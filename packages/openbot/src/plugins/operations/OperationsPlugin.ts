@@ -1,23 +1,21 @@
 import { Bot, Operation, type Operations, Plugin } from "@openbot-build/core"
-import { Effect, type JsonSchema, Record, Schema, Stream } from "effect"
-import { Prompt, Tool, Toolkit } from "effect/ai"
+import {
+	Array as Arr,
+	DateTime,
+	Effect,
+	type JsonSchema,
+	Record as Rec,
+	Schema,
+	Stream,
+} from "effect"
+import { Prompt, Toolkit } from "effect/ai"
+import * as ToolEntry from "../ToolEntry.ts"
 import { toolJson } from "../ToolJson.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/operations")
 
 /** The tools of this plugin. Their parameters are JSON Schema, like App tools. */
-export type Tools = Record<
-	string,
-	Tool.Dynamic<
-		string,
-		{
-			readonly parameters: JsonSchema.JsonSchema
-			readonly success: typeof Schema.Json
-			readonly failure: typeof Schema.Never
-			readonly failureMode: "error"
-		}
-	>
->
+export type Tools = ToolEntry.Tools
 
 export const names = {
 	status: "openbot_operation_status",
@@ -43,20 +41,15 @@ const instructions = `A tool call that takes more time than its budget goes on i
 
 const idSchema = { type: "string" } as const
 
-interface Entry {
-	readonly tool: Tools[string]
-	readonly handle: (input: unknown) => Effect.Effect<Schema.Json>
-}
-
 const view = (record: Operation.Record) =>
 	toolJson({
 		operation: record.id,
 		tool: record.tool,
 		status: record.status,
-		startedAt: new Date(record.startedAt).toISOString(),
+		startedAt: DateTime.formatIso(DateTime.makeUnsafe(record.startedAt)),
 		...(record.endedAt === undefined
 			? {}
-			: { endedAt: new Date(record.endedAt).toISOString() }),
+			: { endedAt: DateTime.formatIso(DateTime.makeUnsafe(record.endedAt)) }),
 	})
 
 const notFound = (id: string) =>
@@ -82,25 +75,11 @@ export const make = (
 						handle: (
 							input: unknown,
 						) => Effect.Effect<Schema.Json, Schema.SchemaError>,
-					): Entry => ({
-						tool: Tool.dynamic(name, {
-							description,
-							parameters,
-							success: Schema.Json,
-						}).annotate(Operation.Budget, "foreground") as Tools[string],
-						handle: (input) =>
-							handle(input).pipe(
-								Effect.catchCause((cause) =>
-									Effect.logWarning("An operation tool failed", cause).pipe(
-										Effect.as(
-											toolJson({
-												error: "The tool could not finish. Try again.",
-											}),
-										),
-									),
-								),
-							),
-					})
+					) =>
+						ToolEntry.entry(name, description, parameters, handle, {
+							log: "An operation tool failed",
+							failure: "The tool could not finish. Try again.",
+						})
 					const entries = [
 						entry(
 							names.status,
@@ -138,7 +117,7 @@ export const make = (
 									Effect.flatMap(({ ids, timeout_ms }) =>
 										operations.wait(chat, ids, timeout_ms ?? maxWait).pipe(
 											Effect.map((records) =>
-												toolJson({ operations: records.map(view) }),
+												toolJson({ operations: Arr.map(records, view) }),
 											),
 											Effect.catchTag("OperationNotFound", (error) =>
 												Effect.succeed(notFound(error.id)),
@@ -168,10 +147,10 @@ export const make = (
 								),
 						),
 					]
-					const own = Toolkit.make(...entries.map((each) => each.tool))
+					const own = Toolkit.make(...Arr.map(entries, (each) => each.tool))
 					const handlers = yield* own.toHandlers(
-						Record.fromEntries(
-							entries.map((each) => [each.tool.name, each.handle]),
+						Rec.fromEntries(
+							Arr.map(entries, (each) => [each.tool.name, each.handle]),
 						),
 					)
 					const all = yield* options.toolkit

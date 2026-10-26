@@ -34,6 +34,39 @@ An annotation is a named value that is attached to a log line.
 The log also has the cause of the failure. The cause can hold error messages and
 other private data.
 
+An inside failure, such as a database error, is often the reason for a `503`.
+OpenBot does not send the inside failure to the client. It writes it first in a
+log line at level `Warn`, with the cause and the place in the code where it
+happened. Every log line of a request has the same `requestId` as the error log
+of that request. Use it to find the reason for a failed request.
+
+When a Turn fails, the client gets only a short message. A model error, such as
+input that is too large for the model, keeps its message and has the code
+`model_error`. Every other failure, such as a database error, has the code
+`internal_error` and a fixed message. The full cause is in a log line at level
+`Warn` with the message `A Turn failed`. It has the same `chatId` and `turnId`
+as the error log.
+
+---
+
+## Background work
+
+OpenBot also does work in the background. For example, it fires the Triggers
+that are due, deletes old files, pauses idle Computers, checks Apps for the
+[App Index](/docs/app-index), and listens for changes to the settings. It also
+pauses delegated work at its time limit, sends reminders, sends the messages of
+Channels, and listens for calls from its other instances.
+
+When one run of this work fails, OpenBot writes a log line at level `Warn` with
+the cause. Then it runs the work again at the next time. The work does not stop.
+These lines are at level `Warn`, not `Error`, because the work goes on. A few
+steps often fail for a reason that does no harm, for example a Chat that another
+instance works on. The next run does them again, so their lines are at level
+`Debug`.
+
+When the server stops, the background work stops too. This is not logged as a
+failure.
+
 ---
 
 ## Send errors to your own service
@@ -43,7 +76,7 @@ When you run OpenBot from your own code, add a logger with `Logger.layer`. Use
 server, so that it stays open until the server has closed.
 
 ```ts
-import { NodeRuntime } from "@effect/platform-node"
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -64,7 +97,9 @@ NodeRuntime.runMain(
 	Effect.gen(function* () {
 		const settings = yield* EnvironmentConfiguration.load
 		return yield* Layer.launch(
-			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+			Server.layerLive(settings).pipe(
+				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+			),
 		)
 	}).pipe(Effect.provide(alerts)),
 )

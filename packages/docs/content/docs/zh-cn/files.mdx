@@ -138,6 +138,11 @@ Chat 只保存文件的 ID，不保存它的字节。每次调用模型之前，
 | `GET /v1/files/:fileId/content` | 给出一个已就绪文件的字节。                     |
 | `DELETE /v1/files/:fileId`      | 立刻删除一个文件。返回 `204`。                 |
 
+`GET /v1/files/:fileId/content`
+在字节从存储到达时就发送它们，所以大文件不会停留在 OpenBot 的内存里。如果存储在字节开始之前出错，回答是
+`503`。如果之后出错，回答会提前结束。把长度和文件的 `bytes`
+比较，确认你拿到了全部字节。
+
 读取文件需要 `File` 上的 `read`，上传和删除需要 `File` 上的
 `write`。每个成员对自己的文件都有这两个权限。见[权限](/zh-cn/docs/permissions)。
 

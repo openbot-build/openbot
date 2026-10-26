@@ -1,14 +1,20 @@
-import { randomBytes } from "node:crypto"
 import { BotsApi, type Caller, VaultsApi } from "@openbot-build/api"
 import { and, eq, inArray } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
-	type Errors as CheckErrors,
-	check,
-	filter,
-	guard,
-} from "../authorization/Check.ts"
+	Array as Arr,
+	Cause,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Record as Rec,
+	Schema,
+} from "effect"
+import { Hex } from "effect/encoding"
+import * as Failures from "../app/Failures.ts"
+import * as Check from "../authorization/Check.ts"
 import { vaultResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
 import { Bots } from "../bots/Bots.ts"
@@ -29,7 +35,7 @@ export type Failure =
 	| VaultsApi.VaultConflict
 	| VaultsApi.VaultInvalid
 	| VaultsApi.VaultsUnavailable
-	| CheckErrors
+	| Check.Errors
 
 /** What a Bot may know about an item it may use. It has no values. */
 export interface Usable {
@@ -58,18 +64,26 @@ const providerOf = (source: Source) =>
 	source._tag === "Builtin" ? null : source.provider
 
 /** The values column holds JSON that only this file writes, from a checked request. */
-const decodeValues = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(Schema.Record(Schema.String, Schema.String)),
+const ValuesJson = Schema.fromJsonString(
+	Schema.Record(Schema.String, Schema.String),
 )
-const decodeSource = Schema.decodeUnknownSync(
-	Schema.fromJsonString(VaultsApi.VaultItemSource),
-)
-const decodeFields = Schema.decodeUnknownSync(
-	Schema.fromJsonString(Schema.Array(VaultsApi.VaultFieldName)),
-)
-const decodeExits = Schema.decodeUnknownSync(
-	Schema.fromJsonString(Schema.Array(VaultsApi.VaultExit)),
-)
+const decodeValues = Schema.decodeUnknownEffect(ValuesJson)
+/** The source, fields and exits columns hold JSON that only this file writes. */
+const SourceJson = Schema.fromJsonString(VaultsApi.VaultItemSource)
+const FieldsJson = Schema.fromJsonString(Schema.Array(VaultsApi.VaultFieldName))
+const ExitsJson = Schema.fromJsonString(Schema.Array(VaultsApi.VaultExit))
+const decodeSource = Schema.decodeUnknownEffect(SourceJson)
+const decodeFields = Schema.decodeUnknownEffect(FieldsJson)
+const decodeExits = Schema.decodeUnknownEffect(ExitsJson)
+/** These values passed the request schema or came from the store, so they always encode. */
+const encodeValues = (values: Readonly<Record<string, string>>) =>
+	Schema.encodeEffect(ValuesJson)(values).pipe(Effect.orDie)
+const encodeSource = (source: Source) =>
+	Schema.encodeEffect(SourceJson)(source).pipe(Effect.orDie)
+const encodeFields = (fields: ReadonlyArray<string>) =>
+	Schema.encodeEffect(FieldsJson)(fields).pipe(Effect.orDie)
+const encodeExits = (exits: ReadonlyArray<VaultsApi.VaultExit>) =>
+	Schema.encodeEffect(ExitsJson)(exits).pipe(Effect.orDie)
 
 type VaultRow = typeof vaults.$inferSelect
 type ItemRow = typeof vaultItems.$inferSelect
@@ -86,18 +100,24 @@ const fromRow = (row: VaultRow): Vault => ({
 	updatedAt: row.updatedAt,
 })
 
-const fromItemRow = (row: ItemRow): Item => ({
-	id: VaultsApi.VaultItemId.make(row.id),
-	vault: VaultsApi.VaultId.make(row.vaultId),
-	name: row.name,
-	description: row.description,
-	source: decodeSource(row.source),
-	fields: decodeFields(row.fields),
-	exits: decodeExits(row.exits),
-	version: row.version,
-	createdAt: row.createdAt,
-	updatedAt: row.updatedAt,
-})
+/** A row with a bad value is a broken store. The log keeps the cause. */
+const fromItemRow = (
+	row: ItemRow,
+): Effect.Effect<Item, VaultsApi.VaultsUnavailable> =>
+	Effect.gen(function* () {
+		return {
+			id: VaultsApi.VaultItemId.make(row.id),
+			vault: VaultsApi.VaultId.make(row.vaultId),
+			name: row.name,
+			description: row.description,
+			source: yield* decodeSource(row.source),
+			fields: yield* decodeFields(row.fields),
+			exits: yield* decodeExits(row.exits),
+			version: row.version,
+			createdAt: row.createdAt,
+			updatedAt: row.updatedAt,
+		} satisfies Item
+	}).pipe(Failures.replace("A stored Vault item has a bad value", unavailable))
 
 /**
  * The Vaults of an organization, their items, and the rights of Bots to use them.
@@ -109,68 +129,64 @@ export class Vaults extends Context.Service<
 	{
 		readonly list: (
 			caller: Caller,
-		) => Effect.Effect<ReadonlyArray<Vault>, Failure, AuthorizationServices>
+		) => Effect.Effect<ReadonlyArray<Vault>, Failure>
 		readonly get: (
 			caller: Caller,
 			id: string,
 			action?: "read" | "use" | "write",
-		) => Effect.Effect<Vault, Failure, AuthorizationServices>
+		) => Effect.Effect<Vault, Failure>
 		readonly create: (
 			caller: Caller,
 			input: VaultsApi.CreateVaultRequest,
-		) => Effect.Effect<Vault, Failure, AuthorizationServices>
+		) => Effect.Effect<Vault, Failure>
 		readonly update: (
 			caller: Caller,
 			id: string,
 			input: VaultsApi.UpdateVaultRequest,
-		) => Effect.Effect<Vault, Failure, AuthorizationServices>
+		) => Effect.Effect<Vault, Failure>
 		readonly remove: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<void, Failure, AuthorizationServices>
+		) => Effect.Effect<void, Failure>
 		readonly items: (
 			caller: Caller,
 			vaultId: string,
-		) => Effect.Effect<ReadonlyArray<Item>, Failure, AuthorizationServices>
+		) => Effect.Effect<ReadonlyArray<Item>, Failure>
 		readonly item: (
 			caller: Caller,
 			vaultId: string,
 			itemId: string,
-		) => Effect.Effect<Item, Failure, AuthorizationServices>
+		) => Effect.Effect<Item, Failure>
 		readonly createItem: (
 			caller: Caller,
 			vaultId: string,
 			input: VaultsApi.CreateVaultItemRequest,
-		) => Effect.Effect<Item, Failure, AuthorizationServices>
+		) => Effect.Effect<Item, Failure>
 		readonly updateItem: (
 			caller: Caller,
 			vaultId: string,
 			itemId: string,
 			input: VaultsApi.UpdateVaultItemRequest,
-		) => Effect.Effect<Item, Failure, AuthorizationServices>
+		) => Effect.Effect<Item, Failure>
 		readonly removeItem: (
 			caller: Caller,
 			vaultId: string,
 			itemId: string,
-		) => Effect.Effect<void, Failure, AuthorizationServices>
+		) => Effect.Effect<void, Failure>
 		readonly bots: (
 			caller: Caller,
 			vaultId: string,
-		) => Effect.Effect<
-			ReadonlyArray<VaultsApi.VaultAccess>,
-			Failure,
-			AuthorizationServices
-		>
+		) => Effect.Effect<ReadonlyArray<VaultsApi.VaultAccess>, Failure>
 		readonly grant: (
 			caller: Caller,
 			vaultId: string,
 			bot: BotsApi.BotId,
-		) => Effect.Effect<VaultsApi.VaultAccess, Failure, AuthorizationServices>
+		) => Effect.Effect<VaultsApi.VaultAccess, Failure>
 		readonly revoke: (
 			caller: Caller,
 			vaultId: string,
 			bot: BotsApi.BotId,
-		) => Effect.Effect<void, Failure, AuthorizationServices>
+		) => Effect.Effect<void, Failure>
 		/** The items of the Vaults that a Bot has the right to use. It checks no permission. An archived Bot has none. */
 		readonly usable: (
 			organizationId: string,
@@ -191,27 +207,41 @@ export const make = Effect.gen(function* () {
 	const readers = yield* Readers
 	const providers = yield* SecretProviders
 	const botsService = yield* Bots
-	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+	const crypto = yield* Crypto.Crypto
+	const { check, filter, guard } = yield* Check.make
+	/** A platform without secure random numbers is broken. */
+	const newId = (prefix: string) =>
+		crypto.randomBytes(16).pipe(
+			Effect.orDie,
+			Effect.map((bytes) => prefix + Hex.encode(bytes)),
+		)
+	const stored = (message: string) => Failures.replace(message, unavailable)
 	const where = (organizationId: string, id: string) =>
 		and(eq(vaults.organizationId, organizationId), eq(vaults.id, id))
 	const row = (organizationId: string, id: string) =>
-		stored(db.select().from(vaults).where(where(organizationId, id))).pipe(
-			Effect.map((rows) => Option.fromNullishOr(rows[0])),
-		)
+		db
+			.select()
+			.from(vaults)
+			.where(where(organizationId, id))
+			.pipe(
+				stored("A Vault could not be read."),
+				Effect.map((rows) => Option.fromNullishOr(rows[0])),
+			)
 	const itemRow = (organizationId: string, vaultId: string, id: string) =>
-		stored(
-			db
-				.select()
-				.from(vaultItems)
-				.where(
-					and(
-						eq(vaultItems.organizationId, organizationId),
-						eq(vaultItems.vaultId, vaultId),
-						eq(vaultItems.id, id),
-					),
+		db
+			.select()
+			.from(vaultItems)
+			.where(
+				and(
+					eq(vaultItems.organizationId, organizationId),
+					eq(vaultItems.vaultId, vaultId),
+					eq(vaultItems.id, id),
 				),
-		).pipe(Effect.map((rows) => Option.fromNullishOr(rows[0])))
+			)
+			.pipe(
+				stored("A Vault item could not be read."),
+				Effect.map((rows) => Option.fromNullishOr(rows[0])),
+			)
 	/** A caller who cannot read a Vault does not learn that it exists. */
 	const access = (
 		caller: Caller,
@@ -245,7 +275,7 @@ export const make = Effect.gen(function* () {
 			yield* access(caller, vaultId, action)
 			const found = yield* itemRow(caller.organizationId, vaultId, itemId)
 			if (Option.isNone(found)) return yield* itemNotFound(itemId)
-			return fromItemRow(found.value)
+			return yield* fromItemRow(found.value)
 		})
 	/**
 	 * Checks the source of an item and gives back its fields. For a provider, the
@@ -264,13 +294,13 @@ export const make = Effect.gen(function* () {
 			if (source._tag === "Builtin") {
 				if (input.values === undefined)
 					return yield* invalid("A builtin item needs its values.")
-				const fields = Object.keys(input.values)
+				const fields = Rec.keys(input.values)
 				if (fields.length === 0 || fields.length > 32)
 					return yield* invalid("A builtin item has 1 to 32 values.")
 				if (
 					input.fields !== undefined &&
 					(input.fields.length !== fields.length ||
-						input.fields.some((name) => !fields.includes(name)))
+						Arr.some(input.fields, (name) => !Arr.contains(fields, name)))
 				)
 					return yield* invalid(
 						"The fields of a builtin item are the keys of its values.",
@@ -296,6 +326,12 @@ export const make = Effect.gen(function* () {
 				.make(credentials)
 				.read(source, input.fields)
 				.pipe(
+					Effect.tapError((error) =>
+						Effect.logInfo(
+							"OpenBot could not read a secret provider",
+							Cause.fail(error),
+						),
+					),
 					Effect.mapError((error) =>
 						invalid("OpenBot could not read the item: " + error.message),
 					),
@@ -309,23 +345,26 @@ export const make = Effect.gen(function* () {
 		except?: string,
 	) =>
 		Effect.gen(function* () {
-			const rows = yield* stored(
-				db
-					.select({ id: vaultItems.id })
-					.from(vaultItems)
-					.where(
-						and(
-							eq(vaultItems.organizationId, organizationId),
-							eq(vaultItems.vaultId, vaultId),
-							eq(vaultItems.name, name),
-						),
+			const rows = yield* db
+				.select({ id: vaultItems.id })
+				.from(vaultItems)
+				.where(
+					and(
+						eq(vaultItems.organizationId, organizationId),
+						eq(vaultItems.vaultId, vaultId),
+						eq(vaultItems.name, name),
 					),
-			)
-			if (rows.some((found) => found.id !== except))
+				)
+				.pipe(stored("The item names of a Vault could not be read."))
+			if (Arr.some(rows, (found) => found.id !== except))
 				return yield* invalid(`The Vault already has an item called ${name}.`)
 		})
 	const sealValues = (id: string, values: Readonly<Record<string, string>>) =>
-		stored(secrets.seal(JSON.stringify(values), valuesBinding(id)))
+		Effect.flatMap(encodeValues(values), (json) =>
+			secrets
+				.seal(json, valuesBinding(id))
+				.pipe(stored("The values of a Vault item could not be sealed.")),
+		)
 
 	return Vaults.of({
 		list: (caller) =>
@@ -343,16 +382,15 @@ export const make = Effect.gen(function* () {
 						}),
 					),
 				)
-				const rows = yield* stored(
-					db
-						.select()
-						.from(vaults)
-						.where(
-							and(eq(vaults.organizationId, caller.organizationId), readable),
-						)
-						.orderBy(vaults.createdAt),
-				)
-				return rows.map(fromRow)
+				const rows = yield* db
+					.select()
+					.from(vaults)
+					.where(
+						and(eq(vaults.organizationId, caller.organizationId), readable),
+					)
+					.orderBy(vaults.createdAt)
+					.pipe(stored("The Vaults could not be listed."))
+				return Arr.map(rows, fromRow)
 			}),
 		get: (caller, id, action = "read") => access(caller, id, action),
 		create: (caller, input) =>
@@ -368,20 +406,19 @@ export const make = Effect.gen(function* () {
 						),
 				})
 				const now = yield* Clock.currentTimeMillis
-				const inserted = yield* stored(
-					db
-						.insert(vaults)
-						.values({
-							organizationId: caller.organizationId,
-							id: "vlt_" + randomBytes(16).toString("hex"),
-							ownerUserId: userId,
-							name: input.name,
-							version: 0,
-							createdAt: now,
-							updatedAt: now,
-						})
-						.returning(),
-				)
+				const inserted = yield* db
+					.insert(vaults)
+					.values({
+						organizationId: caller.organizationId,
+						id: yield* newId("vlt_"),
+						ownerUserId: userId,
+						name: input.name,
+						version: 0,
+						createdAt: now,
+						updatedAt: now,
+					})
+					.returning()
+					.pipe(stored("A Vault could not be created."))
 				return fromRow(inserted[0]!)
 			}),
 		update: (caller, id, input) =>
@@ -390,22 +427,21 @@ export const make = Effect.gen(function* () {
 				if (input.expectedVersion !== vault.version)
 					return yield* VaultsApi.VaultConflict.make({ version: vault.version })
 				const now = yield* Clock.currentTimeMillis
-				const changed = yield* stored(
-					db
-						.update(vaults)
-						.set({
-							...(input.name === undefined ? {} : { name: input.name }),
-							version: vault.version + 1,
-							updatedAt: now,
-						})
-						.where(
-							and(
-								where(caller.organizationId, id),
-								eq(vaults.version, vault.version),
-							),
-						)
-						.returning(),
-				)
+				const changed = yield* db
+					.update(vaults)
+					.set({
+						...(input.name === undefined ? {} : { name: input.name }),
+						version: vault.version + 1,
+						updatedAt: now,
+					})
+					.where(
+						and(
+							where(caller.organizationId, id),
+							eq(vaults.version, vault.version),
+						),
+					)
+					.returning()
+					.pipe(stored("A Vault could not be changed."))
 				const next = changed[0]
 				if (next === undefined)
 					return yield* VaultsApi.VaultConflict.make({ version: vault.version })
@@ -415,24 +451,26 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				yield* access(caller, id, "write")
 				// The items and the rights go with the Vault.
-				yield* stored(db.delete(vaults).where(where(caller.organizationId, id)))
+				yield* db
+					.delete(vaults)
+					.where(where(caller.organizationId, id))
+					.pipe(stored("A Vault could not be deleted."))
 			}),
 		items: (caller, vaultId) =>
 			Effect.gen(function* () {
 				yield* access(caller, vaultId, "read")
-				const rows = yield* stored(
-					db
-						.select()
-						.from(vaultItems)
-						.where(
-							and(
-								eq(vaultItems.organizationId, caller.organizationId),
-								eq(vaultItems.vaultId, vaultId),
-							),
-						)
-						.orderBy(vaultItems.name),
-				)
-				return rows.map(fromItemRow)
+				const rows = yield* db
+					.select()
+					.from(vaultItems)
+					.where(
+						and(
+							eq(vaultItems.organizationId, caller.organizationId),
+							eq(vaultItems.vaultId, vaultId),
+						),
+					)
+					.orderBy(vaultItems.name)
+					.pipe(stored("The items of a Vault could not be listed."))
+				return yield* Effect.forEach(rows, fromItemRow)
 			}),
 		item: (caller, vaultId, itemId) =>
 			itemAccess(caller, vaultId, itemId, "read"),
@@ -446,32 +484,31 @@ export const make = Effect.gen(function* () {
 					values: input.values,
 				})
 				const now = yield* Clock.currentTimeMillis
-				const id = "vli_" + randomBytes(16).toString("hex")
+				const id = yield* newId("vli_")
 				const values =
 					input.values === undefined
 						? null
 						: yield* sealValues(id, input.values)
-				const inserted = yield* stored(
-					db
-						.insert(vaultItems)
-						.values({
-							organizationId: caller.organizationId,
-							id,
-							vaultId,
-							name: input.name,
-							description: input.description ?? "",
-							providerId: providerOf(input.source),
-							source: JSON.stringify(input.source),
-							fields: JSON.stringify(fields),
-							exits: JSON.stringify(input.exits),
-							values,
-							version: 0,
-							createdAt: now,
-							updatedAt: now,
-						})
-						.returning(),
-				)
-				return fromItemRow(inserted[0]!)
+				const inserted = yield* db
+					.insert(vaultItems)
+					.values({
+						organizationId: caller.organizationId,
+						id,
+						vaultId,
+						name: input.name,
+						description: input.description ?? "",
+						providerId: providerOf(input.source),
+						source: yield* encodeSource(input.source),
+						fields: yield* encodeFields(fields),
+						exits: yield* encodeExits(input.exits),
+						values,
+						version: 0,
+						createdAt: now,
+						updatedAt: now,
+					})
+					.returning()
+					.pipe(stored("A Vault item could not be created."))
+				return yield* fromItemRow(inserted[0]!)
 			}),
 		updateItem: (caller, vaultId, itemId, input) =>
 			Effect.gen(function* () {
@@ -489,7 +526,7 @@ export const make = Effect.gen(function* () {
 				const sameFields =
 					input.fields === undefined ||
 					(input.fields.length === item.fields.length &&
-						input.fields.every((name) => item.fields.includes(name)))
+						Arr.every(input.fields, (name) => Arr.contains(item.fields, name)))
 				// A builtin item keeps its values unless new ones come.
 				const fields =
 					builtin && input.values === undefined
@@ -512,68 +549,65 @@ export const make = Effect.gen(function* () {
 						? {}
 						: { values: yield* sealValues(itemId, input.values) }
 				const now = yield* Clock.currentTimeMillis
-				const changed = yield* stored(
-					db
-						.update(vaultItems)
-						.set({
-							...(input.name === undefined ? {} : { name: input.name }),
-							...(input.description === undefined
-								? {}
-								: { description: input.description }),
-							providerId: providerOf(source),
-							source: JSON.stringify(source),
-							fields: JSON.stringify(fields),
-							...(input.exits === undefined
-								? {}
-								: { exits: JSON.stringify(input.exits) }),
-							...values,
-							version: item.version + 1,
-							updatedAt: now,
-						})
-						.where(
-							and(
-								eq(vaultItems.organizationId, caller.organizationId),
-								eq(vaultItems.id, itemId),
-								eq(vaultItems.version, item.version),
-							),
-						)
-						.returning(),
-				)
+				const changed = yield* db
+					.update(vaultItems)
+					.set({
+						...(input.name === undefined ? {} : { name: input.name }),
+						...(input.description === undefined
+							? {}
+							: { description: input.description }),
+						providerId: providerOf(source),
+						source: yield* encodeSource(source),
+						fields: yield* encodeFields(fields),
+						...(input.exits === undefined
+							? {}
+							: { exits: yield* encodeExits(input.exits) }),
+						...values,
+						version: item.version + 1,
+						updatedAt: now,
+					})
+					.where(
+						and(
+							eq(vaultItems.organizationId, caller.organizationId),
+							eq(vaultItems.id, itemId),
+							eq(vaultItems.version, item.version),
+						),
+					)
+					.returning()
+					.pipe(stored("A Vault item could not be changed."))
 				const next = changed[0]
 				if (next === undefined)
 					return yield* VaultsApi.VaultConflict.make({ version: item.version })
-				return fromItemRow(next)
+				return yield* fromItemRow(next)
 			}),
 		removeItem: (caller, vaultId, itemId) =>
 			Effect.gen(function* () {
 				yield* itemAccess(caller, vaultId, itemId, "write")
-				yield* stored(
-					db
-						.delete(vaultItems)
-						.where(
-							and(
-								eq(vaultItems.organizationId, caller.organizationId),
-								eq(vaultItems.id, itemId),
-							),
+				yield* db
+					.delete(vaultItems)
+					.where(
+						and(
+							eq(vaultItems.organizationId, caller.organizationId),
+							eq(vaultItems.id, itemId),
 						),
-				)
+					)
+					.pipe(stored("A Vault item could not be deleted."))
 			}),
 		bots: (caller, vaultId) =>
 			Effect.gen(function* () {
 				yield* access(caller, vaultId, "read")
-				const rows = yield* stored(
-					db
-						.select()
-						.from(vaultAccess)
-						.where(
-							and(
-								eq(vaultAccess.organizationId, caller.organizationId),
-								eq(vaultAccess.vaultId, vaultId),
-							),
-						)
-						.orderBy(vaultAccess.grantedAt),
-				)
-				return rows.map((entry) => ({
+				const rows = yield* db
+					.select()
+					.from(vaultAccess)
+					.where(
+						and(
+							eq(vaultAccess.organizationId, caller.organizationId),
+							eq(vaultAccess.vaultId, vaultId),
+						),
+					)
+					.orderBy(vaultAccess.grantedAt)
+					.pipe(stored("The Bots of a Vault could not be read."))
+				return Arr.map(rows, (entry) => ({
 					vault: VaultsApi.VaultId.make(entry.vaultId),
 					bot: BotsApi.BotId.make(entry.bot),
 					grantedBy: entry.grantedBy,
@@ -594,30 +628,28 @@ export const make = Effect.gen(function* () {
 				if (target.archived)
 					return yield* invalid("An archived Bot cannot use a Vault.")
 				const now = yield* Clock.currentTimeMillis
-				yield* stored(
-					db
-						.insert(vaultAccess)
-						.values({
-							organizationId: caller.organizationId,
-							vaultId,
-							bot,
-							grantedBy: caller.userId,
-							grantedAt: now,
-						})
-						.onConflictDoNothing(),
-				)
-				const rows = yield* stored(
-					db
-						.select()
-						.from(vaultAccess)
-						.where(
-							and(
-								eq(vaultAccess.organizationId, caller.organizationId),
-								eq(vaultAccess.vaultId, vaultId),
-								eq(vaultAccess.bot, bot),
-							),
+				yield* db
+					.insert(vaultAccess)
+					.values({
+						organizationId: caller.organizationId,
+						vaultId,
+						bot,
+						grantedBy: caller.userId,
+						grantedAt: now,
+					})
+					.onConflictDoNothing()
+					.pipe(stored("A Vault right could not be saved."))
+				const rows = yield* db
+					.select()
+					.from(vaultAccess)
+					.where(
+						and(
+							eq(vaultAccess.organizationId, caller.organizationId),
+							eq(vaultAccess.vaultId, vaultId),
+							eq(vaultAccess.bot, bot),
 						),
-				)
+					)
+					.pipe(stored("A Vault right could not be read."))
 				const saved = rows[0]!
 				return {
 					vault: VaultsApi.VaultId.make(vaultId),
@@ -629,62 +661,66 @@ export const make = Effect.gen(function* () {
 		revoke: (caller, vaultId, bot) =>
 			Effect.gen(function* () {
 				yield* access(caller, vaultId, "use")
-				yield* stored(
-					db
-						.delete(vaultAccess)
-						.where(
-							and(
-								eq(vaultAccess.organizationId, caller.organizationId),
-								eq(vaultAccess.vaultId, vaultId),
-								eq(vaultAccess.bot, bot),
-							),
+				yield* db
+					.delete(vaultAccess)
+					.where(
+						and(
+							eq(vaultAccess.organizationId, caller.organizationId),
+							eq(vaultAccess.vaultId, vaultId),
+							eq(vaultAccess.bot, bot),
 						),
-				)
+					)
+					.pipe(stored("A Vault right could not be deleted."))
 			}),
 		usable: (organizationId, bot) =>
 			Effect.gen(function* () {
+				// Bots logs the cause of this failure itself.
 				const found = yield* botsService
 					.find(organizationId, bot)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.catchTag("BotStorageUnavailable", () =>
+							Effect.fail(unavailable()),
+						),
+					)
 				if (Option.isNone(found) || found.value.archived) return []
-				const held = yield* stored(
-					db
-						.select({ vaultId: vaultAccess.vaultId })
-						.from(vaultAccess)
-						.where(
-							and(
-								eq(vaultAccess.organizationId, organizationId),
-								eq(vaultAccess.bot, bot),
+				const held = yield* db
+					.select({ vaultId: vaultAccess.vaultId })
+					.from(vaultAccess)
+					.where(
+						and(
+							eq(vaultAccess.organizationId, organizationId),
+							eq(vaultAccess.bot, bot),
+						),
+					)
+					.pipe(stored("The Vault rights of a Bot could not be read."))
+				if (held.length === 0) return []
+				const rows = yield* db
+					.select({ item: vaultItems, vaultName: vaults.name })
+					.from(vaultItems)
+					.innerJoin(
+						vaults,
+						and(
+							eq(vaults.organizationId, vaultItems.organizationId),
+							eq(vaults.id, vaultItems.vaultId),
+						),
+					)
+					.where(
+						and(
+							eq(vaultItems.organizationId, organizationId),
+							inArray(
+								vaultItems.vaultId,
+								Arr.map(held, (entry) => entry.vaultId),
 							),
 						),
+					)
+					.orderBy(vaultItems.id)
+					.pipe(stored("The usable Vault items could not be read."))
+				return yield* Effect.forEach(rows, (entry) =>
+					Effect.map(fromItemRow(entry.item), (item) => ({
+						item,
+						vaultName: entry.vaultName,
+					})),
 				)
-				if (held.length === 0) return []
-				const rows = yield* stored(
-					db
-						.select({ item: vaultItems, vaultName: vaults.name })
-						.from(vaultItems)
-						.innerJoin(
-							vaults,
-							and(
-								eq(vaults.organizationId, vaultItems.organizationId),
-								eq(vaults.id, vaultItems.vaultId),
-							),
-						)
-						.where(
-							and(
-								eq(vaultItems.organizationId, organizationId),
-								inArray(
-									vaultItems.vaultId,
-									held.map((entry) => entry.vaultId),
-								),
-							),
-						)
-						.orderBy(vaultItems.id),
-				)
-				return rows.map((entry) => ({
-					item: fromItemRow(entry.item),
-					vaultName: entry.vaultName,
-				}))
 			}),
 		reveal: (organizationId, itemId, fields) =>
 			Effect.gen(function* () {
@@ -697,24 +733,32 @@ export const make = Effect.gen(function* () {
 							eq(vaultItems.id, itemId),
 						),
 					)
+					.pipe(stored("A Vault item could not be read."))
 				const found = rows[0]
 				if (found === undefined)
 					return yield* VaultReadFailed.make({ message: "The item is gone." })
-				const item = fromItemRow(found)
+				const item = yield* fromItemRow(found)
 				if (item.source._tag === "Builtin") {
 					if (found.values === null)
 						return yield* VaultReadFailed.make({
 							message: "The builtin item has no values.",
 						})
 					const values = yield* decodeValues(
-						yield* secrets.open(found.values, valuesBinding(itemId)),
+						yield* secrets
+							.open(found.values, valuesBinding(itemId))
+							.pipe(stored("The values of a Vault item could not be opened.")),
 					)
-					const missing = fields.filter((name) => values[name] === undefined)
+					const missing = Arr.filter(
+						fields,
+						(name) => values[name] === undefined,
+					)
 					if (missing.length > 0)
 						return yield* VaultReadFailed.make({
-							message: `The item has no field with the name ${missing.join(", ")}`,
+							message: `The item has no field with the name ${Arr.join(missing, ", ")}`,
 						})
-					return new Map(fields.map((name) => [name, values[name]!] as const))
+					return new Map(
+						Arr.map(fields, (name) => [name, values[name]!] as const),
+					)
 				}
 				const credentials = yield* providers.credentials(
 					organizationId,
@@ -722,15 +766,37 @@ export const make = Effect.gen(function* () {
 				)
 				return yield* readers.make(credentials).read(item.source, fields)
 			}).pipe(
-				Effect.catchIf(
-					(error) => !(error instanceof VaultReadFailed),
-					() =>
+				// A failure of the reader keeps its message. `stored` and `fromItemRow` have logged the store failures.
+				Effect.catchTags({
+					// The decode failure can quote the opened values, so neither the log nor the error keeps it.
+					SchemaError: () =>
+						Effect.logError(
+							"The stored values of a Vault item are not valid",
+						).pipe(
+							Effect.andThen(
+								Effect.fail(
+									VaultReadFailed.make({
+										message: "OpenBot could not open the item.",
+									}),
+								),
+							),
+						),
+					SecretProviderNotFound: (error) =>
+						Effect.fail(
+							VaultReadFailed.make({
+								message: "The secret provider of the item is gone.",
+								cause: error,
+							}),
+						),
+					VaultsUnavailable: (error) =>
 						Effect.fail(
 							VaultReadFailed.make({
 								message: "OpenBot could not open the item.",
+								cause: error,
 							}),
 						),
-				),
+				}),
+				Effect.annotateLogs({ item: itemId }),
 			),
 	})
 })

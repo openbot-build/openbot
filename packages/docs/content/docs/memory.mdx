@@ -137,6 +137,12 @@ linked:
 Without a limit, there is none. When the budget is spent, the Bot gets the fixed
 calm answer, the input stays as it is, and learning waits until the next period.
 
+The answer to `confide` and the new input wait at most 15 seconds. This time
+also counts the wait for a free task when all `concurrency` tasks are busy.
+After that, the Bot gets the fixed calm answer, and the input stays as it is.
+One step of learning may take at most 2 minutes. When it takes longer, the
+memory Bot tries again when a later Turn of the Chat completes.
+
 ---
 
 ## Read and change it

@@ -1,5 +1,13 @@
 import { BotMemory as Api } from "@openbot-build/api"
-import { Array as Arr, HashMap, HashSet, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	HashMap,
+	HashSet,
+	Option,
+	pipe,
+	Predicate,
+	Schema,
+} from "effect"
 import * as Audience from "./Audience.ts"
 
 /**
@@ -20,8 +28,6 @@ export const Edit = Api.Edit
 export type Edit = Api.Edit
 export const LogEntry = Api.LogEntry
 export type LogEntry = Api.LogEntry
-
-const sourceKey = (source: ItemSource) => source.chat + "/" + source.item
 
 /** One Item that the memory Bot may learn from. */
 export interface Evidence {
@@ -59,7 +65,7 @@ export const evidenceTags = (evidence: Evidence): ReadonlyArray<string> => [
 export const isActive = (entry: Entry) =>
 	entry.status === "active" && entry.invalidatedAt === undefined
 export const topicsOf = (entry: Entry) =>
-	entry.tags.filter((tag) => !Audience.isSystem(tag))
+	Arr.filter(entry.tags, Predicate.not(Audience.isSystem))
 
 /** One change that the memory Bot asks for. `ref` names a new entry within one answer. */
 export const Operation = Schema.TaggedUnion({
@@ -95,15 +101,6 @@ export type Operation = typeof Operation.Type
 export const Plan = Schema.Struct({ operations: Schema.Array(Operation) })
 export type Plan = typeof Plan.Type
 
-const parseAudience = (text: string): Option.Option<Audience.Audience> =>
-	text === "bot"
-		? Option.some(Audience.everyone)
-		: text.startsWith("person:") && text.length > "person:".length
-			? Option.some(Audience.person(text.slice("person:".length)))
-			: text.startsWith("channel:") && text.length > "channel:".length
-				? Option.some(Audience.channel(text.slice("channel:".length)))
-				: Option.none()
-
 export interface Applied {
 	/** The new and changed entries. */
 	readonly entries: ReadonlyArray<Entry>
@@ -127,8 +124,9 @@ export const apply = (input: {
 	readonly now: number
 	readonly id: () => string
 }): Applied => {
+	// `HashMap` compares the sources by value.
 	const known = HashMap.fromIterable(
-		input.evidence.map((entry) => [sourceKey(entry.source), entry] as const),
+		Arr.map(input.evidence, (entry) => [entry.source, entry] as const),
 	)
 	const step = (
 		state: {
@@ -157,13 +155,13 @@ export const apply = (input: {
 			)
 		switch (operation._tag) {
 			case "AddFact": {
-				const sources = operation.sources.map((source) =>
-					Option.getOrUndefined(HashMap.get(known, sourceKey(source))),
+				const sources = Option.all(
+					Arr.map(operation.sources, (source) => HashMap.get(known, source)),
 				)
-				if (sources.some((source) => source === undefined)) return reject
-				const evidence = sources as ReadonlyArray<Evidence>
+				if (Option.isNone(sources)) return reject
+				const evidence = sources.value
 				// Content from an App must not become memory by itself.
-				if (evidence.every((source) => source.outside)) return state
+				if (Arr.every(evidence, (source) => source.outside)) return state
 				const id = input.id()
 				return {
 					...put({
@@ -171,13 +169,10 @@ export const apply = (input: {
 						layer: "fact",
 						content: operation.content,
 						tags: Arr.dedupe([
-							...Audience.combine(evidence.map(evidenceTags)),
+							...Audience.combine(Arr.map(evidence, evidenceTags)),
 							...operation.topics,
 						]),
-						sources: Arr.dedupeWith(
-							operation.sources,
-							(a, b) => sourceKey(a) === sourceKey(b),
-						),
+						sources: Arr.dedupe(operation.sources),
 						status: "active",
 						createdAt: input.now,
 						updatedAt: input.now,
@@ -186,15 +181,15 @@ export const apply = (input: {
 				}
 			}
 			case "AddObservation": {
-				const supports = operation.supports.map((id) =>
-					Option.getOrUndefined(
+				const supports = Option.all(
+					Arr.map(operation.supports, (id) =>
 						HashMap.get(state.entries, resolve(id)).pipe(
 							Option.filter(isActive),
 						),
 					),
 				)
-				if (supports.some((entry) => entry === undefined)) return reject
-				const found = supports as ReadonlyArray<Entry>
+				if (Option.isNone(supports)) return reject
+				const found = supports.value
 				const id = input.id()
 				return {
 					...put({
@@ -202,11 +197,14 @@ export const apply = (input: {
 						layer: "observation",
 						content: operation.content,
 						tags: Arr.dedupe([
-							...Audience.combine(found.map((entry) => entry.tags)),
+							...Audience.combine(Arr.map(found, (entry) => entry.tags)),
 							...operation.topics,
 						]),
-						sources: Arr.dedupe(found.map((entry) => entry.id)).map(
-							(entry) => ({ entry }),
+						sources: pipe(
+							found,
+							Arr.map((entry) => entry.id),
+							Arr.dedupe,
+							Arr.map((entry) => ({ entry })),
 						),
 						confidence: Math.min(1, Math.max(0, operation.confidence)),
 						status: "active",
@@ -229,7 +227,7 @@ export const apply = (input: {
 						put({
 							...entry,
 							tags: Arr.dedupe([
-								...entry.tags.filter((tag) => !operation.remove.includes(tag)),
+								...Arr.difference(entry.tags, operation.remove),
 								...operation.add,
 							]),
 							updatedAt: input.now,
@@ -237,7 +235,10 @@ export const apply = (input: {
 				})
 			case "Widen":
 				return Option.match(
-					Option.all([own(operation.id), parseAudience(operation.audience)]),
+					Option.all([
+						own(operation.id),
+						Audience.parseAudience(operation.audience),
+					]),
 					{
 						onNone: () => reject,
 						onSome: ([entry, audience]) =>
@@ -252,18 +253,19 @@ export const apply = (input: {
 					},
 				)
 			case "RenameTopic":
-				return Array.from(HashMap.values(state.entries))
-					.filter(
+				return pipe(
+					HashMap.values(state.entries),
+					Arr.filter(
 						(entry) =>
 							isActive(entry) &&
 							entry.layer !== "pinned" &&
 							entry.tags.includes(operation.from),
-					)
-					.reduce((current, entry) => {
+					),
+					Arr.reduce(state, (current, entry) => {
 						const next: Entry = {
 							...entry,
 							tags: Arr.dedupe(
-								entry.tags.map((tag) =>
+								Arr.map(entry.tags, (tag) =>
 									tag === operation.from ? operation.to : tag,
 								),
 							),
@@ -274,20 +276,25 @@ export const apply = (input: {
 							entries: HashMap.set(current.entries, entry.id, next),
 							changed: HashSet.add(current.changed, entry.id),
 						}
-					}, state)
+					}),
+				)
 		}
 	}
-	const result = input.operations.reduce(step, {
-		entries: HashMap.fromIterable(
-			input.pool.map((entry) => [entry.id, entry] as const),
-		),
-		changed: HashSet.empty<string>(),
-		refs: HashMap.empty<string, string>(),
-		reasons: [] as ReadonlyArray<string>,
-		rejected: 0,
-	})
+	const result = Arr.reduce(
+		input.operations,
+		{
+			entries: HashMap.fromIterable(
+				Arr.map(input.pool, (entry) => [entry.id, entry] as const),
+			),
+			changed: HashSet.empty<string>(),
+			refs: HashMap.empty<string, string>(),
+			reasons: [] as ReadonlyArray<string>,
+			rejected: 0,
+		},
+		step,
+	)
 	return {
-		entries: Array.from(result.changed).flatMap((id) =>
+		entries: Arr.flatMap(Arr.fromIterable(result.changed), (id) =>
 			Option.toArray(HashMap.get(result.entries, id)),
 		),
 		reasons: result.reasons,
@@ -329,9 +336,7 @@ export const edit = (input: {
 			createdAt: now,
 			updatedAt: now,
 		})
-	return Option.fromNullishOr(
-		input.pool.find((entry) => entry.id === change.id),
-	).pipe(
+	return Arr.findFirst(input.pool, (entry) => entry.id === change.id).pipe(
 		Option.filter(
 			(entry) =>
 				entry.status === "active" &&
@@ -341,7 +346,8 @@ export const edit = (input: {
 				}),
 		),
 		Option.map((entry): Entry => {
-			const others = Audience.peopleOf(entry.tags).filter(
+			const others = Arr.filter(
+				Audience.peopleOf(entry.tags),
 				(other) => other !== person.userId,
 			)
 			// When others stand behind the entry too, only the part of this person goes.
@@ -349,7 +355,8 @@ export const edit = (input: {
 				? { ...entry, status: "retracted", updatedAt: now }
 				: {
 						...entry,
-						tags: entry.tags.filter(
+						tags: Arr.filter(
+							entry.tags,
 							(tag) =>
 								tag !== Audience.fromTag(person.userId) &&
 								tag !== Audience.forTag(Audience.person(person.userId)),
@@ -362,25 +369,27 @@ export const edit = (input: {
 
 /** Entries as lines for a model: `[id] (topics) content`. */
 export const render = (entries: ReadonlyArray<Entry>, maxLength: number) =>
-	entries
-		.map(
+	pipe(
+		entries,
+		Arr.map(
 			(entry) =>
 				`[${entry.id}]` +
 				(topicsOf(entry).length === 0
 					? ""
-					: ` (${topicsOf(entry).join(", ")})`) +
+					: ` (${Arr.join(topicsOf(entry), ", ")})`) +
 				` ${entry.content}`,
-		)
-		.reduce(
+		),
+		Arr.reduce(
+			{ lines: [], full: false },
 			(
 				text: { readonly lines: ReadonlyArray<string>; readonly full: boolean },
 				line,
 			) =>
 				text.full
 					? text
-					: [...text.lines, line].join("\n").length <= maxLength
+					: Arr.join([...text.lines, line], "\n").length <= maxLength
 						? { lines: [...text.lines, line], full: false }
 						: { ...text, full: true },
-			{ lines: [], full: false },
-		)
-		.lines.join("\n")
+		),
+		(text) => Arr.join(text.lines, "\n"),
+	)

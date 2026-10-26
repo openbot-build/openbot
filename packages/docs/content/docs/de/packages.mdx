@@ -90,6 +90,21 @@ ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author` hat, und
 wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued` zurück.
 Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten Turn.
 
+Jeder Turn läuft in einer eigenen Fiber, und diese Fiber gehört der Runtime.
+Eine Fiber ist ein leichter Thread von Effect. Wenn der Scope der Runtime
+schließt, halten alle laufenden Turns an und enden als `Interrupted`. Das gilt
+auch für einen Turn, den ein Aufrufer mit `stream` oder `execute` liest.
+Eingaben, die in der Inbox warten, bleiben dort, und eine neue Runtime startet
+sie mit `drain`. Wenn ein Aufrufer von `stream` früh aufhört zu lesen, hält auch
+sein Turn an.
+
+`events` liefert die Ereignisse eines Chats. Mit `after` liefert es zuerst die
+letzten Ereignisse nach dieser Revision, damit ein neuer Abonnent aufholen kann.
+Die Runtime behält dafür die letzten 64 Ereignisse. Ein langsamer Abonnent lässt
+den Speicher nicht wachsen: Wenn 1024 Ereignisse auf ihn warten, verdrängt jedes
+neue Ereignis das älteste. So kann ein solcher Abonnent Ereignisse verpassen,
+aber er bekommt immer die neuesten.
+
 ### Approvals
 
 Ein Werkzeug mit `needsApproval` fragt vor jedem Aufruf. Die Runtime fragt dann

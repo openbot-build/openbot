@@ -1,12 +1,13 @@
 import type { ChannelsApi } from "@openbot-build/api"
 import {
+	Cause,
 	Context,
+	Crypto,
+	Duration,
 	Effect,
-	Exit,
-	HashMap,
 	Layer,
+	RcMap,
 	Scope,
-	SynchronizedRef,
 } from "effect"
 import { HttpClient } from "effect/http"
 import { AppNetwork } from "../apps/AppHost.ts"
@@ -22,12 +23,17 @@ import * as TelegramChannel from "./telegram/TelegramChannel.ts"
 export class ChannelRegistry extends Context.Service<
 	ChannelRegistry,
 	{
+		/**
+		 * Borrows the integration of a stored Channel version. The integration works until
+		 * the scope closes.
+		 */
 		readonly get: (
 			organizationId: string,
 			channel: { readonly id: string; readonly version: number },
 		) => Effect.Effect<
 			Channel,
-			ChannelsApi.ChannelsUnavailable | ChannelsApi.ChannelNotFound
+			ChannelsApi.ChannelsUnavailable | ChannelsApi.ChannelNotFound,
+			Scope.Scope
 		>
 		/**
 		 * Builds an integration from secrets that are not stored yet, such as on create.
@@ -44,6 +50,7 @@ export const make = Effect.gen(function* () {
 	const channels = yield* Channels
 	const client = yield* HttpClient.HttpClient
 	const network = yield* AppNetwork
+	const crypto = yield* Crypto.Crypto
 	const platform = Http.fromClient(client)
 	const build = (
 		id: string,
@@ -53,7 +60,9 @@ export const make = Effect.gen(function* () {
 			case "slack":
 				return Effect.succeed(SlackChannel.make(credentials, platform))
 			case "lark":
-				return LarkChannel.make(credentials, platform)
+				return LarkChannel.make(credentials, platform).pipe(
+					Effect.provideService(Crypto.Crypto, crypto),
+				)
 			case "telegram":
 				return Effect.succeed(TelegramChannel.make(credentials, platform))
 			case "custom":
@@ -70,47 +79,32 @@ export const make = Effect.gen(function* () {
 				)
 		}
 	}
-	// One integration for each Channel version. A change of the Channel builds a new one,
-	// and closes the scope of the old one. All scopes close when the registry stops.
-	const registryScope = yield* Effect.scope
-	const cache = yield* SynchronizedRef.make(
-		HashMap.empty<
-			string,
-			{
-				readonly version: number
-				readonly channel: Channel
-				readonly scope: Scope.Closeable
-			}
-		>(),
-	)
+	// One integration for each Channel version, shared by everyone who uses it. An
+	// integration closes some time after its last user is done, so a change of the
+	// Channel never closes an integration that is still in use, and the integration of
+	// a deleted Channel goes away too. RcMap compares the keys by value.
+	type Key = readonly [organizationId: string, id: string, version: number]
+	const integrations: RcMap.RcMap<
+		Key,
+		Channel,
+		ChannelsApi.ChannelsUnavailable | ChannelsApi.ChannelNotFound
+	> = yield* RcMap.make({
+		lookup: (key: Key) =>
+			channels.credentials(key[0], key[1]).pipe(
+				Effect.flatMap((credentials) => build(key[1], credentials)),
+				// A failed build is not kept, so the next use builds again.
+				Effect.onError((cause) =>
+					Cause.hasInterruptsOnly(cause)
+						? Effect.void
+						: RcMap.invalidate(integrations, key),
+				),
+			),
+		idleTimeToLive: Duration.minutes(10),
+	})
 	return ChannelRegistry.of({
 		build,
 		get: (organizationId, target) =>
-			SynchronizedRef.modifyEffect(cache, (current) =>
-				Effect.gen(function* () {
-					const found = HashMap.get(current, target.id)
-					if (found._tag === "Some" && found.value.version === target.version)
-						return [found.value.channel, current] as const
-					const credentials = yield* channels.credentials(
-						organizationId,
-						target.id,
-					)
-					const scope = yield* Scope.fork(registryScope)
-					const channel = yield* build(target.id, credentials).pipe(
-						Scope.provide(scope),
-					)
-					if (found._tag === "Some")
-						yield* Scope.close(found.value.scope, Exit.void)
-					return [
-						channel,
-						HashMap.set(current, target.id, {
-							version: target.version,
-							channel,
-							scope,
-						}),
-					] as const
-				}),
-			),
+			RcMap.get(integrations, [organizationId, target.id, target.version]),
 	})
 })
 export const layer = Layer.effect(ChannelRegistry, make)

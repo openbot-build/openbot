@@ -1,6 +1,18 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
-import { Array as EffectArray, Deferred, Effect, Option, Stream } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Layer,
+	Logger,
+	Option,
+	pipe,
+	Scope,
+	Stream,
+} from "effect"
 import { AiError, Prompt } from "effect/ai"
 import {
 	Chat,
@@ -11,6 +23,22 @@ import {
 import { ChatTest, settled } from "./ChatTest.ts"
 import { LanguageModelTest, textParts } from "./LanguageModelTest.ts"
 
+/** All the text of a prompt: the system text and every text part, one on each line. */
+const promptText = (prompt: Prompt.Prompt) =>
+	pipe(
+		prompt.content,
+		Arr.flatMap((message): ReadonlyArray<string> => {
+			if (message.role === "system") return [message.content]
+			const parts: ReadonlyArray<Prompt.Part> = message.content
+			return pipe(
+				parts,
+				Arr.filter((part) => part.type === "text"),
+				Arr.map((part) => part.text),
+			)
+		}),
+		Arr.join("\n"),
+	)
+
 /** A model that holds its first request until `gate` opens. Later requests answer at once. */
 const heldModel = (input: {
 	readonly ready: Deferred.Deferred<void>
@@ -20,7 +48,7 @@ const heldModel = (input: {
 }) =>
 	LanguageModelTest({
 		streamText: ({ prompt }) => {
-			input.prompts.value = EffectArray.append(input.prompts.value, prompt)
+			input.prompts.value = Arr.append(input.prompts.value, prompt)
 			return input.prompts.value.length === 1
 				? Stream.fromEffect(
 						Deferred.succeed(input.ready, undefined).pipe(
@@ -65,7 +93,7 @@ it.effect(
 				assert.strictEqual(queued.turn, undefined)
 				const waiting = yield* runtimeStore.read(chat)
 				assert.deepStrictEqual(
-					waiting.chat.inbox.map((entry) => [entry.id, entry.kind]),
+					Arr.map(waiting.chat.inbox, (entry) => [entry.id, entry.kind]),
 					[
 						[steered.item, "steer"],
 						[queued.item, "message"],
@@ -100,15 +128,9 @@ it.effect(
 				assert.deepStrictEqual(next.input, [queued.item])
 				assert.deepStrictEqual(done.chat.inbox, [])
 				assert.strictEqual((yield* runtimeStore.turns(chat)).length, 2)
-				assert.match(JSON.stringify(prompts.value[1]), /steering instruction/)
-				assert.notMatch(
-					JSON.stringify(prompts.value[1]),
-					/ordinary queued input/,
-				)
-				assert.match(
-					JSON.stringify(prompts.value.at(-1)),
-					/ordinary queued input/,
-				)
+				assert.match(promptText(prompts.value[1]!), /steering instruction/)
+				assert.notMatch(promptText(prompts.value[1]!), /ordinary queued input/)
+				assert.match(promptText(prompts.value.at(-1)!), /ordinary queued input/)
 				const late = yield* runtime
 					.interrupt({ chat, turn: started.turn })
 					.pipe(Effect.flip)
@@ -266,14 +288,14 @@ it.effect(
 					author: "carol",
 				})
 				assert.deepStrictEqual(
-					[bob1, bob2, carol].map((delivery) => delivery.delivery),
+					Arr.map([bob1, bob2, carol], (delivery) => delivery.delivery),
 					["queued", "queued", "queued"],
 				)
 				yield* Deferred.succeed(gate, undefined)
 				const done = yield* settled(runtime, chat)
 				const turns = yield* runtimeStore.turns(chat)
 				assert.deepStrictEqual(
-					turns.map((turn) => [turn.author, turn.input.length]),
+					Arr.map(turns, (turn) => [turn.author, turn.input.length]),
 					[
 						["ada", 1],
 						["bob", 2],
@@ -381,13 +403,7 @@ it.effect(
 					assert.strictEqual(queued.delivery, "queued")
 					return { chat, running, steered, queued }
 				}),
-			).pipe(
-				Effect.provide(model),
-				Effect.timeoutOrElse({
-					duration: "2 seconds",
-					orElse: () => Effect.die("The runtime did not close"),
-				}),
-			)
+			).pipe(Effect.provide(model))
 			yield* Effect.gen(function* () {
 				// A new runtime over the same persistence, as after a restart.
 				const { runtime, runtimeStore } = yield* ChatTest({}, { persistence })
@@ -398,7 +414,7 @@ it.effect(
 				)
 				assert.strictEqual(Chat.status(closed.chat)._tag, "Interrupted")
 				assert.deepStrictEqual(
-					closed.chat.inbox.map((entry) => [entry.id, entry.kind]),
+					Arr.map(closed.chat.inbox, (entry) => [entry.id, entry.kind]),
 					[
 						[first.steered.item, "message"],
 						[first.queued.item, "message"],
@@ -410,7 +426,7 @@ it.effect(
 				yield* settled(runtime, first.chat)
 				const turns = yield* runtimeStore.turns(first.chat)
 				assert.deepStrictEqual(
-					turns.map((turn) => [turn.author, turn.status._tag]),
+					Arr.map(turns, (turn) => [turn.author, turn.status._tag]),
 					[
 						["ada", "Interrupted"],
 						["ada", "Completed"],
@@ -514,4 +530,49 @@ it.effect(
 			}).pipe(Effect.provide(heldModel({ ready, gate, prompts })))
 		})
 	},
+)
+
+it.effect(
+	"closing the runtime stops a Turn that a caller streams, the caller sees the end, and nothing logs a warning",
+	() => {
+		const prompts = { value: [] as ReadonlyArray<Prompt.Prompt> }
+		let warnings: ReadonlyArray<unknown> = []
+		const collector = Logger.layer([
+			Logger.make((log) => {
+				if (log.logLevel === "Warn" || log.logLevel === "Error")
+					warnings = Arr.append(warnings, log.message)
+			}),
+		])
+		return Effect.gen(function* () {
+			const ready = yield* Deferred.make<void>(),
+				gate = yield* Deferred.make<void>()
+			yield* Effect.gen(function* () {
+				const persistence = yield* MemoryPersistence.make
+				const scope = yield* Scope.fork(yield* Effect.scope)
+				const { runtime, chat } = yield* ChatTest({}, { persistence }).pipe(
+					Scope.provide(scope),
+				)
+				const running = yield* Effect.forkChild(
+					runtime.execute({ chat, input: "work" }),
+				)
+				yield* Deferred.await(ready)
+				assert.strictEqual(yield* runtime.isActive(chat), true)
+				yield* Scope.close(scope, Exit.void)
+				const exit = yield* Fiber.await(running)
+				assert.ok(Exit.isFailure(exit))
+				assert.ok(Cause.hasInterruptsOnly(exit.cause))
+				// A new runtime over the same persistence, as after a restart.
+				const { runtimeStore } = yield* ChatTest({}, { persistence })
+				const closed = yield* runtimeStore.read(chat)
+				assert.strictEqual(Chat.status(closed.chat)._tag, "Interrupted")
+				assert.strictEqual(closed.state.conversation.closed, true)
+				assert.deepStrictEqual(warnings, [])
+			}).pipe(
+				Effect.provide(
+					Layer.merge(heldModel({ ready, gate, prompts }), collector),
+				),
+			)
+		})
+	},
+	5000,
 )

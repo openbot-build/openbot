@@ -200,12 +200,12 @@ Channel 的路径是
 
 ## 错误
 
-| 错误                      | 状态 | 何时出现                                                       |
-| ------------------------- | ---- | -------------------------------------------------------------- |
-| `ChannelInvalid`          | 400  | Bot 不是共享 Bot、类型被修改了，或者平台没有接受这个 webhook。 |
-| `ChannelNotFound`         | 404  | 没有这个 Channel。                                             |
-| `ChannelLinkInvalid`      | 404  | 关联码未知、已经用过或已经过期。请再向机器人要一次。           |
-| `ChannelIdentityNotFound` | 404  | 没有这个关联的账户。                                           |
-| `ChannelConflict`         | 409  | 你读取之后，这个 Channel 已经改变。                            |
-| `ChannelHookDenied`       | 401  | 签名错误或太旧，或者这个 Channel 已停用。                      |
-| `ChannelsUnavailable`     | 503  | OpenBot 现在无法访问它的存储。                                 |
+| 错误                      | 状态 | 何时出现                                                     |
+| ------------------------- | ---- | ------------------------------------------------------------ |
+| `ChannelInvalid`          | 400  | Bot 不是共享 Bot、类型被修改了，或者平台拒绝了这个 webhook。 |
+| `ChannelNotFound`         | 404  | 没有这个 Channel。                                           |
+| `ChannelLinkInvalid`      | 404  | 关联码未知、已经用过或已经过期。请再向机器人要一次。         |
+| `ChannelIdentityNotFound` | 404  | 没有这个关联的账户。                                         |
+| `ChannelConflict`         | 409  | 你读取之后，这个 Channel 已经改变。                          |
+| `ChannelHookDenied`       | 401  | 签名错误或太旧，或者这个 Channel 已停用。                    |
+| `ChannelsUnavailable`     | 503  | OpenBot 现在无法访问它的存储或平台。                         |

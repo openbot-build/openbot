@@ -1,5 +1,15 @@
 import type { BillingApi } from "@openbot-build/api"
-import { Context, DateTime, type Effect, Schema } from "effect"
+import {
+	Array as Arr,
+	Context,
+	DateTime,
+	type Effect,
+	type HashMap,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import type { Response } from "effect/ai"
 
 /** The provider and model of one model call, and who pays for the key. */
@@ -58,13 +68,11 @@ export const tokensOf = (usage: Response.Usage): Tokens => {
 	}
 }
 
-/** The key of the price of one model at one provider. */
-export const priceKey = (providerId: string, modelId: string) =>
-	JSON.stringify([providerId, modelId])
-
 /** A stored price, with its tiers and periods. */
 export interface Price {
 	readonly id: string
+	/** The time that the price took effect, in milliseconds. */
+	readonly effectiveFrom: number
 	readonly schedule: BillingApi.PriceSchedule
 }
 
@@ -84,33 +92,25 @@ export const costOf = (tokens: Tokens, rates: BillingApi.Rates): number => {
 	return Number((total + million - 1n) / million)
 }
 
-const weekdays: ReadonlyArray<BillingApi.Weekday> = [
-	"sun",
-	"mon",
-	"tue",
-	"wed",
-	"thu",
-	"fri",
-	"sat",
-]
+/** The number of each day of the week, with 0 for Sunday, as `DateTime` gives it. */
+const weekdayNumber: Record<BillingApi.Weekday, number> = {
+	sun: 0,
+	mon: 1,
+	tue: 2,
+	wed: 3,
+	thu: 4,
+	fri: 5,
+	sat: 6,
+}
 const minutesOf = (time: string) =>
-	Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
+	Number(Str.slice(0, 2)(time)) * 60 + Number(Str.slice(3, 5)(time))
 
 /** The day of the week and the minute of the day of a time in a time zone. */
 const localTime = (at: number, timeZone: string) => {
-	const parts = new Intl.DateTimeFormat("en-US", {
-		timeZone,
-		weekday: "short",
-		hour: "2-digit",
-		minute: "2-digit",
-		hourCycle: "h23",
-	}).formatToParts(at)
-	const part = (type: string) =>
-		parts.find((part) => part.type === type)?.value ?? ""
-	return {
-		day: weekdays.indexOf(part("weekday").toLowerCase() as BillingApi.Weekday),
-		minute: Number(part("hour")) * 60 + Number(part("minute")),
-	}
+	const { weekDay, hour, minute } = DateTime.toParts(
+		DateTime.makeZonedUnsafe(at, { timeZone }),
+	)
+	return { day: weekDay, minute: hour * 60 + minute }
 }
 
 /** Whether a window holds a local time. A window past midnight belongs to the day it starts. */
@@ -121,7 +121,8 @@ const holds = (
 	const start = minutesOf(window.start)
 	const end = minutesOf(window.end)
 	const on = (day: number) =>
-		window.days === undefined || window.days.includes(weekdays[(day + 7) % 7]!)
+		window.days === undefined ||
+		Arr.some(window.days, (weekday) => weekdayNumber[weekday] === (day + 7) % 7)
 	return start < end
 		? local.minute >= start && local.minute < end && on(local.day)
 		: (local.minute >= start && on(local.day)) ||
@@ -138,16 +139,27 @@ export const ratesOf = (
 	startedAt: number,
 ): BillingApi.Rates => {
 	const local = localTime(startedAt, schedule.timeZone)
-	const tiers =
-		schedule.periods.find((period) =>
-			period.windows.some((window) => holds(window, local)),
-		)?.tiers ?? schedule.tiers
+	const tiers = pipe(
+		Arr.findFirst(schedule.periods, (period) =>
+			Arr.some(period.windows, (window) => holds(window, local)),
+		),
+		Option.match({
+			onNone: () => schedule.tiers,
+			onSome: (period) => period.tiers,
+		}),
+	)
 	const input =
 		tokens.inputUncached + tokens.inputCacheRead + tokens.inputCacheWrite
 	// The contract makes the last tier open, so a tier always fits.
-	return tiers.find(
-		(tier) => tier.upToInputTokens === null || input <= tier.upToInputTokens,
-	)!
+	return pipe(
+		Arr.findFirst(
+			tiers,
+			(tier) => tier.upToInputTokens === null || input <= tier.upToInputTokens,
+		),
+		Option.getOrThrowWith(
+			() => new Error("No price tier fits the input tokens of the call"),
+		),
+	)
 }
 
 /** The start of the current day or month in UTC, in milliseconds. */
@@ -162,27 +174,27 @@ export const periodStart = (
 }
 
 /** A hard budget, or the credits, do not allow another model call now. */
-export class SpendingBlocked extends Schema.TaggedError<SpendingBlocked>()(
-	"SpendingBlocked",
-	{
-		reason: Schema.Literals(["budget", "credits"]),
-		/** The budget that is spent. Missing for credits. */
-		budgetId: Schema.optional(Schema.String),
-		message: Schema.String,
-	},
-) {}
+export class SpendingBlocked extends Schema.TaggedError<
+	SpendingBlocked,
+	{ readonly brand: unique symbol }
+>()("SpendingBlocked", {
+	reason: Schema.Literals(["budget", "credits"]),
+	/** The budget that is spent. Missing for credits. */
+	budgetId: Schema.optional(Schema.String),
+	message: Schema.String,
+}) {}
 
 /** OpenBot cannot read or write the billing tables now. */
-export class BillingStorageError extends Schema.TaggedError<BillingStorageError>()(
-	"BillingStorageError",
-	{ cause: Schema.Defect() },
-) {}
+export class BillingStorageError extends Schema.TaggedError<
+	BillingStorageError,
+	{ readonly brand: unique symbol }
+>()("BillingStorageError", { cause: Schema.Defect() }) {}
 
 /** The organization does not exist. */
-export class OrganizationMissing extends Schema.TaggedError<OrganizationMissing>()(
-	"OrganizationMissing",
-	{ organizationId: Schema.String },
-) {}
+export class OrganizationMissing extends Schema.TaggedError<
+	OrganizationMissing,
+	{ readonly brand: unique symbol }
+>()("OrganizationMissing", { organizationId: Schema.String }) {}
 
 export interface Range {
 	readonly from: number
@@ -221,7 +233,10 @@ export class Billing extends Context.Service<
 		readonly currentPrices: (
 			providerIds: ReadonlyArray<string>,
 		) => Effect.Effect<
-			ReadonlyMap<string, BillingApi.ModelPrice>,
+			HashMap.HashMap<
+				readonly [providerId: string, modelId: string],
+				BillingApi.ModelPrice
+			>,
 			BillingStorageError
 		>
 		readonly summary: (

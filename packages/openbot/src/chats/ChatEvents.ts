@@ -18,17 +18,12 @@ export interface Sink {
 	readonly stream: Stream.Stream<ChatResponseSseEvent>
 }
 
-/** The observer owns the buffer. The Chats scope owns the producer. */
+/** The scope of the observer owns the buffer and the producer. */
 export const make: Effect.Effect<Sink, never, Scope.Scope> = Effect.gen(
 	function* () {
 		const queue = yield* Queue.bounded<EventInput, Cause.Done>(64)
 		const terminal = yield* Deferred.make<ReadonlyArray<EventInput>>()
 		yield* Effect.addFinalizer(() => Queue.shutdown(queue))
-		let sequence = 0
-		const numbered = (event: EventInput): ChatResponseEvent => ({
-			...event,
-			sequence_number: sequence++,
-		})
 		return {
 			emit: (event: EventInput) => Queue.offer(queue, event),
 			// Finalizers must not wait for space in a full observer queue.
@@ -42,8 +37,8 @@ export const make: Effect.Effect<Sink, never, Scope.Scope> = Effect.gen(
 					Stream.flatMap(Stream.fromIterable),
 				),
 			).pipe(
-				Stream.map((event): ChatResponseSseEvent => {
-					const data = numbered(event)
+				Stream.map((event, index): ChatResponseSseEvent => {
+					const data: ChatResponseEvent = { ...event, sequence_number: index }
 					return { event: data.type, data }
 				}),
 				Stream.ensuring(Queue.shutdown(queue)),

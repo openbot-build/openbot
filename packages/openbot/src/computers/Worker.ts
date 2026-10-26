@@ -1,6 +1,7 @@
 import { Clock, Duration, Effect, Layer, Schedule } from "effect"
+import * as Background from "../app/Background.ts"
 import { Computers } from "./Computers.ts"
-import { removeOld } from "./connector/Connectors.ts"
+import { Connectors } from "./connector/Connectors.ts"
 import { Pairings } from "./Pairings.ts"
 
 export interface Options {
@@ -17,23 +18,21 @@ export const layer = (options: Options = {}) =>
 		Effect.gen(function* () {
 			const computers = yield* Computers
 			const pairings = yield* Pairings
-			const context =
-				yield* Effect.context<Effect.Services<ReturnType<typeof removeOld>>>()
-			yield* Effect.gen(function* () {
-				yield* computers.pauseIdle
-				yield* pairings.removeOld
-				yield* computers.forgetArchived
-				const now = yield* Clock.currentTimeMillis
-				yield* removeOld(now - Duration.toMillis(Duration.minutes(10))).pipe(
-					Effect.provideContext(context),
-					Effect.ignore,
-				)
-			}).pipe(
-				Effect.catchCause((cause) =>
-					Effect.logWarning("The Computer worker failed", cause),
-				),
-				Effect.repeat(Schedule.spaced(options.interval ?? Duration.minutes(1))),
-				Effect.forkScoped,
+			const connectors = yield* Connectors
+			yield* Background.repeat(
+				Effect.gen(function* () {
+					yield* computers.pauseIdle
+					yield* pairings.removeOld
+					yield* computers.forgetArchived
+					const now = yield* Clock.currentTimeMillis
+					yield* connectors.removeOld(
+						now - Duration.toMillis(Duration.minutes(10)),
+					)
+				}),
+				{
+					schedule: Schedule.spaced(options.interval ?? Duration.minutes(1)),
+					message: "The Computer worker failed",
+				},
 			)
 		}),
 	)

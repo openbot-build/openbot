@@ -82,42 +82,42 @@ export const UpdateSsoConnectionRequest = Schema.Struct({
 })
 export type UpdateSsoConnectionRequest = typeof UpdateSsoConnectionRequest.Type
 
-export class DomainNotFound extends Schema.TaggedError<DomainNotFound>()(
-	"DomainNotFound",
-	{ domain: Schema.String },
-) {}
+export class DomainNotFound extends Schema.TaggedError<
+	DomainNotFound,
+	{ readonly brand: unique symbol }
+>()("DomainNotFound", { domain: Schema.String }) {}
 /** Another organization already verified this domain. */
-export class DomainTaken extends Schema.TaggedError<DomainTaken>()(
-	"DomainTaken",
-	{ domain: Schema.String },
-) {}
+export class DomainTaken extends Schema.TaggedError<
+	DomainTaken,
+	{ readonly brand: unique symbol }
+>()("DomainTaken", { domain: Schema.String }) {}
 /** OpenBot did not find the TXT record. DNS changes can take some time. */
-export class DomainNotVerified extends Schema.TaggedError<DomainNotVerified>()(
-	"DomainNotVerified",
-	{ domain: Schema.String },
-) {}
+export class DomainNotVerified extends Schema.TaggedError<
+	DomainNotVerified,
+	{ readonly brand: unique symbol }
+>()("DomainNotVerified", { domain: Schema.String }) {}
 /** An SSO connection still uses the domain. */
-export class DomainInUse extends Schema.TaggedError<DomainInUse>()(
-	"DomainInUse",
-	{ domain: Schema.String },
-) {}
-export class SsoConnectionNotFound extends Schema.TaggedError<SsoConnectionNotFound>()(
-	"SsoConnectionNotFound",
-	{ connectionId: Schema.String },
-) {}
-export class SsoConnectionConflict extends Schema.TaggedError<SsoConnectionConflict>()(
-	"SsoConnectionConflict",
-	{ version: Version },
-) {}
+export class DomainInUse extends Schema.TaggedError<
+	DomainInUse,
+	{ readonly brand: unique symbol }
+>()("DomainInUse", { domain: Schema.String }) {}
+export class SsoConnectionNotFound extends Schema.TaggedError<
+	SsoConnectionNotFound,
+	{ readonly brand: unique symbol }
+>()("SsoConnectionNotFound", { connectionId: Schema.String }) {}
+export class SsoConnectionConflict extends Schema.TaggedError<
+	SsoConnectionConflict,
+	{ readonly brand: unique symbol }
+>()("SsoConnectionConflict", { version: Version }) {}
 /** The value is not valid, such as a domain that is not verified or that another connection uses. */
-export class SsoConnectionInvalid extends Schema.TaggedError<SsoConnectionInvalid>()(
-	"SsoConnectionInvalid",
-	{ message: Schema.String },
-) {}
-export class SsoUnavailable extends Schema.TaggedError<SsoUnavailable>()(
-	"SsoUnavailable",
-	{},
-) {}
+export class SsoConnectionInvalid extends Schema.TaggedError<
+	SsoConnectionInvalid,
+	{ readonly brand: unique symbol }
+>()("SsoConnectionInvalid", { message: Schema.String }) {}
+export class SsoUnavailable extends Schema.TaggedError<
+	SsoUnavailable,
+	{ readonly brand: unique symbol }
+>()("SsoUnavailable", {}) {}
 const errors = [
 	...AuthorizationErrors,
 	DomainNotFound.pipe(HttpApiSchema.status(404)),

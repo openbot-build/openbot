@@ -23,14 +23,19 @@ export type Signal = Data.TaggedEnum<{
 		readonly delegation: string
 		readonly reason: string
 	}
-	/**
-	 * Delegated work paused at a limit. The work below it pauses too. `denied` says why,
-	 * when it may not go on and no request says so.
-	 */
+	/** Delegated work paused at a limit. The work below it pauses too. */
 	DelegationPaused: {
 		readonly organizationId: string
 		readonly delegation: string
-		readonly denied?: string
+	}
+	/**
+	 * Delegated work paused at a limit, and the decider said no without a request.
+	 * So the work ends.
+	 */
+	DelegationDenied: {
+		readonly organizationId: string
+		readonly delegation: string
+		readonly reason: string
 	}
 	/** Delegated work reached a limit while work below it ran, so it must pause. */
 	DelegationLimitReached: {
@@ -70,11 +75,3 @@ export const layer = Layer.effect(
 		})
 	}),
 )
-
-/** Publishes when the service is there. Code that runs without Bots does nothing. */
-export const publish = (signal: Signal) =>
-	Effect.serviceOption(Signals).pipe(
-		Effect.flatMap((signals) =>
-			signals._tag === "Some" ? signals.value.publish(signal) : Effect.void,
-		),
-	)

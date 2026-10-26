@@ -1,11 +1,15 @@
 import type { ChannelsApi } from "@openbot-build/api"
 import { Data, type Effect, Schema } from "effect"
 
+/** A chat with one person, or a group chat. */
+export const ConversationKind = Schema.Literals(["direct", "group"])
+export type ConversationKind = typeof ConversationKind.Type
+
 /** One chat on a platform. Each chat of a Channel is one Chat. */
 export const Conversation = Schema.Struct({
 	/** The ID of the chat on the platform, such as a Slack channel ID. */
 	key: Schema.String,
-	kind: Schema.Literals(["direct", "group"]),
+	kind: ConversationKind,
 	title: Schema.optionalKey(Schema.String),
 })
 export type Conversation = typeof Conversation.Type
@@ -103,23 +107,24 @@ export interface Received {
 }
 
 /** The request did not come from the platform: the signature or token is wrong or too old. */
-export class ChannelDenied extends Schema.TaggedError<ChannelDenied>()(
-	"ChannelDenied",
-	{
-		reason: Schema.String,
-	},
-) {}
+export class ChannelDenied extends Schema.TaggedError<
+	ChannelDenied,
+	{ readonly brand: unique symbol }
+>()("ChannelDenied", {
+	reason: Schema.String,
+}) {}
 
 /** The platform did not take a message. `retryAfterMs` is set when it asked to wait. */
-export class ChannelDeliveryFailed extends Schema.TaggedError<ChannelDeliveryFailed>()(
-	"ChannelDeliveryFailed",
-	{
-		message: Schema.String,
-		retryAfterMs: Schema.optional(Schema.Finite),
-		/** False when trying again cannot help, such as a wrong token. */
-		retry: Schema.Boolean,
-	},
-) {}
+export class ChannelDeliveryFailed extends Schema.TaggedError<
+	ChannelDeliveryFailed,
+	{ readonly brand: unique symbol }
+>()("ChannelDeliveryFailed", {
+	message: Schema.String,
+	retryAfterMs: Schema.optional(Schema.Finite),
+	/** False when trying again cannot help, such as a wrong token. */
+	retry: Schema.Boolean,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
 /**
  * The integration of one platform. Each kind has its own folder, like the model providers.

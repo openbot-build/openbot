@@ -1,6 +1,7 @@
 import { Document, Index } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
+import { Limit } from "./Page.ts"
 
 export const Source = Schema.Struct({
 	id: Schema.NonEmptyString,
@@ -52,32 +53,26 @@ export const Query = Schema.Struct({
 	query: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(200))),
 	source: Schema.optionalKey(Schema.NonEmptyString),
 	cursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(8192))),
-	limit: Schema.optionalKey(
-		Schema.FiniteFromString.pipe(
-			Schema.decodeTo(
-				Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
-			),
-		),
-	),
+	limit: Schema.optionalKey(Limit(50)),
 })
 export type Query = typeof Query.Type
 
-export class IndexInputInvalid extends Schema.TaggedError<IndexInputInvalid>()(
-	"IndexInputInvalid",
-	{ message: Schema.String },
-) {}
-export class IndexUnavailable extends Schema.TaggedError<IndexUnavailable>()(
-	"IndexUnavailable",
-	{ issues: Schema.Array(SourceIssue) },
-) {}
-export class IndexNotFound extends Schema.TaggedError<IndexNotFound>()(
-	"IndexNotFound",
-	{ message: Schema.String },
-) {}
-export class IndexRestricted extends Schema.TaggedError<IndexRestricted>()(
-	"IndexRestricted",
-	{ restriction: Restriction },
-) {}
+export class IndexInputInvalid extends Schema.TaggedError<
+	IndexInputInvalid,
+	{ readonly brand: unique symbol }
+>()("IndexInputInvalid", { message: Schema.String }) {}
+export class IndexUnavailable extends Schema.TaggedError<
+	IndexUnavailable,
+	{ readonly brand: unique symbol }
+>()("IndexUnavailable", { issues: Schema.Array(SourceIssue) }) {}
+export class IndexNotFound extends Schema.TaggedError<
+	IndexNotFound,
+	{ readonly brand: unique symbol }
+>()("IndexNotFound", { message: Schema.String }) {}
+export class IndexRestricted extends Schema.TaggedError<
+	IndexRestricted,
+	{ readonly brand: unique symbol }
+>()("IndexRestricted", { restriction: Restriction }) {}
 
 const errors = [
 	IndexRestricted.pipe(HttpApiSchema.status(403)),

@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Stream } from "effect"
+import { Array as Arr, Effect, HashMap, Layer, Stream } from "effect"
 import { Organization } from "../src/organization/Organization.ts"
 import { AuditLog } from "../src/audit/AuditLog.ts"
 import * as AuthorizationLayer from "../src/authorization/Layer.ts"
@@ -22,7 +22,7 @@ import { RateLimiter } from "../src/billing/RateLimit.ts"
  * An organization where every account is an active Super Administrator.
  * Tests that fake the sign-in use it, because their accounts are not stored.
  */
-export const layerEveryoneAdministrator = Layer.succeed(Organization, {
+export const layerEveryoneAdministrator = Layer.mock(Organization, {
 	admit: () =>
 		Effect.succeed([
 			{
@@ -32,7 +32,6 @@ export const layerEveryoneAdministrator = Layer.succeed(Organization, {
 				roles: ["super_administrator"],
 			},
 		]),
-	memberships: () => Effect.die("unused"),
 	member: (_, userId) =>
 		Effect.succeedSome({
 			userId,
@@ -53,61 +52,41 @@ export const layerEveryoneAdministrator = Layer.succeed(Organization, {
 			policy: Authorization.emptyPolicy,
 			joinedAt: "2026-01-01T00:00:00.000Z",
 		}),
-	get: () => Effect.die("unused"),
-	list: () => Effect.die("unused"),
-	create: () => Effect.die("unused"),
-	update: () => Effect.die("unused"),
-	setStatus: () => Effect.die("unused"),
-	listMembers: () => Effect.die("unused"),
-	updateMember: () => Effect.die("unused"),
-	removeMember: () => Effect.die("unused"),
-	listInvitations: () => Effect.die("unused"),
-	createInvitation: () => Effect.die("unused"),
-	revokeInvitation: () => Effect.die("unused"),
-	invitationsFor: () => Effect.die("unused"),
-	answerInvitation: () => Effect.die("unused"),
-	listBotInvitations: () => Effect.die("unused"),
-	createBotInvitation: () => Effect.die("unused"),
-	botInvitation: () => Effect.die("unused"),
-	revokeBotInvitation: () => Effect.die("unused"),
-	takeBotInvitation: () => Effect.die("unused"),
-	roleInUse: () => Effect.die("unused"),
 })
 
 /** Only the built-in roles. */
-export const layerBuiltinRoles = Layer.succeed(Roles, {
+export const layerBuiltinRoles = Layer.mock(Roles, {
 	list: () => Effect.succeed(builtin),
 	get: (_, roleId) =>
-		Effect.succeed(
-			Option.fromNullishOr(builtin.find((role) => role.id === roleId)),
-		),
-	create: () => Effect.die("unused"),
-	update: () => Effect.die("unused"),
-	delete: () => Effect.die("unused"),
+		Effect.succeed(Arr.findFirst(builtin, (role) => role.id === roleId)),
 })
 
 /**
  * Settings kept in memory. Without options, there are no platform settings,
- * and every organization has the defaults.
+ * and every organization has the defaults. A public origin or App
+ * restrictions give platform settings.
  */
 export const layerSettings = (
 	options: {
+		readonly publicOrigin?: string
 		readonly appRestrictions?: ReadonlyArray<AppIndexApi.Restriction>
 		readonly organization?: Partial<OrganizationDocument>
 	} = {},
 ) =>
-	Layer.succeed(Settings, {
+	Layer.mock(Settings, {
 		platform:
-			options.appRestrictions === undefined
+			options.appRestrictions === undefined &&
+			options.publicOrigin === undefined
 				? Effect.succeedNone
 				: Effect.succeedSome({
 						document: {
-							publicOrigin: "https://openbot.example.com",
+							publicOrigin:
+								options.publicOrigin ?? "https://openbot.example.com",
 							authSecret: "unused",
 							identityProvider: null,
 							organizationCreation: "anyone" as const,
 							ceiling: Authorization.emptyPolicy,
-							appRestrictions: options.appRestrictions,
+							appRestrictions: options.appRestrictions ?? [],
 						},
 						version: 1,
 						updatedAt: 0,
@@ -118,17 +97,13 @@ export const layerSettings = (
 				version: 0,
 				updatedAt: 0,
 			}),
-		initializePlatform: () => Effect.die("unused"),
-		updatePlatform: () => Effect.die("unused"),
-		replacePlatform: () => Effect.die("unused"),
-		updateOrganization: () => Effect.die("unused"),
 		member: () =>
 			Effect.succeed({ document: memberDefaults, version: 0, updatedAt: 0 }),
-		updateMember: () => Effect.die("unused"),
 		notify: () => Effect.void,
 		changes: Stream.never,
 	})
 
+/** Settings kept in memory, with no platform settings and the defaults for every organization. */
 export const layerDefaultSettings = layerSettings()
 
 /**
@@ -141,10 +116,8 @@ export const layerAuthorization = AuthorizationLayer.layer.pipe(
 			layerEveryoneAdministrator,
 			layerBuiltinRoles,
 			layerDefaultSettings,
-			Layer.succeed(PlatformAdmins, {
+			Layer.mock(PlatformAdmins, {
 				list: Effect.succeed([]),
-				add: () => Effect.die("unused"),
-				remove: () => Effect.die("unused"),
 				check: () => Effect.succeed(false),
 			}),
 		),
@@ -159,68 +132,18 @@ export const layerUnusedPlatform = Layer.mergeAll(
 	layerBuiltinRoles,
 	layerDefaultSettings,
 	Layer.succeed(RateLimiter, { hit: () => Effect.void }),
-	Layer.succeed(Billing, {
+	Layer.mock(Billing, {
 		check: () => Effect.void,
 		record: () => Effect.void,
-		prices: () => Effect.die("unused"),
-		setPrice: () => Effect.die("unused"),
-		currentPrices: () => Effect.succeed(new Map()),
-		summary: () => Effect.die("unused"),
-		events: () => Effect.die("unused"),
-		credits: () => Effect.die("unused"),
-		setCreditsEnabled: () => Effect.die("unused"),
-		grantCredits: () => Effect.die("unused"),
+		currentPrices: () => Effect.succeed(HashMap.empty()),
 		botSpend: () => Effect.succeed(0),
 		chatSpend: () => Effect.succeed(0),
-		budgets: () => Effect.die("unused"),
-		budget: () => Effect.die("unused"),
-		createBudget: () => Effect.die("unused"),
-		updateBudget: () => Effect.die("unused"),
-		deleteBudget: () => Effect.die("unused"),
 	}),
-	Layer.succeed(PlatformAdmins, {
-		list: Effect.die("unused"),
-		add: () => Effect.die("unused"),
-		remove: () => Effect.die("unused"),
-		check: () => Effect.succeed(false),
-	}),
-	Layer.succeed(ModelProviders, {
-		list: () => Effect.die("unused"),
-		get: () => Effect.die("unused"),
-		available: () => Effect.succeed([]),
-		create: () => Effect.die("unused"),
-		update: () => Effect.die("unused"),
-		delete: () => Effect.die("unused"),
-		openKey: () => Effect.die("unused"),
-	}),
-	Layer.succeed(Models, {
-		list: () => Effect.die("unused"),
-		get: () => Effect.die("unused"),
-		available: () => Effect.succeed([]),
-		create: () => Effect.die("unused"),
-		update: () => Effect.die("unused"),
-		delete: () => Effect.die("unused"),
-	}),
-	Layer.succeed(ModelRegistry, {
-		catalog: () => Effect.die("unused"),
-		view: () => Effect.die("unused"),
-		resolve: () => Effect.die("unused"),
-		liveCatalog: () => Effect.die("unused"),
-		resolveLive: () => Effect.die("unused"),
-		rulesModel: () => Effect.die("unused"),
-		botMemoryModel: () => Effect.die("unused"),
-		decision: () => Effect.die("unused"),
-	}),
-	Layer.succeed(Sso, {
-		listDomains: () => Effect.die("unused"),
-		addDomain: () => Effect.die("unused"),
-		verifyDomain: () => Effect.die("unused"),
-		removeDomain: () => Effect.die("unused"),
-		listConnections: () => Effect.die("unused"),
-		getConnection: () => Effect.die("unused"),
-		createConnection: () => Effect.die("unused"),
-		updateConnection: () => Effect.die("unused"),
-		deleteConnection: () => Effect.die("unused"),
+	Layer.mock(PlatformAdmins, { check: () => Effect.succeed(false) }),
+	Layer.mock(ModelProviders, { available: () => Effect.succeed([]) }),
+	Layer.mock(Models, { available: () => Effect.succeed([]) }),
+	Layer.mock(ModelRegistry, {}),
+	Layer.mock(Sso, {
 		all: Effect.succeed([]),
 		openSecret: () => Effect.succeedNone,
 		providerOf: () => Effect.succeedNone,

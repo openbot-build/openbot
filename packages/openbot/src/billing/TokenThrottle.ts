@@ -1,5 +1,6 @@
 import type { Settings as Api } from "@openbot-build/api"
 import {
+	Array as Arr,
 	Clock,
 	Context,
 	Effect,
@@ -9,6 +10,7 @@ import {
 	Ref,
 	Schedule,
 } from "effect"
+import * as Background from "../app/Background.ts"
 import { tokenRateOf } from "../settings/Documents.ts"
 import { Settings } from "../settings/Settings.ts"
 import type { Attribution, Call } from "./Billing.ts"
@@ -81,16 +83,22 @@ export const make = Effect.gen(function* () {
 	const buckets = yield* Ref.make(HashMap.empty<string, Bucket>())
 
 	// A full bucket is the same as no bucket, so a background fiber drops it.
-	yield* Effect.gen(function* () {
-		const now = yield* Clock.currentTimeMillis
-		yield* Ref.update(
-			buckets,
-			HashMap.filter(
-				(bucket) =>
-					refill(bucket, bucket.rate, now).level < bucket.rate.burstTokens,
-			),
-		)
-	}).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.forkScoped)
+	yield* Background.repeat(
+		Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			yield* Ref.update(
+				buckets,
+				HashMap.filter(
+					(bucket) =>
+						refill(bucket, bucket.rate, now).level < bucket.rate.burstTokens,
+				),
+			)
+		}),
+		{
+			schedule: Schedule.spaced("1 minute"),
+			message: "OpenBot could not drop full token buckets",
+		},
+	)
 
 	/** Takes tokens from each bucket, and gives the wait until the last one is out of debt. */
 	const debit = (scopes: ReadonlyArray<Scope>, tokens: number) =>
@@ -131,13 +139,27 @@ export const make = Effect.gen(function* () {
 							onSome: (current) => tokenRateOf(current.document),
 						}),
 					),
-					Effect.orElseSucceed(() => null),
+					// The throttle never refuses work, so the call goes on without limits.
+					Effect.catchTag("SettingsUnavailable", (error) =>
+						Effect.logWarning(
+							"OpenBot could not read the platform token rates. The model call goes on without them.",
+							error,
+						).pipe(Effect.as(null)),
+					),
 				)
 				const organization = yield* settings
 					.organization(call.organizationId)
 					.pipe(
 						Effect.map((current) => tokenRateOf(current.document)),
-						Effect.orElseSucceed(() => null),
+						Effect.catchTag("SettingsUnavailable", (error) =>
+							Effect.logWarning(
+								"OpenBot could not read the token rates of the organization. The model call goes on without them.",
+								error,
+							).pipe(
+								Effect.annotateLogs({ organizationId: call.organizationId }),
+								Effect.as(null),
+							),
+						),
 					)
 				const rate = (scope: keyof Api.TokenRateLimits) =>
 					lower(platform?.[scope] ?? null, organization?.[scope] ?? null)
@@ -156,7 +178,7 @@ export const make = Effect.gen(function* () {
 						attribution.tokenId && `token:${org}:${attribution.tokenId}`,
 					],
 				]
-				return candidates.flatMap(([scope, key]) => {
+				return Arr.flatMap(candidates, ([scope, key]) => {
 					const value = rate(scope)
 					return key === undefined || value === null
 						? []

@@ -28,14 +28,18 @@ export const layerConnectionScopes = Layer.effect(
 	ConnectionScopes,
 	Effect.gen(function* () {
 		const state = yield* Ref.make(
-			HashMap.empty<string, HashSet.HashSet<Scope.Closeable>>(),
+			HashMap.empty<
+				readonly [string, string],
+				HashSet.HashSet<Scope.Closeable>
+			>(),
 		)
 		return ConnectionScopes.of({
+			// The scope and its clean-up go in together, so an interruption cannot leave a scope in the map.
 			register: Effect.fn("ConnectionScopes.register")(function* ({
 				key,
 				scope,
 			}) {
-				const id = JSON.stringify([key.owner, key.connectionId])
+				const id = [key.owner, key.connectionId] as const
 				yield* Ref.update(
 					state,
 					HashMap.modifyAt(id, (scopes) =>
@@ -61,9 +65,9 @@ export const layerConnectionScopes = Layer.effect(
 						),
 					),
 				)
-			}),
+			}, Effect.uninterruptible),
 			close: Effect.fn("ConnectionScopes.close")(function* (key) {
-				const id = JSON.stringify([key.owner, key.connectionId])
+				const id = [key.owner, key.connectionId] as const
 				const scopes = yield* Ref.modify(
 					state,
 					(old) => [HashMap.get(old, id), HashMap.remove(old, id)] as const,
@@ -105,12 +109,12 @@ export const add = Effect.fn("App.add")(function* (options: {
 	})
 	const store = yield* Store.AppStore
 	const connection = yield* store.save({
-		app: {
+		app: Store.AppRecord.make({
 			cardUrl: current.cardUrl,
 			card: current.card,
 			sources: current.sources,
-		},
-		connection: {
+		}),
+		connection: Store.UserConnection.make({
 			...options.key,
 			cardUrl: current.cardUrl,
 			endpoint: configured.url,
@@ -125,7 +129,7 @@ export const add = Effect.fn("App.add")(function* (options: {
 						scopes: [],
 					}
 				: { _tag: "Unprotected" },
-		},
+		}),
 	})
 	return {
 		connection,
@@ -278,11 +282,13 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 			Match.orElse(() => true),
 		)
 	if (!sensitive) {
-		yield* store.updateApp({
-			cardUrl: candidate.cardUrl,
-			card: candidate.card,
-			sources: candidate.sources,
-		})
+		yield* store.updateApp(
+			Store.AppRecord.make({
+				cardUrl: candidate.cardUrl,
+				card: candidate.card,
+				sources: candidate.sources,
+			}),
+		)
 		return {
 			_tag: "DescriptionUpdated",
 			connection,
@@ -298,11 +304,13 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 	})
 	const active = yield* ConnectionScopes
 	yield* active.close(options.key)
-	yield* store.updateApp({
-		cardUrl: candidate.cardUrl,
-		card: candidate.card,
-		sources: candidate.sources,
-	})
+	yield* store.updateApp(
+		Store.AppRecord.make({
+			cardUrl: candidate.cardUrl,
+			card: candidate.card,
+			sources: candidate.sources,
+		}),
+	)
 	if (!options.confirmed)
 		return {
 			_tag: "NeedsRevalidation",

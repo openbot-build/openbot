@@ -1,4 +1,3 @@
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
 	Account,
 	BotsApi,
@@ -7,8 +6,16 @@ import {
 	OrganizationApi,
 	OpenBotApi,
 } from "@openbot-build/api"
-import { Effect, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import { HttpApiBuilder } from "effect/http-api"
+import * as Failures from "../app/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { botKey } from "../audit/Resources.ts"
 import { Grants } from "../capabilities/Grants.ts"
@@ -16,135 +23,154 @@ import { Rules } from "../capabilities/Rules.ts"
 import { BotMemories, homeOf } from "./BotMemories.ts"
 import { MemoryBot } from "./MemoryBot.ts"
 import { Organization } from "../organization/Organization.ts"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
 import { Bots } from "./Bots.ts"
 import * as InvitationLinks from "./InvitationLinks.ts"
 import { shareable } from "./Sharing.ts"
+import * as Platform from "../settings/Platform.ts"
+import { Settings } from "../settings/Settings.ts"
 
-export const layer = (publicOrigin: string) =>
-	HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
-		Effect.gen(function* () {
-			const bots = yield* Bots
-			const memories = yield* BotMemories
-			const memoryBot = yield* MemoryBot
-			const rules = yield* Rules
-			const grants = yield* Grants
-			const audit = yield* AuditLog
-			const organization = yield* Organization
-			const services = yield* Effect.context<
-				AuthorizationServices | Effect.Services<typeof InvitationLinks.make>
-			>()
-			const access = (
-				caller: Caller,
-				id: string,
-				permission: "read" | "write" | "share",
-			) =>
-				bots
-					.access(caller, id, permission)
-					.pipe(Effect.provideContext(services))
-			const record = (
-				caller: Caller,
-				action: OrganizationApi.AuditAction,
-				bot: BotsApi.Bot,
-				details: Schema.JsonObject,
-			) =>
-				audit
-					.record({
+export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
+	Effect.gen(function* () {
+		const settings = yield* Settings
+		/** The links of invitations use the public origin of the platform now. */
+		const publicOrigin = Platform.publicOriginOr(settings, () =>
+			BotsApi.BotStorageUnavailable.make({}),
+		)
+		const bots = yield* Bots
+		const memories = yield* BotMemories
+		const memoryBot = yield* MemoryBot
+		const rules = yield* Rules
+		const grants = yield* Grants
+		const audit = yield* AuditLog
+		const organization = yield* Organization
+		const links = yield* InvitationLinks.make
+		/** A link secret that does not seal or open means a broken store. */
+		const sealed = <A>(effect: Effect.Effect<A, SecretStorageError>) =>
+			effect.pipe(
+				Failures.replace(
+					"OpenBot could not seal or open the secret of an invitation link.",
+					() => BotsApi.BotStorageUnavailable.make({}),
+				),
+			)
+		const access = (
+			caller: Caller,
+			id: string,
+			permission: "read" | "write" | "share",
+		) => bots.access(caller, id, permission)
+		const record = (
+			caller: Caller,
+			action: OrganizationApi.AuditAction,
+			bot: BotsApi.Bot,
+			details: Schema.JsonObject,
+		) =>
+			audit
+				.record({
+					organizationId: caller.organizationId,
+					action,
+					actor: caller,
+					resource: botKey({
+						...bot,
 						organizationId: caller.organizationId,
-						action,
-						actor: caller,
-						resource: botKey({
-							...bot,
-							organizationId: caller.organizationId,
-						}),
-						details,
-					})
-					.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
-			/**
-			 * The memory pool of a Bot, as the caller sees it. Each person reads only the
-			 * entries for them, in their own organization. Nobody reads another person's memory.
-			 */
-			const memoryOf = (caller: Caller, id: string) =>
-				Effect.gen(function* () {
-					const bot = yield* access(caller, id, "read")
-					return {
-						bot,
-						home: homeOf(caller.organizationId, bot),
-						viewer: {
-							organizationId: caller.organizationId,
-							person: caller.userId,
-						},
-					}
-				})
-			/** The memory Bot and the purge belong to the people of the Bot, not to its members. */
-			const ownMemory = (caller: Caller, id: string) =>
-				Effect.gen(function* () {
-					const bot = yield* access(caller, id, "write")
-					if (bot.source !== undefined)
-						return yield* BotsApi.BotInvalid.make({
-							message:
-								"This Bot is shared with you. Only its own people manage its memory.",
-						})
-					return { bot, home: homeOf(caller.organizationId, bot) }
-				})
-			return handlers
-				.handle("listBots", ({ query }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						return yield* bots
-							.list(caller, {
-								...(query.archived === undefined
-									? {}
-									: { archived: query.archived === "true" }),
-								...(query.bot === undefined ? {} : { bot: query.bot }),
-							})
-							.pipe(Effect.provideContext(services))
 					}),
+					details,
+				})
+				.pipe(
+					Failures.replace(
+						"OpenBot could not write the audit entry of a Bot.",
+						() => BotsApi.BotStorageUnavailable.make({}),
+					),
 				)
-				.handle("createBot", ({ payload }) =>
+		/**
+		 * The memory pool of a Bot, as the caller sees it. Each person reads only the
+		 * entries for them, in their own organization. Nobody reads another person's memory.
+		 */
+		const memoryOf = (caller: Caller, id: string) =>
+			Effect.gen(function* () {
+				const bot = yield* access(caller, id, "read")
+				return {
+					bot,
+					home: homeOf(caller.organizationId, bot),
+					viewer: {
+						organizationId: caller.organizationId,
+						person: caller.userId,
+					},
+				}
+			})
+		/** The memory Bot and the purge belong to the people of the Bot, not to its members. */
+		const ownMemory = (caller: Caller, id: string) =>
+			Effect.gen(function* () {
+				const bot = yield* access(caller, id, "write")
+				if (bot.source !== undefined)
+					return yield* BotsApi.BotInvalid.make({
+						message:
+							"This Bot is shared with you. Only its own people manage its memory.",
+					})
+				return { bot, home: homeOf(caller.organizationId, bot) }
+			})
+		return handlers
+			.handle("listBots", ({ query }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					return yield* bots.list(caller, {
+						...(query.archived === undefined
+							? {}
+							: { archived: query.archived === "true" }),
+						...(query.bot === undefined ? {} : { bot: query.bot }),
+					})
+				}),
+			)
+			.handle(
+				"createBot",
+				({ payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* bots
-							.create(caller, payload)
-							.pipe(Effect.provideContext(services))
+						const bot = yield* bots.create(caller, payload)
 						yield* record(caller, "bot.created", bot, {
 							name: bot.name,
 							shared: bot.owner._tag === "Organization",
 						})
 						return bot
 					}),
-				)
-				.handle("getBot", ({ params }) =>
-					Effect.flatMap(Identity, (caller) =>
-						access(caller, params.botId, "read"),
-					),
-				)
-				.handle("updateBot", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle("getBot", ({ params }) =>
+				Effect.flatMap(Identity, (caller) =>
+					access(caller, params.botId, "read"),
+				),
+			)
+			.handle(
+				"updateBot",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* bots
-							.update(caller, params.botId, payload)
-							.pipe(Effect.provideContext(services))
+						const bot = yield* bots.update(caller, params.botId, payload)
 						yield* record(caller, "bot.updated", bot, {
 							revision: bot.revision,
 						})
 						return bot
 					}),
-				)
-				.handle("botMemory", ({ params, query }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const { home, viewer } = yield* memoryOf(caller, params.botId)
-						const tags =
-							query.tags === undefined
-								? []
-								: query.tags
-										.split(",")
-										.map((tag) => tag.trim())
-										.filter((tag) => tag.length > 0)
-						return yield* memories.view(home, viewer, tags)
-					}),
-				)
-				.handle("updateBotMemory", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle("botMemory", ({ params, query }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const { home, viewer } = yield* memoryOf(caller, params.botId)
+					const tags =
+						query.tags === undefined
+							? []
+							: pipe(
+									query.tags,
+									Str.split(","),
+									Arr.map(Str.trim),
+									Arr.filter((tag) => tag.length > 0),
+								)
+					return yield* memories.view(home, viewer, tags)
+				}),
+			)
+			.handle(
+				"updateBotMemory",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const { bot, home } = yield* memoryOf(caller, params.botId)
@@ -161,15 +187,18 @@ export const layer = (publicOrigin: string) =>
 						})
 						return view
 					}),
-				)
-				.handle("botMemoryLog", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const { home, viewer } = yield* memoryOf(caller, params.botId)
-						return yield* memories.log(home, viewer)
-					}),
-				)
-				.handle("purgeBotMemory", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle("botMemoryLog", ({ params }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const { home, viewer } = yield* memoryOf(caller, params.botId)
+					return yield* memories.log(home, viewer)
+				}),
+			)
+			.handle(
+				"purgeBotMemory",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const { bot, home } = yield* ownMemory(caller, params.botId)
@@ -180,15 +209,18 @@ export const layer = (publicOrigin: string) =>
 						})
 						return { removed }
 					}),
-				)
-				.handle("memoryBot", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const { home } = yield* ownMemory(caller, params.botId)
-						return yield* memoryBot.settings(home)
-					}),
-				)
-				.handle("updateMemoryBot", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle("memoryBot", ({ params }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const { home } = yield* ownMemory(caller, params.botId)
+					return yield* memoryBot.settings(home)
+				}),
+			)
+			.handle(
+				"updateMemoryBot",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const { bot, home } = yield* ownMemory(caller, params.botId)
@@ -198,15 +230,18 @@ export const layer = (publicOrigin: string) =>
 						})
 						return settings
 					}),
-				)
-				.handle("listRules", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "read")
-						return yield* rules.list(caller.organizationId, bot.id)
-					}),
-				)
-				.handle("createRule", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle("listRules", ({ params }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const bot = yield* access(caller, params.botId, "read")
+					return yield* rules.list(caller.organizationId, bot.id)
+				}),
+			)
+			.handle(
+				"createRule",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "write")
@@ -219,8 +254,11 @@ export const layer = (publicOrigin: string) =>
 						yield* record(caller, "rule.created", bot, { rule: rule.id })
 						return rule
 					}),
-				)
-				.handle("updateRule", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle(
+				"updateRule",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "write")
@@ -237,19 +275,18 @@ export const layer = (publicOrigin: string) =>
 						})
 						return rule
 					}),
-				)
-				.handle("listGrants", ({ params, query }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "read")
-						return yield* grants.list(
-							caller.organizationId,
-							bot.id,
-							query.status,
-						)
-					}),
-				)
-				.handle("createGrant", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle("listGrants", ({ params, query }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const bot = yield* access(caller, params.botId, "read")
+					return yield* grants.list(caller.organizationId, bot.id, query.status)
+				}),
+			)
+			.handle(
+				"createGrant",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "write")
@@ -274,8 +311,11 @@ export const layer = (publicOrigin: string) =>
 						})
 						return grant
 					}),
-				)
-				.handle("revokeGrant", ({ params }) =>
+				{ uninterruptible: true },
+			)
+			.handle(
+				"revokeGrant",
+				({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "write")
@@ -285,18 +325,21 @@ export const layer = (publicOrigin: string) =>
 							params.grantId,
 						)
 						yield* record(caller, "grant.revoked", bot, {
-							grants: revoked.map((grant) => grant.id),
+							grants: Arr.map(revoked, (grant) => grant.id),
 						})
 					}),
-				)
-				.handle("listBotMembers", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "share")
-						return yield* bots.members(caller.organizationId, bot.id)
-					}),
-				)
-				.handle("removeBotMember", ({ params }) =>
+				{ uninterruptible: true },
+			)
+			.handle("listBotMembers", ({ params }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const bot = yield* access(caller, params.botId, "share")
+					return yield* bots.members(caller.organizationId, bot.id)
+				}),
+			)
+			.handle(
+				"removeBotMember",
+				({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "share")
@@ -311,8 +354,11 @@ export const layer = (publicOrigin: string) =>
 							userId: params.userId,
 						})
 					}),
-				)
-				.handle("createBotInvitation", ({ params, payload }) =>
+				{ uninterruptible: true },
+			)
+			.handle(
+				"createBotInvitation",
+				({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "share")
@@ -321,16 +367,11 @@ export const layer = (publicOrigin: string) =>
 								message:
 									"Only a lasting top Bot of this organization that is not archived can be shared.",
 							})
+						// Read the origin first, so a failure leaves no invitation without its link.
+						const origin = yield* publicOrigin
 						const made =
 							payload.email === undefined
-								? Option.some(
-										yield* InvitationLinks.make.pipe(
-											Effect.provideContext(services),
-											Effect.mapError(() =>
-												BotsApi.BotStorageUnavailable.make({}),
-											),
-										),
-									)
+								? Option.some(yield* sealed(links.create))
 								: Option.none()
 						const invitation = yield* organization
 							.createBotInvitation({
@@ -350,10 +391,10 @@ export const layer = (publicOrigin: string) =>
 								}),
 							})
 							.pipe(
-								Effect.mapError((error) =>
-									error._tag === "OrganizationUnavailable"
-										? BotsApi.BotStorageUnavailable.make({})
-										: error,
+								Failures.replaceTag(
+									"OrganizationUnavailable",
+									"OpenBot could not create the invitation of a Bot.",
+									() => BotsApi.BotStorageUnavailable.make({}),
 								),
 							)
 						yield* record(caller, "invitation.created", bot, {
@@ -368,51 +409,53 @@ export const layer = (publicOrigin: string) =>
 						return {
 							invitation,
 							secret,
-							url: InvitationLinks.urlOf(publicOrigin, invitation.path, secret),
+							url: InvitationLinks.urlOf(origin, invitation.path, secret),
 						}
 					}),
-				)
-				.handle("listBotInvitations", ({ params, query }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "share")
-						return yield* organization
-							.listBotInvitations(caller.organizationId, bot.id, query.status)
-							.pipe(
-								Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
-							)
-					}),
-				)
-				.handle("botInvitationSecret", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "share")
-						const { invitation, link } = yield* organization
-							.botInvitation(caller.organizationId, bot.id, params.invitationId)
-							.pipe(
-								Effect.mapError((error) =>
-									error._tag === "OrganizationUnavailable"
-										? BotsApi.BotStorageUnavailable.make({})
-										: error,
-								),
-							)
-						const secret =
-							link === null
-								? null
-								: yield* InvitationLinks.open(link).pipe(
-										Effect.provideContext(services),
-										Effect.mapError(() =>
-											BotsApi.BotStorageUnavailable.make({}),
-										),
-									)
-						return {
-							invitation,
+				{ uninterruptible: true },
+			)
+			.handle("listBotInvitations", ({ params, query }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const bot = yield* access(caller, params.botId, "share")
+					return yield* organization
+						.listBotInvitations(caller.organizationId, bot.id, query.status)
+						.pipe(
+							Failures.replace(
+								"OpenBot could not list the invitations of a Bot.",
+								() => BotsApi.BotStorageUnavailable.make({}),
+							),
+						)
+				}),
+			)
+			.handle("botInvitationSecret", ({ params }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const bot = yield* access(caller, params.botId, "share")
+					const { invitation, link } = yield* organization
+						.botInvitation(caller.organizationId, bot.id, params.invitationId)
+						.pipe(
+							Failures.replaceTag(
+								"OrganizationUnavailable",
+								"OpenBot could not read the invitation of a Bot.",
+								() => BotsApi.BotStorageUnavailable.make({}),
+							),
+						)
+					const secret = link === null ? null : yield* sealed(links.open(link))
+					return {
+						invitation,
+						secret,
+						url: InvitationLinks.urlOf(
+							yield* publicOrigin,
+							invitation.path,
 							secret,
-							url: InvitationLinks.urlOf(publicOrigin, invitation.path, secret),
-						}
-					}),
-				)
-				.handle("revokeBotInvitation", ({ params }) =>
+						),
+					}
+				}),
+			)
+			.handle(
+				"revokeBotInvitation",
+				({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "share")
@@ -423,10 +466,10 @@ export const layer = (publicOrigin: string) =>
 								params.invitationId,
 							)
 							.pipe(
-								Effect.mapError((error) =>
-									error._tag === "OrganizationUnavailable"
-										? BotsApi.BotStorageUnavailable.make({})
-										: error,
+								Failures.replaceTag(
+									"OrganizationUnavailable",
+									"OpenBot could not revoke the invitation of a Bot.",
+									() => BotsApi.BotStorageUnavailable.make({}),
 								),
 							)
 						yield* record(caller, "invitation.revoked", bot, {
@@ -434,9 +477,10 @@ export const layer = (publicOrigin: string) =>
 							target: "bot",
 						})
 					}),
-				)
-		}),
-	)
+				{ uninterruptible: true },
+			)
+	}),
+)
 
 /** A person accepts an invitation to use a Bot, in an organization of their own. */
 export const layerInvitations = HttpApiBuilder.group(
@@ -447,94 +491,110 @@ export const layerInvitations = HttpApiBuilder.group(
 			const bots = yield* Bots
 			const organization = yield* Organization
 			const audit = yield* AuditLog
-			const services = yield* Effect.context<AuthorizationServices>()
-			return handlers.handle("acceptBotInvitation", ({ payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const by =
-						payload.invitation !== undefined
-							? ({ _tag: "Email", invitationId: payload.invitation } as const)
-							: payload.secret !== undefined
-								? ({
-										_tag: "Link",
-										secretHash: InvitationLinks.hashOf(payload.secret),
-									} as const)
-								: undefined
-					if (by === undefined)
-						return yield* OrganizationApi.InvitationInvalid.make({
-							message: "Send `invitation` or `secret`.",
-						})
-					// The organization where the person uses the Bot. They name it, a user
-					// token names it, or it is their only organization.
-					const memberships = yield* organization
-						.memberships(account.userId)
-						.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
-					const chosen =
-						payload.organization ??
-						account.organizationId ??
-						(memberships.length === 1
-							? memberships[0]?.organizationId
-							: undefined)
-					if (chosen === undefined)
-						return yield* OrganizationApi.InvitationInvalid.make({
-							message:
-								"Name the organization where you use the Bot in `organization`.",
-						})
-					const active = yield* organization
-						.activeMember(chosen, account.userId)
-						.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
-					if (Option.isNone(active))
-						return yield* OrganizationApi.InvitationInvalid.make({
-							message:
-								"You must be an active member of the organization where you use the Bot.",
-						})
-					const taken = yield* organization
-						.takeBotInvitation(account.userId, by)
-						.pipe(
-							Effect.mapError((error) =>
-								error._tag === "OrganizationUnavailable"
-									? BotsApi.BotStorageUnavailable.make({})
-									: error,
-							),
-						)
-					const source = yield* bots.find(taken.organizationId, taken.bot)
-					if (Option.isNone(source) || !shareable(source.value))
-						return yield* OrganizationApi.InvitationInvalid.make({
-							message: "This Bot is not shared any more.",
-						})
-					const caller: Caller = {
-						kind: "member",
-						organizationId: chosen,
-						userId: account.userId,
-					}
-					const linked = yield* bots
-						.link(caller, {
+			const links = yield* InvitationLinks.make
+			return handlers.handle(
+				"acceptBotInvitation",
+				({ payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const by =
+							payload.invitation !== undefined
+								? ({ _tag: "Email", invitationId: payload.invitation } as const)
+								: payload.secret !== undefined
+									? ({
+											_tag: "Link",
+											secretHash: yield* links.hashOf(payload.secret),
+										} as const)
+									: undefined
+						if (by === undefined)
+							return yield* OrganizationApi.InvitationInvalid.make({
+								message: "Send `invitation` or `secret`.",
+							})
+						// The organization where the person uses the Bot. They name it, a user
+						// token names it, or it is their only organization.
+						const memberships = yield* organization
+							.memberships(account.userId)
+							.pipe(
+								Failures.replace(
+									"OpenBot could not read the organizations of a person.",
+									() => BotsApi.BotStorageUnavailable.make({}),
+								),
+							)
+						const chosen =
+							payload.organization ??
+							account.organizationId ??
+							(memberships.length === 1
+								? memberships[0]?.organizationId
+								: undefined)
+						if (chosen === undefined)
+							return yield* OrganizationApi.InvitationInvalid.make({
+								message:
+									"Name the organization where you use the Bot in `organization`.",
+							})
+						const active = yield* organization
+							.activeMember(chosen, account.userId)
+							.pipe(
+								Failures.replace(
+									"OpenBot could not read the membership of a person.",
+									() => BotsApi.BotStorageUnavailable.make({}),
+								),
+							)
+						if (Option.isNone(active))
+							return yield* OrganizationApi.InvitationInvalid.make({
+								message:
+									"You must be an active member of the organization where you use the Bot.",
+							})
+						const taken = yield* organization
+							.takeBotInvitation(account.userId, by)
+							.pipe(
+								Failures.replaceTag(
+									"OrganizationUnavailable",
+									"OpenBot could not take the invitation to a Bot.",
+									() => BotsApi.BotStorageUnavailable.make({}),
+								),
+							)
+						const source = yield* bots.find(taken.organizationId, taken.bot)
+						if (Option.isNone(source) || !shareable(source.value))
+							return yield* OrganizationApi.InvitationInvalid.make({
+								message: "This Bot is not shared any more.",
+							})
+						const caller: Caller = {
+							kind: "member",
+							organizationId: chosen,
+							userId: account.userId,
+						}
+						const linked = yield* bots.link(caller, {
 							organizationId: taken.organizationId,
 							bot: source.value,
 						})
-						.pipe(Effect.provideContext(services))
-					const actor: Caller = {
-						kind: "member",
-						organizationId: taken.organizationId,
-						userId: account.userId,
-					}
-					yield* audit
-						.record({
+						const actor: Caller = {
+							kind: "member",
 							organizationId: taken.organizationId,
-							action: "bot_member.joined",
-							actor,
-							resource: botKey({
-								...source.value,
+							userId: account.userId,
+						}
+						yield* audit
+							.record({
 								organizationId: taken.organizationId,
-							}),
-							details: {
-								invitationId: taken.invitationId,
-								organizationId: chosen,
-							},
-						})
-						.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
-					return linked
-				}),
+								action: "bot_member.joined",
+								actor,
+								resource: botKey({
+									...source.value,
+									organizationId: taken.organizationId,
+								}),
+								details: {
+									invitationId: taken.invitationId,
+									organizationId: chosen,
+								},
+							})
+							.pipe(
+								Failures.replace(
+									"OpenBot could not write the audit entry of a Bot.",
+									() => BotsApi.BotStorageUnavailable.make({}),
+								),
+							)
+						return linked
+					}),
+				{ uninterruptible: true },
 			)
 		}),
 )

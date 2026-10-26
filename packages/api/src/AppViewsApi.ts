@@ -1,6 +1,6 @@
 import { Chat, Item, Turn } from "@openbot-build/core"
 import { Client, Ui } from "@openbot-build/protocol"
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Source, Invocation, InvocationStatus } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
@@ -47,7 +47,7 @@ export const ActionRequest = Schema.Union([
 export type ActionRequest = typeof ActionRequest.Type
 /** The kind of an action that an App view asks for. It comes from `ActionRequest`. */
 export const ActionKind = Schema.Literals(
-	ActionRequest.members.map((member) => member.fields.kind.literal),
+	Arr.map(ActionRequest.members, (member) => member.fields.kind.literal),
 )
 export type ActionKind = typeof ActionKind.Type
 export const ActionSource = Schema.TaggedStruct("AppUiAction", {
@@ -79,20 +79,20 @@ export const Observation = Schema.Struct({
 	status: Schema.Literals(["Queued", ...InvocationStatus.literals]),
 	operation: Schema.NullOr(Invocation),
 })
-export class AppViewUnavailable extends Schema.TaggedError<AppViewUnavailable>()(
-	"AppViewUnavailable",
-	{
-		reason: Schema.Literals([
-			"Declaration",
-			"Resource",
-			"ConnectionChanged",
-			"Closed",
-			"Unsupported",
-			"Protocol",
-		]),
-		message: Schema.String,
-	},
-) {}
+export class AppViewUnavailable extends Schema.TaggedError<
+	AppViewUnavailable,
+	{ readonly brand: unique symbol }
+>()("AppViewUnavailable", {
+	reason: Schema.Literals([
+		"Declaration",
+		"Resource",
+		"ConnectionChanged",
+		"Closed",
+		"Unsupported",
+		"Protocol",
+	]),
+	message: Schema.String,
+}) {}
 const errors = [
 	...ExperienceErrors,
 	AppViewUnavailable.pipe(HttpApiSchema.status(409)),

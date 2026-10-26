@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect"
+import { Data, Record as Rec, Schema } from "effect"
 import { Id } from "./TurnIdentity.ts"
 import * as ChatIdentity from "./ChatIdentity.ts"
 import * as Item from "./Item.ts"
@@ -41,10 +41,7 @@ export const StatusSchema = Schema.TaggedUnion({
 })
 export type Status = typeof StatusSchema.Type
 /** The tags of `StatusSchema`, such as `Running` and `Failed`. */
-export const StatusTag = Schema.Literals(
-	// `Object.keys` gives plain strings. The keys of `cases` are the tags.
-	Object.keys(StatusSchema.cases) as ReadonlyArray<Status["_tag"]>,
-)
+export const StatusTag = Schema.Literals(Rec.keys(StatusSchema.cases))
 export type StatusTag = typeof StatusTag.Type
 export const Status = Data.taggedEnum<Status>()
 /**
@@ -71,7 +68,10 @@ export const Record = Schema.Struct({
 	completedAt: Schema.optionalKey(Schema.Finite),
 })
 export type Record = typeof Record.Type
-export class Conflict extends Schema.TaggedError<Conflict>()("TurnConflict", {
+export class Conflict extends Schema.TaggedError<
+	Conflict,
+	{ readonly brand: unique symbol }
+>()("TurnConflict", {
 	chat: ChatIdentity.Id,
 	turn: Id,
 	message: Schema.String,

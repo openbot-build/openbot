@@ -16,21 +16,20 @@ import * as ChannelRegistry from "../src/channels/ChannelRegistry.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/apps/Experience.ts"
 import * as Views from "../src/apps/Views.ts"
-import { execFileSync } from "node:child_process"
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
-import { createServer as createHttpsServer } from "node:https"
-import { assert, it } from "@effect/vitest"
+import * as LiveSessions from "../src/chats/live/LiveSessions.ts"
+import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
-	Array as EffectArray,
+	Array as Arr,
+	Context,
+	Deferred,
 	Effect,
 	Layer,
-	ManagedRuntime,
-	Option,
-	Predicate,
 	Result,
 	Redacted,
+	Ref,
 	Schema,
+	String as Str,
 } from "effect"
 import {
 	AppConnections,
@@ -40,15 +39,26 @@ import {
 	Network,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.layer needs a function that makes a Node HTTP server.
 import { createServer } from "node:http"
 import {
 	NodeHttpServer as PlatformHttpServer,
 	NodeServices,
 	NodeCrypto,
 } from "@effect/platform-node"
-import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
+import {
+	FetchHttpClient,
+	HttpClient,
+	HttpClientRequest,
+	HttpClientResponse,
+	HttpRouter,
+	HttpServer,
+	HttpServerRequest,
+	HttpServerResponse,
+} from "effect/http"
 import * as Client from "@openbot-build/client"
-import { Server, Auth, DatabasePostgres } from "@openbot-build/openbot"
+import { Server, Auth, DatabasePostgres } from "../src/index.ts"
+// The migrations come through the entry point of the package, so the test checks that export too.
 import * as Migration from "@openbot-build/openbot/StorageMigration"
 import * as Connections from "../src/apps/Connections.ts"
 import * as Authorizations from "../src/apps/Authorizations.ts"
@@ -63,10 +73,13 @@ import * as ConnectionLocks from "../src/apps/ConnectionLocks.ts"
 import * as Capabilities from "../src/apps/Capabilities.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Probe from "../src/apps/Probe.ts"
+import * as DomainControl from "../src/apps/DomainControl.ts"
+import * as OutboundPolicy from "../src/network/OutboundPolicy.ts"
 import * as TokensPostgres from "../src/auth/TokensPostgres.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import { Backend } from "../dist/app/Backend.js"
+import { serveHttps } from "../../protocol/test/Fixture.ts"
+import { Backend } from "../src/app/Backend.ts"
 import {
 	AuthApi,
 	DeveloperApi,
@@ -78,35 +91,28 @@ import * as Governance from "../src/apps/Governance.ts"
 import * as PublicIndex from "../src/apps/Index.ts"
 import * as IndexStore from "../src/apps/IndexStore.ts"
 
+/** The Node services for the test servers, and an HTTP client to call them. */
+const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
+
+/** A body given as text, with the JSON content type. */
+const jsonText = (body: string, status = 200) =>
+	HttpServerResponse.text(body, { status, contentType: "application/json" })
+
 // These tests check runtime boundaries. All protocol traffic stays in local fixtures.
-const fixture = async () => {
-	await mkdir(".cache/goal-manager", { recursive: true })
-	const directory = await mkdtemp(".cache/goal-manager/discovery-")
-	execFileSync(
-		"openssl",
-		[
-			"req",
-			"-x509",
-			"-newkey",
-			"rsa:2048",
-			"-nodes",
-			"-days",
-			"1",
-			"-keyout",
-			`${directory}/key.pem`,
-			"-out",
-			`${directory}/cert.pem`,
-			"-subj",
-			"/CN=localhost",
-			"-addext",
-			"subjectAltName=DNS:localhost,IP:127.0.0.1",
-		],
-		{ stdio: "ignore" },
+const fixture = Effect.fn("AppDiscoveryTest.fixture")(function* () {
+	const requests = yield* Ref.make<ReadonlyArray<string>>([])
+	/** Broken rules of the fixture. They fail the test when the scope closes. */
+	const problems = yield* Ref.make<ReadonlyArray<string>>([])
+	yield* Effect.addFinalizer(() =>
+		Effect.flatMap(Ref.get(problems), (found) =>
+			Arr.isReadonlyArrayNonEmpty(found)
+				? Effect.die(new Error(Arr.join(found, "\n")))
+				: Effect.void,
+		),
 	)
-	const ca = await readFile(`${directory}/cert.pem`)
-	let requests: ReadonlyArray<string> = []
-	let origin = ""
-	const card = (name: string) => ({
+	/** The origin of the server. It is known when the server listens. */
+	const origin = yield* Deferred.make<string>()
+	const card = (base: string, name: string) => ({
 		$schema: Document.cardSchemaUrl,
 		name,
 		version: "1.0.0",
@@ -114,7 +120,7 @@ const fixture = async () => {
 		remotes: [
 			{
 				type: "streamable-http",
-				url: `${origin}/mcp`,
+				url: `${base}/mcp`,
 				supportedProtocolVersions: [Document.protocolVersion],
 				headers: [
 					{
@@ -127,128 +133,121 @@ const fixture = async () => {
 		],
 		_meta: { "fixture.test/metadata": { preserved: true } },
 	})
-	const server = createHttpsServer(
-		{ key: await readFile(`${directory}/key.pem`), cert: ca },
-		(req, res) => {
-			assert.strictEqual(req.headers.authorization, undefined)
-			assert.strictEqual(req.headers.cookie, undefined)
-			requests = EffectArray.append(requests, req.url ?? "")
-			res.setHeader("content-type", "application/json")
-			const catalog = (urls: ReadonlyArray<string>) => ({
-				specVersion: "1.0",
-				entries: urls.map((url, index) => ({
-					identifier: String(index),
-					type: Document.cardMediaType,
-					url: origin + url,
-				})),
-			})
-			const requestUrl = new URL(req.url ?? "/", origin)
-			if (requestUrl.pathname === "/index") {
-				const second = requestUrl.searchParams.has("cursor")
-				const cardUrl = origin + (second ? "/second" : "/card?edition=team")
-				res.end(
-					JSON.stringify({
-						apps: [
+	const catalog = (base: string, urls: ReadonlyArray<string>) => ({
+		specVersion: "1.0",
+		entries: Arr.map(urls, (url, index) => ({
+			identifier: String(index),
+			type: Document.cardMediaType,
+			url: base + url,
+		})),
+	})
+	const index = (base: string, second: boolean) => {
+		const cardUrl = base + (second ? "/second" : "/card?edition=team")
+		return {
+			apps: [
+				{
+					entry: {
+						cardUrl,
+						card: card(
+							base,
+							second ? "fixture.test/second" : "fixture.test/first",
+						),
+						evidence: [
 							{
-								entry: {
-									cardUrl,
-									card: card(
-										second ? "fixture.test/second" : "fixture.test/first",
-									),
-									evidence: [
-										{
-											publisherUrl: origin,
-											catalogUrl: origin + "/.well-known/ai-catalog.json",
-											cardUrl,
-											association: "CardOrigin",
-										},
-									],
-									checkedAt: 1000,
-									validators: {},
-								},
-								sources: [],
-								matches: [],
+								publisherUrl: base,
+								catalogUrl: base + "/.well-known/ai-catalog.json",
+								cardUrl,
+								association: "CardOrigin",
 							},
 						],
-						issues: [],
-						nextCursor: second ? null : "second",
-					}),
+						checkedAt: 1000,
+						validators: {},
+					},
+					sources: [],
+					matches: [],
+				},
+			],
+			issues: [],
+			nextCursor: second ? null : "second",
+		}
+	}
+	const app = Effect.gen(function* () {
+		const request = yield* HttpServerRequest.HttpServerRequest
+		const base = yield* Deferred.await(origin)
+		if (
+			request.headers["authorization"] !== undefined ||
+			request.headers["cookie"] !== undefined
+		) {
+			const problem = "A discovery request got account credentials"
+			yield* Ref.update(problems, Arr.append(problem))
+			return yield* Effect.die(new Error(problem))
+		}
+		yield* Ref.update(requests, Arr.append(request.url))
+		const requestUrl = new URL(request.url, base)
+		if (requestUrl.pathname === "/index")
+			return yield* HttpServerResponse.json(
+				index(base, requestUrl.searchParams.has("cursor")),
+			)
+		switch (request.url) {
+			case "/robots.txt":
+				return jsonText("", 404)
+			case "/.well-known/ai-catalog.json":
+				return yield* HttpServerResponse.json(
+					catalog(base, ["/card?edition=team"]),
 				)
-				return
-			}
-			switch (req.url) {
-				case "/robots.txt":
-					res.statusCode = 404
-					res.end()
-					break
-				case "/.well-known/ai-catalog.json":
-					res.end(JSON.stringify(catalog(["/card?edition=team"])))
-					break
-				case "/catalog":
-					res.end(
-						JSON.stringify(
-							catalog(["/card?edition=team", "/second", "/invalid"]),
-						),
-					)
-					break
-				case "/card?edition=team":
-					res.end(JSON.stringify(card("fixture.test/first")))
-					break
-				case "/second":
-					res.end(JSON.stringify(card("fixture.test/second")))
-					break
-				case "/page?edition=team":
-					res.setHeader("content-type", "text/html")
-					res.end(
-						'<head><link rel="ai-catalog" href="/.well-known/ai-catalog.json"></head>',
-					)
-					break
-				case "/none":
-					res.setHeader("content-type", "text/html")
-					res.end("<head></head>")
-					break
-				case "/empty":
-					res.end(JSON.stringify(catalog([])))
-					break
-				case "/invalid":
-					res.setHeader("content-type", Document.cardMediaType)
-					res.end("{}")
-					break
-				case "/malformed":
-					res.end("{")
-					break
-				case "/incompatible":
-					res.end(JSON.stringify({ ...card("fixture.test/old"), remotes: [] }))
-					break
-				case "/redirect":
-					res.writeHead(302, { location: "https://127.0.0.1:1/forbidden" })
-					res.end()
-					break
-				case "/large":
-					res.end("x".repeat(20000))
-					break
-				default:
-					res.statusCode = 503
-					res.end("Unavailable")
-			}
-		},
-	)
-	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
-	const address = server.address()
-	assert.ok(Predicate.isObject(address))
-	origin = `https://127.0.0.1:${address.port}`
+			case "/catalog":
+				return yield* HttpServerResponse.json(
+					catalog(base, ["/card?edition=team", "/second", "/invalid"]),
+				)
+			case "/card?edition=team":
+				return yield* HttpServerResponse.json(card(base, "fixture.test/first"))
+			case "/second":
+				return yield* HttpServerResponse.json(card(base, "fixture.test/second"))
+			case "/page?edition=team":
+				return HttpServerResponse.text(
+					'<head><link rel="ai-catalog" href="/.well-known/ai-catalog.json"></head>',
+					{ contentType: "text/html" },
+				)
+			case "/none":
+				return HttpServerResponse.text("<head></head>", {
+					contentType: "text/html",
+				})
+			case "/empty":
+				return yield* HttpServerResponse.json(catalog(base, []))
+			case "/invalid":
+				return HttpServerResponse.text("{}", {
+					contentType: Document.cardMediaType,
+				})
+			case "/malformed":
+				return jsonText("{")
+			case "/incompatible":
+				return yield* HttpServerResponse.json({
+					...card(base, "fixture.test/old"),
+					remotes: [],
+				})
+			case "/redirect":
+				return HttpServerResponse.redirect("https://127.0.0.1:1/forbidden", {
+					status: 302,
+				})
+			case "/large":
+				return jsonText(Str.repeat(20000)("x"))
+			default:
+				return jsonText("Unavailable", 503)
+		}
+	})
+	const server = yield* serveHttps(app)
+	yield* Deferred.succeed(origin, server.ipOrigin)
 	const network = NodeHttpServer.layerUserNetwork({
 		owner: "local-fixture",
-		allowedOrigins: [origin],
+		allowedOrigins: [server.ipOrigin],
 		allowAddress: (ip) => ip === "127.0.0.1",
-		ca,
+		ca: server.ca,
 		maxBytes: 10000,
 	})
 	return {
-		origin,
-		get requests() {
-			return requests
-		},
+		origin: server.ipOrigin,
+		/** Every request URL that the publisher got, in order. */
+		requests: Ref.get(requests),
 		layer: CatalogDiscovery.layer().pipe(
 			Layer.provide(CatalogDiscovery.layerRules),
 			Layer.provide(network),
@@ -259,158 +258,66 @@ const fixture = async () => {
 				Network.PublicNetwork.of({ readDocument: value.readDocument }),
 			),
 		).pipe(Layer.provide(network)),
-		async [Symbol.asyncDispose]() {
-			server.closeAllConnections()
-			await new Promise<void>((resolve) => server.close(() => resolve()))
-			await rm(directory, { recursive: true, force: true })
-		},
 	}
-}
-
-it("known-address discovery keeps protocol candidates, configuration and sources from local HTTPS", async () => {
-	await using publisher = await fixture()
-	await using runtime = ManagedRuntime.make(publisher.layer)
-	const single = await runtime.runPromise(
-		AppDiscovery.discover(publisher.origin.slice(8)),
-	)
-	assert.strictEqual(single._tag, "Single")
-	assert.ok(single._tag === "Single")
-	assert.strictEqual(
-		single.candidate.cardUrl,
-		publisher.origin + "/card?edition=team",
-	)
-	assert.strictEqual(
-		single.candidate.endpoints[0]?.requirements[0]?.key,
-		"header:X-Account",
-	)
-	assert.deepStrictEqual(single.candidate.card._meta, {
-		"fixture.test/metadata": { preserved: true },
-	})
-	assert.deepStrictEqual(
-		single.candidate.sources.map((source) => source.role),
-		["input", "catalog", "card", "endpoint"],
-	)
-	const multiple = await runtime.runPromise(
-		AppDiscovery.discover(publisher.origin + "/catalog"),
-	)
-	assert.ok(multiple._tag === "Multiple")
-	assert.strictEqual(multiple.candidates.length, 2)
-	assert.strictEqual(multiple.issues.length, 1)
-	assert.strictEqual(multiple.issues[0]?.url, publisher.origin + "/invalid")
-	await runtime.runPromise(Schema.decodeEffect(AppDiscoveryResult)(multiple))
-	const page = await runtime.runPromise(
-		AppDiscovery.discover(publisher.origin + "/page?edition=team"),
-	)
-	assert.ok(page._tag === "Single")
-	assert.strictEqual(
-		page.candidate.sources[0]?.originalInput,
-		publisher.origin + "/page?edition=team",
-	)
-	assert.ok(publisher.requests.includes("/page?edition=team"))
-	assert.strictEqual(publisher.requests.includes("/mcp"), false)
-})
-
-it("extra public Index sources follow HTTPS pages without sending credentials", async () => {
-	await using publisher = await fixture()
-	const runtime = ManagedRuntime.make(publisher.publicNetwork)
-	try {
-		const provider = await runtime.runPromise(
-			PublicIndex.remoteProvider({
-				id: "remote",
-				name: "Remote Index",
-				url: publisher.origin + "/index",
-				simulated: true,
-			}),
-		)
-		const entries = await Effect.runPromise(provider.entries)
-		assert.strictEqual(entries.length, 2)
-		assert.notStrictEqual(entries[0]?.cardUrl, entries[1]?.cardUrl)
-		assert.deepStrictEqual(publisher.requests, [
-			"/index?limit=50",
-			"/index?limit=50&cursor=second",
-		])
-	} finally {
-		await runtime.dispose()
-	}
-})
-
-it("discovery returns the main typed failures with local HTTP evidence", async () => {
-	await using publisher = await fixture()
-	await using runtime = ManagedRuntime.make(publisher.layer)
-	const failures: ReadonlyArray<readonly [string, string]> = [
-		["/none", "NoDeclaration"],
-		["/empty", "NoUsableServices"],
-		["/invalid", "Document"],
-		["/malformed", "Document"],
-		["/incompatible", "IncompatibleCard"],
-		["/unavailable", "Http"],
-		["/large", "TooLarge"],
-		["/redirect", "BlockedTarget"],
-	]
-	for (const [path, reason] of failures) {
-		const result = await runtime.runPromise(
-			AppDiscovery.discover(publisher.origin + path).pipe(Effect.result),
-		)
-		assert.ok(Result.isFailure(result), path)
-		assert.strictEqual(result.failure._tag, "AppDiscoveryFailed")
-		assert.strictEqual(result.failure.reason, reason, path)
-	}
-	const before = publisher.requests.length
-	for (const input of [
-		"not a link",
-		"http://publisher.test/card",
-		"https://name:secret@publisher.test/card",
-	]) {
-		const result = await runtime.runPromise(
-			AppDiscovery.discover(input).pipe(Effect.result),
-		)
-		assert.ok(Result.isFailure(result))
-		assert.strictEqual(result.failure.reason, "InvalidInput")
-	}
-	assert.strictEqual(publisher.requests.length, before)
-})
-
-it("production discovery blocks loopback addresses before any protocol HTTP request", async () => {
-	await using publisher = await fixture()
-	await using runtime = ManagedRuntime.make(AppDiscovery.layerPublic)
-	const result = await runtime.runPromise(
-		AppDiscovery.discover(publisher.origin + "/card?edition=team").pipe(
-			Effect.result,
-		),
-	)
-	assert.ok(Result.isFailure(result))
-	assert.strictEqual(result.failure.reason, "BlockedTarget")
-	assert.strictEqual(publisher.requests.length, 0)
 })
 
 const publicOrigin = "https://openbot.fixture.test"
 
-const startApi = async (
+/** The part of the OpenAPI document that the test reads. */
+const DiscoverOperation = Schema.Struct({
+	paths: Schema.Struct({
+		"/v1/apps/discover": Schema.Struct({
+			post: Schema.Struct({
+				security: Schema.Array(
+					Schema.Record(Schema.String, Schema.Array(Schema.String)),
+				),
+				responses: Schema.Record(Schema.String, Schema.Unknown),
+			}),
+		}),
+	}),
+})
+
+/** Sends a JSON body to the server. */
+const postJson = (
+	url: string,
+	payload: unknown,
+	headers: Record<string, string> = {},
+) =>
+	HttpClientRequest.post(url, { headers }).pipe(
+		HttpClientRequest.bodyJson(payload),
+		Effect.flatMap(HttpClient.execute),
+	)
+
+/** Reads the body of a GET answer as text. */
+const getText = (url: string, headers: Record<string, string> = {}) =>
+	Effect.flatMap(HttpClient.get(url, { headers }), (response) => response.text)
+
+const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 	discovery: Layer.Layer<Discovery.Discovery>,
 	publicNetwork?: Layer.Layer<Network.PublicNetwork>,
-) => {
-	const database = await PostgresTest.start()
-	await using migration = ManagedRuntime.make(
-		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
-			Layer.provide(NodeServices.layer),
+) {
+	const database = yield* PostgresTest.start
+	// The migration has its own database pool. It closes after the migration.
+	yield* DatabasePostgres.migrate.pipe(
+		Effect.provide(
+			DatabasePostgres.layer({
+				databaseUrl: Redacted.make(database.url),
+			}).pipe(Layer.provide(NodeServices.layer)),
 		),
 	)
-	await migration.runPromise(DatabasePostgres.migrate)
-	let authCalls: ReadonlyArray<string> = []
+	const authCalls = yield* Ref.make<ReadonlyArray<string>>([])
 	const identity = {
 		userId: "local-user",
 		organizationId: "local-organization",
 	}
-	const unused = () =>
-		Effect.die("Discovery must not call account or Bot operations")
 	const auth = Auth.Auth.of({
 		handler: () =>
 			Promise.reject(new Error("Discovery must not call Better Auth routes")),
-		signInProvider: () => Option.none(),
+		signInProvider: () => Effect.succeedNone,
 		startSignIn: () => Effect.die("Discovery must not start a sign-in"),
 		resolveSession: (credential) =>
 			Effect.gen(function* () {
-				authCalls = EffectArray.append(authCalls, "session")
+				yield* Ref.update(authCalls, Arr.append("session"))
 				if (Redacted.value(credential) === "unavailable")
 					return yield* Auth.Model.AuthUnavailable.make({
 						dependency: "storage",
@@ -434,42 +341,38 @@ const startApi = async (
 				}
 			}),
 	})
-	const runtime = ManagedRuntime.make(
-		HttpRouter.serve(Server.layerApi({ publicOrigin })).pipe(
+	const encryptionKey = Redacted.make("test:" + Str.repeat(32)("11"))
+	const settings = OrganizationFixture.layerSettings({ publicOrigin })
+	const services = yield* Layer.build(
+		HttpRouter.serve(Server.layerApi).pipe(
 			Layer.provide([
 				discovery,
-				DeveloperLayers.layer({
-					...(publicNetwork === undefined ? {} : { publicNetwork }),
-				}).pipe(
+				DeveloperLayers.layer.pipe(
+					Layer.provide(
+						Layer.mergeAll(
+							publicNetwork ?? OutboundPolicy.layerPublicNetwork,
+							DomainControl.layer,
+							AppHost.layerNetwork,
+						),
+					),
 					Layer.provide(
 						Governance.layer.pipe(
 							Layer.provide(OrganizationFixture.layerDefaultSettings),
 						),
 					),
-					Layer.provide(
-						Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
-					),
+					Layer.provide(Secrets.layer(encryptionKey)),
 					Layer.provide(discovery),
 					Layer.provide(IndexStore.layer),
 				),
 				Layer.mergeAll(
 					AppExperience.layer.pipe(Layer.provideMerge(Lifecycle.layer)),
 					Lifecycle.layer,
-					Authorizations.layer(publicOrigin),
+					Authorizations.layer,
 					Operations.layer,
-					Views.layer.pipe(
-						Layer.provide(
-							Layer.succeed(Backend, { get: unused, forCaller: unused }),
-						),
-					),
-					Layer.succeed(CodeRuns, {
+					Views.layer.pipe(Layer.provide(Layer.mock(Backend, {}))),
+					Layer.mock(CodeRuns, {
 						settings: Effect.succeedNone,
 						vault: Effect.succeed([]),
-						start: unused,
-						resume: unused,
-						forCall: unused,
-						get: unused,
-						list: unused,
 						stale: Effect.succeed([]),
 					}),
 				).pipe(
@@ -495,11 +398,9 @@ const startApi = async (
 					Layer.provide(ConnectionLocks.layer),
 					Layer.provide(NodeCrypto.layer),
 					Layer.provideMerge(ProtocolStores.layer),
-					Layer.provideMerge(
-						Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
-					),
+					Layer.provideMerge(Secrets.layer(encryptionKey)),
 				),
-				PublicIndex.layer({ publicOrigin }).pipe(
+				PublicIndex.layer({}).pipe(
 					Layer.provide(
 						Governance.layer.pipe(
 							Layer.provide(OrganizationFixture.layerDefaultSettings),
@@ -508,44 +409,49 @@ const startApi = async (
 					Layer.provide(IndexStore.layer),
 				),
 				TokensPostgres.layer,
-				TriggerStore.layer,
+				// The triggers take the authorizer when they are built.
+				TriggerStore.layer.pipe(
+					Layer.provide(OrganizationFixture.layerAuthorization),
+					Layer.provide(TokensPostgres.layer),
+				),
 				ChannelRegistry.layer.pipe(
 					Layer.provideMerge(ChannelQueue.layer),
 					Layer.provideMerge(Channels.layer),
 					Layer.provide(
 						Layer.merge(FetchHttpClient.layer, AppHost.layerNetwork),
 					),
-					Layer.provide(
-						Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
-					),
+					Layer.provide(Secrets.layer(encryptionKey)),
 				),
 				OrganizationFixture.layerEveryoneAdministrator,
 				OrganizationFixture.layerNoAudit,
 				OrganizationFixture.layerUnusedPlatform,
-				Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+				// The settings of the platform win over the empty ones of the line above.
+				settings,
+				Secrets.layer(encryptionKey),
 				BotFixture.layerBotServices.pipe(
 					Layer.provide(OrganizationFixture.layerAuthorization),
 					Layer.provide(TokensPostgres.layer),
 				),
 				Layer.succeed(Auth.Auth, auth),
-				Layer.succeed(Backend, { get: unused, forCaller: unused }),
+				Layer.mock(Backend, {}),
 				// Discovery never uses Computers. Their handlers only need the services to exist.
-				Layer.succeed(ComputerProviders, {} as ComputerProviders["Service"]),
-				Layer.succeed(Computers, {} as Computers["Service"]),
-				Layer.succeed(Connectors, {} as Connectors["Service"]),
-				Layer.succeed(Drivers, {} as Drivers["Service"]),
+				Layer.mock(ComputerProviders, {}),
+				Layer.mock(Computers, {}),
+				Layer.mock(Connectors, {}),
+				Layer.mock(Drivers, {}),
 				// Discovery never uses Vaults. Their handlers only need the services to exist.
-				Layer.mergeAll(
-					Layer.succeed(Vaults, {} as Vaults["Service"]),
-					Layer.succeed(SecretProviders, {} as SecretProviders["Service"]),
-				),
-				Layer.succeed(Pairings, {} as Pairings["Service"]),
-				Layer.succeed(Sessions, {} as Sessions["Service"]),
+				Layer.mergeAll(Layer.mock(Vaults, {}), Layer.mock(SecretProviders, {})),
+				Layer.mock(Pairings, {}),
+				Layer.mock(Sessions, {}),
 				// Discovery never uses files. Their handlers only need the service to exist.
-				Layer.succeed(Files, {} as Files["Service"]),
+				Layer.mock(Files, {}),
 				// Discovery never uses Chats. Their handlers only need the Coordinator to exist.
-				Layer.succeed(Coordinator, {} as Coordinator["Service"]),
+				Layer.mock(Coordinator, {}),
+				// The Live handlers take the open Live sessions when they are built.
+				LiveSessions.layer,
 			]),
+			// The services above read the public origin from these settings.
+			Layer.provide(settings),
 			Layer.provideMerge(
 				DatabasePostgres.layer({
 					databaseUrl: Redacted.make(database.url),
@@ -556,247 +462,397 @@ const startApi = async (
 			),
 		),
 	)
-	await runtime.runPromise(Migration.initialize).catch(async (error) => {
-		await runtime.dispose()
-		await database.close()
-		throw error
-	})
-	const address = await runtime.runPromise(
-		Effect.map(HttpServer.HttpServer, (server) =>
-			HttpServer.formatAddress(server.address),
-		),
+	yield* Effect.provideContext(Migration.initialize, services)
+	const address = HttpServer.formatAddress(
+		Context.get(services, HttpServer.HttpServer).address,
 	)
+	const sql = Context.get(services, PgClient.PgClient)
 	return {
 		address,
-		sql: (statement: string) =>
-			runtime.runPromise(
-				Effect.flatMap(PgClient.PgClient, (sql) => sql.unsafe(statement)),
-			),
-		get authCalls() {
-			return authCalls
-		},
+		sql: (statement: string) => sql.unsafe(statement),
+		/** Every session that the server asked Auth to resolve. */
+		authCalls: Ref.get(authCalls),
 		request: (payload: unknown, headers: Record<string, string> = {}) =>
-			fetch(address + "/v1/apps/discover", {
-				method: "POST",
-				headers: { "content-type": "application/json", ...headers },
-				body: JSON.stringify(payload),
+			postJson(address + "/v1/apps/discover", payload, headers),
+	}
+})
+
+layer(platform, { excludeTestServices: true })((it) => {
+	it.effect(
+		"known-address discovery keeps protocol candidates, configuration and sources from local HTTPS",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* fixture()
+				const services = yield* Layer.build(publisher.layer)
+				const discover = (input: string) =>
+					Effect.provideContext(AppDiscovery.discover(input), services)
+				const single = yield* discover(Str.slice(8)(publisher.origin))
+				assert.strictEqual(single._tag, "Single")
+				assert.ok(single._tag === "Single")
+				assert.strictEqual(
+					single.candidate.cardUrl,
+					publisher.origin + "/card?edition=team",
+				)
+				assert.strictEqual(
+					single.candidate.endpoints[0]?.requirements[0]?.key,
+					"header:X-Account",
+				)
+				assert.deepStrictEqual(single.candidate.card._meta, {
+					"fixture.test/metadata": { preserved: true },
+				})
+				assert.deepStrictEqual(
+					Arr.map(single.candidate.sources, (source) => source.role),
+					["input", "catalog", "card", "endpoint"],
+				)
+				const multiple = yield* discover(publisher.origin + "/catalog")
+				assert.ok(multiple._tag === "Multiple")
+				assert.strictEqual(multiple.candidates.length, 2)
+				assert.strictEqual(multiple.issues.length, 1)
+				assert.strictEqual(
+					multiple.issues[0]?.url,
+					publisher.origin + "/invalid",
+				)
+				yield* Schema.decodeEffect(AppDiscoveryResult)(multiple)
+				const page = yield* discover(publisher.origin + "/page?edition=team")
+				assert.ok(page._tag === "Single")
+				assert.strictEqual(
+					page.candidate.sources[0]?.originalInput,
+					publisher.origin + "/page?edition=team",
+				)
+				const requests = yield* publisher.requests
+				assert.ok(Arr.contains(requests, "/page?edition=team"))
+				assert.strictEqual(Arr.contains(requests, "/mcp"), false)
 			}),
-		[Symbol.asyncDispose]: async () => {
-			await runtime.dispose()
-			await database.close()
-		},
-	}
-}
+	)
 
-it("the registered public App API checks ordinary BotAuth before it discovers local services", async () => {
-	await using publisher = await fixture()
-	await using api = await startApi(publisher.layer)
-	const payload = { input: publisher.origin + "/card?edition=team" }
-	const session = { cookie: `${AuthApi.SessionCookie}=local-session` }
-	const authenticated = { ...session, origin: publicOrigin }
-	const denied: ReadonlyArray<readonly [Record<string, string>, number]> = [
-		[{}, 401],
-		[{ authorization: "Bearer wrong-key" }, 401],
-		[
-			{
-				cookie: `${AuthApi.SessionCookie}=wrong-session`,
-				origin: publicOrigin,
-			},
-			401,
-		],
-		[session, 403],
-		[{ ...session, origin: "https://foreign.fixture.test" }, 403],
-		[
-			{ cookie: `${AuthApi.SessionCookie}=unavailable`, origin: publicOrigin },
-			503,
-		],
-	]
-	for (const [headers, status] of denied) {
-		const response = await api.request(payload, headers)
-		assert.strictEqual(response.status, status)
-		await response.text()
-	}
-	assert.strictEqual(publisher.requests.length, 0)
-	for (const invalid of [{}, { input: 123 }, { input: "" }]) {
-		const response = await api.request(invalid, authenticated)
-		assert.strictEqual(response.status, 400)
-		await response.text()
-	}
-	const malformed = await fetch(api.address + "/v1/apps/discover", {
-		method: "POST",
-		headers: { ...authenticated, "content-type": "application/json" },
-		body: "{",
-	})
-	assert.strictEqual(malformed.status, 400)
-	await malformed.text()
-	assert.strictEqual(publisher.requests.length, 0)
-	const response = await api.request(
-		{ input: publisher.origin.slice(8) },
-		{ ...session, origin: publicOrigin },
-	)
-	assert.strictEqual(response.status, 200)
-	const single = Schema.decodeUnknownSync(
-		Schema.toCodecJson(AppDiscoveryResult),
-	)(await response.json())
-	assert.ok(single._tag === "Single")
-	assert.strictEqual(single.candidate.cardUrl, payload.input)
-	assert.strictEqual(
-		single.candidate.endpoints[0]?.requirements[0]?.key,
-		"header:X-Account",
-	)
-	assert.strictEqual(
-		single.candidate.sources[0]?.originalInput,
-		publisher.origin.slice(8),
-	)
-	const spec = await (await fetch(api.address + "/openapi.json")).json()
-	assert.deepStrictEqual(spec.paths["/v1/apps/discover"].post.security, [
-		{ token: [] },
-		{ session: [] },
-	])
-	for (const status of ["200", "400", "401", "403", "422", "503"])
-		assert.ok(spec.paths["/v1/apps/discover"].post.responses[status])
-	assert.strictEqual((await fetch(api.address + "/health")).status, 200)
-	assert.strictEqual(publisher.requests.includes("/mcp"), false)
-})
-
-it("shared public client decodes real HTTP discovery results and typed protocol failures", async () => {
-	await using publisher = await fixture()
-	await using api = await startApi(publisher.layer)
-	await using client = ManagedRuntime.make(
-		Client.layer({ baseUrl: api.address }).pipe(
-			Layer.provide(
-				Layer.succeed(FetchHttpClient.Fetch, (input, init) =>
-					fetch(input, {
-						...init,
-						headers: {
-							...Object.fromEntries(new Headers(init?.headers)),
-							cookie: `${AuthApi.SessionCookie}=local-session`,
-							origin: publicOrigin,
-						},
+	it.effect(
+		"extra public Index sources follow HTTPS pages without sending credentials",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* fixture()
+				const network = yield* Layer.build(publisher.publicNetwork)
+				const provider = yield* Effect.provideContext(
+					PublicIndex.remoteProvider({
+						id: "remote",
+						name: "Remote Index",
+						url: publisher.origin + "/index",
+						simulated: true,
 					}),
-				),
-			),
-		),
+					network,
+				)
+				const entries = yield* provider.entries
+				assert.strictEqual(entries.length, 2)
+				assert.notStrictEqual(entries[0]?.cardUrl, entries[1]?.cardUrl)
+				assert.deepStrictEqual(yield* publisher.requests, [
+					"/index?limit=50",
+					"/index?limit=50&cursor=second",
+				])
+			}),
 	)
-	const discover = (input: string) =>
-		Client.Client.use((client) =>
-			client.api.apps.discoverApp({ payload: { input } }),
-		)
-	const multiple = await client.runPromise(
-		discover(publisher.origin + "/catalog"),
-	)
-	assert.ok(multiple._tag === "Multiple")
-	assert.strictEqual(multiple.candidates.length, 2)
-	assert.strictEqual(multiple.issues[0]?.url, publisher.origin + "/invalid")
-	const failures: ReadonlyArray<readonly [string, string]> = [
-		["not a link", "InvalidInput"],
-		[publisher.origin + "/none", "NoDeclaration"],
-		[publisher.origin + "/empty", "NoUsableServices"],
-		[publisher.origin + "/invalid", "Document"],
-		[publisher.origin + "/malformed", "Document"],
-		[publisher.origin + "/incompatible", "IncompatibleCard"],
-		[publisher.origin + "/unavailable", "Http"],
-		[publisher.origin + "/large", "TooLarge"],
-		[publisher.origin + "/redirect", "BlockedTarget"],
-	]
-	for (const [input, reason] of failures) {
-		const response = await api.request(
-			{ input },
-			{
-				cookie: `${AuthApi.SessionCookie}=local-session`,
-				origin: publicOrigin,
-			},
-		)
-		assert.strictEqual(response.status, 422)
-		const failure = Schema.decodeUnknownSync(AppDiscoveryFailed)(
-			await response.json(),
-		)
-		assert.strictEqual(failure.reason, reason)
-		const result = await client.runPromise(discover(input).pipe(Effect.result))
-		assert.ok(Result.isFailure(result))
-		assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
-		assert.strictEqual(result.failure.reason, reason)
-	}
-	await using publicApi = await startApi(AppDiscovery.layerPublic)
-	const rejected = await publicApi.request(
-		{ input: publisher.origin + "/card?edition=team" },
-		{ cookie: `${AuthApi.SessionCookie}=local-session`, origin: publicOrigin },
-	)
-	assert.strictEqual(rejected.status, 422)
-	assert.strictEqual(
-		Schema.decodeUnknownSync(AppDiscoveryFailed)(await rejected.json()).reason,
-		"BlockedTarget",
-	)
-})
 
-it("anonymous developer inspection uses its own HTTPS evidence and does not change connections or the Index", async () => {
-	await using publisher = await fixture()
-	await using api = await startApi(publisher.layer, publisher.publicNetwork)
-	const headers = {
-		cookie: `${AuthApi.SessionCookie}=local-session`,
-		origin: publicOrigin,
-	}
-	const inventory = await (
-		await fetch(api.address + "/v1/connections", { headers })
-	).text()
-	const index = await (await fetch(api.address + "/v1/app-index/apps")).text()
-	const inspect = async (input: string) => {
-		const response = await fetch(api.address + "/v1/developer/inspect", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ input }),
-		})
-		assert.strictEqual(response.status, 200, await response.clone().text())
-		return Schema.decodeUnknownSync(
-			Schema.toCodecJson(DeveloperApi.InspectionReport),
-		)(await response.json())
-	}
-	const authCalls = api.authCalls.length
-	const single = await inspect(publisher.origin + "/card?edition=team")
-	assert.strictEqual(single.apps[0]?.eligibility._tag, "Eligible")
-	assert.ok(
-		single.stages.some(
-			(stage) => stage.name === "Eligibility" && stage.status === "Passed",
-		),
+	it.effect(
+		"discovery returns the main typed failures with local HTTP evidence",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* fixture()
+				const services = yield* Layer.build(publisher.layer)
+				const discover = (input: string) =>
+					Effect.provideContext(
+						Effect.result(AppDiscovery.discover(input)),
+						services,
+					)
+				const failures: ReadonlyArray<readonly [string, string]> = [
+					["/none", "NoDeclaration"],
+					["/empty", "NoUsableServices"],
+					["/invalid", "Document"],
+					["/malformed", "Document"],
+					["/incompatible", "IncompatibleCard"],
+					["/unavailable", "Http"],
+					["/large", "TooLarge"],
+					["/redirect", "BlockedTarget"],
+				]
+				for (const [path, reason] of failures) {
+					const result = yield* discover(publisher.origin + path)
+					assert.ok(Result.isFailure(result), path)
+					assert.strictEqual(result.failure._tag, "AppDiscoveryFailed")
+					assert.strictEqual(result.failure.reason, reason, path)
+				}
+				const before = (yield* publisher.requests).length
+				for (const input of [
+					"not a link",
+					"http://publisher.test/card",
+					"https://name:secret@publisher.test/card",
+				]) {
+					const result = yield* discover(input)
+					assert.ok(Result.isFailure(result))
+					assert.strictEqual(result.failure.reason, "InvalidInput")
+				}
+				assert.strictEqual((yield* publisher.requests).length, before)
+			}),
 	)
-	await api.sql(
-		"ALTER TABLE openbot_app_index_entries RENAME TO unavailable_index_entries",
-	)
-	try {
-		const unknown = await inspect(publisher.origin + "/card?edition=team")
-		assert.strictEqual(unknown.apps[0]?.eligibility._tag, "Eligible")
-		assert.strictEqual(unknown.apps[0]?.stored._tag, "Unknown")
-	} finally {
-		await api.sql(
-			"ALTER TABLE unavailable_index_entries RENAME TO openbot_app_index_entries",
-		)
-	}
 
-	const multiple = await inspect(publisher.origin + "/catalog")
-	assert.strictEqual(multiple.apps.length, 2)
-	assert.ok(multiple.issues.some((issue) => issue.code === "InvalidCandidate"))
-	for (const path of ["/empty", "/none", "/malformed", "/redirect"]) {
-		const report = await inspect(publisher.origin + path)
-		assert.strictEqual(report.apps.length, 0)
-		assert.ok(report.issues.length > 0)
-		assert.ok(report.stages.some((stage) => stage.status === "NotChecked"))
-	}
-	assert.strictEqual(api.authCalls.length, authCalls)
-	const count = publisher.requests.length
-	const invalid = await fetch(api.address + "/v1/developer/inspect", {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ input: "http://insecure.example/card" }),
-	})
-	assert.strictEqual(invalid.status, 400)
-	assert.strictEqual(publisher.requests.length, count)
-	assert.strictEqual(publisher.requests.includes("/mcp"), false)
-	assert.strictEqual(
-		await (await fetch(api.address + "/v1/connections", { headers })).text(),
-		inventory,
+	it.effect(
+		"production discovery blocks loopback addresses before any protocol HTTP request",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* fixture()
+				const services = yield* Layer.build(AppDiscovery.layerPublic)
+				const result = yield* Effect.provideContext(
+					Effect.result(
+						AppDiscovery.discover(publisher.origin + "/card?edition=team"),
+					),
+					services,
+				)
+				assert.ok(Result.isFailure(result))
+				assert.strictEqual(result.failure.reason, "BlockedTarget")
+				assert.strictEqual((yield* publisher.requests).length, 0)
+			}),
 	)
-	assert.strictEqual(
-		await (await fetch(api.address + "/v1/app-index/apps")).text(),
-		index,
+
+	it.effect(
+		"the registered public App API checks ordinary BotAuth before it discovers local services",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* fixture()
+				const api = yield* startApi(publisher.layer)
+				const payload = { input: publisher.origin + "/card?edition=team" }
+				const session = { cookie: `${AuthApi.SessionCookie}=local-session` }
+				const authenticated = { ...session, origin: publicOrigin }
+				const denied: ReadonlyArray<readonly [Record<string, string>, number]> =
+					[
+						[{}, 401],
+						[{ authorization: "Bearer wrong-key" }, 401],
+						[
+							{
+								cookie: `${AuthApi.SessionCookie}=wrong-session`,
+								origin: publicOrigin,
+							},
+							401,
+						],
+						[session, 403],
+						[{ ...session, origin: "https://foreign.fixture.test" }, 403],
+						[
+							{
+								cookie: `${AuthApi.SessionCookie}=unavailable`,
+								origin: publicOrigin,
+							},
+							503,
+						],
+					]
+				for (const [headers, status] of denied) {
+					const response = yield* api.request(payload, headers)
+					assert.strictEqual(response.status, status)
+					yield* response.text
+				}
+				assert.strictEqual((yield* publisher.requests).length, 0)
+				for (const invalid of [{}, { input: 123 }, { input: "" }]) {
+					const response = yield* api.request(invalid, authenticated)
+					assert.strictEqual(response.status, 400)
+					yield* response.text
+				}
+				const malformed = yield* HttpClient.execute(
+					HttpClientRequest.post(api.address + "/v1/apps/discover", {
+						headers: authenticated,
+					}).pipe(HttpClientRequest.bodyText("{", "application/json")),
+				)
+				assert.strictEqual(malformed.status, 400)
+				yield* malformed.text
+				assert.strictEqual((yield* publisher.requests).length, 0)
+				const response = yield* api.request(
+					{ input: Str.slice(8)(publisher.origin) },
+					{ ...session, origin: publicOrigin },
+				)
+				assert.strictEqual(response.status, 200)
+				const single =
+					yield* HttpClientResponse.schemaBodyJson(AppDiscoveryResult)(response)
+				assert.ok(single._tag === "Single")
+				assert.strictEqual(single.candidate.cardUrl, payload.input)
+				assert.strictEqual(
+					single.candidate.endpoints[0]?.requirements[0]?.key,
+					"header:X-Account",
+				)
+				assert.strictEqual(
+					single.candidate.sources[0]?.originalInput,
+					Str.slice(8)(publisher.origin),
+				)
+				const spec = yield* Effect.flatMap(
+					HttpClient.get(api.address + "/openapi.json"),
+					HttpClientResponse.schemaBodyJson(DiscoverOperation),
+				)
+				const operation = spec.paths["/v1/apps/discover"].post
+				assert.deepStrictEqual(operation.security, [
+					{ token: [] },
+					{ session: [] },
+				])
+				for (const status of ["200", "400", "401", "403", "422", "503"])
+					assert.ok(operation.responses[status])
+				assert.strictEqual(
+					(yield* HttpClient.get(api.address + "/health")).status,
+					200,
+				)
+				assert.strictEqual(
+					Arr.contains(yield* publisher.requests, "/mcp"),
+					false,
+				)
+			}),
+	)
+
+	it.effect(
+		"shared public client decodes real HTTP discovery results and typed protocol failures",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* fixture()
+				const api = yield* startApi(publisher.layer)
+				const browser = {
+					cookie: `${AuthApi.SessionCookie}=local-session`,
+					origin: publicOrigin,
+				}
+				const client = yield* Layer.build(
+					Client.layer({ baseUrl: api.address }),
+				)
+				// The client sends the session cookie and the origin of a browser.
+				const discover = (input: string) =>
+					Client.Client.use((client) =>
+						client.api.apps.discoverApp({ payload: { input } }),
+					).pipe(
+						Effect.provideContext(client),
+						Effect.provideService(FetchHttpClient.RequestInit, {
+							headers: browser,
+						}),
+					)
+				const failureOf = (response: HttpClientResponse.HttpClientResponse) =>
+					Effect.flatMap(
+						response.json,
+						Schema.decodeUnknownEffect(AppDiscoveryFailed),
+					)
+				const multiple = yield* discover(publisher.origin + "/catalog")
+				assert.ok(multiple._tag === "Multiple")
+				assert.strictEqual(multiple.candidates.length, 2)
+				assert.strictEqual(
+					multiple.issues[0]?.url,
+					publisher.origin + "/invalid",
+				)
+				const failures: ReadonlyArray<readonly [string, string]> = [
+					["not a link", "InvalidInput"],
+					[publisher.origin + "/none", "NoDeclaration"],
+					[publisher.origin + "/empty", "NoUsableServices"],
+					[publisher.origin + "/invalid", "Document"],
+					[publisher.origin + "/malformed", "Document"],
+					[publisher.origin + "/incompatible", "IncompatibleCard"],
+					[publisher.origin + "/unavailable", "Http"],
+					[publisher.origin + "/large", "TooLarge"],
+					[publisher.origin + "/redirect", "BlockedTarget"],
+				]
+				for (const [input, reason] of failures) {
+					const response = yield* api.request({ input }, browser)
+					assert.strictEqual(response.status, 422)
+					const failure = yield* failureOf(response)
+					assert.strictEqual(failure.reason, reason)
+					const result = yield* Effect.result(discover(input))
+					assert.ok(Result.isFailure(result))
+					assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
+					assert.strictEqual(result.failure.reason, reason)
+				}
+				const publicApi = yield* startApi(AppDiscovery.layerPublic)
+				const rejected = yield* publicApi.request(
+					{ input: publisher.origin + "/card?edition=team" },
+					browser,
+				)
+				assert.strictEqual(rejected.status, 422)
+				assert.strictEqual((yield* failureOf(rejected)).reason, "BlockedTarget")
+			}),
+	)
+
+	it.effect(
+		"anonymous developer inspection uses its own HTTPS evidence and does not change connections or the Index",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* fixture()
+				const api = yield* startApi(publisher.layer, publisher.publicNetwork)
+				const headers = {
+					cookie: `${AuthApi.SessionCookie}=local-session`,
+					origin: publicOrigin,
+				}
+				const inventory = yield* getText(
+					api.address + "/v1/connections",
+					headers,
+				)
+				const index = yield* getText(api.address + "/v1/app-index/apps")
+				const inspect = (input: string) =>
+					Effect.gen(function* () {
+						const response = yield* postJson(
+							api.address + "/v1/developer/inspect",
+							{ input },
+						)
+						assert.strictEqual(response.status, 200, yield* response.text)
+						return yield* HttpClientResponse.schemaBodyJson(
+							DeveloperApi.InspectionReport,
+						)(response)
+					})
+				const authCalls = (yield* api.authCalls).length
+				const single = yield* inspect(publisher.origin + "/card?edition=team")
+				assert.strictEqual(single.apps[0]?.eligibility._tag, "Eligible")
+				assert.ok(
+					Arr.some(
+						single.stages,
+						(stage) =>
+							stage.name === "Eligibility" && stage.status === "Passed",
+					),
+				)
+				yield* api.sql(
+					"ALTER TABLE openbot_app_index_entries RENAME TO unavailable_index_entries",
+				)
+				yield* Effect.gen(function* () {
+					const unknown = yield* inspect(
+						publisher.origin + "/card?edition=team",
+					)
+					assert.strictEqual(unknown.apps[0]?.eligibility._tag, "Eligible")
+					assert.strictEqual(unknown.apps[0]?.stored._tag, "Unknown")
+				}).pipe(
+					Effect.ensuring(
+						Effect.orDie(
+							api.sql(
+								"ALTER TABLE unavailable_index_entries RENAME TO openbot_app_index_entries",
+							),
+						),
+					),
+				)
+
+				const multiple = yield* inspect(publisher.origin + "/catalog")
+				assert.strictEqual(multiple.apps.length, 2)
+				assert.ok(
+					Arr.some(
+						multiple.issues,
+						(issue) => issue.code === "InvalidCandidate",
+					),
+				)
+				for (const path of ["/empty", "/none", "/malformed", "/redirect"]) {
+					const report = yield* inspect(publisher.origin + path)
+					assert.strictEqual(report.apps.length, 0)
+					assert.ok(report.issues.length > 0)
+					assert.ok(
+						Arr.some(report.stages, (stage) => stage.status === "NotChecked"),
+					)
+				}
+				assert.strictEqual((yield* api.authCalls).length, authCalls)
+				const count = (yield* publisher.requests).length
+				const invalid = yield* postJson(api.address + "/v1/developer/inspect", {
+					input: "http://insecure.example/card",
+				})
+				assert.strictEqual(invalid.status, 400)
+				assert.strictEqual((yield* publisher.requests).length, count)
+				assert.strictEqual(
+					Arr.contains(yield* publisher.requests, "/mcp"),
+					false,
+				)
+				assert.strictEqual(
+					yield* getText(api.address + "/v1/connections", headers),
+					inventory,
+				)
+				assert.strictEqual(
+					yield* getText(api.address + "/v1/app-index/apps"),
+					index,
+				)
+			}),
 	)
 })

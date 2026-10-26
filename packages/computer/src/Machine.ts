@@ -1,5 +1,6 @@
 import { arch, hostname, platform } from "node:os"
 import { ComputersApi } from "@openbot-build/api"
+import { pipe, String as Str } from "effect"
 
 /** The version of this connector program. */
 export const version = "0.1.0"
@@ -14,6 +15,6 @@ export const hello = (): ComputersApi.ConnectorHello => ({
 
 /** The name of this machine, cut to the longest name that OpenBot takes. */
 export const name = (): string => {
-	const value = hostname().slice(0, 253)
+	const value = pipe(hostname(), Str.slice(0, 253))
 	return value === "" ? "computer" : value
 }

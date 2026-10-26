@@ -6,10 +6,18 @@ import {
 } from "@openbot-build/api"
 import { Chat, Item, Turn } from "@openbot-build/core"
 import { and, eq, like } from "drizzle-orm"
-import { Array as Arr, Effect, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import { appSecrets } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 /** The open App views, their actions and their confirmed interaction state, kept sealed in Postgres. */
 export type Error =
@@ -35,16 +43,18 @@ export const Action = Schema.Struct({
 })
 export type Action = typeof Action.Type
 
-/** Keep the errors that callers handle. Every other storage failure becomes one error. */
-export const failure = (value: unknown) =>
-	value instanceof ExperienceNotFound || value instanceof ChatConflict
-		? value
-		: ExperienceStorageUnavailable.make({})
+/**
+ * Log a storage failure that the caller can not act on, and replace it with
+ * one error. The error goes to the client, so it does not hold the failure.
+ */
+const unavailable = (message: string) =>
+	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
 export const initial: Api.Interaction = { revision: 0, context: null }
 export const interactionKey = (chat: string, operationId: string) =>
 	JSON.stringify([chat, operationId])
 export const actionKey = (viewId: string, requestId: string) =>
 	JSON.stringify([viewId, requestId])
+const ChatJson = Schema.fromJsonString(Schema.Tuple([Schema.String]))
 type Sealer = typeof Secrets.Service
 
 export const where = (owner: string, kind: string, id: string) =>
@@ -95,9 +105,11 @@ export const contexts = (
 	Error
 > =>
 	Effect.gen(function* () {
+		const start = yield* Schema.encodeEffect(ChatJson)([chat]).pipe(
+			Effect.orDie,
+		)
 		const prefix =
-			(JSON.stringify([chat]).slice(0, -1) + ",").replace(/[\\%_]/g, "\\$&") +
-			"%"
+			pipe(Str.slice(0, -1)(start) + ",", Str.replace(/[\\%_]/g, "\\$&")) + "%"
 		const rows = yield* db
 			.select()
 			.from(appSecrets)
@@ -120,4 +132,14 @@ export const contexts = (
 			}),
 		)
 		return Arr.getSomes(values)
-	}).pipe(Effect.mapError(failure))
+	}).pipe(
+		Effect.catchTag(
+			["EffectDrizzleQueryError", "SchemaError", "SecretStorageError"],
+			(error) =>
+				Effect.fail(error).pipe(
+					unavailable(
+						"Could not read the confirmed App interactions of a Chat.",
+					),
+				),
+		),
+	)

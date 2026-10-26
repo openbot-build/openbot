@@ -10,8 +10,13 @@ export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 ): ConversationContext.RuntimeOperations<E, R> => ({
 	load: (additional?: { readonly additional?: Prompt.RawInput }) =>
 		Effect.gen(function* () {
-			const view = yield* input.store.read(input.chat),
-				compaction = yield* ContextCompaction.ContextCompaction
+			const view = yield* input.store.read(input.chat)
+			if (view.chat.settings.model === undefined)
+				return yield* ConversationContext.ConversationContextError.make({
+					reason: "unsupported",
+					message: "No model is selected for the current Chat",
+				})
+			const compaction = yield* ContextCompaction.ContextCompaction
 			const window =
 				additional?.additional === undefined
 					? view.state.conversation.context
@@ -19,11 +24,6 @@ export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 							view.state.conversation.context,
 							additional.additional,
 						)
-			if (view.chat.settings.model === undefined)
-				return yield* ConversationContext.ConversationContextError.make({
-					reason: "read-failed",
-					message: "No model is selected for the current Chat",
-				})
 			const estimatedTokens = yield* compaction.count({
 				...input.request,
 				selection: view.chat.settings.model,

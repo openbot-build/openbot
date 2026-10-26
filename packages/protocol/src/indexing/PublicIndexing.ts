@@ -1,15 +1,19 @@
 import {
-	Array as EffectArray,
+	Array as Arr,
+	Cache,
+	Cause,
 	Option,
-	HashMap,
 	Clock,
+	Duration,
 	Effect,
+	Exit,
 	Layer,
-	Ref,
 	Schema,
 	Match,
+	pipe,
 	Predicate,
-	Record,
+	Record as Rec,
+	String as Str,
 } from "effect"
 import { Rules } from "../discovery/Discovery.ts"
 
@@ -30,7 +34,18 @@ import {
 interface Cached {
 	readonly response: Network.DocumentResponse
 	readonly freshUntil: number
+	/** How long the cache keeps this entry. */
+	readonly keepMillis: number
 }
+
+/** The cache drops the least recently used document when it has more. */
+const cacheCapacity = 256
+/** A stale document with an ETag or Last-Modified stays this much longer, so a later read can revalidate it. */
+const staleKeepMillis = 86_400_000
+/** One inspection reads at most this many publisher Catalogs. The Card origin comes first. */
+const maxProbes = 8
+/** One inspection must end in this time. */
+const verifyDeadline = "60 seconds"
 
 interface Probe {
 	readonly publisherUrl: string
@@ -63,13 +78,13 @@ const cacheExpiry = (
 
 const noindex = (header: string | undefined) => {
 	let applies = true
-	for (const part of (header ?? "").toLowerCase().split(",")) {
+	for (const part of pipe(header ?? "", Str.toLowerCase, Str.split(","))) {
 		const scoped = /^\s*([a-z_-]+)\s*:\s*(.*)$/.exec(part)
 		if (scoped !== null)
-			applies = scoped[1] === Network.publicProductToken.toLowerCase()
+			applies = scoped[1] === Str.toLowerCase(Network.publicProductToken)
 		if (
 			applies &&
-			/(?:^|\s)(?:noindex|none)(?:\s|$)/.test(scoped?.[2] ?? part.trim())
+			/(?:^|\s)(?:noindex|none)(?:\s|$)/.test(scoped?.[2] ?? Str.trim(part))
 		)
 			return true
 	}
@@ -85,13 +100,23 @@ export const makeInspection: Effect.Effect<
 	const network = yield* Network.PublicNetwork
 	const rules = yield* Rules
 	const policy = yield* Robots.Robots
-	const cache = yield* Ref.make(HashMap.empty<string, Cached>())
+	// Only getOption, set and invalidate use the cache, so it never calls the lookup.
+	const cache = yield* Cache.makeWith<string, Cached>(
+		() => Effect.die("The Indexing cache has no lookup"),
+		{
+			capacity: cacheCapacity,
+			timeToLive: (exit) =>
+				Exit.isSuccess(exit)
+					? Duration.millis(exit.value.keepMillis)
+					: Duration.zero,
+		},
+	)
 	const readHop = Effect.fn("Indexing.readHop")(function* (
 		url: string,
 		robots: boolean,
 	) {
 		const now = yield* Clock.currentTimeMillis
-		const cached = HashMap.get(yield* Ref.get(cache), url)
+		const cached = yield* Cache.getOption(cache, url)
 		const fresh = Option.filter(
 			cached,
 			(entry) => robots && entry.freshUntil > now,
@@ -103,7 +128,7 @@ export const makeInspection: Effect.Effect<
 			...Option.match(cached, {
 				onNone: () => ({}),
 				onSome: (entry) => ({
-					validators: Record.filter(
+					validators: Rec.filter(
 						{
 							etag: entry.response.headers["etag"],
 							lastModified: entry.response.headers["last-modified"],
@@ -146,14 +171,23 @@ export const makeInspection: Effect.Effect<
 		robots: boolean,
 	) {
 		const now = yield* Clock.currentTimeMillis
-		yield* Ref.update(cache, (entries) =>
-			/\bno-store\b/i.test(response.headers["cache-control"] ?? "")
-				? HashMap.remove(entries, response.url)
-				: HashMap.set(entries, response.url, {
-						response,
-						freshUntil: cacheExpiry(response, now, robots),
-					}),
-		)
+		const freshUntil = cacheExpiry(response, now, robots)
+		const validated =
+			response.headers["etag"] !== undefined ||
+			response.headers["last-modified"] !== undefined
+		// Only robots.txt uses freshness. Other documents serve only as validators,
+		// so without a validator they are not kept.
+		yield* /\bno-store\b/i.test(response.headers["cache-control"] ?? "")
+			? Cache.invalidate(cache, response.url)
+			: Cache.set(cache, response.url, {
+					response,
+					freshUntil,
+					keepMillis: validated
+						? freshUntil - now + staleKeepMillis
+						: robots
+							? freshUntil - now
+							: 0,
+				})
 	})
 	const robots = Effect.fn("Indexing.robots")(function* (target: string) {
 		const original = new URL("/robots.txt", target).href
@@ -195,12 +229,14 @@ export const makeInspection: Effect.Effect<
 						reason: "RobotsUnavailable",
 						issue: "robots.txt is unreachable",
 					})
-				if (
-					response.headers["content-type"]
-						?.split(";", 1)[0]
-						?.trim()
-						.toLowerCase() !== "text/plain"
+				const mediaType = pipe(
+					response.headers["content-type"] ?? "",
+					Str.split(";"),
+					Arr.headNonEmpty,
+					Str.trim,
+					Str.toLowerCase,
 				)
+				if (mediaType !== "text/plain")
 					return yield* IndexingError.make({
 						url: original,
 						reason: "RobotsUnavailable",
@@ -253,15 +289,15 @@ export const makeInspection: Effect.Effect<
 		return yield* follow(yield* Schema.decodeEffect(Document.Link)(input), 0)
 	})
 	const fetchCatalog = Effect.fn("Indexing.catalog")(function* (
-		probe: Probe,
+		catalogUrl: string,
 		cardUrl: string,
 	) {
-		const response = yield* read(probe.catalogUrl)
+		const response = yield* read(catalogUrl)
 		if (response.status === 404 || response.status === 410)
 			return { found: false, declared: false }
 		if (response.status !== 200)
 			return yield* IndexingError.make({
-				url: probe.catalogUrl,
+				url: catalogUrl,
 				reason: "Unavailable",
 				issue: "Publisher Catalog is not anonymously available",
 			})
@@ -269,7 +305,8 @@ export const makeInspection: Effect.Effect<
 			Schema.fromJsonString(Document.Catalog),
 		)(response.text)
 		yield* remember(response, false)
-		for (const entry of catalog.entries.filter(
+		for (const entry of Arr.filter(
+			catalog.entries,
 			(entry) => entry.type === Document.cardMediaType,
 		)) {
 			// An entry with a URL that cannot be read is not the card.
@@ -293,11 +330,14 @@ export const makeInspection: Effect.Effect<
 					"PublisherAssociation",
 					"Eligibility",
 				]
-				let stages: ReadonlyArray<InspectionStage> = stageNames.map((name) => ({
-					name,
-					source: input.cardUrl,
-					status: "NotChecked",
-				}))
+				let stages: ReadonlyArray<InspectionStage> = Arr.map(
+					stageNames,
+					(name) => ({
+						name,
+						source: input.cardUrl,
+						status: "NotChecked",
+					}),
+				)
 				const stage = (
 					name: InspectionStage["name"],
 					status: InspectionStage["status"],
@@ -307,7 +347,7 @@ export const makeInspection: Effect.Effect<
 					Clock.currentTimeMillis.pipe(
 						Effect.flatMap((checkedAt) =>
 							Effect.sync(() => {
-								stages = stages.map((value) =>
+								stages = Arr.map(stages, (value) =>
 									value.name === name
 										? {
 												name,
@@ -375,11 +415,14 @@ export const makeInspection: Effect.Effect<
 							association: "CardOrigin",
 						},
 					]
-					for (const link of rules.catalogLinks({
-						responseUrl: response.url,
-						link: response.headers["link"],
-					}))
-						probes = EffectArray.append(probes, {
+					for (const link of Arr.take(
+						rules.catalogLinks({
+							responseUrl: response.url,
+							link: response.headers["link"],
+						}),
+						maxProbes,
+					))
+						probes = Arr.append(probes, {
 							publisherUrl: link,
 							catalogUrl: link,
 							association: "CardLink",
@@ -414,7 +457,7 @@ export const makeInspection: Effect.Effect<
 								return {
 									url,
 									links: [
-										...links,
+										...Arr.take(links, maxProbes - 1),
 										new URL("/.well-known/ai-catalog.json", page.url).href,
 									],
 								}
@@ -423,11 +466,11 @@ export const makeInspection: Effect.Effect<
 						Match.value(website).pipe(
 							Match.tagsExhaustive({
 								Failure: ({ failure }) => {
-									failures = EffectArray.append(failures, failure)
+									failures = Arr.append(failures, failure)
 								},
 								Success: ({ success }) => {
-									for (const link of EffectArray.dedupe(success.links))
-										probes = EffectArray.append(probes, {
+									for (const link of Arr.dedupe(success.links))
+										probes = Arr.append(probes, {
 											publisherUrl: success.url,
 											catalogUrl: link,
 											association: "Website",
@@ -437,59 +480,77 @@ export const makeInspection: Effect.Effect<
 						)
 					}
 					let withdrawn = Option.exists(previous, (value) =>
-						value.evidence.every(
+						Arr.every(
+							value.evidence,
 							(item) =>
-								!probes.some(
+								!Arr.some(
+									probes,
 									(probe) =>
 										probe.catalogUrl === item.catalogUrl &&
 										probe.association === item.association,
 								),
 						),
 					)
-					for (const probe of probes) {
+					// Read each Catalog once, also when more than one probe names it.
+					const catalogUrls = pipe(
+						probes,
+						Arr.map((probe) => probe.catalogUrl),
+						Arr.dedupe,
+						Arr.take(maxProbes),
+					)
+					for (const catalogUrl of catalogUrls) {
 						const checked = yield* Effect.result(
-							fetchCatalog(probe, input.cardUrl),
+							fetchCatalog(catalogUrl, input.cardUrl),
 						)
 						yield* Match.value(checked).pipe(
 							Match.tagsExhaustive({
 								Failure: ({ failure }) =>
 									Effect.sync(() => {
-										failures = EffectArray.append(failures, failure)
+										failures = Arr.append(failures, failure)
 									}),
 								Success: ({ success }) =>
-									Effect.gen(function* () {
-										if (success.found)
-											evidence = EffectArray.append(
-												evidence,
-												yield* Index.Evidence.decode({
-													...probe,
-													cardUrl: input.cardUrl,
-												}),
-											)
-										else if (
-											Option.exists(previous, (value) =>
-												value.evidence.some(
-													(item) => item.catalogUrl === probe.catalogUrl,
-												),
-											)
-										) {
-											if (success.declared) withdrawn = true
-											else
-												failures = EffectArray.append(
-													failures,
-													IndexingError.make({
-														url: probe.catalogUrl,
-														reason: "Unavailable",
-														issue:
-															"Previously verified publisher Catalog is no longer available",
-													}),
-												)
-										}
-									}),
+									Effect.forEach(
+										Arr.filter(
+											probes,
+											(probe) => probe.catalogUrl === catalogUrl,
+										),
+										(probe) =>
+											Effect.gen(function* () {
+												if (success.found)
+													evidence = Arr.append(
+														evidence,
+														yield* Index.Evidence.decode({
+															...probe,
+															cardUrl: input.cardUrl,
+														}),
+													)
+												else if (
+													Option.exists(previous, (value) =>
+														Arr.some(
+															value.evidence,
+															(item) => item.catalogUrl === probe.catalogUrl,
+														),
+													)
+												) {
+													if (success.declared) withdrawn = true
+													else
+														failures = Arr.append(
+															failures,
+															IndexingError.make({
+																url: probe.catalogUrl,
+																reason: "Unavailable",
+																issue:
+																	"Previously verified publisher Catalog is no longer available",
+															}),
+														)
+												}
+											}),
+										{ discard: true },
+									),
 							}),
 						)
 					}
-					if (!EffectArray.isReadonlyArrayNonEmpty(evidence)) {
+					if (!Arr.isReadonlyArrayNonEmpty(evidence)) {
 						if (withdrawn) return yield* exclude("DeclarationWithdrawn", true)
 						const failure = failures[0]
 						if (failure !== undefined) return yield* failure
@@ -498,14 +559,14 @@ export const makeInspection: Effect.Effect<
 					yield* stage(
 						"PublisherAssociation",
 						"Passed",
-						EffectArray.headNonEmpty(evidence).catalogUrl,
+						Arr.headNonEmpty(evidence).catalogUrl,
 					)
 					const entry = yield* Index.Entry.decode({
 						cardUrl: input.cardUrl,
 						card,
 						evidence,
 						checkedAt: yield* Clock.currentTimeMillis,
-						validators: Record.filter(
+						validators: Rec.filter(
 							{
 								etag: response.headers["etag"],
 								lastModified: response.headers["last-modified"],
@@ -521,6 +582,17 @@ export const makeInspection: Effect.Effect<
 					} as const
 				})
 				return yield* verify.pipe(
+					// Many probes and redirects can be slow, so the whole check has a deadline.
+					Effect.timeoutOrElse({
+						duration: verifyDeadline,
+						orElse: () =>
+							Effect.fail(
+								Network.NetworkError.make({
+									reason: "Timeout",
+									message: "Anonymous verification did not finish in time",
+								}),
+							),
+					}),
 					Effect.catch((error) =>
 						Match.value(error).pipe(
 							Match.when(
@@ -528,28 +600,51 @@ export const makeInspection: Effect.Effect<
 								() => exclude("RobotsDenied", false),
 							),
 							Match.orElse((error) =>
-								Effect.succeed<InspectionResult>({
-									_tag: "Unconfirmed" as const,
-									stages,
-									cardUrl: input.cardUrl,
-									...Match.value(error).pipe(
-										Match.tag("IndexingError", (error) => ({
-											reason: error.reason,
-											url: error.url,
-											issue: error.issue,
-										})),
-										Match.tag("NetworkError", (error) => ({
-											reason: error.reason,
-											url: input.cardUrl,
-											issue: "Anonymous verification did not finish",
-										})),
-										Match.orElse(() => ({
-											reason: "InvalidDocument",
-											url: input.cardUrl,
-											issue: "Anonymous verification did not finish",
-										})),
-									),
-								}),
+								Effect.logInfo(
+									"Anonymous verification failed",
+									Cause.fail(error),
+								).pipe(
+									Effect.annotateLogs({ cardUrl: input.cardUrl }),
+									Effect.as<InspectionResult>({
+										_tag: "Unconfirmed" as const,
+										stages,
+										cardUrl: input.cardUrl,
+										...Match.value(error).pipe(
+											Match.tagsExhaustive({
+												IndexingError: (error) => ({
+													reason: error.reason,
+													url: error.url,
+													issue: error.issue,
+												}),
+												NetworkError: (error) => ({
+													reason: error.reason,
+													url: input.cardUrl,
+													issue: error.message,
+												}),
+												SchemaError: (error) => ({
+													reason: "InvalidDocument",
+													url: input.cardUrl,
+													issue: error.message,
+												}),
+												IncompatibleCard: (error) => ({
+													reason: "InvalidDocument",
+													url: input.cardUrl,
+													issue: error.reason,
+												}),
+												InvalidDocument: (error) => ({
+													reason: "InvalidDocument",
+													url: input.cardUrl,
+													issue: error.issue,
+												}),
+												IndexError: () => ({
+													reason: "InvalidDocument",
+													url: input.cardUrl,
+													issue: "The Index entry is not valid",
+												}),
+											}),
+										),
+									}),
+								),
 							),
 						),
 					),

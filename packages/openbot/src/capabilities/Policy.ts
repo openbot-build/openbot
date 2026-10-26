@@ -5,7 +5,7 @@
  */
 import { BotsApi } from "@openbot-build/api"
 import { Domain, Policy, Resource } from "@nmnmcc/ability"
-import { Effect, Option, Schema } from "effect"
+import { Array as Arr, Effect, Option, Schema } from "effect"
 import type { Chat } from "@openbot-build/core"
 
 /** The Bot that tries a capability, in one Chat. */
@@ -85,11 +85,12 @@ export const decidingGrant = (input: {
 			if (decision._tag === "NotApplicable") return Option.none()
 			// The rules are tested in order, so the first rule that applies with
 			// the same effect is the one that decides. Its ID is the ID of the Grant.
-			const winner = steps.find(
+			const winner = Arr.findFirst(
+				steps,
 				(step) => step.applies && step.rule._tag === decision._tag,
 			)
-			return Option.fromNullishOr(
-				input.grants.find((grant) => grant.id === winner?.rule.id),
+			return Option.flatMap(winner, (step) =>
+				Arr.findFirst(input.grants, (grant) => grant.id === step.rule.id),
 			)
 		}),
 	)

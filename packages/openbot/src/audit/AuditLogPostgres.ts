@@ -8,15 +8,18 @@ import * as Db from "../database/Database.ts"
 
 const ActorJson = Schema.fromJsonString(Caller)
 const DetailsJson = Schema.fromJsonString(Schema.JsonObject)
-const decodeActor = Schema.decodeUnknownSync(ActorJson)
-const encodeActor = Schema.encodeSync(ActorJson)
-const decodeDetails = Schema.decodeUnknownSync(DetailsJson)
-const encodeDetails = Schema.encodeSync(DetailsJson)
+const decodeActor = Schema.decodeUnknownEffect(ActorJson)
+const decodeDetails = Schema.decodeUnknownEffect(DetailsJson)
+/** Only this file writes these columns, from typed values, so a failed encode is a defect. */
+const encodeActor = (actor: Caller) =>
+	Schema.encodeEffect(ActorJson)(actor).pipe(Effect.orDie)
+const encodeDetails = (details: Schema.JsonObject) =>
+	Schema.encodeEffect(DetailsJson)(details).pipe(Effect.orDie)
 /** The cursor of a page is the sequence of its last entry. Another cursor starts at the first page. */
 const decodeSequence = Schema.decodeUnknownOption(
 	Schema.FiniteFromString.pipe(Schema.decodeTo(Schema.Int)),
 )
-const decodeAction = Schema.decodeUnknownSync(OrganizationApi.AuditAction)
+const decodeAction = Schema.decodeUnknownEffect(OrganizationApi.AuditAction)
 
 export const make: Effect.Effect<
 	typeof AuditLog.Service,
@@ -33,11 +36,11 @@ export const make: Effect.Effect<
 					createdAt: now,
 					action: entry.action,
 					actorUserId: entry.actor.userId,
-					actor: encodeActor(entry.actor),
+					actor: yield* encodeActor(entry.actor),
 					resource: entry.resource,
-					details: encodeDetails(entry.details),
+					details: yield* encodeDetails(entry.details),
 				})
-			}).pipe(Effect.mapError(() => AuditUnavailable.make({}))),
+			}).pipe(Effect.mapError((cause) => AuditUnavailable.make({ cause }))),
 		list: (organizationId, options) =>
 			Effect.gen(function* () {
 				const after =
@@ -65,20 +68,26 @@ export const make: Effect.Effect<
 					.limit(options.limit + 1)
 				const page = rows.slice(0, options.limit)
 				return {
-					items: page.map((row) => ({
-						id: String(row.sequence),
-						createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
-						action: decodeAction(row.action),
-						actor: decodeActor(row.actor),
-						resource: row.resource,
-						details: decodeDetails(row.details),
-					})),
+					items: yield* Effect.forEach(page, (row) =>
+						Effect.gen(function* () {
+							return {
+								id: String(row.sequence),
+								createdAt: DateTime.formatIso(
+									DateTime.makeUnsafe(row.createdAt),
+								),
+								action: yield* decodeAction(row.action),
+								actor: yield* decodeActor(row.actor),
+								resource: row.resource,
+								details: yield* decodeDetails(row.details),
+							}
+						}),
+					),
 					next:
 						rows.length > options.limit
 							? String(page[page.length - 1]?.sequence)
 							: null,
 				}
-			}).pipe(Effect.mapError(() => AuditUnavailable.make({}))),
+			}).pipe(Effect.mapError((cause) => AuditUnavailable.make({ cause }))),
 	})
 })
 export const layer = Layer.effect(AuditLog, make)

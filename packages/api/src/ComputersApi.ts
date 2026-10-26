@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import {
 	HttpApi,
 	HttpApiEndpoint,
@@ -37,14 +37,6 @@ export const ComputerOwner = Schema.TaggedUnion({
 })
 export type ComputerOwner = typeof ComputerOwner.Type
 
-/**
- * The service that runs Computers.
- * `e2b` is any service that speaks the E2B API, such as E2B, PPIO, Alibaba Cloud Bot
- * Sandbox, or a self-hosted E2B. `daytona` is Daytona, hosted or self-hosted.
- */
-export const ComputerProviderKind = Schema.Literals(["e2b", "daytona"])
-export type ComputerProviderKind = typeof ComputerProviderKind.Type
-
 /** The secrets of a Computer provider. They go in, but they never come out. */
 export const ComputerProviderCredentials = Schema.Union([
 	Schema.Struct({
@@ -70,6 +62,20 @@ export const ComputerProviderCredentials = Schema.Union([
 ])
 export type ComputerProviderCredentials =
 	typeof ComputerProviderCredentials.Type
+
+/**
+ * The service that runs Computers.
+ * `e2b` is any service that speaks the E2B API, such as E2B, PPIO, Alibaba Cloud Bot
+ * Sandbox, or a self-hosted E2B. `daytona` is Daytona, hosted or self-hosted.
+ * It comes from `ComputerProviderCredentials`.
+ */
+export const ComputerProviderKind = Schema.Literals(
+	Arr.map(
+		ComputerProviderCredentials.members,
+		(member) => member.fields.kind.literal,
+	),
+)
+export type ComputerProviderKind = typeof ComputerProviderKind.Type
 
 /** What the API shows of the secrets of a Computer provider. */
 export const ComputerProviderCredentialsView = Schema.Union([
@@ -601,57 +607,57 @@ export const ApprovePairingRequest = Schema.Struct({
 })
 export type ApprovePairingRequest = typeof ApprovePairingRequest.Type
 
-export class ComputerNotFound extends Schema.TaggedError<ComputerNotFound>()(
-	"ComputerNotFound",
-	{ id: Schema.String },
-) {}
-export class ComputerProviderNotFound extends Schema.TaggedError<ComputerProviderNotFound>()(
-	"ComputerProviderNotFound",
-	{ id: Schema.String },
-) {}
-export class ComputerConflict extends Schema.TaggedError<ComputerConflict>()(
-	"ComputerConflict",
-	{ version: Version },
-) {}
-export class ComputerInvalid extends Schema.TaggedError<ComputerInvalid>()(
-	"ComputerInvalid",
-	{ message: Schema.String },
-) {}
+export class ComputerNotFound extends Schema.TaggedError<
+	ComputerNotFound,
+	{ readonly brand: unique symbol }
+>()("ComputerNotFound", { id: Schema.String }) {}
+export class ComputerProviderNotFound extends Schema.TaggedError<
+	ComputerProviderNotFound,
+	{ readonly brand: unique symbol }
+>()("ComputerProviderNotFound", { id: Schema.String }) {}
+export class ComputerConflict extends Schema.TaggedError<
+	ComputerConflict,
+	{ readonly brand: unique symbol }
+>()("ComputerConflict", { version: Version }) {}
+export class ComputerInvalid extends Schema.TaggedError<
+	ComputerInvalid,
+	{ readonly brand: unique symbol }
+>()("ComputerInvalid", { message: Schema.String }) {}
 /** The Computer cannot do this, such as a desktop action on a Computer without a desktop. */
-export class ComputerUnsupported extends Schema.TaggedError<ComputerUnsupported>()(
-	"ComputerUnsupported",
-	{ feature: Schema.String },
-) {}
+export class ComputerUnsupported extends Schema.TaggedError<
+	ComputerUnsupported,
+	{ readonly brand: unique symbol }
+>()("ComputerUnsupported", { feature: Schema.String }) {}
 /** The Computer is offline or failed. */
-export class ComputerNotReady extends Schema.TaggedError<ComputerNotReady>()(
-	"ComputerNotReady",
-	{ state: ComputerState },
-) {}
+export class ComputerNotReady extends Schema.TaggedError<
+	ComputerNotReady,
+	{ readonly brand: unique symbol }
+>()("ComputerNotReady", { state: ComputerState }) {}
 /** The provider refused the call or did not answer. */
-export class ComputerProviderFailed extends Schema.TaggedError<ComputerProviderFailed>()(
-	"ComputerProviderFailed",
-	{ message: Schema.String },
-) {}
-export class ComputersUnavailable extends Schema.TaggedError<ComputersUnavailable>()(
-	"ComputersUnavailable",
-	{},
-) {}
+export class ComputerProviderFailed extends Schema.TaggedError<
+	ComputerProviderFailed,
+	{ readonly brand: unique symbol }
+>()("ComputerProviderFailed", { message: Schema.String }) {}
+export class ComputersUnavailable extends Schema.TaggedError<
+	ComputersUnavailable,
+	{ readonly brand: unique symbol }
+>()("ComputersUnavailable", {}) {}
 /** The token is wrong, or the Computer is not a connector Computer. */
-export class ConnectorDenied extends Schema.TaggedError<ConnectorDenied>()(
-	"ConnectorDenied",
-	{},
-) {}
+export class ConnectorDenied extends Schema.TaggedError<
+	ConnectorDenied,
+	{ readonly brand: unique symbol }
+>()("ConnectorDenied", {}) {}
 /** The pairing is unknown, denied, used or too old. Run `openbot computer pair` again. */
-export class PairingInvalid extends Schema.TaggedError<PairingInvalid>()(
-	"PairingInvalid",
-	{},
-) {}
+export class PairingInvalid extends Schema.TaggedError<
+	PairingInvalid,
+	{ readonly brand: unique symbol }
+>()("PairingInvalid", {}) {}
 
 /** The session is not there. It ended long ago, or it belongs to another Chat. */
-export class ComputerSessionNotFound extends Schema.TaggedError<ComputerSessionNotFound>()(
-	"ComputerSessionNotFound",
-	{ id: Schema.String },
-) {}
+export class ComputerSessionNotFound extends Schema.TaggedError<
+	ComputerSessionNotFound,
+	{ readonly brand: unique symbol }
+>()("ComputerSessionNotFound", { id: Schema.String }) {}
 export const ComputerErrors = [
 	...AuthorizationErrors,
 	ComputerNotFound.pipe(HttpApiSchema.status(404)),

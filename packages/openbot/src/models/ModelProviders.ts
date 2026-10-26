@@ -1,5 +1,11 @@
 import type { ModelProvidersApi } from "@openbot-build/api"
-import { Context, type Effect, type Option, type Redacted } from "effect"
+import {
+	Context,
+	DateTime,
+	type Effect,
+	type Option,
+	type Redacted,
+} from "effect"
 
 /** The platform owns shared providers. An organization owns its own providers. */
 export type Owner =
@@ -140,6 +146,6 @@ export const view = (provider: Stored): ModelProvidersApi.ModelProvider => ({
 	models: provider.models,
 	availability: provider.availability,
 	version: provider.version,
-	createdAt: new Date(provider.createdAt).toISOString(),
-	updatedAt: new Date(provider.updatedAt).toISOString(),
+	createdAt: DateTime.formatIso(DateTime.makeUnsafe(provider.createdAt)),
+	updatedAt: DateTime.formatIso(DateTime.makeUnsafe(provider.updatedAt)),
 })

@@ -151,6 +151,12 @@ short note in its place.
 | `GET /v1/files/:fileId/content` | Gives the bytes of a ready file.                     |
 | `DELETE /v1/files/:fileId`      | Deletes a file at once. Returns `204`.               |
 
+`GET /v1/files/:fileId/content` sends the bytes while they come from storage, so
+a large file does not wait in the memory of OpenBot. When storage fails before
+the bytes start, the answer is `503`. When it fails after that, the answer stops
+early. Compare the length with `bytes` of the file to see that you have all of
+it.
+
 You need `read` on `File` to read files, and `write` on `File` to upload and
 delete them. Every member has both for their own files. See
 [Permissions](/docs/permissions).

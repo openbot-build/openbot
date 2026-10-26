@@ -157,6 +157,12 @@ sieht das Model an ihrer Stelle eine kurze Notiz.
 | `GET /v1/files/:fileId/content` | Gibt die Bytes einer fertigen Datei.                              |
 | `DELETE /v1/files/:fileId`      | Löscht eine Datei sofort. Antwortet mit `204`.                    |
 
+`GET /v1/files/:fileId/content` sendet die Bytes, während sie aus dem Speicher
+kommen. So wartet eine große Datei nicht im Arbeitsspeicher von OpenBot. Wenn
+der Speicher vor den ersten Bytes ausfällt, ist die Antwort `503`. Wenn er
+danach ausfällt, endet die Antwort zu früh. Vergleiche die Länge mit `bytes` der
+Datei, um zu sehen, dass du alles hast.
+
 Zum Lesen brauchst du `read` auf `File`, zum Hochladen und Löschen `write` auf
 `File`. Jeder Member hat beide für seine eigenen Dateien. Siehe
 [Berechtigungen](/de/docs/permissions).

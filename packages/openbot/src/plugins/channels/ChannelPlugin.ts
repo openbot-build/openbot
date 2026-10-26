@@ -1,13 +1,17 @@
 import { Bot, Plugin, type Chat, type ChatStore } from "@openbot-build/core"
 import {
+	Array as Arr,
+	Cause,
 	Context,
 	Effect,
 	type JsonSchema,
 	Layer,
 	Option,
-	Record,
+	pipe,
+	Record as Rec,
 	Schema,
 	Stream,
+	String as Str,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import { Answer, Gate, remember } from "../../capabilities/Gate.ts"
@@ -68,6 +72,8 @@ export const make = Effect.gen(function* () {
 	const channels = yield* Channels
 	const queue = yield* ChannelQueue
 	const gate = yield* Gate
+	// The Bot plugin gives the Work of each Turn, and it runs outside this plugin.
+	// The type of a plugin cannot carry that, so each tool reads it when it runs.
 	const work = Effect.serviceOption(Work).pipe(
 		Effect.flatMap(Effect.fromOption),
 	)
@@ -91,9 +97,11 @@ export const make = Effect.gen(function* () {
 								channelId,
 								state.channel.conversation,
 							)
-							const others = (yield* channels.conversations(channelId))
-								.filter((chat) => chat.key !== state.channel?.conversation)
-								.slice(0, 20)
+							const others = pipe(
+								yield* channels.conversations(channelId),
+								Arr.filter((chat) => chat.key !== state.channel?.conversation),
+								Arr.take(20),
+							)
 							const send = Tool.dynamic(names.send, {
 								description:
 									"Post a message to another chat of this Channel. Use it only when the person asks for it.",
@@ -131,20 +139,22 @@ export const make = Effect.gen(function* () {
 										Effect.map((answer) => answer._tag !== "Allow"),
 										// When the check fails, the post never goes out.
 										Effect.catchCause((cause) =>
-											Effect.logWarning(
-												"A Channel post could not be checked",
-												cause,
-											).pipe(
-												Effect.andThen(
-													remember(
-														call.toolCallId,
-														Answer.Deny({
-															reason: "OpenBot could not check this post.",
-														}),
+											Cause.hasInterruptsOnly(cause)
+												? Effect.interrupt
+												: Effect.logWarning(
+														"A Channel post could not be checked",
+														cause,
+													).pipe(
+														Effect.andThen(
+															remember(
+																call.toolCallId,
+																Answer.Deny({
+																	reason: "OpenBot could not check this post.",
+																}),
+															),
+														),
+														Effect.as(true),
 													),
-												),
-												Effect.as(true),
-											),
 										),
 									),
 							}) as Tools[string]
@@ -152,7 +162,12 @@ export const make = Effect.gen(function* () {
 								Effect.gen(function* () {
 									const request =
 										yield* Schema.decodeUnknownEffect(SendInput)(raw)
-									if (!others.some((chat) => chat.key === request.conversation))
+									if (
+										!Arr.some(
+											others,
+											(chat) => chat.key === request.conversation,
+										)
+									)
 										return json({
 											error:
 												"There is no such chat in this Channel. Use an ID from your instructions.",
@@ -169,14 +184,18 @@ export const make = Effect.gen(function* () {
 									return json({ sent: true })
 								}).pipe(
 									Effect.catchCause((cause) =>
-										Effect.logWarning("A Channel post failed", cause).pipe(
-											Effect.as(json({ error: "The post did not go out." })),
-										),
+										Cause.hasInterruptsOnly(cause)
+											? Effect.interrupt
+											: Effect.logWarning("A Channel post failed", cause).pipe(
+													Effect.as(
+														json({ error: "The post did not go out." }),
+													),
+												),
 									),
 								)
 							const own = Toolkit.make(send)
 							const handlers = yield* own.toHandlers(
-								Record.fromEntries([[send.name, handle]]),
+								Rec.fromEntries([[send.name, handle]]),
 							)
 							const where = Option.match(here, {
 								onNone: () => "a chat",
@@ -190,21 +209,25 @@ export const make = Effect.gen(function* () {
 								Prompt.make([
 									{
 										role: "system",
-										content: [
-											`You talk in ${where} of the ${stored.value.kind} Channel "${stored.value.name}". Your answer goes to the chat as it is. Write short Markdown.`,
-											"In a group chat, each message starts with the name of the person who wrote it. Many people can talk in the same chat. Each Turn works for the person who wrote its message.",
-											others.length === 0
-												? ""
-												: `Other chats of this Channel, for ${names.send}:\n` +
-													others
-														.map(
-															(chat) =>
-																`- ${chat.key}: ${chat.title ?? (chat.kind === "direct" ? "a direct chat" : "a group chat")}`,
-														)
-														.join("\n"),
-										]
-											.filter((line) => line.length > 0)
-											.join("\n\n"),
+										content: pipe(
+											[
+												`You talk in ${where} of the ${stored.value.kind} Channel "${stored.value.name}". Your answer goes to the chat as it is. Write short Markdown.`,
+												"In a group chat, each message starts with the name of the person who wrote it. Many people can talk in the same chat. Each Turn works for the person who wrote its message.",
+												others.length === 0
+													? ""
+													: `Other chats of this Channel, for ${names.send}:\n` +
+														pipe(
+															others,
+															Arr.map(
+																(chat) =>
+																	`- ${chat.key}: ${chat.title ?? (chat.kind === "direct" ? "a direct chat" : "a group chat")}`,
+															),
+															Arr.join("\n"),
+														),
+											],
+											Arr.filter(Str.isNonEmpty),
+											Arr.join("\n\n"),
+										),
 									},
 								]),
 							)

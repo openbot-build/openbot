@@ -1,6 +1,13 @@
-// The Path service has no PATH delimiter, so it comes from node:path.
-import { delimiter } from "node:path"
-import { Array as Arr, Effect, FileSystem, Option, Order, Path } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	FileSystem,
+	Option,
+	Order,
+	Path,
+	pipe,
+	String as Str,
+} from "effect"
 
 /** Every command is a program named `openbot-<name>`. */
 export const prefix = "openbot-"
@@ -21,7 +28,7 @@ export const searchFolders = Effect.fn("Dispatch.searchFolders")(
 		/** The path that started this program, such as `process.argv[1]`. */
 		readonly script: string
 		/** The PATH variable. */
-		readonly path: string | undefined
+		readonly path: string
 	}) {
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
@@ -41,9 +48,14 @@ export const searchFolders = Effect.fn("Dispatch.searchFolders")(
 					: Option.some(path.dirname(folder)),
 			]),
 		)
-		const onPath = (options.path ?? "")
-			.split(delimiter)
-			.filter((part) => part !== "")
+		// The Path service has no PATH delimiter. On Windows the separator is "\",
+		// and PATH puts ";" between folders. Other systems use ":".
+		const delimiter = path.sep === "\\" ? ";" : ":"
+		const onPath = pipe(
+			options.path,
+			Str.split(delimiter),
+			Arr.filter(Str.isNonEmpty),
+		)
 		return Arr.dedupe([real, path.dirname(options.script), ...above, ...onPath])
 	},
 )
@@ -65,7 +77,7 @@ export const find = Effect.fn("Dispatch.find")(function* (
 ) {
 	if (!isValidName(name)) return Option.none<string>()
 	const path = yield* Path.Path
-	const files = folders.map((folder) => path.join(folder, prefix + name))
+	const files = Arr.map(folders, (folder) => path.join(folder, prefix + name))
 	return yield* Effect.findFirst(files, isExecutable)
 })
 
@@ -75,35 +87,42 @@ export const list = Effect.fn("Dispatch.list")(function* (
 ) {
 	const fs = yield* FileSystem.FileSystem
 	const path = yield* Path.Path
+	const nameOf = Str.slice(prefix.length)
 	const inFolder = (folder: string) =>
 		fs.readDirectory(folder).pipe(
 			Effect.orElseSucceed((): ReadonlyArray<string> => []),
 			Effect.flatMap((entries) =>
 				Effect.filter(
-					entries.filter(
+					Arr.filter(
+						entries,
 						(entry) =>
-							entry.startsWith(prefix) &&
-							isValidName(entry.slice(prefix.length)),
+							Str.startsWith(prefix)(entry) && isValidName(nameOf(entry)),
 					),
 					(entry) => isExecutable(path.join(folder, entry)),
 				),
 			),
-			Effect.map(Arr.map((entry) => entry.slice(prefix.length))),
+			Effect.map(Arr.map(nameOf)),
 		)
 	const names = yield* Effect.forEach(folders, inFolder)
-	return Arr.sort(Arr.dedupe(names.flat()), Order.String)
+	return pipe(names, Arr.flatten, Arr.dedupe, Arr.sort(Order.String))
 })
 
 export const usage = (names: ReadonlyArray<string>): string =>
-	[
-		"Usage: openbot <command> [arguments]",
-		"",
-		"Run 'openbot <command> --help' to see the help of a command.",
-		"",
-		names.length === 0
-			? "There are no commands."
-			: ["Commands:", ...names.map((name) => `  ${name}`)].join("\n"),
-	].join("\n")
+	Arr.join(
+		[
+			"Usage: openbot <command> [arguments]",
+			"",
+			"Run 'openbot <command> --help' to see the help of a command.",
+			"",
+			names.length === 0
+				? "There are no commands."
+				: Arr.join(
+						["Commands:", ...Arr.map(names, (name) => `  ${name}`)],
+						"\n",
+					),
+		],
+		"\n",
+	)
 
 export const unknown = (name: string): string =>
 	`openbot: '${name}' is not a command. Run 'openbot help' to see the commands.`

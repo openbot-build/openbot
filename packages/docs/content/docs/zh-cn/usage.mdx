@@ -192,6 +192,8 @@ OpenBot 使用调用开始的时间。它使用第一个有窗口包含这个时
 | `to`      | 结束时间，使用 ISO 8601 格式。默认是现在。                                 |
 | `groupBy` | `day`（默认）、`model`、`provider`、`member`、`bot`、`token` 或 `source`。 |
 
+没有时区的时间（例如 `2026-10-01T00:00:00`）按 UTC 计算。
+
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   "https://api.example.com/v1/organization/usage?groupBy=member"
@@ -379,7 +381,7 @@ token 速率限制一个范围内的模型工作使用 token 的速度。它把�
 
 一次模型调用从它所属的每个范围的桶中取 token：
 
-- **调用之前**，它会等到没有桶处于欠账状态。它不会失败。
+- **调用之前**，它会等到没有桶处于欠账状态。它不会失败。等待结束后，OpenBot 才检查预算和额度。
 - **模型流式输出时**，OpenBot 把提供方的输出读进一个缓冲区。只有当桶里有足够的空间时，它才把每一段发出去，大约每四个字符算一个 token。所以输出以均匀的速度到来。
 - **调用结束时**，OpenBot 把真实的输入和输出 token 计入桶中。如果这让一个桶欠账，下一次调用会等到这个桶重新装满。
 

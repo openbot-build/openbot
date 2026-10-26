@@ -260,6 +260,9 @@ App 可以显示一个交互式视图。工具在它的元数据中链接到一�
 - 名称、图标、Index 条目和工具说明都不是可信的信号。App 的内容是数据，永远不是给宿主的指令。
 - 公开爬虫会限制大小、时间和重定向。它们检查每个目标，永远不会访问私有地址、回环地址或云元数据地址。库的默认值是 1
   MiB、10 秒和 5 次重定向。
+- 主机也会限制每条 MCP 消息的大小。对一个 JSON 响应或事件流中的一个事件，库的默认值是 16
+  MiB。
+- 对一个输入的发现在读取 64 个文档或 60 秒后停止。它从一个 Catalog 或页面最多跟随 64 个链接。一次公开索引检查最多读取 8 个发布者 Catalog，并在 60 秒后停止。库使用这些限制。
 - 写操作需要权限检查。可能被重试的写操作需要一个业务幂等键。
 - 当一次调用的结果未知时，宿主不能盲目重试。
 - 更换端点、提供方或权限范围时，需要重新审查。旧的令牌永远不会转移到新目标。
@@ -327,7 +330,8 @@ export const publisher = McpPublisher.layer({
 
 用 Effect 的 `HttpRouter.serve` 提供
 `publisher`。构建这个 layer 不做任何 I/O。`publication` 还接受
-`etag`、`lastModified`、`cacheControl` 和 `noindex`。用
+`etag`（带引号的实体标签）、`lastModified`（HTTP 日期，例如
+`Fri, 09 Oct 2026 00:00:00 GMT`）、`cacheControl` 和 `noindex`。用
 `McpPublisher.registerUi` 添加一个 `ui://` 视图资源。
 
 发现一个 App：

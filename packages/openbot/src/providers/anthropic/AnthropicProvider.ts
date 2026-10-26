@@ -2,7 +2,14 @@ import { dual } from "effect/Function"
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic"
 import { Provider as CoreProvider, Model } from "@openbot-build/core"
 import { AiError } from "effect/ai"
-import { Effect, Layer, Schema, Context, Predicate, Record } from "effect"
+import {
+	Effect,
+	Layer,
+	Schema,
+	Context,
+	Predicate,
+	Record as Rec,
+} from "effect"
 
 export type Defaults = Omit<
 	typeof AnthropicLanguageModel.Config.Service,
@@ -26,8 +33,8 @@ const efforts: {
 const serviceTiers: {
 	readonly [Key in NonNullable<Defaults["service_tier"]>]: true
 } = { auto: true, standard_only: true }
-const Effort = Schema.Literals(Record.keys(efforts))
-const ServiceTier = Schema.Literals(Record.keys(serviceTiers))
+const Effort = Schema.Literals(Rec.keys(efforts))
+const ServiceTier = Schema.Literals(Rec.keys(serviceTiers))
 
 /** `upstreamModel` is the model name that the API gets. The default is the selected model ID. */
 export interface Options {
@@ -59,7 +66,7 @@ export const make = ({
 					...(effort === undefined
 						? {}
 						: { output_config: { ...defaults.output_config, effort } }),
-					...Record.filter({ service_tier: tier }, Predicate.isNotUndefined),
+					...Rec.filter({ service_tier: tier }, Predicate.isNotUndefined),
 				}
 				return Model.make({
 					provider: selection.provider,

@@ -4,12 +4,21 @@ import type {
 	OrganizationApi,
 	PlatformApi,
 } from "@openbot-build/api"
-import { Context, type Effect, type Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Context,
+	type Effect,
+	type Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 
-export class OrganizationUnavailable extends Schema.TaggedError<OrganizationUnavailable>()(
-	"OrganizationUnavailable",
-	{},
-) {}
+/** OpenBot cannot read or write the organizations now. */
+export class OrganizationUnavailable extends Schema.TaggedError<
+	OrganizationUnavailable,
+	{ readonly brand: unique symbol }
+>()("OrganizationUnavailable", { cause: Schema.Defect() }) {}
 
 /** The secret of an invitation link: its SHA-256 hash, the sealed secret and its first characters. */
 export interface LinkSecret {
@@ -46,7 +55,7 @@ export class Organization extends Context.Service<
 		 */
 		readonly admit: (
 			account: Account,
-			options?: { readonly only?: string },
+			only: Option.Option<string>,
 		) => Effect.Effect<
 			ReadonlyArray<AuthApi.Membership>,
 			OrganizationUnavailable
@@ -256,5 +265,6 @@ export class Organization extends Context.Service<
 	}
 >()("@openbot-build/openbot/organization/Organization") {}
 
+/** The part of an email after its last "@", in lower case. */
 export const domainOf = (email: string) =>
-	email.slice(email.lastIndexOf("@") + 1).toLowerCase()
+	pipe(email, Str.split("@"), Arr.lastNonEmpty, Str.toLowerCase)

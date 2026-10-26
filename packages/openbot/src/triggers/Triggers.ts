@@ -1,14 +1,21 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API to compare secrets in constant time.
+import { timingSafeEqual } from "node:crypto"
 import { BotsApi, type Caller, TriggersApi } from "@openbot-build/api"
 import { and, eq, lte } from "drizzle-orm"
-import { Clock, Context, Cron, Effect, Layer, Option, Result } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
-	type Errors as CheckErrors,
-	check as checkAct,
-	filter,
-	guard,
-} from "../authorization/Check.ts"
+	Array as Arr,
+	Clock,
+	Context,
+	Cron,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Result,
+} from "effect"
+import { Base64Url, Hex } from "effect/encoding"
+import * as Failures from "../app/Failures.ts"
+import * as Check from "../authorization/Check.ts"
 import { triggerResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
 import { triggers } from "../database/Schema.ts"
@@ -17,16 +24,28 @@ import * as Db from "../database/Database.ts"
 type Trigger = TriggersApi.Trigger
 type Row = typeof triggers.$inferSelect
 
-/** The next time after `now` that a schedule fires, or why it is not valid. */
+const encoder = new TextEncoder()
+
+/**
+ * The next time after `now` that a schedule fires, or why it is not valid. A
+ * cron text can parse and still never fire, such as `0 0 30 2 *` (February
+ * 30). `Cron.next` throws then, so this catches it.
+ */
 export const nextRun = (input: {
 	readonly schedule: TriggersApi.Schedule
 	readonly now: number
 }) =>
 	Cron.parse(input.schedule.cron, input.schedule.timeZone ?? "UTC").pipe(
-		Result.map((cron) => Cron.next(cron, input.now).getTime()),
 		Result.mapError(
-			() =>
-				`The schedule ${JSON.stringify(input.schedule.cron)} is not a valid cron text with this time zone.`,
+			(error) =>
+				`The schedule ${JSON.stringify(input.schedule.cron)} is not a valid cron text with this time zone: ${error.message}.`,
+		),
+		Result.flatMap((cron) =>
+			Result.try({
+				try: () => Cron.next(cron, input.now).getTime(),
+				catch: (error) =>
+					`The schedule ${JSON.stringify(input.schedule.cron)} never fires with this time zone (${String(error)}).`,
+			}),
 		),
 	)
 
@@ -35,7 +54,7 @@ export type Failure =
 	| TriggersApi.TriggerConflict
 	| TriggersApi.TriggerInvalid
 	| TriggersApi.TriggerStorageUnavailable
-	| CheckErrors
+	| Check.Errors
 
 /** The triggers of an organization: their prompts, schedules and webhooks. */
 export class Triggers extends Context.Service<
@@ -43,13 +62,13 @@ export class Triggers extends Context.Service<
 	{
 		readonly list: (
 			caller: Caller,
-		) => Effect.Effect<ReadonlyArray<Trigger>, Failure, AuthorizationServices>
+		) => Effect.Effect<ReadonlyArray<Trigger>, Failure>
 		/** Reads a trigger. With `write`, the caller must also be able to change it. */
 		readonly get: (
 			caller: Caller,
 			id: string,
 			action?: "read" | "write",
-		) => Effect.Effect<Trigger, Failure, AuthorizationServices>
+		) => Effect.Effect<Trigger, Failure>
 		readonly create: (
 			caller: Caller,
 			input: {
@@ -59,30 +78,29 @@ export class Triggers extends Context.Service<
 				readonly shared?: boolean
 				readonly enabled?: boolean
 			},
-		) => Effect.Effect<Trigger, Failure, AuthorizationServices>
+		) => Effect.Effect<Trigger, Failure>
 		/** Changes a trigger. The caller becomes its actor. */
 		readonly update: (
 			caller: Caller,
 			id: string,
 			input: TriggersApi.UpdateTriggerRequest,
-		) => Effect.Effect<Trigger, Failure, AuthorizationServices>
+		) => Effect.Effect<Trigger, Failure>
 		readonly remove: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<Trigger, Failure, AuthorizationServices>
+		) => Effect.Effect<Trigger, Failure>
 		/** Makes a new webhook secret. The old one stops working. The caller becomes the actor. */
 		readonly setWebhook: (
 			caller: Caller,
 			id: string,
 		) => Effect.Effect<
 			{ readonly trigger: Trigger; readonly secret: string },
-			Failure,
-			AuthorizationServices
+			Failure
 		>
 		readonly removeWebhook: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<Trigger, Failure, AuthorizationServices>
+		) => Effect.Effect<Trigger, Failure>
 		/** The enabled trigger that this secret opens. */
 		readonly verifyHook: (
 			id: string,
@@ -147,16 +165,30 @@ const nextOf = (trigger: Pick<Trigger, "schedule" | "enabled">, now: number) =>
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(
-			Effect.mapError(() => TriggersApi.TriggerStorageUnavailable.make({})),
+	const crypto = yield* Crypto.Crypto
+	const { check: checkAct, filter, guard } = yield* Check.make
+	// OpenBot needs secure random numbers and SHA-256 to run, so a failure here is a defect.
+	const randomBytes = (size: number) =>
+		crypto.randomBytes(size).pipe(Effect.orDie)
+	const sha = (value: string) =>
+		crypto.digest("SHA-256", encoder.encode(value)).pipe(Effect.orDie)
+	const stored = (message: string) =>
+		Failures.replace(message, () =>
+			TriggersApi.TriggerStorageUnavailable.make({}),
 		)
 	const where = (organizationId: string, id: string) =>
 		and(eq(triggers.organizationId, organizationId), eq(triggers.id, id))
 	const find = (organizationId: string, id: string) =>
-		stored(db.select().from(triggers).where(where(organizationId, id))).pipe(
-			Effect.map((rows) => Option.map(Option.fromNullishOr(rows[0]), fromRow)),
-		)
+		db
+			.select()
+			.from(triggers)
+			.where(where(organizationId, id))
+			.pipe(
+				stored("A trigger could not be read."),
+				Effect.map((rows) =>
+					Option.map(Option.fromNullishOr(rows[0]), fromRow),
+				),
+			)
 	/** A caller who cannot read a trigger does not learn that it exists. */
 	const access = (caller: Caller, id: string, action: "read" | "write") =>
 		Effect.gen(function* () {
@@ -212,21 +244,23 @@ export const make = Effect.gen(function* () {
 				updatedAt: trigger.updatedAt,
 			}
 			if (expected === undefined) {
-				yield* stored(db.insert(triggers).values(values))
+				yield* db
+					.insert(triggers)
+					.values(values)
+					.pipe(stored("A trigger could not be created."))
 				return trigger
 			}
-			const changed = yield* stored(
-				db
-					.update(triggers)
-					.set(values)
-					.where(
-						and(
-							where(organizationId, trigger.id),
-							eq(triggers.revision, expected),
-						),
-					)
-					.returning({ id: triggers.id }),
-			)
+			const changed = yield* db
+				.update(triggers)
+				.set(values)
+				.where(
+					and(
+						where(organizationId, trigger.id),
+						eq(triggers.revision, expected),
+					),
+				)
+				.returning({ id: triggers.id })
+				.pipe(stored("A trigger could not be changed."))
 			if (changed.length === 0)
 				return yield* TriggersApi.TriggerConflict.make({
 					message: "The trigger changed. Read it again and retry.",
@@ -234,12 +268,14 @@ export const make = Effect.gen(function* () {
 			return trigger
 		})
 	const hashOf = (organizationId: string, id: string) =>
-		stored(
-			db
-				.select({ hash: triggers.hookSecretHash })
-				.from(triggers)
-				.where(where(organizationId, id)),
-		).pipe(Effect.map((rows) => rows[0]?.hash ?? null))
+		db
+			.select({ hash: triggers.hookSecretHash })
+			.from(triggers)
+			.where(where(organizationId, id))
+			.pipe(
+				stored("The webhook of a trigger could not be read."),
+				Effect.map((rows) => rows[0]?.hash ?? null),
+			)
 	/** Saves a change of a trigger that the caller may write. */
 	const change = (
 		caller: Caller,
@@ -290,16 +326,15 @@ export const make = Effect.gen(function* () {
 						}),
 					),
 				)
-				const rows = yield* stored(
-					db
-						.select()
-						.from(triggers)
-						.where(
-							and(eq(triggers.organizationId, caller.organizationId), readable),
-						)
-						.orderBy(triggers.createdAt),
-				)
-				return rows.map(fromRow)
+				const rows = yield* db
+					.select()
+					.from(triggers)
+					.where(
+						and(eq(triggers.organizationId, caller.organizationId), readable),
+					)
+					.orderBy(triggers.createdAt)
+					.pipe(stored("The triggers could not be listed."))
+				return Arr.map(rows, fromRow)
 			}),
 		get: (caller, id, action = "read") => access(caller, id, action),
 		create: (caller, input) =>
@@ -326,7 +361,7 @@ export const make = Effect.gen(function* () {
 				const enabled = input.enabled ?? true
 				const trigger: Trigger = {
 					id: TriggersApi.TriggerId.make(
-						"trg_" + randomBytes(16).toString("hex"),
+						"trg_" + Hex.encode(yield* randomBytes(16)),
 					),
 					owner,
 					bot: input.bot,
@@ -365,19 +400,18 @@ export const make = Effect.gen(function* () {
 		remove: (caller, id) =>
 			Effect.gen(function* () {
 				const trigger = yield* access(caller, id, "write")
-				yield* stored(
-					db.delete(triggers).where(where(caller.organizationId, id)),
-				)
+				yield* db
+					.delete(triggers)
+					.where(where(caller.organizationId, id))
+					.pipe(stored("A trigger could not be deleted."))
 				return trigger
 			}),
 		setWebhook: (caller, id) =>
 			Effect.gen(function* () {
-				const secret = "otg_" + randomBytes(32).toString("base64url")
+				const secret = "otg_" + Base64Url.encode(yield* randomBytes(32))
+				const hash = Hex.encode(yield* sha(secret))
 				const trigger = yield* change(caller, id, undefined, (current) =>
-					Effect.succeed({
-						trigger: { ...current, webhook: true },
-						hash: createHash("sha256").update(secret).digest("hex"),
-					}),
+					Effect.succeed({ trigger: { ...current, webhook: true }, hash }),
 				)
 				return { trigger, secret }
 			}),
@@ -387,24 +421,22 @@ export const make = Effect.gen(function* () {
 			),
 		verifyHook: (id, secret) =>
 			Effect.gen(function* () {
-				const row = (yield* stored(
-					db.select().from(triggers).where(eq(triggers.id, id)),
-				))[0]
+				const row = (yield* db
+					.select()
+					.from(triggers)
+					.where(eq(triggers.id, id))
+					.pipe(stored("The trigger of a webhook could not be read.")))[0]
 				if (row === undefined || row.hookSecretHash === null || !row.enabled)
 					return Option.none()
 				const expected = Buffer.from(row.hookSecretHash, "hex")
-				const given = Buffer.from(
-					createHash("sha256").update(secret).digest("hex"),
-					"hex",
-				)
-				if (!timingSafeEqual(expected, given)) return Option.none()
+				if (!timingSafeEqual(expected, yield* sha(secret))) return Option.none()
 				return Option.some({
 					organizationId: row.organizationId,
 					trigger: fromRow(row),
 				})
 			}),
-		due: stored(
-			db.transaction((tx) =>
+		due: db
+			.transaction((tx) =>
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
 					const rows = yield* tx
@@ -418,25 +450,34 @@ export const make = Effect.gen(function* () {
 					return yield* Effect.forEach(rows, (row) =>
 						Effect.gen(function* () {
 							const trigger = fromRow(row)
+							const next = nextOf(trigger, now)
+							if (next === null && trigger.enabled && trigger.schedule !== null)
+								yield* Effect.logWarning(
+									"A trigger schedule has no next time, so the trigger stops firing by itself.",
+								).pipe(
+									Effect.annotateLogs({
+										trigger: row.id,
+										organization: row.organizationId,
+									}),
+								)
 							yield* tx
 								.update(triggers)
-								.set({ nextRunAt: nextOf(trigger, now) })
+								.set({ nextRunAt: next })
 								.where(where(row.organizationId, row.id))
 							return { organizationId: row.organizationId, trigger }
 						}),
 					)
 				}),
-			),
-		),
+			)
+			.pipe(stored("The due triggers could not be read.")),
 		fired: (organizationId, id) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				yield* stored(
-					db
-						.update(triggers)
-						.set({ lastFiredAt: now })
-						.where(where(organizationId, id)),
-				)
+				yield* db
+					.update(triggers)
+					.set({ lastFiredAt: now })
+					.where(where(organizationId, id))
+					.pipe(stored("The fire time of a trigger could not be saved."))
 			}),
 	})
 })

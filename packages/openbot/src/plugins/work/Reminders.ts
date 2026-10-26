@@ -1,6 +1,16 @@
 import { Chat, Turn } from "@openbot-build/core"
 import type { BotsApi } from "@openbot-build/api"
-import { Clock, Context, Effect, Layer, type Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Schema,
+	String as Str,
+} from "effect"
 import { BotRecords } from "../../bots/BotRecords.ts"
 import { hash } from "../../capabilities/Capability.ts"
 
@@ -57,11 +67,18 @@ export class Reminders extends Context.Service<
 			}>,
 			BotsApi.BotStorageUnavailable
 		>
-		readonly close: (
+		/**
+		 * Changes the status of a reminder when it has the status `from`, and gives the
+		 * changed reminder. It gives None when the status is not `from`. The step holds
+		 * the lock of the reminder, so two steps never both send it, and a sent
+		 * reminder and a cancelled one never write over each other.
+		 */
+		readonly change: (
 			organizationId: string,
-			reminder: Reminder,
-			status: Exclude<ReminderStatus, "waiting">,
-		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
+			id: string,
+			from: ReminderStatus,
+			to: ReminderStatus,
+		) => Effect.Effect<Option.Option<Reminder>, BotsApi.BotStorageUnavailable>
 		/** The open reminders of a Chat. */
 		readonly forChat: (
 			organizationId: string,
@@ -70,51 +87,64 @@ export class Reminders extends Context.Service<
 	}
 >()("@openbot-build/openbot/plugins/work/Reminders") {}
 
-export const make: Effect.Effect<typeof Reminders.Service, never, BotRecords> =
-	Effect.gen(function* () {
-		const records = yield* BotRecords
-		const reminders = records.collection("reminder", Reminder, ReminderStatus)
-		const keys = (organizationId: string, reminder: Reminder) => ({
-			organizationId,
-			id: reminder.id,
-			owner: reminder.userId,
-			scope: reminder.chat,
-			status: reminder.status,
-		})
-		return Reminders.of({
-			start: (organizationId, input) =>
-				Effect.gen(function* () {
-					const id = "rem_" + hash([input.chat, input.toolCallId]).slice(0, 32)
-					return yield* records.transaction(
-						id,
-						Effect.gen(function* () {
-							const found = yield* reminders.find(organizationId, id)
-							if (found._tag === "Some") return found.value
-							const reminder: Reminder = {
-								...input,
-								id,
-								createdAt: yield* Clock.currentTimeMillis,
-								status: "waiting",
-							}
-							yield* reminders.put(keys(organizationId, reminder), reminder)
-							return reminder
-						}),
-					)
-				}),
-			find: reminders.find,
-			open: reminders.withStatus("waiting"),
-			due: Effect.gen(function* () {
-				const now = yield* Clock.currentTimeMillis
-				const open = yield* reminders.withStatus("waiting")
-				return open.filter((entry) => entry.value.dueAt <= now)
-			}),
-			close: (organizationId, reminder, status) =>
-				reminders.put(keys(organizationId, { ...reminder, status }), {
-					...reminder,
-					status,
-				}),
-			forChat: (organizationId, chat) =>
-				reminders.list(organizationId, { scope: chat, status: "waiting" }),
-		})
+export const make: Effect.Effect<
+	typeof Reminders.Service,
+	never,
+	BotRecords | Crypto.Crypto
+> = Effect.gen(function* () {
+	const records = yield* BotRecords
+	const crypto = yield* Crypto.Crypto
+	const reminders = records.collection("reminder", Reminder, ReminderStatus)
+	const keys = (organizationId: string, reminder: Reminder) => ({
+		organizationId,
+		id: reminder.id,
+		owner: reminder.userId,
+		scope: reminder.chat,
+		status: reminder.status,
 	})
+	return Reminders.of({
+		start: (organizationId, input) =>
+			Effect.gen(function* () {
+				const id =
+					"rem_" +
+					Str.slice(0, 32)(yield* hash(crypto, [input.chat, input.toolCallId]))
+				return yield* records.transaction(
+					id,
+					Effect.gen(function* () {
+						const found = yield* reminders.find(organizationId, id)
+						if (Option.isSome(found)) return found.value
+						const reminder: Reminder = {
+							...input,
+							id,
+							createdAt: yield* Clock.currentTimeMillis,
+							status: "waiting",
+						}
+						yield* reminders.put(keys(organizationId, reminder), reminder)
+						return reminder
+					}),
+				)
+			}),
+		find: reminders.find,
+		open: reminders.withStatus("waiting"),
+		due: Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			const open = yield* reminders.withStatus("waiting")
+			return Arr.filter(open, (entry) => entry.value.dueAt <= now)
+		}),
+		change: (organizationId, id, from, to) =>
+			records.transaction(
+				id,
+				Effect.gen(function* () {
+					const found = yield* reminders.find(organizationId, id)
+					if (Option.isNone(found) || found.value.status !== from)
+						return Option.none()
+					const changed: Reminder = { ...found.value, status: to }
+					yield* reminders.put(keys(organizationId, changed), changed)
+					return Option.some(changed)
+				}),
+			),
+		forChat: (organizationId, chat) =>
+			reminders.list(organizationId, { scope: chat, status: "waiting" }),
+	})
+})
 export const layer = Layer.effect(Reminders, make)

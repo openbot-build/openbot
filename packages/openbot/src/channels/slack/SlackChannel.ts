@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Array as Arr, Effect, pipe, String as Str } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
 	Channel,
@@ -18,8 +18,6 @@ export interface Secrets {
 
 const api = "https://slack.com/api/"
 
-/** Slack puts `<@U123>` in the text for each mention. The Bot does not need them. */
-
 const blocks = (message: OutboundMessage) => [
 	{
 		type: "section",
@@ -30,7 +28,7 @@ const blocks = (message: OutboundMessage) => [
 		: [
 				{
 					type: "actions",
-					elements: message.buttons.map((button) => ({
+					elements: Arr.map(message.buttons, (button) => ({
 						type: "button",
 						text: { type: "plain_text", text: button.label },
 						value: button.value,
@@ -55,7 +53,7 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 		if (!sameSecret(signature, expected))
 			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		// Button presses come as a form with one `payload` field.
-		const form = request.body.startsWith("payload=")
+		const form = Str.startsWith("payload=")(request.body)
 			? new URLSearchParams(request.body).get("payload")
 			: null
 		const body = parse(form ?? request.body)
@@ -66,7 +64,7 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 			return { events: [], reply: { challenge: text(body, "challenge") } }
 		if (type === "block_actions") {
 			const action = field(body, "actions")
-			const first = Array.isArray(action) ? action[0] : undefined
+			const first = Arr.isArray(action) ? action[0] : undefined
 			const user = field(body, "user")
 			const channel = field(body, "channel")
 			const value = text(first, "value")
@@ -84,7 +82,7 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 						eventId: `action:${text(body, "trigger_id") ?? text(first, "action_ts")}`,
 						conversation: {
 							key: channelId,
-							kind: channelId.startsWith("D") ? "direct" : "group",
+							kind: Str.startsWith("D")(channelId) ? "direct" : "group",
 						},
 						sender: {
 							externalId: userId,
@@ -121,7 +119,8 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 					eventId: text(body, "event_id") ?? `${channel}:${text(event, "ts")}`,
 					conversation: { key: channel, kind: direct ? "direct" : "group" },
 					sender: { externalId: user, displayName: user },
-					text: message.replace(/<@[A-Z0-9]+>/g, "").trim(),
+					// Slack puts `<@U123>` in the text for each mention. The Bot does not need them.
+					text: pipe(message, Str.replace(/<@[A-Z0-9]+>/g, ""), Str.trim),
 					mentioned: kind === "app_mention" || direct,
 				}),
 			],

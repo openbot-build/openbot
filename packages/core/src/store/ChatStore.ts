@@ -1,11 +1,11 @@
 import {
 	Context,
-	Data,
 	Schema,
+	SchemaIssue,
+	type Data,
 	type Effect,
 	type Option,
 	type Stream,
-	type SchemaIssue,
 } from "effect"
 import * as Chat from "../chat/Chat.ts"
 import type * as ChatState from "../chat/ChatState.ts"
@@ -84,17 +84,23 @@ export type DecodingServices<S extends Plugin.Stores> =
 	S[keyof S]["schema"]["DecodingServices"]
 export type EncodingServices<S extends Plugin.Stores> =
 	S[keyof S]["schema"]["EncodingServices"]
-export class ChatStoreError extends Data.TaggedError("ChatStoreError")<{
-	readonly reason:
-		| "encode-failed"
-		| "decode-failed"
-		| "unsupported-format"
-		| "reference-conflict"
-		| "storage-failed"
-	readonly message: string
-	readonly issue?: SchemaIssue.Issue
-	readonly chat?: Chat.Id
-}> {}
+export class ChatStoreError extends Schema.TaggedError<
+	ChatStoreError,
+	{ readonly brand: unique symbol }
+>()("ChatStoreError", {
+	reason: Schema.Literals([
+		"encode-failed",
+		"decode-failed",
+		"unsupported-format",
+		"reference-conflict",
+		"storage-failed",
+	]),
+	message: Schema.String,
+	issue: Schema.optionalKey(Schema.declare(SchemaIssue.isIssue)),
+	chat: Schema.optionalKey(Chat.Id),
+	/** The failure of the storage below, such as a database error. */
+	cause: Schema.optionalKey(Schema.Defect()),
+}) {}
 export interface Definition<
 	S extends Plugin.Stores,
 	V extends string = string,
@@ -157,6 +163,10 @@ export interface Store<P = {}> {
 		readonly settings?: Partial<Turn.Settings>
 		readonly business?: Chat.Ref["business"]
 	}) => Effect.Effect<Chat.View<P>, ChatStoreError>
+	/**
+	 * Changes a Chat. Writes to one Chat run one at a time. `update` must not write
+	 * the same Chat again, because the lock of the Chat is not reentrant.
+	 */
 	readonly modifyEffect: <A, E, R>(input: {
 		readonly chat: Chat.Id
 		readonly expectedRevision?: Chat.Revision

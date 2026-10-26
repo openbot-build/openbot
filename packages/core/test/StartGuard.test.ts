@@ -1,4 +1,3 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
 	Chat,
@@ -38,10 +37,14 @@ it.effect(
 			assert.strictEqual(waiting.chat.inbox.length, 1)
 			assert.strictEqual(yield* runtime.drain(chat), undefined)
 
-			const exit = yield* runtime
+			const refused = yield* runtime
 				.execute({ chat, input: "Now" })
-				.pipe(Effect.exit)
-			assert.strictEqual(exit._tag, "Failure")
+				.pipe(Effect.flip)
+			assert.strictEqual(refused._tag, "ChatConflict")
+			assert.strictEqual(
+				refused.message,
+				"Another process runs the Turns of this Chat",
+			)
 
 			yield* Ref.set(allowed, true)
 			const drained = yield* runtime.drain(chat)

@@ -11,6 +11,7 @@ import {
 } from "@openbot-build/protocol"
 import {
 	Array as Arr,
+	Cause,
 	Clock,
 	Context,
 	Crypto,
@@ -27,9 +28,12 @@ import { PgClient } from "@effect/sql-pg"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
-import { pages } from "./Capabilities.ts"
+import { capabilityLists, pages } from "./Capabilities.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
+import * as Platform from "../settings/Platform.ts"
+import { Settings } from "../settings/Settings.ts"
 
 export type Execution =
 	| {
@@ -90,13 +94,24 @@ const policy = Client.InvocationPolicy.of({
 					}),
 				),
 })
-const uncheckedLists: ReadonlyArray<Api.TestStage> = (
-	["tools", "resources", "resourceTemplates", "prompts"] as const
-).map((name) => ({ name, status: "NotChecked", items: [], reason: null }))
+/** The capability lists, in the order a test reads them. */
+const listNames = [
+	"tools",
+	"resources",
+	"resourceTemplates",
+	"prompts",
+] as const
+const uncheckedLists: ReadonlyArray<Api.TestStage> = Arr.map(
+	listNames,
+	(name): Api.TestStage => ({
+		name,
+		status: "NotChecked",
+		items: [],
+		reason: null,
+	}),
+)
 
-export const make = (
-	publicOrigin: string,
-): Effect.Effect<
+export const make: Effect.Effect<
 	typeof DeveloperTestRuntime.Service,
 	never,
 	| DeveloperTestStores
@@ -105,24 +120,38 @@ export const make = (
 	| Crypto.Crypto
 	| App.ConnectionScopes
 	| DeveloperAccess
-> =>
-	Effect.gen(function* () {
-		const stores = yield* DeveloperTestStores
-		const db = yield* Db.make
-		const inTransaction = Rows.transaction(yield* PgClient.PgClient)
-		const namespace = yield* IndexNamespace
-		const network = yield* AppNetwork
-		const crypto = yield* Crypto.Crypto
-		const active = yield* App.ConnectionScopes
-		const access = yield* DeveloperAccess
-		const withNetwork = <A, E, R>(
-			owner: string,
-			id: string,
-			extra: ReadonlyArray<string>,
-			program: Effect.Effect<
-				A,
-				E,
-				| R
+	| Settings
+> = Effect.gen(function* () {
+	const settings = yield* Settings
+	const stores = yield* DeveloperTestStores
+	const db = yield* Db.make
+	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+	const namespace = yield* IndexNamespace
+	const network = yield* AppNetwork
+	const crypto = yield* Crypto.Crypto
+	const active = yield* App.ConnectionScopes
+	const access = yield* DeveloperAccess
+	const withNetwork = <A, E, R>(
+		owner: string,
+		id: string,
+		extra: ReadonlyArray<string>,
+		program: Effect.Effect<
+			A,
+			E,
+			| R
+			| Network.Network
+			| Store.AppStore
+			| Store.CredentialStore
+			| Authorization.FlowStore
+			| App.ConnectionScopes
+			| Client.InvocationPolicy
+			| Crypto.Crypto
+		>,
+	): Effect.Effect<
+		A,
+		E | Api.DeveloperInputInvalid | Store.StoreError,
+		| Exclude<
+				R,
 				| Network.Network
 				| Store.AppStore
 				| Store.CredentialStore
@@ -130,521 +159,492 @@ export const make = (
 				| App.ConnectionScopes
 				| Client.InvocationPolicy
 				| Crypto.Crypto
-			>,
-		): Effect.Effect<
-			A,
-			E | Api.Failure | Store.StoreError,
-			| Exclude<
-					R,
-					| Network.Network
-					| Store.AppStore
-					| Store.CredentialStore
-					| Authorization.FlowStore
-					| App.ConnectionScopes
-					| Client.InvocationPolicy
-					| Crypto.Crypto
-			  >
-			| Scope.Scope
-		> =>
-			Effect.gen(function* () {
-				const bound = stores.bind(owner, id)
-				const connection = yield* bound.apps.get({ owner, connectionId: id })
-				const links = yield* Schema.decodeEffect(Schema.Array(Document.Link))([
-					connection.endpoint,
-					...extra,
-				]).pipe(
-					Effect.mapError(() =>
+		  >
+		| Scope.Scope
+	> =>
+		Effect.gen(function* () {
+			const bound = stores.bind(owner, id)
+			const connection = yield* bound.apps.get({ owner, connectionId: id })
+			const links = yield* Schema.decodeEffect(Schema.Array(Document.Link))([
+				connection.endpoint,
+				...extra,
+			]).pipe(
+				Effect.catchTag("SchemaError", () =>
+					Effect.fail(
 						Api.DeveloperInputInvalid.make({
 							message: "Test network targets must be valid HTTPS URLs.",
 						}),
 					),
-				)
-				const context = yield* Layer.buildWithScope(
-					network.layer(
-						owner,
-						links.map((url) => new URL(url).origin),
-					),
-					yield* Effect.scope,
-				)
-				return yield* program.pipe(
-					Effect.provideContext(
-						context.pipe(
-							Context.add(Store.AppStore, bound.apps),
-							Context.add(Store.CredentialStore, bound.credentials),
-							Context.add(Authorization.FlowStore, bound.flows),
-							Context.add(App.ConnectionScopes, active),
-							Context.add(
-								Client.InvocationPolicy,
-								Client.InvocationPolicy.of({
-									check: (invocation) =>
-										Effect.gen(function* () {
-											const test = yield* Rows.getTest(db, namespace, id)
-											if (
-												test.owner !== owner ||
-												test.value.status !== "Running" ||
-												test.value.expiresAt <= (yield* Clock.currentTimeMillis)
-											)
-												return yield* Api.DeveloperForbidden.make({})
-											yield* access.authorize(owner, test.value.cardUrl, true)
-											yield* policy.check(invocation)
-										}).pipe(
-											Effect.mapError(() =>
-												Client.PermissionDenied.make({
-													action: invocation.action,
-													target: invocation.target,
-												}),
-											),
+				),
+			)
+			const context = yield* Layer.buildWithScope(
+				network.layer(
+					owner,
+					Arr.map(links, (url) => new URL(url).origin),
+				),
+				yield* Effect.scope,
+			)
+			return yield* program.pipe(
+				Effect.provideContext(
+					context.pipe(
+						Context.add(Store.AppStore, bound.apps),
+						Context.add(Store.CredentialStore, bound.credentials),
+						Context.add(Authorization.FlowStore, bound.flows),
+						Context.add(App.ConnectionScopes, active),
+						Context.add(
+							Client.InvocationPolicy,
+							Client.InvocationPolicy.of({
+								check: (invocation) => {
+									const denied = () =>
+										Client.PermissionDenied.make({
+											action: invocation.action,
+											target: invocation.target,
+										})
+									return Effect.gen(function* () {
+										const test = yield* Rows.getTest(db, namespace, id)
+										if (
+											test.owner !== owner ||
+											test.value.status !== "Running" ||
+											test.value.expiresAt <= (yield* Clock.currentTimeMillis)
+										)
+											return false
+										return yield* access.allows(owner, test.value.cardUrl, true)
+									}).pipe(
+										Effect.catchTag("DeveloperNotFound", () =>
+											Effect.succeed(false),
 										),
+										// A check that cannot finish denies the call.
+										Failures.replace(
+											"Could not check a call of a test.",
+											denied,
+										),
+										Effect.flatMap((allowed) =>
+											allowed
+												? policy.check(invocation)
+												: Effect.fail(denied()),
+										),
+									)
+								},
+							}),
+						),
+						Context.add(Crypto.Crypto, crypto),
+					),
+				),
+			)
+		})
+	return DeveloperTestRuntime.of({
+		execute: (owner, id) =>
+			Effect.scoped(
+				withNetwork(
+					owner,
+					id,
+					[],
+					Effect.gen(function* () {
+						const client = yield* McpClient.open({
+							key: { owner, connectionId: id },
+							clientInfo: {
+								name: "OpenBot Developer Center",
+								version: "1.0.0",
+							},
+							capabilities: {},
+							eagerLists: false,
+						})
+						let stages: ReadonlyArray<Api.TestStage> = [
+							{
+								name: "negotiation",
+								status: "Passed",
+								items: [],
+								reason: null,
+							},
+						]
+						const partial = yield* Ref.make<ReadonlyArray<unknown>>([])
+						/** Read every page, and keep the items read so far for a partial result. */
+						const collect = <A>(
+							page: (cursor?: string) => Effect.Effect<
+								{
+									readonly values: ReadonlyArray<A>
+									readonly nextCursor?: string | undefined
+								},
+								Client.Error
+							>,
+						) =>
+							pages<A>((cursor) =>
+								page(cursor).pipe(
+									Effect.tap((page) =>
+										Ref.update(partial, (values) => [
+											...values,
+											...page.values,
+										]),
+									),
+								),
+							)
+						const progress = (stages: ReadonlyArray<Api.TestStage>) =>
+							inTransaction(
+								Effect.gen(function* () {
+									const record = yield* Rows.getTest(db, namespace, id, true)
+									if (
+										record.owner !== owner ||
+										record.value.status !== "Running"
+									)
+										return
+									yield* Rows.putTest(db, namespace, {
+										...record,
+										value: {
+											...record.value,
+											stages: [
+												...Arr.filter(
+													record.value.stages,
+													(stage) => stage.name === "configuration",
+												),
+												...stages,
+											],
+										},
+									})
 								}),
-							),
-							Context.add(Crypto.Crypto, crypto),
+							)
+						yield* progress(stages)
+						const capabilities = capabilityLists(client)
+						const lists = Arr.map(listNames, (name) => ({
+							name,
+							advertised: capabilities[name].advertised,
+							read: () => collect<unknown>(capabilities[name].page),
+						}))
+						let failed = false
+						for (const list of lists) {
+							if (failed) {
+								stages = [
+									...stages,
+									{
+										name: list.name,
+										status: "NotChecked",
+										items: [],
+										reason: null,
+									},
+								]
+								yield* progress(stages)
+								continue
+							}
+							if (!list.advertised) {
+								stages = [
+									...stages,
+									{
+										name: list.name,
+										status: "NotAdvertised",
+										items: [],
+										reason: null,
+									},
+								]
+								yield* progress(stages)
+								continue
+							}
+							yield* Ref.set(partial, [])
+							const result = yield* list.read().pipe(
+								Effect.flatMap(
+									Schema.decodeUnknownEffect(Schema.Array(Schema.JsonObject)),
+								),
+								Effect.tapCauseIf(Cause.hasFails, (cause) =>
+									Effect.logInfo(
+										"A developer test could not read a list of the App.",
+										cause,
+									).pipe(Effect.annotateLogs({ testId: id, list: list.name })),
+								),
+								Effect.result,
+							)
+							const read = yield* Ref.get(partial)
+							const stage: Api.TestStage = Match.value(result).pipe(
+								Match.tagsExhaustive({
+									Success: ({ success }) => ({
+										name: list.name,
+										status: "Passed" as const,
+										items: success,
+										reason: null,
+									}),
+									Failure: () => ({
+										name: list.name,
+										status: "Failed" as const,
+										items: Schema.decodeUnknownOption(
+											Schema.Array(Schema.JsonObject),
+										)(read).pipe(Option.getOrElse(() => [])),
+										reason: "CapabilityListIncomplete",
+									}),
+								}),
+							)
+							failed = stage.status === "Failed"
+							stages = [...stages, stage]
+							yield* progress(stages)
+						}
+						return failed
+							? {
+									_tag: "Failed" as const,
+									stages,
+									reason: "CapabilityListIncomplete",
+								}
+							: { _tag: "Completed" as const, stages }
+					}),
+				),
+			).pipe(
+				Effect.catchTag("AuthorizationRequired", (error) =>
+					Effect.scoped(
+						withNetwork(
+							owner,
+							id,
+							error.resourceMetadataUrl === undefined
+								? []
+								: [error.resourceMetadataUrl],
+							Effect.gen(function* () {
+								const connection = yield* stores
+									.bind(owner, id)
+									.apps.get({ owner, connectionId: id })
+								const resource = yield* OAuthAuthorization.discoverResource({
+									resource: connection.endpoint,
+									...(error.resourceMetadataUrl === undefined
+										? {}
+										: { resourceMetadataUrl: error.resourceMetadataUrl }),
+								})
+								return {
+									_tag: "AwaitingAuthorization" as const,
+									stages: [
+										{
+											name: "negotiation" as const,
+											status: "NotChecked" as const,
+											items: [],
+											reason: "AuthorizationRequired",
+										},
+										...uncheckedLists,
+									],
+									issuers: resource.authorization_servers,
+									scopes:
+										error.scopes.length > 0
+											? error.scopes
+											: (resource.scopes_supported ?? []),
+									...(error.resourceMetadataUrl === undefined
+										? {}
+										: { resourceMetadataUrl: error.resourceMetadataUrl }),
+								}
+							}),
 						),
 					),
+				),
+				// Rows logs its own storage failures.
+				Effect.tapCauseIf(
+					(cause) =>
+						Option.exists(
+							Cause.findErrorOption(cause),
+							(error) => error._tag !== "DeveloperUnavailable",
+						),
+					(cause) =>
+						Effect.logInfo(
+							"A developer test could not connect to the App.",
+							cause,
+						).pipe(Effect.annotateLogs({ testId: id })),
+				),
+				Effect.catch((error) =>
+					Effect.succeed<Execution>({
+						_tag: "Failed",
+						stages: [
+							{
+								name: "negotiation",
+								status: "Failed",
+								items: [],
+								reason: "ConnectionFailed",
+							},
+							...uncheckedLists,
+						],
+						reason: error._tag,
+					}),
+				),
+			),
+		begin: (owner, id, input) =>
+			Effect.gen(function* () {
+				const test = yield* Rows.getTest(db, namespace, id)
+				if (test.owner !== owner) return yield* Api.DeveloperNotFound.make({})
+				const issuer = yield* Option.fromNullishOr(input.issuer).pipe(
+					Option.orElse(() =>
+						test.value.issuers.length === 1
+							? Arr.head(test.value.issuers)
+							: Option.none(),
+					),
+					Option.filter((issuer) => test.value.issuers.includes(issuer)),
+					Effect.fromOption(() =>
+						Api.DeveloperConflict.make({ reason: "SelectDeclaredIssuer" }),
+					),
 				)
-			})
-		return DeveloperTestRuntime.of({
-			execute: (owner, id) =>
-				Effect.scoped(
+				const scopes =
+					input.scopes.length === 0 ? test.value.requestedScopes : input.scopes
+				const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
+					Api.DeveloperUnavailable.make({}),
+				)
+				const pending = yield* Effect.scoped(
 					withNetwork(
 						owner,
 						id,
-						[],
-						Effect.gen(function* () {
-							const client = yield* McpClient.open({
-								key: { owner, connectionId: id },
-								clientInfo: {
-									name: "OpenBot Developer Center",
-									version: "1.0.0",
-								},
-								capabilities: {},
-								eagerLists: false,
-							})
-							let stages: ReadonlyArray<Api.TestStage> = [
-								{
-									name: "negotiation",
-									status: "Passed",
-									items: [],
-									reason: null,
-								},
-							]
-							const partial = yield* Ref.make<ReadonlyArray<unknown>>([])
-							/** Read every page, and keep the items read so far for a partial result. */
-							const collect = <A>(
-								page: (cursor?: string) => Effect.Effect<
-									{
-										readonly values: ReadonlyArray<A>
-										readonly nextCursor?: string | undefined
-									},
-									Client.Error
-								>,
-							) =>
-								pages<A>((cursor) =>
-									page(cursor).pipe(
-										Effect.tap((page) =>
-											Ref.update(partial, (values) => [
-												...values,
-												...page.values,
-											]),
-										),
-									),
-								)
-							const progress = (stages: ReadonlyArray<Api.TestStage>) =>
-								inTransaction(
-									Effect.gen(function* () {
-										const record = yield* Rows.getTest(db, namespace, id, true)
-										if (
-											record.owner !== owner ||
-											record.value.status !== "Running"
-										)
-											return
-										yield* Rows.putTest(db, namespace, {
-											...record,
-											value: {
-												...record.value,
-												stages: [
-													...record.value.stages.filter(
-														(stage) => stage.name === "configuration",
-													),
-													...stages,
-												],
-											},
-										})
-									}),
-								)
-							yield* progress(stages)
-							const lists = [
-								{
-									name: "tools" as const,
-									advertised: client.discovery.capabilities.tools !== undefined,
-									read: () =>
-										collect((cursor) =>
-											client
-												.listTools({
-													...(cursor === undefined ? {} : { cursor }),
-													source: "host",
-													singlePage: true,
-												})
-												.pipe(
-													Effect.map((page) => ({
-														values: page.tools,
-														nextCursor: page.nextCursor,
-													})),
-												),
-										),
-								},
-								{
-									name: "resources" as const,
-									advertised:
-										client.discovery.capabilities.resources !== undefined,
-									read: () =>
-										collect((cursor) =>
-											client
-												.listResources(cursor, "host", { singlePage: true })
-												.pipe(
-													Effect.map((page) => ({
-														values: page.resources,
-														nextCursor: page.nextCursor,
-													})),
-												),
-										),
-								},
-								{
-									name: "resourceTemplates" as const,
-									advertised:
-										client.discovery.capabilities.resources !== undefined,
-									read: () =>
-										collect((cursor) =>
-											client
-												.listResourceTemplates(cursor, "host", {
-													singlePage: true,
-												})
-												.pipe(
-													Effect.map((page) => ({
-														values: page.resourceTemplates,
-														nextCursor: page.nextCursor,
-													})),
-												),
-										),
-								},
-								{
-									name: "prompts" as const,
-									advertised:
-										client.discovery.capabilities.prompts !== undefined,
-									read: () =>
-										collect((cursor) =>
-											client
-												.listPrompts(cursor, "host", { singlePage: true })
-												.pipe(
-													Effect.map((page) => ({
-														values: page.prompts,
-														nextCursor: page.nextCursor,
-													})),
-												),
-										),
-								},
-							]
-							let failed = false
-							for (const list of lists) {
-								if (failed) {
-									stages = [
-										...stages,
-										{
-											name: list.name,
-											status: "NotChecked",
-											items: [],
-											reason: null,
-										},
-									]
-									yield* progress(stages)
-									continue
-								}
-								if (!list.advertised) {
-									stages = [
-										...stages,
-										{
-											name: list.name,
-											status: "NotAdvertised",
-											items: [],
-											reason: null,
-										},
-									]
-									yield* progress(stages)
-									continue
-								}
-								yield* Ref.set(partial, [])
-								const result = yield* list
-									.read()
-									.pipe(
-										Effect.flatMap(
-											Schema.decodeUnknownEffect(
-												Schema.Array(Schema.JsonObject),
-											),
-										),
-										Effect.result,
-									)
-								const read = yield* Ref.get(partial)
-								const stage: Api.TestStage = Match.value(result).pipe(
-									Match.tagsExhaustive({
-										Success: ({ success }) => ({
-											name: list.name,
-											status: "Passed" as const,
-											items: success,
-											reason: null,
-										}),
-										Failure: () => ({
-											name: list.name,
-											status: "Failed" as const,
-											items: Schema.decodeUnknownOption(
-												Schema.Array(Schema.JsonObject),
-											)(read).pipe(Option.getOrElse(() => [])),
-											reason: "CapabilityListIncomplete",
-										}),
-									}),
-								)
-								failed = stage.status === "Failed"
-								stages = [...stages, stage]
-								yield* progress(stages)
-							}
-							return failed
-								? {
-										_tag: "Failed" as const,
-										stages,
-										reason: "CapabilityListIncomplete",
-									}
-								: { _tag: "Completed" as const, stages }
+						[
+							issuer,
+							publicOrigin,
+							...(test.resourceMetadataUrl === null
+								? []
+								: [test.resourceMetadataUrl]),
+						],
+						OAuthAuthorization.begin({
+							key: { owner, connectionId: id },
+							issuer,
+							clientId: publicOrigin + "/v1/apps/client-metadata",
+							redirectUri: publicOrigin + "/auth/developer/apps/callback",
+							scopes,
+							...(test.resourceMetadataUrl === null
+								? {}
+								: { resourceMetadataUrl: test.resourceMetadataUrl }),
 						}),
 					),
 				).pipe(
-					Effect.catchTag("AuthorizationRequired", (error) =>
+					// A bad network target keeps its own error.
+					Effect.catchTag("DeveloperInputInvalid", Effect.fail, (error) =>
+						Effect.fail(error).pipe(
+							Failures.replace(
+								"Could not start the authorization of a test.",
+								() =>
+									Api.DeveloperConflict.make({
+										reason: "AuthorizationCouldNotStart",
+									}),
+							),
+						),
+					),
+				)
+				const flow = yield* Rows.getFlow(db, namespace, pending.flowId)
+				const value: Api.TestAuthorization = {
+					...flow.value,
+					authorizationUrl: pending.authorizationUrl,
+				}
+				yield* Rows.putFlow(db, namespace, { ...flow, value })
+				return value
+			}),
+		complete: (owner, id, flowId, callback) =>
+			Effect.gen(function* () {
+				const bound = stores.bind(owner, id)
+				const flow = yield* bound.flows
+					.get({ key: { owner, connectionId: id }, flowId })
+					.pipe(
+						Failures.replace(
+							"Could not read the authorization flow of a test.",
+							() =>
+								Api.DeveloperConflict.make({
+									reason: "AuthorizationFlowUnavailable",
+								}),
+						),
+					)
+				yield* Effect.scoped(
+					withNetwork(
+						owner,
+						id,
+						[flow.metadata.issuer, flow.metadata.token_endpoint],
+						OAuthAuthorization.complete({
+							key: { owner, connectionId: id },
+							flowId,
+							callbackUrl: callback,
+						}),
+					),
+				).pipe(
+					// A bad network target keeps its own error.
+					Effect.catchTag("DeveloperInputInvalid", Effect.fail, (error) =>
+						Effect.fail(error).pipe(
+							Failures.replace(
+								"Could not complete the authorization of a test.",
+								() =>
+									Api.DeveloperConflict.make({
+										reason: "AuthorizationCouldNotComplete",
+									}),
+							),
+						),
+					),
+				)
+			}),
+		revoke: (owner, id) =>
+			Effect.gen(function* () {
+				const bound = stores.bind(owner, id)
+				const found = yield* bound.apps.get({ owner, connectionId: id }).pipe(
+					Effect.asSome,
+					Effect.catchTag("StoreError", (error) =>
+						error.reason === "Missing"
+							? Effect.succeedNone
+							: Effect.fail(error),
+					),
+					Failures.replace("Could not read the connection of a test.", () =>
+						Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
+					),
+				)
+				if (Option.isNone(found)) return "LocalOnly" as const
+				const connection = found.value
+				yield* bound.apps
+					.update({
+						key: connection,
+						change: (current) => ({ ...current, state: "Disabled" }),
+					})
+					.pipe(
+						Failures.replace(
+							"Could not turn off the connection of a test.",
+							() =>
+								Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
+						),
+					)
+				yield* active.close(connection)
+				return yield* Match.value(connection.authorization).pipe(
+					Match.tag("Authorized", (auth) =>
 						Effect.scoped(
 							withNetwork(
 								owner,
 								id,
-								error.resourceMetadataUrl === undefined
-									? []
-									: [error.resourceMetadataUrl],
+								[
+									auth.binding.issuer,
+									...(auth.resourceMetadataUrl === undefined
+										? []
+										: [auth.resourceMetadataUrl]),
+								],
 								Effect.gen(function* () {
-									const connection = yield* stores
-										.bind(owner, id)
-										.apps.get({ owner, connectionId: id })
-									const resource = yield* OAuthAuthorization.discoverResource({
+									const discovered = yield* OAuthAuthorization.discover({
 										resource: connection.endpoint,
-										...(error.resourceMetadataUrl === undefined
+										issuer: auth.binding.issuer,
+										...(auth.resourceMetadataUrl === undefined
 											? {}
-											: { resourceMetadataUrl: error.resourceMetadataUrl }),
+											: { resourceMetadataUrl: auth.resourceMetadataUrl }),
 									})
-									return {
-										_tag: "AwaitingAuthorization" as const,
-										stages: [
-											{
-												name: "negotiation" as const,
-												status: "NotChecked" as const,
-												items: [],
-												reason: "AuthorizationRequired",
-											},
-											...uncheckedLists,
+									return yield* withNetwork(
+										owner,
+										id,
+										[
+											auth.binding.issuer,
+											discovered.metadata.token_endpoint,
+											...(discovered.metadata.revocation_endpoint === undefined
+												? []
+												: [discovered.metadata.revocation_endpoint]),
+											...(auth.resourceMetadataUrl === undefined
+												? []
+												: [auth.resourceMetadataUrl]),
 										],
-										issuers: resource.authorization_servers,
-										scopes:
-											error.scopes.length > 0
-												? error.scopes
-												: (resource.scopes_supported ?? []),
-										...(error.resourceMetadataUrl === undefined
-											? {}
-											: { resourceMetadataUrl: error.resourceMetadataUrl }),
-									}
+										OAuthAuthorization.revokeRemote(connection).pipe(
+											Effect.map((result) => result._tag),
+										),
+									)
 								}),
 							),
 						),
 					),
-					Effect.catch((error) =>
-						Effect.succeed<Execution>({
-							_tag: "Failed",
-							stages: [
-								{
-									name: "negotiation",
-									status: "Failed",
-									items: [],
-									reason: "ConnectionFailed",
-								},
-								...uncheckedLists,
-							],
-							reason: error._tag,
-						}),
+					Match.orElse(() => Effect.succeed("LocalOnly" as const)),
+					// The remote revocation stays pending after any failure, and runs again later.
+					Failures.replace(
+						"Could not revoke the authorization of a test.",
+						() =>
+							Api.DeveloperConflict.make({ reason: "RemoteRevocationPending" }),
+					),
+				)
+			}),
+		clear: (owner, id) =>
+			stores
+				.bind(owner, id)
+				.clear.pipe(
+					Failures.replace("Could not clear the local data of a test.", () =>
+						Api.DeveloperConflict.make({ reason: "LocalCleanupPending" }),
 					),
 				),
-			begin: (owner, id, input) =>
-				Effect.gen(function* () {
-					const test = yield* Rows.getTest(db, namespace, id)
-					if (test.owner !== owner) return yield* Api.DeveloperNotFound.make({})
-					const issuer = yield* Option.fromNullishOr(input.issuer).pipe(
-						Option.orElse(() =>
-							test.value.issuers.length === 1
-								? Arr.head(test.value.issuers)
-								: Option.none(),
-						),
-						Option.filter((issuer) => test.value.issuers.includes(issuer)),
-						Effect.fromOption,
-						Effect.mapError(() =>
-							Api.DeveloperConflict.make({ reason: "SelectDeclaredIssuer" }),
-						),
-					)
-					const scopes =
-						input.scopes.length === 0
-							? test.value.requestedScopes
-							: input.scopes
-					const pending = yield* Effect.scoped(
-						withNetwork(
-							owner,
-							id,
-							[
-								issuer,
-								publicOrigin,
-								...(test.resourceMetadataUrl === null
-									? []
-									: [test.resourceMetadataUrl]),
-							],
-							OAuthAuthorization.begin({
-								key: { owner, connectionId: id },
-								issuer,
-								clientId: publicOrigin + "/v1/apps/client-metadata",
-								redirectUri: publicOrigin + "/auth/developer/apps/callback",
-								scopes,
-								...(test.resourceMetadataUrl === null
-									? {}
-									: { resourceMetadataUrl: test.resourceMetadataUrl }),
-							}),
-						),
-					).pipe(
-						Effect.mapError(() =>
-							Api.DeveloperConflict.make({
-								reason: "AuthorizationCouldNotStart",
-							}),
-						),
-					)
-					const flow = yield* Rows.getFlow(db, namespace, pending.flowId)
-					const value: Api.TestAuthorization = {
-						...flow.value,
-						authorizationUrl: pending.authorizationUrl,
-					}
-					yield* Rows.putFlow(db, namespace, { ...flow, value })
-					return value
-				}),
-			complete: (owner, id, flowId, callback) =>
-				Effect.gen(function* () {
-					const bound = stores.bind(owner, id)
-					const flow = yield* bound.flows
-						.get({ key: { owner, connectionId: id }, flowId })
-						.pipe(
-							Effect.mapError(() =>
-								Api.DeveloperConflict.make({
-									reason: "AuthorizationFlowUnavailable",
-								}),
-							),
-						)
-					yield* Effect.scoped(
-						withNetwork(
-							owner,
-							id,
-							[flow.metadata.issuer, flow.metadata.token_endpoint],
-							OAuthAuthorization.complete({
-								key: { owner, connectionId: id },
-								flowId,
-								callbackUrl: callback,
-							}),
-						),
-					).pipe(
-						Effect.mapError(() =>
-							Api.DeveloperConflict.make({
-								reason: "AuthorizationCouldNotComplete",
-							}),
-						),
-					)
-				}),
-			revoke: (owner, id) =>
-				Effect.gen(function* () {
-					const bound = stores.bind(owner, id)
-					const found = yield* bound.apps.get({ owner, connectionId: id }).pipe(
-						Effect.asSome,
-						Effect.catchTag("StoreError", (error) =>
-							error.reason === "Missing"
-								? Effect.succeedNone
-								: Effect.fail(error),
-						),
-						Effect.mapError(() =>
-							Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
-						),
-					)
-					if (Option.isNone(found)) return "LocalOnly" as const
-					const connection = found.value
-					yield* bound.apps
-						.update({
-							key: connection,
-							change: (current) => ({ ...current, state: "Disabled" }),
-						})
-						.pipe(
-							Effect.mapError(() =>
-								Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
-							),
-						)
-					yield* active.close(connection)
-					return yield* Match.value(connection.authorization).pipe(
-						Match.tag("Authorized", (auth) =>
-							Effect.scoped(
-								withNetwork(
-									owner,
-									id,
-									[
-										auth.binding.issuer,
-										...(auth.resourceMetadataUrl === undefined
-											? []
-											: [auth.resourceMetadataUrl]),
-									],
-									Effect.gen(function* () {
-										const discovered = yield* OAuthAuthorization.discover({
-											resource: connection.endpoint,
-											issuer: auth.binding.issuer,
-											...(auth.resourceMetadataUrl === undefined
-												? {}
-												: { resourceMetadataUrl: auth.resourceMetadataUrl }),
-										})
-										return yield* withNetwork(
-											owner,
-											id,
-											[
-												auth.binding.issuer,
-												discovered.metadata.token_endpoint,
-												...(discovered.metadata.revocation_endpoint ===
-												undefined
-													? []
-													: [discovered.metadata.revocation_endpoint]),
-												...(auth.resourceMetadataUrl === undefined
-													? []
-													: [auth.resourceMetadataUrl]),
-											],
-											OAuthAuthorization.revokeRemote(connection).pipe(
-												Effect.map((result) => result._tag),
-											),
-										)
-									}),
-								),
-							),
-						),
-						Match.orElse(() => Effect.succeed("LocalOnly" as const)),
-						Effect.mapError(() =>
-							Api.DeveloperConflict.make({ reason: "RemoteRevocationPending" }),
-						),
-					)
-				}),
-			clear: (owner, id) =>
-				stores
-					.bind(owner, id)
-					.clear.pipe(
-						Effect.mapError(() =>
-							Api.DeveloperConflict.make({ reason: "LocalCleanupPending" }),
-						),
-					),
-		})
 	})
-export const layer = (publicOrigin: string) =>
-	Layer.effect(DeveloperTestRuntime, make(publicOrigin))
+})
+export const layer = Layer.effect(DeveloperTestRuntime, make)

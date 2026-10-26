@@ -127,18 +127,18 @@ export const Delegation = Schema.Struct({
 })
 export type Delegation = typeof Delegation.Type
 
-export class DelegationNotFound extends Schema.TaggedError<DelegationNotFound>()(
-	"DelegationNotFound",
-	{ delegation: Schema.String },
-) {}
-export class DelegationConflict extends Schema.TaggedError<DelegationConflict>()(
-	"DelegationConflict",
-	{ message: Schema.String },
-) {}
-export class DelegationStorageUnavailable extends Schema.TaggedError<DelegationStorageUnavailable>()(
-	"DelegationStorageUnavailable",
-	{},
-) {}
+export class DelegationNotFound extends Schema.TaggedError<
+	DelegationNotFound,
+	{ readonly brand: unique symbol }
+>()("DelegationNotFound", { delegation: Schema.String }) {}
+export class DelegationConflict extends Schema.TaggedError<
+	DelegationConflict,
+	{ readonly brand: unique symbol }
+>()("DelegationConflict", { message: Schema.String }) {}
+export class DelegationStorageUnavailable extends Schema.TaggedError<
+	DelegationStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("DelegationStorageUnavailable", {}) {}
 export const DelegationErrors = [
 	DelegationNotFound.pipe(HttpApiSchema.status(404)),
 	DelegationConflict.pipe(HttpApiSchema.status(409)),

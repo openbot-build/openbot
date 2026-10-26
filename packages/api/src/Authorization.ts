@@ -16,7 +16,7 @@ import {
 	type Rule,
 } from "@nmnmcc/ability"
 import * as AbilityHttpApi from "@nmnmcc/ability/HttpApi"
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import { HttpApiMiddleware } from "effect/http-api"
 import { Account, AccountCaller, Identity } from "./Identity.ts"
 
@@ -312,7 +312,9 @@ export type OpenBot = OpenBotDomain
 
 /** The name of a kind of resource, such as `Bot`. */
 export type Kind = Domain.Kind<OpenBot>
-export const Kind = Schema.Literals(resources.map((resource) => resource.kind))
+export const Kind = Schema.Literals(
+	Arr.map(resources, (resource) => resource.kind),
+)
 /** The kinds that a user owns, with `ownerUserId` in their path. */
 const ownKinds = [
 	Chat,
@@ -330,9 +332,11 @@ const ownKinds = [
 	SecretProvider,
 ] as const
 /** Every kind of an organization. */
-const organizationKinds = resources.filter(
-	(resource) => resource !== Platform,
-) as ReadonlyArray<Exclude<(typeof resources)[number], typeof Platform>>
+const organizationKinds = Arr.filter(
+	resources,
+	(resource): resource is Exclude<Resources, typeof Platform> =>
+		resource !== Platform,
+)
 
 const descriptions: {
 	readonly [K in Kind]: {
@@ -464,18 +468,19 @@ export const ResourceInfo = Schema.Struct({
 export type ResourceInfo = typeof ResourceInfo.Type
 
 /** Every kind of resource. A field in the path is written as `{field}`. */
-export const resourceInfo: ReadonlyArray<ResourceInfo> = resources.map(
+export const resourceInfo: ReadonlyArray<ResourceInfo> = Arr.map(
+	resources,
 	(resource) => {
 		const descriptor = Resource.descriptor(resource)
 		const actions = descriptions[resource.kind] as Record<string, string>
 		return {
 			kind: resource.kind,
-			actions: descriptor.actions.map((name) => ({
+			actions: Arr.map(descriptor.actions, (name) => ({
 				name,
 				description: actions[name] ?? "",
 			})),
 			fields: descriptor.fieldPaths,
-			path: (descriptor.path ?? []).map((segment) =>
+			path: Arr.map(descriptor.path ?? [], (segment) =>
 				typeof segment === "string" ? segment : `{${segment.field}}`,
 			),
 		}
@@ -496,7 +501,11 @@ const countRules = (node: Policy.Node): number => {
 		case "All":
 		case "Any":
 		case "FirstOf":
-			return node.policies.reduce((sum, child) => sum + countRules(child), 0)
+			return Arr.reduce(
+				node.policies,
+				0,
+				(sum, child) => sum + countRules(child),
+			)
 		case "Ceiling":
 			return countRules(node.cap) + countRules(node.policy)
 	}
@@ -508,7 +517,12 @@ const depth = (node: Policy.Node): number => {
 		case "All":
 		case "Any":
 		case "FirstOf":
-			return 1 + Math.max(0, ...node.policies.map(depth))
+			return (
+				1 +
+				Arr.reduce(node.policies, 0, (deepest, child) =>
+					Math.max(deepest, depth(child)),
+				)
+			)
 		case "Ceiling":
 			return 1 + Math.max(depth(node.cap), depth(node.policy))
 	}
@@ -547,11 +561,11 @@ export const onlyDenies = (policy: Policy): boolean => {
 	const visit = (node: Policy.Node): boolean => {
 		switch (node._tag) {
 			case "Rules":
-				return node.rules.every((rule) => rule._tag === "Deny")
+				return Arr.every(node.rules, (rule) => rule._tag === "Deny")
 			case "All":
 			case "Any":
 			case "FirstOf":
-				return node.policies.every(visit)
+				return Arr.every(node.policies, visit)
 			case "Ceiling":
 				return visit(node.cap) && visit(node.policy)
 		}
@@ -751,7 +765,7 @@ export const builtinRoles = [
 export const defaultTokenPolicy: Policy = define(function* (_) {
 	yield* _.allow(
 		"*",
-		organizationKinds.filter((resource) => resource !== Token),
+		Arr.filter(organizationKinds, (resource) => resource !== Token),
 	)
 })
 
@@ -826,42 +840,75 @@ type OrganizationKind =
 	| "Usage"
 	| "Budget"
 
-/** A path parameter, or an empty string when the path has none. */
+/**
+ * A path parameter. A requirement must only name a parameter that its endpoint
+ * has, and a test of the contract checks this. The empty string is only there
+ * because a scope needs a string.
+ */
 const param = (
 	params: Readonly<Record<string, string | undefined>>,
 	name: string,
 ) => params[name] ?? ""
+
+/** The kinds of the caller with an `id`, so that a path parameter can name one. */
+type OwnIdKind = "Chat" | "File" | "Request" | "Connection"
+
+/** The scope of every resource of the caller. */
+const ofCaller = <B extends Condition.Builder<any, any, AccountCaller>>($: B) =>
+	$.under("org", $.principal("organizationId"), "user", $.principal("userId"))
 
 /**
  * An act on the resources of the caller: the check passes when the caller may
  * act on every one of them. With `name`, the path parameter with that name
  * names one resource, and the check is on that one.
  */
-export const own = <const K extends OwnKind>(
-	action: Domain.ActionOf<OpenBot, K>,
+export function own<const K extends OwnIdKind>(
+	action: Domain.CommonAction<OpenBot, K>,
+	kind: K,
+	name: string,
+): Requirement
+export function own<const K extends OwnKind>(
+	action: Domain.CommonAction<OpenBot, K>,
+	kind: K,
+): Requirement
+export function own<const K extends OwnKind>(
+	action: Domain.CommonAction<OpenBot, K>,
 	kind: K,
 	name?: string,
-): Requirement =>
-	AbilityHttpApi.requires(Auth, action as never, kind, {
-		within: (params) => ($: any) =>
-			$.and(
-				$.under(
-					"org",
-					$.principal("organizationId"),
-					"user",
-					$.principal("userId"),
-				),
-				...(name === undefined ? [] : [$.eq("id", param(params, name))]),
-			),
-	})
+): Requirement {
+	return name === undefined
+		? AbilityHttpApi.requires(Auth, action, kind, { within: () => ofCaller })
+		: AbilityHttpApi.requires(Auth, action, kind, {
+				within:
+					(params) =>
+					<
+						B extends Condition.Builder<
+							{ readonly id: string },
+							any,
+							AccountCaller
+						>,
+					>(
+						$: B,
+					) =>
+						$.and(ofCaller($), $.eq("id", param(params, name))),
+			})
+}
 
 /** An act on the organization of the caller, such as reading its members. */
 export const organization = <const K extends OrganizationKind>(
-	action: Domain.ActionOf<OpenBot, K>,
+	action: Domain.CommonAction<OpenBot, K>,
 	kind: K,
 ): Requirement =>
-	AbilityHttpApi.requires(Auth, action as never, kind, {
-		within: () => ($: any) => $.under("org", $.principal("organizationId")),
+	AbilityHttpApi.requires(Auth, action, kind, {
+		within: () => inOrganization.when,
+	})
+
+/** An act on every Channel of the organization of the caller, such as making a new one. */
+export const channels = (
+	action: Domain.ActionOf<OpenBot, "Channel">,
+): Requirement =>
+	AbilityHttpApi.requires(Auth, action, "Channel", {
+		within: () => inOrganization.when,
 	})
 
 /** An act on one Channel, named by a path parameter. */

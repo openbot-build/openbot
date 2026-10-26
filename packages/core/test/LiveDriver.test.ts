@@ -1,7 +1,6 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import { Chat, Live, LiveDriver } from "@openbot-build/core"
-import { Effect, PubSub, Ref, Schema } from "effect"
+import { Array as Arr, Effect, Option, PubSub, Ref, Schema } from "effect"
 import { LanguageModel, Tool, Toolkit } from "effect/ai"
 import { ChatTest } from "./ChatTest.ts"
 
@@ -57,7 +56,7 @@ it.effect("a Turn answers through the Live connection", () =>
 		assert.strictEqual(turn.status.result.text, "Hello")
 		assert.strictEqual(turn.usage?.[0]?.inputTokens.total, 15)
 		assert.strictEqual(turn.usage?.[0]?.outputTokens.total, 24)
-		const tags = (yield* Ref.get(inputs)).map((input) => input._tag)
+		const tags = Arr.map(yield* Ref.get(inputs), (input) => input._tag)
 		assert.deepStrictEqual(tags, ["Configure", "Text", "Respond"])
 	}),
 )
@@ -76,7 +75,7 @@ it.effect("text that the person said is not sent again", () =>
 		yield* driver.expect("spoken words")
 		yield* runtime.execute({ chat, input: "spoken words" }).pipe(provide)
 		yield* runtime.execute({ chat, input: "spoken words" }).pipe(provide)
-		const tags = (yield* Ref.get(inputs)).map((input) => input._tag)
+		const tags = Arr.map(yield* Ref.get(inputs), (input) => input._tag)
 		// The config does not change, so it goes only once. The second input is new text.
 		assert.deepStrictEqual(tags, ["Configure", "Respond", "Text", "Respond"])
 	}),
@@ -95,7 +94,7 @@ it.effect("a tool call runs in OpenBot and its result goes back", () => {
 				Live.Event.ToolCall({
 					callId: "call_1",
 					name: "Lookup",
-					arguments: JSON.stringify({ word: "sun" }),
+					arguments: '{"word":"sun"}',
 				}),
 				Live.Event.ResponseDone({ status: "completed", usage }),
 			],
@@ -110,16 +109,16 @@ it.effect("a tool call runs in OpenBot and its result goes back", () => {
 		assert.strictEqual(turn.status.result.text, "The sun is a star.")
 		assert.strictEqual(turn.steps, 2)
 		const sent = yield* Ref.get(inputs)
-		const configure = sent.find((input) => input._tag === "Configure")
-		assert.ok(configure?._tag === "Configure")
+		const configure = Arr.findFirst(sent, Live.Input.$is("Configure"))
+		assert.ok(Option.isSome(configure))
 		assert.deepStrictEqual(
-			configure.config.tools.map((tool) => tool.name),
+			Arr.map(configure.value.config.tools, (tool) => tool.name),
 			["Lookup"],
 		)
-		const result = sent.find((input) => input._tag === "ToolResult")
-		assert.ok(result?._tag === "ToolResult")
-		assert.strictEqual(result.callId, "call_1")
-		assert.strictEqual(result.output, JSON.stringify("Word: sun"))
+		const result = Arr.findFirst(sent, Live.Input.$is("ToolResult"))
+		assert.ok(Option.isSome(result))
+		assert.strictEqual(result.value.callId, "call_1")
+		assert.strictEqual(result.value.output, '"Word: sun"')
 	}).pipe(
 		Effect.provide(
 			toolkit.toLayer({
@@ -142,15 +141,19 @@ it.effect("a failure of the connection fails the Turn", () =>
 			],
 		])
 		const { runtime, chat } = yield* ChatTest()
-		const exit = yield* runtime
+		const error = yield* runtime
 			.execute({ chat, input: "Hi" })
 			.pipe(
 				Effect.provideService(LanguageModel.LanguageModel, driver.model),
-				Effect.exit,
+				Effect.flip,
 			)
-		assert.strictEqual(exit._tag, "Failure")
+		assert.ok(error._tag === "AiError")
+		assert.ok(error.reason._tag === "InternalProviderError")
+		assert.strictEqual(error.reason.description, "The connection closed.")
 		const view = yield* runtime.status(chat)
-		assert.strictEqual(Chat.status(view.chat)._tag, "Failed")
+		const status = Chat.status(view.chat)
+		assert.ok(status._tag === "Failed")
+		assert.strictEqual(status.code, "model_error")
 	}),
 )
 

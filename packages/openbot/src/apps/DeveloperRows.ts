@@ -12,6 +12,7 @@ import {
 	developerTests,
 } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 /**
  * The Developer Center tables in Postgres: the codecs between rows and API
@@ -20,11 +21,15 @@ import * as Db from "../database/Database.ts"
  */
 export type Database = Db.Database
 
-/** Every storage failure becomes one error. */
+/** Every storage failure becomes one error. The log keeps the storage failure. */
 export const stored = <A, E, R>(
 	effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, Api.DeveloperUnavailable, R> =>
-	effect.pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
+	effect.pipe(
+		Failures.replace("A Developer Center query failed.", () =>
+			Api.DeveloperUnavailable.make({}),
+		),
+	)
 /**
  * Run the effect in one database transaction. Drizzle queries on the `db` of
  * `Db.make` join this transaction. A nested call becomes a savepoint.
@@ -35,25 +40,34 @@ export const transaction =
 		sql
 			.withTransaction(effect)
 			.pipe(
-				Effect.catchTag("SqlError", () =>
-					Effect.fail(Api.DeveloperUnavailable.make({})),
+				Effect.catchTag("SqlError", (error) =>
+					Effect.fail(error).pipe(
+						Failures.replace("A Developer Center transaction failed.", () =>
+							Api.DeveloperUnavailable.make({}),
+						),
+					),
 				),
 			)
 
 /** A column that holds a value as JSON text. */
 export const Json = <S extends Schema.Top>(schema: S) =>
 	Schema.fromJsonString(Schema.toCodecJson(schema))
-const decodeRow =
+/** Read a stored value. A value that does not match the schema means the storage is broken. */
+export const decodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(row: unknown) =>
 		Schema.decodeUnknownEffect(schema)(row).pipe(
-			Effect.mapError(() => Api.DeveloperUnavailable.make({})),
+			Failures.replace("A stored Developer Center value is not valid.", () =>
+				Api.DeveloperUnavailable.make({}),
+			),
 		)
-const encodeRow =
+export const encodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(value: S["Type"]) =>
 		Schema.encodeEffect(schema)(value).pipe(
-			Effect.mapError(() => Api.DeveloperUnavailable.make({})),
+			Failures.replace("A Developer Center value could not be stored.", () =>
+				Api.DeveloperUnavailable.make({}),
+			),
 		)
 
 /** The account of an owner key, which is `[organizationId, userId]` as JSON. */
@@ -89,25 +103,6 @@ export const decodeProof = (row: typeof developerProofs.$inferSelect) =>
 		})),
 	)
 export const encodeProof = encodeRow(ProofRow)
-export const getProof = Effect.fn("DeveloperRows.getProof")(function* (
-	db: Database,
-	namespace: string,
-	id: string,
-) {
-	const row = (yield* stored(
-		db
-			.select()
-			.from(developerProofs)
-			.where(
-				and(
-					eq(developerProofs.namespace, namespace),
-					eq(developerProofs.id, id),
-				),
-			),
-	))[0]
-	if (row === undefined) return yield* Api.DeveloperNotFound.make({})
-	return yield* decodeProof(row)
-})
 
 const AppRow = Schema.Struct({
 	cardUrl: Schema.String,

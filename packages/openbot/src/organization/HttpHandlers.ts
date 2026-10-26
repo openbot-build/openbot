@@ -7,10 +7,10 @@ import {
 	OpenBotApi,
 	Settings as SettingsApi,
 } from "@openbot-build/api"
-import { Effect, Layer, Option } from "effect"
+import { Array as Arr, Effect, Layer, Option, pipe, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
+import * as Failures from "../app/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import { noMoreThanCaller } from "../authorization/Escalation.ts"
 import { organizationKey, userKey } from "../audit/Resources.ts"
 import { Roles } from "../authorization/Roles.ts"
@@ -18,9 +18,22 @@ import { ModelRegistry } from "../models/ModelRegistry.ts"
 import { Settings } from "../settings/Settings.ts"
 import * as Views from "../settings/Views.ts"
 import { PlatformAdmins } from "../platform/PlatformAdmins.ts"
-import { Organization, type OrganizationUnavailable } from "./Organization.ts"
+import { Organization } from "./Organization.ts"
 
 const superAdministrator = "super_administrator"
+const storageUnavailable = () =>
+	OrganizationApi.OrganizationStorageUnavailable.make({})
+/** Logs a storage failure, then fails with the public error in its place. */
+const replaceStorage = (message: string) =>
+	Failures.replace(message, storageUnavailable)
+/**
+ * The same for one storage failure that `Effect.catchTag` takes out, so the
+ * other failures, such as a missing member, keep their meaning.
+ */
+const storageFailure =
+	(message: string) =>
+	<E>(error: E) =>
+		Effect.fail(error).pipe(replaceStorage(message))
 /** The number of rules in a policy, for the audit log. */
 const ruleCount = (policy: Authorization.Policy): number => {
 	const count = (node: typeof policy.node): number =>
@@ -28,7 +41,7 @@ const ruleCount = (policy: Authorization.Policy): number => {
 			? node.rules.length
 			: node._tag === "Ceiling"
 				? count(node.cap) + count(node.policy)
-				: node.policies.reduce((sum, child) => sum + count(child), 0)
+				: Arr.reduce(node.policies, 0, (sum, child) => sum + count(child))
 	return count(policy.node)
 }
 
@@ -41,7 +54,7 @@ const organizationGroup = HttpApiBuilder.group(
 			const roles = yield* Roles
 			const settings = yield* Settings
 			const registry = yield* ModelRegistry
-			const services = yield* Effect.context<AuthorizationServices>()
+			const auth = yield* Authorization.Auth
 			const audit = yield* AuditLog
 			const record = (
 				caller: Caller,
@@ -57,11 +70,7 @@ const organizationGroup = HttpApiBuilder.group(
 						resource,
 						details,
 					})
-					.pipe(
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
-					)
+					.pipe(replaceStorage("OpenBot could not write the audit log"))
 			/**
 			 * The Bot memory model must not be a `decision` model, because the
 			 * memory Bot writes text. The Rules model can be either type.
@@ -79,16 +88,19 @@ const organizationGroup = HttpApiBuilder.group(
 					const catalog = yield* registry
 						.view(caller.organizationId)
 						.pipe(
-							Effect.mapError(() => SettingsApi.SettingsUnavailable.make({})),
+							Failures.replace("OpenBot could not read the model catalog", () =>
+								SettingsApi.SettingsUnavailable.make({}),
+							),
 						)
-					const type = catalog.models.find(
+					const model = Arr.findFirst(
+						catalog.models,
 						(model) =>
 							model.provider === botMemoryModel.provider &&
 							model.id === botMemoryModel.model,
-					)?.type
-					if (type !== undefined && type !== "language")
+					)
+					if (Option.isSome(model) && model.value.type !== "language")
 						return yield* SettingsApi.SettingsInvalid.make({
-							message: `botMemoryModel cannot be a ${type} model.`,
+							message: `botMemoryModel cannot be a ${model.value.type} model.`,
 						})
 				})
 			/** Fails unless the caller is a Super Administrator. */
@@ -100,11 +112,7 @@ const organizationGroup = HttpApiBuilder.group(
 				Effect.gen(function* () {
 					const self = yield* organization
 						.member(caller.organizationId, caller.userId)
-						.pipe(
-							Effect.mapError(() =>
-								OrganizationApi.OrganizationStorageUnavailable.make({}),
-							),
-						)
+						.pipe(replaceStorage("OpenBot could not read the member"))
 					if (
 						Option.exists(self, (member) =>
 							member.roles.includes(superAdministrator),
@@ -134,74 +142,44 @@ const organizationGroup = HttpApiBuilder.group(
 					? requireSuperAdministrator(caller, "write", "Member")
 					: Effect.void
 			const target = (caller: Caller, userId: string) =>
-				organization.member(caller.organizationId, userId).pipe(
-					Effect.mapError(() =>
-						OrganizationApi.OrganizationStorageUnavailable.make({}),
-					),
-					Effect.flatMap(
-						Option.match({
-							onNone: () =>
-								Effect.fail(OrganizationApi.MemberNotFound.make({ userId })),
-							onSome: Effect.succeed,
-						}),
-					),
-				)
-			const storageError = (
-				error:
-					| OrganizationApi.MemberNotFound
-					| OrganizationApi.LastSuperAdministrator
-					| OrganizationUnavailable,
-			) =>
-				error._tag === "OrganizationUnavailable"
-					? OrganizationApi.OrganizationStorageUnavailable.make({})
-					: error
-
-			const roleError = (
-				error:
-					| OrganizationApi.RoleNotFound
-					| OrganizationApi.RoleReadOnly
-					| { readonly _tag: "RolesUnavailable" },
-			) =>
-				error._tag === "RolesUnavailable"
-					? OrganizationApi.OrganizationStorageUnavailable.make({})
-					: error
+				organization
+					.member(caller.organizationId, userId)
+					.pipe(
+						replaceStorage("OpenBot could not read the member"),
+						Effect.flatMap(
+							Effect.fromOption(() =>
+								OrganizationApi.MemberNotFound.make({ userId }),
+							),
+						),
+					)
 			const findRole = (caller: Caller, roleId: string) =>
-				roles.get(caller.organizationId, roleId).pipe(
-					Effect.mapError(() =>
-						OrganizationApi.OrganizationStorageUnavailable.make({}),
-					),
-					Effect.flatMap(
-						Option.match({
-							onNone: () =>
-								Effect.fail(OrganizationApi.RoleNotFound.make({ roleId })),
-							onSome: Effect.succeed,
-						}),
-					),
-				)
+				roles
+					.get(caller.organizationId, roleId)
+					.pipe(
+						replaceStorage("OpenBot could not read the role"),
+						Effect.flatMap(
+							Effect.fromOption(() =>
+								OrganizationApi.RoleNotFound.make({ roleId }),
+							),
+						),
+					)
 			/**
 			 * The `allow` rules of a role cannot give more than the caller has.
 			 * Otherwise anyone who can write roles could give themselves every act.
 			 */
 			const checkRolePolicy = (caller: Caller, policy: Authorization.Policy) =>
-				noMoreThanCaller(caller, policy).pipe(Effect.provideContext(services))
+				noMoreThanCaller(auth, caller, policy)
 
+			// Write handlers do not stop when the client goes away, so a change
+			// always gets its audit entry.
 			return handlers
 				.handle("getOrganization", () =>
 					Effect.flatMap(Identity, (caller) =>
 						organization.get(caller.organizationId),
 					).pipe(
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
-						Effect.flatMap(
-							Option.match({
-								onNone: () =>
-									Effect.fail(
-										OrganizationApi.OrganizationStorageUnavailable.make({}),
-									),
-								onSome: Effect.succeed,
-							}),
-						),
+						// The organization of the caller must be there.
+						Effect.flatMap(Effect.fromOption),
+						replaceStorage("OpenBot could not read the organization"),
 					),
 				)
 				.handle("getSettings", () =>
@@ -209,67 +187,72 @@ const organizationGroup = HttpApiBuilder.group(
 						settings.organization(caller.organizationId),
 					).pipe(Effect.map(Views.organization)),
 				)
-				.handle("updateSettings", ({ payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const { expectedVersion, ...changes } = payload
-						if (changes.defaultRoles !== undefined) {
-							// New members must not join as Super Administrators unless one says so.
-							if (changes.defaultRoles.includes(superAdministrator))
-								yield* requireSuperAdministrator(
-									caller,
-									"write",
-									"Organization",
-								)
-							for (const roleId of changes.defaultRoles)
-								if (
-									Option.isNone(
-										yield* roles
-											.get(caller.organizationId, roleId)
-											.pipe(
-												Effect.mapError(() =>
-													SettingsApi.SettingsUnavailable.make({}),
-												),
-											),
+				.handle(
+					"updateSettings",
+					({ payload }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const { expectedVersion, ...changes } = payload
+							if (changes.defaultRoles !== undefined) {
+								// New members must not join as Super Administrators unless one says so.
+								if (changes.defaultRoles.includes(superAdministrator))
+									yield* requireSuperAdministrator(
+										caller,
+										"write",
+										"Organization",
 									)
-								)
-									return yield* SettingsApi.SettingsInvalid.make({
-										message: `The role ${roleId} does not exist.`,
-									})
-						}
-						yield* checkModels(caller, changes)
-						const updated = yield* settings.updateOrganization(
-							caller.organizationId,
-							expectedVersion,
-							(current) => Effect.succeed({ ...current, ...changes }),
-						)
-						yield* record(
-							caller,
-							"settings.updated",
-							organizationKey(caller.organizationId),
-							{ changes: Object.keys(changes), version: updated.version },
-						)
-						return Views.organization(updated)
-					}),
-				)
-				.handle("updateOrganization", ({ payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const updated = yield* organization
-							.update(caller.organizationId, payload)
-							.pipe(
-								Effect.mapError(() =>
-									OrganizationApi.OrganizationStorageUnavailable.make({}),
-								),
+								for (const roleId of changes.defaultRoles)
+									if (
+										Option.isNone(
+											yield* roles
+												.get(caller.organizationId, roleId)
+												.pipe(
+													Failures.replace(
+														"OpenBot could not read the role",
+														() => SettingsApi.SettingsUnavailable.make({}),
+													),
+												),
+										)
+									)
+										return yield* SettingsApi.SettingsInvalid.make({
+											message: `The role ${roleId} does not exist.`,
+										})
+							}
+							yield* checkModels(caller, changes)
+							const updated = yield* settings.updateOrganization(
+								caller.organizationId,
+								expectedVersion,
+								(current) => Effect.succeed({ ...current, ...changes }),
 							)
-						yield* record(
-							caller,
-							"organization.updated",
-							organizationKey(caller.organizationId),
-							{ changes: Object.keys(payload) },
-						)
-						return updated
-					}),
+							yield* record(
+								caller,
+								"settings.updated",
+								organizationKey(caller.organizationId),
+								{ changes: Struct.keys(changes), version: updated.version },
+							)
+							return Views.organization(updated)
+						}),
+					{ uninterruptible: true },
+				)
+				.handle(
+					"updateOrganization",
+					({ payload }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const updated = yield* organization
+								.update(caller.organizationId, payload)
+								.pipe(
+									replaceStorage("OpenBot could not change the organization"),
+								)
+							yield* record(
+								caller,
+								"organization.updated",
+								organizationKey(caller.organizationId),
+								{ changes: Struct.keys(payload) },
+							)
+							return updated
+						}),
+					{ uninterruptible: true },
 				)
 				.handle("listMembers", ({ query }) =>
 					Effect.flatMap(Identity, (caller) =>
@@ -277,137 +260,153 @@ const organizationGroup = HttpApiBuilder.group(
 							...(query.after === undefined ? {} : { after: query.after }),
 							limit: query.limit ?? 50,
 						}),
-					).pipe(
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
-					),
+					).pipe(replaceStorage("OpenBot could not list the members")),
 				)
 				.handle("getMember", ({ params }) =>
 					Effect.flatMap(Identity, (caller) => target(caller, params.userId)),
 				)
-				.handle("updateMember", ({ params, payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const member = yield* target(caller, params.userId)
-						yield* guardSuperAdministrator(caller, member, payload)
-						const updated = yield* organization
-							.updateMember(caller.organizationId, params.userId, payload)
-							.pipe(Effect.mapError(storageError))
-						yield* record(
-							caller,
-							"member.updated",
-							userKey({
-								organizationId: caller.organizationId,
-								userId: params.userId,
-							}),
-							{
-								before: {
-									status: member.status,
-									roles: [...member.roles],
-									policyRules: ruleCount(member.policy),
+				.handle(
+					"updateMember",
+					({ params, payload }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const member = yield* target(caller, params.userId)
+							yield* guardSuperAdministrator(caller, member, payload)
+							const updated = yield* organization
+								.updateMember(caller.organizationId, params.userId, payload)
+								.pipe(
+									Effect.catchTag(
+										"OrganizationUnavailable",
+										storageFailure("OpenBot could not change the member"),
+									),
+								)
+							yield* record(
+								caller,
+								"member.updated",
+								userKey({
+									organizationId: caller.organizationId,
+									userId: params.userId,
+								}),
+								{
+									before: {
+										status: member.status,
+										roles: [...member.roles],
+										policyRules: ruleCount(member.policy),
+									},
+									after: {
+										status: updated.status,
+										roles: [...updated.roles],
+										policyRules: ruleCount(updated.policy),
+									},
 								},
-								after: {
-									status: updated.status,
-									roles: [...updated.roles],
-									policyRules: ruleCount(updated.policy),
-								},
-							},
-						)
-						return updated
-					}),
+							)
+							return updated
+						}),
+					{ uninterruptible: true },
 				)
-				.handle("removeMember", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const member = yield* target(caller, params.userId)
-						yield* guardSuperAdministrator(caller, member, {})
-						yield* organization
-							.removeMember(caller.organizationId, params.userId)
-							.pipe(Effect.mapError(storageError))
-						yield* record(
-							caller,
-							"member.removed",
-							userKey({
-								organizationId: caller.organizationId,
-								userId: params.userId,
-							}),
-							{ roles: [...member.roles] },
-						)
-					}),
+				.handle(
+					"removeMember",
+					({ params }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const member = yield* target(caller, params.userId)
+							yield* guardSuperAdministrator(caller, member, {})
+							yield* organization
+								.removeMember(caller.organizationId, params.userId)
+								.pipe(
+									Effect.catchTag(
+										"OrganizationUnavailable",
+										storageFailure("OpenBot could not remove the member"),
+									),
+								)
+							yield* record(
+								caller,
+								"member.removed",
+								userKey({
+									organizationId: caller.organizationId,
+									userId: params.userId,
+								}),
+								{ roles: [...member.roles] },
+							)
+						}),
+					{ uninterruptible: true },
 				)
 				.handle("listInvitations", ({ query }) =>
 					Effect.flatMap(Identity, (caller) =>
 						organization.listInvitations(caller.organizationId, query.status),
 					).pipe(
 						Effect.map((items) => ({ items })),
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
+						replaceStorage("OpenBot could not list the invitations"),
 					),
 				)
-				.handle("createInvitation", ({ payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const invited =
-							payload.roles ??
-							(yield* settings
-								.organization(caller.organizationId)
+				.handle(
+					"createInvitation",
+					({ payload }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const invited =
+								payload.roles ??
+								(yield* settings
+									.organization(caller.organizationId)
+									.pipe(
+										replaceStorage(
+											"OpenBot could not read the organization settings",
+										),
+									)).document.defaultRoles
+							for (const roleId of invited) yield* findRole(caller, roleId)
+							// Only a Super Administrator can give the Super Administrator role.
+							if (invited.includes(superAdministrator))
+								yield* requireSuperAdministrator(caller, "write", "Member")
+							const invitation = yield* organization
+								.createInvitation({
+									organizationId: caller.organizationId,
+									email: payload.email,
+									roles: invited,
+									invitedBy: caller.userId,
+								})
 								.pipe(
-									Effect.mapError(() =>
-										OrganizationApi.OrganizationStorageUnavailable.make({}),
+									Effect.catchTag(
+										"OrganizationUnavailable",
+										storageFailure("OpenBot could not make the invitation"),
 									),
-								)).document.defaultRoles
-						for (const roleId of invited) yield* findRole(caller, roleId)
-						// Only a Super Administrator can give the Super Administrator role.
-						if (invited.includes(superAdministrator))
-							yield* requireSuperAdministrator(caller, "write", "Member")
-						const invitation = yield* organization
-							.createInvitation({
-								organizationId: caller.organizationId,
-								email: payload.email,
-								roles: invited,
-								invitedBy: caller.userId,
-							})
-							.pipe(
-								Effect.mapError((error) =>
-									error._tag === "OrganizationUnavailable"
-										? OrganizationApi.OrganizationStorageUnavailable.make({})
-										: error,
-								),
+								)
+							yield* record(
+								caller,
+								"invitation.created",
+								organizationKey(caller.organizationId),
+								{
+									invitationId: invitation.id,
+									email: invitation.email,
+									roles: [...invitation.roles],
+								},
 							)
-						yield* record(
-							caller,
-							"invitation.created",
-							organizationKey(caller.organizationId),
-							{
-								invitationId: invitation.id,
-								email: invitation.email,
-								roles: [...invitation.roles],
-							},
-						)
-						return invitation
-					}),
+							return invitation
+						}),
+					{ uninterruptible: true },
 				)
-				.handle("revokeInvitation", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const invitation = yield* organization
-							.revokeInvitation(caller.organizationId, params.invitationId)
-							.pipe(
-								Effect.mapError((error) =>
-									error._tag === "OrganizationUnavailable"
-										? OrganizationApi.OrganizationStorageUnavailable.make({})
-										: error,
-								),
+				.handle(
+					"revokeInvitation",
+					({ params }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const invitation = yield* organization
+								.revokeInvitation(caller.organizationId, params.invitationId)
+								.pipe(
+									Effect.catchTag(
+										"OrganizationUnavailable",
+										storageFailure(
+											"OpenBot could not take back the invitation",
+										),
+									),
+								)
+							yield* record(
+								caller,
+								"invitation.revoked",
+								organizationKey(caller.organizationId),
+								{ invitationId: invitation.id, email: invitation.email },
 							)
-						yield* record(
-							caller,
-							"invitation.revoked",
-							organizationKey(caller.organizationId),
-							{ invitationId: invitation.id, email: invitation.email },
-						)
-					}),
+						}),
+					{ uninterruptible: true },
 				)
 				.handle("listResources", () =>
 					Effect.succeed(Authorization.resourceInfo),
@@ -415,11 +414,7 @@ const organizationGroup = HttpApiBuilder.group(
 				.handle("listRoles", () =>
 					Effect.flatMap(Identity, (caller) =>
 						roles.list(caller.organizationId),
-					).pipe(
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
-					),
+					).pipe(replaceStorage("OpenBot could not list the roles")),
 				)
 				.handle("getRole", ({ params }) =>
 					Effect.gen(function* () {
@@ -427,72 +422,89 @@ const organizationGroup = HttpApiBuilder.group(
 						return yield* findRole(caller, params.roleId)
 					}),
 				)
-				.handle("createRole", ({ payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						yield* checkRolePolicy(caller, payload.policy)
-						const role = yield* roles
-							.create(caller.organizationId, payload)
-							.pipe(
-								Effect.mapError(() =>
-									OrganizationApi.OrganizationStorageUnavailable.make({}),
-								),
-							)
-						yield* record(
-							caller,
-							"role.created",
-							organizationKey(caller.organizationId),
-							{ roleId: role.id, name: role.name },
-						)
-						return role
-					}),
-				)
-				.handle("updateRole", ({ params, payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						yield* findRole(caller, params.roleId)
-						if (payload.policy !== undefined)
+				.handle(
+					"createRole",
+					({ payload }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
 							yield* checkRolePolicy(caller, payload.policy)
-						const role = yield* roles
-							.update(caller.organizationId, params.roleId, payload)
-							.pipe(Effect.mapError(roleError))
-						yield* record(
-							caller,
-							"role.updated",
-							organizationKey(caller.organizationId),
-							{ roleId: role.id, changes: Object.keys(payload) },
-						)
-						return role
-					}),
+							const role = yield* roles
+								.create(caller.organizationId, payload)
+								.pipe(replaceStorage("OpenBot could not make the role"))
+							yield* record(
+								caller,
+								"role.created",
+								organizationKey(caller.organizationId),
+								{ roleId: role.id, name: role.name },
+							)
+							return role
+						}),
+					{ uninterruptible: true },
 				)
-				.handle("deleteRole", ({ params }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const role = yield* findRole(caller, params.roleId)
-						if (role.builtin)
-							return yield* OrganizationApi.RoleReadOnly.make({
-								roleId: role.id,
-							})
-						if (
-							yield* organization
-								.roleInUse(caller.organizationId, role.id)
+				.handle(
+					"updateRole",
+					({ params, payload }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							yield* findRole(caller, params.roleId)
+							if (payload.policy !== undefined)
+								yield* checkRolePolicy(caller, payload.policy)
+							const role = yield* roles
+								.update(caller.organizationId, params.roleId, payload)
 								.pipe(
-									Effect.mapError(() =>
-										OrganizationApi.OrganizationStorageUnavailable.make({}),
+									Effect.catchTag(
+										"RolesUnavailable",
+										storageFailure("OpenBot could not change the role"),
 									),
 								)
-						)
-							return yield* OrganizationApi.RoleInUse.make({ roleId: role.id })
-						yield* roles
-							.delete(caller.organizationId, role.id)
-							.pipe(Effect.mapError(roleError))
-						yield* record(
-							caller,
-							"role.deleted",
-							organizationKey(caller.organizationId),
-							{ roleId: role.id, name: role.name },
-						)
-					}),
+							yield* record(
+								caller,
+								"role.updated",
+								organizationKey(caller.organizationId),
+								{ roleId: role.id, changes: Struct.keys(payload) },
+							)
+							return role
+						}),
+					{ uninterruptible: true },
+				)
+				.handle(
+					"deleteRole",
+					({ params }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const role = yield* findRole(caller, params.roleId)
+							if (role.builtin)
+								return yield* OrganizationApi.RoleReadOnly.make({
+									roleId: role.id,
+								})
+							if (
+								yield* organization
+									.roleInUse(caller.organizationId, role.id)
+									.pipe(
+										replaceStorage(
+											"OpenBot could not check if a member uses the role",
+										),
+									)
+							)
+								return yield* OrganizationApi.RoleInUse.make({
+									roleId: role.id,
+								})
+							yield* roles
+								.delete(caller.organizationId, role.id)
+								.pipe(
+									Effect.catchTag(
+										"RolesUnavailable",
+										storageFailure("OpenBot could not delete the role"),
+									),
+								)
+							yield* record(
+								caller,
+								"role.deleted",
+								organizationKey(caller.organizationId),
+								{ roleId: role.id, name: role.name },
+							)
+						}),
+					{ uninterruptible: true },
 				)
 				.handle("listAuditLogs", ({ query }) =>
 					Effect.flatMap(Identity, (caller) =>
@@ -502,11 +514,7 @@ const organizationGroup = HttpApiBuilder.group(
 							...(query.actor === undefined ? {} : { actor: query.actor }),
 							limit: query.limit ?? 50,
 						}),
-					).pipe(
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
-					),
+					).pipe(replaceStorage("OpenBot could not read the audit log")),
 				)
 		}),
 )
@@ -536,11 +544,7 @@ const organizationsGroup = HttpApiBuilder.group(
 						resource: userKey({ organizationId, userId }),
 						details,
 					})
-					.pipe(
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
-					)
+					.pipe(replaceStorage("OpenBot could not write the audit log"))
 			/** An answer to an invitation needs the session cookie, not a token of one organization. */
 			const answer = (invitationId: string, answer: "accepted" | "declined") =>
 				Effect.gen(function* () {
@@ -552,10 +556,9 @@ const organizationsGroup = HttpApiBuilder.group(
 					const invitation = yield* organization
 						.answerInvitation(account.userId, invitationId, answer)
 						.pipe(
-							Effect.mapError((error) =>
-								error._tag === "OrganizationUnavailable"
-									? OrganizationApi.OrganizationStorageUnavailable.make({})
-									: error,
+							Effect.catchTag(
+								"OrganizationUnavailable",
+								storageFailure("OpenBot could not answer the invitation"),
 							),
 						)
 					yield* record(
@@ -568,116 +571,118 @@ const organizationsGroup = HttpApiBuilder.group(
 					)
 					return invitation
 				})
+			// Write handlers do not stop when the client goes away, so a change
+			// always gets its audit entry.
 			return handlers
 				.handle("listOrganizations", () =>
 					Effect.gen(function* () {
 						const account = yield* Account
 						const memberships = yield* organization.memberships(account.userId)
-						const ids = memberships
+						const ids = pipe(
+							memberships,
 							// A token sees only its own organization.
-							.filter(
+							Arr.filter(
 								(membership) =>
 									account.organizationId === undefined ||
 									membership.organizationId === account.organizationId,
-							)
-							.map((membership) => membership.organizationId)
-						const items: Array<OrganizationApi.Organization> = []
-						for (const id of ids) {
-							const found = yield* organization.get(id)
-							if (Option.isSome(found)) items.push(found.value)
-						}
-						return { items }
-					}).pipe(
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
-					),
-				)
-				.handle("createOrganization", ({ payload }) =>
-					Effect.gen(function* () {
-						const account = yield* Account
-						const platform = yield* settings.platform.pipe(
-							Effect.mapError(() =>
-								OrganizationApi.OrganizationStorageUnavailable.make({}),
 							),
+							Arr.map((membership) => membership.organizationId),
 						)
-						const anyone = Option.exists(
-							platform,
-							(platform) => platform.document.organizationCreation === "anyone",
+						const found = yield* Effect.forEach(ids, (id) =>
+							organization.get(id),
 						)
-						if (
-							!anyone &&
-							!(yield* admins
-								.check({ id: account.userId })
+						return { items: Arr.getSomes(found) }
+					}).pipe(replaceStorage("OpenBot could not list the organizations")),
+				)
+				.handle(
+					"createOrganization",
+					({ payload }) =>
+						Effect.gen(function* () {
+							const account = yield* Account
+							const platform = yield* settings.platform.pipe(
+								replaceStorage("OpenBot could not read the platform settings"),
+							)
+							const anyone = Option.exists(
+								platform,
+								(platform) =>
+									platform.document.organizationCreation === "anyone",
+							)
+							if (
+								!anyone &&
+								!(yield* admins
+									.check({ id: account.userId })
+									.pipe(
+										replaceStorage(
+											"OpenBot could not check the platform admins",
+										),
+									))
+							)
+								return yield* OrganizationApi.OrganizationCreationDisabled.make(
+									{},
+								)
+							return yield* organization
+								.create({ name: payload.name, owner: { id: account.userId } })
+								.pipe(replaceStorage("OpenBot could not make the organization"))
+						}),
+					{ uninterruptible: true },
+				)
+				.handle(
+					"leaveOrganization",
+					({ params }) =>
+						Effect.gen(function* () {
+							const account = yield* Account
+							// A token belongs to one organization, so it can only leave that one.
+							if (
+								account.organizationId !== undefined &&
+								account.organizationId !== params.organizationId
+							)
+								return yield* OrganizationApi.MemberNotFound.make({
+									userId: account.userId,
+								})
+							yield* organization
+								.removeMember(params.organizationId, account.userId)
 								.pipe(
-									Effect.mapError(() =>
-										OrganizationApi.OrganizationStorageUnavailable.make({}),
+									Effect.catchTag(
+										"OrganizationUnavailable",
+										storageFailure("OpenBot could not remove the member"),
 									),
-								))
-						)
-							return yield* OrganizationApi.OrganizationCreationDisabled.make(
+								)
+							yield* record(
+								account.userId,
+								params.organizationId,
+								"member.left",
 								{},
 							)
-						return yield* organization
-							.create({ name: payload.name, owner: { id: account.userId } })
-							.pipe(
-								Effect.mapError(() =>
-									OrganizationApi.OrganizationStorageUnavailable.make({}),
-								),
-							)
-					}),
-				)
-				.handle("leaveOrganization", ({ params }) =>
-					Effect.gen(function* () {
-						const account = yield* Account
-						// A token belongs to one organization, so it can only leave that one.
-						if (
-							account.organizationId !== undefined &&
-							account.organizationId !== params.organizationId
-						)
-							return yield* OrganizationApi.MemberNotFound.make({
-								userId: account.userId,
-							})
-						yield* organization
-							.removeMember(params.organizationId, account.userId)
-							.pipe(
-								Effect.mapError((error) =>
-									error._tag === "OrganizationUnavailable"
-										? OrganizationApi.OrganizationStorageUnavailable.make({})
-										: error,
-								),
-							)
-						yield* record(
-							account.userId,
-							params.organizationId,
-							"member.left",
-							{},
-						)
-					}),
+						}),
+					{ uninterruptible: true },
 				)
 				.handle("listMyInvitations", () =>
 					Effect.flatMap(Account, (account) =>
 						organization.invitationsFor(account.userId),
 					).pipe(
 						Effect.map((items) => ({ items })),
-						Effect.mapError(() =>
-							OrganizationApi.OrganizationStorageUnavailable.make({}),
-						),
+						replaceStorage("OpenBot could not list the invitations"),
 					),
 				)
-				.handle("acceptInvitation", ({ params }) =>
-					Effect.gen(function* () {
-						const invitation = yield* answer(params.invitationId, "accepted")
-						return yield* organization.get(invitation.organizationId).pipe(
-							Effect.flatMap(Effect.fromOption),
-							Effect.mapError(() =>
-								OrganizationApi.OrganizationStorageUnavailable.make({}),
-							),
-						)
-					}),
+				.handle(
+					"acceptInvitation",
+					({ params }) =>
+						Effect.gen(function* () {
+							const invitation = yield* answer(params.invitationId, "accepted")
+							return yield* organization.get(invitation.organizationId).pipe(
+								// The organization of an accepted invitation must be there.
+								Effect.flatMap(Effect.fromOption),
+								replaceStorage(
+									"OpenBot could not read the organization of the invitation",
+								),
+							)
+						}),
+					{ uninterruptible: true },
 				)
-				.handle("declineInvitation", ({ params }) =>
-					answer(params.invitationId, "declined"),
+				.handle(
+					"declineInvitation",
+					({ params }) => answer(params.invitationId, "declined"),
+					{ uninterruptible: true },
 				)
 		}),
 )

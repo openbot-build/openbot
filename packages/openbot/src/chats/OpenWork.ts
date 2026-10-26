@@ -1,5 +1,5 @@
 import type { Chat } from "@openbot-build/core"
-import type { OpenWork as OpenWorkView } from "@openbot-build/api"
+import type { BotsApi, OpenWork as OpenWorkView } from "@openbot-build/api"
 import { Context, Effect, Layer } from "effect"
 
 /**
@@ -9,10 +9,11 @@ import { Context, Effect, Layer } from "effect"
 export class OpenWork extends Context.Service<
 	OpenWork,
 	{
+		/** Fails when the work cannot be read, so a caller never takes a failure for no work. */
 		readonly count: (
 			organizationId: string,
 			chat: Chat.Id,
-		) => Effect.Effect<OpenWorkView>
+		) => Effect.Effect<OpenWorkView, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/chats/OpenWork") {}
 

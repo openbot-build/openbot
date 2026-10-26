@@ -1,5 +1,5 @@
 import type { ModelProvidersApi } from "@openbot-build/api"
-import { Context, type Effect, type Option } from "effect"
+import { Context, DateTime, type Effect, type Option } from "effect"
 import type { Owner } from "./ModelProviders.ts"
 
 /** A stored model. It does not belong to a provider. */
@@ -67,15 +67,14 @@ export class Models extends Context.Service<
 	}
 >()("@openbot-build/openbot/models/Models") {}
 
-/** A key that finds a model by its owner and ID. */
+/** A key that finds a model by its owner and ID. `HashMap` compares it by value. */
 export const modelKey = ({
 	owner,
 	id,
 }: {
 	readonly owner: Owner
 	readonly id: string
-}) =>
-	JSON.stringify([owner.kind, owner.kind === "platform" ? "" : owner.id, id])
+}) => [owner.kind, owner.kind === "platform" ? "" : owner.id, id] as const
 
 /** The API form. */
 export const view = (model: StoredModel): ModelProvidersApi.Model => ({
@@ -93,8 +92,8 @@ export const view = (model: StoredModel): ModelProvidersApi.Model => ({
 		: { maxOutputTokens: model.maxOutputTokens }),
 	availability: model.availability,
 	version: model.version,
-	createdAt: new Date(model.createdAt).toISOString(),
-	updatedAt: new Date(model.updatedAt).toISOString(),
+	createdAt: DateTime.formatIso(DateTime.makeUnsafe(model.createdAt)),
+	updatedAt: DateTime.formatIso(DateTime.makeUnsafe(model.updatedAt)),
 })
 
 /** The values of a model for one provider: the values of the link replace the values of the model. */

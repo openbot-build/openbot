@@ -1,4 +1,3 @@
-import type { Services as AuthorizationServices } from "../../authorization/Check.ts"
 import {
 	Authorization,
 	BotsApi,
@@ -8,11 +7,13 @@ import {
 	OpenBotApi,
 } from "@openbot-build/api"
 import { Config } from "@openbot-build/core"
-import { Effect, Option, Result } from "effect"
+import { Effect, Result } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Backend } from "../../app/Backend.ts"
-import { check } from "../../authorization/Check.ts"
+import * as Background from "../../app/Background.ts"
+import * as Failures from "../../app/Failures.ts"
+import * as Check from "../../authorization/Check.ts"
 import { Bots } from "../../bots/Bots.ts"
 import { ModelRegistry } from "../../models/ModelRegistry.ts"
 import * as ChatHost from "../ChatHost.ts"
@@ -24,31 +25,29 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 	Effect.gen(function* () {
 		const backend = yield* Backend
 		const bots = yield* Bots
-		const services = yield* Effect.context<AuthorizationServices>()
-		// An app without models, such as a small test app, has no Live mode.
-		const registry = yield* Effect.serviceOption(ModelRegistry)
-		const sessions = yield* Effect.serviceOption(LiveSessions)
+		const { check } = yield* Check.make
+		const registry = yield* ModelRegistry
+		const sessions = yield* LiveSessions
 		const chatsOf = (caller: typeof Identity.Service) =>
 			backend
 				.forCaller(caller)
-				.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
+				.pipe(
+					Failures.replace(
+						"OpenBot could not open the Chats of a member.",
+						() => ChatStorageUnavailable.make({}),
+					),
+				)
 		return handlers
 			.handle("createLiveChat", ({ params, payload }) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
-					if (Option.isNone(registry))
-						return yield* LiveApi.LiveUnavailable.make({
-							message: "This OpenBot has no Live mode.",
-						})
 					// Work for a Bot needs the delegate permission on it.
-					const bot = yield* bots
-						.access(caller, params.botId, "delegate")
-						.pipe(Effect.provideContext(services))
+					const bot = yield* bots.access(caller, params.botId, "delegate")
 					if (bot.archived)
 						return yield* BotsApi.BotInvalid.make({
 							message: "An archived Bot does no new work.",
 						})
-					const first = (yield* registry.value
+					const first = (yield* registry
 						.liveCatalog(caller.organizationId)
 						.pipe(
 							Effect.mapError((error) =>
@@ -74,7 +73,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 							provider: model.provider,
 							id: model.model,
 						}),
-					}).pipe(Effect.provideContext(services))
+					})
 					const chats = yield* chatsOf(caller)
 					return yield* chats.create({
 						bot,
@@ -87,10 +86,6 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 			.handleRaw("connectLive", ({ params, query, request }) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
-					if (Option.isNone(registry) || Option.isNone(sessions))
-						return yield* LiveApi.LiveUnavailable.make({
-							message: "This OpenBot has no Live mode.",
-						})
 					const chats = yield* chatsOf(caller)
 					// The Chat must be a live Chat of the caller. Its model is the Live model.
 					const view = yield* chats.get(params.chatId)
@@ -99,7 +94,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 						return yield* LiveApi.LiveUnavailable.make({
 							message: "Only a live Chat has a Live session.",
 						})
-					const live = yield* registry.value
+					const live = yield* registry
 						.resolveLive(caller.organizationId, selection)
 						.pipe(
 							Effect.mapError((error) =>
@@ -111,11 +106,19 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 						return yield* LiveApi.LiveUnavailable.make({
 							message: chosen.failure,
 						})
+					// A request that is not a WebSocket is a mistake of the client.
 					const socket = yield* request.upgrade.pipe(
-						Effect.mapError(() =>
-							LiveApi.LiveUnavailable.make({
-								message: "Open this address as a WebSocket.",
-							}),
+						Effect.catch((error) =>
+							Effect.logDebug(
+								"A request to a Live session was not a WebSocket.",
+								error,
+							).pipe(
+								Effect.andThen(
+									LiveApi.LiveUnavailable.make({
+										message: "Open this address as a WebSocket.",
+									}),
+								),
+							),
 						),
 					)
 					yield* LiveSession.run({
@@ -126,10 +129,8 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 						live,
 						plan: chosen.success,
 					}).pipe(
-						Effect.provideService(LiveSessions, sessions.value),
-						Effect.catchCause((cause) =>
-							Effect.logWarning("A Live session ended with an error.", cause),
-						),
+						Effect.provideService(LiveSessions, sessions),
+						Background.logFailure("A Live session ended with an error."),
 					)
 					return HttpServerResponse.empty()
 				}),

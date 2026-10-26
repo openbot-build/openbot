@@ -1,5 +1,5 @@
 import { Identity, OpenBotApi } from "@openbot-build/api"
-import { Effect } from "effect"
+import { Array as Arr, Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import { CodeRuns } from "./CodeRuns.ts"
@@ -20,7 +20,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "codeRuns", (handlers) =>
 				Effect.flatMap(owner, (owner) =>
 					runs
 						.list(owner, params.chatId)
-						.pipe(Effect.map((list) => list.map(view))),
+						.pipe(Effect.map((list) => Arr.map(list, view))),
 				),
 			)
 	}),

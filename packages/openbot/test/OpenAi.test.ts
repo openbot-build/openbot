@@ -1,15 +1,14 @@
-// Each test owns the Layers that it provides at the point where it runs.
-// @effect-diagnostics strictEffectProvide:off
-
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Match,
 	Context,
+	Deferred,
 	Effect,
 	Fiber,
 	Layer,
 	Schema,
 	Stream,
+	String as Str,
 	Predicate,
 } from "effect"
 import { assert, it } from "@effect/vitest"
@@ -75,6 +74,16 @@ const response = {
 	created_at: 1,
 	output,
 }
+const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+const RequestBody = Schema.fromJsonString(Schema.JsonObject)
+/** The events as the text of a server-sent event stream. */
+const eventStream = (events: ReadonlyArray<unknown>) =>
+	Effect.map(
+		Effect.forEach(events, (event) =>
+			Effect.map(toJson(event), (data) => `data: ${data}\n\n`),
+		),
+		Arr.join(""),
+	)
 
 it.effect(
 	"generation, counting and compaction share encoded input, and the full native output stays for the next request",
@@ -86,17 +95,17 @@ it.effect(
 			const HttpClientTest = Layer.succeed(
 				HttpClient.HttpClient,
 				HttpClient.make((request, url) =>
-					Effect.sync(() => {
+					Effect.gen(function* () {
 						assert.strictEqual(request.body._tag, "Uint8Array")
-						const body = JSON.parse(
+						const body = yield* Schema.decodeEffect(RequestBody)(
 							new TextDecoder().decode(
 								Match.value(request.body).pipe(
 									Match.tag("Uint8Array", (body) => body.body),
 									Match.orElse(() => new Uint8Array()),
 								),
 							),
-						) as Schema.JsonObject
-						requests = EffectArray.append(requests, {
+						)
+						requests = Arr.append(requests, {
 							path: url.pathname,
 							body,
 						})
@@ -105,7 +114,7 @@ it.effect(
 								request.headers["x-sdk-transform"],
 								"preserved",
 							)
-							const events = [
+							const events = yield* eventStream([
 								{
 									type: "response.created",
 									response: { ...response, output: [] },
@@ -114,29 +123,26 @@ it.effect(
 									type: "response.completed",
 									response: { ...response, output: [] },
 								},
-							]
+							])
 							return HttpClientResponse.fromWeb(
 								request,
-								new globalThis.Response(
-									events
-										.map((event) => `data: ${JSON.stringify(event)}\n\n`)
-										.join(""),
-									{ headers: { "content-type": "text/event-stream" } },
-								),
+								new globalThis.Response(events, {
+									headers: { "content-type": "text/event-stream" },
+								}),
 							)
 						}
-						const payload = url.pathname.endsWith("input_tokens")
+						const payload = Str.endsWith("input_tokens")(url.pathname)
 							? { input_tokens: 21, object: "response.input_tokens" }
-							: url.pathname.endsWith("compact")
+							: Str.endsWith("compact")(url.pathname)
 								? { object: "response.compaction", output: nativeItems }
 								: response
 						return HttpClientResponse.fromWeb(
 							request,
-							new globalThis.Response(JSON.stringify(payload), {
+							new globalThis.Response(yield* toJson(payload), {
 								headers: { "content-type": "application/json" },
 							}),
 						)
-					}),
+					}).pipe(Effect.orDie),
 				),
 			)
 			yield* Effect.gen(function* () {
@@ -247,7 +253,7 @@ it.effect(
 								requests.at(-2)!.body["tools"],
 							)
 							assert.deepStrictEqual(
-								requests.map(({ path }) => path),
+								Arr.map(requests, ({ path }) => path),
 								[
 									"/v1/responses/input_tokens",
 									"/v1/responses/compact",
@@ -260,11 +266,7 @@ it.effect(
 							assert.strictEqual(toolCalls, 0)
 						}),
 					),
-					Match.orElse(() =>
-						Effect.gen(function* () {
-							throw new Error("Expected native compaction")
-						}),
-					),
+					Match.orElse(() => assert.fail("Expected native compaction")),
 				)
 			}).pipe(
 				Effect.provide(
@@ -290,49 +292,48 @@ it.effect("native SDK streaming runs a tool and keeps cancellation", () =>
 		let toolCalls = 0,
 			requests = 0,
 			cancelled = false
+		const text = yield* eventStream([
+			{ type: "response.created", response: { ...response, output: [] } },
+			{
+				type: "response.output_item.added",
+				output_index: 0,
+				item: {
+					type: "function_call",
+					id: "call_item",
+					call_id: "call_1",
+					name: "echo",
+					arguments: "",
+				},
+			},
+			{
+				type: "response.function_call_arguments.delta",
+				item_id: "call_item",
+				output_index: 0,
+				delta: '{"text":"hello"}',
+			},
+			{
+				type: "response.function_call_arguments.done",
+				item_id: "call_item",
+				output_index: 0,
+				arguments: '{"text":"hello"}',
+				name: "echo",
+			},
+			{ type: "response.completed", response: { ...response, output: [] } },
+		])
+		const started = yield* Deferred.make<void>()
 		const HttpClientTest = Layer.succeed(
 			HttpClient.HttpClient,
 			HttpClient.make((request) => {
 				requests++
 				if (requests === 2)
-					return Effect.never.pipe(
+					return Deferred.succeed(started, undefined).pipe(
+						Effect.andThen(Effect.never),
 						Effect.onInterrupt(() =>
 							Effect.sync(() => {
 								cancelled = true
 							}),
 						),
 					)
-				const events = [
-					{ type: "response.created", response: { ...response, output: [] } },
-					{
-						type: "response.output_item.added",
-						output_index: 0,
-						item: {
-							type: "function_call",
-							id: "call_item",
-							call_id: "call_1",
-							name: "echo",
-							arguments: "",
-						},
-					},
-					{
-						type: "response.function_call_arguments.delta",
-						item_id: "call_item",
-						output_index: 0,
-						delta: '{"text":"hello"}',
-					},
-					{
-						type: "response.function_call_arguments.done",
-						item_id: "call_item",
-						output_index: 0,
-						arguments: '{"text":"hello"}',
-						name: "echo",
-					},
-					{ type: "response.completed", response: { ...response, output: [] } },
-				]
-				const text = events
-					.map((event) => `data: ${JSON.stringify(event)}\n\n`)
-					.join("")
 				return Effect.succeed(
 					HttpClientResponse.fromWeb(
 						request,
@@ -349,14 +350,14 @@ it.effect("native SDK streaming runs a tool and keeps cancellation", () =>
 				prompt: "echo",
 				toolkit: tools,
 			}).pipe(Stream.runCollect, Effect.provide(model))
-			assert.ok(events.some((part) => part.type === "tool-result"))
+			assert.ok(Arr.some(events, (part) => part.type === "tool-result"))
 			assert.strictEqual(toolCalls, 1)
 			const fiber = yield* LanguageModel.streamText({ prompt: "wait" }).pipe(
 				Stream.runDrain,
 				Effect.provide(model),
 				Effect.forkChild,
 			)
-			yield* Effect.yieldNow
+			yield* Deferred.await(started)
 			yield* Fiber.interrupt(fiber)
 			assert.strictEqual(cancelled, true)
 		}).pipe(
@@ -390,16 +391,16 @@ it.effect(
 				const HttpClientTest = Layer.succeed(
 					HttpClient.HttpClient,
 					HttpClient.make((request) =>
-						Effect.sync(() => {
+						Effect.gen(function* () {
 							calls++
 							return HttpClientResponse.fromWeb(
 								request,
-								new globalThis.Response(JSON.stringify(scenario.payload), {
+								new globalThis.Response(yield* toJson(scenario.payload), {
 									status: scenario.status,
 									headers: { "content-type": "application/json" },
 								}),
 							)
-						}),
+						}).pipe(Effect.orDie),
 					),
 				)
 				yield* Effect.gen(function* () {
@@ -414,6 +415,12 @@ it.effect(
 					const compactError = yield* service.compact(request).pipe(Effect.flip)
 					assert.strictEqual(countError.reason, "request-failed")
 					assert.strictEqual(compactError.reason, "request-failed")
+					// The body of an error answer says why OpenAI refused the request.
+					for (const error of [countError, compactError])
+						assert.strictEqual(
+							Str.includes("bad request")(error.message),
+							scenario.status === 400,
+						)
 					assert.strictEqual(calls, 2)
 				}).pipe(
 					Effect.provide(
@@ -447,30 +454,26 @@ it.effect(
 						return yield* Match.value(request.body).pipe(
 							Match.tag("Uint8Array", (body) =>
 								Effect.gen(function* () {
-									bodies = EffectArray.append(
+									bodies = Arr.append(
 										bodies,
-										yield* Schema.decodeEffect(
-											Schema.fromJsonString(Schema.JsonObject),
-										)(new TextDecoder().decode(body.body)),
+										yield* Schema.decodeEffect(RequestBody)(
+											new TextDecoder().decode(body.body),
+										),
 									)
-									const payload = url.pathname.endsWith("input_tokens")
+									const payload = Str.endsWith("input_tokens")(url.pathname)
 										? { input_tokens: 21 }
-										: url.pathname.endsWith("compact")
+										: Str.endsWith("compact")(url.pathname)
 											? { output: nativeItems }
 											: response
 									return HttpClientResponse.fromWeb(
 										request,
-										new globalThis.Response(JSON.stringify(payload), {
+										new globalThis.Response(yield* toJson(payload), {
 											headers: { "content-type": "application/json" },
 										}),
 									)
 								}),
 							),
-							Match.orElse(() =>
-								Effect.gen(function* () {
-									throw new Error("Expected a JSON request")
-								}),
-							),
+							Match.orElse(() => assert.fail("Expected a JSON request")),
 						)
 					}).pipe(Effect.orDie),
 				),
@@ -517,7 +520,7 @@ it.effect(
 					Schema.Array(Schema.JsonObject),
 				)(bodies[0]!["tools"])
 				assert.deepStrictEqual(
-					definitions.map((tool) => tool["name"]),
+					Arr.map(definitions, (tool) => tool["name"]),
 					["convert"],
 				)
 			}).pipe(
@@ -646,19 +649,21 @@ it.effect(
 	"the API gets the upstream model name, and the model keeps the selected ID",
 	() =>
 		Effect.gen(function* () {
-			let sent: unknown
+			let sent: Schema.JsonObject = {}
 			const HttpClientTest = Layer.succeed(
 				HttpClient.HttpClient,
-				HttpClient.make((request) => {
-					if (request.body._tag === "Uint8Array")
-						sent = JSON.parse(new TextDecoder().decode(request.body.body))
-					return Effect.succeed(
-						HttpClientResponse.fromWeb(
+				HttpClient.make((request) =>
+					Effect.gen(function* () {
+						if (request.body._tag === "Uint8Array")
+							sent = yield* Schema.decodeEffect(RequestBody)(
+								new TextDecoder().decode(request.body.body),
+							).pipe(Effect.orDie)
+						return HttpClientResponse.fromWeb(
 							request,
 							new globalThis.Response("Gateway unavailable", { status: 503 }),
-						),
-					)
-				}),
+						)
+					}),
+				),
 			)
 			const name = yield* Effect.gen(function* () {
 				const model = yield* OpenAiProvider.make({
@@ -676,10 +681,7 @@ it.effect(
 					),
 				),
 			)
-			assert.strictEqual(
-				(sent as { readonly model?: unknown }).model,
-				"upstream-name",
-			)
+			assert.strictEqual(sent["model"], "upstream-name")
 			assert.strictEqual(name, selection.model)
 		}),
 )

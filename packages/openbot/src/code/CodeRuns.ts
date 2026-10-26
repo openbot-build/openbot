@@ -1,21 +1,36 @@
-import { createHash, randomInt } from "node:crypto"
 import type { PgClient } from "@effect/sql-pg"
-import { CodeRunsApi, Settings as SettingsApi } from "@openbot-build/api"
+import {
+	ChatConflict,
+	CodeRunsApi,
+	ExperienceStorageUnavailable,
+	Settings as SettingsApi,
+} from "@openbot-build/api"
 import {
 	Array as Arr,
+	Cause,
 	Clock,
 	Context,
+	Crypto,
+	Duration,
 	Effect,
 	Layer,
+	Match,
 	Option,
+	Order,
 	Ref,
 	Result,
+	Schedule,
 	Schema,
+	Semaphore,
+	String as Str,
+	pipe,
 } from "effect"
 import { ActionPolicy } from "../apps/ActionPolicy.ts"
 import * as Bindings from "../apps/Bindings.ts"
 import { Capabilities } from "../apps/Capabilities.ts"
 import { Invocations, type Position } from "../apps/Invocations.ts"
+import * as Background from "../app/Background.ts"
+import * as Failures from "../app/Failures.ts"
 import { Answer, Gate, remember } from "../capabilities/Gate.ts"
 import { Work } from "../capabilities/Work.ts"
 import { Secrets } from "../secrets/Secrets.ts"
@@ -54,7 +69,7 @@ export const toolResult = (run: Stored.Run): ToolResult => ({
 			message: "The program stopped before it ended.",
 			logs: [],
 		} as const),
-	calls: run.calls.map((call) => ({
+	calls: Arr.map(run.calls, (call) => ({
 		index: call.index,
 		binding: call.binding,
 		operationId: call.operationId,
@@ -69,12 +84,24 @@ export interface Named {
 }
 
 const slug = (text: string) => {
-	const value = text
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "_")
-		.replace(/^_+|_+$/g, "")
+	const value = pipe(
+		text,
+		Str.toLowerCase,
+		Str.replace(/[^a-z0-9]+/g, "_"),
+		Str.replace(/^_+|_+$/g, ""),
+	)
 	return value.length === 0 || /^[0-9]/.test(value) ? "_" + value : value
 }
+
+/** Orders values by a text with `localeCompare`. */
+const byText =
+	<A>(text: (value: A) => string): Order.Order<A> =>
+	(self, that) =>
+		Str.localeCompare(text(that))(text(self))
+
+const byConnection = byText(
+	(binding: Bindings.Binding) => binding.source.connectionId,
+)
 
 /**
  * Gives each binding a short name. The first part names the connection, the second the
@@ -83,47 +110,45 @@ const slug = (text: string) => {
 export const name = (
 	bindings: ReadonlyArray<Bindings.Binding>,
 ): ReadonlyArray<Named> => {
-	const connections = Arr.dedupe(
-		bindings
-			.map((binding) => binding.source)
-			.toSorted((a, b) => a.connectionId.localeCompare(b.connectionId))
-			.map((source) => source.connectionId),
+	const sorted = Arr.sort(
+		bindings,
+		Order.combineAll([
+			byConnection,
+			byText((binding: Bindings.Binding) => binding.source.kind),
+			byText((binding: Bindings.Binding) => binding.source.name),
+		]),
 	)
-	let groups: ReadonlyArray<readonly [string, string]> = []
-	for (const connectionId of connections) {
-		const source = bindings.find(
-			(binding) => binding.source.connectionId === connectionId,
-		)!.source
-		const base = slug(source.connectionName)
+	// The first binding of a connection gives the name of the connection.
+	const connections = pipe(
+		bindings,
+		Arr.dedupeWith((a, b) => a.source.connectionId === b.source.connectionId),
+		Arr.sort(byConnection),
+		Arr.map((binding) => binding.source),
+	)
+	let groups: ReadonlyArray<string> = []
+	let named: ReadonlyArray<Named> = []
+	for (const connection of connections) {
+		const base = slug(connection.connectionName)
 		let group = base
 		// `apps.call` is taken by the call that takes a full name.
-		for (
-			let n = 2;
-			group === "call" || groups.some(([, used]) => used === group);
-			n++
-		)
+		for (let n = 2; group === "call" || Arr.contains(groups, group); n++)
 			group = base + "_" + n
-		groups = [...groups, [connectionId, group]]
-	}
-	let named: ReadonlyArray<Named> = []
-	for (const binding of bindings.toSorted(
-		(a, b) =>
-			a.source.connectionId.localeCompare(b.source.connectionId) ||
-			a.source.kind.localeCompare(b.source.kind) ||
-			a.source.name.localeCompare(b.source.name),
-	)) {
-		const group = groups.find(
-			([connectionId]) => connectionId === binding.source.connectionId,
-		)![1]
-		const base =
-			group +
-			"." +
-			slug(binding.source.name) +
-			(binding.source.kind === "tool" ? "" : "_" + binding.source.kind)
-		let alias = base
-		for (let n = 2; named.some((entry) => entry.alias === alias); n++)
-			alias = base + "_" + n
-		named = [...named, { alias, binding }]
+		groups = [...groups, group]
+		const own = Arr.filter(
+			sorted,
+			(binding) => binding.source.connectionId === connection.connectionId,
+		)
+		for (const binding of own) {
+			const base =
+				group +
+				"." +
+				slug(binding.source.name) +
+				(binding.source.kind === "tool" ? "" : "_" + binding.source.kind)
+			let alias = base
+			for (let n = 2; Arr.some(named, (entry) => entry.alias === alias); n++)
+				alias = base + "_" + n
+			named = [...named, { alias, binding }]
+		}
 	}
 	return named
 }
@@ -139,23 +164,24 @@ const errorText = (
 		...(details === undefined ? {} : { details }),
 	})
 
+/** The outcome of a call that does not wait for a decision. */
+type Ended = Exclude<Stored.StoredCall["outcome"], { readonly _tag: "Waiting" }>
+
 /** What the program gets for one recorded call. */
-const settledOf = (call: Stored.StoredCall): Settled | undefined => {
-	switch (call.outcome._tag) {
-		case "Waiting":
-			return undefined
+const settledOf = (call: Stored.StoredCall, outcome: Ended): Settled => {
+	switch (outcome._tag) {
 		case "Denied":
 			return {
 				index: call.index,
 				ok: false,
 				error: errorText(
 					"AppCallDenied",
-					"A decider did not allow this call: " + call.outcome.reason,
+					"A decider did not allow this call: " + outcome.reason,
 					{ operationId: call.operationId },
 				),
 			}
 		case "Done": {
-			const result = call.outcome.result
+			const result = outcome.result
 			switch (result._tag) {
 				case "Completed":
 					return {
@@ -189,8 +215,53 @@ const settledOf = (call: Stored.StoredCall): Settled | undefined => {
 	}
 }
 
+const byIndex = Order.mapInput(
+	Order.Number,
+	(value: { readonly index: number }) => value.index,
+)
+
 /** How long one host may run a program before another host can take it over. */
 const leaseFor = (settings: SettingsApi.CodeMode) => settings.timeoutMs + 60_000
+
+/** The run with its result. */
+const ended = (
+	run: Stored.Run,
+	result: CodeRunsApi.CodeResult,
+): Stored.Run => ({
+	...run,
+	status: result._tag === "Completed" ? "Completed" : "Failed",
+	result,
+})
+
+/** What a run becomes when the host stopped the program. */
+const stopped = (
+	run: Stored.Run,
+	isBroken: boolean,
+	isMismatch: boolean,
+): Stored.Run =>
+	isBroken
+		? ended(run, {
+				_tag: "Failed",
+				reason: "Unavailable",
+				message: "OpenBot could not handle an App call of the program.",
+				logs: [],
+			})
+		: isMismatch
+			? ended(run, {
+					_tag: "Failed",
+					reason: "ReplayMismatch",
+					message:
+						"The program made other App calls than the last time it ran, so OpenBot stopped it.",
+					logs: [],
+				})
+			: Arr.some(run.calls, (call) => call.outcome._tag === "Waiting")
+				? { ...run, status: "Waiting" }
+				: ended(run, {
+						_tag: "Failed",
+						reason: "Unavailable",
+						message: "OpenBot could not handle an App call of the program.",
+						logs: [],
+					})
 
 export class CodeRuns extends Context.Service<
 	CodeRuns,
@@ -260,12 +331,14 @@ export const make: Effect.Effect<
 	| ActionPolicy
 	| Gate
 	| Vaults
+	| Crypto.Crypto
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const vaults = yield* Vaults
 	const shared = yield* Settings
 	const sandbox = yield* Sandbox
+	const crypto = yield* Crypto.Crypto
 	const services: Bindings.Services = {
 		db,
 		secrets,
@@ -273,31 +346,48 @@ export const make: Effect.Effect<
 		invocations: yield* Invocations,
 		policy: yield* ActionPolicy,
 		gate: yield* Gate,
+		crypto,
 	}
-	const settings: typeof CodeRuns.Service.settings = shared.platform.pipe(
+	/** The Code Mode settings, when the platform turned Code Mode on. */
+	const enabled = shared.platform.pipe(
 		Effect.map(
 			Option.flatMap((platform) => {
 				const value = codeModeOf(platform.document)
 				return value.enabled ? Option.some(value) : Option.none()
 			}),
 		),
-		Effect.orElseSucceed(() => Option.none()),
+		Failures.replace("The Code Mode settings could not be read", () =>
+			ExperienceStorageUnavailable.make({}),
+		),
 	)
-	const vault: typeof CodeRuns.Service.vault = Effect.gen(function* () {
+	const settings: typeof CodeRuns.Service.settings = enabled.pipe(
+		// The list of tools shows no Code Mode while nobody can read its settings.
+		// `Failures.replace` logged the failure.
+		Effect.catchTag("ExperienceStorageUnavailable", () => Effect.succeedNone),
+	)
+	/** The Vault items of the Bot, or none when they could not be read. */
+	const usableItems: Effect.Effect<
+		Option.Option<ReadonlyArray<VaultCode.Entry>>
+	> = Effect.gen(function* () {
+		// The Work belongs to the current Turn of a Bot. Outside of one, no Bot may use
+		// Vault items.
 		const work = yield* Effect.serviceOption(Work)
-		if (Option.isNone(work)) return []
-		const usable = yield* vaults
+		if (Option.isNone(work)) return Option.some([])
+		return yield* vaults
 			.usable(work.value.caller.organizationId, work.value.bot.id)
 			.pipe(
+				Effect.map((usable) => Option.some(VaultCode.aliases(usable))),
 				Effect.catch((error) =>
 					Effect.logWarning(
 						"Could not read the Vault items of a Bot.",
-						error,
-					).pipe(Effect.as([])),
+						Cause.fail(error),
+					).pipe(Effect.as(Option.none())),
 				),
 			)
-		return VaultCode.aliases(usable)
 	})
+	const vault: typeof CodeRuns.Service.vault = usableItems.pipe(
+		Effect.map(Option.getOrElse(() => [])),
+	)
 	const save = (owner: string, run: Stored.Run, leaseUntil: number | null) =>
 		Stored.change(db, secrets, owner, run.id, () =>
 			Option.some({ run, leaseUntil }),
@@ -306,17 +396,69 @@ export const make: Effect.Effect<
 	/**
 	 * Runs a program from the start. Recorded calls give their recorded results.
 	 * A new call goes through the capability check. The run stops at the first call
-	 * that waits for a decision.
+	 * that waits for a decision. `leaseUntil` is the lease that this host holds on
+	 * the run. Each write checks it, so a host whose lease ended and whose run another
+	 * host took over does not write the run again.
 	 */
 	const execute = (
 		position: Position,
 		initial: Stored.Run,
 		bindings: ReadonlyArray<Bindings.Binding>,
 		limits: SettingsApi.CodeMode,
+		leaseUntil: number,
 	): Effect.Effect<Stored.Run, Stored.Error> =>
 		Effect.gen(function* () {
 			const named = name(bindings)
-			const items = yield* vault
+			const owned = yield* Ref.make(leaseUntil)
+			// One write at a time, so each write sees the lease of the write before it.
+			const permit = yield* Semaphore.make(1)
+			/** Changes the stored run while this host holds its lease. `next` is the new lease. */
+			const own = (
+				next: number | null,
+				update: (current: Stored.Run) => Stored.Run,
+			) =>
+				permit.withPermit(
+					Effect.gen(function* () {
+						const held = yield* Ref.get(owned)
+						const changed = yield* Stored.change(
+							db,
+							secrets,
+							position.owner,
+							initial.id,
+							(current, stored) =>
+								current.status === "Running" && stored === held
+									? Option.some({ run: update(current), leaseUntil: next })
+									: Option.none(),
+						)
+						if (Option.isNone(changed))
+							return yield* ChatConflict.make({
+								message: "Another host runs this code run now.",
+							})
+						if (next !== null) yield* Ref.set(owned, next)
+					}),
+				)
+			const lease = Effect.map(
+				Clock.currentTimeMillis,
+				(now) => now + leaseFor(limits),
+			)
+			const usable = yield* usableItems
+			if (Option.isNone(usable)) {
+				// The program must not run without the Vault items that it may name.
+				const failed: Stored.Run = {
+					...initial,
+					status: "Failed",
+					result: {
+						_tag: "Failed",
+						reason: "Unavailable",
+						message: "OpenBot could not read the Vault items of the Bot.",
+						logs: [],
+					},
+					updatedAt: yield* Clock.currentTimeMillis,
+				}
+				yield* own(null, () => failed)
+				return failed
+			}
+			const items = usable.value
 			const state = yield* Ref.make(initial)
 			const mismatch = yield* Ref.make(false)
 			// A storage failure stops the program. It must not look like a wait for a decision.
@@ -326,19 +468,17 @@ export const make: Effect.Effect<
 					const now = yield* Clock.currentTimeMillis
 					const run = { ...(yield* Ref.get(state)), updatedAt: now }
 					yield* Ref.set(state, run)
-					yield* save(position.owner, run, leaseUntil)
+					yield* own(leaseUntil, () => run)
 				})
-			const lease = Effect.map(
-				Clock.currentTimeMillis,
-				(now) => now + leaseFor(limits),
-			)
 			const record = (call: Stored.StoredCall) =>
 				Ref.update(state, (run) => ({
 					...run,
-					calls: [
-						...run.calls.filter((entry) => entry.index !== call.index),
-						call,
-					].toSorted((a, b) => a.index - b.index),
+					calls: pipe(
+						run.calls,
+						Arr.filter((entry) => entry.index !== call.index),
+						Arr.append(call),
+						Arr.sort(byIndex),
+					),
 				}))
 			const callIdOf = (index: number) => initial.callId + ":" + index
 			const answer = (calls: ReadonlyArray<Call>) =>
@@ -351,11 +491,14 @@ export const make: Effect.Effect<
 					}> = []
 					let paused = false
 					for (const call of calls) {
-						const entry = named.find((entry) => entry.alias === call.binding)
+						const entry = Arr.findFirst(
+							named,
+							(entry) => entry.alias === call.binding,
+						)
 						const args = Schema.decodeOption(
 							Schema.fromJsonString(Schema.JsonObject),
 						)(call.arguments)
-						if (entry === undefined || Option.isNone(args)) {
+						if (Option.isNone(entry) || Option.isNone(args)) {
 							ready = [
 								...ready,
 								{
@@ -372,24 +515,33 @@ export const make: Effect.Effect<
 							continue
 						}
 						// The invocation gets the program name, so it is the same in each run.
-						const plain = { ...entry.binding, name: entry.alias }
+						const plain = { ...entry.value.binding, name: entry.value.alias }
 						// The arguments keep their Vault references, so the hash never depends on a secret.
-						const argumentsHash = createHash("sha256")
-							.update(JSON.stringify([call.binding, args.value]))
-							.digest("hex")
-						const recorded = (yield* Ref.get(state)).calls.find(
+						const argumentsHash = yield* Stored.argumentsHashOf(
+							crypto,
+							call.binding,
+							args.value,
+						)
+						const recorded = Arr.findFirst(
+							(yield* Ref.get(state)).calls,
 							(stored) => stored.index === call.index,
 						)
 						if (
-							recorded !== undefined &&
-							(recorded.binding !== call.binding ||
-								recorded.argumentsHash !== argumentsHash)
+							Option.isSome(recorded) &&
+							(recorded.value.binding !== call.binding ||
+								recorded.value.argumentsHash !== argumentsHash)
 						) {
 							yield* Ref.set(mismatch, true)
 							return Option.none()
 						}
-						if (recorded !== undefined && recorded.outcome._tag !== "Waiting") {
-							ready = [...ready, settledOf(recorded)!]
+						if (
+							Option.isSome(recorded) &&
+							recorded.value.outcome._tag !== "Waiting"
+						) {
+							ready = [
+								...ready,
+								settledOf(recorded.value, recorded.value.outcome),
+							]
 							continue
 						}
 						const guarded = VaultCode.guard(
@@ -418,7 +570,7 @@ export const make: Effect.Effect<
 							source: binding.source,
 							argumentsHash,
 						}
-						if (recorded !== undefined) {
+						if (Option.isSome(recorded)) {
 							// The call waited for a decision. The App operation says what happened since.
 							const operation = yield* services.invocations.pending(
 								position,
@@ -427,7 +579,10 @@ export const make: Effect.Effect<
 							const status = Option.map(operation, (value) => value.status)
 							// A read needs no decision. Its host stopped before it sent the call.
 							if (Option.isNone(operation) && !binding.needsDecision) {
-								send = [...send, { call: recorded, binding, args: args.value }]
+								send = [
+									...send,
+									{ call: recorded.value, binding, args: args.value },
+								]
 								continue
 							}
 							if (
@@ -439,29 +594,32 @@ export const make: Effect.Effect<
 							}
 							if (Option.contains(status, "Rejected")) {
 								const denied = {
-									...recorded,
+									...recorded.value,
 									outcome: {
 										_tag: "Denied",
 										reason: "A decider did not allow it.",
 									} as const,
 								}
 								yield* record(denied)
-								ready = [...ready, settledOf(denied)!]
+								ready = [...ready, settledOf(denied, denied.outcome)]
 								continue
 							}
 							if (Option.contains(status, "Approved")) {
-								send = [...send, { call: recorded, binding, args: args.value }]
+								send = [
+									...send,
+									{ call: recorded.value, binding, args: args.value },
+								]
 								continue
 							}
 							// The call ran before, and maybe a host stopped before it saved the result.
 							const result = operation.value.result
 							if (result !== null) {
 								const done = {
-									...recorded,
+									...recorded.value,
 									outcome: { _tag: "Done", result } as const,
 								}
 								yield* record(done)
-								ready = [...ready, settledOf(done)!]
+								ready = [...ready, settledOf(done, done.outcome)]
 								continue
 							}
 							paused = true
@@ -527,36 +685,51 @@ export const make: Effect.Effect<
 					if (sent.length > 0) yield* store(yield* lease)
 					if (paused) return Option.none()
 					return Option.some(
-						[...ready, ...sent.map((call) => settledOf(call)!)].toSorted(
-							(a, b) => a.index - b.index,
+						Arr.sort(
+							Arr.appendAll(
+								ready,
+								Arr.map(sent, (call) => settledOf(call, call.outcome)),
+							),
+							byIndex,
 						),
 					)
 				})
 			// When the Turn stops, the run keeps the calls that it made so far.
+			// When the run is no longer ours, `own` does not save it.
 			const cancelled = Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				yield* save(
-					position.owner,
-					{
-						...(yield* Ref.get(state)),
-						status: "Cancelled",
-						result: {
-							_tag: "Failed",
-							reason: "Cancelled",
-							message: "The program was stopped.",
-							logs: [],
-						},
-						updatedAt: now,
+				const run: Stored.Run = {
+					...(yield* Ref.get(state)),
+					status: "Cancelled",
+					result: {
+						_tag: "Failed",
+						reason: "Cancelled",
+						message: "The program was stopped.",
+						logs: [],
 					},
-					null,
-				).pipe(Effect.ignore)
+					updatedAt: now,
+				}
+				yield* own(null, () => run).pipe(
+					Background.logFailure(
+						"A stopped Code Mode program could not be saved",
+					),
+				)
 			})
-			const outcome = yield* sandbox
-				.run(
+			// A run with many slow App calls can take longer than its lease, so the lease
+			// grows while the program runs. The heartbeat stops before the last write.
+			const extend = Effect.flatMap(lease, (next) =>
+				own(next, (current) => current),
+			)
+			const outcome = yield* Effect.gen(function* () {
+				yield* Background.repeat(extend, {
+					schedule: Schedule.spaced(Duration.millis(leaseFor(limits) / 3)),
+					message: "The lease of a Code Mode program could not be extended",
+				})
+				return yield* sandbox.run(
 					{
 						code: initial.code,
-						bindings: named.map((entry) => entry.alias),
-						vault: items.map((entry) => ({
+						bindings: Arr.map(named, (entry) => entry.alias),
+						vault: Arr.map(items, (entry) => ({
 							alias: entry.alias,
 							fields: entry.usable.item.fields,
 						})),
@@ -573,7 +746,7 @@ export const make: Effect.Effect<
 							Effect.catch((error) =>
 								Effect.logWarning(
 									"A Code Mode call could not be handled.",
-									error,
+									Cause.fail(error),
 								).pipe(
 									Effect.andThen(Ref.set(broken, true)),
 									Effect.as(Option.none()),
@@ -581,52 +754,29 @@ export const make: Effect.Effect<
 							),
 						),
 				)
-				.pipe(Effect.onInterrupt(() => cancelled))
+			}).pipe(
+				Effect.onInterrupt(() => cancelled),
+				Effect.scoped,
+			)
 			const run = yield* Ref.get(state)
-			const ended = (result: CodeRunsApi.CodeResult): Stored.Run => ({
-				...run,
-				status: result._tag === "Completed" ? "Completed" : "Failed",
-				result,
+			const isBroken = yield* Ref.get(broken)
+			const isMismatch = yield* Ref.get(mismatch)
+			const next = Match.valueTags(outcome, {
+				Done: (outcome) =>
+					ended(run, {
+						_tag: "Completed",
+						value: outcome.value,
+						logs: outcome.logs,
+					}),
+				Failed: (outcome) =>
+					ended(run, {
+						_tag: "Failed",
+						reason: outcome.reason,
+						message: outcome.message,
+						logs: outcome.logs,
+					}),
+				Stopped: () => stopped(run, isBroken, isMismatch),
 			})
-			const next: Stored.Run =
-				outcome._tag === "Done"
-					? ended({
-							_tag: "Completed",
-							value: outcome.value,
-							logs: outcome.logs,
-						})
-					: outcome._tag === "Failed"
-						? ended({
-								_tag: "Failed",
-								reason: outcome.reason,
-								message: outcome.message,
-								logs: outcome.logs,
-							})
-						: (yield* Ref.get(broken))
-							? ended({
-									_tag: "Failed",
-									reason: "Unavailable",
-									message:
-										"OpenBot could not handle an App call of the program.",
-									logs: [],
-								})
-							: (yield* Ref.get(mismatch))
-								? ended({
-										_tag: "Failed",
-										reason: "ReplayMismatch",
-										message:
-											"The program made other App calls than the last time it ran, so OpenBot stopped it.",
-										logs: [],
-									})
-								: run.calls.some((call) => call.outcome._tag === "Waiting")
-									? { ...run, status: "Waiting" }
-									: ended({
-											_tag: "Failed",
-											reason: "Unavailable",
-											message:
-												"OpenBot could not handle an App call of the program.",
-											logs: [],
-										})
 			yield* Ref.set(state, next)
 			yield* store(null)
 			return yield* Ref.get(state)
@@ -640,11 +790,16 @@ export const make: Effect.Effect<
 
 	const start: typeof CodeRuns.Service.start = (input) =>
 		Effect.gen(function* () {
-			const limits = yield* settings
-			// The capability checks read the current Bot from the context too.
+			// A read failure fails the start, so the tool call gets no run that says Code Mode is off.
+			const limits = yield* enabled
+			// The Work belongs to the current Turn of a Bot, and the capability checks read
+			// it from the context too. A program outside of a Turn has no Bot to work for.
 			const work = yield* Effect.serviceOption(Work)
 			const now = yield* Clock.currentTimeMillis
-			const id = Stored.idOf({ ...input.position, callId: input.callId })
+			const id = yield* Stored.idOf(crypto, {
+				...input.position,
+				callId: input.callId,
+			})
 			const fresh: Stored.Run = {
 				id,
 				chat: input.position.chat,
@@ -657,7 +812,7 @@ export const make: Effect.Effect<
 				result: null,
 				createdAt: now,
 				updatedAt: now,
-				seed: randomInt(0, 2 ** 31),
+				seed: yield* crypto.randomIntBetween(0, 2 ** 31, { halfOpen: true }),
 				clock: now,
 				organizationId: Option.match(work, {
 					onNone: () => "",
@@ -689,25 +844,37 @@ export const make: Effect.Effect<
 					0,
 				)).run
 			}
+			const leaseUntil = now + leaseFor(limits.value)
 			const { run, created } = yield* Stored.insert(
 				db,
 				secrets,
 				input.position.owner,
 				fresh,
-				now + leaseFor(limits.value),
+				leaseUntil,
 			)
 			// The same tool call ran before. Keep its run.
 			if (!created) return run
-			return yield* execute(input.position, run, input.bindings, limits.value)
+			return yield* execute(
+				input.position,
+				run,
+				input.bindings,
+				limits.value,
+				leaseUntil,
+			)
 		})
 
 	const resume: typeof CodeRuns.Service.resume = (input) =>
 		Effect.gen(function* () {
-			const limits = yield* settings
+			const read = yield* Effect.result(enabled)
 			const now = yield* Clock.currentTimeMillis
 			const lease =
 				now +
-				leaseFor(Option.getOrElse(limits, () => SettingsApi.codeModeDefaults))
+				leaseFor(
+					pipe(
+						Result.getOrElse(read, () => Option.none()),
+						Option.getOrElse(() => SettingsApi.codeModeDefaults),
+					),
+				)
 			const claimed = yield* Stored.change(
 				db,
 				secrets,
@@ -722,7 +889,7 @@ export const make: Effect.Effect<
 					const decided =
 						input.decision === undefined || input.decision.allowed
 							? current.calls
-							: current.calls.map((call) =>
+							: Arr.map(current.calls, (call) =>
 									call.index === input.decision!.index &&
 									call.outcome._tag === "Waiting"
 										? {
@@ -748,6 +915,10 @@ export const make: Effect.Effect<
 				},
 			)
 			if (Option.isNone(claimed)) return Option.none()
+			// The claim saved the decision. The run stays Running under the lease, so the
+			// sweep of stale runs runs it again when the lease ends.
+			if (Result.isFailure(read)) return yield* read.failure
+			const limits = read.success
 			const run = claimed.value
 			const position: Position = {
 				owner: input.owner,
@@ -771,7 +942,7 @@ export const make: Effect.Effect<
 			const ended = yield* Effect.scoped(
 				Effect.gen(function* () {
 					const bindings = yield* bindingsOf(position)
-					return yield* execute(position, run, bindings, limits.value)
+					return yield* execute(position, run, bindings, limits.value, lease)
 				}),
 			)
 			return Option.some(ended)

@@ -9,16 +9,28 @@ import { Effect, Schema } from "effect"
 import { appInvocations } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 /** The App operations of each owner, kept sealed in Postgres. */
 export type Error =
 	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
-/** Keep the errors that callers handle. Every other storage failure becomes one error. */
-export const failure = (error: unknown) =>
-	error instanceof ChatConflict || error instanceof ExperienceNotFound
-		? error
-		: ExperienceStorageUnavailable.make({})
+/**
+ * Log a storage failure that the caller can not act on, and replace it with
+ * one error. The error goes to the client, so it does not hold the failure.
+ */
+export const unavailable = (message: string) =>
+	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
 const codec = Schema.fromJsonString(AppExecution.Invocation)
+const AadJson = Schema.fromJsonString(
+	Schema.Tuple([
+		Schema.Literal("app-invocation"),
+		Schema.String,
+		Schema.String,
+	]),
+)
+/** The sealed body of an operation opens only with its own owner and ID. */
+const aad = (owner: string, id: string) =>
+	Schema.encodeEffect(AadJson)(["app-invocation", owner, id]).pipe(Effect.orDie)
 type Sealer = typeof Secrets.Service
 
 export const where = (owner: string, id: string) =>
@@ -28,19 +40,18 @@ export const seal = (
 	owner: string,
 	value: AppExecution.Invocation,
 ) =>
-	Schema.encodeEffect(codec)(value).pipe(
-		Effect.flatMap((body) =>
-			secrets.seal(body, JSON.stringify(["app-invocation", owner, value.id])),
-		),
+	Effect.all([Schema.encodeEffect(codec)(value), aad(owner, value.id)]).pipe(
+		Effect.flatMap(([body, data]) => secrets.seal(body, data)),
 	)
 export const open = (
 	secrets: Sealer,
 	row: typeof appInvocations.$inferSelect,
 ) =>
 	Effect.gen(function* () {
-		const value = yield* secrets
-			.open(row.body, JSON.stringify(["app-invocation", row.owner, row.id]))
-			.pipe(Effect.flatMap(Schema.decodeEffect(codec)))
+		const value = yield* aad(row.owner, row.id).pipe(
+			Effect.flatMap((data) => secrets.open(row.body, data)),
+			Effect.flatMap(Schema.decodeEffect(codec)),
+		)
 		return yield* Schema.decodeUnknownEffect(AppExecution.Invocation)({
 			...value,
 			status: row.status,
@@ -68,11 +79,14 @@ export const get = (
 		const row = (yield* db
 			.select()
 			.from(appInvocations)
-			.where(where(owner, id)))[0]
+			.where(where(owner, id))
+			.pipe(unavailable("Could not read an App operation.")))[0]
 		if (row === undefined)
 			return yield* ExperienceNotFound.make({ id: "App operation" })
-		return yield* open(secrets, row)
-	}).pipe(Effect.mapError(failure))
+		return yield* open(secrets, row).pipe(
+			unavailable("Could not open a stored App operation."),
+		)
+	})
 
 export const list = (
 	db: Db.Database,
@@ -88,5 +102,5 @@ export const list = (
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, row)),
 			),
-			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+			unavailable("Could not list App operations."),
 		)

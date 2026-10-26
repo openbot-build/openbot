@@ -1,12 +1,15 @@
 import {
+	Array as Arr,
 	Context,
 	Data,
 	Effect,
 	HashMap,
+	Order,
 	PubSub,
 	Ref,
 	Schema,
 	Stream,
+	pipe,
 } from "effect"
 import type { Duration } from "effect"
 import * as ChatIdentity from "./ChatIdentity.ts"
@@ -50,6 +53,10 @@ export const Record = Schema.Struct({
 })
 export type Record = typeof Record.Type
 export const isTerminal = (status: Status) => status._tag !== "Running"
+const byStart = Order.mapInput(
+	Order.Number,
+	(record: Record) => record.startedAt,
+)
 
 /**
  * A tool annotation. It says how long a call may run before it goes to the
@@ -62,12 +69,12 @@ export class Budget extends Context.Service<
 	Duration.Input | "foreground"
 >()("@openbot-build/core/chat/Operation/Budget") {}
 
-export class NotFound extends Schema.TaggedError<NotFound>()(
-	"OperationNotFound",
-	{
-		id: Id,
-	},
-) {}
+export class NotFound extends Schema.TaggedError<
+	NotFound,
+	{ readonly brand: unique symbol }
+>()("OperationNotFound", {
+	id: Id,
+}) {}
 
 /** Where Operations are kept. Hosts keep them in a database. */
 export interface Store {
@@ -128,9 +135,11 @@ export const memoryStore: Effect.Effect<Store> = Effect.gen(function* () {
 		list: (chat) =>
 			Ref.get(records).pipe(
 				Effect.map((current) =>
-					Array.from(HashMap.values(current))
-						.filter((record) => record.chat === chat)
-						.sort((a, b) => a.startedAt - b.startedAt),
+					pipe(
+						Arr.fromIterable(HashMap.values(current)),
+						Arr.filter((record) => record.chat === chat),
+						Arr.sort(byStart),
+					),
 				),
 			),
 		changes: Stream.fromPubSub(changed),

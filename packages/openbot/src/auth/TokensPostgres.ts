@@ -1,19 +1,23 @@
 import { Authorization, UserTokensApi } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
 import {
+	Array as Arr,
 	Clock,
+	Crypto,
 	DateTime,
 	Effect,
 	Layer,
 	Option,
 	Redacted,
 	Schema,
+	String as Str,
 } from "effect"
+import { Base64Url, Hex } from "effect/encoding"
 import { and, count, eq, sql } from "drizzle-orm"
-import { createHash, randomBytes, randomUUID } from "node:crypto"
 import { tokens } from "../database/Schema.ts"
 import { Tokens } from "./Tokens.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import * as Failures from "../app/Failures.ts"
 import * as Db from "../database/Database.ts"
 
 const day = 24 * 60 * 60 * 1000
@@ -21,30 +25,52 @@ const day = 24 * 60 * 60 * 1000
 const lastUsedResolution = 60 * 1000
 
 const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
-const decodePolicy = Schema.decodeUnknownSync(PolicyJson)
-const encodePolicy = Schema.encodeSync(PolicyJson)
-const view = (row: typeof tokens.$inferSelect): UserTokensApi.Token => ({
-	id: row.id,
-	name: row.name,
-	prefix: row.prefix,
-	policy: decodePolicy(row.policy),
-	createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
-	expiresAt:
-		row.expiresAt === null
-			? null
-			: DateTime.formatIso(DateTime.makeUnsafe(row.expiresAt)),
-	lastUsedAt:
-		row.lastUsedAt === null
-			? null
-			: DateTime.formatIso(DateTime.makeUnsafe(row.lastUsedAt)),
-})
+/** The lock key of the tokens of one member. */
+const LockKey = Schema.fromJsonString(
+	Schema.Tuple([Schema.Literal("tokens"), Schema.String, Schema.String]),
+)
+/** Fails with `TokenStorageUnavailable` in place of a storage failure, and logs the failure. */
+const storageUnavailable = (message: string) =>
+	Failures.replace(message, () =>
+		UserTokensApi.TokenStorageUnavailable.make({}),
+	)
+/** The policy column holds JSON that only this file writes, from a checked policy. */
+const encodePolicy = (policy: typeof PolicyJson.Type) =>
+	Schema.encodeEffect(PolicyJson)(policy).pipe(Effect.orDie)
+const view = (
+	row: typeof tokens.$inferSelect,
+): Effect.Effect<UserTokensApi.Token, UserTokensApi.TokenStorageUnavailable> =>
+	Schema.decodeEffect(PolicyJson)(row.policy).pipe(
+		storageUnavailable("The stored policy of a token does not decode."),
+		Effect.map((policy) => ({
+			id: row.id,
+			name: row.name,
+			prefix: row.prefix,
+			policy,
+			createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
+			expiresAt:
+				row.expiresAt === null
+					? null
+					: DateTime.formatIso(DateTime.makeUnsafe(row.expiresAt)),
+			lastUsedAt:
+				row.lastUsedAt === null
+					? null
+					: DateTime.formatIso(DateTime.makeUnsafe(row.lastUsedAt)),
+		})),
+	)
 
 export const make: Effect.Effect<
 	typeof Tokens.Service,
 	never,
-	PgClient.PgClient
+	PgClient.PgClient | Crypto.Crypto
 > = Effect.gen(function* () {
 	const db = yield* Db.make
+	const crypto = yield* Crypto.Crypto
+	/** The SHA-256 hash of a secret, in hex. Only the hash goes into the database. */
+	const hash = (secret: string) =>
+		crypto
+			.digest("SHA-256", new TextEncoder().encode(secret))
+			.pipe(Effect.orDie, Effect.map(Hex.encode))
 	const owned = (owner: {
 		readonly organizationId: string
 		readonly userId: string
@@ -62,8 +88,13 @@ export const make: Effect.Effect<
 				return yield* db.transaction((tx) =>
 					Effect.gen(function* () {
 						// Create tokens one at a time per member, so concurrent requests keep the limit.
+						const lockKey = yield* Schema.encodeEffect(LockKey)([
+							"tokens",
+							owner.organizationId,
+							owner.userId,
+						]).pipe(Effect.orDie)
 						yield* tx.execute(
-							sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["tokens", owner.organizationId, owner.userId])}, 0))`,
+							sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`,
 						)
 						const [existing] = yield* tx
 							.select({ total: count() })
@@ -75,15 +106,19 @@ export const make: Effect.Effect<
 							})
 						const now = yield* Clock.currentTimeMillis
 						const secret =
-							UserTokensApi.SecretPrefix + randomBytes(32).toString("base64url")
+							UserTokensApi.SecretPrefix +
+							Base64Url.encode(yield* Effect.orDie(crypto.randomBytes(32)))
 						const row = {
-							id: randomUUID(),
+							id: yield* Effect.orDie(crypto.randomUUIDv4()),
 							organizationId: owner.organizationId,
 							userId: owner.userId,
-							name: input.name.trim(),
-							prefix: secret.slice(0, UserTokensApi.SecretPrefix.length + 8),
-							hash: createHash("sha256").update(secret).digest("hex"),
-							policy: encodePolicy(policy),
+							name: Str.trim(input.name),
+							prefix: Str.slice(
+								0,
+								UserTokensApi.SecretPrefix.length + 8,
+							)(secret),
+							hash: yield* hash(secret),
+							policy: yield* encodePolicy(policy),
 							createdAt: now,
 							expiresAt:
 								input.expiresInDays === undefined
@@ -92,14 +127,18 @@ export const make: Effect.Effect<
 							lastUsedAt: null,
 						}
 						yield* tx.insert(tokens).values(row)
-						return { token: view(row), secret }
+						return { token: yield* view(row), secret }
 					}),
 				)
 			}).pipe(
-				Effect.mapError((error) =>
-					error._tag === "TokenLimitReached"
-						? error
-						: UserTokensApi.TokenStorageUnavailable.make({}),
+				// `TokenLimitReached` keeps its meaning.
+				Failures.replaceTag(
+					"EffectDrizzleQueryError",
+					"A token could not be created.",
+					() => UserTokensApi.TokenStorageUnavailable.make({}),
+				),
+				Failures.replaceTag("SqlError", "A token could not be created.", () =>
+					UserTokensApi.TokenStorageUnavailable.make({}),
 				),
 			),
 		list: (owner) =>
@@ -109,8 +148,8 @@ export const make: Effect.Effect<
 				.where(owned(owner))
 				.orderBy(tokens.createdAt, tokens.id)
 				.pipe(
-					Effect.map((rows) => rows.map(view)),
-					Effect.mapError(() => UserTokensApi.TokenStorageUnavailable.make({})),
+					storageUnavailable("The tokens of a member could not be listed."),
+					Effect.flatMap((rows) => Effect.forEach(rows, view)),
 				),
 		revoke: (owner, id) =>
 			db
@@ -118,12 +157,13 @@ export const make: Effect.Effect<
 				.where(and(owned(owner), eq(tokens.id, id)))
 				.returning()
 				.pipe(
-					Effect.mapError(() => UserTokensApi.TokenStorageUnavailable.make({})),
+					storageUnavailable("A token could not be revoked."),
 					Effect.flatMap(([row]) =>
 						row === undefined
 							? Effect.fail(UserTokensApi.TokenNotFound.make({}))
-							: Effect.succeed(view(row)),
+							: Effect.succeed(row),
 					),
+					Effect.flatMap(view),
 				),
 		find: (owner, id) =>
 			db
@@ -131,22 +171,22 @@ export const make: Effect.Effect<
 				.from(tokens)
 				.where(and(owned(owner), eq(tokens.id, id)))
 				.pipe(
-					Effect.map((rows) => Option.map(Option.fromNullishOr(rows[0]), view)),
-					Effect.mapError(() => UserTokensApi.TokenStorageUnavailable.make({})),
+					storageUnavailable("A token could not be read."),
+					Effect.flatMap((rows) =>
+						Effect.transposeOption(Option.map(Arr.head(rows), view)),
+					),
 				),
 		authenticate: (credential) =>
 			Effect.gen(function* () {
 				const secret = Redacted.value(credential)
-				if (!secret.startsWith(UserTokensApi.SecretPrefix))
+				if (!Str.startsWith(UserTokensApi.SecretPrefix)(secret))
 					return yield* CredentialRejected.make({ kind: "token" })
 				const [row] = yield* db
 					.select()
 					.from(tokens)
-					.where(
-						eq(tokens.hash, createHash("sha256").update(secret).digest("hex")),
-					)
+					.where(eq(tokens.hash, yield* hash(secret)))
 					.pipe(
-						Effect.mapError(() =>
+						Failures.replace("The token of a secret could not be read.", () =>
 							AuthUnavailable.make({ dependency: "storage" }),
 						),
 					)
@@ -165,8 +205,9 @@ export const make: Effect.Effect<
 						.set({ lastUsedAt: now })
 						.where(eq(tokens.id, row.id))
 						.pipe(
-							Effect.mapError(() =>
-								AuthUnavailable.make({ dependency: "storage" }),
+							Failures.replace(
+								"The last use time of a token could not be written.",
+								() => AuthUnavailable.make({ dependency: "storage" }),
 							),
 						)
 				return {

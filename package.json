@@ -7,10 +7,12 @@
 	"devDependencies": {
 		"@openbot-build/cli": "workspace:*",
 		"@openbot-build/openbot": "workspace:*",
+		"@effect/platform-node": "4.0.6",
 		"@effect/tsgo": "0.56.0",
 		"@types/node": "26.6.5",
 		"acorn": "8.19.0",
 		"drizzle-kit": "1.0.0-rc.5",
+		"effect": "4.0.6",
 		"tsdown": "0.23.1",
 		"typescript": "7",
 		"vitest": "5.0.5"
@@ -18,7 +20,8 @@
 	"scripts": {
 		"dev": "devenv up",
 		"dev:setup": "dev-setup",
-		"typecheck": "pnpm -r exec tsc -p tsconfig.json --noEmit",
+		"typecheck": "pnpm -r exec tsc -p tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit && pnpm rules",
+		"rules": "node --disable-warning=ExperimentalWarning scripts/effect-rules.ts",
 		"prepare": "effect-tsgo patch --typescript --no-oxlint",
 		"build": "pnpm -r build",
 		"images": "docker buildx bake -f deploy/docker/docker-bake.hcl --load",

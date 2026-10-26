@@ -1,11 +1,12 @@
 import {
-	Array as EffectArray,
+	Array as Arr,
 	HashSet,
 	Cause,
 	Deferred,
 	Effect,
 	Exit,
 	Fiber,
+	FiberSet,
 	Ref,
 	Schema,
 	Scope,
@@ -41,13 +42,22 @@ const allContentTypes = {
 	resource: {},
 }
 
+/** The error reply that the SDK sends to the App. Its message is safe to show. */
+class UiRequestRejected extends Schema.TaggedError<
+	UiRequestRejected,
+	{ readonly brand: unique symbol }
+>()("UiRequestRejected", {
+	message: Schema.String,
+}) {}
+
 const sdk = <A>(call: () => Promise<A>) =>
 	Effect.tryPromise({
 		try: call,
-		catch: () =>
+		catch: (cause) =>
 			Ui.UiError.make({
 				reason: "Protocol",
 				issue: "Apps bridge operation failed",
+				cause,
 			}),
 	})
 
@@ -76,24 +86,28 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 	const actions = yield* HostActions
 	const active = yield* App.ConnectionScopes
 	const parentScope = yield* Effect.scope
-	const context = yield* Effect.context<never>()
-	const run = Effect.runPromiseExitWith(context)
+	// The SDK callbacks start their fibers in this set, so closing the mount scope stops them.
+	const callbacks = yield* FiberSet.make()
+	const run = yield* FiberSet.runtime(callbacks)<never>()
+	const runPromise = yield* FiberSet.runtimePromise(callbacks)<never>()
 	const source: Source = { key: options.client.key, tool: options.tool }
 	const state = yield* Ref.make<State>({ _tag: "Loading" })
 	const result = yield* Ref.make(Option.fromUndefinedOr(options.result))
-	const lock = Semaphore.makeUnsafe(1)
+	const partials = yield* Ref.make<ReadonlyArray<Schema.JsonObject>>([])
+	const lock = yield* Semaphore.make(1)
+	const loading = yield* Semaphore.make(1)
 	let scope: Scope.Closeable | undefined
+	// The UI requests of the current document. Closing its UI scope stops them.
+	let requests: FiberSet.FiberSet | undefined
 	let bridge: AppBridge | undefined
-	let ready = Deferred.makeUnsafe<void, Ui.UiError>()
+	let ready = yield* Deferred.make<void, Ui.UiError>()
 	let args = options.arguments
-	let partials: ReadonlyArray<Schema.JsonObject> = []
 	let cancellation = Option.none<string>()
 	let inputSent = false
 	let resultSent = false
 	let cancellationSent = false
 	let generation = 0
 	let disposed = false
-	let pendingActions = HashSet.empty<Effect.Effect<void>>()
 	let hostContext = options.hostContext ?? {}
 
 	const fail = (error: Ui.UiError) =>
@@ -121,13 +135,12 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 					Effect.gen(function* () {
 						if (bridge === undefined) return
 						const current = bridge
-						for (const arguments_ of partials)
+						for (const arguments_ of yield* Ref.getAndSet(partials, []))
 							yield* sdk(() =>
 								current.sendToolInputPartial({
 									arguments: arguments_,
 								}),
 							)
-						partials = []
 						if (args !== undefined && !inputSent) {
 							const arguments_ = args
 							yield* sdk(() =>
@@ -154,52 +167,50 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		}),
 	)
 	// AppBridge handlers must return a Promise. A rejected Promise is how the SDK
-	// sends an error reply to the App, so this boundary throws a plain Error.
-	const invoke = async <A, E>(
+	// sends an error reply to the App, with the message of the error.
+	const invoke = <A, E>(
 		effect: Effect.Effect<A, E>,
 		signal?: AbortSignal,
-	): Promise<A> => {
-		const currentScope = scope
-		if (disposed || currentScope === undefined) throw new Error("UI is closed")
-		const exit = await run(
+	): Promise<A> =>
+		runPromise(
 			Effect.gen(function* () {
-				const current = yield* Ref.get(state)
-				yield* Match.value(current).pipe(
+				const current = requests
+				if (disposed || current === undefined)
+					return yield* HostActionDenied.make({ action: "UI is closed" })
+				yield* Match.value(yield* Ref.get(state)).pipe(
 					Match.tag("Ready", () => Effect.void),
 					Match.orElse(() =>
 						Effect.fail(HostActionDenied.make({ action: "UI is not ready" })),
 					),
 				)
-				const fiber = yield* Effect.forkIn(effect, currentScope)
-				const interrupt = Fiber.interrupt(fiber).pipe(Effect.asVoid)
-				pendingActions = HashSet.add(pendingActions, interrupt)
+				const fiber = yield* FiberSet.run(current, effect)
 				return yield* Fiber.join(fiber).pipe(
-					Effect.onInterrupt(() => interrupt),
-					Effect.ensuring(
-						Effect.sync(
-							() =>
-								(pendingActions = HashSet.remove(pendingActions, interrupt)),
-						),
-					),
+					Effect.onInterrupt(() => Fiber.interrupt(fiber)),
 				)
-			}),
+			}).pipe(
+				Effect.tapCause((cause) =>
+					Cause.hasInterruptsOnly(cause)
+						? Effect.void
+						: Effect.logDebug("The UI request failed", cause),
+				),
+				// Standard UI errors never include credential details or internal network failures.
+				// An action that the host stops gets the same reply.
+				Effect.catchCause((cause) =>
+					Effect.fail(
+						UiRequestRejected.make({
+							message: Cause.findErrorOption(cause).pipe(
+								Option.filter(Schema.is(HostActionDenied)),
+								Option.match({
+									onNone: () => "Host rejected the UI request",
+									onSome: (denied) => denied.action,
+								}),
+							),
+						}),
+					),
+				),
+			),
 			signal === undefined ? undefined : { signal },
 		)
-		if (Exit.isSuccess(exit)) return exit.value
-		// Standard UI errors never include credential details or internal network failures.
-		throw new Error(
-			Cause.findErrorOption(exit.cause).pipe(
-				Option.filter(
-					(error): error is HostActionDenied =>
-						error instanceof HostActionDenied,
-				),
-				Option.match({
-					onNone: () => "Host rejected the UI request",
-					onSome: (denied) => denied.action,
-				}),
-			),
-		)
-	}
 	const start = Effect.fn("Apps.load")(function* () {
 		if (disposed)
 			return yield* Ui.UiError.make({
@@ -208,14 +219,22 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			})
 		if (scope !== undefined) yield* Scope.close(scope, Exit.void)
 		const id = ++generation
-		ready = Deferred.makeUnsafe<void, Ui.UiError>()
-		inputSent = false
-		resultSent = false
-		cancellationSent = false
-		yield* Ref.set(state, { _tag: "Loading" })
-		let tool:
-			| Effect.Success<ReturnType<UiClient["listTools"]>>["tools"][number]
-			| undefined
+		const initialized = yield* Deferred.make<void, Ui.UiError>()
+		ready = initialized
+		// A flush for the old document can still be running. It holds the lock, so it
+		// cannot mark the input as sent after this reset.
+		yield* lock.withPermit(
+			Effect.gen(function* () {
+				inputSent = false
+				resultSent = false
+				cancellationSent = false
+				yield* Ref.set(state, { _tag: "Loading" })
+			}),
+		)
+		let tool =
+			Option.none<
+				Effect.Success<ReturnType<UiClient["listTools"]>>["tools"][number]
+			>()
 		let cursor: string | undefined
 		let seen = HashSet.empty<string>()
 		do {
@@ -223,7 +242,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 				source: "host",
 				...(cursor === undefined ? {} : { cursor }),
 			})
-			tool = page.tools.find((entry) => entry.name === options.tool)
+			tool = Arr.findFirst(page.tools, (entry) => entry.name === options.tool)
 			cursor = page.nextCursor
 			if (cursor !== undefined && HashSet.has(seen, cursor))
 				return yield* Ui.UiError.make({
@@ -231,13 +250,13 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 					issue: "The App repeated a tool cursor",
 				})
 			if (cursor !== undefined) seen = HashSet.add(seen, cursor)
-		} while (tool === undefined && cursor !== undefined)
-		if (tool === undefined)
+		} while (Option.isNone(tool) && cursor !== undefined)
+		if (Option.isNone(tool))
 			return yield* Ui.UiError.make({
 				reason: "Declaration",
 				issue: "Tool is missing from the bound service",
 			})
-		const uri = yield* ui.toolResourceUri(tool)
+		const uri = yield* ui.toolResourceUri(tool.value)
 		const read = yield* options.client.readResource({ uri }, { source: "host" })
 		const resource = yield* Match.value(read).pipe(
 			Match.tag("Completed", (read) => ui.readResource(uri, read.result)),
@@ -250,8 +269,15 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 				),
 			),
 		)
+		// The UI can close while the service answers. Then no new document starts.
+		if (disposed)
+			return yield* Ui.UiError.make({
+				reason: "Closed",
+				issue: "UI has been closed",
+			})
 		const uiScope = yield* Scope.fork(parentScope)
 		scope = uiScope
+		requests = yield* FiberSet.make().pipe(Scope.provide(uiScope))
 		yield* active.register({
 			key: options.client.key,
 			scope: uiScope,
@@ -367,12 +393,17 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 							Effect.gen(function* () {
 								yield* Ref.set(state, { _tag: "Ready" as const })
 								yield* flush
-								yield* Deferred.succeed(ready, undefined)
+								yield* Deferred.succeed(initialized, undefined)
 							}),
 						),
 						Match.orElse(() => Effect.void),
 					)
-				}).pipe(Effect.catchTag("UiError", fail)),
+				}).pipe(
+					// A flush for a released document must not fail the next one.
+					Effect.catchTag("UiError", (error) =>
+						id === generation ? fail(error) : Effect.void,
+					),
+				),
 			)
 		}
 		const transport = new FrameTransport(peer, window.location.origin)
@@ -413,7 +444,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 						Match.orElse(() => Effect.void),
 					)
 				yield* Deferred.fail(
-					ready,
+					initialized,
 					Ui.UiError.make({
 						reason: "Closed",
 						issue: "UI document was released",
@@ -423,7 +454,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		)
 		yield* sdk(() => current.connect(transport))
 		yield* Effect.forkIn(
-			Deferred.await(ready).pipe(
+			Deferred.await(initialized).pipe(
 				Effect.timeoutOrElse({
 					duration: options.timeoutMs ?? 10_000,
 					orElse: () =>
@@ -443,16 +474,20 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			parentScope,
 		)
 	})
-	const load = start().pipe(
-		Effect.catch((error) =>
-			fail(
-				Match.value(error).pipe(
-					Match.tag("UiError", (error) => error),
-					Match.orElse(() =>
-						Ui.UiError.make({
-							reason: "Resource",
-							issue: "Could not load UI from the bound service",
-						}),
+	// One load runs at a time, so a reload cannot leave an old document open.
+	const load = loading.withPermit(
+		start().pipe(
+			Effect.catch((error) =>
+				fail(
+					Match.value(error).pipe(
+						Match.tag("UiError", (error) => error),
+						Match.orElse((cause) =>
+							Ui.UiError.make({
+								reason: "Resource",
+								issue: "Could not load UI from the bound service",
+								cause,
+							}),
+						),
 					),
 				),
 			),
@@ -479,9 +514,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		result: Ref.get(result),
 		close,
 		inputPartial: (value) =>
-			Effect.sync(() => {
-				partials = EffectArray.append(partials, value)
-			}).pipe(Effect.andThen(flush)),
+			Ref.update(partials, Arr.append(value)).pipe(Effect.andThen(flush)),
 		input: (value) =>
 			Effect.sync(() => {
 				args = value
@@ -493,10 +526,9 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 				cancellation = Option.some(reason)
 			}).pipe(
 				Effect.andThen(
-					Effect.forEach(pendingActions, (interrupt) => interrupt, {
-						discard: true,
-						concurrency: "unbounded",
-					}),
+					Effect.suspend(() =>
+						requests === undefined ? Effect.void : FiberSet.clear(requests),
+					),
 				),
 				Effect.andThen(flush),
 			),

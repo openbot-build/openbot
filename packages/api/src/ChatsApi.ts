@@ -6,7 +6,7 @@ import { BotErrors, BotId } from "./BotsApi.ts"
 import { Delegation, DelegationId } from "./DelegationsApi.ts"
 import { FileId, FileInvalid } from "./FilesApi.ts"
 import { PlanApproval } from "./PlanApproval.ts"
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import { Sse } from "effect/encoding"
 import {
 	HttpApi,
@@ -181,7 +181,7 @@ export const ChatResponseEvent = Schema.Union([
 export type ChatResponseEvent = typeof ChatResponseEvent.Type
 /** The `type` of each Responses event, such as `response.created`. */
 export const ChatResponseEventType = Schema.Literals(
-	ChatResponseEvent.members.map((member) => member.fields.type.literal),
+	Arr.map(ChatResponseEvent.members, (member) => member.fields.type.literal),
 )
 export type ChatResponseEventType = typeof ChatResponseEventType.Type
 
@@ -310,29 +310,29 @@ export const MessageReceipt = Schema.Struct({
 })
 export type MessageReceipt = typeof MessageReceipt.Type
 
-export class ChatNotFound extends Schema.TaggedError<ChatNotFound>()(
-	"ChatNotFound",
-	{ chat: Chat.Id },
-) {}
-export class ChatExecutionUnavailable extends Schema.TaggedError<ChatExecutionUnavailable>()(
-	"ChatExecutionUnavailable",
-	{ chat: Chat.Id },
-) {}
-export class ChatConflict extends Schema.TaggedError<ChatConflict>()(
-	"ChatConflict",
-	{ message: Schema.String },
-) {}
-export class ChatStorageUnavailable extends Schema.TaggedError<ChatStorageUnavailable>()(
-	"ChatStorageUnavailable",
-	{},
-) {}
-export class ChatModelInvalid extends Schema.TaggedError<ChatModelInvalid>()(
-	"ChatModelInvalid",
-	{
-		reason: Config.SelectionReason,
-		message: Schema.String,
-	},
-) {}
+export class ChatNotFound extends Schema.TaggedError<
+	ChatNotFound,
+	{ readonly brand: unique symbol }
+>()("ChatNotFound", { chat: Chat.Id }) {}
+export class ChatExecutionUnavailable extends Schema.TaggedError<
+	ChatExecutionUnavailable,
+	{ readonly brand: unique symbol }
+>()("ChatExecutionUnavailable", { chat: Chat.Id }) {}
+export class ChatConflict extends Schema.TaggedError<
+	ChatConflict,
+	{ readonly brand: unique symbol }
+>()("ChatConflict", { message: Schema.String }) {}
+export class ChatStorageUnavailable extends Schema.TaggedError<
+	ChatStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("ChatStorageUnavailable", {}) {}
+export class ChatModelInvalid extends Schema.TaggedError<
+	ChatModelInvalid,
+	{ readonly brand: unique symbol }
+>()("ChatModelInvalid", {
+	reason: Config.SelectionReason,
+	message: Schema.String,
+}) {}
 
 export const ChatOperationErrors = [
 	ChatNotFound.pipe(HttpApiSchema.status(404)),
@@ -340,7 +340,7 @@ export const ChatOperationErrors = [
 	ChatStorageUnavailable.pipe(HttpApiSchema.status(503)),
 	ChatModelInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
-const chatParams = { chatId: Chat.Id.check(Schema.isMinLength(1)) }
+export const chatParams = { chatId: Chat.Id.check(Schema.isMinLength(1)) }
 export const ChatModels = Schema.Struct({
 	selected: Schema.optionalKey(Config.Selection),
 	providers: Schema.Array(Config.Provider),
@@ -432,10 +432,12 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			},
 			success: Schema.Array(ChatSummary),
 			error: ChatOperationErrors,
-		}).annotate(
-			OpenApi.Description,
-			"Lists your Chats. Without `kind`, it lists direct Chats, channel Chats and live Chats.",
-		),
+		})
+			.annotate(Required, [own("read", "Chat")])
+			.annotate(
+				OpenApi.Description,
+				"Lists your Chats. Without `kind`, it lists direct Chats, channel Chats and live Chats.",
+			),
 		HttpApiEndpoint.get("getChat", "/v1/chats/:chatId", {
 			params: chatParams,
 			success: ChatView,

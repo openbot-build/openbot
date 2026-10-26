@@ -1,22 +1,38 @@
-import type { JsonSchema } from "effect"
+import {
+	Array as Arr,
+	Predicate,
+	Record as Rec,
+	String as Str,
+	pipe,
+	type JsonSchema,
+} from "effect"
 import type { Named } from "./CodeRuns.ts"
 
 /** Writes a TypeScript type for a JSON Schema. Deep or unknown parts become `unknown`. */
 const typeOf = (schema: unknown, depth: number): string => {
-	if (typeof schema !== "object" || schema === null || depth > 4)
-		return "unknown"
-	const value = schema as Record<string, unknown>
-	if ("const" in value) return JSON.stringify(value["const"])
-	if (Array.isArray(value["enum"]))
-		return value["enum"].map((entry) => JSON.stringify(entry)).join(" | ")
-	const union = value["anyOf"] ?? value["oneOf"]
-	if (Array.isArray(union))
-		return union.map((entry) => typeOf(entry, depth + 1)).join(" | ")
-	const type = value["type"]
-	if (Array.isArray(type))
-		return type
-			.map((entry) => typeOf({ ...value, type: entry }, depth))
-			.join(" | ")
+	if (!Predicate.isObject(schema) || depth > 4) return "unknown"
+	if ("const" in schema) return JSON.stringify(schema["const"])
+	const choices = schema["enum"]
+	if (Arr.isArray(choices))
+		return pipe(
+			choices,
+			Arr.map((entry) => JSON.stringify(entry)),
+			Arr.join(" | "),
+		)
+	const union = schema["anyOf"] ?? schema["oneOf"]
+	if (Arr.isArray(union))
+		return pipe(
+			union,
+			Arr.map((entry) => typeOf(entry, depth + 1)),
+			Arr.join(" | "),
+		)
+	const type = schema["type"]
+	if (Arr.isArray(type))
+		return pipe(
+			type,
+			Arr.map((entry) => typeOf({ ...schema, type: entry }, depth)),
+			Arr.join(" | "),
+		)
 	switch (type) {
 		case "string":
 			return "string"
@@ -28,34 +44,34 @@ const typeOf = (schema: unknown, depth: number): string => {
 		case "null":
 			return "null"
 		case "array":
-			return "Array<" + typeOf(value["items"], depth + 1) + ">"
+			return "Array<" + typeOf(schema["items"], depth + 1) + ">"
 		case "object":
 		case undefined: {
-			const properties = value["properties"]
-			if (typeof properties !== "object" || properties === null)
+			const properties = schema["properties"]
+			if (!Predicate.isObject(properties))
 				return type === undefined ? "unknown" : "Record<string, unknown>"
-			const required = Array.isArray(value["required"])
-				? (value["required"] as ReadonlyArray<unknown>)
-				: []
-			const fields = Object.entries(properties).map(([key, field]) => {
+			const listed = schema["required"]
+			const required = Arr.isArray(listed) ? listed : []
+			const fields = Arr.map(Rec.toEntries(properties), ([key, field]) => {
 				const description =
-					typeof field === "object" &&
-					field !== null &&
-					typeof (field as Record<string, unknown>)["description"] === "string"
+					Predicate.hasProperty(field, "description") &&
+					Predicate.isString(field.description)
 						? "/** " +
-							String((field as Record<string, unknown>)["description"])
-								.replaceAll("*/", "* /")
-								.slice(0, 200) +
+							pipe(
+								field.description,
+								Str.replaceAll("*/", "* /"),
+								Str.slice(0, 200),
+							) +
 							" */ "
 						: ""
 				return (
 					description +
 					JSON.stringify(key) +
-					(required.includes(key) ? ": " : "?: ") +
+					(Arr.contains(required, key) ? ": " : "?: ") +
 					typeOf(field, depth + 1)
 				)
 			})
-			return "{ " + fields.join("; ") + " }"
+			return "{ " + Arr.join(fields, "; ") + " }"
 		}
 		default:
 			return "unknown"
@@ -72,33 +88,38 @@ type ReadResult = Record<string, unknown>
  * Each error has \`details.operationId\`.
  */`
 
+/** The group of an alias, such as `calendar` for `calendar.list_events`. */
+const groupOf = (alias: string) => Arr.headNonEmpty(Str.split(alias, "."))
+
 /** The TypeScript declarations of the bindings that match the filter. */
 export const declarations = (
 	named: ReadonlyArray<Named>,
 	filter: (entry: Named) => boolean,
 ): string => {
-	const chosen = named.filter(filter)
-	const groups = [...new Set(chosen.map(({ alias }) => alias.split(".")[0]!))]
-	const members = groups.map((group) => {
-		const functions = chosen
-			.filter(({ alias }) => alias.split(".")[0] === group)
-			.map(({ alias, binding }) => {
-				const description = (
+	const chosen = Arr.filter(named, filter)
+	// Group names never look like numbers (`slug` puts "_" before a leading digit),
+	// so the record keeps the order of first appearance.
+	const members = pipe(
+		Arr.groupBy(chosen, ({ alias }) => groupOf(alias)),
+		Rec.toEntries,
+		Arr.map(([group, entries]) => {
+			const functions = Arr.map(entries, ({ alias, binding }) => {
+				const description = pipe(
 					binding.source.appName +
-					" / " +
-					binding.source.connectionName +
-					" / " +
-					binding.source.name +
-					". " +
-					binding.description
+						" / " +
+						binding.source.connectionName +
+						" / " +
+						binding.source.name +
+						". " +
+						binding.description,
+					Str.replaceAll("*/", "* /"),
+					Str.slice(0, 1000),
 				)
-					.replaceAll("*/", "* /")
-					.slice(0, 1000)
 				return (
 					"\t\t/** " +
 					description +
 					" */\n\t\t" +
-					alias.split(".")[1] +
+					pipe(alias, Str.slice(group.length + 1)) +
 					"(args: " +
 					typeOf(binding.schema satisfies JsonSchema.JsonSchema, 0) +
 					"): Promise<" +
@@ -106,15 +127,22 @@ export const declarations = (
 					">"
 				)
 			})
-		return "\t" + group + ": {\n" + functions.join("\n") + "\n\t}"
-	})
-	return [
-		header,
-		"declare const apps: {\n" +
-			[
-				...members,
-				'\t/** Calls a binding by its full name, such as "calendar.list_events". */\n\tcall(binding: string, args: Record<string, unknown>): Promise<unknown>',
-			].join("\n") +
-			"\n}",
-	].join("\n\n")
+			return "\t" + group + ": {\n" + Arr.join(functions, "\n") + "\n\t}"
+		}),
+	)
+	return Arr.join(
+		[
+			header,
+			"declare const apps: {\n" +
+				Arr.join(
+					Arr.append(
+						members,
+						'\t/** Calls a binding by its full name, such as "calendar.list_events". */\n\tcall(binding: string, args: Record<string, unknown>): Promise<unknown>',
+					),
+					"\n",
+				) +
+				"\n}",
+		],
+		"\n\n",
+	)
 }

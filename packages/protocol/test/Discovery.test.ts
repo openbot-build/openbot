@@ -1,6 +1,13 @@
-// Tests are entry points, so they provide their own Layers.
-// @effect-diagnostics strictEffectProvide:off
-import { Array as EffectArray, Effect, Layer, Stream, Match } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Fiber,
+	Layer,
+	Match,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
 import {
 	CatalogDiscovery,
 	Discovery,
@@ -8,23 +15,27 @@ import {
 	Network,
 } from "@openbot-build/protocol"
 import { assert, it } from "@effect/vitest"
+import { TestClock } from "effect/testing"
 
 // These tests build Discovery instances with Effect.provide.
 
-const card = (url: string): Document.ServerCard => ({
-	$schema: Document.cardSchemaUrl,
-	name: "example.test/same-name",
-	version: "1.0.0",
-	description: "Example",
-	remotes: [
-		{
-			type: "streamable-http",
-			url,
-			supportedProtocolVersions: [Document.protocolVersion],
-		},
-	],
-	_meta: { "example.test/extra": { kept: true } },
-})
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+
+const card = (url: string): Document.ServerCard =>
+	Document.ServerCard.make({
+		$schema: Document.cardSchemaUrl,
+		name: "example.test/same-name",
+		version: "1.0.0",
+		description: "Example",
+		remotes: [
+			{
+				type: "streamable-http",
+				url,
+				supportedProtocolVersions: [Document.protocolVersion],
+			},
+		],
+		_meta: { "example.test/extra": { kept: true } },
+	})
 const json = (
 	url: string,
 	value: unknown,
@@ -74,7 +85,7 @@ it.effect(
 			let reads: ReadonlyArray<string> = []
 			const net = network({
 				get: ({ url }) => {
-					reads = EffectArray.append(reads, url)
+					reads = Arr.append(reads, url)
 					if (url === "https://pub.example/apps/calendar?edition=team")
 						return {
 							url,
@@ -120,30 +131,31 @@ it.effect(
 					assert.strictEqual(candidate.sources[0]?.originalInput, input)
 					return candidate
 				}),
-				Match.orElse(() => {
-					throw new Error("Expected a single candidate")
-				}),
+				Match.orElse(() => assert.fail("Expected a single candidate")),
 			)
 			assert.strictEqual(
 				candidate.cardUrl,
 				"https://cards.example/a?edition=team",
 			)
 			assert.deepStrictEqual(
-				candidate.sources.map((s) => s.role),
+				Arr.map(candidate.sources, (s) => s.role),
 				["input", "page", "catalog", "card", "endpoint"],
 			)
 			assert.strictEqual(
 				candidate.sources.at(-1)?.url,
 				"https://api.example/mcp",
 			)
-			assert.strictEqual(reads.filter((u) => u === candidate.cardUrl).length, 1)
+			assert.strictEqual(
+				Arr.filter(reads, (u) => u === candidate.cardUrl).length,
+				1,
+			)
 			assert.deepStrictEqual(
 				yield* Discovery.resolve(input).pipe(Effect.provide(discovery)),
 				result,
 			)
 			yield* Discovery.resolve("pub.example").pipe(Effect.provide(discovery))
 			assert.ok(
-				reads.includes("https://pub.example/.well-known/ai-catalog.json"),
+				Arr.contains(reads, "https://pub.example/.well-known/ai-catalog.json"),
 			)
 			assert.strictEqual(
 				yield* CatalogDiscovery.inputLink("pub.example:8443"),
@@ -155,10 +167,8 @@ it.effect(
 					Effect.provide(discovery),
 				),
 			)
-			assert.ok(
-				noDeclaration instanceof Discovery.DiscoveryError &&
-					noDeclaration.reason === "NoDeclaration",
-			)
+			assert.ok(noDeclaration._tag === "DiscoveryError")
+			assert.strictEqual(noDeclaration.reason, "NoDeclaration")
 			assert.strictEqual(reads.length, before + 1)
 			assert.deepStrictEqual(
 				CatalogDiscovery.catalogLinks({
@@ -177,7 +187,7 @@ it.effect(
 		Effect.gen(function* () {
 			const net = network({
 				get: ({ url }) =>
-					url.endsWith("catalog")
+					Str.endsWith("catalog")(url)
 						? json(url, {
 								specVersion: "1.0",
 								entries: [
@@ -210,7 +220,7 @@ it.effect(
 							})
 						: json(
 								url,
-								url.endsWith("incompatible")
+								Str.endsWith("incompatible")(url)
 									? {
 											...card("https://api.example/mcp"),
 											remotes: [],
@@ -231,9 +241,7 @@ it.effect(
 			assert.strictEqual(result._tag, "Multiple")
 			const candidates = Match.value(result).pipe(
 				Match.tag("Multiple", ({ candidates }) => candidates),
-				Match.orElse(() => {
-					throw new Error("Expected multiple candidates")
-				}),
+				Match.orElse(() => assert.fail("Expected multiple candidates")),
 			)
 			assert.strictEqual(candidates.length, 2)
 			assert.notStrictEqual(candidates[0].cardUrl, candidates[1].cardUrl)
@@ -241,7 +249,19 @@ it.effect(
 				"example.test/extra": { kept: true },
 			})
 			assert.strictEqual(result.issues.length, 2)
-			assert.ok(result.issues.some((i) => i.reason.includes("stable Card URL")))
+			assert.ok(
+				Arr.some(result.issues, (i) =>
+					Str.includes("stable Card URL")(i.reason),
+				),
+			)
+			assert.ok(
+				Arr.some(
+					result.issues,
+					(i) =>
+						i.url === "https://cards.example/incompatible" &&
+						Str.includes("No HTTPS Streamable HTTP endpoint")(i.reason),
+				),
+			)
 			const noServices = network({
 				get: ({ url }) => json(url, { specVersion: "1.0", entries: [] }),
 			})
@@ -255,10 +275,8 @@ it.effect(
 					),
 				),
 			)
-			assert.ok(
-				error instanceof Discovery.DiscoveryError &&
-					error.reason === "NoUsableServices",
-			)
+			assert.ok(error._tag === "DiscoveryError")
+			assert.strictEqual(error.reason, "NoUsableServices")
 		}),
 )
 
@@ -302,9 +320,7 @@ it.effect(
 			)
 			const candidate = Match.value(result).pipe(
 				Match.tag("Single", ({ candidate }) => candidate),
-				Match.orElse(() => {
-					throw new Error("Expected a candidate")
-				}),
+				Match.orElse(() => assert.fail("Expected a candidate")),
 			)
 			assert.strictEqual(candidate.endpoints[0]?.requirements.length, 2)
 			const missing = yield* Effect.flip(
@@ -314,7 +330,8 @@ it.effect(
 					values: {},
 				}),
 			)
-			assert.match(String(missing), /DiscoveryError/)
+			assert.ok(missing._tag === "DiscoveryError")
+			assert.strictEqual(missing.reason, "Configuration")
 			const config = yield* CatalogDiscovery.configureEndpoint({
 				candidate,
 				index: 0,
@@ -325,7 +342,7 @@ it.effect(
 			})
 			assert.strictEqual(config.url, "https://api.example/team-a/mcp")
 			assert.strictEqual(config.headers["x-api-key"], "private-secret")
-			assert.ok(!JSON.stringify(candidate).includes("private-secret"))
+			assert.ok(!Str.includes("private-secret")(yield* encodeJson(candidate)))
 			const wrongChoice = yield* Effect.flip(
 				CatalogDiscovery.configureEndpoint({
 					candidate,
@@ -336,7 +353,12 @@ it.effect(
 					},
 				}),
 			)
-			assert.match(String(wrongChoice), /DiscoveryError/)
+			assert.ok(wrongChoice._tag === "DiscoveryError")
+			assert.strictEqual(wrongChoice.reason, "Configuration")
+			assert.deepStrictEqual(
+				Arr.map(wrongChoice.issues, (issue) => issue.fieldPath),
+				["variable:tenant"],
+			)
 		}),
 )
 
@@ -349,7 +371,7 @@ it.effect(
 			const alice = network({
 				owner: "alice",
 				get: ({ url, headers }) => {
-					seen = EffectArray.append(seen, headers)
+					seen = Arr.append(seen, headers)
 					if (headers?.["if-none-match"] === '"v1"' && !modified)
 						return {
 							url,
@@ -399,7 +421,7 @@ it.effect(
 			)
 			const previous = {
 				...changed,
-				endpoints: changed.endpoints.map((e) => ({
+				endpoints: Arr.map(changed.endpoints, (e) => ({
 					...e,
 					remote: { ...e.remote, url: "https://api.example/mcp" },
 				})),
@@ -441,65 +463,148 @@ it.effect(
 					),
 				),
 			)
-			assert.match(String(denied), /DiscoveryError/)
+			assert.ok(denied._tag === "DiscoveryError")
+			assert.strictEqual(denied.reason, "Http")
+			assert.strictEqual(denied.issues[0]?.reason, "HTTP 403")
 			assert.strictEqual(anonymousCalls, 1)
 		}),
 )
 
-it("connection hints ignore variable key order and descriptions but keep choices", () => {
-	const remote: Document.Remote = {
-		type: "streamable-http",
-		url: "https://api.example/mcp",
-		variables: {
-			account: { default: "one", choices: ["one", "two"] },
-			mode: { default: "read" },
-		},
-	}
-	const previous: Discovery.Candidate = {
-		cardUrl: "https://cards.example/a",
-		card: card(remote.url),
-		endpoints: [{ index: 0, remote, requirements: [] }],
-		sources: [],
-	}
-	const reordered = {
-		...remote,
-		variables: {
-			mode: { default: "read", description: "New display text" },
-			account: { choices: ["one", "two"], default: "one" },
-		},
-	}
-	assert.strictEqual(
-		CatalogDiscovery.compare({
-			previous,
-			current: {
-				...previous,
-				endpoints: [{ index: 0, remote: reordered, requirements: [] }],
-			},
-		})._tag,
-		"DescriptionUpdated",
-	)
-	for (const account of [
-		{ default: "two", choices: ["one", "two"] },
-		{ default: "one", choices: ["two", "one"] },
-	]) {
-		assert.strictEqual(
-			CatalogDiscovery.compare({
-				previous,
-				current: {
-					...previous,
-					endpoints: [
-						{
-							index: 0,
-							remote: {
-								...reordered,
-								variables: { ...reordered.variables, account },
-							},
-							requirements: [],
-						},
-					],
+it.effect(
+	"connection hints ignore variable key order and descriptions but keep choices",
+	() =>
+		Effect.sync(() => {
+			const remote = Document.Remote.make({
+				type: "streamable-http",
+				url: "https://api.example/mcp",
+				variables: {
+					account: { default: "one", choices: ["one", "two"] },
+					mode: { default: "read" },
 				},
-			})._tag,
-			"NeedsRevalidation",
-		)
-	}
-})
+			})
+			const previous = Discovery.Candidate.make({
+				cardUrl: "https://cards.example/a",
+				card: card(remote.url),
+				endpoints: [{ index: 0, remote, requirements: [] }],
+				sources: [],
+			})
+			const reordered = {
+				...remote,
+				variables: {
+					mode: { default: "read", description: "New display text" },
+					account: { choices: ["one", "two"], default: "one" },
+				},
+			}
+			assert.strictEqual(
+				CatalogDiscovery.compare({
+					previous,
+					current: {
+						...previous,
+						endpoints: [
+							Discovery.Endpoint.make({
+								index: 0,
+								remote: reordered,
+								requirements: [],
+							}),
+						],
+					},
+				})._tag,
+				"DescriptionUpdated",
+			)
+			for (const account of [
+				{ default: "two", choices: ["one", "two"] },
+				{ default: "one", choices: ["two", "one"] },
+			]) {
+				assert.strictEqual(
+					CatalogDiscovery.compare({
+						previous,
+						current: {
+							...previous,
+							endpoints: [
+								Discovery.Endpoint.make({
+									index: 0,
+									remote: {
+										...reordered,
+										variables: { ...reordered.variables, account },
+									},
+									requirements: [],
+								}),
+							],
+						},
+					})._tag,
+					"NeedsRevalidation",
+				)
+			}
+		}),
+)
+
+it.effect(
+	"Discovery stops at its link and document limits, and a stalled host fails with Timeout",
+	() =>
+		Effect.gen(function* () {
+			const catalogUrl = "https://pub.example/catalog"
+			const net = network({
+				get: ({ url }) =>
+					url === catalogUrl
+						? json(url, {
+								specVersion: "1.0",
+								entries: Arr.makeBy(70, (index) => ({
+									identifier: `card-${index}`,
+									type: Document.cardMediaType,
+									url: `https://cards.example/${index}`,
+								})),
+							})
+						: json(url, card("https://api.example/mcp")),
+			})
+			const result = yield* Discovery.resolve(catalogUrl).pipe(
+				Effect.provide(
+					CatalogDiscovery.layer().pipe(
+						Layer.provide(net),
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			)
+			const candidates = Match.value(result).pipe(
+				Match.tag("Multiple", ({ candidates }) => candidates),
+				Match.orElse(() => assert.fail("Expected multiple candidates")),
+			)
+			// The Catalog is the first of the 64 documents, so 63 Cards are left.
+			assert.strictEqual(candidates.length, 63)
+			assert.ok(
+				Arr.some(
+					result.issues,
+					(i) =>
+						i.url === catalogUrl && Str.includes("skipped 6 links")(i.reason),
+				),
+			)
+			assert.ok(
+				Arr.some(
+					result.issues,
+					(i) =>
+						i.url === "https://cards.example/63" &&
+						Str.includes("at most 64 documents")(i.reason),
+				),
+			)
+			const stalled = Layer.succeed(Network.Network, {
+				identity: { scope: "public", owner: "anonymous" },
+				readDocument: () => Effect.never,
+				execute: () => Effect.never,
+			})
+			const fiber = yield* Discovery.resolve(catalogUrl).pipe(
+				Effect.provide(
+					CatalogDiscovery.layer().pipe(
+						Layer.provide(stalled),
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+				Effect.flip,
+				Effect.forkChild,
+			)
+			yield* TestClock.adjust("60 seconds")
+			const failure = yield* Fiber.join(fiber)
+			assert.ok(
+				Schema.is(Network.NetworkError)(failure) &&
+					failure.reason === "Timeout",
+			)
+		}),
+)

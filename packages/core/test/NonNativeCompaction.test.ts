@@ -1,11 +1,11 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
-	Array as EffectArray,
-	Data,
+	Array as Arr,
 	Effect,
 	Option,
+	Schema,
 	Stream,
+	String as Str,
 	Predicate,
 } from "effect"
 import { AiError, Model as AiModel, Prompt, Response, Toolkit } from "effect/ai"
@@ -38,6 +38,8 @@ const request = {
 	instructions: Prompt.make([{ role: "system", content: "task instructions" }]),
 	toolkit: Toolkit.empty,
 }
+/** The JSON text of a value, so a test can match a pattern in it. */
+const json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 const conversation = Prompt.fromMessages([
 	text("old goal"),
 	text("old decisions"),
@@ -65,7 +67,7 @@ const populate = (runtimeStore: ChatStore.Store, chat: Chat.Id) =>
 				Effect.succeed([
 					undefined,
 					Option.some({
-						append: conversation.content.map((message, index) => ({
+						append: Arr.map(conversation.content, (message, index) => ({
 							id: Item.Id.make(`message-${index}`),
 							content: Prompt.fromMessages([message]),
 						})),
@@ -155,11 +157,9 @@ it.effect(
 					LanguageModelTest({
 						streamText: () => Stream.empty,
 						generateText: (options) =>
-							Effect.sync(() => {
-								sources = EffectArray.append(
-									sources,
-									JSON.stringify(options.prompt),
-								)
+							Effect.gen(function* () {
+								const source = yield* json(options.prompt).pipe(Effect.orDie)
+								sources = Arr.append(sources, source)
 								assert.strictEqual(options.toolChoice, "none")
 								assert.strictEqual(options.tools.length, 0)
 								return [
@@ -194,8 +194,9 @@ it.effect(
 		const layer = LanguageModelTest({
 			streamText: () => Stream.empty,
 			generateText: (options) =>
-				Effect.sync(() => {
-					sources = EffectArray.append(sources, JSON.stringify(options.prompt))
+				Effect.gen(function* () {
+					const source = yield* json(options.prompt).pipe(Effect.orDie)
+					sources = Arr.append(sources, source)
 					return [
 						Response.makePart("text", { text: `summary-${sources.length}` }),
 						finish(),
@@ -220,7 +221,9 @@ it.effect(
 				targetTokens: 80,
 			})
 			assert.strictEqual(second.prompt.content.length, 9)
-			assert.match(sources[1]!, /summary-1|original-2|original-3/)
+			assert.match(sources[1]!, /summary-1/)
+			assert.match(sources[1]!, /original-2/)
+			assert.match(sources[1]!, /original-3/)
 			assert.notMatch(sources[1]!, /original-0|original-1|new-2/)
 			const unchanged = yield* SummaryCompaction.compact({
 				prompt: Prompt.fromMessages([text("short")]),
@@ -245,7 +248,7 @@ it.effect(
 			id: summarySelection.provider,
 			model: (selection) =>
 				Effect.sync(() => {
-					selections = EffectArray.append(selections, selection)
+					selections = Arr.append(selections, selection)
 					return Model.make({
 						provider: selection.provider,
 						model: selection.model,
@@ -271,14 +274,10 @@ it.effect(
 										).prompt.content.length,
 										0,
 									)
-									assert.match(
-										JSON.stringify(options.prompt),
-										/old goal|old decisions/,
-									)
-									assert.notMatch(
-										JSON.stringify(options.prompt),
-										/recent request/,
-									)
+									const source = yield* json(options.prompt).pipe(Effect.orDie)
+									assert.match(source, /old goal/)
+									assert.match(source, /old decisions/)
+									assert.notMatch(source, /recent request/)
 									summaries++
 									return [
 										Response.makePart("text", { text: "preserved summary" }),
@@ -292,13 +291,10 @@ it.effect(
 		return Effect.gen(function* () {
 			const counter = {
 				count: (input: ContextCompaction.Request) =>
-					Effect.sync(() => {
-						counts = EffectArray.append(counts, input)
-						return JSON.stringify(input.window.prompt).includes(
-							"preserved summary",
-						)
-							? 20
-							: 90
+					Effect.gen(function* () {
+						counts = Arr.append(counts, input)
+						const text = yield* json(input.window.prompt).pipe(Effect.orDie)
+						return Str.includes("preserved summary")(text) ? 20 : 90
 					}),
 				compact: () => Effect.die("NonNative must not call the native service"),
 			}
@@ -344,7 +340,10 @@ it.effect(
 	},
 )
 
-class BuildFailure extends Data.TaggedError("BuildFailure")<{}> {}
+class BuildFailure extends Schema.TaggedError<
+	BuildFailure,
+	{ readonly brand: unique symbol }
+>()("BuildFailure", {}) {}
 
 for (const scenario of [
 	"missing-provider",
@@ -359,15 +358,17 @@ for (const scenario of [
 		`non-native ${scenario} leaves the Item log and the window uncommitted`,
 		() => {
 			let calls = 0
-			const failure = new BuildFailure()
+			const failure = BuildFailure.make({})
 			return Effect.gen(function* () {
 				const counter = {
 					count: (input: ContextCompaction.Request) =>
-						Effect.succeed(
-							JSON.stringify(input.window.prompt).includes("summary") &&
-								scenario !== "missed-target"
-								? 10
-								: 90,
+						json(input.window.prompt).pipe(
+							Effect.orDie,
+							Effect.map((text) =>
+								Str.includes("summary")(text) && scenario !== "missed-target"
+									? 10
+									: 90,
+							),
 						),
 					compact: () => Effect.die("must not call native compaction"),
 				}
@@ -418,6 +419,10 @@ for (const scenario of [
 				})
 				const before = yield* populate(runtimeStore, chat)
 				const log = yield* runtimeStore.items(chat)
+				const competing = ContextWindow.append(
+					before.state.conversation.context,
+					"competing change",
+				)
 				if (scenario === "head-conflict")
 					race = runtimeStore
 						.modifyEffect({
@@ -426,8 +431,12 @@ for (const scenario of [
 								Effect.succeed([
 									undefined,
 									Option.some({
-										chat: {
-											settings: { ...current.chat.settings, mode: "plan" },
+										value: {
+											...current.state,
+											conversation: {
+												...current.state.conversation,
+												context: competing,
+											},
 										},
 									}),
 								] as const),
@@ -446,14 +455,16 @@ for (const scenario of [
 							: scenario === "missed-target"
 								? "target-not-reached"
 								: scenario === "head-conflict"
-									? "reference-conflict"
+									? "head-conflict"
 									: "request-failed",
 					)
 				}
 				const after = yield* runtimeStore.read(chat)
 				assert.deepStrictEqual(
 					after.state.conversation.context,
-					before.state.conversation.context,
+					scenario === "head-conflict"
+						? competing
+						: before.state.conversation.context,
 				)
 				assert.deepStrictEqual(yield* runtimeStore.items(chat), log)
 				if (scenario !== "head-conflict")

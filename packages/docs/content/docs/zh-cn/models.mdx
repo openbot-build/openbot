@@ -328,10 +328,13 @@ OpenBot 的通知，例如一个委派的结果，仍然会进入它所在 Chat 
 | `models`    | 要显示的模型，是 `Config.Model` 值。                             |
 | `resolve`   | 一个函数，接收一个选择，返回一个带有 `LanguageModel` 的 Effect。 |
 
+`defaultModel`
+选项指定其中一个模型。当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。只有模拟的平台会设置它，例如开发环境或测试。在真实的平台上，每个 Bot 都指定自己的模型。
+
 这个示例提供一个 Anthropic 模型，密钥来自你程序的环境：
 
 ```ts
-import { NodeRuntime } from "@effect/platform-node"
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	AnthropicProvider,
@@ -388,8 +391,8 @@ NodeRuntime.runMain(
 							),
 			}
 			return yield* Layer.launch(
-				Server.layer({ ...settings, builtinModels }).pipe(
-					Layer.provide(FetchHttpClient.layer),
+				Server.layerLive({ ...settings, builtinModels }).pipe(
+					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 				),
 			)
 		}),
@@ -450,4 +453,5 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
 ```
 
 开发入口通过 `builtinModels`
-提供这些模型，所以开发平台的每个组织都可以使用它们。生产程序永远不会使用它们。
+提供这些模型，所以开发平台的每个组织都可以使用它们。它把 `mock-text` 作为
+`defaultModel`，所以当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。生产程序永远不会使用它们。

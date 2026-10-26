@@ -1,5 +1,5 @@
 import { Chat, ChatStore } from "@openbot-build/core"
-import { Array, Clock, Effect, Option, Schema } from "effect"
+import { Array as Arr, Cause, Clock, Effect, Option, Schema } from "effect"
 import {
 	and,
 	asc,
@@ -22,6 +22,17 @@ import { databaseError, decode } from "./ChatEncoding.ts"
 type Database = Db.Database
 const parse = decode(Schema.fromJsonString(Schema.Json))
 const decodeRef = decode(Schema.fromJsonString(Chat.Ref))
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+const stringify = (value: Schema.Json) =>
+	encodeJson(value).pipe(
+		Effect.mapError((error) =>
+			ChatStore.ChatStoreError.make({
+				reason: "encode-failed",
+				message: "The Chat data does not encode as JSON",
+				issue: error.issue,
+			}),
+		),
+	)
 
 /** The fields of a record that the table copies into its own columns. */
 const Columns = Schema.Struct({
@@ -37,12 +48,12 @@ const Columns = Schema.Struct({
 		[chatHostId]: Schema.Struct({ bot: Schema.String, kind: Schema.String }),
 	}),
 })
-const columnsOf = (ref: Schema.Json) =>
+const columnsOf = (ref: Schema.Json, chat: Chat.Id) =>
 	Effect.gen(function* () {
-		const record = yield* decode(Columns)(ref)
+		const record = yield* decode(Columns)(ref, chat)
 		const host = record.business[chatHostId]
 		if (host === undefined)
-			return yield* new ChatStore.ChatStoreError({
+			return yield* ChatStore.ChatStoreError.make({
 				reason: "reference-conflict",
 				message: "The Chat revision is out of date",
 			})
@@ -67,14 +78,14 @@ export const persistence = (
 			.from(chats)
 			.where(and(eq(chats.namespace, namespace), eq(chats.id, chat)))
 			.pipe(
-				Effect.map(Array.head),
+				Effect.map(Arr.head),
 				Effect.flatMap(
 					Option.match({
 						onNone: () => Effect.succeedNone,
 						onSome: (row) =>
 							Effect.all({
-								ref: parse(row.body),
-								state: parse(row.state),
+								ref: parse(row.body, chat),
+								state: parse(row.state, chat),
 							}).pipe(Effect.asSome),
 					}),
 				),
@@ -112,7 +123,7 @@ export const persistence = (
 			.limit(query.limit ?? Number.MAX_SAFE_INTEGER)
 			.pipe(
 				Effect.flatMap((rows) =>
-					Effect.forEach(rows, (row) => parse(row.value)),
+					Effect.forEach(rows, (row) => parse(row.value, chat)),
 				),
 				Effect.mapError(databaseError),
 			),
@@ -144,7 +155,7 @@ export const persistence = (
 				)
 				.orderBy(asc(chatTurns.position))
 				.limit(query.limit ?? Number.MAX_SAFE_INTEGER)
-			return yield* Effect.forEach(rows, (row) => parse(row.value))
+			return yield* Effect.forEach(rows, (row) => parse(row.value, chat))
 		}).pipe(Effect.mapError(databaseError)),
 	turn: (chat, turn) =>
 		db
@@ -158,11 +169,11 @@ export const persistence = (
 				),
 			)
 			.pipe(
-				Effect.map(Array.head),
+				Effect.map(Arr.head),
 				Effect.flatMap(
 					Option.match({
 						onNone: () => Effect.succeedNone,
-						onSome: (row) => parse(row.value).pipe(Effect.asSome),
+						onSome: (row) => parse(row.value, chat).pipe(Effect.asSome),
 					}),
 				),
 				Effect.mapError(databaseError),
@@ -180,10 +191,11 @@ export const save = (
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
-				const columns = yield* columnsOf(delta.ref)
+				const columns = yield* columnsOf(delta.ref, Chat.Id.make(delta.chat))
 				const now = yield* Clock.currentTimeMillis
+				const state = yield* stringify(delta.state ?? null)
 				const values = {
-					body: JSON.stringify(delta.ref),
+					body: yield* stringify(delta.ref),
 					bot: columns.bot,
 					kind: columns.kind,
 					status: columns.status,
@@ -201,7 +213,7 @@ export const save = (
 								.values({
 									namespace,
 									id: delta.chat,
-									state: JSON.stringify(delta.state ?? null),
+									state,
 									createdAt: columns.createdAt,
 									...values,
 								})
@@ -211,9 +223,7 @@ export const save = (
 								.update(chats)
 								.set({
 									...values,
-									...(delta.state === undefined
-										? {}
-										: { state: JSON.stringify(delta.state) }),
+									...(delta.state === undefined ? {} : { state }),
 								})
 								.where(
 									and(
@@ -224,41 +234,42 @@ export const save = (
 								)
 								.returning({ id: chats.id })
 				if (written.length !== 1)
-					return yield* new ChatStore.ChatStoreError({
+					return yield* ChatStore.ChatStoreError.make({
 						reason: "reference-conflict",
 						message: "The Chat revision is out of date",
 					})
-				const items = delta.items.map((item) => ({
-					namespace,
-					chat: delta.chat,
-					seq: item.seq,
-					id: item.id,
-					turn: item.turn,
-					value: JSON.stringify(item.value),
-				}))
+				const items = yield* Effect.forEach(delta.items, (item) =>
+					Effect.map(stringify(item.value), (value) => ({
+						namespace,
+						chat: delta.chat,
+						seq: item.seq,
+						id: item.id,
+						turn: item.turn,
+						value,
+					})),
+				)
 				if (items.length > 0) yield* tx.insert(chatItems).values(items)
 				// The files that the new Items name stay while this Chat lives.
-				const used = [
-					...new Set(items.flatMap((item) => fileIdsIn(item.value))),
-				]
+				const used = Arr.dedupe(
+					Arr.flatMap(items, (item) => fileIdsIn(item.value)),
+				)
 				if (used.length > 0)
 					yield* tx
 						.insert(fileRefs)
-						.values(used.map((file) => ({ file, namespace, chat: delta.chat })))
+						.values(
+							Arr.map(used, (file) => ({ file, namespace, chat: delta.chat })),
+						)
 						.onConflictDoNothing()
-				if (delta.turn !== undefined)
+				if (delta.turn !== undefined) {
+					const value = yield* stringify(delta.turn.value)
 					yield* tx
 						.insert(chatTurns)
-						.values({
-							namespace,
-							chat: delta.chat,
-							id: delta.turn.id,
-							value: JSON.stringify(delta.turn.value),
-						})
+						.values({ namespace, chat: delta.chat, id: delta.turn.id, value })
 						.onConflictDoUpdate({
 							target: [chatTurns.namespace, chatTurns.chat, chatTurns.id],
-							set: { value: JSON.stringify(delta.turn.value) },
+							set: { value },
 						})
+				}
 			}),
 		)
 		.pipe(Effect.mapError(databaseError))
@@ -341,7 +352,7 @@ export const direct = (
 		)
 		.pipe(
 			Effect.map((rows) =>
-				Option.map(Array.head(rows), (row) => Chat.Id.make(row.id)),
+				Option.map(Arr.head(rows), (row) => Chat.Id.make(row.id)),
 			),
 			Effect.mapError(databaseError),
 		)
@@ -396,30 +407,26 @@ export const needingSweep = (
 		.limit(500)
 		.pipe(
 			Effect.flatMap((rows) =>
-				Effect.forEach(rows, (row) =>
-					decodeRef(row.body).pipe(
-						Effect.map((ref) => ({
-							namespace: row.namespace,
-							id: Chat.Id.make(row.id),
-							ref,
-						})),
-					),
-				),
+				Effect.forEach(rows, (row) => {
+					const id = Chat.Id.make(row.id)
+					return decodeRef(row.body, id).pipe(
+						Effect.map((ref) =>
+							Option.some<Swept>({ namespace: row.namespace, id, ref }),
+						),
+						// One bad row must not stop the sweep of the Chats of every namespace.
+						Effect.catchTag("ChatStoreError", (error) =>
+							Effect.logError(
+								"A stored Chat does not decode, so the sweep skips it",
+								Cause.fail(error),
+							).pipe(
+								Effect.annotateLogs({ namespace: row.namespace, chat: id }),
+								Effect.as(Option.none<Swept>()),
+							),
+						),
+					)
+				}),
 			),
-			Effect.mapError(databaseError),
-		)
-
-/** The Chats of a namespace whose Turn says that it runs. */
-export const running = (
-	db: Database,
-	namespace: string,
-): Effect.Effect<ReadonlyArray<Chat.Id>, ChatStore.ChatStoreError> =>
-	db
-		.select({ id: chats.id })
-		.from(chats)
-		.where(and(eq(chats.namespace, namespace), eq(chats.status, "Running")))
-		.pipe(
-			Effect.map((rows) => rows.map((row) => Chat.Id.make(row.id))),
+			Effect.map(Arr.getSomes),
 			Effect.mapError(databaseError),
 		)
 
@@ -428,15 +435,18 @@ export const ref = (
 	db: Database,
 	namespace: string,
 	id: Chat.Id,
-): Effect.Effect<Chat.Ref | undefined, ChatStore.ChatStoreError> =>
+): Effect.Effect<Option.Option<Chat.Ref>, ChatStore.ChatStoreError> =>
 	db
 		.select({ body: chats.body })
 		.from(chats)
 		.where(and(eq(chats.namespace, namespace), eq(chats.id, id)))
 		.pipe(
-			Effect.flatMap((rows) =>
-				Effect.forEach(rows.slice(0, 1), (row) => decodeRef(row.body)),
+			Effect.map(Arr.head),
+			Effect.flatMap(
+				Option.match({
+					onNone: () => Effect.succeedNone,
+					onSome: (row) => decodeRef(row.body, id).pipe(Effect.asSome),
+				}),
 			),
-			Effect.map((refs) => refs[0]),
 			Effect.mapError(databaseError),
 		)

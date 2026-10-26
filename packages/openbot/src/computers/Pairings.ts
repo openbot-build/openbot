@@ -1,17 +1,26 @@
-import {
-	createHash,
-	randomBytes,
-	randomInt,
-	timingSafeEqual,
-} from "node:crypto"
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API to compare secrets in constant time.
+import { timingSafeEqual } from "node:crypto"
 import { type Caller, ComputersApi } from "@openbot-build/api"
+import { PgClient } from "@effect/sql-pg"
 import { and, count, eq, gt, lt } from "drizzle-orm"
-import { Clock, Context, Effect, Layer } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
+import { Base64Url, Hex } from "effect/encoding"
+import * as Background from "../app/Background.ts"
+import * as Failures from "../app/Failures.ts"
 import * as Db from "../database/Database.ts"
 import { computerPairings } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
-import { Computers, type Failure } from "./Computers.ts"
+import { Computers, type Failure, hashToken } from "./Computers.ts"
 
 /** A pairing code works this long. */
 export const lifetimeMs = 10 * 60 * 1000
@@ -21,23 +30,15 @@ export const pollInterval = 3
 export const openLimit = 1000
 
 /** Letters and digits that people do not mix up, such as no `O` and `0`. */
-const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-
-const sha = (value: string) => createHash("sha256").update(value).digest("hex")
-
-/** A code like `KDTW-7Q3M`. */
-const newCode = () => {
-	let code = ""
-	for (let index = 0; index < 8; index++)
-		code += alphabet[randomInt(alphabet.length)]
-	return code.slice(0, 4) + "-" + code.slice(4)
-}
+const alphabet = Str.split("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", "")
 
 /** People may type the code in small letters or without the dash. */
 export const normalize = (code: string) =>
-	code.toUpperCase().replaceAll(/[^A-Z0-9]/g, "")
+	pipe(code, Str.toUpperCase, Str.replaceAll(/[^A-Z0-9]/g, ""))
 
 const binding = (id: string) => `openbot_computer_pairings:${id}:token`
+
+const decodeComputerId = Schema.decodeUnknownEffect(ComputersApi.ComputerId)
 
 /**
  * Pairings of the machines of people. A machine starts one without a key. A person
@@ -71,8 +72,7 @@ export class Pairings extends Context.Service<
 			input: ComputersApi.ApprovePairingRequest,
 		) => Effect.Effect<
 			ComputersApi.Computer,
-			Failure | ComputersApi.PairingInvalid,
-			AuthorizationServices
+			Failure | ComputersApi.PairingInvalid
 		>
 		readonly deny: (
 			code: string,
@@ -87,22 +87,45 @@ export class Pairings extends Context.Service<
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
+	const sql = yield* PgClient.PgClient
 	const secrets = yield* Secrets
 	const computers = yield* Computers
-	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(
-			Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
+	const crypto = yield* Crypto.Crypto
+	const stored = Failures.replace("The pairing store failed", () =>
+		ComputersApi.ComputersUnavailable.make({}),
+	)
+	// OpenBot needs secure random numbers and SHA-256 to run, so a failure here is a defect.
+	const randomBytes = (size: number) =>
+		crypto.randomBytes(size).pipe(Effect.orDie)
+	const sha = (value: string) => hashToken(crypto, value)
+	/** A code like `KDTW-7Q3M`. */
+	const newCode = crypto
+		.randomIntBetween(0, alphabet.length, { halfOpen: true })
+		.pipe(
+			Effect.replicateEffect(8),
+			Effect.map((picks) =>
+				pipe(
+					picks,
+					Arr.map((index) => Arr.getUnsafe(alphabet, index)),
+					Arr.chunksOf(4),
+					Arr.map(Arr.join("")),
+					Arr.join("-"),
+				),
+			),
 		)
-	/** A pairing that still waits for a person. */
-	const waiting = (code: string) =>
+	/**
+	 * A pairing that still waits for a person. With `lock`, the row stays locked
+	 * until the open transaction ends.
+	 */
+	const waiting = (code: string, lock = false) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
-			const row = (yield* stored(
-				db
-					.select()
-					.from(computerPairings)
-					.where(eq(computerPairings.codeHash, sha(normalize(code)))),
-			))[0]
+			const codeHash = yield* sha(normalize(code))
+			const query = db
+				.select()
+				.from(computerPairings)
+				.where(eq(computerPairings.codeHash, codeHash))
+			const row = (yield* stored(lock ? query.for("update") : query))[0]
 			if (row === undefined || row.status !== "waiting" || row.expiresAt <= now)
 				return yield* ComputersApi.PairingInvalid.make({})
 			return row
@@ -118,17 +141,22 @@ export const make = Effect.gen(function* () {
 						.where(gt(computerPairings.expiresAt, now)),
 				)
 				// Starting needs no key, so a limit keeps the table small.
-				if ((open[0]?.value ?? 0) >= openLimit)
+				const waitingNow = open[0]?.value ?? 0
+				if (waitingNow >= openLimit) {
+					yield* Effect.logWarning(
+						"Too many Computer pairings wait at the same time.",
+					).pipe(Effect.annotateLogs({ open: waitingNow, limit: openLimit }))
 					return yield* ComputersApi.ComputersUnavailable.make({})
-				const id = "cpa_" + randomBytes(16).toString("hex")
-				const code = newCode()
-				const secret = "ocp_" + randomBytes(32).toString("base64url")
+				}
+				const id = "cpa_" + Hex.encode(yield* randomBytes(16))
+				const code = yield* newCode
+				const secret = "ocp_" + Base64Url.encode(yield* randomBytes(32))
 				const expiresAt = now + lifetimeMs
 				yield* stored(
 					db.insert(computerPairings).values({
 						id,
-						codeHash: sha(normalize(code)),
-						secretHash: sha(secret),
+						codeHash: yield* sha(normalize(code)),
+						secretHash: yield* sha(secret),
 						machineId: input.machineId,
 						hostname: input.hostname,
 						os: input.os,
@@ -157,7 +185,7 @@ export const make = Effect.gen(function* () {
 				if (row === undefined)
 					return yield* ComputersApi.PairingInvalid.make({})
 				const expected = Buffer.from(row.secretHash, "hex")
-				const given = Buffer.from(sha(secret), "hex")
+				const given = Buffer.from(yield* sha(secret), "hex")
 				if (!timingSafeEqual(expected, given))
 					return yield* ComputersApi.PairingInvalid.make({})
 				if (row.status === "waiting" && row.expiresAt > now)
@@ -168,32 +196,44 @@ export const make = Effect.gen(function* () {
 					row.computerId === null
 				)
 					return yield* ComputersApi.PairingInvalid.make({})
+				// A bad stored ID fails here, before the token goes out.
+				const computer = yield* stored(decodeComputerId(row.computerId))
 				const token = yield* stored(secrets.open(row.token, binding(id)))
-				// The token goes out only once.
-				yield* stored(
+				// The token goes out only once, so only the poll that marks the pairing used gives it.
+				const claimed = yield* stored(
 					db
 						.update(computerPairings)
 						.set({ status: "used", token: null })
-						.where(eq(computerPairings.id, id)),
+						.where(
+							and(
+								eq(computerPairings.id, id),
+								eq(computerPairings.status, "approved"),
+							),
+						)
+						.returning({ id: computerPairings.id }),
 				)
+				if (claimed.length === 0)
+					return yield* ComputersApi.PairingInvalid.make({})
 				return {
 					_tag: "Approved",
-					computer: ComputersApi.ComputerId.make(row.computerId),
+					computer,
 					token,
 				} as const
 			}),
 		get: (code) =>
 			Effect.map(waiting(code), (row) => ({
-				code: code.toUpperCase(),
+				code: Str.toUpperCase(code),
 				hostname: row.hostname,
 				os: row.os,
 				arch: row.arch,
 				desktop: row.desktop,
 				expiresAt: row.expiresAt,
 			})),
+		// The lock makes a second approval of the same code wait, and then it sees
+		// that the pairing does not wait any more. So only one pair gives a token.
 		approve: (caller, code, input) =>
 			Effect.gen(function* () {
-				const row = yield* waiting(code)
+				const row = yield* waiting(code, true)
 				const { computer, token } = yield* computers.pair(caller, {
 					machineId: row.machineId,
 					name: input.name ?? row.hostname,
@@ -218,16 +258,30 @@ export const make = Effect.gen(function* () {
 						),
 				)
 				return computer
-			}),
+			}).pipe(
+				sql.withTransaction,
+				Failures.replaceTag("SqlError", "The pairing transaction failed", () =>
+					ComputersApi.ComputersUnavailable.make({}),
+				),
+			),
 		deny: (code) =>
 			Effect.gen(function* () {
 				const row = yield* waiting(code)
-				yield* stored(
+				// An approval may come between the read and this update. It wins.
+				const denied = yield* stored(
 					db
 						.update(computerPairings)
 						.set({ status: "denied" })
-						.where(eq(computerPairings.id, row.id)),
+						.where(
+							and(
+								eq(computerPairings.id, row.id),
+								eq(computerPairings.status, "waiting"),
+							),
+						)
+						.returning({ id: computerPairings.id }),
 				)
+				if (denied.length === 0)
+					return yield* ComputersApi.PairingInvalid.make({})
 			}),
 		removeOld: Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
@@ -235,7 +289,9 @@ export const make = Effect.gen(function* () {
 			yield* db
 				.delete(computerPairings)
 				.where(lt(computerPairings.expiresAt, now - 24 * 60 * 60 * 1000))
-		}).pipe(Effect.ignore),
+		}).pipe(
+			Background.logFailure("OpenBot could not remove old Computer pairings"),
+		),
 	})
 })
 export const layer = Layer.effect(Pairings, make)

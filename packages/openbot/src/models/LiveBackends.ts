@@ -1,6 +1,7 @@
 import type { Live, Model, Provider } from "@openbot-build/core"
 import type { ModelProvidersApi } from "@openbot-build/api"
 import {
+	Array as Arr,
 	Context,
 	HashMap,
 	Layer,
@@ -39,7 +40,7 @@ export class LiveBackends extends Context.Service<
 /** The backends, one for each provider kind. A later backend of the same kind wins. */
 export const layer = (backends: ReadonlyArray<LiveBackend>) => {
 	const map = HashMap.fromIterable(
-		backends.map((backend) => [backend.kind, backend] as const),
+		Arr.map(backends, (backend) => [backend.kind, backend] as const),
 	)
 	return Layer.succeed(LiveBackends, {
 		get: (kind) => HashMap.get(map, kind),
@@ -47,8 +48,3 @@ export const layer = (backends: ReadonlyArray<LiveBackend>) => {
 }
 
 export const empty = layer([])
-
-export const find = (
-	backends: Option.Option<typeof LiveBackends.Service>,
-	kind: ModelProvidersApi.ProviderKind,
-) => Option.flatMap(backends, (service) => service.get(kind))

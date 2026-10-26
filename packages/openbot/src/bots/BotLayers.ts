@@ -20,28 +20,29 @@ import * as Signals from "./Signals.ts"
 /**
  * The Bot services: records, Bots, memory, delegations and their limits, Grants, Rules, the judge,
  * requests, the capability gate, the approvals of tool calls, the Bot plugin and the work
- * plugin. The coordinator is separate, because it needs the Chat runtimes.
+ * plugin. The coordinator is separate, because it needs the Chat runtimes. The host gives the
+ * helper models (`Judge.HelperModel`).
  */
-export const layer = <R>(options: {
-	readonly helper: Layer.Layer<Judge.HelperModel, never, R>
-}) =>
-	Layer.mergeAll(BotPlugin.layer, WorkPlugin.layer, Approvals.layer).pipe(
-		Layer.provideMerge(OpenWorkCount.layer),
-		Layer.provideMerge(Reminders.layer),
-		Layer.provideMerge(Limits.layer),
-		Layer.provideMerge(Gate.layer),
-		Layer.provideMerge(Requests.layer),
-		Layer.provideMerge(MemoryBot.layer),
-		Layer.provideMerge(
-			Layer.mergeAll(
-				Judge.layer,
-				Grants.layer,
-				Rules.layer,
-				Delegations.layer,
-				BotMemories.layer,
-				Bots.layer,
-			),
+export const layer = Layer.mergeAll(
+	BotPlugin.layer,
+	WorkPlugin.layer,
+	Approvals.layer,
+).pipe(
+	Layer.provideMerge(OpenWorkCount.layer),
+	Layer.provideMerge(Reminders.layer),
+	Layer.provideMerge(Limits.layer),
+	Layer.provideMerge(Gate.layer),
+	Layer.provideMerge(Requests.layer),
+	Layer.provideMerge(MemoryBot.layer),
+	Layer.provideMerge(
+		Layer.mergeAll(
+			Judge.layer,
+			Grants.layer,
+			Rules.layer,
+			Delegations.layer,
+			BotMemories.layer,
+			Bots.layer,
 		),
-		Layer.provideMerge(options.helper),
-		Layer.provideMerge(Layer.merge(BotRecords.layer, Signals.layer)),
-	)
+	),
+	Layer.provideMerge(Layer.merge(BotRecords.layer, Signals.layer)),
+)

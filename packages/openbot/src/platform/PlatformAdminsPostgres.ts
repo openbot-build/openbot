@@ -1,5 +1,5 @@
 import { PlatformApi } from "@openbot-build/api"
-import { Clock, DateTime, Effect, Layer } from "effect"
+import { Array as Arr, Cause, Clock, DateTime, Effect, Layer } from "effect"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { platformAdmins } from "../database/Schema.ts"
 import {
@@ -17,6 +17,12 @@ const view = (
 	addedAt: DateTime.formatIso(DateTime.makeUnsafe(row.addedAt)),
 })
 
+const unavailable = (cause: unknown) =>
+	PlatformAdminsUnavailable.make({ cause })
+/** A row that must be in the database is not there. */
+const missing = (what: string) =>
+	unavailable(new Cause.NoSuchElementError(what))
+
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 
@@ -25,10 +31,7 @@ export const make = Effect.gen(function* () {
 			.select()
 			.from(platformAdmins)
 			.orderBy(asc(platformAdmins.email))
-			.pipe(
-				Effect.map((rows) => rows.map(view)),
-				Effect.mapError(() => PlatformAdminsUnavailable.make({})),
-			),
+			.pipe(Effect.map(Arr.map(view)), Effect.mapError(unavailable)),
 		add: (input) =>
 			Effect.gen(function* () {
 				const email = normalizeEmail(input)
@@ -41,13 +44,15 @@ export const make = Effect.gen(function* () {
 					.select()
 					.from(platformAdmins)
 					.where(eq(platformAdmins.email, email))
-				if (row === undefined) return yield* PlatformAdminsUnavailable.make({})
+				// A remove at the same time can delete the row.
+				if (row === undefined)
+					return yield* missing(
+						"The new platform admin is not in the database.",
+					)
 				return view(row)
 			}).pipe(
-				Effect.mapError((error) =>
-					error._tag === "PlatformAdminsUnavailable"
-						? error
-						: PlatformAdminsUnavailable.make({}),
+				Effect.catchTag("EffectDrizzleQueryError", (error) =>
+					Effect.fail(unavailable(error)),
 				),
 			),
 		remove: (input) =>
@@ -59,7 +64,7 @@ export const make = Effect.gen(function* () {
 							sql`SELECT pg_advisory_xact_lock(hashtextextended('openbot-platform-admins', 0))`,
 						)
 						const rows = yield* tx.select().from(platformAdmins)
-						if (!rows.some((row) => row.email === email))
+						if (!Arr.some(rows, (row) => row.email === email))
 							return yield* PlatformApi.PlatformAdminNotFound.make({ email })
 						if (rows.length === 1)
 							return yield* PlatformApi.LastPlatformAdmin.make({})
@@ -69,11 +74,8 @@ export const make = Effect.gen(function* () {
 					}),
 				)
 				.pipe(
-					Effect.mapError((error) =>
-						error._tag === "PlatformAdminNotFound" ||
-						error._tag === "LastPlatformAdmin"
-							? error
-							: PlatformAdminsUnavailable.make({}),
+					Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+						Effect.fail(unavailable(error)),
 					),
 				),
 		check: (account) =>
@@ -97,7 +99,7 @@ export const make = Effect.gen(function* () {
 					)
 					.returning({ email: platformAdmins.email })
 				return claimed.length > 0
-			}).pipe(Effect.mapError(() => PlatformAdminsUnavailable.make({}))),
+			}).pipe(Effect.mapError(unavailable)),
 	})
 })
 

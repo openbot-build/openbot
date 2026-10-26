@@ -31,6 +31,33 @@ description: OpenBot 如何记录失败，以及如何把它们发送到你自�
 
 日志中还有失败的原因。原因中可能包含错误消息和其他私密数据。
 
+`503`
+的原因常常是一个内部失败，比如数据库错误。OpenBot 不会把内部失败发送给客户端。它会先把它写进一行级别为
+`Warn`
+的日志，并带上原因和它在代码中发生的位置。一个请求的每一行日志都和这个请求的错误日志有相同的
+`requestId`。用它可以找到请求失败的原因。
+
+Turn 失败时，客户端只得到一条简短的消息。模型错误，比如对模型来说太大的输入，会保留它的消息，代码是
+`model_error`。其他所有失败，比如数据库错误，代码是
+`internal_error`，消息是固定的文字。完整的原因在一行级别为 `Warn`、消息为
+`A Turn failed` 的日志中。它和错误日志有相同的 `chatId` 和 `turnId`。
+
+---
+
+## 后台工作
+
+OpenBot 也会在后台做一些工作。比如，它会触发到时间的 Trigger，删除旧文件，暂停空闲的 Computer，为
+[App Index](/zh-cn/docs/app-index)
+检查 App，并监听设置的修改。它还会在委派的工作到达时间限制时暂停它，发送提醒，发送 Channel 的消息，并监听来自它的其他实例的调用。
+
+这项工作的某一次运行失败时，OpenBot 会写一行级别为 `Warn`
+的日志，并带上原因。然后它会在下一次的时间再运行这项工作。工作不会停止。这些日志行的级别是
+`Warn`，不是
+`Error`，因为工作还会继续。有几个步骤常常因为无害的原因失败，比如另一个实例正在处理的Chat。下一次运行会再做它们，所以它们的日志行级别是
+`Debug`。
+
+服务器停止时，后台工作也会停止。这不会作为失败记录。
+
 ---
 
 ## 把错误发送到你自己的服务
@@ -40,7 +67,7 @@ description: OpenBot 如何记录失败，以及如何把它们发送到你自�
 来保留其他日志器。在服务器外部提供它，这样它会一直保持打开，直到服务器关闭。
 
 ```ts
-import { NodeRuntime } from "@effect/platform-node"
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -61,7 +88,9 @@ NodeRuntime.runMain(
 	Effect.gen(function* () {
 		const settings = yield* EnvironmentConfiguration.load
 		return yield* Layer.launch(
-			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+			Server.layerLive(settings).pipe(
+				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+			),
 		)
 	}).pipe(Effect.provide(alerts)),
 )

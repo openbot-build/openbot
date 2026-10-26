@@ -1,6 +1,8 @@
-import { Context, Effect, Layer, Option } from "effect"
+import { Array as Arr, Context, Effect, Layer, Option } from "effect"
 import { dual } from "effect/Function"
 
+import type * as Chat from "../chat/Chat.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
 import * as Config from "./Config.ts"
 
 /** Works out the total capacity, usable input and compaction threshold from the catalog. */
@@ -59,26 +61,33 @@ export const selectionProblem: {
 		selection: Config.Selection,
 	): Option.Option<SelectionProblem> => {
 		if (
-			!catalog.providers.some((provider) => provider.id === selection.provider)
+			!Arr.some(
+				catalog.providers,
+				(provider) => provider.id === selection.provider,
+			)
 		)
 			return Option.some({
 				reason: "provider-not-found",
 				message: "The provider does not exist",
 			})
-		const model = catalog.models.find(
+		const model = Arr.findFirst(
+			catalog.models,
 			(model) =>
 				model.provider === selection.provider && model.id === selection.model,
 		)
-		if (model === undefined)
+		if (Option.isNone(model))
 			return Option.some({
 				reason: "model-not-found",
 				message: "The model does not exist",
 			})
 		if (
 			(selection.reasoningEffort !== undefined &&
-				!model.reasoningEfforts.includes(selection.reasoningEffort)) ||
+				!Arr.contains(
+					model.value.reasoningEfforts,
+					selection.reasoningEffort,
+				)) ||
 			(selection.serviceTier !== undefined &&
-				!model.serviceTiers.includes(selection.serviceTier))
+				!Arr.contains(model.value.serviceTiers, selection.serviceTier))
 		)
 			return Option.some({
 				reason: "unsupported-option",
@@ -96,7 +105,7 @@ export const modelConfiguration = <P>(
 			view.chat.settings.model === undefined
 				? Effect.fail(
 						Config.ModelConfigurationError.make({
-							reason: "unavailable",
+							reason: "missing",
 							message: "No model is selected for the current Chat",
 						}),
 					)
@@ -125,7 +134,8 @@ export const modelConfiguration = <P>(
 	listProviders: Effect.succeed(input.providers),
 	listModels: (provider) =>
 		Effect.succeed(
-			input.models.filter(
+			Arr.filter(
+				input.models,
 				(model) => provider === undefined || model.provider === provider,
 			),
 		),
@@ -170,27 +180,28 @@ export const layerModelConfiguration: {
 	) => Layer.succeed(tag, modelConfiguration(input)),
 )
 
+const executionModeMessages = {
+	ChatNotFound: "The Chat does not exist",
+	ChatConflict: "Another change to the Chat came first",
+	ChatStoreError: "The Chat store is unavailable",
+} as const
+
+const toExecutionModeError = (
+	error: Chat.ChatNotFound | Chat.Conflict | ChatStore.ChatStoreError,
+) =>
+	Config.ExecutionModeError.make({
+		reason: error._tag === "ChatNotFound" ? "chat-not-found" : "unavailable",
+		message: executionModeMessages[error._tag],
+		cause: error,
+	})
+
 export const layerExecutionMode = <P>(
 	input: Config.ExecutionModeOptions<P>,
 ) => {
 	const operations = executionMode(input)
 	return Layer.succeed(Config.ExecutionMode, {
-		get: operations.get.pipe(
-			Effect.mapError((error) =>
-				Config.ExecutionModeError.make({
-					reason: "chat-not-found",
-					message: error.toString(),
-				}),
-			),
-		),
+		get: operations.get.pipe(Effect.mapError(toExecutionModeError)),
 		set: (mode) =>
-			operations.set(mode).pipe(
-				Effect.mapError((error) =>
-					Config.ExecutionModeError.make({
-						reason: "unavailable",
-						message: error.toString(),
-					}),
-				),
-			),
+			operations.set(mode).pipe(Effect.mapError(toExecutionModeError)),
 	})
 }

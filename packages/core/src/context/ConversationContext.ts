@@ -31,23 +31,23 @@ export class Compaction extends Data.TaggedClass(
 	readonly afterTokens: number
 }> {}
 
-export class ConversationContextError extends Schema.TaggedError<ConversationContextError>()(
-	"ConversationContextError",
-	{
-		reason: Schema.Literals([
-			"chat-not-found",
-			"read-failed",
-			"summary-failed",
-			"invalid-target",
-			"unsupported",
-			"input-too-large",
-			"target-not-reached",
-			"request-failed",
-			"head-conflict",
-		]),
-		message: Schema.String,
-	},
-) {}
+export class ConversationContextError extends Schema.TaggedError<
+	ConversationContextError,
+	{ readonly brand: unique symbol }
+>()("ConversationContextError", {
+	reason: Schema.Literals([
+		"chat-not-found",
+		"read-failed",
+		"summary-failed",
+		"invalid-target",
+		"unsupported",
+		"input-too-large",
+		"target-not-reached",
+		"request-failed",
+		"head-conflict",
+	]),
+	message: Schema.String,
+}) {}
 
 export interface Operations<
 	LoadError = ConversationContextError,

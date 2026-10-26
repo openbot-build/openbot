@@ -1,5 +1,13 @@
 import { Bot, Chat } from "@openbot-build/core"
-import { Effect, HashMap, Layer, Option, Ref } from "effect"
+import {
+	Cause,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	Ref,
+	String as Str,
+} from "effect"
 import { Gate } from "./Gate.ts"
 import { Requests } from "./Requests.ts"
 import { Work } from "./Work.ts"
@@ -19,8 +27,8 @@ export const pendingResult = (request: string) => ({
 export const approvedCallId = (request: string) => "approved_" + request
 /** The request of an allowed call that runs again, when the ID is one. */
 export const approvedRequest = (callId: string): Option.Option<string> =>
-	callId.startsWith("approved_")
-		? Option.some(callId.slice("approved_".length))
+	Str.startsWith("approved_")(callId)
+		? Option.some(Str.slice("approved_".length)(callId))
 		: Option.none()
 
 /**
@@ -35,6 +43,8 @@ export const make = Effect.gen(function* () {
 	return Chat.Approvals.of({
 		decide: (input) =>
 			Effect.gen(function* () {
+				// The Bot plugin gives the Work to the Turns of a Bot. The approvals of core
+				// cannot name it in their type, and a Turn without a Bot has none.
 				const work = yield* Effect.serviceOption(Work)
 				if (Option.isNone(work))
 					return Chat.Decision.Deny({ reason: "No Bot runs this work." })
@@ -59,31 +69,50 @@ export const make = Effect.gen(function* () {
 					case "Deny":
 						return Chat.Decision.Deny({ reason: answer.reason })
 					case "Pending": {
-						const stored = yield* requests.find(organizationId, answer.request)
-						// A plan runs in a new Turn when it is allowed, and a Code Mode program
-						// goes on by itself, so their calls never run again.
-						if (
-							Option.isSome(stored) &&
-							stored.value.request.capability.action !== "plans.run" &&
-							stored.value.request.code === undefined
-						) {
-							// A host action names its own tool. It keeps its source, so the
-							// action can be made again when the call runs.
-							const source = Option.flatMap(
-								yield* Effect.serviceOption(Bot.Context),
-								(context) => Option.fromUndefinedOr(context.options.action),
-							).pipe(
-								Option.filter((action) => action.name === input.toolCall.name),
-								Option.flatMap((action) =>
-									Option.fromUndefinedOr(action.source),
-								),
+						yield* Effect.gen(function* () {
+							const stored = yield* requests.find(
+								organizationId,
+								answer.request,
 							)
-							yield* requests.setCall(organizationId, answer.request, {
-								name: input.toolCall.name,
-								params: toolJson(input.toolCall.params ?? {}),
-								...(Option.isSome(source) ? { source: source.value } : {}),
-							})
-						}
+							// A plan runs in a new Turn when it is allowed, and a Code Mode program
+							// goes on by itself, so their calls never run again.
+							if (
+								Option.isSome(stored) &&
+								stored.value.request.capability.action !== "plans.run" &&
+								stored.value.request.code === undefined
+							) {
+								// A host action names its own tool. It keeps its source, so the
+								// action can be made again when the call runs. Core gives the context
+								// of the Bot only while a Bot runs the Turn.
+								const source = Option.flatMap(
+									yield* Effect.serviceOption(Bot.Context),
+									(context) => Option.fromUndefinedOr(context.options.action),
+								).pipe(
+									Option.filter(
+										(action) => action.name === input.toolCall.name,
+									),
+									Option.flatMap((action) =>
+										Option.fromUndefinedOr(action.source),
+									),
+								)
+								yield* requests.setCall(organizationId, answer.request, {
+									name: input.toolCall.name,
+									params: toolJson(input.toolCall.params ?? {}),
+									...(Option.isSome(source) ? { source: source.value } : {}),
+								})
+							}
+						}).pipe(
+							// The request is made and waits for a decider, so the call is still
+							// pending. Only the kept call is missing, so a storage failure here
+							// does not turn it into a Deny.
+							Effect.catchTag("BotStorageUnavailable", (error) =>
+								Effect.logWarning(
+									"The call that waits for a request could not be kept. It does not run by itself when the request is allowed.",
+									error,
+								),
+							),
+							Effect.annotateLogs({ request: answer.request }),
+						)
 						return Chat.Decision.Pending({
 							result: pendingResult(answer.request),
 						})
@@ -91,14 +120,21 @@ export const make = Effect.gen(function* () {
 				}
 			}).pipe(
 				Effect.catchCause((cause) =>
-					Effect.logWarning("A tool call could not be decided", cause).pipe(
-						Effect.as(
-							Chat.Decision.Deny({
-								reason: "OpenBot could not check this now. Try again later.",
-							}),
-						),
-					),
+					Cause.hasInterruptsOnly(cause)
+						? Effect.interrupt
+						: Effect.logWarning("A tool call could not be decided", cause).pipe(
+								Effect.as(
+									Chat.Decision.Deny({
+										reason:
+											"OpenBot could not check this now. Try again later.",
+									}),
+								),
+							),
 				),
+				Effect.annotateLogs({
+					toolCallId: input.toolCall.id,
+					tool: input.toolCall.name,
+				}),
 			),
 	})
 })

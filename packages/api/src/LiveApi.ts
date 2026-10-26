@@ -1,15 +1,12 @@
 import { BotAuth } from "./AuthApi.ts"
-import { Chat, Config, Live, Turn } from "@openbot-build/core"
+import { Config, Live, Turn } from "@openbot-build/core"
 import { Authorize, Required, own } from "./Authorization.ts"
 import { BotErrors, BotId } from "./BotsApi.ts"
 import {
-	ChatConflict,
 	ChatExecutionUnavailable,
-	ChatModelInvalid,
-	ChatNotFound,
 	ChatOperationErrors,
-	ChatStorageUnavailable,
 	ChatView,
+	chatParams,
 } from "./ChatsApi.ts"
 import { Schema } from "effect"
 import {
@@ -141,10 +138,10 @@ export const LiveServerMessage = Schema.Union([
 export type LiveServerMessage = typeof LiveServerMessage.Type
 
 /** The Chat has no Live model, or the backend cannot use the formats that the client asked for. */
-export class LiveUnavailable extends Schema.TaggedError<LiveUnavailable>()(
-	"LiveUnavailable",
-	{ message: Schema.String },
-) {}
+export class LiveUnavailable extends Schema.TaggedError<
+	LiveUnavailable,
+	{ readonly brand: unique symbol }
+>()("LiveUnavailable", { message: Schema.String }) {}
 
 export const CreateLiveChatRequest = Schema.Struct({
 	/** A Live model. Without it, OpenBot uses the first Live model of the organization. */
@@ -170,14 +167,11 @@ export class LiveApi extends HttpApiGroup.make("live")
 				"Makes a new live Chat of yours with this Bot. Then open its Live WebSocket. You need `bots.delegate` on the Bot and `models.use` on the Live model.",
 			),
 		HttpApiEndpoint.get("connectLive", "/v1/chats/:chatId/live", {
-			params: { chatId: Chat.Id.check(Schema.isMinLength(1)) },
+			params: chatParams,
 			query: LiveQuery,
 			success: HttpApiSchema.NoContent,
 			error: [
-				ChatNotFound.pipe(HttpApiSchema.status(404)),
-				ChatConflict.pipe(HttpApiSchema.status(409)),
-				ChatStorageUnavailable.pipe(HttpApiSchema.status(503)),
-				ChatModelInvalid.pipe(HttpApiSchema.status(400)),
+				...ChatOperationErrors,
 				ChatExecutionUnavailable.pipe(HttpApiSchema.status(503)),
 				LiveUnavailable.pipe(HttpApiSchema.status(409)),
 			],

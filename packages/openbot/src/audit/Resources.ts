@@ -9,11 +9,12 @@ import type {
 	TriggersApi,
 	VaultsApi,
 } from "@openbot-build/api"
+import { pipe, String as Str } from "effect"
 import { rootOf } from "../authorization/Resources.ts"
 
 /** IDs go into dotted names, so a dot in an ID must not look like a new part. */
 export const segment = (id: string) =>
-	encodeURIComponent(id).replaceAll(".", "%2E")
+	pipe(encodeURIComponent(id), Str.replaceAll(".", "%2E"))
 
 export interface Subject {
 	readonly organizationId: string

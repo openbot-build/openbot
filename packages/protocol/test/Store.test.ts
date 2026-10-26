@@ -1,5 +1,3 @@
-// Tests are entry points, so they provide their own Layers.
-// @effect-diagnostics strictEffectProvide:off
 import {
 	CatalogDiscovery,
 	AppConnections,
@@ -9,11 +7,11 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import { assert, it } from "@effect/vitest"
-import { Effect, Layer, Redacted } from "effect"
+import { Effect, Layer, Redacted, Schema } from "effect"
 
 // Tests build in-process dependencies with Effect.provide.
 
-const candidate: Discovery.Candidate = {
+const candidate = Discovery.Candidate.make({
 	cardUrl: "https://service.example/card",
 	card: {
 		$schema: Document.cardSchemaUrl,
@@ -40,7 +38,7 @@ const candidate: Discovery.Candidate = {
 		},
 	],
 	sources: [{ role: "card", url: "https://service.example/card" }],
-}
+})
 const discovery = Layer.succeed(Discovery.Discovery, {
 	resolve: () => Effect.succeed({ _tag: "Single", candidate, issues: [] }),
 	refreshCard: () => Effect.succeed(candidate),
@@ -60,13 +58,12 @@ it.effect(
 	"Confirmation saves one shared App record, and each owner keeps its own configuration and credentials",
 	() =>
 		Effect.gen(function* () {
-			const denied = yield* Effect.result(add("alice", false))
-			assert.strictEqual(denied._tag, "Failure")
+			const denied = yield* Effect.flip(add("alice", false))
+			assert.ok(denied._tag === "AppError")
+			assert.strictEqual(denied.reason, "ConfirmationRequired")
 			const apps = yield* Store.AppStore
-			assert.strictEqual(
-				(yield* Effect.result(apps.getApp(candidate.cardUrl)))._tag,
-				"Failure",
-			)
+			const missing = yield* Effect.flip(apps.getApp(candidate.cardUrl))
+			assert.strictEqual(missing.reason, "Missing")
 			const alice = yield* add("alice")
 			const bob = yield* add("bob")
 			assert.strictEqual(alice.connection.cardUrl, bob.connection.cardUrl)
@@ -86,43 +83,39 @@ it.effect(
 			)
 			assert.strictEqual(alice.publicHints.cardUrl, candidate.cardUrl)
 			const credentials = yield* Store.CredentialStore
-			const binding = {
+			const binding = Store.CredentialBinding.make({
 				owner: "alice",
 				connectionId: "service",
 				resource: "https://service.example/mcp",
 				issuer: "https://auth.example",
-			}
-			const reference = yield* credentials.put({
-				binding,
-				accessToken: Redacted.make("secret-a"),
-				scopes: ["read"],
 			})
-			assert.ok(
-				!JSON.stringify(
+			const reference = yield* credentials.put(
+				Store.Credential.make({
+					binding,
+					accessToken: Redacted.make("secret-a"),
+					scopes: ["read"],
+				}),
+			)
+			assert.notInclude(
+				yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
 					yield* credentials.get({
 						binding,
 						reference,
 					}),
-				).includes("secret-a"),
+				),
+				"secret-a",
 			)
 			for (const change of [
 				{ owner: "bob" },
 				{ connectionId: "other" },
 				{ resource: "https://other.example/mcp" },
 				{ issuer: "https://other-auth.example" },
-			])
-				assert.strictEqual(
-					(yield* Effect.result(
-						credentials.get({
-							binding: {
-								...binding,
-								...change,
-							},
-							reference,
-						}),
-					))._tag,
-					"Failure",
+			]) {
+				const failure = yield* Effect.flip(
+					credentials.get({ binding: { ...binding, ...change }, reference }),
 				)
+				assert.strictEqual(failure.reason, "Missing")
+			}
 			yield* credentials.deleteConnection({
 				owner: "bob",
 				connectionId: "service",
@@ -136,8 +129,9 @@ it.effect(
 				),
 				"secret-a",
 			)
-			const duplicate = yield* Effect.result(add("alice"))
-			assert.strictEqual(duplicate._tag, "Failure")
+			const duplicate = yield* Effect.flip(add("alice"))
+			assert.ok(duplicate._tag === "StoreError")
+			assert.strictEqual(duplicate.reason, "AlreadyExists")
 		}).pipe(
 			Effect.provide(
 				Layer.mergeAll(
@@ -192,6 +186,49 @@ it.effect("An unavailable store cannot report a successful add", () =>
 				),
 			),
 		)
-		assert.match(String(error), /StoreError/)
+		assert.ok(error._tag === "StoreError")
+		assert.strictEqual(error.reason, "Unavailable")
+		assert.strictEqual(error.operation, "save")
 	}),
+)
+
+it.effect(
+	"An update that moves the connection fails as invalid, and an update of an unknown connection fails as missing",
+	() =>
+		Effect.gen(function* () {
+			const { connection } = yield* add("alice")
+			const apps = yield* Store.AppStore
+			const moved = yield* Effect.flip(
+				apps.update({
+					key: connection,
+					change: (old) =>
+						Store.UserConnection.make({
+							...old,
+							cardUrl: "https://other.example/card",
+						}),
+				}),
+			)
+			assert.strictEqual(moved.reason, "Invalid")
+			assert.strictEqual(moved.operation, "update")
+			assert.strictEqual(
+				(yield* apps.get(connection)).cardUrl,
+				candidate.cardUrl,
+			)
+			const missing = yield* Effect.flip(
+				apps.update({
+					key: { owner: "bob", connectionId: "service" },
+					change: (old) => old,
+				}),
+			)
+			assert.strictEqual(missing.reason, "Missing")
+			assert.strictEqual(missing.operation, "update")
+		}).pipe(
+			Effect.provide(
+				Layer.mergeAll(
+					MemoryStore.layer,
+					MemoryStore.layerCredentials,
+					discovery,
+				).pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
+			),
+		),
 )

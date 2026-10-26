@@ -8,8 +8,11 @@ import {
 	Stream,
 	Match,
 	Predicate,
-	Record as RecordUtils,
-	Array as ArrayUtils,
+	Record as Rec,
+	Array as Arr,
+	String as Str,
+	flow,
+	pipe,
 } from "effect"
 import { McpSchema } from "effect/ai"
 import { Sse } from "effect/encoding"
@@ -33,17 +36,25 @@ import {
 
 const identities = new WeakMap<HttpServerRequest.HttpServerRequest, Identity>()
 
+/** The body of a protected list response could not be read. */
+class ListUnreadable extends Schema.TaggedError<
+	ListUnreadable,
+	{ readonly brand: unique symbol }
+>()("ListUnreadable", { cause: Schema.Defect() }) {}
+
 /** Use this only during an invocation. The key is the real HTTP request that Effect MCP keeps. */
 export const currentIdentity = Effect.gen(function* () {
 	yield* McpSchema.McpRequestContext
+	// Only an invocation over HTTP has a request. Any other invocation has no identity.
 	const request = yield* Effect.serviceOption(
 		HttpServerRequest.HttpServerRequest,
 	)
-	return yield* Effect.fromOption(
-		Option.flatMap(request, (request) =>
-			Option.fromUndefinedOr(identities.get(request)),
-		),
-	).pipe(Effect.mapError(() => TokenRejected.make({ reason: "Missing" })))
+	const identity = Option.flatMap(request, (request) =>
+		Option.fromUndefinedOr(identities.get(request)),
+	)
+	if (Option.isNone(identity))
+		return yield* TokenRejected.make({ reason: "Missing" })
+	return identity.value
 })
 
 const Request = Schema.Struct({
@@ -54,7 +65,8 @@ const Request = Schema.Struct({
 const Json = Schema.fromJsonString(Schema.JsonObject)
 
 const targetOf = (method: string, params: Schema.JsonObject | undefined) => {
-	const value = params?.[method.startsWith("resources/") ? "uri" : "name"]
+	const value =
+		params?.[pipe(method, Str.startsWith("resources/")) ? "uri" : "name"]
 	return Predicate.isString(value) ? value : undefined
 }
 
@@ -67,11 +79,15 @@ const listFields: Readonly<
 	"prompts/list": ["prompts", "name"],
 }
 
-const quote = (value: string) =>
-	value
-		.replaceAll("\\", "\\\\")
-		.replaceAll('"', '\\"')
-		.replace(/[\r\n]/g, "")
+const isJsonArray = (
+	value: Schema.Json | undefined,
+): value is Schema.JsonArray => Arr.isArray(value)
+
+const quote = flow(
+	Str.replaceAll("\\", "\\\\"),
+	Str.replaceAll('"', '\\"'),
+	Str.replace(/[\r\n]/g, ""),
+)
 
 const challenge = (
 	metadataUrl: string,
@@ -81,7 +97,7 @@ const challenge = (
 	HttpServerResponse.empty({
 		status: error === "invalid_token" ? 401 : 403,
 		headers: {
-			"www-authenticate": `Bearer resource_metadata="${quote(metadataUrl)}", error="${error}"${scopes.length === 0 ? "" : `, scope="${quote(scopes.join(" "))}"`}`,
+			"www-authenticate": `Bearer resource_metadata="${quote(metadataUrl)}", error="${error}"${scopes.length === 0 ? "" : `, scope="${quote(Arr.join(scopes, " "))}"`}`,
 			"cache-control": "no-store",
 		},
 	})
@@ -110,7 +126,7 @@ const filterResponse = (
 				if (Option.isNone(decoded)) return data
 				const result = decoded.value
 				const entries = result[fields[0]]
-				if (!ArrayUtils.isArray(entries)) return data
+				if (!isJsonArray(entries)) return data
 				const visible = yield* Effect.filter(entries, (entry) => {
 					if (!Schema.is(Schema.JsonObject)(entry)) return Effect.succeed(false)
 					const target = entry[fields[1]]
@@ -121,7 +137,7 @@ const filterResponse = (
 							})
 						: Effect.succeed(false)
 				})
-				return JSON.stringify({
+				return yield* Schema.encodeEffect(Json)({
 					...message,
 					result: {
 						...result,
@@ -140,18 +156,16 @@ const filterResponse = (
 			Match.tag("Uint8Array", (body) => Stream.succeed(body.body)),
 			Match.tag("Stream", (body) =>
 				body.stream.pipe(
-					Stream.mapError(() =>
-						Document.InvalidDocument.make({
-							kind: "Publication",
-							issue: "Could not read the protected list response",
-						}),
-					),
+					Stream.mapError((cause) => ListUnreadable.make({ cause })),
 				),
 			),
 			Match.orElse(() => Stream.empty),
 		)
 		if (
-			(response.headers["content-type"] ?? "").startsWith("text/event-stream")
+			pipe(
+				response.headers["content-type"] ?? "",
+				Str.startsWith("text/event-stream"),
+			)
 		) {
 			const body = bytes.pipe(
 				Stream.decodeText(),
@@ -176,9 +190,12 @@ const filterResponse = (
 				(all, chunk) => all + chunk,
 			),
 		)
-		const lines = yield* Effect.forEach(text.trimEnd().split("\n"), transform)
+		const lines = yield* Effect.forEach(
+			Str.split(Str.trimEnd(text), "\n"),
+			transform,
+		)
 		return HttpServerResponse.uint8Array(
-			encoder.encode(lines.join("\n") + "\n"),
+			encoder.encode(Arr.join(lines, "\n") + "\n"),
 			optionsResponse,
 		)
 	})
@@ -213,13 +230,27 @@ export const middleware = (options: Options) =>
 					if (match?.[1] === undefined)
 						return challenge(options.metadataUrl, "invalid_token")
 					const verified = yield* Effect.result(
-						verifier
-							.verify(Redacted.make(match[1]))
-							.pipe(Effect.flatMap(Identity.decode)),
+						verifier.verify(Redacted.make(match[1])),
 					)
-					if (Result.isFailure(verified))
+					if (Result.isFailure(verified)) {
+						yield* Effect.logDebug(
+							"The bearer token was rejected",
+							verified.failure,
+						)
 						return challenge(options.metadataUrl, "invalid_token")
-					const identity = verified.success
+					}
+					// When this decode fails, the verifier of the host has a bug. The client did nothing wrong.
+					const decoded = yield* Effect.result(
+						Identity.decode(verified.success),
+					)
+					if (Result.isFailure(decoded)) {
+						yield* Effect.logWarning(
+							"The token verifier gave an identity that is not valid",
+							decoded.failure,
+						)
+						return challenge(options.metadataUrl, "invalid_token")
+					}
+					const identity = decoded.success
 					const now = yield* Clock.currentTimeMillis
 					if (
 						!options.authorizationServers.includes(identity.issuer) ||
@@ -227,7 +258,8 @@ export const middleware = (options: Options) =>
 						identity.expiresAt <= now
 					)
 						return challenge(options.metadataUrl, "invalid_token")
-					const missing = scopes.filter(
+					const missing = Arr.filter(
+						scopes,
 						(scope) => !identity.scopes.includes(scope),
 					)
 					if (missing.length !== 0)
@@ -245,7 +277,7 @@ export const middleware = (options: Options) =>
 					const args = params?.["arguments"]
 					const operation: Operation = {
 						method,
-						...RecordUtils.filter(
+						...Rec.filter(
 							{ target: targetOf(method, params) },
 							Predicate.isNotUndefined,
 						),
@@ -272,8 +304,12 @@ export const middleware = (options: Options) =>
 								"no-store",
 							),
 						),
-						Effect.catchTag(["SchemaError", "InvalidDocument"], () =>
-							Effect.succeed(HttpServerResponse.empty({ status: 502 })),
+						// The list cannot be read or filtered, so it is not sent.
+						Effect.catchTag(["SchemaError", "ListUnreadable"], (error) =>
+							Effect.logWarning(
+								"A protected list response could not be filtered",
+								error,
+							).pipe(Effect.as(HttpServerResponse.empty({ status: 502 }))),
 						),
 					)
 				})
@@ -283,7 +319,7 @@ export const middleware = (options: Options) =>
 export const layerMetadata = (options: Options) =>
 	HttpRouter.add(
 		"GET",
-		`/${new URL(options.metadataUrl).pathname.slice(1)}`,
+		`/${pipe(new URL(options.metadataUrl).pathname, Str.slice(1))}`,
 		(request) =>
 			new URL(request.originalUrl, options.metadataUrl).search !==
 			new URL(options.metadataUrl).search
@@ -297,7 +333,7 @@ export const layerMetadata = (options: Options) =>
 							resource: options.resource,
 							authorization_servers: options.authorizationServers,
 							bearer_methods_supported: ["header"],
-							...RecordUtils.filter(
+							...Rec.filter(
 								{ scopes_supported: options.scopes },
 								Predicate.isNotUndefined,
 							),

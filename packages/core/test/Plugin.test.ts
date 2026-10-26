@@ -1,10 +1,10 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
 	Order,
 	Ref,
 	Scope,
-	Array as EffectArray,
+	Array as Arr,
+	Cause,
 	Context,
 	Deferred,
 	Exit,
@@ -16,6 +16,8 @@ import {
 	SchemaTransformation,
 	Stream,
 	Predicate,
+	Record as Rec,
+	Result,
 } from "effect"
 import { Prompt } from "effect/ai"
 import {
@@ -24,7 +26,6 @@ import {
 	ChatRuntime,
 	ChatState,
 	ChatStore,
-	ChatStoreMemory,
 	ChatStoreRepository,
 	MemoryPersistence,
 	Plugin,
@@ -123,7 +124,7 @@ it.effect(
 						assert.strictEqual(own, storeA)
 						const state = yield* own.snapshot
 						assert.strictEqual(Option.getOrThrow(state.value).value, 7)
-						seen = EffectArray.append(seen, "a")
+						seen = Arr.append(seen, "a")
 						return next(options)
 					}),
 				),
@@ -141,7 +142,7 @@ it.effect(
 						const own = yield* ctx.store
 						assert.strictEqual(own, storeB)
 						yield* own.get
-						seen = EffectArray.append(seen, "b")
+						seen = Arr.append(seen, "b")
 						return next(options)
 					}),
 				),
@@ -151,15 +152,17 @@ it.effect(
 		assert.strictEqual(pluginA.store.definition, a)
 		assert.strictEqual(pluginB.store.definition, b)
 		assert.strictEqual(pluginB.id, "b")
-		assert.strictEqual(Object.hasOwn(storeA.definition, "id"), false)
-		assert.strictEqual(Object.hasOwn(storeB.definition, "id"), false)
+		assert.strictEqual(Predicate.hasProperty(storeA.definition, "id"), false)
+		assert.strictEqual(Predicate.hasProperty(storeB.definition, "id"), false)
 		assert.strictEqual(reads, 0)
-		const combined = yieldSync(
-			PluginComposition.mergeState(Plugin.Id.make("both"), pluginA, pluginB),
-		)
-		assert.strictEqual(combined.stores.a, a)
-		assert.strictEqual(combined.stores.b, b)
 		return Effect.gen(function* () {
+			const combined = yield* PluginComposition.mergeState(
+				Plugin.Id.make("both"),
+				pluginA,
+				pluginB,
+			)
+			assert.strictEqual(combined.stores.a, a)
+			assert.strictEqual(combined.stores.b, b)
 			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const definition = yield* Store.define({
@@ -212,9 +215,6 @@ it.effect(
 		})
 	},
 )
-function yieldSync<A, E>(effect: Effect.Effect<A, E>) {
-	return Effect.runSync(effect)
-}
 it.effect(
 	"one plugin builds its runtime and store in order, reads state in middleware and checks the revision of a write",
 	() =>
@@ -250,7 +250,7 @@ it.effect(
 						Effect.gen(function* () {
 							const own = yield* ctx.store
 							const state = yield* own.snapshot
-							observed = EffectArray.append(
+							observed = Arr.append(
 								observed,
 								Option.getOrThrow(state.value).value,
 							)
@@ -279,9 +279,6 @@ it.effect(
 					},
 				})
 				.pipe(Effect.provideService(EncodingDependency, 7))
-			const store = yield* ChatStoreMemory.make(definition).pipe(
-				Effect.provideService(EncodingDependency, 7),
-			)
 			const beforeConstruction = encodes
 			const own = yield* PluginState.make({
 				store: runtimeStore,
@@ -305,8 +302,6 @@ it.effect(
 			assert.deepStrictEqual(completed.state.a, { value: 1 })
 			assert.deepStrictEqual(completed.state.b, { value: 2 })
 			assert.deepStrictEqual(completed.state["future"], { x: 1 })
-			assert.throws(() => Plugin.Id.make("chat"))
-			assert.throws(() => Plugin.Id.make("conversation"))
 			const context = Bot.Context.of({
 				options: { prompt: Prompt.empty },
 				at: runtimeStore.read(view.chat.id).pipe(
@@ -330,13 +325,6 @@ it.effect(
 				assert.deepStrictEqual(value.b, { value: 2 })
 				assert.deepStrictEqual(value["future"], { x: 1 })
 				assert.deepStrictEqual(value.conversation, completed.state.conversation)
-				assert.ok(
-					Option.isNone(
-						yield* store
-							.get(view.chat.id)
-							.pipe(Effect.provideService(EncodingDependency, 7)),
-					),
-				)
 				const stale = yield* own
 					.setAt({ base: read.at, value: Option.none() })
 					.pipe(Effect.flip)
@@ -358,7 +346,7 @@ it.effect(
 					value: Option.none(),
 				})
 				const removed = (yield* runtimeStore.read(view.chat.id)).state
-				assert.strictEqual(Object.hasOwn(removed, "a"), false)
+				assert.strictEqual(Rec.has(removed, "a"), false)
 				assert.deepStrictEqual(removed.b, { value: 2 })
 				assert.deepStrictEqual(removed["future"], { x: 1 })
 				assert.deepStrictEqual(
@@ -368,6 +356,26 @@ it.effect(
 			})
 			yield* program.pipe(Effect.provideService(Bot.Context, context))
 		}),
+)
+
+it.effect("a plugin cannot use a core namespace as its ID", () =>
+	Effect.gen(function* () {
+		yield* Effect.forEach(
+			["chat", "conversation"],
+			(id) =>
+				Schema.decodeEffect(Plugin.Id)(id).pipe(
+					Effect.flip,
+					Effect.map((error) =>
+						assert.strictEqual(error.message, "Core namespaces are reserved"),
+					),
+				),
+			{ discard: true },
+		)
+		assert.strictEqual(
+			yield* Schema.decodeEffect(Plugin.Id)("resident"),
+			"resident",
+		)
+	}),
 )
 
 const counterStore = (
@@ -465,7 +473,7 @@ it.effect(
 				assert.strictEqual(invalid.reason, "encode-failed")
 				yield* own.set(Option.none())
 				const removed = yield* runtimeStore.read(chat)
-				assert.strictEqual(Object.hasOwn(removed.chat.business, "b"), false)
+				assert.strictEqual(Rec.has(removed.chat.business, "b"), false)
 				assert.deepStrictEqual(removed.state, initial.state)
 			}).pipe(Effect.provideService(Bot.Context, context))
 		}),
@@ -736,7 +744,7 @@ it.effect(
 					SynchronizedRef.updateSome(native, () => Option.some(Option.none())),
 				)
 				assert.strictEqual(
-					Object.hasOwn((yield* runtimeStore.read(initial.chat.id)).state, "a"),
+					Rec.has((yield* runtimeStore.read(initial.chat.id)).state, "a"),
 					false,
 				)
 			})
@@ -753,7 +761,7 @@ it.effect(
 				yield* counterStore(() =>
 					reject
 						? Effect.fail(
-								new ChatStore.ChatStoreError({
+								ChatStore.ChatStoreError.make({
 									reason: "storage-failed",
 									message: "Fixture storage failure",
 								}),
@@ -788,8 +796,8 @@ it.effect(
 					{ concurrency: "unbounded" },
 				)
 				assert.deepStrictEqual(
-					EffectArray.sort(
-						refs.map((value) => Option.getOrThrow(value).value),
+					Arr.sort(
+						Arr.map(refs, (value) => Option.getOrThrow(value).value),
 						Order.Number,
 					),
 					Array.from({ length: 20 }, (_, i) => i + 1),
@@ -811,7 +819,8 @@ it.effect(
 				const defect = yield* own
 					.modifyEffect(() => Effect.die("fixture defect"))
 					.pipe(Effect.exit)
-				assert.ok(Exit.isFailure(defect))
+				assert.ok(Exit.hasDies(defect))
+				assert.ok(!Cause.hasFails(defect.cause))
 				const entered = yield* Deferred.make<void>()
 				const interrupted = yield* own
 					.updateEffect(() =>
@@ -842,7 +851,7 @@ it.effect(
 				assert.deepStrictEqual(yield* own.get, Option.some({ value: 21 }))
 				const observed = yield* Fiber.join(observer)
 				assert.deepStrictEqual(
-					EffectArray.sort(observed, Order.Number),
+					Arr.sort(observed, Order.Number),
 					Array.from({ length: 21 }, (_, i) => initial.chat.revision + i + 1),
 				)
 			})
@@ -907,7 +916,6 @@ it.effect(
 		let constructions = 0
 		let services = 0
 		let uses: ReadonlyArray<number> = []
-		const blocked = Deferred.makeUnsafe<void>()
 		const plugin = Plugin.make({ id: Plugin.Id.make("resident") })(() => {
 			constructions++
 			return Effect.gen(function* () {
@@ -931,7 +939,7 @@ it.effect(
 				return (next, options) =>
 					Stream.unwrap(
 						Effect.gen(function* () {
-							uses = EffectArray.append(
+							uses = Arr.append(
 								uses,
 								yield* Ref.updateAndGet(count, (n) => n + 1),
 							)
@@ -948,6 +956,7 @@ it.effect(
 		)
 		assert.strictEqual(constructions, 0)
 		return Effect.gen(function* () {
+			const blocked = yield* Deferred.make<void>()
 			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const parent = yield* Effect.scope
@@ -994,10 +1003,12 @@ it.effect(
 				Effect.provide(
 					LanguageModelTest({
 						streamText: ({ prompt }) =>
-							prompt.content.some(
+							Arr.some(
+								prompt.content,
 								(message) =>
 									message.role === "user" &&
-									message.content.some(
+									Arr.some(
+										message.content,
 										(part) => part.type === "text" && part.text === "block",
 									),
 							)
@@ -1023,21 +1034,21 @@ it.effect(
 				Effect.gen(function* () {
 					yield* Effect.acquireRelease(
 						Effect.sync(() => {
-							calls = EffectArray.append(calls, "build-" + name)
+							calls = Arr.append(calls, "build-" + name)
 						}),
 						() =>
 							Effect.sync(() => {
-								calls = EffectArray.append(calls, "release-" + name)
+								calls = Arr.append(calls, "release-" + name)
 							}),
 					)
 					return (next, options) =>
 						Stream.unwrap(
 							Effect.sync(() => {
-								calls = EffectArray.append(calls, "enter-" + name)
+								calls = Arr.append(calls, "enter-" + name)
 								return next(options).pipe(
 									Stream.ensuring(
 										Effect.sync(() => {
-											calls = EffectArray.append(calls, "exit-" + name)
+											calls = Arr.append(calls, "exit-" + name)
 										}),
 									),
 								)
@@ -1077,8 +1088,87 @@ it.effect(
 			const result = yield* Effect.scoped(
 				ChatTest({ plugin: PluginComposition.merge(plugin("a"), failed) }),
 			).pipe(Effect.result)
-			assert.strictEqual(result._tag, "Failure")
+			assert.ok(Result.isFailure(result))
+			assert.strictEqual(result.failure, "build-failed")
 			assert.deepStrictEqual(calls, ["build-a", "release-a"])
 		})
+	},
+)
+
+it.effect(
+	"stateful plugins stay Plugin values, so they can be piped and run",
+	() => {
+		let seen: ReadonlyArray<string> = []
+		const tracked = <Name extends "a" | "b">(name: Name) =>
+			Plugin.make({ id: pluginId(name) })(() =>
+				Effect.succeed((next, options) =>
+					Stream.unwrap(
+						Effect.sync(() => {
+							seen = Arr.append(seen, name)
+							return next(options)
+						}),
+					),
+				),
+			)
+		const after = Plugin.make({ id: Plugin.Id.make("after") })(() =>
+			Effect.succeed((next, options) =>
+				Stream.unwrap(
+					Effect.sync(() => {
+						seen = Arr.append(seen, "after")
+						return next(options)
+					}),
+				),
+			),
+		)
+		const stored = Plugin.make({ id: pluginId("a"), store: declaration() })(
+			() =>
+				Effect.succeed((next, options) =>
+					Stream.unwrap(
+						Effect.sync(() => {
+							seen = Arr.append(seen, "a")
+							return next(options)
+						}),
+					),
+				),
+		)
+		const withStore = PluginComposition.withStore(tracked("b"), declaration())
+		return Effect.gen(function* () {
+			const merged = yield* PluginComposition.mergeState(
+				Plugin.Id.make("both"),
+				stored,
+				withStore,
+			)
+			assert.deepStrictEqual(Rec.keys(merged.stores), ["a", "b"])
+			yield* Effect.forEach(
+				[
+					{ plugin: stored.pipe(PluginComposition.merge(after)), seen: ["a"] },
+					{
+						plugin: withStore.pipe(PluginComposition.merge(after)),
+						seen: ["b"],
+					},
+					{
+						plugin: merged.pipe(PluginComposition.merge(after)),
+						seen: ["a", "b"],
+					},
+				],
+				(scenario) =>
+					Effect.gen(function* () {
+						assert.ok(scenario.plugin instanceof Plugin.Plugin)
+						seen = []
+						const { runtime, chat } = yield* ChatTest({
+							plugin: scenario.plugin,
+						})
+						yield* runtime.execute({ chat, input: "hello" })
+						assert.deepStrictEqual(seen, [...scenario.seen, "after"])
+					}).pipe(Effect.scoped),
+				{ discard: true },
+			)
+		}).pipe(
+			Effect.provide(
+				LanguageModelTest({
+					streamText: () => Stream.fromArray(textParts("done")),
+				}),
+			),
+		)
 	},
 )

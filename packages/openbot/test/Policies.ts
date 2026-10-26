@@ -4,12 +4,13 @@ import { Schema } from "effect"
 
 /**
  * Makes the JSON of a policy, as a client sends it. The rules come from
- * `Policy.define`, so the types check every kind, action and field.
+ * `Policy.define`, so the types check every kind, action and field. It is an
+ * Effect, because the policy goes through its schema.
  */
 export const json = <Rules extends Rule.Any>(
 	body: (builder: Builder) => Generator<Rules, void, unknown>,
 ) =>
-	Schema.encodeSync(Authorization.PolicySchema)(
+	Schema.encodeEffect(Authorization.PolicySchema)(
 		Policy.define(Authorization.OpenBot)(body) as Authorization.Policy,
 	)
 

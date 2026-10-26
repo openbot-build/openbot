@@ -1,15 +1,19 @@
-// Tests are entry points, so they provide their own Layers.
-// @effect-diagnostics strictEffectProvide:off
 import {
-	Array as EffectArray,
+	Array as Arr,
+	Crypto,
 	Option,
 	HashMap,
 	Effect,
 	Layer,
 	Redacted,
+	Ref,
 	Match,
+	Schema,
+	Scope,
+	String as Str,
 } from "effect"
 import {
+	App,
 	CatalogDiscovery,
 	MemoryStore,
 	OAuthAuthorization,
@@ -21,12 +25,15 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { createHash, randomUUID } from "node:crypto"
 import { assert, it } from "@effect/vitest"
-import { NodeCrypto } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
+import { Base64Url } from "effect/encoding"
+import { HttpServerRequest, HttpServerResponse } from "effect/http"
 
 import { TestClock } from "effect/testing"
-import { startHttps } from "./Fixture.ts"
+import { serveChecked } from "./Fixture.ts"
+
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
 // The HTTPS server is real, so the test runs with live services. The test
 // program gets its own TestClock from the layer below.
@@ -45,141 +52,118 @@ it.live(
 			let businessRequests = 0
 			let requested: ReadonlyArray<string> = []
 			let codes = HashMap.empty<string, URLSearchParams>()
-			const fixture = yield* Effect.acquireRelease(
-				Effect.promise(() =>
-					startHttps((req, res) => {
-						void (async () => {
-							const url = new URL(req.url ?? "/", origin)
-							requested = EffectArray.append(requested, url.pathname)
-							const json = (value: unknown) => {
-								res.setHeader("content-type", "application/json")
-								res.end(JSON.stringify(value))
-							}
-							const issuer = origin + "/tenant"
-							if (url.pathname === "/client.json")
-								return json({
-									client_id: wrongClient
-										? origin + "/different.json"
-										: origin + "/client.json",
-									redirect_uris: [origin + "/callback?host=trusted"],
-									token_endpoint_auth_method: "none",
-									grant_types: ["authorization_code", "refresh_token"],
-									response_types: ["code"],
-								})
-							if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
-								return json({
-									resource: origin + "/mcp",
-									authorization_servers: [issuer],
-								})
-							if (
-								(url.pathname ===
-									"/.well-known/oauth-authorization-server/tenant" &&
-									!oidc) ||
-								(url.pathname === "/tenant/.well-known/openid-configuration" &&
-									oidc)
-							)
-								return json({
-									issuer,
-									authorization_endpoint: origin + "/authorize",
-									token_endpoint: origin + "/token",
-									revocation_endpoint: origin + "/revoke",
-									client_id_metadata_document_supported: cimd,
-									authorization_response_iss_parameter_supported: true,
-									code_challenge_methods_supported: ["S256"],
-									response_types_supported: ["code"],
-									token_endpoint_auth_methods_supported: ["none"],
-									jwks_uri: origin + "/jwks",
-									subject_types_supported: ["public"],
-									id_token_signing_alg_values_supported: ["RS256"],
-								})
-							if (url.pathname === "/authorize") {
-								assert.strictEqual(
-									url.searchParams.get("code_challenge_method"),
-									"S256",
-								)
-								assert.strictEqual(
-									url.searchParams.get("resource"),
-									origin + "/mcp",
-								)
-								assert.strictEqual(
-									url.searchParams.get("client_id"),
-									origin + "/client.json",
-								)
-								const code = randomUUID()
-								codes = HashMap.set(codes, code, url.searchParams)
-								const callback = new URL(
-									url.searchParams.get("redirect_uri") ?? "",
-								)
-								callback.searchParams.set(
-									"state",
-									url.searchParams.get("state") ?? "",
-								)
-								callback.searchParams.set("code", code)
-								callback.searchParams.set("iss", issuer)
-								res.writeHead(303, { location: callback.href })
-								return res.end()
-							}
-							if (url.pathname === "/callback") return json({ received: true })
-							if (url.pathname === "/token" || url.pathname === "/revoke") {
-								let chunks: ReadonlyArray<Buffer> = []
-								for await (const chunk of req)
-									chunks = EffectArray.append(chunks, Buffer.from(chunk))
-								const form = new URLSearchParams(
-									Buffer.concat(chunks).toString(),
-								)
-								assert.strictEqual(
-									form.get("client_id"),
-									origin + "/client.json",
-								)
-								if (url.pathname === "/revoke") {
-									revocations++
-									assert.strictEqual(form.get("token"), "refresh-secret")
-									return res.end()
-								}
-								assert.strictEqual(form.get("resource"), origin + "/mcp")
-								if (form.get("grant_type") === "authorization_code") {
-									exchanges++
-									const code = form.get("code") ?? ""
-									const params = Option.getOrUndefined(HashMap.get(codes, code))
-									assert.ok(params)
-									codes = HashMap.remove(codes, code)
-									assert.strictEqual(
-										form.get("redirect_uri"),
-										params.get("redirect_uri"),
-									)
-									assert.strictEqual(
-										createHash("sha256")
-											.update(form.get("code_verifier") ?? "")
-											.digest("base64url"),
-										params.get("code_challenge"),
-									)
-								} else {
-									refreshes++
-									assert.strictEqual(form.get("grant_type"), "refresh_token")
-									assert.strictEqual(
-										form.get("refresh_token"),
-										"refresh-secret",
-									)
-								}
-								return json({
-									access_token: "access-secret",
-									refresh_token: "refresh-secret",
-									token_type: "Bearer",
-									expires_in: 60,
-									scope: expanded ? "notes admin" : "notes",
-								})
-							}
-							if (url.pathname === "/mcp") businessRequests++
-							res.writeHead(404)
-							res.end()
-						})().catch((error) => {
-							res.writeHead(500)
-							res.end()
-							throw error
+			const crypto = yield* Crypto.Crypto
+			const fixture = yield* serveChecked(
+				Effect.gen(function* () {
+					const request = yield* HttpServerRequest.HttpServerRequest
+					const url = new URL(request.url, origin)
+					requested = Arr.append(requested, url.pathname)
+					const issuer = origin + "/tenant"
+					if (url.pathname === "/client.json")
+						return yield* HttpServerResponse.json({
+							client_id: wrongClient
+								? origin + "/different.json"
+								: origin + "/client.json",
+							redirect_uris: [origin + "/callback?host=trusted"],
+							token_endpoint_auth_method: "none",
+							grant_types: ["authorization_code", "refresh_token"],
+							response_types: ["code"],
 						})
-					}),
-				),
-				(fixture) => Effect.promise(() => fixture.close()),
+					if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+						return yield* HttpServerResponse.json({
+							resource: origin + "/mcp",
+							authorization_servers: [issuer],
+						})
+					if (
+						(url.pathname ===
+							"/.well-known/oauth-authorization-server/tenant" &&
+							!oidc) ||
+						(url.pathname === "/tenant/.well-known/openid-configuration" &&
+							oidc)
+					)
+						return yield* HttpServerResponse.json({
+							issuer,
+							authorization_endpoint: origin + "/authorize",
+							token_endpoint: origin + "/token",
+							revocation_endpoint: origin + "/revoke",
+							client_id_metadata_document_supported: cimd,
+							authorization_response_iss_parameter_supported: true,
+							code_challenge_methods_supported: ["S256"],
+							response_types_supported: ["code"],
+							token_endpoint_auth_methods_supported: ["none"],
+							jwks_uri: origin + "/jwks",
+							subject_types_supported: ["public"],
+							id_token_signing_alg_values_supported: ["RS256"],
+						})
+					if (url.pathname === "/authorize") {
+						assert.strictEqual(
+							url.searchParams.get("code_challenge_method"),
+							"S256",
+						)
+						assert.strictEqual(
+							url.searchParams.get("resource"),
+							origin + "/mcp",
+						)
+						assert.strictEqual(
+							url.searchParams.get("client_id"),
+							origin + "/client.json",
+						)
+						const code = yield* crypto.randomUUIDv4()
+						codes = HashMap.set(codes, code, url.searchParams)
+						const callback = new URL(url.searchParams.get("redirect_uri") ?? "")
+						callback.searchParams.set(
+							"state",
+							url.searchParams.get("state") ?? "",
+						)
+						callback.searchParams.set("code", code)
+						callback.searchParams.set("iss", issuer)
+						return HttpServerResponse.redirect(callback.href, { status: 303 })
+					}
+					if (url.pathname === "/callback")
+						return yield* HttpServerResponse.json({ received: true })
+					if (url.pathname === "/token" || url.pathname === "/revoke") {
+						const form = new URLSearchParams(yield* request.text)
+						assert.strictEqual(form.get("client_id"), origin + "/client.json")
+						if (url.pathname === "/revoke") {
+							revocations++
+							assert.strictEqual(form.get("token"), "refresh-secret")
+							return HttpServerResponse.empty({ status: 200 })
+						}
+						assert.strictEqual(form.get("resource"), origin + "/mcp")
+						if (form.get("grant_type") === "authorization_code") {
+							exchanges++
+							const code = form.get("code") ?? ""
+							const params = Option.getOrUndefined(HashMap.get(codes, code))
+							assert.ok(params)
+							codes = HashMap.remove(codes, code)
+							assert.strictEqual(
+								form.get("redirect_uri"),
+								params.get("redirect_uri"),
+							)
+							const digest = yield* crypto.digest(
+								"SHA-256",
+								new TextEncoder().encode(form.get("code_verifier") ?? ""),
+							)
+							assert.strictEqual(
+								Base64Url.encode(digest),
+								params.get("code_challenge"),
+							)
+						} else {
+							refreshes++
+							assert.strictEqual(form.get("grant_type"), "refresh_token")
+							assert.strictEqual(form.get("refresh_token"), "refresh-secret")
+						}
+						return yield* HttpServerResponse.json({
+							access_token: "access-secret",
+							refresh_token: "refresh-secret",
+							token_type: "Bearer",
+							expires_in: 60,
+							scope: expanded ? "notes admin" : "notes",
+						})
+					}
+					if (url.pathname === "/mcp") businessRequests++
+					return HttpServerResponse.empty({ status: 404 })
+				}),
 			)
 			origin = fixture.origin
 			const key = { owner: "alice", connectionId: "notes" }
@@ -208,9 +192,9 @@ it.live(
 					const apps = yield* Store.AppStore
 					const credentials = yield* Store.CredentialStore
 					yield* apps.save({
-						app: {
+						app: Store.AppRecord.make({
 							cardUrl: origin + "/card",
-							card: {
+							card: Document.ServerCard.make({
 								$schema: Document.cardSchemaUrl,
 								name: "example.test/notes",
 								description: "Notes",
@@ -222,10 +206,10 @@ it.live(
 										supportedProtocolVersions: [Document.protocolVersion],
 									},
 								],
-							},
+							}),
 							sources: [],
-						},
-						connection: {
+						}),
+						connection: Store.UserConnection.make({
 							...key,
 							cardUrl: origin + "/card",
 							endpoint: resource,
@@ -238,7 +222,7 @@ it.live(
 								resource,
 								scopes: [],
 							},
-						},
+						}),
 					})
 					const options = {
 						key,
@@ -258,73 +242,64 @@ it.live(
 						issuer,
 					})
 					assert.ok(
-						requested.includes(
+						Arr.contains(
+							requested,
 							"/.well-known/oauth-authorization-server/tenant",
 						),
 					)
 					assert.ok(
-						requested.includes("/tenant/.well-known/openid-configuration"),
+						Arr.contains(requested, "/tenant/.well-known/openid-configuration"),
 					)
 					cimd = false
-					const incompatible = yield* Effect.result(
+					const incompatible = yield* Effect.flip(
 						OAuthAuthorization.begin(options),
 					)
-					assert.strictEqual(incompatible._tag, "Failure")
-					Match.value(incompatible).pipe(
-						Match.tag("Failure", (incompatible) => {
-							assert.strictEqual(
-								incompatible.failure._tag,
-								"AuthorizationError",
-							)
-						}),
-						Match.orElse(() => undefined),
-					)
+					assert.ok(incompatible._tag === "AuthorizationError")
+					assert.strictEqual(incompatible.reason, "CimdUnsupported")
 					cimd = true
 					wrongClient = true
-					assert.strictEqual(
-						(yield* Effect.result(
-							OAuthAuthorization.readClientMetadata({
-								clientId,
-								redirectUri,
-							}),
-						))._tag,
-						"Failure",
+					const differentClient = yield* Effect.flip(
+						OAuthAuthorization.readClientMetadata({
+							clientId,
+							redirectUri,
+						}),
 					)
+					assert.ok(differentClient._tag === "AuthorizationError")
+					assert.strictEqual(differentClient.reason, "ClientMetadata")
 					wrongClient = false
-					assert.strictEqual(
-						(yield* Effect.result(
-							OAuthAuthorization.readClientMetadata({
-								clientId: origin + "/",
-								redirectUri,
-							}),
-						))._tag,
-						"Failure",
+					const wrongOrigin = yield* Effect.flip(
+						OAuthAuthorization.readClientMetadata({
+							clientId: origin + "/",
+							redirectUri,
+						}),
 					)
-					assert.strictEqual(
-						(yield* Effect.result(
-							OAuthAuthorization.readClientMetadata({
-								clientId,
-								redirectUri: origin + "/other",
-							}),
-						))._tag,
-						"Failure",
+					assert.ok(wrongOrigin._tag === "AuthorizationError")
+					assert.strictEqual(wrongOrigin.reason, "ClientMetadata")
+					const wrongRedirect = yield* Effect.flip(
+						OAuthAuthorization.readClientMetadata({
+							clientId,
+							redirectUri: origin + "/other",
+						}),
 					)
+					assert.ok(wrongRedirect._tag === "AuthorizationError")
+					assert.strictEqual(wrongRedirect.reason, "ClientMetadata")
 					const pending = yield* OAuthAuthorization.begin(options)
 					const flows = yield* Authorization.FlowStore
 					const flow = yield* flows.get({
 						key,
 						flowId: pending.flowId,
 					})
-					assert.deepStrictEqual(flow.binding, {
-						...key,
-						resource,
-						issuer,
-					})
-					assert.strictEqual(
-						(yield* Effect.result(flows.save(flow)))._tag,
-						"Failure",
+					assert.deepStrictEqual(
+						flow.binding,
+						Store.CredentialBinding.make({
+							...key,
+							resource,
+							issuer,
+						}),
 					)
-					assert.ok(!JSON.stringify(pending).includes("verifier"))
+					const duplicate = yield* Effect.flip(flows.save(flow))
+					assert.strictEqual(duplicate.reason, "AlreadyExists")
+					assert.ok(!Str.includes("verifier")(yield* encodeJson(pending)))
 					const network = yield* Network.Network
 					const callback = (yield* network.readDocument({
 						url: pending.authorizationUrl,
@@ -351,73 +326,81 @@ it.live(
 						},
 						{
 							...complete,
-							callbackUrl: callback.replace("host=trusted", "host=attacker"),
+							callbackUrl: Str.replace(
+								"host=trusted",
+								"host=attacker",
+							)(callback),
 						},
 						{
 							...complete,
-							callbackUrl: callback.replace(
+							callbackUrl: Str.replace(
 								/iss=[^&]+/,
 								"iss=https%3A%2F%2Fother.example",
-							),
+							)(callback),
 						},
 						{
 							...complete,
-							callbackUrl: callback.replace(/state=[^&]+/, "state=other"),
+							callbackUrl: Str.replace(/state=[^&]+/, "state=other")(callback),
 						},
-					])
-						assert.strictEqual(
-							(yield* Effect.result(OAuthAuthorization.complete(input)))._tag,
-							"Failure",
+					]) {
+						const tampered = yield* Effect.flip(
+							OAuthAuthorization.complete(input),
 						)
+						assert.ok(tampered._tag === "AuthorizationError")
+						assert.strictEqual(tampered.reason, "CallbackMismatch")
+					}
 					assert.strictEqual(exchanges, 0)
+					// A live client of the connection, as McpClient registers one.
+					const liveClient = Effect.gen(function* () {
+						const closed = yield* Ref.make(false)
+						const scope = yield* Scope.fork(yield* Effect.scope)
+						yield* Scope.addFinalizer(scope, Ref.set(closed, true))
+						yield* (yield* App.ConnectionScopes).register({ key, scope })
+						return closed
+					})
+					const beforeGrant = yield* liveClient
 					const authorized = yield* OAuthAuthorization.complete(complete)
+					// A new grant can be for another account, so live clients connect again.
+					assert.strictEqual(yield* Ref.get(beforeGrant), true)
 					assert.strictEqual(authorized.authorization._tag, "Authorized")
-					assert.ok(!JSON.stringify(authorized).includes("access-secret"))
-					assert.ok(!JSON.stringify(authorized).includes("refresh-secret"))
+					const authorizedText = yield* encodeJson(authorized)
+					assert.ok(!Str.includes("access-secret")(authorizedText))
+					assert.ok(!Str.includes("refresh-secret")(authorizedText))
 					assert.strictEqual(exchanges, 1)
 					assert.strictEqual(businessRequests, 0)
-					assert.strictEqual(
-						(yield* Effect.result(OAuthAuthorization.complete(complete)))._tag,
-						"Failure",
+					const replayed = yield* Effect.flip(
+						OAuthAuthorization.complete(complete),
 					)
+					assert.ok(replayed._tag === "AuthorizationError")
+					assert.strictEqual(replayed.reason, "AlreadyConsumed")
 					assert.strictEqual(exchanges, 1)
 					assert.strictEqual(authorized.authorization._tag, "Authorized")
 					const auth = Match.value(authorized.authorization).pipe(
 						Match.tag("Authorized", (auth) => auth),
-						Match.orElse(() => {
-							throw new Error("Expected a bound grant")
-						}),
+						Match.orElse(() => assert.fail("Expected a bound grant")),
 					)
 					for (const changed of [
 						{ owner: "bob" },
 						{ connectionId: "other" },
 						{ resource: origin + "/other" },
 						{ issuer: origin + "/other" },
-					])
-						assert.strictEqual(
-							(yield* Effect.result(
-								credentials.get({
-									binding: {
-										...auth.binding,
-										...changed,
-									},
-									reference: auth.credentialRef,
-								}),
-							))._tag,
-							"Failure",
+					]) {
+						const missing = yield* Effect.flip(
+							credentials.get({
+								binding: {
+									...auth.binding,
+									...changed,
+								},
+								reference: auth.credentialRef,
+							}),
 						)
+						assert.strictEqual(missing._tag, "StoreError")
+						assert.strictEqual(missing.reason, "Missing")
+					}
 					expanded = true
-					const rejected = yield* Effect.result(OAuthAuthorization.refresh(key))
-					assert.strictEqual(rejected._tag, "Failure")
-					Match.value(rejected).pipe(
-						Match.when(
-							{ _tag: "Failure", failure: { _tag: "AuthorizationError" } },
-							({ failure }) => {
-								assert.strictEqual(failure.reason, "ScopeRequired")
-							},
-						),
-						Match.orElse(() => undefined),
-					)
+					const rejected = yield* Effect.flip(OAuthAuthorization.refresh(key))
+					assert.ok(rejected._tag === "AuthorizationError")
+					assert.strictEqual(rejected.reason, "ScopeRequired")
 					assert.deepStrictEqual(
 						(yield* credentials.get({
 							binding: auth.binding,
@@ -426,10 +409,13 @@ it.live(
 						["notes"],
 					)
 					expanded = false
+					const beforeRefresh = yield* liveClient
 					yield* OAuthAuthorization.refresh(key)
 					assert.strictEqual(refreshes, 2)
+					// A refresh of the same grant keeps live clients and their running calls.
+					assert.strictEqual(yield* Ref.get(beforeRefresh), false)
 					yield* TestClock.adjust("61 seconds")
-					const expired = yield* Effect.result(
+					const expired = yield* Effect.flip(
 						McpClient.open({
 							key,
 							clientInfo: {
@@ -438,16 +424,8 @@ it.live(
 							},
 						}),
 					)
-					assert.strictEqual(expired._tag, "Failure")
-					Match.value(expired).pipe(
-						Match.when(
-							{ _tag: "Failure", failure: { _tag: "AuthorizationRequired" } },
-							({ failure }) => {
-								assert.strictEqual(failure.reason, "Expired")
-							},
-						),
-						Match.orElse(() => undefined),
-					)
+					assert.ok(expired._tag === "AuthorizationRequired")
+					assert.strictEqual(expired.reason, "Expired")
 					assert.strictEqual(businessRequests, 0)
 					assert.strictEqual(refreshes, 2)
 					const expiring = yield* OAuthAuthorization.begin({
@@ -458,38 +436,29 @@ it.live(
 						url: expiring.authorizationUrl,
 					})).url
 					yield* TestClock.adjust("1 second")
-					const expiredFlow = yield* Effect.result(
+					const expiredFlow = yield* Effect.flip(
 						OAuthAuthorization.complete({
 							key,
 							flowId: expiring.flowId,
 							callbackUrl: expiredCallback,
 						}),
 					)
-					assert.strictEqual(expiredFlow._tag, "Failure")
-					Match.value(expiredFlow).pipe(
-						Match.when(
-							{ _tag: "Failure", failure: { _tag: "AuthorizationError" } },
-							({ failure }) => {
-								assert.strictEqual(failure.reason, "FlowExpired")
-							},
-						),
-						Match.orElse(() => undefined),
-					)
+					assert.ok(expiredFlow._tag === "AuthorizationError")
+					assert.strictEqual(expiredFlow.reason, "FlowExpired")
 					assert.strictEqual(exchanges, 1)
 					assert.strictEqual(
 						(yield* OAuthAuthorization.revoke(key))._tag,
 						"Revoked",
 					)
 					assert.strictEqual(revocations, 1)
-					assert.strictEqual(
-						(yield* credentials
-							.get({
-								binding: auth.binding,
-								reference: auth.credentialRef,
-							})
-							.pipe(Effect.result))._tag,
-						"Failure",
+					const revoked = yield* Effect.flip(
+						credentials.get({
+							binding: auth.binding,
+							reference: auth.credentialRef,
+						}),
 					)
+					assert.strictEqual(revoked._tag, "StoreError")
+					assert.strictEqual(revoked.reason, "Missing")
 					assert.strictEqual(
 						(yield* apps.get(key)).authorization._tag,
 						"PendingAuthorization",
@@ -500,5 +469,5 @@ it.live(
 					layer.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
 				),
 			)
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )

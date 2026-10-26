@@ -1,22 +1,27 @@
 import {
+	Array as Arr,
 	Clock,
 	Context,
 	Crypto,
+	Duration,
 	Effect,
 	HashMap,
 	Match,
 	Option,
+	Record as Rec,
 	Schema,
 	Semaphore,
+	String as Str,
 } from "effect"
 import { Base64Url } from "effect/encoding"
 import { McpSchema, McpServer } from "effect/ai"
 import {
 	Document,
 	McpPublisher,
+	Publisher,
 	PublisherProtection,
 } from "@openbot-build/protocol"
-import { type Scenario } from "./Scenarios.ts"
+import { lifetimes, type Scenario } from "./Scenarios.ts"
 import * as Temporary from "./Temporary.ts"
 
 const WorkspaceId = Schema.String.check(
@@ -43,21 +48,34 @@ interface Continuation {
 	readonly input: string
 	readonly request: McpSchema.McpInputRequest
 }
-const result = (data: Schema.JsonObject, message = JSON.stringify(data)) =>
-	McpSchema.CallToolResult.make({
-		content: [McpSchema.TextContent.make({ type: "text", text: message })],
+/** The value is JSON already, so it always encodes. */
+const jsonText = (value: Schema.Json) =>
+	Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(value).pipe(
+		Effect.orDie,
+	)
+const result = Effect.fn(function* (data: Schema.JsonObject, message?: string) {
+	return McpSchema.CallToolResult.make({
+		content: [
+			McpSchema.TextContent.make({
+				type: "text",
+				text: message ?? (yield* jsonText(data)),
+			}),
+		],
 		structuredContent: data,
 	})
+})
 const businessError = (message: string) =>
 	McpSchema.CallToolResult.make({
 		isError: true,
 		content: [McpSchema.TextContent.make({ type: "text", text: message })],
 	})
 const invalid = (message: string) => McpSchema.InvalidParams.make({ message })
-const internal = () =>
-	McpSchema.InternalError.make({
-		message: "The test state is full. Try again after some entries expire.",
-	})
+const stateFull = () =>
+	Effect.fail(
+		McpSchema.InternalError.make({
+			message: "The test state is full. Try again after some entries expire.",
+		}),
+	)
 
 export const register = (options: {
 	readonly origin: string
@@ -69,34 +87,32 @@ export const register = (options: {
 		const server = yield* McpServer.McpServer
 		const crypto = yield* Crypto.Crypto
 		const lock = yield* Semaphore.make(1)
-		const workspaces = Temporary.make<Workspace>(1_800_000)(1000)
-		const continuations = Temporary.make<Continuation>(300_000)()
+		const workspaces = yield* Temporary.make<Workspace>(
+			lifetimes.workspace,
+			1000,
+		)
+		const continuations = yield* Temporary.make<Continuation>(lifetimes.access)
 		const subject = Match.value(scenario.authentication).pipe(
 			Match.when({ kind: "oauth" }, () =>
 				PublisherProtection.currentIdentity.pipe(
 					Effect.map((identity) => identity.subject),
-					Effect.mapError(() =>
-						invalid("There is no authenticated test account."),
+					Effect.catchTag("TokenRejected", () =>
+						Effect.fail(invalid("There is no authenticated test account.")),
 					),
 				),
 			),
 			Match.orElse(() => Effect.succeed("public")),
 		)
 		const keyFor = Effect.fn(function* (workspace: string) {
-			return JSON.stringify([yield* subject, workspace])
+			return yield* jsonText([yield* subject, workspace])
 		})
 		const read = Effect.fn(function* (workspace: string) {
-			const stored = Option.getOrUndefined(
+			return Option.getOrElse(
 				yield* workspaces.get(yield* keyFor(workspace)),
-			)
-			return (
-				stored ?? {
+				(): Workspace => ({
 					view: { workspace, revision: 0, notes: [] },
-					receipts: HashMap.empty<
-						string,
-						{ readonly input: string; readonly view: View }
-					>(),
-				}
+					receipts: HashMap.empty(),
+				}),
 			)
 		})
 		const add = <A>(input: {
@@ -126,7 +142,7 @@ export const register = (options: {
 					inputSchema: {
 						type: "object",
 						...json.schema,
-						...(Object.keys(json.definitions).length === 0
+						...(Rec.isEmptyReadonlyRecord(json.definitions)
 							? {}
 							: { $defs: json.definitions }),
 					},
@@ -136,7 +152,7 @@ export const register = (options: {
 								outputSchema: {
 									type: "object",
 									...output.schema,
-									...(Object.keys(output.definitions).length === 0
+									...(Rec.isEmptyReadonlyRecord(output.definitions)
 										? {}
 										: { $defs: output.definitions }),
 								},
@@ -172,8 +188,7 @@ export const register = (options: {
 				"Return the given test text as a structured result that matches its schema.",
 			schema: Schema.Struct({ text: Text }),
 			output: Schema.Struct({ text: Text, scenario: Schema.String }),
-			handle: ({ text }) =>
-				Effect.succeed(result({ text, scenario: scenario.id })),
+			handle: ({ text }) => result({ text, scenario: scenario.id }),
 		})
 		yield* add({
 			name: "add",
@@ -182,7 +197,7 @@ export const register = (options: {
 			output: Schema.Struct({ sum: Schema.Finite }),
 			handle: ({ a, b }) =>
 				Number.isFinite(a + b)
-					? Effect.succeed(result({ sum: a + b }))
+					? result({ sum: a + b })
 					: Effect.succeed(
 							businessError("The sum is too large to be a finite number."),
 						),
@@ -195,13 +210,17 @@ export const register = (options: {
 			handle: () =>
 				Effect.gen(function* () {
 					const context = yield* McpSchema.McpRequestContext
-					return result({
+					return yield* result({
 						subject: yield* subject,
 						scenario: scenario.id,
 						protocolVersion: context.protocolVersion,
 						capabilities: yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
 							context.clientCapabilities,
-						).pipe(Effect.mapError(() => invalid("Invalid capabilities."))),
+						).pipe(
+							Effect.catchTag("SchemaError", () =>
+								Effect.fail(invalid("Invalid capabilities.")),
+							),
+						),
 					})
 				}),
 		})
@@ -260,7 +279,7 @@ export const register = (options: {
 			output: View,
 			meta: uiMeta,
 			handle: ({ workspace }) =>
-				read(workspace).pipe(Effect.map(({ view }) => result(view))),
+				read(workspace).pipe(Effect.flatMap(({ view }) => result(view))),
 		})
 		const WriteInput = Schema.Struct({
 			workspace: WorkspaceId,
@@ -279,13 +298,11 @@ export const register = (options: {
 				lock.withPermit(
 					Effect.gen(function* () {
 						const state = yield* read(args.workspace)
-						const input = JSON.stringify([args.text])
-						const prior = Option.getOrUndefined(
-							HashMap.get(state.receipts, args.idempotencyKey),
-						)
-						if (prior !== undefined)
-							return prior.input === input
-								? result(prior.view)
+						const input = yield* jsonText([args.text])
+						const prior = HashMap.get(state.receipts, args.idempotencyKey)
+						if (Option.isSome(prior))
+							return prior.value.input === input
+								? yield* result(prior.value.view)
 								: businessError(
 										"This idempotency key was already used with different input.",
 									)
@@ -312,11 +329,14 @@ export const register = (options: {
 									view,
 								}),
 							})
-							.pipe(Effect.mapError(internal))
+							.pipe(Effect.catchTag("CapacityExceeded", stateFull))
 						yield* server.notifications["notifications/resources/updated"]({
 							uri: "protocol-test://workspace/" + args.workspace,
 						})
-						return result(view, "Created a test note. " + JSON.stringify(view))
+						return yield* result(
+							view,
+							"Created a test note. " + (yield* jsonText(view)),
+						)
 					}),
 				),
 		})
@@ -339,9 +359,12 @@ export const register = (options: {
 							return businessError(
 								"The workspace revision changed. Read the workspace again before you delete.",
 							)
-						const notes = state.view.notes.filter((note) => note.id !== args.id)
+						const notes = Arr.filter(
+							state.view.notes,
+							(note) => note.id !== args.id,
+						)
 						if (notes.length === state.view.notes.length)
-							return result(state.view)
+							return yield* result(state.view)
 						const view = {
 							...state.view,
 							revision: state.view.revision + 1,
@@ -349,11 +372,11 @@ export const register = (options: {
 						}
 						yield* workspaces
 							.put(yield* keyFor(args.workspace), { ...state, view })
-							.pipe(Effect.mapError(internal))
+							.pipe(Effect.catchTag("CapacityExceeded", stateFull))
 						yield* server.notifications["notifications/resources/updated"]({
 							uri: "protocol-test://workspace/" + args.workspace,
 						})
-						return result(view)
+						return yield* result(view)
 					}),
 				),
 		})
@@ -370,7 +393,7 @@ export const register = (options: {
 				},
 			},
 			handle: ({ workspace }) =>
-				read(workspace).pipe(Effect.map(({ view }) => result(view))),
+				read(workspace).pipe(Effect.flatMap(({ view }) => result(view))),
 		})
 		yield* add({
 			name: "test_error",
@@ -419,7 +442,7 @@ export const register = (options: {
 							}
 						})
 					yield* tick(0)
-					return result({
+					return yield* result({
 						waited: milliseconds,
 						completedAt: yield* Clock.currentTimeMillis,
 					})
@@ -437,7 +460,7 @@ export const register = (options: {
 						{},
 					)
 					yield* server.notifications["notifications/prompts/list_changed"]({})
-					return result({ notified: true })
+					return yield* result({ notified: true })
 				}),
 		})
 		const inputKinds = ["form", "url", "sampling", "roots"] as const
@@ -456,14 +479,14 @@ export const register = (options: {
 							const context = yield* McpSchema.McpRequestContext
 							const account = yield* subject
 							if (context.requestState !== undefined) {
-								const pending = Option.getOrUndefined(
-									yield* continuations.get(context.requestState),
-								)
 								if (
-									pending === undefined ||
-									pending.subject !== account ||
-									pending.tool !== kind ||
-									pending.input !== text
+									!Option.exists(
+										yield* continuations.get(context.requestState),
+										(pending) =>
+											pending.subject === account &&
+											pending.tool === kind &&
+											pending.input === text,
+									)
 								)
 									return yield* invalid(
 										"The continuation expired, or it does not match the original account, tool and input.",
@@ -471,7 +494,7 @@ export const register = (options: {
 								const response = context.inputResponses?.["input"]
 								if (
 									response === undefined ||
-									Object.keys(context.inputResponses ?? {}).length !== 1
+									Rec.size(context.inputResponses ?? {}) !== 1
 								)
 									return yield* invalid(
 										"Return one response, for the requested input ID only.",
@@ -504,7 +527,7 @@ export const register = (options: {
 										"The continuation was already completed.",
 									)
 								// Since effect 4.0.6, input responses are not typed as JSON
-								return result({
+								return yield* result({
 									kind,
 									response: yield* Schema.decodeUnknownEffect(Schema.Json)(
 										response,
@@ -515,9 +538,10 @@ export const register = (options: {
 								return yield* invalid(
 									"Input responses need the original request state.",
 								)
+							// A platform without secure random numbers is broken.
 							const id = yield* crypto
 								.randomBytes(24)
-								.pipe(Effect.map(Base64Url.encode), Effect.mapError(internal))
+								.pipe(Effect.map(Base64Url.encode), Effect.orDie)
 							const request = Match.value(kind).pipe(
 								Match.when("form", (): McpSchema.McpInputRequest => ({
 									method: "elicitation/create",
@@ -563,7 +587,7 @@ export const register = (options: {
 							)
 							yield* continuations
 								.put(id, { subject: account, tool: kind, input: text, request })
-								.pipe(Effect.mapError(internal))
+								.pipe(Effect.catchTag("CapacityExceeded", stateFull))
 							return new McpSchema.InputRequired({
 								requestState: id,
 								inputRequests: { input: request },
@@ -576,14 +600,12 @@ export const register = (options: {
 			uri: "protocol-test://about",
 			name: "About Protocol Test",
 			mimeType: "application/json",
-			content: Effect.succeed(
-				JSON.stringify({
-					scenario: scenario.id,
-					protocolVersion: Document.protocolVersion,
-					synthetic: true,
-					workspaceTtlSeconds: 1800,
-				}),
-			),
+			content: jsonText({
+				scenario: scenario.id,
+				protocolVersion: Document.protocolVersion,
+				synthetic: true,
+				workspaceTtlSeconds: Duration.toSeconds(lifetimes.workspace),
+			}),
 		})
 		yield* McpServer.registerResource({
 			uri: "protocol-test://binary",
@@ -598,13 +620,11 @@ export const register = (options: {
 				completion: {
 					param0: (prefix: string) =>
 						Effect.succeed(
-							["demo", "example", "test"].filter((value) =>
-								value.startsWith(prefix),
-							),
+							Arr.filter(["demo", "example", "test"], Str.startsWith(prefix)),
 						),
 				},
 				content: (_uri, workspace) =>
-					read(workspace).pipe(Effect.map(({ view }) => JSON.stringify(view))),
+					read(workspace).pipe(Effect.flatMap(({ view }) => jsonText(view))),
 			},
 		)
 		// Register enough real resources to need more than one native MCP page.
@@ -629,13 +649,11 @@ export const register = (options: {
 			completion: {
 				workspace: (prefix) =>
 					Effect.succeed(
-						["demo", "example", "test"].filter((value) =>
-							value.startsWith(prefix),
-						),
+						Arr.filter(["demo", "example", "test"], Str.startsWith(prefix)),
 					),
 				style: (prefix) =>
 					Effect.succeed(
-						["brief", "detailed"].filter((value) => value.startsWith(prefix)),
+						Arr.filter(["brief", "detailed"], Str.startsWith(prefix)),
 					),
 			},
 			content: ({ workspace, style }) =>
@@ -647,15 +665,17 @@ export const register = (options: {
 						" style.",
 				),
 		})
-		yield* McpPublisher.registerUi({
-			uri: "ui://protocol-test/workspace.html",
-			name: "Protocol Test workspace",
-			html: options.uiHtml,
-			meta: {
-				ui: {
-					csp: { connectDomains: [], resourceDomains: [] },
-					prefersBorder: true,
+		yield* McpPublisher.registerUi(
+			Publisher.UiResource.make({
+				uri: "ui://protocol-test/workspace.html",
+				name: "Protocol Test workspace",
+				html: options.uiHtml,
+				meta: {
+					ui: {
+						csp: { connectDomains: [], resourceDomains: [] },
+						prefersBorder: true,
+					},
 				},
-			},
-		})
+			}),
+		)
 	})

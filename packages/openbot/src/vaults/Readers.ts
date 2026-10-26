@@ -1,12 +1,28 @@
 import type { VaultsApi } from "@openbot-build/api"
-import { Context, Effect, Layer, Predicate, Schema } from "effect"
+import {
+	Array as Arr,
+	Context,
+	Effect,
+	Layer,
+	pipe,
+	Predicate,
+	Record as Rec,
+	Schema,
+	String as Str,
+} from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 
-/** The secret provider did not answer, refused the token, or has no such item or field. */
-export class VaultReadFailed extends Schema.TaggedError<VaultReadFailed>()(
-	"VaultReadFailed",
-	{ message: Schema.String },
-) {}
+/**
+ * The secret provider did not answer, refused the token, or has no such item or field.
+ * Callers show the message. The cause stays inside OpenBot.
+ */
+export class VaultReadFailed extends Schema.TaggedError<
+	VaultReadFailed,
+	{ readonly brand: unique symbol }
+>()("VaultReadFailed", {
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
 /** The credentials of a secret provider. */
 export type Remote = VaultsApi.SecretProviderCredentials
@@ -30,8 +46,12 @@ export class Readers extends Context.Service<
 
 const timeoutMs = 15_000
 const decoder = new TextDecoder()
+const decodeJson = Schema.decodeUnknownEffect(
+	Schema.fromJsonString(Schema.Unknown),
+)
 
-const failed = (message: string) => VaultReadFailed.make({ message })
+const failed = (message: string, cause?: unknown) =>
+	VaultReadFailed.make({ message, cause })
 
 /** Sends one request and gives back the JSON body of a good answer. */
 const fetchJson = (
@@ -46,8 +66,8 @@ const fetchJson = (
 				text: decoder.decode(buffer),
 			})),
 		),
-		Effect.mapError(() =>
-			failed(`${what}: the password manager did not answer`),
+		Effect.mapError((error) =>
+			failed(`${what}: the password manager did not answer`, error),
 		),
 		Effect.timeoutOrElse({
 			duration: timeoutMs,
@@ -67,10 +87,10 @@ const fetchJson = (
 				)
 			if (status < 200 || status >= 300)
 				return Effect.fail(failed(`${what} failed with HTTP ${status}`))
-			return Effect.try({
-				try: (): unknown => JSON.parse(text),
-				catch: () => failed(`${what}: the answer is not JSON`),
-			})
+			return decodeJson(text).pipe(
+				// @effect-rules-next-line blind-error-map -- The answer can hold secrets, and the decode failure holds the answer, so the error must not keep it.
+				Effect.mapError(() => failed(`${what}: the answer is not JSON`)),
+			)
 		}),
 	)
 
@@ -79,7 +99,7 @@ const field = (value: unknown, key: string): unknown =>
 		? (value as Record<string, unknown>)[key]
 		: undefined
 const list = (value: unknown): ReadonlyArray<unknown> =>
-	Array.isArray(value) ? value : []
+	Arr.isArray(value) ? value : []
 const string = (value: unknown): string | undefined =>
 	Predicate.isString(value) ? value : undefined
 
@@ -88,13 +108,13 @@ const pick = (
 	found: ReadonlyMap<string, string>,
 	fields: ReadonlyArray<string>,
 ): Effect.Effect<ReadonlyMap<string, string>, VaultReadFailed> => {
-	const missing = fields.filter((name) => !found.has(name))
+	const missing = Arr.filter(fields, (name) => !found.has(name))
 	if (missing.length > 0)
 		return Effect.fail(
-			failed(`The item has no field with the name ${missing.join(", ")}`),
+			failed(`The item has no field with the name ${Arr.join(missing, ", ")}`),
 		)
 	return Effect.succeed(
-		new Map(fields.map((name) => [name, found.get(name)!] as const)),
+		new Map(Arr.map(fields, (name) => [name, found.get(name)!] as const)),
 	)
 }
 
@@ -165,15 +185,16 @@ export const bitwarden = (
 			),
 			what,
 		).pipe(
-			Effect.flatMap((body) =>
-				field(body, "success") === true
-					? Effect.succeed(field(body, "data"))
-					: Effect.fail(
-							failed(
-								`${what}: ${string(field(body, "message"))?.slice(0, 200) ?? "Bitwarden said no"}`,
-							),
-						),
-			),
+			Effect.flatMap((body) => {
+				if (field(body, "success") === true)
+					return Effect.succeed(field(body, "data"))
+				const message = string(field(body, "message"))
+				return Effect.fail(
+					failed(
+						`${what}: ${message === undefined ? "Bitwarden said no" : Str.slice(0, 200)(message)}`,
+					),
+				)
+			}),
 		)
 	return {
 		verify: get("/status", "Reading the Bitwarden status").pipe(
@@ -228,7 +249,7 @@ export const hashiCorp = (
 	client: HttpClient.HttpClient,
 	credentials: Extract<Remote, { readonly kind: "hashicorp" }>,
 ): Reader => {
-	const mount = (credentials.mount ?? "secret").replace(/^\/+|\/+$/g, "")
+	const mount = Str.replace(/^\/+|\/+$/g, "")(credentials.mount ?? "secret")
 	const get = (path: string, what: string) =>
 		fetchJson(
 			client,
@@ -249,17 +270,19 @@ export const hashiCorp = (
 		),
 		read: (source, fields) => {
 			if (source._tag !== "HashiCorp") return wrongSource("HashiCorp")
-			const path = source.path
-				.replace(/^\/+|\/+$/g, "")
-				.split("/")
-				.map(encodeURIComponent)
-				.join("/")
+			const path = pipe(
+				source.path,
+				Str.replace(/^\/+|\/+$/g, ""),
+				Str.split("/"),
+				Arr.map((part) => encodeURIComponent(part)),
+				Arr.join("/"),
+			)
 			return get(`/v1/${mount}/data/${path}`, "Reading the Vault secret").pipe(
 				Effect.flatMap((body) => {
 					const data = field(field(body, "data"), "data")
 					const found = new Map<string, string>()
 					if (Predicate.isObject(data))
-						for (const [key, value] of Object.entries(data))
+						for (const [key, value] of Rec.toEntries(data))
 							found.set(
 								key,
 								Predicate.isString(value) ? value : JSON.stringify(value),

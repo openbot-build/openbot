@@ -1,10 +1,10 @@
 import type { Caller, OrganizationApi } from "@openbot-build/api"
 import { Context, type Effect, Schema } from "effect"
 
-export class AuditUnavailable extends Schema.TaggedError<AuditUnavailable>()(
-	"AuditUnavailable",
-	{},
-) {}
+export class AuditUnavailable extends Schema.TaggedError<
+	AuditUnavailable,
+	{ readonly brand: unique symbol }
+>()("AuditUnavailable", { cause: Schema.Defect() }) {}
 
 export interface Entry {
 	readonly organizationId: string

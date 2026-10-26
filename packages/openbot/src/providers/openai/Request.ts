@@ -1,4 +1,11 @@
-import { Deferred, Effect, Option, Schema, Predicate, Record } from "effect"
+import {
+	Deferred,
+	Effect,
+	Option,
+	Schema,
+	Predicate,
+	Record as Rec,
+} from "effect"
 import { AiError, Prompt } from "effect/ai"
 import {
 	OpenAiClient,
@@ -14,6 +21,22 @@ import {
 } from "@openbot-build/core"
 import { type Defaults, type Options } from "./OpenAiProvider.ts"
 
+const invalidRequest = (description: string) =>
+	AiError.AiError.make({
+		module: "OpenAiProvider",
+		method: "encodeRequest",
+		reason: AiError.InvalidRequestError.make({ description }),
+	})
+
+const decodeJsonObjects = Schema.decodeUnknownEffect(
+	Schema.Array(Schema.JsonObject),
+)
+
+const decodeItems = (input: unknown) =>
+	decodeJsonObjects(input).pipe(
+		Effect.mapError((error) => invalidRequest(String(error))),
+	)
+
 export const config =
 	({ upstreamModel, ...defaults }: Defaults & Options) =>
 	(selection: Config.Selection) =>
@@ -26,29 +49,24 @@ export const config =
 						)({
 							...defaults.reasoning,
 							effort: selection.reasoningEffort,
-						}).pipe(
-							Effect.mapError((e) =>
-								AiError.AiError.make({
-									module: "OpenAiProvider",
-									method: "encodeRequest",
-									reason: AiError.InvalidRequestError.make({
-										description: String(e),
-									}),
-								}),
-							),
-						)
+						}).pipe(Effect.mapError((error) => invalidRequest(String(error))))
 			return {
 				store: false,
 				...defaults,
 				model: upstreamModel ?? selection.model,
 				reasoning,
-				...Record.filter(
+				...Rec.filter(
 					{ service_tier: selection.serviceTier },
 					Predicate.isNotUndefined,
 				),
 			} satisfies typeof OpenAiLanguageModel.Config.Service
 		})
 
+/**
+ * The native items of the context window of the current model call. The Chat
+ * runtime gives the window to each call that it makes. Other calls, such as
+ * those of a helper model, have none, so they send no native items.
+ */
 export const nativeInput = (
 	selection: Config.Selection,
 ): Effect.Effect<ReadonlyArray<Schema.JsonObject>, AiError.AiError> =>
@@ -62,28 +80,11 @@ export const nativeInput = (
 						window.provider !== selection.provider ||
 						window.model !== selection.model
 							? Effect.fail(
-									AiError.AiError.make({
-										module: "OpenAiProvider",
-										method: "encodeRequest",
-										reason: AiError.InvalidRequestError.make({
-											description:
-												"The native context window provider or model does not match the request",
-										}),
-									}),
-								)
-							: Schema.decodeUnknownEffect(Schema.Array(Schema.JsonObject))(
-									window.items,
-								).pipe(
-									Effect.mapError((e) =>
-										AiError.AiError.make({
-											module: "OpenAiProvider",
-											method: "encodeRequest",
-											reason: AiError.InvalidRequestError.make({
-												description: String(e),
-											}),
-										}),
+									invalidRequest(
+										"The native context window provider or model does not match the request",
 									),
-								),
+								)
+							: decodeItems(window.items),
 				},
 			),
 		),
@@ -99,17 +100,7 @@ const prependNativeInput = (
 ): Effect.Effect<Request, AiError.AiError> =>
 	Effect.gen(function* () {
 		const native = yield* nativeInput(selection)
-		const input = yield* Schema.decodeUnknownEffect(
-			Schema.Array(Schema.JsonObject),
-		)(payload.input).pipe(
-			Effect.mapError((e) =>
-				AiError.AiError.make({
-					module: "OpenAiProvider",
-					method: "encodeRequest",
-					reason: AiError.InvalidRequestError.make({ description: String(e) }),
-				}),
-			),
-		)
+		const input = yield* decodeItems(payload.input)
 		return { ...payload, input: [...native, ...input] }
 	})
 
@@ -125,6 +116,8 @@ export const client = (
 		): Effect.Effect<A, AiError.AiError> =>
 			Effect.gen(function* () {
 				const body = yield* prependNativeInput(selection, payload)
+				// The SDK has a config only when the caller set one for this call. It is
+				// replaced below, so its own change of the client must still run.
 				const scoped = yield* Effect.serviceOption(OpenAiConfig.OpenAiConfig)
 				return yield* operation.pipe(
 					OpenAiConfig.withClientTransform((http) => {
@@ -184,19 +177,11 @@ export const encode =
 					prompt: Prompt.concat(request.instructions, request.window.prompt),
 					toolkit: {
 						// Encoding needs only the wire schema. It does not need parameter codec services.
-						tools: Record.map(request.toolkit.tools, (tool) =>
+						tools: Rec.map(request.toolkit.tools, (tool) =>
 							tool.setParameters(Schema.toEncoded(tool.parametersSchema)),
 						),
 						handle: () =>
-							Effect.fail(
-								AiError.AiError.make({
-									module: "OpenAiProvider",
-									method: "encodeRequest",
-									reason: AiError.InvalidRequestError.make({
-										description: "Request encoding cannot run tools",
-									}),
-								}),
-							),
+							Effect.fail(invalidRequest("Request encoding cannot run tools")),
 					},
 					toolChoice: request.toolChoice ?? "auto",
 					disableToolCallResolution: true,

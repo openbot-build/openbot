@@ -66,7 +66,8 @@ für diesen direkten Chat, oder liste die Task-Chats des Bots mit
 Ein Zeitplan hat einen `cron`-Text mit fünf Feldern, zum Beispiel `0 9 * * 1-5`
 für 9:00 Uhr an Werktagen. `timeZone` ist eine IANA-Zeitzone, zum Beispiel
 `Europe/Berlin`. Ohne sie ist die Zeitzone UTC. Ein ungültiger cron-Text gibt
-`400` mit `TriggerInvalid` zurück.
+`400` mit `TriggerInvalid` zurück. Ein cron-Text, der nie auslöst, zum Beispiel
+`0 0 30 2 *` (30. Februar), gibt denselben Fehler zurück.
 
 OpenBot sucht alle 15 Sekunden nach fälligen Zeitplänen. Wenn viele Server
 laufen, löst jeder Trigger nur einmal aus.

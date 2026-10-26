@@ -1,4 +1,5 @@
 import { Duration, Effect, Layer, Schedule } from "effect"
+import * as Background from "../app/Background.ts"
 import { Files } from "./Files.ts"
 
 export interface Options {
@@ -15,12 +16,9 @@ export const layer = (options: Options = {}) =>
 	Layer.effectDiscard(
 		Effect.gen(function* () {
 			const files = yield* Files
-			yield* files.collect.pipe(
-				Effect.catchCause((cause) =>
-					Effect.logWarning("The file garbage collector failed", cause),
-				),
-				Effect.repeat(Schedule.spaced(options.interval ?? Duration.minutes(1))),
-				Effect.forkScoped,
-			)
+			yield* Background.repeat(files.collect, {
+				schedule: Schedule.spaced(options.interval ?? Duration.minutes(1)),
+				message: "The file garbage collector failed",
+			})
 		}),
 	)

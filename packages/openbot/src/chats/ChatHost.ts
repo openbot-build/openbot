@@ -1,7 +1,7 @@
 import { Chat, type Plugin, type Turn } from "@openbot-build/core"
 import { BotsApi, ChatKind, ChatParent, PlanApproval } from "@openbot-build/api"
 import type * as Todos from "../plugins/work/Todos.ts"
-import { Schema } from "effect"
+import { Option, Schema, String as Str } from "effect"
 
 /** The OpenBot plugin that adds the host toolkit, the user plugin and the execution services. */
 const chatHostKey = "@openbot-build/openbot/chat-host"
@@ -88,12 +88,14 @@ export const authorOf = (userId: string, tokenId?: string): Turn.Author =>
 /** The member and the token of an author. */
 export const parseAuthor = (
 	author: Turn.Author,
-): { readonly userId: string; readonly tokenId?: string } => {
-	const at = author.indexOf("#")
-	return at === -1
-		? { userId: author }
-		: { userId: author.slice(0, at), tokenId: author.slice(at + 1) }
-}
+): { readonly userId: string; readonly tokenId?: string } =>
+	Option.match(Str.indexOf("#")(author), {
+		onNone: () => ({ userId: author }),
+		onSome: (at) => ({
+			userId: Str.slice(0, at)(author),
+			tokenId: Str.slice(at + 1)(author),
+		}),
+	})
 
 /**
  * Who one Turn works for. A Turn with an author, such as a speaker in a chat Channel,
@@ -122,10 +124,6 @@ export const turnChain = (
 /** The author of the work of a chain: its member, and its token when it has one. */
 export const chainAuthor = (chain: Chain): Turn.Author =>
 	authorOf(chain.userId, chain.tokenId)
-
-/** The chain of the current Turn of a Chat, or of the Chat when no Turn runs. */
-export const currentChain = (chat: Chat.Ref): Chain =>
-	turnChain(chat, Chat.currentTurn(chat)?.author)
 
 /** The member whose Chats hold the work of a chain. */
 export const ownerOf = (chain: Chain) => chain.owner ?? chain.userId

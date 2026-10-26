@@ -1,3 +1,4 @@
+// @effect-diagnostics processEnv:off -- better-auth reads these values from the process itself, so only a change to the process environment hides them.
 // Vitest sets NODE_ENV to "test" and TEST to "true". When better-auth sees them,
 // it acts in other ways than in production: for example, it does not check the
 // secret, and it gives a localhost IP when it cannot find the real one. The

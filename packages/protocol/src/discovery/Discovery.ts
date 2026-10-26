@@ -2,7 +2,10 @@ import { Context, Effect, Schema } from "effect"
 import * as Document from "../Document.ts"
 import * as Network from "../network/Network.ts"
 
-export class Source extends Schema.Opaque<Source>()(
+export class Source extends Schema.Opaque<
+	Source,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		role: Schema.Literals([
 			"input",
@@ -27,7 +30,10 @@ export class Source extends Schema.Opaque<Source>()(
 		)
 }
 
-export class ConfigurationRequirement extends Schema.Opaque<ConfigurationRequirement>()(
+export class ConfigurationRequirement extends Schema.Opaque<
+	ConfigurationRequirement,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		key: Schema.String,
 		description: Schema.optional(Schema.String),
@@ -47,7 +53,10 @@ export class ConfigurationRequirement extends Schema.Opaque<ConfigurationRequire
 		)
 }
 
-export class Endpoint extends Schema.Opaque<Endpoint>()(
+export class Endpoint extends Schema.Opaque<
+	Endpoint,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		index: Schema.Natural,
 		remote: Document.Remote,
@@ -65,7 +74,10 @@ export class Endpoint extends Schema.Opaque<Endpoint>()(
 		)
 }
 
-export class Candidate extends Schema.Opaque<Candidate>()(
+export class Candidate extends Schema.Opaque<
+	Candidate,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		cardUrl: Schema.String,
 		card: Document.ServerCard,
@@ -84,7 +96,10 @@ export class Candidate extends Schema.Opaque<Candidate>()(
 		)
 }
 
-export class Issue extends Schema.Opaque<Issue>()(
+export class Issue extends Schema.Opaque<
+	Issue,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		url: Schema.String,
 		reason: Schema.String,
@@ -134,13 +149,13 @@ export const DiscoveryErrorReason = Schema.Literals([
 ])
 export type DiscoveryErrorReason = typeof DiscoveryErrorReason.Type
 
-export class DiscoveryError extends Schema.TaggedError<DiscoveryError>()(
-	"DiscoveryError",
-	{
-		reason: DiscoveryErrorReason,
-		issues: Schema.Array(Issue),
-	},
-) {}
+export class DiscoveryError extends Schema.TaggedError<
+	DiscoveryError,
+	{ readonly brand: unique symbol }
+>()("DiscoveryError", {
+	reason: DiscoveryErrorReason,
+	issues: Schema.Array(Issue),
+}) {}
 
 export type Error =
 	| DiscoveryError

@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 import { NodeServices } from "@effect/platform-node"
 import {
+	Array as Arr,
 	Cause,
 	Config,
 	Console,
 	Data,
 	Effect,
+	Match,
 	Option,
-	PlatformError,
+	Record as Rec,
 } from "effect"
-import { Argument, Command } from "effect/cli"
+import { Argument, CliError, Command } from "effect/cli"
 import { ChildProcess } from "effect/process"
 import * as Dispatch from "./Dispatch.ts"
+import * as Signal from "./Signal.ts"
 
 /** The version of the openbot command. */
 const version = "0.1.0"
@@ -48,28 +51,15 @@ const forwardSignals = (pid: number) =>
 				SIGTERM: () => process.kill(pid, "SIGTERM"),
 				SIGHUP: () => process.kill(pid, "SIGHUP"),
 			} as const
-			for (const [signal, handler] of Object.entries(handlers))
+			for (const [signal, handler] of Rec.toEntries(handlers))
 				process.on(signal, handler)
 			return handlers
 		}),
 		(handlers) =>
 			Effect.sync(() => {
-				for (const [signal, handler] of Object.entries(handlers))
+				for (const [signal, handler] of Rec.toEntries(handlers))
 					process.off(signal, handler)
 			}),
-	)
-
-/**
- * The handle of @effect/platform-node 4.0.6 gives no signal when a command stops on
- * a signal. Its `exitCode` fails with an error whose cause names the signal in its
- * text, so this reads the signal from that text.
- */
-const signalIn = (error: PlatformError.PlatformError) =>
-	Option.fromNullishOr(
-		error.reason.cause instanceof Error
-			? (/signal: '(SIG[A-Z0-9]+)'/.exec(error.reason.cause.message)?.[1] as
-					NodeJS.Signals | undefined)
-			: undefined,
 	)
 
 const run = (file: string, args: ReadonlyArray<string>) =>
@@ -86,7 +76,7 @@ const run = (file: string, args: ReadonlyArray<string>) =>
 			return yield* handle.exitCode.pipe(
 				Effect.map((code) => Outcome.Code({ code })),
 				Effect.catch((error) =>
-					Option.match(signalIn(error), {
+					Option.match(Signal.signalOf(error), {
 						onNone: () => Effect.fail(error),
 						onSome: (signal) => Effect.succeed(Outcome.Signal({ signal })),
 					}),
@@ -134,20 +124,20 @@ const openbot = Command.make(
 		Effect.gen(function* () {
 			const folders = yield* Dispatch.searchFolders({
 				script: process.argv[1] ?? import.meta.filename,
-				path: Option.getOrUndefined(
-					yield* Config.option(Config.String("PATH")),
-				),
+				path: yield* Config.String("PATH").pipe(Config.withDefault("")),
 			})
-			const name = Option.getOrUndefined(command)
-			const first = args[0]
-			const outcome =
-				name === undefined || name === "--help" || name === "-h"
-					? yield* showUsage(folders)
-					: name !== "help"
-						? yield* runCommand(name, folders, args)
-						: first === undefined
-							? yield* showUsage(folders)
-							: yield* runCommand(first, folders, ["--help"])
+			const outcome = yield* Match.value(
+				Option.getOrElse(command, () => "--help"),
+			).pipe(
+				Match.whenOr("--help", "-h", () => showUsage(folders)),
+				Match.when("help", () =>
+					Option.match(Arr.head(args), {
+						onNone: () => showUsage(folders),
+						onSome: (first) => runCommand(first, folders, ["--help"]),
+					}),
+				),
+				Match.orElse((name) => runCommand(name, folders, args)),
+			)
 			return yield* finish(outcome)
 		}),
 ).pipe(Command.withDescription("Run and control OpenBot."))
@@ -158,8 +148,15 @@ const argv = process.argv.slice(2)
 const program = Command.runWith(openbot, { version })(
 	argv.length === 0 ? [] : ["--", ...argv],
 ).pipe(
-	// The parser has already shown its errors.
-	Effect.catch(() => finish(Outcome.Code({ code: 1 }))),
+	// runWith has already shown the help and the user errors. This shows any other failure.
+	Effect.catch((error) =>
+		CliError.isCliError(error) &&
+		(error._tag === "ShowHelp" || error._tag === "UserError")
+			? finish(Outcome.Code({ code: 1 }))
+			: Console.error(`openbot: ${error.message}`).pipe(
+					Effect.andThen(finish(Outcome.Code({ code: 1 }))),
+				),
+	),
 	Effect.catchDefect((defect) =>
 		Console.error(Cause.pretty(Cause.die(defect))).pipe(
 			Effect.andThen(finish(Outcome.Code({ code: 1 }))),
@@ -170,5 +167,5 @@ const program = Command.runWith(openbot, { version })(
 // This is the entry point, so it gives every service at once. It does not use
 // NodeRuntime.runMain, because runMain stops the program on SIGINT, and openbot must
 // wait for the command to stop.
-// @effect-diagnostics-next-line strictEffectProvide:off
+// @effect-diagnostics-next-line strictEffectProvide:off -- this is the entry point, so it gives the services here
 Effect.runFork(program.pipe(Effect.provide(NodeServices.layer)))

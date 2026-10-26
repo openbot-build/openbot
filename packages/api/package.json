@@ -14,13 +14,16 @@
 		".": "./dist/index.js"
 	},
 	"scripts": {
-		"build": "tsdown"
+		"build": "tsdown",
+		"test": "tsc -p tsconfig.test.json && vitest run"
 	},
 	"peerDependencies": {
 		"effect": "4.0.6"
 	},
 	"devDependencies": {
-		"effect": "4.0.6"
+		"@effect/vitest": "4.0.6",
+		"effect": "4.0.6",
+		"vitest": "5.0.5"
 	},
 	"dependencies": {
 		"@nmnmcc/ability": "1.0.1",

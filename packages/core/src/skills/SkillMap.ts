@@ -1,4 +1,12 @@
-import { Array as Arr, Chunk, Context, HashMap, Layer, Option } from "effect"
+import {
+	Array as Arr,
+	Chunk,
+	Context,
+	HashMap,
+	Layer,
+	Option,
+	pipe,
+} from "effect"
 import type * as Skill from "./Skill.ts"
 
 export type Catalog = Chunk.Chunk<Skill.Descriptor>
@@ -14,14 +22,17 @@ export class SkillMap extends Context.Service<
 
 /** A skill keeps the position of its first definition and the value of its last one. */
 const merge = (...maps: ReadonlyArray<Catalog>): Catalog => {
-	const skills = maps.flatMap(Chunk.toReadonlyArray)
+	const skills = Arr.flatMap(maps, Chunk.toReadonlyArray)
 	const latest = HashMap.fromIterable(
-		skills.map((skill) => [skill.id, skill] as const),
+		Arr.map(skills, (skill) => [skill.id, skill] as const),
 	)
-	return Chunk.fromIterable(
-		Arr.dedupeWith(skills, (left, right) => left.id === right.id).map((skill) =>
+	return pipe(
+		skills,
+		Arr.dedupeWith((left, right) => left.id === right.id),
+		Arr.map((skill) =>
 			Option.getOrElse(HashMap.get(latest, skill.id), () => skill),
 		),
+		Chunk.fromIterable,
 	)
 }
 

@@ -1,5 +1,5 @@
 import { PlanApproval, Settings as Api } from "@openbot-build/api"
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 
 /** The stored form of the file settings. The secret key is sealed. */
 export const FilesDocument = Schema.Struct({
@@ -171,17 +171,21 @@ export const scopeKey = (scope: Scope) =>
 	scope.kind === "organization" || scope.kind === "member"
 		? scope.kind + ":" + scope.id
 		: scope.kind + ":" + scope.kind
-export const parseScopeKey = (key: string): Scope | undefined => {
-	const colon = key.indexOf(":")
-	const kind = key.slice(0, colon)
-	const id = key.slice(colon + 1)
-	if (colon < 0 || id === "") return undefined
-	if (kind === "platform") return platformScope
-	if (kind === "signIn") return signInScope
-	if (kind === "organization") return organizationScope(id)
-	if (kind === "member") return { kind: "member", id }
-	return undefined
-}
+const ScopeKey = Schema.TemplateLiteralParser([
+	Schema.Literals(["platform", "signIn", "organization", "member"]),
+	":",
+	Schema.NonEmptyString,
+])
+const decodeScopeKey = Schema.decodeUnknownOption(ScopeKey)
+/** Reads the key that `scopeKey` makes. Any other text is none. */
+export const parseScopeKey = (key: string): Option.Option<Scope> =>
+	Option.map(decodeScopeKey(key), ([kind, , id]) =>
+		kind === "platform"
+			? platformScope
+			: kind === "signIn"
+				? signInScope
+				: { kind, id },
+	)
 
 /** One version of a settings document. */
 export interface Snapshot<Document> {

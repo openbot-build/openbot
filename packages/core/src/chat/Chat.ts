@@ -4,6 +4,7 @@ import {
 	Schema,
 	type Duration,
 	type Effect,
+	type Scope,
 	type Stream,
 } from "effect"
 import { type Prompt, type Tool, type Toolkit } from "effect/ai"
@@ -45,9 +46,6 @@ export const InboxEntry = Schema.Struct({
 	approved: Schema.optionalKey(ApprovedCall),
 })
 export type InboxEntry = typeof InboxEntry.Type
-const opaque = Schema.declare(
-	(_value: unknown): _value is unknown => true,
-).annotate({ toCodecJson: () => undefined, toJsonSchema: () => ({}) })
 /** The small, changing record of a Chat. The Items and the old Turns are kept apart. */
 export const Ref = Schema.Struct({
 	id: Id,
@@ -58,7 +56,7 @@ export const Ref = Schema.Struct({
 	turn: Schema.optionalKey(Turn.Record),
 	/** The place of the last Item. It is 0 when the Chat has no Items. */
 	seq: Item.Seq,
-	business: Schema.Record(Schema.String, opaque),
+	business: Schema.Record(Schema.String, ChatState.Opaque),
 	createdAt: Schema.Finite,
 })
 export type Ref = typeof Ref.Type
@@ -77,15 +75,21 @@ export const position = (chat: Ref): Position => ({
 	chat: chat.id,
 	revision: chat.revision,
 })
-export class ChatNotFound extends Schema.TaggedError<ChatNotFound>()(
-	"ChatNotFound",
-	{ chat: Id },
-) {}
-export class ChatError extends Schema.TaggedError<ChatError>()("ChatError", {
+export class ChatNotFound extends Schema.TaggedError<
+	ChatNotFound,
+	{ readonly brand: unique symbol }
+>()("ChatNotFound", { chat: Id }) {}
+export class ChatError extends Schema.TaggedError<
+	ChatError,
+	{ readonly brand: unique symbol }
+>()("ChatError", {
 	reason: Schema.Literals(["state-conflict", "unavailable"]),
 	message: Schema.String,
 }) {}
-export class Conflict extends Schema.TaggedError<Conflict>()("ChatConflict", {
+export class Conflict extends Schema.TaggedError<
+	Conflict,
+	{ readonly brand: unique symbol }
+>()("ChatConflict", {
 	chat: Id,
 	message: Schema.String,
 }) {}
@@ -187,6 +191,13 @@ export interface RuntimeOptions<
 	 * A host uses it when only one process can run the Turns of a Chat.
 	 */
 	readonly canStart?: (view: View<P>) => Effect.Effect<boolean>
+	/**
+	 * Runs while a Turn of the Chat runs: from its start until the runtime has
+	 * closed it and started the next Turn from the inbox. Its scope closes then.
+	 * A host uses it to keep its runtime open while the Turn works, or to tell
+	 * other processes that the Turn still runs.
+	 */
+	readonly whileRunning?: (chat: Id) => Effect.Effect<void, never, Scope.Scope>
 }
 export interface Runtime<
 	P = {},
@@ -204,7 +215,10 @@ export interface Runtime<
 	readonly deliver: (
 		input: DeliverInput,
 	) => Effect.Effect<Delivery, RuntimeError, Bot.RuntimeServices<Tools, R>>
-	/** Starts a Turn and returns its events. It fails when the Chat is not idle. */
+	/**
+	 * Starts a Turn and returns its events. It fails when the Chat is not idle.
+	 * The Turn stops when the caller stops reading, or when the runtime closes.
+	 */
 	readonly stream: (
 		input: StartInput,
 	) => Stream.Stream<
@@ -245,6 +259,10 @@ export interface Runtime<
 		readonly afterActive?: boolean
 		readonly timeout: Duration.Input
 	}) => Effect.Effect<View<P>, RuntimeError>
+	/**
+	 * The events of a Chat. With `after`, the recent events after that revision
+	 * come first. A slow reader can miss old events, but it gets the newest ones.
+	 */
 	readonly events: (input: {
 		readonly chat: Id
 		readonly after?: Revision

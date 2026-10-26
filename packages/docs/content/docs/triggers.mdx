@@ -62,7 +62,8 @@ direct Chat, or list the task Chats of the Bot with
 A schedule has a `cron` text with five fields, such as `0 9 * * 1-5` for 9:00 on
 work days. `timeZone` is an IANA time zone, such as `Europe/Berlin`. Without it,
 the time zone is UTC. A cron text that is not valid returns `400` with
-`TriggerInvalid`.
+`TriggerInvalid`. A cron text that never fires, such as `0 0 30 2 *` (February
+30), returns the same error.
 
 OpenBot looks for schedules that are due every 15 seconds. When many servers
 run, each trigger fires only once.

@@ -17,12 +17,12 @@ export const InvitationStatus = Schema.Literals([
 	"expired",
 ])
 export type InvitationStatus = typeof InvitationStatus.Type
-export class InvitationNotFound extends Schema.TaggedError<InvitationNotFound>()(
-	"InvitationNotFound",
-	{ invitationId: Schema.String },
-) {}
+export class InvitationNotFound extends Schema.TaggedError<
+	InvitationNotFound,
+	{ readonly brand: unique symbol }
+>()("InvitationNotFound", { invitationId: Schema.String }) {}
 /** The invitation cannot be used now, for example because it is too old or is for another email. */
-export class InvitationInvalid extends Schema.TaggedError<InvitationInvalid>()(
-	"InvitationInvalid",
-	{ message: Schema.String },
-) {}
+export class InvitationInvalid extends Schema.TaggedError<
+	InvitationInvalid,
+	{ readonly brand: unique symbol }
+>()("InvitationInvalid", { message: Schema.String }) {}

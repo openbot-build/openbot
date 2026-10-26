@@ -91,7 +91,8 @@ No outside service is needed. To sign in and make a user token, see
 | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `devenv shell -- pnpm install`                           | Installs all packages.                                                           |
 | `devenv shell -- pnpm build`                             | Builds every package with tsdown.                                                |
-| `devenv shell -- pnpm typecheck`                         | Checks the types of every package.                                               |
+| `devenv shell -- pnpm typecheck`                         | Checks the types of every package and the Effect rules.                          |
+| `devenv shell -- pnpm rules`                             | Checks only the Effect rules of `scripts/effect-rules.ts`.                       |
 | `devenv shell -- pnpm -r test`                           | Runs the tests of every package.                                                 |
 | `devenv shell -- pnpm test`                              | Runs the tests of every package in one Vitest run, without build or type checks. |
 | `devenv shell -- pnpm --filter @openbot-build/core test` | Runs the tests of one package.                                                   |
@@ -197,9 +198,10 @@ the repository. The docs site is the only exception. Every new feature starts as
 an operation in the `@openbot-build/api` contract. Then the server handles it.
 Every operation must work with a user token and with the sign-in cookie. It must
 also say which action on which resource it needs, with a `Required` or
-`GroupRequired` annotation. The helpers `own`, `organization` and `channel` in
-`packages/api/src/Authorization.ts` make the annotations. See
-[Permissions](/docs/permissions).
+`GroupRequired` annotation. The helpers `own`, `organization`, `channel` and
+`channels` in `packages/api/src/Authorization.ts` make the annotations. A
+requirement may only name a path parameter that its endpoint has. A test in
+`packages/api` checks this. See [Permissions](/docs/permissions).
 
 The authorization code comes from the
 [ability](https://github.com/nmnmcc/ability) library, the npm package
@@ -215,6 +217,58 @@ fix for a bug in an outside package or tool.
 
 Use the immutable data types of Effect, such as `HashMap`, `Chunk`, and
 `Option`. Use the mutable types of JavaScript only when you really need them.
+
+### Effect rules
+
+OpenBot is written with [Effect](https://effect.website). Two checks keep the
+code in the Effect style. `pnpm typecheck` runs both, and GitHub Actions runs
+`pnpm typecheck` on every change.
+
+The first check is the Effect language service. It is a plugin of the TypeScript
+compiler, set up in `tsconfig.base.json`. Its rules are errors, so `tsc` stops
+on them. Among other things, they ask for:
+
+- the `Array`, `String` and `Record` modules of Effect in place of the native
+  methods, imported as `Arr`, `Str` and `Rec`;
+- `Clock` and `DateTime` for time, the `Random` and `Crypto` services for random
+  values and IDs, and `Config` for environment variables;
+- `HttpClient` in place of `fetch`, and the `FileSystem`, `Path` and
+  `ChildProcess` services in place of the Node.js modules;
+- Effect Schema for JSON and for outside data, decoded through Effect and not
+  with the `*Sync` functions;
+- `Schema.TaggedError` for errors, and a brand on each Schema class;
+- `Effect.gen` and `Effect.fn` in place of `async` functions and `new Promise`;
+- `it.effect`, `it.live` and `it.layer` from `@effect/vitest` in tests.
+
+Three rules are off. `apiStabilityLeak` and `unstableApiUsage` are off because
+the API contract is built on `effect/http-api`, which Effect marks as unstable.
+`missingPipeableSignature` is off because a pipeable form of each exported
+function helps a library, not an application.
+
+The second check is `scripts/effect-rules.ts`. It reads every TypeScript file
+and checks the rules that the language service cannot see:
+
+| Rule               | What it stops                                                                                                                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blind-error-map`  | `Effect.mapError(() => ...)`, `Effect.orElseFail(() => ...)` and `catch: () => ...`, which drop the cause of a failure. A handler given by name counts too, when the same file declares it as a function with no parameter. |
+| `throw`            | `throw`. Fail with a typed error, use `Effect.die` for a broken rule of the code, or `assert.fail` in a test.                                                                                                               |
+| `run-outside-main` | `Effect.runPromise` and the other `run` functions outside a program entry point (a `*Main.ts` file).                                                                                                                        |
+| `fork-daemon`      | `Effect.forkDetach`. Fork a fiber in a scope, or keep it in a `FiberSet` or `FiberMap`.                                                                                                                                     |
+| `promise-then`     | Promise chains with `.then`. Turn the Promise into an Effect.                                                                                                                                                               |
+| `directive-reason` | A rule directive without a reason.                                                                                                                                                                                          |
+
+Some code must stay native, because an outside API asks for it or because Effect
+has no API for it. Examples are a Drizzle callback that must give back a `Date`,
+a Promise callback of an SDK, and HMAC signatures. Then turn the rule off for
+one line, and give the reason after `--`:
+
+```ts
+// @effect-diagnostics-next-line globalDate:off -- Drizzle calls this outside Effect and needs a Date.
+// @effect-rules-next-line throw -- The SDK reads a thrown error as a failed call.
+```
+
+A directive is never a way to save work. Tests are program entry points, so
+`strictEffectProvide` is off in `test/` folders.
 
 ### Small, real changes
 

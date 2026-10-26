@@ -1,8 +1,15 @@
-import { randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { PgClient } from "@effect/sql-pg"
 import { and, desc, eq, lt, or, type SQL } from "drizzle-orm"
-import { Context, Effect, Layer } from "effect"
+import {
+	Array as Arr,
+	Context,
+	Crypto,
+	Effect,
+	Equivalence,
+	Layer,
+	Option,
+} from "effect"
 import { developerReports } from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
@@ -48,31 +55,37 @@ export const issueKey = (issue: Api.Issue): string =>
 		issue.source,
 		issue.fieldPath ?? null,
 	])
+/** Two issues are the same issue when the fields of `issueKey` are the same. */
+export const sameIssue: Equivalence.Equivalence<Api.Issue> =
+	Equivalence.mapInput(
+		Equivalence.Tuple([
+			Equivalence.String,
+			Equivalence.String,
+			Equivalence.String,
+			Equivalence.strictEqual<string | null>(),
+		]),
+		(issue: Api.Issue) =>
+			[issue.code, issue.stage, issue.source, issue.fieldPath ?? null] as const,
+	)
 const compare = (
 	before: Api.InspectionReport,
 	after: Api.InspectionReport,
 ): Api.ReportDiff => ({
-	introduced: after.issues.filter(
-		(issue) =>
-			!before.issues.some((previous) => issueKey(issue) === issueKey(previous)),
-	),
-	resolved: before.issues.filter(
-		(issue) => !after.issues.some((next) => issueKey(issue) === issueKey(next)),
-	),
-	persisting: after.issues.filter((issue) =>
-		before.issues.some((previous) => issueKey(issue) === issueKey(previous)),
-	),
+	introduced: Arr.differenceWith(sameIssue)(after.issues, before.issues),
+	resolved: Arr.differenceWith(sameIssue)(before.issues, after.issues),
+	persisting: Arr.intersectionWith(sameIssue)(after.issues, before.issues),
 })
 export const make: Effect.Effect<
 	typeof DeveloperReports.Service,
 	never,
-	DeveloperAccess | PgClient.PgClient | AppInspections
+	DeveloperAccess | PgClient.PgClient | AppInspections | Crypto.Crypto
 > = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const inspections = yield* AppInspections
+	const crypto = yield* Crypto.Crypto
 	const reportWhere = (id: string) =>
 		and(eq(developerReports.namespace, namespace), eq(developerReports.id, id))
 	const read = Effect.fn("DeveloperReports.read")(function* (id: string) {
@@ -140,7 +153,7 @@ export const make: Effect.Effect<
 				before,
 				"The report cursor is no longer available. Reload your records.",
 			)
-			return rows.map((row) => ({
+			return Arr.map(rows, (row) => ({
 				id: row.id,
 				cardUrl: row.cardUrl,
 				checkedAt: row.checkedAt,
@@ -155,20 +168,21 @@ export const make: Effect.Effect<
 					const app = yield* Rows.getApp(db, namespace, cardUrl, true)
 					yield* access.authorize(owner, cardUrl, true)
 					const value: Api.SavedReport = {
-						id: yield* Effect.sync(randomUUID),
+						id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
 						cardUrl,
 						createdBy: owner,
 						report,
 					}
 					yield* Rows.saveReport(db, namespace, owner, value)
-					const observed = report.apps.find(
+					const observed = Arr.findFirst(
+						report.apps,
 						(app) => app.candidate.cardUrl === cardUrl,
 					)
-					if (observed !== undefined)
+					if (Option.isSome(observed))
 						yield* Rows.putApp(db, namespace, {
 							...app,
 							candidate: {
-								...observed.candidate,
+								...observed.value.candidate,
 								sources: app.candidate.sources,
 							},
 						})

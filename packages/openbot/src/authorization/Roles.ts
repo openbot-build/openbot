@@ -3,16 +3,19 @@ import {
 	type OrganizationApi,
 	type Roles as RolesApi,
 } from "@openbot-build/api"
-import { Context, type Effect, type Option, Schema } from "effect"
+import { Array as Arr, Context, type Effect, type Option, Schema } from "effect"
 
-export class RolesUnavailable extends Schema.TaggedError<RolesUnavailable>()(
-	"RolesUnavailable",
-	{},
-) {}
+/** OpenBot cannot read or write the roles now. */
+export class RolesUnavailable extends Schema.TaggedError<
+	RolesUnavailable,
+	{ readonly brand: unique symbol }
+>()("RolesUnavailable", { cause: Schema.Defect() }) {}
 
 /** The built-in roles in their API form. */
-export const builtin: ReadonlyArray<RolesApi.Role> =
-	Authorization.builtinRoles.map((role) => ({ ...role, builtin: true }))
+export const builtin: ReadonlyArray<RolesApi.Role> = Arr.map(
+	Authorization.builtinRoles,
+	(role) => ({ ...role, builtin: true }),
+)
 
 /** The built-in roles of every organization, and its custom roles. */
 export class Roles extends Context.Service<

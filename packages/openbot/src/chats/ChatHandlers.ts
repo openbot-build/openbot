@@ -1,4 +1,3 @@
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
 	Authorization,
 	ChatConflict,
@@ -12,15 +11,16 @@ import {
 	type SendMessageRequest,
 } from "@openbot-build/api"
 import type { Chat } from "@openbot-build/core"
-import { Clock, Effect, Option } from "effect"
+import { Array as Arr, Clock, Effect, Option } from "effect"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
+import * as Failures from "../app/Failures.ts"
 import { Bots } from "../bots/Bots.ts"
 import { Coordinator } from "../bots/Coordinator.ts"
 import { Delegations, view } from "../bots/Delegations.ts"
 import { MemoryBot } from "../bots/MemoryBot.ts"
 import { Files } from "../files/Files.ts"
-import { check } from "../authorization/Check.ts"
+import * as Check from "../authorization/Check.ts"
 import type * as Chats from "./Chats.ts"
 import * as ChatHost from "./ChatHost.ts"
 
@@ -33,7 +33,11 @@ const currentChats = Effect.map(Backend, (backend) =>
 	Effect.flatMap(Identity, (caller) =>
 		backend
 			.forCaller(caller)
-			.pipe(Effect.mapError(() => ChatStorageUnavailable.make({}))),
+			.pipe(
+				Failures.replace("OpenBot could not open the Chats of a member.", () =>
+					ChatStorageUnavailable.make({}),
+				),
+			),
 	),
 )
 /** The work of a caller with one Bot: the caller, and the token when a token calls. */
@@ -81,15 +85,13 @@ const implementations = Effect.gen(function* () {
 	const delegations = yield* Delegations
 	const memoryBot = yield* MemoryBot
 	const files = yield* Files
-	const services = yield* Effect.context<AuthorizationServices>()
+	const { check } = yield* Check.make
 	return {
 		sendBotMessage: ({ params, payload }: Request<"sendBotMessage">) =>
 			Effect.gen(function* () {
 				const caller = yield* Identity
 				// Work for a Bot needs the delegate permission on it.
-				const bot = yield* bots
-					.access(caller, params.botId, "delegate")
-					.pipe(Effect.provideContext(services))
+				const bot = yield* bots.access(caller, params.botId, "delegate")
 				if (bot.archived)
 					return yield* BotsApi.BotInvalid.make({
 						message: "An archived Bot does no new work.",
@@ -135,7 +137,7 @@ const implementations = Effect.gen(function* () {
 							provider: payload.model.provider,
 							id: payload.model.model,
 						}),
-					}).pipe(Effect.provideContext(services))
+					})
 				}
 				return yield* (yield* current).update(params.chatId, payload)
 			}),
@@ -157,7 +159,12 @@ const implementations = Effect.gen(function* () {
 						params.chatId,
 						"The Chat was deleted.",
 					)
-					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
+					.pipe(
+						Failures.replace(
+							"OpenBot could not stop the work that a Chat gave away.",
+							() => ChatStorageUnavailable.make({}),
+						),
+					)
 				yield* chats.remove(params.chatId)
 			}),
 		chatModels: ({ params }: Request<"chatModels">) =>
@@ -194,7 +201,12 @@ const implementations = Effect.gen(function* () {
 							params.chatId,
 							"The person stopped the work.",
 						)
-						.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
+						.pipe(
+							Failures.replace(
+								"OpenBot could not stop the work that a Chat gave away.",
+								() => ChatStorageUnavailable.make({}),
+							),
+						)
 				return yield* chats.interrupt(params.chatId)
 			}),
 		chatTodos: ({ params }: Request<"chatTodos">) =>
@@ -209,9 +221,14 @@ const implementations = Effect.gen(function* () {
 				yield* (yield* current).get(params.chatId)
 				const list = yield* delegations
 					.forChat(caller.organizationId, params.chatId)
-					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
+					.pipe(
+						Failures.replace(
+							"OpenBot could not read the delegations of a Chat.",
+							() => ChatStorageUnavailable.make({}),
+						),
+					)
 				const now = yield* Clock.currentTimeMillis
-				return list.map((stored) => view(stored, now))
+				return Arr.map(list, (stored) => view(stored, now))
 			}),
 		// Reading the Chat first checks that the caller may see it.
 		chatConfessions: ({ params }: Request<"chatConfessions">) =>
@@ -220,7 +237,12 @@ const implementations = Effect.gen(function* () {
 				yield* (yield* current).get(params.chatId)
 				return yield* memoryBot
 					.confessions(caller.organizationId, params.chatId)
-					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
+					.pipe(
+						Failures.replace(
+							"OpenBot could not read the confessions of a Chat.",
+							() => ChatStorageUnavailable.make({}),
+						),
+					)
 			}),
 		chatEnrichments: ({ params }: Request<"chatEnrichments">) =>
 			Effect.gen(function* () {
@@ -228,7 +250,12 @@ const implementations = Effect.gen(function* () {
 				yield* (yield* current).get(params.chatId)
 				return yield* memoryBot
 					.enrichments(caller.organizationId, params.chatId)
-					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
+					.pipe(
+						Failures.replace(
+							"OpenBot could not read the enrichments of a Chat.",
+							() => ChatStorageUnavailable.make({}),
+						),
+					)
 			}),
 	}
 })

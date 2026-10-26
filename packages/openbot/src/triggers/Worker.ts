@@ -1,5 +1,6 @@
 import { Duration, Effect, Layer, Schedule } from "effect"
-import { fire } from "./Fire.ts"
+import * as Background from "../app/Background.ts"
+import * as Fire from "./Fire.ts"
 import { Triggers } from "./Triggers.ts"
 
 export interface Options {
@@ -12,32 +13,28 @@ export const layer = (options: Options = {}) =>
 	Layer.effectDiscard(
 		Effect.gen(function* () {
 			const triggers = yield* Triggers
-			const context =
-				yield* Effect.context<Effect.Services<ReturnType<typeof fire>>>()
-			yield* triggers.due.pipe(
-				Effect.flatMap((due) =>
-					Effect.forEach(
-						due,
-						(entry) =>
-							fire(entry).pipe(
-								Effect.catchCause((cause) =>
-									Effect.logWarning(
-										"A scheduled trigger could not fire",
-										cause,
-									),
+			const fire = yield* Fire.make
+			yield* Background.repeat(
+				triggers.due.pipe(
+					Effect.flatMap((due) =>
+						Effect.forEach(
+							due,
+							(entry) =>
+								fire(entry).pipe(
+									Background.logFailure("A scheduled trigger could not fire"),
+									Effect.annotateLogs({
+										trigger: entry.trigger.id,
+										organization: entry.organizationId,
+									}),
 								),
-							),
-						{ discard: true },
+							{ discard: true },
+						),
 					),
 				),
-				Effect.provideContext(context),
-				Effect.catchCause((cause) =>
-					Effect.logWarning("The trigger worker failed", cause),
-				),
-				Effect.repeat(
-					Schedule.spaced(options.interval ?? Duration.seconds(15)),
-				),
-				Effect.forkScoped,
+				{
+					schedule: Schedule.spaced(options.interval ?? Duration.seconds(15)),
+					message: "The trigger worker failed",
+				},
 			)
 		}),
 	)

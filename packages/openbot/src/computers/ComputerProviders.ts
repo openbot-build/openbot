@@ -1,14 +1,18 @@
-import { randomBytes } from "node:crypto"
 import { type Caller, ComputersApi } from "@openbot-build/api"
 import { and, eq } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
-	type Errors as CheckErrors,
-	check,
-	filter,
-	guard,
-} from "../authorization/Check.ts"
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Schema,
+} from "effect"
+import { Hex } from "effect/encoding"
+import * as Failures from "../app/Failures.ts"
+import * as Check from "../authorization/Check.ts"
 import { computerProviderResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
 import * as Db from "../database/Database.ts"
@@ -23,7 +27,7 @@ const CredentialsJson = Schema.fromJsonString(
 	ComputersApi.ComputerProviderCredentials,
 )
 const decodeCredentials = Schema.decodeUnknownEffect(CredentialsJson)
-const encodeCredentials = Schema.encodeSync(CredentialsJson)
+const encodeCredentials = Schema.encodeEffect(CredentialsJson)
 
 /** The fields of the credentials that are not secret. The key is always empty here. */
 const Plain = Schema.Union([
@@ -42,22 +46,24 @@ const Plain = Schema.Union([
 ])
 type Plain = typeof Plain.Type
 
-const decodeKind = Schema.decodeUnknownSync(ComputersApi.ComputerProviderKind)
+const decodeId = Schema.decodeUnknownEffect(ComputersApi.ComputerProviderId)
+const decodeKind = Schema.decodeUnknownEffect(ComputersApi.ComputerProviderKind)
 
 /** The hints column holds JSON that only this file writes. */
 const HintsJson = Schema.fromJsonString(
 	Schema.Struct({ apiKey: Schema.NullOr(Schema.String), plain: Plain }),
 )
-const decodeHints = Schema.decodeUnknownSync(HintsJson)
-const encodeHints = Schema.encodeSync(HintsJson)
+const decodeHints = Schema.decodeUnknownEffect(HintsJson)
+const encodeHints = Schema.encodeEffect(HintsJson)
 type Row = typeof computerProviders.$inferSelect
 
 export type Failure =
 	| ComputersApi.ComputerProviderNotFound
 	| ComputersApi.ComputerConflict
 	| ComputersApi.ComputerInvalid
+	| ComputersApi.ComputerProviderFailed
 	| ComputersApi.ComputersUnavailable
-	| CheckErrors
+	| Check.Errors
 
 const binding = (id: string) => `openbot_computer_providers:${id}:credentials`
 
@@ -89,22 +95,30 @@ const viewOf = (
 	}
 }
 
-const fromRow = (row: Row): ComputerProvider => {
-	const stored = decodeHints(row.hints)
-	return {
-		id: ComputersApi.ComputerProviderId.make(row.id),
-		kind: decodeKind(row.kind),
-		name: row.name,
-		owner:
-			row.ownerUserId === null
-				? { _tag: "Organization" }
-				: { _tag: "Member", userId: row.ownerUserId },
-		credentials: viewOf(stored.plain, stored.apiKey),
-		version: row.version,
-		createdAt: row.createdAt,
-		updatedAt: row.updatedAt,
-	}
-}
+/** A row with a bad value is a broken store. The log keeps the cause. */
+const fromRow = (
+	row: Row,
+): Effect.Effect<ComputerProvider, ComputersApi.ComputersUnavailable> =>
+	Effect.gen(function* () {
+		const stored = yield* decodeHints(row.hints)
+		return {
+			id: yield* decodeId(row.id),
+			kind: yield* decodeKind(row.kind),
+			name: row.name,
+			owner:
+				row.ownerUserId === null
+					? { _tag: "Organization" }
+					: { _tag: "Member", userId: row.ownerUserId },
+			credentials: viewOf(stored.plain, stored.apiKey),
+			version: row.version,
+			createdAt: row.createdAt,
+			updatedAt: row.updatedAt,
+		} satisfies ComputerProvider
+	}).pipe(
+		Failures.replace("A stored Computer provider has a bad value", () =>
+			ComputersApi.ComputersUnavailable.make({}),
+		),
+	)
 
 /** The accounts at Computer providers. The keys are sealed and never come out. */
 export class ComputerProviders extends Context.Service<
@@ -112,33 +126,29 @@ export class ComputerProviders extends Context.Service<
 	{
 		readonly list: (
 			caller: Caller,
-		) => Effect.Effect<
-			ReadonlyArray<ComputerProvider>,
-			Failure,
-			AuthorizationServices
-		>
+		) => Effect.Effect<ReadonlyArray<ComputerProvider>, Failure>
 		/** Reads a provider that the caller may read, and also use or change when asked. */
 		readonly get: (
 			caller: Caller,
 			id: string,
 			action?: "read" | "use" | "write",
-		) => Effect.Effect<ComputerProvider, Failure, AuthorizationServices>
+		) => Effect.Effect<ComputerProvider, Failure>
 		readonly create: (
 			caller: Caller,
 			input: ComputersApi.CreateComputerProviderRequest,
 			verify: (credentials: Credentials) => Effect.Effect<void, Failure>,
-		) => Effect.Effect<ComputerProvider, Failure, AuthorizationServices>
+		) => Effect.Effect<ComputerProvider, Failure>
 		readonly update: (
 			caller: Caller,
 			id: string,
 			input: ComputersApi.UpdateComputerProviderRequest,
 			verify: (credentials: Credentials) => Effect.Effect<void, Failure>,
-		) => Effect.Effect<ComputerProvider, Failure, AuthorizationServices>
+		) => Effect.Effect<ComputerProvider, Failure>
 		/** Fails while Computers still use the provider. */
 		readonly remove: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<void, Failure, AuthorizationServices>
+		) => Effect.Effect<void, Failure>
 		/** The secrets of a provider, for its driver. It checks no permission. */
 		readonly credentials: (
 			organizationId: string,
@@ -153,10 +163,11 @@ export class ComputerProviders extends Context.Service<
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(
-			Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
-		)
+	const crypto = yield* Crypto.Crypto
+	const { check, filter, guard } = yield* Check.make
+	const stored = Failures.replace("The Computer provider store failed", () =>
+		ComputersApi.ComputersUnavailable.make({}),
+	)
 	const where = (organizationId: string, id: string) =>
 		and(
 			eq(computerProviders.organizationId, organizationId),
@@ -168,15 +179,15 @@ export const make = Effect.gen(function* () {
 		).pipe(Effect.map((rows) => Option.fromNullishOr(rows[0])))
 	const seal = (id: string, credentials: Credentials) =>
 		Effect.gen(function* () {
-			const sealed = yield* stored(
-				secrets.seal(encodeCredentials(credentials), binding(id)),
-			)
+			// The credentials passed the request schema, so they always encode.
+			const json = yield* encodeCredentials(credentials).pipe(Effect.orDie)
+			const sealed = yield* stored(secrets.seal(json, binding(id)))
 			return {
 				credentials: sealed,
-				hints: encodeHints({
+				hints: yield* encodeHints({
 					...hintsOf(credentials),
 					plain: { ...credentials, apiKey: "" },
-				}),
+				}).pipe(Effect.orDie),
 			}
 		})
 	/** A caller who cannot read a provider does not learn that it exists. */
@@ -189,7 +200,7 @@ export const make = Effect.gen(function* () {
 			const found = yield* row(caller.organizationId, id)
 			if (Option.isNone(found))
 				return yield* ComputersApi.ComputerProviderNotFound.make({ id })
-			const provider = fromRow(found.value)
+			const provider = yield* fromRow(found.value)
 			yield* guard(
 				caller,
 				{
@@ -233,7 +244,7 @@ export const make = Effect.gen(function* () {
 						)
 						.orderBy(computerProviders.createdAt),
 				)
-				return rows.map(fromRow)
+				return yield* Effect.forEach(rows, fromRow)
 			}),
 		get: (caller, id, action = "read") =>
 			Effect.map(access(caller, id, action), (found) => found.provider),
@@ -251,23 +262,30 @@ export const make = Effect.gen(function* () {
 				})
 				yield* verify(input.credentials)
 				const now = yield* Clock.currentTimeMillis
-				const id = "cpp_" + randomBytes(16).toString("hex")
+				const id =
+					"cpp_" + Hex.encode(yield* crypto.randomBytes(16).pipe(Effect.orDie))
 				const sealed = yield* seal(id, input.credentials)
-				yield* stored(
-					db.insert(computerProviders).values({
-						organizationId: caller.organizationId,
-						id,
-						ownerUserId: userId,
-						kind: input.credentials.kind,
-						name: input.name,
-						...sealed,
-						version: 0,
-						createdAt: now,
-						updatedAt: now,
-					}),
+				const created = Arr.head(
+					yield* stored(
+						db
+							.insert(computerProviders)
+							.values({
+								organizationId: caller.organizationId,
+								id,
+								ownerUserId: userId,
+								kind: input.credentials.kind,
+								name: input.name,
+								...sealed,
+								version: 0,
+								createdAt: now,
+								updatedAt: now,
+							})
+							.returning(),
+					),
 				)
-				const created = yield* row(caller.organizationId, id)
-				return fromRow(Option.getOrThrow(created))
+				if (Option.isNone(created))
+					return yield* Effect.die("An insert gave back no row")
+				return yield* fromRow(created.value)
 			}),
 		update: (caller, id, input, verify) =>
 			Effect.gen(function* () {
@@ -311,7 +329,7 @@ export const make = Effect.gen(function* () {
 					return yield* ComputersApi.ComputerConflict.make({
 						version: provider.version,
 					})
-				return fromRow(next)
+				return yield* fromRow(next)
 			}),
 		remove: (caller, id) =>
 			Effect.gen(function* () {

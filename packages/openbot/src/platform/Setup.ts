@@ -1,6 +1,6 @@
-import { randomBytes } from "node:crypto"
 import { Authorization, type Settings as Api } from "@openbot-build/api"
-import { Effect, Option, Schema } from "effect"
+import { Crypto, Effect, Option, Redacted, Schema } from "effect"
+import { Hex } from "effect/encoding"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import {
 	filesDefaults,
@@ -17,33 +17,33 @@ export interface Input {
 	readonly identityProvider: Option.Option<{
 		readonly issuer: string
 		readonly clientId: string
-		readonly clientSecret: Option.Option<string>
+		readonly clientSecret: Option.Option<Redacted.Redacted<string>>
 	}>
 	/** People with these verified emails become platform admins. */
 	readonly adminEmails: ReadonlyArray<string>
 	/** Write the settings even when they exist. Use it only when no admin can sign in. */
 	readonly force: boolean
 	/**
-	 * The sign-in secret to store. Without it, a new platform gets a random one,
-	 * and an existing platform keeps its own.
+	 * The sign-in secret to store. None means that a new platform gets a random
+	 * one, and an existing platform keeps its own.
 	 */
-	readonly authSecret?: string | undefined
+	readonly authSecret: Option.Option<Redacted.Redacted<string>>
 	/**
-	 * The object storage for files. Without it, a new platform has none, and
+	 * The object storage for files. None means that a new platform has none, and
 	 * an existing platform keeps its own.
 	 */
-	readonly fileStorage?: Api.FileStorageInput | undefined
+	readonly fileStorage: Option.Option<Api.FileStorageInput>
 }
 
 /** The platform already has settings, and they are not the same. */
-export class SetupAlreadyDone extends Schema.TaggedError<SetupAlreadyDone>()(
-	"SetupAlreadyDone",
-	{},
-) {}
-export class SetupInvalid extends Schema.TaggedError<SetupInvalid>()(
-	"SetupInvalid",
-	{ message: Schema.String },
-) {}
+export class SetupAlreadyDone extends Schema.TaggedError<
+	SetupAlreadyDone,
+	{ readonly brand: unique symbol }
+>()("SetupAlreadyDone", {}) {}
+export class SetupInvalid extends Schema.TaggedError<
+	SetupInvalid,
+	{ readonly brand: unique symbol }
+>()("SetupInvalid", { message: Schema.String }) {}
 
 export type Outcome = "created" | "unchanged" | "replaced"
 
@@ -57,25 +57,28 @@ export const run = (input: Input) =>
 		const settings = yield* Settings
 		const secrets = yield* Secrets
 		const admins = yield* PlatformAdmins
+		const crypto = yield* Crypto.Crypto
 		if (input.adminEmails.length === 0)
 			return yield* SetupInvalid.make({
 				message: "Name at least one platform admin email.",
 			})
 		const current = yield* settings.platform
-		const sameStorage = (document: PlatformDocument) => {
-			const wanted = input.fileStorage
-			if (wanted === undefined) return true
-			const storage = filesOf(document).storage
-			return (
-				storage !== null &&
-				storage.endpoint === wanted.endpoint &&
-				storage.publicEndpoint === wanted.publicEndpoint &&
-				storage.region === wanted.region &&
-				storage.bucket === wanted.bucket &&
-				storage.accessKeyId === wanted.accessKeyId &&
-				storage.forcePathStyle === wanted.forcePathStyle
-			)
-		}
+		const sameStorage = (document: PlatformDocument) =>
+			Option.match(input.fileStorage, {
+				onNone: () => true,
+				onSome: (wanted) => {
+					const storage = filesOf(document).storage
+					return (
+						storage !== null &&
+						storage.endpoint === wanted.endpoint &&
+						storage.publicEndpoint === wanted.publicEndpoint &&
+						storage.region === wanted.region &&
+						storage.bucket === wanted.bucket &&
+						storage.accessKeyId === wanted.accessKeyId &&
+						storage.forcePathStyle === wanted.forcePathStyle
+					)
+				},
+			})
 		const sameAsCurrent = (document: PlatformDocument) =>
 			document.publicOrigin === input.publicOrigin &&
 			sameStorage(document) &&
@@ -96,91 +99,87 @@ export const run = (input: Input) =>
 		const identityProvider = yield* Option.match(input.identityProvider, {
 			onNone: () => Effect.succeed(null),
 			onSome: (provider) =>
-				Effect.gen(function* () {
-					const clientSecret = Option.isSome(provider.clientSecret)
-						? yield* secrets.seal(
-								provider.clientSecret.value,
-								bindings.identityProviderSecret,
-							)
-						: null
-					return {
+				Effect.transposeOption(
+					Option.map(provider.clientSecret, (secret) =>
+						secrets.seal(
+							Redacted.value(secret),
+							bindings.identityProviderSecret,
+						),
+					),
+				).pipe(
+					Effect.map((clientSecret) => ({
 						issuer: provider.issuer,
 						clientId: provider.clientId,
-						clientSecret,
+						clientSecret: Option.getOrNull(clientSecret),
 						clientSecretHint: Option.match(provider.clientSecret, {
 							onNone: () => null,
-							onSome: hint,
+							onSome: (secret) => hint(Redacted.value(secret)),
 						}),
-					}
+					})),
+				),
+		})
+		const authSecret = yield* Option.match(input.authSecret, {
+			onSome: (secret) =>
+				secrets.seal(Redacted.value(secret), bindings.authSecret),
+			// Keep the current sign-in secret, so `--force` does not sign everyone out.
+			onNone: () =>
+				Option.match(current, {
+					onSome: ({ document }) => Effect.succeed(document.authSecret),
+					onNone: () =>
+						crypto.randomBytes(32).pipe(
+							// A machine with no secure random numbers cannot make a secret, so this is a defect.
+							Effect.orDie,
+							Effect.flatMap((bytes) =>
+								secrets.seal(Hex.encode(bytes), bindings.authSecret),
+							),
+						),
 				}),
 		})
-		// Keep the current sign-in secret, so `--force` does not sign everyone out.
-		const authSecret =
-			input.authSecret !== undefined
-				? yield* secrets.seal(input.authSecret, bindings.authSecret)
-				: Option.isSome(current)
-					? current.value.document.authSecret
-					: yield* secrets.seal(
-							randomBytes(32).toString("hex"),
-							bindings.authSecret,
-						)
-		const files =
-			input.fileStorage === undefined
-				? Option.getOrUndefined(current)?.document.files
-				: yield* changeFiles(
-						Option.match(current, {
-							onNone: () => filesDefaults,
-							onSome: (current) => filesOf(current.document),
-						}),
-						{ storage: input.fileStorage },
-					)
+		// Setup changes only the files storage. The current document already holds the current files.
+		const changedFiles = yield* Option.match(input.fileStorage, {
+			onNone: () => Effect.succeed({}),
+			onSome: (storage) =>
+				changeFiles(
+					secrets,
+					Option.match(current, {
+						onNone: () => filesDefaults,
+						onSome: ({ document }) => filesOf(document),
+					}),
+					{ storage },
+				).pipe(Effect.map((files) => ({ files }))),
+		})
+		// Setup keeps every other setting of the current document, or uses the defaults.
+		const kept: Omit<
+			PlatformDocument,
+			"publicOrigin" | "authSecret" | "identityProvider"
+		> = Option.match(current, {
+			onNone: () => ({
+				organizationCreation: "anyone",
+				ceiling: Authorization.emptyPolicy,
+				appRestrictions: [],
+			}),
+			onSome: ({ document }) => document,
+		})
 		const document: PlatformDocument = {
-			...(files === undefined ? {} : { files }),
+			...kept,
+			...changedFiles,
 			publicOrigin: input.publicOrigin,
 			authSecret,
 			identityProvider,
-			organizationCreation: Option.match(current, {
-				onNone: () => "anyone" as const,
-				onSome: (current) => current.document.organizationCreation,
-			}),
-			ceiling: Option.match(current, {
-				onNone: () => Authorization.emptyPolicy,
-				onSome: (current) => current.document.ceiling,
-			}),
-			appRestrictions: Option.match(current, {
-				onNone: () => [],
-				onSome: (current) => current.document.appRestrictions,
-			}),
-			...Option.match(current, {
-				onNone: () => ({}),
-				onSome: (current) =>
-					current.document.codeMode === undefined
-						? {}
-						: { codeMode: current.document.codeMode },
-			}),
-			...Option.match(current, {
-				onNone: () => ({}),
-				onSome: (current) =>
-					current.document.rateLimit === undefined
-						? {}
-						: { rateLimit: current.document.rateLimit },
-			}),
-			...Option.match(current, {
-				onNone: () => ({}),
-				onSome: (current) =>
-					current.document.tokenRate === undefined
-						? {}
-						: { tokenRate: current.document.tokenRate },
-			}),
 		}
-		const outcome: Outcome = Option.isNone(current)
-			? (yield* settings.initializePlatform(document))
-				? "created"
-				: // Another instance ran setup at the same time.
-					"unchanged"
-			: input.force
-				? (yield* settings.replacePlatform(document), "replaced")
-				: "unchanged"
+		const outcome = yield* Option.match(current, {
+			onNone: () =>
+				Effect.map(settings.initializePlatform(document), (created): Outcome =>
+					created
+						? "created"
+						: // Another instance ran setup at the same time.
+							"unchanged",
+				),
+			onSome: (): Effect.Effect<Outcome, Api.SettingsUnavailable> =>
+				input.force
+					? Effect.as(settings.replacePlatform(document), "replaced")
+					: Effect.succeed("unchanged"),
+		})
 		for (const email of input.adminEmails) yield* admins.add(email)
 		return outcome
 	})

@@ -74,7 +74,7 @@ export const CapabilityRequest = Schema.Struct({
 	createdAt: Schema.Finite,
 	expiresAt: Schema.Finite,
 	/** What happens when nobody answers in time. Without it, the request is denied. */
-	onExpire: Schema.optionalKey(Schema.Literals(["allow", "deny"])),
+	onExpire: Schema.optionalKey(Decision),
 })
 export type CapabilityRequest = typeof CapabilityRequest.Type
 
@@ -91,14 +91,14 @@ export const ResolveRequest = Schema.Struct({
 })
 export type ResolveRequest = typeof ResolveRequest.Type
 
-export class RequestNotFound extends Schema.TaggedError<RequestNotFound>()(
-	"RequestNotFound",
-	{ request: Schema.String },
-) {}
-export class RequestConflict extends Schema.TaggedError<RequestConflict>()(
-	"RequestConflict",
-	{ message: Schema.String },
-) {}
+export class RequestNotFound extends Schema.TaggedError<
+	RequestNotFound,
+	{ readonly brand: unique symbol }
+>()("RequestNotFound", { request: Schema.String }) {}
+export class RequestConflict extends Schema.TaggedError<
+	RequestConflict,
+	{ readonly brand: unique symbol }
+>()("RequestConflict", { message: Schema.String }) {}
 export const RequestErrors = [
 	...BotErrors,
 	RequestNotFound.pipe(HttpApiSchema.status(404)),

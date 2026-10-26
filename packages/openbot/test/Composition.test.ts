@@ -1,0 +1,84 @@
+import { assert, it } from "@effect/vitest"
+import type { PgClient } from "@effect/sql-pg"
+import {
+	type Crypto,
+	Effect,
+	type FileSystem,
+	type Layer,
+	Redacted,
+	String as Str,
+} from "effect"
+import type { HttpClient } from "effect/http"
+import * as OpenBot from "../src/app/OpenBot.ts"
+import * as Server from "../src/app/Server.ts"
+import type { HostTools } from "../src/chats/HostTools.ts"
+import type { Secrets } from "../src/secrets/Secrets.ts"
+import type { Settings } from "../src/settings/Settings.ts"
+
+/** True when the two types are the same. */
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+/** The services that `OpenBot.layerShared` gives. */
+type Shared = PgClient.PgClient | Settings | Secrets
+
+/** The platform services, such as those of `NodeServices.layer` and `FetchHttpClient.layer`. */
+type Platform = Crypto.Crypto | FileSystem.FileSystem | HttpClient.HttpClient
+
+const options = {
+	databaseUrl: Redacted.make("postgresql://unused"),
+	secretKeys: Redacted.make("test:" + Str.repeat(32)("11")),
+	host: "127.0.0.1",
+	port: 0,
+}
+
+it.effect(
+	"OpenBot asks for the services from outside, the tools of the host, the shared services and the platform services, and for nothing else",
+	() =>
+		Effect.sync(() => {
+			const app = OpenBot.layer(options)
+			const needs: Same<
+				Layer.Services<typeof app>,
+				OpenBot.Outside | HostTools | Shared | Platform
+			> = true
+			const live = OpenBot.layerLive(options)
+			const liveNeeds: Same<
+				Layer.Services<typeof live>,
+				Shared | Platform
+			> = true
+			const outside = OpenBot.layerOutside
+			const outsideGives: Same<
+				Layer.Success<typeof outside>,
+				OpenBot.Outside
+			> = true
+			const outsideNeeds: Same<
+				Layer.Services<typeof outside>,
+				HttpClient.HttpClient
+			> = true
+			assert.deepStrictEqual(
+				[needs, liveNeeds, outsideGives, outsideNeeds],
+				[true, true, true, true],
+			)
+		}),
+)
+
+it.effect(
+	"the live server needs only the platform services that the entry points give",
+	() =>
+		Effect.sync(() => {
+			const server = Server.layerLive(options)
+			const needs: Same<
+				Layer.Services<typeof server>,
+				Crypto.Crypto | HttpClient.HttpClient
+			> = true
+			const custom = Server.layer(options)
+			// The server of `layer` gets the shared services and the services from outside from its caller.
+			const customNeeds: Same<
+				Exclude<
+					Layer.Services<typeof custom>,
+					OpenBot.Outside | HostTools | Shared | HttpClient.HttpClient
+				>,
+				never
+			> = true
+			assert.deepStrictEqual([needs, customNeeds], [true, true])
+		}),
+)

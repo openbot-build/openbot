@@ -1,28 +1,26 @@
-import { ChatStore } from "@openbot-build/core"
-import { ChatResponse } from "@openbot-build/api"
+import { Chat, ChatStore } from "@openbot-build/core"
 import { Effect, Schema } from "effect"
 
-export const databaseError = (error: unknown) =>
-	error instanceof ChatStore.ChatStoreError
+/** Keeps a ChatStoreError. Any other database failure becomes `storage-failed` and keeps its cause. */
+export const databaseError = (error: unknown): ChatStore.ChatStoreError =>
+	Schema.is(ChatStore.ChatStoreError)(error)
 		? error
-		: new ChatStore.ChatStoreError({
+		: ChatStore.ChatStoreError.make({
 				reason: "storage-failed",
 				message: "Chat storage is unavailable",
+				cause: error,
 			})
+/** Decodes stored Chat data. A failure names the Chat when the caller knows it. */
 export const decode =
 	<S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>
-	(value: unknown) =>
+	(value: unknown, chat?: Chat.Id) =>
 		Schema.decodeUnknownEffect(schema)(value).pipe(
-			Effect.mapError(
-				() =>
-					new ChatStore.ChatStoreError({
-						reason: "decode-failed",
-						message: "Stored Chat data is invalid",
-					}),
+			Effect.mapError((error) =>
+				ChatStore.ChatStoreError.make({
+					reason: "decode-failed",
+					message: "Stored Chat data is invalid",
+					issue: error.issue,
+					...(chat === undefined ? {} : { chat }),
+				}),
 			),
 		)
-export const responseSummary = (response: ChatResponse) => ({
-	id: response.id,
-	created_at: response.created_at,
-	status: response.status,
-})

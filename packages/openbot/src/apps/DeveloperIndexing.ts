@@ -1,9 +1,9 @@
-import { randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Clock,
 	Context,
+	Crypto,
 	Effect,
 	Layer,
 	Match,
@@ -19,6 +19,7 @@ import { IndexNamespace } from "./IndexNamespace.ts"
 import * as IndexWork from "./IndexWork.ts"
 import { Governance } from "./Governance.ts"
 import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 export class DeveloperIndexing extends Context.Service<
 	DeveloperIndexing,
@@ -40,10 +41,15 @@ export class DeveloperIndexing extends Context.Service<
 export const make: Effect.Effect<
 	typeof DeveloperIndexing.Service,
 	never,
-	DeveloperAccess | AppInspections | PgClient.PgClient | Governance
+	| DeveloperAccess
+	| AppInspections
+	| PgClient.PgClient
+	| Governance
+	| Crypto.Crypto
 > = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const inspections = yield* AppInspections
+	const crypto = yield* Crypto.Crypto
 	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
@@ -64,7 +70,11 @@ export const make: Effect.Effect<
 				namespace,
 				record.cardUrl,
 				record.generation,
-			).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
+			).pipe(
+				Failures.replace("Could not read the Public Index job.", () =>
+					Api.DeveloperUnavailable.make({}),
+				),
+			)
 			return {
 				id: record.id,
 				cardUrl: record.cardUrl,
@@ -123,8 +133,7 @@ export const make: Effect.Effect<
 					report.apps,
 					(app) => app.candidate.cardUrl === cardUrl,
 				).pipe(
-					Effect.fromOption,
-					Effect.mapError(() =>
+					Effect.fromOption(() =>
 						Api.DeveloperConflict.make({ reason: "PublicationUnavailable" }),
 					),
 				)
@@ -145,9 +154,14 @@ export const make: Effect.Effect<
 							namespace,
 							cardUrl,
 							app.candidate.sources,
-						).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
+						).pipe(
+							Effect.provideService(Crypto.Crypto, crypto),
+							Failures.replace("Could not add the Public Index job.", () =>
+								Api.DeveloperUnavailable.make({}),
+							),
+						)
 						const value: Api.IndexRequest = {
-							id: yield* Effect.sync(randomUUID),
+							id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
 							cardUrl,
 							generation: job.generation,
 							acceptedAt: yield* Clock.currentTimeMillis,
@@ -183,7 +197,9 @@ export const make: Effect.Effect<
 								),
 						))[0]
 						if (previous === undefined)
-							return yield* Api.DeveloperUnavailable.make({})
+							return yield* Effect.die(
+								"An Index request blocked the insert, but OpenBot can not read it.",
+							)
 						return yield* read(previous)
 					}),
 				)

@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { Chat, Item } from "@openbot-build/core"
 import * as BotMemory from "../src/plugins/memory/BotMemory.ts"
 import * as Audience from "../src/plugins/memory/Audience.ts"
-import { Option } from "effect"
+import { Array as Arr, Option } from "effect"
 
 const source = (item: string) => ({
 	chat: Chat.Id.make("c-1"),
@@ -148,10 +148,12 @@ it("an observation comes from all its people, but only people who see every sour
 		now: 1,
 		id: next,
 	})
-	const observation = applied.entries.find(
+	const found = Arr.findFirst(
+		applied.entries,
 		(entry) => entry.layer === "observation",
 	)
-	assert.ok(observation !== undefined)
+	assert.ok(Option.isSome(found))
+	const observation = found.value
 	assert.strictEqual(observation.confidence, 1)
 	assert.deepStrictEqual(Audience.peopleOf(observation.tags).sort(), [
 		"u-ana",

@@ -6,6 +6,8 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
+import { Email } from "./Email.ts"
+import { Limit } from "./Page.ts"
 import {
 	CreditGrant,
 	Credits,
@@ -49,40 +51,34 @@ export const PlatformAdmin = Schema.Struct({
 })
 export type PlatformAdmin = typeof PlatformAdmin.Type
 export const AddPlatformAdminRequest = Schema.Struct({
-	email: Schema.String.check(
-		Schema.isMaxLength(320),
-		Schema.isPattern(/^[^@\s]+@[^@\s]+$/),
-	),
+	email: Email,
 })
 export const UpdatePlatformOrganizationRequest = Schema.Struct({
 	status: OrganizationStatus,
 })
 
-export class PlatformAdminNotFound extends Schema.TaggedError<PlatformAdminNotFound>()(
-	"PlatformAdminNotFound",
-	{ email: Schema.String },
-) {}
+export class PlatformAdminNotFound extends Schema.TaggedError<
+	PlatformAdminNotFound,
+	{ readonly brand: unique symbol }
+>()("PlatformAdminNotFound", { email: Schema.String }) {}
 /** The platform must keep at least one admin. */
-export class LastPlatformAdmin extends Schema.TaggedError<LastPlatformAdmin>()(
-	"LastPlatformAdmin",
-	{},
-) {}
-export class OrganizationNotFound extends Schema.TaggedError<OrganizationNotFound>()(
-	"OrganizationNotFound",
-	{ organizationId: Schema.String },
-) {}
-export class PlatformUnavailable extends Schema.TaggedError<PlatformUnavailable>()(
-	"PlatformUnavailable",
-	{},
-) {}
+export class LastPlatformAdmin extends Schema.TaggedError<
+	LastPlatformAdmin,
+	{ readonly brand: unique symbol }
+>()("LastPlatformAdmin", {}) {}
+export class OrganizationNotFound extends Schema.TaggedError<
+	OrganizationNotFound,
+	{ readonly brand: unique symbol }
+>()("OrganizationNotFound", { organizationId: Schema.String }) {}
+export class PlatformUnavailable extends Schema.TaggedError<
+	PlatformUnavailable,
+	{ readonly brand: unique symbol }
+>()("PlatformUnavailable", {}) {}
 const errors = [
 	PlatformUnavailable.pipe(HttpApiSchema.status(503)),
 	OrganizationStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 
-const Limit = Schema.FiniteFromString.check(
-	Schema.isBetween({ minimum: 1, maximum: 100 }),
-)
 const ProviderParams = { providerId: Schema.String }
 const ModelParams = { modelId: Schema.String }
 
@@ -107,7 +103,7 @@ export class PlatformApi extends HttpApiGroup.make("platform")
 			{
 				query: {
 					after: Schema.optionalKey(Schema.String),
-					limit: Schema.optionalKey(Limit),
+					limit: Schema.optionalKey(Limit(100)),
 				},
 				success: Schema.Struct({
 					items: Schema.Array(Organization),

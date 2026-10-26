@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import { VaultsApi } from "@openbot-build/api"
-import { Effect } from "effect"
+import { Array as Arr, Effect, Record as Rec, Ref, String as Str } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Readers from "../src/vaults/Readers.ts"
 
@@ -12,17 +12,18 @@ interface Seen {
 }
 
 /** A fake password manager: one function answers every request, and the test keeps a log. */
-const fake = (answer: (seen: Seen) => Response) => {
-	const log: Array<Seen> = []
-	const client = HttpClient.make((request, url) =>
-		Effect.sync(() => {
-			const seen = { url: url.toString(), headers: request.headers }
-			log.push(seen)
-			return HttpClientResponse.fromWeb(request, answer(seen))
-		}),
-	)
-	return { log, client }
-}
+const fake = (answer: (seen: Seen) => Effect.Effect<Response>) =>
+	Effect.gen(function* () {
+		const log = yield* Ref.make<ReadonlyArray<Seen>>([])
+		const client = HttpClient.make((request, url) => {
+			const seen: Seen = { url: url.toString(), headers: request.headers }
+			return Ref.update(log, Arr.append(seen)).pipe(
+				Effect.andThen(answer(seen)),
+				Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
+			)
+		})
+		return { log: Ref.get(log), client }
+	})
 
 const json = (value: unknown, status = 200) =>
 	new Response(JSON.stringify(value), {
@@ -32,16 +33,18 @@ const json = (value: unknown, status = 200) =>
 
 it.effect("1Password Connect finds fields by label, ID and purpose", () =>
 	Effect.gen(function* () {
-		const { log, client } = fake((seen) =>
-			seen.url.endsWith("/v1/vaults")
-				? json([])
-				: json({
-						fields: [
-							{ id: "username", purpose: "USERNAME", value: "alice" },
-							{ id: "x1", purpose: "PASSWORD", label: "secret", value: "pw" },
-							{ id: "x2", label: "API key", value: "key-1" },
-						],
-					}),
+		const { log, client } = yield* fake((seen) =>
+			Effect.succeed(
+				Str.endsWith("/v1/vaults")(seen.url)
+					? json([])
+					: json({
+							fields: [
+								{ id: "username", purpose: "USERNAME", value: "alice" },
+								{ id: "x1", purpose: "PASSWORD", label: "secret", value: "pw" },
+								{ id: "x2", label: "API key", value: "key-1" },
+							],
+						}),
+			),
 		)
 		const reader = Readers.onePassword(client, {
 			kind: "onepassword",
@@ -61,11 +64,12 @@ it.effect("1Password Connect finds fields by label, ID and purpose", () =>
 				["API key", "key-1"],
 			],
 		)
+		const seen = yield* log
 		assert.strictEqual(
-			log[1]?.url,
+			seen[1]?.url,
 			"https://connect.example.com/v1/vaults/v%201/items/i1",
 		)
-		assert.strictEqual(log[1]?.headers["authorization"], "Bearer op-token")
+		assert.strictEqual(seen[1]?.headers["authorization"], "Bearer op-token")
 		const missing = yield* Effect.flip(
 			reader.read({ _tag: "OnePassword", provider, vault: "v", item: "i" }, [
 				"totp",
@@ -83,23 +87,29 @@ it.effect(
 	"Bitwarden reads `bw serve`, gives the current code, and needs an unlocked vault",
 	() =>
 		Effect.gen(function* () {
-			let status = "unlocked"
-			const { log, client } = fake((seen) => {
-				if (seen.url.endsWith("/status"))
-					return json({ success: true, data: { template: { status } } })
-				if (seen.url.includes("/object/totp/"))
-					return json({
+			const status = yield* Ref.make("unlocked")
+			const { log, client } = yield* fake((seen) => {
+				if (Str.endsWith("/status")(seen.url))
+					return Effect.map(Ref.get(status), (status) =>
+						json({ success: true, data: { template: { status } } }),
+					)
+				if (Str.includes("/object/totp/")(seen.url))
+					return Effect.succeed(
+						json({
+							success: true,
+							data: { object: "string", data: "123456" },
+						}),
+					)
+				return Effect.succeed(
+					json({
 						success: true,
-						data: { object: "string", data: "123456" },
-					})
-				return json({
-					success: true,
-					data: {
-						login: { username: "bob", password: "hunter2" },
-						notes: null,
-						fields: [{ name: "pin", value: "0000" }],
-					},
-				})
+						data: {
+							login: { username: "bob", password: "hunter2" },
+							notes: null,
+							fields: [{ name: "pin", value: "0000" }],
+						},
+					}),
+				)
 			})
 			const reader = Readers.bitwarden(client, {
 				kind: "bitwarden",
@@ -110,14 +120,15 @@ it.effect(
 				{ _tag: "Bitwarden", provider, item: "abc" },
 				["password", "pin", "totp"],
 			)
-			assert.deepStrictEqual(Object.fromEntries(values), {
+			assert.deepStrictEqual(Rec.fromEntries(values), {
 				password: "hunter2",
 				pin: "0000",
 				totp: "123456",
 			})
-			assert.strictEqual(log[1]?.url, "http://localhost:8087/object/item/abc")
-			assert.strictEqual(log[1]?.headers["authorization"], undefined)
-			status = "locked"
+			const seen = yield* log
+			assert.strictEqual(seen[1]?.url, "http://localhost:8087/object/item/abc")
+			assert.strictEqual(seen[1]?.headers["authorization"], undefined)
+			yield* Ref.set(status, "locked")
 			const locked = yield* Effect.flip(reader.verify)
 			assert.match(locked.message, /locked/)
 		}),
@@ -127,12 +138,14 @@ it.effect(
 	"HashiCorp Vault reads the KV version 2 engine with the token and namespace",
 	() =>
 		Effect.gen(function* () {
-			const { log, client } = fake((seen) =>
-				seen.url.endsWith("/lookup-self")
-					? json({ data: {} })
-					: seen.url.includes("/gone")
-						? json({ errors: [] }, 404)
-						: json({ data: { data: { token: "s.1", port: 5432 } } }),
+			const { log, client } = yield* fake((seen) =>
+				Effect.succeed(
+					Str.endsWith("/lookup-self")(seen.url)
+						? json({ data: {} })
+						: Str.includes("/gone")(seen.url)
+							? json({ errors: [] }, 404)
+							: json({ data: { data: { token: "s.1", port: 5432 } } }),
+				),
 			)
 			const reader = Readers.hashiCorp(client, {
 				kind: "hashicorp",
@@ -146,16 +159,17 @@ it.effect(
 				{ _tag: "HashiCorp", provider, path: "/bots/db/" },
 				["token", "port"],
 			)
-			assert.deepStrictEqual(Object.fromEntries(values), {
+			assert.deepStrictEqual(Rec.fromEntries(values), {
 				token: "s.1",
 				port: "5432",
 			})
+			const seen = yield* log
 			assert.strictEqual(
-				log[1]?.url,
+				seen[1]?.url,
 				"https://vault.example.com/v1/kv/data/bots/db",
 			)
-			assert.strictEqual(log[1]?.headers["x-vault-token"], "hvs.test")
-			assert.strictEqual(log[1]?.headers["x-vault-namespace"], "team")
+			assert.strictEqual(seen[1]?.headers["x-vault-token"], "hvs.test")
+			assert.strictEqual(seen[1]?.headers["x-vault-namespace"], "team")
 			const gone = yield* Effect.flip(
 				reader.read({ _tag: "HashiCorp", provider, path: "gone" }, ["token"]),
 			)

@@ -1,5 +1,5 @@
 import { ChannelsApi } from "@openbot-build/api"
-import { Clock, Effect, Option, Schema } from "effect"
+import { Clock, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
 	Channel,
@@ -20,11 +20,14 @@ export interface Secrets {
 const signature = (secret: string, timestamp: string, body: string) =>
 	"sha256=" + hmacHex(secret, `${timestamp}.${body}`)
 
-const decodeEvent = Schema.decodeUnknownOption(
+const decodeEvent = Schema.decodeUnknownEffect(
 	Schema.fromJsonString(ChannelsApi.CustomEvent),
 )
-const decodeResult = Schema.decodeUnknownOption(
+const decodeResult = Schema.decodeUnknownEffect(
 	ChannelsApi.CustomDeliveryResult,
+)
+const encodeDelivery = Schema.encodeEffect(
+	Schema.fromJsonString(ChannelsApi.CustomDelivery),
 )
 
 /**
@@ -44,12 +47,13 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 			return yield* ChannelDenied.make({ reason: "missing or old signature" })
 		if (!sameSecret(given, signature(secrets.secret, timestamp, request.body)))
 			return yield* ChannelDenied.make({ reason: "wrong signature" })
-		const event = decodeEvent(request.body)
-		if (Option.isNone(event))
-			return yield* ChannelDenied.make({
-				reason: "the body is not a CustomEvent",
-			})
-		const value = event.value
+		const value = yield* decodeEvent(request.body).pipe(
+			Effect.mapError((error) =>
+				ChannelDenied.make({
+					reason: `the body is not a CustomEvent: ${error.message}`,
+				}),
+			),
+		)
 		const conversation = {
 			key: value.conversation.id,
 			kind: value.conversation.kind,
@@ -95,7 +99,8 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 					message: "The custom Channel has no signing secret yet",
 					retry: false,
 				})
-			const body = JSON.stringify(delivery)
+			// OpenBot makes the delivery, so a value that does not encode is a defect.
+			const body = yield* encodeDelivery(delivery).pipe(Effect.orDie)
 			const timestamp = String(
 				Math.floor((yield* Clock.currentTimeMillis) / 1000),
 			)
@@ -130,24 +135,22 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 				...buttons(message),
 			}).pipe(
 				Effect.flatMap((json) =>
-					Option.match(decodeResult(json), {
-						onNone: () =>
-							Effect.fail(
-								ChannelDeliveryFailed.make({
-									message: "The custom Channel did not answer with a ref",
-									retry: false,
-								}),
-							),
-						onSome: (result) =>
-							Effect.succeed({
-								conversation:
-									result.conversation ??
-									(target._tag === "Person"
-										? target.person
-										: target.conversation),
-								id: result.ref,
+					decodeResult(json).pipe(
+						Effect.mapError((error) =>
+							ChannelDeliveryFailed.make({
+								message: `The custom Channel did not answer with a ref: ${error.message}`,
+								retry: false,
 							}),
-					}),
+						),
+						Effect.map((result) => ({
+							conversation:
+								result.conversation ??
+								(target._tag === "Person"
+									? target.person
+									: target.conversation),
+							id: result.ref,
+						})),
+					),
 				),
 			),
 		edit: (ref, message) =>

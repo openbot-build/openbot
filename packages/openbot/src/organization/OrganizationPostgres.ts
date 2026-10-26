@@ -6,7 +6,19 @@ import {
 	PlatformApi,
 } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
-import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Clock,
+	Crypto,
+	DateTime,
+	Effect,
+	Layer,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import {
 	and,
 	asc,
@@ -19,7 +31,6 @@ import {
 	sql,
 	type SQL,
 } from "drizzle-orm"
-import { randomUUID } from "node:crypto"
 import { openbot_auth_user } from "../database/AuthSchema.ts"
 import {
 	invitations,
@@ -41,93 +52,130 @@ import * as Db from "../database/Database.ts"
 
 const Roles = Schema.fromJsonString(OrganizationApi.Roles)
 const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
-const decodeRoles = Schema.decodeUnknownSync(Roles)
-const encodeRoles = Schema.encodeSync(Roles)
-const decodePolicy = Schema.decodeUnknownSync(PolicyJson)
-const encodePolicy = Schema.encodeSync(PolicyJson)
-const decodeStatus = Schema.decodeUnknownSync(OrganizationApi.MemberStatus)
-const decodeOrganizationStatus = Schema.decodeUnknownSync(
-	OrganizationApi.OrganizationStatus,
-)
+const unavailable = (cause: unknown) => OrganizationUnavailable.make({ cause })
+/** A row that must be in the database is not there. */
+const missing = (what: string) =>
+	unavailable(new Cause.NoSuchElementError(what))
+
+// The rows come from the database, so a bad value is a typed failure.
+const decodeRoles = (text: string) =>
+	Schema.decodeEffect(Roles)(text).pipe(Effect.mapError(unavailable))
+const decodePolicy = (text: string) =>
+	Schema.decodeEffect(PolicyJson)(text).pipe(Effect.mapError(unavailable))
+const decodeStatus = (status: string) =>
+	Schema.decodeUnknownEffect(OrganizationApi.MemberStatus)(status).pipe(
+		Effect.mapError(unavailable),
+	)
+const decodeOrganizationStatus = (status: string) =>
+	Schema.decodeUnknownEffect(OrganizationApi.OrganizationStatus)(status).pipe(
+		Effect.mapError(unavailable),
+	)
+const decodeInvitationStatus = (status: string) =>
+	Schema.decodeUnknownEffect(OrganizationApi.InvitationStatus)(status).pipe(
+		Effect.mapError(unavailable),
+	)
+const decodeBotId = (id: string | null) =>
+	Schema.decodeUnknownEffect(BotsApi.BotId)(id).pipe(
+		Effect.mapError(unavailable),
+	)
+// Only this file writes these columns, from checked values, so a failed encode is a defect.
+const encodeRoles = (roles: typeof Roles.Type) =>
+	Schema.encodeEffect(Roles)(roles).pipe(Effect.orDie)
+const encodePolicy = (policy: typeof PolicyJson.Type) =>
+	Schema.encodeEffect(PolicyJson)(policy).pipe(Effect.orDie)
 
 const organizationView = (
 	row: typeof organizations.$inferSelect,
-): OrganizationApi.Organization => ({
-	id: row.id,
-	name: row.name,
-	status: decodeOrganizationStatus(row.status),
-	createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
-})
+): Effect.Effect<OrganizationApi.Organization, OrganizationUnavailable> =>
+	Effect.map(decodeOrganizationStatus(row.status), (status) => ({
+		id: row.id,
+		name: row.name,
+		status,
+		createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
+	}))
 const memberView = (
 	row: typeof members.$inferSelect,
-): OrganizationApi.Member => ({
-	userId: row.userId,
-	email: row.email,
-	name: row.name,
-	status: decodeStatus(row.status),
-	roles: decodeRoles(row.roles),
-	policy: decodePolicy(row.policy),
-	joinedAt: DateTime.formatIso(DateTime.makeUnsafe(row.joinedAt)),
-})
-const decodeInvitationStatus = Schema.decodeUnknownSync(
-	OrganizationApi.InvitationStatus,
-)
+): Effect.Effect<OrganizationApi.Member, OrganizationUnavailable> =>
+	Effect.gen(function* () {
+		return {
+			userId: row.userId,
+			email: row.email,
+			name: row.name,
+			status: yield* decodeStatus(row.status),
+			roles: yield* decodeRoles(row.roles),
+			policy: yield* decodePolicy(row.policy),
+			joinedAt: DateTime.formatIso(DateTime.makeUnsafe(row.joinedAt)),
+		}
+	})
 /** An email invitation lasts 7 days. */
 const invitationLifetime = 7 * 24 * 60 * 60 * 1000
 type InvitationRow = typeof invitations.$inferSelect
 /** A pending invitation past its end counts as expired. A link without an end never expires. */
-const statusOf = (row: InvitationRow, now: number) =>
+const statusOf = (
+	row: InvitationRow,
+	now: number,
+): Effect.Effect<OrganizationApi.InvitationStatus, OrganizationUnavailable> =>
 	row.status === "pending" && row.expiresAt !== null && row.expiresAt <= now
-		? "expired"
+		? Effect.succeed("expired")
 		: decodeInvitationStatus(row.status)
 const invitationView = (
 	row: InvitationRow & { readonly organizationName: string },
 	now: number,
-): OrganizationApi.Invitation => ({
-	id: row.id,
-	organizationId: row.organizationId,
-	organizationName: row.organizationName,
-	// Only Bot links have no email, and this view never shows them.
-	email: row.email ?? "",
-	// An invitation to a Bot gives no roles in the organization.
-	roles: row.target === "bot" ? [] : decodeRoles(row.roles),
-	status: statusOf(row, now),
-	invitedBy: row.invitedBy,
-	createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
-	expiresAt: DateTime.formatIso(
-		DateTime.makeUnsafe(row.expiresAt ?? row.createdAt),
-	),
-	...(row.target === "bot" && row.botId !== null
-		? { bot: { id: row.botId, name: row.botName ?? "" } }
-		: {}),
-})
+): Effect.Effect<OrganizationApi.Invitation, OrganizationUnavailable> =>
+	Effect.gen(function* () {
+		return {
+			id: row.id,
+			organizationId: row.organizationId,
+			organizationName: row.organizationName,
+			// Only Bot links have no email, and this view never shows them.
+			email: row.email ?? "",
+			// An invitation to a Bot gives no roles in the organization.
+			roles: row.target === "bot" ? [] : yield* decodeRoles(row.roles),
+			status: yield* statusOf(row, now),
+			invitedBy: row.invitedBy,
+			createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
+			expiresAt: DateTime.formatIso(
+				DateTime.makeUnsafe(row.expiresAt ?? row.createdAt),
+			),
+			...(row.target === "bot" && row.botId !== null
+				? { bot: { id: row.botId, name: row.botName ?? "" } }
+				: {}),
+		}
+	})
 const botInvitationView = (
 	row: InvitationRow,
 	now: number,
-): BotsApi.BotInvitation => ({
-	id: row.id,
-	bot: BotsApi.BotId.make(row.botId ?? ""),
-	email: row.email,
-	prefix: row.prefix,
-	path: row.path,
-	status: statusOf(row, now),
-	invitedBy: row.invitedBy,
-	createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
-	expiresAt:
-		row.expiresAt === null
-			? null
-			: DateTime.formatIso(DateTime.makeUnsafe(row.expiresAt)),
-})
+): Effect.Effect<BotsApi.BotInvitation, OrganizationUnavailable> =>
+	Effect.gen(function* () {
+		return {
+			id: row.id,
+			bot: yield* decodeBotId(row.botId),
+			email: row.email,
+			prefix: row.prefix,
+			path: row.path,
+			status: yield* statusOf(row, now),
+			invitedBy: row.invitedBy,
+			createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
+			expiresAt:
+				row.expiresAt === null
+					? null
+					: DateTime.formatIso(DateTime.makeUnsafe(row.expiresAt)),
+		}
+	})
 
 export const make: Effect.Effect<
 	typeof Organization.Service,
 	never,
-	PgClient.PgClient | AuditLog | Settings
+	PgClient.PgClient | AuditLog | Settings | Crypto.Crypto
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 	const audit = yield* AuditLog
 	const settings = yield* Settings
+	const crypto = yield* Crypto.Crypto
+	const newId = crypto
+		.randomUUIDv4()
+		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 
 	/** Run one change to the members of an organization at a time, so the Super Administrator check stays true. */
 	const lockMembers = (tx: Transaction, organizationId: string) =>
@@ -151,19 +199,25 @@ export const make: Effect.Effect<
 			.where(eq(members.userId, userId))
 			.orderBy(asc(organizations.createdAt))
 			.pipe(
-				Effect.map((rows) =>
-					rows.map((row): AuthApi.Membership => ({
-						organizationId: row.organizationId,
-						name: row.name,
-						// A suspended organization suspends every membership in it.
-						status:
-							row.organizationStatus === "active"
-								? decodeStatus(row.status)
-								: "suspended",
-						roles: decodeRoles(row.roles),
-					})),
+				Effect.mapError(unavailable),
+				Effect.flatMap((rows) =>
+					Effect.forEach(
+						rows,
+						(row): Effect.Effect<AuthApi.Membership, OrganizationUnavailable> =>
+							Effect.gen(function* () {
+								return {
+									organizationId: row.organizationId,
+									name: row.name,
+									// A suspended organization suspends every membership in it.
+									status:
+										row.organizationStatus === "active"
+											? yield* decodeStatus(row.status)
+											: "suspended",
+									roles: yield* decodeRoles(row.roles),
+								}
+							}),
+					),
 				),
-				Effect.mapError(() => OrganizationUnavailable.make({})),
 			)
 
 	const recordJoin = (
@@ -179,7 +233,7 @@ export const make: Effect.Effect<
 				resource: userKey({ organizationId, userId: account.id }),
 				details: { roles: [...roles] },
 			})
-			.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+			.pipe(Effect.mapError(unavailable))
 
 	/** Adds a member. It does nothing when the account is already a member. */
 	const join = (
@@ -189,38 +243,42 @@ export const make: Effect.Effect<
 		roles: ReadonlyArray<string>,
 		now: number,
 	) =>
-		tx
-			.insert(members)
-			.values({
-				organizationId,
-				userId: account.id,
-				email: account.email ?? null,
-				name: account.name ?? null,
-				status: "active",
-				roles: encodeRoles(roles),
-				policy: encodePolicy(Authorization.emptyPolicy),
-				joinedAt: now,
-			})
-			.onConflictDoNothing()
-			.returning({ userId: members.userId })
-			.pipe(Effect.map((rows) => rows.length > 0))
+		Effect.gen(function* () {
+			const rows = yield* tx
+				.insert(members)
+				.values({
+					organizationId,
+					userId: account.id,
+					email: account.email ?? null,
+					name: account.name ?? null,
+					status: "active",
+					roles: yield* encodeRoles(roles),
+					policy: yield* encodePolicy(Authorization.emptyPolicy),
+					joinedAt: now,
+				})
+				.onConflictDoNothing()
+				.returning({ userId: members.userId })
+			return rows.length > 0
+		})
 
 	/** Creates an organization and makes its owner the Super Administrator. */
 	const create = (input: { readonly name: string; readonly owner: Account }) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
 			const row = {
-				id: "org_" + randomUUID().replaceAll("-", ""),
-				name: input.name.trim(),
+				id: "org_" + (yield* newId),
+				name: Str.trim(input.name),
 				status: "active",
 				createdAt: now,
 			}
-			yield* db.transaction((tx) =>
-				Effect.gen(function* () {
-					yield* tx.insert(organizations).values(row)
-					yield* join(tx, row.id, input.owner, ["super_administrator"], now)
-				}),
-			)
+			yield* db
+				.transaction((tx) =>
+					Effect.gen(function* () {
+						yield* tx.insert(organizations).values(row)
+						yield* join(tx, row.id, input.owner, ["super_administrator"], now)
+					}),
+				)
+				.pipe(Effect.mapError(unavailable))
 			yield* audit
 				.record({
 					organizationId: row.id,
@@ -233,10 +291,10 @@ export const make: Effect.Effect<
 					resource: organizationKey(row.id),
 					details: { name: row.name },
 				})
-				.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+				.pipe(Effect.mapError(unavailable))
 			yield* recordJoin(row.id, input.owner, ["super_administrator"])
-			return organizationView(row)
-		}).pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+			return yield* organizationView(row)
+		})
 
 	/** The organization that verified the email domain of the account, if any. */
 	const domainOrganization = (account: Account) =>
@@ -252,23 +310,21 @@ export const make: Effect.Effect<
 						isNotNull(organizationDomains.verifiedAt),
 					),
 				)
-				.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+				.pipe(Effect.mapError(unavailable))
 			return Option.fromNullishOr(row?.organizationId)
 		})
 
-	const admit: (typeof Organization.Service)["admit"] = (account, options) =>
+	const admit: (typeof Organization.Service)["admit"] = (account, only) =>
 		Effect.gen(function* () {
 			const before = yield* memberships(account.id)
 			const target = Option.filter(
-				options?.only === undefined
-					? yield* domainOrganization(account)
-					: Option.some(options.only),
-				(id) => !before.some((member) => member.organizationId === id),
+				Option.isSome(only) ? only : yield* domainOrganization(account),
+				(id) => !Arr.some(before, (member) => member.organizationId === id),
 			)
 			if (Option.isSome(target)) {
 				const organizationId = target.value
 				const current = yield* settings.organization(organizationId)
-				if (options?.only !== undefined || current.document.joinByDomain) {
+				if (Option.isSome(only) || current.document.joinByDomain) {
 					const now = yield* Clock.currentTimeMillis
 					const roles = current.document.defaultRoles
 					const joined = yield* db
@@ -278,7 +334,7 @@ export const make: Effect.Effect<
 								return yield* join(tx, organizationId, account, roles, now)
 							}),
 						)
-						.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+						.pipe(Effect.mapError(unavailable))
 					if (joined) yield* recordJoin(organizationId, account, roles)
 					return yield* memberships(account.id)
 				}
@@ -294,14 +350,12 @@ export const make: Effect.Effect<
 							sql`(${members.email} IS DISTINCT FROM ${account.email ?? null} OR ${members.name} IS DISTINCT FROM ${account.name ?? null})`,
 						),
 					)
-					.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+					.pipe(Effect.mapError(unavailable))
 			}
 			return before
 		}).pipe(
-			Effect.mapError((error) =>
-				error._tag === "OrganizationUnavailable"
-					? error
-					: OrganizationUnavailable.make({}),
+			Effect.catchTag("SettingsUnavailable", (error) =>
+				Effect.fail(unavailable(error)),
 			),
 		)
 
@@ -319,7 +373,7 @@ export const make: Effect.Effect<
 			)
 			.where(where)
 			.orderBy(desc(invitations.createdAt), desc(invitations.id))
-			.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+			.pipe(Effect.mapError(unavailable))
 	/** The invitations to use one Bot, newest first. */
 	const botInvitationRows = (organizationId: string, bot: string) =>
 		db
@@ -333,7 +387,25 @@ export const make: Effect.Effect<
 				),
 			)
 			.orderBy(desc(invitations.createdAt), desc(invitations.id))
-			.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+			.pipe(Effect.mapError(unavailable))
+	/** One invitation to use a Bot. */
+	const botInvitationRow = (
+		organizationId: string,
+		bot: string,
+		invitationId: string,
+	) =>
+		db
+			.select()
+			.from(invitations)
+			.where(
+				and(
+					eq(invitations.organizationId, organizationId),
+					eq(invitations.target, "bot"),
+					eq(invitations.botId, bot),
+					eq(invitations.id, invitationId),
+				),
+			)
+			.pipe(Effect.mapError(unavailable), Effect.map(Arr.head))
 	/** The account of a user, with its email in lower case. */
 	const accountOf = (userId: string) =>
 		db
@@ -347,12 +419,12 @@ export const make: Effect.Effect<
 			.where(eq(openbot_auth_user.id, userId))
 			.pipe(
 				Effect.map((rows) =>
-					Option.map(Option.fromNullishOr(rows[0]), (row) => ({
+					Option.map(Arr.head(rows), (row) => ({
 						...row,
-						email: row.email.toLowerCase(),
+						email: Str.toLowerCase(row.email),
 					})),
 				),
-				Effect.mapError(() => OrganizationUnavailable.make({})),
+				Effect.mapError(unavailable),
 			)
 
 	const findMember = (organizationId: string, userId: string) =>
@@ -361,10 +433,10 @@ export const make: Effect.Effect<
 			.from(members)
 			.where(memberWhere(organizationId, userId))
 			.pipe(
-				Effect.map((rows) =>
-					Option.map(Option.fromNullishOr(rows[0]), memberView),
+				Effect.mapError(unavailable),
+				Effect.flatMap((rows) =>
+					Effect.transposeOption(Option.map(Arr.head(rows), memberView)),
 				),
-				Effect.mapError(() => OrganizationUnavailable.make({})),
 			)
 	const findOrganization = (organizationId: string) =>
 		db
@@ -372,10 +444,10 @@ export const make: Effect.Effect<
 			.from(organizations)
 			.where(eq(organizations.id, organizationId))
 			.pipe(
-				Effect.map((rows) =>
-					Option.map(Option.fromNullishOr(rows[0]), organizationView),
+				Effect.mapError(unavailable),
+				Effect.flatMap((rows) =>
+					Effect.transposeOption(Option.map(Arr.head(rows), organizationView)),
 				),
-				Effect.mapError(() => OrganizationUnavailable.make({})),
 			)
 
 	const updateMembers = <A, E>(
@@ -394,24 +466,25 @@ export const make: Effect.Effect<
 					.select()
 					.from(members)
 					.where(eq(members.organizationId, organizationId))
-				const all = rows.map(memberView)
-				const target = all.find((member) => member.userId === userId)
-				if (target === undefined)
+				const all = yield* Effect.forEach(rows, memberView)
+				const target = Arr.findFirst(all, (member) => member.userId === userId)
+				if (Option.isNone(target))
 					return yield* OrganizationApi.MemberNotFound.make({ userId })
-				const remaining = all.flatMap((member) => {
+				const remaining = Arr.flatMap(all, (member) => {
 					if (member.userId !== userId) return [member]
 					const next = after(member)
 					return next === null ? [] : [next]
 				})
 				if (
-					!remaining.some(
+					!Arr.some(
+						remaining,
 						(member) =>
 							member.status === "active" &&
 							member.roles.includes("super_administrator"),
 					)
 				)
 					return yield* OrganizationApi.LastSuperAdministrator.make({})
-				return yield* change(target, tx)
+				return yield* change(target.value, tx)
 			}),
 		)
 
@@ -443,58 +516,57 @@ export const make: Effect.Effect<
 				.orderBy(asc(organizations.id))
 				.limit(limit + 1)
 				.pipe(
-					Effect.map((rows) => {
-						const page = rows.slice(0, limit).map(organizationView)
-						return {
-							items: page,
-							next:
-								rows.length > limit
-									? (page[page.length - 1]?.id ?? null)
-									: null,
-						}
-					}),
-					Effect.mapError(() => OrganizationUnavailable.make({})),
+					Effect.mapError(unavailable),
+					Effect.flatMap((rows) =>
+						Effect.map(
+							Effect.forEach(Arr.take(rows, limit), organizationView),
+							(page) => ({
+								items: page,
+								next:
+									rows.length > limit
+										? (page[page.length - 1]?.id ?? null)
+										: null,
+							}),
+						),
+					),
 				),
 		create,
 		update: (organizationId, patch) =>
 			patch.name === undefined
 				? findOrganization(organizationId).pipe(
 						Effect.flatMap(
-							Option.match({
-								onNone: () => Effect.fail(OrganizationUnavailable.make({})),
-								onSome: Effect.succeed,
-							}),
+							Effect.fromOption(() =>
+								missing("The organization does not exist."),
+							),
 						),
 					)
 				: db
 						.update(organizations)
-						.set(patch.name === undefined ? {} : { name: patch.name.trim() })
+						.set({ name: Str.trim(patch.name) })
 						.where(eq(organizations.id, organizationId))
 						.returning()
 						.pipe(
+							Effect.mapError(unavailable),
 							Effect.flatMap(([row]) =>
 								row === undefined
-									? Effect.fail(OrganizationUnavailable.make({}))
-									: Effect.succeed(organizationView(row)),
+									? Effect.fail(missing("The organization does not exist."))
+									: organizationView(row),
 							),
-							Effect.mapError(() => OrganizationUnavailable.make({})),
 						),
 		setStatus: (organizationId, status) =>
-			db
-				.update(organizations)
-				.set({ status })
-				.where(eq(organizations.id, organizationId))
-				.returning()
-				.pipe(
-					Effect.mapError(() => OrganizationUnavailable.make({})),
-					Effect.flatMap(([row]) =>
-						row === undefined
-							? Effect.fail(
-									PlatformApi.OrganizationNotFound.make({ organizationId }),
-								)
-							: Effect.succeed(organizationView(row)),
-					),
-				),
+			Effect.gen(function* () {
+				const [row] = yield* db
+					.update(organizations)
+					.set({ status })
+					.where(eq(organizations.id, organizationId))
+					.returning()
+					.pipe(Effect.mapError(unavailable))
+				if (row === undefined)
+					return yield* PlatformApi.OrganizationNotFound.make({
+						organizationId,
+					})
+				return yield* organizationView(row)
+			}),
 		listMembers: (organizationId, { after, limit }) =>
 			db
 				.select()
@@ -508,17 +580,19 @@ export const make: Effect.Effect<
 				.orderBy(asc(members.userId))
 				.limit(limit + 1)
 				.pipe(
-					Effect.map((rows) => {
-						const page = rows.slice(0, limit).map(memberView)
-						return {
-							items: page,
-							next:
-								rows.length > limit
-									? (page[page.length - 1]?.userId ?? null)
-									: null,
-						}
-					}),
-					Effect.mapError(() => OrganizationUnavailable.make({})),
+					Effect.mapError(unavailable),
+					Effect.flatMap((rows) =>
+						Effect.map(
+							Effect.forEach(Arr.take(rows, limit), memberView),
+							(page) => ({
+								items: page,
+								next:
+									rows.length > limit
+										? (page[page.length - 1]?.userId ?? null)
+										: null,
+							}),
+						),
+					),
 				),
 		updateMember: (organizationId, userId, patch) => {
 			const apply = (member: OrganizationApi.Member) => ({
@@ -531,22 +605,22 @@ export const make: Effect.Effect<
 				organizationId,
 				userId,
 				(member, tx) =>
-					tx
-						.update(members)
-						.set({
-							status: apply(member).status,
-							roles: encodeRoles(apply(member).roles),
-							policy: encodePolicy(apply(member).policy),
-						})
-						.where(memberWhere(organizationId, userId))
-						.pipe(Effect.as(apply(member))),
+					Effect.gen(function* () {
+						const next = apply(member)
+						yield* tx
+							.update(members)
+							.set({
+								status: next.status,
+								roles: yield* encodeRoles(next.roles),
+								policy: yield* encodePolicy(next.policy),
+							})
+							.where(memberWhere(organizationId, userId))
+						return next
+					}),
 				apply,
 			).pipe(
-				Effect.mapError((error) =>
-					error._tag === "MemberNotFound" ||
-					error._tag === "LastSuperAdministrator"
-						? error
-						: OrganizationUnavailable.make({}),
+				Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+					Effect.fail(unavailable(error)),
 				),
 			)
 		},
@@ -568,11 +642,8 @@ export const make: Effect.Effect<
 					}),
 				() => null,
 			).pipe(
-				Effect.mapError((error) =>
-					error._tag === "MemberNotFound" ||
-					error._tag === "LastSuperAdministrator"
-						? error
-						: OrganizationUnavailable.make({}),
+				Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+					Effect.fail(unavailable(error)),
 				),
 			),
 		listInvitations: (organizationId, status) =>
@@ -584,22 +655,23 @@ export const make: Effect.Effect<
 						eq(invitations.target, "organization"),
 					),
 				)
-				return rows
-					.map((row) => invitationView(row, now))
-					.filter(
-						(invitation) =>
-							status === undefined || invitation.status === status,
-					)
+				const views = yield* Effect.forEach(rows, (row) =>
+					invitationView(row, now),
+				)
+				return Arr.filter(
+					views,
+					(invitation) => status === undefined || invitation.status === status,
+				)
 			}),
 		createInvitation: (input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const email = input.email.trim().toLowerCase()
+				const email = pipe(input.email, Str.trim, Str.toLowerCase)
 				const row = {
-					id: "inv_" + randomUUID().replaceAll("-", ""),
+					id: "inv_" + (yield* newId),
 					organizationId: input.organizationId,
 					email,
-					roles: encodeRoles(input.roles),
+					roles: yield* encodeRoles(input.roles),
 					status: "pending",
 					invitedBy: input.invitedBy,
 					createdAt: now,
@@ -644,16 +716,14 @@ export const make: Effect.Effect<
 						}),
 					)
 					.pipe(
-						Effect.mapError((error) =>
-							error._tag === "InvitationInvalid"
-								? error
-								: OrganizationUnavailable.make({}),
+						Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+							Effect.fail(unavailable(error)),
 						),
 					)
 				const [created] = yield* invitationRows(eq(invitations.id, row.id))
 				if (created === undefined)
-					return yield* OrganizationUnavailable.make({})
-				return invitationView(created, now)
+					return yield* missing("The new invitation is not in the database.")
+				return yield* invitationView(created, now)
 			}),
 		revokeInvitation: (organizationId, invitationId) =>
 			Effect.gen(function* () {
@@ -669,7 +739,7 @@ export const make: Effect.Effect<
 					return yield* OrganizationApi.InvitationNotFound.make({
 						invitationId,
 					})
-				const current = invitationView(row, now)
+				const current = yield* invitationView(row, now)
 				if (current.status !== "pending")
 					return yield* OrganizationApi.InvitationInvalid.make({
 						message: `The invitation is ${current.status}.`,
@@ -683,7 +753,7 @@ export const make: Effect.Effect<
 							eq(invitations.status, "pending"),
 						),
 					)
-					.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+					.pipe(Effect.mapError(unavailable))
 				return { ...current, status: "revoked" as const }
 			}),
 		invitationsFor: (userId) =>
@@ -698,7 +768,7 @@ export const make: Effect.Effect<
 						gt(invitations.expiresAt, now),
 					),
 				)
-				return rows.map((row) => invitationView(row, now))
+				return yield* Effect.forEach(rows, (row) => invitationView(row, now))
 			}),
 		answerInvitation: (userId, invitationId, answer) =>
 			Effect.gen(function* () {
@@ -724,7 +794,7 @@ export const make: Effect.Effect<
 							"This invitation is for a Bot. Accept it with POST /v1/bot-invitations/accept.",
 					})
 				const now = yield* Clock.currentTimeMillis
-				const roles = decodeRoles(row.roles)
+				const roles = yield* decodeRoles(row.roles)
 				const joined = yield* db
 					.transaction((tx) =>
 						Effect.gen(function* () {
@@ -734,12 +804,7 @@ export const make: Effect.Effect<
 								.from(invitations)
 								.where(eq(invitations.id, invitationId))
 							const status =
-								locked === undefined
-									? "revoked"
-									: invitationView(
-											{ ...locked, organizationName: row.organizationName },
-											now,
-										).status
+								locked === undefined ? "revoked" : yield* statusOf(locked, now)
 							if (status !== "pending")
 								return yield* OrganizationApi.InvitationInvalid.make({
 									message: `The invitation is ${status}.`,
@@ -764,33 +829,35 @@ export const make: Effect.Effect<
 						}),
 					)
 					.pipe(
-						Effect.mapError((error) =>
-							error._tag === "InvitationInvalid"
-								? error
-								: OrganizationUnavailable.make({}),
+						Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+							Effect.fail(unavailable(error)),
 						),
 					)
 				if (joined)
 					yield* recordJoin(row.organizationId, { id: account.value.id }, roles)
-				return { ...invitationView(row, now), status: answer }
+				return { ...(yield* invitationView(row, now)), status: answer }
 			}),
 		listBotInvitations: (organizationId, bot, status) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const rows = yield* botInvitationRows(organizationId, bot)
-				return rows
-					.map((row) => botInvitationView(row, now))
-					.filter(
-						(invitation) =>
-							status === undefined || invitation.status === status,
-					)
+				const views = yield* Effect.forEach(rows, (row) =>
+					botInvitationView(row, now),
+				)
+				return Arr.filter(
+					views,
+					(invitation) => status === undefined || invitation.status === status,
+				)
 			}),
 		createBotInvitation: (input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const email = input.email?.trim().toLowerCase() ?? null
+				const email =
+					input.email === undefined
+						? null
+						: pipe(input.email, Str.trim, Str.toLowerCase)
 				const row: InvitationRow = {
-					id: "inv_" + randomUUID().replaceAll("-", ""),
+					id: "inv_" + (yield* newId),
 					organizationId: input.organizationId,
 					target: "bot",
 					botId: input.bot.id,
@@ -839,26 +906,23 @@ export const make: Effect.Effect<
 						}),
 					)
 					.pipe(
-						Effect.mapError((error) =>
-							error._tag === "InvitationInvalid"
-								? error
-								: OrganizationUnavailable.make({}),
+						Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+							Effect.fail(unavailable(error)),
 						),
 					)
-				return botInvitationView(row, now)
+				return yield* botInvitationView(row, now)
 			}),
 		botInvitation: (organizationId, bot, invitationId) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const row = (yield* botInvitationRows(organizationId, bot)).find(
-					(row) => row.id === invitationId,
-				)
-				if (row === undefined)
+				const found = yield* botInvitationRow(organizationId, bot, invitationId)
+				if (Option.isNone(found))
 					return yield* OrganizationApi.InvitationNotFound.make({
 						invitationId,
 					})
+				const row = found.value
 				return {
-					invitation: botInvitationView(row, now),
+					invitation: yield* botInvitationView(row, now),
 					link:
 						row.secretHash === null ||
 						row.secret === null ||
@@ -874,14 +938,12 @@ export const make: Effect.Effect<
 		revokeBotInvitation: (organizationId, bot, invitationId) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const row = (yield* botInvitationRows(organizationId, bot)).find(
-					(row) => row.id === invitationId,
-				)
-				if (row === undefined)
+				const found = yield* botInvitationRow(organizationId, bot, invitationId)
+				if (Option.isNone(found))
 					return yield* OrganizationApi.InvitationNotFound.make({
 						invitationId,
 					})
-				const current = botInvitationView(row, now)
+				const current = yield* botInvitationView(found.value, now)
 				if (current.status !== "pending")
 					return yield* OrganizationApi.InvitationInvalid.make({
 						message: `The invitation is ${current.status}.`,
@@ -895,7 +957,7 @@ export const make: Effect.Effect<
 							eq(invitations.status, "pending"),
 						),
 					)
-					.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+					.pipe(Effect.mapError(unavailable))
 				return { ...current, status: "revoked" as const }
 			}),
 		takeBotInvitation: (userId, by) =>
@@ -916,7 +978,7 @@ export const make: Effect.Effect<
 								: eq(invitations.secretHash, by.secretHash),
 						),
 					)
-					.pipe(Effect.mapError(() => OrganizationUnavailable.make({})))
+					.pipe(Effect.mapError(unavailable))
 				if (row === undefined || row.botId === null) return yield* notFound
 				const taken = {
 					invitationId: row.id,
@@ -926,7 +988,7 @@ export const make: Effect.Effect<
 				if (by._tag === "Link") {
 					// A link stays open, so many people can use it.
 					if (row.email !== null) return yield* notFound
-					const status = statusOf(row, now)
+					const status = yield* statusOf(row, now)
 					if (status !== "pending")
 						return yield* OrganizationApi.InvitationInvalid.make({
 							message: `The invitation is ${status}.`,
@@ -950,7 +1012,7 @@ export const make: Effect.Effect<
 								.from(invitations)
 								.where(eq(invitations.id, row.id))
 							const status =
-								locked === undefined ? "revoked" : statusOf(locked, now)
+								locked === undefined ? "revoked" : yield* statusOf(locked, now)
 							if (status !== "pending")
 								return yield* OrganizationApi.InvitationInvalid.make({
 									message: `The invitation is ${status}.`,
@@ -967,10 +1029,8 @@ export const make: Effect.Effect<
 						}),
 					)
 					.pipe(
-						Effect.mapError((error) =>
-							error._tag === "InvitationInvalid"
-								? error
-								: OrganizationUnavailable.make({}),
+						Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+							Effect.fail(unavailable(error)),
 						),
 					)
 				return taken
@@ -991,7 +1051,7 @@ export const make: Effect.Effect<
 					)
 					.limit(1)
 				return rows.length > 0
-			}).pipe(Effect.mapError(() => OrganizationUnavailable.make({}))),
+			}).pipe(Effect.mapError(unavailable)),
 	})
 })
 

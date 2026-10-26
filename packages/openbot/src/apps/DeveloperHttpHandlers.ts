@@ -1,10 +1,5 @@
-import {
-	AuthApi,
-	DeveloperApi as Api,
-	Identity,
-	OpenBotApi,
-} from "@openbot-build/api"
-import { Effect, Layer, Option, Redacted } from "effect"
+import { DeveloperApi as Api, Identity, OpenBotApi } from "@openbot-build/api"
+import { Effect, Layer, Option } from "effect"
 import * as HttpMiddleware from "../auth/HttpMiddleware.ts"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -30,24 +25,12 @@ export const layerPublic = HttpApiBuilder.group(
 				.handleRaw("authorizationCallback", () =>
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
-						const owner = yield* Option.match(
-							Option.fromNullishOr(request.cookies[AuthApi.SessionCookie]),
-							{
-								onNone: () => Effect.succeedNone,
-								onSome: (cookie) =>
-									auth.resolveSession(Redacted.make(cookie)).pipe(
-										Effect.tap(({ setCookies }) =>
-											HttpMiddleware.setSessionCookies(setCookies),
-										),
-										Effect.map((value) => Option.some(ownersOf(value))),
-										// A rejected session is the same as no session: the caller must log in.
-										Effect.catchTag(
-											"CredentialRejected",
-											() => Effect.succeedNone,
-										),
-										Effect.mapError(() => Api.DeveloperUnavailable.make({})),
-									),
-							},
+						const owner = yield* HttpMiddleware.optionalSession(auth).pipe(
+							Effect.map(Option.map(ownersOf)),
+							// The Auth service logs the cause of each failure.
+							Effect.catchTag("AuthUnavailable", () =>
+								Effect.fail(Api.DeveloperUnavailable.make({})),
+							),
 						)
 						const receipt = yield* tests.receive(request.url, owner)
 						const target =

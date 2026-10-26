@@ -6,10 +6,15 @@ import {
 	PlatformApi,
 	Settings as SettingsApi,
 } from "@openbot-build/api"
-import { Effect, Option } from "effect"
+import { Array as Arr, Effect, Option, Stream, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
+import * as Failures from "../app/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { Billing } from "../billing/Billing.ts"
+import {
+	Billing,
+	type BillingStorageError,
+	type OrganizationMissing,
+} from "../billing/Billing.ts"
 import { organizationKey, platformKey } from "../audit/Resources.ts"
 import { checkUnused } from "../models/HttpHandlers.ts"
 import {
@@ -29,6 +34,18 @@ import { PlatformAdmins } from "./PlatformAdmins.ts"
 /** Platform actions go to this audit log, apart from the logs of organizations. */
 export const platformLog = "platform"
 
+/** Logs an inside failure, then fails with `PlatformUnavailable` in its place. */
+const unavailable = (message: string) =>
+	Failures.replace(message, () => PlatformApi.PlatformUnavailable.make({}))
+/**
+ * The same for one failure that `Effect.catchTag` takes out, so the other
+ * failures, such as a missing organization, keep their meaning.
+ */
+const unavailableFailure =
+	(message: string) =>
+	<E>(error: E) =>
+		Effect.fail(error).pipe(unavailable(message))
+
 const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 	Effect.gen(function* () {
 		const settings = yield* Settings
@@ -40,18 +57,18 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 		const audit = yield* AuditLog
 		const billing = yield* Billing
 		const credits = <A>(
-			effect: Effect.Effect<
-				A,
-				{ readonly _tag: "BillingStorageError" | "OrganizationMissing" }
-			>,
+			effect: Effect.Effect<A, BillingStorageError | OrganizationMissing>,
 			organizationId: string,
+			message: string,
 		) =>
 			effect.pipe(
-				Effect.mapError((error) =>
-					error._tag === "OrganizationMissing"
-						? PlatformApi.OrganizationNotFound.make({ organizationId })
-						: PlatformApi.PlatformUnavailable.make({}),
-				),
+				Effect.catchTags({
+					OrganizationMissing: () =>
+						Effect.fail(
+							PlatformApi.OrganizationNotFound.make({ organizationId }),
+						),
+					BillingStorageError: unavailableFailure(message),
+				}),
 			)
 		const record = (
 			account: AccountCaller,
@@ -77,131 +94,146 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					resource: input.resource,
 					details: input.details,
 				})
-				.pipe(Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})))
+				.pipe(unavailable("Could not write the audit log"))
 		const current = settings.platform.pipe(
 			Effect.flatMap(
-				Option.match({
-					onNone: () => Effect.fail(SettingsApi.SettingsUnavailable.make({})),
-					onSome: Effect.succeed,
-				}),
+				Effect.fromOption(() => SettingsApi.SettingsUnavailable.make({})),
 			),
 		)
 		const findProvider = (providerId: string) =>
-			providers.get(platformOwner, providerId).pipe(
-				Effect.flatMap(
-					Option.match({
-						onNone: () =>
-							Effect.fail(
-								ModelProvidersApi.ModelProviderNotFound.make({ providerId }),
-							),
-						onSome: Effect.succeed,
-					}),
-				),
-			)
+			providers
+				.get(platformOwner, providerId)
+				.pipe(
+					Effect.flatMap(
+						Effect.fromOption(() =>
+							ModelProvidersApi.ModelProviderNotFound.make({ providerId }),
+						),
+					),
+				)
 		const findModel = (modelId: string) =>
-			models.get(platformOwner, modelId).pipe(
-				Effect.flatMap(
-					Option.match({
-						onNone: () =>
-							Effect.fail(ModelProvidersApi.ModelNotFound.make({ modelId })),
-						onSome: Effect.succeed,
-					}),
-				),
-			)
+			models
+				.get(platformOwner, modelId)
+				.pipe(
+					Effect.flatMap(
+						Effect.fromOption(() =>
+							ModelProvidersApi.ModelNotFound.make({ modelId }),
+						),
+					),
+				)
 		/** Every organization, page by page. */
-		const allOrganizations = Effect.gen(function* () {
-			const ids: Array<string> = []
-			let after: string | undefined
-			do {
-				const page = yield* organization.list({
+		const allOrganizations = Stream.paginate(Option.none<string>(), (after) =>
+			organization
+				.list({
 					limit: 100,
-					...(after === undefined ? {} : { after }),
+					...Option.match(after, {
+						onNone: () => ({}),
+						onSome: (after) => ({ after }),
+					}),
 				})
-				ids.push(...page.items.map((item) => item.id))
-				after = page.next ?? undefined
-			} while (after !== undefined)
-			return ids
-		})
-
-		return handlers
-			.handle("getPlatformSettings", () => Effect.map(current, Views.platform))
-			.handle("updatePlatformSettings", ({ payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const {
-						expectedVersion,
-						identityProvider,
-						files: filesInput,
-						...changes
-					} = payload
-					const updated = yield* settings.updatePlatform(
-						expectedVersion,
-						(document) =>
-							Effect.gen(function* () {
-								const provider: PlatformDocument["identityProvider"] =
-									identityProvider === undefined
-										? document.identityProvider
-										: identityProvider === null
-											? null
-											: {
-													issuer: identityProvider.issuer,
-													clientId: identityProvider.clientId,
-													...(identityProvider.clientSecret === undefined
-														? {
-																clientSecret:
-																	document.identityProvider?.clientSecret ??
-																	null,
-																clientSecretHint:
-																	document.identityProvider?.clientSecretHint ??
-																	null,
-															}
-														: identityProvider.clientSecret === null
-															? { clientSecret: null, clientSecretHint: null }
-															: {
-																	clientSecret: yield* secrets.seal(
-																		identityProvider.clientSecret,
-																		bindings.identityProviderSecret,
-																	),
-																	clientSecretHint: hint(
-																		identityProvider.clientSecret,
-																	),
-																}),
-												}
-								const files =
-									filesInput === undefined
-										? document.files
-										: yield* changeFiles(filesOf(document), filesInput)
-								return {
-									...document,
-									...changes,
-									identityProvider: provider,
-									...(files === undefined ? {} : { files }),
-								}
-							}).pipe(
-								Effect.provideService(Secrets, secrets),
-								Effect.catchTag("SecretStorageError", () =>
-									Effect.fail(SettingsApi.SettingsUnavailable.make({})),
-								),
-							),
-					)
-					yield* record(account, {
-						action: "settings.updated",
-						resource: platformKey,
-						details: {
-							changes: [
-								...Object.keys(changes),
-								...(identityProvider === undefined ? [] : ["identityProvider"]),
-								...(filesInput === undefined ? [] : ["files"]),
-							],
-							version: updated.version,
-						},
-					})
-					return Views.platform(updated)
-				}).pipe(
-					Effect.catchTag("SetupRequired", () =>
-						Effect.fail(SettingsApi.SettingsUnavailable.make({})),
+				.pipe(
+					Effect.map(
+						(page) =>
+							[
+								Arr.map(page.items, (item) => item.id),
+								Option.map(Option.fromNullOr(page.next), Option.some),
+							] as const,
 					),
 				),
+		).pipe(Stream.runCollect)
+
+		// Write handlers do not stop when the client goes away, so a change
+		// always gets its audit entry.
+		return handlers
+			.handle("getPlatformSettings", () => Effect.map(current, Views.platform))
+			.handle(
+				"updatePlatformSettings",
+				({ payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const {
+							expectedVersion,
+							identityProvider,
+							files: filesInput,
+							...changes
+						} = payload
+						const updated = yield* settings.updatePlatform(
+							expectedVersion,
+							(document) =>
+								Effect.gen(function* () {
+									const provider: PlatformDocument["identityProvider"] =
+										identityProvider === undefined
+											? document.identityProvider
+											: identityProvider === null
+												? null
+												: {
+														issuer: identityProvider.issuer,
+														clientId: identityProvider.clientId,
+														...(identityProvider.clientSecret === undefined
+															? {
+																	clientSecret:
+																		document.identityProvider?.clientSecret ??
+																		null,
+																	clientSecretHint:
+																		document.identityProvider
+																			?.clientSecretHint ?? null,
+																}
+															: identityProvider.clientSecret === null
+																? { clientSecret: null, clientSecretHint: null }
+																: {
+																		clientSecret: yield* secrets.seal(
+																			identityProvider.clientSecret,
+																			bindings.identityProviderSecret,
+																		),
+																		clientSecretHint: hint(
+																			identityProvider.clientSecret,
+																		),
+																	}),
+													}
+									const files =
+										filesInput === undefined
+											? document.files
+											: yield* changeFiles(
+													secrets,
+													filesOf(document),
+													filesInput,
+												)
+									return {
+										...document,
+										...changes,
+										identityProvider: provider,
+										...(files === undefined ? {} : { files }),
+									}
+								}).pipe(
+									Effect.catchTag("SecretStorageError", (error) =>
+										Effect.fail(error).pipe(
+											Failures.replace("Could not seal a platform secret", () =>
+												SettingsApi.SettingsUnavailable.make({}),
+											),
+										),
+									),
+								),
+						)
+						yield* record(account, {
+							action: "settings.updated",
+							resource: platformKey,
+							details: {
+								changes: [
+									...Struct.keys(changes),
+									...(identityProvider === undefined
+										? []
+										: ["identityProvider"]),
+									...(filesInput === undefined ? [] : ["files"]),
+								],
+								version: updated.version,
+							},
+						})
+						return Views.platform(updated)
+					}).pipe(
+						Effect.catchTag("SetupRequired", () =>
+							Effect.fail(SettingsApi.SettingsUnavailable.make({})),
+						),
+					),
+				{ uninterruptible: true },
 			)
 			.handle("listPlatformOrganizations", ({ query }) =>
 				organization
@@ -209,248 +241,285 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						limit: query.limit ?? 50,
 						...(query.after === undefined ? {} : { after: query.after }),
 					})
-					.pipe(
-						Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
-					),
+					.pipe(unavailable("Could not list the organizations")),
 			)
-			.handle("updatePlatformOrganization", ({ params, payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const updated = yield* organization
-						.setStatus(params.organizationId, payload.status)
-						.pipe(
-							Effect.mapError((error) =>
-								error._tag === "OrganizationNotFound"
-									? error
-									: PlatformApi.PlatformUnavailable.make({}),
-							),
-						)
-					yield* record(account, {
-						organizationId: updated.id,
-						action: "organization.updated",
-						resource: organizationKey(updated.id),
-						details: { status: updated.status, by: "platform" },
-					})
-					return updated
-				}),
+			.handle(
+				"updatePlatformOrganization",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const updated = yield* organization
+							.setStatus(params.organizationId, payload.status)
+							.pipe(
+								Effect.catchTag(
+									"OrganizationUnavailable",
+									unavailableFailure(
+										"Could not change the status of an organization",
+									),
+								),
+							)
+						yield* record(account, {
+							organizationId: updated.id,
+							action: "organization.updated",
+							resource: organizationKey(updated.id),
+							details: { status: updated.status, by: "platform" },
+						})
+						return updated
+					}),
+				{ uninterruptible: true },
 			)
 			.handle("listPlatformAdmins", () =>
 				admins.list.pipe(
 					Effect.map((items) => ({ items })),
-					Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
+					unavailable("Could not list the platform admins"),
 				),
 			)
-			.handle("addPlatformAdmin", ({ payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const added = yield* admins
-						.add(payload.email)
-						.pipe(
-							Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
-						)
-					yield* record(account, {
-						action: "member.updated",
-						resource: platformKey,
-						details: { platformAdmin: "added", email: added.email },
-					})
-					return added
-				}),
+			.handle(
+				"addPlatformAdmin",
+				({ payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const added = yield* admins
+							.add(payload.email)
+							.pipe(unavailable("Could not add a platform admin"))
+						yield* record(account, {
+							action: "member.updated",
+							resource: platformKey,
+							details: { platformAdmin: "added", email: added.email },
+						})
+						return added
+					}),
+				{ uninterruptible: true },
 			)
-			.handle("removePlatformAdmin", ({ params }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					yield* admins
-						.remove(params.email)
-						.pipe(
-							Effect.mapError((error) =>
-								error._tag === "PlatformAdminsUnavailable"
-									? PlatformApi.PlatformUnavailable.make({})
-									: error,
-							),
-						)
-					yield* record(account, {
-						action: "member.updated",
-						resource: platformKey,
-						details: { platformAdmin: "removed", email: params.email },
-					})
-				}),
+			.handle(
+				"removePlatformAdmin",
+				({ params }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						yield* admins
+							.remove(params.email)
+							.pipe(
+								Effect.catchTag(
+									"PlatformAdminsUnavailable",
+									unavailableFailure("Could not remove a platform admin"),
+								),
+							)
+						yield* record(account, {
+							action: "member.updated",
+							resource: platformKey,
+							details: { platformAdmin: "removed", email: params.email },
+						})
+					}),
+				{ uninterruptible: true },
 			)
 			.handle("listPlatformModels", () =>
 				models
 					.list(platformOwner)
-					.pipe(Effect.map((items) => ({ items: items.map(modelView) }))),
+					.pipe(Effect.map((items) => ({ items: Arr.map(items, modelView) }))),
 			)
 			.handle("getPlatformModel", ({ params }) =>
 				Effect.map(findModel(params.modelId), modelView),
 			)
-			.handle("createPlatformModel", ({ payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const created = yield* models.create(platformOwner, payload)
-					yield* record(account, {
-						action: "model.created",
-						resource: platformKey,
-						details: { modelId: created.id, name: created.name },
-					})
-					return modelView(created)
-				}),
+			.handle(
+				"createPlatformModel",
+				({ payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const created = yield* models.create(platformOwner, payload)
+						yield* record(account, {
+							action: "model.created",
+							resource: platformKey,
+							details: { modelId: created.id, name: created.name },
+						})
+						return modelView(created)
+					}),
+				{ uninterruptible: true },
 			)
-			.handle("updatePlatformModel", ({ params, payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const updated = yield* models.update(
-						platformOwner,
-						params.modelId,
-						payload,
-					)
-					yield* record(account, {
-						action: "model.updated",
-						resource: platformKey,
-						details: { modelId: updated.id, name: updated.name },
-					})
-					return modelView(updated)
-				}),
+			.handle(
+				"updatePlatformModel",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const updated = yield* models.update(
+							platformOwner,
+							params.modelId,
+							payload,
+						)
+						yield* record(account, {
+							action: "model.updated",
+							resource: platformKey,
+							details: { modelId: updated.id, name: updated.name },
+						})
+						return modelView(updated)
+					}),
+				{ uninterruptible: true },
 			)
-			.handle("deletePlatformModel", ({ params }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const model = yield* findModel(params.modelId)
-					yield* models.delete(platformOwner, model.id)
-					yield* record(account, {
-						action: "model.deleted",
-						resource: platformKey,
-						details: { modelId: model.id, name: model.name },
-					})
-				}),
+			.handle(
+				"deletePlatformModel",
+				({ params }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const model = yield* findModel(params.modelId)
+						yield* models.delete(platformOwner, model.id)
+						yield* record(account, {
+							action: "model.deleted",
+							resource: platformKey,
+							details: { modelId: model.id, name: model.name },
+						})
+					}),
+				{ uninterruptible: true },
 			)
 			.handle("listPlatformModelProviders", () =>
 				providers
 					.list(platformOwner)
-					.pipe(Effect.map((items) => ({ items: items.map(view) }))),
+					.pipe(Effect.map((items) => ({ items: Arr.map(items, view) }))),
 			)
 			.handle("getPlatformModelProvider", ({ params }) =>
 				Effect.map(findProvider(params.providerId), view),
 			)
-			.handle("createPlatformModelProvider", ({ payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const created = yield* providers.create(platformOwner, payload)
-					yield* record(account, {
-						action: "model_provider.created",
-						resource: platformKey,
-						details: { providerId: created.id, name: created.name },
-					})
-					return view(created)
-				}),
+			.handle(
+				"createPlatformModelProvider",
+				({ payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const created = yield* providers.create(platformOwner, payload)
+						yield* record(account, {
+							action: "model_provider.created",
+							resource: platformKey,
+							details: { providerId: created.id, name: created.name },
+						})
+						return view(created)
+					}),
+				{ uninterruptible: true },
 			)
-			.handle("updatePlatformModelProvider", ({ params, payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const updated = yield* providers.update(
-						platformOwner,
-						params.providerId,
-						payload,
-					)
-					yield* record(account, {
-						action: "model_provider.updated",
-						resource: platformKey,
-						details: { providerId: updated.id, name: updated.name },
-					})
-					return view(updated)
-				}),
+			.handle(
+				"updatePlatformModelProvider",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const updated = yield* providers.update(
+							platformOwner,
+							params.providerId,
+							payload,
+						)
+						yield* record(account, {
+							action: "model_provider.updated",
+							resource: platformKey,
+							details: { providerId: updated.id, name: updated.name },
+						})
+						return view(updated)
+					}),
+				{ uninterruptible: true },
 			)
 			.handle("listPlatformModelPrices", ({ params }) =>
 				Effect.gen(function* () {
 					const provider = yield* findProvider(params.providerId)
 					const items = yield* billing
 						.prices(provider.id)
-						.pipe(
-							Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
-						)
+						.pipe(unavailable("Could not read the model prices"))
 					return { items }
 				}),
 			)
-			.handle("setPlatformModelPrice", ({ params, payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const provider = yield* findProvider(params.providerId)
-					if (!provider.models.some((link) => link.model === payload.model))
-						return yield* ModelProvidersApi.ModelProviderInvalid.make({
-							message: "The provider does not offer this model.",
-						})
-					const price = yield* billing
-						.setPrice(provider.id, payload, account.userId)
-						.pipe(
-							Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
+			.handle(
+				"setPlatformModelPrice",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const provider = yield* findProvider(params.providerId)
+						if (
+							!Arr.some(provider.models, (link) => link.model === payload.model)
 						)
-					yield* record(account, {
-						action: "model_price.set",
-						resource: platformKey,
-						details: { providerId: provider.id, ...price },
-					})
-					return price
-				}),
+							return yield* ModelProvidersApi.ModelProviderInvalid.make({
+								message: "The provider does not offer this model.",
+							})
+						const price = yield* billing
+							.setPrice(provider.id, payload, account.userId)
+							.pipe(unavailable("Could not set the model price"))
+						yield* record(account, {
+							action: "model_price.set",
+							resource: platformKey,
+							details: { providerId: provider.id, ...price },
+						})
+						return price
+					}),
+				{ uninterruptible: true },
 			)
 			.handle("getPlatformOrganizationCredits", ({ params }) =>
-				credits(billing.credits(params.organizationId), params.organizationId),
+				credits(
+					billing.credits(params.organizationId),
+					params.organizationId,
+					"Could not read the credits of an organization",
+				),
 			)
-			.handle("updatePlatformOrganizationCredits", ({ params, payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const updated = yield* credits(
-						billing.setCreditsEnabled(params.organizationId, payload.enabled),
-						params.organizationId,
-					)
-					yield* record(account, {
-						organizationId: params.organizationId,
-						action: "credits.updated",
-						resource: organizationKey(params.organizationId),
-						details: { enabled: payload.enabled },
-					})
-					return updated
-				}),
-			)
-			.handle("grantPlatformOrganizationCredits", ({ params, payload }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const grant = yield* credits(
-						billing.grantCredits(
+			.handle(
+				"updatePlatformOrganizationCredits",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const updated = yield* credits(
+							billing.setCreditsEnabled(params.organizationId, payload.enabled),
 							params.organizationId,
-							payload,
-							account.userId,
-						),
-						params.organizationId,
-					)
-					yield* record(account, {
-						organizationId: params.organizationId,
-						action: "credits.granted",
-						resource: organizationKey(params.organizationId),
-						details: {
-							grantId: grant.id,
-							amountMicros: grant.amountMicros,
-							note: grant.note,
-						},
-					})
-					return grant
-				}),
+							"Could not change the credits of an organization",
+						)
+						yield* record(account, {
+							organizationId: params.organizationId,
+							action: "credits.updated",
+							resource: organizationKey(params.organizationId),
+							details: { enabled: payload.enabled },
+						})
+						return updated
+					}),
+				{ uninterruptible: true },
 			)
-			.handle("deletePlatformModelProvider", ({ params }) =>
-				Effect.gen(function* () {
-					const account = yield* Account
-					const provider = yield* findProvider(params.providerId)
-					const organizationIds = yield* allOrganizations.pipe(
-						Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
-					)
-					yield* checkUnused({ providerId: provider.id, organizationIds }).pipe(
-						Effect.provideService(Settings, settings),
-					)
-					yield* providers.delete(platformOwner, provider.id)
-					yield* record(account, {
-						action: "model_provider.deleted",
-						resource: platformKey,
-						details: { providerId: provider.id, name: provider.name },
-					})
-				}),
+			.handle(
+				"grantPlatformOrganizationCredits",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const grant = yield* credits(
+							billing.grantCredits(
+								params.organizationId,
+								payload,
+								account.userId,
+							),
+							params.organizationId,
+							"Could not grant credits to an organization",
+						)
+						yield* record(account, {
+							organizationId: params.organizationId,
+							action: "credits.granted",
+							resource: organizationKey(params.organizationId),
+							details: {
+								grantId: grant.id,
+								amountMicros: grant.amountMicros,
+								note: grant.note,
+							},
+						})
+						return grant
+					}),
+				{ uninterruptible: true },
+			)
+			.handle(
+				"deletePlatformModelProvider",
+				({ params }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const provider = yield* findProvider(params.providerId)
+						const organizationIds = yield* allOrganizations.pipe(
+							unavailable("Could not list the organizations"),
+						)
+						yield* checkUnused(settings, {
+							providerId: provider.id,
+							organizationIds,
+						})
+						yield* providers.delete(platformOwner, provider.id)
+						yield* record(account, {
+							action: "model_provider.deleted",
+							resource: platformKey,
+							details: { providerId: provider.id, name: provider.name },
+						})
+					}),
+				{ uninterruptible: true },
 			)
 	}),
 )

@@ -97,7 +97,8 @@ Token erstellst, steht unter [Schnellstart](/de/docs/quickstart).
 | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `devenv shell -- pnpm install`                           | Installiert alle Pakete.                                                          |
 | `devenv shell -- pnpm build`                             | Baut jedes Paket mit tsdown.                                                      |
-| `devenv shell -- pnpm typecheck`                         | Prüft die Typen jedes Pakets.                                                     |
+| `devenv shell -- pnpm typecheck`                         | Prüft die Typen jedes Pakets und die Effect-Regeln.                               |
+| `devenv shell -- pnpm rules`                             | Prüft nur die Effect-Regeln von `scripts/effect-rules.ts`.                        |
 | `devenv shell -- pnpm -r test`                           | Führt die Tests jedes Pakets aus.                                                 |
 | `devenv shell -- pnpm test`                              | Führt die Tests aller Pakete in einem Vitest-Lauf aus, ohne Build und Typprüfung. |
 | `devenv shell -- pnpm --filter @openbot-build/core test` | Führt die Tests eines Pakets aus.                                                 |
@@ -207,9 +208,10 @@ neue Funktion beginnt als Operation im Vertrag `@openbot-build/api`. Danach
 behandelt der Server sie. Jede Operation muss mit einem User Token und mit dem
 Anmelde-Cookie funktionieren. Sie muss auch sagen, welche Aktion auf welcher
 Ressource sie braucht, mit einer Annotation `Required` oder `GroupRequired`. Die
-Helfer `own`, `organization` und `channel` in
-`packages/api/src/Authorization.ts` erstellen die Annotationen. Siehe
-[Berechtigungen](/de/docs/permissions).
+Helfer `own`, `organization`, `channel` und `channels` in
+`packages/api/src/Authorization.ts` erstellen die Annotationen. Eine Anforderung
+darf nur einen Pfadparameter nennen, den ihr Endpunkt hat. Ein Test in
+`packages/api` prüft das. Siehe [Berechtigungen](/de/docs/permissions).
 
 Der Code für die Autorisierung kommt aus der Bibliothek
 [ability](https://github.com/nmnmcc/ability), dem npm-Paket `@nmnmcc/ability`.
@@ -227,6 +229,58 @@ Werkzeug.
 Nutze die unveränderlichen Datentypen von Effect, zum Beispiel `HashMap`,
 `Chunk` und `Option`. Nutze die veränderlichen Typen von JavaScript nur, wenn du
 sie wirklich brauchst.
+
+### Effect-Regeln
+
+OpenBot ist mit [Effect](https://effect.website) geschrieben. Zwei Prüfungen
+halten den Code im Stil von Effect. `pnpm typecheck` führt beide aus, und GitHub
+Actions führt `pnpm typecheck` bei jeder Änderung aus.
+
+Die erste Prüfung ist der Effect Language Service. Er ist ein Plugin des
+TypeScript-Compilers und in `tsconfig.base.json` eingerichtet. Seine Regeln sind
+Fehler, also hält `tsc` bei ihnen an. Unter anderem verlangen sie:
+
+- die Module `Array`, `String` und `Record` von Effect statt der nativen
+  Methoden, importiert als `Arr`, `Str` und `Rec`;
+- `Clock` und `DateTime` für Zeit, die Dienste `Random` und `Crypto` für
+  Zufallswerte und IDs und `Config` für Umgebungsvariablen;
+- `HttpClient` statt `fetch` und die Dienste `FileSystem`, `Path` und
+  `ChildProcess` statt der Node.js-Module;
+- Effect Schema für JSON und für Daten von außen, dekodiert über Effect und
+  nicht mit den `*Sync`-Funktionen;
+- `Schema.TaggedError` für Fehler und eine Brand an jeder Schema-Klasse;
+- `Effect.gen` und `Effect.fn` statt `async`-Funktionen und `new Promise`;
+- `it.effect`, `it.live` und `it.layer` aus `@effect/vitest` in Tests.
+
+Drei Regeln sind aus. `apiStabilityLeak` und `unstableApiUsage` sind aus, weil
+der API-Vertrag auf `effect/http-api` aufbaut, das Effect als instabil markiert.
+`missingPipeableSignature` ist aus, weil eine pipe-fähige Form jeder
+exportierten Funktion einer Bibliothek hilft, nicht einer Anwendung.
+
+Die zweite Prüfung ist `scripts/effect-rules.ts`. Sie liest jede
+TypeScript-Datei und prüft die Regeln, die der Language Service nicht sieht:
+
+| Regel              | Was sie verhindert                                                                                                                                                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blind-error-map`  | `Effect.mapError(() => ...)`, `Effect.orElseFail(() => ...)` und `catch: () => ...`, die die Ursache eines Fehlers verwerfen. Ein Handler, der mit seinem Namen übergeben wird, zählt auch, wenn dieselbe Datei ihn als Funktion ohne Parameter deklariert. |
+| `throw`            | `throw`. Scheitere mit einem typisierten Fehler, nutze `Effect.die` für eine verletzte Regel des Codes oder `assert.fail` in einem Test.                                                                                                                    |
+| `run-outside-main` | `Effect.runPromise` und die anderen `run`-Funktionen außerhalb eines Einstiegspunkts (einer `*Main.ts`-Datei).                                                                                                                                              |
+| `fork-daemon`      | `Effect.forkDetach`. Forke eine Fiber in einem Scope oder halte sie in einem `FiberSet` oder `FiberMap`.                                                                                                                                                    |
+| `promise-then`     | Promise-Ketten mit `.then`. Mach aus dem Promise einen Effect.                                                                                                                                                                                              |
+| `directive-reason` | Eine Regel-Direktive ohne Grund.                                                                                                                                                                                                                            |
+
+Manche Stellen müssen nativ bleiben, weil eine API von außen es verlangt oder
+weil Effect keine API dafür hat. Beispiele sind ein Drizzle-Callback, der ein
+`Date` zurückgeben muss, ein Promise-Callback eines SDK und HMAC-Signaturen.
+Dann schalte die Regel für eine Zeile aus und gib den Grund nach `--` an:
+
+```ts
+// @effect-diagnostics-next-line globalDate:off -- Drizzle calls this outside Effect and needs a Date.
+// @effect-rules-next-line throw -- The SDK reads a thrown error as a failed call.
+```
+
+Eine Direktive ist nie ein Weg, Arbeit zu sparen. Tests sind Einstiegspunkte,
+daher ist `strictEffectProvide` in `test/`-Ordnern aus.
 
 ### Kleine, echte Änderungen
 

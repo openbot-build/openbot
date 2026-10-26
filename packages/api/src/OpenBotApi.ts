@@ -97,8 +97,8 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		AppExperienceApi.annotate(GroupRequired, {
-			read: connection("read"),
-			write: connection("write"),
+			read: [own("read", "Connection")],
+			write: [own("write", "Connection")],
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),

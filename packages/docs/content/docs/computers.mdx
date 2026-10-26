@@ -75,9 +75,11 @@ machine is not connected) or `failed`.
 | `POST /v1/computers/:computerId/desktop/stream`        | Gives an address where a person can watch and use the desktop.               |
 | `POST /v1/computers/:computerId/pause`, `/resume`      | Pauses or resumes the Computer.                                              |
 
-A command on a paused Computer resumes it first.
+A paired machine gives no desktop stream, so `desktop/stream` fails there with
+`ComputerUnsupported`. A command on a paused Computer resumes it first.
 `DELETE /v1/computers/:computerId` deletes the Computer and its sandbox. Its
-files are gone.
+files are gone. When OpenBot cannot reach the provider, the delete fails and the
+Computer stays. Try again later.
 
 ### Commands
 
@@ -211,6 +213,10 @@ any other capability:
 | `computers.delete`  | The ID of the Computer | It deletes a Computer with its files.    |
 | `computers.expose`  | The ID of the Computer | It gives a port a public address.        |
 
+When OpenBot cannot check one of these actions, the action does not run, and the
+tool tells the Bot why. For example, the person of the Bot may not see the
+Computer, or OpenBot cannot read its data.
+
 All other work on a Computer needs no decision. The Computer is the boundary: a
 Bot with the right can do anything inside it.
 
@@ -218,9 +224,10 @@ Bot with the right can do anything inside it.
 
 ## Pause and usage
 
-OpenBot pauses a sandbox when it had no work for `pauseAfter` seconds. E2B keeps
-its files, memory and running programs. Daytona keeps its files and starts it
-again from them. Your own machines never pause.
+OpenBot pauses a sandbox when it had no work for `pauseAfter` seconds. A command
+that still runs counts as work. E2B keeps its files, memory and running
+programs. Daytona keeps its files and starts it again from them. Your own
+machines never pause.
 
 `GET /v1/computers/:computerId/usage` lists the times when a Computer ran. The
 provider bills you for them. OpenBot only records them. It does not set a price,

@@ -1,7 +1,4 @@
-// Each test provides its own Layers where it runs.
-// @effect-diagnostics strictEffectProvide:off
-
-import { Option, Chunk, Effect } from "effect"
+import { Chunk, Effect } from "effect"
 import { Skill, SkillMap } from "@openbot-build/core"
 import { assert, it } from "@effect/vitest"
 
@@ -30,38 +27,14 @@ it.effect(
 		return Effect.gen(function* () {
 			const catalog = yield* Effect.gen(function* () {
 				const service = yield* SkillMap.SkillMap
-				assert.strictEqual(
-					Option.getOrUndefined(
-						Chunk.findFirst(service.skills, (skill) => skill.id === first.id),
-					),
+				assert.deepStrictEqual(Chunk.toReadonlyArray(service.skills), [
 					last,
-				)
-				assert.strictEqual(
-					Option.getOrUndefined(
-						Chunk.findFirst(service.skills, (skill) => skill.id === other.id),
-					),
 					other,
-				)
+				])
 				return service.merge(two, one)
 			}).pipe(Effect.provide(SkillMap.layer(one, two)))
-			assert.strictEqual(
-				Option.getOrUndefined(
-					Chunk.findFirst(catalog, (skill) => skill.id === first.id),
-				),
-				first,
-			)
-			assert.strictEqual(
-				Option.getOrUndefined(
-					Chunk.findFirst(catalog, (skill) => skill.id === other.id),
-				),
-				other,
-			)
-			assert.strictEqual(
-				Option.getOrUndefined(
-					Chunk.findFirst(one, (skill) => skill.id === first.id),
-				),
-				first,
-			)
+			assert.deepStrictEqual(Chunk.toReadonlyArray(catalog), [first, other])
+			assert.deepStrictEqual(Chunk.toReadonlyArray(one), [first])
 		})
 	},
 )

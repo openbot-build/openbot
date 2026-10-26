@@ -1,6 +1,16 @@
 import type { Chat } from "@openbot-build/core"
 import type { BotsApi, DelegationsApi } from "@openbot-build/api"
-import { Clock, Context, Effect, HashSet, Layer, Option } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Clock,
+	Context,
+	Effect,
+	HashSet,
+	Layer,
+	Option,
+} from "effect"
+import * as Background from "../app/Background.ts"
 import { Billing } from "../billing/Billing.ts"
 import { type Answer, Gate } from "../capabilities/Gate.ts"
 import { delegationTimeLimitOf } from "../settings/Documents.ts"
@@ -123,26 +133,31 @@ const reasonOf = (limit: Limit, limits: DelegationsApi.DelegationLimits) =>
 export const make: Effect.Effect<
 	typeof Limits.Service,
 	never,
-	Delegations | Settings | Gate
+	Delegations | Settings | Gate | Billing
 > = Effect.gen(function* () {
 	const delegations = yield* Delegations
 	const settings = yield* Settings
 	const gate = yield* Gate
-	// Hosts without billing, such as some tests, have no cost, so a budget never ends.
-	const billing = yield* Effect.serviceOption(Billing)
+	const billing = yield* Billing
 	const of: typeof Limits.Service.of = (organizationId, stored) =>
 		stored.delegation.limits !== undefined
 			? Effect.succeed(stored.delegation.limits)
 			: settings.organization(organizationId).pipe(
 					Effect.map((current) => delegationTimeLimitOf(current.document)),
-					Effect.orElseSucceed(() => delegationTimeLimitOf({})),
+					// Work must have a time limit, so it gets the default one.
+					Effect.catch((error) =>
+						Effect.logWarning(
+							"The time limit of the organization could not be read, so work uses the default one",
+							error,
+						).pipe(Effect.as(delegationTimeLimitOf({}))),
+					),
 					Effect.map((timeMs) => ({ timeMs })),
 				)
 	/** The task Chats of the work and of all the work below it. */
 	const chatsBelow = (
 		organizationId: string,
 		chat: Chat.Id,
-	): Effect.Effect<HashSet.HashSet<Chat.Id>, unknown> =>
+	): Effect.Effect<HashSet.HashSet<Chat.Id>, BotsApi.BotStorageUnavailable> =>
 		Effect.gen(function* () {
 			let found = HashSet.make(chat)
 			let next: ReadonlyArray<Chat.Id> = [chat]
@@ -150,14 +165,12 @@ export const make: Effect.Effect<
 				const given = yield* Effect.forEach(next, (parent) =>
 					delegations.forChat(organizationId, parent),
 				)
-				next = given
-					.flat()
-					.flatMap((child) =>
-						child.delegation.chat === null ||
-						HashSet.has(found, child.delegation.chat)
-							? []
-							: [child.delegation.chat],
-					)
+				next = Arr.flatMap(Arr.flatten(given), (child) =>
+					child.delegation.chat === null ||
+					HashSet.has(found, child.delegation.chat)
+						? []
+						: [child.delegation.chat],
+				)
 				found = HashSet.union(found, HashSet.fromIterable(next))
 			}
 			return found
@@ -165,19 +178,22 @@ export const make: Effect.Effect<
 	const cost: typeof Limits.Service.cost = (organizationId, stored) =>
 		Effect.gen(function* () {
 			const chat = stored.delegation.chat
-			if (Option.isNone(billing) || chat === null) return 0
+			if (chat === null) return 0
 			const chats = yield* chatsBelow(organizationId, chat)
-			return yield* billing.value.chatSpend(
+			return yield* billing.chatSpend(
 				organizationId,
 				[...chats],
 				stored.delegation.createdAt,
 			)
 		}).pipe(
+			// The last known cost is better than none. A stop is not a failure.
 			Effect.catchCause((cause) =>
-				Effect.logWarning(
-					"The cost of delegated work could not be read",
-					cause,
-				).pipe(Effect.as(stored.delegation.usage?.costMicros ?? 0)),
+				Cause.hasInterruptsOnly(cause)
+					? Effect.interrupt
+					: Effect.logWarning(
+							"The cost of delegated work could not be read",
+							cause,
+						).pipe(Effect.as(stored.delegation.usage?.costMicros ?? 0)),
 			),
 		)
 	const check: typeof Limits.Service.check = (organizationId, stored, now) =>
@@ -201,50 +217,98 @@ export const make: Effect.Effect<
 							: Option.none()
 			return { reached, usage }
 		})
-	const pause: typeof Limits.Service.pause = (organizationId, id, limit) =>
-		Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			const stopped = yield* delegations.change(
-				organizationId,
-				id,
-				["running"],
-				(stored) => paused(stored, { limit, now }),
-			)
-			if (Option.isNone(stopped)) return Option.none()
-			const limits = yield* of(organizationId, stopped.value)
-			const answer = yield* gate.check({
-				capability: {
-					action: "delegations.continue",
-					target: id,
-					arguments: { limit },
-				},
-				reason: reasonOf(limit, limits),
-				toolCallId: "limit:" + id + ":" + now,
-			})
-			if (answer._tag === "Allow") {
-				const costMicros = yield* cost(organizationId, stopped.value)
-				yield* delegations.change(organizationId, id, ["paused"], (stored) =>
-					resumed(stored, { now, renew: true, costMicros }),
-				)
-			} else if (answer.request !== undefined) {
-				const request = answer.request
-				// A decision can come before this, and then the work runs again already.
-				yield* delegations.change(
+	/**
+	 * Work that paused but has no answer yet. Nothing else sets it running again, so
+	 * `pause` uses this when its check ends without an answer.
+	 */
+	const unanswered = (stored: Stored) =>
+		stored.delegation.pause?.request === null &&
+		stored.delegation.pause.delegation === undefined
+	/**
+	 * Lets paused work run again with the limits it had, because its check of the
+	 * Gate stopped before an answer. The next check of its limits pauses it again.
+	 */
+	const unpause = (organizationId: string, id: string) =>
+		Clock.currentTimeMillis.pipe(
+			Effect.flatMap((now) =>
+				delegations.change(
 					organizationId,
 					id,
 					["paused"],
-					(stored) => ({
-						...stored,
-						delegation: {
-							...stored.delegation,
-							pause: { ...stored.delegation.pause!, request },
-						},
-					}),
-					(stored) => stored.delegation.pause?.request === null,
+					(stored) =>
+						resumed(stored, {
+							now,
+							renew: false,
+							costMicros: stored.delegation.usage?.costMicros ?? 0,
+						}),
+					unanswered,
+				),
+			),
+			Background.logFailure(
+				"Work that stopped while it paused could not run again",
+			),
+		)
+	// A pause must not stop halfway. Work that is paused with no request stays paused
+	// for ever, because nothing else lets it run again. So the writes of a pause are
+	// not cut. Only the slow check of the Gate can be cut (the judge model can take
+	// seconds), for example when a person stops the Turn or the server shuts down.
+	// Then the work runs again in place of the pause.
+	const pause: typeof Limits.Service.pause = (organizationId, id, limit) =>
+		Effect.uninterruptibleMask((restore) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const stopped = yield* delegations.change(
+					organizationId,
+					id,
+					["running"],
+					(stored) => paused(stored, { limit, now }),
 				)
-			}
-			return Option.some(answer)
-		})
+				if (Option.isNone(stopped)) return Option.none()
+				const { answer, costMicros } = yield* restore(
+					Effect.gen(function* () {
+						const limits = yield* of(organizationId, stopped.value)
+						const answer = yield* gate.check({
+							capability: {
+								action: "delegations.continue",
+								target: id,
+								arguments: { limit },
+							},
+							reason: reasonOf(limit, limits),
+							toolCallId: "limit:" + id + ":" + now,
+						})
+						return {
+							answer,
+							costMicros:
+								answer._tag === "Allow"
+									? yield* cost(organizationId, stopped.value)
+									: 0,
+						}
+					}),
+				).pipe(Effect.onError(() => unpause(organizationId, id)))
+				if (answer._tag === "Allow") {
+					yield* delegations.change(organizationId, id, ["paused"], (stored) =>
+						resumed(stored, { now, renew: true, costMicros }),
+					)
+				} else if (answer.request !== undefined) {
+					const request = answer.request
+					// A decision can come before this, and then the work runs again already.
+					yield* delegations.change(
+						organizationId,
+						id,
+						["paused"],
+						(stored) => ({
+							...stored,
+							delegation: {
+								...stored.delegation,
+								pause: { ...stored.delegation.pause!, request },
+							},
+						}),
+						(stored) => stored.delegation.pause?.request === null,
+					)
+				}
+				return Option.some(answer)
+			}),
+		)
 	return Limits.of({ of, cost, check, pause })
 })
 export const layer = Layer.effect(Limits, make)

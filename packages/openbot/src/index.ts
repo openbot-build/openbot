@@ -5,6 +5,7 @@ export * as DatabasePostgres from "./database/DatabasePostgres.ts"
 export * as EnvironmentConfiguration from "./configuration/EnvironmentConfiguration.ts"
 export * as Auth from "./auth/index.ts"
 export * as Chats from "./chats/Chats.ts"
+export * as HostTools from "./chats/HostTools.ts"
 export * as AppHost from "./apps/AppHost.ts"
 export * as AppPlugin from "./plugins/apps/AppPlugin.ts"
 

@@ -14,12 +14,12 @@ import { Context, Effect, type Option, Schema } from "effect"
 import type * as Store from "../connections/Store.ts"
 import * as Ui from "./Ui.ts"
 
-export class HostActionDenied extends Schema.TaggedError<HostActionDenied>()(
-	"HostActionDenied",
-	{
-		action: Schema.String,
-	},
-) {}
+export class HostActionDenied extends Schema.TaggedError<
+	HostActionDenied,
+	{ readonly brand: unique symbol }
+>()("HostActionDenied", {
+	action: Schema.String,
+}) {}
 
 export interface Source {
 	readonly key: Store.ConnectionKey

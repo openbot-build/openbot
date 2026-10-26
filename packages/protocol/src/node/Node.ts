@@ -1,5 +1,5 @@
 import { type LookupAllOptions, type LookupAddress } from "node:dns"
-import { type AgentOptions } from "node:https"
+import type { NodeHttpClient } from "@effect/platform-node"
 import type * as Network from "../network/Network.ts"
 
 /** A DNS resolver that returns every address, like node:dns lookup with `all: true`. */
@@ -15,7 +15,7 @@ export type Resolver = (
 export interface PublicOptions extends Network.Limits {
 	/** The resolver that the real TLS socket lookup uses. The default is node:dns. */
 	readonly lookup?: Resolver
-	readonly ca?: AgentOptions["ca"]
+	readonly ca?: NodeHttpClient.HttpAgentOptions["ca"]
 	/**
 	 * Must check each real address, including literal and redirected targets.
 	 * The default for the public network is `isPublicAddress`.

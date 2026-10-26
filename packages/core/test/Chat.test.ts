@@ -1,7 +1,7 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
-	Array as EffectArray,
+	Array as Arr,
+	Cause,
 	Deferred,
 	Effect,
 	Exit,
@@ -14,7 +14,7 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Response, Tool, Toolkit } from "effect/ai"
-import { Chat, ChatState, Plugin, Turn } from "@openbot-build/core"
+import { Chat, ChatRuntime, ChatState, Plugin, Turn } from "@openbot-build/core"
 import { ChatTest, settled } from "./ChatTest.ts"
 import { LanguageModelTest, finish, textParts } from "./LanguageModelTest.ts"
 
@@ -35,12 +35,14 @@ const handlers = tools.toLayer({
 })
 /** The tool results in a prompt, in order. */
 const results = (prompt: Prompt.Prompt) =>
-	prompt.content.flatMap((message) =>
+	Arr.flatMap(prompt.content, (message) =>
 		message.role === "tool"
-			? message.content.filter((part) => part.type === "tool-result")
+			? Arr.filter(message.content, (part) => part.type === "tool-result")
 			: [],
 	)
 const hasResult = (prompt: Prompt.Prompt) => results(prompt).length > 0
+/** The JSON text of a value, so a test can match a pattern in it. */
+const json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
 it.effect(
 	"a multi-step tool loop has one Turn and stable Item identities",
@@ -53,11 +55,14 @@ it.effect(
 			const events = yield* Stream.runCollect(
 				runtime.stream({ chat, input: "echo" }),
 			)
-			const started = events.filter((event) => event._tag === "TurnStarted"),
-				steps = events.filter((event) => event._tag === "ModelStepStarted")
+			const started = Arr.filter(
+					events,
+					(event) => event._tag === "TurnStarted",
+				),
+				steps = Arr.filter(events, (event) => event._tag === "ModelStepStarted")
 			assert.strictEqual(started.length, 1)
 			assert.strictEqual(steps.length, 2)
-			assert.ok(steps.every((event) => event.turn === started[0]!.turn))
+			assert.ok(Arr.every(steps, (event) => event.turn === started[0]!.turn))
 			const view = yield* runtimeStore.read(chat),
 				turn = Chat.currentTurn(view.chat)!
 			assert.strictEqual(turn.id, started[0]!.turn)
@@ -65,18 +70,20 @@ it.effect(
 			assert.strictEqual(turn.steps, 2)
 			const items = yield* runtimeStore.items(chat)
 			assert.deepStrictEqual(
-				ChatState.promptOf(items).content.map((message) => message.role),
+				Arr.map(ChatState.promptOf(items).content, (message) => message.role),
 				["user", "assistant", "tool", "assistant"],
 			)
 			assert.deepStrictEqual(
 				turn.items,
-				items.map((item) => item.id),
+				Arr.map(items, (item) => item.id),
 			)
 			assert.deepStrictEqual(turn.input, [items[0]!.id])
 			assert.strictEqual(view.chat.seq, items.length)
-			const parts = events.filter((event) => event._tag === "ResponsePart")
+			const parts = Arr.filter(events, (event) => event._tag === "ResponsePart")
 			assert.ok(
-				parts.every((event) => items.some((item) => item.id === event.item)),
+				Arr.every(parts, (event) =>
+					Arr.some(items, (item) => item.id === event.item),
+				),
 			)
 			assert.strictEqual(requests, 2)
 		}).pipe(
@@ -124,7 +131,7 @@ it.effect(
 			assert.notStrictEqual(Chat.currentTurn(next.chat)!.id, record.id)
 			const turns = yield* runtimeStore.turns(chat)
 			assert.deepStrictEqual(
-				turns.map((turn) => turn.settings.mode),
+				Arr.map(turns, (turn) => turn.settings.mode),
 				["build", "plan"],
 			)
 			assert.deepStrictEqual(
@@ -164,7 +171,9 @@ it.effect("interrupt needs the current Turn ID and ends the running Turn", () =>
 			assert.strictEqual(wrong._tag, "TurnConflict")
 			const stopped = yield* runtime.interrupt({ chat, turn: turn.id })
 			assert.strictEqual(Chat.status(stopped.chat)._tag, "Interrupted")
-			assert.ok(Exit.isFailure(yield* Fiber.await(running)))
+			const exit = yield* Fiber.await(running)
+			assert.ok(Exit.isFailure(exit))
+			assert.ok(Cause.hasInterruptsOnly(exit.cause))
 			assert.strictEqual(yield* runtime.isActive(chat), false)
 			const again = yield* runtime
 				.interrupt({ chat, turn: turn.id })
@@ -182,7 +191,7 @@ it.effect(
 			const entered = yield* Deferred.make<void>()
 			const model = LanguageModelTest({
 				streamText: ({ prompt }) => {
-					requests = EffectArray.append(requests, prompt)
+					requests = Arr.append(requests, prompt)
 					return requests.length === 1
 						? Stream.fromEffect(Deferred.succeed(entered, undefined)).pipe(
 								Stream.flatMap(() => Stream.never),
@@ -192,18 +201,6 @@ it.effect(
 			})
 			yield* Effect.gen(function* () {
 				const { runtime, runtimeStore, chat } = yield* ChatTest()
-				let views: ReadonlyArray<Chat.View<{}>> = []
-				yield* Effect.forkChild(
-					runtimeStore.changes({ chat }).pipe(
-						Stream.runForEach((change) =>
-							Effect.sync(() => {
-								if (change._tag === "Committed")
-									views = EffectArray.append(views, change.view)
-							}),
-						),
-					),
-					{ startImmediately: true },
-				)
 				const first = yield* runtime.deliver({
 					chat,
 					input: "first",
@@ -218,6 +215,24 @@ it.effect(
 				})
 				assert.strictEqual(steered.delivery, "steered")
 				assert.strictEqual(steered.turn, first.turn)
+				const backInInbox = yield* runtimeStore.changes({ chat }).pipe(
+					Stream.filter(
+						(change) =>
+							change._tag === "Committed" &&
+							change.view.chat.turn !== undefined &&
+							change.view.chat.turn.id === first.turn &&
+							change.view.chat.turn.status._tag === "Interrupted" &&
+							Arr.some(
+								change.view.chat.inbox,
+								(entry) =>
+									entry.id === steered.item &&
+									entry.kind === "message" &&
+									entry.turn === undefined,
+							),
+					),
+					Stream.runHead,
+					Effect.forkChild({ startImmediately: true }),
+				)
 				yield* runtime.interrupt({ chat, turn: first.turn! })
 				const view = yield* settled(runtime, chat)
 				const interrupted = Option.getOrThrow(
@@ -230,21 +245,8 @@ it.effect(
 				assert.strictEqual(next.author, "ada")
 				assert.deepStrictEqual(next.input, [steered.item])
 				assert.strictEqual(next.status._tag, "Completed")
-				assert.ok(
-					views.some(
-						(view) =>
-							view.chat.turn !== undefined &&
-							view.chat.turn.id === first.turn &&
-							view.chat.turn.status._tag === "Interrupted" &&
-							view.chat.inbox.some(
-								(entry) =>
-									entry.id === steered.item &&
-									entry.kind === "message" &&
-									entry.turn === undefined,
-							),
-					),
-				)
-				assert.match(JSON.stringify(requests.at(-1)), /more from ada/)
+				assert.ok(Option.isSome(yield* Fiber.join(backInInbox)))
+				assert.match(yield* json(requests.at(-1)), /more from ada/)
 			}).pipe(Effect.provide(model))
 		})
 	},
@@ -261,7 +263,7 @@ const approvalModel = (
 ) =>
 	LanguageModelTest({
 		streamText: ({ prompt }) => {
-			prompts.value = EffectArray.append(prompts.value, prompt)
+			prompts.value = Arr.append(prompts.value, prompt)
 			return hasResult(prompt)
 				? Stream.fromArray(textParts("done"))
 				: Stream.fromArray(parts)
@@ -288,7 +290,7 @@ it.effect(
 				approvals: {
 					decide: (request) =>
 						Effect.sync(() => {
-							requests = EffectArray.append(requests, request)
+							requests = Arr.append(requests, request)
 							return Chat.Decision.Allow()
 						}),
 				},
@@ -308,7 +310,7 @@ it.effect(
 			assert.strictEqual(requests[0]!.toolCall.id, "echo-1")
 			assert.strictEqual(requests[0]!.toolCall.name, "Echo")
 			assert.deepStrictEqual(
-				results(prompts.value[1]!).map((part) => part.result),
+				Arr.map(results(prompts.value[1]!), (part) => part.result),
 				["ran:echo-1"],
 			)
 		}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
@@ -334,7 +336,7 @@ it.effect(
 			const [denied] = results(prompts.value[1]!)
 			assert.ok(denied)
 			assert.strictEqual(denied.isFailure, true)
-			assert.match(JSON.stringify(denied.result), /not now/)
+			assert.match(yield* json(denied.result), /not now/)
 		}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
 	},
 )
@@ -359,7 +361,7 @@ it.effect(
 			assert.strictEqual(calls.value, 0)
 			assert.strictEqual(prompts.value.length, 2)
 			assert.deepStrictEqual(
-				results(prompts.value[1]!).map((part) => part.result),
+				Arr.map(results(prompts.value[1]!), (part) => part.result),
 				["a person will decide"],
 			)
 			const items = yield* runtimeStore.items(chat)
@@ -382,14 +384,17 @@ it.effect(
 			const events = yield* Stream.runCollect(
 				runtime.stream({ chat, input: "no decider" }),
 			)
-			const completed = events.filter((event) => event._tag === "TurnCompleted")
+			const completed = Arr.filter(
+				events,
+				(event) => event._tag === "TurnCompleted",
+			)
 			assert.strictEqual(completed.length, 1)
 			assert.strictEqual(completed[0]!.turn.status._tag, "Completed")
 			assert.strictEqual(calls.value, 0)
 			const [pending] = results(prompts.value[1]!)
 			assert.ok(pending)
 			assert.strictEqual(pending.isFailure, false)
-			assert.match(JSON.stringify(pending.result), /"pending":true/)
+			assert.deepStrictEqual(pending.result, ChatRuntime.pendingResult)
 		}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
 	},
 )
@@ -437,7 +442,7 @@ it.effect("two calls in one step get one decision each", () => {
 		assert.strictEqual(calls.value, 1)
 		const answers = results(prompts.value[1]!)
 		assert.deepStrictEqual(
-			answers.map((part) => [part.id, part.result]),
+			Arr.map(answers, (part) => [part.id, part.result]),
 			[
 				["echo-2", "later"],
 				["echo-1", "ran:echo-1"],
@@ -469,7 +474,7 @@ it.effect(
 				approvals: {
 					decide: (request) =>
 						Effect.sync(() => {
-							decisions = EffectArray.append(decisions, request)
+							decisions = Arr.append(decisions, request)
 							return Chat.Decision.Pending({ result: "a person will decide" })
 						}),
 				},
@@ -495,7 +500,7 @@ it.effect(
 			assert.strictEqual(calls.value, 1)
 			assert.strictEqual(decisions.length, 1)
 			const items = yield* runtimeStore.items(chat, { turn: delivery.turn! })
-			assert.match(JSON.stringify(items), /ran:echo-1/)
+			assert.match(yield* json(items), /ran:echo-1/)
 			assert.strictEqual(HashMap.size(ChatState.unansweredCalls(items)), 0)
 		}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
 	},
@@ -524,7 +529,7 @@ it.effect(
 			assert.strictEqual(Chat.status(view.chat)._tag, "Completed")
 			assert.strictEqual(calls.value, 0)
 			const items = yield* runtimeStore.items(chat, { turn: delivery.turn! })
-			assert.match(JSON.stringify(items), /did not run/)
+			assert.match(yield* json(items), /did not run/)
 			// The saved history has a result for the call, so a provider takes it.
 			assert.strictEqual(HashMap.size(ChatState.unansweredCalls(items)), 0)
 		}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
@@ -572,7 +577,7 @@ it.effect(
 			)
 			assert.strictEqual(view.state.conversation.closed, true)
 			const items = yield* runtimeStore.items(chat)
-			assert.match(JSON.stringify(items), /actual external receipt/)
+			assert.match(yield* json(items), /actual external receipt/)
 			assert.strictEqual(HashMap.size(ChatState.unansweredCalls(items)), 0)
 		}).pipe(
 			Effect.provide(
@@ -637,19 +642,16 @@ it.effect(
 					{ startImmediately: true },
 				)
 				yield* Deferred.succeed(release, undefined)
-				const woken = yield* Fiber.join(waiting).pipe(
-					Effect.timeout("500 millis"),
-				)
+				// The test clock does not move, so only the activity signal can end these waits.
+				const woken = yield* Fiber.join(waiting)
 				assert.strictEqual(woken.chat.revision, completed.chat.revision)
 				assert.strictEqual(yield* runtime.isActive(chat), false)
-				yield* runtime
-					.wait({
-						chat,
-						after: woken.chat.revision,
-						afterActive: true,
-						timeout: "5 seconds",
-					})
-					.pipe(Effect.timeout("500 millis"))
+				yield* runtime.wait({
+					chat,
+					after: woken.chat.revision,
+					afterActive: true,
+					timeout: "5 seconds",
+				})
 			}).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
 		}).pipe(
 			Effect.provide(
@@ -658,4 +660,22 @@ it.effect(
 				}),
 			),
 		),
+)
+
+it.effect("a caller that stops reading a stream early stops the Turn", () =>
+	Effect.gen(function* () {
+		const { runtime, runtimeStore, chat } = yield* ChatTest()
+		// The model never answers, so only the end of the reading can end the Turn.
+		const read = yield* runtime.stream({ chat, input: "stop early" }).pipe(
+			Stream.takeUntil((event) => event._tag === "ModelStepStarted"),
+			Stream.runCollect,
+		)
+		assert.strictEqual(read.at(-1)?._tag, "ModelStepStarted")
+		const view = yield* runtimeStore.read(chat)
+		assert.strictEqual(Chat.status(view.chat)._tag, "Interrupted")
+		assert.strictEqual(view.state.conversation.closed, true)
+		assert.strictEqual(yield* runtime.isActive(chat), false)
+	}).pipe(
+		Effect.provide(LanguageModelTest({ streamText: () => Stream.never })),
+	),
 )

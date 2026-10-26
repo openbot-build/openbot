@@ -97,27 +97,27 @@ export const WebhookSecret = Schema.Struct({
 })
 export type WebhookSecret = typeof WebhookSecret.Type
 
-export class TriggerNotFound extends Schema.TaggedError<TriggerNotFound>()(
-	"TriggerNotFound",
-	{ id: Schema.String },
-) {}
-export class TriggerConflict extends Schema.TaggedError<TriggerConflict>()(
-	"TriggerConflict",
-	{ message: Schema.String },
-) {}
-export class TriggerInvalid extends Schema.TaggedError<TriggerInvalid>()(
-	"TriggerInvalid",
-	{ message: Schema.String },
-) {}
-export class TriggerStorageUnavailable extends Schema.TaggedError<TriggerStorageUnavailable>()(
-	"TriggerStorageUnavailable",
-	{},
-) {}
+export class TriggerNotFound extends Schema.TaggedError<
+	TriggerNotFound,
+	{ readonly brand: unique symbol }
+>()("TriggerNotFound", { id: Schema.String }) {}
+export class TriggerConflict extends Schema.TaggedError<
+	TriggerConflict,
+	{ readonly brand: unique symbol }
+>()("TriggerConflict", { message: Schema.String }) {}
+export class TriggerInvalid extends Schema.TaggedError<
+	TriggerInvalid,
+	{ readonly brand: unique symbol }
+>()("TriggerInvalid", { message: Schema.String }) {}
+export class TriggerStorageUnavailable extends Schema.TaggedError<
+	TriggerStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("TriggerStorageUnavailable", {}) {}
 /** The webhook secret is wrong, the trigger has no webhook, or it is disabled. */
-export class TriggerHookDenied extends Schema.TaggedError<TriggerHookDenied>()(
-	"TriggerHookDenied",
-	{},
-) {}
+export class TriggerHookDenied extends Schema.TaggedError<
+	TriggerHookDenied,
+	{ readonly brand: unique symbol }
+>()("TriggerHookDenied", {}) {}
 
 /** The handlers check permissions on triggers themselves, so these errors are listed here too. */
 export const TriggerErrors = [

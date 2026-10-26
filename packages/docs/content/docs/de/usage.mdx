@@ -225,6 +225,8 @@ zusammen. Es braucht `read` auf `Usage`.
 | `to`      | Das Ende, als Zeit nach ISO 8601. Standard ist jetzt.                                    |
 | `groupBy` | `day` (Standard), `model`, `provider`, `member`, `bot`, `token` oder `source`.           |
 
+Eine Zeit ohne Zone, zum Beispiel `2026-10-01T00:00:00`, ist in UTC.
+
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   "https://api.example.com/v1/organization/usage?groupBy=member"
@@ -434,7 +436,7 @@ Bucket lässt einen kurzen Schub Arbeit mit voller Geschwindigkeit durch.
 Ein Aufruf eines Model nimmt aus jedem Bucket seiner Bereiche:
 
 - **Vor dem Aufruf** wartet er, bis kein Bucket Schulden hat. Er schlägt nicht
-  fehl.
+  fehl. OpenBot prüft die Budgets und die Credits erst nach dem Warten.
 - **Während das Model streamt**, liest OpenBot die Ausgabe vom Anbieter in einen
   Puffer. Es schickt jedes Stück erst weiter, wenn die Buckets Platz dafür
   haben. Ein Token sind etwa vier Zeichen. So kommt die Ausgabe mit

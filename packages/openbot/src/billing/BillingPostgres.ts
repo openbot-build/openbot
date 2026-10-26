@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto"
 import { BillingApi } from "@openbot-build/api"
 import {
 	and,
@@ -14,15 +13,23 @@ import {
 } from "drizzle-orm"
 import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import {
+	Array as Arr,
+	Cache,
 	Clock,
+	Crypto,
 	DateTime,
+	Duration,
 	Effect,
+	Exit,
 	HashMap,
 	Layer,
 	Option,
-	Ref,
+	pipe,
+	Predicate,
+	Record as Rec,
 	Schema,
 	SchemaTransformation,
+	String as Str,
 } from "effect"
 import {
 	budgets,
@@ -44,13 +51,11 @@ import {
 	OrganizationMissing,
 	periodStart,
 	type Price,
-	priceKey,
 	SpendingBlocked,
 } from "./Billing.ts"
 import * as Db from "../database/Database.ts"
 
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
-const newId = (prefix: string) => prefix + randomUUID().replaceAll("-", "")
 /**
  * The cursor of a page of usage events is `<time>.<id>` of the last event on the page.
  * A cursor that does not decode starts at the first page.
@@ -69,56 +74,79 @@ const UsageCursor = Schema.TemplateLiteralParser([
 	),
 )
 const decodeCursor = Schema.decodeUnknownOption(UsageCursor)
-const encodeCursor = Schema.encodeSync(UsageCursor)
+const encodeCursor = (cursor: typeof UsageCursor.Type) =>
+	Schema.encodeEffect(UsageCursor)(cursor).pipe(
+		Effect.mapError((cause) => BillingStorageError.make({ cause })),
+	)
 
 /** A price change on another instance reaches this instance after at most this time. */
-const priceCacheMs = 30_000
+const priceTimeToLive = Duration.seconds(30)
 
 type PriceRow = typeof modelPrices.$inferSelect
 type BudgetRow = typeof budgets.$inferSelect
 type EventRow = typeof usageEvents.$inferSelect
 
+/** Reads a stored value back. A value that does not decode is a storage error. */
+const decodeStored =
+	<S extends Schema.Decoder<unknown>>(schema: S) =>
+	(input: unknown): Effect.Effect<S["Type"], BillingStorageError> =>
+		Schema.decodeUnknownEffect(schema)(input).pipe(
+			Effect.mapError((cause) => BillingStorageError.make({ cause })),
+		)
+
 /** The text columns hold the values of the API, so these read them back. */
-const decodeSource = Schema.decodeUnknownSync(BillingApi.UsageSource)
-const decodeProviderOwner = Schema.decodeUnknownSync(
+const decodeSource = decodeStored(BillingApi.UsageSource)
+const decodeProviderOwner = decodeStored(
 	BillingApi.UsageEvent.fields.providerOwner,
 )
-const decodePeriod = Schema.decodeUnknownSync(BillingApi.BudgetPeriod)
-const decodeScope = Schema.decodeUnknownSync(BillingApi.BudgetScope)
-const decodeMode = Schema.decodeUnknownSync(BillingApi.BudgetMode)
+const decodePeriod = decodeStored(BillingApi.BudgetPeriod)
+const decodeScope = decodeStored(BillingApi.BudgetScope)
+const decodeMode = decodeStored(BillingApi.BudgetMode)
 
 /** The schedule column holds JSON that only this file writes, from a checked request. */
-const decodeSchedule = Schema.decodeUnknownSync(
-	Schema.fromJsonString(BillingApi.PriceSchedule),
-)
+const ScheduleJson = Schema.fromJsonString(BillingApi.PriceSchedule)
+const decodeSchedule = decodeStored(ScheduleJson)
+const encodeSchedule = (schedule: BillingApi.PriceSchedule) =>
+	Schema.encodeEffect(ScheduleJson)(schedule).pipe(Effect.orDie)
 
-const priceView = (row: PriceRow): BillingApi.ModelPrice => ({
-	model: row.modelId,
-	...decodeSchedule(row.schedule),
-	effectiveFrom: iso(row.effectiveFrom),
-})
+const priceView = (row: PriceRow) =>
+	Effect.map(
+		decodeSchedule(row.schedule),
+		(schedule): BillingApi.ModelPrice => ({
+			model: row.modelId,
+			...schedule,
+			effectiveFrom: iso(row.effectiveFrom),
+		}),
+	)
 
-const eventView = (row: EventRow): BillingApi.UsageEvent => ({
-	id: row.id,
-	occurredAt: iso(row.occurredAt),
-	source: decodeSource(row.source),
-	chatId: row.chatId,
-	turnId: row.turnId,
-	botId: row.botId,
-	userId: row.userId,
-	tokenId: row.tokenId,
-	provider: row.providerId,
-	providerOwner: decodeProviderOwner(row.providerOwner),
-	model: row.modelId,
-	inputUncached: row.inputUncached,
-	inputCacheRead: row.inputCacheRead,
-	inputCacheWrite: row.inputCacheWrite,
-	outputText: row.outputText,
-	outputReasoning: row.outputReasoning,
-	priced: row.priceId !== null,
-	costMicros: row.costMicros,
-	charged: row.charged,
-})
+const eventView = (row: EventRow) =>
+	Effect.map(
+		Effect.all({
+			source: decodeSource(row.source),
+			providerOwner: decodeProviderOwner(row.providerOwner),
+		}),
+		({ source, providerOwner }): BillingApi.UsageEvent => ({
+			id: row.id,
+			occurredAt: iso(row.occurredAt),
+			source,
+			chatId: row.chatId,
+			turnId: row.turnId,
+			botId: row.botId,
+			userId: row.userId,
+			tokenId: row.tokenId,
+			provider: row.providerId,
+			providerOwner,
+			model: row.modelId,
+			inputUncached: row.inputUncached,
+			inputCacheRead: row.inputCacheRead,
+			inputCacheWrite: row.inputCacheWrite,
+			outputText: row.outputText,
+			outputReasoning: row.outputReasoning,
+			priced: row.priceId !== null,
+			costMicros: row.costMicros,
+			charged: row.charged,
+		}),
+	)
 
 /** The column that a budget of each scope matches. Organization budgets match every row. */
 const scopeColumn = (
@@ -187,51 +215,38 @@ const groupColumn = (
 	}
 }
 
-/** The errors of the database driver. Billing turns them into one error. */
-type DatabaseError = {
-	readonly _tag:
-		| "EffectDrizzleError"
-		| "EffectDrizzleQueryError"
-		| "EffectTransactionRollbackError"
-		| "SqlError"
-}
-const databaseTags: ReadonlyArray<string> = [
+/** The tags of the errors of the database driver. Billing turns them into one error. */
+const databaseTags = [
 	"EffectDrizzleError",
 	"EffectDrizzleQueryError",
 	"EffectTransactionRollbackError",
 	"SqlError",
-]
+] as const
+type DatabaseError = { readonly _tag: (typeof databaseTags)[number] }
 const isDatabaseError = (error: unknown): error is DatabaseError =>
-	typeof error === "object" &&
-	error !== null &&
-	"_tag" in error &&
-	databaseTags.includes(String(error._tag))
-const stored = <A, E, R>(
-	effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, Exclude<E, DatabaseError> | BillingStorageError, R> =>
-	Effect.mapError(effect, (error) =>
-		isDatabaseError(error)
-			? BillingStorageError.make({ cause: error })
-			: // The guard above removed every database error.
-				(error as Exclude<E, DatabaseError>),
+	Predicate.hasProperty(error, "_tag") && Arr.contains(databaseTags, error._tag)
+const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	Effect.catchIf(
+		effect,
+		(error): error is Extract<E, DatabaseError> => isDatabaseError(error),
+		(cause) => Effect.fail(BillingStorageError.make({ cause })),
 	)
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const prices = yield* Ref.make(
-		HashMap.empty<
-			string,
-			{ readonly price: Option.Option<Price>; readonly at: number }
-		>(),
-	)
-
-	/** The price of a model at the time of a call, from a short cache. */
-	const currentPrice = (providerId: string, modelId: string, now: number) =>
+	const crypto = yield* Crypto.Crypto
+	const newId = (prefix: string) =>
+		Effect.map(
+			Effect.orDie(crypto.randomUUIDv4()),
+			(uuid) => prefix + Str.replaceAll("-", "")(uuid),
+		)
+	/** The price of a model that applies at a time. */
+	const priceAtFromStorage = (
+		providerId: string,
+		modelId: string,
+		at: number,
+	) =>
 		Effect.gen(function* () {
-			const key = priceKey(providerId, modelId)
-			const cached = HashMap.get(yield* Ref.get(prices), key)
-			if (Option.isSome(cached) && now - cached.value.at < priceCacheMs)
-				return cached.value.price
 			const [row] = yield* db
 				.select()
 				.from(modelPrices)
@@ -239,45 +254,78 @@ export const make = Effect.gen(function* () {
 					and(
 						eq(modelPrices.providerId, providerId),
 						eq(modelPrices.modelId, modelId),
-						lte(modelPrices.effectiveFrom, now),
+						lte(modelPrices.effectiveFrom, at),
 					),
 				)
 				.orderBy(desc(modelPrices.effectiveFrom))
 				.limit(1)
-			const price: Option.Option<Price> = Option.map(
-				Option.fromNullishOr(row),
-				(row) => ({ id: row.id, schedule: decodeSchedule(row.schedule) }),
-			)
-			yield* Ref.update(prices, HashMap.set(key, { price, at: now }))
-			return price
+			return row === undefined
+				? Option.none<Price>()
+				: Option.some<Price>({
+						id: row.id,
+						effectiveFrom: row.effectiveFrom,
+						schedule: yield* decodeSchedule(row.schedule),
+					})
 		})
+
+	/**
+	 * The current price of each model, for a short time. Calls that miss at the
+	 * same time share one read. A failed read stays out of the cache.
+	 */
+	const prices = yield* Cache.makeWith(
+		([providerId, modelId]: readonly [providerId: string, modelId: string]) =>
+			Effect.flatMap(Clock.currentTimeMillis, (now) =>
+				priceAtFromStorage(providerId, modelId, now),
+			),
+		{
+			capacity: 1_000,
+			timeToLive: (exit) =>
+				Exit.isSuccess(exit) ? priceTimeToLive : Duration.zero,
+		},
+	)
+
+	/**
+	 * The price of a model at the start of a call. When the current price took
+	 * effect after the call started, the price before it comes from storage.
+	 */
+	const priceAt = (providerId: string, modelId: string, startedAt: number) =>
+		Cache.get(prices, [providerId, modelId]).pipe(
+			Effect.filterOrElse(
+				(current) =>
+					!Option.exists(current, (price) => price.effectiveFrom > startedAt),
+				() => priceAtFromStorage(providerId, modelId, startedAt),
+			),
+		)
+
+	/** The spend of the usage events that match the filter. */
+	const spend = (where: SQL | undefined) =>
+		db
+			.select({ spent: sumOf(usageEvents.costMicros) })
+			.from(usageEvents)
+			.where(where)
+			.pipe(Effect.map(([row]) => row?.spent ?? 0))
 
 	const spentSince = (
 		organizationId: string,
 		scope: BillingApi.BudgetScope,
 		scopeId: string,
 		since: number,
-	) =>
-		Effect.gen(function* () {
-			const column = scopeColumn(scope)
-			const [row] = yield* db
-				.select({ spent: sumOf(usageEvents.costMicros) })
-				.from(usageEvents)
-				.where(
-					and(
-						eq(usageEvents.organizationId, organizationId),
-						gte(usageEvents.occurredAt, since),
-						column === undefined ? undefined : eq(column, scopeId),
-					),
-				)
-			return row?.spent ?? 0
-		})
+	) => {
+		const column = scopeColumn(scope)
+		return spend(
+			and(
+				eq(usageEvents.organizationId, organizationId),
+				gte(usageEvents.occurredAt, since),
+				column === undefined ? undefined : eq(column, scopeId),
+			),
+		)
+	}
 
 	const budgetView = (row: BudgetRow, now: number) =>
 		Effect.gen(function* () {
-			const period = decodePeriod(row.period)
+			const period = yield* decodePeriod(row.period)
 			const start = periodStart(period, now)
-			const scope = decodeScope(row.scopeKind)
+			const scope = yield* decodeScope(row.scopeKind)
 			const spent = yield* spentSince(
 				row.organizationId,
 				scope,
@@ -290,7 +338,7 @@ export const make = Effect.gen(function* () {
 				scopeId: row.scopeId,
 				period,
 				limitMicros: row.limitMicros,
-				mode: decodeMode(row.mode),
+				mode: yield* decodeMode(row.mode),
 				periodStart: iso(start),
 				spentMicros: spent,
 				exceeded: spent >= row.limitMicros,
@@ -326,7 +374,7 @@ export const make = Effect.gen(function* () {
 			return {
 				enabled: row?.enabled ?? false,
 				balanceMicros: row?.balanceMicros ?? 0,
-				grants: grants.map(grantView),
+				grants: Arr.map(grants, grantView),
 			} satisfies BillingApi.Credits
 		})
 
@@ -396,42 +444,27 @@ export const make = Effect.gen(function* () {
 	return Billing.of({
 		botSpend: (botId, since) =>
 			stored(
-				Effect.gen(function* () {
-					const [row] = yield* db
-						.select({ spent: sumOf(usageEvents.costMicros) })
-						.from(usageEvents)
-						.where(
-							and(
-								eq(usageEvents.botId, botId),
-								gte(usageEvents.occurredAt, since),
-							),
-						)
-					return row?.spent ?? 0
-				}),
+				spend(
+					and(eq(usageEvents.botId, botId), gte(usageEvents.occurredAt, since)),
+				),
 			),
 		chatSpend: (organizationId, chats, since) =>
 			chats.length === 0
 				? Effect.succeed(0)
 				: stored(
-						Effect.gen(function* () {
-							const [row] = yield* db
-								.select({ spent: sumOf(usageEvents.costMicros) })
-								.from(usageEvents)
-								.where(
-									and(
-										eq(usageEvents.organizationId, organizationId),
-										inArray(usageEvents.chatId, [...chats]),
-										gte(usageEvents.occurredAt, since),
-									),
-								)
-							return row?.spent ?? 0
-						}),
+						spend(
+							and(
+								eq(usageEvents.organizationId, organizationId),
+								inArray(usageEvents.chatId, [...chats]),
+								gte(usageEvents.occurredAt, since),
+							),
+						),
 					),
 		check: (call, attribution) =>
 			stored(
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
-					const hard = (yield* db
+					const rows = yield* db
 						.select()
 						.from(budgets)
 						.where(
@@ -439,29 +472,43 @@ export const make = Effect.gen(function* () {
 								eq(budgets.organizationId, call.organizationId),
 								eq(budgets.mode, "hard"),
 							),
-						)).filter(
-						(budget) =>
-							scopeIdOf(decodeScope(budget.scopeKind), call, attribution) ===
-							budget.scopeId,
+						)
+					const scoped = yield* Effect.forEach(rows, (budget) =>
+						Effect.map(decodeScope(budget.scopeKind), (scope) => ({
+							budget,
+							scope,
+						})),
+					)
+					const hard = yield* pipe(
+						scoped,
+						Arr.filter(
+							({ budget, scope }) =>
+								scopeIdOf(scope, call, attribution) === budget.scopeId,
+						),
+						Effect.forEach(({ budget, scope }) =>
+							Effect.map(decodePeriod(budget.period), (period) => ({
+								budget,
+								scope,
+								start: periodStart(period, now),
+							})),
+						),
 					)
 					if (hard.length > 0) {
-						const starts = hard.map((budget) =>
-							periodStart(decodePeriod(budget.period), now),
-						)
+						const starts = Arr.map(hard, ({ start }) => start)
 						// One pass over the rows of this month gives the spend of every budget.
-						const columns = Object.fromEntries(
-							hard.map((budget, index) => {
-								const column = scopeColumn(decodeScope(budget.scopeKind))
+						const columns = Rec.fromEntries(
+							Arr.map(hard, ({ budget, scope, start }, index) => {
+								const column = scopeColumn(scope)
 								const filter =
 									column === undefined
-										? sql`${usageEvents.occurredAt} >= ${starts[index]}`
-										: sql`${usageEvents.occurredAt} >= ${starts[index]} AND ${column} = ${budget.scopeId}`
+										? sql`${usageEvents.occurredAt} >= ${start}`
+										: sql`${usageEvents.occurredAt} >= ${start} AND ${column} = ${budget.scopeId}`
 								return [
 									"b" + index,
 									sql<number>`coalesce(sum(${usageEvents.costMicros}) FILTER (WHERE ${filter}), 0)`.mapWith(
 										Number,
 									),
-								]
+								] as const
 							}),
 						)
 						const [spent] = yield* db
@@ -473,7 +520,7 @@ export const make = Effect.gen(function* () {
 									gte(usageEvents.occurredAt, Math.min(...starts)),
 								),
 							)
-						for (const [index, budget] of hard.entries()) {
+						for (const [index, { budget }] of hard.entries()) {
 							if (Number(spent?.["b" + index] ?? 0) >= budget.limitMicros)
 								return yield* SpendingBlocked.make({
 									reason: "budget",
@@ -502,11 +549,8 @@ export const make = Effect.gen(function* () {
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
 					// The price at the start of the call applies, also when the call ends later.
-					const price = yield* currentPrice(
-						call.providerId,
-						call.modelId,
-						startedAt,
-					)
+					const price = yield* priceAt(call.providerId, call.modelId, startedAt)
+					const id = yield* newId("usage_")
 					const cost = Option.match(price, {
 						onNone: () => 0,
 						onSome: (price) =>
@@ -529,7 +573,7 @@ export const make = Effect.gen(function* () {
 									: []
 							const charged = credits?.enabled === true
 							yield* tx.insert(usageEvents).values({
-								id: newId("usage_"),
+								id,
 								organizationId: call.organizationId,
 								occurredAt: now,
 								source: attribution.source,
@@ -577,40 +621,42 @@ export const make = Effect.gen(function* () {
 							),
 						)
 						.orderBy(modelPrices.modelId, desc(modelPrices.effectiveFrom))
-					return rows.map(priceView)
+					return yield* Effect.forEach(rows, priceView)
 				}),
 			),
 		setPrice: (providerId, input, createdBy) =>
 			stored(
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
+					const schedule = yield* encodeSchedule({
+						timeZone: input.timeZone ?? "UTC",
+						tiers: input.tiers,
+						periods: input.periods ?? [],
+					})
 					const [row] = yield* db
 						.insert(modelPrices)
 						.values({
-							id: newId("price_"),
+							id: yield* newId("price_"),
 							providerId,
 							modelId: input.model,
 							effectiveFrom: now,
-							schedule: JSON.stringify({
-								timeZone: input.timeZone ?? "UTC",
-								tiers: input.tiers,
-								periods: input.periods ?? [],
-							} satisfies BillingApi.PriceSchedule),
+							schedule,
 							createdBy,
 							createdAt: now,
 						})
 						.returning()
-					yield* Ref.update(
-						prices,
-						HashMap.remove(priceKey(providerId, input.model)),
-					)
-					return priceView(row!)
+					yield* Cache.invalidate(prices, [providerId, input.model])
+					return yield* priceView(row!)
 				}),
 			),
 		currentPrices: (providerIds) =>
 			stored(
 				Effect.gen(function* () {
-					if (providerIds.length === 0) return new Map()
+					if (providerIds.length === 0)
+						return HashMap.empty<
+							readonly [providerId: string, modelId: string],
+							BillingApi.ModelPrice
+						>()
 					const now = yield* Clock.currentTimeMillis
 					const rows = yield* db
 						.selectDistinctOn([modelPrices.providerId, modelPrices.modelId])
@@ -626,11 +672,14 @@ export const make = Effect.gen(function* () {
 							modelPrices.modelId,
 							desc(modelPrices.effectiveFrom),
 						)
-					return new Map(
-						rows.map((row) => [
-							priceKey(row.providerId, row.modelId),
-							priceView(row),
-						]),
+					return HashMap.fromIterable(
+						yield* Effect.forEach(rows, (row) =>
+							Effect.map(
+								priceView(row),
+								(price) =>
+									[[row.providerId, row.modelId] as const, price] as const,
+							),
+						),
 					)
 				}),
 			),
@@ -701,10 +750,10 @@ export const make = Effect.gen(function* () {
 					const items = rows.slice(0, page.limit)
 					const last = items.at(-1)
 					return {
-						items: items.map(eventView),
+						items: yield* Effect.forEach(items, eventView),
 						next:
 							rows.length > page.limit && last !== undefined
-								? encodeCursor({ at: last.occurredAt, id: last.id })
+								? yield* encodeCursor({ at: last.occurredAt, id: last.id })
 								: null,
 					}
 				}),
@@ -740,7 +789,7 @@ export const make = Effect.gen(function* () {
 							const [grant] = yield* tx
 								.insert(creditGrants)
 								.values({
-									id: newId("grant_"),
+									id: yield* newId("grant_"),
 									organizationId,
 									amountMicros: input.amountMicros,
 									note: input.note,
@@ -800,7 +849,7 @@ export const make = Effect.gen(function* () {
 					const [row] = yield* db
 						.insert(budgets)
 						.values({
-							id: newId("budget_"),
+							id: yield* newId("budget_"),
 							organizationId,
 							scopeKind: input.scope,
 							scopeId,

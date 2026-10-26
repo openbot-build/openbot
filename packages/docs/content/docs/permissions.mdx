@@ -247,6 +247,14 @@ read. OpenBot changes the policy into a condition on the list, for most lists in
 the database query itself. So a deny rule on one resource hides it from the list
 too.
 
+A few lists do not hide resources in this way: `GET /v1/chats`, `GET /v1/files`,
+`GET /v1/connections` and `GET /v1/organization/channels`. They need the action
+on every resource of their kind that the caller can get to: all of the caller's
+Chats, files or App connections, or all the Channels of the organization. A call
+that makes a new one of these needs `write` on all of them in the same way. So a
+deny rule on one Chat, file, App connection or Channel makes these calls fail
+with `403`.
+
 ### Tokens never do more than their member
 
 A user token must pass its own policy and the policy of its member. So a token

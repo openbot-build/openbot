@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Array as Arr, pipe, Schema } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -144,7 +144,11 @@ export type ProviderModel = typeof ProviderModel.Type
 export const ProviderModels = Schema.Array(ProviderModel).check(
 	Schema.isMaxLength(200),
 	Schema.makeFilter((links: ReadonlyArray<ProviderModel>) =>
-		new Set(links.map((link) => link.model)).size === links.length
+		pipe(
+			links,
+			Arr.map((link) => link.model),
+			Arr.dedupe,
+		).length === links.length
 			? undefined
 			: "Expected each model ID only once",
 	),
@@ -234,39 +238,42 @@ export const ModelCatalog = Schema.Struct({
 })
 export type ModelCatalog = typeof ModelCatalog.Type
 
-export class ModelProviderNotFound extends Schema.TaggedError<ModelProviderNotFound>()(
-	"ModelProviderNotFound",
-	{ providerId: Schema.String },
-) {}
-export class ModelProviderConflict extends Schema.TaggedError<ModelProviderConflict>()(
-	"ModelProviderConflict",
-	{ version: Version },
-) {}
-export class ModelProviderInvalid extends Schema.TaggedError<ModelProviderInvalid>()(
-	"ModelProviderInvalid",
-	{ message: Schema.String },
-) {}
+export class ModelProviderNotFound extends Schema.TaggedError<
+	ModelProviderNotFound,
+	{ readonly brand: unique symbol }
+>()("ModelProviderNotFound", { providerId: Schema.String }) {}
+export class ModelProviderConflict extends Schema.TaggedError<
+	ModelProviderConflict,
+	{ readonly brand: unique symbol }
+>()("ModelProviderConflict", { version: Version }) {}
+export class ModelProviderInvalid extends Schema.TaggedError<
+	ModelProviderInvalid,
+	{ readonly brand: unique symbol }
+>()("ModelProviderInvalid", { message: Schema.String }) {}
 /** A setting still names the provider, such as the Rules model. Change the setting first. */
-export class ModelProviderInUse extends Schema.TaggedError<ModelProviderInUse>()(
-	"ModelProviderInUse",
-	{ providerId: Schema.String },
-) {}
-export class ModelNotFound extends Schema.TaggedError<ModelNotFound>()(
-	"ModelNotFound",
-	{ modelId: Schema.String },
-) {}
-export class ModelConflict extends Schema.TaggedError<ModelConflict>()(
-	"ModelConflict",
-	{ version: Version },
-) {}
+export class ModelProviderInUse extends Schema.TaggedError<
+	ModelProviderInUse,
+	{ readonly brand: unique symbol }
+>()("ModelProviderInUse", { providerId: Schema.String }) {}
+export class ModelNotFound extends Schema.TaggedError<
+	ModelNotFound,
+	{ readonly brand: unique symbol }
+>()("ModelNotFound", { modelId: Schema.String }) {}
+export class ModelConflict extends Schema.TaggedError<
+	ModelConflict,
+	{ readonly brand: unique symbol }
+>()("ModelConflict", { version: Version }) {}
 /** A provider still links the model, or a setting names it. Remove those first. */
-export class ModelInUse extends Schema.TaggedError<ModelInUse>()("ModelInUse", {
+export class ModelInUse extends Schema.TaggedError<
+	ModelInUse,
+	{ readonly brand: unique symbol }
+>()("ModelInUse", {
 	modelId: Schema.String,
 }) {}
-export class ModelProvidersUnavailable extends Schema.TaggedError<ModelProvidersUnavailable>()(
-	"ModelProvidersUnavailable",
-	{},
-) {}
+export class ModelProvidersUnavailable extends Schema.TaggedError<
+	ModelProvidersUnavailable,
+	{ readonly brand: unique symbol }
+>()("ModelProvidersUnavailable", {}) {}
 export const ModelProviderErrors = [
 	ModelProviderNotFound.pipe(HttpApiSchema.status(404)),
 	ModelProviderConflict.pipe(HttpApiSchema.status(409)),

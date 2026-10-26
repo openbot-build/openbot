@@ -240,6 +240,8 @@ Aufruf vor der Prüfung. Wenn der Aufruf später erlaubt wird, läuft er als die
 gespeicherte Aufruf. Wenn sich die Verbindung nach dem Request geändert hat,
 läuft der Aufruf nicht. Der Bot bekommt eine Mitteilung, die ihn bittet, es noch
 einmal zu versuchen. So nutzt eine neue Revision nie eine alte Entscheidung.
+Wenn OpenBot die Entscheidung nicht speichern kann, läuft der Aufruf auch nicht,
+und die Mitteilung sagt das.
 
 Ressourcen, Ressourcen-Vorlagen und Prompts einer App sind Lesen. Darum brauchen
 sie keine Entscheidung. Die eigenen Hinweise einer App entscheiden nie, welche

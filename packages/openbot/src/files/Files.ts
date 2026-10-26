@@ -1,7 +1,9 @@
 import { type Caller, FilesApi, type MessageInput } from "@openbot-build/api"
 import { and, desc, eq, inArray, lt, notExists, sql } from "drizzle-orm"
 import {
+	Array as Arr,
 	Cache,
+	Cause,
 	Clock,
 	Context,
 	Crypto,
@@ -11,12 +13,17 @@ import {
 	Layer,
 	Option,
 	Predicate,
+	Record as Rec,
+	Redacted,
 	Ref,
 	Stream,
+	String as Str,
+	pipe,
 } from "effect"
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
 import { HttpClient, Multipart } from "effect/http"
+import * as Failures from "../app/Failures.ts"
 import * as Db from "../database/Database.ts"
 import { fileRefs, files } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
@@ -81,10 +88,17 @@ export class Files extends Context.Service<
 			caller: Caller,
 			id: string,
 		) => Effect.Effect<FilesApi.FileObject, Failure>
+		/**
+		 * The bytes of a ready file, as they come from storage. A failure of
+		 * storage in the middle of the stream is logged, and the stream fails.
+		 */
 		readonly content: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<Uint8Array, Failure>
+		) => Effect.Effect<
+			Stream.Stream<Uint8Array, FilesApi.FilesUnavailable>,
+			Failure
+		>
 		/** Deletes a file now. The garbage collector removes its bytes. */
 		readonly remove: (
 			caller: Caller,
@@ -126,27 +140,36 @@ const extensions: Readonly<Record<string, string>> = {
 
 /** `image/PNG; x=y` becomes `image/png`. */
 const normalize = (mediaType: string) =>
-	mediaType.split(";")[0]!.trim().toLowerCase()
+	pipe(mediaType, Str.split(";"), Arr.headNonEmpty, Str.trim, Str.toLowerCase)
 
 const mediaTypeOf = (contentType: string, fileName: string) => {
 	const given = normalize(contentType)
 	if (given !== "" && given !== "application/octet-stream") return given
-	const extension = fileName.split(".").pop()?.toLowerCase() ?? ""
-	return extensions[extension] ?? "application/octet-stream"
+	const extension = pipe(
+		fileName,
+		Str.split("."),
+		Arr.lastNonEmpty,
+		Str.toLowerCase,
+	)
+	// `Rec.get` reads only own keys, so a name such as `a.constructor` gets no value.
+	return pipe(
+		Rec.get(extensions, extension),
+		Option.getOrElse(() => "application/octet-stream"),
+	)
 }
 
 /** `image/*` in the list takes every image. */
 export const accepts = (mediaTypes: ReadonlyArray<string>, mediaType: string) =>
-	mediaTypes.some((entry) => {
+	Arr.some(mediaTypes, (entry) => {
 		const allowed = normalize(entry)
-		return allowed.endsWith("/*")
-			? mediaType.startsWith(allowed.slice(0, -1))
+		return Str.endsWith("/*")(allowed)
+			? Str.startsWith(Str.slice(0, -1)(allowed))(mediaType)
 			: allowed === mediaType
 	})
 
 /** A file name without folders, as some browsers send the whole path. */
 const baseName = (name: string) =>
-	name.split(/[/\\]/).pop()?.slice(0, 255) || "file"
+	pipe(name, Str.split(/[/\\]/), Arr.lastNonEmpty, Str.slice(0, 255)) || "file"
 
 type Row = typeof files.$inferSelect
 
@@ -166,12 +189,15 @@ export const make = Effect.gen(function* () {
 	const secrets = yield* Secrets
 	const client = yield* HttpClient.HttpClient
 	const crypto = yield* Crypto.Crypto
-	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		Effect.mapError(effect, () => FilesApi.FilesUnavailable.make({}))
+	const stored = Failures.replace("A file query failed", () =>
+		FilesApi.FilesUnavailable.make({}),
+	)
 
 	/** The file settings, or the defaults before `openbot setup`. */
 	const config = settings.platform.pipe(
-		Effect.mapError(() => FilesApi.FilesUnavailable.make({})),
+		Failures.replace("Could not read the file settings", () =>
+			FilesApi.FilesUnavailable.make({}),
+		),
 		Effect.map(
 			Option.match({
 				onNone: () => filesDefaults,
@@ -179,35 +205,44 @@ export const make = Effect.gen(function* () {
 			}),
 		),
 	)
-	const targetOf = (document: FilesDocument) =>
+	/** The storage target of storage settings that are there. */
+	const targetFor = (storage: NonNullable<FilesDocument["storage"]>) =>
 		Effect.gen(function* () {
-			const storage = document.storage
-			if (storage === null)
-				return yield* FilesApi.FilesDisabled.make({
-					message: "The platform has no file storage.",
-				})
 			const secretAccessKey = yield* secrets
 				.open(storage.secretAccessKey, bindings.fileStorageSecret)
-				.pipe(Effect.mapError(() => FilesApi.FilesUnavailable.make({})))
+				.pipe(
+					Failures.replace("Could not open the key of the file storage", () =>
+						FilesApi.FilesUnavailable.make({}),
+					),
+				)
 			return {
 				target: {
 					endpoint: storage.endpoint,
 					region: storage.region,
 					bucket: storage.bucket,
 					accessKeyId: storage.accessKeyId,
-					secretAccessKey,
+					secretAccessKey: Redacted.make(secretAccessKey),
 					forcePathStyle: storage.forcePathStyle,
 				} satisfies S3.Target,
 				publicEndpoint: storage.publicEndpoint ?? storage.endpoint,
 			}
+		})
+	const targetOf = (document: FilesDocument) =>
+		Effect.gen(function* () {
+			if (document.storage === null)
+				return yield* FilesApi.FilesDisabled.make({
+					message: "The platform has no file storage.",
+				})
+			return yield* targetFor(document.storage)
 		})
 	const logged = <A>(
 		effect: Effect.Effect<A, S3.StorageError, Crypto.Crypto>,
 	) =>
 		effect.pipe(
 			Effect.provideService(Crypto.Crypto, crypto),
-			Effect.tapError((error) => Effect.logWarning(error.message)),
-			Effect.mapError(() => FilesApi.FilesUnavailable.make({})),
+			Failures.replace("The file storage failed", () =>
+				FilesApi.FilesUnavailable.make({}),
+			),
 		)
 
 	type Query = Pick<typeof db, "select">
@@ -277,12 +312,7 @@ export const make = Effect.gen(function* () {
 	}) =>
 		Effect.gen(function* () {
 			const id =
-				"file_" +
-				Hex.encode(
-					yield* crypto
-						.randomBytes(16)
-						.pipe(Effect.mapError(() => FilesApi.FilesUnavailable.make({}))),
-				)
+				"file_" + Hex.encode(yield* Effect.orDie(crypto.randomBytes(16)))
 			const row: Row = {
 				id,
 				organizationId: input.caller.organizationId,
@@ -310,8 +340,8 @@ export const make = Effect.gen(function* () {
 					}),
 				)
 				.pipe(
-					Effect.catchTag("SqlError", () =>
-						Effect.fail(FilesApi.FilesUnavailable.make({})),
+					Failures.replaceTag("SqlError", "A file transaction failed", () =>
+						FilesApi.FilesUnavailable.make({}),
 					),
 				)
 			return row
@@ -375,32 +405,25 @@ export const make = Effect.gen(function* () {
 			return Buffer.concat(chunks)
 		})
 
-	const loadNow = (id: string) =>
+	/** The bytes of a stored object, or none when storage does not have it. */
+	const bytesOf = (objectKey: string) =>
 		Effect.gen(function* () {
-			const row = (yield* stored(
-				db
-					.select()
-					.from(files)
-					.where(and(eq(files.id, id), eq(files.status, "ready"))),
-			))[0]
-			if (row === undefined) return Option.none<Content>()
 			const document = yield* config
+			// An admin took the storage away after the upload. A model call cannot act on that.
 			const { target } = yield* targetOf(document).pipe(
-				Effect.catchTag("FilesDisabled", () =>
-					Effect.fail(FilesApi.FilesUnavailable.make({})),
+				Failures.replaceTag(
+					"FilesDisabled",
+					"A ready file was asked for, but the platform has no file storage",
+					() => FilesApi.FilesUnavailable.make({}),
 				),
 			)
 			const now = yield* Clock.currentTimeMillis
-			const bytes = yield* logged(S3.get(client, target, row.objectKey, now))
-			return Option.map(bytes, (bytes): Content => ({
-				mediaType: row.mediaType,
-				fileName: row.filename,
-				bytes,
-			}))
+			return yield* logged(S3.get(client, target, objectKey, now))
 		})
-	// The steps of one Turn send the same files again. A short cache keeps them
-	// from storage, and a failure is not kept.
-	const cache = yield* Cache.makeWith(loadNow, {
+	// The steps of one Turn send the same files again. A short cache keeps their
+	// bytes from storage, and a failure is not kept. The row is read each time,
+	// so a delete on any instance takes effect at once.
+	const cache = yield* Cache.makeWith(bytesOf, {
 		capacity: 16,
 		timeToLive: (exit) =>
 			Exit.isSuccess(exit) ? Duration.minutes(5) : Duration.zero,
@@ -433,13 +456,18 @@ export const make = Effect.gen(function* () {
 											}),
 										),
 					),
-					Effect.mapError((error) =>
-						error instanceof FilesApi.FileInvalid ||
-						error instanceof FilesApi.FileQuotaExceeded
-							? error
-							: FilesApi.FileInvalid.make({
+					Effect.catchTag("MultipartError", (error) =>
+						Effect.andThen(
+							Effect.logInfo(
+								"The multipart form is not valid",
+								Cause.fail(error),
+							),
+							Effect.fail(
+								FilesApi.FileInvalid.make({
 									message: "The body is not a valid multipart form.",
 								}),
+							),
+						),
 					),
 				)
 				if (Option.isNone(found))
@@ -541,6 +569,8 @@ export const make = Effect.gen(function* () {
 		list: (caller, query) =>
 			Effect.gen(function* () {
 				const limit = query.limit ?? 50
+				// A file that was deleted after the page before still works as the
+				// cursor while its row is there, so the owner is checked but not the status.
 				const after =
 					query.after === undefined
 						? undefined
@@ -548,8 +578,18 @@ export const make = Effect.gen(function* () {
 								db
 									.select({ createdAt: files.createdAt })
 									.from(files)
-									.where(eq(files.id, query.after)),
+									.where(
+										and(
+											eq(files.id, query.after),
+											eq(files.organizationId, caller.organizationId),
+											eq(files.userId, caller.userId),
+										),
+									),
 							))[0]
+				if (query.after !== undefined && after === undefined)
+					return yield* FilesApi.FileInvalid.make({
+						message: `The cursor ${query.after} names none of your files. Ask for the list again without after.`,
+					})
 				const rows = yield* stored(
 					db
 						.select()
@@ -559,7 +599,7 @@ export const make = Effect.gen(function* () {
 								eq(files.organizationId, caller.organizationId),
 								eq(files.userId, caller.userId),
 								inArray(files.status, ["pending", "ready"]),
-								after === undefined || query.after === undefined
+								after === undefined
 									? undefined
 									: sql`(${files.createdAt}, ${files.id}) < (${after.createdAt}, ${query.after})`,
 							),
@@ -569,7 +609,7 @@ export const make = Effect.gen(function* () {
 				)
 				const page = rows.slice(0, limit)
 				return {
-					items: page.map(view),
+					items: Arr.map(page, view),
 					next:
 						rows.length > limit
 							? FilesApi.FileId.make(page[page.length - 1]!.id)
@@ -587,31 +627,33 @@ export const make = Effect.gen(function* () {
 				const document = yield* config
 				const { target } = yield* targetOf(document)
 				const now = yield* Clock.currentTimeMillis
-				const bytes = yield* logged(S3.get(client, target, row.objectKey, now))
+				const bytes = yield* logged(
+					S3.getStream(client, target, row.objectKey, now),
+				)
 				if (Option.isNone(bytes))
 					return yield* FilesApi.FileNotFound.make({ id })
-				return bytes.value
+				return Stream.catch(bytes.value, (error) =>
+					Stream.fromEffect(logged(Effect.fail(error))),
+				)
 			}),
 		remove: (caller, id) =>
 			Effect.gen(function* () {
 				const row = yield* find(caller, id)
 				yield* setStatus(row.id, row.status, "deleting")
-				yield* Cache.invalidate(cache, id)
+				yield* Cache.invalidate(cache, row.objectKey)
 			}),
 		prompt: (caller, input) =>
 			Effect.gen(function* () {
 				if (Predicate.isString(input)) return Prompt.make(input)
-				const ids = [
-					...new Set(
-						input.flatMap((message) =>
-							Predicate.isString(message.content)
-								? []
-								: message.content.flatMap((part) =>
-										part.type === "input_text" ? [] : [part.file_id],
-									),
-						),
+				const ids = Arr.dedupe(
+					Arr.flatMap(input, (message) =>
+						Predicate.isString(message.content)
+							? []
+							: Arr.flatMap(message.content, (part) =>
+									part.type === "input_text" ? [] : [part.file_id],
+								),
 					),
-				]
+				)
 				const now = yield* Clock.currentTimeMillis
 				// A file in a new message counts as used now, so the garbage
 				// collector waits again before it takes a file that no Chat names yet.
@@ -632,7 +674,7 @@ export const make = Effect.gen(function* () {
 									)
 									.returning(),
 							)
-				const byId = new Map(rows.map((row) => [row.id, row]))
+				const byId = Rec.fromIterableBy(rows, (row) => row.id)
 				const messages = yield* Effect.forEach(input, (message) =>
 					Effect.gen(function* () {
 						const parts = Predicate.isString(message.content)
@@ -649,16 +691,17 @@ export const make = Effect.gen(function* () {
 											return Effect.succeed(
 												Prompt.makePart("text", { text: part.text }),
 											)
-										const row = byId.get(part.file_id)
-										if (row === undefined)
+										const found = Rec.get(byId, part.file_id)
+										if (Option.isNone(found))
 											return Effect.fail(
 												FilesApi.FileInvalid.make({
 													message: `The file ${part.file_id} is not one of your ready files.`,
 												}),
 											)
+										const row = found.value
 										if (
 											part.type === "input_image" &&
-											!row.mediaType.startsWith("image/")
+											!Str.startsWith("image/")(row.mediaType)
 										)
 											return Effect.fail(
 												FilesApi.FileInvalid.make({
@@ -679,7 +722,22 @@ export const make = Effect.gen(function* () {
 				)
 				return Prompt.fromMessages(messages)
 			}),
-		load: (id) => Cache.get(cache, id),
+		load: (id) =>
+			Effect.gen(function* () {
+				const row = (yield* stored(
+					db
+						.select()
+						.from(files)
+						.where(and(eq(files.id, id), eq(files.status, "ready"))),
+				))[0]
+				if (row === undefined) return Option.none<Content>()
+				const bytes = yield* Cache.get(cache, row.objectKey)
+				return Option.map(bytes, (bytes): Content => ({
+					mediaType: row.mediaType,
+					fileName: row.filename,
+					bytes,
+				}))
+			}),
 		collect: Effect.gen(function* () {
 			const document = yield* config
 			const now = yield* Clock.currentTimeMillis
@@ -713,11 +771,7 @@ export const make = Effect.gen(function* () {
 			)
 			// Without storage, the rows wait until there is storage again.
 			if (document.storage === null) return
-			const { target } = yield* targetOf(document).pipe(
-				Effect.catchTag("FilesDisabled", () =>
-					Effect.fail(FilesApi.FilesUnavailable.make({})),
-				),
-			)
+			const { target } = yield* targetFor(document.storage)
 			const doomed = yield* stored(
 				db
 					.select({ id: files.id, objectKey: files.objectKey })
@@ -731,14 +785,24 @@ export const make = Effect.gen(function* () {
 				doomed,
 				(row) =>
 					Effect.gen(function* () {
-						yield* logged(S3.remove(client, target, row.objectKey, now))
-						yield* stored(
-							db
-								.delete(files)
-								.where(and(eq(files.id, row.id), eq(files.status, "deleting"))),
+						const doomedRow = and(
+							eq(files.id, row.id),
+							eq(files.status, "deleting"),
 						)
-						yield* Cache.invalidate(cache, row.id)
-					}),
+						// An object that storage will not delete goes to the back, so it
+						// cannot stop the other rows.
+						yield* logged(S3.remove(client, target, row.objectKey, now)).pipe(
+							Effect.tapError(() =>
+								stored(
+									db.update(files).set({ updatedAt: now }).where(doomedRow),
+								),
+							),
+						)
+						yield* stored(db.delete(files).where(doomedRow))
+						yield* Cache.invalidate(cache, row.objectKey)
+					}).pipe(
+						Effect.annotateLogs({ file: row.id, objectKey: row.objectKey }),
+					),
 				{ concurrency: 4, discard: true },
 			)
 		}),

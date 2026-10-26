@@ -1,5 +1,13 @@
 import type { Effect, Stream } from "effect"
-import type { AiError, LanguageModel, Response } from "effect/ai"
+import type { AiError, LanguageModel, Prompt, Response } from "effect/ai"
+
+/**
+ * The part of the options that every model method takes. The real options have
+ * more fields, and a wrapper passes them on as they are.
+ */
+export interface Options {
+	readonly prompt: Prompt.RawInput
+}
 
 /**
  * The model methods in a plain form. The methods of `LanguageModel` are generic and
@@ -9,13 +17,13 @@ import type { AiError, LanguageModel, Response } from "effect/ai"
  */
 export interface Methods {
 	readonly generateText: (
-		options: unknown,
+		options: Options,
 	) => Effect.Effect<{ readonly usage: Response.Usage }, AiError.AiError>
 	readonly generateObject: (
-		options: unknown,
+		options: Options,
 	) => Effect.Effect<{ readonly usage: Response.Usage }, AiError.AiError>
 	readonly streamText: (
-		options: unknown,
+		options: Options,
 	) => Stream.Stream<Response.StreamPart<{}>, AiError.AiError>
 }
 

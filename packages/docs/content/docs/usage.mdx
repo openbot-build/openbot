@@ -218,6 +218,8 @@ needs `read` on `Usage`.
 | `to`      | The end, as an ISO 8601 time. The default is now.                                     |
 | `groupBy` | `day` (the default), `model`, `provider`, `member`, `bot`, `token` or `source`.       |
 
+A time without a zone, such as `2026-10-01T00:00:00`, is in UTC.
+
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   "https://api.example.com/v1/organization/usage?groupBy=member"
@@ -421,6 +423,7 @@ through at full speed.
 A model call takes from every bucket of its scopes:
 
 - **Before the call**, it waits until no bucket is in debt. It does not fail.
+  OpenBot checks the budgets and the credits after this wait.
 - **While the model streams**, OpenBot reads the output from the provider into a
   buffer. It sends each piece on only when the buckets have room for it, about
   one token for every four characters. So the output comes at an even speed.

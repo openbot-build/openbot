@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import {
 	HttpApi,
 	HttpApiEndpoint,
@@ -43,19 +43,6 @@ export const VaultOwner = Schema.TaggedUnion({
 })
 export type VaultOwner = typeof VaultOwner.Type
 
-/**
- * A service that keeps secrets, which OpenBot reads.
- * `onepassword`: a 1Password Connect server.
- * `bitwarden`: the API of `bw serve`, the Bitwarden command line tool. It works with Bitwarden and Vaultwarden.
- * `hashicorp`: the KV version 2 engine of HashiCorp Vault or OpenBao.
- */
-export const SecretProviderKind = Schema.Literals([
-	"onepassword",
-	"bitwarden",
-	"hashicorp",
-])
-export type SecretProviderKind = typeof SecretProviderKind.Type
-
 const Text = (max: number) =>
 	Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(max))
 
@@ -87,6 +74,21 @@ export const SecretProviderCredentials = Schema.Union([
 	}),
 ])
 export type SecretProviderCredentials = typeof SecretProviderCredentials.Type
+
+/**
+ * A service that keeps secrets, which OpenBot reads.
+ * `onepassword`: a 1Password Connect server.
+ * `bitwarden`: the API of `bw serve`, the Bitwarden command line tool. It works with Bitwarden and Vaultwarden.
+ * `hashicorp`: the KV version 2 engine of HashiCorp Vault or OpenBao.
+ * It comes from `SecretProviderCredentials`.
+ */
+export const SecretProviderKind = Schema.Literals(
+	Arr.map(
+		SecretProviderCredentials.members,
+		(member) => member.fields.kind.literal,
+	),
+)
+export type SecretProviderKind = typeof SecretProviderKind.Type
 
 /** What the API shows of the secrets of a secret provider. */
 export const SecretProviderCredentialsView = Schema.Union([
@@ -280,30 +282,30 @@ export const VaultAccess = Schema.Struct({
 })
 export type VaultAccess = typeof VaultAccess.Type
 
-export class VaultNotFound extends Schema.TaggedError<VaultNotFound>()(
-	"VaultNotFound",
-	{ id: Schema.String },
-) {}
-export class VaultItemNotFound extends Schema.TaggedError<VaultItemNotFound>()(
-	"VaultItemNotFound",
-	{ id: Schema.String },
-) {}
-export class SecretProviderNotFound extends Schema.TaggedError<SecretProviderNotFound>()(
-	"SecretProviderNotFound",
-	{ id: Schema.String },
-) {}
-export class VaultConflict extends Schema.TaggedError<VaultConflict>()(
-	"VaultConflict",
-	{ version: Version },
-) {}
-export class VaultInvalid extends Schema.TaggedError<VaultInvalid>()(
-	"VaultInvalid",
-	{ message: Schema.String },
-) {}
-export class VaultsUnavailable extends Schema.TaggedError<VaultsUnavailable>()(
-	"VaultsUnavailable",
-	{},
-) {}
+export class VaultNotFound extends Schema.TaggedError<
+	VaultNotFound,
+	{ readonly brand: unique symbol }
+>()("VaultNotFound", { id: Schema.String }) {}
+export class VaultItemNotFound extends Schema.TaggedError<
+	VaultItemNotFound,
+	{ readonly brand: unique symbol }
+>()("VaultItemNotFound", { id: Schema.String }) {}
+export class SecretProviderNotFound extends Schema.TaggedError<
+	SecretProviderNotFound,
+	{ readonly brand: unique symbol }
+>()("SecretProviderNotFound", { id: Schema.String }) {}
+export class VaultConflict extends Schema.TaggedError<
+	VaultConflict,
+	{ readonly brand: unique symbol }
+>()("VaultConflict", { version: Version }) {}
+export class VaultInvalid extends Schema.TaggedError<
+	VaultInvalid,
+	{ readonly brand: unique symbol }
+>()("VaultInvalid", { message: Schema.String }) {}
+export class VaultsUnavailable extends Schema.TaggedError<
+	VaultsUnavailable,
+	{ readonly brand: unique symbol }
+>()("VaultsUnavailable", {}) {}
 
 export const VaultErrors = [
 	...AuthorizationErrors,

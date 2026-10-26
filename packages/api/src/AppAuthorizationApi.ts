@@ -2,7 +2,11 @@ import { Authorization, Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { ReturnTo, NoStore } from "./AuthApi.ts"
-import { Errors as ConnectionErrors } from "./ConnectionsApi.ts"
+import {
+	Errors as ConnectionErrors,
+	connectionParams,
+} from "./ConnectionsApi.ts"
+import { Required, own } from "./Authorization.ts"
 
 export const Request = Schema.Struct({
 	revision: Schema.Natural,
@@ -46,14 +50,17 @@ export const State = Schema.Struct({
 export type State = typeof State.Type
 export const Revocation = Schema.TaggedUnion({ Revoked: {}, LocalOnly: {} })
 export type Revocation = typeof Revocation.Type
-export class AppAuthorizationFailed extends Schema.TaggedError<AppAuthorizationFailed>()(
-	"AppAuthorizationFailed",
-	{ reason: Schema.String, message: Schema.String },
-) {}
-export class AppAuthorizationUnavailable extends Schema.TaggedError<AppAuthorizationUnavailable>()(
-	"AppAuthorizationUnavailable",
-	{},
-) {}
+export class AppAuthorizationFailed extends Schema.TaggedError<
+	AppAuthorizationFailed,
+	{ readonly brand: unique symbol }
+>()("AppAuthorizationFailed", {
+	reason: Schema.String,
+	message: Schema.String,
+}) {}
+export class AppAuthorizationUnavailable extends Schema.TaggedError<
+	AppAuthorizationUnavailable,
+	{ readonly brand: unique symbol }
+>()("AppAuthorizationUnavailable", {}) {}
 export const Errors = [
 	AppAuthorizationUnavailable.pipe(HttpApiSchema.status(503)),
 	...ConnectionErrors,
@@ -65,7 +72,7 @@ export const AppAuthorizationApi = HttpApiGroup.make("appAuthorization").add(
 		"beginAppAuthorization",
 		"/v1/connections/:connectionId/authorization",
 		{
-			params: { connectionId: Schema.NonEmptyString },
+			params: connectionParams,
 			payload: Request,
 			success: Started,
 			error: Errors,
@@ -75,7 +82,7 @@ export const AppAuthorizationApi = HttpApiGroup.make("appAuthorization").add(
 		params: { flowId: Schema.NonEmptyString },
 		success: State,
 		error: Errors,
-	}),
+	}).annotate(Required, [own("read", "Connection")]),
 	HttpApiEndpoint.post(
 		"completeAppAuthorization",
 		"/v1/app-authorizations/:flowId/complete",
@@ -84,12 +91,12 @@ export const AppAuthorizationApi = HttpApiGroup.make("appAuthorization").add(
 			success: State,
 			error: Errors,
 		},
-	),
+	).annotate(Required, [own("write", "Connection")]),
 	HttpApiEndpoint.delete(
 		"revokeAppAuthorization",
 		"/v1/connections/:connectionId/authorization",
 		{
-			params: { connectionId: Schema.NonEmptyString },
+			params: connectionParams,
 			success: Revocation,
 			error: Errors,
 		},

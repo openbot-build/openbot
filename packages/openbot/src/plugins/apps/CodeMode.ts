@@ -1,6 +1,13 @@
 import { CodeRunsApi } from "@openbot-build/api"
 import { Operation } from "@openbot-build/core"
-import { Effect, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import { Tool } from "effect/ai"
 import type * as Bindings from "../../apps/Bindings.ts"
 import type { Position } from "../../apps/Invocations.ts"
@@ -64,19 +71,25 @@ export const entries = (input: {
 	)
 		return []
 	const named = name(input.bindings)
-	const index = named
-		.slice(0, 200)
-		.map(
+	const index = pipe(
+		named,
+		Arr.take(200),
+		Arr.map(
 			({ alias, binding }) =>
-				"apps." + alias + ": " + binding.description.slice(0, 80),
-		)
-		.join("\n")
+				"apps." + alias + ": " + Str.slice(0, 80)(binding.description),
+		),
+		Arr.join("\n"),
+	)
 	const vaultDeclarations = VaultCode.declarations(input.vault)
 	const vaultIndex =
 		input.vault.length === 0
 			? ""
 			: "\nThe Vault items are: " +
-				input.vault.map((entry) => "vault." + entry.alias).join(", ") +
+				pipe(
+					input.vault,
+					Arr.map((entry) => "vault." + entry.alias),
+					Arr.join(", "),
+				) +
 				". `vault.<item>.<field>` is a reference to a secret, not the secret. Put it in a string argument of an App tool. OpenBot puts the secret in when it sends the call, and only to the tools that the item allows."
 	const api: Entry = {
 		tool: Tool.dynamic(names.api, {
@@ -92,23 +105,21 @@ export const entries = (input: {
 		handle: (raw) =>
 			Schema.decodeUnknownEffect(ApiInput)(raw).pipe(
 				Effect.map((query) => {
-					const words = (query.query ?? "")
-						.toLowerCase()
-						.split(/\s+/)
-						.filter((word) => word.length > 0)
+					const words = pipe(
+						query.query ?? "",
+						Str.toLowerCase,
+						Str.split(/\s+/),
+						Arr.filter(Str.isNonEmpty),
+					)
 					const found = declarations(named, ({ alias, binding }) => {
-						const group = alias.split(".")[0]!
-						const text = (
-							alias +
-							" " +
-							binding.source.name +
-							" " +
-							binding.description
-						).toLowerCase()
+						const group = Arr.headNonEmpty(Str.split(alias, "."))
+						const text = Str.toLowerCase(
+							alias + " " + binding.source.name + " " + binding.description,
+						)
 						return (
 							(query.connections === undefined ||
 								query.connections.includes(group)) &&
-							words.every((word) => text.includes(word))
+							Arr.every(words, (word) => Str.includes(word)(text))
 						)
 					})
 					return {

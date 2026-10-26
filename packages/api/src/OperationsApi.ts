@@ -1,5 +1,5 @@
 import { BotAuth } from "./AuthApi.ts"
-import { Chat, Operation } from "@openbot-build/core"
+import { Operation } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -9,25 +9,24 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { Authorize, GroupRequired, own } from "./Authorization.ts"
-import { ChatNotFound, ChatStorageUnavailable } from "./ChatsApi.ts"
+import { ChatNotFound, ChatStorageUnavailable, chatParams } from "./ChatsApi.ts"
 
-export class OperationNotFound extends Schema.TaggedError<OperationNotFound>()(
-	"OperationNotFound",
-	{ id: Schema.String },
-) {}
+export class OperationNotFound extends Schema.TaggedError<
+	OperationNotFound,
+	{ readonly brand: unique symbol }
+>()("OperationNotFound", { id: Schema.String }) {}
 const errors = [
 	ChatNotFound.pipe(HttpApiSchema.status(404)),
 	OperationNotFound.pipe(HttpApiSchema.status(404)),
 	ChatStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
-const params = { chatId: Chat.Id.check(Schema.isMinLength(1)) }
-const operationParams = { ...params, id: Operation.Id }
+const operationParams = { ...chatParams, id: Operation.Id }
 
 /** Tool calls of a Chat that took more time than their budget and went on in the background. */
 export const OperationsApi = HttpApiGroup.make("operations")
 	.add(
 		HttpApiEndpoint.get("list", "/v1/chats/:chatId/operations", {
-			params,
+			params: chatParams,
 			success: Schema.Array(Operation.Record),
 			error: errors,
 		}).annotate(

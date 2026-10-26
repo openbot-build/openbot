@@ -1,7 +1,12 @@
-import { Effect, Schema } from "effect"
+import { Effect, Result, Schema } from "effect"
+import { Headers } from "effect/http"
+import * as Ui from "../apps/Ui.ts"
 import * as Document from "../Document.ts"
 
-export class Publication extends Schema.Opaque<Publication>()(
+export class Publication extends Schema.Opaque<
+	Publication,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		card: Document.ServerCard,
 		cardUrl: Schema.String,
@@ -10,8 +15,22 @@ export class Publication extends Schema.Opaque<Publication>()(
 		catalog: Schema.optional(Document.Catalog),
 		allowedOrigins: Schema.optional(Schema.Array(Schema.String)),
 		cacheControl: Schema.optional(Schema.String),
-		etag: Schema.optional(Schema.String),
-		lastModified: Schema.optional(Schema.String),
+		etag: Schema.optional(
+			Schema.String.check(
+				Schema.isPattern(/^(W\/)?"[^"\r\n]*"$/, {
+					message: "ETag must be a quoted HTTP entity tag",
+				}),
+			),
+		),
+		lastModified: Schema.optional(
+			Schema.String.check(
+				Schema.makeFilter(
+					(value: string) =>
+						Result.isSuccess(Headers.parseHttpDate(value)) ||
+						"Last-Modified must be an HTTP date",
+				),
+			),
+		),
 		noindex: Schema.optional(Schema.Boolean),
 	}),
 ) {
@@ -26,9 +45,12 @@ export class Publication extends Schema.Opaque<Publication>()(
 		)
 }
 
-export class UiResource extends Schema.Opaque<UiResource>()(
+export class UiResource extends Schema.Opaque<
+	UiResource,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
-		uri: Schema.String.check(Schema.isPattern(/^ui:\/\/[^\s]+$/)),
+		uri: Ui.Uri,
 		name: Schema.NonEmptyString,
 		html: Schema.NonEmptyString,
 		meta: Schema.optional(Schema.JsonObject),

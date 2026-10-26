@@ -1,5 +1,3 @@
-// Tests are entry points, so they provide their own Layers.
-// @effect-diagnostics strictEffectProvide:off
 import {
 	CatalogDiscovery,
 	RobotsPolicy,
@@ -11,21 +9,25 @@ import {
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { assert, it } from "@effect/vitest"
-import { Effect, Exit, Fiber, Layer, Match } from "effect"
+import { NodeServices } from "@effect/platform-node"
+import {
+	Effect,
+	Fiber,
+	Layer,
+	Match,
+	Queue,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
+import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Node from "@openbot-build/protocol/Node"
 import { gzipSync } from "node:zlib"
-import { startHttps } from "./Fixture.ts"
+import { type HttpsServer, serveHttps } from "./Fixture.ts"
 
 // These tests build their own Layers. They use it.live, because they talk to
-// a real HTTPS server.
-
-// The server stops when the test ends.
-const serve = (handler: Parameters<typeof startHttps>[0]) =>
-	Effect.acquireRelease(
-		Effect.promise(() => startHttps(handler)),
-		(fixture) => Effect.promise(() => fixture.close()),
-	)
+// a real HTTPS server. The server stops when the test ends.
 
 it.live(
 	"Public adapter blocks IP literals and the DNS address used by the socket",
@@ -34,10 +36,12 @@ it.live(
 			let requests = 0
 			let connections = 0
 			let lookups = 0
-			const fixture = yield* serve((_req, res) => {
-				requests++
-				res.end("unreachable")
-			})
+			const fixture = yield* serveHttps(
+				Effect.sync(() => {
+					requests++
+					return HttpServerResponse.text("unreachable")
+				}),
+			)
 			fixture.server.on("connection", () => connections++)
 			const layerPublic = NodeHttpServer.layerPublicNetwork({
 				ca: fixture.ca,
@@ -58,7 +62,7 @@ it.live(
 				),
 			)
 			assert.ok(
-				literal instanceof Network.NetworkError &&
+				Schema.is(Network.NetworkError)(literal) &&
 					literal.reason === "BlockedTarget",
 			)
 			const named = yield* Effect.flip(
@@ -72,7 +76,10 @@ it.live(
 					),
 				),
 			)
-			assert.match(String(named), /NetworkError/)
+			assert.ok(
+				Schema.is(Network.NetworkError)(named) &&
+					named.reason === "BlockedTarget",
+			)
 			assert.strictEqual(lookups, 1)
 			assert.strictEqual(requests, 0)
 			assert.strictEqual(connections, 0)
@@ -93,7 +100,7 @@ it.live(
 				NodeHttpServer.isPublicAddress("2606:4700:4700::1111"),
 				true,
 			)
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
@@ -101,10 +108,12 @@ it.live(
 	() =>
 		Effect.gen(function* () {
 			let requests = 0
-			const fixture = yield* serve((_req, res) => {
-				requests++
-				res.end("listed")
-			})
+			const fixture = yield* serveHttps(
+				Effect.sync(() => {
+					requests++
+					return HttpServerResponse.text("listed")
+				}),
+			)
 			// One built Layer serves both calls, as one runtime did before.
 			const services = yield* Layer.build(
 				NodeHttpServer.layerPublicNetwork({
@@ -121,14 +130,17 @@ it.live(
 					net.readDocument({ url: `https://other.test:${port}/` }),
 				).pipe(Effect.provideContext(services)),
 			)
-			assert.match(String(error), /NetworkError/)
+			assert.ok(
+				Schema.is(Network.NetworkError)(error) &&
+					error.reason === "BlockedTarget",
+			)
 			assert.strictEqual(requests, 0)
 			const reply = yield* Network.Network.use((net) =>
 				net.readDocument({ url: fixture.origin }),
 			).pipe(Effect.provideContext(services))
 			assert.strictEqual(reply.text, "listed")
 			assert.strictEqual(requests, 1)
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
@@ -137,11 +149,14 @@ it.live(
 		Effect.gen(function* () {
 			let requests = 0
 			let publicLookups = 0
-			const fixture = yield* serve((_req, res) => {
-				requests++
-				res.writeHead(200, { "content-type": Document.cardMediaType })
-				res.end("{}")
-			})
+			const fixture = yield* serveHttps(
+				Effect.sync(() => {
+					requests++
+					return HttpServerResponse.text("{}", {
+						contentType: Document.cardMediaType,
+					})
+				}),
+			)
 			const user = NodeHttpServer.layerUserNetwork({
 				owner: "alice",
 				allowedOrigins: [fixture.origin],
@@ -177,9 +192,9 @@ it.live(
 					url: fixture.origin + "/private",
 				})
 				assert.strictEqual(requests, 1)
-				const result = yield* Indexing.sync({
-					cardUrl: fixture.origin + "/card",
-				})
+				const result = yield* Indexing.sync(
+					Indexing.Input.make({ cardUrl: fixture.origin + "/card" }),
+				)
 				assert.strictEqual(result._tag, "Unconfirmed")
 				Match.value(result).pipe(
 					Match.tag("Unconfirmed", (result) => {
@@ -201,7 +216,7 @@ it.live(
 					),
 				),
 			)
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
@@ -209,29 +224,27 @@ it.live(
 	() =>
 		Effect.gen(function* () {
 			let requests = 0
-			let targetHeaders: import("node:http").IncomingHttpHeaders = {}
-			const fixture = yield* serve((req, res) => {
-				requests++
-				if (req.url === "/redirect") {
-					res.writeHead(302, {
-						location: fixture.ipOrigin + "/target",
-					})
-					res.end()
-				} else if (req.url === "/target") {
-					targetHeaders = req.headers
-					res.end("target")
-				} else if (req.url === "/large") {
-					res.writeHead(200, { "content-encoding": "gzip" })
-					res.end(gzipSync("a".repeat(2048)))
-				} else if (req.url === "/forbidden") {
-					res.writeHead(302, {
-						location: "https://169.254.169.254/",
-					})
-					res.end()
-				} else {
-					res.end("ok")
-				}
-			})
+			let targetHeaders = Headers.empty
+			const fixture: HttpsServer = yield* serveHttps(
+				Effect.gen(function* () {
+					const request = yield* HttpServerRequest.HttpServerRequest
+					requests++
+					if (request.url === "/redirect")
+						return HttpServerResponse.redirect(fixture.ipOrigin + "/target")
+					if (request.url === "/target") {
+						targetHeaders = request.headers
+						return HttpServerResponse.text("target")
+					}
+					if (request.url === "/large")
+						return HttpServerResponse.uint8Array(
+							gzipSync(Str.repeat(2048)("a")),
+							{ headers: { "content-encoding": "gzip" } },
+						)
+					if (request.url === "/forbidden")
+						return HttpServerResponse.redirect("https://169.254.169.254/")
+					return HttpServerResponse.text("ok")
+				}),
+			)
 			const user = (extra: Partial<Node.UserOptions> = {}) =>
 				NodeHttpServer.layerUserNetwork({
 					owner: "alice",
@@ -259,9 +272,9 @@ it.live(
 			)
 			assert.strictEqual(reply.text, "target")
 			assert.strictEqual(reply.url, fixture.ipOrigin + "/target")
-			assert.strictEqual(targetHeaders.authorization, undefined)
-			assert.strictEqual(targetHeaders.cookie, undefined)
-			assert.strictEqual(targetHeaders["x-api-key"], undefined)
+			assert.isFalse(Headers.has(targetHeaders, "authorization"))
+			assert.isFalse(Headers.has(targetHeaders, "cookie"))
+			assert.isFalse(Headers.has(targetHeaders, "x-api-key"))
 			const large = yield* Effect.flip(
 				Network.Network.use((net) =>
 					net.readDocument({
@@ -274,7 +287,7 @@ it.live(
 				),
 			)
 			assert.ok(
-				large instanceof Network.NetworkError && large.reason === "TooLarge",
+				Schema.is(Network.NetworkError)(large) && large.reason === "TooLarge",
 			)
 			const beforeForbidden = requests
 			const forbidden = yield* Effect.flip(
@@ -289,7 +302,7 @@ it.live(
 				),
 			)
 			assert.ok(
-				forbidden instanceof Network.NetworkError &&
+				Schema.is(Network.NetworkError)(forbidden) &&
 					forbidden.reason === "BlockedTarget",
 			)
 			assert.strictEqual(requests, beforeForbidden + 1)
@@ -306,32 +319,44 @@ it.live(
 			const program = Effect.gen(function* () {
 				const net = yield* Network.Network
 				yield* net.readDocument({ url: fixture.origin })
-				return yield* Effect.exit(net.readDocument({ url: fixture.origin }))
+				return yield* Effect.flip(net.readDocument({ url: fixture.origin }))
 			})
-			const result = yield* program.pipe(
+			const rebound = yield* program.pipe(
 				Effect.provide(
 					rebinding.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
 				),
 			)
-			assert.ok(Exit.isFailure(result))
+			assert.ok(
+				Schema.is(Network.NetworkError)(rebound) &&
+					rebound.reason === "BlockedTarget",
+			)
 			assert.strictEqual(lookups, 2)
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
 	"Cancellation closes the response socket, and a document timeout is a typed failure",
 	() =>
 		Effect.gen(function* () {
-			let started!: () => void
-			let closed!: () => void
-			const waiting = new Promise<void>((resolve) => (started = resolve))
-			const released = new Promise<void>((resolve) => (closed = resolve))
-			const fixture = yield* serve((_req, res) => {
-				res.writeHead(200)
-				res.write("partial")
-				res.on("close", closed)
-				started()
-			})
+			// Each request sends a part of the body and then stays open. The
+			// server tells the test when the part is sent and when the response
+			// closes.
+			const started = yield* Queue.unbounded<void>()
+			const closed = yield* Queue.unbounded<void>()
+			const fixture = yield* serveHttps(
+				Effect.succeed(
+					HttpServerResponse.stream(
+						Stream.make("partial").pipe(
+							Stream.encodeText,
+							Stream.concat(
+								Stream.fromEffectDrain(Queue.offer(started, undefined)),
+							),
+							Stream.concat(Stream.never),
+							Stream.ensuring(Queue.offer(closed, undefined)),
+						),
+					),
+				),
+			)
 			const layer = NodeHttpServer.layerUserNetwork({
 				owner: "alice",
 				allowedOrigins: [fixture.ipOrigin],
@@ -347,10 +372,9 @@ it.live(
 					),
 				),
 			)
-			yield* Effect.promise(() => waiting)
+			yield* Queue.take(started)
 			yield* Fiber.interrupt(fiber)
-			yield* Effect.promise(() => released)
-			const timeoutStarted = new Promise<void>((resolve) => (started = resolve))
+			yield* Queue.take(closed)
 			const timed = NodeHttpServer.layerUserNetwork({
 				owner: "alice",
 				allowedOrigins: [fixture.ipOrigin],
@@ -368,7 +392,7 @@ it.live(
 							}),
 						),
 					)
-					yield* Effect.promise(() => timeoutStarted)
+					yield* Queue.take(started)
 					yield* TestClock.adjust("1 second")
 					return yield* Fiber.join(request)
 				}).pipe(
@@ -380,8 +404,8 @@ it.live(
 				),
 			)
 			assert.ok(
-				timeout instanceof Network.NetworkError && timeout.reason === "Timeout",
+				Schema.is(Network.NetworkError)(timeout) &&
+					timeout.reason === "Timeout",
 			)
-			assert.ok(Layer.isLayer(layer))
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )

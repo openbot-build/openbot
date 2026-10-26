@@ -359,11 +359,15 @@ When you run OpenBot from your own program, you can give models in code with the
 | `models`    | The models to show, as `Config.Model` values.                                  |
 | `resolve`   | A function that gets a selection and returns an Effect with a `LanguageModel`. |
 
+The `defaultModel` option names one of these models. A new Chat gets it when its
+Bot names no model. Only a simulated platform, such as development or a test,
+sets it. On a real platform, each Bot names its model.
+
 This example gives one Anthropic model with a key from the environment of your
 program:
 
 ```ts
-import { NodeRuntime } from "@effect/platform-node"
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	AnthropicProvider,
@@ -420,8 +424,8 @@ NodeRuntime.runMain(
 							),
 			}
 			return yield* Layer.launch(
-				Server.layer({ ...settings, builtinModels }).pipe(
-					Layer.provide(FetchHttpClient.layer),
+				Server.layerLive({ ...settings, builtinModels }).pipe(
+					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 				),
 			)
 		}),
@@ -485,5 +489,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
 ```
 
 The development entry point gives these models with `builtinModels`, so every
-organization of the development platform can use them. The production program
-never uses them.
+organization of the development platform can use them. It gives `mock-text` as
+`defaultModel`, so a new Chat gets it when its Bot names no model. The
+production program never uses them.

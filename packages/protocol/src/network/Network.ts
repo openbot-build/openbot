@@ -13,13 +13,15 @@ export const NetworkErrorReason = Schema.Literals([
 ])
 export type NetworkErrorReason = typeof NetworkErrorReason.Type
 
-export class NetworkError extends Schema.TaggedError<NetworkError>()(
-	"NetworkError",
-	{
-		reason: NetworkErrorReason,
-		message: Schema.String,
-	},
-) {}
+export class NetworkError extends Schema.TaggedError<
+	NetworkError,
+	{ readonly brand: unique symbol }
+>()("NetworkError", {
+	reason: NetworkErrorReason,
+	/** A short text that may reach clients. Put the details in `cause`. */
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
 export interface Reply {
 	readonly url: string

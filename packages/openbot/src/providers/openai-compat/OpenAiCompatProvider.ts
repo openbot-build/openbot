@@ -2,7 +2,7 @@ import { dual } from "effect/Function"
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai-compat"
 import { Provider as CoreProvider, Model } from "@openbot-build/core"
 import { type AiError } from "effect/ai"
-import { Effect, Layer, Context, Predicate, Record } from "effect"
+import { Effect, Layer, Context, Predicate, Record as Rec } from "effect"
 
 export type Defaults = Omit<typeof OpenAiLanguageModel.Config.Service, "model">
 
@@ -33,7 +33,7 @@ export const make = ({
 						model: upstreamModel ?? selection.model,
 						config: {
 							...defaults,
-							...Record.filter(
+							...Rec.filter(
 								{
 									reasoning_effort: selection.reasoningEffort,
 									service_tier: selection.serviceTier,

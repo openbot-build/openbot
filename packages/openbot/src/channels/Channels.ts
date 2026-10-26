@@ -1,7 +1,20 @@
-import { createHash, randomBytes } from "node:crypto"
 import { BotsApi, ChannelsApi } from "@openbot-build/api"
 import { and, eq, isNull } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	pipe,
+	Record as Rec,
+	Schema,
+} from "effect"
+import { Base64Url, Hex } from "effect/encoding"
+import * as Failures from "../app/Failures.ts"
+import { ConversationKind } from "./Channel.ts"
 import {
 	channelConversations,
 	channelIdentities,
@@ -43,9 +56,9 @@ export const Credentials = Schema.Union([
 ])
 export type Credentials = typeof Credentials.Type
 
-const decodeCredentials = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(Credentials),
-)
+const CredentialsJson = Schema.fromJsonString(Credentials)
+const decodeCredentials = Schema.decodeUnknownEffect(CredentialsJson)
+const encodeCredentials = Schema.encodeEffect(CredentialsJson)
 
 /** A stored Channel. The API view adds the webhook address of the public origin. */
 export type StoredChannel = Omit<ChannelsApi.Channel, "webhookUrl">
@@ -54,7 +67,7 @@ export interface Conversation {
 	readonly organizationId: string
 	readonly channelId: string
 	readonly key: string
-	readonly kind: "direct" | "group"
+	readonly kind: ConversationKind
 	readonly title: string | null
 	readonly chat: string
 	/** The member that owns the Chat. */
@@ -66,31 +79,40 @@ export const linkLifetimeMs = 15 * 60 * 1000
 
 const binding = (id: string) => `openbot_channels:${id}:credentials`
 
+/**
+ * Secure random bytes. A platform without secure random numbers cannot keep
+ * secrets, so a failure here is a defect.
+ */
+const randomBytes = (crypto: Crypto.Crypto, size: number) =>
+	Effect.orDie(crypto.randomBytes(size))
+
 /** The credentials of the API, with the secrets that OpenBot makes itself. */
 export const fromInput = (
+	crypto: Crypto.Crypto,
 	input: ChannelsApi.ChannelCredentials,
 	current?: Credentials,
-): Credentials => {
-	switch (input.kind) {
-		case "slack":
-		case "lark":
-			return input
-		case "telegram":
-			return {
-				...input,
-				// A new token keeps the webhook secret, so Telegram does not need it again.
-				webhookSecret:
-					current?.kind === "telegram"
-						? current.webhookSecret
-						: randomBytes(32).toString("base64url"),
-			}
-		case "custom":
-			return {
-				...input,
-				secret: current?.kind === "custom" ? current.secret : null,
-			}
-	}
-}
+): Effect.Effect<Credentials> =>
+	Effect.gen(function* () {
+		switch (input.kind) {
+			case "slack":
+			case "lark":
+				return input
+			case "telegram":
+				return {
+					...input,
+					// A new token keeps the webhook secret, so Telegram does not need it again.
+					webhookSecret:
+						current?.kind === "telegram"
+							? current.webhookSecret
+							: Base64Url.encode(yield* randomBytes(crypto, 32)),
+				}
+			case "custom":
+				return {
+					...input,
+					secret: current?.kind === "custom" ? current.secret : null,
+				}
+		}
+	})
 
 const state = (
 	hints: Readonly<Record<string, string | null>>,
@@ -133,51 +155,77 @@ const credentialsView = (
 	}
 }
 
+/** The fields of credentials that the API may show. The other fields are secret. */
+const isPlain = (key: string) =>
+	key === "domain" || key === "appId" || key === "endpoint"
+
 /** The secret fields of credentials, and the plain fields that the API may show. */
 const split = (credentials: Credentials) => {
-	const hints: Record<string, string | null> = {}
-	const plain: Record<string, string> = {}
-	for (const [key, value] of Object.entries(credentials)) {
-		if (key === "kind" || value === null) continue
-		if (key === "domain" || key === "appId" || key === "endpoint")
-			plain[key] = value
-		// The webhook secret of Telegram is between OpenBot and Telegram, so it gets no hint.
-		else if (key !== "webhookSecret") hints[key] = hint(value)
+	const fields = Arr.filter(
+		Rec.toEntries<string, string | null>(credentials),
+		(entry): entry is [string, string] =>
+			entry[0] !== "kind" && entry[1] !== null,
+	)
+	return {
+		hints: pipe(
+			fields,
+			// The webhook secret of Telegram is between OpenBot and Telegram, so it gets no hint.
+			Arr.filter(([key]) => !isPlain(key) && key !== "webhookSecret"),
+			Arr.map(([key, value]) => [key, hint(value)] as const),
+			Rec.fromEntries,
+		),
+		plain: pipe(
+			fields,
+			Arr.filter(([key]) => isPlain(key)),
+			Rec.fromEntries,
+		),
 	}
-	return { hints, plain }
 }
 
 type Row = typeof channels.$inferSelect
 
-const decodeKind = Schema.decodeUnknownSync(ChannelsApi.ChannelKind)
+const decodeKind = Schema.decodeUnknownEffect(ChannelsApi.ChannelKind)
+const decodeConversationKind = Schema.decodeUnknownEffect(ConversationKind)
 
 /** The hints column holds JSON that only `split` writes. */
-const decodeHints = Schema.decodeUnknownSync(
-	Schema.fromJsonString(
-		Schema.Struct({
-			hints: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
-			plain: Schema.Record(Schema.String, Schema.String),
-		}),
-	),
+const Hints = Schema.fromJsonString(
+	Schema.Struct({
+		hints: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
+		plain: Schema.Record(Schema.String, Schema.String),
+	}),
 )
+const decodeHints = Schema.decodeUnknownEffect(Hints)
+const encodeHints = Schema.encodeEffect(Hints)
 
-const fromRow = (row: Row): StoredChannel => {
-	const stored = decodeHints(row.hints)
-	const kind = decodeKind(row.kind)
-	return {
-		id: ChannelsApi.ChannelId.make(row.id),
-		kind,
-		name: row.name,
-		bot: BotsApi.BotId.make(row.bot),
-		actor: row.actor,
-		enabled: row.enabled,
-		linkPath: row.linkPath,
-		credentials: credentialsView(kind, stored.hints, stored.plain),
-		version: row.version,
-		createdAt: row.createdAt,
-		updatedAt: row.updatedAt,
-	}
-}
+/**
+ * Reads a value that OpenBot stored. A bad value is logged here. The caller only
+ * learns that Channels are unavailable.
+ */
+const readStored = <A>(effect: Effect.Effect<A, Schema.SchemaError>) =>
+	effect.pipe(
+		Failures.replace("A stored Channel has a bad value.", () =>
+			ChannelsApi.ChannelsUnavailable.make({}),
+		),
+	)
+
+const fromRow = (row: Row): Effect.Effect<StoredChannel, Failure> =>
+	Effect.gen(function* () {
+		const stored = yield* readStored(decodeHints(row.hints))
+		const kind = yield* readStored(decodeKind(row.kind))
+		return {
+			id: ChannelsApi.ChannelId.make(row.id),
+			kind,
+			name: row.name,
+			bot: BotsApi.BotId.make(row.bot),
+			actor: row.actor,
+			enabled: row.enabled,
+			linkPath: row.linkPath,
+			credentials: credentialsView(kind, stored.hints, stored.plain),
+			version: row.version,
+			createdAt: row.createdAt,
+			updatedAt: row.updatedAt,
+		}
+	})
 
 type IdentityRow = typeof channelIdentities.$inferSelect
 const identityOf = (row: IdentityRow): ChannelsApi.ChannelIdentity => ({
@@ -312,8 +360,19 @@ export class Channels extends Context.Service<
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})))
+	const crypto = yield* Crypto.Crypto
+	/** A failure of the database or of the secrets is `ChannelsUnavailable`. The log keeps the cause. */
+	const stored = Failures.replace(
+		"OpenBot could not read or write a Channel.",
+		() => ChannelsApi.ChannelsUnavailable.make({}),
+	)
+	/** The SHA-256 of a link code, as hex. Only this hash is stored. */
+	const hashOf = (code: string) =>
+		crypto.digest("SHA-256", new TextEncoder().encode(code)).pipe(
+			// SHA-256 is always there on a working platform, so a failure here is a defect.
+			Effect.orDie,
+			Effect.map(Hex.encode),
+		)
 	const where = (organizationId: string, id: string) =>
 		and(eq(channels.organizationId, organizationId), eq(channels.id, id))
 	const row = (organizationId: string, id: string) =>
@@ -322,33 +381,23 @@ export const make = Effect.gen(function* () {
 		)
 	const seal = (id: string, credentials: Credentials) =>
 		Effect.gen(function* () {
-			const sealed = yield* stored(
-				secrets.seal(JSON.stringify(credentials), binding(id)),
-			)
-			return { credentials: sealed, hints: JSON.stringify(split(credentials)) }
+			// The types already check the credentials, so a failure to encode them is a defect.
+			const json = yield* Effect.orDie(encodeCredentials(credentials))
+			const hints = yield* Effect.orDie(encodeHints(split(credentials)))
+			const sealed = yield* stored(secrets.seal(json, binding(id)))
+			return { credentials: sealed, hints }
 		})
 	const open = (row: Row) =>
 		stored(secrets.open(row.credentials, binding(row.id))).pipe(
-			Effect.flatMap((json) =>
-				decodeCredentials(json).pipe(
-					Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})),
-				),
-			),
+			Effect.flatMap((json) => readStored(decodeCredentials(json))),
 		)
 	/** An open code of the organization, with its Channel. */
 	const openLink = (organizationId: string, code: string) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
+			const hash = yield* hashOf(code)
 			const link = (yield* stored(
-				db
-					.select()
-					.from(channelLinks)
-					.where(
-						eq(
-							channelLinks.codeHash,
-							createHash("sha256").update(code).digest("hex"),
-						),
-					),
+				db.select().from(channelLinks).where(eq(channelLinks.codeHash, hash)),
 			))[0]
 			if (
 				link === undefined ||
@@ -362,17 +411,19 @@ export const make = Effect.gen(function* () {
 				return yield* ChannelsApi.ChannelLinkInvalid.make({})
 			return { link, channel: channel.value, now }
 		})
-	const conversationOf = (
-		row: typeof channelConversations.$inferSelect,
-	): Conversation => ({
-		organizationId: row.organizationId,
-		channelId: row.channelId,
-		key: row.conversationKey,
-		kind: row.kind === "direct" ? "direct" : "group",
-		title: row.title,
-		chat: row.chat,
-		owner: row.owner,
-	})
+	const conversationOf = (row: typeof channelConversations.$inferSelect) =>
+		Effect.map(
+			readStored(decodeConversationKind(row.kind)),
+			(kind): Conversation => ({
+				organizationId: row.organizationId,
+				channelId: row.channelId,
+				key: row.conversationKey,
+				kind,
+				title: row.title,
+				chat: row.chat,
+				owner: row.owner,
+			}),
+		)
 	return Channels.of({
 		list: (organizationId) =>
 			stored(
@@ -381,22 +432,30 @@ export const make = Effect.gen(function* () {
 					.from(channels)
 					.where(eq(channels.organizationId, organizationId))
 					.orderBy(channels.createdAt),
-			).pipe(Effect.map((rows) => rows.map(fromRow))),
+			).pipe(Effect.flatMap((rows) => Effect.forEach(rows, fromRow))),
 		get: (organizationId, id) =>
-			row(organizationId, id).pipe(Effect.map(Option.map(fromRow))),
+			row(organizationId, id).pipe(
+				Effect.flatMap((found) =>
+					Effect.transposeOption(Option.map(found, fromRow)),
+				),
+			),
 		find: (id) =>
 			stored(db.select().from(channels).where(eq(channels.id, id))).pipe(
-				Effect.map((rows) =>
-					Option.map(Option.fromNullishOr(rows[0]), (row) => ({
-						organizationId: row.organizationId,
-						channel: fromRow(row),
-					})),
+				Effect.flatMap((rows) =>
+					Effect.transposeOption(
+						Option.map(Option.fromNullishOr(rows[0]), (row) =>
+							Effect.map(fromRow(row), (channel) => ({
+								organizationId: row.organizationId,
+								channel,
+							})),
+						),
+					),
 				),
 			),
 		create: (input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const id = "chn_" + randomBytes(16).toString("hex")
+				const id = "chn_" + Hex.encode(yield* randomBytes(crypto, 16))
 				const sealed = yield* seal(id, input.credentials)
 				const values = {
 					organizationId: input.organizationId,
@@ -413,7 +472,7 @@ export const make = Effect.gen(function* () {
 					updatedAt: now,
 				}
 				yield* stored(db.insert(channels).values(values))
-				return fromRow(values)
+				return yield* fromRow(values)
 			}),
 		update: (organizationId, id, expected, change) =>
 			Effect.gen(function* () {
@@ -453,7 +512,7 @@ export const make = Effect.gen(function* () {
 				)
 				if (changed.length === 0)
 					return yield* ChannelsApi.ChannelConflict.make({ version: expected })
-				return fromRow(values)
+				return yield* fromRow(values)
 			}),
 		remove: (organizationId, id) =>
 			stored(
@@ -481,7 +540,7 @@ export const make = Effect.gen(function* () {
 						),
 					)
 					.orderBy(channelIdentities.createdAt),
-			).pipe(Effect.map((rows) => rows.map(identityOf))),
+			).pipe(Effect.map((rows) => Arr.map(rows, identityOf))),
 		identitiesOf: (organizationId, userId) =>
 			stored(
 				db
@@ -494,7 +553,7 @@ export const make = Effect.gen(function* () {
 						),
 					)
 					.orderBy(channelIdentities.createdAt),
-			).pipe(Effect.map((rows) => rows.map(identityOf))),
+			).pipe(Effect.map((rows) => Arr.map(rows, identityOf))),
 		identity: (channelId, externalUserId) =>
 			stored(
 				db
@@ -548,10 +607,11 @@ export const make = Effect.gen(function* () {
 		createLink: (input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const code = "ocl_" + randomBytes(32).toString("base64url")
+				const code = "ocl_" + Base64Url.encode(yield* randomBytes(crypto, 32))
+				const hash = yield* hashOf(code)
 				yield* stored(
 					db.insert(channelLinks).values({
-						codeHash: createHash("sha256").update(code).digest("hex"),
+						codeHash: hash,
 						organizationId: input.organizationId,
 						channelId: input.channelId,
 						externalUserId: input.externalUserId,
@@ -563,16 +623,17 @@ export const make = Effect.gen(function* () {
 				return code
 			}),
 		readLink: (organizationId, code) =>
-			openLink(organizationId, code).pipe(
-				Effect.map(({ link, channel }) => ({
+			Effect.gen(function* () {
+				const { link, channel } = yield* openLink(organizationId, code)
+				return {
 					channel: ChannelsApi.ChannelId.make(channel.id),
 					channelName: channel.name,
-					kind: decodeKind(channel.kind),
+					kind: yield* readStored(decodeKind(channel.kind)),
 					externalUserId: link.externalUserId,
 					displayName: link.displayName,
 					expiresAt: link.expiresAt,
-				})),
-			),
+				}
+			}),
 		acceptLink: (organizationId, code, userId) =>
 			Effect.gen(function* () {
 				const { link, now } = yield* openLink(organizationId, code)
@@ -629,8 +690,10 @@ export const make = Effect.gen(function* () {
 						),
 					),
 			).pipe(
-				Effect.map((rows) =>
-					Option.map(Option.fromNullishOr(rows[0]), conversationOf),
+				Effect.flatMap((rows) =>
+					Effect.transposeOption(
+						Option.map(Option.fromNullishOr(rows[0]), conversationOf),
+					),
 				),
 			),
 		conversationOfChat: (chat) =>
@@ -640,8 +703,10 @@ export const make = Effect.gen(function* () {
 					.from(channelConversations)
 					.where(eq(channelConversations.chat, chat)),
 			).pipe(
-				Effect.map((rows) =>
-					Option.map(Option.fromNullishOr(rows[0]), conversationOf),
+				Effect.flatMap((rows) =>
+					Effect.transposeOption(
+						Option.map(Option.fromNullishOr(rows[0]), conversationOf),
+					),
 				),
 			),
 		conversations: (channelId) =>
@@ -651,7 +716,7 @@ export const make = Effect.gen(function* () {
 					.from(channelConversations)
 					.where(eq(channelConversations.channelId, channelId))
 					.orderBy(channelConversations.createdAt),
-			).pipe(Effect.map((rows) => rows.map(conversationOf))),
+			).pipe(Effect.flatMap((rows) => Effect.forEach(rows, conversationOf))),
 		saveConversation: (conversation) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis

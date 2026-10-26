@@ -1,4 +1,4 @@
-import { Effect, Match, Stream } from "effect"
+import { Array as Arr, Effect, Match, Stream } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 import type { Action } from "./Turn.ts"
 
@@ -8,10 +8,11 @@ export const make = (input: {
 	readonly callId: string
 }) => {
 	const parts = (prompt: Prompt.Prompt) => {
-		const selected = prompt.content.some((message) =>
+		const selected = Arr.some(prompt.content, (message) =>
 			Match.value(message).pipe(
 				Match.when({ role: "assistant" }, (message) =>
-					message.content.some(
+					Arr.some(
+						message.content,
 						(part) => part.type === "tool-call" && part.id === input.callId,
 					),
 				),

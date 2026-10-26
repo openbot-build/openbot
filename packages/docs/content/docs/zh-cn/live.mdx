@@ -106,18 +106,18 @@ socket.onmessage = (event) => {
 
 ### 来自 OpenBot
 
-| `type`                    | 含义                                                                                        |
-| ------------------------- | ------------------------------------------------------------------------------------------- |
-| `session.ready`           | 会话已打开。它有 `provider`、`model`、`capabilities`、`audio`、`turnDetection` 和 `voice`。 |
-| `input.speech.started`    | 这个人开始说话。                                                                            |
-| `input.speech.stopped`    | 这个人停止说话。                                                                            |
-| `input.transcript`        | 这个人说的话的文本。完整文本的 `final` 是 `true`。                                          |
-| `output.transcript.delta` | 回答文本的一部分。                                                                          |
-| `output.done`             | 回答项 `itemId` 没有更多声音或文本了。                                                      |
-| `output.stop`             | 这个人又开始说话。现在停止播放回答。                                                        |
-| `turn.started`            | 一个 Turn 开始了。它有 `turnId`。                                                           |
-| `turn.completed`          | Turn 结束了。`status` 是 `Completed`、`Failed` 或 `Interrupted`。                           |
-| `error`                   | 出了问题。它有 `code` 和 `message`。除非和模型的连接断开，会话保持打开。                    |
+| `type`                    | 含义                                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `session.ready`           | 会话已打开。它有 `provider`、`model`、`capabilities`、`audio`、`turnDetection` 和 `voice`。                |
+| `input.speech.started`    | 这个人开始说话。                                                                                           |
+| `input.speech.stopped`    | 这个人停止说话。                                                                                           |
+| `input.transcript`        | 这个人说的话的文本。完整文本的 `final` 是 `true`。                                                         |
+| `output.transcript.delta` | 回答文本的一部分。                                                                                         |
+| `output.done`             | 回答项 `itemId` 没有更多声音或文本了。                                                                     |
+| `output.stop`             | 这个人又开始说话。现在停止播放回答。                                                                       |
+| `turn.started`            | 一个 Turn 开始了。它有 `turnId`。                                                                          |
+| `turn.completed`          | Turn 结束了。`status` 是 `Completed`、`Failed` 或 `Interrupted`。                                          |
+| `error`                   | 出了问题。它有 `code` 和 `message`。除非和模型的连接断开，或者 OpenBot 无法再跟踪这个 Chat，会话保持打开。 |
 
 ### 来自客户端
 
@@ -158,7 +158,7 @@ socket.onmessage = (event) => {
 读取它，其他客户端通过 `GET /v1/chats/:chatId/wait`
 看到它。Live 模型的用量和其他模型调用一样进入[用量](/zh-cn/docs/usage)。声音 token 计入输入和输出的总数。
 
-会话打开时，OpenBot 把 Chat 最近的文本消息交给 Live 模型，这样它知道之前说过什么。
+会话打开时，OpenBot 把 Chat 最近的文本消息交给 Live 模型，这样它知道之前说过什么。OpenBot 读不到这些消息时，会话在没有它们的情况下开始。
 
 一个 live
 Chat 同一时间只能有一个 Live 会话。只有这个会话所在的服务器会开始这个 Chat 的 Turn。其他输入会在 Chat 中等待，直到有会话打开。来自
@@ -181,7 +181,7 @@ Chat 同一时间只能有一个 Live 会话。只有这个会话所在的服务
 2. 在 `capabilities` 中说明这个服务能做什么。OpenBot 从不发送后端不支持的输入。
 3. 把 `Live.Input` 的值映射为这个服务的消息，并把服务的消息映射为 `Live.Event`
    的值。
-4. 把后端加入 `packages/openbot/src/app/OpenBot.ts` 中的 `defaultLiveBackends`。
+4. 把后端加入 `packages/openbot/src/app/OpenBot.ts` 中的 `layerLiveBackends`。
 
 `packages/openbot/src/providers/openai/OpenAiRealtime.ts` 是 OpenAI Realtime
 API 的后端。可以把它当作例子。

@@ -1,5 +1,14 @@
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { Context, Effect, HashSet, Layer, Result } from "effect"
+import {
+	Array as Arr,
+	Context,
+	Effect,
+	HashSet,
+	Layer,
+	pipe,
+	Result,
+	String as Str,
+} from "effect"
 import { IpNetwork, NetAddress } from "effect/net"
 
 /**
@@ -19,10 +28,10 @@ const hostnamePattern =
 	/^(?=.{1,253}$)[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?(?:\.[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?)*$/
 
 const normalizeHostname = (hostname: string) =>
-	hostname.toLowerCase().replace(/\.$/, "")
+	pipe(hostname, Str.toLowerCase, Str.replace(/\.$/, ""))
 
 const parseAddress = (input: string) =>
-	NetAddress.ipFromString(input.replace(/^\[|\]$/g, ""))
+	NetAddress.ipFromString(pipe(input, Str.replace(/^\[|\]$/g, "")))
 
 const parseEntry = (
 	entry: string,
@@ -37,7 +46,7 @@ const parseEntry = (
 	const invalid = Result.fail(
 		`OPENBOT_OUTBOUND_ALLOW has an invalid entry "${entry}". Use an IP address, an IP range such as 10.0.0.0/8, or an exact host name.`,
 	)
-	if (entry.includes("/"))
+	if (pipe(entry, Str.includes("/")))
 		return Result.match(IpNetwork.fromString(entry), {
 			onFailure: () => invalid,
 			onSuccess: (network) =>
@@ -65,23 +74,24 @@ const parseEntry = (
 }
 
 /** Reads a comma-separated list. The first invalid entry is the failure message. */
-export const parse = (input: string): Result.Result<Allow, string> => {
-	let allow = empty
-	for (const raw of input.split(",")) {
-		const entry = raw.trim()
-		if (entry === "") continue
-		const parsed = parseEntry(entry)
-		if (Result.isFailure(parsed)) return Result.fail(parsed.failure)
-		allow =
-			parsed.success._tag === "Hostname"
-				? {
-						...allow,
-						hostnames: HashSet.add(allow.hostnames, parsed.success.hostname),
-					}
-				: { ...allow, networks: [...allow.networks, parsed.success.network] }
-	}
-	return Result.succeed(allow)
-}
+export const parse = (input: string): Result.Result<Allow, string> =>
+	pipe(
+		Str.split(input, ","),
+		Arr.map(Str.trim),
+		Arr.filter(Str.isNonEmpty),
+		Arr.map(parseEntry),
+		Result.all,
+		Result.map(
+			Arr.reduce(empty, (allow, entry): Allow =>
+				entry._tag === "Hostname"
+					? {
+							...allow,
+							hostnames: HashSet.add(allow.hostnames, entry.hostname),
+						}
+					: { ...allow, networks: [...allow.networks, entry.network] },
+			),
+		),
+	)
 
 /**
  * Says if a connection may use `address`, which a DNS lookup of `hostname`
@@ -95,7 +105,7 @@ export const allowAddress =
 		const parsed = parseAddress(address)
 		if (Result.isFailure(parsed)) return false
 		const canonical = NetAddress.toCanonical(parsed.success)
-		return allow.networks.some((network) =>
+		return Arr.some(allow.networks, (network) =>
 			IpNetwork.contains(network, canonical),
 		)
 	}

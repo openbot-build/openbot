@@ -1,4 +1,12 @@
-import { HashMap, HashSet, Match, Schema } from "effect"
+import {
+	Array as Arr,
+	HashMap,
+	HashSet,
+	Match,
+	Option,
+	Schema,
+	pipe,
+} from "effect"
 import { Prompt } from "effect/ai"
 import type * as Item from "./Item.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
@@ -16,7 +24,8 @@ export const Conversation = Schema.Struct({
 	closed: Schema.Boolean,
 })
 export type Conversation = typeof Conversation.Type
-const opaque = Schema.declare(
+/** Plugin data that the core keeps as it is. */
+export const Opaque = Schema.declare(
 	(_value: unknown): _value is unknown => true,
 ).annotate({ toCodecJson: () => undefined, toJsonSchema: () => ({}) })
 /** The state of a Chat: the conversation and the data of the plugins with state scope. */
@@ -25,7 +34,7 @@ export const Value = <Fields extends Schema.Struct.Fields>(
 ) =>
 	Schema.StructWithRest(
 		Schema.Struct({ ...namespaces, conversation: Conversation }),
-		[Schema.Record(Schema.String, opaque)],
+		[Schema.Record(Schema.String, Opaque)],
 	)
 export type Value<P = {}> = typeof Conversation extends never
 	? never
@@ -41,42 +50,37 @@ export const initial = <P>(plugins: P): Value<P> => ({
 
 /** All the messages of some Items, in order. */
 export const promptOf = (items: ReadonlyArray<Item.Entry>): Prompt.Prompt =>
-	items.reduce(
-		(prompt, entry) => Prompt.concat(prompt, entry.content),
-		Prompt.empty,
+	Arr.reduce(items, Prompt.empty, (prompt, entry) =>
+		Prompt.concat(prompt, entry.content),
 	)
 
 /** Client tool calls in some Items that have no tool result yet, by call ID. */
 export const unansweredCalls = (
 	items: ReadonlyArray<Item.Entry>,
 ): HashMap.HashMap<string, Prompt.ToolCallPart> =>
-	items
-		.flatMap((entry) => entry.content.content)
-		.reduce(
-			(calls, message) =>
-				Match.value(message).pipe(
-					Match.when({ role: "assistant" }, (message) =>
-						message.content.reduce(
-							(calls, part) =>
-								part.type === "tool-call" && !part.providerExecuted
-									? HashMap.set(calls, part.id, part)
-									: calls,
-							calls,
-						),
+	pipe(
+		items,
+		Arr.flatMap((entry) => entry.content.content),
+		Arr.reduce(HashMap.empty<string, Prompt.ToolCallPart>(), (calls, message) =>
+			Match.value(message).pipe(
+				Match.when({ role: "assistant" }, (message) =>
+					Arr.reduce(message.content, calls, (calls, part) =>
+						part.type === "tool-call" && !part.providerExecuted
+							? HashMap.set(calls, part.id, part)
+							: calls,
 					),
-					Match.when({ role: "tool" }, (message) =>
-						message.content.reduce(
-							(calls, part) =>
-								part.type === "tool-result"
-									? HashMap.remove(calls, part.id)
-									: calls,
-							calls,
-						),
-					),
-					Match.orElse(() => calls),
 				),
-			HashMap.empty<string, Prompt.ToolCallPart>(),
-		)
+				Match.when({ role: "tool" }, (message) =>
+					Arr.reduce(message.content, calls, (calls, part) =>
+						part.type === "tool-result"
+							? HashMap.remove(calls, part.id)
+							: calls,
+					),
+				),
+				Match.orElse(() => calls),
+			),
+		),
+	)
 
 /** A tool approval request in some Items that has no answer and no result yet. */
 export interface OpenApproval {
@@ -89,34 +93,36 @@ export const openApprovals = (
 	prompt: Prompt.Prompt,
 ): ReadonlyArray<OpenApproval> => {
 	const messages = prompt.content
-	const assistant = messages.flatMap((message) =>
+	const assistant = Arr.flatMap(messages, (message) =>
 		message.role === "assistant" ? message.content : [],
 	)
-	const tool = messages.flatMap((message) =>
+	const tool = Arr.flatMap(messages, (message) =>
 		message.role === "tool" ? message.content : [],
 	)
 	const answered = HashSet.fromIterable(
-		tool.flatMap((part) =>
+		Arr.flatMap(tool, (part) =>
 			part.type === "tool-approval-response" ? [part.approvalId] : [],
 		),
 	)
 	const results = HashSet.fromIterable(
-		tool.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
+		Arr.flatMap(tool, (part) => (part.type === "tool-result" ? [part.id] : [])),
 	)
-	return assistant.flatMap((part) => {
+	return Arr.flatMap(assistant, (part) => {
 		if (
 			part.type !== "tool-approval-request" ||
 			HashSet.has(answered, part.approvalId) ||
 			HashSet.has(results, part.toolCallId)
 		)
 			return []
-		const toolCall = assistant.find(
-			(call): call is Prompt.ToolCallPart =>
-				call.type === "tool-call" && call.id === part.toolCallId,
+		return pipe(
+			Arr.findFirst(
+				assistant,
+				(call): call is Prompt.ToolCallPart =>
+					call.type === "tool-call" && call.id === part.toolCallId,
+			),
+			Option.map((toolCall) => ({ approvalId: part.approvalId, toolCall })),
+			Option.toArray,
 		)
-		return toolCall === undefined
-			? []
-			: [{ approvalId: part.approvalId, toolCall }]
 	})
 }
 
@@ -130,36 +136,38 @@ export const withoutTool = (
 	tools: ReadonlyArray<string>,
 ): ReadonlyArray<Prompt.ToolCallPart> => {
 	const messages = prompt.content
-	const assistant = messages.flatMap((message) =>
+	const assistant = Arr.flatMap(messages, (message) =>
 		message.role === "assistant" ? message.content : [],
 	)
-	const tool = messages.flatMap((message) =>
+	const tool = Arr.flatMap(messages, (message) =>
 		message.role === "tool" ? message.content : [],
 	)
 	const allowed = HashSet.fromIterable(
-		tool.flatMap((part) =>
+		Arr.flatMap(tool, (part) =>
 			part.type === "tool-approval-response" && part.approved
 				? [part.approvalId]
 				: [],
 		),
 	)
 	const results = HashSet.fromIterable(
-		tool.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
+		Arr.flatMap(tool, (part) => (part.type === "tool-result" ? [part.id] : [])),
 	)
-	return assistant.flatMap((part) => {
+	return Arr.flatMap(assistant, (part) => {
 		if (
 			part.type !== "tool-approval-request" ||
 			!HashSet.has(allowed, part.approvalId) ||
 			HashSet.has(results, part.toolCallId)
 		)
 			return []
-		const toolCall = assistant.find(
-			(call): call is Prompt.ToolCallPart =>
-				call.type === "tool-call" && call.id === part.toolCallId,
+		return pipe(
+			Arr.findFirst(
+				assistant,
+				(call): call is Prompt.ToolCallPart =>
+					call.type === "tool-call" && call.id === part.toolCallId,
+			),
+			Option.filter((toolCall) => !tools.includes(toolCall.name)),
+			Option.toArray,
 		)
-		return toolCall === undefined || tools.includes(toolCall.name)
-			? []
-			: [toolCall]
 	})
 }
 
@@ -170,9 +178,9 @@ export const withoutTool = (
  */
 export const resultsFirst = (prompt: Prompt.Prompt): Prompt.Prompt => {
 	const calls = HashSet.fromIterable(
-		prompt.content.flatMap((message) =>
+		Arr.flatMap(prompt.content, (message) =>
 			message.role === "assistant"
-				? message.content.flatMap((part) =>
+				? Arr.flatMap(message.content, (part) =>
 						part.type === "tool-call" ? [part.id] : [],
 					)
 				: [],
@@ -180,14 +188,15 @@ export const resultsFirst = (prompt: Prompt.Prompt): Prompt.Prompt => {
 	)
 	const earlier = (part: Prompt.ToolMessagePart) =>
 		part.type === "tool-result" && !HashSet.has(calls, part.id)
-	const early = prompt.content.flatMap((message) =>
-		message.role === "tool" ? message.content.filter(earlier) : [],
+	const early = Arr.flatMap(prompt.content, (message) =>
+		message.role === "tool" ? Arr.filter(message.content, earlier) : [],
 	)
 	if (early.length === 0) return prompt
-	const rest = prompt.content.flatMap(
+	const rest = Arr.flatMap(
+		prompt.content,
 		(message): ReadonlyArray<Prompt.Message> => {
 			if (message.role !== "tool") return [message]
-			const kept = message.content.filter((part) => !earlier(part))
+			const kept = Arr.filter(message.content, (part) => !earlier(part))
 			return kept.length === 0
 				? []
 				: [Prompt.makeMessage("tool", { content: kept })]

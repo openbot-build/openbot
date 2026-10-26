@@ -1,6 +1,18 @@
-import { createDecipheriv, createHash } from "node:crypto"
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API for the AES cipher of Lark events.
+import { createDecipheriv } from "node:crypto"
 import type { ChannelsApi } from "@openbot-build/api"
-import { Clock, Effect, Option, Predicate, Ref } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Crypto,
+	Effect,
+	Option,
+	pipe,
+	Predicate,
+	String as Str,
+	SynchronizedRef,
+} from "effect"
+import { Hex } from "effect/encoding"
 import { HttpClientRequest } from "effect/http"
 import {
 	Channel,
@@ -26,21 +38,22 @@ const origins: Record<ChannelsApi.LarkDomain, string> = {
 	lark: "https://open.larksuite.com",
 }
 
+/** A platform without SHA-256 cannot check Lark events, so a failure here is a defect. */
+const sha256 = (crypto: Crypto.Crypto, value: string) =>
+	crypto.digest("SHA-256", new TextEncoder().encode(value)).pipe(Effect.orDie)
+
 /**
  * Lark encrypts each event with AES-256-CBC. The key is the SHA-256 of the encrypt key,
  * and the first 16 bytes of the data are the IV.
  */
-const decrypt = Option.liftThrowable((encryptKey: string, data: string) => {
+const decrypt = Option.liftThrowable((key: Uint8Array, data: string) => {
 	const bytes = Buffer.from(data, "base64")
-	const key = createHash("sha256").update(encryptKey).digest()
 	const decipher = createDecipheriv("aes-256-cbc", key, bytes.subarray(0, 16))
 	return Buffer.concat([
 		decipher.update(bytes.subarray(16)),
 		decipher.final(),
 	]).toString("utf8")
 })
-
-/** Lark puts `@_user_1` in the text for each mention. The Bot does not need them. */
 
 /** Every message is a card, because Lark can only change a card after it sends it. */
 const card = (message: OutboundMessage) => ({
@@ -52,7 +65,7 @@ const card = (message: OutboundMessage) => ({
 			: [
 					{
 						tag: "action",
-						actions: message.buttons.map((button) => ({
+						actions: Arr.map(message.buttons, (button) => ({
 							tag: "button",
 							text: { tag: "plain_text", content: button.label },
 							type: button.style ?? "default",
@@ -68,15 +81,18 @@ const card = (message: OutboundMessage) => ({
  * With an encrypt key, Lark signs each request with
  * `SHA-256(timestamp + nonce + encrypt key + body)`, and each event has the verification token.
  */
-const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
+const read = (
+	secrets: Secrets,
+	crypto: Crypto.Crypto,
+	request: Parameters<Channel["receive"]>[0],
+) =>
 	Effect.gen(function* () {
 		const outer = parse(request.body)
 		const encrypted = text(outer, "encrypt")
 		if (encrypted === undefined)
 			return yield* ChannelDenied.make({ reason: "the event is not encrypted" })
-		const body = parse(
-			Option.getOrElse(decrypt(secrets.encryptKey, encrypted), () => ""),
-		)
+		const key = yield* sha256(crypto, secrets.encryptKey)
+		const body = parse(Option.getOrElse(decrypt(key, encrypted), () => ""))
 		if (body === undefined)
 			return yield* ChannelDenied.make({ reason: "the event does not decrypt" })
 		// The check of the request URL has the token, but no signature.
@@ -95,9 +111,12 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 			signature === undefined
 		)
 			return yield* ChannelDenied.make({ reason: "missing or old signature" })
-		const expected = createHash("sha256")
-			.update(timestamp + nonce + secrets.encryptKey + request.body)
-			.digest("hex")
+		const expected = Hex.encode(
+			yield* sha256(
+				crypto,
+				timestamp + nonce + secrets.encryptKey + request.body,
+			),
+		)
 		if (!sameSecret(signature, expected))
 			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		const header = field(body, "header")
@@ -129,7 +148,8 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 							eventId,
 							conversation: { key: chat, kind: direct ? "direct" : "group" },
 							sender: { externalId: sender, displayName: sender },
-							text: content.replace(/@_user_\d+/g, "").trim(),
+							// Lark puts `@_user_1` in the text for each mention. The Bot does not need them.
+							text: pipe(content, Str.replace(/@_user_\d+/g, ""), Str.trim),
 							// By default Lark only sends the group messages that mention the bot.
 							mentioned: true,
 						}),
@@ -160,38 +180,50 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 		}
 	})
 
-export const make = (secrets: Secrets, call: Call): Effect.Effect<Channel> =>
+export const make = (
+	secrets: Secrets,
+	call: Call,
+): Effect.Effect<Channel, never, Crypto.Crypto> =>
 	Effect.gen(function* () {
+		const crypto = yield* Crypto.Crypto
 		const origin = origins[secrets.domain]
 		// The tenant token lasts about two hours. One token serves every message until then.
-		const cached = yield* Ref.make<
+		// Concurrent callers wait for one request of a new token, and do not each send one.
+		const cached = yield* SynchronizedRef.make<
 			{ readonly token: string; readonly until: number } | undefined
 		>(undefined)
-		const token = Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			const current = yield* Ref.get(cached)
-			if (current !== undefined && current.until > now) return current.token
-			const reply = yield* call(
-				HttpClientRequest.post(
-					origin + "/open-apis/auth/v3/tenant_access_token/internal",
-				).pipe(
-					HttpClientRequest.bodyJsonUnsafe({
-						app_id: secrets.appId,
-						app_secret: secrets.appSecret,
-					}),
-				),
-			)
-			const value = text(reply.json, "tenant_access_token")
-			const expire = field(reply.json, "expire")
-			if (reply.status !== 200 || value === undefined)
-				return yield* failed(reply, "Lark did not give a tenant token")
-			yield* Ref.set(cached, {
-				token: value,
-				until:
-					now + ((Predicate.isNumber(expire) ? expire : 3600) - 300) * 1000,
-			})
-			return value
-		})
+		const token = SynchronizedRef.modifyEffect(cached, (current) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				if (current !== undefined && current.until > now)
+					return [current.token, current] as const
+				const reply = yield* call(
+					HttpClientRequest.post(
+						origin + "/open-apis/auth/v3/tenant_access_token/internal",
+					).pipe(
+						HttpClientRequest.bodyJsonUnsafe({
+							app_id: secrets.appId,
+							app_secret: secrets.appSecret,
+						}),
+					),
+				)
+				const value = text(reply.json, "tenant_access_token")
+				const expire = field(reply.json, "expire")
+				if (reply.status !== 200 || value === undefined)
+					return yield* failed(
+						reply,
+						`Lark did not give a tenant token: ${text(reply.json, "msg") ?? reply.status}`,
+					)
+				return [
+					value,
+					{
+						token: value,
+						until:
+							now + ((Predicate.isNumber(expire) ? expire : 3600) - 300) * 1000,
+					},
+				] as const
+			}),
+		)
 		const request = (
 			build: HttpClientRequest.HttpClientRequest,
 			what: string,
@@ -236,7 +268,7 @@ export const make = (secrets: Secrets, call: Call): Effect.Effect<Channel> =>
 		return new Channel({
 			kind: "lark",
 			features: { edit: true, maxLength: 20_000, private: false },
-			receive: (input) => read(secrets, input),
+			receive: (input) => read(secrets, crypto, input),
 			send: (target, message) =>
 				target._tag === "Conversation"
 					? create("chat_id", target.conversation, message)

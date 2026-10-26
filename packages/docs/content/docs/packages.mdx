@@ -87,6 +87,19 @@ the running Turn when the input has the same `author`, and waits in the inbox
 otherwise. It returns `started`, `steered` or `queued`. After each Turn, the
 next input in the inbox starts the next Turn.
 
+Each Turn runs in its own fiber, and the runtime owns that fiber. A fiber is a
+light thread of Effect. When the Scope of the runtime closes, every running Turn
+stops and ends as `Interrupted`. This is also true for a Turn that a caller
+reads with `stream` or `execute`. Input that waits in the inbox stays there, and
+a new runtime starts it with `drain`. When a caller of `stream` stops reading
+early, its Turn stops too.
+
+`events` gives the events of one Chat. With `after`, it first gives the recent
+events after that revision, so a new subscriber can catch up. The runtime keeps
+the last 64 events for this. A slow subscriber does not make memory grow: when
+1024 events wait for it, each new event pushes out the oldest one. So such a
+subscriber can miss events, but it always gets the newest ones.
+
 ### Approvals
 
 A tool with `needsApproval` asks before each call. The runtime then asks the

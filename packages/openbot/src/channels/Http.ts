@@ -32,11 +32,18 @@ export const fromClient =
 					})),
 				),
 			),
-			Effect.mapError((cause) =>
-				ChannelDeliveryFailed.make({
-					message: `The platform could not be reached: ${String(cause)}`,
-					retry: true,
-				}),
+			Effect.catchTag("HttpClientError", (error) =>
+				Effect.fail(
+					ChannelDeliveryFailed.make({
+						// The address of some platforms holds a secret, such as the bot token of
+						// Telegram. The text of an HttpClientError has the full address, so only
+						// the kind of failure and the host go in the message, and only the cause
+						// of the reason (such as the fetch failure) goes in the cause.
+						message: `The platform could not be reached: ${error.reason._tag} (${URL.parse(error.request.url)?.host ?? "unknown host"})`,
+						retry: true,
+						cause: error.reason.cause,
+					}),
+				),
 			),
 			Effect.timeoutOrElse({
 				duration: timeoutMs,
@@ -75,12 +82,25 @@ export const fromNetwork =
 		).pipe(
 			// Each custom Channel has its own guarded network, made for its endpoint.
 			Effect.provideContext(network),
-			Effect.mapError((cause) =>
-				ChannelDeliveryFailed.make({
-					message: `The platform could not be reached: ${String(cause)}`,
-					retry: true,
-				}),
-			),
+			Effect.catchTags({
+				NetworkError: (error) =>
+					Effect.fail(
+						ChannelDeliveryFailed.make({
+							message: `The custom Channel could not be reached: ${error.reason}: ${error.message}`,
+							// A blocked address, a redirect or an unknown encoding is the same on the next try.
+							retry: error.reason === "Transport" || error.reason === "Timeout",
+							cause: error,
+						}),
+					),
+				SchemaError: (error) =>
+					Effect.fail(
+						ChannelDeliveryFailed.make({
+							message: "The address of the custom Channel is not valid",
+							retry: false,
+							cause: error,
+						}),
+					),
+			}),
 			Effect.timeoutOrElse({
 				duration: timeoutMs,
 				orElse: () =>

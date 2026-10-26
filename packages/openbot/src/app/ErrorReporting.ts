@@ -1,7 +1,11 @@
-import { randomUUID } from "node:crypto"
-import { Cause, Effect, Match, Option } from "effect"
+import { Cause, Crypto, Effect, Match, Option, type Types } from "effect"
 import type { Turn } from "@openbot-build/core"
-import { HttpEffect, HttpRouter, HttpServerRequest } from "effect/http"
+import {
+	HttpEffect,
+	HttpRouter,
+	HttpServerRequest,
+	type HttpServerResponse,
+} from "effect/http"
 
 interface Failure {
 	readonly source: "http" | "turn" | "startup"
@@ -41,50 +45,72 @@ export const failedTurn = (turn: Turn.Record): Effect.Effect<void> =>
 		Match.orElse(() => Effect.void),
 	)
 
-/** Watch both failed Effects and server errors that are already mapped to responses. */
+/**
+ * Watch both failed Effects and server errors that are already mapped to responses.
+ * It makes the request ids with the `Crypto` service of the program. Every log
+ * of the request carries the request id of its error log, so the inside
+ * failures that a request logs can be found from its error log.
+ */
 export const layerHttp = HttpRouter.middleware(
-	(httpEffect) =>
-		Effect.gen(function* () {
-			const request = yield* HttpServerRequest.HttpServerRequest
-			const requestId = randomUUID()
-			let reported = false
-			let failure: Cause.Cause<unknown> | undefined
-			const report = Effect.fnUntraced(function* (
-				status: number,
-				cause?: Cause.Cause<unknown>,
-			) {
-				if (
-					reported ||
-					status < 500 ||
-					(cause !== undefined && Cause.hasInterruptsOnly(cause))
-				)
-					return
-				reported = true
-				const route = yield* Effect.serviceOption(HttpRouter.RouteContext)
-				yield* record({
-					source: "http",
-					operation: "http.request",
-					requestId,
-					method: request.method,
-					route: Option.match(route, {
-						onNone: () => "/unknown",
-						onSome: ({ route }) => route.path,
-					}),
-					status,
-					...(cause === undefined ? { errorType: `Http${status}` } : { cause }),
+	Effect.gen(function* () {
+		const crypto = yield* Crypto.Crypto
+		return (
+			httpEffect: Effect.Effect<
+				HttpServerResponse.HttpServerResponse,
+				Types.unhandled
+			>,
+		) =>
+			Effect.gen(function* () {
+				const request = yield* HttpServerRequest.HttpServerRequest
+				// A platform without secure random numbers is broken, so this failure is a defect.
+				const requestId = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
+				// The scoped form changes the context of the request in place, the
+				// same way the router adds the route context. `Effect.annotateLogs`
+				// puts the old context back when the handler ends, and that also
+				// takes away the route context that `report` reads.
+				yield* Effect.annotateLogsScoped({ requestId })
+				let reported = false
+				let failure: Cause.Cause<unknown> | undefined
+				const report = Effect.fnUntraced(function* (
+					status: number,
+					cause?: Cause.Cause<unknown>,
+				) {
+					if (
+						reported ||
+						status < 500 ||
+						(cause !== undefined && Cause.hasInterruptsOnly(cause))
+					)
+						return
+					reported = true
+					// A request that matches no route has no route context.
+					const route = yield* Effect.serviceOption(HttpRouter.RouteContext)
+					yield* record({
+						source: "http",
+						operation: "http.request",
+						requestId,
+						method: request.method,
+						route: Option.match(route, {
+							onNone: () => "/unknown",
+							onSome: ({ route }) => route.path,
+						}),
+						status,
+						...(cause === undefined
+							? { errorType: `Http${status}` }
+							: { cause }),
+					})
 				})
+				return yield* httpEffect.pipe(
+					Effect.tapCause((cause) =>
+						Effect.sync(() => {
+							failure = cause
+						}),
+					),
+					HttpEffect.withPreResponseHandler((_, response) =>
+						report(response.status, failure).pipe(Effect.as(response)),
+					),
+				)
 			})
-			return yield* httpEffect.pipe(
-				Effect.tapCause((cause) =>
-					Effect.sync(() => {
-						failure = cause
-					}),
-				),
-				HttpEffect.withPreResponseHandler((_, response) =>
-					report(response.status, failure).pipe(Effect.as(response)),
-				),
-			)
-		}),
+	}),
 	{ global: true },
 )
 

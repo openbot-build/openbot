@@ -5,12 +5,24 @@ import {
 	Index,
 	Indexing,
 } from "@openbot-build/protocol"
-import { Clock, Context, Effect, HashMap, Layer, Match, Option } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Clock,
+	Context,
+	Effect,
+	HashMap,
+	Layer,
+	Match,
+	Option,
+	pipe,
+} from "effect"
 import type { PgClient } from "@effect/sql-pg"
 import { discover } from "./Discovery.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as IndexStore from "./IndexStore.ts"
 import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 export class AppInspections extends Context.Service<
 	AppInspections,
@@ -38,10 +50,12 @@ export const make: Effect.Effect<
 		inspect: (input) =>
 			Effect.gen(function* () {
 				yield* CatalogDiscovery.inputLink(input).pipe(
-					Effect.mapError(() =>
-						Api.DeveloperInputInvalid.make({
-							message: "Enter a domain or an HTTPS link without credentials.",
-						}),
+					Effect.catchTag(["InvalidLink", "SchemaError"], () =>
+						Effect.fail(
+							Api.DeveloperInputInvalid.make({
+								message: "Enter a domain or an HTTPS link without credentials.",
+							}),
+						),
 					),
 				)
 				const checkedAt = yield* Clock.currentTimeMillis
@@ -67,19 +81,21 @@ export const make: Effect.Effect<
 									},
 									{ name: "Eligibility", source: input, status: "NotChecked" },
 								],
-								issues: (failure.issues.length === 0
-									? [{ url: input, reason: failure.reason }]
-									: failure.issues
-								).map((issue) => ({
-									code: failure.reason,
-									impacts: ["discovery", "indexing"] as const,
-									stage: "publication" as const,
-									severity: "blocking" as const,
-									source: issue.url,
-									message: issue.reason,
-									repair:
-										"Check the publication address and publish a valid public AI Catalog and Server Card, then inspect again.",
-								})),
+								issues: Arr.map(
+									failure.issues.length === 0
+										? [{ url: input, reason: failure.reason }]
+										: failure.issues,
+									(issue) => ({
+										code: failure.reason,
+										impacts: ["discovery", "indexing"] as const,
+										stage: "publication" as const,
+										severity: "blocking" as const,
+										source: issue.url,
+										message: issue.reason,
+										repair:
+											"Check the publication address and publish a valid public AI Catalog and Server Card, then inspect again.",
+									}),
+								),
 							}),
 						Success: ({ success }) =>
 							Effect.gen(function* () {
@@ -96,7 +112,16 @@ export const make: Effect.Effect<
 											const stored = yield* Effect.all({
 												entry: index.get(candidate.cardUrl),
 												checks: IndexStore.checks(db, namespace),
-											}).pipe(Effect.result)
+											}).pipe(
+												// The report then says "Unknown", so the log keeps the reason.
+												Effect.tapCauseIf(Cause.hasFails, (cause) =>
+													Effect.logWarning(
+														"Public Index state could not be read",
+														cause,
+													),
+												),
+												Effect.result,
+											)
 											const eligibility = yield* inspection
 												.inspect(
 													yield* Indexing.Input.decode({
@@ -153,11 +178,12 @@ export const make: Effect.Effect<
 									{ concurrency: 4 },
 								)
 								const issues: ReadonlyArray<Api.Issue> = [
-									...apps
-										.filter(
+									...pipe(
+										apps,
+										Arr.filter(
 											(app) => (app.candidate.card.icons?.length ?? 0) === 0,
-										)
-										.map((app): Api.Issue => ({
+										),
+										Arr.map((app): Api.Issue => ({
 											code: "MissingIcon",
 											fieldPath: "icons",
 											impacts: ["discovery"],
@@ -168,8 +194,9 @@ export const make: Effect.Effect<
 											repair:
 												"Add an optional public icon to make the App easy to recognize.",
 										})),
+									),
 
-									...success.issues.map((issue) => ({
+									...Arr.map(success.issues, (issue) => ({
 										code: "InvalidCandidate",
 										impacts: ["discovery", "connection", "indexing"] as const,
 										stage: "card" as const,
@@ -178,7 +205,7 @@ export const make: Effect.Effect<
 										message: issue.reason,
 										repair: "Repair this Card declaration and inspect again.",
 									})),
-									...apps.flatMap<Api.Issue>((app) =>
+									...Arr.flatMap(apps, (app): ReadonlyArray<Api.Issue> =>
 										Match.value(app.eligibility).pipe(
 											Match.tagsExhaustive({
 												Eligible: () => [],
@@ -228,17 +255,21 @@ export const make: Effect.Effect<
 											status: "Passed" as const,
 											checkedAt,
 										},
-										...apps.flatMap((app) => app.eligibility.stages),
+										...Arr.flatMap(apps, (app) => app.eligibility.stages),
 									],
 								}
 							}),
 					}),
 				)
 			}).pipe(
-				Effect.mapError(() =>
-					Api.DeveloperInputInvalid.make({
-						message: "The publication input could not be checked.",
-					}),
+				// A Card that is not a valid indexing input is a problem of the publication.
+				Failures.replaceTag(
+					"IndexingError",
+					"A discovered Card URL is not a valid indexing input",
+					() =>
+						Api.DeveloperInputInvalid.make({
+							message: "The publication input could not be checked.",
+						}),
 				),
 			),
 	})

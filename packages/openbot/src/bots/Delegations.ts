@@ -1,7 +1,18 @@
-import { randomUUID } from "node:crypto"
 import { Chat, Turn } from "@openbot-build/core"
 import { BotsApi, DelegationsApi } from "@openbot-build/api"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Order,
+	pipe,
+	Schema,
+} from "effect"
+import { Hex } from "effect/encoding"
 import { hash } from "../capabilities/Capability.ts"
 import { Chain } from "../chats/ChatHost.ts"
 import { BotRecords } from "./BotRecords.ts"
@@ -44,6 +55,8 @@ export interface CreateInput {
 	readonly status: "authorizing" | "queued" | "running" | "failed"
 	readonly request?: string
 	readonly result?: string
+	/** Since when work that is made as running runs. */
+	readonly runningSince?: number
 }
 
 /** The records of work that one Bot gave to a Bot. */
@@ -128,18 +141,23 @@ export const view = (stored: Stored, now: number): Delegation =>
 		? stored.delegation
 		: { ...stored.delegation, usage: usageOf(stored, now) }
 
+const isOpenStatus = Schema.is(DelegationsApi.OpenDelegationStatus)
+
 /** True when the work has not ended yet. */
-export const isOpen = (stored: Stored) =>
-	DelegationsApi.OpenDelegationStatus.literals.some(
-		(status) => status === stored.delegation.status,
-	)
+export const isOpen = (stored: Stored) => isOpenStatus(stored.delegation.status)
+
+const byCreation = Order.mapInput(
+	Order.Number,
+	(stored: Stored) => stored.delegation.createdAt,
+)
 
 export const make: Effect.Effect<
 	typeof Delegations.Service,
 	never,
-	BotRecords
+	BotRecords | Crypto.Crypto
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
+	const crypto = yield* Crypto.Crypto
 	const delegations = records.collection(
 		"delegation",
 		Stored,
@@ -160,14 +178,21 @@ export const make: Effect.Effect<
 			.pipe(Effect.as(stored))
 	const idFor = (input: CreateInput) =>
 		input.parent.toolCallId === undefined
-			? "dlg_" + randomUUID().replaceAll("-", "")
-			: "dlg_" + hash([input.parent.chat, input.parent.toolCallId])
+			? crypto.randomUUIDv4({ format: "bytes" }).pipe(
+					// A platform without secure random numbers is broken.
+					Effect.orDie,
+					Effect.map((uuid) => "dlg_" + Hex.encode(uuid)),
+				)
+			: Effect.map(
+					hash(crypto, [input.parent.chat, input.parent.toolCallId]),
+					(value) => "dlg_" + value,
+				)
 	return Delegations.of({
 		create: (organizationId, input) =>
 			records.transaction(
 				"delegation:" + organizationId + ":" + input.parent.chat,
 				Effect.gen(function* () {
-					const id = idFor(input)
+					const id = yield* idFor(input)
 					const existing = yield* delegations.find(organizationId, id)
 					if (Option.isSome(existing)) return existing.value
 					const now = yield* Clock.currentTimeMillis
@@ -176,6 +201,9 @@ export const make: Effect.Effect<
 						author: input.author,
 						chain: input.chain,
 						...(input.request === undefined ? {} : { request: input.request }),
+						...(input.runningSince === undefined
+							? {}
+							: { runningSince: input.runningSince }),
 						delegation: {
 							id,
 							parent: input.parent,
@@ -201,32 +229,27 @@ export const make: Effect.Effect<
 		forChat: (organizationId, chat) =>
 			delegations.list(organizationId, { scope: chat }),
 		forChild: (organizationId, userId, chat) =>
-			delegations
-				.list(organizationId, { owner: userId })
-				.pipe(
-					Effect.map((list) =>
-						list
-							.filter((stored) => stored.delegation.chat === chat)
-							.sort((a, b) => a.delegation.createdAt - b.delegation.createdAt),
+			delegations.list(organizationId, { owner: userId }).pipe(
+				Effect.map((list) =>
+					pipe(
+						list,
+						Arr.filter((stored) => stored.delegation.chat === chat),
+						Arr.sort(byCreation),
 					),
 				),
+			),
 		forRequest: (organizationId, chat, request) =>
 			delegations
 				.list(organizationId, { scope: chat })
 				.pipe(
 					Effect.map((list) =>
-						Option.fromNullishOr(
-							list.find((stored) => stored.request === request),
-						),
+						Arr.findFirst(list, (stored) => stored.request === request),
 					),
 				),
-		open: Effect.gen(function* () {
-			const all = yield* Effect.forEach(
-				DelegationsApi.OpenDelegationStatus.literals,
-				(status) => delegations.withStatus(status),
-			)
-			return all.flat()
-		}),
+		open: Effect.forEach(
+			DelegationsApi.OpenDelegationStatus.literals,
+			(status) => delegations.withStatus(status),
+		).pipe(Effect.map(Arr.flatten)),
 		change: (organizationId, id, expected, update, when) =>
 			records.transaction(
 				"delegation-item:" + organizationId + ":" + id,
@@ -234,7 +257,7 @@ export const make: Effect.Effect<
 					const found = yield* delegations.find(organizationId, id)
 					if (
 						Option.isNone(found) ||
-						!expected.includes(found.value.delegation.status) ||
+						!Arr.contains(expected, found.value.delegation.status) ||
 						(when !== undefined && !when(found.value))
 					)
 						return Option.none()

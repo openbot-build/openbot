@@ -1,14 +1,16 @@
-// Tests are entry points, so they provide their own Layers.
-// @effect-diagnostics strictEffectProvide:off
 import {
-	Array as EffectArray,
+	Array as Arr,
 	HashMap,
 	Effect,
+	Fiber,
 	Layer,
 	Option,
+	pipe,
 	Redacted,
 	Match,
 	Predicate,
+	Schema,
+	String as Str,
 } from "effect"
 import {
 	CatalogDiscovery,
@@ -29,20 +31,23 @@ import { TestClock } from "effect/testing"
 // These tests build public-only services with Effect.provide. The TestClock
 // of it.effect is the clock of these services.
 
-const cardAt = (cardUrl: string, websiteUrl?: string): Document.ServerCard => ({
-	$schema: Document.cardSchemaUrl,
-	name: "example.test/notes",
-	version: "1.0.0",
-	description: "Public description",
-	...(websiteUrl === undefined ? {} : { websiteUrl }),
-	remotes: [
-		{
-			type: "streamable-http",
-			url: new URL("/mcp", cardUrl).href,
-			supportedProtocolVersions: [Document.protocolVersion],
-		},
-	],
-})
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+
+const cardAt = (cardUrl: string, websiteUrl?: string): Document.ServerCard =>
+	Document.ServerCard.make({
+		$schema: Document.cardSchemaUrl,
+		name: "example.test/notes",
+		version: "1.0.0",
+		description: "Public description",
+		...(websiteUrl === undefined ? {} : { websiteUrl }),
+		remotes: [
+			{
+				type: "streamable-http",
+				url: new URL("/mcp", cardUrl).href,
+				supportedProtocolVersions: [Document.protocolVersion],
+			},
+		],
+	})
 const site = (
 	cardUrl = "https://publisher.example/card",
 	websiteUrl?: string,
@@ -74,7 +79,7 @@ const site = (
 			url,
 			{
 				specVersion: "1.0",
-				entries: links.map((link) => ({
+				entries: Arr.map(links, (link) => ({
 					identifier: "not-an-identity",
 					type: Document.cardMediaType,
 					url: link,
@@ -90,7 +95,7 @@ const site = (
 	const network = Layer.succeed(Network.PublicNetwork, {
 		readDocument: (options) =>
 			Effect.sync(() => {
-				requests = EffectArray.append(requests, options)
+				requests = Arr.append(requests, options)
 				const response = Option.getOrUndefined(
 					HashMap.get(responses, options.url),
 				) ?? {
@@ -143,12 +148,12 @@ it.effect(
 			yield* Effect.gen(function* () {
 				const apps = yield* Store.AppStore
 				yield* apps.save({
-					app: {
+					app: Store.AppRecord.make({
 						cardUrl: fixture.cardUrl,
 						card: cardAt(fixture.cardUrl),
 						sources: [],
-					},
-					connection: {
+					}),
+					connection: Store.UserConnection.make({
 						owner: "alice",
 						connectionId: "notes",
 						cardUrl: fixture.cardUrl,
@@ -162,9 +167,9 @@ it.effect(
 						headers: Redacted.make({
 							"x-private": "private-secret",
 						}),
-					},
+					}),
 				})
-				const input = { cardUrl: fixture.cardUrl }
+				const input = Indexing.Input.make({ cardUrl: fixture.cardUrl })
 				const first = yield* Indexing.sync(input)
 				assert.strictEqual(first._tag, "Indexed")
 				return yield* Match.value(first).pipe(
@@ -175,24 +180,21 @@ it.effect(
 								first.entry.evidence[0]?.association,
 								"CardOrigin",
 							)
-							assert.strictEqual(
-								JSON.stringify(first).includes("private-secret"),
-								false,
-							)
-							assert.strictEqual(
-								JSON.stringify(first).includes("private-tenant"),
-								false,
-							)
+							const text = yield* encodeJson(first)
+							assert.strictEqual(Str.includes("private-secret")(text), false)
+							assert.strictEqual(Str.includes("private-tenant")(text), false)
 							assert.strictEqual((yield* Indexing.sync(input))._tag, "Indexed")
 							assert.ok(
-								fixture.requests.some(
+								Arr.some(
+									fixture.requests,
 									(request) => request.validators?.etag === '"card-1"',
 								),
 							)
 							assert.ok(
-								fixture.requests.every(
+								Arr.every(
+									fixture.requests,
 									(request) =>
-										!Object.hasOwn(request, "headers") &&
+										!Predicate.hasProperty(request, "headers") &&
 										request.followRedirects === false,
 								),
 							)
@@ -212,13 +214,10 @@ it.effect(
 								"https://publisher.example/.well-known/ai-catalog.json",
 								[],
 							)
-							const catalog = Option.getOrUndefined(
-								HashMap.get(
-									fixture.responses,
-									"https://publisher.example/.well-known/ai-catalog.json",
-								),
-							)
-							if (catalog === undefined) throw new Error("Missing Catalog")
+							const catalog = HashMap.get(
+								fixture.responses,
+								"https://publisher.example/.well-known/ai-catalog.json",
+							).pipe(Option.getOrElse(() => assert.fail("Missing Catalog")))
 							fixture.responses = HashMap.set(fixture.responses, catalog.url, {
 								...catalog,
 								headers: {
@@ -276,18 +275,21 @@ it.effect(
 			)
 			fixture.catalog("https://publisher.example/catalog?product=notes")
 			yield* Effect.gen(function* () {
-				const indexed = yield* Indexing.sync({
-					cardUrl: fixture.cardUrl,
-				})
+				const indexed = yield* Indexing.sync(
+					Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+				)
 				assert.strictEqual(indexed._tag, "Indexed")
 				Match.value(indexed).pipe(
 					Match.tag("Indexed", (indexed) => {
-						assert.deepStrictEqual(indexed.entry.evidence[0], {
-							publisherUrl: "https://publisher.example/product",
-							catalogUrl: "https://publisher.example/catalog?product=notes",
-							cardUrl: fixture.cardUrl,
-							association: "Website",
-						})
+						assert.deepStrictEqual(
+							indexed.entry.evidence[0],
+							Index.Evidence.make({
+								publisherUrl: "https://publisher.example/product",
+								catalogUrl: "https://publisher.example/catalog?product=notes",
+								cardUrl: fixture.cardUrl,
+								association: "Website",
+							}),
+						)
 					}),
 					Match.orElse(() => undefined),
 				)
@@ -298,9 +300,9 @@ it.effect(
 					{ etag: '"card-2"' },
 				)
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Withdrawn",
 				)
 			}).pipe(provideSite(fixture))
@@ -311,19 +313,22 @@ it.effect(
 			)
 			repost.catalog("https://third-party.example/catalog")
 			yield* Effect.gen(function* () {
-				const result = yield* Indexing.sync({
-					cardUrl: repost.cardUrl,
-					sources: [
-						{
-							role: "catalog",
-							url: "https://third-party.example/catalog",
-						},
-					],
-				})
+				const result = yield* Indexing.sync(
+					Indexing.Input.make({
+						cardUrl: repost.cardUrl,
+						sources: [
+							{
+								role: "catalog",
+								url: "https://third-party.example/catalog",
+							},
+						],
+					}),
+				)
 				assert.strictEqual(result._tag, "Excluded")
 				assert.ok(
-					repost.requests.every(
-						(request) => !request.url.includes("third-party"),
+					Arr.every(
+						repost.requests,
+						(request) => !Str.includes("third-party")(request.url),
 					),
 				)
 			}).pipe(provideSite(repost))
@@ -336,9 +341,9 @@ it.effect(
 			const fixture = site()
 			yield* Effect.gen(function* () {
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Indexed",
 				)
 				fixture.document(
@@ -348,9 +353,9 @@ it.effect(
 					{ "x-robots-tag": "NOINDEX", etag: '"card-2"' },
 				)
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Withdrawn",
 				)
 				fixture.document(
@@ -361,9 +366,9 @@ it.effect(
 					401,
 				)
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Unconfirmed",
 				)
 				fixture.document(
@@ -371,18 +376,21 @@ it.effect(
 					"User-agent: *\nDisallow: /",
 					"text/plain",
 				)
-				const count = fixture.requests.filter(
+				const count = Arr.filter(
+					fixture.requests,
 					(request) => request.url === fixture.cardUrl,
 				).length
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Excluded",
 				)
 				assert.strictEqual(
-					fixture.requests.filter((request) => request.url === fixture.cardUrl)
-						.length,
+					Arr.filter(
+						fixture.requests,
+						(request) => request.url === fixture.cardUrl,
+					).length,
 					count,
 				)
 				fixture.document(
@@ -393,14 +401,16 @@ it.effect(
 					503,
 				)
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Unconfirmed",
 				)
 				assert.strictEqual(
-					fixture.requests.filter((request) => request.url === fixture.cardUrl)
-						.length,
+					Arr.filter(
+						fixture.requests,
+						(request) => request.url === fixture.cardUrl,
+					).length,
 					count,
 				)
 			}).pipe(provideSite(fixture))
@@ -417,7 +427,7 @@ it.effect(
 					),
 			})
 			const result = yield* Effect.result(
-				Indexing.sync({ cardUrl: valid.cardUrl }),
+				Indexing.sync(Indexing.Input.make({ cardUrl: valid.cardUrl })),
 			).pipe(
 				Effect.provide(
 					PublicIndexing.layer.pipe(
@@ -473,9 +483,9 @@ it.effect(
 					text + "\nAllow: /.well-known/",
 					"text/plain",
 				)
-				const result = yield* Indexing.sync({ cardUrl: fixture.cardUrl }).pipe(
-					provideSite(fixture),
-				)
+				const result = yield* Indexing.sync(
+					Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+				).pipe(provideSite(fixture))
 				assert.strictEqual(result._tag, expected, path + " " + text)
 			}
 		}),
@@ -497,12 +507,15 @@ it.effect(
 				"User-agent: *\nDisallow: /card",
 				"text/plain",
 			)
-			let result = yield* Indexing.sync({ cardUrl: fixture.cardUrl }).pipe(
-				provideSite(fixture),
-			)
+			let result = yield* Indexing.sync(
+				Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+			).pipe(provideSite(fixture))
 			assert.strictEqual(result._tag, "Excluded")
 			assert.ok(
-				fixture.requests.every((request) => request.url !== fixture.cardUrl),
+				Arr.every(
+					fixture.requests,
+					(request) => request.url !== fixture.cardUrl,
+				),
 			)
 			fixture.document(
 				"https://rules.example/rules",
@@ -516,12 +529,13 @@ it.effect(
 				{ location: "/private" },
 				302,
 			)
-			result = yield* Indexing.sync({ cardUrl: fixture.cardUrl }).pipe(
-				provideSite(fixture),
-			)
+			result = yield* Indexing.sync(
+				Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+			).pipe(provideSite(fixture))
 			assert.strictEqual(result._tag, "Excluded")
 			assert.ok(
-				fixture.requests.every(
+				Arr.every(
+					fixture.requests,
 					(request) => request.url !== "https://publisher.example/private",
 				),
 			)
@@ -541,23 +555,23 @@ it.effect(
 			)
 			yield* Effect.gen(function* () {
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Indexed",
 				)
-				const first = fixture.requests.filter((request) =>
-					request.url.endsWith("/robots.txt"),
+				const first = Arr.filter(fixture.requests, (request) =>
+					Str.endsWith("/robots.txt")(request.url),
 				).length
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Indexed",
 				)
 				assert.strictEqual(
-					fixture.requests.filter((request) =>
-						request.url.endsWith("/robots.txt"),
+					Arr.filter(fixture.requests, (request) =>
+						Str.endsWith("/robots.txt")(request.url),
 					).length,
 					first,
 				)
@@ -572,13 +586,14 @@ it.effect(
 				)
 				yield* TestClock.adjust("24 hours")
 				assert.strictEqual(
-					(yield* Indexing.sync({
-						cardUrl: fixture.cardUrl,
-					}))._tag,
+					(yield* Indexing.sync(
+						Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+					))._tag,
 					"Excluded",
 				)
 				assert.ok(
-					fixture.requests.some(
+					Arr.some(
+						fixture.requests,
 						(request) => request.validators?.etag === '"robots-1"',
 					),
 				)
@@ -591,12 +606,14 @@ it.effect(
 				{ "cache-control": "no-store", etag: '"private-cache"' },
 			)
 			yield* Effect.gen(function* () {
-				yield* Indexing.sync({ cardUrl: uncached.cardUrl })
-				yield* Indexing.sync({ cardUrl: uncached.cardUrl })
+				yield* Indexing.sync(Indexing.Input.make({ cardUrl: uncached.cardUrl }))
+				yield* Indexing.sync(Indexing.Input.make({ cardUrl: uncached.cardUrl }))
 				assert.ok(
-					uncached.requests
-						.filter((request) => request.url === uncached.cardUrl)
-						.every((request) => request.validators === undefined),
+					pipe(
+						uncached.requests,
+						Arr.filter((request) => request.url === uncached.cardUrl),
+						Arr.every((request) => request.validators === undefined),
+					),
 				)
 			}).pipe(provideSite(uncached))
 		}),
@@ -639,5 +656,47 @@ it.effect(
 				Effect.provideContext(services),
 			)
 			assert.strictEqual(unconfirmed._tag, "Unconfirmed")
+		}),
+)
+
+it.effect(
+	"an Unconfirmed result keeps the real issue, and a stalled publisher stops at the deadline",
+	() =>
+		Effect.gen(function* () {
+			const fixture = site()
+			fixture.document(
+				fixture.cardUrl,
+				{ ...cardAt(fixture.cardUrl), remotes: [] },
+				Document.cardMediaType,
+			)
+			const incompatible = yield* Indexing.sync(
+				Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+			).pipe(provideSite(fixture))
+			assert.ok(incompatible._tag === "Unconfirmed")
+			assert.strictEqual(incompatible.reason, "InvalidDocument")
+			assert.ok(
+				Str.includes("No HTTPS Streamable HTTP endpoint")(incompatible.issue),
+			)
+			const stalled = Layer.succeed(Network.PublicNetwork, {
+				readDocument: () => Effect.never,
+			})
+			const fiber = yield* Indexing.sync(
+				Indexing.Input.make({ cardUrl: fixture.cardUrl }),
+			).pipe(
+				Effect.provide(
+					PublicIndexing.layer.pipe(
+						Layer.provide(RobotsPolicy.layer),
+						Layer.provideMerge(
+							Layer.mergeAll(stalled, MemoryIndex.layer, MemoryStore.layer),
+						),
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+				Effect.forkChild,
+			)
+			yield* TestClock.adjust("60 seconds")
+			const timedOut = yield* Fiber.join(fiber)
+			assert.ok(timedOut._tag === "Unconfirmed")
+			assert.strictEqual(timedOut.reason, "Timeout")
 		}),
 )

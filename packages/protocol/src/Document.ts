@@ -1,4 +1,12 @@
-import { Effect, HashSet, Schema, SchemaTransformation } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	HashSet,
+	Record as Rec,
+	Schema,
+	SchemaTransformation,
+	String as Str,
+} from "effect"
 
 export const protocolVersion = "2026-07-28"
 export const appsVersion = "2026-01-26"
@@ -8,29 +16,29 @@ export const uiMediaType = "text/html;profile=mcp-app"
 export const cardSchemaUrl =
 	"https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json"
 
-export class InvalidLink extends Schema.TaggedError<InvalidLink>()(
-	"InvalidLink",
-	{
-		reason: Schema.String,
-	},
-) {}
-export class InvalidDocument extends Schema.TaggedError<InvalidDocument>()(
-	"InvalidDocument",
-	{
-		kind: Schema.Literals(["Card", "Catalog", "Publication"]),
-		issue: Schema.String,
-	},
-) {}
+export class InvalidLink extends Schema.TaggedError<
+	InvalidLink,
+	{ readonly brand: unique symbol }
+>()("InvalidLink", {
+	reason: Schema.String,
+}) {}
+export class InvalidDocument extends Schema.TaggedError<
+	InvalidDocument,
+	{ readonly brand: unique symbol }
+>()("InvalidDocument", {
+	kind: Schema.Literals(["Card", "Catalog", "Publication"]),
+	issue: Schema.String,
+}) {}
 const invalid =
 	(kind: InvalidDocument["kind"]) => (error: Schema.SchemaError) =>
 		InvalidDocument.make({ kind, issue: error.message })
 
-export class IncompatibleCard extends Schema.TaggedError<IncompatibleCard>()(
-	"IncompatibleCard",
-	{
-		reason: Schema.String,
-	},
-) {}
+export class IncompatibleCard extends Schema.TaggedError<
+	IncompatibleCard,
+	{ readonly brand: unique symbol }
+>()("IncompatibleCard", {
+	reason: Schema.String,
+}) {}
 
 /** The canonical identity keeps the path and query, including the query order. */
 export const Link = Schema.URLFromString.check(
@@ -45,8 +53,8 @@ export const Link = Schema.URLFromString.check(
 	Schema.decodeTo(Schema.flip(Schema.URLFromString)),
 	Schema.decode(
 		SchemaTransformation.transform({
-			decode: (href) => href.replace(/#.*$/s, ""),
-			encode: (href) => href.replace(/#.*$/s, ""),
+			decode: Str.replace(/#.*$/s, ""),
+			encode: Str.replace(/#.*$/s, ""),
 		}),
 	),
 )
@@ -56,7 +64,10 @@ const Extensions = Schema.Record(Schema.String, Schema.Unknown)
 /** Public presentation is optional. It never describes authority to run actions. */
 export const presentationKey = "openbot/presentation"
 
-export class Icon extends Schema.Opaque<Icon>()(
+export class Icon extends Schema.Opaque<
+	Icon,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			src: Uri,
@@ -68,7 +79,10 @@ export class Icon extends Schema.Opaque<Icon>()(
 	),
 ) {}
 
-export class PreviewImage extends Schema.Opaque<PreviewImage>()(
+export class PreviewImage extends Schema.Opaque<
+	PreviewImage,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		src: Link,
 		alt: Schema.NonEmptyString.check(Schema.isMaxLength(500)),
@@ -92,7 +106,10 @@ export class PreviewImage extends Schema.Opaque<PreviewImage>()(
 	}),
 ) {}
 
-export class UsageExample extends Schema.Opaque<UsageExample>()(
+export class UsageExample extends Schema.Opaque<
+	UsageExample,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		id: Schema.NonEmptyString.check(
 			Schema.isMaxLength(100),
@@ -107,7 +124,10 @@ export class UsageExample extends Schema.Opaque<UsageExample>()(
 	}),
 ) {}
 
-export class Presentation extends Schema.Opaque<Presentation>()(
+export class Presentation extends Schema.Opaque<
+	Presentation,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		version: Schema.Literal("1"),
 		examples: Schema.NonEmptyArray(UsageExample).check(Schema.isMaxLength(12)),
@@ -115,7 +135,9 @@ export class Presentation extends Schema.Opaque<Presentation>()(
 		Schema.makeFilter(
 			(value) =>
 				HashSet.size(
-					HashSet.fromIterable(value.examples.map((example) => example.id)),
+					HashSet.fromIterable(
+						Arr.map(value.examples, (example) => example.id),
+					),
 				) === value.examples.length || "Example identifiers must be unique",
 		),
 	),
@@ -143,15 +165,19 @@ const InputFields = {
 	value: Schema.optional(Schema.String),
 	choices: Schema.optional(Schema.Array(Schema.String)),
 }
-export class Input extends Schema.Opaque<Input>()(
-	Schema.StructWithRest(Schema.Struct(InputFields), [Extensions]),
-) {
+export class Input extends Schema.Opaque<
+	Input,
+	{ readonly brand: unique symbol }
+>()(Schema.StructWithRest(Schema.Struct(InputFields), [Extensions])) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Input)(value).pipe(
 			Effect.mapError(invalid("Card")),
 		)
 }
-export class HeaderInput extends Schema.Opaque<HeaderInput>()(
+export class HeaderInput extends Schema.Opaque<
+	HeaderInput,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			...InputFields,
@@ -168,7 +194,10 @@ export class HeaderInput extends Schema.Opaque<HeaderInput>()(
 			Effect.mapError(invalid("Card")),
 		)
 }
-export class Remote extends Schema.Opaque<Remote>()(
+export class Remote extends Schema.Opaque<
+	Remote,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			type: Schema.Literals(["streamable-http", "sse"]),
@@ -189,7 +218,10 @@ export class Remote extends Schema.Opaque<Remote>()(
 			Effect.mapError(invalid("Card")),
 		)
 }
-export class ServerCard extends Schema.Opaque<ServerCard>()(
+export class ServerCard extends Schema.Opaque<
+	ServerCard,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			$schema: Schema.Literal(cardSchemaUrl),
@@ -215,7 +247,9 @@ export class ServerCard extends Schema.Opaque<ServerCard>()(
 						subfolder: Schema.optional(
 							Schema.String.check(
 								Schema.makeFilter(
-									(s) => !s.startsWith("/") && !s.split("/").includes(".."),
+									(s) =>
+										!Str.startsWith("/")(s) &&
+										!Arr.contains(Str.split(s, "/"), ".."),
 								),
 							),
 						),
@@ -241,7 +275,10 @@ export class ServerCard extends Schema.Opaque<ServerCard>()(
 export const presentationFromCard = (card: ServerCard) =>
 	Schema.decodeUnknownOption(Presentation)(card._meta?.[presentationKey])
 
-export class CatalogEntry extends Schema.Opaque<CatalogEntry>()(
+export class CatalogEntry extends Schema.Opaque<
+	CatalogEntry,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			identifier: Schema.NonEmptyString,
@@ -258,18 +295,17 @@ export class CatalogEntry extends Schema.Opaque<CatalogEntry>()(
 			extensions: Schema.optional(Extensions),
 		}),
 		[Extensions],
-	).check(
-		Schema.makeFilter(
-			(e) => Object.hasOwn(e, "url") !== Object.hasOwn(e, "data"),
-		),
-	),
+	).check(Schema.makeFilter((e) => Rec.has(e, "url") !== Rec.has(e, "data"))),
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(CatalogEntry)(value).pipe(
 			Effect.mapError(invalid("Catalog")),
 		)
 }
-export class Catalog extends Schema.Opaque<Catalog>()(
+export class Catalog extends Schema.Opaque<
+	Catalog,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			specVersion: Schema.Literal("1.0"),
@@ -301,11 +337,13 @@ export class Catalog extends Schema.Opaque<Catalog>()(
 export const compatibleRemotes = (
 	card: ServerCard,
 ): Effect.Effect<ReadonlyArray<Remote>, IncompatibleCard> => {
-	const remotes = (card.remotes ?? []).filter(
+	const remotes = Arr.filter(
+		card.remotes ?? [],
 		(r) =>
 			r.type === "streamable-http" &&
-			r.supportedProtocolVersions?.includes(protocolVersion) === true &&
-			(r.url.startsWith("https://") || r.url.startsWith("{")),
+			r.supportedProtocolVersions !== undefined &&
+			Arr.contains(r.supportedProtocolVersions, protocolVersion) &&
+			(Str.startsWith("https://")(r.url) || Str.startsWith("{")(r.url)),
 	)
 	return remotes.length > 0
 		? Effect.succeed(remotes)

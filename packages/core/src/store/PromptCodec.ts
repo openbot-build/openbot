@@ -4,27 +4,31 @@ import {
 	Schema,
 	SchemaTransformation,
 	Predicate,
-	Array as ArrayUtils,
+	pipe,
+	Array as Arr,
+	Record as Rec,
 } from "effect"
 import { Prompt } from "effect/ai"
 
 const FileData = Schema.TaggedUnion({
 	String: { value: Schema.String },
 	Bytes: { value: Schema.Array(Schema.Int) },
-	Url: { value: Schema.String },
+	Url: { value: Schema.URLFromString },
 })
 
 /** Optional schema properties are left out at the JSON boundary. Array positions stay the same. */
 export const omitOptional = (value: unknown): unknown => {
-	if (ArrayUtils.isArray(value)) return value.map(omitOptional)
+	if (Arr.isArray(value)) return Arr.map(value, omitOptional)
 	if (
-		Predicate.isObjectOrArray(value) &&
+		Predicate.isObject(value) &&
 		Object.getPrototypeOf(value) === Object.prototype
 	)
-		return Object.fromEntries(
-			Object.entries(value)
-				.filter(([, field]) => field !== undefined)
-				.map(([key, field]) => [key, omitOptional(field)]),
+		return Rec.fromEntries(
+			pipe(
+				Rec.toEntries(value),
+				Arr.filter(([, field]) => field !== undefined),
+				Arr.map(([key, field]) => [key, omitOptional(field)] as const),
+			),
 		)
 	return value
 }
@@ -35,7 +39,7 @@ export const omitOptional = (value: unknown): unknown => {
  */
 const encodeFileData = (
 	data: Prompt.FilePartEncoded["data"],
-): Effect.Effect<typeof FileData.Type, Schema.SchemaError> =>
+): Effect.Effect<typeof FileData.Encoded, Schema.SchemaError> =>
 	Predicate.isString(data)
 		? Effect.succeed({ _tag: "String", value: data })
 		: data instanceof URL
@@ -104,7 +108,7 @@ export const PromptJson = Schema.Json.pipe(
 													...part,
 													data: Match.value(data).pipe(
 														Match.tag("String", (data) => data.value),
-														Match.tag("Url", (data) => new URL(data.value)),
+														Match.tag("Url", (data) => data.value),
 														Match.orElse((data) => Uint8Array.from(data.value)),
 													),
 												}

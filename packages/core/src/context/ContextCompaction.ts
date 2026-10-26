@@ -25,20 +25,21 @@ export type NonNativeCompact = (
 	LanguageModel.LanguageModel
 >
 
-export class ContextCompactionError extends Schema.TaggedError<ContextCompactionError>()(
-	"ContextCompactionError",
-	{
-		reason: Schema.Literals([
-			"unsupported",
-			"request-failed",
-			"input-too-large",
-			"target-not-reached",
-			"invalid-target",
-			"head-conflict",
-		]),
-		message: Schema.String,
-	},
-) {}
+export class ContextCompactionError extends Schema.TaggedError<
+	ContextCompactionError,
+	{ readonly brand: unique symbol }
+>()("ContextCompactionError", {
+	reason: Schema.Literals([
+		"unsupported",
+		"request-failed",
+		"input-too-large",
+		"target-not-reached",
+		"invalid-target",
+		"head-conflict",
+	]),
+	message: Schema.String,
+	cause: Schema.optionalKey(Schema.Defect()),
+}) {}
 
 export class ContextCompaction extends Context.Service<
 	ContextCompaction,

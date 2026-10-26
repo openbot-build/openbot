@@ -1,6 +1,13 @@
-import { Effect, HashSet, Layer, Match } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	HashSet,
+	Layer,
+	Match,
+	String as Str,
+} from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { McpPublisher, Protection } from "@openbot-build/protocol"
+import { McpPublisher, Protection, Publisher } from "@openbot-build/protocol"
 import { Authorization } from "./Authorization.ts"
 import * as AuthorizationRoutes from "./AuthorizationRoutes.ts"
 import * as Discovery from "./Discovery.ts"
@@ -10,18 +17,22 @@ import {
 	card,
 	cardUrl,
 	catalog,
+	catalogUrl,
+	etag,
 	issuer,
+	modified,
+	readScope,
 	resource,
 	scenarios,
-	scopes,
+	writeScope,
 	type Settings,
 } from "./Scenarios.ts"
 
 const writes = HashSet.make("write_note", "delete_note")
 const requiredScope = (operation: Protection.Operation) =>
 	operation.target !== undefined && HashSet.has(writes, operation.target)
-		? "test:write"
-		: "test:read"
+		? writeScope
+		: readScope
 const policy = Layer.succeed(Protection.AccessPolicy, {
 	check: (identity, operation) => {
 		const scope = requiredScope(operation)
@@ -48,7 +59,7 @@ const headerProtection = (options: {
 					request.method === "OPTIONS"
 				)
 					return yield* http
-				if (request.headers[options.name.toLowerCase()] !== options.value)
+				if (request.headers[Str.toLowerCase(options.name)] !== options.value)
 					return HttpServerResponse.jsonUnsafe(
 						{
 							error: "invalid_credentials",
@@ -59,9 +70,9 @@ const headerProtection = (options: {
 							status: 401,
 							headers: {
 								"cache-control": "no-store",
-								...(options.value.startsWith("Basic ")
+								...(Str.startsWith("Basic ")(options.value)
 									? { "www-authenticate": 'Basic realm="Protocol Test"' }
-									: options.value.startsWith("Bearer ")
+									: Str.startsWith("Bearer ")(options.value)
 										? {
 												"www-authenticate":
 													'Bearer realm="Protocol Test", error="invalid_token"',
@@ -107,18 +118,17 @@ export const layer = (settings: Settings) =>
 	Layer.unwrap(
 		Effect.gen(function* () {
 			const auth = yield* Authorization
-			const apps = scenarios.map((scenario) => {
-				const publication = {
+			const apps = Arr.map(scenarios, (scenario) => {
+				const publication = Publisher.Publication.make({
 					card: card(settings.origin)(scenario),
 					cardUrl: cardUrl(settings.origin)(scenario),
-					catalogUrl:
-						settings.origin + "/apps/" + scenario.id + "/catalog.json",
+					catalogUrl: catalogUrl(settings.origin)(scenario),
 					catalog: catalog(settings.origin)([scenario]),
 					mcpUrl: resource(settings.origin)(scenario),
 					allowedOrigins: settings.allowedOrigins,
-					etag: '"protocol-test-0.1.0"',
-					lastModified: "Sun, 18 Oct 2026 00:00:00 GMT",
-				}
+					etag,
+					lastModified: modified,
+				})
 				const register = Capabilities.register({ ...settings, scenario })
 				return Match.value(scenario.authentication).pipe(
 					Match.when({ kind: "anonymous" }, () =>
@@ -144,7 +154,7 @@ export const layer = (settings: Settings) =>
 									"/.well-known/oauth-protected-resource/mcp/" +
 									scenario.id,
 								authorizationServers: [issuer(settings.origin)(mode)],
-								scopes: [scopes[0]!],
+								scopes: [readScope],
 							},
 						}).pipe(
 							Layer.provide(

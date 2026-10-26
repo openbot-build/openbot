@@ -13,6 +13,8 @@ import {
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { OutboundPolicy } from "../network/OutboundPolicy.ts"
 import {
+	Array as Arr,
+	Cause,
 	Context,
 	Crypto,
 	Effect,
@@ -22,7 +24,7 @@ import {
 	Schema,
 	Scope,
 } from "effect"
-import { ProtocolStores } from "./ProtocolStores.ts"
+import { ProtocolStores, toStoreError } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { eq } from "drizzle-orm"
 import { appRecords } from "../database/Schema.ts"
@@ -31,6 +33,10 @@ import * as StoredConnections from "./StoredConnections.ts"
 import { Governance } from "./Governance.ts"
 import type { AppAuthorizationApi, ConnectionsApi } from "@openbot-build/api"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
+import * as Failures from "../app/Failures.ts"
+import * as HostApp from "./HostApp.ts"
+import { Probe } from "./Probe.ts"
+import * as Db from "../database/Database.ts"
 
 type AuthorizationError =
 	| Authorization.AuthorizationError
@@ -46,7 +52,18 @@ export type Protection =
 			readonly scopes: ReadonlyArray<string>
 			readonly resourceMetadataUrl?: string
 	  }
-export type BoundApp = HostApp.Service & {
+export type BoundApp = Omit<HostApp.Service, "add"> & {
+	/** A restricted App and a configuration that the App does not accept keep their own errors. */
+	readonly add: (
+		input: HostApp.AddRequest,
+	) => Effect.Effect<
+		HostApp.Added,
+		| App.AppError
+		| Store.StoreError
+		| Discovery.Error
+		| ConnectionsApi.AppRestricted
+		| ConnectionsApi.ConnectionConfigurationInvalid
+	>
 	readonly inspectAuthorization: (
 		key: Store.ConnectionKey,
 	) => Effect.Effect<
@@ -63,10 +80,6 @@ export type BoundApp = HostApp.Service & {
 		AuthorizationError | App.CleanupPending
 	>
 }
-import * as HostApp from "./HostApp.ts"
-import { Probe } from "./Probe.ts"
-import * as Db from "../database/Database.ts"
-
 export class AppNetwork extends Context.Service<
 	AppNetwork,
 	{
@@ -142,11 +155,13 @@ export const make: Effect.Effect<
 				Context.add(Client.InvocationPolicy, {
 					check: (invocation) =>
 						governance.check(invocation.connection.cardUrl).pipe(
-							Effect.mapError(() =>
-								Client.PermissionDenied.make({
-									action: invocation.action,
-									target: invocation.target,
-								}),
+							Effect.catchTag("AppRestricted", () =>
+								Effect.fail(
+									Client.PermissionDenied.make({
+										action: invocation.action,
+										target: invocation.target,
+									}),
+								),
 							),
 							Effect.andThen(policy.check(invocation)),
 						),
@@ -178,26 +193,29 @@ export const make: Effect.Effect<
 					const links = yield* Schema.decodeEffect(Schema.Array(Document.Link))(
 						[connection.endpoint, ...additional],
 					).pipe(
-						Effect.mapError(() =>
-							Store.StoreError.make({
-								reason: "Invalid",
-								operation: "App network targets",
-							}),
+						Failures.replace(
+							"OpenBot could not read the network targets of an App connection.",
+							() =>
+								Store.StoreError.make({
+									reason: "Invalid",
+									operation: "App network targets",
+								}),
 						),
 					)
 					const context = yield* Layer.buildWithScope(
 						network.layer(
 							owner,
-							links.map((url) => new URL(url).origin),
+							Arr.map(links, (url) => new URL(url).origin),
 						),
 						scope,
 					)
 					return yield* program.pipe(Effect.provideContext(context))
 				})
-			const appError = () =>
+			const appError = (cause: unknown) =>
 				HostApp.AppError.make({
 					reason: "storage-failed",
 					message: "The account's App connections could not be read.",
+					cause,
 				})
 			const withAuthorizationNetwork = <A, E, R>(
 				key: Store.ConnectionKey,
@@ -252,14 +270,21 @@ export const make: Effect.Effect<
 						verification: { _tag: "CleanupPending", stage },
 					}),
 				).pipe(
-					Effect.mapError(() =>
-						Store.StoreError.make({
-							reason: "Unavailable",
-							operation: "Record App cleanup progress",
-						}),
-					),
+					Effect.mapError(toStoreError("Record App cleanup progress")),
 					Effect.andThen(Effect.fail(App.CleanupPending.make({ key, stage }))),
 				)
+			/** The member can retry the cleanup. The log keeps the reason for the failure. */
+			const pendingAfter =
+				(
+					message: string,
+					key: Store.ConnectionKey,
+					stage: App.CleanupPending["stage"],
+				) =>
+				(error: unknown) =>
+					Effect.logWarning(message, Cause.fail(error)).pipe(
+						Effect.annotateLogs({ connectionId: key.connectionId }),
+						Effect.andThen(pending(key, stage)),
+					)
 			const revoke = (key: Store.ConnectionKey) =>
 				Effect.scoped(
 					Effect.gen(function* () {
@@ -274,10 +299,26 @@ export const make: Effect.Effect<
 							OAuthAuthorization.revoke(key).pipe(
 								Effect.provideContext(services),
 							),
-						).pipe(Effect.catch(() => pending(key, "Credentials")))
+						).pipe(
+							Effect.catch(
+								pendingAfter(
+									"OpenBot could not revoke the App credentials.",
+									key,
+									"Credentials",
+								),
+							),
+						)
 						yield* stores
 							.clearFlows(key.connectionId)
-							.pipe(Effect.catch(() => pending(key, "Credentials")))
+							.pipe(
+								Effect.catch(
+									pendingAfter(
+										"OpenBot could not clear the App authorization flows.",
+										key,
+										"Credentials",
+									),
+								),
+							)
 						return result
 					}),
 				)
@@ -297,19 +338,13 @@ export const make: Effect.Effect<
 					),
 				get: stores.apps.getApp,
 				listConnections: StoredConnections.list(db, secrets, owner).pipe(
-					Effect.map((rows) => rows.map((row) => row.connection)),
+					Effect.map(Arr.map((row) => row.connection)),
 					Effect.mapError(appError),
 				),
 				getConnection: stores.apps.get,
 				add: Effect.fn("AppHost.add")(function* (input) {
 					yield* keyChecked(input.key)
-					yield* governance
-						.check(input.candidate.cardUrl)
-						.pipe(
-							Effect.mapError(() =>
-								App.AppError.make({ reason: "Unavailable" }),
-							),
-						)
+					yield* governance.check(input.candidate.cardUrl)
 					if (!input.confirmed)
 						return yield* App.AppError.make({ reason: "ConfirmationRequired" })
 					const current = yield* discovery.refreshCard(input.candidate.cardUrl)
@@ -326,7 +361,7 @@ export const make: Effect.Effect<
 						index: input.remoteIndex,
 						values: input.values,
 					})
-					const connection: Store.UserConnection = {
+					const connection = Store.UserConnection.make({
 						...input.key,
 						cardUrl: current.cardUrl,
 						endpoint: configured.url,
@@ -335,21 +370,15 @@ export const make: Effect.Effect<
 						headers: Redacted.make(configured.headers),
 						state: "Enabled",
 						authorization: { _tag: "Unprotected" },
-					}
-					const protection = yield* probe
-						.check({
-							app: {
-								cardUrl: current.cardUrl,
-								card: current.card,
-								sources: current.sources,
-							},
-							connection,
-						})
-						.pipe(
-							Effect.mapError(() =>
-								App.AppError.make({ reason: "Unavailable" }),
-							),
-						)
+					})
+					const protection = yield* probe.check({
+						app: Store.AppRecord.make({
+							cardUrl: current.cardUrl,
+							card: current.card,
+							sources: current.sources,
+						}),
+						connection,
+					})
 					return yield* AppConnections.add({
 						...input,
 						candidate: current,
@@ -389,11 +418,13 @@ export const make: Effect.Effect<
 					Effect.gen(function* () {
 						const connection = yield* stores.apps.get(input.key)
 						yield* governance.check(connection.cardUrl).pipe(
-							Effect.mapError(() =>
-								Client.PermissionDenied.make({
-									action: "connect",
-									target: connection.cardUrl,
-								}),
+							Effect.catchTag("AppRestricted", () =>
+								Effect.fail(
+									Client.PermissionDenied.make({
+										action: "connect",
+										target: connection.cardUrl,
+									}),
+								),
 							),
 						)
 						return yield* withNetwork(
@@ -424,23 +455,25 @@ export const make: Effect.Effect<
 											: "Disabled",
 									},
 								}),
-							),
+							).pipe(Effect.mapError(toStoreError("Update owned App state"))),
 						),
 						Effect.tap(() => active.close(key)),
 						Effect.map((row) => row.connection),
-						Effect.mapError(() =>
-							Store.StoreError.make({
-								reason: "Unavailable",
-								operation: "Update owned App state",
-							}),
-						),
 					),
 				remove: (key) =>
 					Effect.gen(function* () {
 						yield* revoke(key)
 						yield* stores.apps
 							.delete(key)
-							.pipe(Effect.catch(() => pending(key, "Connection")))
+							.pipe(
+								Effect.catch(
+									pendingAfter(
+										"OpenBot could not delete the App connection.",
+										key,
+										"Connection",
+									),
+								),
+							)
 						return { _tag: "Removed", key } as const
 					}),
 				revalidate: (input) =>

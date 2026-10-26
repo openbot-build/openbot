@@ -1,11 +1,20 @@
-// Each test is an entry point, so it provides its own layers.
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
-import type { Settings as Api } from "@openbot-build/api"
-import { Effect, Layer, Stream } from "effect"
+import { type Settings as Api, Authorization } from "@openbot-build/api"
+import {
+	Array as Arr,
+	Duration,
+	Effect,
+	Fiber,
+	Layer,
+	pipe,
+	Stream,
+	String as Str,
+} from "effect"
 import { LanguageModel, Response } from "effect/ai"
+import { TestClock } from "effect/testing"
 import { meter } from "../src/billing/MeteredModel.ts"
 import * as TokenThrottle from "../src/billing/TokenThrottle.ts"
+import { organizationDefaults } from "../src/settings/Documents.ts"
 import { Settings } from "../src/settings/Settings.ts"
 
 const call = {
@@ -26,19 +35,33 @@ const settings = (
 	platform: Api.TokenRateLimits,
 	organization: Api.TokenRateLimits,
 ) =>
-	Layer.succeed(Settings, {
+	Layer.mock(Settings, {
 		platform: Effect.succeedSome({
-			document: { tokenRate: platform },
+			document: {
+				publicOrigin: "https://openbot.example.com",
+				authSecret: "unused",
+				identityProvider: null,
+				organizationCreation: "anyone" as const,
+				ceiling: Authorization.emptyPolicy,
+				appRestrictions: [],
+				tokenRate: platform,
+			},
 			version: 1,
 			updatedAt: 0,
 		}),
 		organization: () =>
 			Effect.succeed({
-				document: { tokenRate: organization },
+				document: { ...organizationDefaults, tokenRate: organization },
 				version: 1,
 				updatedAt: 0,
 			}),
-	} as never)
+	})
+
+/** A Billing that lets every call through and records nothing. */
+const billing = {
+	check: () => Effect.void,
+	record: () => Effect.void,
+} as never
 
 const run = <A>(
 	effect: Effect.Effect<A, never, TokenThrottle.TokenThrottle>,
@@ -52,13 +75,12 @@ const run = <A>(
 		Effect.scoped,
 	)
 
-/** Runs the effect, and gives its value and the real time it took. */
-const elapsed = <A, E>(effect: Effect.Effect<A, E>) =>
-	Effect.gen(function* () {
-		const start = performance.now()
-		const value = yield* effect
-		return { value, ms: performance.now() - start }
-	})
+/** Runs the effect, and gives its value and the time it took in milliseconds. */
+const elapsed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	Effect.map(Effect.timed(effect), ([duration, value]) => ({
+		value,
+		ms: Duration.toMillis(duration),
+	}))
 
 it.effect(
 	"each scope uses the lower rate of the platform and the organization",
@@ -101,51 +123,47 @@ it.effect(
 		}),
 )
 
-// The throttle waits in real time, so this test needs the real clock.
-it.live(
+it.effect(
 	"a bucket in debt makes the next taker wait, and fills again over time",
 	() =>
 		Effect.gen(function* () {
 			const rate = { tokensPerSecond: 1000, burstTokens: 100 }
-			const result = yield* run(
+			const burst = yield* run(
 				Effect.gen(function* () {
 					const throttle = yield* TokenThrottle.TokenThrottle
 					const scopes = [{ key: "organization:org_1", rate }]
-					const time = (effect: Effect.Effect<void>) =>
-						Effect.gen(function* () {
-							const start = performance.now()
-							yield* effect
-							return performance.now() - start
-						})
 					// The full bucket gives the first 100 tokens at once.
-					const burst = yield* time(throttle.take(scopes, 100))
+					const burst = yield* elapsed(throttle.take(scopes, 100))
 					// 150 more tokens: 150 ms at 1000 tokens each second.
 					yield* throttle.charge(scopes, 150)
-					const debt = yield* time(throttle.take(scopes, 0))
-					return { burst, debt }
+					const fiber = yield* Effect.forkChild(throttle.take(scopes, 0), {
+						startImmediately: true,
+					})
+					yield* TestClock.adjust("149 millis")
+					assert.strictEqual(fiber.pollUnsafe(), undefined)
+					yield* TestClock.adjust("1 millis")
+					yield* Fiber.join(fiber)
+					return burst
 				}),
 				{ ...none, organization: rate },
 			)
-			assert.ok(result.burst < 30, `burst took ${result.burst} ms`)
-			assert.ok(result.debt >= 120, `debt took ${result.debt} ms`)
-			assert.ok(result.debt < 1000, `debt took ${result.debt} ms`)
+			assert.strictEqual(burst.ms, 0)
 		}),
 )
 
-// The throttle waits in real time, so this test needs the real clock.
-it.live(
+it.effect(
 	"a stream over the rate comes out slower but complete, and is never refused",
 	() =>
 		Effect.gen(function* () {
-			const pieces = Array.from({ length: 40 }, (_, index) =>
-				String(index).padStart(40, "x"),
+			const pieces = Arr.makeBy(40, (index) =>
+				Str.padStart(40, "x")(String(index)),
 			)
 			const model = yield* LanguageModel.make({
 				generateText: () => Effect.succeed([]),
 				streamText: () =>
 					Stream.fromIterable<Response.StreamPartEncoded>([
 						Response.makePart("text-start", { id: "text" }),
-						...pieces.map((delta) =>
+						...Arr.map(pieces, (delta) =>
 							Response.makePart("text-delta", { id: "text", delta }),
 						),
 						Response.makePart("text-end", { id: "text" }),
@@ -163,28 +181,40 @@ it.live(
 				run(
 					Effect.gen(function* () {
 						const throttle = yield* TokenThrottle.TokenThrottle
-						const metered = meter(model, call, { throttle })
+						const metered = meter(model, call, { billing, throttle })
 						const parts = yield* metered
 							.streamText({ prompt: "Write" })
 							.pipe(Stream.runCollect, Effect.orDie)
-						return parts
-							.filter((part) => part.type === "text-delta")
-							.map((part) => part.delta)
-							.join("")
+						return pipe(
+							parts,
+							Arr.filter((part) => part.type === "text-delta"),
+							Arr.map((part) => part.delta),
+							Arr.join(""),
+						)
 					}),
 					platform,
 				)
 			const free = yield* elapsed(answer(none))
-			assert.strictEqual(free.value, pieces.join(""))
-			// 400 tokens with a burst of 100 at 2000 tokens each second: at least 150 ms.
-			const slow = yield* elapsed(
-				answer({
-					...none,
-					organization: { tokensPerSecond: 2000, burstTokens: 100 },
-				}),
+			assert.strictEqual(free.value, Arr.join(pieces, ""))
+			assert.strictEqual(free.ms, 0)
+			const fiber = yield* Effect.forkChild(
+				elapsed(
+					answer({
+						...none,
+						organization: { tokensPerSecond: 2000, burstTokens: 100 },
+					}),
+				),
 			)
-			assert.strictEqual(slow.value, pieces.join(""))
-			assert.ok(slow.ms >= 120, `the slow stream took ${slow.ms} ms`)
-			assert.ok(slow.ms > free.ms + 80, `${slow.ms} ms against ${free.ms} ms`)
+			// The stream starts each wait some steps after the one before, so one
+			// big move of the clock can go past a wait that is not there yet.
+			// The clock moves 1 ms at a time until the stream ends.
+			yield* TestClock.adjust("1 millis").pipe(
+				Effect.repeat({ until: () => fiber.pollUnsafe() !== undefined }),
+			)
+			const slow = yield* Fiber.join(fiber)
+			assert.strictEqual(slow.value, Arr.join(pieces, ""))
+			// 400 tokens with a burst of 100 at 2000 tokens each second: 150 ms.
+			assert.ok(slow.ms >= 150, `the slow stream took ${slow.ms} ms`)
+			assert.ok(slow.ms < 160, `the slow stream took ${slow.ms} ms`)
 		}),
 )

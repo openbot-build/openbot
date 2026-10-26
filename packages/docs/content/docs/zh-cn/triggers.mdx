@@ -56,7 +56,8 @@ Chat。那个 Chat 还不存在时，OpenBot 会创建它。所以 Bot 在那里
 计划时间有一个五个字段的 `cron` 文本，例如 `0 9 * * 1-5`
 表示工作日的 9:00。`timeZone` 是 IANA 时区，例如
 `Europe/Berlin`。不填时使用 UTC。无效的 cron 文本会返回 `400` 和
-`TriggerInvalid`。
+`TriggerInvalid`。永远不会触发的 cron 文本，例如
+`0 0 30 2 *`（2 月 30 日），也会返回同样的错误。
 
 OpenBot 每 15 秒查找一次到期的计划。有多台服务器运行时，每个触发器也只触发一次。
 

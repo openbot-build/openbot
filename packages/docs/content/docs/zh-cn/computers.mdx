@@ -69,8 +69,9 @@ Computer 有一个
 | `POST /v1/computers/:computerId/desktop/stream`        | 给出一个地址，人可以在那里观看和使用桌面。                      |
 | `POST /v1/computers/:computerId/pause`、`/resume`      | 暂停或恢复这台 Computer。                                       |
 
-在暂停的 Computer 上运行命令时，会先恢复它。`DELETE /v1/computers/:computerId`
-删除 Computer 和它的沙箱。它的文件也会消失。
+配对的机器不提供桌面流，所以在那里 `desktop/stream` 会以 `ComputerUnsupported`
+失败。在暂停的 Computer 上运行命令时，会先恢复它。`DELETE /v1/computers/:computerId`
+删除 Computer 和它的沙箱。它的文件也会消失。OpenBot 无法连接提供方时，删除会失败，Computer 会保留。请稍后再试。
 
 ### 命令
 
@@ -194,6 +195,8 @@ Bot 有用于 Computer 的工具。它用 `openbot_computers_list`
 | `computers.delete`  | Computer 的 ID | 删除一台 Computer 和它的文件时。 |
 | `computers.expose`  | Computer 的 ID | 给一个端口一个公开地址时。       |
 
+OpenBot 无法检查这些动作中的一个时，这个动作不会运行，工具会把原因告诉 Bot。例如，Bot 的那个人看不到这台 Computer，或者 OpenBot 读不到它的数据。
+
 在 Computer 上的其他工作都不需要决定。Computer 就是边界：有使用权的 Bot 可以在里面做任何事。
 
 ---
@@ -201,7 +204,7 @@ Bot 有用于 Computer 的工具。它用 `openbot_computers_list`
 ## 暂停和用量
 
 沙箱在 `pauseAfter`
-秒内没有工作时，OpenBot 会暂停它。E2B 保留它的文件、内存和正在运行的程序。Daytona 保留它的文件，并从这些文件重新启动它。你自己的机器从不暂停。
+秒内没有工作时，OpenBot 会暂停它。仍在运行的命令也算作工作。E2B 保留它的文件、内存和正在运行的程序。Daytona 保留它的文件，并从这些文件重新启动它。你自己的机器从不暂停。
 
 `GET /v1/computers/:computerId/usage`
 列出一台 Computer 运行的时间。提供方为这些时间向你收费。OpenBot 只记录它们。它不设定价格，预算也不会停止 Computer。

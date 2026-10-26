@@ -305,6 +305,13 @@ siehst du unter [App Index](/de/docs/app-index).
   jedes Ziel und erreichen nie private, Loopback- oder Cloud-Metadaten-Adressen.
   Die Standardwerte der Bibliothek sind 1 MiB, 10 Sekunden und 5
   Weiterleitungen.
+- Hosts begrenzen auch die Größe jeder MCP-Nachricht. Der Standardwert der
+  Bibliothek ist 16 MiB für eine JSON-Antwort oder für ein Ereignis eines
+  Event-Streams.
+- Die Suche nach Apps für eine Eingabe endet nach 64 Dokumenten oder 60
+  Sekunden. Sie folgt höchstens 64 Links aus einem Catalog oder einer Seite.
+  Eine Prüfung für die öffentliche Indexierung liest höchstens 8 Catalogs des
+  Herausgebers und endet nach 60 Sekunden. Die Bibliothek nutzt diese Grenzen.
 - Schreibvorgänge brauchen eine Berechtigungsprüfung. Schreibvorgänge, die
   wiederholt werden können, brauchen einen geschäftlichen Idempotenz-Schlüssel.
 - Wenn das Ergebnis eines Aufrufs unbekannt ist, darf der Host ihn nicht blind
@@ -375,9 +382,10 @@ export const publisher = McpPublisher.layer({
 ```
 
 Liefere `publisher` mit `HttpRouter.serve` von Effect aus. Den Layer zu bauen
-macht kein I/O. Die `publication` nimmt auch `etag`, `lastModified`,
-`cacheControl` und `noindex`. Nutze `McpPublisher.registerUi`, um eine
-`ui://`-Ansichtsressource hinzuzufügen.
+macht kein I/O. Die `publication` nimmt auch `etag` (ein Entity-Tag in
+Anführungszeichen), `lastModified` (ein HTTP-Datum wie
+`Fri, 09 Oct 2026 00:00:00 GMT`), `cacheControl` und `noindex`. Nutze
+`McpPublisher.registerUi`, um eine `ui://`-Ansichtsressource hinzuzufügen.
 
 Eine App finden:
 

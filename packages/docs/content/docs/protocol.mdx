@@ -287,6 +287,12 @@ other registries. See how OpenBot does this in [App Index](/docs/app-index).
 - Public crawlers limit size, time, and redirects. They check each target and
   never reach private, loopback, or cloud metadata addresses. The library
   defaults are 1 MiB, 10 seconds, and 5 redirects.
+- Hosts also limit the size of each MCP message. The library default is 16 MiB
+  for a JSON response or for one event of an event stream.
+- Discovery from one input stops after 64 documents or 60 seconds. It follows at
+  most 64 links from one Catalog or page. A public indexing check reads at most
+  8 publisher Catalogs and stops after 60 seconds. The library uses these
+  limits.
 - Writes need a permission check. Writes that may be retried need a business
   idempotency key.
 - When the result of a call is unknown, the host must not retry it blindly.
@@ -355,7 +361,8 @@ export const publisher = McpPublisher.layer({
 ```
 
 Serve `publisher` with Effect `HttpRouter.serve`. Building the layer does no
-I/O. The `publication` also takes `etag`, `lastModified`, `cacheControl`, and
+I/O. The `publication` also takes `etag` (a quoted entity tag), `lastModified`
+(an HTTP date, such as `Fri, 09 Oct 2026 00:00:00 GMT`), `cacheControl`, and
 `noindex`. Use `McpPublisher.registerUi` to add a `ui://` view resource.
 
 Discover an App:

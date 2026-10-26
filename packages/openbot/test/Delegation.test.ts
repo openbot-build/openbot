@@ -1,16 +1,25 @@
-import { assert, it } from "@effect/vitest"
+import { assert, layer } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
+import { BotsApi, DelegationsApi, RequestsApi } from "@openbot-build/api"
 import {
-	BotsApi,
-	ChatView,
-	DelegationsApi,
-	MessageReceipt,
-	RequestsApi,
-} from "@openbot-build/api"
-import { Effect, Redacted, Schema, Stream } from "effect"
+	Array as Arr,
+	Duration,
+	Effect,
+	Option,
+	pipe,
+	Redacted,
+	Ref,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
+import type { HttpMethod } from "effect/http"
 import { names } from "../src/plugins/bots/BotPlugin.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import * as Caller from "./Caller.ts"
+import * as Messages from "./Messages.ts"
+import { until } from "./Wait.ts"
 
 const publicOrigin = "https://delegation.example.com"
 const usage = {
@@ -19,14 +28,22 @@ const usage = {
 }
 
 /** IDs that the scripted model needs. The test fills them in. */
-const known: { research?: string; other?: string } = {}
+interface Known {
+	readonly research?: string
+	readonly other?: string
+}
+
+const isUser = (message: Prompt.Message): message is Prompt.UserMessage =>
+	message.role === "user"
 
 const textOf = (message: Prompt.Message) =>
 	typeof message.content === "string"
 		? message.content
-		: message.content
-				.flatMap((part) => (part.type === "text" ? [part.text] : []))
-				.join("")
+		: pipe(
+				message.content,
+				Arr.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+				Arr.join(""),
+			)
 
 const answer = (text: string) =>
 	Stream.make(
@@ -37,222 +54,215 @@ const answer = (text: string) =>
 	)
 /** An answer that comes after some time, like a model that thinks for long. */
 const later = (seconds: number, text: string) =>
-	Stream.fromEffect(Effect.sleep(seconds * 1000)).pipe(
+	Stream.fromEffect(Effect.sleep(Duration.seconds(seconds))).pipe(
 		Stream.flatMap(() => answer(text)),
-	)
-let calls = 0
-const call = (name: string, params: Record<string, unknown>) =>
-	Stream.make(
-		Response.makePart("tool-call", {
-			id: "call-" + calls++,
-			name,
-			params,
-			providerExecuted: false,
-		}),
-		Response.makePart("finish", { reason: "tool-calls", usage }),
 	)
 
 /**
  * One scripted model for every Chat. It reads the last user message, and whether a
- * tool result came after it.
+ * tool result came after it. The test puts the IDs that the model needs in `known`.
  */
-const model = Effect.runSync(
-	LanguageModel.make({
+const scripted = Effect.gen(function* () {
+	const known = yield* Ref.make<Known>({})
+	const calls = yield* Ref.make(0)
+	const call = (name: string, params: Record<string, unknown>) =>
+		Stream.unwrap(
+			Effect.map(
+				Ref.getAndUpdate(calls, (count) => count + 1),
+				(count) =>
+					Stream.make(
+						Response.makePart("tool-call", {
+							id: "call-" + count,
+							name,
+							params,
+							providerExecuted: false,
+						}),
+						Response.makePart("finish", { reason: "tool-calls", usage }),
+					),
+			),
+		)
+	const reply = (
+		prompt: Prompt.Prompt,
+		ids: Known,
+	): Stream.Stream<Response.StreamPartEncoded> => {
+		const last = Arr.findLastIndex(prompt.content, isUser)
+		const input = pipe(
+			last,
+			Option.flatMap((index) => Arr.get(prompt.content, index)),
+			Option.map(textOf),
+			Option.getOrElse(() => ""),
+		)
+		const has = (text: string) => Str.includes(text)(input)
+		const after = Arr.drop(prompt.content, Option.getOrElse(last, () => -1) + 1)
+		const answered = Arr.some(after, (message) => message.role === "tool")
+		const result = JSON.stringify(Option.getOrUndefined(Arr.last(after)))
+		// Paused work that its decider lets go on.
+		if (Str.startsWith("[OpenBot] Your work reached")(input))
+			return answer("Finished after the pause. " + input)
+		// Work that the Bot gave to itself or to another Bot.
+		if (has("gives you this task:")) {
+			if (has("stepping task"))
+				return answered
+					? answer("This step must not run.")
+					: call(names.list, {})
+			if (has("slow research")) return later(3, "Research done.")
+			if (has("deeper task")) return later(60, "Too late.")
+			if (has("deep task"))
+				return answered
+					? answer("I wait for the deeper task.")
+					: call(names.delegate, {
+							task: "deeper task",
+							limits: { timeMs: 3600000 },
+						})
+			if (has("One more thing")) return answer("One more thing done.")
+			return answer("Other work done.")
+		}
+		if (has("Also look at the tests")) return answer("Tests look fine.")
+		if (has("Please also write it down")) return answer("Written down.")
+		// Messages from OpenBot about work that ended.
+		if (has("[OpenBot] The work dlg_")) return answer("Noted: " + input)
+		if (answered) return answer("Started: " + result)
+		if (has("research slowly"))
+			return call(names.delegate, {
+				task: "slow research",
+				limits: { timeMs: 3600000 },
+			})
+		if (has("add to the research"))
+			return call(names.delegate, {
+				limits: { timeMs: 3600000 },
+				delegation: ids.research,
+				task: "Also look at the tests.",
+			})
+		if (has("continue the research"))
+			return call(names.delegate, {
+				limits: { timeMs: 3600000 },
+				delegation: ids.research,
+				task: "One more thing.",
+			})
+		if (has("step carefully"))
+			return call(names.delegate, {
+				task: "stepping task",
+				limits: { timeMs: 3600000, steps: 1 },
+			})
+		if (has("research with a short time"))
+			return call(names.delegate, {
+				task: "slow research",
+				limits: { timeMs: 1200 },
+			})
+		if (has("go deep with a short time"))
+			return call(names.delegate, {
+				task: "deep task",
+				limits: { timeMs: 3000 },
+			})
+		if (has("go deep"))
+			return call(names.delegate, {
+				task: "deep task",
+				limits: { timeMs: 3600000 },
+			})
+		if (has("ask the other Bot"))
+			return call(names.delegate, {
+				limits: { timeMs: 3600000 },
+				bot: ids.other,
+				reason: "The other Bot knows this.",
+				task: "Other work.",
+			})
+		if (has("are you there")) return answer("Yes, I am here.")
+		return answer("Hello.")
+	}
+	const model = yield* LanguageModel.make({
 		generateText: () =>
 			Effect.succeed([Response.makePart("text", { text: '{"changes":[]}' })]),
 		streamText: ({ prompt }) =>
-			Stream.suspend((): Stream.Stream<Response.StreamPartEncoded> => {
-				const last = prompt.content.findLastIndex(
-					(message) => message.role === "user",
-				)
-				const input = textOf(prompt.content[last]!)
-				const answered = prompt.content
-					.slice(last + 1)
-					.some((message) => message.role === "tool")
-				const result = JSON.stringify(prompt.content.slice(last + 1).at(-1))
-				// Paused work that its decider lets go on.
-				if (input.startsWith("[OpenBot] Your work reached"))
-					return answer("Finished after the pause. " + input)
-				// Work that the Bot gave to itself or to another Bot.
-				if (input.includes("gives you this task:")) {
-					if (input.includes("stepping task"))
-						return answered
-							? answer("This step must not run.")
-							: call(names.list, {})
-					if (input.includes("slow research")) return later(3, "Research done.")
-					if (input.includes("deeper task")) return later(60, "Too late.")
-					if (input.includes("deep task"))
-						return answered
-							? answer("I wait for the deeper task.")
-							: call(names.delegate, {
-									task: "deeper task",
-									limits: { timeMs: 3600000 },
-								})
-					if (input.includes("One more thing"))
-						return answer("One more thing done.")
-					return answer("Other work done.")
-				}
-				if (input.includes("Also look at the tests"))
-					return answer("Tests look fine.")
-				if (input.includes("Please also write it down"))
-					return answer("Written down.")
-				// Messages from OpenBot about work that ended.
-				if (input.includes("[OpenBot] The work dlg_"))
-					return answer("Noted: " + input)
-				if (answered) return answer("Started: " + result)
-				if (input.includes("research slowly"))
-					return call(names.delegate, {
-						task: "slow research",
-						limits: { timeMs: 3600000 },
-					})
-				if (input.includes("add to the research"))
-					return call(names.delegate, {
-						limits: { timeMs: 3600000 },
-						delegation: known.research,
-						task: "Also look at the tests.",
-					})
-				if (input.includes("continue the research"))
-					return call(names.delegate, {
-						limits: { timeMs: 3600000 },
-						delegation: known.research,
-						task: "One more thing.",
-					})
-				if (input.includes("step carefully"))
-					return call(names.delegate, {
-						task: "stepping task",
-						limits: { timeMs: 3600000, steps: 1 },
-					})
-				if (input.includes("research with a short time"))
-					return call(names.delegate, {
-						task: "slow research",
-						limits: { timeMs: 1200 },
-					})
-				if (input.includes("go deep with a short time"))
-					return call(names.delegate, {
-						task: "deep task",
-						limits: { timeMs: 3000 },
-					})
-				if (input.includes("go deep"))
-					return call(names.delegate, {
-						task: "deep task",
-						limits: { timeMs: 3600000 },
-					})
-				if (input.includes("ask the other Bot"))
-					return call(names.delegate, {
-						limits: { timeMs: 3600000 },
-						bot: known.other,
-						reason: "The other Bot knows this.",
-						task: "Other work.",
-					})
-				if (input.includes("are you there")) return answer("Yes, I am here.")
-				return answer("Hello.")
-			}),
-	}),
-)
+			Stream.unwrap(Effect.map(Ref.get(known), (ids) => reply(prompt, ids))),
+	})
+	return { model, known }
+})
 
-const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
+/** Calls the API of the host as one signed-in person. */
+const client = Effect.fn("Delegation.client")(function* (
+	host: BrowserHost.Host,
+	credential: Redacted.Redacted<string>,
+) {
+	const call = Caller.withCookie({
+		address: yield* host.address,
+		publicOrigin,
+	})
 	const send = (
-		credential: Redacted.Redacted<string>,
 		path: string,
-		method = "GET",
+		method: HttpMethod.HttpMethod = "GET",
 		payload?: unknown,
-	) =>
-		fetch(host.address + path, {
-			method,
-			headers: {
-				cookie:
-					"__Host-openbot-session=" +
-					encodeURIComponent(Redacted.value(credential)),
-				origin: publicOrigin,
-				...(payload === undefined
-					? {}
-					: { "content-type": "application/json" }),
-			},
-			...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-		})
-	const json = async <A, I>(
-		schema: Schema.Codec<A, I>,
-		response: Promise<globalThis.Response>,
-	): Promise<A> => {
-		const value = await response
-		const body = await value.text()
-		assert.ok(value.ok, value.status + " " + body)
-		return Schema.decodeUnknownSync(schema)(JSON.parse(body))
-	}
-	const until = async <A>(
-		label: string,
-		check: () => Promise<A | undefined>,
-	): Promise<A> => {
-		for (let tries = 0; tries < 600; tries++) {
-			const value = await check()
-			if (value !== undefined) return value
-			await new Promise((resolve) => setTimeout(resolve, 25))
-		}
-		throw new Error("Timed out: " + label)
-	}
-	return { send, json, until }
-}
+	) => call(credential, path, method, payload)
+	/** Reads the JSON answer of a GET request with a schema. */
+	const read = <S extends Schema.Constraint>(schema: S, path: string) =>
+		Effect.flatMap(send(path), Caller.json(schema))
+	return { send, read }
+})
+
+type Client = Effect.Success<ReturnType<typeof client>>
 
 /** The direct Chat of a person with a Bot, with helpers to send and read. */
-const direct = (
-	host: Awaited<ReturnType<typeof BrowserHost.start>>,
-	credential: Redacted.Redacted<string>,
+const direct = Effect.fn("Delegation.direct")(function* (
+	api: Client,
 	bot: string,
-) => {
-	const { send, json, until } = client(host)
-	let chat = ""
-	const view = (id = chat) =>
-		json(ChatView, send(credential, "/v1/chats/" + id))
-	const message = async (input: string, to?: string) => {
-		const sent = await send(
-			credential,
-			to === undefined ? "/v1/bots/" + bot + "/messages" : to + "/messages",
-			"POST",
-			{ input },
-		)
-		assert.strictEqual(sent.status, 202, await sent.clone().text())
-		const receipt = Schema.decodeUnknownSync(MessageReceipt)(await sent.json())
-		if (to === undefined) chat = receipt.chat
+) {
+	const { send, read } = api
+	/** The ID of the direct Chat. The first message to the Bot sets it. */
+	const current = yield* Ref.make("")
+	const chatOf = (id: string | undefined) =>
+		id === undefined ? Ref.get(current) : Effect.succeed(id)
+	/** Sends a message to the Bot, or to another Chat when `chat` is given. */
+	const message = Effect.fn("Delegation.message")(function* (
+		input: string,
+		chat?: string,
+	) {
+		if (chat !== undefined) return yield* Messages.send(send, chat, input)
+		const receipt = yield* Messages.message(send, bot, input)
+		yield* Ref.set(current, receipt.chat)
 		return receipt
-	}
-	const rested = (id = chat) =>
-		until("the Chat comes to rest", async () => {
-			const current = await view(id)
-			return current.status !== "Running" &&
-				current.activity !== "active" &&
-				current.inbox === 0
-				? current
-				: undefined
-		})
-	const history = async (id = chat) =>
-		(
-			await json(
-				Schema.Struct({ items: Schema.Array(Item.Record) }),
-				send(credential, "/v1/chats/" + id + "/items?limit=500"),
-			)
-		).items
-			.toReversed()
-			.map((item) => JSON.stringify(item.content))
-			.join("\n")
-	const delegations = () =>
-		json(
-			Schema.Array(DelegationsApi.Delegation),
-			send(credential, "/v1/chats/" + chat + "/delegations"),
+	})
+	const rested = (id?: string) =>
+		Effect.flatMap(chatOf(id), (chat) => Messages.settled(send, chat))
+	const history = (id?: string) =>
+		chatOf(id).pipe(
+			Effect.flatMap((chat) =>
+				read(
+					Schema.Struct({ items: Schema.Array(Item.Record) }),
+					"/v1/chats/" + chat + "/items?limit=500",
+				),
+			),
+			Effect.map(({ items }) =>
+				pipe(
+					items,
+					Arr.reverse,
+					Arr.map((item) => JSON.stringify(item.content)),
+					Arr.join("\n"),
+				),
+			),
 		)
+	const delegations = Effect.flatMap(Ref.get(current), (chat) =>
+		read(
+			Schema.Array(DelegationsApi.Delegation),
+			"/v1/chats/" + chat + "/delegations",
+		),
+	)
 	const delegation = (id: string) =>
-		json(DelegationsApi.Delegation, send(credential, "/v1/delegations/" + id))
-	const ended = (id: string, status: string) =>
-		until(`the work ${id} is ${status}`, async () => {
-			const current = await delegation(id)
-			return current.status === status ? current : undefined
-		})
-	const says = (text: string, id = chat) =>
-		until("the history says " + text, async () =>
-			(await history(id)).includes(text) ? true : undefined,
+		read(DelegationsApi.Delegation, "/v1/delegations/" + id)
+	const ended = (id: string, status: DelegationsApi.DelegationStatus) =>
+		until(
+			`the work ${id} is ${status}`,
+			Effect.map(
+				delegation(id),
+				Option.liftPredicate(
+					(work: DelegationsApi.Delegation) => work.status === status,
+				),
+			),
+		)
+	const says = (text: string, id?: string) =>
+		until(
+			"the history says " + text,
+			Effect.map(history(id), Option.liftPredicate(Str.includes(text))),
 		)
 	return {
-		chat: () => chat,
-		view,
 		message,
 		rested,
 		history,
@@ -260,298 +270,323 @@ const direct = (
 		delegation,
 		ended,
 		says,
-		turn: async (input: string) => {
-			await message(input)
-			return rested()
-		},
+		turn: (input: string) => Effect.andThen(message(input), rested()),
 	}
-}
+})
 
-it(
-	"a Bot gives slow work to itself without a request, answers the person at once while it runs, and takes more work into the same task",
-	{ timeout: 120000 },
-	async () => {
-		const host = await BrowserHost.start({ publicOrigin, model })
-		try {
-			const { send, json, until } = client(host)
-			const alice = await host.login("delegation-alice")
-			const main = await host.defaultBot(alice.session)
-			const chat = direct(host, alice.session, main)
+// The host is a real server with real time.
+layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+	it.effect(
+		"a Bot gives slow work to itself without a request, answers the person at once while it runs, and takes more work into the same task",
+		() =>
+			Effect.gen(function* () {
+				const { model, known } = yield* scripted
+				const host = yield* BrowserHost.start({ publicOrigin, model })
+				const alice = yield* host.login("delegation-alice")
+				const main = yield* host.defaultBot(alice.session)
+				const api = yield* client(host, alice.session)
+				const chat = yield* direct(api, main)
 
-			// Work for itself needs no request. The Bot answers at once.
-			const started = await chat.turn("research slowly")
-			assert.strictEqual(started.status, "Completed")
-			assert.strictEqual(started.open.delegations, 1)
-			const [research] = await chat.delegations()
-			assert.ok(research !== undefined)
-			assert.strictEqual(research.bot, main)
-			assert.ok(["queued", "running"].includes(research.status))
-			known.research = research.id
-			assert.deepStrictEqual(
-				await json(
-					Schema.Array(RequestsApi.CapabilityRequest),
-					send(alice.session, "/v1/requests"),
-				),
-				[],
-			)
-
-			// While the work runs, the person gets an answer at once.
-			const asked = Date.now()
-			const reply = await chat.message("are you there?")
-			assert.strictEqual(reply.delivery, "started")
-			await chat.says("Yes, I am here.")
-			assert.ok(Date.now() - asked < 2500, String(Date.now() - asked))
-			assert.strictEqual((await chat.delegation(research.id)).status, "running")
-
-			// More work for running work goes into the same task. The work ends only
-			// after the task Chat has read it, so the result is the last answer.
-			await chat.turn("add to the research")
-			const first = await chat.ended(research.id, "completed")
-			assert.strictEqual(first.result, "Tests look fine.")
-			assert.ok(first.chat !== null)
-			const task = first.chat
-			assert.match(await chat.history(task), /Research done\./)
-			assert.match(await chat.history(task), /Also look at the tests\./)
-			await chat.says("Noted: [OpenBot] The work " + research.id)
-			await chat.rested()
-
-			// More work for ended work is new work in the same task Chat.
-			await chat.turn("continue the research")
-			const rounds = await chat.delegations()
-			const next = rounds.find((entry) => entry.id !== research.id)
-			assert.ok(next !== undefined)
-			const second = await chat.ended(next.id, "completed")
-			assert.strictEqual(second.chat, task)
-			assert.strictEqual(second.result, "One more thing done.")
-			await chat.says("Noted: [OpenBot] The work " + next.id)
-			await chat.rested()
-
-			// A person can also write in the task Chat. That is a new round of the work,
-			// and its result goes to the parent Chat too.
-			await chat.message("Please also write it down.", "/v1/chats/" + task)
-			const round = await until("a new round of the work", async () =>
-				(await chat.delegations()).find(
-					(entry) =>
-						entry.id !== research.id &&
-						entry.id !== next.id &&
-						entry.status === "completed",
-				),
-			)
-			assert.strictEqual(round.chat, task)
-			assert.strictEqual(round.result, "Written down.")
-			await chat.says("Noted: [OpenBot] The work " + round.id)
-			await chat.rested()
-		} finally {
-			await host.close()
-		}
-	},
-)
-
-it(
-	"cancelling work also stops the work that it gave away, and a denied request comes back as a message",
-	{ timeout: 120000 },
-	async () => {
-		const host = await BrowserHost.start({ publicOrigin, model })
-		try {
-			const { send, json, until } = client(host)
-			const alice = await host.login("cancel-alice")
-			const main = await host.defaultBot(alice.session)
-			const chat = direct(host, alice.session, main)
-
-			// The task gives work to itself again. Its work stays open while that runs.
-			await chat.turn("go deep")
-			const [deep] = await chat.delegations()
-			assert.ok(deep !== undefined)
-			const deeper = await until("the deeper work", async () => {
-				const current = await chat.delegation(deep.id)
-				if (current.chat === null) return undefined
-				const list = await json(
-					Schema.Array(DelegationsApi.Delegation),
-					send(alice.session, "/v1/chats/" + current.chat + "/delegations"),
-				)
-				return list[0]?.status === "running" && list[0].chat !== null
-					? list[0]
-					: undefined
-			})
-			await chat.says(
-				"I wait for the deeper task.",
-				(await chat.delegation(deep.id)).chat!,
-			)
-			assert.strictEqual((await chat.delegation(deep.id)).status, "running")
-
-			// The person cancels the first work. The work below it stops too.
-			const cancelled = await send(
-				alice.session,
-				"/v1/delegations/" + deep.id + "/cancel",
-				"POST",
-				{},
-			)
-			assert.strictEqual(cancelled.status, 200, await cancelled.clone().text())
-			await chat.ended(deep.id, "cancelled")
-			await chat.ended(deeper.id, "cancelled")
-			const stopped = await chat.rested(deeper.chat!)
-			assert.notStrictEqual(stopped.status, "Completed")
-			assert.ok(!(await chat.history(deeper.chat!)).includes("Too late."))
-
-			// Work for another Bot needs a decision. A denial comes back as a message.
-			const other = await json(
-				BotsApi.Bot,
-				send(alice.session, "/v1/bots", "POST", {
-					name: "Other",
-					role: "Knows other things",
-					instructions: "Help.",
-				}),
-			)
-			known.other = other.id
-			await chat.turn("ask the other Bot")
-			const request = await until("a pending request", async () =>
-				(
-					await json(
+				// Work for itself needs no request. The Bot answers at once.
+				const started = yield* chat.turn("research slowly")
+				assert.strictEqual(started.status, "Completed")
+				assert.strictEqual(started.open.delegations, 1)
+				const [research] = yield* chat.delegations
+				assert.ok(research !== undefined)
+				assert.strictEqual(research.bot, main)
+				assert.ok(["queued", "running"].includes(research.status))
+				yield* Ref.update(known, (ids) => ({ ...ids, research: research.id }))
+				assert.deepStrictEqual(
+					yield* api.read(
 						Schema.Array(RequestsApi.CapabilityRequest),
-						send(alice.session, "/v1/requests?status=pending"),
-					)
-				).find((entry) => entry.capability.action === "bots.delegate"),
-			)
-			const denied = await send(
-				alice.session,
-				"/v1/requests/" + request.id,
-				"POST",
-				{
+						"/v1/requests",
+					),
+					[],
+				)
+
+				// While the work runs, the person gets an answer at once.
+				const [took] = yield* Effect.timed(
+					Effect.gen(function* () {
+						const reply = yield* chat.message("are you there?")
+						assert.strictEqual(reply.delivery, "started")
+						yield* chat.says("Yes, I am here.")
+					}),
+				)
+				assert.ok(
+					Duration.isLessThan(took, Duration.millis(2500)),
+					String(Duration.toMillis(took)),
+				)
+				assert.strictEqual(
+					(yield* chat.delegation(research.id)).status,
+					"running",
+				)
+
+				// More work for running work goes into the same task. The work ends only
+				// after the task Chat has read it, so the result is the last answer.
+				yield* chat.turn("add to the research")
+				const first = yield* chat.ended(research.id, "completed")
+				assert.strictEqual(first.result, "Tests look fine.")
+				assert.ok(first.chat !== null)
+				const task = first.chat
+				assert.match(yield* chat.history(task), /Research done\./)
+				assert.match(yield* chat.history(task), /Also look at the tests\./)
+				yield* chat.says("Noted: [OpenBot] The work " + research.id)
+				yield* chat.rested()
+
+				// More work for ended work is new work in the same task Chat.
+				yield* chat.turn("continue the research")
+				const next = Arr.findFirst(
+					yield* chat.delegations,
+					(entry) => entry.id !== research.id,
+				)
+				assert.ok(Option.isSome(next))
+				const second = yield* chat.ended(next.value.id, "completed")
+				assert.strictEqual(second.chat, task)
+				assert.strictEqual(second.result, "One more thing done.")
+				yield* chat.says("Noted: [OpenBot] The work " + next.value.id)
+				yield* chat.rested()
+
+				// A person can also write in the task Chat. That is a new round of the work,
+				// and its result goes to the parent Chat too.
+				yield* chat.message("Please also write it down.", task)
+				const round = yield* until(
+					"a new round of the work",
+					Effect.map(chat.delegations, (list) =>
+						Arr.findFirst(
+							list,
+							(entry) =>
+								entry.id !== research.id &&
+								entry.id !== next.value.id &&
+								entry.status === "completed",
+						),
+					),
+				)
+				assert.strictEqual(round.chat, task)
+				assert.strictEqual(round.result, "Written down.")
+				yield* chat.says("Noted: [OpenBot] The work " + round.id)
+				yield* chat.rested()
+			}),
+		{ timeout: 120000 },
+	)
+
+	it.effect(
+		"cancelling work also stops the work that it gave away, and a denied request comes back as a message",
+		() =>
+			Effect.gen(function* () {
+				const { model, known } = yield* scripted
+				const host = yield* BrowserHost.start({ publicOrigin, model })
+				const alice = yield* host.login("cancel-alice")
+				const main = yield* host.defaultBot(alice.session)
+				const api = yield* client(host, alice.session)
+				const chat = yield* direct(api, main)
+
+				// The task gives work to itself again. Its work stays open while that runs.
+				yield* chat.turn("go deep")
+				const [deep] = yield* chat.delegations
+				assert.ok(deep !== undefined)
+				const deeper = yield* until(
+					"the deeper work",
+					Effect.gen(function* () {
+						const current = yield* chat.delegation(deep.id)
+						if (current.chat === null)
+							return Option.none<DelegationsApi.Delegation>()
+						const list = yield* api.read(
+							Schema.Array(DelegationsApi.Delegation),
+							"/v1/chats/" + current.chat + "/delegations",
+						)
+						return Option.filter(
+							Arr.head(list),
+							(entry) => entry.status === "running" && entry.chat !== null,
+						)
+					}),
+				)
+				assert.ok(deeper.chat !== null)
+				const deepNow = yield* chat.delegation(deep.id)
+				assert.ok(deepNow.chat !== null)
+				yield* chat.says("I wait for the deeper task.", deepNow.chat)
+				assert.strictEqual((yield* chat.delegation(deep.id)).status, "running")
+
+				// The person cancels the first work. The work below it stops too.
+				const cancelled = yield* api.send(
+					"/v1/delegations/" + deep.id + "/cancel",
+					"POST",
+					{},
+				)
+				assert.strictEqual(cancelled.status, 200, yield* cancelled.text)
+				yield* chat.ended(deep.id, "cancelled")
+				yield* chat.ended(deeper.id, "cancelled")
+				const stopped = yield* chat.rested(deeper.chat)
+				assert.strictEqual(stopped.status, "Interrupted")
+				assert.notInclude(yield* chat.history(deeper.chat), "Too late.")
+
+				// Work for another Bot needs a decision. A denial comes back as a message.
+				const other = yield* Effect.flatMap(
+					api.send("/v1/bots", "POST", {
+						name: "Other",
+						role: "Knows other things",
+						instructions: "Help.",
+					}),
+					Caller.json(BotsApi.Bot),
+				)
+				yield* Ref.update(known, (ids) => ({ ...ids, other: other.id }))
+				yield* chat.turn("ask the other Bot")
+				const request = yield* until(
+					"a pending request",
+					Effect.map(
+						api.read(
+							Schema.Array(RequestsApi.CapabilityRequest),
+							"/v1/requests?status=pending",
+						),
+						(list) =>
+							Arr.findFirst(
+								list,
+								(entry) => entry.capability.action === "bots.delegate",
+							),
+					),
+				)
+				const denied = yield* api.send("/v1/requests/" + request.id, "POST", {
 					expected: request.revision,
 					decision: "deny",
 					reason: "Not this week.",
-				},
-			)
-			assert.strictEqual(denied.status, 200, await denied.clone().text())
-			const asked = (await chat.delegations()).find(
-				(entry) => entry.bot === other.id,
-			)
-			assert.ok(asked !== undefined)
-			const failed = await chat.ended(asked.id, "failed")
-			assert.match(failed.result ?? "", /Not this week/)
-			await chat.says("Noted: [OpenBot] The work " + asked.id)
-			assert.match(await chat.history(), /Not this week/)
-		} finally {
-			await host.close()
-		}
-	},
-)
-
-it(
-	"work pauses at a limit and asks its decider, who lets it go on with words or stops it, and work below waits with it",
-	{ timeout: 120000 },
-	async () => {
-		const host = await BrowserHost.start({ publicOrigin, model })
-		try {
-			const { send, json, until } = client(host)
-			const alice = await host.login("limits-alice")
-			const main = await host.defaultBot(alice.session)
-			const chat = direct(host, alice.session, main)
-			const pending = (limit: string) =>
-				until("a request to go on after the " + limit + " limit", async () =>
-					(
-						await json(
-							Schema.Array(RequestsApi.CapabilityRequest),
-							send(alice.session, "/v1/requests?status=pending"),
-						)
-					).find(
-						(entry) =>
-							entry.capability.action === "delegations.continue" &&
-							entry.capability.arguments?.["limit"] === limit,
-					),
+				})
+				assert.strictEqual(denied.status, 200, yield* denied.text)
+				const asked = Arr.findFirst(
+					yield* chat.delegations,
+					(entry) => entry.bot === other.id,
 				)
-			const decide = async (
-				request: RequestsApi.CapabilityRequest,
-				decision: "allow" | "deny",
-				reason: string,
-			) => {
-				const decided = await send(
-					alice.session,
-					"/v1/requests/" + request.id,
-					"POST",
-					{
-						expected: request.revision,
-						decision,
-						reason,
-						...(decision === "allow" ? { scope: "once" } : {}),
-					},
-				)
-				assert.strictEqual(decided.status, 200, await decided.clone().text())
-			}
+				assert.ok(Option.isSome(asked))
+				const failed = yield* chat.ended(asked.value.id, "failed")
+				assert.match(failed.result ?? "", /Not this week/)
+				yield* chat.says("Noted: [OpenBot] The work " + asked.value.id)
+				assert.match(yield* chat.history(), /Not this week/)
+			}),
+		{ timeout: 120000 },
+	)
 
-			// The work may use one model step. Before its second step it pauses, and the
-			// person above the Bot decides. The words of the decision go to the work.
-			await chat.turn("step carefully")
-			const [stepping] = await chat.delegations()
-			assert.ok(stepping !== undefined)
-			assert.deepStrictEqual(stepping.limits, { timeMs: 3600000, steps: 1 })
-			const steps = await pending("steps")
-			assert.strictEqual(steps.capability.target, stepping.id)
-			const waiting = await chat.ended(stepping.id, "paused")
-			assert.strictEqual(waiting.pause?.limit, "steps")
-			assert.strictEqual(waiting.pause?.request, steps.id)
-			assert.strictEqual(waiting.usage?.steps, 1)
-			assert.ok(!(await chat.history(waiting.chat!)).includes("must not run"))
-			await decide(steps, "allow", "Use the short way.")
-			const finished = await chat.ended(stepping.id, "completed")
-			assert.match(finished.result ?? "", /Finished after the pause/)
-			assert.match(finished.result ?? "", /Use the short way\./)
-			await chat.says("Noted: [OpenBot] The work " + stepping.id)
-			await chat.rested()
-
-			// The time is over while the model still thinks. The decider stops the work.
-			await chat.turn("research with a short time")
-			const slow = (await chat.delegations()).find(
-				(entry) => entry.id !== stepping.id,
-			)
-			assert.ok(slow !== undefined)
-			const time = await pending("time")
-			assert.strictEqual(time.capability.target, slow.id)
-			assert.strictEqual((await chat.delegation(slow.id)).status, "paused")
-			await decide(time, "deny", "Too slow.")
-			const stopped = await chat.ended(slow.id, "cancelled")
-			assert.match(stopped.result ?? "", /Too slow/)
-			assert.ok(!(await chat.history(stopped.chat!)).includes("Research done."))
-			await chat.says("Noted: [OpenBot] The work " + slow.id)
-			await chat.rested()
-
-			// Work that pauses pauses the work that it gave away. Only the work at the
-			// limit asks. When it goes on, the work below goes on too.
-			await chat.turn("go deep with a short time")
-			const deep = (await chat.delegations()).find(
-				(entry) => entry.id !== stepping.id && entry.id !== slow.id,
-			)
-			assert.ok(deep !== undefined)
-			const deeper = await until("the deeper work", async () => {
-				const current = await chat.delegation(deep.id)
-				if (current.chat === null) return undefined
-				return (
-					await json(
-						Schema.Array(DelegationsApi.Delegation),
-						send(alice.session, "/v1/chats/" + current.chat + "/delegations"),
-					)
-				).find((entry) => entry.chat !== null)
-			})
-			const over = await pending("time")
-			assert.strictEqual(over.capability.target, deep.id)
-			const below = await chat.ended(deeper.id, "paused")
-			assert.strictEqual(below.pause?.delegation, deep.id)
-			assert.strictEqual(below.pause?.request, null)
-			const asks = (
-				await json(
+	it.effect(
+		"work pauses at a limit and asks its decider, who lets it go on with words or stops it, and work below waits with it",
+		() =>
+			Effect.gen(function* () {
+				const { model } = yield* scripted
+				const host = yield* BrowserHost.start({ publicOrigin, model })
+				const alice = yield* host.login("limits-alice")
+				const main = yield* host.defaultBot(alice.session)
+				const api = yield* client(host, alice.session)
+				const chat = yield* direct(api, main)
+				const pendingRequests = api.read(
 					Schema.Array(RequestsApi.CapabilityRequest),
-					send(alice.session, "/v1/requests?status=pending"),
+					"/v1/requests?status=pending",
 				)
-			).filter((entry) => entry.capability.action === "delegations.continue")
-			assert.deepStrictEqual(
-				asks.map((entry) => entry.capability.target),
-				[deep.id],
-			)
-			await decide(over, "allow", "Take more time.")
-			await chat.ended(deeper.id, "completed")
-			await chat.ended(deep.id, "completed")
-		} finally {
-			await host.close()
-		}
-	},
-)
+				const pending = (limit: string) =>
+					until(
+						"a request to go on after the " + limit + " limit",
+						Effect.map(pendingRequests, (list) =>
+							Arr.findFirst(
+								list,
+								(entry) =>
+									entry.capability.action === "delegations.continue" &&
+									entry.capability.arguments?.["limit"] === limit,
+							),
+						),
+					)
+				const decide = Effect.fn("Delegation.decide")(function* (
+					request: RequestsApi.CapabilityRequest,
+					decision: "allow" | "deny",
+					reason: string,
+				) {
+					const decided = yield* api.send(
+						"/v1/requests/" + request.id,
+						"POST",
+						{
+							expected: request.revision,
+							decision,
+							reason,
+							...(decision === "allow" ? { scope: "once" } : {}),
+						},
+					)
+					assert.strictEqual(decided.status, 200, yield* decided.text)
+				})
+
+				// The work may use one model step. Before its second step it pauses, and the
+				// person above the Bot decides. The words of the decision go to the work.
+				yield* chat.turn("step carefully")
+				const [stepping] = yield* chat.delegations
+				assert.ok(stepping !== undefined)
+				assert.deepStrictEqual(stepping.limits, { timeMs: 3600000, steps: 1 })
+				const steps = yield* pending("steps")
+				assert.strictEqual(steps.capability.target, stepping.id)
+				const waiting = yield* chat.ended(stepping.id, "paused")
+				assert.strictEqual(waiting.pause?.limit, "steps")
+				assert.strictEqual(waiting.pause?.request, steps.id)
+				assert.strictEqual(waiting.usage?.steps, 1)
+				assert.ok(waiting.chat !== null)
+				assert.notInclude(yield* chat.history(waiting.chat), "must not run")
+				yield* decide(steps, "allow", "Use the short way.")
+				const finished = yield* chat.ended(stepping.id, "completed")
+				assert.match(finished.result ?? "", /Finished after the pause/)
+				assert.match(finished.result ?? "", /Use the short way\./)
+				yield* chat.says("Noted: [OpenBot] The work " + stepping.id)
+				yield* chat.rested()
+
+				// The time is over while the model still thinks. The decider stops the work.
+				yield* chat.turn("research with a short time")
+				const slow = Arr.findFirst(
+					yield* chat.delegations,
+					(entry) => entry.id !== stepping.id,
+				)
+				assert.ok(Option.isSome(slow))
+				const time = yield* pending("time")
+				assert.strictEqual(time.capability.target, slow.value.id)
+				assert.strictEqual(
+					(yield* chat.delegation(slow.value.id)).status,
+					"paused",
+				)
+				yield* decide(time, "deny", "Too slow.")
+				const stopped = yield* chat.ended(slow.value.id, "cancelled")
+				assert.match(stopped.result ?? "", /Too slow/)
+				assert.ok(stopped.chat !== null)
+				assert.notInclude(yield* chat.history(stopped.chat), "Research done.")
+				yield* chat.says("Noted: [OpenBot] The work " + slow.value.id)
+				yield* chat.rested()
+
+				// Work that pauses pauses the work that it gave away. Only the work at the
+				// limit asks. When it goes on, the work below goes on too.
+				yield* chat.turn("go deep with a short time")
+				const deep = Arr.findFirst(
+					yield* chat.delegations,
+					(entry) => entry.id !== stepping.id && entry.id !== slow.value.id,
+				)
+				assert.ok(Option.isSome(deep))
+				const deeper = yield* until(
+					"the deeper work",
+					Effect.gen(function* () {
+						const current = yield* chat.delegation(deep.value.id)
+						if (current.chat === null)
+							return Option.none<DelegationsApi.Delegation>()
+						const list = yield* api.read(
+							Schema.Array(DelegationsApi.Delegation),
+							"/v1/chats/" + current.chat + "/delegations",
+						)
+						return Arr.findFirst(list, (entry) => entry.chat !== null)
+					}),
+				)
+				const over = yield* pending("time")
+				assert.strictEqual(over.capability.target, deep.value.id)
+				const below = yield* chat.ended(deeper.id, "paused")
+				assert.strictEqual(below.pause?.delegation, deep.value.id)
+				assert.strictEqual(below.pause?.request, null)
+				const asks = Arr.filter(
+					yield* pendingRequests,
+					(entry) => entry.capability.action === "delegations.continue",
+				)
+				assert.deepStrictEqual(
+					Arr.map(asks, (entry) => entry.capability.target),
+					[deep.value.id],
+				)
+				yield* decide(over, "allow", "Take more time.")
+				yield* chat.ended(deeper.id, "completed")
+				yield* chat.ended(deep.value.id, "completed")
+			}),
+		{ timeout: 120000 },
+	)
+})

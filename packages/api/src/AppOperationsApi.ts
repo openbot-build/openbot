@@ -1,9 +1,8 @@
-import { Chat } from "@openbot-build/core"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Invocation } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
-import { ChatConflict } from "./ChatsApi.ts"
+import { ChatConflict, chatParams } from "./ChatsApi.ts"
 import { Required, own } from "./Authorization.ts"
 
 const errors = [
@@ -17,7 +16,7 @@ export const AppOperationsApi = HttpApiGroup.make("appOperations").add(
 		error: errors,
 	}),
 	HttpApiEndpoint.get("list", "/v1/chats/:chatId/app-operations", {
-		params: { chatId: Chat.Id },
+		params: chatParams,
 		success: Schema.Array(Invocation),
 		error: errors,
 	}).annotate(Required, [own("read", "Chat", "chatId")]),

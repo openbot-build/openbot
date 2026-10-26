@@ -1,5 +1,5 @@
 import { Identity, OpenBotApi } from "@openbot-build/api"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Files } from "./Files.ts"
 
@@ -28,9 +28,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "files", (handlers) =>
 			)
 			.handle("getFileContent", ({ params }) =>
 				Effect.flatMap(Identity, (caller) =>
-					Effect.map(files.content(caller, params.fileId), (bytes) =>
-						Stream.make(bytes),
-					),
+					files.content(caller, params.fileId),
 				),
 			)
 			.handle("deleteFile", ({ params }) =>

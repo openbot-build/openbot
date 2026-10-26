@@ -1,6 +1,7 @@
 import { AuthApi, type Caller } from "@openbot-build/api"
 import { lt, sql } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option, Schedule } from "effect"
+import { Cause, Clock, Context, Effect, Layer, Option, Schedule } from "effect"
+import * as Background from "../app/Background.ts"
 import { rateWindows } from "../database/Schema.ts"
 import { rateLimitOf } from "../settings/Documents.ts"
 import { Settings } from "../settings/Settings.ts"
@@ -24,20 +25,17 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const settings = yield* Settings
 	// Old windows only take space. A background fiber removes them.
-	yield* Effect.gen(function* () {
-		const now = yield* Clock.currentTimeMillis
-		yield* db
-			.delete(rateWindows)
-			.where(lt(rateWindows.windowStart, now - 2 * windowMs))
-	}).pipe(
-		Effect.catchCause((cause) =>
-			Effect.logWarning(
-				"OpenBot could not remove old rate limit counts",
-				cause,
-			),
-		),
-		Effect.repeat(Schedule.spaced(windowMs)),
-		Effect.forkScoped,
+	yield* Background.repeat(
+		Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			yield* db
+				.delete(rateWindows)
+				.where(lt(rateWindows.windowStart, now - 2 * windowMs))
+		}),
+		{
+			schedule: Schedule.spaced(windowMs),
+			message: "OpenBot could not remove old rate limit counts",
+		},
 	)
 	return RateLimiter.of({
 		hit: (caller) =>
@@ -69,7 +67,12 @@ export const make = Effect.gen(function* () {
 					.returning({ count: rateWindows.count })
 					.pipe(
 						Effect.map((rows) => rows[0]?.count ?? 0),
-						Effect.orElseSucceed(() => 0),
+						Effect.catch((error) =>
+							Effect.logWarning(
+								"OpenBot could not count a request for the rate limit. The request goes on.",
+								Cause.fail(error),
+							).pipe(Effect.annotateLogs({ rateKey: key }), Effect.as(0)),
+						),
 					)
 				if (count > limit)
 					return yield* AuthApi.RateLimited.make({

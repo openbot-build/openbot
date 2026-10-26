@@ -1,28 +1,32 @@
 import { Context, Effect, Schema } from "effect"
 import * as Store from "./Store.ts"
 
-export class AuthorizationError extends Schema.TaggedError<AuthorizationError>()(
-	"AuthorizationError",
-	{
-		reason: Schema.Literals([
-			"Metadata",
-			"CimdUnsupported",
-			"ClientMetadata",
-			"CallbackMismatch",
-			"FlowExpired",
-			"AlreadyConsumed",
-			"GrantRejected",
-			"RefreshUnavailable",
-			"RefreshFailed",
-			"ScopeRequired",
-			"Crypto",
-			"RevocationFailed",
-		]),
-		issue: Schema.String,
-	},
-) {}
+export class AuthorizationError extends Schema.TaggedError<
+	AuthorizationError,
+	{ readonly brand: unique symbol }
+>()("AuthorizationError", {
+	reason: Schema.Literals([
+		"Metadata",
+		"CimdUnsupported",
+		"ClientMetadata",
+		"CallbackMismatch",
+		"FlowExpired",
+		"AlreadyConsumed",
+		"GrantRejected",
+		"RefreshUnavailable",
+		"RefreshFailed",
+		"ScopeRequired",
+		"Crypto",
+		"RevocationFailed",
+	]),
+	issue: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
-export class ClientMetadata extends Schema.Opaque<ClientMetadata>()(
+export class ClientMetadata extends Schema.Opaque<
+	ClientMetadata,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			client_id: Schema.NonEmptyString,
@@ -46,7 +50,10 @@ export class ClientMetadata extends Schema.Opaque<ClientMetadata>()(
 		)
 }
 
-export class ResourceMetadata extends Schema.Opaque<ResourceMetadata>()(
+export class ResourceMetadata extends Schema.Opaque<
+	ResourceMetadata,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			resource: Schema.NonEmptyString,
@@ -68,7 +75,10 @@ export class ResourceMetadata extends Schema.Opaque<ResourceMetadata>()(
 		)
 }
 
-export class ServerMetadata extends Schema.Opaque<ServerMetadata>()(
+export class ServerMetadata extends Schema.Opaque<
+	ServerMetadata,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			issuer: Schema.NonEmptyString,
@@ -99,7 +109,10 @@ export class ServerMetadata extends Schema.Opaque<ServerMetadata>()(
 		)
 }
 
-export class Flow extends Schema.Opaque<Flow>()(
+export class Flow extends Schema.Opaque<
+	Flow,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		flowId: Schema.String,
 		binding: Store.CredentialBinding,
@@ -114,10 +127,11 @@ export class Flow extends Schema.Opaque<Flow>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Flow)(value).pipe(
-			Effect.mapError(() =>
+			Effect.mapError((error) =>
 				AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Invalid saved authorization flow",
+					cause: error,
 				}),
 			),
 		)

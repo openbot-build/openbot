@@ -1,6 +1,6 @@
 import type { Chat, ChatStore, Plugin } from "@openbot-build/core"
 import { ChatConflict, ChatTodos, type Todo } from "@openbot-build/api"
-import { Effect, Option, Schema } from "effect"
+import { Array as Arr, Effect, HashSet, Option, pipe, Schema } from "effect"
 
 /** The key of the todo list in the state of a Chat. */
 export const storeKey = "@openbot-build/openbot/todos"
@@ -20,22 +20,24 @@ export const of = (view: Chat.View<Values>): ChatTodos =>
 
 /** The items that are not done yet. While there are some, the Bot goes on working. */
 export const open = (todos: ChatTodos): ReadonlyArray<Todo> =>
-	todos.items.filter((item) => item.status !== "done")
+	Arr.filter(todos.items, (item) => item.status !== "done")
 
 /** Why a list is not valid, or `undefined` when it is valid. */
 export const problem = (items: ReadonlyArray<Todo>): string | undefined => {
-	const ids = new Set(items.map((item) => item.id))
-	if (ids.size !== items.length) return "Each todo needs its own id."
-	if (items.filter((item) => item.status === "in_progress").length > 1)
+	const ids = HashSet.fromIterable(Arr.map(items, (item) => item.id))
+	if (HashSet.size(ids) !== items.length) return "Each todo needs its own id."
+	if (Arr.filter(items, (item) => item.status === "in_progress").length > 1)
 		return "Only one todo can be in progress at a time."
 	return undefined
 }
 
 /** One line for each item, for the Bot to read. */
 export const describe = (items: ReadonlyArray<Todo>): string =>
-	items
-		.map((item) => `- [${item.status}] ${item.id}: ${item.content}`)
-		.join("\n")
+	pipe(
+		items,
+		Arr.map((item) => `- [${item.status}] ${item.id}: ${item.content}`),
+		Arr.join("\n"),
+	)
 
 type Store<P extends Values> = Pick<ChatStore.Store<P>, "modifyEffect">
 

@@ -226,12 +226,12 @@ them. Every member may use them and link their own accounts. See
 
 ## Errors
 
-| Error                     | Status | When                                                                                     |
-| ------------------------- | ------ | ---------------------------------------------------------------------------------------- |
-| `ChannelInvalid`          | 400    | The Bot is not a shared Bot, the kind changed, or the platform did not take the webhook. |
-| `ChannelNotFound`         | 404    | There is no such Channel.                                                                |
-| `ChannelLinkInvalid`      | 404    | The code is unknown, used or too old. Ask the bot again.                                 |
-| `ChannelIdentityNotFound` | 404    | There is no such linked account.                                                         |
-| `ChannelConflict`         | 409    | The Channel changed since you read it.                                                   |
-| `ChannelHookDenied`       | 401    | The signature is wrong or too old, or the Channel is disabled.                           |
-| `ChannelsUnavailable`     | 503    | OpenBot cannot reach its storage now.                                                    |
+| Error                     | Status | When                                                                                |
+| ------------------------- | ------ | ----------------------------------------------------------------------------------- |
+| `ChannelInvalid`          | 400    | The Bot is not a shared Bot, the kind changed, or the platform refused the webhook. |
+| `ChannelNotFound`         | 404    | There is no such Channel.                                                           |
+| `ChannelLinkInvalid`      | 404    | The code is unknown, used or too old. Ask the bot again.                            |
+| `ChannelIdentityNotFound` | 404    | There is no such linked account.                                                    |
+| `ChannelConflict`         | 409    | The Channel changed since you read it.                                              |
+| `ChannelHookDenied`       | 401    | The signature is wrong or too old, or the Channel is disabled.                      |
+| `ChannelsUnavailable`     | 503    | OpenBot cannot reach its storage or the platform now.                               |

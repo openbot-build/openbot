@@ -1,6 +1,7 @@
 import { DelegationsApi, Identity, OpenBotApi } from "@openbot-build/api"
 import { Clock, Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
+import * as Failures from "../app/Failures.ts"
 import { Coordinator } from "./Coordinator.ts"
 import { Delegations, view } from "./Delegations.ts"
 
@@ -14,7 +15,7 @@ const implementations = Effect.gen(function* () {
 			const found = yield* delegations
 				.find(caller.organizationId, id)
 				.pipe(
-					Effect.mapError(() =>
+					Failures.replace("A delegation could not be read.", () =>
 						DelegationsApi.DelegationStorageUnavailable.make({}),
 					),
 				)
@@ -47,7 +48,7 @@ const implementations = Effect.gen(function* () {
 						"A person stopped the work.",
 					)
 					.pipe(
-						Effect.mapError(() =>
+						Failures.replace("A delegation could not be stopped.", () =>
 							DelegationsApi.DelegationStorageUnavailable.make({}),
 						),
 					)

@@ -1,8 +1,17 @@
-import { existsSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { Worker } from "node:worker_threads"
 import type { CodeRunsApi } from "@openbot-build/api"
-import { Context, Duration, Effect, Layer, Option, Queue, Schema } from "effect"
+import {
+	Cause,
+	Context,
+	Duration,
+	Effect,
+	FileSystem,
+	Layer,
+	Option,
+	Queue,
+	Schema,
+} from "effect"
 import type {
 	Call,
 	FromWorker,
@@ -58,20 +67,26 @@ export class Sandbox extends Context.Service<
 >()("@openbot-build/openbot/code/Sandbox") {}
 
 /**
- * The worker file. Tests run the TypeScript source. The package build has a
- * JavaScript file next to this one. The single-file server bundle has
+ * The places of the worker file. Tests run the TypeScript source. The package
+ * build has a JavaScript file next to this one. The single-file server bundle has
  * `CodeWorker.mjs` next to the bundle.
  */
-const workerFile = () =>
-	[
-		new URL("./Worker.ts", import.meta.url),
-		new URL("./Worker.js", import.meta.url),
-		new URL("./CodeWorker.mjs", import.meta.url),
-	].find((url) => existsSync(fileURLToPath(url)))
+const workerFiles = [
+	new URL("./Worker.ts", import.meta.url),
+	new URL("./Worker.js", import.meta.url),
+	new URL("./CodeWorker.mjs", import.meta.url),
+]
 
 type Event =
 	| { readonly _tag: "Message"; readonly message: FromWorker }
-	| { readonly _tag: "Ended"; readonly message: string }
+	| {
+			readonly _tag: "Ended"
+			readonly message: string
+			/** The error of the worker, when an error stopped it. */
+			readonly error?: unknown
+			/** True when the worker used all the memory of its `resourceLimits`. */
+			readonly outOfMemory?: boolean
+	  }
 
 const unavailable = (message: string): Outcome => ({
 	_tag: "Failed",
@@ -80,24 +95,43 @@ const unavailable = (message: string): Outcome => ({
 	logs: [],
 })
 
-export const make: Effect.Effect<typeof Sandbox.Service> = Effect.sync(() => {
+export const make: Effect.Effect<
+	typeof Sandbox.Service,
+	never,
+	FileSystem.FileSystem
+> = Effect.gen(function* () {
+	const fs = yield* FileSystem.FileSystem
+	/** The first worker file that exists. */
+	const workerFile = Effect.findFirst(workerFiles, (url) =>
+		fs.exists(fileURLToPath(url)).pipe(
+			Effect.tapCauseIf(Cause.hasFails, (cause) =>
+				Effect.logWarning(
+					"OpenBot could not check a file of the Code Mode worker.",
+					cause,
+				),
+			),
+			Effect.catch(() => Effect.succeed(false)),
+		),
+	)
 	const run: typeof Sandbox.Service.run = (program, answer) =>
 		Effect.scoped(
 			Effect.gen(function* () {
-				const file = workerFile()
-				if (file === undefined)
+				const file = yield* workerFile
+				if (Option.isNone(file)) {
+					yield* Effect.logError(
+						"OpenBot could not find the Code Mode worker file.",
+					)
 					return unavailable("OpenBot could not find the Code Mode worker.")
+				}
 				const events = yield* Queue.unbounded<Event>()
 				const worker = yield* Effect.acquireRelease(
 					Effect.sync(() => {
-						const worker = new Worker(file, {
+						const worker = new Worker(file.value, {
 							// The second limit on memory. QuickJS has its own, smaller limit.
 							resourceLimits: {
 								maxOldGenerationSizeMb:
 									Math.ceil(program.limits.memoryBytes / (1024 * 1024)) + 64,
 							},
-							stdout: true,
-							stderr: true,
 						})
 						worker.on("message", (message: FromWorker) => {
 							Queue.offerUnsafe(events, { _tag: "Message", message })
@@ -106,12 +140,16 @@ export const make: Effect.Effect<typeof Sandbox.Service> = Effect.sync(() => {
 							Queue.offerUnsafe(events, {
 								_tag: "Ended",
 								message: error instanceof Error ? error.message : String(error),
+								error,
+								outOfMemory:
+									"code" in error && error.code === "ERR_WORKER_OUT_OF_MEMORY",
 							})
 						})
-						worker.on("exit", () => {
+						worker.on("exit", (code) => {
 							Queue.offerUnsafe(events, {
 								_tag: "Ended",
-								message: "The Code Mode worker stopped.",
+								message:
+									"The Code Mode worker stopped with exit code " + code + ".",
 							})
 						})
 						return worker
@@ -135,15 +173,37 @@ export const make: Effect.Effect<typeof Sandbox.Service> = Effect.sync(() => {
 				})
 				for (;;) {
 					const event = yield* next
-					if (Option.isNone(event))
+					if (Option.isNone(event)) {
+						yield* Effect.logWarning(
+							"The Code Mode worker did not answer in time, so OpenBot stopped it.",
+						).pipe(Effect.annotateLogs({ timeoutMs: program.limits.timeoutMs }))
 						return {
 							_tag: "Failed",
 							reason: "Timeout",
 							message: "The program used all of its time.",
 							logs: [],
 						} satisfies Outcome
-					if (event.value._tag === "Ended")
-						return unavailable(event.value.message)
+					}
+					if (event.value._tag === "Ended") {
+						// A worker that fails writes its full report to the server output before it stops.
+						// The report and the exit code stay in the log. They are inside details.
+						const { message, error, outOfMemory } = event.value
+						yield* Effect.logWarning(
+							"The Code Mode worker stopped before the program ended.",
+							error === undefined ? message : Cause.die(error),
+						)
+						// The worker gets to its memory limit only through the data of the program.
+						if (outOfMemory === true)
+							return {
+								_tag: "Failed",
+								reason: "Memory",
+								message: "The program used all of its memory.",
+								logs: [],
+							} satisfies Outcome
+						return unavailable(
+							"The Code Mode worker stopped before the program ended.",
+						)
+					}
 					const message = event.value.message
 					switch (message.type) {
 						case "done": {
@@ -183,13 +243,13 @@ export const make: Effect.Effect<typeof Sandbox.Service> = Effect.sync(() => {
 				}
 			}),
 		).pipe(
+			// A defect here is a bug of OpenBot, not of the program. The log keeps it, and the
+			// client gets no inside details. The Turn goes on with an `Unavailable` result.
 			Effect.catchDefect((defect) =>
-				Effect.succeed(
-					unavailable(
-						"OpenBot could not run the program: " +
-							(defect instanceof Error ? defect.message : String(defect)),
-					),
-				),
+				Effect.logError(
+					"OpenBot could not run a Code Mode program.",
+					Cause.die(defect),
+				).pipe(Effect.as(unavailable("OpenBot could not run the program."))),
 			),
 		)
 	return Sandbox.of({ run })

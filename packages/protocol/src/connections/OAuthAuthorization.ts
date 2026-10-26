@@ -1,16 +1,21 @@
 import {
+	Array as Arr,
 	Option,
 	HashMap,
 	Clock,
 	Crypto,
 	Effect,
+	Equal,
+	HashSet,
 	Layer,
 	Redacted,
 	Ref,
 	Schema,
 	Match,
 	Predicate,
-	Record,
+	Record as Rec,
+	String as Str,
+	pipe,
 } from "effect"
 import * as Sdk from "../network/Sdk.ts"
 import * as AppConnections from "./AppConnections.ts"
@@ -49,10 +54,11 @@ export const layerMemoryFlows = Layer.effect(
 		return FlowStore.of({
 			save: Effect.fn("FlowStore.save")(function* (input) {
 				const flow = yield* Flow.decode(input).pipe(
-					Effect.mapError(() =>
+					Effect.mapError((error) =>
 						Store.StoreError.make({
 							reason: "Invalid",
 							operation: "FlowStore.save",
+							cause: error,
 						}),
 					),
 				)
@@ -127,10 +133,11 @@ export const layerMemoryFlows = Layer.effect(
 
 const https = (url: string) =>
 	Schema.decodeEffect(Document.Link)(url).pipe(
-		Effect.mapError(() =>
+		Effect.mapError((error) =>
 			AuthorizationError.make({
 				reason: "Metadata",
 				issue: "Expected an absolute HTTPS URL without credentials",
+				cause: error,
 			}),
 		),
 		Effect.filterOrFail(
@@ -148,16 +155,17 @@ const clientIdUrl = (clientId: string) =>
 		Effect.andThen(
 			Effect.try({
 				try: () => Mcp.validateClientMetadataUrl(clientId),
-				catch: () =>
+				catch: (error) =>
 					AuthorizationError.make({
 						reason: "ClientMetadata",
 						issue: "client_id must be a HTTPS metadata document URL",
+						cause: error,
 					}),
 			}),
 		),
 	)
 
-const sdkMetadata = (metadata: ServerMetadata) =>
+const sdkMetadata = (metadata: typeof ServerMetadata.Encoded) =>
 	metadata as Mcp.AuthorizationServerMetadata
 
 export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
@@ -212,7 +220,7 @@ export const layerClientMetadata = (input: ClientMetadata) =>
 			for (const redirect of metadata.redirect_uris) yield* https(redirect)
 			return HttpRouter.add(
 				"GET",
-				`/${new URL(metadata.client_id).pathname.slice(1)}`,
+				`/${pipe(new URL(metadata.client_id).pathname, Str.slice(1))}`,
 				(request) =>
 					Effect.succeed(
 						new URL(request.originalUrl, metadata.client_id).search ===
@@ -247,17 +255,18 @@ export const discoverResource = Effect.fn("Authorization.discoverResource")(
 							options.resource,
 							{
 								protocolVersion: Document.protocolVersion,
-								...Record.filter(
+								...Rec.filter(
 									{ resourceMetadataUrl: options.resourceMetadataUrl },
 									Predicate.isNotUndefined,
 								),
 							},
 							fetch,
 						),
-					catch: () =>
+					catch: (error) =>
 						AuthorizationError.make({
 							reason: "Metadata",
 							issue: "Protected Resource Metadata discovery failed",
+							cause: error,
 						}),
 				})
 				const resource = yield* ResourceMetadata.decode(prm)
@@ -292,6 +301,7 @@ export const discover = Effect.fn("Authorization.discover")(
 					documents: true,
 				})
 				let metadataDocument: unknown
+				// @effect-diagnostics-next-line asyncFunction:off -- The SDK discovery needs a fetch function that returns a Promise.
 				const fetchMetadata: Mcp.FetchLike = async (input, init) => {
 					const response = await fetch(input, init)
 					if (response.ok) metadataDocument = await response.clone().json()
@@ -303,11 +313,12 @@ export const discover = Effect.fn("Authorization.discover")(
 							fetchFn: fetchMetadata,
 							protocolVersion: Document.protocolVersion,
 						}),
-					catch: () =>
+					catch: (error) =>
 						AuthorizationError.make({
 							reason: "Metadata",
 							issue:
 								"Authorization server discovery failed or issuer did not match",
+							cause: error,
 						}),
 				})
 				// SDK 2.3.1 checks OIDC but removes OAuth extension fields such as revocation_endpoint.
@@ -356,7 +367,8 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 }) {
 	const connection = yield* AppConnections.usable(options.key)
 	if (
-		options.scopes.some(
+		Arr.some(
+			options.scopes,
 			(scope) => !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
 		) ||
 		(options.expiresInMs !== undefined &&
@@ -370,49 +382,31 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	const { metadata } = yield* discover({
 		resource: connection.endpoint,
 		issuer: options.issuer,
-		...Record.filter(
+		...Rec.filter(
 			{ resourceMetadataUrl: options.resourceMetadataUrl },
 			Predicate.isNotUndefined,
 		),
 	})
 	const crypto = yield* Crypto.Crypto
+	// A platform without secure random bytes or SHA-256 is a defect, not a failure a caller can act on.
 	const flowId = Base64Url.encode(
-		yield* crypto.randomBytes(32).pipe(
-			Effect.mapError(() =>
-				AuthorizationError.make({
-					reason: "Crypto",
-					issue: "Could not generate authorization state",
-				}),
-			),
-		),
+		yield* crypto.randomBytes(32).pipe(Effect.orDie),
 	)
 	const verifier = Base64Url.encode(
-		yield* crypto.randomBytes(32).pipe(
-			Effect.mapError(() =>
-				AuthorizationError.make({
-					reason: "Crypto",
-					issue: "Could not generate PKCE verifier",
-				}),
-			),
-		),
+		yield* crypto.randomBytes(32).pipe(Effect.orDie),
 	)
 	const challenge = Base64Url.encode(
-		yield* crypto.digest("SHA-256", new TextEncoder().encode(verifier)).pipe(
-			Effect.mapError(() =>
-				AuthorizationError.make({
-					reason: "Crypto",
-					issue: "Could not generate PKCE challenge",
-				}),
-			),
-		),
+		yield* crypto
+			.digest("SHA-256", new TextEncoder().encode(verifier))
+			.pipe(Effect.orDie),
 	)
 	const url = new URL(metadata.authorization_endpoint)
-	for (const [name, value] of Object.entries({
+	for (const [name, value] of Rec.toEntries({
 		response_type: "code",
 		client_id: options.clientId,
 		redirect_uri: options.redirectUri,
 		resource: connection.endpoint,
-		scope: options.scopes.join(" "),
+		scope: Arr.join(options.scopes, " "),
 		state: flowId,
 		code_challenge: challenge,
 		code_challenge_method: "S256",
@@ -420,23 +414,25 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 		url.searchParams.set(name, value)
 	const now = yield* Clock.currentTimeMillis
 	const store = yield* FlowStore
-	yield* store.save({
-		flowId,
-		binding: {
-			...options.key,
-			resource: connection.endpoint,
-			issuer: metadata.issuer,
-		},
-		clientId: options.clientId,
-		redirectUri: options.redirectUri,
-		scopes: options.scopes,
-		verifier: Redacted.make(verifier),
-		expiresAt: now + (options.expiresInMs ?? 600000),
-		metadata,
-		...(options.resourceMetadataUrl === undefined
-			? {}
-			: { resourceMetadataUrl: options.resourceMetadataUrl }),
-	})
+	yield* store.save(
+		Flow.make({
+			flowId,
+			binding: {
+				...options.key,
+				resource: connection.endpoint,
+				issuer: metadata.issuer,
+			},
+			clientId: options.clientId,
+			redirectUri: options.redirectUri,
+			scopes: options.scopes,
+			verifier: Redacted.make(verifier),
+			expiresAt: now + (options.expiresInMs ?? 600000),
+			metadata,
+			...(options.resourceMetadataUrl === undefined
+				? {}
+				: { resourceMetadataUrl: options.resourceMetadataUrl }),
+		}),
+	)
 	return {
 		_tag: "PendingAuthorization" as const,
 		flowId,
@@ -448,21 +444,33 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	}
 })
 
+const sameScopes = (
+	left: ReadonlyArray<string>,
+	right: ReadonlyArray<string>,
+) => Equal.equals(HashSet.fromIterable(left), HashSet.fromIterable(right))
+
 const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 	readonly binding: Store.CredentialBinding
 	readonly clientId: string
 	readonly scopes: ReadonlyArray<string>
 	readonly tokens: Mcp.OAuthTokens
 	readonly resourceMetadataUrl?: string
+	/**
+	 * True when live clients must connect again, for example after a new grant.
+	 * A grant with other scopes than `scopes` always closes them.
+	 */
+	readonly reconnect: boolean
 }) {
-	if (options.tokens.token_type.toLowerCase() !== "bearer")
+	if (Str.toLowerCase(options.tokens.token_type) !== "bearer")
 		return yield* AuthorizationError.make({
 			reason: "GrantRejected",
 			issue: "Expected bearer resource credentials",
 		})
 	const scopes =
-		options.tokens.scope?.split(/\s+/).filter(Boolean) ?? options.scopes
-	if (scopes.some((scope) => !options.scopes.includes(scope)))
+		options.tokens.scope === undefined
+			? options.scopes
+			: pipe(options.tokens.scope, Str.split(/\s+/), Arr.filter(Str.isNonEmpty))
+	if (Arr.some(scopes, (scope) => !options.scopes.includes(scope)))
 		return yield* AuthorizationError.make({
 			reason: "ScopeRequired",
 			issue: "Token response grants more than was requested",
@@ -479,7 +487,8 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 			reason: "CallbackMismatch",
 			issue: "Connection was disabled or changed",
 		})
-	const reference = yield* credentials.put({
+	// The tokens come from the authorization server, so check them like other outside data.
+	const credential = yield* Store.Credential.decode({
 		binding: options.binding,
 		accessToken: Redacted.make(options.tokens.access_token),
 		...(options.tokens.refresh_token === undefined
@@ -495,6 +504,7 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 		scopes,
 		clientId: options.clientId,
 	})
+	const reference = yield* credentials.put(credential)
 	const current = yield* apps.update({
 		key: options.binding,
 		change: (old) =>
@@ -536,8 +546,12 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 			}),
 		),
 	)
-	const active = yield* App.ConnectionScopes
-	yield* active.close(options.binding)
+	// Live clients read the credential again for each request, so a refresh of the
+	// same grant does not need to close them and cut off their running calls.
+	if (options.reconnect || !sameScopes(scopes, options.scopes)) {
+		const active = yield* App.ConnectionScopes
+		yield* active.close(options.binding)
+	}
 	return current
 })
 
@@ -564,10 +578,11 @@ export const complete = Effect.fn("Authorization.complete")(
 			})
 		const callback = yield* Effect.try({
 			try: () => new URL(options.callbackUrl),
-			catch: () =>
+			catch: (error) =>
 				AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Invalid callback URL",
+					cause: error,
 				}),
 		})
 		const redirect = new URL(flow.redirectUri)
@@ -577,7 +592,8 @@ export const complete = Effect.fn("Authorization.complete")(
 			callback.hash !== "" ||
 			callback.username !== "" ||
 			callback.password !== "" ||
-			[...redirect.searchParams].some(
+			Arr.some(
+				Arr.fromIterable(redirect.searchParams),
 				([key, value]) => callback.searchParams.get(key) !== value,
 			) ||
 			callback.searchParams.getAll("state").length !== 1 ||
@@ -606,14 +622,14 @@ export const complete = Effect.fn("Authorization.complete")(
 						flow.metadata.authorization_response_iss_parameter_supported ===
 						true,
 				}),
-			catch: () =>
+			catch: (error) =>
 				AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Authorization callback issuer did not match",
+					cause: error,
 				}),
 		})
-		yield* store.consume(options)
-		const tokens = yield* Effect.scoped(
+		const exchange = Effect.scoped(
 			Effect.gen(function* () {
 				const fetch = yield* Sdk.fetch({
 					documents: true,
@@ -626,29 +642,42 @@ export const complete = Effect.fn("Authorization.complete")(
 								client_id: flow.clientId,
 							},
 							authorizationCode: code,
-							...Record.filter({ iss }, Predicate.isNotUndefined),
+							...Rec.filter({ iss }, Predicate.isNotUndefined),
 							codeVerifier: Redacted.value(flow.verifier),
 							redirectUri: flow.redirectUri,
 							resource: flow.binding.resource,
 							fetchFn: fetch,
 						}),
-					catch: () =>
+					catch: (error) =>
 						AuthorizationError.make({
 							reason: "GrantRejected",
 							issue: "Authorization code exchange failed",
+							cause: error,
 						}),
 				})
 			}),
 		)
-		return yield* saveTokens({
-			binding: flow.binding,
-			clientId: flow.clientId,
-			scopes: flow.scopes,
-			...(flow.resourceMetadataUrl === undefined
-				? {}
-				: { resourceMetadataUrl: flow.resourceMetadataUrl }),
-			tokens,
-		})
+		// The claim uses up the flow, and the server uses up the code. If the request
+		// stops after the claim, the flow or the issued tokens are lost, so nothing
+		// can interrupt these steps. Each request of the exchange has a time limit.
+		return yield* Effect.uninterruptible(
+			store.consume(options).pipe(
+				Effect.andThen(exchange),
+				Effect.flatMap((tokens) =>
+					saveTokens({
+						binding: flow.binding,
+						clientId: flow.clientId,
+						scopes: flow.scopes,
+						...(flow.resourceMetadataUrl === undefined
+							? {}
+							: { resourceMetadataUrl: flow.resourceMetadataUrl }),
+						tokens,
+						// A new grant can be for another account or other scopes.
+						reconnect: true,
+					}),
+				),
+			),
+		)
 	},
 )
 
@@ -694,7 +723,7 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 			? {}
 			: { resourceMetadataUrl: auth.resourceMetadataUrl }),
 	})
-	const tokens = yield* Effect.scoped(
+	const exchange = Effect.scoped(
 		Effect.gen(function* () {
 			const fetch = yield* Sdk.fetch({ documents: true })
 			return yield* Effect.tryPromise({
@@ -708,26 +737,37 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 						resource: connection.endpoint,
 						fetchFn: fetch,
 					}),
-				catch: () =>
+				catch: (error) =>
 					AuthorizationError.make({
 						reason: "RefreshFailed",
 						issue: "Refresh grant was rejected",
+						cause: error,
 					}),
 			})
 		}),
 	)
-	return yield* saveTokens({
-		binding: auth.binding,
-		clientId,
-		scopes: credential.scopes,
-		...(auth.resourceMetadataUrl === undefined
-			? {}
-			: { resourceMetadataUrl: auth.resourceMetadataUrl }),
-		tokens: {
-			...tokens,
-			refresh_token: tokens.refresh_token ?? Redacted.value(refreshToken),
-		},
-	})
+	// The server can rotate the refresh token, and then the old one stops working
+	// when the server answers. If the request stops before the save, only the dead
+	// token stays, so nothing can interrupt these steps. Each request has a time limit.
+	return yield* Effect.uninterruptible(
+		exchange.pipe(
+			Effect.flatMap((tokens) =>
+				saveTokens({
+					binding: auth.binding,
+					clientId,
+					scopes: credential.scopes,
+					...(auth.resourceMetadataUrl === undefined
+						? {}
+						: { resourceMetadataUrl: auth.resourceMetadataUrl }),
+					tokens: {
+						...tokens,
+						refresh_token: tokens.refresh_token ?? Redacted.value(refreshToken),
+					},
+					reconnect: false,
+				}),
+			),
+		),
+	)
 })
 
 export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (

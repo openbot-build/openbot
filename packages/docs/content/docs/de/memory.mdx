@@ -145,6 +145,13 @@ Ohne Grenze gibt es keine. Wenn das Budget verbraucht ist, bekommt der Bot die
 feste, ruhige Antwort, die Eingabe bleibt, wie sie ist, und das Lernen wartet
 bis zur nächsten Periode.
 
+Die Antwort auf `confide` und die neue Eingabe warten höchstens 15 Sekunden.
+Diese Zeit zählt auch das Warten auf eine freie Aufgabe, wenn alle
+`concurrency`-Aufgaben belegt sind. Danach bekommt der Bot die feste, ruhige
+Antwort, und die Eingabe bleibt, wie sie ist. Ein Schritt des Lernens darf
+höchstens 2 Minuten dauern. Dauert er länger, versucht es der Memory-Bot noch
+einmal, wenn ein späterer Turn des Chats fertig ist.
+
 ---
 
 ## Lesen und ändern

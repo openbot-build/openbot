@@ -221,7 +221,8 @@ tool call, the exact arguments, and the App connection with its revision.
 OpenBot saves the call before the check. When the call is allowed later, it runs
 as this saved call. If the connection changed after the request, the call does
 not run. The Bot gets a notice that asks it to try again, so a new revision
-never uses an old decision.
+never uses an old decision. If OpenBot cannot save the decision, the call does
+not run either, and the notice says so.
 
 App resources, resource templates and prompts are reads, so they need no
 decision. An App's own notes never decide which tools are safe. Only the

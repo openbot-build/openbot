@@ -37,6 +37,43 @@ hängt.
 Das Log enthält auch die Ursache des Fehlers. Die Ursache kann Fehlermeldungen
 und andere private Daten enthalten.
 
+Ein innerer Fehler, zum Beispiel ein Fehler der Datenbank, ist oft der Grund für
+einen `503`. OpenBot schickt den inneren Fehler nicht an den Client. Es schreibt
+ihn zuerst in eine Log-Zeile mit der Stufe `Warn`, mit der Ursache und der
+Stelle im Code, an der er passiert ist. Jede Log-Zeile eines Requests hat
+dieselbe `requestId` wie das Fehler-Log dieses Requests. Damit findest du den
+Grund für einen fehlgeschlagenen Request.
+
+Wenn ein Turn fehlschlägt, bekommt der Client nur eine kurze Nachricht. Ein
+Fehler des Modells, zum Beispiel eine Eingabe, die zu groß für das Modell ist,
+behält seine Nachricht und hat den Code `model_error`. Jeder andere Fehler, zum
+Beispiel ein Fehler der Datenbank, hat den Code `internal_error` und einen
+festen Text. Die ganze Ursache steht in einer Log-Zeile mit der Stufe `Warn` und
+der Nachricht `A Turn failed`. Sie hat dieselbe `chatId` und `turnId` wie das
+Fehler-Log.
+
+---
+
+## Arbeit im Hintergrund
+
+OpenBot erledigt auch Arbeit im Hintergrund. Zum Beispiel löst es fällige
+Trigger aus, löscht alte Dateien, pausiert ungenutzte Computer, prüft Apps für
+den [App Index](/de/docs/app-index) und hört auf Änderungen an den
+Einstellungen. Es pausiert auch delegierte Arbeit an ihrem Zeitlimit, schickt
+Erinnerungen, schickt die Nachrichten von Channels und hört auf Aufrufe von
+seinen anderen Instanzen.
+
+Wenn ein Durchlauf dieser Arbeit fehlschlägt, schreibt OpenBot eine Log-Zeile
+mit der Stufe `Warn` und der Ursache. Dann führt es die Arbeit zur nächsten Zeit
+wieder aus. Die Arbeit hört nicht auf. Diese Zeilen haben die Stufe `Warn` und
+nicht `Error`, weil die Arbeit weitergeht. Einige Schritte schlagen oft aus
+einem harmlosen Grund fehl, zum Beispiel bei einem Chat, an dem eine andere
+Instanz arbeitet. Der nächste Durchlauf macht sie noch einmal, darum haben ihre
+Zeilen die Stufe `Debug`.
+
+Wenn der Server stoppt, hört auch die Arbeit im Hintergrund auf. Das wird nicht
+als Fehler protokolliert.
+
 ---
 
 ## Fehler an deinen eigenen Dienst schicken
@@ -47,7 +84,7 @@ Stelle ihn außerhalb des Servers bereit. So bleibt er offen, bis der Server
 geschlossen ist.
 
 ```ts
-import { NodeRuntime } from "@effect/platform-node"
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -68,7 +105,9 @@ NodeRuntime.runMain(
 	Effect.gen(function* () {
 		const settings = yield* EnvironmentConfiguration.load
 		return yield* Layer.launch(
-			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+			Server.layerLive(settings).pipe(
+				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+			),
 		)
 	}).pipe(Effect.provide(alerts)),
 )

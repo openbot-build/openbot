@@ -1,6 +1,11 @@
 import { PgClient } from "@effect/sql-pg"
 import { BotsApi } from "@openbot-build/api"
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
+import * as Failures from "../app/Failures.ts"
+
+/** Fails with `BotStorageUnavailable` in place of a storage failure, and logs the failure. */
+const storageUnavailable = (message: string) =>
+	Failures.replace(message, () => BotsApi.BotStorageUnavailable.make({}))
 
 /** Where one record is. `owner` and `scope` are the keys that lists filter by. */
 export interface Keys<Status extends string = string> {
@@ -64,6 +69,13 @@ export class BotRecords extends Context.Service<
 			key: string,
 			operation: Effect.Effect<A, E, R>,
 		) => Effect.Effect<A, E | BotsApi.BotStorageUnavailable, R>
+		/**
+		 * Takes the lock on `key` as well, and waits for it. The lock lasts until
+		 * the transaction ends, so use it only inside `transaction`.
+		 */
+		readonly lock: (
+			key: string,
+		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/bots/BotRecords") {}
 
@@ -82,11 +94,9 @@ export const make: Effect.Effect<
 		// Only the type of the status keys comes from this schema.
 		_status?: Schema.Schema<Status>,
 	): Collection<S["Type"], Status> => {
-		type A = S["Type"]
-		const codec = Schema.fromJsonString(
-			Schema.toCodecJson(schema),
-		) as Schema.Codec<A, string>
+		const codec = Schema.fromJsonString(Schema.toCodecJson(schema))
 		const decode = Schema.decodeEffect(codec)
+		// Each log of a read or a change names the record, so the operator can find the row.
 		return {
 			find: (organizationId, id) =>
 				sql<{
@@ -96,22 +106,39 @@ export const make: Effect.Effect<
 					Effect.flatMap((row) =>
 						Effect.transposeOption(Option.map(row, (row) => decode(row.body))),
 					),
-					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
+					storageUnavailable("A Bot record could not be read."),
+					Effect.annotateLogs({
+						botRecordKind: kind,
+						organizationId,
+						botRecordId: id,
+					}),
 				),
 			list: (organizationId, filter = {}) =>
 				sql<{
+					id: string
 					body: string
-				}>`SELECT body FROM openbot_bot_records WHERE kind = ${kind} AND organization_id = ${organizationId} AND (${filter.owner ?? null}::text IS NULL OR owner = ${filter.owner ?? null}) AND (${filter.scope ?? null}::text IS NULL OR scope = ${filter.scope ?? null}) AND (${filter.status ?? null}::text IS NULL OR status = ${filter.status ?? null}) ORDER BY id`.pipe(
+				}>`SELECT id, body FROM openbot_bot_records WHERE kind = ${kind} AND organization_id = ${organizationId} AND (${filter.owner ?? null}::text IS NULL OR owner = ${filter.owner ?? null}) AND (${filter.scope ?? null}::text IS NULL OR scope = ${filter.scope ?? null}) AND (${filter.status ?? null}::text IS NULL OR status = ${filter.status ?? null}) ORDER BY id`.pipe(
+					storageUnavailable("The Bot records could not be listed."),
+					// A record that does not decode fails the list. The log names it.
 					Effect.flatMap((rows) =>
-						Effect.forEach(rows, (row) => decode(row.body)),
+						Effect.forEach(rows, (row) =>
+							decode(row.body).pipe(
+								storageUnavailable("A Bot record could not be read."),
+								Effect.annotateLogs({ botRecordId: row.id }),
+							),
+						),
 					),
-					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
+					Effect.annotateLogs({ botRecordKind: kind, organizationId }),
 				),
 			withStatus: (status) =>
 				sql<{
 					organization_id: string
+					id: string
 					body: string
-				}>`SELECT organization_id, body FROM openbot_bot_records WHERE kind = ${kind} AND status = ${status} ORDER BY id`.pipe(
+				}>`SELECT organization_id, id, body FROM openbot_bot_records WHERE kind = ${kind} AND status = ${status} ORDER BY id`.pipe(
+					storageUnavailable(
+						"The Bot records with a status could not be read.",
+					),
 					Effect.flatMap((rows) =>
 						Effect.forEach(rows, (row) =>
 							decode(row.body).pipe(
@@ -119,10 +146,18 @@ export const make: Effect.Effect<
 									organizationId: row.organization_id,
 									value,
 								})),
+								storageUnavailable("A Bot record could not be read."),
+								Effect.annotateLogs({
+									organizationId: row.organization_id,
+									botRecordId: row.id,
+								}),
 							),
 						),
 					),
-					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
+					Effect.annotateLogs({
+						botRecordKind: kind,
+						botRecordStatus: status,
+					}),
 				),
 			put: (keys, value) =>
 				Schema.encodeEffect(codec)(value).pipe(
@@ -131,30 +166,42 @@ export const make: Effect.Effect<
 							sql`INSERT INTO openbot_bot_records (kind, organization_id, id, owner, scope, status, body) VALUES (${kind}, ${keys.organizationId}, ${keys.id}, ${keys.owner}, ${keys.scope}, ${keys.status}, ${body}) ON CONFLICT (kind, organization_id, id) DO UPDATE SET owner = EXCLUDED.owner, scope = EXCLUDED.scope, status = EXCLUDED.status, body = EXCLUDED.body`,
 					),
 					Effect.asVoid,
-					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
+					storageUnavailable("A Bot record could not be written."),
+					Effect.annotateLogs({
+						botRecordKind: kind,
+						organizationId: keys.organizationId,
+						botRecordId: keys.id,
+					}),
 				),
 			remove: (organizationId, id) =>
 				sql`DELETE FROM openbot_bot_records WHERE kind = ${kind} AND organization_id = ${organizationId} AND id = ${id}`.pipe(
 					Effect.asVoid,
-					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
+					storageUnavailable("A Bot record could not be removed."),
+					Effect.annotateLogs({
+						botRecordKind: kind,
+						organizationId,
+						botRecordId: id,
+					}),
 				),
 		}
 	}
+	const lock = (key: string) =>
+		sql`SELECT pg_advisory_xact_lock(hashtextextended(${"bots:" + key}, 0))`.pipe(
+			Effect.asVoid,
+			storageUnavailable("The lock of a Bot record could not be taken."),
+			Effect.annotateLogs({ botRecordLock: key }),
+		)
 	return BotRecords.of({
 		collection,
+		lock,
 		transaction: (key, operation) =>
 			sql
-				.withTransaction(
-					Effect.gen(function* () {
-						yield* sql`SELECT pg_advisory_xact_lock(hashtextextended(${"bots:" + key}, 0))`.pipe(
-							Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
-						)
-						return yield* operation
-					}),
-				)
+				.withTransaction(Effect.andThen(lock(key), operation))
 				.pipe(
-					Effect.catchTag("SqlError", () =>
-						BotsApi.BotStorageUnavailable.make({}),
+					Effect.catchTag("SqlError", (error) =>
+						Effect.fail(error).pipe(
+							storageUnavailable("A transaction of Bot records failed."),
+						),
 					),
 				),
 	})

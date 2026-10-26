@@ -7,23 +7,22 @@ export interface Options {
 	readonly maxTokens: number
 }
 
-export class InvalidMaxTokens extends Schema.TaggedError<InvalidMaxTokens>()(
-	"InvalidMaxTokens",
-	{
-		// The value is the bad input, so it can be NaN or Infinity.
-		// @effect-diagnostics-next-line schemaNumber:off
-		maxTokens: Schema.Number,
-	},
-) {}
+export class InvalidMaxTokens extends Schema.TaggedError<
+	InvalidMaxTokens,
+	{ readonly brand: unique symbol }
+>()("InvalidMaxTokens", {
+	// @effect-diagnostics-next-line schemaNumber:off -- The value is the bad input, so it can be NaN or Infinity.
+	maxTokens: Schema.Number,
+}) {}
 
-export class TokenLimitExceeded extends Schema.TaggedError<TokenLimitExceeded>()(
-	"TokenLimitExceeded",
-	{
-		maxTokens: Schema.Int,
-		usedTokens: Schema.Int,
-		history: Prompt.Prompt,
-	},
-) {}
+export class TokenLimitExceeded extends Schema.TaggedError<
+	TokenLimitExceeded,
+	{ readonly brand: unique symbol }
+>()("TokenLimitExceeded", {
+	maxTokens: Schema.Int,
+	usedTokens: Schema.Int,
+	history: Prompt.Prompt,
+}) {}
 
 /**
  * Limits each execution on its own, through the ReAct middleware chain.

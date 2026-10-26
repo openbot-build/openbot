@@ -1,5 +1,13 @@
 import type { SsoApi } from "@openbot-build/api"
-import { Context, type Effect, type Option, type Redacted } from "effect"
+import {
+	Array as Arr,
+	Context,
+	type Effect,
+	type Option,
+	pipe,
+	type Redacted,
+	String as Str,
+} from "effect"
 
 /** A stored SSO connection. The client secret stays sealed until sign-in needs it. */
 export interface Connection {
@@ -96,6 +104,8 @@ export const connectionFor = ({
 	readonly connections: ReadonlyArray<Connection>
 	readonly email: string
 }) => {
-	const domain = email.slice(email.lastIndexOf("@") + 1).toLowerCase()
-	return connections.find((connection) => connection.domains.includes(domain))
+	const domain = pipe(email, Str.split("@"), Arr.lastNonEmpty, Str.toLowerCase)
+	return Arr.findFirst(connections, (connection) =>
+		connection.domains.includes(domain),
+	)
 }

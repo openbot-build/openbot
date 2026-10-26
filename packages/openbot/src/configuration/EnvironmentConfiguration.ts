@@ -1,5 +1,5 @@
 import type * as Configuration from "./Configuration.ts"
-import { Config, ConfigProvider, Result } from "effect"
+import { Config, Result, Schema, SchemaIssue } from "effect"
 import * as OutboundPolicy from "../network/OutboundPolicy.ts"
 
 export const load: Configuration.Load = Config.all({
@@ -14,8 +14,12 @@ export const load: Configuration.Load = Config.all({
 		Config.flatMap((input) =>
 			Result.match(OutboundPolicy.parse(input), {
 				onSuccess: (allow) => Config.succeed(allow),
+				// The value is there but it is not right, so this is a schema error,
+				// not a source error (a source that could not be read).
 				onFailure: (message) =>
-					Config.fail(new ConfigProvider.SourceError({ message })),
+					Config.fail(
+						new Schema.SchemaError(new SchemaIssue.InvalidValue({ message })),
+					),
 			}),
 		),
 	),

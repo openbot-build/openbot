@@ -3,8 +3,12 @@ import type {
 	AuthUnavailable,
 	CredentialRejected,
 	SessionInfo,
-} from "./Model.js"
+} from "./Model.ts"
 
+/**
+ * Sign-in with Better Auth. Each call uses the sign-in configuration of the
+ * current platform settings, so a change to them works on the next call.
+ */
 export class Auth extends Context.Service<
 	Auth,
 	{
@@ -13,7 +17,7 @@ export class Auth extends Context.Service<
 		/** The provider for a sign-in: the SSO connection of the email domain, or the platform provider. */
 		readonly signInProvider: (
 			email: string | undefined,
-		) => Option.Option<string>
+		) => Effect.Effect<Option.Option<string>, AuthUnavailable>
 		/** The address of the provider, and the cookie that keeps the sign-in state. */
 		readonly startSignIn: (input: {
 			readonly providerId: string

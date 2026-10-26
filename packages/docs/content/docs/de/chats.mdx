@@ -307,7 +307,11 @@ Computer holen oder abgeben. Die Befehls-Tools eines
 Die Organisation setzt das Budget, die längste Zeit einer Operation und wie
 viele Operationen eines Chats zugleich laufen dürfen. Siehe
 [Einstellungen der Organisation](/de/docs/organization#einstellungen). Hat ein
-Chat die meisten Operationen, warten weitere Aufrufe in ihrem Turn.
+Chat die meisten Operationen, warten weitere Aufrufe in ihrem Turn. Ein Aufruf
+nimmt seinen Platz, wenn er startet. Darum zählen auch Aufrufe, die noch in
+ihrem Turn laufen. Die längste Zeit beginnt auch mit dem Aufruf. Erreicht ein
+Aufruf sie noch in seinem Budget, geht er in den Hintergrund, stoppt und schlägt
+fehl.
 
 | Route                                          | Was sie tut                       |
 | ---------------------------------------------- | --------------------------------- |
@@ -508,6 +512,8 @@ und prüft die Fähigkeit `plans.run`, wie bei jedem [Request](/de/docs/requests
   einen neuen Turn, der den Plan ausführt.
 - Wenn der Plan abgelehnt wird, gibt eine Mitteilung dem Bot den Grund. Der Chat
   bleibt im Modus `plan`.
+- Wenn OpenBot den Plan nicht prüfen kann, läuft der Plan nicht. Das Werkzeug
+  gibt dem Bot den Grund, und der Chat bleibt im Modus `plan`.
 
 Die Einstellung für die Erlaubnis sagt, wer antwortet und was passiert, wenn
 niemand rechtzeitig antwortet:

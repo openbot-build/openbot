@@ -7,6 +7,7 @@ import {
 } from "./Authorization.ts"
 import { Chat, Config } from "@openbot-build/core"
 import * as BotMemory from "./BotMemory.ts"
+import { Email } from "./Email.ts"
 import { Name } from "./Name.ts"
 import { Schema } from "effect"
 import {
@@ -231,21 +232,24 @@ export type UpdateBotMemoryRequest = typeof UpdateBotMemoryRequest.Type
 /** Only entries with all of these tags. Separate the tags with commas. */
 const memoryQuery = { tags: Schema.optionalKey(Schema.NonEmptyString) }
 
-export class BotNotFound extends Schema.TaggedError<BotNotFound>()(
-	"BotNotFound",
-	{ bot: Schema.String },
-) {}
-export class BotConflict extends Schema.TaggedError<BotConflict>()(
-	"BotConflict",
-	{ message: Schema.String },
-) {}
-export class BotInvalid extends Schema.TaggedError<BotInvalid>()("BotInvalid", {
+export class BotNotFound extends Schema.TaggedError<
+	BotNotFound,
+	{ readonly brand: unique symbol }
+>()("BotNotFound", { bot: Schema.String }) {}
+export class BotConflict extends Schema.TaggedError<
+	BotConflict,
+	{ readonly brand: unique symbol }
+>()("BotConflict", { message: Schema.String }) {}
+export class BotInvalid extends Schema.TaggedError<
+	BotInvalid,
+	{ readonly brand: unique symbol }
+>()("BotInvalid", {
 	message: Schema.String,
 }) {}
-export class BotStorageUnavailable extends Schema.TaggedError<BotStorageUnavailable>()(
-	"BotStorageUnavailable",
-	{},
-) {}
+export class BotStorageUnavailable extends Schema.TaggedError<
+	BotStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("BotStorageUnavailable", {}) {}
 /** The handlers check permissions on Bots themselves, so these errors are listed here too. */
 export const BotErrors = [
 	...AuthorizationErrors,
@@ -280,12 +284,7 @@ export const BotInvitation = Schema.Struct({
 export type BotInvitation = typeof BotInvitation.Type
 export const CreateBotInvitationRequest = Schema.Struct({
 	/** Without it, the invitation is a link. */
-	email: Schema.optionalKey(
-		Schema.String.check(
-			Schema.isMaxLength(320),
-			Schema.isPattern(/^[^@\s]+@[^@\s]+$/),
-		),
-	),
+	email: Schema.optionalKey(Email),
 	/** Milliseconds since 1970. An email invitation always lasts 7 days. */
 	expiresAt: Schema.optionalKey(Schema.Finite),
 	/**

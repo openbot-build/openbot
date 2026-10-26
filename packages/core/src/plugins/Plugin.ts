@@ -291,10 +291,10 @@ export interface StateComposition {
 	>
 }
 
-export class StoreConflict extends Schema.TaggedError<StoreConflict>()(
-	"Plugin.StoreConflict",
-	{ id: Id },
-) {}
+export class StoreConflict extends Schema.TaggedError<
+	StoreConflict,
+	{ readonly brand: unique symbol }
+>()("Plugin.StoreConflict", { id: Id }) {}
 
 /** Parameters that each plugin maps before the final toolkit resolves its handlers. */
 export interface Options<
@@ -435,7 +435,7 @@ export function make<
 		BuildE = never,
 		BuildR = never,
 	>(
-		construct: (ctx: {
+		construct: (ctx?: {
 			readonly store: StoreService<D, StoreE, StoreR, I>
 		}) => Effect.Effect<Body<Tools, E, R>, BuildE, BuildR | Scope.Scope>,
 	) => {
@@ -449,9 +449,12 @@ export function make<
 				>(`@openbot-build/core/PluginStore/${input.id}`),
 				{ definition },
 			)
-			const plugin = makeMiddleware(input.id, () => construct({ store }))
-			return { ...plugin, store, stores: { [input.id]: definition } }
+			// A spread would lose the methods of Plugin, such as `pipe`.
+			return Object.assign(
+				makeMiddleware(input.id, () => construct({ store })),
+				{ store, stores: { [input.id]: definition } },
+			)
 		}
-		return makeMiddleware(input.id, () => construct(undefined!))
+		return makeMiddleware(input.id, () => construct())
 	}
 }

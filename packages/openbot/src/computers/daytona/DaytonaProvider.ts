@@ -1,5 +1,3 @@
-// `make` builds a Provider from its secrets. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 /**
  * The driver for Daytona, hosted or self-hosted. It uses two APIs over plain HTTP,
  * with no Daytona SDK. Both take the key as a bearer token.
@@ -15,9 +13,22 @@
  * `make(credentials)` needs an `HttpClient` and gives a `Provider`. It does no I/O.
  */
 import type { ComputersApi } from "@openbot-build/api"
-import { Clock, Effect, Option, Ref, Result } from "effect"
-import { Base64 } from "effect/encoding"
+import {
+	Array as Arr,
+	Cause,
+	Clock,
+	Effect,
+	Fiber,
+	Option,
+	Random,
+	Record as Rec,
+	Ref,
+	Result,
+	String as Str,
+} from "effect"
+import { Base64, Hex } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
+import * as Background from "../../app/Background.ts"
 import {
 	ComputerCallFailed,
 	ComputerGone,
@@ -32,6 +43,8 @@ import * as ProcessSink from "../Process.ts"
 import {
 	failed,
 	field,
+	fileBytes,
+	fileContent,
 	json,
 	number,
 	ok,
@@ -88,10 +101,10 @@ export const stateOf = (state: string | undefined): MachineState => {
 	}
 }
 
-const marker = () =>
-	`__OPENBOT_${Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) =>
-		byte.toString(16).padStart(2, "0"),
-	).join("")}__`
+const gone = (id: string) =>
+	ComputerGone.make({ reason: `The Daytona sandbox ${id} does not exist` })
+
+const withoutEndSlash = Str.replace(/\/$/, "")
 
 const entry = (value: unknown): ComputersApi.FileEntry => {
 	const modified = string(value, "modTime") ?? string(value, "modifiedAt")
@@ -99,7 +112,7 @@ const entry = (value: unknown): ComputersApi.FileEntry => {
 	return {
 		name: string(value, "name") ?? "",
 		// The mode is the text of a Go file mode, such as `Lrwxrwxrwx` for a link.
-		kind: (string(value, "mode") ?? "").startsWith("L")
+		kind: Str.startsWith("L")(string(value, "mode") ?? "")
 			? "link"
 			: field(value, "isDir") === true
 				? "directory"
@@ -187,10 +200,7 @@ export const make = (credentials: Credentials) =>
 		const attach = (id: string) =>
 			Effect.gen(function* () {
 				const found = yield* detail(id)
-				if (Option.isNone(found))
-					return yield* ComputerGone.make({
-						reason: `The Daytona sandbox ${id} does not exist`,
-					})
+				if (Option.isNone(found)) return yield* gone(id)
 				const body = found.value
 				/** The toolbox address, and when OpenBot last saw the sandbox run. */
 				const running = yield* Ref.make(
@@ -201,14 +211,19 @@ export const make = (credentials: Credentials) =>
 					Effect.gen(function* () {
 						const proxy = string(sandbox, "toolboxProxyUrl")
 						if (proxy !== undefined && proxy !== "")
-							return `${proxy.replace(/\/$/, "")}/${id}`
+							return `${withoutEndSlash(proxy)}/${id}`
 						const reply = yield* call(
 							HttpClientRequest.get(sandboxUrl(id, "/toolbox-proxy-url")),
 						).pipe(
 							Effect.flatMap(expect("Reading the Daytona toolbox address")),
 						)
-						const url = string(json(reply), "url") ?? ""
-						return `${url.replace(/\/$/, "")}/${id}`
+						const url = string(json(reply), "url")
+						if (url === undefined || url === "")
+							return yield* ComputerCallFailed.make({
+								message: "Daytona did not give the toolbox address.",
+								retry: true,
+							})
+						return `${withoutEndSlash(url)}/${id}`
 					})
 
 				const start = call(
@@ -229,15 +244,9 @@ export const make = (credentials: Credentials) =>
 						let started = false
 						while ((yield* Clock.currentTimeMillis) - now < startTimeoutMs) {
 							const current = yield* detail(id)
-							if (Option.isNone(current))
-								return yield* ComputerGone.make({
-									reason: `The Daytona sandbox ${id} does not exist`,
-								})
+							if (Option.isNone(current)) return yield* gone(id)
 							const state = stateOf(string(current.value, "state"))
-							if (state === "gone")
-								return yield* ComputerGone.make({
-									reason: `The Daytona sandbox ${id} does not exist`,
-								})
+							if (state === "gone") return yield* gone(id)
 							if (state === "running") {
 								const toolbox = yield* toolboxOf(current.value)
 								yield* Ref.set(
@@ -288,34 +297,57 @@ export const make = (credentials: Credentials) =>
 									"A Daytona Computer gives no terminal to a command in OpenBot. Run it without tty.",
 								retry: false,
 							})
-						const sessionId = `openbot-${marker().slice(9, 25)}`
+						// The ID only needs to be unique in the sandbox. It is not a secret.
+						const random = yield* Effect.replicateEffect(
+							Random.nextIntBetween(0, 255),
+							8,
+						)
+						const sessionId = `openbot-${Hex.encode(Uint8Array.from(random))}`
 						const sessionPath = `/process/session/${sessionId}`
-						yield* toolbox(
-							(base) =>
-								HttpClientRequest.post(`${base}/process/session`).pipe(
+						const address = yield* ensure
+						/**
+						 * Closes the session once. It does not go through `ensure`, so it never
+						 * starts a stopped sandbox only to close a session. On a stopped
+						 * sandbox it fails fast, and the log keeps the failure.
+						 */
+						const close = yield* Effect.cached(
+							call(
+								HttpClientRequest.delete(`${address}${sessionPath}`),
+								10_000,
+							).pipe(
+								Effect.flatMap(expect("Closing the command session")),
+								Background.logFailure(
+									"OpenBot could not close a Daytona command session",
+								),
+							),
+						)
+						yield* Effect.acquireRelease(
+							call(
+								HttpClientRequest.post(`${address}/process/session`).pipe(
 									HttpClientRequest.bodyJsonUnsafe({ sessionId }),
 								),
-							"Starting a command session",
+							).pipe(Effect.flatMap(expect("Starting a command session"))),
+							() => close,
 						)
-						const remove = toolbox(
-							(base) => HttpClientRequest.delete(`${base}${sessionPath}`),
-							"Closing the command session",
-						).pipe(Effect.ignore)
-						yield* Effect.addFinalizer(() => remove)
-						const prefix = [
-							...(request.cwd === undefined
-								? []
-								: [`cd ${quote(request.cwd)} &&`]),
-							...Object.entries(request.env ?? {}).map(
-								([key, value]) => `export ${key}=${quote(value)};`,
-							),
-						].join(" ")
+						const prefix = Arr.join(
+							[
+								...(request.cwd === undefined
+									? []
+									: [`cd ${quote(request.cwd)} &&`]),
+								...Arr.map(
+									Rec.toEntries(request.env ?? {}),
+									([key, value]) => `export ${key}=${quote(value)};`,
+								),
+							],
+							" ",
+						)
 						const started = yield* toolbox(
 							(base) =>
 								HttpClientRequest.post(`${base}${sessionPath}/exec`).pipe(
 									HttpClientRequest.bodyJsonUnsafe({
-										command:
-											`${prefix} bash -lc ${quote(request.command)}`.trim(),
+										command: Str.trim(
+											`${prefix} bash -lc ${quote(request.command)}`,
+										),
 										runAsync: true,
 									}),
 								),
@@ -341,7 +373,7 @@ export const make = (credentials: Credentials) =>
 								)
 								const all = text(logs)
 								if (all.length > seen) {
-									yield* sink.push(encoder.encode(all.slice(seen)))
+									yield* sink.push(encoder.encode(Str.slice(seen)(all)))
 									seen = all.length
 								}
 								const detail = json(
@@ -361,17 +393,41 @@ export const make = (credentials: Credentials) =>
 										),
 									)
 									if (last.length > seen)
-										yield* sink.push(encoder.encode(last.slice(seen)))
+										yield* sink.push(encoder.encode(Str.slice(seen)(last)))
 									return yield* sink.end({ code: exitCode, signal: null })
 								}
 								yield* Effect.sleep("250 millis")
 							}
 						}).pipe(
+							// A failure still ends the sink, so a reader does not wait for ever.
 							Effect.catchCause((cause) =>
-								sink.end({ code: null, signal: null, error: String(cause) }),
+								Effect.andThen(
+									Cause.hasInterruptsOnly(cause)
+										? Effect.void
+										: Effect.logWarning(
+												"OpenBot could not read a Daytona command",
+												cause,
+											).pipe(
+												Effect.annotateLogs({
+													sandbox: id,
+													command: commandId,
+												}),
+											),
+									sink.end({
+										code: null,
+										signal: null,
+										error: Option.match(Cause.findErrorOption(cause), {
+											onNone: () => "OpenBot could not read the command.",
+											onSome: (error) =>
+												error._tag === "ComputerGone"
+													? error.reason
+													: error.message,
+										}),
+									}),
+								),
 							),
 						)
-						yield* Effect.forkScoped(poll)
+						const reader = yield* Effect.forkScoped(poll)
 						const process: Process = {
 							output: sink.output,
 							exit: sink.exit,
@@ -388,7 +444,9 @@ export const make = (credentials: Credentials) =>
 							resize: () => Effect.void,
 							signal: (signal) =>
 								signal === "SIGKILL" || signal === "SIGTERM"
-									? remove.pipe(
+									? // Stop reading first, so the read of a closed session does not fail.
+										Fiber.interrupt(reader).pipe(
+											Effect.andThen(close),
 											Effect.andThen(
 												sink.end({
 													code: null,
@@ -415,29 +473,11 @@ export const make = (credentials: Credentials) =>
 								HttpClientRequest.get(query(base, "/files/download", { path })),
 							`Reading ${path}`,
 						).pipe(
-							Effect.map((reply): ComputersApi.FileContent => ({
-								path,
-								encoding,
-								content:
-									encoding === "base64"
-										? Base64.encode(reply.body)
-										: text(reply),
-							})),
+							Effect.map((reply) => fileContent(path, encoding, reply.body)),
 						),
 					write: (file: ComputersApi.FileContent) =>
 						Effect.gen(function* () {
-							const bytes =
-								file.encoding === "base64"
-									? yield* Base64.decode(file.content).pipe(
-											Effect.fromResult,
-											Effect.mapError(() =>
-												ComputerCallFailed.make({
-													message: "The file content is not valid base64",
-													retry: false,
-												}),
-											),
-										)
-									: new TextEncoder().encode(file.content)
+							const bytes = yield* fileBytes(file)
 							const form = new FormData()
 							form.append("files[0].path", file.path)
 							form.append("files[0].file", new Blob([bytes.slice()]), file.path)
@@ -457,7 +497,7 @@ export const make = (credentials: Credentials) =>
 						).pipe(
 							Effect.map((reply) => {
 								const entries = json(reply)
-								return Array.isArray(entries) ? entries.map(entry) : []
+								return Arr.isArray(entries) ? Arr.map(entries, entry) : []
 							}),
 						),
 					remove: (path: string) =>
@@ -478,9 +518,17 @@ export const make = (credentials: Credentials) =>
 						),
 					).pipe(
 						Effect.flatMap(expect("Making the Daytona preview link")),
-						Effect.map((reply) =>
-							(string(json(reply), "url") ?? "").replace(/\/$/, ""),
-						),
+						Effect.flatMap((reply) => {
+							const url = string(json(reply), "url")
+							return url === undefined || url === ""
+								? Effect.fail(
+										ComputerCallFailed.make({
+											message: "Daytona did not give a preview link.",
+											retry: true,
+										}),
+									)
+								: Effect.succeed(withoutEndSlash(url))
+						}),
 					)
 
 				/** Starts Xvfb, XFCE, x11vnc and noVNC, when they do not run yet. */
@@ -577,7 +625,7 @@ export const make = (credentials: Credentials) =>
 									)
 								: post(
 										"/computeruse/keyboard/hotkey",
-										{ keys: step.keys.join("+") },
+										{ keys: Arr.join(step.keys, "+") },
 										"Pressing keys",
 									)
 					}
@@ -600,7 +648,7 @@ export const make = (credentials: Credentials) =>
 									const data = string(json(reply), "screenshot") ?? ""
 									const size = pngSize(
 										Result.getOrElse(
-											Base64.decode(data.slice(0, 64)),
+											Base64.decode(Str.slice(0, 64)(data)),
 											() => new Uint8Array(0),
 										),
 									)
@@ -639,11 +687,7 @@ export const make = (credentials: Credentials) =>
 					Effect.flatMap(
 						(reply): Effect.Effect<void, ComputerCallFailed | ComputerGone> =>
 							reply.status === 404
-								? Effect.fail(
-										ComputerGone.make({
-											reason: `The Daytona sandbox ${id} does not exist`,
-										}),
-									)
+								? Effect.fail(gone(id))
 								: ok(reply)
 									? Effect.void
 									: // Daytona refuses to stop a sandbox that is stopped already.

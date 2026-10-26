@@ -94,15 +94,23 @@ const services = Layer.unwrap(
 	),
 )
 
+/** What the command says after each outcome of setup. */
+const done: Record<Setup.Outcome, string> = {
+	created: "OpenBot wrote the platform settings.",
+	replaced: "OpenBot replaced the platform settings.",
+	unchanged:
+		"The platform settings were already the same. OpenBot added the admins.",
+}
+
 // Read the settings only when the command runs, so --help works without them.
 const withServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 	effect.pipe(
-		// This program owns the whole application Layer scope.
-		// @effect-diagnostics-next-line strictEffectProvide:off
+		// @effect-diagnostics-next-line strictEffectProvide:off -- This program owns the whole application Layer scope.
 		Effect.provide(
 			services.pipe(
 				// The database URL and the secret keys may come from secret files.
-				Layer.provide(Layer.merge(NodeServices.layer, SecretFiles.layer())),
+				// The program gives the Node services that read the files.
+				Layer.provide(SecretFiles.layer()),
 			),
 		),
 	)
@@ -137,7 +145,7 @@ const setup = Command.make("openbot setup", {
 				(issuer, clientId) => ({
 					issuer,
 					clientId,
-					clientSecret: Option.map(input.clientSecret, Redacted.value),
+					clientSecret: input.clientSecret,
 				}),
 			)
 			const storage = [
@@ -163,7 +171,6 @@ const setup = Command.make("openbot setup", {
 					region: input.s3Region,
 					forcePathStyle: input.s3PathStyle,
 				})),
-				Option.getOrUndefined,
 			)
 			const outcome = yield* Setup.run({
 				publicOrigin: input.publicOrigin,
@@ -171,14 +178,9 @@ const setup = Command.make("openbot setup", {
 				identityProvider,
 				adminEmails: input.adminEmails,
 				force: input.force,
+				authSecret: Option.none(),
 			})
-			yield* Effect.logInfo(
-				outcome === "created"
-					? "OpenBot wrote the platform settings."
-					: outcome === "replaced"
-						? "OpenBot replaced the platform settings."
-						: "The platform settings were already the same. OpenBot added the admins.",
-			)
+			yield* Effect.logInfo(done[outcome])
 		}).pipe(
 			Effect.catchTag("SetupAlreadyDone", () =>
 				Effect.fail(
@@ -197,8 +199,7 @@ const program = Command.run(setup, { version: "0.1.0" })
 
 NodeRuntime.runMain(
 	program.pipe(
-		// This program owns the whole application Layer scope.
-		// @effect-diagnostics-next-line strictEffectProvide:off
+		// @effect-diagnostics-next-line strictEffectProvide:off -- This program owns the whole application Layer scope.
 		Effect.provide(NodeServices.layer),
 	),
 )

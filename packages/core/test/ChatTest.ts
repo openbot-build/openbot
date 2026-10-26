@@ -7,10 +7,13 @@ import {
 	MemoryPersistence,
 	Store,
 } from "@openbot-build/core"
-import { Effect } from "effect"
+import { Array as Arr, Effect } from "effect"
 import { type Tool } from "effect/ai"
 
-/** A runtime over a store in memory, and one new Chat. */
+/**
+ * A runtime over a store in memory, and one new Chat.
+ * It needs a Scope: the runtime stops when the Scope closes.
+ */
 export const ChatTest = <
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
@@ -48,7 +51,8 @@ export const ChatTest = <
 
 /**
  * Waits until no Turn runs in the Chat and no message waits in its inbox.
- * It fails when that does not happen in five seconds.
+ * It has no time limit of its own. The time limit of the test stops it.
+ * The one-second wait is a check again under real time. On the test clock it does nothing.
  */
 export const settled = <P>(
 	runtime: Pick<Chat.Runtime<P>, "status" | "isActive" | "wait">,
@@ -61,7 +65,7 @@ export const settled = <P>(
 			if (
 				!active &&
 				Chat.status(view.chat)._tag !== "Running" &&
-				!view.chat.inbox.some((entry) => entry.kind === "message")
+				!Arr.some(view.chat.inbox, (entry) => entry.kind === "message")
 			)
 				return view
 			view = yield* runtime.wait({
@@ -71,9 +75,4 @@ export const settled = <P>(
 				timeout: "1 second",
 			})
 		}
-	}).pipe(
-		Effect.timeoutOrElse({
-			duration: "5 seconds",
-			orElse: () => Effect.die("The Chat did not come to rest in time"),
-		}),
-	)
+	})

@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import {
 	HttpApi,
 	HttpApiEndpoint,
@@ -12,7 +12,9 @@ import {
 	Authorize,
 	AuthorizationErrors,
 	GroupRequired,
+	Required,
 	channel,
+	channels,
 	own,
 } from "./Authorization.ts"
 import { SecretInput, SecretState, Version } from "./Settings.ts"
@@ -22,18 +24,6 @@ export const ChannelId = Schema.String.check(
 	Schema.isMaxLength(128),
 ).pipe(Schema.brand("@openbot-build/api/ChannelId"))
 export type ChannelId = typeof ChannelId.Type
-
-/**
- * The platform of a Channel. `custom` is any other system that speaks the
- * Channel protocol of OpenBot over signed HTTP requests.
- */
-export const ChannelKind = Schema.Literals([
-	"slack",
-	"lark",
-	"telegram",
-	"custom",
-])
-export type ChannelKind = typeof ChannelKind.Type
 
 /** An HTTPS address that a custom Channel sends its replies to. */
 export const ChannelEndpoint = Schema.NonEmptyString.check(
@@ -84,6 +74,16 @@ export const ChannelCredentials = Schema.Union([
 	}),
 ])
 export type ChannelCredentials = typeof ChannelCredentials.Type
+
+/**
+ * The platform of a Channel. `custom` is any other system that speaks the
+ * Channel protocol of OpenBot over signed HTTP requests. It comes from
+ * `ChannelCredentials`.
+ */
+export const ChannelKind = Schema.Literals(
+	Arr.map(ChannelCredentials.members, (member) => member.fields.kind.literal),
+)
+export type ChannelKind = typeof ChannelKind.Type
 
 /** What the API shows of the secrets of a Channel. */
 export const ChannelCredentialsView = Schema.Union([
@@ -271,36 +271,36 @@ export const CustomDeliveryResult = Schema.Struct({
 	conversation: Schema.optionalKey(Schema.String),
 })
 
-export class ChannelNotFound extends Schema.TaggedError<ChannelNotFound>()(
-	"ChannelNotFound",
-	{ id: Schema.String },
-) {}
-export class ChannelConflict extends Schema.TaggedError<ChannelConflict>()(
-	"ChannelConflict",
-	{ version: Version },
-) {}
-export class ChannelInvalid extends Schema.TaggedError<ChannelInvalid>()(
-	"ChannelInvalid",
-	{ message: Schema.String },
-) {}
+export class ChannelNotFound extends Schema.TaggedError<
+	ChannelNotFound,
+	{ readonly brand: unique symbol }
+>()("ChannelNotFound", { id: Schema.String }) {}
+export class ChannelConflict extends Schema.TaggedError<
+	ChannelConflict,
+	{ readonly brand: unique symbol }
+>()("ChannelConflict", { version: Version }) {}
+export class ChannelInvalid extends Schema.TaggedError<
+	ChannelInvalid,
+	{ readonly brand: unique symbol }
+>()("ChannelInvalid", { message: Schema.String }) {}
 /** The code is unknown, used or too old. Ask the bot for a new one. */
-export class ChannelLinkInvalid extends Schema.TaggedError<ChannelLinkInvalid>()(
-	"ChannelLinkInvalid",
-	{},
-) {}
-export class ChannelIdentityNotFound extends Schema.TaggedError<ChannelIdentityNotFound>()(
-	"ChannelIdentityNotFound",
-	{},
-) {}
-export class ChannelsUnavailable extends Schema.TaggedError<ChannelsUnavailable>()(
-	"ChannelsUnavailable",
-	{},
-) {}
+export class ChannelLinkInvalid extends Schema.TaggedError<
+	ChannelLinkInvalid,
+	{ readonly brand: unique symbol }
+>()("ChannelLinkInvalid", {}) {}
+export class ChannelIdentityNotFound extends Schema.TaggedError<
+	ChannelIdentityNotFound,
+	{ readonly brand: unique symbol }
+>()("ChannelIdentityNotFound", {}) {}
+export class ChannelsUnavailable extends Schema.TaggedError<
+	ChannelsUnavailable,
+	{ readonly brand: unique symbol }
+>()("ChannelsUnavailable", {}) {}
 /** The signature is wrong, the Channel does not exist, or it is disabled. */
-export class ChannelHookDenied extends Schema.TaggedError<ChannelHookDenied>()(
-	"ChannelHookDenied",
-	{},
-) {}
+export class ChannelHookDenied extends Schema.TaggedError<
+	ChannelHookDenied,
+	{ readonly brand: unique symbol }
+>()("ChannelHookDenied", {}) {}
 
 export const ChannelErrors = [
 	...AuthorizationErrors,
@@ -326,15 +326,17 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 		HttpApiEndpoint.get("listChannels", "/v1/organization/channels", {
 			success: Schema.Array(Channel),
 			error: ChannelErrors,
-		}),
+		}).annotate(Required, [channels("read")]),
 		HttpApiEndpoint.post("createChannel", "/v1/organization/channels", {
 			payload: CreateChannelRequest,
 			success: Channel.pipe(HttpApiSchema.status(201)),
 			error: ChannelErrors,
-		}).annotate(
-			OpenApi.Description,
-			"Creates a Channel. The caller becomes its actor. For Telegram, OpenBot also sets the webhook of the bot.",
-		),
+		})
+			.annotate(Required, [channels("write")])
+			.annotate(
+				OpenApi.Description,
+				"Creates a Channel. The caller becomes its actor. For Telegram, OpenBot also sets the webhook of the bot.",
+			),
 		HttpApiEndpoint.get("getChannel", "/v1/organization/channels/:channelId", {
 			params: channelParams,
 			success: Channel,

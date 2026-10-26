@@ -6,9 +6,10 @@ import type { Caller, Identity } from "@openbot-build/api"
 export class Backend extends Context.Service<
 	Backend,
 	{
+		/** The Chats of a namespace. Only its owner may use them. */
 		readonly get: (
 			namespace: string,
-			owner?: typeof Identity.Service,
+			owner: typeof Identity.Service,
 		) => Effect.Effect<
 			typeof Chats.Chats.Service,
 			ChatStore.ChatStoreError | Chat.ChatError

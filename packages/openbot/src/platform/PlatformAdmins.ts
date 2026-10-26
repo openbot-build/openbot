@@ -1,10 +1,10 @@
 import type { PlatformApi } from "@openbot-build/api"
-import { Context, type Effect, Schema } from "effect"
+import { Context, type Effect, pipe, Schema, String as Str } from "effect"
 
-export class PlatformAdminsUnavailable extends Schema.TaggedError<PlatformAdminsUnavailable>()(
-	"PlatformAdminsUnavailable",
-	{},
-) {}
+export class PlatformAdminsUnavailable extends Schema.TaggedError<
+	PlatformAdminsUnavailable,
+	{ readonly brand: unique symbol }
+>()("PlatformAdminsUnavailable", { cause: Schema.Defect() }) {}
 
 export interface Account {
 	readonly id: string
@@ -45,4 +45,5 @@ export class PlatformAdmins extends Context.Service<
 	}
 >()("@openbot-build/openbot/platform/PlatformAdmins") {}
 
-export const normalizeEmail = (email: string) => email.trim().toLowerCase()
+export const normalizeEmail = (email: string) =>
+	pipe(email, Str.trim, Str.toLowerCase)

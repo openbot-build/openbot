@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Schema, String as Str } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -15,11 +15,13 @@ export const SecretPrefix = "obut_"
 export const MaxTokens = 25
 
 export const TokenName = Schema.String.check(
-	Schema.makeFilter(
-		(value) =>
-			(value.trim().length >= 1 && value.trim().length <= 80) ||
-			"Use a token name between 1 and 80 characters.",
-	),
+	Schema.makeFilter((value) => {
+		const length = Str.trim(value).length
+		return (
+			(length >= 1 && length <= 80) ||
+			"Use a token name between 1 and 80 characters."
+		)
+	}),
 )
 export const Token = Schema.Struct({
 	id: Schema.String,
@@ -56,18 +58,18 @@ export const TokenVerification = Schema.Struct({
 })
 export type TokenVerification = typeof TokenVerification.Type
 
-export class TokenNotFound extends Schema.TaggedError<TokenNotFound>()(
-	"TokenNotFound",
-	{},
-) {}
-export class TokenLimitReached extends Schema.TaggedError<TokenLimitReached>()(
-	"TokenLimitReached",
-	{ limit: Schema.Int },
-) {}
-export class TokenStorageUnavailable extends Schema.TaggedError<TokenStorageUnavailable>()(
-	"TokenStorageUnavailable",
-	{},
-) {}
+export class TokenNotFound extends Schema.TaggedError<
+	TokenNotFound,
+	{ readonly brand: unique symbol }
+>()("TokenNotFound", {}) {}
+export class TokenLimitReached extends Schema.TaggedError<
+	TokenLimitReached,
+	{ readonly brand: unique symbol }
+>()("TokenLimitReached", { limit: Schema.Int }) {}
+export class TokenStorageUnavailable extends Schema.TaggedError<
+	TokenStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("TokenStorageUnavailable", {}) {}
 const errors = [
 	TokenStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const

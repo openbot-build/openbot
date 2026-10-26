@@ -1,7 +1,17 @@
 import { ModelProvidersApi } from "@openbot-build/api"
-import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Redacted,
+	Schema,
+	String as Str,
+} from "effect"
 import { and, asc, eq, inArray, or } from "drizzle-orm"
-import { randomUUID } from "node:crypto"
+import * as Failures from "../app/Failures.ts"
 import { modelProviders, models, providerModels } from "../database/Schema.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import {
@@ -17,77 +27,109 @@ import * as Db from "../database/Database.ts"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))
 const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
-const decodeOptions = Schema.decodeUnknownSync(Options)
-const decodeAvailability = Schema.decodeUnknownSync(AvailabilityJson)
-const encodeOptions = Schema.encodeSync(Options)
-const encodeAvailability = Schema.encodeSync(AvailabilityJson)
-const decodeKind = Schema.decodeUnknownSync(ModelProvidersApi.ProviderKind)
-const decodeType = Schema.decodeUnknownSync(ModelProvidersApi.ModelType)
+const decodeOptions = Schema.decodeUnknownEffect(Options)
+const decodeAvailability = Schema.decodeUnknownEffect(AvailabilityJson)
+const decodeKind = Schema.decodeUnknownEffect(ModelProvidersApi.ProviderKind)
+const decodeType = Schema.decodeUnknownEffect(ModelProvidersApi.ModelType)
+/** The values have their types already, so they always encode. */
+const encodeOptions = (options: typeof Options.Type) =>
+	Schema.encodeEffect(Options)(options).pipe(Effect.orDie)
+const encodeAvailability = (availability: typeof AvailabilityJson.Type) =>
+	Schema.encodeEffect(AvailabilityJson)(availability).pipe(Effect.orDie)
+
+/** Turns an inside failure into one public error. The log keeps the reason. */
+const unavailable = (message: string) =>
+	Failures.replace(message, () =>
+		ModelProvidersApi.ModelProvidersUnavailable.make({}),
+	)
+
+/** A stored value that does not decode makes the store unavailable. */
+const storedValue =
+	(what: string) =>
+	<A>(decode: Effect.Effect<A, Schema.SchemaError>) =>
+		decode.pipe(unavailable(`A stored ${what} has a bad value`))
+const providerValue = storedValue("model provider")
+const modelValue = storedValue("model")
 
 const binding = (id: string) => "openbot_model_providers:" + id + ":api_key"
 
 type LinkRow = typeof providerModels.$inferSelect
 
-const link = (row: LinkRow): ModelProvidersApi.ProviderModel => ({
-	model: row.modelId,
-	modelOwner: row.modelOwnerKind === "platform" ? "platform" : "organization",
-	...(row.upstream === null ? {} : { upstream: row.upstream }),
-	...(row.reasoningEfforts === null
-		? {}
-		: { reasoningEfforts: decodeOptions(row.reasoningEfforts) }),
-	...(row.serviceTiers === null
-		? {}
-		: { serviceTiers: decodeOptions(row.serviceTiers) }),
-	...(row.contextWindow === null ? {} : { contextWindow: row.contextWindow }),
-	...(row.maxOutputTokens === null
-		? {}
-		: { maxOutputTokens: row.maxOutputTokens }),
-})
+const link = (
+	row: LinkRow,
+): Effect.Effect<ModelProvidersApi.ProviderModel, Schema.SchemaError> =>
+	Effect.gen(function* () {
+		return {
+			model: row.modelId,
+			modelOwner:
+				row.modelOwnerKind === "platform" ? "platform" : "organization",
+			...(row.upstream === null ? {} : { upstream: row.upstream }),
+			...(row.reasoningEfforts === null
+				? {}
+				: { reasoningEfforts: yield* decodeOptions(row.reasoningEfforts) }),
+			...(row.serviceTiers === null
+				? {}
+				: { serviceTiers: yield* decodeOptions(row.serviceTiers) }),
+			...(row.contextWindow === null
+				? {}
+				: { contextWindow: row.contextWindow }),
+			...(row.maxOutputTokens === null
+				? {}
+				: { maxOutputTokens: row.maxOutputTokens }),
+		}
+	})
 
 const linkRows = (
 	provider: { readonly id: string; readonly owner: Owner },
 	links: ReadonlyArray<ModelProvidersApi.ProviderModel>,
-): Array<LinkRow> =>
-	links.map((item, position) => {
-		const owner = ownerColumns(linkedOwner({ provider, link: item }))
-		return {
-			providerId: provider.id,
-			modelOwnerKind: owner.ownerKind,
-			modelOwnerId: owner.ownerId,
-			modelId: item.model,
-			position,
-			upstream: item.upstream ?? null,
-			reasoningEfforts:
-				item.reasoningEfforts === undefined
-					? null
-					: encodeOptions(item.reasoningEfforts),
-			serviceTiers:
-				item.serviceTiers === undefined
-					? null
-					: encodeOptions(item.serviceTiers),
-			contextWindow: item.contextWindow ?? null,
-			maxOutputTokens: item.maxOutputTokens ?? null,
-		}
-	})
+): Effect.Effect<Array<LinkRow>> =>
+	Effect.forEach(links, (item, position) =>
+		Effect.gen(function* () {
+			const owner = ownerColumns(linkedOwner({ provider, link: item }))
+			return {
+				providerId: provider.id,
+				modelOwnerKind: owner.ownerKind,
+				modelOwnerId: owner.ownerId,
+				modelId: item.model,
+				position,
+				upstream: item.upstream ?? null,
+				reasoningEfforts:
+					item.reasoningEfforts === undefined
+						? null
+						: yield* encodeOptions(item.reasoningEfforts),
+				serviceTiers:
+					item.serviceTiers === undefined
+						? null
+						: yield* encodeOptions(item.serviceTiers),
+				contextWindow: item.contextWindow ?? null,
+				maxOutputTokens: item.maxOutputTokens ?? null,
+			}
+		}),
+	)
 
 const stored = (
 	row: typeof modelProviders.$inferSelect,
 	links: ReadonlyArray<LinkRow>,
-): Stored => ({
-	id: row.id,
-	owner: ownerOf(row),
-	kind: decodeKind(row.kind),
-	name: row.name,
-	endpoint: row.endpoint,
-	apiKey: row.apiKey,
-	apiKeyHint: row.apiKeyHint,
-	models: links.map(link),
-	availability:
-		row.availability === null ? null : decodeAvailability(row.availability),
-	version: row.version,
-	createdAt: row.createdAt,
-	updatedAt: row.updatedAt,
-})
+): Effect.Effect<Stored, ModelProvidersApi.ModelProvidersUnavailable> =>
+	Effect.gen(function* () {
+		return {
+			id: row.id,
+			owner: ownerOf(row),
+			kind: yield* decodeKind(row.kind),
+			name: row.name,
+			endpoint: row.endpoint,
+			apiKey: row.apiKey,
+			apiKeyHint: row.apiKeyHint,
+			models: yield* Effect.forEach(links, link),
+			availability:
+				row.availability === null
+					? null
+					: yield* decodeAvailability(row.availability),
+			version: row.version,
+			createdAt: row.createdAt,
+			updatedAt: row.updatedAt,
+		}
+	}).pipe(providerValue)
 
 /**
  * An `openai-compat` provider has no default address. A `typesafe` provider
@@ -129,20 +171,24 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
 /** A database or a transaction. Both can read. */
 type Reader = Pick<Transaction, "select">
 
-type KnownError =
-	| ModelProvidersApi.ModelNotFound
-	| ModelProvidersApi.ModelProviderNotFound
-	| ModelProvidersApi.ModelProviderConflict
-	| ModelProvidersApi.ModelProviderInvalid
-const isKnown = (error: unknown): error is KnownError =>
-	error instanceof ModelProvidersApi.ModelNotFound ||
-	error instanceof ModelProvidersApi.ModelProviderNotFound ||
-	error instanceof ModelProvidersApi.ModelProviderConflict ||
-	error instanceof ModelProvidersApi.ModelProviderInvalid
+/** The errors that go to the client as they are. A `ModelProvidersUnavailable` here is in the log already. */
+const Known = Schema.Union([
+	ModelProvidersApi.ModelNotFound,
+	ModelProvidersApi.ModelProviderNotFound,
+	ModelProvidersApi.ModelProviderConflict,
+	ModelProvidersApi.ModelProviderInvalid,
+	ModelProvidersApi.ModelProvidersUnavailable,
+])
+const isKnown = Schema.is(Known)
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
+	const crypto = yield* Crypto.Crypto
+	const newId = crypto.randomUUIDv4().pipe(
+		Effect.orDie,
+		Effect.map((uuid) => "prov_" + Str.replaceAll("-", "")(uuid)),
+	)
 	const where = (owner: Owner, id: string) => {
 		const columns = ownerColumns(owner)
 		return and(
@@ -164,14 +210,15 @@ export const make = Effect.gen(function* () {
 				.where(
 					inArray(
 						providerModels.providerId,
-						rows.map((row) => row.id),
+						Arr.map(rows, (row) => row.id),
 					),
 				)
 				.orderBy(asc(providerModels.position))
-			return rows.map((row) =>
+				.pipe(unavailable("Could not read the models of the providers"))
+			return yield* Effect.forEach(rows, (row) =>
 				stored(
 					row,
-					links.filter((item) => item.providerId === row.id),
+					Arr.filter(links, (item) => item.providerId === row.id),
 				),
 			)
 		})
@@ -181,11 +228,9 @@ export const make = Effect.gen(function* () {
 			.from(modelProviders)
 			.where(where(owner, id))
 			.pipe(
+				unavailable("Could not read the model provider"),
 				Effect.flatMap((rows) => withLinks(rows)),
 				Effect.map((list) => Option.fromNullishOr(list[0])),
-				Effect.mapError(() =>
-					ModelProvidersApi.ModelProvidersUnavailable.make({}),
-				),
 			)
 	/**
 	 * A provider of the platform links only models of the platform. A provider
@@ -228,7 +273,7 @@ export const make = Effect.gen(function* () {
 								availability:
 									row.availability === null
 										? null
-										: decodeAvailability(row.availability),
+										: yield* modelValue(decodeAvailability(row.availability)),
 							},
 							organizationId: owner.id,
 						}))
@@ -236,7 +281,7 @@ export const make = Effect.gen(function* () {
 					return yield* ModelProvidersApi.ModelNotFound.make({
 						modelId: item.model,
 					})
-				const type = decodeType(row.type)
+				const type = yield* modelValue(decodeType(row.type))
 				if (!servesType(kind, type))
 					return yield* ModelProvidersApi.ModelProviderInvalid.make({
 						message: `A ${kind} provider cannot link the ${type} model ${item.model}.`,
@@ -245,12 +290,13 @@ export const make = Effect.gen(function* () {
 		})
 	/** Keep the errors of the API, and turn database errors into one error. */
 	const known = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(
-			Effect.mapError((error) =>
-				isKnown(error)
-					? error
-					: ModelProvidersApi.ModelProvidersUnavailable.make({}),
-			),
+		Effect.catchIf(
+			effect,
+			(error): error is Exclude<E, typeof Known.Type> => !isKnown(error),
+			(error) =>
+				Effect.fail(error).pipe(
+					unavailable("Could not change the model provider"),
+				),
 		)
 
 	return ModelProviders.of({
@@ -267,10 +313,8 @@ export const make = Effect.gen(function* () {
 				)
 				.orderBy(asc(modelProviders.createdAt))
 				.pipe(
+					unavailable("Could not list the model providers"),
 					Effect.flatMap((rows) => withLinks(rows)),
-					Effect.mapError(() =>
-						ModelProvidersApi.ModelProvidersUnavailable.make({}),
-					),
 				)
 		},
 		get,
@@ -289,12 +333,12 @@ export const make = Effect.gen(function* () {
 				)
 				.orderBy(asc(modelProviders.createdAt))
 				.pipe(
+					unavailable("Could not list the model providers"),
 					Effect.flatMap((rows) => withLinks(rows)),
 					Effect.map((list) =>
-						list.filter((provider) => usableBy({ provider, organizationId })),
-					),
-					Effect.mapError(() =>
-						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+						Arr.filter(list, (provider) =>
+							usableBy({ provider, organizationId }),
+						),
 					),
 				),
 		create: (owner, input) =>
@@ -303,25 +347,25 @@ export const make = Effect.gen(function* () {
 					const endpoint = input.endpoint ?? null
 					yield* checkEndpoint(input.kind, endpoint)
 					const now = yield* Clock.currentTimeMillis
-					const id = "prov_" + randomUUID().replaceAll("-", "")
+					const id = yield* newId
 					const apiKey = yield* secrets.seal(input.apiKey, binding(id))
 					const row = {
 						id,
 						...ownerColumns(owner),
 						kind: input.kind,
-						name: input.name.trim(),
+						name: Str.trim(input.name),
 						endpoint,
 						apiKey,
 						apiKeyHint: hint(input.apiKey),
 						availability:
 							owner.kind === "platform"
-								? encodeAvailability(input.availability)
+								? yield* encodeAvailability(input.availability)
 								: null,
 						version: 1,
 						createdAt: now,
 						updatedAt: now,
 					}
-					const links = linkRows({ id, owner }, input.models)
+					const links = yield* linkRows({ id, owner }, input.models)
 					yield* db.transaction((tx) =>
 						Effect.gen(function* () {
 							yield* checkLinks(tx, owner, input.kind, input.models)
@@ -330,7 +374,7 @@ export const make = Effect.gen(function* () {
 								yield* tx.insert(providerModels).values(links)
 						}),
 					)
-					return stored(row, links)
+					return yield* stored(row, links)
 				}),
 			),
 		update: (owner, id, patch) =>
@@ -350,7 +394,7 @@ export const make = Effect.gen(function* () {
 							return yield* ModelProvidersApi.ModelProviderConflict.make({
 								version: row.version,
 							})
-						const kind = decodeKind(row.kind)
+						const kind = yield* providerValue(decodeKind(row.kind))
 						const endpoint =
 							patch.endpoint === undefined ? row.endpoint : patch.endpoint
 						yield* checkEndpoint(kind, endpoint)
@@ -367,7 +411,7 @@ export const make = Effect.gen(function* () {
 							yield* tx
 								.delete(providerModels)
 								.where(eq(providerModels.providerId, id))
-							const links = linkRows({ id, owner }, patch.models)
+							const links = yield* linkRows({ id, owner }, patch.models)
 							if (links.length > 0)
 								yield* tx.insert(providerModels).values(links)
 						}
@@ -376,13 +420,17 @@ export const make = Effect.gen(function* () {
 							.set({
 								...(patch.name === undefined
 									? {}
-									: { name: patch.name.trim() }),
+									: { name: Str.trim(patch.name) }),
 								endpoint,
 								...key,
 								...(patch.availability === undefined ||
 								owner.kind !== "platform"
 									? {}
-									: { availability: encodeAvailability(patch.availability) }),
+									: {
+											availability: yield* encodeAvailability(
+												patch.availability,
+											),
+										}),
 								version: row.version + 1,
 								updatedAt: now,
 							})
@@ -407,9 +455,7 @@ export const make = Effect.gen(function* () {
 				.where(where(owner, id))
 				.returning({ id: modelProviders.id })
 				.pipe(
-					Effect.mapError(() =>
-						ModelProvidersApi.ModelProvidersUnavailable.make({}),
-					),
+					unavailable("Could not delete the model provider"),
 					Effect.flatMap((rows) =>
 						rows.length === 0
 							? Effect.fail(
@@ -421,12 +467,12 @@ export const make = Effect.gen(function* () {
 					),
 				),
 		openKey: (provider) =>
-			secrets.open(provider.apiKey, binding(provider.id)).pipe(
-				Effect.map(Redacted.make),
-				Effect.mapError(() =>
-					ModelProvidersApi.ModelProvidersUnavailable.make({}),
+			secrets
+				.open(provider.apiKey, binding(provider.id))
+				.pipe(
+					Effect.map(Redacted.make),
+					unavailable("Could not open the key of the model provider"),
 				),
-			),
 	})
 })
 

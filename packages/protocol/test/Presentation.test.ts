@@ -1,5 +1,3 @@
-// Tests are entry points, so they provide their own Layers.
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -7,6 +5,7 @@ import {
 	Layer,
 	Match,
 	Option,
+	Record as Rec,
 	Schema,
 	Stream,
 } from "effect"
@@ -45,11 +44,11 @@ const card = {
 	version: "1.0.0",
 	description: "Organize notes and next steps",
 	icons: [
-		{
+		Document.Icon.make({
 			src: origin + "/assets/icon.png",
 			mimeType: "image/png",
 			sizes: ["128x128"],
-		},
+		}),
 	],
 	remotes: [
 		{
@@ -88,23 +87,20 @@ it.effect(
 				Effect.promise(() => publisher.dispose()),
 			)
 			let reads: ReadonlyArray<string> = []
+			// The web handler of the publisher runs in memory and gives every
+			// failure as a response, so a rejected Promise is a defect.
 			const read = (url: string) =>
-				Effect.tryPromise({
-					try: async () => {
-						reads = Arr.append(reads, url)
-						const response = await publisher.handler(new Request(url))
-						return {
-							url,
-							status: response.status,
-							headers: Object.fromEntries(response.headers),
-							text: await response.text(),
-						}
-					},
-					catch: () =>
-						Network.NetworkError.make({
-							reason: "Transport",
-							message: "Publisher fixture request failed",
-						}),
+				Effect.gen(function* () {
+					reads = Arr.append(reads, url)
+					const response = yield* Effect.promise(() =>
+						publisher.handler(new Request(url)),
+					)
+					return {
+						url,
+						status: response.status,
+						headers: Rec.fromEntries(response.headers),
+						text: yield* Effect.promise(() => response.text()),
+					}
 				})
 			const network = Layer.succeed(Network.Network, {
 				identity: { scope: "public", owner: "anonymous" },
@@ -127,9 +123,7 @@ it.effect(
 			)
 			const candidate = Match.value(result).pipe(
 				Match.tag("Single", (value) => value.candidate),
-				Match.orElse(() => {
-					throw new Error("Expected one candidate")
-				}),
+				Match.orElse(() => assert.fail("Expected one candidate")),
 			)
 			assert.deepStrictEqual(candidate.card.icons, card.icons)
 			assert.deepStrictEqual(candidate.card._meta, card._meta)
@@ -166,7 +160,7 @@ it.effect(
 				...candidate,
 				card: {
 					...candidate.card,
-					icons: [{ src: origin + "/assets/new.png" }],
+					icons: [Document.Icon.make({ src: origin + "/assets/new.png" })],
 					_meta: {
 						...candidate.card._meta,
 						[Document.presentationKey]: {

@@ -296,7 +296,10 @@ own sessions.
 The organization sets the budget, the longest time of an operation, and how many
 operations of one Chat may run at one time. See
 [Organization settings](/docs/organization#settings). When a Chat has its most
-operations, more calls wait in their Turn.
+operations, more calls wait in their Turn. A call takes its place when it
+starts, so calls that still run in their Turn count too. The longest time also
+starts with the call. When a call gets to it inside its budget, the call goes to
+the background, stops, and fails.
 
 | Route                                          | What it does                      |
 | ---------------------------------------------- | --------------------------------- |
@@ -486,6 +489,8 @@ todo list and a short summary. OpenBot saves the list and checks the capability
   and a notice starts a new Turn that carries out the plan.
 - When the plan is denied, a notice gives the Bot the reason. The Chat stays in
   `plan` mode.
+- When OpenBot cannot check the plan, the plan does not run. The tool gives the
+  Bot the reason, and the Chat stays in `plan` mode.
 
 The approval setting says who answers and what happens when nobody answers in
 time:

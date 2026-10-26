@@ -1,19 +1,23 @@
-import { randomUUID } from "node:crypto"
 import { PgClient } from "@effect/sql-pg"
 import { BotMemory as Api, BotsApi } from "@openbot-build/api"
+import * as Failures from "../app/Failures.ts"
 import * as BotMemory from "../plugins/memory/BotMemory.ts"
 import * as Audience from "../plugins/memory/Audience.ts"
 import {
 	Array as Arr,
 	Clock,
 	Context,
+	Crypto,
 	Effect,
-	HashMap,
 	HashSet,
 	Layer,
 	Option,
+	pipe,
+	Record as Rec,
 	Schema,
+	String as Str,
 } from "effect"
+import { Hex } from "effect/encoding"
 import { BotRecords } from "./BotRecords.ts"
 
 /**
@@ -37,7 +41,13 @@ export interface Change<A> {
 	readonly result: A
 }
 
-export const newId = () => "mem_" + randomUUID().replaceAll("-", "")
+/** Makes the id of a new memory entry. */
+export const newId = (crypto: Crypto.Crypto) =>
+	crypto.randomUUIDv4({ format: "bytes" }).pipe(
+		// A platform without secure random numbers is broken.
+		Effect.orDie,
+		Effect.map((uuid) => "mem_" + Hex.encode(uuid)),
+	)
 
 /** The pool of tagged memory entries of each Bot. It does not follow any Timeline. */
 export class BotMemories extends Context.Service<
@@ -90,8 +100,12 @@ export class BotMemories extends Context.Service<
 	}
 >()("@openbot-build/openbot/bots/BotMemories") {}
 
+/** Fails with `BotStorageUnavailable` in place of a storage failure, and logs the failure. */
+const storageUnavailable = (message: string) =>
+	Failures.replace(message, () => BotsApi.BotStorageUnavailable.make({}))
+
 const Sources = Schema.fromJsonString(Schema.Array(BotMemory.Source))
-const encodeSources = Schema.encodeSync(Sources)
+const encodeSources = Schema.encodeEffect(Sources)
 const decodeSources = Schema.decodeUnknownEffect(Sources)
 const decodeEntry = Schema.decodeUnknownEffect(BotMemory.Entry)
 
@@ -110,10 +124,11 @@ interface Row {
 export const make: Effect.Effect<
 	typeof BotMemories.Service,
 	never,
-	BotRecords | PgClient.PgClient
+	BotRecords | PgClient.PgClient | Crypto.Crypto
 > = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
 	const records = yield* BotRecords
+	const crypto = yield* Crypto.Crypto
 	const versions = records.collection(
 		"memory_pool",
 		Schema.Struct({ version: Schema.Natural }),
@@ -130,13 +145,9 @@ export const make: Effect.Effect<
 				memory_id: string
 				tag: string
 			}>`SELECT memory_id, tag FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} ORDER BY tag`
-			const byEntry = tags.reduce(
-				(map, row) =>
-					HashMap.set(map, row.memory_id, [
-						...Option.getOrElse(HashMap.get(map, row.memory_id), () => []),
-						row.tag,
-					]),
-				HashMap.empty<string, ReadonlyArray<string>>(),
+			const byEntry = Rec.map(
+				Arr.groupBy(tags, (row) => row.memory_id),
+				Arr.map((row) => row.tag),
 			)
 			return yield* Effect.forEach(rows, (row) =>
 				Effect.flatMap(decodeSources(row.sources), (sources) =>
@@ -144,7 +155,7 @@ export const make: Effect.Effect<
 						id: row.id,
 						layer: row.layer,
 						content: row.content,
-						tags: Option.getOrElse(HashMap.get(byEntry, row.id), () => []),
+						tags: Option.getOrElse(Rec.get(byEntry, row.id), () => []),
 						sources,
 						...(row.confidence === null ? {} : { confidence: row.confidence }),
 						status: row.status,
@@ -156,7 +167,7 @@ export const make: Effect.Effect<
 					}),
 				),
 			)
-		}).pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
+		}).pipe(storageUnavailable("The memory of a Bot could not be read."))
 	const version = (home: Home) =>
 		versions
 			.find(home.organizationId, home.bot)
@@ -165,18 +176,20 @@ export const make: Effect.Effect<
 			)
 	const writeEntry = (home: Home, entry: BotMemory.Entry) =>
 		Effect.gen(function* () {
-			yield* sql`INSERT INTO openbot_bot_memories (organization_id, home_bot, id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at) VALUES (${home.organizationId}, ${home.bot}, ${entry.id}, ${entry.layer}, ${entry.content}, ${encodeSources(entry.sources)}, ${entry.confidence ?? null}, ${entry.status}, ${entry.createdAt}, ${entry.updatedAt}, ${entry.invalidatedAt ?? null}) ON CONFLICT (organization_id, home_bot, id) DO UPDATE SET layer = EXCLUDED.layer, content = EXCLUDED.content, sources = EXCLUDED.sources, confidence = EXCLUDED.confidence, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at, invalidated_at = EXCLUDED.invalidated_at`
+			// The entry has its type already, so its sources always encode.
+			const sources = yield* encodeSources(entry.sources).pipe(Effect.orDie)
+			yield* sql`INSERT INTO openbot_bot_memories (organization_id, home_bot, id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at) VALUES (${home.organizationId}, ${home.bot}, ${entry.id}, ${entry.layer}, ${entry.content}, ${sources}, ${entry.confidence ?? null}, ${entry.status}, ${entry.createdAt}, ${entry.updatedAt}, ${entry.invalidatedAt ?? null}) ON CONFLICT (organization_id, home_bot, id) DO UPDATE SET layer = EXCLUDED.layer, content = EXCLUDED.content, sources = EXCLUDED.sources, confidence = EXCLUDED.confidence, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at, invalidated_at = EXCLUDED.invalidated_at`
 			yield* sql`DELETE FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND memory_id = ${entry.id}`
 			if (entry.tags.length > 0)
 				yield* sql`INSERT INTO openbot_bot_memory_tags ${sql.insert(
-					Arr.dedupe(entry.tags).map((tag) => ({
+					Arr.map(Arr.dedupe(entry.tags), (tag) => ({
 						organization_id: home.organizationId,
 						home_bot: home.bot,
 						memory_id: entry.id,
 						tag,
 					})),
 				)}`
-		}).pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
+		}).pipe(storageUnavailable("A memory entry could not be written."))
 	/** Gives the new version and writes its log entry. */
 	const bump = (
 		home: Home,
@@ -200,7 +213,7 @@ export const make: Effect.Effect<
 			yield* logs.put(
 				{
 					organizationId: home.organizationId,
-					id: home.bot + ":" + String(next).padStart(12, "0"),
+					id: home.bot + ":" + pipe(String(next), Str.padStart(12, "0")),
 					owner: home.bot,
 					scope: "",
 					status: "",
@@ -212,7 +225,9 @@ export const make: Effect.Effect<
 						at: now,
 						by,
 						ids,
-						...(reasons.length === 0 ? {} : { reason: reasons.join("\n") }),
+						...(reasons.length === 0
+							? {}
+							: { reason: Arr.join(reasons, "\n") }),
 					},
 				},
 			)
@@ -237,7 +252,7 @@ export const make: Effect.Effect<
 					)
 					yield* bump(
 						home,
-						changed.entries.map((entry) => entry.id),
+						Arr.map(changed.entries, (entry) => entry.id),
 						changed.by,
 						changed.reasons ?? [],
 					)
@@ -252,10 +267,11 @@ export const make: Effect.Effect<
 	) =>
 		Effect.all([pool(home), version(home)]).pipe(
 			Effect.map(([entries, current]) => ({
-				entries: entries.filter(
+				entries: Arr.filter(
+					entries,
 					(entry) =>
 						Audience.visible(entry.tags, viewer) &&
-						tags.every((tag) => entry.tags.includes(tag)),
+						Arr.every(tags, (tag) => entry.tags.includes(tag)),
 				),
 				version: current,
 			})),
@@ -267,6 +283,7 @@ export const make: Effect.Effect<
 		edit: (home, person, command) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
+				const id = yield* newId(crypto)
 				const found = yield* change(home, (current) =>
 					Effect.succeed(
 						Option.match(
@@ -275,7 +292,7 @@ export const make: Effect.Effect<
 								person,
 								change: command,
 								now,
-								id: newId,
+								id: () => id,
 							}),
 							{
 								onNone: () => ({
@@ -308,12 +325,16 @@ export const make: Effect.Effect<
 			]).pipe(
 				Effect.map(([entries, list]) => {
 					const seen = HashSet.fromIterable(
-						entries
-							.filter((entry) => Audience.visible(entry.tags, viewer))
-							.map((entry) => entry.id),
+						pipe(
+							entries,
+							Arr.filter((entry) => Audience.visible(entry.tags, viewer)),
+							Arr.map((entry) => entry.id),
+						),
 					)
-					return list.flatMap((logged) => {
-						const ids = logged.entry.ids.filter((id) => HashSet.has(seen, id))
+					return Arr.flatMap(list, (logged) => {
+						const ids = Arr.filter(logged.entry.ids, (id) =>
+							HashSet.has(seen, id),
+						)
 						// A reason can name entries that the viewer may not see.
 						const { reason: _, ...entry } = logged.entry
 						return ids.length === 0 ? [] : [{ ...entry, ids }]
@@ -327,12 +348,14 @@ export const make: Effect.Effect<
 					const removed = yield* sql<{
 						id: string
 					}>`DELETE FROM openbot_bot_memories WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND id IN (SELECT memory_id FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND tag = ${tag}) RETURNING id`.pipe(
-						Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
+						storageUnavailable(
+							"The memory entries of a tag could not be removed.",
+						),
 					)
 					if (removed.length > 0)
 						yield* bump(
 							home,
-							removed.map((row) => row.id),
+							Arr.map(removed, (row) => row.id),
 							"person",
 							[],
 						)

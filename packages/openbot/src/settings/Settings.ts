@@ -75,7 +75,11 @@ export class Settings extends Context.Service<
 		readonly notify: (
 			scope: Scope,
 		) => Effect.Effect<void, Api.SettingsUnavailable>
-		/** Each scope that changed, on any instance, after the subscription starts. */
+		/**
+		 * Each scope that changed, on any instance, after the subscription starts.
+		 * A subscriber that reads too slowly loses its oldest changes, so it must
+		 * also read the settings again from time to time.
+		 */
 		readonly changes: Stream.Stream<Scope>
 	}
 >()("@openbot-build/openbot/settings/Settings") {}

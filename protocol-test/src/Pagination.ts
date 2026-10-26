@@ -1,4 +1,14 @@
-import { Effect, Match, Option, Predicate, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Match,
+	Option,
+	Predicate,
+	Record as Rec,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
 import { Sse } from "effect/encoding"
 import {
 	Headers,
@@ -30,26 +40,30 @@ export const middleware = HttpRouter.middleware(
 				Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(Request))),
 				Effect.option,
 			)
-			const operation = Option.getOrUndefined(parsed)
-			if (operation === undefined) return yield* http
-			const field = fields[operation.method]
-			if (field === undefined) return yield* http
+			if (Option.isNone(parsed)) return yield* http
+			const operation = parsed.value
+			const listed = Rec.get(fields, operation.method)
+			if (Option.isNone(listed)) return yield* http
+			const field = listed.value
 			const cursor = operation.params?.["cursor"]
 			const prefix = "protocol-test:" + operation.method + ":"
-			const offset =
-				typeof cursor === "string" &&
-				cursor.startsWith(prefix) &&
-				/^\d+$/.test(cursor.slice(prefix.length))
-					? Number(cursor.slice(prefix.length))
-					: cursor === undefined
-						? 0
-						: -1
-			if (!Number.isSafeInteger(offset) || offset < 0)
+			const start =
+				cursor === undefined
+					? Option.some(0)
+					: Option.liftPredicate(cursor, Predicate.isString).pipe(
+							Option.filter(Str.startsWith(prefix)),
+							Option.map(Str.slice(prefix.length)),
+							Option.filter((digits) => /^\d+$/.test(digits)),
+							Option.map(Number),
+							Option.filter(Number.isSafeInteger),
+						)
+			if (Option.isNone(start))
 				return HttpServerResponse.jsonUnsafe({
 					jsonrpc: "2.0",
 					id: operation.id,
 					error: { code: -32602, message: "Invalid pagination cursor." },
 				})
+			const offset = start.value
 			const response = yield* http
 			if (response.status !== 200) return response
 			const transform = (data: string) =>
@@ -57,13 +71,12 @@ export const middleware = HttpRouter.middleware(
 					const value = yield* Schema.decodeEffect(Json)(data)
 					const rawResult = value["result"]
 					if (!Schema.is(Schema.JsonObject)(rawResult)) return data
-					const result = yield* Schema.decodeEffect(Schema.JsonObject)(
-						rawResult,
-					)
+					// The guard gives `Json & JsonObject`, which a spread does not take.
+					const result: Schema.JsonObject = rawResult
 					const entries = result[field]
-					if (!Array.isArray(entries)) return data
+					if (!Arr.isArray(entries)) return data
 					const page = entries.slice(offset, offset + 20)
-					return JSON.stringify({
+					return yield* Schema.encodeEffect(Json)({
 						...value,
 						result: {
 							...result,
@@ -80,8 +93,8 @@ export const middleware = HttpRouter.middleware(
 				Match.orElse(() => Stream.empty),
 			)
 			const text = bytes.pipe(Stream.decodeText())
-			const body = (response.headers["content-type"] ?? "").startsWith(
-				"text/event-stream",
+			const body = Str.startsWith("text/event-stream")(
+				response.headers["content-type"] ?? "",
 			)
 				? text.pipe(
 						Stream.pipeThroughChannel(Sse.decode()),

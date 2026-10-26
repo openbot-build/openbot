@@ -1,4 +1,4 @@
-import { Array as Arr } from "effect"
+import { Array as Arr, Equal, Match, Option, pipe, String as Str } from "effect"
 
 /**
  * The tags that OpenBot sets on Bot memory entries. A tag with a colon belongs to OpenBot.
@@ -28,35 +28,40 @@ export const orgTag = (organizationId: string) => "org:" + organizationId
 export const channelTag = (channelId: string) => "channel:" + channelId
 export const appTag = (tool: string) => "app:" + tool
 export const forTag = (audience: Audience) =>
-	audience._tag === "Bot"
-		? "for:bot"
-		: audience._tag === "Person"
-			? "for:person:" + audience.id
-			: "for:channel:" + audience.id
+	Match.valueTags(audience, {
+		Bot: () => "for:bot",
+		Person: ({ id }) => "for:person:" + id,
+		Channel: ({ id }) => "for:channel:" + id,
+	})
 
 /** A tag of OpenBot. Topic tags have no colon. */
-export const isSystem = (tag: string) => tag.includes(":")
+export const isSystem = (tag: string) => Str.includes(":")(tag)
 
 const valuesOf = (tags: ReadonlyArray<string>, prefix: string) =>
-	tags
-		.filter((tag) => tag.startsWith(prefix))
-		.map((tag) => tag.slice(prefix.length))
+	pipe(
+		tags,
+		Arr.filter(Str.startsWith(prefix)),
+		Arr.map(Str.slice(prefix.length)),
+	)
+
+/** Reads an audience in the form of a `for:` tag without its prefix: `bot`, `person:<id>` or `channel:<id>`. */
+export const parseAudience = (text: string): Option.Option<Audience> =>
+	text === "bot"
+		? Option.some(everyone)
+		: Str.startsWith("person:")(text) && text.length > "person:".length
+			? Option.some(person(Str.slice("person:".length)(text)))
+			: Str.startsWith("channel:")(text) && text.length > "channel:".length
+				? Option.some(channel(Str.slice("channel:".length)(text)))
+				: Option.none()
 
 export const audiencesOf = (tags: ReadonlyArray<string>) =>
-	tags.flatMap((tag): ReadonlyArray<Audience> =>
-		tag === "for:bot"
-			? [everyone]
-			: tag.startsWith("for:person:")
-				? [person(tag.slice("for:person:".length))]
-				: tag.startsWith("for:channel:")
-					? [channel(tag.slice("for:channel:".length))]
-					: [],
+	Arr.flatMap(tags, (tag) =>
+		Str.startsWith("for:")(tag)
+			? Option.toArray(parseAudience(Str.slice("for:".length)(tag)))
+			: [],
 	)
 export const peopleOf = (tags: ReadonlyArray<string>) => valuesOf(tags, "from:")
 export const orgsOf = (tags: ReadonlyArray<string>) => valuesOf(tags, "org:")
-
-const same = (a: Audience, b: Audience) =>
-	a._tag === b._tag && (a._tag === "Bot" || a.id === (b as { id: string }).id)
 
 /**
  * The people who may see both of two entries. `for:bot` is everyone, so it gives the other side.
@@ -67,17 +72,17 @@ export const intersect = (
 	a: ReadonlyArray<Audience>,
 	b: ReadonlyArray<Audience>,
 ): ReadonlyArray<Audience> =>
-	Arr.dedupeWith(
-		a.flatMap((left) =>
-			b.flatMap((right): ReadonlyArray<Audience> =>
+	// Audiences hold only plain data, so Effect compares them by value.
+	Arr.dedupe(
+		Arr.flatMap(a, (left) =>
+			Arr.flatMap(b, (right): ReadonlyArray<Audience> =>
 				left._tag === "Bot"
 					? [right]
-					: right._tag === "Bot" || same(left, right)
+					: right._tag === "Bot" || Equal.equals(left, right)
 						? [left]
 						: [],
 			),
 		),
-		same,
 	)
 
 /**
@@ -89,24 +94,27 @@ export const combine = (
 ): ReadonlyArray<string> => {
 	if (supports.length === 0) return []
 	const union = Arr.dedupe(
-		supports.flatMap((tags) =>
-			tags.filter(
+		Arr.flatMap(supports, (tags) =>
+			Arr.filter(
+				tags,
 				(tag) =>
-					tag.startsWith("from:") ||
-					tag.startsWith("chat:") ||
-					tag.startsWith("channel:") ||
-					tag.startsWith("app:"),
+					Str.startsWith("from:")(tag) ||
+					Str.startsWith("chat:")(tag) ||
+					Str.startsWith("channel:")(tag) ||
+					Str.startsWith("app:")(tag),
 			),
 		),
 	)
-	const [firstOrgs = [], ...otherOrgs] = supports.map(orgsOf)
-	const orgs = otherOrgs.reduce<ReadonlyArray<string>>(
-		(left, right) => left.filter((org) => right.includes(org)),
-		firstOrgs,
+	const [firstOrgs = [], ...otherOrgs] = Arr.map(supports, orgsOf)
+	const orgs = Arr.reduce(otherOrgs, firstOrgs, (left, right) =>
+		Arr.intersection(left, right),
 	)
-	const [firstAudiences = [], ...otherAudiences] = supports.map(audiencesOf)
-	const audiences = otherAudiences.reduce(intersect, firstAudiences)
-	return [...union, ...orgs.map(orgTag), ...audiences.map(forTag)]
+	const [firstAudiences = [], ...otherAudiences] = Arr.map(
+		supports,
+		audiencesOf,
+	)
+	const audiences = Arr.reduce(otherAudiences, firstAudiences, intersect)
+	return [...union, ...Arr.map(orgs, orgTag), ...Arr.map(audiences, forTag)]
 }
 
 /**
@@ -128,13 +136,14 @@ export interface Viewer {
  */
 export const visible = (tags: ReadonlyArray<string>, viewer: Viewer) =>
 	orgsOf(tags).includes(viewer.organizationId) &&
-	audiencesOf(tags).some((audience) =>
-		audience._tag === "Bot"
-			? true
-			: audience._tag === "Person"
-				? viewer.channel === undefined && viewer.person === audience.id
-				: viewer.channel === audience.id ||
-					(viewer.channel === undefined &&
-						viewer.person !== undefined &&
-						peopleOf(tags).includes(viewer.person)),
+	Arr.some(audiencesOf(tags), (audience) =>
+		Match.valueTags(audience, {
+			Bot: () => true,
+			Person: ({ id }) => viewer.channel === undefined && viewer.person === id,
+			Channel: ({ id }) =>
+				viewer.channel === id ||
+				(viewer.channel === undefined &&
+					viewer.person !== undefined &&
+					peopleOf(tags).includes(viewer.person)),
+		}),
 	)

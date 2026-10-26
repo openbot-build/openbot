@@ -1,13 +1,24 @@
 import type { Chat } from "@openbot-build/core"
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import type {
 	BotsApi,
 	AppExecution,
 	CodeRunsApi,
 	ComputersApi,
 } from "@openbot-build/api"
-import { Context, Data, Effect, HashMap, Layer, Option, Ref } from "effect"
-import { allows } from "../authorization/Check.ts"
+import {
+	Array as Arr,
+	Cause,
+	Context,
+	Data,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	Ref,
+	pipe,
+} from "effect"
+import * as Check from "../authorization/Check.ts"
+import { Bots } from "../bots/Bots.ts"
 import { Signal, Signals } from "../bots/Signals.ts"
 import { type Capability, describe, memberTarget } from "./Capability.ts"
 import { Grants } from "./Grants.ts"
@@ -72,6 +83,8 @@ export class Gate extends Context.Service<
 /**
  * Keeps the answer for a tool call with the Turn, so an approval of the call finds it.
  * A tool whose own check fails before the Gate keeps a `Deny` here, so the call never runs.
+ * The Work belongs to the current Turn of a Bot. Outside of one there is no Turn to keep
+ * the answer, so it is not kept.
  */
 export const remember = (toolCallId: string, answer: Answer) =>
 	Effect.serviceOption(Work).pipe(
@@ -85,14 +98,15 @@ export const remember = (toolCallId: string, answer: Answer) =>
 export const make: Effect.Effect<
 	typeof Gate.Service,
 	never,
-	Grants | Rules | Judge | Requests | Signals | AuthorizationServices
+	Bots | Grants | Rules | Judge | Requests | Signals | Check.Services
 > = Effect.gen(function* () {
+	const bots = yield* Bots
 	const grants = yield* Grants
 	const rules = yield* Rules
 	const judge = yield* Judge
 	const requests = yield* Requests
 	const signals = yield* Signals
-	const services = yield* Effect.context<AuthorizationServices>()
+	const checks = yield* Check.make
 	/** The verdict of the Rules for a Bot, and the Bots that wrote the Rules it quotes. */
 	const judged = (input: {
 		readonly organizationId: string
@@ -103,26 +117,26 @@ export const make: Effect.Effect<
 		Effect.gen(function* () {
 			const list = yield* rules.list(input.organizationId, input.bot.id)
 			const verdict = yield* judge.decide({ ...input, rules: list })
-			const authors = verdict.citations.flatMap((citation) =>
-				list
-					.filter((rule) => rule.id === citation.rule)
-					.map((rule) => rule.author),
+			const authors = Arr.flatMap(verdict.citations, (citation) =>
+				pipe(
+					list,
+					Arr.filter((rule) => rule.id === citation.rule),
+					Arr.map((rule) => rule.author),
+				),
 			)
 			return { verdict, authors }
 		})
 	/**
-	 * True when a Bot holds a capability by a Grant, or by a Rule from a person.
-	 * A Rule from a Bot counts only when that Bot holds the capability too.
+	 * True when a Bot holds a capability by a Grant, or by Rules that only people wrote.
+	 * A Rule from a Bot does not count here.
 	 */
 	const holds = (input: {
 		readonly organizationId: string
 		readonly bot: BotsApi.Bot
 		readonly capability: Capability
 		readonly chat: Chat.Id
-		readonly depth?: number
 	}): Effect.Effect<boolean> =>
 		Effect.gen(function* () {
-			if ((input.depth ?? 0) > 8) return false
 			const grant = yield* grants.match({
 				organizationId: input.organizationId,
 				bot: input.bot.id,
@@ -135,12 +149,30 @@ export const make: Effect.Effect<
 				reason: "A decider checks whether it may allow this itself.",
 			})
 			if (verdict.decision !== "allow") return false
-			return authors.every((author) => author._tag === "Person")
-		}).pipe(Effect.orElseSucceed(() => false))
+			return Arr.every(authors, (author) => author._tag === "Person")
+		}).pipe(
+			// Without an answer, the decider must ask, as when it does not hold the capability.
+			Effect.catchCause((cause) =>
+				Cause.hasInterruptsOnly(cause)
+					? Effect.interrupt
+					: Effect.logWarning(
+							"OpenBot could not check whether a decider holds a capability",
+							cause,
+						).pipe(Effect.as(false)),
+			),
+			// The arguments of the capability stay out of the logs, because they hold user data.
+			Effect.annotateLogs({
+				bot: input.bot.id,
+				action: input.capability.action,
+				target: input.capability.target,
+			}),
+		)
 	const check: typeof Gate.Service.check = (attempt) =>
 		Effect.gen(function* () {
+			// The Work belongs to the current Turn of a Bot, so each call reads it from the
+			// context. Tool handlers cannot name it in their type. Without the current Bot
+			// nothing can decide, so the call does not run.
 			const work = yield* Effect.serviceOption(Work)
-			// Without the current Bot nothing can decide, so the call does not run.
 			if (Option.isNone(work))
 				return Answer.Deny({ reason: "No Bot runs this work." })
 			const current = work.value
@@ -174,6 +206,9 @@ export const make: Effect.Effect<
 								}),
 							),
 						),
+						// The Coordinator starts the review on this signal, so an
+						// interruption must not come between the write and the signal.
+						Effect.uninterruptible,
 						Effect.map((stored): Answer =>
 							stored.request.status === "denied"
 								? Answer.Deny({
@@ -195,10 +230,9 @@ export const make: Effect.Effect<
 					? {}
 					: { computerOwner: attempt.computerOwner }),
 			})
-			const member = yield* allows(current.caller, needed).pipe(
-				Effect.provideContext(services),
-				Effect.orElseSucceed(() => false),
-			)
+			// A policy that cannot be read is not a "no" of the policy. The check below
+			// then fails, and the answer is `Deny` without a request.
+			const member = yield* checks.allows(current.caller, needed)
 			if (!member)
 				return yield* record({
 					allow: false,
@@ -224,8 +258,10 @@ export const make: Effect.Effect<
 						by: grant.value.grantedBy,
 						reason: grant.value.reason ?? "A Grant denies this.",
 					})
-				yield* grants.use(organizationId, grant.value)
-				return Answer.Allow()
+				// Another call may take a `once` Grant first. This call then goes on as if
+				// no Grant matched.
+				if (yield* grants.use(organizationId, grant.value))
+					return Answer.Allow()
 			}
 			const { verdict, authors } = yield* judged({
 				organizationId,
@@ -233,12 +269,17 @@ export const make: Effect.Effect<
 				capability: attempt.capability,
 				reason: attempt.reason,
 			})
-			const rule = verdict.citations[0]?.rule ?? ""
 			if (verdict.decision === "deny")
-				return yield* record({
-					allow: false,
-					by: { _tag: "Rule", rule },
-					reason: verdict.explanation,
+				return yield* Option.match(Arr.head(verdict.citations), {
+					// `Judge.check` gives no_match for a verdict without a citation.
+					onNone: () =>
+						Effect.die("The judge gave a deny verdict without a citation."),
+					onSome: ({ rule }) =>
+						record({
+							allow: false,
+							by: { _tag: "Rule", rule },
+							reason: verdict.explanation,
+						}),
 				})
 			if (verdict.decision === "allow") {
 				const all = yield* Effect.forEach(authors, (author) =>
@@ -246,38 +287,47 @@ export const make: Effect.Effect<
 						? Effect.gen(function* () {
 								// Only a Bot above this one in its owner chain can set its Rules.
 								if (!current.deciders.includes(author.bot)) return false
+								const found = yield* bots.find(organizationId, author.bot)
+								if (Option.isNone(found)) return false
 								return yield* holds({
 									organizationId,
-									bot: { ...current.bot, id: author.bot },
+									bot: found.value,
 									capability: attempt.capability,
 									chat: chatOf({
 										chain: current.chain,
 										bot: author.bot,
 										current: current.chat,
 									}),
-									depth: 1,
 								})
 							})
 						: Effect.succeed(true),
 				)
-				if (all.every(Boolean)) return Answer.Allow()
+				if (Arr.every(all, Boolean)) return Answer.Allow()
 			}
 			return yield* record()
 		}).pipe(
 			Effect.catchCause((cause) =>
-				Effect.logWarning(
-					"A capability check failed, so the call does not run",
-					cause,
-				).pipe(
-					Effect.as(
-						Answer.Deny({
-							reason: "OpenBot could not check this now. Try again later.",
-						}),
-					),
-				),
+				Cause.hasInterruptsOnly(cause)
+					? Effect.interrupt
+					: Effect.logWarning(
+							"A capability check failed, so the call does not run",
+							cause,
+						).pipe(
+							Effect.as(
+								Answer.Deny({
+									reason: "OpenBot could not check this now. Try again later.",
+								}),
+							),
+						),
 			),
 			// The answer stays with the Turn, so an approval of the call finds it.
 			Effect.tap((answer) => remember(attempt.toolCallId, answer)),
+			// The arguments of the capability stay out of the logs, because they hold user data.
+			Effect.annotateLogs({
+				toolCallId: attempt.toolCallId,
+				action: attempt.capability.action,
+				target: attempt.capability.target,
+			}),
 		)
 	return Gate.of({ check, holds })
 })

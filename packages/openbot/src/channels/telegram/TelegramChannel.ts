@@ -1,4 +1,4 @@
-import { Effect, Predicate } from "effect"
+import { Array as Arr, Effect, pipe, Predicate, String as Str } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
 	Channel,
@@ -20,9 +20,11 @@ export interface Secrets {
 const sender = (from: unknown) => {
 	const userId = id(from, "id")
 	if (userId === undefined) return undefined
-	const name = [text(from, "first_name"), text(from, "last_name")]
-		.filter((part) => part !== undefined)
-		.join(" ")
+	const name = pipe(
+		[text(from, "first_name"), text(from, "last_name")],
+		Arr.filter(Predicate.isNotUndefined),
+		Arr.join(" "),
+	)
 	return {
 		externalId: userId,
 		displayName: name.length > 0 ? name : (text(from, "username") ?? userId),
@@ -49,7 +51,7 @@ const markup = (message: OutboundMessage) =>
 		: {
 				reply_markup: {
 					inline_keyboard: [
-						message.buttons.map((button) => ({
+						Arr.map(message.buttons, (button) => ({
 							text: button.label,
 							callback_data: button.value,
 						})),
@@ -113,7 +115,8 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 					conversation: chat,
 					sender: from,
 					// Commands such as `/ask@my_bot` name the bot. The Bot does not need that part.
-					text: body.replace(/^\/\w+(@\w+)?\s*/, "").trim() || body,
+					text:
+						pipe(body, Str.replace(/^\/\w+(@\w+)?\s*/, ""), Str.trim) || body,
 					mentioned: true,
 				}),
 			],

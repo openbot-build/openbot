@@ -5,7 +5,7 @@ import {
 	type UserTokensApi,
 } from "@openbot-build/api"
 import { Policy } from "@nmnmcc/ability"
-import { Effect, Option } from "effect"
+import { Array as Arr, Effect, Option, pipe } from "effect"
 import { Tokens } from "../auth/Tokens.ts"
 import {
 	Organization,
@@ -79,9 +79,11 @@ export const memberPolicy = (input: {
 }): OpenBotPolicy =>
 	Policy.all([
 		overriding([
-			...input.roles
-				.filter((role) => input.member.roles.includes(role.id))
-				.map((role) => role.policy),
+			...pipe(
+				input.roles,
+				Arr.filter((role) => input.member.roles.includes(role.id)),
+				Arr.map((role) => role.policy),
+			),
 			input.member.policy,
 		]),
 		organizationScope,

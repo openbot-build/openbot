@@ -1,7 +1,6 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Deferred,
 	Effect,
 	Fiber,
@@ -9,7 +8,9 @@ import {
 	Match,
 	Option,
 	Predicate,
+	Schema,
 	Stream,
+	String as Str,
 } from "effect"
 import { Prompt, Response, Toolkit } from "effect/ai"
 import {
@@ -45,6 +46,8 @@ const request = {
 	instructions: Prompt.make([{ role: "system", content: "instructions" }]),
 	toolkit: Toolkit.empty,
 }
+/** The JSON text of a value, so a test can match a pattern in it. */
+const json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 /** Gives the Chat one Item, a window with the same message, and the model of the catalog. */
 const selected = (runtimeStore: ChatStore.Store, chat: Chat.Id) =>
 	runtimeStore
@@ -79,7 +82,7 @@ it.effect(
 	"explicit compaction keeps opaque items and the whole Item log, also for a new store over the same persistence",
 	() =>
 		Effect.gen(function* () {
-			const test = ContextCompactionTest()
+			const test = yield* ContextCompactionTest()
 			const { runtime, runtimeStore, chat, definition, persistence } =
 				yield* ChatTest({
 					compaction: test.service,
@@ -96,7 +99,7 @@ it.effect(
 			const result = yield* service.compact({ targetTokens: 20 })
 			assert.ok(Option.isNone(result.summary))
 			assert.strictEqual(result.afterTokens, 10)
-			assert.strictEqual(test.compactions, 1)
+			assert.strictEqual(yield* test.compactions, 1)
 			const compacted = yield* runtimeStore.read(chat)
 			assert.deepStrictEqual(yield* runtimeStore.items(chat), log)
 			assert.strictEqual(compacted.chat.revision, before.chat.revision + 1)
@@ -136,7 +139,7 @@ it.effect(
 			const continued = yield* fresh.execute({ chat, input: "continue" })
 			assert.strictEqual(continued.state.conversation.context._tag, "Native")
 			assert.match(
-				JSON.stringify(yield* freshStore.items(chat)),
+				yield* json(yield* freshStore.items(chat)),
 				/whole history.*continue/,
 			)
 			const load = yield* service.load({ additional: "tail" })
@@ -148,79 +151,72 @@ it.effect(
 					LanguageModelTest({
 						streamText: () => Stream.fromArray(textParts("answer")),
 					}),
-					Layer.succeed(
+					Layer.effect(
 						ContextCompaction.ContextCompaction,
-						ContextCompactionTest().service,
+						Effect.map(ContextCompactionTest(), (test) => test.service),
 					),
 				),
 			),
 		),
 )
 
-it.effect(
-	"invalid targets, large input, provider failure and a missed target never commit or repeat compaction",
-	() => {
-		const cases = [
-			{ options: {}, target: 0, reason: "invalid-target", calls: 0 },
-			{
-				options: { before: 101 },
-				target: 50,
-				reason: "input-too-large",
-				calls: 0,
-			},
-			{
-				options: { after: 60 },
-				target: 50,
-				reason: "target-not-reached",
-				calls: 1,
-			},
-			{
-				options: {
-					compact: () =>
-						Effect.fail(
-							ContextCompaction.ContextCompactionError.make({
-								reason: "request-failed",
-								message: "failed",
-							}),
-						),
-				},
-				target: 50,
-				reason: "request-failed",
-				calls: 1,
-			},
-		] as const
-		return Effect.forEach(
-			cases,
-			(entry) =>
-				Effect.scoped(
-					Effect.gen(function* () {
-						const test = ContextCompactionTest(entry.options)
-						const { runtime, runtimeStore, chat } = yield* ChatTest({
-							compaction: test.service,
-							modelCatalog: Effect.succeed([catalog]),
-						})
-						const before = yield* selected(runtimeStore, chat)
-						const error = yield* runtime
-							.compact({ chat, targetTokens: entry.target, request })
-							.pipe(Effect.flip)
-						assert.ok(Predicate.hasProperty(error, "reason"))
-						assert.strictEqual(error.reason, entry.reason)
-						assert.strictEqual(test.compactions, entry.calls)
-						assert.deepStrictEqual(yield* runtimeStore.read(chat), before)
+const failedCompactions = [
+	{ options: {}, target: 0, reason: "invalid-target", calls: 0 },
+	{
+		options: { before: 101 },
+		target: 50,
+		reason: "input-too-large",
+		calls: 0,
+	},
+	{
+		options: { after: 60 },
+		target: 50,
+		reason: "target-not-reached",
+		calls: 1,
+	},
+	{
+		options: {
+			compact: () =>
+				Effect.fail(
+					ContextCompaction.ContextCompactionError.make({
+						reason: "request-failed",
+						message: "failed",
 					}),
 				),
-			{ discard: true },
-		)
+		},
+		target: 50,
+		reason: "request-failed",
+		calls: 1,
 	},
+] as const
+
+it.effect.each(failedCompactions)(
+	"invalid targets, large input, provider failure and a missed target never commit or repeat compaction ($reason)",
+	(entry) =>
+		Effect.gen(function* () {
+			const test = yield* ContextCompactionTest(entry.options)
+			const { runtime, runtimeStore, chat } = yield* ChatTest({
+				compaction: test.service,
+				modelCatalog: Effect.succeed([catalog]),
+			})
+			const before = yield* selected(runtimeStore, chat)
+			const error = yield* runtime
+				.compact({ chat, targetTokens: entry.target, request })
+				.pipe(Effect.flip)
+			assert.ok(Predicate.hasProperty(error, "reason"))
+			assert.strictEqual(error.reason, entry.reason)
+			assert.strictEqual(yield* test.compactions, entry.calls)
+			assert.deepStrictEqual(yield* runtimeStore.read(chat), before)
+		}),
 )
 
 it.effect(
-	"compaction checks the revision after its network work and rejects a competing change",
-	() => {
-		const start = Deferred.makeUnsafe<void>(),
-			finish = Deferred.makeUnsafe<void>()
-		return Effect.gen(function* () {
-			const test = ContextCompactionTest({
+	"compaction checks the context after its network work and rejects a competing change",
+	() =>
+		Effect.gen(function* () {
+			const start = yield* Deferred.make<void>(),
+				finish = yield* Deferred.make<void>()
+			const test = yield* ContextCompactionTest({
 				compact: (r) =>
 					Deferred.succeed(start, undefined).pipe(
 						Effect.andThen(Deferred.await(finish)),
@@ -264,10 +260,9 @@ it.effect(
 			yield* Deferred.succeed(finish, undefined)
 			const error = yield* Fiber.join(fiber)
 			assert.ok(Predicate.hasProperty(error, "reason"))
-			assert.strictEqual(error.reason, "reference-conflict")
+			assert.strictEqual(error.reason, "head-conflict")
 			assert.deepStrictEqual(yield* runtimeStore.read(chat), changed)
-		})
-	},
+		}),
 )
 
 for (const strategy of [
@@ -278,7 +273,6 @@ for (const strategy of [
 		`automatic ${strategy._tag} compaction starts at 90 percent, runs once and gives CurrentWindow to the model call`,
 		() => {
 			let windows: ReadonlyArray<ContextWindow.Window> = []
-			const test = ContextCompactionTest()
 			let summaries = 0
 			const lm = LanguageModelTest({
 				streamText: () =>
@@ -287,7 +281,7 @@ for (const strategy of [
 							Effect.serviceOption(ContextWindow.CurrentWindow),
 							(window) => {
 								const w = Option.getOrThrow(window)
-								windows = EffectArray.append(windows, w)
+								windows = Arr.append(windows, w)
 								return Stream.fromArray(textParts("answer"))
 							},
 						),
@@ -299,17 +293,27 @@ for (const strategy of [
 					}),
 			})
 			return Effect.gen(function* () {
+				const test = yield* ContextCompactionTest()
 				const { runtime, runtimeStore, chat } = yield* ChatTest({
 					compaction: {
 						...test.service,
 						count: (request) =>
-							JSON.stringify(request.window.prompt).includes("summary")
-								? Effect.succeed(10)
-								: test.service.count(request),
+							json(request.window.prompt).pipe(
+								Effect.orDie,
+								Effect.flatMap((text) =>
+									Str.includes("summary")(text)
+										? Effect.succeed(10)
+										: test.service.count(request),
+								),
+							),
 						compact: test.service.compact,
 					},
 					modelCatalog: Effect.succeed([
-						Config.Model.make({ ...catalog, compaction: strategy }),
+						Config.Model.make({
+							...catalog,
+							compaction: strategy,
+							instructionsTemplate: "instructions",
+						}),
 					]),
 				})
 				yield* selected(runtimeStore, chat)
@@ -318,14 +322,17 @@ for (const strategy of [
 					Match.tag("Native", () => "Native" as const),
 					Match.orElse(() => "Prompt" as const),
 				)
-				assert.strictEqual(test.compactions, expected === "Native" ? 1 : 0)
+				assert.strictEqual(
+					yield* test.compactions,
+					expected === "Native" ? 1 : 0,
+				)
 				assert.strictEqual(summaries, expected === "Native" ? 0 : 1)
 				assert.strictEqual(windows[0]?._tag, expected)
 				assert.strictEqual(result.state.conversation.context._tag, expected)
 				assert.strictEqual((yield* runtimeStore.items(chat)).length, 3)
-				assert.match(
-					JSON.stringify(test.requests[0]?.instructions),
-					/instructions|content/,
+				assert.deepStrictEqual(
+					(yield* test.requests)[0]?.instructions.content,
+					Prompt.make([{ role: "system", content: "instructions" }]).content,
 				)
 			}).pipe(Effect.provide(lm))
 		},
@@ -362,7 +369,7 @@ it.effect(
 		let prompts: ReadonlyArray<Prompt.Prompt> = []
 		let windows: ReadonlyArray<ContextWindow.Window> = []
 		return Effect.gen(function* () {
-			const test = ContextCompactionTest(),
+			const test = yield* ContextCompactionTest(),
 				{ runtime, runtimeStore, chat } = yield* ChatTest({
 					compaction: test.service,
 					modelCatalog: Effect.succeed([catalog]),
@@ -396,14 +403,15 @@ it.effect(
 			const shown = prompts[1]!.content
 			const note = shown[0]
 			assert.ok(note !== undefined && note.role === "user")
-			assert.match(JSON.stringify(note), /compacted/)
-			assert.notMatch(JSON.stringify(prompts[1]), /whole history/)
-			assert.match(JSON.stringify(prompts[1]), /same model.*other model/)
+			assert.match(yield* json(note), /compacted/)
+			const shownText = yield* json(prompts[1])
+			assert.notMatch(shownText, /whole history/)
+			assert.match(shownText, /same model.*other model/)
 			assert.match(
-				JSON.stringify(yield* runtimeStore.items(chat)),
+				yield* json(yield* runtimeStore.items(chat)),
 				/whole history/,
 			)
-			assert.strictEqual(test.compactions, 1)
+			assert.strictEqual(yield* test.compactions, 1)
 		}).pipe(
 			Effect.provide(
 				LanguageModelTest({
@@ -412,11 +420,8 @@ it.effect(
 							Effect.map(
 								Effect.serviceOption(ContextWindow.CurrentWindow),
 								(window) => {
-									prompts = EffectArray.append(prompts, prompt)
-									windows = EffectArray.append(
-										windows,
-										Option.getOrThrow(window),
-									)
+									prompts = Arr.append(prompts, prompt)
+									windows = Arr.append(windows, Option.getOrThrow(window))
 									return Stream.fromArray(textParts("answer"))
 								},
 							),

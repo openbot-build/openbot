@@ -1,10 +1,18 @@
-import { Effect, Layer, Schema, Stream } from "effect"
-import { assert, it } from "@effect/vitest"
+import {
+	Array as Arr,
+	Deferred,
+	Effect,
+	Fiber,
+	Ref,
+	Schema,
+	Stream,
+} from "effect"
+import { assert, it, layer } from "@effect/vitest"
+import { TestClock } from "effect/testing"
 import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import * as TimeLimiter from "../src/plugins/time-limiter/TimeLimiter.ts"
 import { ChatTest } from "./ChatTest.ts"
-// @effect-diagnostics strictEffectProvide:off
 
 const usage = Response.Usage.make({
 	inputTokens: {
@@ -24,13 +32,10 @@ const answer = () =>
 		Response.makePart("text-end", { id: "text" }),
 		finish(),
 	)
-const LanguageModelTest = (
+/** A model that streams the parts of `streamText`. */
+const makeModel = (
 	streamText: Parameters<typeof LanguageModel.make>[0]["streamText"],
-) =>
-	Layer.effect(
-		LanguageModel.LanguageModel,
-		LanguageModel.make({ generateText: () => Effect.succeed([]), streamText }),
-	)
+) => LanguageModel.make({ generateText: () => Effect.succeed([]), streamText })
 const Wait = Tool.make("Wait", {
 	parameters: Schema.Struct({}),
 	success: Schema.String,
@@ -52,69 +57,77 @@ const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
 
 it.effect("invalid time limits fail before any model request", () =>
 	Effect.gen(function* () {
-		let calls = 0
-		for (const maxDuration of [0, -1, "Infinity", "-Infinity"] as const) {
-			const chat = ChatTest(TimeLimiter.make({ maxDuration }))
-			const error = yield* chat.execute({ input: "hello" }).pipe(
-				Effect.flip,
-				Effect.provide(
-					LanguageModelTest(() => {
-						calls++
-						return Stream.empty
-					}),
-				),
-			)
-			assert.ok(error instanceof TimeLimiter.InvalidMaxDuration)
-			assert.strictEqual(error.maxDuration, maxDuration)
-		}
-		assert.strictEqual(calls, 0)
-	}),
-)
-
-// The limit must really pass, so this test uses the real clock.
-it.live("stops a model step that runs past the limit", () =>
-	Effect.gen(function* () {
-		let released = 0
-		const chat = ChatTest(TimeLimiter.make({ maxDuration: "20 millis" }))
-		const error = yield* chat.execute({ input: "slow" }).pipe(
-			Effect.flip,
-			Effect.provide(
-				LanguageModelTest(() =>
-					Stream.never.pipe(
-						Stream.ensuring(
-							Effect.sync(() => {
-								released++
-							}),
-						),
-					),
+		const calls = yield* Ref.make(0)
+		const model = yield* makeModel(() =>
+			Stream.unwrap(
+				Effect.as(
+					Ref.update(calls, (n) => n + 1),
+					Stream.empty,
 				),
 			),
 		)
-		assert.ok(error instanceof TimeLimiter.TimeLimitExceeded)
-		assert.strictEqual(released, 1)
+		for (const maxDuration of [0, -1, "Infinity", "-Infinity"] as const) {
+			const chat = ChatTest(TimeLimiter.make({ maxDuration }))
+			const error = yield* chat
+				.execute({ input: "hello" })
+				.pipe(
+					Effect.flip,
+					Effect.provideService(LanguageModel.LanguageModel, model),
+				)
+			assert.ok(Schema.is(TimeLimiter.InvalidMaxDuration)(error))
+			assert.strictEqual(error.maxDuration, maxDuration)
+		}
+		assert.strictEqual(yield* Ref.get(calls), 0)
+	}),
+)
+
+it.effect("stops a model step that runs past the limit", () =>
+	Effect.gen(function* () {
+		const released = yield* Ref.make(0)
+		const started = yield* Deferred.make<void>()
+		const chat = ChatTest(TimeLimiter.make({ maxDuration: "20 millis" }))
+		const model = yield* makeModel(() =>
+			Stream.unwrap(
+				Effect.as(Deferred.succeed(started, undefined), Stream.never),
+			).pipe(Stream.ensuring(Ref.update(released, (n) => n + 1))),
+		)
+		const fiber = yield* chat
+			.execute({ input: "slow" })
+			.pipe(
+				Effect.flip,
+				Effect.provideService(LanguageModel.LanguageModel, model),
+				Effect.forkChild,
+			)
+		// The limit starts before the model does. A move of the clock before the
+		// model starts can come before the limit, and then nothing stops the Turn.
+		yield* Deferred.await(started)
+		yield* TestClock.adjust("20 millis")
+		const error = yield* Fiber.join(fiber)
+		assert.ok(Schema.is(TimeLimiter.TimeLimitExceeded)(error))
+		assert.strictEqual(yield* Ref.get(released), 1)
 		assert.deepStrictEqual(
-			error.history.content.map((m) => m.role),
+			Arr.map(error.history.content, (m) => m.role),
 			["user"],
 		)
 	}),
 )
 
-// The limit must really pass, so this test uses the real clock.
-it.live(
-	"stops a tool call that runs past the limit and keeps earlier history",
-	() =>
-		Effect.gen(function* () {
-			const chat = ChatTest(
-				PluginComposition.merge(
-					TimeLimiter.make({ maxDuration: "20 millis" }),
-					toolPlugin,
-				),
-			)
-			const error = yield* chat.execute({ input: "wait" }).pipe(
-				Effect.flip,
-				Effect.provide(
-					Layer.merge(
-						LanguageModelTest(() =>
+layer(tools.toLayer({ Wait: () => Effect.never }))((it) => {
+	it.effect(
+		"stops a tool call that runs past the limit and keeps earlier history",
+		() =>
+			Effect.gen(function* () {
+				const started = yield* Deferred.make<void>()
+				const chat = ChatTest(
+					PluginComposition.merge(
+						TimeLimiter.make({ maxDuration: "20 millis" }),
+						toolPlugin,
+					),
+				)
+				const model = yield* makeModel(() =>
+					Stream.unwrap(
+						Effect.as(
+							Deferred.succeed(started, undefined),
 							Stream.make(
 								Response.makePart("tool-call", {
 									id: "wait-1",
@@ -125,21 +138,31 @@ it.live(
 								finish("tool-calls"),
 							),
 						),
-						tools.toLayer({ Wait: () => Effect.never }),
 					),
-				),
-			)
-			assert.ok(error instanceof TimeLimiter.TimeLimitExceeded)
-			assert.strictEqual(error.history.content[0]?.role, "system")
-		}),
-)
+				)
+				const fiber = yield* chat
+					.execute({ input: "wait" })
+					.pipe(
+						Effect.flip,
+						Effect.provideService(LanguageModel.LanguageModel, model),
+						Effect.forkChild,
+					)
+				yield* Deferred.await(started)
+				yield* TestClock.adjust("20 millis")
+				const error = yield* Fiber.join(fiber)
+				assert.ok(Schema.is(TimeLimiter.TimeLimitExceeded)(error))
+				assert.strictEqual(error.history.content[0]?.role, "system")
+			}),
+	)
+})
 
 it.effect("a Turn that ends in time completes", () =>
 	Effect.gen(function* () {
 		const chat = ChatTest(TimeLimiter.make({ maxDuration: "1 minute" }))
+		const model = yield* makeModel(() => answer())
 		const view = yield* chat
 			.execute({ input: "hello" })
-			.pipe(Effect.provide(LanguageModelTest(() => answer())))
+			.pipe(Effect.provideService(LanguageModel.LanguageModel, model))
 		assert.strictEqual(Chat.status(view.chat)._tag, "Completed")
 	}),
 )

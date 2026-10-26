@@ -253,6 +253,15 @@ Aufrufer lesen darf. OpenBot macht aus der Policy eine Bedingung für die Liste,
 bei den meisten Listen direkt in der Abfrage an die Datenbank. Eine Deny-Regel
 auf einer Ressource versteckt sie also auch in der Liste.
 
+Einige Listen verstecken Ressourcen nicht auf diese Weise: `GET /v1/chats`,
+`GET /v1/files`, `GET /v1/connections` und `GET /v1/organization/channels`. Sie
+brauchen die Aktion auf jeder Ressource ihrer Art, die der Aufrufer erreicht:
+auf allen eigenen Chats, Dateien oder App-Verbindungen, oder auf allen Channels
+der Organisation. Ein Aufruf, der eine neue solche Ressource erstellt, braucht
+genauso `write` auf allen. Eine Deny-Regel auf einem Chat, einer Datei, einer
+App-Verbindung oder einem Channel lässt diese Aufrufe also mit `403`
+fehlschlagen.
+
 ### Tokens tun nie mehr als ihr Member
 
 Ein User-Token muss seine eigene Policy und die Policy seines Members bestehen.

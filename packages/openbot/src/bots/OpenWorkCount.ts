@@ -1,5 +1,5 @@
-import { Effect, Layer } from "effect"
-import { OpenWork, none } from "../chats/OpenWork.ts"
+import { Array as Arr, Effect, Layer } from "effect"
+import { OpenWork } from "../chats/OpenWork.ts"
 import { Requests } from "../capabilities/Requests.ts"
 import { Reminders } from "../plugins/work/Reminders.ts"
 import { Delegations, isOpen } from "./Delegations.ts"
@@ -16,20 +16,22 @@ export const layer = Layer.effect(
 				Effect.all({
 					delegations: delegations
 						.forChat(organizationId, chat)
-						.pipe(Effect.map((list) => list.filter(isOpen).length)),
+						.pipe(Effect.map((list) => Arr.filter(list, isOpen).length)),
 					requests: requests
 						.forChat(organizationId, chat)
 						.pipe(
 							Effect.map(
 								(list) =>
-									list.filter((stored) => stored.request.status === "pending")
-										.length,
+									Arr.filter(
+										list,
+										(stored) => stored.request.status === "pending",
+									).length,
 							),
 						),
 					reminders: reminders
 						.forChat(organizationId, chat)
 						.pipe(Effect.map((list) => list.length)),
-				}).pipe(Effect.orElseSucceed(() => none)),
+				}),
 		})
 	}),
 )

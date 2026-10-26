@@ -1,7 +1,7 @@
 import { Authorization, type Caller, Identity } from "@openbot-build/api"
 import { Condition, Policy, type Rule } from "@nmnmcc/ability"
-import { Effect, HashMap, Option } from "effect"
-import type { Errors, Services } from "./Check.ts"
+import { Array as Arr, Effect, HashMap, Option } from "effect"
+import type { Errors } from "./Check.ts"
 
 /** Allows everything. A scope is empty when this policy allows none of it. */
 const everything = Policy.define(Authorization.OpenBot)(function* (_) {
@@ -12,11 +12,11 @@ const everything = Policy.define(Authorization.OpenBot)(function* (_) {
 const allowRules = (node: Policy.Node): ReadonlyArray<Rule.Any> => {
 	switch (node._tag) {
 		case "Rules":
-			return node.rules.filter((rule) => rule._tag === "Allow")
+			return Arr.filter(node.rules, (rule) => rule._tag === "Allow")
 		case "All":
 		case "Any":
 		case "FirstOf":
-			return node.policies.flatMap(allowRules)
+			return Arr.flatMap(node.policies, allowRules)
 		case "Ceiling":
 			return [...allowRules(node.cap), ...allowRules(node.policy)]
 	}
@@ -31,63 +31,81 @@ const allowRules = (node: Policy.Node): ReadonlyArray<Rule.Any> => {
  * that it allows inside the organization, with the caller as the principal.
  * The policy of the caller must allow every value in that scope. An empty
  * scope gives nothing, so it passes. The check fails closed: when the answer
- * is not known, it says no.
+ * is not known, it says no. It uses the authorizer `auth`, so it needs no
+ * services. It loads the policy of the caller one time and tests every scope
+ * against that one snapshot, so it reads storage once and its answers agree.
  */
 export const noMoreThanCaller = (
+	auth: typeof Authorization.Auth.Service,
 	caller: Caller,
 	policy: Authorization.Policy,
-): Effect.Effect<void, Errors, Services> =>
-	Effect.forEach(
-		allowRules(policy.node),
-		(rule) => {
-			const kinds = rule.resources.includes("*")
-				? Array.from(HashMap.keys(Authorization.OpenBot.resources))
-				: rule.resources
-			return Effect.forEach(
-				kinds,
-				(kind) => {
-					const descriptor = HashMap.get(Authorization.OpenBot.resources, kind)
-					// The rules of a member only work in the organization of the
-					// member, so a kind outside every organization gives nothing.
-					if (Option.isNone(descriptor) || descriptor.value.path?.[0] !== "org")
-						return Effect.void
-					const actions = rule.actions.includes("*")
-						? descriptor.value.actions
-						: rule.actions.filter((action) =>
-								descriptor.value.actions.includes(action),
-							)
-					// A decoded policy keeps its conditions as plain data, so the
-					// condition of the rule is a scope as it is.
-					const within = ($: Condition.Builder<any, any, any>) =>
-						$.and(
-							$.under("org", $.principal("organizationId")),
-							(rule.when ?? Condition.always) as never,
+): Effect.Effect<void, Errors> =>
+	Effect.flatMap(auth.policy, (own) =>
+		Effect.forEach(
+			allowRules(policy.node),
+			(rule) => {
+				const kinds = Arr.contains(rule.resources, "*")
+					? Arr.fromIterable(HashMap.keys(Authorization.OpenBot.resources))
+					: rule.resources
+				return Effect.forEach(
+					kinds,
+					(kind) => {
+						const descriptor = HashMap.get(
+							Authorization.OpenBot.resources,
+							kind,
 						)
-					return Effect.forEach(
-						actions,
-						(action) =>
-							Effect.gen(function* () {
-								const target = { action, kind, within } as never
-								const empty =
-									Policy.coverage(everything, {
-										...(target as object),
-										principal: caller,
-									} as never)._tag === "None"
-								if (empty) return
-								const coverage = yield* Authorization.Auth.coverage(target)
-								if (coverage._tag === "All") return
-								return yield* Authorization.Forbidden.make({
+						// The rules of a member only work in the organization of the
+						// member, so a kind outside every organization gives nothing.
+						if (
+							Option.isNone(descriptor) ||
+							descriptor.value.path?.[0] !== "org"
+						)
+							return Effect.void
+						const actions = Arr.contains(rule.actions, "*")
+							? descriptor.value.actions
+							: Arr.filter(rule.actions, (action) =>
+									Arr.contains(descriptor.value.actions, action),
+								)
+						// A decoded policy keeps its conditions as plain data, so the
+						// condition of the rule is a scope as it is.
+						const within: Policy.Scope<
+							Authorization.OpenBot,
+							Authorization.Kind
+						> = ($) =>
+							$.and(
+								$.under("org", $.principal("organizationId")),
+								(rule.when ?? Condition.always) as never,
+							)
+						return Effect.forEach(
+							actions,
+							(action) => {
+								// The kind and the action come from a decoded rule, so
+								// only this assertion ties them together.
+								const target = {
 									action,
 									kind,
-									reason:
-										"A role or a policy may not give more than you can do yourself.",
-								})
-							}),
-						{ discard: true },
-					)
-				},
-				{ discard: true },
-			)
-		},
-		{ discard: true },
+									within,
+								} as Policy.KindTarget<Authorization.OpenBot>
+								const request = { ...target, principal: caller }
+								const empty =
+									Policy.coverage(everything, request)._tag === "None"
+								if (empty || Policy.coverage(own, request)._tag === "All")
+									return Effect.void
+								return Effect.fail(
+									Authorization.Forbidden.make({
+										action,
+										kind,
+										reason:
+											"A role or a policy may not give more than you can do yourself.",
+									}),
+								)
+							},
+							{ discard: true },
+						)
+					},
+					{ discard: true },
+				)
+			},
+			{ discard: true },
+		),
 	).pipe(Effect.provideService(Identity, caller))

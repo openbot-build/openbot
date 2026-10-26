@@ -1,5 +1,5 @@
 import { Discovery, Network } from "@openbot-build/protocol"
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiError,
@@ -32,7 +32,8 @@ export type AppDiscoveryResult = typeof AppDiscoveryResult.Type
 export const AppDiscoveryFailureReason = Schema.Literals([
 	"InvalidInput",
 	"IncompatibleCard",
-	...Discovery.DiscoveryErrorReason.literals.filter(
+	...Arr.filter(
+		Discovery.DiscoveryErrorReason.literals,
 		(reason): reason is Exclude<typeof reason, "Configuration"> =>
 			reason !== "Configuration",
 	),
@@ -40,13 +41,13 @@ export const AppDiscoveryFailureReason = Schema.Literals([
 ])
 export type AppDiscoveryFailureReason = typeof AppDiscoveryFailureReason.Type
 
-export class AppDiscoveryFailed extends Schema.TaggedError<AppDiscoveryFailed>()(
-	"AppDiscoveryFailed",
-	{
-		reason: AppDiscoveryFailureReason,
-		issues: Schema.Array(Discovery.Issue),
-	},
-) {}
+export class AppDiscoveryFailed extends Schema.TaggedError<
+	AppDiscoveryFailed,
+	{ readonly brand: unique symbol }
+>()("AppDiscoveryFailed", {
+	reason: AppDiscoveryFailureReason,
+	issues: Schema.Array(Discovery.Issue),
+}) {}
 
 export const AppsApi = HttpApiGroup.make("apps").add(
 	HttpApiEndpoint.post("discoverApp", "/v1/apps/discover", {

@@ -2,7 +2,10 @@ import { Context, Effect, Option, Schema, Scope } from "effect"
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Store from "./Store.ts"
 
-export class AppError extends Schema.TaggedError<AppError>()("AppError", {
+export class AppError extends Schema.TaggedError<
+	AppError,
+	{ readonly brand: unique symbol }
+>()("AppError", {
 	reason: Schema.Literals([
 		"ConfirmationRequired",
 		"CandidateChanged",
@@ -14,13 +17,13 @@ export class AppError extends Schema.TaggedError<AppError>()("AppError", {
 export const CleanupStage = Schema.Literals(["Credentials", "Connection"])
 export type CleanupStage = typeof CleanupStage.Type
 
-export class CleanupPending extends Schema.TaggedError<CleanupPending>()(
-	"CleanupPending",
-	{
-		key: Store.ConnectionKey,
-		stage: CleanupStage,
-	},
-) {}
+export class CleanupPending extends Schema.TaggedError<
+	CleanupPending,
+	{ readonly brand: unique symbol }
+>()("CleanupPending", {
+	key: Store.ConnectionKey,
+	stage: CleanupStage,
+}) {}
 
 export class ConnectionScopes extends Context.Service<
 	ConnectionScopes,

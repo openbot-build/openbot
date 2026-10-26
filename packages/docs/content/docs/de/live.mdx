@@ -117,18 +117,18 @@ Client, was das Model kann.
 
 ### Von OpenBot
 
-| `type`                    | Bedeutung                                                                                                              |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `session.ready`           | Die Session ist offen. Sie hat `provider`, `model`, `capabilities`, `audio`, `turnDetection` und `voice`.              |
-| `input.speech.started`    | Die Person hat angefangen zu sprechen.                                                                                 |
-| `input.speech.stopped`    | Die Person hat aufgehört zu sprechen.                                                                                  |
-| `input.transcript`        | Text dessen, was die Person gesagt hat. `final` ist `true` für den ganzen Text.                                        |
-| `output.transcript.delta` | Ein Teil des Textes der Antwort.                                                                                       |
-| `output.done`             | Das Antwort-Item `itemId` hat keinen Ton und keinen Text mehr.                                                         |
-| `output.stop`             | Die Person spricht wieder. Hör jetzt auf, die Antwort abzuspielen.                                                     |
-| `turn.started`            | Ein Turn hat angefangen. Er hat `turnId`.                                                                              |
-| `turn.completed`          | Der Turn ist zu Ende. `status` ist `Completed`, `Failed` oder `Interrupted`.                                           |
-| `error`                   | Etwas ist schiefgegangen. Es hat `code` und `message`. Die Session bleibt offen, außer die Verbindung zum Model endet. |
+| `type`                    | Bedeutung                                                                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.ready`           | Die Session ist offen. Sie hat `provider`, `model`, `capabilities`, `audio`, `turnDetection` und `voice`.                                                           |
+| `input.speech.started`    | Die Person hat angefangen zu sprechen.                                                                                                                              |
+| `input.speech.stopped`    | Die Person hat aufgehört zu sprechen.                                                                                                                               |
+| `input.transcript`        | Text dessen, was die Person gesagt hat. `final` ist `true` für den ganzen Text.                                                                                     |
+| `output.transcript.delta` | Ein Teil des Textes der Antwort.                                                                                                                                    |
+| `output.done`             | Das Antwort-Item `itemId` hat keinen Ton und keinen Text mehr.                                                                                                      |
+| `output.stop`             | Die Person spricht wieder. Hör jetzt auf, die Antwort abzuspielen.                                                                                                  |
+| `turn.started`            | Ein Turn hat angefangen. Er hat `turnId`.                                                                                                                           |
+| `turn.completed`          | Der Turn ist zu Ende. `status` ist `Completed`, `Failed` oder `Interrupted`.                                                                                        |
+| `error`                   | Etwas ist schiefgegangen. Es hat `code` und `message`. Die Session bleibt offen, außer die Verbindung zum Model endet oder OpenBot kann dem Chat nicht mehr folgen. |
 
 ### Vom Client
 
@@ -175,7 +175,8 @@ ihn mit `GET /v1/chats/:chatId/turns` lesen, und andere Clients sehen ihn mit
 zählen in den Summen für Eingabe und Ausgabe.
 
 Wenn die Session öffnet, gibt OpenBot dem Live-Model die letzten
-Text-Nachrichten des Chats, damit es weiß, was vorher gesagt wurde.
+Text-Nachrichten des Chats, damit es weiß, was vorher gesagt wurde. Wenn OpenBot
+sie nicht lesen kann, startet die Session ohne sie.
 
 Ein Live-Chat kann zur selben Zeit eine Live-Session haben. Nur der Server
 dieser Session startet die Turns des Chats. Andere Eingaben warten im Chat, bis
@@ -206,7 +207,7 @@ andere im Live-Modus arbeitet mit jedem Backend. So fügst du eines hinzu:
    die das Backend nicht kann.
 3. Bilde die Werte von `Live.Input` auf die Nachrichten des Dienstes ab, und die
    Nachrichten des Dienstes auf Werte von `Live.Event`.
-4. Füge das Backend zu `defaultLiveBackends` in
+4. Füge das Backend zu `layerLiveBackends` in
    `packages/openbot/src/app/OpenBot.ts` hinzu.
 
 `packages/openbot/src/providers/openai/OpenAiRealtime.ts` ist das Backend für

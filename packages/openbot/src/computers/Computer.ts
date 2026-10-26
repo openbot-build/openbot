@@ -2,22 +2,24 @@ import type { ComputersApi } from "@openbot-build/api"
 import { Data, type Effect, Schema, type Scope, type Stream } from "effect"
 
 /** The provider or the connector did not do the call. */
-export class ComputerCallFailed extends Schema.TaggedError<ComputerCallFailed>()(
-	"ComputerCallFailed",
-	{
-		message: Schema.String,
-		/** False when trying again cannot help, such as a wrong key. */
-		retry: Schema.Boolean,
-	},
-) {}
+export class ComputerCallFailed extends Schema.TaggedError<
+	ComputerCallFailed,
+	{ readonly brand: unique symbol }
+>()("ComputerCallFailed", {
+	message: Schema.String,
+	/** False when trying again cannot help, such as a wrong key. */
+	retry: Schema.Boolean,
+	/** The inside failure, such as a refused connection. It is for the log only. */
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
 /** The sandbox is gone at the provider, or the connector is not connected. */
-export class ComputerGone extends Schema.TaggedError<ComputerGone>()(
-	"ComputerGone",
-	{
-		reason: Schema.String,
-	},
-) {}
+export class ComputerGone extends Schema.TaggedError<
+	ComputerGone,
+	{ readonly brand: unique symbol }
+>()("ComputerGone", {
+	reason: Schema.String,
+}) {}
 
 export type ComputerError = ComputerCallFailed | ComputerGone
 
@@ -37,8 +39,6 @@ export interface RunResult {
 	readonly exitCode: number | null
 	readonly stdout: string
 	readonly stderr: string
-	readonly truncated: boolean
-	readonly durationMs: number
 }
 
 /** A command to start. It runs with `bash -lc` in its own process group. */
@@ -110,7 +110,8 @@ export interface Desktop {
 	readonly act: (
 		actions: ReadonlyArray<ComputersApi.DesktopAction>,
 	) => Effect.Effect<void, ComputerError>
-	readonly stream: Effect.Effect<ComputersApi.DesktopStream, ComputerError>
+	/** A live view of the desktop. It is there only when the Computer can give one. */
+	readonly stream?: Effect.Effect<ComputersApi.DesktopStream, ComputerError>
 }
 
 /** A Computer that can give a port a public HTTPS address. */

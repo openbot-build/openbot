@@ -1,15 +1,17 @@
-// Tests are entry points, so they provide their own Layers.
-// @effect-diagnostics strictEffectProvide:off
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Effect,
 	Fiber,
 	Layer,
+	Option,
+	pipe,
+	Queue,
 	Redacted,
 	Schema,
 	Stream,
 	Match,
 } from "effect"
+import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http"
 import {
 	CatalogDiscovery,
 	MemoryStore,
@@ -20,11 +22,11 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { NodeHttpServerRequest, NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import { type IncomingHttpHeaders, type ServerResponse } from "node:http"
 import * as Mcp from "@modelcontextprotocol/client"
 
-import { startHttps } from "./Fixture.ts"
+import { serveChecked } from "./Fixture.ts"
 
 // These tests build their Layers at the edge of the test runtime.
 
@@ -33,37 +35,54 @@ const WireRequest = Schema.Struct({
 	method: Schema.String,
 	params: Schema.optional(Schema.JsonObject),
 })
-const paramsOf = Schema.decodeUnknownSync(
-	Schema.Struct({
-		name: Schema.optional(Schema.String),
-		cursor: Schema.optional(Schema.String),
-		uri: Schema.optional(Schema.String),
-		arguments: Schema.optional(Schema.JsonObject),
-		_meta: Schema.optional(Schema.JsonObject),
-		requestState: Schema.optional(Schema.String),
-		inputResponses: Schema.optional(Schema.JsonObject),
-		notifications: Schema.optional(Schema.JsonObject),
-	}),
-)
+const Params = Schema.Struct({
+	name: Schema.optional(Schema.String),
+	cursor: Schema.optional(Schema.String),
+	uri: Schema.optional(Schema.String),
+	arguments: Schema.optional(Schema.JsonObject),
+	_meta: Schema.optional(Schema.JsonObject),
+	requestState: Schema.optional(Schema.String),
+	inputResponses: Schema.optional(Schema.JsonObject),
+	notifications: Schema.optional(Schema.JsonObject),
+})
+const decodeRequest = Schema.decodeEffect(Schema.fromJsonString(WireRequest))
+const decodeParams = Schema.decodeUnknownEffect(Params)
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
-/** A separate HTTP implementation of the chosen wire contract. */
-const service = async () => {
-	let requests: ReadonlyArray<{
-		request: typeof WireRequest.Type
-		headers: IncomingHttpHeaders
-		url: string
-		method: string
-	}> = []
+/** Gives one server-sent event with a JSON value as its data. */
+const event = (value: unknown) =>
+	Effect.map(encodeJson(value), (json) => `data: ${json}\n\n`)
+
+/** A request that the service got. */
+interface Received {
+	readonly request: typeof WireRequest.Type
+	readonly params: typeof Params.Type
+	readonly headers: Headers.Headers
+	readonly url: string
+	readonly method: string
+}
+
+/**
+ * A separate HTTP implementation of the chosen wire contract. It stops when
+ * the scope closes.
+ */
+const service = Effect.gen(function* () {
+	let requests: ReadonlyArray<Received> = []
 	const state = {
 		writes: 0,
 		listReads: 0,
 		inputId: "consent",
 		versions: [Document.protocolVersion],
 		toolsOnly: false,
+		/** When it is true, every tools/list page names a new next page. */
+		endlessPages: false,
 		revision: 1,
 		aborted: 0,
 	}
-	let subscription: ServerResponse | undefined
+	/** The open event stream of the subscription, if there is one. */
+	let subscription: Queue.Queue<string> | undefined
+	/** Gets a value when a call of the Hang tool runs and its response is open. */
+	const hanging = yield* Queue.unbounded<void>()
 	const info = { name: "independent-service", version: "1.0.0" }
 	const meta = { [Mcp.SERVER_INFO_META_KEY]: info }
 	const tools = [
@@ -101,7 +120,8 @@ const service = async () => {
 			inputSchema: { type: "object" },
 			_meta: { ui: { visibility: ["app"] } },
 		},
-		...["NeedInput", "BadOutput", "Fail", "Stream", "Hang", "Drop"].map(
+		...Arr.map(
+			["NeedInput", "BadOutput", "Fail", "Stream", "Hang", "Drop"],
 			(name) => ({
 				name,
 				inputSchema: { type: "object" },
@@ -113,35 +133,38 @@ const service = async () => {
 			}),
 		),
 	]
-	const fixture = await startHttps((req, res) => {
-		let body = ""
-		req.setEncoding("utf8")
-		req.on("data", (part: string) => {
-			body += part
+	/** An event stream that sends the text parts and closes. */
+	const events = (...parts: ReadonlyArray<string>) =>
+		HttpServerResponse.stream(Stream.encodeText(Stream.fromIterable(parts)), {
+			contentType: "text/event-stream",
 		})
-		req.on("end", () => {
-			const request = Schema.decodeSync(Schema.fromJsonString(WireRequest))(
-				body,
-			)
-			requests = EffectArray.append(requests, {
+	const fixture = yield* serveChecked(
+		Effect.gen(function* () {
+			const http = yield* HttpServerRequest.HttpServerRequest
+			const request = yield* Effect.flatMap(http.text, decodeRequest)
+			const params = yield* decodeParams(request.params ?? {})
+			requests = Arr.append(requests, {
 				request,
-				headers: req.headers,
-				url: req.url ?? "",
-				method: req.method ?? "",
+				params,
+				headers: http.headers,
+				url: http.url,
+				method: http.method,
 			})
-			const params = paramsOf(request.params ?? {})
 			const message = (value: object) => ({
 				jsonrpc: "2.0",
 				id: request.id,
 				result: {
 					resultType: "complete",
-					...([
-						"tools/list",
-						"resources/list",
-						"resources/templates/list",
-						"resources/read",
-						"prompts/list",
-					].includes(request.method)
+					...(Arr.contains(
+						[
+							"tools/list",
+							"resources/list",
+							"resources/templates/list",
+							"resources/read",
+							"prompts/list",
+						],
+						request.method,
+					)
 						? {
 								ttlMs: 60000,
 								cacheScope: "private",
@@ -151,14 +174,161 @@ const service = async () => {
 					_meta: meta,
 				},
 			})
-			const reply = (value: object) => {
-				res.writeHead(200, {
-					"content-type": "application/json",
+			const reply = (value: object) => HttpServerResponse.json(message(value))
+			const callTool = Effect.gen(function* () {
+				if (params.name === "NeedInput" && params.inputResponses === undefined)
+					return yield* HttpServerResponse.json({
+						jsonrpc: "2.0",
+						id: request.id,
+						result: {
+							resultType: "input_required",
+							inputRequests: {
+								[state.inputId]: {
+									method: "elicitation/create",
+									params: {
+										message: "Create a note?",
+										requestedSchema: {
+											type: "object" as const,
+											properties: {
+												text: {
+													type: "string" as const,
+												},
+											},
+										},
+									},
+								},
+							},
+							requestState: "server-owned-operation-1",
+							_meta: meta,
+						},
+					})
+				if (params.name === "NeedInput") {
+					assert.strictEqual(params.requestState, "server-owned-operation-1")
+					assert.deepStrictEqual(params.inputResponses, {
+						consent: {
+							action: "accept",
+							content: {
+								text: "yes",
+							},
+						},
+					})
+				}
+				if (params.name === "Hang")
+					return HttpServerResponse.stream(
+						Stream.make(": alive\n\n").pipe(
+							Stream.encodeText,
+							Stream.concat(
+								Stream.fromEffectDrain(Queue.offer(hanging, undefined)),
+							),
+							Stream.concat(Stream.never),
+							Stream.ensuring(
+								Effect.sync(() => {
+									state.aborted++
+								}),
+							),
+						),
+						{ contentType: "text/event-stream" },
+					)
+				if (params.name === "Stream")
+					return events(
+						": keepalive\n\n",
+						yield* event({
+							jsonrpc: "2.0",
+							method: "notifications/progress",
+							params: {
+								progressToken: params._meta?.["progressToken"],
+								progress: 1,
+								total: 1,
+							},
+						}),
+						yield* event({
+							jsonrpc: "2.0",
+							method: "notifications/message",
+							params: { level: "info", data: "working", _meta: meta },
+						}),
+						yield* event(
+							message({
+								content: [{ type: "text" as const, text: "stream done" }],
+								structuredContent: { id: 9 },
+							}),
+						),
+					)
+				if (params.name === "Drop") {
+					state.writes++
+					// Effect has no way to drop a connection without an answer, so the
+					// test uses the Node socket. The request fiber stops when the socket
+					// closes.
+					NodeHttpServerRequest.toIncomingMessage(http).socket.destroy()
+					return yield* Effect.never
+				}
+				if (params.name === "Fail")
+					return yield* reply({
+						isError: true,
+						content: [
+							{
+								type: "text" as const,
+								text: "business rejected",
+							},
+						],
+					})
+				if (params.name === "BadOutput")
+					return yield* reply({
+						content: [
+							{
+								type: "text" as const,
+								text: "wrong",
+							},
+						],
+						structuredContent: {
+							id: "wrong type",
+						},
+					})
+				if (params.name === "Write" || params.name === "NeedInput")
+					state.writes++
+				return yield* reply({
+					content: [
+						{
+							type: "text" as const,
+							text: String(params.arguments?.["text"] ?? "done"),
+						},
+					],
+					structuredContent: {
+						id: state.writes,
+					},
+					_meta: { retained: true },
 				})
-				res.end(JSON.stringify(message(value)))
-			}
-			Match.value(request.method).pipe(
-				Match.when("server/discover", () => {
+			})
+			const listen = Effect.gen(function* () {
+				const queue = yield* Queue.unbounded<string>()
+				subscription = queue
+				return HttpServerResponse.stream(
+					Stream.make(
+						yield* event({
+							jsonrpc: "2.0",
+							method: "notifications/subscriptions/acknowledged",
+							params: {
+								notifications: params.notifications,
+								_meta: {
+									[Mcp.SUBSCRIPTION_ID_META_KEY]: request.id,
+									...meta,
+								},
+							},
+						}),
+					).pipe(
+						Stream.concat(Stream.fromQueue(queue)),
+						Stream.encodeText,
+						Stream.ensuring(
+							Effect.sync(() => {
+								subscription = undefined
+								state.aborted++
+							}),
+						),
+					),
+					{ contentType: "text/event-stream" },
+				)
+			})
+			return yield* Match.value(request.method).pipe(
+				Match.when("server/discover", () =>
 					reply({
 						supportedVersions: state.versions,
 						capabilities: state.toolsOnly
@@ -172,30 +342,31 @@ const service = async () => {
 									},
 									prompts: {},
 								},
-					})
-					return
-				}),
+					}),
+				),
 				Match.when("tools/list", () => {
-					{
-						state.listReads++
-						const listed = tools.map((tool) => ({
-							...tool,
-							description: `revision ${state.revision}`,
-						}))
-						reply(
-							params.cursor === undefined
+					state.listReads++
+					const listed = Arr.map(tools, (tool) => ({
+						...tool,
+						description: `revision ${state.revision}`,
+					}))
+					return reply(
+						state.endlessPages
+							? {
+									tools: [],
+									nextCursor: `page-${state.listReads}`,
+								}
+							: params.cursor === undefined
 								? {
-										tools: listed.slice(0, 2),
+										tools: Arr.take(listed, 2),
 										nextCursor: "next",
 									}
 								: {
-										tools: listed.slice(2),
+										tools: Arr.drop(listed, 2),
 									},
-						)
-						return
-					}
+					)
 				}),
-				Match.when("resources/list", () => {
+				Match.when("resources/list", () =>
 					reply({
 						resources: [
 							{
@@ -203,10 +374,9 @@ const service = async () => {
 								name: "Latest",
 							},
 						],
-					})
-					return
-				}),
-				Match.when("resources/templates/list", () => {
+					}),
+				),
+				Match.when("resources/templates/list", () =>
 					reply({
 						resourceTemplates: [
 							{
@@ -214,10 +384,9 @@ const service = async () => {
 								name: "Note",
 							},
 						],
-					})
-					return
-				}),
-				Match.when("resources/read", () => {
+					}),
+				),
+				Match.when("resources/read", () =>
 					reply({
 						contents: [
 							{
@@ -229,16 +398,14 @@ const service = async () => {
 								},
 							},
 						],
-					})
-					return
-				}),
-				Match.when("prompts/list", () => {
+					}),
+				),
+				Match.when("prompts/list", () =>
 					reply({
 						prompts: [{ name: "Summary" }],
-					})
-					return
-				}),
-				Match.when("prompts/get", () => {
+					}),
+				),
+				Match.when("prompts/get", () =>
 					reply({
 						messages: [
 							{
@@ -249,162 +416,22 @@ const service = async () => {
 								},
 							},
 						],
-					})
-					return
-				}),
-				Match.when("tools/call", () => {
-					{
-						if (
-							params.name === "NeedInput" &&
-							params.inputResponses === undefined
-						) {
-							res.writeHead(200, {
-								"content-type": "application/json",
-							})
-							res.end(
-								JSON.stringify({
-									jsonrpc: "2.0",
-									id: request.id,
-									result: {
-										resultType: "input_required",
-										inputRequests: {
-											[state.inputId]: {
-												method: "elicitation/create",
-												params: {
-													message: "Create a note?",
-													requestedSchema: {
-														type: "object" as const,
-														properties: {
-															text: {
-																type: "string" as const,
-															},
-														},
-													},
-												},
-											},
-										},
-										requestState: "server-owned-operation-1",
-										_meta: meta,
-									},
-								}),
-							)
-							return
-						}
-						if (params.name === "NeedInput") {
-							assert.strictEqual(
-								params.requestState,
-								"server-owned-operation-1",
-							)
-							assert.deepStrictEqual(params.inputResponses, {
-								consent: {
-									action: "accept",
-									content: {
-										text: "yes",
-									},
-								},
-							})
-						}
-						if (params.name === "Hang") {
-							res.writeHead(200, {
-								"content-type": "text/event-stream",
-							})
-							res.write(": alive\n\n")
-							res.on("close", () => state.aborted++)
-							return
-						}
-						if (params.name === "Stream") {
-							res.writeHead(200, {
-								"content-type": "text/event-stream",
-							})
-							res.write(": keepalive\n\n")
-							res.write(
-								`data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/progress", params: { progressToken: params._meta?.["progressToken"], progress: 1, total: 1 } })}\n\n`,
-							)
-							res.write(
-								`data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/message", params: { level: "info", data: "working", _meta: meta } })}\n\n`,
-							)
-							res.end(
-								`data: ${JSON.stringify(message({ content: [{ type: "text" as const, text: "stream done" }], structuredContent: { id: 9 } }))}\n\n`,
-							)
-							return
-						}
-						if (params.name === "Drop") {
-							state.writes++
-							req.socket.destroy()
-							return
-						}
-						if (params.name === "Fail") {
-							reply({
-								isError: true,
-								content: [
-									{
-										type: "text" as const,
-										text: "business rejected",
-									},
-								],
-							})
-							return
-						}
-						if (params.name === "BadOutput") {
-							reply({
-								content: [
-									{
-										type: "text" as const,
-										text: "wrong",
-									},
-								],
-								structuredContent: {
-									id: "wrong type",
-								},
-							})
-							return
-						}
-						if (params.name === "Write" || params.name === "NeedInput")
-							state.writes++
-						reply({
-							content: [
-								{
-									type: "text" as const,
-									text: String(params.arguments?.["text"] ?? "done"),
-								},
-							],
-							structuredContent: {
-								id: state.writes,
-							},
-							_meta: { retained: true },
-						})
-						return
-					}
-				}),
-				Match.when("subscriptions/listen", () => {
-					{
-						subscription = res
-						res.writeHead(200, {
-							"content-type": "text/event-stream",
-						})
-						res.write(
-							`data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/subscriptions/acknowledged", params: { notifications: params.notifications, _meta: { [Mcp.SUBSCRIPTION_ID_META_KEY]: request.id, ...meta } } })}\n\n`,
-						)
-						res.on("close", () => {
-							subscription = undefined
-							state.aborted++
-						})
-						return
-					}
-				}),
-				Match.orElse(() => {
-					res.writeHead(400)
-					res.end()
-				}),
+					}),
+				),
+				Match.when("tools/call", () => callTool),
+				Match.when("subscriptions/listen", () => listen),
+				Match.orElse(() =>
+					Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+				),
 			)
-		})
-	})
+		}),
+	)
 	const key = { owner: "alice", connectionId: "notes" }
 	const endpoint = fixture.ipOrigin + "/mcp?account=1"
 	const cardUrl = fixture.ipOrigin + "/card"
-	const record: Store.AppRecord = {
+	const record = Store.AppRecord.make({
 		cardUrl,
-		card: {
+		card: Document.ServerCard.make({
 			$schema: Document.cardSchemaUrl,
 			name: "example.test/notes",
 			version: "1.0.0",
@@ -416,10 +443,10 @@ const service = async () => {
 					supportedProtocolVersions: [Document.protocolVersion],
 				},
 			],
-		},
+		}),
 		sources: [],
-	}
-	const connection: Store.UserConnection = {
+	})
+	const connection = Store.UserConnection.make({
 		...key,
 		cardUrl,
 		endpoint,
@@ -428,7 +455,7 @@ const service = async () => {
 		headers: Redacted.make({}),
 		state: "Enabled",
 		authorization: { _tag: "Unprotected" },
-	}
+	})
 	let denied = false
 	const layers = Layer.mergeAll(
 		NodeHttpServer.layerUserNetwork({
@@ -477,35 +504,46 @@ const service = async () => {
 		layers,
 		prepare,
 		connect,
-		deny: () => {
+		/** Waits until a call of the Hang tool runs. */
+		hanging: Queue.take(hanging),
+		deny: Effect.sync(() => {
 			denied = true
-		},
-		change: () => {
+		}),
+		/** Changes the tool list and tells the subscription about it. */
+		change: Effect.gen(function* () {
 			state.revision++
-			const id = requests.findLast(
-				(r) => r.request.method === "subscriptions/listen",
-			)?.request.id
-			subscription?.write(
-				`data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/tools/list_changed", params: { _meta: { [Mcp.SUBSCRIPTION_ID_META_KEY]: id, ...meta } } })}\n\n`,
+			const id = pipe(
+				Arr.findLast(
+					requests,
+					(r) => r.request.method === "subscriptions/listen",
+				),
+				Option.map((r) => r.request.id),
+				Option.getOrUndefined,
 			)
-		},
+			if (subscription !== undefined)
+				yield* Queue.offer(
+					subscription,
+					yield* event({
+						jsonrpc: "2.0",
+						method: "notifications/tools/list_changed",
+						params: {
+							_meta: { [Mcp.SUBSCRIPTION_ID_META_KEY]: id, ...meta },
+						},
+					}),
+				)
+		}),
 	}
-}
+})
 
-// Each test starts its own service and closes it when the test ends.
-const openService = Effect.acquireRelease(
-	Effect.promise(() => service()),
-	(fixture) => Effect.promise(() => fixture.close()),
-)
 // A fresh Layer for each provide, like a fresh runtime.
-const layersOf = (fixture: Effect.Success<typeof openService>) =>
+const layersOf = (fixture: Effect.Success<typeof service>) =>
 	fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules]))
 
 it.live(
 	"the protocol client uses live discovery, standard pages, schemas, headers and one shared policy",
 	() =>
 		Effect.gen(function* () {
-			const fixture = yield* openService
+			const fixture = yield* service
 			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
@@ -522,7 +560,10 @@ it.live(
 					)
 					assert.strictEqual((yield* client.listTools()).tools.length, 9)
 					assert.strictEqual(
-						(yield* client.modelTools).some((tool) => tool.name === "AppOnly"),
+						Arr.some(
+							yield* client.modelTools,
+							(tool) => tool.name === "AppOnly",
+						),
 						false,
 					)
 					const created = yield* client.callTool(
@@ -534,17 +575,12 @@ it.live(
 						},
 						{ source: "model" },
 					)
-					assert.strictEqual(created._tag, "Completed")
-					Match.value(created).pipe(
-						Match.tag("Completed", (created) => {
-							assert.deepStrictEqual(created.result.structuredContent, {
-								id: 1,
-							})
-						}),
-						Match.orElse(() => undefined),
-					)
+					assert.ok(created._tag === "Completed")
+					assert.deepStrictEqual(created.result.structuredContent, {
+						id: 1,
+					})
 					const before = fixture.requests.length
-					const invalid = yield* Effect.result(
+					const invalid = yield* Effect.flip(
 						client.callTool(
 							{
 								name: "Write",
@@ -555,11 +591,13 @@ it.live(
 							{ source: "model" },
 						),
 					)
-					assert.strictEqual(invalid._tag, "Failure")
+					assert.ok(invalid._tag === "ClientError")
+					assert.strictEqual(invalid.reason, "Schema")
 					assert.ok(
-						fixture.requests
-							.slice(before)
-							.every((r) => r.request.method !== "tools/call"),
+						Arr.every(
+							Arr.drop(fixture.requests, before),
+							(r) => r.request.method !== "tools/call",
+						),
 					)
 					const malformed = yield* Effect.result(
 						client.callTool(
@@ -567,29 +605,15 @@ it.live(
 							{ source: "host", readOnly: true },
 						),
 					)
-					assert.strictEqual(malformed._tag, "Failure")
-					Match.value(malformed).pipe(
-						Match.tag("Failure", (malformed) => {
-							assert.strictEqual(malformed.failure._tag, "ClientError")
-						}),
-						Match.orElse(() => undefined),
-					)
-					const failed = yield* Effect.result(
+					assert.ok(malformed._tag === "Failure")
+					assert.strictEqual(malformed.failure._tag, "ClientError")
+					const failed = yield* Effect.flip(
 						client.callTool({ name: "Fail" }, { source: "host" }),
 					)
-					assert.strictEqual(failed._tag, "Failure")
-					Match.value(failed).pipe(
-						Match.when(
-							{
-								_tag: "Failure",
-								failure: Match.instanceOf(Client.ToolFailure),
-							},
-							({ failure }) => {
-								assert.strictEqual(failure.result.content[0]?.type, "text")
-							},
-						),
-						Match.orElse(() => undefined),
-					)
+					assert.ok(failed._tag === "ToolFailure")
+					const failedContent = failed.result.content[0]
+					assert.ok(failedContent?.type === "text")
+					assert.strictEqual(failedContent.text, "business rejected")
 					yield* client.callTool(
 						{
 							name: "Mapped",
@@ -599,82 +623,88 @@ it.live(
 						},
 						{ source: "host" },
 					)
-					assert.strictEqual(
-						fixture.requests.findLast((r) => r.request.method === "tools/call")
-							?.headers["mcp-param-locale"],
-						"=?base64?77yv77yr?=",
+					assert.deepStrictEqual(
+						pipe(
+							Arr.findLast(
+								fixture.requests,
+								(r) => r.request.method === "tools/call",
+							),
+							Option.flatMap((r) => Headers.get(r.headers, "mcp-param-locale")),
+						),
+						Option.some("=?base64?77yv77yr?="),
 					)
 					const resource = yield* client.readTemplate({
 						template: "notes://{id}",
 						values: { id: "42" },
 						source: "model",
 					})
-					Match.value(resource).pipe(
-						Match.tag("Completed", (resource) => {
-							assert.strictEqual(resource.result.contents[0]?.uri, "notes://42")
-						}),
-						Match.orElse(() => undefined),
-					)
+					assert.ok(resource._tag === "Completed")
+					assert.strictEqual(resource.result.contents[0]?.uri, "notes://42")
 					const prompt = yield* client.getPrompt(
 						{ name: "Summary" },
 						{ source: "model" },
 					)
-					Match.value(prompt).pipe(
-						Match.tag("Completed", (prompt) => {
-							assert.strictEqual(
-								prompt.result.messages[0]?.content.type,
-								"text",
-							)
-						}),
-						Match.orElse(() => undefined),
-					)
-					fixture.deny()
+					assert.ok(prompt._tag === "Completed")
+					assert.strictEqual(prompt.result.messages[0]?.content.type, "text")
+					yield* fixture.deny
 					const deniedCount = fixture.requests.length
-					for (const source of ["model", "app"] as const)
-						assert.strictEqual(
-							(yield* Effect.result(
-								client.callTool(
-									{
-										name: "Write",
-										arguments: {
-											text: "denied",
-										},
+					for (const source of ["model", "app"] as const) {
+						const denied = yield* Effect.flip(
+							client.callTool(
+								{
+									name: "Write",
+									arguments: {
+										text: "denied",
 									},
-									{
-										source,
-									},
-								),
-							))._tag,
-							"Failure",
+								},
+								{
+									source,
+								},
+							),
 						)
+						assert.ok(denied._tag === "PermissionDenied")
+						assert.strictEqual(denied.action, "tools/call")
+						assert.strictEqual(denied.target, "Write")
+					}
 					assert.strictEqual(fixture.requests.length, deniedCount)
 					assert.strictEqual(fixture.state.writes, 1)
 					assert.ok(
-						fixture.requests.every(
+						Arr.every(
+							fixture.requests,
 							(r) =>
 								r.method === "POST" &&
 								r.url === "/mcp?account=1" &&
-								r.headers["mcp-session-id"] === undefined,
+								!Headers.has(r.headers, "mcp-session-id"),
 						),
 					)
 					assert.ok(
-						fixture.requests.every((r) => r.request.method !== "initialize"),
+						Arr.every(
+							fixture.requests,
+							(r) => r.request.method !== "initialize",
+						),
 					)
-					assert.strictEqual(
-						fixture.requests.find((r) => r.request.method === "tools/call")
-							?.headers["mcp-protocol-version"],
-						Document.protocolVersion,
+					assert.deepStrictEqual(
+						pipe(
+							Arr.findFirst(
+								fixture.requests,
+								(r) => r.request.method === "tools/call",
+							),
+							Option.flatMap((r) =>
+								Headers.get(r.headers, "mcp-protocol-version"),
+							),
+						),
+						Option.some(Document.protocolVersion),
 					)
 				}),
 			).pipe(Effect.provide(layersOf(fixture)))
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
 	"MRTR stays pending until a capable host explicitly resumes the same operation",
 	() =>
 		Effect.gen(function* () {
-			const fixture = yield* openService
+			const fixture = yield* service
 			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
@@ -683,67 +713,53 @@ it.live(
 						{ name: "NeedInput" },
 						{ source: "host" },
 					)
-					assert.strictEqual(pending._tag, "InputRequired")
-					return yield* Match.value(pending).pipe(
-						Match.tag("InputRequired", (pending) =>
-							Effect.gen(function* () {
-								assert.strictEqual(fixture.state.writes, 0)
-								assert.strictEqual(
-									(yield* Effect.result(pending.handle))._tag,
-									"Failure",
-								)
-								assert.strictEqual(fixture.state.writes, 0)
-								const client = yield* fixture.connect({
-									capabilities: {
-										elicitation: {
-											form: {},
-										},
-									},
-									handle: () =>
-										Effect.succeed({
-											action: "accept",
-											content: {
-												text: "yes",
-											},
-										}),
-								})
-								const operation = yield* client.callTool(
-									{ name: "NeedInput" },
-									{ source: "host" },
-								)
-								assert.strictEqual(operation._tag, "InputRequired")
-								return yield* Match.value(operation).pipe(
-									Match.tag("InputRequired", (operation) =>
-										Effect.gen(function* () {
-											const completed = yield* operation.handle
-											assert.strictEqual(completed._tag, "Completed")
-											assert.strictEqual(fixture.state.writes, 1)
-											const requests = fixture.requests.filter(
-												(r) => r.request.method === "tools/call",
-											)
-											assert.strictEqual(requests.length, 3)
-											assert.strictEqual(
-												requests[2]?.request.params?.["requestState"],
-												"server-owned-operation-1",
-											)
-										}),
-									),
-									Match.orElse(() => Effect.void),
-								)
+					assert.ok(pending._tag === "InputRequired")
+					assert.strictEqual(fixture.state.writes, 0)
+					const unavailable = yield* Effect.flip(pending.handle)
+					assert.ok(unavailable._tag === "ClientError")
+					assert.strictEqual(unavailable.reason, "InputUnavailable")
+					assert.strictEqual(fixture.state.writes, 0)
+					const client = yield* fixture.connect({
+						capabilities: {
+							elicitation: {
+								form: {},
+							},
+						},
+						handle: () =>
+							Effect.succeed({
+								action: "accept",
+								content: {
+									text: "yes",
+								},
 							}),
-						),
-						Match.orElse(() => Effect.void),
+					})
+					const operation = yield* client.callTool(
+						{ name: "NeedInput" },
+						{ source: "host" },
+					)
+					assert.ok(operation._tag === "InputRequired")
+					const completed = yield* operation.handle
+					assert.strictEqual(completed._tag, "Completed")
+					assert.strictEqual(fixture.state.writes, 1)
+					const requests = Arr.filter(
+						fixture.requests,
+						(r) => r.request.method === "tools/call",
+					)
+					assert.strictEqual(requests.length, 3)
+					assert.strictEqual(
+						requests[2]?.request.params?.["requestState"],
+						"server-owned-operation-1",
 					)
 				}),
 			).pipe(Effect.provide(layersOf(fixture)))
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
 	"SSE progress, explicit subscriptions, cancellation and unknown write outcomes stay distinct",
 	() =>
 		Effect.gen(function* () {
-			const fixture = yield* openService
+			const fixture = yield* service
 			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
@@ -754,7 +770,7 @@ it.live(
 						{
 							source: "host",
 							onprogress: (event) =>
-								(progress = EffectArray.append(progress, event.progress)),
+								(progress = Arr.append(progress, event.progress)),
 						},
 					)
 					assert.strictEqual(result._tag, "Completed")
@@ -772,7 +788,7 @@ it.live(
 						toolsListChanged: true,
 					})
 					assert.strictEqual(subscription.honoredFilter.toolsListChanged, true)
-					fixture.change()
+					yield* fixture.change
 					yield* Fiber.join(received)
 					assert.strictEqual(
 						(yield* client.listTools()).tools[0]?.description,
@@ -783,14 +799,7 @@ it.live(
 					const hanging = yield* Effect.forkChild(
 						client.callTool({ name: "Hang" }, { source: "host" }),
 					)
-					const waitForRequest: Effect.Effect<void> = Effect.suspend(() =>
-						fixture.requests.some(
-							(r) => paramsOf(r.request.params ?? {}).name === "Hang",
-						)
-							? Effect.void
-							: Effect.yieldNow.pipe(Effect.andThen(() => waitForRequest)),
-					)
-					yield* waitForRequest
+					yield* fixture.hanging
 					yield* Fiber.interrupt(hanging)
 					const unknown = yield* Effect.result(
 						client.callTool(
@@ -801,36 +810,31 @@ it.live(
 							},
 						),
 					)
-					assert.strictEqual(unknown._tag, "Failure")
-					Match.value(unknown).pipe(
-						Match.tag("Failure", (unknown) => {
-							assert.strictEqual(unknown.failure._tag, "OutcomeUnknown")
-						}),
-						Match.orElse(() => undefined),
-					)
+					assert.ok(unknown._tag === "Failure")
+					assert.strictEqual(unknown.failure._tag, "OutcomeUnknown")
 					assert.strictEqual(fixture.state.writes, 1)
 					assert.strictEqual(
-						fixture.requests.filter(
-							(r) => paramsOf(r.request.params ?? {}).name === "Drop",
-						).length,
+						Arr.filter(fixture.requests, (r) => r.params.name === "Drop")
+							.length,
 						1,
 					)
 					assert.ok(
-						fixture.requests.every(
+						Arr.every(
+							fixture.requests,
 							(r) => r.request.method !== "notifications/cancelled",
 						),
 					)
 				}),
 			).pipe(Effect.provide(layersOf(fixture)))
-			assert.ok(fixture.state.aborted >= 2)
-		}),
+			assert.strictEqual(fixture.state.aborted, 2)
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
 	"Version mismatch fails before tools, and a service that advertises only tools gets no other lists",
 	() =>
 		Effect.gen(function* () {
-			const fixture = yield* openService
+			const fixture = yield* service
 			fixture.state.versions = ["2025-11-25"]
 			const error = yield* Effect.flip(
 				Effect.scoped(
@@ -840,9 +844,13 @@ it.live(
 					}),
 				).pipe(Effect.provide(layersOf(fixture))),
 			)
-			assert.match(String(error), /ClientError/)
+			assert.ok(error._tag === "ClientError")
+			assert.strictEqual(error.reason, "Protocol")
 			assert.ok(
-				fixture.requests.every((r) => r.request.method === "server/discover"),
+				Arr.every(
+					fixture.requests,
+					(r) => r.request.method === "server/discover",
+				),
 			)
 			fixture.requests = []
 			fixture.state.versions = [Document.protocolVersion]
@@ -854,18 +862,18 @@ it.live(
 				}),
 			).pipe(Effect.provide(layersOf(fixture)))
 			assert.ok(
-				fixture.requests.every((r) =>
-					["server/discover", "tools/list"].includes(r.request.method),
+				Arr.every(fixture.requests, (r) =>
+					Arr.contains(["server/discover", "tools/list"], r.request.method),
 				),
 			)
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
 )
 
 it.live(
 	"input response identifiers cannot collide with a joined identifier",
 	() =>
 		Effect.gen(function* () {
-			const fixture = yield* openService
+			const fixture = yield* service
 			fixture.state.inputId = "a\0b"
 			yield* Effect.scoped(
 				Effect.gen(function* () {
@@ -895,5 +903,29 @@ it.live(
 					assert.strictEqual(fixture.state.writes, 0)
 				}),
 			).pipe(Effect.provide(layersOf(fixture)))
-		}),
+		}).pipe(Effect.provide(NodeServices.layer)),
+)
+
+it.live(
+	"A service that never ends its tool pages stops the walk after 64 pages",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* service
+			fixture.state.endlessPages = true
+			yield* Effect.scoped(
+				Effect.gen(function* () {
+					yield* fixture.prepare
+					const client = yield* McpClient.open({
+						key: fixture.key,
+						clientInfo: { name: "protocol-test-host", version: "1.0.0" },
+						eagerLists: false,
+					})
+					const error = yield* Effect.flip(client.modelTools)
+					assert.ok(error._tag === "ClientError")
+					assert.strictEqual(error.reason, "Protocol")
+					assert.strictEqual(error.issue, "The service sent too many pages")
+					assert.strictEqual(fixture.state.listReads, 64)
+				}),
+			).pipe(Effect.provide(layersOf(fixture)))
+		}).pipe(Effect.provide(NodeServices.layer)),
 )

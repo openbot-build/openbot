@@ -1,24 +1,40 @@
 import {
+	Array as Arr,
 	HashSet,
 	Context,
+	DateTime,
 	Effect,
+	flow,
 	Layer,
+	pipe,
+	Result,
 	Schema,
 	Predicate,
-	Record as RecordUtils,
+	Record as Rec,
+	String as Str,
 } from "effect"
 import * as Client from "../connections/Client.ts"
 import * as PublisherProtection from "./PublisherProtection.ts"
 
 import { McpProtocol, McpSchema, McpServer } from "effect/ai"
 import {
+	Headers,
 	HttpRouter,
 	HttpServerResponse,
 	type HttpServerRequest,
 } from "effect/http"
+import * as Ui from "../apps/Ui.ts"
 import * as Document from "../Document.ts"
 import * as Protection from "./Protection.ts"
 import { Publication, UiResource } from "./Publisher.ts"
+
+/**
+ * A Publication after `validate`. It always has a Catalog.
+ * The declaration file needs this name to keep the brand of Publication.
+ */
+interface Valid extends Publication {
+	readonly catalog: Document.Catalog
+}
 
 export const validate = Effect.fn("Publisher.validate")(function* (
 	input: unknown,
@@ -26,7 +42,7 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 	const config = yield* Publication.decode(input)
 	if (
 		config.card._meta !== undefined &&
-		Object.hasOwn(config.card._meta, Document.presentationKey)
+		Rec.has(config.card._meta, Document.presentationKey)
 	) {
 		yield* Document.Presentation.decode(
 			config.card._meta[Document.presentationKey],
@@ -38,7 +54,7 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 	)
 	const mcpUrl = yield* Schema.decodeEffect(Document.Link)(config.mcpUrl)
 	const remotes = yield* Document.compatibleRemotes(config.card)
-	if (!remotes.some((r) => r.url === mcpUrl)) {
+	if (!Arr.some(remotes, (r) => r.url === mcpUrl)) {
 		return yield* Document.IncompatibleCard.make({
 			reason: "Publication MCP URL must match a compatible Card remote",
 		})
@@ -53,7 +69,10 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 				"One Publisher serves one public origin. Mount a separate Publisher for each other origin",
 		})
 	}
-	const paths = [cardUrl, catalogUrl, mcpUrl].map((s) => new URL(s).pathname)
+	const paths = Arr.map(
+		[cardUrl, catalogUrl, mcpUrl],
+		(s) => new URL(s).pathname,
+	)
 	if (HashSet.size(HashSet.fromIterable(paths)) !== 3) {
 		return yield* Document.InvalidDocument.make({
 			kind: "Publication",
@@ -73,7 +92,8 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 		config.catalog ??
 		Document.catalogFor({ cardUrl, identifier: config.card.name })
 	if (
-		!catalog.entries.some(
+		!Arr.some(
+			catalog.entries,
 			(e) => e.type === Document.cardMediaType && e.url === cardUrl,
 		)
 	) {
@@ -82,23 +102,13 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 			issue: "Published Catalog must reference the stable Card URL",
 		})
 	}
-	if (config.etag !== undefined && !/^(W\/)?"[^"\r\n]*"$/.test(config.etag)) {
-		return yield* Document.InvalidDocument.make({
-			kind: "Publication",
-			issue: "ETag must be a quoted HTTP entity tag",
-		})
-	}
-	if (
-		config.lastModified !== undefined &&
-		!Number.isFinite(Date.parse(config.lastModified))
-	) {
-		return yield* Document.InvalidDocument.make({
-			kind: "Publication",
-			issue: "Last-Modified must be an HTTP date",
-		})
-	}
-	return { ...config, cardUrl, catalogUrl, mcpUrl, catalog }
+	const valid: Valid = { ...config, cardUrl, catalogUrl, mcpUrl, catalog }
+	return valid
 })
+
+/** The path of an HTTP URL always starts with `/`. */
+const routePath = (url: string): `/${string}` =>
+	`/${pipe(new URL(url).pathname, Str.slice(1))}`
 
 /** Register native Effect tools, resources and prompts in the publisher Scope. */
 export const layer = <E, R>(options: {
@@ -113,39 +123,33 @@ export const layer = <E, R>(options: {
 				version: config.card.version,
 				description: config.card.description,
 				websiteUrl: config.card.websiteUrl,
-				path: `/${new URL(config.mcpUrl).pathname.slice(1)}`,
+				path: routePath(config.mcpUrl),
 				protocols: [McpProtocol.v2026_07_28],
 				allowedOrigins: config.allowedOrigins,
 			})
 			const docs = HttpRouter.use((router) =>
 				Effect.gen(function* () {
-					yield* router.add(
-						"GET",
-						`/${new URL(config.cardUrl).pathname.slice(1)}`,
-						(request) =>
-							Effect.succeed(
-								documentResponse({
-									request,
-									url: config.cardUrl,
-									value: config.card,
-									mediaType: Document.cardMediaType,
-									config,
-								}),
-							),
+					yield* router.add("GET", routePath(config.cardUrl), (request) =>
+						Effect.succeed(
+							documentResponse({
+								request,
+								url: config.cardUrl,
+								value: config.card,
+								mediaType: Document.cardMediaType,
+								config,
+							}),
+						),
 					)
-					yield* router.add(
-						"GET",
-						`/${new URL(config.catalogUrl).pathname.slice(1)}`,
-						(request) =>
-							Effect.succeed(
-								documentResponse({
-									request,
-									url: config.catalogUrl,
-									value: config.catalog,
-									mediaType: Document.catalogMediaType,
-									config,
-								}),
-							),
+					yield* router.add("GET", routePath(config.catalogUrl), (request) =>
+						Effect.succeed(
+							documentResponse({
+								request,
+								url: config.catalogUrl,
+								value: config.catalog,
+								mediaType: Document.catalogMediaType,
+								config,
+							}),
+						),
 					)
 				}),
 			)
@@ -168,13 +172,14 @@ export const layerProtected = <E, R>(options: {
 			const protection = yield* PublisherProtection.validate({
 				...options.protection,
 				resource: publication.mcpUrl,
-				...RecordUtils.filter(
+				...Rec.filter(
 					{ allowedOrigins: publication.allowedOrigins },
 					Predicate.isNotUndefined,
 				),
 			})
 			if (
-				[publication.cardUrl, publication.catalogUrl].some(
+				Arr.some(
+					[publication.cardUrl, publication.catalogUrl],
 					(url) =>
 						new URL(url).pathname === new URL(protection.metadataUrl).pathname,
 				)
@@ -195,6 +200,23 @@ export const layerProtected = <E, R>(options: {
 		}),
 	)
 
+/** If-None-Match uses weak comparison, so it ignores the `W/` of a weak entity tag. */
+const withoutWeakPrefix = Str.replace(/^W\//, "")
+
+/** RFC 9110 says to ignore an If-Modified-Since value that is not a valid HTTP date. */
+const notModifiedSince = (since: string, lastModified: string) =>
+	Result.match(
+		Result.all([
+			Headers.parseHttpDate(since),
+			Headers.parseHttpDate(lastModified),
+		]),
+		{
+			onFailure: () => false,
+			onSuccess: ([since, lastModified]) =>
+				DateTime.isGreaterThanOrEqualTo(since, lastModified),
+		},
+	)
+
 const documentResponse = (options: {
 	readonly request: HttpServerRequest.HttpServerRequest
 	readonly url: string
@@ -209,31 +231,39 @@ const documentResponse = (options: {
 	) {
 		return HttpServerResponse.empty({ status: 404 })
 	}
-	const headers: Record<string, string> = {
+	const headers = {
 		"content-type": options.mediaType,
 		"cache-control": config.cacheControl ?? "no-cache",
+		...Rec.filter(
+			{
+				etag: config.etag,
+				"last-modified": config.lastModified,
+				"x-robots-tag":
+					config.noindex === true &&
+					options.mediaType === Document.cardMediaType
+						? "noindex"
+						: undefined,
+			},
+			Predicate.isNotUndefined,
+		),
 	}
-	if (config.etag !== undefined) headers["etag"] = config.etag
-	if (config.lastModified !== undefined)
-		headers["last-modified"] = config.lastModified
-	if (config.noindex === true && options.mediaType === Document.cardMediaType)
-		headers["x-robots-tag"] = "noindex"
 	const inm = request.headers["if-none-match"]
 	const etag = config.etag
 	const etagMatch =
 		inm !== undefined &&
 		etag !== undefined &&
-		(inm.trim() === "*" ||
-			inm
-				.split(",")
-				.some((t) => t.trim().replace(/^W\//, "") === etag.replace(/^W\//, "")))
+		(Str.trim(inm) === "*" ||
+			Arr.some(
+				Str.split(inm, ","),
+				(t) => withoutWeakPrefix(Str.trim(t)) === withoutWeakPrefix(etag),
+			))
 	const since = request.headers["if-modified-since"]
 	if (
 		etagMatch ||
 		(inm === undefined &&
 			since !== undefined &&
 			config.lastModified !== undefined &&
-			Date.parse(since) >= Date.parse(config.lastModified))
+			notModifiedSince(since, config.lastModified))
 	) {
 		return HttpServerResponse.empty({ status: 304, headers })
 	}
@@ -248,11 +278,17 @@ export const catalogLinkHeader = (catalogUrl: string) =>
 		),
 	)
 
+const escapeAttribute = flow(
+	Str.replaceAll("&", "&amp;"),
+	Str.replaceAll('"', "&quot;"),
+	Str.replaceAll("<", "&lt;"),
+)
+
 export const catalogLinkHtml = (catalogUrl: string) =>
 	Schema.decodeEffect(Document.Link)(catalogUrl).pipe(
 		Effect.map(
 			(url) =>
-				`<link rel="ai-catalog" type="${Document.catalogMediaType}" href="${url.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;")}">`,
+				`<link rel="ai-catalog" type="${Document.catalogMediaType}" href="${escapeAttribute(url)}">`,
 		),
 	)
 
@@ -291,7 +327,7 @@ export const uiToolMeta = (options: {
 	Schema.decodeEffect(
 		Schema.Struct({
 			ui: Schema.Struct({
-				resourceUri: Schema.String.check(Schema.isPattern(/^ui:\/\/[^\s]+$/)),
+				resourceUri: Ui.Uri,
 				visibility: Schema.optional(Schema.Array(Client.ToolVisibility)),
 			}),
 		}),

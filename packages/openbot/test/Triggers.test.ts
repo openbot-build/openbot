@@ -1,17 +1,30 @@
-import { assert, it } from "@effect/vitest"
+import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Authorization,
 	ChatSummary,
-	ChatView,
 	DelegationsApi,
 	TriggersApi,
 } from "@openbot-build/api"
 import { Item } from "@openbot-build/core"
-import { Effect, Redacted, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Effect,
+	Option,
+	pipe,
+	Redacted,
+	Schedule,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { dataNote } from "../src/triggers/Fire.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import * as Caller from "./Caller.ts"
+import * as Messages from "./Messages.ts"
 import * as Policies from "./Policies.ts"
 
 const publicOrigin = "https://triggers.example.com"
@@ -22,325 +35,318 @@ const usage = {
 const textOf = (message: Prompt.Message) =>
 	typeof message.content === "string"
 		? message.content
-		: message.content
-				.flatMap((part) => (part.type === "text" ? [part.text] : []))
-				.join("")
+		: pipe(
+				message.content,
+				Arr.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+				Arr.join(""),
+			)
 
 /** The model answers with the last user message, so the test can see what came in. */
-const model = Effect.runSync(
-	LanguageModel.make({
-		generateText: () =>
-			Effect.succeed([Response.makePart("text", { text: '{"changes":[]}' })]),
-		streamText: ({ prompt }) => {
-			const last = prompt.content.findLast((message) => message.role === "user")
-			return Stream.make(
-				Response.makePart("text-start", { id: "answer" }),
-				Response.makePart("text-delta", {
-					id: "answer",
-					delta: "Got: " + (last === undefined ? "" : textOf(last)),
-				}),
-				Response.makePart("text-end", { id: "answer" }),
-				Response.makePart("finish", { reason: "stop", usage }),
-			)
-		},
-	}),
-)
+const echo = LanguageModel.make({
+	generateText: () =>
+		Effect.succeed([Response.makePart("text", { text: '{"changes":[]}' })]),
+	streamText: ({ prompt }) => {
+		const last = pipe(
+			Arr.findLast(prompt.content, (message) => message.role === "user"),
+			Option.map(textOf),
+			Option.getOrElse(() => ""),
+		)
+		return Stream.make(
+			Response.makePart("text-start", { id: "answer" }),
+			Response.makePart("text-delta", { id: "answer", delta: "Got: " + last }),
+			Response.makePart("text-end", { id: "answer" }),
+			Response.makePart("finish", { reason: "stop", usage }),
+		)
+	},
+})
 
-const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
-	const send = (
-		credential: Redacted.Redacted<string> | undefined,
-		path: string,
-		method = "GET",
-		payload?: unknown,
-		headers: Record<string, string> = {},
-	) =>
-		fetch(host.address + path, {
-			method,
-			headers: {
-				...(credential === undefined
-					? {}
-					: {
-							cookie:
-								"__Host-openbot-session=" +
-								encodeURIComponent(Redacted.value(credential)),
-						}),
-				origin: publicOrigin,
-				...(payload === undefined
-					? {}
-					: { "content-type": "application/json" }),
-				...headers,
-			},
-			...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-		})
-	const json = async <A, I>(
-		schema: Schema.Codec<A, I>,
-		response: Promise<globalThis.Response>,
-	): Promise<A> => {
-		const value = await response
-		const body = await value.text()
-		assert.ok(value.ok, value.status + " " + body)
-		return Schema.decodeUnknownSync(schema)(JSON.parse(body))
+/** Something that the test waits for did not happen in time. */
+class TimedOut extends Schema.TaggedError<
+	TimedOut,
+	{ readonly brand: unique symbol }
+>()("TimedOut", { label: Schema.String }) {
+	override get message() {
+		return "Timed out: " + this.label
 	}
-	const pause = () => new Promise((resolve) => setTimeout(resolve, 25))
-	const until = async <A>(
-		label: string,
-		check: () => Promise<A | undefined>,
-	): Promise<A> => {
-		for (let tries = 0; tries < 400; tries++) {
-			const value = await check()
-			if (value !== undefined) return value
-			await pause()
-		}
-		throw new Error("Timed out: " + label)
-	}
-	return { send, json, until }
 }
 
-it(
-	"a trigger gives its prompt to its Bot on a schedule and from a webhook, the result comes to the Chat of the actor, and only those who may use it",
-	{ timeout: 120000 },
-	async () => {
-		const host = await BrowserHost.start({
-			publicOrigin,
-			model,
-			triggerIntervalMs: 100,
-		})
-		try {
-			const { send, json, until } = client(host)
-			const alice = await host.login("triggers-alice")
-			const bob = await host.login("triggers-bob")
-			await host.defaultBot(alice.session)
-			await host.defaultBot(bob.session)
-			const tasks = async (credential: Redacted.Redacted<string>) =>
-				json(Schema.Array(ChatSummary), send(credential, "/v1/chats?kind=task"))
-			const delegation = (id: string) =>
-				json(
-					DelegationsApi.Delegation,
-					send(alice.session, "/v1/delegations/" + id),
-				)
-			const completed = (id: string) =>
-				until("the work of the trigger ends", async () => {
-					const work = await delegation(id)
-					return work.status === "completed" ? work : undefined
+/**
+ * Runs a check again and again, 25 milliseconds apart, until it gives a value.
+ * It tries again at most 400 times, then fails with `TimedOut`.
+ */
+const until = <A, E, R>(
+	label: string,
+	check: Effect.Effect<Option.Option<A>, E, R>,
+) =>
+	check.pipe(
+		Effect.repeat({
+			until: Option.isSome,
+			times: 400,
+			schedule: Schedule.spaced("25 millis"),
+		}),
+		Effect.flatMap((found) =>
+			Effect.fromOption(found, () => TimedOut.make({ label })),
+		),
+	)
+
+/** The items of a Chat. The test reads them as JSON text and looks for words in it. */
+const History = Schema.Struct({ items: Schema.Array(Item.Record) })
+const encodeHistory = Schema.encodeEffect(Schema.fromJsonString(History))
+
+/** Calls the API of the host as a browser, and the webhooks of triggers as another system. */
+const client = Effect.fn("Triggers.client")(function* (host: BrowserHost.Host) {
+	const address = yield* host.address
+	const send = Caller.withCookie({ address, publicOrigin })
+	/** Sends a call and reads its JSON answer with a schema. The answer must be 2xx. */
+	const json = <S extends Schema.Constraint>(schema: S, call: Caller.Call) =>
+		Effect.flatMap(call, Caller.json(schema))
+	/** Posts a body to the webhook of a trigger with a secret and no session. */
+	const webhook = (trigger: string, secret: string, payload: unknown) =>
+		HttpClientRequest.post(address + "/v1/hooks/triggers/" + trigger, {
+			headers: { origin: publicOrigin },
+		}).pipe(
+			HttpClientRequest.bearerToken(secret),
+			HttpClientRequest.bodyJson(payload),
+			Effect.flatMap(HttpClient.execute),
+		)
+	return { send, json, webhook }
+})
+
+// The hosts use real servers, so these tests run on the real clock.
+layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+	it.effect(
+		"a trigger gives its prompt to its Bot on a schedule and from a webhook, the result comes to the Chat of the actor, and only those who may use it",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					model: yield* echo,
+					triggerIntervalMs: 100,
 				})
-			const history = async (chat: string) =>
-				JSON.stringify(
-					await json(
-						Schema.Struct({ items: Schema.Array(Item.Record) }),
+				const { send, json, webhook } = yield* client(host)
+				const alice = yield* host.login("triggers-alice")
+				const bob = yield* host.login("triggers-bob")
+				yield* host.defaultBot(alice.session)
+				yield* host.defaultBot(bob.session)
+				const tasks = (credential: Redacted.Redacted<string>) =>
+					json(
+						Schema.Array(ChatSummary),
+						send(credential, "/v1/chats?kind=task"),
+					)
+				const delegation = (id: string) =>
+					json(
+						DelegationsApi.Delegation,
+						send(alice.session, "/v1/delegations/" + id),
+					)
+				const completed = (id: string) =>
+					until(
+						"the work of the trigger ends",
+						Effect.map(
+							delegation(id),
+							Option.liftPredicate(
+								(work: DelegationsApi.Delegation) =>
+									work.status === "completed",
+							),
+						),
+					)
+				const history = (chat: string) =>
+					json(
+						History,
 						send(alice.session, "/v1/chats/" + chat + "/items?limit=100"),
+					).pipe(Effect.flatMap(encodeHistory))
+
+				// A schedule that is not valid is refused.
+				const wrong = yield* send(alice.session, "/v1/triggers", "POST", {
+					prompt: "Check the build.",
+					schedule: { cron: "every day" },
+				})
+				assert.strictEqual(wrong.status, 400)
+				// A schedule that parses but never fires (February 30) is refused too.
+				const never = yield* send(alice.session, "/v1/triggers", "POST", {
+					prompt: "Check the build.",
+					schedule: { cron: "0 0 30 2 *" },
+				})
+				assert.strictEqual(never.status, 400)
+
+				// The schedule fires. The test moves its next time to now.
+				const daily = yield* json(
+					TriggersApi.Trigger,
+					send(alice.session, "/v1/triggers", "POST", {
+						prompt: "Check the build.",
+						schedule: { cron: "0 9 * * *", timeZone: "Europe/Berlin" },
+					}),
+				)
+				assert.strictEqual(daily.actor, alice.identity.userId)
+				const created = yield* Clock.currentTimeMillis
+				assert.ok(daily.nextRunAt !== null && daily.nextRunAt > created)
+				yield* host.run(
+					Effect.gen(function* () {
+						const sql = yield* PgClient.PgClient
+						yield* sql`update openbot_triggers set next_run_at = 0 where id = ${daily.id}`
+					}),
+				)
+				const scheduled = yield* until(
+					"a task of the schedule",
+					Effect.map(tasks(alice.session), Arr.head),
+				)
+				assert.ok(scheduled.chat.parent !== null)
+				const work = yield* completed(scheduled.chat.parent.delegation)
+				assert.strictEqual(work.trigger, daily.id)
+				assert.strictEqual(work.chat, scheduled.chat.id)
+				const task = yield* history(scheduled.chat.id)
+				// The task comes in as a note from OpenBot, and the model repeats it.
+				assert.match(work.result ?? "", /^Got: .*Check the build\./s)
+				assert.match(task, /Got: .*Check the build\./)
+				// The result comes to the direct Chat of the actor with the Bot as a notice.
+				const direct = work.parent.chat
+				yield* until(
+					"the notice of the result",
+					Effect.map(
+						history(direct),
+						Option.liftPredicate(Str.includes(work.id)),
 					),
 				)
-			const rested = (chat: string) =>
-				until("the Chat comes to rest", async () => {
-					const view = await json(
-						ChatView,
-						send(alice.session, "/v1/chats/" + chat),
-					)
-					return view.status !== "Running" &&
-						view.activity !== "active" &&
-						view.inbox === 0
-						? view
-						: undefined
-				})
+				const rest = yield* Messages.settled(
+					(path, method, payload) => send(alice.session, path, method, payload),
+					direct,
+				)
+				assert.strictEqual(rest.chat.kind, "direct")
+				assert.strictEqual(rest.status, "Completed")
+				const after = yield* json(
+					TriggersApi.Trigger,
+					send(alice.session, "/v1/triggers/" + daily.id),
+				)
+				assert.ok(after.lastFiredAt !== null)
+				const fired = yield* Clock.currentTimeMillis
+				assert.ok(after.nextRunAt !== null && after.nextRunAt > fired)
 
-			// A schedule that is not valid is refused.
-			const wrong = await send(alice.session, "/v1/triggers", "POST", {
-				prompt: "Check the build.",
-				schedule: { cron: "every day" },
-			})
-			assert.strictEqual(wrong.status, 400)
+				// A webhook fires with its secret only. The body goes in as data.
+				const hook = yield* json(
+					TriggersApi.WebhookSecret,
+					send(alice.session, "/v1/triggers/" + daily.id + "/webhook", "PUT"),
+				)
+				assert.strictEqual(
+					hook.url,
+					publicOrigin + "/v1/hooks/triggers/" + daily.id,
+				)
+				const denied = yield* webhook(daily.id, "wrong", { order: 42 })
+				assert.strictEqual(denied.status, 401)
+				const started = yield* json(
+					Schema.Struct({ delegation: DelegationsApi.DelegationId }),
+					webhook(daily.id, hook.secret, { order: 42 }),
+				)
+				const hooked = yield* completed(started.delegation)
+				assert.ok(hooked.chat !== null)
+				const text = yield* history(hooked.chat)
+				assert.ok(Str.includes(dataNote)(text))
+				assert.match(text, /order/)
 
-			// The schedule fires. The test moves its next time to now.
-			const daily = await json(
-				TriggersApi.Trigger,
-				send(alice.session, "/v1/triggers", "POST", {
-					prompt: "Check the build.",
-					schedule: { cron: "0 9 * * *", timeZone: "Europe/Berlin" },
-				}),
-			)
-			assert.strictEqual(daily.actor, alice.identity.userId)
-			assert.ok(daily.nextRunAt !== null && daily.nextRunAt > Date.now())
-			await host.runtime.runPromise(
-				Effect.gen(function* () {
-					const sql = yield* PgClient.PgClient
-					yield* sql`update openbot_triggers set next_run_at = 0 where id = ${daily.id}`
-				}),
-			)
-			const scheduled = await until("a task of the schedule", async () => {
-				const list = await tasks(alice.session)
-				return list[0]
-			})
-			assert.ok(scheduled.chat.parent !== null)
-			const work = await completed(scheduled.chat.parent.delegation)
-			assert.strictEqual(work.trigger, daily.id)
-			assert.strictEqual(work.chat, scheduled.chat.id)
-			console.log(
-				"DEBUG",
-				JSON.stringify(work),
-				await history(scheduled.chat.id),
-			)
-			// The task comes in as a note from OpenBot, and the model repeats it.
-			assert.match(work.result ?? "", /^Got: .*Check the build\./s)
-			assert.match(await history(scheduled.chat.id), /Got: .*Check the build\./)
-			// The result comes to the direct Chat of the actor with the Bot as a notice.
-			const direct = work.parent.chat
-			await until("the notice of the result", async () =>
-				(await history(direct)).includes(work.id) ? true : undefined,
-			)
-			const rest = await rested(direct)
-			assert.strictEqual(rest.chat.kind, "direct")
-			assert.strictEqual(rest.status, "Completed")
-			const after = await json(
-				TriggersApi.Trigger,
-				send(alice.session, "/v1/triggers/" + daily.id),
-			)
-			assert.ok(after.lastFiredAt !== null)
-			assert.ok(after.nextRunAt !== null && after.nextRunAt > Date.now())
+				// A disabled trigger does not fire from its webhook.
+				const disabled = yield* json(
+					TriggersApi.Trigger,
+					send(alice.session, "/v1/triggers/" + daily.id, "PATCH", {
+						expected: after.revision + 1,
+						enabled: false,
+					}),
+				)
+				assert.strictEqual(disabled.nextRunAt, null)
+				const off = yield* webhook(daily.id, hook.secret, {})
+				assert.strictEqual(off.status, 401)
 
-			// A webhook fires with its secret only. The body goes in as data.
-			const hook = await json(
-				TriggersApi.WebhookSecret,
-				send(alice.session, "/v1/triggers/" + daily.id + "/webhook", "PUT"),
-			)
-			assert.strictEqual(
-				hook.url,
-				publicOrigin + "/v1/hooks/triggers/" + daily.id,
-			)
-			const denied = await send(
-				undefined,
-				"/v1/hooks/triggers/" + daily.id,
-				"POST",
-				{ order: 42 },
-				{ authorization: "Bearer wrong" },
-			)
-			assert.strictEqual(denied.status, 401)
-			const fired = await json(
-				Schema.Struct({ delegation: DelegationsApi.DelegationId }),
-				send(
-					undefined,
-					"/v1/hooks/triggers/" + daily.id,
-					"POST",
-					{ order: 42 },
-					{ authorization: "Bearer " + hook.secret },
-				),
-			)
-			const hooked = await completed(fired.delegation)
-			assert.ok(hooked.chat !== null)
-			const text = await history(hooked.chat)
-			assert.ok(text.includes(dataNote))
-			assert.match(text, /order/)
-
-			// A disabled trigger does not fire from its webhook.
-			const disabled = await json(
-				TriggersApi.Trigger,
-				send(alice.session, "/v1/triggers/" + daily.id, "PATCH", {
-					expected: after.revision + 1,
-					enabled: false,
-				}),
-			)
-			assert.strictEqual(disabled.nextRunAt, null)
-			const off = await send(
-				undefined,
-				"/v1/hooks/triggers/" + daily.id,
-				"POST",
-				{},
-				{ authorization: "Bearer " + hook.secret },
-			)
-			assert.strictEqual(off.status, 401)
-
-			// Bob cannot see the trigger of Alice, and a member cannot make shared triggers.
-			assert.strictEqual(
-				(await send(bob.session, "/v1/triggers/" + daily.id)).status,
-				404,
-			)
-			const shared = await send(bob.session, "/v1/triggers", "POST", {
-				prompt: "Say hello.",
-				shared: true,
-			})
-			assert.strictEqual(shared.status, 403, await shared.clone().text())
-			const team = await json(
-				TriggersApi.Trigger,
-				send(alice.session, "/v1/triggers", "POST", {
+				// Bob cannot see the trigger of Alice, and a member cannot make shared triggers.
+				assert.strictEqual(
+					(yield* send(bob.session, "/v1/triggers/" + daily.id)).status,
+					404,
+				)
+				const shared = yield* send(bob.session, "/v1/triggers", "POST", {
 					prompt: "Say hello.",
 					shared: true,
-				}),
-			)
-			assert.deepStrictEqual(team.owner, { _tag: "Organization" })
-			const seen = await json(
-				Schema.Array(TriggersApi.Trigger),
-				send(bob.session, "/v1/triggers"),
-			)
-			assert.deepStrictEqual(
-				seen.map((trigger) => trigger.id),
-				[team.id],
-			)
-			const change = await send(
-				bob.session,
-				"/v1/triggers/" + team.id,
-				"PATCH",
-				{
-					expected: team.revision,
-					prompt: "Say goodbye.",
-				},
-			)
-			assert.strictEqual(change.status, 403)
-			assert.strictEqual(
-				(await send(alice.session, "/v1/triggers/" + team.id, "DELETE")).status,
-				204,
-			)
-		} finally {
-			await host.close()
-		}
-	},
-)
-
-it(
-	"a deny rule on one trigger hides it from the list and from a read",
-	{ timeout: 60000 },
-	async () => {
-		const host = await BrowserHost.start({ publicOrigin, model })
-		try {
-			const { send, json } = client(host)
-			const alice = await host.login("triggers-deny")
-			await host.defaultBot(alice.session)
-			const create = (prompt: string) =>
-				json(
+				})
+				assert.strictEqual(shared.status, 403, yield* shared.text)
+				const team = yield* json(
 					TriggersApi.Trigger,
-					send(alice.session, "/v1/triggers", "POST", { prompt }),
+					send(alice.session, "/v1/triggers", "POST", {
+						prompt: "Say hello.",
+						shared: true,
+					}),
 				)
-			const open = await create("Open")
-			const hidden = await create("Hidden")
-			const listed = async () =>
-				(
-					await json(
+				assert.deepStrictEqual(team.owner, { _tag: "Organization" })
+				const seen = yield* json(
+					Schema.Array(TriggersApi.Trigger),
+					send(bob.session, "/v1/triggers"),
+				)
+				assert.deepStrictEqual(
+					Arr.map(seen, (trigger) => trigger.id),
+					[team.id],
+				)
+				const change = yield* send(
+					bob.session,
+					"/v1/triggers/" + team.id,
+					"PATCH",
+					{
+						expected: team.revision,
+						prompt: "Say goodbye.",
+					},
+				)
+				assert.strictEqual(change.status, 403)
+				assert.strictEqual(
+					(yield* send(alice.session, "/v1/triggers/" + team.id, "DELETE"))
+						.status,
+					204,
+				)
+			}),
+		{ timeout: 120000 },
+	)
+
+	it.effect(
+		"a deny rule on one trigger hides it from the list and from a read",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					model: yield* echo,
+				})
+				const { send, json } = yield* client(host)
+				const alice = yield* host.login("triggers-deny")
+				yield* host.defaultBot(alice.session)
+				const create = (prompt: string) =>
+					json(
+						TriggersApi.Trigger,
+						send(alice.session, "/v1/triggers", "POST", { prompt }),
+					)
+				const open = yield* create("Open")
+				const hidden = yield* create("Hidden")
+				const listed = Effect.map(
+					json(
 						Schema.Array(TriggersApi.Trigger),
 						send(alice.session, "/v1/triggers"),
-					)
-				).map((trigger) => trigger.id)
-			assert.sameMembers(await listed(), [open.id, hidden.id])
+					),
+					(triggers) => Arr.map(triggers, (trigger) => trigger.id),
+				)
+				assert.sameMembers(yield* listed, [open.id, hidden.id])
 
-			const changed = await send(
-				alice.session,
-				"/v1/organization/members/" + encodeURIComponent(alice.identity.userId),
-				"PATCH",
-				{
-					policy: Policies.json(function* (_) {
-						yield* _.deny("read", Authorization.Trigger, {
-							when: ($) => $.eq("id", hidden.id),
-						})
-					}),
-				},
-			)
-			assert.strictEqual(changed.status, 200, await changed.clone().text())
-			// The list query has the condition of the policy, so the database
-			// leaves out the trigger.
-			assert.deepStrictEqual(await listed(), [open.id])
-			assert.strictEqual(
-				(await send(alice.session, "/v1/triggers/" + hidden.id)).status,
-				404,
-			)
-		} finally {
-			await host.close()
-		}
-	},
-)
+				const changed = yield* send(
+					alice.session,
+					"/v1/organization/members/" +
+						encodeURIComponent(alice.identity.userId),
+					"PATCH",
+					{
+						policy: yield* Policies.json(function* (_) {
+							yield* _.deny("read", Authorization.Trigger, {
+								when: ($) => $.eq("id", hidden.id),
+							})
+						}),
+					},
+				)
+				assert.strictEqual(changed.status, 200, yield* changed.text)
+				// The list query has the condition of the policy, so the database
+				// leaves out the trigger.
+				assert.deepStrictEqual(yield* listed, [open.id])
+				assert.strictEqual(
+					(yield* send(alice.session, "/v1/triggers/" + hidden.id)).status,
+					404,
+				)
+			}),
+		{ timeout: 60000 },
+	)
+})

@@ -6,40 +6,54 @@ import {
 import { Chat, Turn } from "@openbot-build/core"
 import type { ChatResponseSseEvent } from "@openbot-build/api"
 import {
+	Array as Arr,
 	Cause,
 	Clock,
-	Deferred,
 	Duration,
 	Effect,
-	Fiber,
+	Exit,
 	Layer,
 	Option,
+	pipe,
 	PubSub,
 	Schedule,
 	Schema,
 	SchemaTransformation,
+	Scope,
 	Stream,
+	String as Str,
 } from "effect"
 import { Bots } from "../bots/Bots.ts"
 import { Signals, type Signal } from "../bots/Signals.ts"
 import { Backend } from "../app/Backend.ts"
-import { allows } from "../authorization/Check.ts"
+import * as Background from "../app/Background.ts"
+import * as Check from "../authorization/Check.ts"
 import { Requests } from "../capabilities/Requests.ts"
-import { resolveAsPerson } from "../capabilities/Resolve.ts"
+import * as Resolve from "../capabilities/Resolve.ts"
+import type { Chats } from "../chats/Chats.ts"
 import { Organization } from "../organization/Organization.ts"
 import {
 	type Channel,
 	type ChannelEvent,
+	type MessageRef,
 	type OutboundMessage,
 	Target,
 } from "./Channel.ts"
-import { Channels, type Conversation, type StoredChannel } from "./Channels.ts"
+import {
+	Channels,
+	type Conversation,
+	linkLifetimeMs,
+	type StoredChannel,
+} from "./Channels.ts"
 import {
 	ChannelQueue,
 	type ClaimedEvent,
 	type Delivery,
+	leaseMs,
 } from "./ChannelQueue.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
+import * as Platform from "../settings/Platform.ts"
+import { Settings } from "../settings/Settings.ts"
 import { chunk } from "./Text.ts"
 
 export interface Options {
@@ -49,6 +63,12 @@ export interface Options {
 
 /** The least time between two changes of a message while a Turn writes it. */
 const editEveryMs = 1500
+
+/**
+ * How often a worker renews the leases of the items it works on. Three renewals in
+ * each lease mean that one failed renewal does not end a lease.
+ */
+const renewEvery = Duration.millis(leaseMs / 3)
 
 const working = "Working…"
 
@@ -63,10 +83,12 @@ export const answerOf = (response: {
 	}>
 	readonly error: { readonly message: string } | null
 }) => {
-	const text = response.output
-		.flatMap((message) => message.content.map((part) => part.text))
-		.join("\n\n")
-		.trim()
+	const text = pipe(
+		response.output,
+		Arr.flatMap((message) => Arr.map(message.content, (part) => part.text)),
+		Arr.join("\n\n"),
+		Str.trim,
+	)
 	if (response.status === "failed")
 		return (
 			(text.length > 0 ? text + "\n\n" : "") +
@@ -112,10 +134,12 @@ const Button = Schema.TemplateLiteralParser([
 )
 
 const buttonValue = (request: string, choice: Choice, revision: number) =>
-	Schema.encodeSync(Button)({ request, choice, revision })
+	Schema.encodeEffect(Button)({ request, choice, revision }).pipe(
+		// A stored request always has an ID and a revision of 0 or more, so a failure here is a defect.
+		Effect.orDie,
+	)
 
-const readButton = (value: string) =>
-	Option.getOrUndefined(Schema.decodeUnknownOption(Button)(value))
+const readButton = Schema.decodeUnknownOption(Button)
 
 const describe = (request: RequestsApi.CapabilityRequest) => {
 	const { action, target } = request.capability
@@ -154,47 +178,59 @@ const outcome = (request: RequestsApi.CapabilityRequest) => {
 	}
 }
 
+/** Where a request card goes. */
+interface CardPlace {
+	readonly target: Target
+	/** The person who must decide, when the card goes to a chat that others see too. */
+	readonly approver: Option.Option<string>
+}
+
 /** The card of a request. It has buttons only while the request waits. */
 const requestCard = (
 	request: RequestsApi.CapabilityRequest,
 	botName: string,
-	approverName: string | null,
-): OutboundMessage => ({
-	markdown: [
-		`**${botName}** wants to ${describe(request)}.`,
-		request.reason.length > 0 ? `Reason: ${request.reason}` : "",
-		approverName === null ? "" : `This needs a decision from ${approverName}.`,
-		outcome(request),
-	]
-		.filter((line) => line.length > 0)
-		.join("\n\n"),
-	...(request.status === "pending"
-		? {
-				buttons: [
-					{
-						label: "Allow once",
-						value: buttonValue(request.id, "once", request.revision),
-						style: "primary" as const,
-					},
-					{
-						label: "Allow in this chat",
-						value: buttonValue(request.id, "chat", request.revision),
-					},
-					{
-						label: "Deny",
-						value: buttonValue(request.id, "deny", request.revision),
-						style: "danger" as const,
-					},
-				],
-			}
-		: {}),
-})
+	approverName: Option.Option<string>,
+): Effect.Effect<OutboundMessage> =>
+	Effect.gen(function* () {
+		const markdown = pipe(
+			[
+				`**${botName}** wants to ${describe(request)}.`,
+				request.reason.length > 0 ? `Reason: ${request.reason}` : "",
+				Option.match(approverName, {
+					onNone: () => "",
+					onSome: (name) => `This needs a decision from ${name}.`,
+				}),
+				outcome(request),
+			],
+			Arr.filter((line) => line.length > 0),
+			Arr.join("\n\n"),
+		)
+		if (request.status !== "pending") return { markdown }
+		const value = (choice: Choice) =>
+			buttonValue(request.id, choice, request.revision)
+		return {
+			markdown,
+			buttons: [
+				{
+					label: "Allow once",
+					value: yield* value("once"),
+					style: "primary" as const,
+				},
+				{ label: "Allow in this chat", value: yield* value("chat") },
+				{
+					label: "Deny",
+					value: yield* value("deny"),
+					style: "danger" as const,
+				},
+			],
+		}
+	})
 
 /**
  * Handles the work of all Channels: the events that came in, the messages that go out,
  * the end of each Turn, and the cards of requests.
  */
-export const layer = (options: { readonly publicOrigin: string } & Options) =>
+export const layer = (options: Options = {}) =>
 	Layer.effectDiscard(
 		Effect.gen(function* () {
 			const channels = yield* Channels
@@ -205,11 +241,9 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 			const organization = yield* Organization
 			const requests = yield* Requests
 			const signals = yield* Signals
-			const services = yield* Effect.context<
-				| Effect.Services<ReturnType<typeof resolveAsPerson>>
-				| Effect.Services<ReturnType<typeof allows>>
-				| Effect.Services<ReturnType<typeof bots.access>>
-			>()
+			const settings = yield* Settings
+			const { allows } = yield* Check.make
+			const { resolveAsPerson } = yield* Resolve.make
 			const scope = yield* Effect.scope
 			const interval = options.interval ?? Duration.seconds(1)
 
@@ -221,7 +255,12 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							onSome: (member) => member.name ?? member.email ?? userId,
 						}),
 					),
-					Effect.orElseSucceed(() => userId),
+					Effect.catch((error) =>
+						Effect.logWarning(
+							"The name of a member could not be read, so a message uses the user ID",
+							error,
+						).pipe(Effect.as(userId)),
+					),
 				)
 
 			/** Where only the sender should see a message about themself. */
@@ -257,16 +296,30 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 				event: ChannelEvent,
 			) =>
 				Effect.gen(function* () {
+					// The link page is at the public origin now. Read it before the code is made,
+					// so a failure makes no code. The event is then tried again later.
+					const linkPage = yield* Option.match(
+						Option.fromNullishOr(stored.linkPath),
+						{
+							onNone: () => Effect.succeedNone,
+							onSome: (linkPath) =>
+								Effect.map(Platform.publicOrigin(settings), (publicOrigin) =>
+									Option.some(publicOrigin + linkPath),
+								),
+						},
+					)
 					const code = yield* channels.createLink({
 						organizationId,
 						channelId: stored.id,
 						externalUserId: event.sender.externalId,
 						displayName: event.sender.displayName,
 					})
-					const markdown =
-						stored.linkPath === null
-							? `Link your OpenBot account first. Accept this code in OpenBot within 15 minutes: \`${code}\``
-							: `Link your OpenBot account first: ${options.publicOrigin}${stored.linkPath}${stored.linkPath.includes("?") ? "&" : "?"}code=${encodeURIComponent(code)}`
+					const markdown = Option.match(linkPage, {
+						onNone: () =>
+							`Link your OpenBot account first. Accept this code in OpenBot within ${Duration.toMinutes(linkLifetimeMs)} minutes: \`${code}\``,
+						onSome: (page) =>
+							`Link your OpenBot account first: ${page}${Str.includes("?")(page) ? "&" : "?"}code=${encodeURIComponent(code)}`,
+					})
 					yield* tellSender(organizationId, stored, channel, event, markdown)
 					// Without private messages in a group, the code goes to a direct chat.
 					if (event.conversation.kind === "group" && !channel.features.private)
@@ -312,9 +365,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						organizationId,
 						userId: stored.actor,
 					}
-					const bot = yield* bots
-						.access(actor, stored.bot, "delegate")
-						.pipe(Effect.provideContext(services))
+					const bot = yield* bots.access(actor, stored.bot, "delegate")
 					const chats = yield* backend.forCaller(actor)
 					const title =
 						event.conversation.title ??
@@ -355,62 +406,133 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 				readonly stored: StoredChannel
 				readonly channel: Channel
 				readonly conversation: string
-				readonly chat: string
+				readonly chat: Chat.Id
 				readonly events: Stream.Stream<ChatResponseSseEvent>
-			}) =>
-				Effect.gen(function* () {
-					let started = false,
-						text = "",
-						shown = 0,
-						ref: { readonly conversation: string; readonly id: string } | null =
-							null
-					yield* input.events.pipe(
-						Stream.runForEach(({ data }) =>
+			}) => {
+				const target = Target.Conversation({ conversation: input.conversation })
+				/** Shows that the Turn runs, and keeps its message for the final answer. */
+				const start = (turn: Turn.Id) =>
+					Effect.gen(function* () {
+						const ref = input.channel.features.edit
+							? yield* input.channel.send(target, { markdown: working }).pipe(
+									Effect.asSome,
+									Effect.catch((error) =>
+										Effect.logDebug(
+											"A Channel could not show that a Turn runs.",
+											error,
+										).pipe(Effect.as(Option.none<MessageRef>())),
+									),
+								)
+							: Option.none<MessageRef>()
+						yield* queue.startReply({
+							organizationId: input.organizationId,
+							channelId: input.stored.id,
+							target,
+							chat: input.chat,
+							turn,
+							ref: Option.getOrNull(ref),
+						})
+						return ref
+					})
+				interface Shown {
+					readonly started: boolean
+					readonly ref: Option.Option<MessageRef>
+					/** The text of the Turn so far. */
+					readonly text: string
+					/** When the message last changed. */
+					readonly shown: number
+				}
+				return input.events.pipe(
+					Stream.runFoldEffect(
+						(): Shown => ({
+							started: false,
+							ref: Option.none(),
+							text: "",
+							shown: 0,
+						}),
+						(state, { data }) =>
 							Effect.gen(function* () {
-								if (!started) {
-									started = true
-									if (input.channel.features.edit)
-										ref = yield* input.channel
-											.send(
-												Target.Conversation({
-													conversation: input.conversation,
-												}),
-												{ markdown: working },
-											)
-											.pipe(Effect.orElseSucceed(() => null))
-									yield* queue.startReply({
-										organizationId: input.organizationId,
-										channelId: input.stored.id,
-										target: Target.Conversation({
-											conversation: input.conversation,
-										}),
-										chat: input.chat,
-										turn: data.turn,
-										ref,
-									})
-								}
-								if (data.type !== "response.output_text.delta") return
-								text += data.delta
+								const ref = state.started ? state.ref : yield* start(data.turn)
+								const next: Shown = { ...state, started: true, ref }
+								if (data.type !== "response.output_text.delta") return next
+								const text = state.text + data.delta
 								const now = yield* Clock.currentTimeMillis
 								if (
-									ref === null ||
-									now - shown < editEveryMs ||
+									Option.isNone(ref) ||
+									now - state.shown < editEveryMs ||
 									text.length + 2 > input.channel.features.maxLength
 								)
-									return
-								shown = now
+									return { ...next, text }
 								yield* input.channel
-									.edit(ref, { markdown: text + " …" })
-									.pipe(Effect.ignore)
+									.edit(ref.value, { markdown: text + " …" })
+									.pipe(
+										Effect.ignore({
+											log: "Debug",
+											message: "A Channel could not change a running message.",
+										}),
+									)
+								return { ...next, text, shown: now }
 							}),
+					),
+					Background.logFailure("A Channel could not show a running Turn", {
+						level: "Debug",
+					}),
+				)
+			}
+
+			/**
+			 * Hands a message to its Chat. A message for a running Turn of the same person
+			 * goes into it. A message of another person waits for its own Turn. The final
+			 * answer of each Turn goes to the chat when the Turn ends. The live text of a new
+			 * Turn shows in its own fiber until the Turn ends, so this step is done as soon
+			 * as the Chat takes the message.
+			 */
+			const deliverMessage = (input: {
+				readonly organizationId: string
+				readonly stored: StoredChannel
+				readonly chats: typeof Chats.Service
+				readonly chat: Chat.Id
+				readonly conversation: string
+				readonly text: string
+				readonly author: string
+			}) =>
+				Effect.gen(function* () {
+					// The live text has its own scope. It is a child of the layer scope, so a
+					// shut down closes it too, also when its fiber never starts.
+					const turnScope = yield* Scope.fork(scope)
+					const { live, result } = yield* Effect.all({
+						// The live text holds its own borrow of the integration, because the
+						// borrow of the event ends when the event is done.
+						live: registry.get(input.organizationId, input.stored),
+						result: input.chats.deliverStream(input.chat, {
+							input: input.text,
+							author: input.author,
+						}),
+					}).pipe(
+						Scope.provide(turnScope),
+						Effect.onError((cause) =>
+							Scope.close(turnScope, Exit.failCause(cause)),
 						),
 					)
-				}).pipe(
-					Effect.catchCause((cause) =>
-						Effect.logDebug("A Channel could not show a running Turn", cause),
-					),
-				)
+					if (Option.isNone(result.events))
+						return yield* Scope.close(turnScope, Exit.void)
+					yield* Effect.forkIn(
+						follow({
+							organizationId: input.organizationId,
+							stored: input.stored,
+							channel: live,
+							conversation: input.conversation,
+							chat: input.chat,
+							events: result.events.value,
+						}).pipe(Effect.ensuring(Scope.close(turnScope, Exit.void))),
+						scope,
+					)
+				})
 
+			/**
+			 * Gets a message ready for its Chat. The result is the step that hands the
+			 * message to the Chat, or nothing when the message does not go to a Chat.
+			 */
 			const onMessage = (
 				claimed: ClaimedEvent,
 				stored: StoredChannel,
@@ -427,69 +549,67 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							organizationId,
 							id: stored.id,
 						}),
-					}).pipe(Effect.provideContext(services))
+					})
 					const active = yield* organization.activeMember(
 						organizationId,
 						userId,
 					)
-					if (!allowed || Option.isNone(active))
-						return yield* tellSender(
+					if (!allowed || Option.isNone(active)) {
+						yield* tellSender(
 							organizationId,
 							stored,
 							channel,
 							event,
 							"You may not use this Channel. Ask an administrator of your organization.",
 						)
+						return Effect.void
+					}
 					const found = yield* chatOf(organizationId, stored, event).pipe(
-						Effect.catchTag(["BotNotFound", "Forbidden", "Pending"], () =>
-							Effect.succeed(null),
+						Effect.asSome,
+						Effect.catchTag(["BotNotFound", "Forbidden", "Pending"], (error) =>
+							Effect.logInfo(
+								"The actor of a Channel cannot give work to its Bot.",
+								error,
+							).pipe(
+								Effect.as(Option.none()),
+								Effect.annotateLogs({
+									channel: stored.id,
+									bot: stored.bot,
+									actor: stored.actor,
+								}),
+							),
 						),
 					)
-					if (found === null)
-						return yield* tellSender(
+					if (Option.isNone(found)) {
+						yield* tellSender(
 							organizationId,
 							stored,
 							channel,
 							event,
 							"This Channel cannot work now: its actor cannot give work to its Bot. Ask an administrator to check the Channel.",
 						)
-					const { chat, owner } = found
+						return Effect.void
+					}
+					const { chat, owner } = found.value
 					const chats = yield* backend.forCaller({
 						kind: "member",
 						organizationId,
 						userId: owner,
 					})
 					// In a group, the Bot must know who speaks.
-					const input =
+					const text =
 						event.conversation.kind === "group"
 							? `${yield* nameOf(organizationId, userId)}: ${event.text}`
 							: event.text
-					// A message for a running Turn of the same person goes into it. A message of
-					// another person waits for its own Turn. The final answer of each Turn goes
-					// to the chat when the Turn ends.
-					// The live text of a new Turn shows in its own fiber until the Turn ends.
-					// This event is done as soon as the Chat takes the message.
-					const accepted = yield* Deferred.make<boolean>()
-					const run = Effect.scoped(
-						Effect.gen(function* () {
-							const result = yield* chats.deliverStream(chat, {
-								input,
-								author: userId,
-							})
-							yield* Deferred.succeed(accepted, true)
-							if (Option.isSome(result.events))
-								yield* follow({
-									organizationId,
-									stored,
-									channel,
-									conversation: event.conversation.key,
-									chat,
-									events: result.events.value,
-								})
-						}),
-					).pipe(Effect.onExit(() => Deferred.succeed(accepted, false)))
-					const fiber = yield* Effect.forkIn(run, scope)
-					if (!(yield* Deferred.await(accepted))) yield* Fiber.join(fiber)
+					return deliverMessage({
+						organizationId,
+						stored,
+						chats,
+						chat,
+						conversation: event.conversation.key,
+						text,
+						author: userId,
+					})
 				})
 
 			const onAction = (
@@ -501,41 +621,57 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 			) =>
 				Effect.gen(function* () {
 					const organizationId = claimed.organizationId
-					yield* channel.acknowledge(event).pipe(Effect.ignore)
+					yield* channel.acknowledge(event).pipe(
+						Effect.ignore({
+							log: "Debug",
+							message: "A Channel could not acknowledge a button.",
+						}),
+					)
 					const button = readButton(event.value)
-					if (button === undefined) return
+					if (Option.isNone(button)) return
+					const { request, choice, revision } = button.value
 					const caller: Caller = { kind: "member", organizationId, userId }
 					const allowed = yield* allows(caller, {
 						action: "resolve",
 						resource: Authorization.Request.make({
 							organizationId,
 							ownerUserId: userId,
-							id: button.request,
+							id: request,
 						}),
-					}).pipe(Effect.provideContext(services))
+					})
 					const answer = allowed
-						? yield* resolveAsPerson(caller, button.request, {
-								expected: button.revision,
-								...decisions[button.choice],
+						? yield* resolveAsPerson(caller, request, {
+								expected: revision,
+								...decisions[choice],
 							}).pipe(
-								Effect.provideContext(services),
-								Effect.as(null),
+								Effect.as(Option.none<string>()),
 								Effect.catchTags({
 									RequestNotFound: () =>
-										Effect.succeed(
+										Effect.succeedSome(
 											"Only the person that the work is for can decide this request.",
 										),
 									RequestConflict: () =>
-										Effect.succeed(
+										Effect.succeedSome(
 											"This request was already decided, or it changed.",
 										),
 								}),
 							)
-						: "You may not decide requests."
-					if (answer !== null)
-						yield* tellSender(organizationId, stored, channel, event, answer)
+						: Option.some("You may not decide requests.")
+					if (Option.isSome(answer))
+						yield* tellSender(
+							organizationId,
+							stored,
+							channel,
+							event,
+							answer.value,
+						)
 				})
 
+			/**
+			 * Handles an event up to the step that ends it, and gives back that step. Only
+			 * a message that goes to a Chat has such a step. The integration of the Channel
+			 * stays open until the scope of the event closes.
+			 */
 			const handleEvent = (claimed: ClaimedEvent) =>
 				Effect.gen(function* () {
 					const found = yield* channels.get(
@@ -543,7 +679,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						claimed.channelId,
 					)
 					// A deleted or disabled Channel drops its events.
-					if (Option.isNone(found) || !found.value.enabled) return
+					if (Option.isNone(found) || !found.value.enabled) return Effect.void
 					const stored = found.value
 					const channel = yield* registry.get(claimed.organizationId, stored)
 					const event = claimed.event
@@ -552,134 +688,189 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						event.conversation.kind === "group" &&
 						!event.mentioned
 					)
-						return
+						return Effect.void
 					const identity = yield* channels.identity(
 						stored.id,
 						event.sender.externalId,
 					)
 					if (Option.isNone(identity)) {
 						if (event._tag === "Action")
-							yield* channel.acknowledge(event).pipe(Effect.ignore)
-						return yield* askToLink(
-							claimed.organizationId,
-							stored,
-							channel,
-							event,
-						)
+							yield* channel.acknowledge(event).pipe(
+								Effect.ignore({
+									log: "Debug",
+									message: "A Channel could not acknowledge a button.",
+								}),
+							)
+						yield* askToLink(claimed.organizationId, stored, channel, event)
+						return Effect.void
 					}
 					const userId = identity.value.userId
 					if (event._tag === "Message")
-						yield* onMessage(claimed, stored, channel, event, userId)
-					else yield* onAction(claimed, stored, channel, event, userId)
+						return yield* onMessage(claimed, stored, channel, event, userId)
+					yield* onAction(claimed, stored, channel, event, userId)
+					return Effect.void
 				})
 
-			/** Sends one message. A long text goes out in parts, and the first part changes the old message. */
-			const deliver = (delivery: Delivery) =>
-				Effect.gen(function* () {
-					const found = yield* channels.get(
-						delivery.organizationId,
-						delivery.channelId,
-					)
-					if (Option.isNone(found)) return
-					const channel = yield* registry.get(
-						delivery.organizationId,
-						found.value,
-					)
-					const parts = chunk(
-						delivery.message.markdown,
-						channel.features.maxLength,
-					)
-					const [first = "", ...rest] = parts
-					const last = parts.length - 1
-					const message = (text: string, index: number) => ({
-						markdown: text,
-						// Buttons go with the last part.
-						...(index === last && delivery.message.buttons !== undefined
-							? { buttons: delivery.message.buttons }
-							: {}),
-					})
-					const ref =
-						delivery.ref !== null && channel.features.edit
-							? yield* channel
-									.edit(delivery.ref, message(first, 0))
-									.pipe(Effect.as(delivery.ref))
-							: yield* channel.send(delivery.target, message(first, 0))
-					for (const [index, text] of rest.entries())
-						yield* channel.send(
-							Target.Conversation({ conversation: ref.conversation }),
-							message(text, index + 1),
-						)
-					yield* queue.finishDelivery(delivery, ref)
-				}).pipe(
-					Effect.catchTag("ChannelDeliveryFailed", (failure) =>
-						Effect.logWarning("A Channel message did not go out", failure).pipe(
-							Effect.andThen(
-								queue.retryDelivery(
-									delivery,
-									failure.retryAfterMs,
-									!failure.retry,
+			/**
+			 * Puts a message back for a later try, and logs why. After too many tries, or
+			 * when `give` is true, OpenBot gives up on the message.
+			 */
+			const retryDelivery = (
+				delivery: Delivery,
+				failure: unknown,
+				delayMs: number | undefined,
+				give: boolean,
+			) =>
+				queue.retryDelivery(delivery, delayMs, give).pipe(
+					Effect.flatMap((gaveUp) =>
+						gaveUp
+							? Effect.logError(
+									"OpenBot gave up on a Channel message.",
+									failure,
+								)
+							: Effect.logWarning(
+									"A Channel message did not go out. It is tried again later.",
+									failure,
 								),
-							),
+					),
+					// The log keeps the failure, also when the retry cannot be written. The
+					// message then comes back when its lease ends.
+					Effect.catch((error) =>
+						Effect.logWarning(
+							"A Channel message did not go out",
+							failure,
+							error,
 						),
 					),
 				)
 
-			/** Puts the final answer of a Turn in a chat of a Channel. */
+			/** Sends one message. A long text goes out in parts, and the first part changes the old message. */
+			const deliver = (delivery: Delivery) =>
+				// The integration of the Channel stays open until the message is out.
+				Effect.scoped(
+					// When the platform may have a part, only `finishDelivery` may end the
+					// work. A stop between the two would send every part again after the
+					// lease. So only the steps before the first send can stop.
+					Effect.uninterruptibleMask((restore) =>
+						Effect.gen(function* () {
+							const found = yield* restore(
+								channels.get(delivery.organizationId, delivery.channelId),
+							)
+							if (Option.isNone(found)) return
+							const channel = yield* restore(
+								registry.get(delivery.organizationId, found.value),
+							)
+							const parts = chunk(
+								delivery.message.markdown,
+								channel.features.maxLength,
+							)
+							const last = parts.length - 1
+							const message = (text: string, index: number) => ({
+								markdown: text,
+								// Buttons go with the last part.
+								...(index === last && delivery.message.buttons !== undefined
+									? { buttons: delivery.message.buttons }
+									: {}),
+							})
+							const first = message(Arr.headNonEmpty(parts), 0)
+							const ref =
+								delivery.ref !== null && channel.features.edit
+									? yield* channel
+											.edit(delivery.ref, first)
+											.pipe(Effect.as(delivery.ref))
+									: yield* channel.send(delivery.target, first)
+							yield* Effect.forEach(
+								Arr.tailNonEmpty(parts),
+								(text, index) =>
+									channel.send(
+										Target.Conversation({ conversation: ref.conversation }),
+										message(text, index + 1),
+									),
+								{ discard: true },
+							)
+							yield* queue.finishDelivery(delivery, ref)
+						}),
+					),
+				).pipe(
+					Effect.catchTag("ChannelDeliveryFailed", (failure) =>
+						retryDelivery(
+							delivery,
+							failure,
+							failure.retryAfterMs,
+							!failure.retry,
+						),
+					),
+				)
+
+			/**
+			 * Puts the final answer of a Turn in a chat of a Channel. The result is false
+			 * when no chat of a Channel has the Chat now.
+			 */
 			const finishTurn = (input: {
 				readonly organizationId: string
-				readonly chat: string
-				readonly turn: string
+				readonly chat: Chat.Id
+				readonly turn: Turn.Id
 			}) =>
 				Effect.gen(function* () {
 					const conversation = yield* channels.conversationOfChat(input.chat)
-					if (Option.isNone(conversation)) return
+					if (Option.isNone(conversation)) return false
 					const chats = yield* backend.forCaller({
 						kind: "member",
 						organizationId: input.organizationId,
 						userId: conversation.value.owner,
 					})
-					const result = yield* chats.turn(
-						Chat.Id.make(input.chat),
-						input.turn as Turn.Id,
-					)
-					if (!Turn.isTerminal(result.turn.status)) return
-					yield* queue.finishReply({
-						organizationId: input.organizationId,
-						channelId: conversation.value.channelId,
-						target: Target.Conversation({
-							conversation: conversation.value.key,
-						}),
-						chat: input.chat,
-						turn: input.turn,
-						message: { markdown: answerOf(result.response) },
-					})
+					const result = yield* chats.turn(input.chat, input.turn)
+					if (Turn.isTerminal(result.turn.status))
+						yield* queue.finishReply({
+							organizationId: input.organizationId,
+							channelId: conversation.value.channelId,
+							target: Target.Conversation({
+								conversation: conversation.value.key,
+							}),
+							chat: input.chat,
+							turn: input.turn,
+							message: { markdown: answerOf(result.response) },
+						})
+					return true
 				})
 
-			/** Where a request card goes: the direct chat of the approver, or the chat of the work. */
+			/** Ends a reply that can never get its answer, because its Chat or its Turn is gone. */
+			const endReply = (
+				reply: { readonly chat: Chat.Id; readonly turn: Turn.Id },
+				reason: unknown,
+			) =>
+				Effect.logInfo(
+					"The Chat of a Channel reply is gone, so OpenBot ends the reply.",
+					reason,
+				).pipe(Effect.andThen(queue.endReply(reply)))
+
+			/**
+			 * Where a request card goes: the direct chat of the approver, or the chat of the
+			 * work. Only a request that a person decides gets a card.
+			 */
 			const cardTarget = (
 				conversation: Conversation,
 				request: RequestsApi.CapabilityRequest,
 			) =>
 				Effect.gen(function* () {
-					if (request.approver._tag !== "Person")
-						return { target: null, approver: null }
+					const approver = request.approver
+					if (approver._tag !== "Person") return Option.none<CardPlace>()
 					const identity = yield* channels.identityOfUser(
 						conversation.channelId,
-						request.approver.userId,
+						approver.userId,
 					)
-					return Option.match(identity, {
-						onSome: (identity) => ({
-							target: Target.Person({ person: identity.externalUserId }),
-							approver: null,
+					return Option.some<CardPlace>(
+						Option.match(identity, {
+							onSome: (identity) => ({
+								target: Target.Person({ person: identity.externalUserId }),
+								approver: Option.none(),
+							}),
+							onNone: () => ({
+								target: Target.Conversation({ conversation: conversation.key }),
+								approver: Option.some(approver.userId),
+							}),
 						}),
-						onNone: () => ({
-							target: Target.Conversation({ conversation: conversation.key }),
-							approver:
-								request.approver._tag === "Person"
-									? request.approver.userId
-									: null,
-						}),
-					})
+					)
 				})
 
 			const onRequest = (organizationId: string, id: string) =>
@@ -697,105 +888,236 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						(yield* queue.requestRef(conversation.value.channelId, id)) !== null
 					if (request.status !== "pending" && !known) return
 					const where = yield* cardTarget(conversation.value, request)
-					if (where.target === null) return
+					if (Option.isNone(where)) return
 					const bot = yield* bots.find(organizationId, request.bot)
 					yield* queue.putRequest({
 						organizationId,
 						channelId: conversation.value.channelId,
-						target: where.target,
+						target: where.value.target,
 						request: id,
-						message: requestCard(
+						message: yield* requestCard(
 							request,
 							Option.match(bot, {
 								onNone: () => "A Bot",
 								onSome: (bot) => bot.name,
 							}),
-							where.approver === null
-								? null
-								: yield* nameOf(organizationId, where.approver),
+							yield* Effect.transposeOption(
+								Option.map(where.value.approver, (approver) =>
+									nameOf(organizationId, approver),
+								),
+							),
 						),
 					})
 				})
 
-			const onSignal = (signal: Signal) =>
-				Effect.gen(function* () {
-					if (signal._tag === "TurnChanged" && signal.status !== "Running")
-						yield* finishTurn({
-							organizationId: signal.organizationId,
-							chat: signal.chat,
-							turn: signal.turn,
-						})
-					if (signal._tag === "RequestChanged")
-						yield* onRequest(signal.organizationId, signal.request)
-				})
+			/** Follows one change. Its log lines name the Chat or the request. */
+			const onSignal = (signal: Signal) => {
+				switch (signal._tag) {
+					case "TurnChanged":
+						return signal.status === "Running"
+							? Effect.void
+							: finishTurn(signal).pipe(
+									Background.logFailure("A Channel could not follow a change"),
+									Effect.annotateLogs({
+										organization: signal.organizationId,
+										chat: signal.chat,
+										turn: signal.turn,
+									}),
+								)
+					case "RequestChanged":
+						return onRequest(signal.organizationId, signal.request).pipe(
+							Background.logFailure("A Channel could not follow a change"),
+							Effect.annotateLogs({
+								organization: signal.organizationId,
+								request: signal.request,
+							}),
+						)
+					default:
+						return Effect.void
+				}
+			}
 
 			const subscription = yield* PubSub.subscribe(signals.pubsub)
 			yield* Stream.fromSubscription(subscription).pipe(
-				Stream.runForEach((signal) =>
-					Effect.forkIn(
-						onSignal(signal).pipe(
-							Effect.catchCause((cause) =>
-								Effect.logWarning("A Channel could not follow a change", cause),
-							),
-						),
-						scope,
-					),
-				),
+				Stream.runForEach((signal) => Effect.forkIn(onSignal(signal), scope)),
 				Effect.forkScoped,
 			)
 
-			// New events, one by one for each chat.
-			yield* queue.claimEvents.pipe(
-				Effect.flatMap((claimed) =>
-					Effect.forEach(
-						claimed,
-						(entry) =>
-							handleEvent(entry).pipe(
-								Effect.andThen(queue.finishEvent(entry)),
-								// An event that was stopped, such as at shut down, is tried again with no warning.
+			/**
+			 * Puts an event that failed back for a later try, and logs why. After too many
+			 * tries, OpenBot gives up on the event.
+			 */
+			const retryEvent = (entry: ClaimedEvent, cause: Cause.Cause<unknown>) =>
+				queue.retryEvent(entry).pipe(
+					Effect.flatMap((gaveUp) =>
+						gaveUp
+							? Effect.logError("OpenBot gave up on a Channel event.", cause)
+							: Effect.logWarning(
+									"A Channel event failed. It is tried again later.",
+									cause,
+								),
+					),
+					// The log keeps the failure, also when the retry cannot be written. The
+					// event then comes back when its lease ends.
+					Effect.catch((error) =>
+						Effect.logWarning("A Channel event failed", cause, error),
+					),
+				)
+
+			/**
+			 * Works on the items of a claimed batch, four at a time, and renews their leases
+			 * while the work runs. A batch can take longer than one lease, and another
+			 * instance must not take its items then. The renewal stops with the batch.
+			 */
+			const whileClaimed = <I, E, R>(
+				items: ReadonlyArray<I>,
+				extend: (items: ReadonlyArray<I>) => Effect.Effect<void, unknown>,
+				work: (item: I) => Effect.Effect<void, E, R>,
+			) =>
+				items.length === 0
+					? Effect.void
+					: Effect.scoped(
+							Effect.gen(function* () {
+								yield* Effect.sleep(renewEvery).pipe(
+									Effect.andThen(extend(items)),
+									// One failed renewal does not stop the next one.
+									Background.logFailure("A Channel lease could not be renewed"),
+									Effect.forever,
+									Effect.forkScoped,
+								)
+								yield* Effect.forEach(items, work, {
+									concurrency: 4,
+									discard: true,
+								})
+							}),
+						)
+
+			// New events, one by one for each chat. Each event has its own failures, so one
+			// event cannot stop the others.
+			yield* Background.repeat(
+				queue.claimEvents.pipe(
+					Effect.flatMap((claimed) =>
+						whileClaimed(claimed, queue.extendEvents, (entry) =>
+							// The integration of the Channel stays open until the event is done.
+							Effect.scoped(
+								// Only the steps before the Chat may have the message can stop. A
+								// stop after that would put the event back, and the message would
+								// reach the Chat twice.
+								Effect.uninterruptibleMask((restore) =>
+									restore(handleEvent(entry)).pipe(
+										Effect.flatten,
+										Effect.andThen(queue.finishEvent(entry)),
+									),
+								),
+							).pipe(
+								// A stop of the fiber of the event itself, such as at shut down,
+								// goes past every handler of failures, but this finalizer still
+								// runs. A stop is not a failed try, so the event goes back as it
+								// was. A failure that comes with a stop counts as a try.
+								Effect.onError((cause) =>
+									Cause.hasInterruptsOnly(cause)
+										? queue.releaseEvent(entry).pipe(
+												Effect.ignore({
+													log: "Debug",
+													message:
+														"A stopped Channel event could not be put back. It comes back when its lease ends.",
+												}),
+											)
+										: Cause.hasInterrupts(cause)
+											? retryEvent(entry, cause)
+											: Effect.void,
+								),
+								Effect.catchCause((cause) =>
+									Cause.hasInterrupts(cause)
+										? Effect.void
+										: retryEvent(entry, cause),
+								),
+								Effect.annotateLogs({
+									organization: entry.organizationId,
+									channel: entry.channelId,
+									event: entry.event.eventId,
+									attempts: entry.attempts + 1,
+								}),
+							),
+						),
+					),
+				),
+				{
+					schedule: Schedule.spaced(interval),
+					message: "The Channel inbox failed",
+				},
+			)
+			// Messages that wait to go out. Each message has its own failures, so one
+			// message cannot stop the others while they are sent.
+			yield* Background.repeat(
+				queue.claimDeliveries.pipe(
+					Effect.flatMap((due) =>
+						whileClaimed(due, queue.extendDeliveries, (delivery) =>
+							deliver(delivery).pipe(
+								// Any other failure counts as a try too, so a message that always
+								// fails, such as one of a broken Channel, ends.
 								Effect.catchCause((cause) =>
 									Cause.hasInterruptsOnly(cause)
-										? queue.retryEvent(entry)
-										: Effect.logWarning(
-												"A Channel event failed. It is tried again later.",
-												cause,
-											).pipe(Effect.andThen(queue.retryEvent(entry))),
+										? Effect.void
+										: retryDelivery(delivery, cause, undefined, false),
 								),
+								Effect.annotateLogs({
+									organization: delivery.organizationId,
+									channel: delivery.channelId,
+									delivery: delivery.id,
+									attempts: delivery.attempts + 1,
+								}),
 							),
-						{ concurrency: 4, discard: true },
+						),
 					),
 				),
-				Effect.catchCause((cause) =>
-					Effect.logWarning("The Channel inbox failed", cause),
-				),
-				Effect.repeat(Schedule.spaced(interval)),
-				Effect.forkScoped,
+				{
+					schedule: Schedule.spaced(interval),
+					message: "The Channel outbox failed",
+				},
 			)
-			// Messages that wait to go out.
-			yield* queue.claimDeliveries.pipe(
-				Effect.flatMap((due) =>
-					Effect.forEach(due, deliver, { concurrency: 4, discard: true }),
-				),
-				Effect.catchCause((cause) =>
-					Effect.logWarning("The Channel outbox failed", cause),
-				),
-				Effect.repeat(Schedule.spaced(interval)),
-				Effect.forkScoped,
-			)
-			// A Turn that ended while no instance listened still gets its answer.
-			yield* queue.liveReplies.pipe(
-				Effect.flatMap((live) =>
-					Effect.forEach(
-						live,
-						(reply) => finishTurn(reply).pipe(Effect.ignore),
-						{ discard: true },
+			// A Turn that ended while no instance listened still gets its answer. A reply
+			// whose Chat or Turn is gone can never get one, so it ends.
+			yield* Background.repeat(
+				queue.liveReplies.pipe(
+					Effect.flatMap((live) =>
+						Effect.forEach(
+							live,
+							(reply) =>
+								finishTurn(reply).pipe(
+									Effect.flatMap((found) =>
+										found
+											? Effect.void
+											: endReply(
+													reply,
+													"No chat of a Channel has the Chat now.",
+												),
+									),
+									Effect.catchTags({
+										ChatNotFound: (error) => endReply(reply, error),
+										ChatConflict: (error) => endReply(reply, error),
+									}),
+									// Other failures are often short, and the next check tries
+									// again, so they are not warnings.
+									Background.logFailure(
+										"A Channel reply could not be finished",
+										{ level: "Debug" },
+									),
+									Effect.annotateLogs({
+										organization: reply.organizationId,
+										channel: reply.channelId,
+										chat: reply.chat,
+										turn: reply.turn,
+									}),
+								),
+							{ discard: true },
+						),
 					),
 				),
-				Effect.catchCause((cause) =>
-					Effect.logWarning("Channel replies could not be checked", cause),
-				),
-				Effect.repeat(Schedule.spaced(Duration.seconds(30))),
-				Effect.forkScoped,
+				{
+					schedule: Schedule.spaced(Duration.seconds(30)),
+					message: "Channel replies could not be checked",
+				},
 			)
 		}),
 	)

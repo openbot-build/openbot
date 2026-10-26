@@ -21,7 +21,7 @@ Dieses Programm macht dasselbe wie `openbot`:
 ```ts
 import { Launch, Server } from "@openbot-build/openbot"
 
-Launch.main(Server.layer)
+Launch.main(Server.layerLive)
 ```
 
 `Launch.main` liest zuerst die Kommandozeile. Mit `--help` zeigt es die Hilfe
@@ -29,8 +29,9 @@ und endet. Dafür braucht es keine Einstellungen. Dann liest es die Variablen au
 [Konfiguration](/de/docs/configuration), aus der Umgebung oder aus geheimen
 Dateien. Es sperrt ausgehende Verbindungen zu privaten Adressen und schreibt
 einen fehlgeschlagenen Start ins Log. Dann führt es den Layer aus, den du ihm
-gibst, bis der Prozess endet. `Launch.server` ist dasselbe Programm als Effect,
-wenn du es selbst ausführst.
+gibst, bis der Prozess endet. Es gibt diesem Layer die Node.js-Dienste und den
+Fetch-HTTP-Client. `Launch.server` ist dasselbe Programm als Effect, wenn du es
+selbst ausführst. Gib ihm `NodeServices.layer`.
 
 `EnvironmentConfiguration.load` gibt dieselben Einstellungen zurück: `host`,
 `port`, `databaseUrl`, `secretKeys` und `outboundAllow`. Du kannst diese Werte
@@ -41,17 +42,22 @@ einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/docs/platform#setup).
 
 ## Was das Paket exportiert
 
-| Export                                                   | Was es ist                                                                                                                     |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `Server.layer(options)`                                  | OpenBot mit eigenem Node.js-Server für HTTP. Er liest die Anmeldung aus den Plattform-Einstellungen.                           |
-| `Server.layerFixed(options)`                             | OpenBot mit einer festen Anmelde-Konfiguration. Für Tests und den Entwicklungsserver.                                          |
-| `Server.layerApi(options)`                               | Nur die HTTP-Routen, für einen HTTP-Server, den du schon hast.                                                                 |
-| `Launch.main(make)`, `Launch.server(make)`               | Führt den Layer aus `make` so aus wie `openbot-server`.                                                                        |
-| `OpenBot.layerShared(options)`                           | Die Dienste, die so lange leben wie die Instanz: der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen. |
-| `OpenBot.layer(options)`                                 | Die Dienste hinter den Routen: Anmeldung, Tokens, Berechtigungen, Speicher, Chats und Apps.                                    |
-| `DatabasePostgres`                                       | Der Datenbank-Layer und das Programm `migrate`.                                                                                |
-| `EnvironmentConfiguration`                               | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                                    |
-| `Auth`, `Chats`, `AppHost`, `AppPlugin`, `Configuration` | Diensttypen für fortgeschrittene Aufbauten.                                                                                    |
+| Export                                                   | Was es ist                                                                                                                        |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Server.layerLive(options)`                              | OpenBot mit eigenem Node.js-Server für HTTP und den echten Diensten von außen. `openbot-server` führt es aus.                     |
+| `Server.layer(options)`                                  | Derselbe Server, ohne die Dienste, die er braucht. Siehe [Dienste, die OpenBot braucht](#dienste-die-openbot-braucht).            |
+| `Server.layerFixed(options)`                             | Wie `Server.layer`, aber es schreibt zuerst eine Anmelde-Konfiguration in die Plattform-Einstellungen. Für Tests und Entwicklung. |
+| `Server.layerApp(options)`                               | Die OpenBot-Routen und -Dienste, für einen HTTP-Server, den du schon hast.                                                        |
+| `Server.layerApi`                                        | Nur die HTTP-Routen.                                                                                                              |
+| `Launch.main(make)`, `Launch.server(make)`               | Führt den Layer aus `make` so aus wie `openbot-server`.                                                                           |
+| `OpenBot.layerShared(options)`                           | Die Dienste, die so lange leben wie die Instanz: der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen.    |
+| `OpenBot.layer(options)`                                 | Die Dienste hinter den Routen: Anmeldung, Tokens, Berechtigungen, Speicher, Chats und Apps.                                       |
+| `OpenBot.layerOutside`                                   | Die echten Dienste von außerhalb von OpenBot, zum Beispiel das Netzwerk der Apps.                                                 |
+| `OpenBot.layerLive(options)`                             | `OpenBot.layer` mit den echten Diensten von außen und ohne Werkzeuge des Hosts.                                                   |
+| `HostTools`                                              | Die Werkzeuge, die dein Programm jedem Chat gibt. Siehe [Ein Werkzeug hinzufügen](#ein-werkzeug-hinzufügen).                      |
+| `DatabasePostgres`                                       | Der Datenbank-Layer und das Programm `migrate`.                                                                                   |
+| `EnvironmentConfiguration`                               | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                                       |
+| `Auth`, `Chats`, `AppHost`, `AppPlugin`, `Configuration` | Diensttypen für fortgeschrittene Aufbauten.                                                                                       |
 
 Der Unterpfad `@openbot-build/openbot/Development` exportiert den
 Entwicklungsserver. Siehe
@@ -61,45 +67,47 @@ Entwicklungsserver. Siehe
 
 ## Optionen
 
-`Server.layer` nimmt Instanz-Optionen und App-Optionen.
+`Server.layerLive` nimmt Instanz-Optionen und App-Optionen. `Server.layer` und
+`Server.layerFixed` nehmen dieselben Optionen, aber nicht `secretKeys`, weil
+dein Programm ihnen die gemeinsamen Dienste gibt.
 
 ### Instanz-Optionen
 
-| Option        | Typ                | Was es ist                                                                                                      |
-| ------------- | ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `host`        | `string`           | Pflicht. Die Adresse, auf der der Server hört, zum Beispiel `127.0.0.1`.                                        |
-| `port`        | `number`           | Pflicht. Der Port, auf dem der Server hört, zum Beispiel `3000`.                                                |
-| `databaseUrl` | `Redacted<string>` | Pflicht. Die PostgreSQL-URL.                                                                                    |
-| `secretKeys`  | `Redacted<string>` | Pflicht. Die Liste der geheimen Schlüssel. Siehe [Geheime Schlüssel](/de/docs/configuration#geheime-schlüssel). |
+| Option        | Typ                | Was es ist                                                                                             |
+| ------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `host`        | `string`           | Pflicht. Die Adresse, auf der der Server hört, zum Beispiel `127.0.0.1`.                               |
+| `port`        | `number`           | Pflicht. Der Port, auf dem der Server hört, zum Beispiel `3000`.                                       |
+| `databaseUrl` | `Redacted<string>` | Pflicht. Die PostgreSQL-URL.                                                                           |
+| `secretKeys`  | `Redacted<string>` | Die Liste der geheimen Schlüssel. Siehe [Geheime Schlüssel](/de/docs/configuration#geheime-schlüssel). |
 
 ### Anmeldung
 
-`Server.layer` nimmt keine Anmelde-Optionen. Es liest den öffentlichen Origin,
-den Anbieter der Plattform und das Anmelde-Geheimnis aus den
+Der Server nimmt keine Anmelde-Optionen. Er liest den öffentlichen Origin, den
+Anbieter der Plattform und das Anmelde-Geheimnis aus den
 [Plattform-Einstellungen](/de/docs/platform#einstellungen-der-platform).
 
 - Vor der Einrichtung antwortet jede Route außer `/health` mit `503` und
   `SetupRequired`.
-- Wenn sich eine dieser Einstellungen ändert, baut der Server eine neue App mit
-  den neuen Werten. Die neue App nimmt zuerst Anfragen an, dann hält die alte
-  App an.
+- OpenBot liest diese Einstellungen jedes Mal, wenn es sie braucht. Wenn sich
+  eine davon ändert, nutzt schon die nächste Anfrage den neuen Wert. Der Server
+  wird nur einmal gebaut, also gehen laufende Anfragen und Turns weiter.
 
-`Server.layerFixed` stellt stattdessen eine feste `auth`-Konfiguration bereit
-und baut nie eine neue App. Es gibt die App-Dienste auch an dein Programm
-weiter, damit Tests sie nutzen können. Wenn die Datenbank keine
-Plattform-Einstellungen hat, schreibt es sie zuerst, für den `publicOrigin` von
-`auth`. Tests und der Entwicklungsserver nutzen es.
+`Server.layerFixed` nimmt eine `auth`-Konfiguration. Beim Start schreibt es den
+öffentlichen Origin, das Anmelde-Geheimnis und den Anbieter von `auth` in die
+Plattform-Einstellungen. Danach arbeitet es wie `Server.layer`, also wirkt auch
+eine spätere Änderung der Plattform-Einstellungen sofort. Tests und der
+Entwicklungsserver nutzen es. Jeder Server gibt die App-Dienste auch an dein
+Programm weiter, damit Tests sie nutzen können.
 
 ### App-Optionen
 
-| Option          | Was sie tut                                                                                                      |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `chats`         | Werkzeuge für die Turns von Chats. Siehe unten.                                                                  |
-| `builtinModels` | Models, die jede Organisation nutzen kann, im Code angegeben. Siehe [Models](/de/docs/models#eingebaute-models). |
-| `routes`        | Eine Funktion, die die Anmelde-Konfiguration bekommt und einen Layer mit deinen eigenen HTTP-Routen zurückgibt.  |
-| `discovery`     | Ein Layer, der Apps im Web findet. Standardmäßig liest er öffentliche Catalogs über das Internet.                |
-| `indexSources`  | Weitere Quellen für die Suche im App Index, neben dem OpenBot Index.                                             |
-| `indexWork`     | Zeitplan des App-Index-Workers: `{ intervalMs, retryMs }`.                                                       |
+| Option          | Was sie tut                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `builtinModels` | Models, die jede Organisation nutzen kann, im Code angegeben. Siehe [Models](/de/docs/models#eingebaute-models).                   |
+| `defaultModel`  | Das Model eines neuen Chats, wenn sein Bot keines nennt. Es ist eines aus `builtinModels`. Nur eine simulierte Plattform setzt es. |
+| `routes`        | Ein Layer mit deinen eigenen HTTP-Routen.                                                                                          |
+| `indexSources`  | Weitere Quellen für die Suche im App Index, neben dem OpenBot Index.                                                               |
+| `indexWork`     | Zeitplan des App-Index-Workers: `{ intervalMs, retryMs }`.                                                                         |
 
 Einige Werte waren früher Optionen. Jetzt sind sie Einstellungen in der
 Datenbank. So teilen alle Instanzen sie:
@@ -115,28 +123,73 @@ Datenbank. So teilen alle Instanzen sie:
 
 ---
 
+## Dienste, die OpenBot braucht
+
+`OpenBot.layer`, `Server.layer` und `Server.layerFixed` bauen die Dienste nicht,
+die von außerhalb von OpenBot kommen. Sie brauchen sie, und dein Programm gibt
+sie als Layers. So kann ein Test Fälschungen geben, und dein Programm kann
+eigene geben.
+
+| Dienste                               | Was sie sind                                                                                                                                                                                                              | Layer für einen echten Server                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Gemeinsame Dienste                    | Der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen.                                                                                                                                             | `OpenBot.layerShared(options)`                   |
+| Dienste von außen (`OpenBot.Outside`) | Die Treiber der Computer-Anbieter, die Live-Backends, die Leser der Passwort-Manager, das Netzwerk und die Prüfung der Apps, die DNS-Prüfung von Domains, das öffentliche Netzwerk des App Index und das Finden von Apps. | `OpenBot.layerOutside`                           |
+| Werkzeuge des Hosts (`HostTools`)     | Die Werkzeuge, die dein Programm jedem Chat gibt.                                                                                                                                                                         | `HostTools.none`                                 |
+| Plattform-Dienste                     | Dateien, Pfade, Zufallszahlen und der HTTP-Client.                                                                                                                                                                        | `NodeServices.layer` und `FetchHttpClient.layer` |
+
+`Server.layerLive` gibt alle davon außer den Plattform-Diensten. `Launch.main`
+gibt die Plattform-Dienste. Dieses Programm macht dasselbe wie
+`Launch.main(Server.layerLive)`, und jeder Teil ist zu sehen:
+
+```ts
+import { HostTools, Launch, OpenBot, Server } from "@openbot-build/openbot"
+import { Layer } from "effect"
+
+Launch.main((settings) =>
+	Server.layer(settings).pipe(
+		Layer.provide(Layer.merge(OpenBot.layerOutside, HostTools.none)),
+		Layer.provideMerge(OpenBot.layerShared(settings)),
+	),
+)
+```
+
+Die Optionen `chats`, `discovery`, `computerDrivers`, `liveBackends`,
+`vaultReaders`, `appProbe`, `appNetwork`, `domainControl` und
+`indexPublicNetwork` gibt es nicht mehr. Gib an ihrer Stelle die Dienste.
+
+---
+
 ## Chats
-
-Die Option `chats` legt fest, wie die Turns von [Chats](/de/docs/chats) ihre
-Arbeit machen.
-
-| Feld             | Was es tut                                                                             |
-| ---------------- | -------------------------------------------------------------------------------------- |
-| `runtime`        | Die Bot-Definition: `toolkit`, `plugin`, `providers`, `compaction` und mehr.           |
-| `layerExecution` | Eine Funktion, die für jeden Turn zusätzliche Dienste baut, zum Beispiel Tool-Handler. |
 
 Models kommen von den Model Providers in der Datenbank und aus `builtinModels`.
 Siehe [Models](/de/docs/models). [Bot Memory](/de/docs/memory) folgt `botMemory`
 in den [Organisations-Einstellungen](/de/docs/organization#einstellungen).
 
+Jedes Mitglied hat in jedem Server-Prozess eine Chat-Laufzeit. Die Laufzeit hält
+die laufenden Turns des Mitglieds und die Werkzeugaufrufe im Hintergrund seiner
+Chats. Der Server macht sie bei der ersten Anfrage des Mitglieds. Nach 10
+Minuten ohne Anfrage, ohne laufenden Turn und ohne Werkzeugaufruf im Hintergrund
+schließt der Server sie, um Speicher frei zu machen. Die nächste Anfrage macht
+sie wieder aus der Datenbank, so geht nichts verloren. Ein Mitglied wartet nie,
+während die Laufzeit eines anderen Mitglieds entsteht.
+
 ### Ein Werkzeug hinzufügen
 
 Ein Werkzeug (Tool) ist eine Funktion, die das Model aufrufen kann. Erstelle es
-mit Effect AI. Gib dann das Toolkit und seine Handler an OpenBot:
+mit Effect AI. Gib dann das Toolkit und seine Handler mit `HostTools.layer` an
+OpenBot. Jeder Turn jedes Chats kann das Werkzeug aufrufen. `handlers` bekommt
+die ID des Chats und gibt die Handler für seine Turns. Jeder Turn baut sie, wenn
+er startet, und schließt sie, wenn er endet.
 
 ```ts
-import { type Configuration, Server } from "@openbot-build/openbot"
-import { Effect, Layer, Schema } from "effect"
+import {
+	type Configuration,
+	HostTools,
+	Launch,
+	OpenBot,
+	Server,
+} from "@openbot-build/openbot"
+import { DateTime, Effect, Layer, Schema } from "effect"
 import { Tool, Toolkit } from "effect/ai"
 
 const CurrentTime = Tool.make("CurrentTime", {
@@ -146,17 +199,21 @@ const CurrentTime = Tool.make("CurrentTime", {
 })
 const toolkit = Toolkit.make(CurrentTime)
 const handlers = toolkit.toLayer({
-	CurrentTime: () => Effect.sync(() => new Date().toISOString()),
+	CurrentTime: () => Effect.map(DateTime.now, DateTime.formatIso),
 })
 
 const server = (settings: Configuration.Settings) =>
-	Server.layer({
-		...settings,
-		chats: {
-			runtime: { toolkit },
-			layerExecution: () => handlers,
-		},
-	}).pipe(Layer.provide(handlers))
+	Server.layer(settings).pipe(
+		Layer.provide(
+			Layer.merge(
+				OpenBot.layerOutside,
+				HostTools.layer({ toolkit, handlers: () => handlers }),
+			),
+		),
+		Layer.provideMerge(OpenBot.layerShared(settings)),
+	)
+
+Launch.main(server)
 ```
 
 Füge `needsApproval: true` zu `Tool.make` hinzu, wenn jeder Aufruf eine
@@ -169,8 +226,7 @@ und der Aufruf läuft später, wenn er erlaubt wird. Siehe
 
 ## Deine eigenen Routen
 
-`routes` fügt demselben Server HTTP-Routen hinzu. Es ist eine Funktion, die die
-aktuelle Anmelde-Konfiguration bekommt und einen Layer zurückgibt. Der Layer
+`routes` fügt demselben Server HTTP-Routen hinzu. Es ist ein Layer. Der Layer
 kann den Dienst `Auth` nutzen, um das Anmelde-Cookie zu prüfen.
 
 ```ts
@@ -182,26 +238,24 @@ const routes = HttpRouter.add(
 	HttpServerResponse.text("ready"),
 )
 
-Server.layer({ ...settings, routes: () => routes })
+Server.layerLive({ ...settings, routes })
 ```
 
 Nutze keine Pfade unter `/auth/` oder `/v1/`. Sie gehören OpenBot.
 
 ## Deinen eigenen HTTP-Server nutzen
 
-`Server.layerApp(options)` gibt eine Funktion zurück. Sie bekommt eine
-Anmelde-Konfiguration und gibt die OpenBot-Routen und -Dienste dafür zurück.
-`Server.layerApi({ publicOrigin })` gibt nur die OpenBot-Routen. Es fügt auch
-Fehler-Logs für fehlgeschlagene Anfragen hinzu.
+`Server.layerApp(options)` gibt die OpenBot-Routen und -Dienste. Es braucht
+dieselben Dienste wie `Server.layer`. `Server.layerApi` gibt nur die
+OpenBot-Routen. Es fügt auch Fehler-Logs für fehlgeschlagene Anfragen hinzu.
 
-`Server.layer` und `Server.layerFixed` starten ihren eigenen Node.js-Server.
-Wenn du OpenBot in einen Server einbauen willst, den du schon hast, baue
-dieselben Teile selbst. Lies `packages/openbot/src/app/Server.ts`, um zu sehen,
-wie `layerFixed` eine Konfiguration bereitstellt. Lies
-`packages/openbot/src/app/Supervisor.ts`, um zu sehen, wie `Server.layer` eine
-neue App baut, wenn sich die Plattform-Einstellungen ändern. Bewahre das
-Anmelde-Geheimnis in den Plattform-Einstellungen auf, nicht in deiner eigenen
-Umgebungsvariable. Jede Instanz muss dasselbe nutzen.
+`Server.layerLive`, `Server.layer` und `Server.layerFixed` starten ihren eigenen
+Node.js-Server. Wenn du OpenBot in einen Server einbauen willst, den du schon
+hast, baue dieselben Teile selbst. Lies `packages/openbot/src/app/Server.ts`, um
+zu sehen, wie `Server.layer` die App einmal baut und vor der Einrichtung mit
+`SetupRequired` antwortet. Bewahre das Anmelde-Geheimnis in den
+Plattform-Einstellungen auf, nicht in deiner eigenen Umgebungsvariable. Jede
+Instanz muss dasselbe nutzen.
 
 ---
 
@@ -245,7 +299,9 @@ NodeRuntime.runMain(Development.launch)
 `Development.launch` liest dieselben Einstellungen wie `Launch.main` und
 `OPENBOT_DEV_PUBLIC_ORIGIN`. Wenn die Variablen `OPENBOT_DEV_S3_*` gesetzt sind,
 nutzt es diesen lokalen Objektspeicher für Dateien und legt seinen Bucket an.
-`Development.layer` ist der Server ohne diese Schritte. Er schreibt die
+`Development.layer` ist der Server ohne diese Schritte. Er braucht die
+Plattform-Dienste, zum Beispiel `NodeServices.layer` und
+`FetchHttpClient.layer`, und `Development.launch` gibt sie ihm. Er schreibt die
 Plattform-Einstellungen selbst. Darum braucht er kein Einrichtungsprogramm.
 `Development.developmentSecret` macht das Anmelde-Geheimnis aus dem ersten
 geheimen Schlüssel. So bleibt es nach einem Neustart gleich. Nutze den

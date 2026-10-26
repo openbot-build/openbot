@@ -1,13 +1,16 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
+	Array as Arr,
 	Context,
 	Deferred,
 	Effect,
 	Exit,
 	Layer,
 	Option,
+	Order,
+	Record as Rec,
 	Redacted,
+	Ref,
 	Schema,
 	Stream,
 } from "effect"
@@ -31,48 +34,77 @@ import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as ManagedChats from "../src/chats/ManagedChats.ts"
 import * as BackendLayers from "../src/app/BackendLayers.ts"
+import * as HostTools from "../src/chats/HostTools.ts"
+import * as ModelRegistry from "../src/models/ModelRegistry.ts"
+import * as ChatsFixture from "./ChatsFixture.ts"
 import { Backend } from "../src/app/Backend.ts"
 import * as Db from "../src/database/Database.ts"
 import * as BotFixture from "./BotFixture.ts"
 
 /** The tables that the Drizzle schema defines. The migrations must make the same tables. */
-const definedTables = [
-	...Object.values(DatabaseSchema),
-	...Object.values(AuthSchema),
-]
-	.flatMap((value) => (is(value, Table) ? [getTableName(value)] : []))
-	.sort()
+const definedTables = Arr.sort(
+	Arr.flatMap(
+		[...Rec.values(DatabaseSchema), ...Rec.values(AuthSchema)],
+		(value) => (is(value, Table) ? [getTableName(value)] : []),
+	),
+	Order.String,
+)
 
 /** The OpenBot data of a Chat. The table of Chats copies its Bot and kind into columns. */
 const { kind, chain } = BotFixture.direct()
 const host = { [chatHostId]: { bot: BotFixture.bot.id, kind, chain } }
 assert.strictEqual(chatHostId, "@openbot-build/openbot/chat-host")
-/** Starts a new PostgreSQL. It stops when the test ends. */
-const startDatabase = Effect.acquireRelease(
-	Effect.promise(() => PostgresTest.start()),
-	(database) => Effect.promise(() => database.close()),
-)
-/** The OpenBot database layer for a PostgreSQL address. */
-const databaseLayer = (url: string) =>
-	DatabasePostgres.layer({ databaseUrl: Redacted.make(url) }).pipe(
-		Layer.provide(NodeServices.layer),
-	)
+/**
+ * The OpenBot database layer over a new PostgreSQL. Each test gets its own
+ * layer, so each test starts with an empty database.
+ */
+const database = Layer.unwrap(
+	Effect.map(PostgresTest.start, (database) =>
+		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
+	),
+).pipe(Layer.provideMerge(NodeServices.layer))
 /** An Item as JSON, the way the store keeps it. */
 const itemJson = (id: string, seq: number) =>
-	Schema.decodeSync(Schema.Json)(
-		Schema.encodeSync(Item.Record)({
-			id: Item.Id.make(id),
-			seq: Item.Seq.make(seq),
-			content: Prompt.make(id),
-		}),
-	)
+	Schema.encodeEffect(Item.Record)({
+		id: Item.Id.make(id),
+		seq: Item.Seq.make(seq),
+		content: Prompt.make(id),
+	}).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)))
 
-it.live(
-	"PostgreSQL saves the revision and the new Items of each Chat in one step within each namespace",
-	() =>
-		Effect.gen(function* () {
-			const database = yield* startDatabase
-			yield* Effect.gen(function* () {
+class ResidentConfiguration extends Context.Service<
+	ResidentConfiguration,
+	number
+>()("@openbot-build/openbot/test/Storage.test/ResidentConfiguration") {}
+
+const model = Layer.effect(
+	LanguageModel.LanguageModel,
+	LanguageModel.make({
+		generateText: () => Effect.succeed([]),
+		streamText: () =>
+			Stream.make(
+				Response.makePart("finish", {
+					reason: "stop",
+					usage: Response.Usage.make({
+						inputTokens: { total: 1 },
+						outputTokens: { total: 1 },
+					}),
+				}),
+			),
+	}),
+)
+
+/** One set of services serves all the steps of a test, like one running server. */
+const residentServices = ChatsFixture.services.pipe(
+	Layer.provideMerge(database),
+	Layer.provideMerge(model),
+	Layer.provideMerge(Layer.succeed(ResidentConfiguration, 7)),
+)
+
+it.layer(database, { excludeTestServices: true })((it) => {
+	it.effect(
+		"PostgreSQL saves the revision and the new Items of each Chat in one step within each namespace",
+		() =>
+			Effect.gen(function* () {
 				yield* Migration.initialize
 				yield* Migration.check
 				const db = yield* Db.make,
@@ -128,22 +160,28 @@ it.live(
 				const competing = yield* Effect.forEach(
 					["first", "second"],
 					(name) =>
-						StoredChats.save(db, "alice", {
-							chat: root.chat.id,
-							ref: { ...ref, revision: 2, seq: 1 },
-							revision: 2,
-							expected: 1,
-							items: [
-								{ seq: 1, id: name, turn: null, value: itemJson(name, 1) },
-							],
-						}).pipe(Effect.exit),
+						Effect.flatMap(itemJson(name, 1), (value) =>
+							StoredChats.save(db, "alice", {
+								chat: root.chat.id,
+								ref: { ...ref, revision: 2, seq: 1 },
+								revision: 2,
+								expected: 1,
+								items: [{ seq: 1, id: name, turn: null, value }],
+							}).pipe(Effect.exit),
+						),
 					{ concurrency: 2 },
 				)
-				assert.strictEqual(competing.filter(Exit.isSuccess).length, 1)
-				assert.strictEqual(competing.filter(Exit.isFailure).length, 1)
+				assert.strictEqual(Arr.filter(competing, Exit.isSuccess).length, 1)
+				assert.deepStrictEqual(
+					Arr.map(
+						Arr.filterMap(competing, (exit) => Exit.findError(exit)),
+						(error) => error.reason,
+					),
+					["reference-conflict"],
+				)
 				const winner = competing[0]?._tag === "Success" ? "first" : "second"
 				assert.deepStrictEqual(
-					(yield* store.items(root.chat.id)).map((item) => item.id),
+					Arr.map(yield* store.items(root.chat.id), (item) => item.id),
 					[winner],
 				)
 				const current = yield* store.read(root.chat.id)
@@ -179,10 +217,11 @@ it.live(
 				assert.strictEqual(changed.chat.revision, 3)
 				assert.strictEqual(changed.chat.seq, 2)
 				assert.deepStrictEqual(
-					(yield* sql<{
-						id: string
-						seq: number
-					}>`SELECT id, seq FROM openbot_chat_items ORDER BY seq`).map(
+					Arr.map(
+						yield* sql<{
+							id: string
+							seq: number
+						}>`SELECT id, seq FROM openbot_chat_items ORDER BY seq`,
 						(row) => [row.id, Number(row.seq)],
 					),
 					[
@@ -190,8 +229,8 @@ it.live(
 						["input", 2],
 					],
 				)
-				const stale = yield* Effect.exit(
-					store.modifyEffect({
+				const stale = yield* store
+					.modifyEffect({
 						chat: root.chat.id,
 						expectedRevision: settings.chat.revision,
 						update: (view) =>
@@ -209,9 +248,12 @@ it.live(
 									},
 								}),
 							] as const),
-					}),
+					})
+					.pipe(Effect.flip)
+				assert.ok(
+					stale._tag === "ChatStoreError" &&
+						stale.reason === "reference-conflict",
 				)
-				assert.ok(Exit.isFailure(stale))
 				assert.deepStrictEqual(yield* store.read(root.chat.id), changed)
 				assert.strictEqual(
 					(yield* sql`SELECT id FROM openbot_chat_items`).length,
@@ -234,86 +276,62 @@ it.live(
 					0,
 				)
 				assert.deepStrictEqual(yield* fresh.read(other.chat.id), other)
-			}).pipe(
-				// The Chat store closes before the database.
-				Effect.scoped,
-				Effect.provide(databaseLayer(database.url)),
-			)
-		}),
-	{ timeout: 30000 },
-)
+			}),
+	)
+})
 
-it.live(
-	"database initialization creates the required tables and can run twice",
-	() =>
-		Effect.gen(function* () {
-			const database = yield* startDatabase
-			yield* Effect.gen(function* () {
-				const before = yield* Effect.exit(Migration.check)
-				assert.ok(Exit.isFailure(before))
+it.layer(database, { excludeTestServices: true })((it) => {
+	it.effect(
+		"database initialization creates the required tables and can run twice",
+		() =>
+			Effect.gen(function* () {
+				const before = yield* Effect.flip(Migration.check)
+				assert.strictEqual(before.reason, "storage-failed")
 				yield* Migration.initialize
 				yield* Migration.check
 				yield* Migration.initialize
 				const sql = yield* SqlClient.SqlClient
-				const tables = (yield* sql<{
-					tablename: string
-				}>`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`)
-					.map((row) => row.tablename)
-					.sort()
+				const tables = Arr.sort(
+					Arr.map(
+						yield* sql<{
+							tablename: string
+						}>`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`,
+						(row) => row.tablename,
+					),
+					Order.String,
+				)
 				assert.deepStrictEqual(tables, definedTables)
-			}).pipe(Effect.provide(databaseLayer(database.url)))
-		}),
-	{ timeout: 30000 },
-)
+			}),
+	)
+})
 
-it.live(
-	"OpenBot builds resident user middleware once and releases it with the host Scope",
-	() =>
-		Effect.gen(function* () {
-			class ResidentConfiguration extends Context.Service<
-				ResidentConfiguration,
-				number
-			>()("@openbot-build/openbot/test/Storage.test/ResidentConfiguration") {}
-			const database = yield* startDatabase
-			const model = Layer.effect(
-				LanguageModel.LanguageModel,
-				LanguageModel.make({
-					generateText: () => Effect.succeed([]),
-					streamText: () =>
-						Stream.make(
-							Response.makePart("finish", {
-								reason: "stop",
-								usage: Response.Usage.make({
-									inputTokens: { total: 1 },
-									outputTokens: { total: 1 },
-								}),
-							}),
-						),
-				}),
-			)
-			// One set of services serves all the steps below, like one running server.
-			const services = databaseLayer(database.url).pipe(
-				Layer.provideMerge(model),
-				Layer.provideMerge(Layer.succeed(ResidentConfiguration, 7)),
-			)
-			let builds = 0
-			let active = 0
-			let turns = 0
+/**
+ * A host plugin with resources that live as long as its runtime. It counts
+ * its builds, its open resources and its Turns. A failing one also has a part
+ * whose build fails.
+ */
+const residentTools = (
+	counters: {
+		readonly builds: Ref.Ref<number>
+		readonly active: Ref.Ref<number>
+		readonly turns: Ref.Ref<number>
+	},
+	options: { readonly fail: boolean },
+) =>
+	Layer.effect(
+		HostTools.HostTools,
+		Effect.map(ResidentConfiguration, (configuration) => {
 			const plugin = Plugin.make({ id: Plugin.Id.make("openbot-resident") })(
 				() =>
 					Effect.gen(function* () {
-						assert.strictEqual(yield* ResidentConfiguration, 7)
-						builds++
+						// The host gives its services to the plugin when it builds the layer.
+						assert.strictEqual(configuration, 7)
+						yield* Ref.update(counters.builds, (n) => n + 1)
 						const ready = yield* Deferred.make<void>()
 						yield* Effect.forkScoped(
 							Effect.acquireRelease(
-								Effect.sync(() => {
-									active++
-								}),
-								() =>
-									Effect.sync(() => {
-										active--
-									}),
+								Ref.update(counters.active, (n) => n + 1),
+								() => Ref.update(counters.active, (n) => n - 1),
 							).pipe(
 								Effect.andThen(Deferred.succeed(ready, undefined)),
 								Effect.andThen(Effect.never),
@@ -322,23 +340,43 @@ it.live(
 						yield* Deferred.await(ready)
 						return (next, options) =>
 							Stream.unwrap(
-								Effect.sync(() => {
-									assert.strictEqual(active, 1)
-									turns++
+								Effect.gen(function* () {
+									assert.strictEqual(yield* Ref.get(counters.active), 1)
+									yield* Ref.update(counters.turns, (n) => n + 1)
 									return next(options)
 								}),
 							)
 					}),
 			)
-			yield* Effect.gen(function* () {
+			const failed = Plugin.make({ id: Plugin.Id.make("failed") })(() =>
+				Effect.die("construction-failed"),
+			)
+			return HostTools.HostTools.of({
+				plugin: options.fail ? PluginComposition.merge(plugin, failed) : plugin,
+			})
+		}),
+	)
+
+it.layer(residentServices, { excludeTestServices: true })((it) => {
+	it.effect(
+		"OpenBot builds resident host middleware once and releases it with the host Scope",
+		() =>
+			Effect.gen(function* () {
+				const counters = {
+					builds: yield* Ref.make(0),
+					active: yield* Ref.make(0),
+					turns: yield* Ref.make(0),
+				}
+				const { builds, active, turns } = counters
 				yield* Migration.initialize
+				const answers = yield* LanguageModel.LanguageModel
 				yield* Effect.scoped(
 					Effect.gen(function* () {
-						const instance = yield* ManagedChats.make({
-							runtime: { plugin },
-						})
-						assert.strictEqual(builds, 1)
-						assert.strictEqual(active, 1)
+						const instance = yield* ManagedChats.make(
+							ChatsFixture.models(answers),
+						)
+						assert.strictEqual(yield* Ref.get(builds), 1)
+						assert.strictEqual(yield* Ref.get(active), 1)
 						const initial = yield* instance.create(BotFixture.direct())
 						yield* instance.runtime.execute({
 							chat: initial.chat.id,
@@ -347,36 +385,39 @@ it.live(
 						yield* instance.runtime
 							.stream({ chat: initial.chat.id, input: "two" })
 							.pipe(Stream.runDrain)
-						assert.strictEqual(builds, 1)
-						assert.strictEqual(turns, 2)
-						assert.strictEqual(active, 1)
+						assert.strictEqual(yield* Ref.get(builds), 1)
+						assert.strictEqual(yield* Ref.get(turns), 2)
+						assert.strictEqual(yield* Ref.get(active), 1)
 					}),
-				)
-				assert.strictEqual(active, 0)
-				const failing = PluginComposition.merge(
-					plugin,
-					Plugin.make({ id: Plugin.Id.make("failed") })(() =>
-						Effect.fail("construction-failed" as const),
-					),
-				)
+				).pipe(Effect.provide(residentTools(counters, { fail: false })))
+				assert.strictEqual(yield* Ref.get(active), 0)
 				yield* Effect.scoped(
 					Effect.gen(function* () {
 						const backend = yield* Backend
 						yield* Effect.forEach([2, 3], (expectedBuilds) =>
 							Effect.gen(function* () {
 								const result = yield* backend
-									.get("failed-construction")
-									.pipe(Effect.result)
-								assert.strictEqual(result._tag, "Failure")
-								assert.strictEqual(builds, expectedBuilds)
-								assert.strictEqual(active, 0)
+									.get("failed-construction", {
+										kind: "member",
+										userId: "test-user",
+										organizationId: "test-organization",
+									})
+									.pipe(Effect.exit)
+								assert.ok(Exit.isFailure(result))
+								assert.strictEqual(yield* Ref.get(builds), expectedBuilds)
+								assert.strictEqual(yield* Ref.get(active), 0)
 							}),
 						)
 					}),
 				).pipe(
-					Effect.provide(BackendLayers.layer({ runtime: { plugin: failing } })),
+					Effect.provide(
+						BackendLayers.layer().pipe(
+							Layer.provide(residentTools(counters, { fail: true })),
+							// The build fails before the runtime reads the model registry.
+							Layer.provide(Layer.mock(ModelRegistry.ModelRegistry, {})),
+						),
+					),
 				)
-			}).pipe(Effect.provide(services))
-		}),
-	{ timeout: 30000 },
-)
+			}),
+	)
+})

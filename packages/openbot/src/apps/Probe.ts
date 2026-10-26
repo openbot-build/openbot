@@ -1,4 +1,3 @@
-// @effect-diagnostics strictEffectProvide:off
 import { ConnectionsApi as Api } from "@openbot-build/api"
 import {
 	AppConnections,
@@ -9,6 +8,7 @@ import {
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { OutboundPolicy } from "../network/OutboundPolicy.ts"
+import * as Failures from "../app/Failures.ts"
 import { Context, Effect, Layer } from "effect"
 
 export class Probe extends Context.Service<
@@ -55,6 +55,7 @@ export const layerWithNetwork = (
 							: { resourceMetadataUrl: error.resourceMetadataUrl }),
 					} as const),
 				),
+				// @effect-diagnostics-next-line strictEffectProvide:off -- Each check builds its own short-lived store and network for one handshake.
 				Effect.provide(
 					Layer.mergeAll(
 						MemoryStore.layer,
@@ -64,7 +65,7 @@ export const layerWithNetwork = (
 						network(input.connection),
 					),
 				),
-				Effect.mapError(() =>
+				Failures.replace("App connection check failed", () =>
 					Api.ConnectionConfigurationInvalid.make({
 						message:
 							"The App connection could not be checked. Check its address and required configuration, then try again.",

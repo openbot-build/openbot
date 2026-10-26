@@ -1,4 +1,4 @@
-import { Effect, Option, Record as EffectRecord } from "effect"
+import { Effect, Option, Record as Rec } from "effect"
 import * as Chat from "../chat/Chat.ts"
 import * as Bot from "../bot/Bot.ts"
 import type * as Plugin from "./Plugin.ts"
@@ -18,14 +18,15 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 			input.plugin.store.definition.scope === "state"
 				? view.state
 				: view.chat.business
+		// The stored record type does not know the type of the plugin store's codec.
 		const read = (view: Chat.View<P>): Option.Option<A> =>
-			Option.fromUndefinedOr(scoped(view)[key] as A | undefined)
+			Rec.get(scoped(view), key) as Option.Option<A>
 		const replace = (
 			view: Chat.View<P>,
 			data: Option.Option<A>,
 		): ChatStore.Mutation<P> => {
 			const value = Option.match(data, {
-				onNone: () => EffectRecord.remove(scoped(view), key),
+				onNone: () => Rec.remove(scoped(view), key),
 				onSome: (data) => ({ ...scoped(view), [key]: data }),
 			})
 			return input.plugin.store.definition.scope === "state"

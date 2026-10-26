@@ -1,7 +1,15 @@
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { PgClient } from "@effect/sql-pg"
 import { and, desc, eq, lt, or } from "drizzle-orm"
-import { Clock, Context, Effect, Layer } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Effect,
+	Layer,
+	Option,
+	pipe,
+} from "effect"
 import { developerNotices, developerSubscriptions } from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
@@ -150,10 +158,12 @@ export const make: Effect.Effect<
 							),
 						),
 				)
-				return overview.apps.map((app) => ({
+				return Arr.map(overview.apps, (app) => ({
 					cardUrl: app.cardUrl,
-					enabled:
-						saved.find((row) => row.cardUrl === app.cardUrl)?.enabled ?? true,
+					enabled: pipe(
+						Arr.findFirst(saved, (row) => row.cardUrl === app.cardUrl),
+						Option.match({ onNone: () => true, onSome: (row) => row.enabled }),
+					),
 				}))
 			}),
 		subscribe: (owner, value) =>

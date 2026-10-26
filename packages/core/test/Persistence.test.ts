@@ -1,13 +1,13 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Deferred,
 	Effect,
-	Exit,
 	Fiber,
 	Option,
 	Order,
+	Predicate,
+	Record as Rec,
 	Schema,
 	Stream,
 } from "effect"
@@ -50,7 +50,7 @@ it.effect(
 			const persist = Effect.suspend(() =>
 				fail
 					? Effect.fail(
-							new ChatStore.ChatStoreError({
+							ChatStore.ChatStoreError.make({
 								reason: "storage-failed",
 								message: "fixture",
 							}),
@@ -68,7 +68,8 @@ it.effect(
 				onRemove: (ref) =>
 					persist.pipe(Effect.andThen(persistence.remove(ref.id))),
 			})
-			assert.ok(Exit.isFailure(yield* Effect.exit(store.create({}))))
+			const createError = yield* Effect.flip(store.create({}))
+			assert.strictEqual(createError.reason, "storage-failed")
 			assert.strictEqual((yield* store.list).length, 0)
 			fail = false
 			const view = yield* store.create({})
@@ -106,16 +107,17 @@ it.effect(
 						] as const),
 				}),
 				store.remove(view.chat),
-			])
-				assert.ok(
-					Exit.isFailure(
-						yield* Effect.exit<
-							unknown,
-							Chat.ChatNotFound | ChatStore.ChatStoreError,
-							never
-						>(operation),
-					),
+			]) {
+				const error = yield* Effect.flip(
+					Effect.asVoid<
+						unknown,
+						Chat.ChatNotFound | ChatStore.ChatStoreError,
+						never
+					>(operation),
 				)
+				assert.ok(error._tag === "ChatStoreError")
+				assert.strictEqual(error.reason, "storage-failed")
+			}
 			assert.deepStrictEqual(yield* store.read(chat), view)
 			assert.deepStrictEqual(yield* store.items(chat), [])
 			assert.strictEqual((yield* store.list).length, 1)
@@ -144,7 +146,7 @@ it.effect(
 					Effect.gen(function* () {
 						gets++
 						if (reject)
-							return yield* new ChatStore.ChatStoreError({
+							return yield* ChatStore.ChatStoreError.make({
 								reason: "storage-failed",
 								message: "Fixture unavailable",
 							})
@@ -162,7 +164,7 @@ it.effect(
 					}),
 				save: (delta) =>
 					Effect.suspend(() => {
-						saves = EffectArray.append(saves, delta)
+						saves = Arr.append(saves, delta)
 						return base.save(delta)
 					}),
 			}
@@ -186,8 +188,8 @@ it.effect(
 			assert.strictEqual(saves[0]!.expected, initial.chat.revision)
 			assert.strictEqual(saves[0]!.revision, settings.view.chat.revision)
 			assert.strictEqual(saves[0]!.items.length, 0)
-			assert.strictEqual(Object.hasOwn(saves[0]!, "state"), false)
-			assert.strictEqual(Object.hasOwn(saves[0]!, "turn"), false)
+			assert.strictEqual(Predicate.hasProperty(saves[0]!, "state"), false)
+			assert.strictEqual(Predicate.hasProperty(saves[0]!, "turn"), false)
 			saves = []
 			yield* store.modifyEffect({
 				chat,
@@ -202,10 +204,10 @@ it.effect(
 					] as const),
 			})
 			assert.deepStrictEqual(
-				saves[0]!.items.map((item) => [item.seq, item.id, item.turn]),
+				Arr.map(saves[0]!.items, (item) => [item.seq, item.id, item.turn]),
 				[[1, "first", null]],
 			)
-			assert.strictEqual(Object.hasOwn(saves[0]!, "state"), false)
+			assert.strictEqual(Predicate.hasProperty(saves[0]!, "state"), false)
 			saves = []
 			const turn: Turn.Record = {
 				id: Turn.Id.make("turn"),
@@ -227,7 +229,7 @@ it.effect(
 						Effect.succeed([undefined, Option.some(mutation)] as const),
 				})
 			assert.strictEqual(saves[0]!.turn?.id, "turn")
-			assert.strictEqual(Object.hasOwn(saves[1]!, "turn"), false)
+			assert.strictEqual(Predicate.hasProperty(saves[1]!, "turn"), false)
 			saves = []
 			const changed = yield* store.modifyEffect({
 				chat,
@@ -245,13 +247,15 @@ it.effect(
 						}),
 					] as const),
 			})
-			assert.strictEqual(Object.hasOwn(saves[0]!, "state"), true)
+			assert.strictEqual(Predicate.hasProperty(saves[0]!, "state"), true)
 			const fresh = yield* ChatStoreRepository.make({
 				definition,
 				persistence: storage,
 			})
 			reject = true
-			assert.ok(Exit.isFailure(yield* Effect.exit(fresh.read(chat))))
+			const readError = yield* Effect.flip(fresh.read(chat))
+			assert.ok(readError._tag === "ChatStoreError")
+			assert.strictEqual(readError.reason, "storage-failed")
 			reject = false
 			assert.deepStrictEqual(yield* fresh.read(chat), changed.view)
 			assert.deepStrictEqual(
@@ -276,10 +280,19 @@ it.effect("an interruption before the durable save publishes no Chat", () =>
 					Effect.andThen(storage.save(delta)),
 				),
 		})
+		const first = yield* store
+			.changes()
+			.pipe(Stream.runHead, Effect.forkChild({ startImmediately: true }))
 		const fiber = yield* Effect.forkChild(store.create({}))
 		yield* Deferred.await(entered)
 		yield* Fiber.interrupt(fiber)
 		assert.deepStrictEqual(yield* store.list, [])
+		yield* Deferred.succeed(release, undefined)
+		const later = yield* store.create({})
+		// The first change is the later Chat, so the interrupted create published nothing.
+		const head = yield* Fiber.join(first)
+		assert.ok(Option.isSome(head) && head.value._tag === "Committed")
+		assert.deepStrictEqual(head.value.view, later)
 	}),
 )
 
@@ -414,19 +427,16 @@ it.effect(
 			})
 			const json = yield* Schema.encodeEffect(definition.schema)(restored.state)
 			assert.deepStrictEqual(
-				EffectArray.sort(Object.keys(json as Schema.JsonObject), Order.String),
+				Arr.sort(Rec.keys(json as Record<string, Schema.Json>), Order.String),
 				["conversation", "future"],
 			)
-			assert.ok(
-				Exit.isFailure(
-					yield* Effect.exit(
-						Schema.decodeEffect(definition.schema)({
-							plugins: {},
-							unrecognizedPlugins: {},
-						}),
-					),
-				),
+			const decodeError = yield* Effect.flip(
+				Schema.decodeEffect(definition.schema)({
+					plugins: {},
+					unrecognizedPlugins: {},
+				}),
 			)
+			assert.strictEqual(decodeError._tag, "SchemaError")
 		}),
 )
 

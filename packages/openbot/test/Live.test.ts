@@ -1,11 +1,32 @@
-import { assert, it } from "@effect/vitest"
-import { AuthApi, LiveApi } from "@openbot-build/api"
+import { NodeHttpClient, NodeSocket } from "@effect/platform-node"
+import { assert, layer } from "@effect/vitest"
+import {
+	ChatSummary,
+	ChatView,
+	LiveApi,
+	MessageReceipt,
+	UserTokensApi,
+} from "@openbot-build/api"
 import { Live } from "@openbot-build/core"
-import { Effect, Redacted, Schema, Stream, Queue } from "effect"
-import { request } from "node:http"
+import {
+	Array as Arr,
+	Effect,
+	Fiber,
+	Layer,
+	Option,
+	pipe,
+	Queue,
+	Ref,
+	Schema,
+	Stream,
+	String as Str,
+	SubscriptionRef,
+} from "effect"
+import { HttpClient, HttpClientRequest } from "effect/http"
+import { Socket } from "effect/socket"
 import * as LiveBackends from "../src/models/LiveBackends.ts"
 import * as BrowserHost from "./BrowserHost.ts"
-import { withCookie } from "./Caller.ts"
+import * as Caller from "./Caller.ts"
 import { message, settled, type Send } from "./Messages.ts"
 
 const publicOrigin = "https://live.example.com"
@@ -22,13 +43,56 @@ const capabilities: Live.Capabilities = {
 }
 const answerSound = new Uint8Array([1, 2, 3, 4])
 
+type ServerMessage = LiveApi.LiveServerMessage
+
+const decodeServerMessage = Schema.decodeEffect(
+	Schema.fromJsonString(LiveApi.LiveServerMessage),
+)
+const encodeServerMessages = Schema.encodeEffect(
+	Schema.fromJsonString(Schema.Array(LiveApi.LiveServerMessage)),
+)
+const encodeClientMessage = Schema.encodeEffect(
+	Schema.fromJsonString(LiveApi.LiveClientMessage),
+)
+
+/** An answer that names what went wrong. */
+const Tagged = Schema.Struct({ _tag: Schema.String })
+const Created = Schema.Struct({ id: Schema.String })
+const Organizations = Schema.Struct({
+	items: Schema.Array(Schema.Struct({ id: Schema.String })),
+})
+const TurnAnswer = Schema.Struct({
+	turn: Schema.Struct({
+		status: Schema.Struct({
+			_tag: Schema.String,
+			result: Schema.optionalKey(Schema.Struct({ text: Schema.String })),
+		}),
+	}),
+})
+
+/** The Live client did not get the message that it waited for. */
+class NoSuchMessage extends Schema.TaggedError<
+	NoSuchMessage,
+	{ readonly brand: unique symbol }
+>()("NoSuchMessage", { messages: Schema.String }) {
+	override get message() {
+		return "No such message: " + this.messages
+	}
+}
+
+/** True for a server message of this type. */
+const isType =
+	<T extends ServerMessage["type"]>(type: T) =>
+	(message: ServerMessage): message is Extract<ServerMessage, { type: T }> =>
+		message.type === type
+
 /**
  * A backend that hears one fixed question in any sound, and gives one fixed answer for
  * each answer request. It keeps every input that OpenBot sent.
  */
-const fakeBackend = () => {
-	const inputs: Array<Live.Input> = []
-	let answers = 0
+const fakeBackend = Effect.gen(function* () {
+	const inputs = yield* Ref.make<ReadonlyArray<Live.Input>>([])
+	const answers = yield* Ref.make(0)
 	const backend: LiveBackends.LiveBackend = {
 		kind: "openai",
 		make: ({ providerId, modelId }) =>
@@ -43,7 +107,7 @@ const fakeBackend = () => {
 							Effect.gen(function* () {
 								const error = Live.unsupported(capabilities, input)
 								if (error !== undefined) return yield* error
-								inputs.push(input)
+								yield* Ref.update(inputs, Arr.append(input))
 								if (input._tag === "Audio")
 									yield* Queue.offerAll(events, [
 										Live.Event.SpeechStarted(),
@@ -56,8 +120,9 @@ const fakeBackend = () => {
 										}),
 									])
 								if (input._tag === "Respond") {
-									answers++
-									const itemId = "answer_" + answers
+									const itemId =
+										"answer_" +
+										(yield* Ref.updateAndGet(answers, (count) => count + 1))
 									yield* Queue.offerAll(events, [
 										Live.Event.OutputAudio({ itemId, bytes: answerSound }),
 										Live.Event.OutputTranscript({ itemId, delta: "It is " }),
@@ -77,351 +142,433 @@ const fakeBackend = () => {
 					}),
 			}),
 	}
-	return { backend, inputs }
-}
+	return { backend, inputs: Ref.get(inputs) }
+})
 
-/** A Live client that keeps every message and every sound frame. */
-const connect = (url: string, headers: Record<string, string>) => {
-	const socket = new WebSocket(url, { headers } as never)
-	socket.binaryType = "arraybuffer"
-	const messages: Array<LiveApi.LiveServerMessage> = []
-	const sounds: Array<Uint8Array> = []
-	const waiters: Array<() => void> = []
-	socket.onmessage = (event) => {
-		if (typeof event.data === "string")
-			messages.push(
-				Schema.decodeSync(Schema.fromJsonString(LiveApi.LiveServerMessage))(
-					event.data,
-				),
-			)
-		else sounds.push(new Uint8Array(event.data as ArrayBuffer))
-		for (const wake of waiters.splice(0)) wake()
+/**
+ * Opens a Live client that keeps every message and every sound frame. It
+ * gives the client when the socket is open. The socket closes at the latest
+ * when the test ends.
+ */
+const connect = Effect.fn("Live.connect")(function* (
+	url: string,
+	headers: Record<string, string>,
+) {
+	const socket = yield* Socket.makeWebSocket(url, { headers })
+	const reader = yield* socket.reader
+	const writer = yield* socket.writer
+	const messages = yield* SubscriptionRef.make<ReadonlyArray<ServerMessage>>([])
+	const sounds = yield* Ref.make<ReadonlyArray<Uint8Array>>([])
+	const receive = (frame: string | Uint8Array) =>
+		typeof frame === "string"
+			? Effect.flatMap(decodeServerMessage(frame), (received) =>
+					SubscriptionRef.update(messages, Arr.append(received)),
+				)
+			: Ref.update(sounds, Arr.append(frame))
+	// The pull fails when the socket closes, after a clean close too. That is
+	// the normal end of the reading. Any other failure, such as a message that
+	// does not decode, makes `until` fail at once.
+	const reading = yield* reader.pull.pipe(
+		Effect.flatMap((frames) =>
+			Effect.forEach(frames, receive, { discard: true }),
+		),
+		Effect.forever,
+		Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+		Effect.forkScoped,
+	)
+	/** Waits until the messages pass the test, at most 20 seconds. */
+	const until = (test: (messages: ReadonlyArray<ServerMessage>) => boolean) =>
+		SubscriptionRef.changes(messages).pipe(
+			Stream.filter(test),
+			Stream.runHead,
+			Effect.asVoid,
+			Effect.raceFirst(Effect.andThen(Fiber.join(reading), Effect.never)),
+			Effect.timeoutOrElse({
+				duration: "20 seconds",
+				orElse: () =>
+					SubscriptionRef.get(messages).pipe(
+						Effect.flatMap(encodeServerMessages),
+						Effect.flatMap((text) =>
+							Effect.fail(NoSuchMessage.make({ messages: text })),
+						),
+					),
+			}),
+		)
+	return {
+		messages: SubscriptionRef.get(messages),
+		sounds: Ref.get(sounds),
+		until,
+		send: writer.write,
+		close: writer.write(new Socket.CloseEvent()),
 	}
-	const until = async (
-		test: (messages: ReadonlyArray<LiveApi.LiveServerMessage>) => boolean,
-	) => {
-		const end = Date.now() + 20000
-		while (!test(messages)) {
-			if (Date.now() > end)
-				throw new Error("No such message: " + JSON.stringify(messages))
-			await new Promise<void>((resolve) => {
-				waiters.push(resolve)
-				setTimeout(resolve, 200)
-			})
-		}
-	}
-	const opened = new Promise<void>((resolve, reject) => {
-		socket.onopen = () => resolve()
-		socket.onerror = () => reject(new Error("The WebSocket did not open"))
-	})
-	return { socket, messages, sounds, until, opened }
-}
+})
 
 /** The status of a WebSocket handshake that the server refuses. */
-const handshake = (url: string, headers: Record<string, string>) =>
-	new Promise<number>((resolve, reject) => {
-		const call = request(url, {
-			headers: {
-				connection: "Upgrade",
-				upgrade: "websocket",
-				"sec-websocket-version": "13",
-				"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-				...headers,
-			},
-		})
-		call.on("response", (response) => resolve(response.statusCode ?? 0))
-		call.on("upgrade", (response, socket) => {
-			socket.destroy()
-			resolve(response.statusCode ?? 0)
-		})
-		call.on("error", reject)
-		call.end()
+const handshake = (
+	client: HttpClient.HttpClient,
+	url: string,
+	headers: Record<string, string>,
+) =>
+	Effect.map(
+		client.execute(
+			HttpClientRequest.get(url, {
+				headers: {
+					connection: "Upgrade",
+					upgrade: "websocket",
+					"sec-websocket-version": "13",
+					"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+					...headers,
+				},
+			}),
+		),
+		(response) => response.status,
+	)
+
+/** Reads the JSON body of an answer with a schema, and checks its status. */
+const json = <S extends Schema.Constraint>(
+	schema: S,
+	call: Caller.Call,
+	status = 200,
+) => Effect.flatMap(call, Caller.json(schema, status))
+
+/** Checks the status of an answer, and gives its body as text. */
+const text = (call: Caller.Call, status = 200) =>
+	Effect.gen(function* () {
+		const response = yield* call
+		const body = yield* response.text
+		assert.strictEqual(response.status, status, body)
+		return body
 	})
 
-it(
-	"a person talks with a Bot in a live Chat, and only the Live session starts its Turns",
-	{ timeout: 180000 },
-	async () => {
-		const fake = fakeBackend()
-		const host = await BrowserHost.start({
-			publicOrigin,
-			liveBackends: LiveBackends.layer([fake.backend]),
-			bots: { memory: false },
-		})
-		try {
-			const send = withCookie({ address: host.address, publicOrigin })
-			const json = async (response: Promise<Response>, status = 200) => {
-				const value = await response
-				const body = await value.text()
-				assert.strictEqual(value.status, status, body)
-				return body.length === 0 ? undefined : JSON.parse(body)
-			}
-			const alice = await host.login("alice")
-			const asAlice: Send = (path, method, payload) =>
-				send(alice.session, path, method, payload)
-			const botId = await host.defaultBot(alice.session)
-			const direct = await message(asAlice, botId, "Hello")
-			await settled(asAlice, direct.chat)
-			const cookie =
-				AuthApi.SessionCookie +
-				"=" +
-				encodeURIComponent(Redacted.value(alice.session))
-			const urlOf = (chat: string) =>
-				host.address.replace(/^http/, "ws") + `/v1/chats/${chat}/live`
+layer(
+	Layer.merge(BrowserHost.layerPlatform, NodeSocket.layerWebSocketConstructor),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
+	it.effect(
+		"a person talks with a Bot in a live Chat, and only the Live session starts its Turns",
+		() =>
+			Effect.gen(function* () {
+				const fake = yield* fakeBackend
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					liveBackends: LiveBackends.layer([fake.backend]),
+					bots: { memory: false },
+				})
+				// The fetch client cannot send an upgrade request, so the
+				// handshakes use the Undici client.
+				const dispatcher = yield* NodeHttpClient.makeDispatcher
+				const upgrades = yield* NodeHttpClient.makeUndici.pipe(
+					Effect.provideService(NodeHttpClient.Dispatcher, dispatcher),
+				)
+				const address = yield* host.address
+				const send = Caller.withCookie({ address, publicOrigin })
+				const alice = yield* host.login("alice")
+				const asAlice: Send = (path, method, payload) =>
+					send(alice.session, path, method, payload)
+				const botId = yield* host.defaultBot(alice.session)
+				const direct = yield* message(asAlice, botId, "Hello")
+				yield* settled(asAlice, direct.chat)
+				const cookie = Caller.sessionCookie(alice.session)
+				const urlOf = (chat: string) =>
+					Str.replace(/^http/, "ws")(address) + `/v1/chats/${chat}/live`
+				const knock = (url: string, headers: Record<string, string>) =>
+					handshake(upgrades, Str.replace(/^ws/, "http")(url), headers)
 
-			// Without a Live model, OpenBot makes no live Chat.
-			const none = await json(
-				send(alice.session, `/v1/bots/${botId}/live`, "POST", {}),
-				409,
-			)
-			assert.strictEqual(none._tag, "LiveUnavailable")
+				// Without a Live model, OpenBot makes no live Chat.
+				const none = yield* json(
+					Tagged,
+					send(alice.session, `/v1/bots/${botId}/live`, "POST", {}),
+					409,
+				)
+				assert.strictEqual(none._tag, "LiveUnavailable")
 
-			// Alice adds a Live model with the key of her organization.
-			await json(
-				send(alice.session, "/v1/organization/models", "POST", {
-					id: "talk",
-					name: "Talk",
-					type: "live",
-					reasoningEfforts: [],
-					serviceTiers: [],
-				}),
-			)
-			const provider = await json(
-				send(alice.session, "/v1/organization/model_providers", "POST", {
-					kind: "openai",
-					name: "Realtime",
-					apiKey: "sk-live-0123456789",
-					models: [{ model: "talk", modelOwner: "organization" }],
-				}),
-			)
-			const talk = {
-				_tag: "Config.Selection",
-				provider: provider.id,
-				model: "talk",
-			}
+				// Alice adds a Live model with the key of her organization.
+				yield* text(
+					send(alice.session, "/v1/organization/models", "POST", {
+						id: "talk",
+						name: "Talk",
+						type: "live",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				)
+				const provider = yield* json(
+					Created,
+					send(alice.session, "/v1/organization/model_providers", "POST", {
+						kind: "openai",
+						name: "Realtime",
+						apiKey: "sk-live-0123456789",
+						models: [{ model: "talk", modelOwner: "organization" }],
+					}),
+				)
+				const talk = {
+					_tag: "Config.Selection",
+					provider: provider.id,
+					model: "talk",
+				}
 
-			// Only a live Chat has a Live session.
-			assert.strictEqual(
-				await handshake(urlOf(direct.chat).replace(/^ws/, "http"), {
+				// Only a live Chat has a Live session.
+				assert.strictEqual(
+					yield* knock(urlOf(direct.chat), {
+						cookie,
+						origin: publicOrigin,
+					}),
+					409,
+				)
+
+				// A live Chat gets the Live model. Each call makes a new one.
+				const created = yield* json(
+					ChatView,
+					send(alice.session, `/v1/bots/${botId}/live`, "POST", {}),
+					201,
+				)
+				assert.strictEqual(created.chat.kind, "live")
+				assert.strictEqual(created.chat.settings.model?.model, "talk")
+				const chat: string = created.chat.id
+				const liveUrl = urlOf(chat)
+
+				// A live Chat takes only Live models, and other Chats never take them.
+				const textModel = {
+					_tag: "Config.Selection",
+					provider: "fixture",
+					model: "fixture-model",
+				}
+				const toText = yield* json(
+					Tagged,
+					send(alice.session, `/v1/chats/${chat}`, "PATCH", {
+						expected: created.chat.revision,
+						model: textModel,
+					}),
+					400,
+				)
+				assert.strictEqual(toText._tag, "ChatModelInvalid")
+				const directView = yield* json(
+					ChatView,
+					send(alice.session, `/v1/chats/${direct.chat}`),
+				)
+				const toLive = yield* json(
+					Tagged,
+					send(alice.session, `/v1/chats/${direct.chat}`, "PATCH", {
+						expected: directView.chat.revision,
+						model: talk,
+					}),
+					400,
+				)
+				assert.strictEqual(toLive._tag, "ChatModelInvalid")
+
+				// The default list has live Chats.
+				const listed = yield* json(
+					Schema.Array(ChatSummary),
+					send(alice.session, "/v1/chats"),
+				)
+				assert.ok(Arr.some(listed, (summary) => summary.chat.id === chat))
+
+				// While no Live session is open, a message waits in the inbox.
+				const waiting = yield* json(
+					MessageReceipt,
+					send(alice.session, `/v1/chats/${chat}/messages`, "POST", {
+						input: "Remember me",
+					}),
+					202,
+				)
+				assert.strictEqual(waiting.delivery, "queued")
+				assert.strictEqual(waiting.turn, null)
+				const idle = yield* json(
+					ChatView,
+					send(alice.session, `/v1/chats/${chat}`),
+				)
+				assert.strictEqual(idle.status, "Idle")
+
+				// A page on another site cannot open the socket with the cookie.
+				assert.strictEqual(
+					yield* knock(liveUrl, {
+						cookie,
+						origin: "https://other.example.com",
+					}),
+					403,
+				)
+				// A format that the model does not have fails before the upgrade.
+				assert.strictEqual(
+					yield* knock(liveUrl + "?inputFormat=opus@48000", {
+						cookie,
+						origin: publicOrigin,
+					}),
+					409,
+				)
+
+				const client = yield* connect(liveUrl + "?voice=calm", {
 					cookie,
 					origin: publicOrigin,
-				}),
-				409,
-			)
+				})
+				yield* client.until((all) => Arr.some(all, isType("session.ready")))
+				const ready = Arr.findFirst(
+					yield* client.messages,
+					isType("session.ready"),
+				)
+				assert.ok(Option.isSome(ready))
+				assert.strictEqual(ready.value.model, "talk")
+				assert.deepStrictEqual(ready.value.audio, { input: pcm, output: pcm })
+				assert.strictEqual(ready.value.voice, "calm")
 
-			// A live Chat gets the Live model. Each call makes a new one.
-			const created = await json(
-				send(alice.session, `/v1/bots/${botId}/live`, "POST", {}),
-				201,
-			)
-			assert.strictEqual(created.chat.kind, "live")
-			assert.strictEqual(created.chat.settings.model.model, "talk")
-			const chat: string = created.chat.id
-			const liveUrl = urlOf(chat)
+				// The session runs the message that waited, and the client hears the Turn.
+				const completedTurns = (all: ReadonlyArray<ServerMessage>) =>
+					Arr.filter(all, isType("turn.completed"))
+				yield* client.until((all) => completedTurns(all).length === 1)
+				assert.ok(
+					Arr.some(
+						yield* fake.inputs,
+						(input) => input._tag === "Text" && input.text === "Remember me",
+					),
+				)
+				assert.deepStrictEqual(yield* client.sounds, [answerSound])
 
-			// A live Chat takes only Live models, and other Chats never take them.
-			const text = {
-				_tag: "Config.Selection",
-				provider: "fixture",
-				model: "fixture-model",
-			}
-			const toText = await json(
-				send(alice.session, `/v1/chats/${chat}`, "PATCH", {
-					expected: created.chat.revision,
-					model: text,
-				}),
-				400,
-			)
-			assert.strictEqual(toText._tag, "ChatModelInvalid")
-			const directView = await json(
-				send(alice.session, `/v1/chats/${direct.chat}`),
-			)
-			const toLive = await json(
-				send(alice.session, `/v1/chats/${direct.chat}`, "PATCH", {
-					expected: directView.chat.revision,
-					model: talk,
-				}),
-				400,
-			)
-			assert.strictEqual(toLive._tag, "ChatModelInvalid")
+				// Alice talks. The Bot answers with sound and text, in a Turn.
+				yield* client.send(new Uint8Array([9, 9, 9, 9]))
+				yield* client.until((all) => completedTurns(all).length === 2)
+				const all = yield* client.messages
+				const types = Arr.map(all, (received) => received.type)
+				assert.ok(Arr.contains(types, "input.speech.started"))
+				assert.ok(Arr.contains(types, "input.transcript"))
+				assert.ok(Arr.contains(types, "turn.started"))
+				const completed = Arr.get(completedTurns(all), 1)
+				assert.ok(Option.isSome(completed))
+				assert.strictEqual(completed.value.status, "Completed")
+				assert.ok(
+					pipe(
+						all,
+						Arr.flatMap((received) =>
+							received.type === "output.transcript.delta"
+								? [received.delta]
+								: [],
+						),
+						Arr.join(""),
+						Str.endsWith("It is noon."),
+					),
+				)
+				assert.deepStrictEqual(yield* client.sounds, [answerSound, answerSound])
 
-			// The default list has live Chats.
-			const listed = await json(send(alice.session, "/v1/chats"))
-			assert.ok(
-				listed.some(
-					(summary: { readonly chat: { readonly id: string } }) =>
-						summary.chat.id === chat,
-				),
-			)
-
-			// While no Live session is open, a message waits in the inbox.
-			const waiting = await json(
-				send(alice.session, `/v1/chats/${chat}/messages`, "POST", {
-					input: "Remember me",
-				}),
-				202,
-			)
-			assert.strictEqual(waiting.delivery, "queued")
-			assert.strictEqual(waiting.turn, null)
-			const idle = await json(send(alice.session, `/v1/chats/${chat}`))
-			assert.strictEqual(idle.status, "Idle")
-
-			// A page on another site cannot open the socket with the cookie.
-			assert.strictEqual(
-				await handshake(liveUrl.replace(/^ws/, "http"), {
-					cookie,
-					origin: "https://other.example.com",
-				}),
-				403,
-			)
-			// A format that the model does not have fails before the upgrade.
-			assert.strictEqual(
-				await handshake(
-					liveUrl.replace(/^ws/, "http") + "?inputFormat=opus@48000",
-					{ cookie, origin: publicOrigin },
-				),
-				409,
-			)
-
-			const client = connect(liveUrl + "?voice=calm", {
-				cookie,
-				origin: publicOrigin,
-			})
-			await client.opened
-			await client.until((all) => all.some((m) => m.type === "session.ready"))
-			const ready = client.messages.find((m) => m.type === "session.ready")
-			assert.ok(ready?.type === "session.ready")
-			assert.strictEqual(ready.model, "talk")
-			assert.deepStrictEqual(ready.audio, { input: pcm, output: pcm })
-			assert.strictEqual(ready.voice, "calm")
-
-			// The session runs the message that waited, and the client hears the Turn.
-			const completedTurns = () =>
-				client.messages.filter((m) => m.type === "turn.completed")
-			await client.until(() => completedTurns().length === 1)
-			assert.ok(
-				fake.inputs.some(
-					(input) => input._tag === "Text" && input.text === "Remember me",
-				),
-			)
-			assert.deepStrictEqual(client.sounds, [answerSound])
-
-			// Alice talks. The Bot answers with sound and text, in a Turn.
-			client.socket.send(new Uint8Array([9, 9, 9, 9]))
-			await client.until(() => completedTurns().length === 2)
-			const types = client.messages.map((m) => m.type)
-			assert.ok(types.includes("input.speech.started"))
-			assert.ok(types.includes("input.transcript"))
-			assert.ok(types.includes("turn.started"))
-			const completed = completedTurns()[1]
-			assert.ok(completed?.type === "turn.completed")
-			assert.strictEqual(completed.status, "Completed")
-			assert.ok(
-				client.messages
-					.flatMap((m) =>
-						m.type === "output.transcript.delta" ? [m.delta] : [],
-					)
-					.join("")
-					.endsWith("It is noon."),
-			)
-			assert.deepStrictEqual(client.sounds, [answerSound, answerSound])
-
-			// The Turn is in the history of the Chat, like a text Turn.
-			const turn = await json(
-				send(alice.session, `/v1/chats/${chat}/turns/${completed.turnId}`),
-			)
-			assert.strictEqual(turn.turn.status._tag, "Completed")
-			assert.strictEqual(turn.turn.status.result.text, "It is noon.")
-			const items = JSON.stringify(
-				await json(
+				// The Turn is in the history of the Chat, like a text Turn.
+				const turn = yield* json(
+					TurnAnswer,
 					send(
 						alice.session,
-						`/v1/chats/${chat}/turns/${completed.turnId}/items`,
+						`/v1/chats/${chat}/turns/${completed.value.turnId}`,
 					),
-				),
-			)
-			assert.match(items, /What time is it\?/)
+				)
+				assert.strictEqual(turn.turn.status._tag, "Completed")
+				assert.strictEqual(turn.turn.status.result?.text, "It is noon.")
+				const items = yield* text(
+					send(
+						alice.session,
+						`/v1/chats/${chat}/turns/${completed.value.turnId}/items`,
+					),
+				)
+				assert.match(items, /What time is it\?/)
 
-			// The backend got the Bot instructions for a talk with sound, and the sound.
-			const configured = fake.inputs.filter(
-				(input) => input._tag === "Configure",
-			)
-			const last = configured.at(-1)
-			assert.ok(last?._tag === "Configure")
-			assert.match(last.config.instructions, /talk with sound/)
-			assert.strictEqual(last.config.voice, "calm")
-			assert.ok(fake.inputs.some((input) => input._tag === "Audio"))
-			// The person said the text, so it does not go to the backend again.
-			assert.ok(
-				!fake.inputs.some(
-					(input) => input._tag === "Text" && input.text === "What time is it?",
-				),
-			)
+				// The backend got the Bot instructions for a talk with sound, and the sound.
+				const inputs = yield* fake.inputs
+				const last = Arr.last(Arr.filter(inputs, Live.Input.$is("Configure")))
+				assert.ok(Option.isSome(last))
+				assert.match(last.value.config.instructions, /talk with sound/)
+				assert.strictEqual(last.value.config.voice, "calm")
+				assert.ok(Arr.some(inputs, Live.Input.$is("Audio")))
+				// The person said the text, so it does not go to the backend again.
+				assert.ok(
+					!Arr.some(
+						inputs,
+						(input) =>
+							input._tag === "Text" && input.text === "What time is it?",
+					),
+				)
 
-			// Only one session for each live Chat.
-			const second = connect(liveUrl, { cookie, origin: publicOrigin })
-			await second.opened
-			await second.until((all) => all.some((m) => m.type === "error"))
-			second.socket.close()
-
-			// Typed text starts a Turn too, and goes to the backend as text.
-			client.socket.send(JSON.stringify({ type: "input.text", text: "Thanks" }))
-			await client.until(() => completedTurns().length === 3)
-			assert.ok(
-				fake.inputs.some(
-					(input) => input._tag === "Text" && input.text === "Thanks",
-				),
-			)
-			// A message that the backend does not support gives an error, and the session stays open.
-			client.socket.send(
-				JSON.stringify({ type: "output.truncate", itemId: "x", audioEndMs: 1 }),
-			)
-			await client.until((all) =>
-				all.some((m) => m.type === "error" && m.code === "unsupported"),
-			)
-			client.socket.close()
-
-			// A user token opens a Live session in the same way. The new session gets
-			// the earlier messages of the Chat.
-			const token = await json(
-				send(alice.session, "/v1/user/tokens", "POST", { name: "live" }),
-				201,
-			)
-			const keyed = connect(liveUrl, {
-				authorization: "Bearer " + token.secret,
-			})
-			await keyed.opened
-			await keyed.until((all) => all.some((m) => m.type === "session.ready"))
-			const history = fake.inputs.find((input) => input._tag === "History")
-			assert.ok(history?._tag === "History")
-			assert.strictEqual(history.messages[0]?.text, "Remember me")
-			keyed.socket.close()
-
-			// With a second organization, a browser names the organization in the query,
-			// because it cannot send the header with a WebSocket.
-			const listedOrganizations = await json(
-				send(alice.session, "/v1/organizations"),
-			)
-			const first: string = listedOrganizations.items[0].id
-			await json(
-				send(alice.session, "/v1/organizations", "POST", { name: "Second" }),
-			)
-			assert.strictEqual(
-				await handshake(liveUrl.replace(/^ws/, "http"), {
+				// Only one session for each live Chat.
+				const second = yield* connect(liveUrl, {
 					cookie,
 					origin: publicOrigin,
-				}),
-				400,
-			)
-			const named = connect(liveUrl + "?organization=" + first, {
-				cookie,
-				origin: publicOrigin,
-			})
-			await named.opened
-			await named.until((all) => all.some((m) => m.type === "session.ready"))
-			named.socket.close()
-		} finally {
-			await host.close()
-		}
-	},
-)
+				})
+				yield* second.until((received) => Arr.some(received, isType("error")))
+				yield* second.close
+
+				// Typed text starts a Turn too, and goes to the backend as text.
+				yield* client.send(
+					yield* encodeClientMessage({ type: "input.text", text: "Thanks" }),
+				)
+				yield* client.until((received) => completedTurns(received).length === 3)
+				assert.ok(
+					Arr.some(
+						yield* fake.inputs,
+						(input) => input._tag === "Text" && input.text === "Thanks",
+					),
+				)
+				// A message that the backend does not support gives an error, and the session stays open.
+				yield* client.send(
+					yield* encodeClientMessage({
+						type: "output.truncate",
+						itemId: "x",
+						audioEndMs: 1,
+					}),
+				)
+				yield* client.until((received) =>
+					Arr.some(
+						received,
+						(item) => item.type === "error" && item.code === "unsupported",
+					),
+				)
+				yield* client.close
+
+				// A user token opens a Live session in the same way. The new session gets
+				// the earlier messages of the Chat.
+				const token = yield* json(
+					UserTokensApi.CreatedToken,
+					send(alice.session, "/v1/user/tokens", "POST", { name: "live" }),
+					201,
+				)
+				const keyed = yield* connect(liveUrl, {
+					authorization: "Bearer " + token.secret,
+				})
+				yield* keyed.until((received) =>
+					Arr.some(received, isType("session.ready")),
+				)
+				const history = Arr.findFirst(
+					yield* fake.inputs,
+					Live.Input.$is("History"),
+				)
+				assert.ok(Option.isSome(history))
+				assert.strictEqual(history.value.messages[0]?.text, "Remember me")
+				yield* keyed.close
+
+				// With a second organization, a browser names the organization in the query,
+				// because it cannot send the header with a WebSocket.
+				const listedOrganizations = yield* json(
+					Organizations,
+					send(alice.session, "/v1/organizations"),
+				)
+				const first = Arr.head(listedOrganizations.items)
+				assert.ok(Option.isSome(first))
+				yield* text(
+					send(alice.session, "/v1/organizations", "POST", { name: "Second" }),
+				)
+				assert.strictEqual(
+					yield* knock(liveUrl, {
+						cookie,
+						origin: publicOrigin,
+					}),
+					400,
+				)
+				const named = yield* connect(
+					liveUrl + "?organization=" + first.value.id,
+					{
+						cookie,
+						origin: publicOrigin,
+					},
+				)
+				yield* named.until((received) =>
+					Arr.some(received, isType("session.ready")),
+				)
+				yield* named.close
+			}),
+		180000,
+	)
+})

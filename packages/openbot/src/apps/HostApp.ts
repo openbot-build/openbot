@@ -9,13 +9,17 @@ import type {
 	Store,
 } from "@openbot-build/protocol"
 
-export class AppError extends Schema.TaggedError<AppError>()("AppError", {
+export class AppError extends Schema.TaggedError<
+	AppError,
+	{ readonly brand: unique symbol }
+>()("AppError", {
 	reason: Schema.Literals([
 		"unavailable",
 		"storage-failed",
 		"configuration-failed",
 	]),
 	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export interface AddRequest {

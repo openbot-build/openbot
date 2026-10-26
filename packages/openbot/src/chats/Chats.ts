@@ -1,8 +1,7 @@
 import {
-	Bot,
 	Chat,
 	ChatStore,
-	Config,
+	type Config,
 	Item,
 	type Operations,
 	Turn,
@@ -30,9 +29,15 @@ import {
 	type BotsApi,
 	type PlanApproval,
 } from "@openbot-build/api"
-import { Context, Effect, Layer, Scope, Stream, Option } from "effect"
-import { LanguageModel, type Prompt, type Tool, type Toolkit } from "effect/ai"
-import type { Tools as AppTools } from "../plugins/apps/AppPlugin.ts"
+import {
+	Context,
+	type Effect,
+	type Scope,
+	type Stream,
+	type Option,
+} from "effect"
+import type { LanguageModel, Prompt } from "effect/ai"
+import type { Tools as PluginTools } from "./ChatFeatures.ts"
 import type * as ChatHost from "./ChatHost.ts"
 
 /** What a new Chat needs: the Bot that works in it and where the work came from. */
@@ -69,63 +74,37 @@ export interface DeliverInput {
 export type ServiceError =
 	ChatNotFound | ChatConflict | ChatStorageUnavailable | ChatModelInvalid
 
-export type ExecutionServices<Tools extends Record<string, Tool.Any>, R> =
-	| R
-	| Tool.HandlersFor<Tools>
-	| LanguageModel.ExtractServices<{
-			readonly toolkit: Toolkit.WithHandler<Tools>
-	  }>
+/** The models that the Chats of one runtime can use. */
+export interface Catalog {
+	readonly providers: ReadonlyArray<Config.Provider>
+	readonly models: ReadonlyArray<Config.Model>
+}
 
-export interface Options<
-	Tools extends Record<string, Tool.Any> = {},
-	E = never,
-	R = never,
-	BuildE = never,
-	BuildR = never,
-> {
+/**
+ * What one Chat runtime is made from. `Backend` makes a runtime for each
+ * member, with the models of the organization of the member.
+ */
+export interface Options {
 	readonly owner?: typeof Identity.Service
-	readonly modelDefaults?: (
+	readonly namespace?: string
+	/** The language models that a Chat can use. */
+	readonly modelCatalog: Effect.Effect<Catalog>
+	/** The Live models that a live Chat can use. Without them, OpenBot makes no live Chats. */
+	readonly liveCatalog?: Effect.Effect<Catalog>
+	/** The model that a selection names. */
+	readonly resolveModel: (
 		selection: Config.Selection,
-	) => Effect.Effect<Config.Selection>
-	readonly modelCatalog?: Effect.Effect<{
-		readonly providers: ReadonlyArray<Config.Provider>
-		readonly models: ReadonlyArray<Config.Model>
-	}>
-	/** The Live models that a live Chat can use. Without it, OpenBot makes no live Chats. */
-	readonly liveCatalog?: Effect.Effect<{
-		readonly providers: ReadonlyArray<Config.Provider>
-		readonly models: ReadonlyArray<Config.Model>
-	}>
-	/**
-	 * Settings that the host gives to each new Chat, such as the simulated
-	 * model of a development platform or of a test. They come before the model
-	 * of the Bot. A real platform never sets them: each Chat gets its model
-	 * from its own settings or from its Bot.
-	 */
-	readonly defaults?: Effect.Effect<Partial<Turn.Settings>>
-	readonly resolveModel?: (
-		selection: Config.Selection | undefined,
 	) => Effect.Effect<
 		LanguageModel.LanguageModel,
 		Config.ModelConfigurationError
 	>
 	/**
-	 * The settings of the organization of the owner, read on each use.
-	 * They come before the static options above.
+	 * The model of a new Chat when its Bot names none. Only a simulated
+	 * platform has one, such as development or a test. On a real platform,
+	 * each Bot names its model.
 	 */
-	readonly organization?: (organizationId: string) => OrganizationOptions
-	readonly namespace?: string
-	readonly runtime?: Bot.Definition<Tools, E, R, BuildE, BuildR>
-	readonly layerExecution?: (
-		ref: Chat.Ref,
-		namespace: string,
-	) => Layer.Layer<ExecutionServices<Tools, R>, E>
+	readonly defaultModel?: Config.Selection
 }
-
-/** The options that come from the settings of an organization. */
-export type OrganizationOptions = Partial<
-	Pick<Options, "modelCatalog" | "resolveModel" | "liveCatalog">
->
 
 export class Chats extends Context.Service<
 	Chats,
@@ -276,17 +255,13 @@ export class Chats extends Context.Service<
 	}
 >()("@openbot-build/openbot/chats/Chats") {}
 
-export type Instance<
-	Tools extends Record<string, Tool.Any> = {},
-	E = never,
-	R = never,
-> = typeof Chats.Service & {
+export type Instance = typeof Chats.Service & {
 	readonly runtime: Chat.Runtime<
 		ChatHost.Values,
-		Tools,
-		E | Chat.ChatNotFound | Chat.ChatError | ChatStore.ChatStoreError,
-		R,
-		AppTools
+		{},
+		Chat.ChatNotFound | Chat.ChatError | ChatStore.ChatStoreError,
+		never,
+		PluginTools
 	>
 	readonly store: ChatStore.Store<ChatHost.Values>
 }

@@ -1,14 +1,27 @@
-// These functions take all their inputs at once. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import { homedir } from "node:os"
-import { dirname, join, resolve } from "node:path"
 import type { ComputersApi } from "@openbot-build/api"
-import { Effect, FileSystem, Option, Schema } from "effect"
+import {
+	Effect,
+	FileSystem,
+	Option,
+	Path,
+	type PlatformError,
+	Schema,
+} from "effect"
+import * as Config from "./Config.ts"
 
 /** A call that did not work. The message goes back to OpenBot in a `Failed` reply. */
-export class CallFailed extends Schema.TaggedError<CallFailed>()("CallFailed", {
+export class CallFailed extends Schema.TaggedError<
+	CallFailed,
+	{ readonly brand: unique symbol }
+>()("CallFailed", {
 	message: Schema.String,
+	/** The failure below, such as a file system error. */
+	cause: Schema.optionalKey(Schema.Defect()),
 }) {}
+
+const failed = (error: PlatformError.PlatformError) =>
+	CallFailed.make({ message: Config.platformErrorText(error), cause: error })
 
 type Call = ComputersApi.ConnectorCall
 type Reply = ComputersApi.ConnectorReply
@@ -28,13 +41,13 @@ const kindOf = (type: FileSystem.File.Type) =>
 			? ("directory" as const)
 			: ("file" as const)
 
-const list = (fs: FileSystem.FileSystem, folder: string) =>
+const list = (fs: FileSystem.FileSystem, path: Path.Path, folder: string) =>
 	fs.readDirectory(folder).pipe(
 		Effect.flatMap((names) =>
 			Effect.forEach(
 				names,
 				(name) =>
-					fs.lstat(join(folder, name)).pipe(
+					fs.lstat(path.join(folder, name)).pipe(
 						Effect.map((info) => ({
 							name,
 							kind: kindOf(info.type),
@@ -45,7 +58,8 @@ const list = (fs: FileSystem.FileSystem, folder: string) =>
 							}),
 						})),
 					),
-				{ concurrency: "unbounded" },
+				// Node does file system work on a small pool of threads, so more at once is not faster.
+				{ concurrency: 32 },
 			),
 		),
 	)
@@ -53,18 +67,19 @@ const list = (fs: FileSystem.FileSystem, folder: string) =>
 const operate = Effect.fnUntraced(function* (
 	operation: Operation,
 	options: Options,
-): Effect.fn.Return<Schema.Json, CallFailed, FileSystem.FileSystem> {
+): Effect.fn.Return<
+	Schema.Json,
+	CallFailed,
+	FileSystem.FileSystem | Path.Path
+> {
 	const fs = yield* FileSystem.FileSystem
-	const at = (path: string) => resolve(options.home, path)
+	const path = yield* Path.Path
+	const at = (file: string) => path.resolve(options.home, file)
 	switch (operation._tag) {
 		case "Read": {
 			const bytes = yield* fs
 				.readFile(at(operation.path))
-				.pipe(
-					Effect.mapError((error) =>
-						CallFailed.make({ message: error.message }),
-					),
-				)
+				.pipe(Effect.mapError(failed))
 			return {
 				path: operation.path,
 				encoding: operation.encoding,
@@ -73,29 +88,27 @@ const operate = Effect.fnUntraced(function* (
 		}
 		case "Write": {
 			const file = at(operation.file.path)
-			yield* fs.makeDirectory(dirname(file), { recursive: true }).pipe(
-				Effect.andThen(
-					fs.writeFile(
-						file,
-						Buffer.from(operation.file.content, operation.file.encoding),
+			yield* fs
+				.makeDirectory(path.dirname(file), { recursive: true })
+				.pipe(
+					Effect.andThen(
+						fs.writeFile(
+							file,
+							Buffer.from(operation.file.content, operation.file.encoding),
+						),
 					),
-				),
-				Effect.mapError((error) => CallFailed.make({ message: error.message })),
-			)
+					Effect.mapError(failed),
+				)
 			return null
 		}
 		case "List":
-			return yield* list(fs, at(operation.path)).pipe(
-				Effect.mapError((error) => CallFailed.make({ message: error.message })),
+			return yield* list(fs, path, at(operation.path)).pipe(
+				Effect.mapError(failed),
 			)
 		case "Remove":
 			yield* fs
 				.remove(at(operation.path), { recursive: true })
-				.pipe(
-					Effect.mapError((error) =>
-						CallFailed.make({ message: error.message }),
-					),
-				)
+				.pipe(Effect.mapError(failed))
 			return null
 		case "Screenshot":
 		case "Desktop":
@@ -107,7 +120,7 @@ const operate = Effect.fnUntraced(function* (
 export const execute = (
 	call: Call,
 	options: Options,
-): Effect.Effect<Reply, never, FileSystem.FileSystem> =>
+): Effect.Effect<Reply, never, FileSystem.FileSystem | Path.Path> =>
 	operate(call.operation, options).pipe(
 		Effect.map((value): Reply => ({
 			id: call.id,

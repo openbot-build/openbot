@@ -1,5 +1,5 @@
 import * as Mcp from "@modelcontextprotocol/client"
-import { Context, Data, Effect, Scope, Stream, Schema } from "effect"
+import { Context, Effect, Scope, Stream, Schema } from "effect"
 import * as App from "./App.ts"
 import * as Store from "./Store.ts"
 
@@ -38,51 +38,57 @@ export const CallSource = Schema.Literals([...ToolVisibility.literals, "host"])
 export type CallSource = typeof CallSource.Type
 
 /** The host may deny its own actions too, so `action` is not only an MCP `Action`. */
-export class PermissionDenied extends Schema.TaggedError<PermissionDenied>()(
-	"PermissionDenied",
-	{
-		action: Schema.String,
-		target: Schema.String,
-	},
-) {}
+export class PermissionDenied extends Schema.TaggedError<
+	PermissionDenied,
+	{ readonly brand: unique symbol }
+>()("PermissionDenied", {
+	action: Schema.String,
+	target: Schema.String,
+}) {}
 
-export class ClientError extends Schema.TaggedError<ClientError>()(
-	"ClientError",
-	{
-		reason: Schema.Literals([
-			"Protocol",
-			"Network",
-			"Schema",
-			"UnsupportedCapability",
-			"ConnectionChanged",
-			"InputUnavailable",
-			"Closed",
-		]),
-		issue: Schema.String,
-	},
-) {}
+export class ClientError extends Schema.TaggedError<
+	ClientError,
+	{ readonly brand: unique symbol }
+>()("ClientError", {
+	reason: Schema.Literals([
+		"Protocol",
+		"Network",
+		"Schema",
+		"UnsupportedCapability",
+		"ConnectionChanged",
+		"InputUnavailable",
+		"Closed",
+	]),
+	issue: Schema.String,
+}) {}
 
-export class AuthorizationRequired extends Schema.TaggedError<AuthorizationRequired>()(
-	"AuthorizationRequired",
-	{
-		reason: Schema.Literals(["Pending", "Expired", "InsufficientScope"]),
-		resourceMetadataUrl: Schema.optional(Schema.String),
-		scopes: Schema.Array(Schema.String),
-	},
-) {}
+export class AuthorizationRequired extends Schema.TaggedError<
+	AuthorizationRequired,
+	{ readonly brand: unique symbol }
+>()("AuthorizationRequired", {
+	reason: Schema.Literals(["Pending", "Expired", "InsufficientScope"]),
+	resourceMetadataUrl: Schema.optional(Schema.String),
+	scopes: Schema.Array(Schema.String),
+}) {}
 
-export class OutcomeUnknown extends Schema.TaggedError<OutcomeUnknown>()(
-	"OutcomeUnknown",
-	{
-		key: Store.ConnectionKey,
-		target: Schema.String,
-		cause: Schema.Literals(["Network", "Protocol", "Schema", "Closed"]),
-	},
-) {}
+export class OutcomeUnknown extends Schema.TaggedError<
+	OutcomeUnknown,
+	{ readonly brand: unique symbol }
+>()("OutcomeUnknown", {
+	key: Store.ConnectionKey,
+	target: Schema.String,
+	cause: Schema.Literals(["Network", "Protocol", "Schema", "Closed"]),
+}) {}
 
-export class ToolFailure extends Data.TaggedError("ToolFailure")<{
-	readonly result: Mcp.CallToolResult
-}> {}
+/** The SDK type of a tool result. The Client checks the result before it makes this error. */
+const CallToolResult = Schema.declare(Mcp.isCallToolResult)
+
+export class ToolFailure extends Schema.TaggedError<
+	ToolFailure,
+	{ readonly brand: unique symbol }
+>()("ToolFailure", {
+	result: CallToolResult,
+}) {}
 
 export interface Invocation {
 	readonly connection: Store.UserConnection

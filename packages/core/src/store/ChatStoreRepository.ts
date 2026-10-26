@@ -1,4 +1,5 @@
 import {
+	Array as Arr,
 	Clock,
 	Context,
 	Effect,
@@ -6,10 +7,11 @@ import {
 	Layer,
 	Option,
 	PubSub,
+	RcMap,
 	Schema,
+	Scope,
 	Semaphore,
 	Stream,
-	type Scope,
 } from "effect"
 import { dual } from "effect/Function"
 import { IdGenerator } from "effect/ai"
@@ -33,13 +35,12 @@ const json = <A, I, RD, RE>(schema: Schema.Codec<A, I, RD, RE>) => {
 			Effect.flatMap((encoded) =>
 				Schema.decodeUnknownEffect(Schema.Json)(omitOptional(encoded)),
 			),
-			Effect.mapError(
-				(e) =>
-					new ChatStore.ChatStoreError({
-						reason: "encode-failed",
-						message: "Failed to encode the Chat",
-						issue: e.issue,
-					}),
+			Effect.mapError((e) =>
+				ChatStore.ChatStoreError.make({
+					reason: "encode-failed",
+					message: "Failed to encode the Chat",
+					issue: e.issue,
+				}),
 			),
 		)
 }
@@ -65,8 +66,21 @@ export const make = <S extends Plugin.Stores>(
 		const provide = <A, E, R>(program: Effect.Effect<A, E, R>) =>
 			Effect.provideContext(program, services)
 		const storage = options.persistence
-		// All writes run one at a time.
-		const atomic = (yield* Semaphore.make(1)).withPermits(1)
+		// Writes to one Chat run one at a time. Writes to other Chats do not wait.
+		// An entry lives while a write holds or waits for it, so the map stays small.
+		const locks = yield* RcMap.make({
+			lookup: (_: Chat.Id) => Semaphore.make(1),
+		})
+		const atomic =
+			(chat: Chat.Id) =>
+			<A, E, R>(effect: Effect.Effect<A, E, R>) =>
+				// Only the lock uses this scope, so `effect` keeps the Scope of its caller.
+				Effect.scopedWith((scope) =>
+					RcMap.get(locks, chat).pipe(
+						Scope.provide(scope),
+						Effect.flatMap((lock) => lock.withPermits(1)(effect)),
+					),
+				)
 		const bus = yield* PubSub.unbounded<ChatStore.Change<P>>()
 		yield* Effect.addFinalizer(() => PubSub.shutdown(bus))
 		const publish = (change: ChatStore.Change<P>) =>
@@ -113,7 +127,7 @@ export const make = <S extends Plugin.Stores>(
 				),
 			)
 		const modifyEffect: ChatStore.Store<P>["modifyEffect"] = (input) =>
-			atomic(
+			atomic(input.chat)(
 				Effect.gen(function* () {
 					const before = yield* read(input.chat)
 					if (
@@ -133,7 +147,7 @@ export const make = <S extends Plugin.Stores>(
 					const appended = mutation.append ?? []
 					if (!changed && mutation.chat === undefined && appended.length === 0)
 						return { result, view: before, items: [] }
-					const items = appended.map((entry, index): Item.Record => ({
+					const items = Arr.map(appended, (entry, index): Item.Record => ({
 						...entry,
 						seq: Item.Seq.make(before.chat.seq + index + 1),
 					}))
@@ -145,7 +159,7 @@ export const make = <S extends Plugin.Stores>(
 					}
 					const view: Chat.View<P> = {
 						chat: ref,
-						state: changed ? mutation.value! : before.state,
+						state: changed ? mutation.value : before.state,
 					}
 					const turn =
 						ref.turn !== undefined && !Equal.equals(ref.turn, before.chat.turn)
@@ -182,35 +196,39 @@ export const make = <S extends Plugin.Stores>(
 				}),
 			)
 		const create: ChatStore.Store<P>["create"] = (input) =>
-			atomic(
-				Effect.gen(function* () {
-					const value = input.value ?? initial({} as P)
-					const ref: Chat.Ref = {
-						id: input.id ?? Chat.Id.make(yield* generator.generateId()),
-						revision: Chat.Revision.make(0),
-						settings: { mode: "build", ...input.settings },
-						inbox: [],
-						seq: Item.Seq.make(0),
-						business: input.business ?? {},
-						createdAt: yield* Clock.currentTimeMillis,
-					}
-					const view = { chat: ref, state: value }
-					yield* save(
-						{
-							chat: ref.id,
-							ref: yield* provide(json(options.definition.recordSchema)(ref)),
-							revision: ref.revision,
-							expected: null,
-							state: yield* provide(json(options.definition.schema)(value)),
-							items: [],
-						},
-						null,
-						view,
-						[],
-					)
-					return view
-				}),
-			)
+			Effect.gen(function* () {
+				// The id comes first, so a create takes the same lock as the other writes to that Chat.
+				const id = input.id ?? Chat.Id.make(yield* generator.generateId())
+				return yield* atomic(id)(
+					Effect.gen(function* () {
+						const value = input.value ?? initial<P>({})
+						const ref: Chat.Ref = {
+							id,
+							revision: Chat.Revision.make(0),
+							settings: { mode: "build", ...input.settings },
+							inbox: [],
+							seq: Item.Seq.make(0),
+							business: input.business ?? {},
+							createdAt: yield* Clock.currentTimeMillis,
+						}
+						const view = { chat: ref, state: value }
+						yield* save(
+							{
+								chat: ref.id,
+								ref: yield* provide(json(options.definition.recordSchema)(ref)),
+								revision: ref.revision,
+								expected: null,
+								state: yield* provide(json(options.definition.schema)(value)),
+								items: [],
+							},
+							null,
+							view,
+							[],
+						)
+						return view
+					}),
+				)
+			})
 		const decodeAll = <A>(
 			rows: ReadonlyArray<Schema.Json>,
 			decode: (row: unknown) => Effect.Effect<A, Schema.SchemaError>,
@@ -251,7 +269,7 @@ export const make = <S extends Plugin.Stores>(
 					),
 				),
 			remove: (ref) =>
-				atomic(
+				atomic(ref.id)(
 					Effect.gen(function* () {
 						yield* options.onRemove === undefined
 							? storage.remove(ref.id)

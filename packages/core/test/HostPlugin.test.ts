@@ -1,4 +1,3 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
 	Chat,
@@ -8,8 +7,9 @@ import {
 	Plugin,
 	Store,
 } from "@openbot-build/core"
-import { Context, Effect, Schema, Stream } from "effect"
+import { Array as Arr, Context, Effect, Option, Schema, Stream } from "effect"
 import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
+import { finish, textParts } from "./LanguageModelTest.ts"
 
 class CallerDependency extends Context.Service<CallerDependency, string>()(
 	"@openbot-build/core/test/HostPlugin.test/CallerDependency",
@@ -63,33 +63,25 @@ it.effect(
 				),
 			),
 		)
-		const usage = {
-			inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
-			outputTokens: { total: 1, text: 1, reasoning: 0 },
-		}
 		return Effect.gen(function* () {
 			const model = yield* LanguageModel.make({
 				generateText: () => Effect.succeed([]),
 				streamText: ({ prompt, tools }) =>
 					Stream.suspend((): Stream.Stream<Response.StreamPartEncoded> => {
-						assert.ok(tools.some((tool) => tool.name === "CallerTool"))
-						assert.ok(tools.some((tool) => tool.name === "HostedTool"))
-						const last = prompt.content.findLastIndex(
+						assert.ok(Arr.some(tools, (tool) => tool.name === "CallerTool"))
+						assert.ok(Arr.some(tools, (tool) => tool.name === "HostedTool"))
+						const user = Arr.findLastIndex(
+							prompt.content,
 							(message) => message.role === "user",
 						)
-						const answered = prompt.content
-							.slice(last + 1)
-							.some((message) => message.role === "tool")
+						assert.ok(Option.isSome(user))
+						const last = user.value
+						const answered = Arr.some(
+							Arr.drop(prompt.content, last + 1),
+							(message) => message.role === "tool",
+						)
 						return answered
-							? Stream.make(
-									Response.makePart("text-start", { id: "done" }),
-									Response.makePart("text-delta", {
-										id: "done",
-										delta: "Done",
-									}),
-									Response.makePart("text-end", { id: "done" }),
-									Response.makePart("finish", { reason: "stop", usage }),
-								)
+							? Stream.fromArray(textParts("Done"))
 							: Stream.make(
 									Response.makePart("tool-call", {
 										id: "caller-" + last,
@@ -103,7 +95,7 @@ it.effect(
 										params: {},
 										providerExecuted: false,
 									}),
-									Response.makePart("finish", { reason: "tool-calls", usage }),
+									finish("tool-calls"),
 								)
 					}),
 			})

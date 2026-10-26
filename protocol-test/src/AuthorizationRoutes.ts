@@ -1,7 +1,13 @@
-import { Effect, Layer } from "effect"
+import { Array as Arr, Effect, Layer, Schema, String as Str } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import { Authorization, OAuthError, predefined } from "./Authorization.ts"
-import { OAuthMode, issuer, type Settings } from "./Scenarios.ts"
+import {
+	OAuthMode,
+	issuer,
+	readScope,
+	scopes,
+	type Settings,
+} from "./Scenarios.ts"
 import { consentPage, html, page } from "./Pages.ts"
 
 const headers = {
@@ -22,12 +28,15 @@ const errorResponse = (error: OAuthError) =>
 		},
 	)
 const respond = <E, R>(
-	effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+	effect: Effect.Effect<
+		HttpServerResponse.HttpServerResponse,
+		E | OAuthError,
+		R
+	>,
 ) =>
 	effect.pipe(
-		Effect.catchIf(
-			(error): error is E & OAuthError => error instanceof OAuthError,
-			(error) => Effect.succeed(errorResponse(error)),
+		Effect.catchIf(Schema.is(OAuthError), (error) =>
+			Effect.succeed(errorResponse(error)),
 		),
 	)
 
@@ -37,7 +46,7 @@ export const layer = ({ origin }: Settings) =>
 			const auth = yield* Authorization
 			return Layer.mergeAll(
 				Layer.empty,
-				...OAuthMode.literals.flatMap((mode) => {
+				...Arr.flatMap(OAuthMode.literals, (mode) => {
 					const base = issuer(origin)(mode)
 					const metadata = {
 						issuer: base,
@@ -60,23 +69,25 @@ export const layer = ({ origin }: Settings) =>
 							"client_secret_basic",
 							"client_secret_post",
 						],
-						scopes_supported: ["test:read", "test:write"],
+						scopes_supported: scopes,
 					}
 					return [
-						...[
-							"/.well-known/oauth-authorization-server/oauth/" + mode,
-							"/.well-known/openid-configuration/oauth/" + mode,
-							"/oauth/" + mode + "/.well-known/openid-configuration",
-						].map((path) =>
-							HttpRouter.add(
-								"GET",
-								`/${path.slice(1)}`,
-								Effect.succeed(
-									HttpServerResponse.jsonUnsafe(metadata, {
-										headers: { "cache-control": "public, max-age=60" },
-									}),
+						...Arr.map(
+							[
+								".well-known/oauth-authorization-server/oauth/" + mode,
+								".well-known/openid-configuration/oauth/" + mode,
+								"oauth/" + mode + "/.well-known/openid-configuration",
+							],
+							(path) =>
+								HttpRouter.add(
+									"GET",
+									`/${path}`,
+									Effect.succeed(
+										HttpServerResponse.jsonUnsafe(metadata, {
+											headers: { "cache-control": "public, max-age=60" },
+										}),
+									),
 								),
-							),
 						),
 						HttpRouter.add("GET", `/oauth/${mode}/authorize`, (request) =>
 							respond(
@@ -169,8 +180,9 @@ export const layer = ({ origin }: Settings) =>
 						HttpServerResponse.jsonUnsafe({
 							client_id: origin + "/clients/public.json",
 							client_name: "Protocol Test CIMD client",
-							redirect_uris: predefined(origin)[0]!.redirect_uris.filter(
-								(uri) => uri.startsWith("https://"),
+							redirect_uris: Arr.filter(
+								predefined(origin)[0]!.redirect_uris,
+								Str.startsWith("https://"),
 							),
 							token_endpoint_auth_method: "none",
 							grant_types: ["authorization_code", "refresh_token"],
@@ -196,7 +208,7 @@ export const layer = ({ origin }: Settings) =>
 						HttpServerResponse.jsonUnsafe({
 							resource: origin + "/mcp/oauth-cimd",
 							authorization_servers: [issuer(origin)("cimd")],
-							scopes_supported: ["test:read"],
+							scopes_supported: [readScope],
 							bearer_methods_supported: ["header"],
 						}),
 					),

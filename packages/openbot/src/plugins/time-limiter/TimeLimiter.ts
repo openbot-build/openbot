@@ -1,4 +1,4 @@
-import { Data, Duration, Effect, Option, Schema, Stream } from "effect"
+import { Duration, Effect, Option, Predicate, Schema, Stream } from "effect"
 import { Prompt } from "effect/ai"
 import { Bot, Plugin } from "@openbot-build/core"
 
@@ -7,14 +7,30 @@ export interface Options {
 	readonly maxDuration: Duration.Input
 }
 
-export class InvalidMaxDuration extends Data.TaggedError("InvalidMaxDuration")<{
-	readonly maxDuration: Duration.Input
-}> {}
+/**
+ * Any form of `Duration.Input`. It checks only the kind of the value,
+ * because the error must keep a bad input as it was given.
+ */
+const DurationInput = Schema.declare(
+	(value: unknown): value is Duration.Input =>
+		Predicate.isNumber(value) ||
+		Predicate.isBigInt(value) ||
+		Predicate.isString(value) ||
+		Predicate.isObjectOrArray(value),
+)
 
-export class TimeLimitExceeded extends Schema.TaggedError<TimeLimitExceeded>()(
-	"TimeLimitExceeded",
-	{ maxDuration: Schema.Duration, history: Prompt.Prompt },
-) {}
+export class InvalidMaxDuration extends Schema.TaggedError<
+	InvalidMaxDuration,
+	{ readonly brand: unique symbol }
+>()("InvalidMaxDuration", { maxDuration: DurationInput }) {}
+
+export class TimeLimitExceeded extends Schema.TaggedError<
+	TimeLimitExceeded,
+	{ readonly brand: unique symbol }
+>()("TimeLimitExceeded", {
+	maxDuration: Schema.Duration,
+	history: Prompt.Prompt,
+}) {}
 
 /**
  * Limits each execution on its own, through the ReAct middleware chain.
@@ -35,7 +51,7 @@ export const make = ({
 		Stream.unwrap(
 			Effect.gen(function* () {
 				if (Option.isNone(duration))
-					return yield* new InvalidMaxDuration({ maxDuration })
+					return yield* InvalidMaxDuration.make({ maxDuration })
 
 				const context = yield* Bot.Context
 				return next(options).pipe(

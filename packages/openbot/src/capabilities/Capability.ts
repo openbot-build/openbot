@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import {
 	Authorization,
 	type BotsApi,
@@ -6,6 +5,8 @@ import {
 	type ComputersApi,
 } from "@openbot-build/api"
 import type { Authorizer } from "@nmnmcc/ability"
+import { Crypto, Effect, Schema, String as Str } from "effect"
+import { Hex } from "effect/encoding"
 import {
 	botResource,
 	computerProviderResource,
@@ -24,8 +25,21 @@ export const describe = (capability: Capability) =>
 		? ""
 		: " " + JSON.stringify(capability.arguments))
 
-export const hash = (value: unknown) =>
-	createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40)
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+
+/** A short and stable SHA-256 text of a JSON value, for IDs and cache keys. */
+export const hash = (crypto: Crypto.Crypto, value: unknown) =>
+	Effect.gen(function* () {
+		const text = yield* encodeJson(value)
+		const digest = yield* crypto.digest(
+			"SHA-256",
+			new TextEncoder().encode(text),
+		)
+		return Str.slice(0, 40)(Hex.encode(digest))
+	}).pipe(
+		// The value is JSON data and SHA-256 is always there, so a failure here is a defect.
+		Effect.orDie,
+	)
 
 /**
  * The act of the member that a capability needs. A Bot never does more than

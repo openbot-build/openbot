@@ -2,7 +2,7 @@ import {
 	type ReadResourceResult,
 	type Tool,
 } from "@modelcontextprotocol/client"
-import { Effect, Schema, Layer, Predicate } from "effect"
+import { Array as Arr, Effect, Schema, Layer, Predicate } from "effect"
 import { Base64 } from "effect/encoding"
 import * as Document from "../Document.ts"
 import { Ui, UiError, Uri, decodeError, Resource } from "./Ui.ts"
@@ -28,7 +28,7 @@ export const readResource = Effect.fn("Ui.readResource")(function* (
 	uri: string,
 	result: ReadResourceResult,
 ) {
-	const matching = result.contents.filter((item) => item.uri === uri)
+	const matching = Arr.filter(result.contents, (item) => item.uri === uri)
 	const item = matching[0]
 	if (
 		matching.length !== 1 ||
@@ -47,10 +47,10 @@ export const readResource = Effect.fn("Ui.readResource")(function* (
 	const html = Predicate.hasProperty(item, "text")
 		? item.text
 		: yield* Effect.fromResult(Base64.decodeString(item.blob)).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((error) =>
 					UiError.make({
 						reason: "Resource",
-						issue: "Invalid base64 UI resource",
+						issue: `Invalid base64 UI resource: ${error.message}`,
 					}),
 				),
 			)

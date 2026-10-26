@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest"
 import { AppIndexApi } from "@openbot-build/api"
 import { Document } from "@openbot-build/protocol"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Record as Rec, Schema } from "effect"
 
 it.effect(
 	"the public Index page keeps publisher icons and examples through its JSON contract",
@@ -80,6 +80,6 @@ it.effect(
 				Option.getOrThrow(Document.presentationFromCard(app.entry.card)),
 				presentation,
 			)
-			assert.strictEqual(Object.hasOwn(app, "connection"), false)
+			assert.strictEqual(Rec.has<string, unknown>(app, "connection"), false)
 		}),
 )

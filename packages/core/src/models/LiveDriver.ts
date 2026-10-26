@@ -1,4 +1,5 @@
 import {
+	Array as Arr,
 	Effect,
 	HashMap,
 	HashSet,
@@ -7,6 +8,7 @@ import {
 	Ref,
 	Schema,
 	Stream,
+	pipe,
 	type Scope,
 } from "effect"
 import {
@@ -43,13 +45,17 @@ export interface Options {
 
 /** The system text of a prompt, in order. */
 const instructionsOf = (prompt: Prompt.Prompt) =>
-	prompt.content
-		.flatMap((message) => (message.role === "system" ? [message.content] : []))
-		.join("\n\n")
+	pipe(
+		prompt.content,
+		Arr.flatMap((message) =>
+			message.role === "system" ? [message.content] : [],
+		),
+		Arr.join("\n\n"),
+	)
 
 /** Tools that OpenBot runs. Tools that run inside a provider do not go to a Live model. */
 const toolsOf = (tools: ReadonlyArray<Tool.Any>) =>
-	tools.flatMap((tool): ReadonlyArray<Live.ToolDefinition> =>
+	Arr.flatMap(tools, (tool): ReadonlyArray<Live.ToolDefinition> =>
 		Tool.isProviderDefined(tool)
 			? []
 			: [
@@ -64,21 +70,35 @@ const toolsOf = (tools: ReadonlyArray<Tool.Any>) =>
 	)
 
 /** The messages after the last assistant message: new input and tool results. */
-const trailing = (prompt: Prompt.Prompt) => {
-	const last = prompt.content.findLastIndex(
-		(message) => message.role === "assistant",
+const trailing = (prompt: Prompt.Prompt) =>
+	pipe(
+		Arr.findLastIndex(
+			prompt.content,
+			(message) => message.role === "assistant",
+		),
+		Option.match({
+			onNone: () => prompt.content,
+			onSome: (last) => Arr.drop(prompt.content, last + 1),
+		}),
 	)
-	return prompt.content.slice(last + 1)
-}
 
 const textOf = (message: Prompt.UserMessage) =>
-	message.content
-		.flatMap((part) => (part.type === "text" ? [part.text] : []))
-		.join("\n")
+	pipe(
+		message.content,
+		Arr.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+		Arr.join("\n"),
+	)
 
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+
+/**
+ * The `undefined` of a void tool goes as `null`. Every other result has a JSON form,
+ * because its tool schema encoded it.
+ */
 const outputOf = (part: Prompt.ToolResultPart) =>
-	JSON.stringify(part.isFailure ? { error: part.result } : part.result) ??
-	"null"
+	encodeJson(
+		part.isFailure ? { error: part.result } : (part.result ?? null),
+	).pipe(Effect.orDie)
 
 const decodeJson = Schema.decodeUnknownOption(
 	Schema.fromJsonString(Schema.Json),
@@ -138,7 +158,10 @@ export const make = (
 					instructions: instructionsOf(request.prompt),
 					tools: toolsOf(request.tools),
 				}
-				const key = JSON.stringify([config.instructions, config.tools])
+				// Instructions and JSON schemas of tools always have a JSON form.
+				const key = yield* encodeJson([config.instructions, config.tools]).pipe(
+					Effect.orDie,
+				)
 				if (!Option.contains(yield* Ref.get(configured), key)) {
 					yield* options.send(Live.Input.Configure({ config }))
 					yield* Ref.set(configured, Option.some(key))
@@ -156,7 +179,7 @@ export const make = (
 							yield* options.send(
 								Live.Input.ToolResult({
 									callId: part.id,
-									output: outputOf(part),
+									output: yield* outputOf(part),
 								}),
 							)
 							yield* Ref.update(answered, HashSet.add(part.id))

@@ -6,7 +6,10 @@ import {
 } from "@modelcontextprotocol/client"
 import * as Document from "../Document.ts"
 
-export class UiError extends Schema.TaggedError<UiError>()("UiError", {
+export class UiError extends Schema.TaggedError<
+	UiError,
+	{ readonly brand: unique symbol }
+>()("UiError", {
 	reason: Schema.Literals([
 		"Declaration",
 		"Resource",
@@ -15,6 +18,7 @@ export class UiError extends Schema.TaggedError<UiError>()("UiError", {
 		"Protocol",
 	]),
 	issue: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export const Uri = Schema.String.check(Schema.isPattern(/^ui:\/\/[^\s]+$/))
@@ -23,7 +27,10 @@ export const decodeError =
 	(reason: UiError["reason"]) => (error: Schema.SchemaError) =>
 		UiError.make({ reason, issue: error.message })
 
-export class Resource extends Schema.Opaque<Resource>()(
+export class Resource extends Schema.Opaque<
+	Resource,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		uri: Uri,
 		mimeType: Schema.Literal(Document.uiMediaType),

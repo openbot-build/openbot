@@ -1,5 +1,6 @@
 import { BotsApi } from "@openbot-build/api"
 import { Effect, Layer } from "effect"
+import { Billing } from "../src/billing/Billing.ts"
 import * as BotLayers from "../src/bots/BotLayers.ts"
 import * as Judge from "../src/capabilities/Judge.ts"
 
@@ -43,5 +44,18 @@ export const layerNoHelper = Layer.succeed(Judge.HelperModel, {
 	botMemory: noHelper,
 })
 
+/**
+ * Billing where nothing costs money, for tests that do not count costs. A
+ * budget of work or of the memory Bot then never ends. It has only the
+ * methods that the Bot services call. Any other method fails with a defect.
+ */
+export const layerNoCosts = Layer.mock(Billing, {
+	botSpend: () => Effect.succeed(0),
+	chatSpend: () => Effect.succeed(0),
+})
+
 /** The Bot services for tests that serve the HTTP API without a coordinator. */
-export const layerBotServices = BotLayers.layer({ helper: layerNoHelper })
+export const layerBotServices = BotLayers.layer.pipe(
+	Layer.provideMerge(layerNoHelper),
+	Layer.provide(layerNoCosts),
+)

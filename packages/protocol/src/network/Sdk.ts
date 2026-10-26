@@ -5,12 +5,15 @@ import {
 	type JSONRPCMessage,
 } from "@modelcontextprotocol/client"
 import {
+	Array as Arr,
 	Effect,
 	Exit,
+	pipe,
 	Predicate,
-	Record as RecordUtils,
+	Record as Rec,
 	Scope,
 	Stream,
+	String as Str,
 } from "effect"
 import { HttpClientRequest } from "effect/http"
 import * as Network from "./Network.ts"
@@ -35,15 +38,33 @@ export class HttpTransport extends StreamableHTTPClientTransport {
 
 /** The reply body holds decoded bytes, so it must not report the compressed encoding or length. */
 const decodedHeaders = (headers: Readonly<Record<string, string>>) =>
-	RecordUtils.remove(
-		RecordUtils.remove(headers, "content-encoding"),
-		"content-length",
+	Rec.remove(Rec.remove(headers, "content-encoding"), "content-length")
+
+/** The type and subtype of a Content-Type value, without its parameters. */
+const mediaType = (headers: Readonly<Record<string, string>>) =>
+	pipe(
+		headers["content-type"] ?? "",
+		Str.split(";"),
+		Arr.headNonEmpty,
+		Str.trim,
+		Str.toLowerCase,
 	)
+
+/** Normal tool results with images or resources fit in this many bytes. */
+const defaultMaxMessageBytes = 16 * 1024 * 1024
 
 /** Promise conversion happens only in callbacks that the external SDK calls. */
 export const fetch = Effect.fn("Sdk.fetch")(function* (
-	options: { readonly documents?: boolean } = {},
+	options: {
+		readonly documents?: boolean
+		/**
+		 * The largest JSON body, or the largest single SSE (server-sent events)
+		 * event, that the SDK may read from one response.
+		 */
+		readonly maxMessageBytes?: number
+	} = {},
 ) {
+	const maxMessageBytes = options.maxMessageBytes ?? defaultMaxMessageBytes
 	const network = yield* Network.Network
 	const ownerScope = yield* Effect.scope
 	const context = yield* Effect.context<Scope.Scope>()
@@ -79,15 +100,16 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 									: HttpClientRequest.post(request.url)
 					outgoing = HttpClientRequest.setHeaders(
 						outgoing,
-						Object.fromEntries(request.headers),
+						Rec.fromEntries(request.headers),
 					)
 					if (request.body !== null) {
 						const bytes = yield* Effect.tryPromise({
 							try: () => request.arrayBuffer(),
-							catch: () =>
+							catch: (cause) =>
 								Network.NetworkError.make({
 									reason: "Transport",
 									message: "Could not read SDK request body",
+									cause,
 								}),
 						})
 						outgoing = HttpClientRequest.bodyUint8Array(
@@ -99,7 +121,7 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 					if (options.documents === true && request.method === "GET") {
 						const reply = yield* network.readDocument({
 							url: request.url,
-							headers: Object.fromEntries(request.headers),
+							headers: Rec.fromEntries(request.headers),
 						})
 						yield* Scope.close(scope, Exit.void)
 						return new Response(
@@ -133,8 +155,14 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 							headers,
 						})
 					}
+					// The SDK reads a whole JSON body, and each whole SSE event, into memory.
 					const body = yield* Stream.toReadableStreamEffect(
-						reply.body.pipe(Stream.ensuring(Scope.close(scope, Exit.void))),
+						reply.body.pipe(
+							mediaType(reply.headers) === "text/event-stream"
+								? HttpNetwork.eventLimit(maxMessageBytes)
+								: HttpNetwork.limit(maxMessageBytes),
+							Stream.ensuring(Scope.close(scope, Exit.void)),
+						),
 					)
 					return new Response(body, {
 						status: reply.status,

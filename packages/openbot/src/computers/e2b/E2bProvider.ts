@@ -1,5 +1,3 @@
-// `make` builds a Provider from its secrets. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 /**
  * The driver for any service that speaks the E2B API, such as E2B, PPIO, or a
  * self-hosted E2B. It uses two APIs over plain HTTP, with no E2B SDK:
@@ -13,7 +11,7 @@
  * `make(credentials)` needs an `HttpClient` and gives a `Provider`. It does no I/O.
  */
 import type { ComputersApi } from "@openbot-build/api"
-import { Effect, Option, Ref } from "effect"
+import { Effect, Option, Ref, String as Str } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import {
@@ -31,6 +29,8 @@ import * as Envd from "./Envd.ts"
 import {
 	failed,
 	field,
+	fileBytes,
+	fileContent,
 	json,
 	ok,
 	pngSize,
@@ -61,6 +61,28 @@ const sandboxTimeout = 3600
 const controlTimeoutMs = 30_000
 const createTimeoutMs = 120_000
 
+/**
+ * The host where the sandbox of the connection serves a port. The address comes
+ * from the stored sandbox domain or from E2B, so it can be wrong.
+ */
+const hostOf = (connection: Envd.Connection, port: number) =>
+	Effect.try({
+		try: () =>
+			Str.replace(
+				`${Envd.envdPort}-`,
+				`${port}-`,
+			)(new URL(connection.url).host),
+		catch: (cause) =>
+			ComputerCallFailed.make({
+				message: `The E2B sandbox address ${connection.url} is not a valid URL`,
+				retry: false,
+				cause,
+			}),
+	})
+
+const gone = (id: string) =>
+	ComputerGone.make({ reason: `The E2B sandbox ${id} does not exist` })
+
 export const make = (credentials: Credentials) =>
 	Effect.gen(function* () {
 		const client = yield* HttpClient.HttpClient
@@ -84,7 +106,7 @@ export const make = (credentials: Credentials) =>
 			accessToken: string(body, "envdAccessToken"),
 		})
 
-		/** Reads one sandbox. `undefined` when the sandbox does not exist. */
+		/** Reads one sandbox. `Option.none()` when the sandbox does not exist. */
 		const detail = (
 			id: string,
 		): Effect.Effect<Option.Option<unknown>, ComputerCallFailed> =>
@@ -124,11 +146,7 @@ export const make = (credentials: Credentials) =>
 						ComputerCallFailed | ComputerGone
 					> =>
 						reply.status === 404
-							? Effect.fail(
-									ComputerGone.make({
-										reason: `The E2B sandbox ${id} does not exist`,
-									}),
-								)
+							? Effect.fail(gone(id))
 							: ok(reply)
 								? Effect.succeed(connectionOf(id, json(reply)))
 								: Effect.fail(failed(reply, "Resuming the E2B sandbox")),
@@ -149,11 +167,7 @@ export const make = (credentials: Credentials) =>
 						reply: Reply,
 					): Effect.Effect<void, ComputerCallFailed | ComputerGone> =>
 						reply.status === 404
-							? Effect.fail(
-									ComputerGone.make({
-										reason: `The E2B sandbox ${id} does not exist`,
-									}),
-								)
+							? Effect.fail(gone(id))
 							: // 409 means that the sandbox is paused already.
 								ok(reply) || reply.status === 409
 								? Effect.void
@@ -210,10 +224,7 @@ export const make = (credentials: Credentials) =>
 		const attach = (id: string) =>
 			Effect.gen(function* () {
 				const found = yield* detail(id)
-				if (Option.isNone(found))
-					return yield* ComputerGone.make({
-						reason: `The E2B sandbox ${id} does not exist`,
-					})
+				if (Option.isNone(found)) return yield* gone(id)
 				const body = found.value
 				const running = string(body, "state") !== "paused"
 				const cached = yield* Ref.make(
@@ -265,29 +276,11 @@ export const make = (credentials: Credentials) =>
 						withEnvd((current) => Envd.start(client, current, request)),
 					read: (path: string, encoding: ComputersApi.FileEncoding) =>
 						withEnvd((current) => Envd.read(client, current, path)).pipe(
-							Effect.map((bytes): ComputersApi.FileContent => ({
-								path,
-								encoding,
-								content:
-									encoding === "base64"
-										? Base64.encode(bytes)
-										: new TextDecoder().decode(bytes),
-							})),
+							Effect.map((bytes) => fileContent(path, encoding, bytes)),
 						),
 					write: (file: ComputersApi.FileContent) =>
 						Effect.gen(function* () {
-							const bytes =
-								file.encoding === "base64"
-									? yield* Base64.decode(file.content).pipe(
-											Effect.fromResult,
-											Effect.mapError(() =>
-												ComputerCallFailed.make({
-													message: "The file content is not valid base64",
-													retry: false,
-												}),
-											),
-										)
-									: new TextEncoder().encode(file.content)
+							const bytes = yield* fileBytes(file)
 							return yield* withEnvd((current) =>
 								Envd.write(client, current, file.path, bytes),
 							)
@@ -307,7 +300,7 @@ export const make = (credentials: Credentials) =>
 								? Effect.succeed(result.stdout)
 								: Effect.fail(
 										ComputerCallFailed.make({
-											message: `The desktop command failed: ${(result.stderr || result.stdout).slice(-300) || "it did not finish in time"}`,
+											message: `The desktop command failed: ${Str.takeRight(result.stderr || result.stdout, 300) || "it did not finish in time"}`,
 											retry: false,
 										}),
 									),
@@ -334,11 +327,10 @@ export const make = (credentials: Credentials) =>
 								act: (actions: ReadonlyArray<ComputersApi.DesktopAction>) =>
 									Effect.asVoid(script(Desktop.actions(actions))),
 								stream: Effect.gen(function* () {
-									const key = (yield* script(Desktop.stream)).trim()
-									const current = yield* connection
-									const host = new URL(current.url).host.replace(
-										`${Envd.envdPort}-`,
-										`${Desktop.streamPort}-`,
+									const key = Str.trim(yield* script(Desktop.stream))
+									const host = yield* hostOf(
+										yield* connection,
+										Desktop.streamPort,
 									)
 									const query = new URLSearchParams({
 										autoconnect: "true",
@@ -364,13 +356,9 @@ export const make = (credentials: Credentials) =>
 					...(desktop === undefined ? {} : { desktop }),
 					ports: {
 						open: (port: number) =>
-							Effect.map(connection, (current) => {
-								const host = new URL(current.url).host.replace(
-									`${Envd.envdPort}-`,
-									`${port}-`,
-								)
-								return `https://${host}`
-							}),
+							Effect.flatMap(connection, (current) =>
+								Effect.map(hostOf(current, port), (host) => `https://${host}`),
+							),
 					},
 					state: stateOf(id),
 					destroy: destroy(id),

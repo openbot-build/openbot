@@ -1,4 +1,13 @@
-import { Match, Predicate, Record as EffectRecord, Schema } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Effect,
+	Match,
+	Option,
+	pipe,
+	Predicate,
+	Record as Rec,
+} from "effect"
 import { dual } from "effect/Function"
 import type { Chat, Item, Turn } from "@openbot-build/core"
 import {
@@ -11,23 +20,60 @@ import {
 import { Prompt, type Response } from "effect/ai"
 import type { ServiceError } from "./Chats.ts"
 
-export const publicError = (
-	error: Chat.RuntimeError | Schema.SchemaError | ServiceError,
-): ServiceError =>
+type Failure = Chat.RuntimeError | ServiceError
+
+const conflict = (error: { readonly message: string }) =>
+	ChatConflict.make({ message: error.message })
+
+/**
+ * Sorts a failure by its meaning. A conflict and a missing Chat keep their
+ * meaning. A server fault, such as a database failure or stored data that does
+ * not decode, becomes `ChatStorageUnavailable`, because the client cannot act
+ * on it.
+ */
+const publicError = (error: Failure): ServiceError =>
 	Match.value(error).pipe(
 		Match.tag("ChatStorageUnavailable", "ChatModelInvalid", (error) => error),
-		Match.tag("ChatConflict", (error) =>
-			ChatConflict.make({ message: error.message }),
-		),
+		Match.tag("ChatConflict", "TurnConflict", conflict),
 		Match.tag("ChatNotFound", (error) =>
 			ChatNotFound.make({ chat: error.chat }),
 		),
 		Match.tag("ChatStoreError", (error) =>
-			error.reason === "storage-failed"
-				? ChatStorageUnavailable.make({})
-				: ChatConflict.make({ message: error.message }),
+			error.reason === "reference-conflict"
+				? conflict(error)
+				: ChatStorageUnavailable.make({}),
 		),
-		Match.orElse((error) => ChatConflict.make({ message: error.message })),
+		Match.tag("ChatError", (error) =>
+			error.reason === "state-conflict"
+				? conflict(error)
+				: ChatStorageUnavailable.make({}),
+		),
+		Match.tag("ContextCompactionError", (error) =>
+			error.reason === "head-conflict"
+				? conflict(error)
+				: ChatStorageUnavailable.make({}),
+		),
+		Match.exhaustive,
+	)
+
+const isFault = (error: Failure) =>
+	error._tag !== "ChatStorageUnavailable" &&
+	publicError(error)._tag === "ChatStorageUnavailable"
+
+/**
+ * Gives the public error of a Chat failure. The public error goes to the
+ * client, so it must not hold the inside failure. For a server fault, this
+ * logs the full cause first, at level Warn, as `Failures.replace` does.
+ */
+export const toPublic = <A, E extends Failure, R>(
+	self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, ServiceError, R> =>
+	self.pipe(
+		Effect.tapCauseIf(
+			(cause) => Option.exists(Cause.findErrorOption(cause), isFault),
+			(cause) => Effect.logWarning("Chat storage failed", cause),
+		),
+		Effect.mapError(publicError),
 	)
 
 export const inputPrompt = (
@@ -38,12 +84,12 @@ export const inputPrompt = (
 		: Predicate.isString(input)
 			? Prompt.make(input)
 			: Prompt.fromMessages(
-					input.map((message) =>
+					Arr.map(input, (message) =>
 						Prompt.makeMessage("user", {
 							content: Predicate.isString(message.content)
 								? [Prompt.makePart("text", { text: message.content })]
 								: // The Files service turns file parts into prompts. Here only text is left.
-									message.content.flatMap((part) =>
+									Arr.flatMap(message.content, (part) =>
 										part.type === "input_text"
 											? [Prompt.makePart("text", { text: part.text })]
 											: [],
@@ -68,7 +114,7 @@ export const addUsage: {
 	const sum = (a: number | undefined, b: number | undefined) =>
 		a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0)
 	const clean = (values: Readonly<Record<string, number | undefined>>) =>
-		EffectRecord.filter(values, Predicate.isNotUndefined)
+		Rec.filter(values, Predicate.isNotUndefined)
 	return {
 		inputTokens: clean({
 			total: sum(previous?.inputTokens.total, next.inputTokens.total),
@@ -95,12 +141,14 @@ export const addUsage: {
 
 /** The text that the Bot wrote in some Items. */
 export const textOf = (items: ReadonlyArray<Item.Entry>): string =>
-	items
-		.flatMap((entry) => entry.content.content)
-		.filter((message) => message.role === "assistant")
-		.flatMap((message) => message.content)
-		.flatMap((part) => (part.type === "text" ? [part.text] : []))
-		.join("")
+	pipe(
+		items,
+		Arr.flatMap((entry) => entry.content.content),
+		Arr.filter((message) => message.role === "assistant"),
+		Arr.flatMap((message) => message.content),
+		Arr.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+		Arr.join(""),
+	)
 
 /** One Turn in the Responses format. `items` are the Items of that Turn. */
 export const response: {
@@ -136,10 +184,12 @@ export const response: {
 			Match.tag("Completed", ({ result }) => result.finishReason),
 			Match.orElse(() => "unknown" as const),
 		)
-		const output = items
-			.filter((entry) => entry.origin?.turn === turn.id)
-			.flatMap((entry) => {
-				const messages = entry.content.content.filter(
+		const output = pipe(
+			items,
+			Arr.filter((entry) => entry.origin?.turn === turn.id),
+			Arr.flatMap((entry) => {
+				const messages = Arr.filter(
+					entry.content.content,
 					(message) => message.role === "assistant",
 				)
 				if (
@@ -167,10 +217,12 @@ export const response: {
 						],
 					},
 				]
-			})
-		const usage = turn.usage?.reduce<ChatResponse["usage"]>(
-			(previous, next) => addUsage(previous, next),
+			}),
+		)
+		const usage = Arr.reduce<Response.Usage, ChatResponse["usage"]>(
+			turn.usage ?? [],
 			undefined,
+			(previous, next) => addUsage(previous, next),
 		)
 		return {
 			id: turn.id,

@@ -1,6 +1,14 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
-import { Deferred, Effect, Fiber, Option, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Deferred,
+	Effect,
+	Fiber,
+	Option,
+	Predicate,
+	Schema,
+	Stream,
+} from "effect"
 import { Prompt } from "effect/ai"
 import {
 	Chat,
@@ -98,7 +106,7 @@ it.effect(
 			assert.strictEqual(chosen.chat.settings.mode, "plan")
 			assert.strictEqual(chosen.chat.business["goal"], "given goal")
 			assert.deepStrictEqual(
-				(yield* store.list).map((ref) => ref.id),
+				Arr.map(yield* store.list, (ref) => ref.id),
 				[a.chat.id, b.chat.id, chosen.chat.id],
 			)
 			yield* store.remove(changed.chat)
@@ -193,30 +201,24 @@ it.effect(
 			const store = yield* ChatStoreRepository.make({
 				definition: declared,
 				persistence,
-				onCommit: () =>
-					Deferred.succeed(entered, undefined).pipe(
-						Effect.andThen(Deferred.await(gate)),
-						Effect.andThen(
-							Effect.fail(
-								new ChatStore.ChatStoreError({
-									reason: "storage-failed",
-									message: "blocked write",
-								}),
-							),
-						),
-					),
+				onCommit: ({ delta, view }) =>
+					view.chat.business["goal"] === "unsaved"
+						? Deferred.succeed(entered, undefined).pipe(
+								Effect.andThen(Deferred.await(gate)),
+								Effect.andThen(
+									Effect.fail(
+										ChatStore.ChatStoreError.make({
+											reason: "storage-failed",
+											message: "blocked write",
+										}),
+									),
+								),
+							)
+						: persistence.save(delta),
 			})
-			let notified = false
-			yield* Effect.forkChild(
-				store.changes().pipe(
-					Stream.runForEach(() =>
-						Effect.sync(() => {
-							notified = true
-						}),
-					),
-				),
-				{ startImmediately: true },
-			)
+			const first = yield* store
+				.changes()
+				.pipe(Stream.runHead, Effect.forkChild({ startImmediately: true }))
 			const writing = yield* Effect.forkChild(
 				store.modifyEffect({
 					chat: root.chat.id,
@@ -229,13 +231,23 @@ it.effect(
 			)
 			yield* Deferred.await(entered)
 			assert.deepStrictEqual(yield* store.read(root.chat.id), root)
-			assert.strictEqual(notified, false)
 			yield* Deferred.succeed(gate, undefined)
 			const failure = yield* Fiber.join(writing).pipe(Effect.flip)
 			assert.ok(failure._tag === "ChatStoreError")
 			assert.strictEqual(failure.reason, "storage-failed")
 			assert.deepStrictEqual(yield* store.read(root.chat.id), root)
-			assert.strictEqual(notified, false)
+			const saved = yield* store.modifyEffect({
+				chat: root.chat.id,
+				update: () =>
+					Effect.succeed([
+						undefined,
+						Option.some({ chat: { business: { goal: "saved" } } }),
+					] as const),
+			})
+			// The first change is the later write, so the blocked write published nothing.
+			const head = yield* Fiber.join(first)
+			assert.ok(Option.isSome(head) && head.value._tag === "Committed")
+			assert.deepStrictEqual(head.value.view, saved.view)
 		}),
 )
 
@@ -261,6 +273,51 @@ it.effect(
 		}),
 )
 
+it.effect("a stored file with a bad URL fails with decode-failed", () =>
+	Effect.gen(function* () {
+		const { declared, persistence } = yield* setup
+		const chat = Chat.Id.make("files")
+		const storeWith = (url: string) =>
+			ChatStoreRepository.make({
+				definition: declared,
+				persistence: {
+					...persistence,
+					items: () =>
+						Effect.succeed([
+							{
+								id: "file",
+								seq: 1,
+								content: {
+									content: [
+										{
+											role: "user",
+											content: [
+												{
+													type: "file",
+													mediaType: "image/png",
+													data: { _tag: "Url", value: url },
+												},
+											],
+										},
+									],
+								},
+							},
+						]),
+				},
+			})
+		const good = yield* storeWith("https://example.com/a.png")
+		const [item] = yield* good.items(chat)
+		const message = item!.content.content[0]!
+		assert.ok(message.role === "user" && !Predicate.isString(message.content))
+		const part = message.content[0]!
+		assert.ok(part.type === "file" && part.data instanceof URL)
+		assert.strictEqual(part.data.href, "https://example.com/a.png")
+		const bad = yield* storeWith("not a url")
+		const error = yield* bad.items(chat).pipe(Effect.flip)
+		assert.strictEqual(error.reason, "decode-failed")
+	}),
+)
+
 it.effect(
 	"Items get places that grow by one, and a query reads one part of the log",
 	() =>
@@ -270,17 +327,12 @@ it.effect(
 			const chat = view.chat.id
 			const one = Turn.Id.make("one"),
 				two = Turn.Id.make("two")
-			let published: ReadonlyArray<ReadonlyArray<number>> = []
-			yield* Effect.forkChild(
-				store.changes({ chat }).pipe(
-					Stream.runForEach((change) =>
-						Effect.sync(() => {
-							if (change._tag === "Committed")
-								published = [...published, change.items.map((item) => item.seq)]
-						}),
-					),
-				),
-				{ startImmediately: true },
+			const published = yield* store.changes({ chat }).pipe(
+				Stream.filter((change) => change._tag === "Committed"),
+				Stream.map((change) => Arr.map(change.items, (item) => item.seq)),
+				Stream.take(3),
+				Stream.runCollect,
+				Effect.forkChild({ startImmediately: true }),
 			)
 			const entry = (name: string, turn?: Turn.Id): Item.Entry => ({
 				id: Item.Id.make(name),
@@ -298,7 +350,7 @@ it.effect(
 				})
 			const first = yield* append([entry("a", one), entry("b", one)])
 			assert.deepStrictEqual(
-				first.items.map((item) => item.seq),
+				Arr.map(first.items, (item) => item.seq),
 				[1, 2],
 			)
 			yield* append([entry("c", two), entry("d", two), entry("e", two)])
@@ -306,12 +358,10 @@ it.effect(
 			assert.strictEqual(last.view.chat.seq, 6)
 			assert.strictEqual(last.view.chat.revision, 3)
 			const seqs = (query?: ChatStore.ItemQuery) =>
-				store
-					.items(chat, query)
-					.pipe(Effect.map((items) => items.map((item) => item.seq)))
+				store.items(chat, query).pipe(Effect.map(Arr.map((item) => item.seq)))
 			assert.deepStrictEqual(yield* seqs(), [1, 2, 3, 4, 5, 6])
 			assert.deepStrictEqual(
-				(yield* store.items(chat)).map((item) => item.id),
+				Arr.map(yield* store.items(chat), (item) => item.id),
 				["a", "b", "c", "d", "e", "f"],
 			)
 			assert.deepStrictEqual(yield* seqs({ turn: one }), [1, 2])
@@ -323,8 +373,11 @@ it.effect(
 			assert.deepStrictEqual(yield* seqs({ limit: 2 }), [1, 2])
 			assert.deepStrictEqual(yield* seqs({ order: "desc", limit: 2 }), [6, 5])
 			assert.deepStrictEqual(yield* seqs({ turn: Turn.Id.make("other") }), [])
-			yield* Effect.yieldNow
-			assert.deepStrictEqual(published, [[1, 2], [3, 4, 5], [6]])
+			assert.deepStrictEqual(yield* Fiber.join(published), [
+				[1, 2],
+				[3, 4, 5],
+				[6],
+			])
 		}),
 )
 
@@ -355,17 +408,17 @@ it.effect(
 			const firstItems = yield* store.items(chat, { turn: first.id }),
 				secondItems = yield* store.items(chat, { turn: second.id })
 			assert.deepStrictEqual(
-				firstItems.map((item) => item.id),
+				Arr.map(firstItems, (item) => item.id),
 				first.items,
 			)
 			assert.deepStrictEqual(
-				secondItems.map((item) => item.id),
+				Arr.map(secondItems, (item) => item.id),
 				second.items,
 			)
-			assert.ok(firstItems.every((item) => item.origin?.turn === first.id))
+			assert.ok(Arr.every(firstItems, (item) => item.origin?.turn === first.id))
 			assert.ok(
-				Math.max(...firstItems.map((item) => item.seq)) <
-					Math.min(...secondItems.map((item) => item.seq)),
+				Math.max(...Arr.map(firstItems, (item) => item.seq)) <
+					Math.min(...Arr.map(secondItems, (item) => item.seq)),
 			)
 			assert.strictEqual(done.chat.seq, firstItems.length + secondItems.length)
 		}).pipe(

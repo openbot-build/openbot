@@ -12,23 +12,23 @@ export const Provider = Schema.Struct({
 })
 export type Provider = typeof Provider.Type
 
-export class Selection extends Schema.TaggedClass<Selection>()(
-	"Config.Selection",
-	{
-		provider: ProviderRuntime.Id,
-		model: ModelRuntime.Id,
-		reasoningEffort: Schema.optional(Schema.String),
-		serviceTier: Schema.optional(Schema.String),
-	},
-) {}
+export class Selection extends Schema.TaggedClass<
+	Selection,
+	{ readonly brand: unique symbol }
+>()("Config.Selection", {
+	provider: ProviderRuntime.Id,
+	model: ModelRuntime.Id,
+	reasoningEffort: Schema.optional(Schema.String),
+	serviceTier: Schema.optional(Schema.String),
+}) {}
+
+const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
 
 const CompactionSchema = Schema.TaggedUnion({
 	Native: {},
 	NonNative: {
 		model: Schema.optional(Selection),
-		keepRecentMessages: Schema.optional(
-			Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0))),
-		),
+		keepRecentMessages: Schema.optional(PositiveInt),
 	},
 })
 export type Compaction = typeof CompactionSchema.Type
@@ -51,7 +51,10 @@ export interface ContextLimits {
 }
 
 /** Model catalog data that can be serialized. Executable models live in Model. */
-export class Model extends Schema.TaggedClass<Model>()("Config.Model", {
+export class Model extends Schema.TaggedClass<
+	Model,
+	{ readonly brand: unique symbol }
+>()("Config.Model", {
 	provider: ProviderRuntime.Id,
 	id: ModelRuntime.Id,
 	name: Schema.String,
@@ -62,13 +65,11 @@ export class Model extends Schema.TaggedClass<Model>()("Config.Model", {
 	reasoningLevels: Schema.optional(Schema.Array(ReasoningLevel)),
 	defaultServiceTier: Schema.optional(Schema.NonEmptyString),
 	serviceTierOptions: Schema.optional(Schema.Array(ServiceTier)),
-	maxContextWindow: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+	maxContextWindow: Schema.optional(PositiveInt),
 	effectiveContextWindowPercent: Schema.optional(
 		Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
 	),
-	effectiveContextWindow: Schema.optional(
-		Schema.Int.check(Schema.isGreaterThan(0)),
-	),
+	effectiveContextWindow: Schema.optional(PositiveInt),
 	instructionsTemplate: Schema.optional(Schema.String),
 	supportVerbosity: Schema.optional(Schema.Boolean),
 	defaultVerbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])),
@@ -78,21 +79,15 @@ export class Model extends Schema.TaggedClass<Model>()("Config.Model", {
 	),
 	reasoningEfforts: Schema.Array(Schema.String),
 	serviceTiers: Schema.Array(Schema.String),
-	maxInputTokens: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
-	maxOutputTokensLimit: Schema.optional(
-		Schema.Int.check(Schema.isGreaterThan(0)),
-	),
-	maxOutputTokens: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+	maxInputTokens: Schema.optional(PositiveInt),
+	maxOutputTokensLimit: Schema.optional(PositiveInt),
+	maxOutputTokens: Schema.optional(PositiveInt),
 	temperature: Schema.optional(Schema.Finite),
 	topP: Schema.optional(Schema.Finite),
 	tokenCounting: Schema.optional(Schema.Literals(["native", "estimate"])),
-	contextWindow: Schema.optional(
-		Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0))),
-	),
+	contextWindow: Schema.optional(PositiveInt),
 	compaction: Schema.optional(CompactionSchema),
-	autoCompactTokenLimit: Schema.optional(
-		Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0))),
-	),
+	autoCompactTokenLimit: Schema.optional(PositiveInt),
 }) {}
 
 /** `build` does the work. `plan` looks things up and writes a plan first. */
@@ -118,10 +113,13 @@ export const SelectionReason = ModelConfigurationReason.pick([
 ])
 export type SelectionReason = typeof SelectionReason.Type
 
-export class ModelConfigurationError extends Schema.TaggedError<ModelConfigurationError>()(
-	"ModelConfigurationError",
-	{ reason: ModelConfigurationReason, message: Schema.String },
-) {}
+export class ModelConfigurationError extends Schema.TaggedError<
+	ModelConfigurationError,
+	{ readonly brand: unique symbol }
+>()("ModelConfigurationError", {
+	reason: ModelConfigurationReason,
+	message: Schema.String,
+}) {}
 
 export interface ModelConfigurationOperations<
 	ReadError = ModelConfigurationError,
@@ -163,13 +161,14 @@ export class ModelConfiguration extends Context.Service<
 	ModelConfigurationOperations
 >()("@openbot-build/core/models/Config/ModelConfiguration") {}
 
-export class ExecutionModeError extends Schema.TaggedError<ExecutionModeError>()(
-	"ExecutionModeError",
-	{
-		reason: Schema.Literals(["chat-not-found", "unavailable"]),
-		message: Schema.String,
-	},
-) {}
+export class ExecutionModeError extends Schema.TaggedError<
+	ExecutionModeError,
+	{ readonly brand: unique symbol }
+>()("ExecutionModeError", {
+	reason: Schema.Literals(["chat-not-found", "unavailable"]),
+	message: Schema.String,
+	cause: Schema.optionalKey(Schema.Defect()),
+}) {}
 
 export interface ExecutionModeOperations<
 	ReadError = ExecutionModeError,

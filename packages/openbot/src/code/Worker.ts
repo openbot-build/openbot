@@ -5,19 +5,21 @@
  * The program can only call the App bindings that the host gives it. The host
  * answers each call. `vault` holds only references to secrets, never their values. This file is a worker entry point, so it starts work when it loads.
  */
-import { parentPort } from "node:worker_threads"
+import { type MessagePort, parentPort } from "node:worker_threads"
 import { performance } from "node:perf_hooks"
+// Each run starts a new worker, so the worker loads only the modules that it uses.
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import variant from "@jitl/quickjs-singlefile-mjs-release-sync"
+import * as Arr from "effect/Array"
+import * as Deferred from "effect/Deferred"
+import * as Effect from "effect/Effect"
+import * as Queue from "effect/Queue"
 import {
 	newQuickJSWASMModuleFromVariant,
 	type QuickJSContext,
 	type QuickJSHandle,
 } from "quickjs-emscripten-core"
 import type { FromWorker, Settled, ToWorker } from "./Protocol.ts"
-
-const port = parentPort
-if (port === null)
-	throw new Error("The Code Mode worker must run in a worker thread.")
 
 /** Code that runs in QuickJS before the program. It builds `apps`, `vault`, `console`, the clock and random numbers. */
 const prelude = `(() => {
@@ -54,7 +56,7 @@ const prelude = `(() => {
 		apps[group][name] = (args) => call(binding, args)
 	}
 	const vault = {}
-	for (const item of JSON.parse(host.vault)) {
+	for (const item of host.vault) {
 		const fields = {}
 		for (const field of item.fields) fields[field] = "⟦vault:" + item.alias + "/" + field + "⟧"
 		vault[item.alias] = Object.freeze(fields)
@@ -84,69 +86,97 @@ const prelude = `(() => {
 	return settle
 })()`
 
-const run = async (start: Extract<ToWorker, { type: "start" }>) => {
-	const module = await newQuickJSWASMModuleFromVariant(variant)
-	const runtime = module.newRuntime()
-	runtime.setMemoryLimit(start.limits.memoryBytes)
-	runtime.setMaxStackSize(512 * 1024)
-	// Only time inside QuickJS counts. Time that the host spends on App calls does not.
-	let used = 0
-	let since: number | undefined
-	let timedOut = false
-	runtime.setInterruptHandler(() => {
-		if (since === undefined) return false
-		timedOut = used + (performance.now() - since) > start.limits.timeoutMs
-		return timedOut
-	})
-	const timed = <A>(work: () => A): A => {
-		since = performance.now()
-		try {
-			return work()
-		} finally {
-			used += performance.now() - since
-			since = undefined
-		}
-	}
-	const context = runtime.newContext()
-	let logs: ReadonlyArray<string> = []
-	let logBytes = 0
-	let next = 0
-	let calls: Array<{ index: number; binding: string; arguments: string }> = []
-	const failed = (
-		reason: Extract<FromWorker, { type: "failed" }>["reason"],
-		message: string,
-	) =>
-		port.postMessage({
-			type: "failed",
-			reason,
-			message,
-			logs,
-		} satisfies FromWorker)
-	const fromError = (handle: QuickJSHandle) => {
-		const error: unknown = context.dump(handle)
+type Start = Extract<ToWorker, { type: "start" }>
+
+/** A new QuickJS array of strings. The caller disposes it. */
+const newStrings = (context: QuickJSContext, values: ReadonlyArray<string>) => {
+	const array = context.newArray()
+	Arr.forEach(values, (value, index) => {
+		const handle = context.newString(value)
+		context.setProp(array, index, handle)
 		handle.dispose()
-		if (timedOut) return failed("Timeout", "The program used all of its time.")
-		const text =
-			typeof error === "object" && error !== null && "message" in error
-				? String((error as { name?: unknown }).name ?? "Error") +
-					": " +
-					String(error.message)
-				: String(error)
-		if (/out of memory/i.test(text))
-			return failed("Memory", "The program used all of its memory.")
-		return failed("Error", text)
-	}
-	try {
-		const host = context.newObject()
-		const bindings = context.newArray()
-		start.bindings.forEach((binding, index) => {
-			const value = context.newString(binding)
-			context.setProp(bindings, index, value)
-			value.dispose()
+	})
+	return array
+}
+
+/**
+ * Runs the program. `results` gives the answers to each batch of App calls.
+ * A defect is a bug of OpenBot, not of the program. It ends the worker, and
+ * `NodeRuntime.runMain` writes its full cause to the server output.
+ */
+const run = (
+	port: MessagePort,
+	start: Start,
+	results: Queue.Dequeue<ReadonlyArray<Settled>>,
+) =>
+	Effect.gen(function* () {
+		const post = (message: FromWorker) =>
+			Effect.sync(() => port.postMessage(message))
+		const module = yield* Effect.promise(() =>
+			newQuickJSWASMModuleFromVariant(variant),
+		)
+		const runtime = module.newRuntime()
+		runtime.setMemoryLimit(start.limits.memoryBytes)
+		runtime.setMaxStackSize(512 * 1024)
+		// Only time inside QuickJS counts. Time that the host spends on App calls does not.
+		let used = 0
+		let since: number | undefined
+		let timedOut = false
+		runtime.setInterruptHandler(() => {
+			if (since === undefined) return false
+			timedOut = used + (performance.now() - since) > start.limits.timeoutMs
+			return timedOut
 		})
+		const timed = <A>(work: () => A): A => {
+			since = performance.now()
+			try {
+				return work()
+			} finally {
+				used += performance.now() - since
+				since = undefined
+			}
+		}
+		const context = runtime.newContext()
+		let logs: ReadonlyArray<string> = []
+		let logBytes = 0
+		let next = 0
+		let calls: Array<{ index: number; binding: string; arguments: string }> = []
+		const failed = (
+			reason: Extract<FromWorker, { type: "failed" }>["reason"],
+			message: string,
+		) => post({ type: "failed", reason, message, logs })
+		const fromError = (handle: QuickJSHandle) =>
+			Effect.suspend(() => {
+				const error: unknown = context.dump(handle)
+				handle.dispose()
+				if (timedOut)
+					return failed("Timeout", "The program used all of its time.")
+				const text =
+					typeof error === "object" && error !== null && "message" in error
+						? String((error as { name?: unknown }).name ?? "Error") +
+							": " +
+							String(error.message)
+						: String(error)
+				if (/out of memory/i.test(text))
+					return failed("Memory", "The program used all of its memory.")
+				return failed("Error", text)
+			})
+		const host = context.newObject()
+		const bindings = newStrings(context, start.bindings)
 		context.setProp(host, "bindings", bindings)
 		bindings.dispose()
-		const vault = context.newString(JSON.stringify(start.vault))
+		const vault = context.newArray()
+		Arr.forEach(start.vault, (item, index) => {
+			const entry = context.newObject()
+			const alias = context.newString(item.alias)
+			context.setProp(entry, "alias", alias)
+			alias.dispose()
+			const fields = newStrings(context, item.fields)
+			context.setProp(entry, "fields", fields)
+			fields.dispose()
+			context.setProp(vault, index, entry)
+			entry.dispose()
+		})
 		context.setProp(host, "vault", vault)
 		vault.dispose()
 		const seed = context.newNumber(start.seed)
@@ -190,64 +220,52 @@ const run = async (start: Extract<ToWorker, { type: "start" }>) => {
 				"program.js",
 			),
 		)
-		if (evaluated.error !== undefined) return fromError(evaluated.error)
+		if (evaluated.error !== undefined) return yield* fromError(evaluated.error)
 		const program = evaluated.value
 		for (;;) {
 			const jobs = timed(() => runtime.executePendingJobs())
-			if (jobs.error !== undefined) return fromError(jobs.error)
+			if (jobs.error !== undefined) return yield* fromError(jobs.error)
 			const state = context.getPromiseState(program)
 			if (state.type === "fulfilled") {
-				const text = context.getString(
-					context
-						.unwrapResult(
-							timed(() =>
-								context.evalCode(
-									"(value) => JSON.stringify(value === undefined ? null : value)",
-								),
-							),
-						)
-						.consume((stringify) =>
-							context.unwrapResult(
-								context.callFunction(stringify, context.undefined, state.value),
-							),
+				// This code is constant, so a failure here is a bug of OpenBot.
+				const stringify = context.unwrapResult(
+					timed(() =>
+						context.evalCode(
+							"(value) => JSON.stringify(value === undefined ? null : value)",
 						),
+					),
 				)
+				// The value of the program can make JSON.stringify fail, for example with a
+				// circular reference or a BigInt. That is an error of the program.
+				const result = timed(() =>
+					context.callFunction(stringify, context.undefined, state.value),
+				)
+				stringify.dispose()
 				state.value.dispose()
+				if (result.error !== undefined) return yield* fromError(result.error)
+				const text = result.value.consume((value) => context.getString(value))
 				if (Buffer.byteLength(text) > start.limits.outputBytes)
-					return failed(
+					return yield* failed(
 						"OutputTooLarge",
 						"The program returned more data than the platform allows.",
 					)
-				return port.postMessage({
-					type: "done",
-					value: text,
-					logs,
-				} satisfies FromWorker)
+				return yield* post({ type: "done", value: text, logs })
 			}
-			if (state.type === "rejected") return fromError(state.error)
+			if (state.type === "rejected") return yield* fromError(state.error)
 			if (calls.length === 0)
-				return failed(
+				return yield* failed(
 					"Error",
 					"The program waits for something that never comes. Only App calls can make it wait.",
 				)
 			const batch = calls
 			calls = []
-			port.postMessage({ type: "calls", calls: batch } satisfies FromWorker)
-			const results = await answers()
-			if (results === undefined) return
-			for (const result of results) {
+			yield* post({ type: "calls", calls: batch })
+			for (const result of yield* Queue.take(results)) {
 				const settled = settleIn(context, settle, result, timed)
-				if (settled !== undefined) return fromError(settled)
+				if (settled !== undefined) return yield* fromError(settled)
 			}
 		}
-	} catch (error) {
-		if (timedOut) return failed("Timeout", "The program used all of its time.")
-		const text = error instanceof Error ? error.message : String(error)
-		if (/out of memory|memory/i.test(text))
-			return failed("Memory", "The program used all of its memory.")
-		return failed("Error", text)
-	}
-}
+	})
 
 /** Gives one App result to the program. Answers an error handle when the program fails on it. */
 const settleIn = (
@@ -269,17 +287,23 @@ const settleIn = (
 	return undefined
 }
 
-let waiting: ((results: ReadonlyArray<Settled> | undefined) => void) | undefined
-const answers = () =>
-	new Promise<ReadonlyArray<Settled> | undefined>((resolve) => {
-		waiting = resolve
-	})
-
-port.on("message", (message: ToWorker) => {
-	if (message.type === "start") void run(message)
-	else if (message.type === "results") {
-		const resolve = waiting
-		waiting = undefined
-		resolve?.(message.results)
-	}
+/** Takes the messages of the host. The first message starts the program. */
+const main = Effect.gen(function* () {
+	const port = parentPort
+	if (port === null)
+		return yield* Effect.die(
+			new Error("The Code Mode worker must run in a worker thread."),
+		)
+	const started = yield* Deferred.make<Start>()
+	const results = yield* Queue.unbounded<ReadonlyArray<Settled>>()
+	yield* Effect.sync(() =>
+		port.on("message", (message: ToWorker) => {
+			if (message.type === "start")
+				Deferred.doneUnsafe(started, Effect.succeed(message))
+			else Queue.offerUnsafe(results, message.results)
+		}),
+	)
+	yield* run(port, yield* Deferred.await(started), results)
 })
+
+NodeRuntime.runMain(main)

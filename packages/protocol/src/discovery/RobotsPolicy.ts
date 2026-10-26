@@ -1,4 +1,4 @@
-import { Array as EffectArray, Layer } from "effect"
+import { Array as Arr, Layer, Option, pipe, String as Str } from "effect"
 import { Robots } from "./Robots.ts"
 
 interface Rule {
@@ -15,67 +15,76 @@ const groups = (text: string) => {
 	let result: ReadonlyArray<Group> = []
 	let group: Group | undefined
 	let rulesStarted = false
-	for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
-		const value = line.split("#", 1)[0]?.trim() ?? ""
-		const colon = value.indexOf(":")
-		if (colon < 0) continue
-		const name = value.slice(0, colon).trim().toLowerCase()
-		const field = value.slice(colon + 1).trim()
+	for (const line of pipe(
+		text,
+		Str.replace(/^\uFEFF/, ""),
+		Str.split(/\r\n|\r|\n/),
+	)) {
+		const value = Str.trim(Arr.headNonEmpty(Str.split(line, "#")))
+		const colon = pipe(value, Str.indexOf(":"))
+		if (Option.isNone(colon)) continue
+		const name = pipe(
+			value,
+			Str.slice(0, colon.value),
+			Str.trim,
+			Str.toLowerCase,
+		)
+		const field = pipe(value, Str.slice(colon.value + 1), Str.trim)
 		if (name === "user-agent") {
 			if (!/^(?:[a-z_-]+|\*)$/i.test(field)) continue
 			if (group === undefined || rulesStarted) {
-				if (group !== undefined) result = EffectArray.append(result, group)
+				if (group !== undefined) result = Arr.append(result, group)
 				group = { bots: [], rules: [] }
 				rulesStarted = false
 			}
 			group = {
 				...group,
-				bots: EffectArray.append(group.bots, field.toLowerCase()),
+				bots: Arr.append(group.bots, Str.toLowerCase(field)),
 			}
 		} else if (
 			(name === "allow" || name === "disallow") &&
 			group !== undefined
 		) {
 			rulesStarted = true
-			if (field.startsWith("/") || field.startsWith("*"))
+			if (pipe(field, Str.startsWith("/")) || pipe(field, Str.startsWith("*")))
 				group = {
 					...group,
-					rules: EffectArray.append(group.rules, {
+					rules: Arr.append(group.rules, {
 						allow: name === "allow",
 						pattern: field,
 					}),
 				}
 		}
 	}
-	return group === undefined ? result : EffectArray.append(result, group)
+	return group === undefined ? result : Arr.append(result, group)
 }
 const octets = (value: string, pattern: boolean) => {
 	let result = ""
 	for (let index = 0; index < value.length; index++) {
 		const part = value[index]
 		if (part === undefined) continue
-		if (
-			part === "%" &&
-			/^[a-f\d]{2}$/i.test(value.slice(index + 1, index + 3))
-		) {
-			const hex = value.slice(index + 1, index + 3).toUpperCase()
+		const escape = pipe(value, Str.slice(index + 1, index + 3))
+		if (part === "%" && /^[a-f\d]{2}$/i.test(escape)) {
+			const hex = Str.toUpperCase(escape)
 			const character = String.fromCharCode(Number.parseInt(hex, 16))
 			result += /^[a-z\d_.~-]$/i.test(character) ? character : "%" + hex
 			index += 2
 		} else if (!pattern && (part === "*" || part === "$"))
 			result += part === "*" ? "%2A" : "%24"
-		else if (part.codePointAt(0)! > 127) {
-			const point = value.codePointAt(index)
-			if (point !== undefined) {
-				result += encodeURIComponent(String.fromCodePoint(point))
-				if (point > 0xffff) index++
+		else if (Option.exists(Str.codePointAt(part, 0), (point) => point > 127)) {
+			const point = Str.codePointAt(value, index)
+			if (Option.isSome(point)) {
+				result += encodeURIComponent(String.fromCodePoint(point.value))
+				if (point.value > 0xffff) index++
 			}
 		} else result += part
 	}
 	return result
 }
 const matches = (rule: string, path: string) => {
-	const pattern = rule.endsWith("$") ? rule.slice(0, -1) : rule + "*"
+	const pattern = pipe(rule, Str.endsWith("$"))
+		? pipe(rule, Str.slice(0, -1))
+		: rule + "*"
 	let cursor = 0
 	let position = 0
 	let star = -1
@@ -103,20 +112,19 @@ export const allowed = (options: {
 	const url = new URL(options.url)
 	if (url.pathname === "/robots.txt") return true
 	const parsed = groups(options.text)
-	const token = options.productToken.toLowerCase()
-	const exact = parsed.filter((group) => group.bots.includes(token))
-	const selected =
-		exact.length > 0
-			? exact
-			: parsed.filter((group) => group.bots.includes("*"))
+	const token = Str.toLowerCase(options.productToken)
+	const exact = Arr.filter(parsed, (group) => Arr.contains(group.bots, token))
+	const selected = Arr.isReadonlyArrayNonEmpty(exact)
+		? exact
+		: Arr.filter(parsed, (group) => Arr.contains(group.bots, "*"))
 	const path = octets(url.pathname + url.search, false)
 	let length = -1
 	let decision = true
-	for (const rule of selected.flatMap((group) => group.rules)) {
+	for (const rule of Arr.flatMap(selected, (group) => group.rules)) {
 		const normalized = octets(rule.pattern, true)
 		if (!matches(normalized, path)) continue
 		const specificity = new TextEncoder().encode(
-			normalized.replace(/\*/g, ""),
+			pipe(normalized, Str.replaceAll("*", "")),
 		).length
 		if (specificity > length || (specificity === length && rule.allow)) {
 			length = specificity

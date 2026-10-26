@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Array as Arr, Record as Rec, Schema } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -13,6 +13,8 @@ import {
 	InvitationStatus,
 } from "./Invitation.ts"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
+import { Email } from "./Email.ts"
+import { Limit } from "./Page.ts"
 import {
 	AuthorizationErrors,
 	PolicyInput,
@@ -99,10 +101,7 @@ export const Invitation = Schema.Struct({
 })
 export type Invitation = typeof Invitation.Type
 export const CreateInvitationRequest = Schema.Struct({
-	email: Schema.String.check(
-		Schema.isMaxLength(320),
-		Schema.isPattern(/^[^@\s]+@[^@\s]+$/),
-	),
+	email: Email,
 	/** Without it, the person gets the default roles of the organization. */
 	roles: Schema.optionalKey(Roles),
 })
@@ -172,12 +171,8 @@ export type AuditActionOf<Resource extends keyof AuditActionTree> =
 	`${Resource}.${AuditActionTree[Resource][number]}`
 
 export const AuditAction = Schema.Literals(
-	Object.entries(auditActionTree).flatMap(([resource, actions]) =>
-		actions.map(
-			// `Object.entries` gives plain strings. The type above gives the same ids.
-			(action) =>
-				`${resource}.${action}` as AuditActionOf<keyof AuditActionTree>,
-		),
+	Arr.flatMap(Rec.toEntries(auditActionTree), ([resource, actions]) =>
+		Arr.map(actions, (action) => `${resource}.${action}` as const),
 	),
 )
 export type AuditAction = typeof AuditAction.Type
@@ -191,41 +186,40 @@ export const AuditLogEntry = Schema.Struct({
 })
 export type AuditLogEntry = typeof AuditLogEntry.Type
 
-const Limit = Schema.FiniteFromString.check(
-	Schema.isBetween({ minimum: 1, maximum: 100 }),
-)
-
-export class MemberNotFound extends Schema.TaggedError<MemberNotFound>()(
-	"MemberNotFound",
-	{ userId: Schema.String },
-) {}
+export class MemberNotFound extends Schema.TaggedError<
+	MemberNotFound,
+	{ readonly brand: unique symbol }
+>()("MemberNotFound", { userId: Schema.String }) {}
 /** An organization must keep at least one active Super Administrator. */
-export class LastSuperAdministrator extends Schema.TaggedError<LastSuperAdministrator>()(
-	"LastSuperAdministrator",
-	{},
-) {}
-export class RoleNotFound extends Schema.TaggedError<RoleNotFound>()(
-	"RoleNotFound",
-	{ roleId: Schema.String },
-) {}
+export class LastSuperAdministrator extends Schema.TaggedError<
+	LastSuperAdministrator,
+	{ readonly brand: unique symbol }
+>()("LastSuperAdministrator", {}) {}
+export class RoleNotFound extends Schema.TaggedError<
+	RoleNotFound,
+	{ readonly brand: unique symbol }
+>()("RoleNotFound", { roleId: Schema.String }) {}
 /** Members or the settings still use the role. Give them another role first. */
-export class RoleInUse extends Schema.TaggedError<RoleInUse>()("RoleInUse", {
+export class RoleInUse extends Schema.TaggedError<
+	RoleInUse,
+	{ readonly brand: unique symbol }
+>()("RoleInUse", {
 	roleId: Schema.String,
 }) {}
 /** Built-in roles cannot change. */
-export class RoleReadOnly extends Schema.TaggedError<RoleReadOnly>()(
-	"RoleReadOnly",
-	{ roleId: Schema.String },
-) {}
+export class RoleReadOnly extends Schema.TaggedError<
+	RoleReadOnly,
+	{ readonly brand: unique symbol }
+>()("RoleReadOnly", { roleId: Schema.String }) {}
 /** Only platform admins can create organizations on this platform. */
-export class OrganizationCreationDisabled extends Schema.TaggedError<OrganizationCreationDisabled>()(
-	"OrganizationCreationDisabled",
-	{},
-) {}
-export class OrganizationStorageUnavailable extends Schema.TaggedError<OrganizationStorageUnavailable>()(
-	"OrganizationStorageUnavailable",
-	{},
-) {}
+export class OrganizationCreationDisabled extends Schema.TaggedError<
+	OrganizationCreationDisabled,
+	{ readonly brand: unique symbol }
+>()("OrganizationCreationDisabled", {}) {}
+export class OrganizationStorageUnavailable extends Schema.TaggedError<
+	OrganizationStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("OrganizationStorageUnavailable", {}) {}
 const errors = [
 	OrganizationStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
@@ -271,7 +265,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.get("listMembers", "/v1/organization/members", {
 		query: {
 			after: Schema.optionalKey(Schema.String),
-			limit: Schema.optionalKey(Limit),
+			limit: Schema.optionalKey(Limit(100)),
 		},
 		success: Schema.Struct({
 			items: Schema.Array(Member),
@@ -398,7 +392,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.get("listAuditLogs", "/v1/organization/audit_logs", {
 		query: {
 			after: Schema.optionalKey(Schema.String),
-			limit: Schema.optionalKey(Limit),
+			limit: Schema.optionalKey(Limit(100)),
 			action: Schema.optionalKey(AuditAction),
 			actor: Schema.optionalKey(Schema.String),
 		},

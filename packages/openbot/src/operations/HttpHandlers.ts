@@ -1,5 +1,4 @@
 import {
-	ChatNotFound,
 	ChatStorageUnavailable,
 	Identity,
 	OpenBotApi,
@@ -9,18 +8,26 @@ import type { Chat, Operation } from "@openbot-build/core"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
+import * as Failures from "../app/Failures.ts"
 
 type Chats = Effect.Success<ReturnType<(typeof Backend.Service)["forCaller"]>>
 
-/** Checks that the Chat is one of the caller. */
+/**
+ * Checks that the Chat is one of the caller. A Chat that is not there and a
+ * storage failure keep their meaning. The other errors are not in the contract
+ * of this group, so they become a storage failure.
+ */
 const ownChat = (chats: Chats, id: Chat.Id) =>
-	chats
-		.get(id)
-		.pipe(
-			Effect.mapError((error) =>
-				error instanceof ChatNotFound ? error : ChatStorageUnavailable.make({}),
-			),
-		)
+	chats.get(id).pipe(
+		Failures.replaceTag("ChatConflict", "OpenBot could not read the Chat", () =>
+			ChatStorageUnavailable.make({}),
+		),
+		Failures.replaceTag(
+			"ChatModelInvalid",
+			"OpenBot could not read the Chat",
+			() => ChatStorageUnavailable.make({}),
+		),
+	)
 const notFound = (error: { readonly id: Operation.Id }) =>
 	Effect.fail(OperationNotFound.make({ id: error.id }))
 
@@ -36,7 +43,11 @@ export const layer = HttpApiBuilder.group(
 					const caller = yield* Identity
 					const chats = yield* backend
 						.forCaller(caller)
-						.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
+						.pipe(
+							Failures.replace("OpenBot could not open the Chats", () =>
+								ChatStorageUnavailable.make({}),
+							),
+						)
 					yield* ownChat(chats, chat)
 					return chats
 				})

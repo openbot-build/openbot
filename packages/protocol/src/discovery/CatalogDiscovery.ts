@@ -1,18 +1,21 @@
 import {
-	Array as EffectArray,
+	Array as Arr,
+	Cache,
 	Chunk,
 	Option,
 	HashSet,
-	HashMap,
 	Clock,
+	Duration,
 	Effect,
 	Equal,
+	Exit,
 	Layer,
-	Ref,
 	Schema,
 	Match,
 	Predicate,
-	Record as RecordUtils,
+	Record as Rec,
+	String as Str,
+	pipe,
 } from "effect"
 import { parse, defaultTreeAdapter, type DefaultTreeAdapterTypes } from "parse5"
 import * as Document from "../Document.ts"
@@ -24,10 +27,11 @@ import {
 	DiscoveryError,
 	Discovery,
 	Rules,
-	type ConfigurationRequirement,
+	ConfigurationRequirement,
 	type Update,
 	type Error,
 	type Options,
+	type Result,
 } from "./Discovery.ts"
 
 export const compare = (options: {
@@ -35,17 +39,17 @@ export const compare = (options: {
 	readonly current: Candidate
 }): Update => {
 	const hints = (candidate: Candidate) =>
-		candidate.endpoints.map(({ remote }) => ({
+		Arr.map(candidate.endpoints, ({ remote }) => ({
 			url: remote.url,
 			type: remote.type,
 			versions: remote.supportedProtocolVersions,
-			variables: Object.fromEntries(
-				Object.entries(remote.variables ?? {}).map(([name, input]) => [
-					name,
-					[input.value, input.default, input.isRequired, input.choices],
-				]),
-			),
-			headers: (remote.headers ?? []).map((h) => [
+			variables: Rec.map(remote.variables ?? {}, (input) => [
+				input.value,
+				input.default,
+				input.isRequired,
+				input.choices,
+			]),
+			headers: Arr.map(remote.headers ?? [], (h) => [
 				h.name,
 				h.value,
 				h.default,
@@ -67,7 +71,7 @@ export const compare = (options: {
 export const inputLink = (
 	input: string,
 ): Effect.Effect<string, Document.InvalidLink | Schema.SchemaError> => {
-	const value = input.trim()
+	const value = Str.trim(input)
 	if (/^https:\/\//i.test(value))
 		return Schema.decodeEffect(Document.Link)(value)
 	if (
@@ -93,10 +97,11 @@ export const configureEndpoint = Effect.fn("Discovery.configureEndpoint")(
 		readonly index: number
 		readonly values: Readonly<Record<string, string>>
 	}) {
-		const endpoint = options.candidate.endpoints.find(
+		const selected = Arr.findFirst(
+			options.candidate.endpoints,
 			(e) => e.index === options.index,
 		)
-		if (endpoint === undefined)
+		if (Option.isNone(selected))
 			return yield* DiscoveryError.make({
 				reason: "Configuration",
 				issues: [
@@ -106,8 +111,12 @@ export const configureEndpoint = Effect.fn("Discovery.configureEndpoint")(
 					},
 				],
 			})
+		const endpoint = selected.value
 		let issues: ReadonlyArray<Issue> = []
-		const value = (key: string, input: Document.Input | undefined) => {
+		const value = (
+			key: string,
+			input: Document.Input | Document.HeaderInput | undefined,
+		) => {
 			const result = input?.value ?? options.values[key] ?? input?.default
 			if (
 				result !== undefined &&
@@ -115,13 +124,16 @@ export const configureEndpoint = Effect.fn("Discovery.configureEndpoint")(
 					(input?.format === "boolean" &&
 						!["true", "false"].includes(result)) ||
 					(input?.format === "number" &&
-						(!Number.isFinite(Number(result)) || result.trim() === "")))
+						(!Number.isFinite(Number(result)) || Str.trim(result) === "")))
 			) {
-				issues = EffectArray.append(issues, {
-					url: options.candidate.cardUrl,
-					reason: `Invalid configuration: ${key}`,
-					fieldPath: key,
-				})
+				issues = Arr.append(
+					issues,
+					Issue.make({
+						url: options.candidate.cardUrl,
+						reason: `Invalid configuration: ${key}`,
+						fieldPath: key,
+					}),
+				)
 			}
 			return result
 		}
@@ -130,23 +142,35 @@ export const configureEndpoint = Effect.fn("Discovery.configureEndpoint")(
 			prefix: string,
 			variables: typeof endpoint.remote.variables,
 		) =>
-			template.replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (_, name: string) => {
-				const result = value(`${prefix}${name}`, variables?.[name])
-				if (result === undefined)
-					issues = EffectArray.append(issues, {
-						url: options.candidate.cardUrl,
-						reason: `Missing configuration: ${prefix}${name}`,
-						fieldPath: `${prefix}${name}`,
-					})
-				return result ?? ""
-			})
+			pipe(
+				Str.split(template, /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/),
+				// A split with a capture group puts each variable name at an odd index.
+				Arr.map((part, index) => {
+					if (index % 2 === 0) return part
+					const result = value(`${prefix}${part}`, variables?.[part])
+					if (result === undefined)
+						issues = Arr.append(
+							issues,
+							Issue.make({
+								url: options.candidate.cardUrl,
+								reason: `Missing configuration: ${prefix}${part}`,
+								fieldPath: `${prefix}${part}`,
+							}),
+						)
+					return result ?? ""
+				}),
+				Arr.join(""),
+			)
 		for (const req of endpoint.requirements) {
 			if (options.values[req.key] === undefined)
-				issues = EffectArray.append(issues, {
-					url: options.candidate.cardUrl,
-					reason: `Missing configuration: ${req.key}`,
-					fieldPath: req.key,
-				})
+				issues = Arr.append(
+					issues,
+					Issue.make({
+						url: options.candidate.cardUrl,
+						reason: `Missing configuration: ${req.key}`,
+						fieldPath: req.key,
+					}),
+				)
 		}
 		const url = substitute(
 			endpoint.remote.url,
@@ -166,11 +190,14 @@ export const configureEndpoint = Effect.fn("Discovery.configureEndpoint")(
 				/^(?:authorization|cookie|host|origin|mcp-.*)$/i.test(header.name) ||
 				/[\r\n]/.test(rendered)
 			) {
-				issues = EffectArray.append(issues, {
-					url: options.candidate.cardUrl,
-					reason: `Reserved or invalid connection header: ${header.name}`,
-					fieldPath: `header:${header.name}`,
-				})
+				issues = Arr.append(
+					issues,
+					Issue.make({
+						url: options.candidate.cardUrl,
+						reason: `Reserved or invalid connection header: ${header.name}`,
+						fieldPath: `header:${header.name}`,
+					}),
+				)
 			} else headers[header.name] = rendered
 		}
 		if (issues.length > 0)
@@ -192,59 +219,65 @@ export const catalogLinks = (options: {
 	readonly link?: string | undefined
 	readonly html?: string | undefined
 }): ReadonlyArray<string> => {
+	const isCatalog = (rel: string) =>
+		pipe(rel, Str.toLowerCase, Str.split(/\s+/), Arr.contains("ai-catalog"))
+	const attribute = (node: DefaultTreeAdapterTypes.Element, name: string) =>
+		pipe(
+			Arr.findFirst(node.attrs, (a) => a.name === name),
+			Option.map((a) => a.value),
+		)
 	let declarations: ReadonlyArray<string> = []
 	const header = options.link ?? ""
-	for (const match of header.matchAll(
-		/<([^<>]+)>\s*((?:;\s*[\w-]+=(?:"[^"]*"|[^,;\s]+))*)/g,
+	for (const match of pipe(
+		header,
+		Str.matchAll(/<([^<>]+)>\s*((?:;\s*[\w-]+=(?:"[^"]*"|[^,;\s]+))*)/g),
 	)) {
 		const rel = /;\s*rel=(?:"([^"]*)"|([^,;\s]+))/i.exec(match[2] ?? "")
-		if (
-			(rel?.[1] ?? rel?.[2] ?? "")
-				.toLowerCase()
-				.split(/\s+/)
-				.includes("ai-catalog") &&
-			match[1] !== undefined
-		)
-			declarations = EffectArray.append(declarations, match[1])
+		if (isCatalog(rel?.[1] ?? rel?.[2] ?? "") && match[1] !== undefined)
+			declarations = Arr.append(declarations, match[1])
 	}
 	let base = options.responseUrl
 	if (declarations.length === 0 && options.html !== undefined) {
 		const document = parse(options.html)
-		const html = document.childNodes.find(
-			(node): node is DefaultTreeAdapterTypes.Element =>
-				defaultTreeAdapter.isElementNode(node) && node.tagName === "html",
+		const elements = pipe(
+			Arr.findFirst(
+				document.childNodes,
+				(node): node is DefaultTreeAdapterTypes.Element =>
+					defaultTreeAdapter.isElementNode(node) && node.tagName === "html",
+			),
+			Option.flatMap((html) =>
+				Arr.findFirst(
+					html.childNodes,
+					(node): node is DefaultTreeAdapterTypes.Element =>
+						defaultTreeAdapter.isElementNode(node) && node.tagName === "head",
+				),
+			),
+			Option.map((head) =>
+				Arr.filter(head.childNodes, defaultTreeAdapter.isElementNode),
+			),
+			Option.getOrElse(Arr.empty<DefaultTreeAdapterTypes.Element>),
 		)
-		const head = html?.childNodes.find(
-			(node): node is DefaultTreeAdapterTypes.Element =>
-				defaultTreeAdapter.isElementNode(node) && node.tagName === "head",
+		const baseHref = Arr.findFirst(elements, (node) =>
+			node.tagName === "base" ? attribute(node, "href") : Option.none(),
 		)
-		const elements = (head?.childNodes ?? []).filter(
-			defaultTreeAdapter.isElementNode,
-		)
-		const baseTag = elements.find(
-			(node) =>
-				node.tagName === "base" && node.attrs.some((a) => a.name === "href"),
-		)
-		const baseHref = baseTag?.attrs.find((a) => a.name === "href")?.value
 		// HTML URL resolution ignores an invalid base.
-		if (baseHref !== undefined && URL.canParse(baseHref, options.responseUrl))
-			base = new URL(baseHref, options.responseUrl).href
+		if (
+			Option.isSome(baseHref) &&
+			URL.canParse(baseHref.value, options.responseUrl)
+		)
+			base = new URL(baseHref.value, options.responseUrl).href
 		for (const node of elements) {
-			const rel = node.attrs
-				.find((a) => a.name === "rel")
-				?.value.toLowerCase()
-				.split(/\s+/)
-			const href = node.attrs.find((a) => a.name === "href")?.value
+			const href = attribute(node, "href")
 			if (
 				node.tagName === "link" &&
-				rel?.includes("ai-catalog") === true &&
-				href !== undefined
+				Option.exists(attribute(node, "rel"), isCatalog) &&
+				Option.isSome(href)
 			)
-				declarations = EffectArray.append(declarations, href)
+				declarations = Arr.append(declarations, href.value)
 		}
 	}
-	return EffectArray.dedupe(
-		declarations.flatMap((href) =>
+	return Arr.dedupe(
+		Arr.flatMap(declarations, (href) =>
 			URL.canParse(href, base) ? [new URL(href, base).href] : [],
 		),
 	)
@@ -259,7 +292,34 @@ interface Cached {
 	readonly response: Network.DocumentResponse
 	readonly parsed: Parsed
 	readonly freshUntil: number
+	/** How long the cache keeps this entry. */
+	readonly keepMillis: number
 }
+
+/** The cache drops the least recently used document when it has more. */
+const cacheCapacity = 256
+/** A stale document with an ETag or Last-Modified stays this much longer, so a later read can revalidate it. */
+const staleKeepMillis = 86_400_000
+/** One resolve reads at most this many documents. */
+const maxDocuments = 64
+/** Discovery follows at most this many links from one Catalog or page. */
+const maxLinks = 64
+/** One resolve must end in this time. */
+const resolveDeadline = "60 seconds"
+
+const failureIssues = (url: string, failure: Error): ReadonlyArray<Issue> =>
+	Match.valueTags(failure, {
+		DiscoveryError: (error) => error.issues,
+		InvalidDocument: (error) => [
+			Issue.make({ url, reason: `${error.kind}: ${error.issue}` }),
+		],
+		IncompatibleCard: (error) => [Issue.make({ url, reason: error.reason })],
+		InvalidLink: (error) => [Issue.make({ url, reason: error.reason })],
+		NetworkError: (error) => [
+			Issue.make({ url, reason: `${error.reason}: ${error.message}` }),
+		],
+		SchemaError: (error) => [Issue.make({ url, reason: error.message })],
+	})
 
 export const layer = (options: Options = {}) =>
 	Layer.effect(
@@ -267,22 +327,31 @@ export const layer = (options: Options = {}) =>
 		Effect.gen(function* () {
 			const rules = yield* Rules
 			const network = yield* Network.Network
-			const cache = yield* Ref.make<HashMap.HashMap<string, Cached>>(
-				HashMap.empty(),
-			)
+			// The cache compares and hashes arrays by their items, so a tuple is a good key.
+			// Only getOption, set and invalidate use it, so it never calls the lookup.
+			const cache = yield* Cache.makeWith<
+				ReadonlyArray<string | undefined>,
+				Cached
+			>(() => Effect.die("The Discovery cache has no lookup"), {
+				capacity: cacheCapacity,
+				timeToLive: (exit) =>
+					Exit.isSuccess(exit)
+						? Duration.millis(exit.value.keepMillis)
+						: Duration.zero,
+			})
 			const fetchDocument = Effect.fn("Discovery.fetchDocument")(function* (
 				input: string,
 				refresh: boolean = false,
 			) {
 				const url = yield* Schema.decodeEffect(Document.Link)(input)
 				const accept = `${Document.cardMediaType}, ${Document.catalogMediaType}, text/html`
-				const key = JSON.stringify([
+				const key = [
 					network.identity.scope,
 					network.identity.owner,
 					url,
 					accept,
-				])
-				const cached = HashMap.get(yield* Ref.get(cache), key)
+				] as const
+				const cached = yield* Cache.getOption(cache, key)
 				const now = yield* Clock.currentTimeMillis
 				const fresh = Option.filter(
 					cached,
@@ -296,7 +365,7 @@ export const layer = (options: Options = {}) =>
 				const cachedHeaders = Option.match(cached, {
 					onNone: () => ({}),
 					onSome: (entry) =>
-						RecordUtils.filter(
+						Rec.filter(
 							{
 								"if-none-match": entry.response.headers["etag"],
 								"if-modified-since": entry.response.headers["last-modified"],
@@ -347,10 +416,13 @@ export const layer = (options: Options = {}) =>
 							},
 						],
 					})
-				const media = response.headers["content-type"]
-					?.split(";")[0]
-					?.trim()
-					.toLowerCase()
+				const media = pipe(
+					response.headers["content-type"] ?? "",
+					Str.split(";"),
+					Arr.headNonEmpty,
+					Str.trim,
+					Str.toLowerCase,
+				)
 				let parsed: Parsed
 				const pageLinks = rules.catalogLinks({
 					responseUrl: response.url,
@@ -364,7 +436,7 @@ export const layer = (options: Options = {}) =>
 							Document.cardMediaType,
 							Document.catalogMediaType,
 							"application/json",
-						].includes(media ?? ""))
+						].includes(media))
 				) {
 					const links = pageLinks
 					if (links.length === 0)
@@ -408,10 +480,10 @@ export const layer = (options: Options = {}) =>
 							catalog: yield* Document.Catalog.decode(value),
 						}
 				}
-				const control = response.headers["cache-control"]?.toLowerCase() ?? ""
+				const control = Str.toLowerCase(response.headers["cache-control"] ?? "")
 				const maxAge = /(?:^|,)\s*max-age=(\d+)/.exec(control)?.[1]
 				const freshUntil =
-					control.includes("no-cache") || maxAge === undefined
+					pipe(control, Str.includes("no-cache")) || maxAge === undefined
 						? now
 						: now +
 							Math.max(
@@ -419,11 +491,18 @@ export const layer = (options: Options = {}) =>
 								Number(maxAge) - Number(response.headers["age"] ?? "0"),
 							) *
 								1000
-				yield* Ref.update(cache, (old) =>
-					control.includes("no-store")
-						? HashMap.remove(old, key)
-						: HashMap.set(old, key, { response, parsed, freshUntil }),
-				)
+				// Without a validator, a stale entry cannot be used again.
+				const validated =
+					response.headers["etag"] !== undefined ||
+					response.headers["last-modified"] !== undefined
+				yield* pipe(control, Str.includes("no-store"))
+					? Cache.invalidate(cache, key)
+					: Cache.set(cache, key, {
+							response,
+							parsed,
+							freshUntil,
+							keepMillis: freshUntil - now + (validated ? staleKeepMillis : 0),
+						})
 				return { response, parsed }
 			})
 			const makeCandidate = Effect.fn("Discovery.makeCandidate")(
@@ -434,10 +513,10 @@ export const layer = (options: Options = {}) =>
 					readonly sources: ReadonlyArray<Source>
 				}) {
 					const remotes = yield* Document.compatibleRemotes(options.card)
-					return {
+					return Candidate.make({
 						cardUrl: options.cardUrl,
 						card: options.card,
-						endpoints: remotes.map((remote) => ({
+						endpoints: Arr.map(remotes, (remote) => ({
 							index: (options.card.remotes ?? []).indexOf(remote),
 							remote,
 							requirements: rules.requirements(remote),
@@ -456,12 +535,12 @@ export const layer = (options: Options = {}) =>
 											url: options.response.url,
 										},
 									]),
-							...remotes.map((remote) => ({
+							...Arr.map(remotes, (remote) => ({
 								role: "endpoint" as const,
 								url: remote.url,
 							})),
 						],
-					} satisfies Candidate
+					})
 				},
 			)
 			const fetchCard = Effect.fn("Discovery.fetchCard")(function* (
@@ -489,146 +568,176 @@ export const layer = (options: Options = {}) =>
 					sources,
 				})
 			})
-			const resolveInput = Effect.fn("Discovery.resolve")(function* (
-				input: string,
-			) {
-				const url = yield* rules.inputLink(input)
-				let candidates = HashMap.empty<string, Candidate>()
-				let candidateOrder = Chunk.empty<string>()
-				let issues: ReadonlyArray<Issue> = []
-				let visited = HashSet.empty<string>()
-				const visit = (
-					url: string,
-					sources: ReadonlyArray<Source>,
-				): Effect.Effect<void, Error> =>
-					Effect.gen(function* () {
-						const identity = yield* Schema.decodeEffect(Document.Link)(url)
-						if (HashSet.has(visited, identity)) return
-						visited = HashSet.add(visited, identity)
-						const { response, parsed } = yield* fetchDocument(identity)
-						return yield* Match.value(parsed).pipe(
-							Match.tag("Card", ({ card }) =>
-								Effect.gen(function* () {
-									const candidate = yield* makeCandidate({
-										cardUrl: identity,
-										response,
-										card,
-										sources,
-									})
-									if (!HashMap.has(candidates, candidate.cardUrl))
-										candidateOrder = Chunk.append(
-											candidateOrder,
-											candidate.cardUrl,
+			const resolveInput = Effect.fn("Discovery.resolve")(
+				function* (input: string) {
+					const url = yield* rules.inputLink(input)
+					let candidates = Chunk.empty<Candidate>()
+					let issues: ReadonlyArray<Issue> = []
+					let visited = HashSet.empty<string>()
+					const visit = (
+						url: string,
+						sources: ReadonlyArray<Source>,
+					): Effect.Effect<void, Error> =>
+						Effect.gen(function* () {
+							const identity = yield* Schema.decodeEffect(Document.Link)(url)
+							if (HashSet.has(visited, identity)) return
+							if (HashSet.size(visited) >= maxDocuments) {
+								issues = Arr.append(
+									issues,
+									Issue.make({
+										url: identity,
+										reason: `Discovery stopped: one lookup reads at most ${maxDocuments} documents`,
+									}),
+								)
+								return
+							}
+							visited = HashSet.add(visited, identity)
+							const { response, parsed } = yield* fetchDocument(identity)
+							return yield* Match.value(parsed).pipe(
+								Match.tag("Card", ({ card }) =>
+									Effect.gen(function* () {
+										// `visited` lets each identity in only once, so a Card URL is never twice in the list.
+										candidates = Chunk.append(
+											candidates,
+											yield* makeCandidate({
+												cardUrl: identity,
+												response,
+												card,
+												sources,
+											}),
 										)
-									candidates = HashMap.set(
-										candidates,
-										candidate.cardUrl,
-										candidate,
-									)
-								}),
-							),
-							Match.orElse((parsed) =>
-								Effect.gen(function* () {
-									const { role, urls } = Match.value(parsed).pipe(
-										Match.tagsExhaustive({
-											Page: (parsed) => ({
-												role: "page" as const,
-												urls: parsed.links,
-											}),
-											Catalog: (parsed) => ({
-												role: "catalog" as const,
-												urls: parsed.catalog.entries.flatMap((entry) =>
-													Match.value(entry.type).pipe(
-														Match.whenOr(
-															Document.cardMediaType,
-															Document.catalogMediaType,
-															() => {
-																if (entry.url !== undefined) return [entry.url]
-																issues = EffectArray.append(issues, {
-																	url: response.url,
-																	reason: `Inline-only entry ${entry.identifier} has no stable Card URL`,
-																})
-																return []
-															},
-														),
-														Match.orElse(() => []),
-													),
-												),
-											}),
-										}),
-									)
-									const chain = [
-										...sources,
-										{
-											role,
-											url: identity,
-										},
-										...(response.url === identity
-											? []
-											: [
-													{
-														role,
-														url: response.url,
-													},
-												]),
-									]
-									for (const target of urls) {
-										// One broken link is an issue of the result. It does not stop the other links.
-										yield* visit(target, chain).pipe(
-											Effect.catch((failure) =>
-												Effect.sync(() => {
-													issues = EffectArray.append(issues, {
-														url: target,
-														reason: String(failure),
-													})
+									}),
+								),
+								Match.orElse((parsed) =>
+									Effect.gen(function* () {
+										const { role, urls } = Match.value(parsed).pipe(
+											Match.tagsExhaustive({
+												Page: (parsed) => ({
+													role: "page" as const,
+													urls: parsed.links,
 												}),
-											),
+												Catalog: (parsed) => ({
+													role: "catalog" as const,
+													urls: Arr.flatMap(parsed.catalog.entries, (entry) =>
+														Match.value(entry.type).pipe(
+															Match.whenOr(
+																Document.cardMediaType,
+																Document.catalogMediaType,
+																() => {
+																	if (entry.url !== undefined)
+																		return [entry.url]
+																	issues = Arr.append(
+																		issues,
+																		Issue.make({
+																			url: response.url,
+																			reason: `Inline-only entry ${entry.identifier} has no stable Card URL`,
+																		}),
+																	)
+																	return []
+																},
+															),
+															Match.orElse(() => []),
+														),
+													),
+												}),
+											}),
 										)
-									}
+										const chain = [
+											...sources,
+											Source.make({
+												role,
+												url: identity,
+											}),
+											...(response.url === identity
+												? []
+												: [
+														Source.make({
+															role,
+															url: response.url,
+														}),
+													]),
+										]
+										if (urls.length > maxLinks)
+											issues = Arr.append(
+												issues,
+												Issue.make({
+													url: response.url,
+													reason: `Discovery skipped ${urls.length - maxLinks} links: it follows at most ${maxLinks} links from one document`,
+												}),
+											)
+										for (const target of Arr.take(urls, maxLinks)) {
+											// One broken link is an issue of the result. It does not stop the other links.
+											yield* visit(target, chain).pipe(
+												Effect.catch((failure) =>
+													Effect.sync(() => {
+														issues = Arr.appendAll(
+															issues,
+															failureIssues(target, failure),
+														)
+													}),
+												),
+											)
+										}
+									}),
+								),
+							)
+						})
+					yield* visit(url, [
+						Source.make({
+							role: "input",
+							url,
+							originalInput: input,
+						}),
+					])
+					return yield* Arr.matchLeft(Chunk.toReadonlyArray(candidates), {
+						onEmpty: () =>
+							Effect.fail(
+								DiscoveryError.make({
+									reason: "NoUsableServices",
+									issues,
 								}),
 							),
-						)
+						onNonEmpty: (first, rest) =>
+							Effect.succeed<Result>(
+								Arr.matchLeft(rest, {
+									onEmpty: () => ({
+										_tag: "Single" as const,
+										candidate: first,
+										issues,
+									}),
+									onNonEmpty: (second, others) => ({
+										_tag: "Multiple" as const,
+										candidates: [first, second, ...others],
+										issues,
+									}),
+								}),
+							),
 					})
-				yield* visit(url, [
-					{
-						role: "input",
-						url,
-						originalInput: input,
-					},
-				])
-				const values = Array.from(candidateOrder, (url) =>
-					HashMap.getUnsafe(candidates, url),
-				)
-				const first = values[0]
-				const second = values[1]
-				if (first === undefined)
-					return yield* DiscoveryError.make({
-						reason: "NoUsableServices",
-						issues,
-					})
-				return second === undefined
-					? {
-							_tag: "Single" as const,
-							candidate: first,
-							issues,
-						}
-					: {
-							_tag: "Multiple" as const,
-							candidates: [first, second, ...values.slice(2)] as const,
-							issues,
-						}
-			})
+				},
+				// A Catalog can link to many slow documents, so the whole lookup has a deadline.
+				Effect.timeoutOrElse({
+					duration: resolveDeadline,
+					orElse: () =>
+						Effect.fail(
+							Network.NetworkError.make({
+								reason: "Timeout",
+								message: "Discovery did not finish in time",
+							}),
+						),
+				}),
+			)
 			return Discovery.of({
 				resolve: resolveInput,
-				refreshCard: (url) => fetchCard(url, [{ role: "input", url }], true),
+				refreshCard: (url) =>
+					fetchCard(url, [Source.make({ role: "input", url })], true),
 				refresh: (previous) =>
 					fetchCard(
 						previous.cardUrl,
 						[
-							{
+							Source.make({
 								role: "input",
 								url: previous.cardUrl,
-							},
+							}),
 						],
 						true,
 					).pipe(
@@ -644,20 +753,25 @@ export const layer = (options: Options = {}) =>
 	)
 
 const referencedVariables = (s: string) =>
-	[...s.matchAll(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g)]
-		.map((m) => m[1])
-		.filter((v): v is string => v !== undefined)
+	pipe(
+		s,
+		Str.matchAll(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g),
+		Arr.fromIterable,
+		Arr.map((m) => m[1]),
+		Arr.filter(Predicate.isNotUndefined),
+	)
 
 const requirement = (
 	key: string,
-	input: Document.Input,
-): ConfigurationRequirement => ({
-	key,
-	description: input.description,
-	isSecret: input.isSecret === true,
-	format: input.format,
-	choices: input.choices,
-})
+	input: Document.Input | Document.HeaderInput,
+): ConfigurationRequirement =>
+	ConfigurationRequirement.make({
+		key,
+		description: input.description,
+		isSecret: input.isSecret === true,
+		format: input.format,
+		choices: input.choices,
+	})
 
 /** A variable needs a value from the user when nothing in the Card gives one. */
 const variableRequirements = (options: {
@@ -667,7 +781,8 @@ const variableRequirements = (options: {
 	readonly isSecret: boolean
 }): ReadonlyArray<ConfigurationRequirement> => {
 	const referenced = referencedVariables(options.template)
-	const declared = Object.entries(options.variables ?? {}).flatMap(
+	const declared = Arr.flatMap(
+		Rec.toEntries(options.variables ?? {}),
 		([name, input]) =>
 			(input.isRequired === true || referenced.includes(name)) &&
 			input.value === undefined &&
@@ -675,9 +790,14 @@ const variableRequirements = (options: {
 				? [requirement(`${options.prefix}${name}`, input)]
 				: [],
 	)
-	const undeclared = referenced.flatMap((name) =>
+	const undeclared = Arr.flatMap(referenced, (name) =>
 		options.variables?.[name] === undefined
-			? [{ key: `${options.prefix}${name}`, isSecret: options.isSecret }]
+			? [
+					ConfigurationRequirement.make({
+						key: `${options.prefix}${name}`,
+						isSecret: options.isSecret,
+					}),
+				]
 			: [],
 	)
 	return [...declared, ...undeclared]
@@ -692,7 +812,7 @@ export const requirements = (
 		variables: remote.variables,
 		isSecret: false,
 	}),
-	...(remote.headers ?? []).flatMap((header) => [
+	...Arr.flatMap(remote.headers ?? [], (header) => [
 		...(header.isRequired === true &&
 		header.value === undefined &&
 		header.default === undefined

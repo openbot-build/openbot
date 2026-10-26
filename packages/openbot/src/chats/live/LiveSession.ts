@@ -6,12 +6,27 @@ import {
 	type Chat,
 	Turn,
 } from "@openbot-build/core"
-import { Effect, Option, PubSub, Ref, Result, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Effect,
+	Option,
+	Order,
+	PubSub,
+	Ref,
+	Result,
+	Schedule,
+	Schema,
+	Stream,
+	String as Str,
+	pipe,
+} from "effect"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
 import type { Prompt } from "effect/ai"
 import type * as Chats from "../Chats.ts"
 import type { ResolvedLive } from "../../models/ModelRegistry.ts"
+import * as Background from "../../app/Background.ts"
 import { LiveSessions } from "./LiveSessions.ts"
 
 /**
@@ -39,19 +54,22 @@ export const plan = (
 		asked: Live.AudioFormat | undefined,
 	) =>
 		asked === undefined
-			? offered[0]
-			: offered.find((format) => Live.sameFormat(format, asked))
+			? Arr.head(offered)
+			: Arr.findFirst(offered, (format) => Live.sameFormat(format, asked))
 	const input = pick(capabilities.audio.input, query.inputFormat)
 	const output = pick(capabilities.audio.output, query.outputFormat)
-	const turnDetection = query.turnDetection ?? capabilities.turnDetection[0]
-	if (input === undefined)
+	const turnDetection =
+		query.turnDetection === undefined
+			? Arr.head(capabilities.turnDetection)
+			: Arr.findFirst(
+					capabilities.turnDetection,
+					(mode) => mode === query.turnDetection,
+				)
+	if (Option.isNone(input))
 		return Result.fail("The Live model does not take this input format.")
-	if (output === undefined)
+	if (Option.isNone(output))
 		return Result.fail("The Live model does not give this output format.")
-	if (
-		turnDetection === undefined ||
-		!capabilities.turnDetection.includes(turnDetection)
-	)
+	if (Option.isNone(turnDetection))
 		return Result.fail("The Live model does not support this turn detection.")
 	if (!capabilities.inputTranscription)
 		return Result.fail(
@@ -60,17 +78,17 @@ export const plan = (
 	if (
 		query.voice !== undefined &&
 		capabilities.voices.length > 0 &&
-		!capabilities.voices.includes(query.voice)
+		!Arr.contains(capabilities.voices, query.voice)
 	)
 		return Result.fail("The Live model does not have this voice.")
 	return Result.succeed({
-		audio: { input, output },
-		turnDetection,
+		audio: { input: input.value, output: output.value },
+		turnDetection: turnDetection.value,
 		...(query.voice === undefined ? {} : { voice: query.voice }),
 	})
 }
 
-const encodeServer = Schema.encodeSync(
+const encodeServer = Schema.encodeEffect(
 	Schema.fromJsonString(LiveApi.LiveServerMessage),
 )
 const decodeClient = Schema.decodeUnknownOption(
@@ -79,14 +97,20 @@ const decodeClient = Schema.decodeUnknownOption(
 
 /** How many old messages go to the Live model when the session starts. */
 const historyLimit = 40
+const bySeq = Order.mapInput(
+	Order.Number,
+	(item: { readonly seq: number }) => item.seq,
+)
 
 /** The user and assistant text of some Items, oldest first. */
 const historyOf = (prompt: Prompt.Prompt): ReadonlyArray<Live.HistoryMessage> =>
-	prompt.content.flatMap((message): ReadonlyArray<Live.HistoryMessage> => {
+	Arr.flatMap(prompt.content, (message): ReadonlyArray<Live.HistoryMessage> => {
 		if (message.role !== "user" && message.role !== "assistant") return []
-		const text = message.content
-			.flatMap((part) => (part.type === "text" ? [part.text] : []))
-			.join("\n")
+		const text = pipe(
+			message.content,
+			Arr.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+			Arr.join("\n"),
+		)
 		return text.length === 0 ? [] : [{ role: message.role, text }]
 	})
 
@@ -110,7 +134,11 @@ export const run = (input: {
 			const reader = yield* input.socket.reader
 			const writer = yield* input.socket.writer
 			const say = (message: LiveApi.LiveServerMessage) =>
-				writer.write(encodeServer(message)).pipe(Effect.ignore)
+				encodeServer(message).pipe(
+					// The server makes each message from the schema, so a message that does not encode is a bug.
+					Effect.orDie,
+					Effect.flatMap((text) => writer.write(text).pipe(Effect.ignore)),
+				)
 			const fail = (code: LiveApi.LiveErrorCode, message: string) =>
 				say({ type: "error", code, message })
 
@@ -127,7 +155,18 @@ export const run = (input: {
 				return
 			}
 			const connection = connected.success
-			const events = yield* PubSub.unbounded<Live.Event>()
+			// The hub ends with the session, also when the session is interrupted. A Turn that
+			// waits for an answer then gets this failure and ends.
+			const closed = Live.Event.Failure({
+				error: Live.LiveError.make({
+					reason: "closed",
+					message: "The Live session closed.",
+				}),
+			})
+			const events = yield* Effect.acquireRelease(
+				PubSub.unbounded<Live.Event>(),
+				(pubsub) => PubSub.end(pubsub, closed),
+			)
 			const driver = yield* LiveDriver.make({
 				send: connection.send,
 				events,
@@ -140,11 +179,14 @@ export const run = (input: {
 
 			const history = yield* chats.items(chat, { limit: historyLimit }).pipe(
 				Effect.map((page) =>
-					historyOf(
-						ChatState.promptOf([...page.items].sort((a, b) => a.seq - b.seq)),
-					),
+					historyOf(ChatState.promptOf(Arr.sort(page.items, bySeq))),
 				),
-				Effect.orElseSucceed(() => []),
+				Effect.catch((error) =>
+					Effect.logWarning(
+						"OpenBot could not read the history of a live Chat. The session starts without it.",
+						Cause.fail(error),
+					).pipe(Effect.as<ReadonlyArray<Live.HistoryMessage>>([])),
+				),
 			)
 			if (history.length > 0)
 				yield* connection.send(Live.Input.History({ messages: history }))
@@ -161,13 +203,33 @@ export const run = (input: {
 
 			/** The Turn of the Chat that runs now. */
 			const running = yield* Ref.make(Option.none<Turn.Id>())
+			const interrupt = chats
+				.interrupt(chat)
+				.pipe(
+					Background.logFailure("A live Chat could not stop its running Turn."),
+				)
+			// The client or the backend is gone, or the session is interrupted. A running Turn must end.
+			yield* Effect.addFinalizer(() =>
+				Ref.get(running).pipe(
+					Effect.flatMap((turn) =>
+						Option.isSome(turn) ? interrupt : Effect.void,
+					),
+				),
+			)
 
 			const interruptRunning = Effect.gen(function* () {
 				if (Option.isNone(yield* Ref.get(running))) return
 				yield* say({ type: "output.stop" })
 				if (capabilities.interruption)
-					yield* connection.send(Live.Input.Cancel()).pipe(Effect.ignore)
-				yield* chats.interrupt(chat).pipe(Effect.ignore)
+					yield* connection
+						.send(Live.Input.Cancel())
+						.pipe(
+							Background.logFailure(
+								"The Live backend could not cancel its answer.",
+								{ level: "Debug" },
+							),
+						)
+				yield* interrupt
 			})
 
 			/** Gives what the person said to the Chat. The watcher reports the Turn. */
@@ -180,6 +242,10 @@ export const run = (input: {
 						),
 					)
 
+			/** The last Turn that the client heard of, and whether it heard that it ended. */
+			const heard = yield* Ref.make<
+				{ readonly id: Turn.Id; readonly ended: boolean } | undefined
+			>(undefined)
 			/**
 			 * Follows the Chat. It reports each Turn to the client, whoever started it, and
 			 * starts the Turns of input that waits, such as input that other servers gave
@@ -187,10 +253,9 @@ export const run = (input: {
 			 */
 			const watch = Effect.gen(function* () {
 				let view = yield* chats.get(chat)
-				/** The last Turn that the client heard of, and whether it heard that it ended. */
-				let told: { readonly id: Turn.Id; readonly ended: boolean } | undefined
 				while (true) {
 					const turn = view.turn
+					let told = yield* Ref.get(heard)
 					if (turn !== null && turn.id !== told?.id) {
 						yield* say({ type: "turn.started", turnId: turn.id })
 						told = { id: turn.id, ended: false }
@@ -206,16 +271,29 @@ export const run = (input: {
 							told = { id: turn.id, ended: true }
 						} else yield* Ref.set(running, Option.some(turn.id))
 					}
+					yield* Ref.set(heard, told)
 					if (turn === null || Turn.isTerminal(turn.status))
-						yield* chats.drain(chat).pipe(Effect.ignore)
+						yield* chats
+							.drain(chat)
+							.pipe(
+								Background.logFailure(
+									"A live Chat could not start the input that waits.",
+								),
+							)
 					view = yield* chats.wait(chat, view.chat.revision, watchMs)
 				}
 			}).pipe(
-				Effect.catch((error) =>
+				// A short storage failure must not end the session.
+				Effect.retry({
+					while: (error) => error._tag === "ChatStorageUnavailable",
+					schedule: Schedule.exponential("200 millis"),
+					times: 5,
+				}),
+				// A session that cannot follow its Chat ends.
+				Effect.tapError((error) =>
 					fail("chat", `OpenBot cannot follow the Chat: ${error._tag}.`),
 				),
 			)
-			yield* Effect.forkScoped(watch)
 
 			const onEvent = (event: Live.Event) =>
 				Live.Event.$match(event, {
@@ -230,7 +308,7 @@ export const run = (input: {
 						Effect.gen(function* () {
 							yield* say({ type: "input.transcript", itemId, text, final })
 							if (!final) return
-							if (text.trim().length === 0)
+							if (Str.isEmpty(Str.trim(text)))
 								return yield* fail(
 									"provider",
 									"OpenBot did not get the text of what you said.",
@@ -313,21 +391,13 @@ export const run = (input: {
 				}
 			}).pipe(Effect.ignore)
 
-			yield* Effect.raceFirst(fromClient, fromBackend)
-			// The client or the backend is gone. A Turn that waits for an answer must end.
-			yield* PubSub.publish(
-				events,
-				Live.Event.Failure({
-					error: Live.LiveError.make({
-						reason: "closed",
-						message: "The Live session closed.",
-					}),
-				}),
+			// The finalizers above end the running Turn and the hub.
+			yield* Effect.raceAllFirst([fromClient, fromBackend, watch]).pipe(
+				Effect.ensuring(
+					writer
+						.write(new Socket.CloseEvent(1000, "closed"))
+						.pipe(Effect.ignore),
+				),
 			)
-			if (Option.isSome(yield* Ref.get(running)))
-				yield* chats.interrupt(chat).pipe(Effect.ignore)
-			yield* writer
-				.write(new Socket.CloseEvent(1000, "closed"))
-				.pipe(Effect.ignore)
 		}),
 	)

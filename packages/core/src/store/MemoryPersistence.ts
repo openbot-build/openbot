@@ -1,4 +1,11 @@
-import { Chunk, Effect, HashMap, Option, SynchronizedRef } from "effect"
+import {
+	Array as Arr,
+	Chunk,
+	Effect,
+	HashMap,
+	Option,
+	SynchronizedRef,
+} from "effect"
 import type { Schema } from "effect"
 import type * as Chat from "../chat/Chat.ts"
 import type * as ChatStore from "./ChatStore.ts"
@@ -19,14 +26,21 @@ const range = (
 	items: Chunk.Chunk<ChatStore.StoredItem>,
 	query: ChatStore.ItemQuery,
 ) => {
-	const selected = Chunk.toReadonlyArray(items).filter(
+	const selected = Arr.filter(
+		Chunk.toReadonlyArray(items),
 		(item) =>
 			(query.turn === undefined || item.turn === query.turn) &&
 			(query.after === undefined || item.seq > query.after) &&
 			(query.before === undefined || item.seq < query.before),
 	)
-	const ordered = query.order === "desc" ? [...selected].reverse() : selected
-	return query.limit === undefined ? ordered : ordered.slice(0, query.limit)
+	const ordered = query.order === "desc" ? Arr.reverse(selected) : selected
+	return query.limit === undefined ? ordered : Arr.take(ordered, query.limit)
+}
+
+const empty: Pick<Stored, "state" | "items" | "turns"> = {
+	state: null,
+	items: Chunk.empty(),
+	turns: Chunk.empty(),
 }
 
 /** Adds a Turn record, or replaces the record with the same ID. */
@@ -60,7 +74,7 @@ export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 				),
 			list: SynchronizedRef.get(state).pipe(
 				Effect.map((s) =>
-					Chunk.toReadonlyArray(s.order).flatMap((id) =>
+					Arr.flatMap(Chunk.toReadonlyArray(s.order), (id) =>
 						Option.toArray(
 							Option.map(HashMap.get(s.chats, id), (stored) => stored.ref),
 						),
@@ -73,7 +87,7 @@ export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 						Option.match({
 							onNone: () => [],
 							onSome: (stored) =>
-								range(stored.items, query).map((item) => item.value),
+								Arr.map(range(stored.items, query), (item) => item.value),
 						}),
 					),
 				),
@@ -87,13 +101,20 @@ export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 								const start =
 									query.after === undefined
 										? 0
-										: turns.findIndex((turn) => turn.id === query.after) + 1
-								const selected = turns.slice(start)
-								return (
+										: Option.match(
+												Arr.findFirstIndex(
+													turns,
+													(turn) => turn.id === query.after,
+												),
+												{ onNone: () => 0, onSome: (index) => index + 1 },
+											)
+								const selected = Arr.drop(turns, start)
+								return Arr.map(
 									query.limit === undefined
 										? selected
-										: selected.slice(0, query.limit)
-								).map((turn) => turn.value)
+										: Arr.take(selected, query.limit),
+									(turn) => turn.value,
+								)
 							},
 						}),
 					),
@@ -103,11 +124,7 @@ export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 					Effect.map((stored) =>
 						Option.flatMap(stored, (stored) =>
 							Option.map(
-								Option.fromUndefinedOr(
-									Chunk.toReadonlyArray(stored.turns).find(
-										(entry) => entry.id === turn,
-									),
-								),
+								Arr.findFirst(stored.turns, (entry) => entry.id === turn),
 								(entry) => entry.value,
 							),
 						),
@@ -125,24 +142,22 @@ export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 							return yield* error("reference-conflict", {
 								message: "The Chat revision is out of date",
 							})
-						const before = Option.getOrUndefined(current)
-						const turns = upsert(before?.turns ?? Chunk.empty(), delta.turn)
+						const before = Option.getOrElse(current, () => empty)
 						const stored: Stored = {
 							ref: delta.ref,
-							state: delta.state ?? before?.state ?? null,
+							state: delta.state ?? before.state,
 							revision: delta.revision,
 							items: Chunk.appendAll(
-								before?.items ?? Chunk.empty(),
+								before.items,
 								Chunk.fromIterable(delta.items),
 							),
-							turns,
+							turns: upsert(before.turns, delta.turn),
 						}
 						return {
 							chats: HashMap.set(s.chats, delta.chat, stored),
-							order:
-								before === undefined
-									? Chunk.append(s.order, delta.chat)
-									: s.order,
+							order: Option.isNone(current)
+								? Chunk.append(s.order, delta.chat)
+								: s.order,
 						}
 					}),
 				),

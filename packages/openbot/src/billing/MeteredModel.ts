@@ -1,10 +1,11 @@
-import { Clock, Context, Effect, Ref, Stream } from "effect"
+import { Cause, Clock, Context, Effect, Ref, Stream } from "effect"
 import { AiError, type LanguageModel, type Response } from "effect/ai"
 import {
 	type Attribution,
 	type Billing,
 	type Call,
 	type SpendingBlocked,
+	type Tokens,
 	tokensOf,
 	type BillingStorageError,
 } from "./Billing.ts"
@@ -79,7 +80,7 @@ const estimate = (part: Response.StreamPart<{}>) =>
 		? Math.ceil(part.delta.length / 4)
 		: 0
 
-const totalOf = (tokens: ReturnType<typeof tokensOf>) =>
+const totalOf = (tokens: Tokens) =>
 	tokens.inputUncached +
 	tokens.inputCacheRead +
 	tokens.inputCacheWrite +
@@ -89,11 +90,15 @@ const totalOf = (tokens: ReturnType<typeof tokensOf>) =>
 /** How many parts of a stream OpenBot reads ahead from the provider while it slows the output. */
 const readAhead = 4096
 
+/** How long OpenBot waits to record the usage of a call before it gives up and logs it. */
+const recordTimeout = "30 seconds"
+
 /**
  * A model that checks the budgets and credits before each call, and records the
  * usage after each call. A failed record only writes a log, so the answer is not lost.
+ * Once the provider gives an answer, a stop of the call does not cut off its record.
  *
- * With a throttle, each call first waits until its token buckets are out of debt.
+ * When the settings give token rates, each call first waits until its token buckets are out of debt.
  * A stream then sends each piece of output only when the buckets have room for
  * it, so the output comes at an even speed. At the end, the real input and output
  * tokens go into the buckets, and the next call waits for them.
@@ -102,77 +107,120 @@ export const meter = (
 	model: LanguageModel.LanguageModel,
 	call: Call,
 	services: {
-		readonly billing?: Billing["Service"] | undefined
-		readonly throttle?: TokenThrottle["Service"] | undefined
+		readonly billing: Billing["Service"]
+		readonly throttle: TokenThrottle["Service"]
 	},
 ): LanguageModel.LanguageModel => {
 	const { billing, throttle } = services
 	const before = (method: "generateText" | "generateObject" | "streamText") =>
 		Effect.gen(function* () {
 			const attribution = refine(yield* yield* CurrentAttribution, method)
+			const scopes = yield* throttle.scopes(call, attribution)
+			yield* throttle.take(scopes, 0)
+			// The check and the start time come after the wait, so they are for the
+			// time at which the call really goes to the provider.
 			const startedAt = yield* Clock.currentTimeMillis
-			if (billing !== undefined)
-				yield* billing
-					.check(call, attribution)
-					.pipe(Effect.mapError((error) => blocked(method, error)))
-			const scopes =
-				throttle === undefined ? [] : yield* throttle.scopes(call, attribution)
-			if (throttle !== undefined) yield* throttle.take(scopes, 0)
+			yield* billing.check(call, attribution).pipe(
+				// The model error cannot carry the storage failure, so the log keeps it.
+				Effect.tapErrorTag("BillingStorageError", (error) =>
+					Effect.logWarning(
+						"OpenBot could not check the budgets",
+						Cause.fail(error),
+					).pipe(
+						Effect.annotateLogs({
+							organizationId: call.organizationId,
+							providerId: call.providerId,
+							modelId: call.modelId,
+						}),
+					),
+				),
+				Effect.mapError((error) => blocked(method, error)),
+			)
 			return { attribution, startedAt, scopes }
 		})
 	type Started = Effect.Success<ReturnType<typeof before>>
-	const after = (started: Started, usage: Response.Usage, paced = 0) =>
-		Effect.gen(function* () {
-			const tokens = tokensOf(usage)
-			if (throttle !== undefined)
-				yield* throttle.charge(started.scopes, totalOf(tokens) - paced)
-			if (billing !== undefined)
-				yield* billing
-					.record(call, started.attribution, tokens, started.startedAt)
-					.pipe(
-						Effect.catch((error) =>
-							Effect.logWarning("OpenBot could not record model usage", error),
-						),
-					)
-		})
+	/** Puts the tokens of a call into its buckets, less the tokens that its output already took. */
+	const charge = (started: Started, tokens: Tokens, paced = 0) =>
+		throttle.charge(started.scopes, totalOf(tokens) - paced)
+	/** Adds the usage row of a call, and takes its cost from the credits. */
+	const record = (started: Started, tokens: Tokens) =>
+		billing.record(call, started.attribution, tokens, started.startedAt).pipe(
+			// Nothing can stop the record from outside, so a stuck database must not hold the call for ever.
+			Effect.timeout(recordTimeout),
+			// The log has every value of the lost usage row, so it can be added again.
+			Effect.catch((error) =>
+				Effect.logWarning(
+					"OpenBot could not record model usage",
+					Cause.fail(error),
+				).pipe(
+					Effect.annotateLogs({
+						organizationId: call.organizationId,
+						providerId: call.providerId,
+						providerOwner: call.providerOwner,
+						modelId: call.modelId,
+						startedAt: started.startedAt,
+						...started.attribution,
+						...tokens,
+					}),
+				),
+			),
+		)
+	const after = (started: Started, usage: Response.Usage) => {
+		const tokens = tokensOf(usage)
+		return Effect.andThen(charge(started, tokens), record(started, tokens))
+	}
 	const plain = methodsOf(model)
 	const methods: Methods = {
+		// The provider charges for each answer, so a stop after the answer must
+		// not cut off its record.
 		generateText: (options) =>
-			Effect.gen(function* () {
-				const started = yield* before("generateText")
-				const response = yield* plain.generateText(options)
-				yield* after(started, response.usage)
-				return response
-			}),
+			Effect.uninterruptibleMask((restore) =>
+				Effect.gen(function* () {
+					const started = yield* restore(before("generateText"))
+					const response = yield* restore(plain.generateText(options))
+					yield* after(started, response.usage)
+					return response
+				}),
+			),
 		generateObject: (options) =>
-			Effect.gen(function* () {
-				const started = yield* before("generateObject")
-				const response = yield* plain.generateObject(options)
-				yield* after(started, response.usage)
-				return response
-			}),
+			Effect.uninterruptibleMask((restore) =>
+				Effect.gen(function* () {
+					const started = yield* restore(before("generateObject"))
+					const response = yield* restore(plain.generateObject(options))
+					yield* after(started, response.usage)
+					return response
+				}),
+			),
 		streamText: (options) =>
 			Stream.unwrap(
 				Effect.gen(function* () {
 					const started = yield* before("streamText")
 					const stream = plain.streamText(options)
-					if (throttle === undefined || started.scopes.length === 0)
+					if (started.scopes.length === 0)
 						return stream.pipe(
 							Stream.tap((part) =>
 								part.type === "finish"
-									? after(started, part.usage)
+									? Effect.uninterruptible(after(started, part.usage))
 									: Effect.void,
 							),
 						)
 					// The tokens that the output already took from the buckets.
 					const paced = yield* Ref.make(0)
 					return stream.pipe(
+						// The provider bills the call when it sends `finish`. This step comes
+						// before the read-ahead buffer, so a stop while the output waits for
+						// room does not lose the record. Only the throttle charge waits for the output.
+						Stream.tap((part) =>
+							part.type === "finish"
+								? Effect.uninterruptible(record(started, tokensOf(part.usage)))
+								: Effect.void,
+						),
 						// Read on from the provider while the output waits for room.
 						Stream.buffer({ capacity: readAhead }),
 						Stream.tap((part) => {
 							if (part.type === "finish")
 								return Effect.flatMap(Ref.get(paced), (taken) =>
-									after(started, part.usage, taken),
+									charge(started, tokensOf(part.usage), taken),
 								)
 							const tokens = estimate(part)
 							return tokens === 0

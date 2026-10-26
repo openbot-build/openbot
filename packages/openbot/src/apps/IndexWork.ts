@@ -1,8 +1,11 @@
 import { AppIndexApi, DeveloperApi } from "@openbot-build/api"
 import { Discovery, Index, Indexing } from "@openbot-build/protocol"
 import {
+	Array as Arr,
+	Cause,
 	Clock,
 	Context,
+	Crypto,
 	Effect,
 	Layer,
 	Match,
@@ -11,9 +14,13 @@ import {
 	Schema,
 } from "effect"
 import { and, asc, eq, lte } from "drizzle-orm"
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import type { SqlError } from "effect/sql"
+import * as Background from "../app/Background.ts"
 import { appIndexJobs, appIndexResults } from "../database/Schema.ts"
 import { Governance } from "./Governance.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import { CheckJson } from "./IndexStore.ts"
 import * as Db from "../database/Database.ts"
 
 export interface Options {
@@ -49,7 +56,6 @@ export class IndexWork extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/IndexWork") {}
 
-const checkCodec = Schema.fromJsonString(AppIndexApi.Check)
 const sourcesCodec = Schema.fromJsonString(Schema.Array(Discovery.Source))
 const toJob = (
 	row: typeof appIndexJobs.$inferSelect,
@@ -67,13 +73,42 @@ const toJob = (
 					: "Verifying",
 			check:
 				completed && row.check !== null
-					? yield* Schema.decodeEffect(checkCodec)(row.check)
+					? yield* Schema.decodeEffect(CheckJson)(row.check)
 					: null,
 		}
 	})
 
 const jobWhere = (namespace: string, cardUrl: string) =>
 	and(eq(appIndexJobs.namespace, namespace), eq(appIndexJobs.cardUrl, cardUrl))
+
+/**
+ * A database failure, or a stored row that does not decode. The error keeps
+ * the failure as its cause, and the callers log it. An `IndexError` stays as
+ * it is.
+ */
+const unavailable = <A, R>(
+	self: Effect.Effect<
+		A,
+		| Index.IndexError
+		| EffectDrizzleQueryError
+		| SqlError.SqlError
+		| Schema.SchemaError,
+		R
+	>,
+): Effect.Effect<A, Index.IndexError, R> =>
+	self.pipe(
+		Effect.catchTag(
+			["EffectDrizzleQueryError", "SqlError", "SchemaError"],
+			(cause) =>
+				Effect.fail(
+					Index.IndexError.make({
+						reason: "Unavailable",
+						operation: "Public Index work storage",
+						cause,
+					}),
+				),
+		),
+	)
 
 /**
  * Ask for a new check of an App. A job that waits already keeps its
@@ -84,10 +119,11 @@ export const enqueue = (
 	namespace: string,
 	cardUrl: string,
 	sources: ReadonlyArray<Discovery.Source>,
-): Effect.Effect<Job, Index.IndexError> =>
+): Effect.Effect<Job, Index.IndexError, Crypto.Crypto> =>
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
+				const crypto = yield* Crypto.Crypto
 				yield* tx
 					.insert(appIndexJobs)
 					.values({ namespace, cardUrl, nextCheckAt: 0 })
@@ -105,11 +141,9 @@ export const enqueue = (
 				const previousSources = yield* Schema.decodeEffect(sourcesCodec)(
 					row.sources,
 				)
-				const combined = [...previousSources, ...sources].filter(
-					(source, index, values) =>
-						values.findIndex(
-							(value) => value.role === source.role && value.url === source.url,
-						) === index,
+				const combined = Arr.dedupeWith(
+					[...previousSources, ...sources],
+					(a, b) => a.role === b.role && a.url === b.url,
 				)
 				const encoded = yield* Schema.encodeEffect(sourcesCodec)(combined)
 				const pending =
@@ -118,7 +152,7 @@ export const enqueue = (
 					? { ...row, sources: encoded }
 					: {
 							...row,
-							generation: yield* Effect.sync(() => crypto.randomUUID()),
+							generation: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
 							sources: encoded,
 							requestedAt: yield* Clock.currentTimeMillis,
 							startedAt: 0,
@@ -131,14 +165,7 @@ export const enqueue = (
 				return yield* toJob(next)
 			}),
 		)
-		.pipe(
-			Effect.mapError(() =>
-				Index.IndexError.make({
-					reason: "Unavailable",
-					operation: "Public Index work storage",
-				}),
-			),
-		)
+		.pipe(unavailable)
 
 /** Read the job of an App, or the saved result of one of its generations. */
 export const job = (
@@ -172,18 +199,11 @@ export const job = (
 				generation,
 				status: "Completed",
 				requestedAt: result.finishedAt,
-				check: yield* Schema.decodeEffect(checkCodec)(result.check),
+				check: yield* Schema.decodeEffect(CheckJson)(result.check),
 			})
 		}
 		return row === undefined ? Option.none() : Option.some(yield* toJob(row))
-	}).pipe(
-		Effect.mapError(() =>
-			Index.IndexError.make({
-				reason: "Unavailable",
-				operation: "Public Index work storage",
-			}),
-		),
-	)
+	}).pipe(unavailable)
 
 export const layer = (options: Options = {}) =>
 	Layer.effect(
@@ -193,13 +213,15 @@ export const layer = (options: Options = {}) =>
 			const namespace = yield* IndexNamespace
 			const indexing = yield* Indexing.Indexing
 			const governance = yield* Governance
+			const crypto = yield* Crypto.Crypto
+			const uuid = crypto.randomUUIDv4().pipe(Effect.orDie)
 			const { intervalMs, retryMs } = settings(options)
 			const where = (cardUrl: string) => jobWhere(namespace, cardUrl)
 			/** Take the next due job that no other worker holds. */
 			const claim = (cardUrl?: string) =>
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
-					const token = yield* Effect.sync(() => crypto.randomUUID())
+					const token = yield* uuid
 					return yield* db.transaction((tx) =>
 						Effect.gen(function* () {
 							const row = (yield* tx
@@ -225,7 +247,7 @@ export const layer = (options: Options = {}) =>
 							const generation =
 								row.generation === "" ||
 								row.generation === row.completedGeneration
-									? yield* Effect.sync(() => crypto.randomUUID())
+									? yield* uuid
 									: row.generation
 							yield* tx
 								.update(appIndexJobs)
@@ -246,14 +268,7 @@ export const layer = (options: Options = {}) =>
 							})
 						}),
 					)
-				}).pipe(
-					Effect.mapError(() =>
-						Index.IndexError.make({
-							reason: "Unavailable",
-							operation: "Public Index work storage",
-						}),
-					),
-				)
+				}).pipe(unavailable)
 			const finish = (
 				claim: Claim,
 				check: AppIndexApi.Check,
@@ -262,8 +277,8 @@ export const layer = (options: Options = {}) =>
 				db
 					.transaction((tx) =>
 						Effect.gen(function* () {
-							const encoded = yield* Schema.encodeEffect(checkCodec)(check)
-							const rows = yield* tx
+							const encoded = yield* Schema.encodeEffect(CheckJson)(check)
+							const [finished] = yield* tx
 								.update(appIndexJobs)
 								.set({
 									check: encoded,
@@ -279,12 +294,15 @@ export const layer = (options: Options = {}) =>
 									),
 								)
 								.returning({ generation: appIndexJobs.generation })
-							const [finished] = rows
-							if (rows.length !== 1 || finished === undefined)
-								return yield* Index.IndexError.make({
-									reason: "Unavailable",
-									operation: "Public Index work storage",
-								})
+							if (finished === undefined)
+								return yield* Effect.logWarning(
+									"The Public Index claim ended before the check finished. Another worker has the job now, so OpenBot drops this result.",
+								).pipe(
+									Effect.annotateLogs({
+										cardUrl: claim.cardUrl,
+										generation: claim.generation,
+									}),
+								)
 							yield* tx
 								.insert(appIndexResults)
 								.values({
@@ -297,15 +315,8 @@ export const layer = (options: Options = {}) =>
 								.onConflictDoNothing()
 						}),
 					)
-					.pipe(
-						Effect.asVoid,
-						Effect.mapError(() =>
-							Index.IndexError.make({
-								reason: "Unavailable",
-								operation: "Public Index work storage",
-							}),
-						),
-					)
+					.pipe(Effect.asVoid, unavailable)
+			/** Releasing the claim is best effort. The lease ends by itself if this fails. */
 			const release = (claim: Claim) =>
 				db
 					.update(appIndexJobs)
@@ -313,28 +324,53 @@ export const layer = (options: Options = {}) =>
 					.where(and(where(claim.cardUrl), eq(appIndexJobs.claim, claim.token)))
 					.pipe(
 						Effect.asVoid,
-						Effect.mapError(() =>
-							Index.IndexError.make({
-								reason: "Unavailable",
-								operation: "Public Index work storage",
-							}),
+						Effect.catch((error) =>
+							Effect.logWarning(
+								"Public Index claim release failed",
+								Cause.fail(error),
+							).pipe(
+								Effect.annotateLogs({
+									source: "apps",
+									operation: "index-release",
+								}),
+							),
 						),
 					)
 			const verify = (claim: Claim) =>
 				Effect.gen(function* () {
-					const outcome = yield* Option.match(governance.find(claim.cardUrl), {
+					const sync: Effect.Effect<
+						Indexing.SyncResult,
+						Index.IndexError | Indexing.IndexingError
+					> = Option.match(governance.find(claim.cardUrl), {
 						onNone: () =>
-							indexing.sync({
-								cardUrl: claim.cardUrl,
-								sources: claim.sources,
-							}),
+							indexing.sync(
+								Indexing.Input.make({
+									cardUrl: claim.cardUrl,
+									sources: claim.sources,
+								}),
+							),
 						onSome: (restriction) =>
 							Effect.succeed<Indexing.SyncResult>({
 								_tag: "Excluded",
 								cardUrl: claim.cardUrl,
 								reason: restriction.reason,
 							}),
-					}).pipe(Effect.result)
+					})
+					const outcome = yield* sync.pipe(
+						// The saved check has a fixed text, so the log keeps the reason.
+						Effect.tapCauseIf(Cause.hasFails, (cause) =>
+							Effect.logWarning(
+								"Public Index verification could not complete",
+								cause,
+							).pipe(
+								Effect.annotateLogs({
+									cardUrl: claim.cardUrl,
+									generation: claim.generation,
+								}),
+							),
+						),
+						Effect.result,
+					)
 					const attemptedAt = yield* Clock.currentTimeMillis
 					const check: AppIndexApi.Check = Match.value(outcome).pipe(
 						Match.tag(
@@ -367,68 +403,45 @@ export const layer = (options: Options = {}) =>
 					)
 					yield* finish(claim, check, attemptedAt + delay)
 					return true
-				}).pipe(
-					Effect.onError(() =>
-						// Releasing the claim is best effort. The lease ends by itself if this fails.
-						release(claim).pipe(
-							Effect.catch((error) =>
-								Effect.logWarning("Public Index claim release failed", {
-									source: "apps",
-									operation: "index-release",
-									reason: error.reason,
+				})
+			return IndexWork.of({
+				runOne: Effect.fn("IndexWork.runOne")(function* (cardUrl) {
+					// A claim and its release step are one step. An interruption can
+					// stop only the check, and then the release step still runs.
+					return yield* Effect.uninterruptibleMask((restore) =>
+						claim(cardUrl).pipe(
+							Effect.flatMap(
+								Option.match({
+									onNone: () => Effect.succeed(false),
+									onSome: (held) =>
+										restore(verify(held)).pipe(
+											Effect.onError(() => release(held)),
+										),
 								}),
 							),
 						),
-					),
-				)
-			return IndexWork.of({
-				runOne: Effect.fn("IndexWork.runOne")(function* (cardUrl) {
-					return yield* Option.match(yield* claim(cardUrl), {
-						onNone: () => Effect.succeed(false),
-						onSome: verify,
-					})
+					)
 				}),
 			})
 		}),
 	)
 
-/** Each OpenBot process runs one scoped worker. It recovers saved claims at startup. */
+/**
+ * Each OpenBot process runs one scoped worker. When a process stops before it
+ * can release a claim, the claim comes back when its lease ends.
+ */
 export const layerWorker = (options: Options = {}) =>
 	Layer.effectDiscard(
 		Effect.gen(function* () {
-			const db = yield* Db.make
-			const namespace = yield* IndexNamespace
 			const work = yield* IndexWork
 			const { retryMs } = settings(options)
-			// Claims from before the restart have no worker any more.
-			yield* db
-				.update(appIndexJobs)
-				.set({ claim: null, leaseUntil: 0 })
-				.where(eq(appIndexJobs.namespace, namespace))
-				.pipe(
-					Effect.mapError(() =>
-						Index.IndexError.make({
-							reason: "Unavailable",
-							operation: "Public Index work storage",
-						}),
-					),
-				)
-			const drain: Effect.Effect<void, Index.IndexError> = Effect.suspend(() =>
-				work
-					.runOne()
-					.pipe(
-						Effect.flatMap((processed) => (processed ? drain : Effect.void)),
-					),
-			)
-			yield* drain.pipe(
-				Effect.catch(() =>
-					Effect.logError("Public Index verification failed", {
-						source: "apps",
-						operation: "index-sync",
-					}),
-				),
-				Effect.repeat(Schedule.spaced(retryMs)),
-				Effect.forkScoped,
-			)
+			// Check due jobs one after another until no job is due.
+			const drain = work
+				.runOne()
+				.pipe(Effect.repeat({ while: (processed) => processed }), Effect.asVoid)
+			yield* Background.repeat(drain, {
+				schedule: Schedule.spaced(retryMs),
+				message: "Public Index verification failed",
+			}).pipe(Effect.annotateLogs({ source: "apps", operation: "index-sync" }))
 		}),
 	)

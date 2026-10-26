@@ -13,6 +13,7 @@ import {
 	GroupRequired,
 	organization,
 } from "./Authorization.ts"
+import { Limit } from "./Page.ts"
 import { Version } from "./Settings.ts"
 
 /**
@@ -319,28 +320,28 @@ export const UpdateBudgetRequest = Schema.Struct({
 })
 export type UpdateBudgetRequest = typeof UpdateBudgetRequest.Type
 
-export class BudgetNotFound extends Schema.TaggedError<BudgetNotFound>()(
-	"BudgetNotFound",
-	{ budgetId: Schema.String },
-) {}
+export class BudgetNotFound extends Schema.TaggedError<
+	BudgetNotFound,
+	{ readonly brand: unique symbol }
+>()("BudgetNotFound", { budgetId: Schema.String }) {}
 /** Someone changed the budget after you read it, or a budget for the same scope and period exists. */
-export class BudgetConflict extends Schema.TaggedError<BudgetConflict>()(
-	"BudgetConflict",
-	{ message: Schema.String },
-) {}
-export class BudgetInvalid extends Schema.TaggedError<BudgetInvalid>()(
-	"BudgetInvalid",
-	{ message: Schema.String },
-) {}
+export class BudgetConflict extends Schema.TaggedError<
+	BudgetConflict,
+	{ readonly brand: unique symbol }
+>()("BudgetConflict", { message: Schema.String }) {}
+export class BudgetInvalid extends Schema.TaggedError<
+	BudgetInvalid,
+	{ readonly brand: unique symbol }
+>()("BudgetInvalid", { message: Schema.String }) {}
 /** A value in the query is not valid, such as a time that is not ISO 8601. */
-export class UsageQueryInvalid extends Schema.TaggedError<UsageQueryInvalid>()(
-	"UsageQueryInvalid",
-	{ message: Schema.String },
-) {}
-export class BillingUnavailable extends Schema.TaggedError<BillingUnavailable>()(
-	"BillingUnavailable",
-	{},
-) {}
+export class UsageQueryInvalid extends Schema.TaggedError<
+	UsageQueryInvalid,
+	{ readonly brand: unique symbol }
+>()("UsageQueryInvalid", { message: Schema.String }) {}
+export class BillingUnavailable extends Schema.TaggedError<
+	BillingUnavailable,
+	{ readonly brand: unique symbol }
+>()("BillingUnavailable", {}) {}
 
 const usageErrors = [
 	...AuthorizationErrors,
@@ -354,9 +355,6 @@ const budgetErrors = [
 	BudgetInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
 
-const Limit = Schema.FiniteFromString.check(
-	Schema.isBetween({ minimum: 1, maximum: 200 }),
-)
 const range = {
 	/** The start, as an ISO time. Leave it out for the start of the current month in UTC. */
 	from: Schema.optionalKey(Schema.String),
@@ -379,7 +377,7 @@ export class UsageApi extends HttpApiGroup.make("usage")
 			query: {
 				...range,
 				after: Schema.optionalKey(Schema.String),
-				limit: Schema.optionalKey(Limit),
+				limit: Schema.optionalKey(Limit(200)),
 			},
 			success: Schema.Struct({
 				items: Schema.Array(UsageEvent),

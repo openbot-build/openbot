@@ -81,9 +81,12 @@ Ein Computer hat einen `state` (Zustand): `starting`, `running`, `paused`,
 | `POST /v1/computers/:computerId/desktop/stream`        | Gibt eine Adresse, unter der eine Person den Desktop ansehen und nutzen kann.          |
 | `POST /v1/computers/:computerId/pause`, `/resume`      | Pausiert den Computer oder setzt ihn fort.                                             |
 
-Ein Befehl auf einem pausierten Computer setzt ihn zuerst fort.
-`DELETE /v1/computers/:computerId` löscht den Computer und seine Sandbox. Seine
-Dateien sind dann weg.
+Eine gekoppelte Maschine gibt keinen Desktop-Stream, deshalb schlägt
+`desktop/stream` dort mit `ComputerUnsupported` fehl. Ein Befehl auf einem
+pausierten Computer setzt ihn zuerst fort. `DELETE /v1/computers/:computerId`
+löscht den Computer und seine Sandbox. Seine Dateien sind dann weg. Wenn OpenBot
+den Provider nicht erreicht, schlägt das Löschen fehl, und der Computer bleibt.
+Versuche es später noch einmal.
 
 ### Befehle
 
@@ -222,6 +225,10 @@ Diese vier Aktionen sind [Fähigkeiten](/de/docs/requests#fähigkeiten). Die
 | `computers.delete`  | Die ID des Computer  | Er löscht einen Computer mit seinen Dateien.       |
 | `computers.expose`  | Die ID des Computer  | Er gibt einem Port eine öffentliche Adresse.       |
 
+Wenn OpenBot eine dieser Aktionen nicht prüfen kann, läuft die Aktion nicht, und
+das Werkzeug sagt dem Bot den Grund. Zum Beispiel darf die Person des Bots den
+Computer nicht sehen, oder OpenBot kann seine Daten nicht lesen.
+
 Jede andere Arbeit auf einem Computer braucht keine Entscheidung. Der Computer
 ist die Grenze: Ein Bot mit dem Recht darf darin alles tun.
 
@@ -230,9 +237,9 @@ ist die Grenze: Ein Bot mit dem Recht darf darin alles tun.
 ## Pause und Nutzung
 
 OpenBot pausiert eine Sandbox, wenn sie `pauseAfter` Sekunden lang keine Arbeit
-hatte. E2B behält ihre Dateien, ihren Speicher und laufende Programme. Daytona
-behält ihre Dateien und startet sie aus ihnen neu. Deine eigenen Maschinen
-pausieren nie.
+hatte. Ein Befehl, der noch läuft, zählt als Arbeit. E2B behält ihre Dateien,
+ihren Speicher und laufende Programme. Daytona behält ihre Dateien und startet
+sie aus ihnen neu. Deine eigenen Maschinen pausieren nie.
 
 `GET /v1/computers/:computerId/usage` listet die Zeiten, in denen ein Computer
 lief. Der Provider stellt sie dir in Rechnung. OpenBot zeichnet sie nur auf. Es

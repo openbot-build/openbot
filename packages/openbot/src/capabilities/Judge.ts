@@ -1,5 +1,18 @@
 import { Authorization, BotsApi } from "@openbot-build/api"
-import { Context, Duration, Effect, Layer, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Context,
+	Crypto,
+	Duration,
+	Effect,
+	Layer,
+	Option,
+	Record as Rec,
+	Schema,
+	String as Str,
+	pipe,
+} from "effect"
 import { Decision, LanguageModel, Prompt } from "effect/ai"
 import { BotRecords } from "../bots/BotRecords.ts"
 import { type Capability, describe, hash } from "./Capability.ts"
@@ -31,10 +44,10 @@ export type RulesModel = AnyModel
 export const RulesModel = AnyModel
 
 /** OpenBot has no model for its own work right now. */
-export class HelperModelUnavailable extends Schema.TaggedError<HelperModelUnavailable>()(
-	"HelperModelUnavailable",
-	{ message: Schema.String },
-) {}
+export class HelperModelUnavailable extends Schema.TaggedError<
+	HelperModelUnavailable,
+	{ readonly brand: unique symbol }
+>()("HelperModelUnavailable", { message: Schema.String }) {}
 
 /**
  * The models for work that OpenBot does itself. Each kind of work has its own
@@ -81,14 +94,16 @@ export const check = ({
 	readonly rules: ReadonlyArray<BotsApi.Rule>
 }): Verdict => {
 	if (verdict.decision === "no_match") return verdict
-	const citations = verdict.citations.filter((citation) =>
-		rules.some(
+	const citations = Arr.filter(verdict.citations, (citation) => {
+		const quote = Str.trim(citation.quote)
+		return Arr.some(
+			rules,
 			(rule) =>
 				rule.id === citation.rule &&
-				citation.quote.trim().length > 0 &&
-				rule.text.includes(citation.quote.trim()),
-		),
-	)
+				Str.isNonEmpty(quote) &&
+				Str.includes(quote)(rule.text),
+		)
+	})
 	return citations.length === 0
 		? noMatch("The decision did not quote a Rule.")
 		: { ...verdict, citations }
@@ -128,13 +143,17 @@ const decisions = (rules: JudgeInput["rules"]) =>
 					no_match: "No Rule clearly allows or forbids this request.",
 				},
 			}),
-			...Object.fromEntries(
-				rules.map((rule, index) => [
-					`rule_${index}`,
-					Decision.probability({
-						instructions: `The Rule with id ${rule.id} clearly allows or forbids this exact request.`,
-					}),
-				]),
+			...Rec.fromEntries(
+				Arr.map(
+					rules,
+					(rule, index) =>
+						[
+							`rule_${index}`,
+							Decision.probability({
+								instructions: `The Rule with id ${rule.id} clearly allows or forbids this exact request.`,
+							}),
+						] as const,
+				),
 			),
 		},
 	})
@@ -161,16 +180,18 @@ const fromDecision = (
 			: Option.none()
 	if (Option.isNone(decision) || decision.value === "no_match")
 		return noMatch("The decision model found no Rule that decides this.")
-	const citations = input.rules
-		.filter((_, index) => {
+	const citations = pipe(
+		input.rules,
+		Arr.filter((_, index) => {
 			const answer = answers[`rule_${index}`]
 			return (
 				answer !== undefined &&
 				"probability" in answer &&
 				answer.probability >= citedLikelihood
 			)
-		})
-		.map((rule) => ({ rule: rule.id, quote: rule.text }))
+		}),
+		Arr.map((rule) => ({ rule: rule.id, quote: rule.text })),
+	)
 	return {
 		decision: decision.value,
 		citations,
@@ -184,19 +205,23 @@ const instructions =
 export const make: Effect.Effect<
 	typeof Judge.Service,
 	never,
-	BotRecords | HelperModel
+	BotRecords | HelperModel | Crypto.Crypto
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
 	const helper = yield* HelperModel
+	const crypto = yield* Crypto.Crypto
 	const cache = records.collection("decision", Verdict, Verdict.fields.decision)
 	return Judge.of({
 		decide: (input) =>
 			Effect.gen(function* () {
-				const rules = input.rules.filter((rule) => rule.status === "active")
+				const rules = Arr.filter(
+					input.rules,
+					(rule) => rule.status === "active",
+				)
 				if (rules.length === 0) return noMatch("No Rule applies.")
-				const key = hash([
+				const key = yield* hash(crypto, [
 					input.bot.id,
-					rules.map((rule) => [rule.id, rule.version]),
+					Arr.map(rules, (rule) => [rule.id, rule.version]),
 					describe(input.capability),
 				])
 				const cached = yield* cache
@@ -211,7 +236,7 @@ export const make: Effect.Effect<
 						role: input.bot.role,
 					},
 					request: { capability: input.capability, reason: input.reason },
-					rules: rules.map((rule) => ({ id: rule.id, text: rule.text })),
+					rules: Arr.map(rules, (rule) => ({ id: rule.id, text: rule.text })),
 				}
 				const answer = RulesModel.$match(model, {
 					Language: ({ model }) =>
@@ -250,15 +275,26 @@ export const make: Effect.Effect<
 					.pipe(Effect.ignore)
 				return verdict
 			}).pipe(
-				Effect.timeoutOption(Duration.seconds(15)),
-				Effect.map(
-					Option.getOrElse(() => noMatch("The judge did not answer in time.")),
-				),
+				// A slow model sends every check to people, so the log must show it.
+				Effect.timeoutOrElse({
+					duration: Duration.seconds(15),
+					orElse: () =>
+						Effect.logWarning("The judge model did not answer in time").pipe(
+							Effect.as(noMatch("The judge did not answer in time.")),
+						),
+				}),
 				Effect.catchCause((cause) =>
-					Effect.logWarning("The judge model failed", cause).pipe(
-						Effect.as(noMatch("The judge model failed.")),
-					),
+					Cause.hasInterruptsOnly(cause)
+						? Effect.interrupt
+						: Effect.logWarning("The judge model failed", cause).pipe(
+								Effect.as(noMatch("The judge model failed.")),
+							),
 				),
+				// The arguments of the capability stay out of the logs, because they hold user data.
+				Effect.annotateLogs({
+					organizationId: input.organizationId,
+					bot: input.bot.id,
+				}),
 			),
 	})
 })

@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest"
+import { Array as Arr, Effect } from "effect"
 import { Live } from "@openbot-build/core"
 import * as OpenAiRealtime from "../src/providers/openai/OpenAiRealtime.ts"
 
@@ -73,14 +74,17 @@ it("inputs become Realtime client events", () => {
 		],
 	)
 	assert.deepStrictEqual(
-		OpenAiRealtime.encodeInput(
-			Live.Input.History({
-				messages: [
-					{ role: "user", text: "Hi" },
-					{ role: "assistant", text: "Hello" },
-				],
-			}),
-		).map((value) => (value["item"] as { role: string }).role),
+		Arr.map(
+			OpenAiRealtime.encodeInput(
+				Live.Input.History({
+					messages: [
+						{ role: "user", text: "Hi" },
+						{ role: "assistant", text: "Hello" },
+					],
+				}),
+			),
+			(value) => (value["item"] as { role: string }).role,
+		),
 		["user", "assistant"],
 	)
 	assert.deepStrictEqual(OpenAiRealtime.encodeInput(Live.Input.Respond()), [
@@ -88,96 +92,128 @@ it("inputs become Realtime client events", () => {
 	])
 })
 
-it("Realtime server events become Live events", () => {
-	assert.deepStrictEqual(
-		OpenAiRealtime.decodeEvent(
+it.effect("Realtime server events become Live events", () =>
+	Effect.gen(function* () {
+		assert.deepStrictEqual(
+			yield* OpenAiRealtime.decodeEvent(
+				event({
+					type: "conversation.item.input_audio_transcription.completed",
+					item_id: "item_1",
+					content_index: 0,
+					transcript: "What time is it?",
+				}),
+			),
+			[
+				Live.Event.InputTranscript({
+					itemId: "item_1",
+					text: "What time is it?",
+					final: true,
+				}),
+			],
+		)
+		const [audio] = yield* OpenAiRealtime.decodeEvent(
 			event({
-				type: "conversation.item.input_audio_transcription.completed",
-				item_id: "item_1",
-				content_index: 0,
-				transcript: "What time is it?",
+				type: "response.output_audio.delta",
+				item_id: "a",
+				delta: "AQID",
 			}),
-		),
-		[
-			Live.Event.InputTranscript({
-				itemId: "item_1",
-				text: "What time is it?",
-				final: true,
-			}),
-		],
-	)
-	const [audio] = OpenAiRealtime.decodeEvent(
-		event({ type: "response.output_audio.delta", item_id: "a", delta: "AQID" }),
-	)
-	assert.ok(audio?._tag === "OutputAudio")
-	assert.deepStrictEqual([...audio.bytes], [1, 2, 3])
-	assert.deepStrictEqual(
-		OpenAiRealtime.decodeEvent(
-			event({
-				type: "response.output_item.done",
-				item: {
-					type: "function_call",
-					id: "fc_1",
-					call_id: "call_1",
+		)
+		assert.ok(audio?._tag === "OutputAudio")
+		assert.deepStrictEqual([...audio.bytes], [1, 2, 3])
+		assert.deepStrictEqual(
+			yield* OpenAiRealtime.decodeEvent(
+				event({
+					type: "response.output_item.done",
+					item: {
+						type: "function_call",
+						id: "fc_1",
+						call_id: "call_1",
+						name: "Lookup",
+						arguments: '{"word":"sun"}',
+					},
+				}),
+			),
+			[
+				Live.Event.ToolCall({
+					callId: "call_1",
 					name: "Lookup",
 					arguments: '{"word":"sun"}',
-				},
-			}),
-		),
-		[
-			Live.Event.ToolCall({
-				callId: "call_1",
-				name: "Lookup",
-				arguments: '{"word":"sun"}',
-			}),
-		],
-	)
-	assert.deepStrictEqual(
-		OpenAiRealtime.decodeEvent(
-			event({
-				type: "response.done",
-				response: {
+				}),
+			],
+		)
+		assert.deepStrictEqual(
+			yield* OpenAiRealtime.decodeEvent(
+				event({
+					type: "response.done",
+					response: {
+						status: "completed",
+						usage: {
+							input_tokens: 30,
+							output_tokens: 20,
+							input_token_details: {
+								text_tokens: 10,
+								audio_tokens: 15,
+								image_tokens: 0,
+								cached_tokens: 5,
+							},
+							output_token_details: { text_tokens: 4, audio_tokens: 16 },
+						},
+					},
+				}),
+			),
+			[
+				Live.Event.ResponseDone({
 					status: "completed",
 					usage: {
-						input_tokens: 30,
-						output_tokens: 20,
-						input_token_details: {
-							text_tokens: 10,
-							audio_tokens: 15,
-							image_tokens: 0,
-							cached_tokens: 5,
-						},
-						output_token_details: { text_tokens: 4, audio_tokens: 16 },
+						input: { text: 10, audio: 15, image: 0, cached: 5 },
+						output: { text: 4, audio: 16 },
 					},
-				},
-			}),
-		),
-		[
-			Live.Event.ResponseDone({
-				status: "completed",
-				usage: {
-					input: { text: 10, audio: 15, image: 0, cached: 5 },
-					output: { text: 4, audio: 16 },
-				},
-			}),
-		],
-	)
-	// A cancel when no answer runs is not a failure.
-	assert.deepStrictEqual(
-		OpenAiRealtime.decodeEvent(
-			event({
-				type: "error",
-				error: { code: "response_cancel_not_active", message: "No answer" },
-			}),
-		),
-		[],
-	)
-	assert.deepStrictEqual(
-		OpenAiRealtime.decodeEvent(event({ type: "rate_limits.updated" })),
-		[],
-	)
-	assert.deepStrictEqual(OpenAiRealtime.decodeEvent("not json"), [])
-})
+				}),
+			],
+		)
+		// A cancel when no answer runs is not a failure.
+		assert.deepStrictEqual(
+			yield* OpenAiRealtime.decodeEvent(
+				event({
+					type: "error",
+					error: { code: "response_cancel_not_active", message: "No answer" },
+				}),
+			),
+			[],
+		)
+		assert.deepStrictEqual(
+			yield* OpenAiRealtime.decodeEvent(event({ type: "rate_limits.updated" })),
+			[],
+		)
+		assert.deepStrictEqual(yield* OpenAiRealtime.decodeEvent("not json"), [])
+	}),
+)
+
+it.effect(
+	"a known Realtime event that OpenBot cannot read gives a protocol Failure",
+	() =>
+		Effect.gen(function* () {
+			const texts = [
+				event({ type: "response.done", response: null }),
+				event({
+					type: "response.output_audio.delta",
+					item_id: "a",
+					delta: "not base64!",
+				}),
+			]
+			for (const text of texts) {
+				const events = yield* OpenAiRealtime.decodeEvent(text)
+				assert.strictEqual(events.length, 1)
+				const [failure] = events
+				assert.ok(failure?._tag === "Failure")
+				assert.strictEqual(failure.error.reason, "protocol")
+				assert.strictEqual(
+					failure.error.message,
+					"OpenAI Realtime sent an event that OpenBot cannot read.",
+				)
+			}
+		}),
+)
 
 it("the WebSocket address comes from the endpoint of the provider", () => {
 	assert.strictEqual(

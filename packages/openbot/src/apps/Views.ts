@@ -1,27 +1,34 @@
-import { randomUUID } from "node:crypto"
 import { Chat, Item } from "@openbot-build/core"
 import {
 	AppViewsApi as Api,
+	type ConnectionsApi,
+	ExperienceInputInvalid,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 	Identity,
 	ChatConflict,
+	type ChatExecutionUnavailable,
 } from "@openbot-build/api"
 import { AppUi, Client } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Clock,
 	Context,
+	Crypto,
 	Effect,
 	Layer,
 	Match,
 	Option,
+	pipe,
 	Schema,
+	type Scope,
+	String as Str,
 } from "effect"
 import { Backend } from "../app/Backend.ts"
-import { Capabilities } from "./Capabilities.ts"
+import * as Failures from "../app/Failures.ts"
+import type * as Chats from "../chats/Chats.ts"
+import { Capabilities, type Opened } from "./Capabilities.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
-import { eq } from "drizzle-orm"
 import { appSecrets } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
@@ -29,8 +36,56 @@ import { ownerKey } from "./StoredConnections.ts"
 import * as StoredInvocations from "./StoredInvocations.ts"
 import * as StoredViews from "./StoredViews.ts"
 import { type Action, type View } from "./StoredViews.ts"
-import { json } from "./AppResults.ts"
+import { json, jsonObject } from "./AppResults.ts"
 import * as Db from "../database/Database.ts"
+
+/** The error of a view that can not go on. The text and the result of its operation stay. */
+const viewUnavailable = (reason: Api.AppViewUnavailable["reason"]) =>
+	Api.AppViewUnavailable.make({
+		reason,
+		message:
+			"This App view is unavailable. Its recorded text and business result are still available.",
+	})
+const viewChanged = () =>
+	ChatConflict.make({
+		message:
+			"The Chat or App view changed. Read its current state before continuing.",
+	})
+const interactionChanged = () =>
+	ChatConflict.make({
+		message:
+			"The App view or confirmed interaction changed. Read its current state before continuing.",
+	})
+/** Logs a failure that the caller can not act on, then fails with `AppViewUnavailable` in its place. */
+const replaceUnavailable = (
+	message: string,
+	reason: Api.AppViewUnavailable["reason"],
+) => Failures.replace(message, () => viewUnavailable(reason))
+/** Logs a storage failure, then fails with `ExperienceStorageUnavailable` in its place. */
+const replaceStorage = (message: string) =>
+	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
+/**
+ * Gives each failure of the Chats service its meaning for App views. A
+ * conflict stays a conflict, a missing Chat is not found, and a bad model is
+ * bad input. Only the other failures become `ExperienceStorageUnavailable`.
+ */
+const fromChats =
+	(message: string) =>
+	<A, R>(
+		self: Effect.Effect<A, Chats.ServiceError | ChatExecutionUnavailable, R>,
+	) =>
+		self.pipe(
+			Effect.catchTags({
+				ChatNotFound: (error) =>
+					Effect.fail(ExperienceNotFound.make({ id: error.chat })),
+				ChatModelInvalid: (error) =>
+					Effect.fail(ExperienceInputInvalid.make({ message: error.message })),
+				ChatStorageUnavailable: (error) =>
+					Effect.fail(error).pipe(replaceStorage(message)),
+				ChatExecutionUnavailable: (error) =>
+					Effect.fail(error).pipe(replaceStorage(message)),
+			}),
+		)
 
 export const make = Effect.gen(function* () {
 	const backend = yield* Backend
@@ -38,12 +93,8 @@ export const make = Effect.gen(function* () {
 	const locks = yield* ConnectionLocks
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	// A view that was open when the host stopped can not continue.
-	yield* db
-		.update(appSecrets)
-		.set({ consumed: true })
-		.where(eq(appSecrets.kind, "app-view"))
-		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))
+	const crypto = yield* Crypto.Crypto
+	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
 	const read = (owner: string, kind: string, id: string) =>
 		db
 			.select()
@@ -51,15 +102,17 @@ export const make = Effect.gen(function* () {
 			.where(StoredViews.where(owner, kind, id))
 			.pipe(Effect.map(Arr.head))
 	const required = <A>(found: Option.Option<A>) =>
-		Effect.fromOption(found).pipe(
-			Effect.mapError(() => ExperienceNotFound.make({ id: "App view" })),
-		)
+		Effect.fromOption(found, () => ExperienceNotFound.make({ id: "App view" }))
 	const getView = (owner: string, id: string) =>
 		read(owner, "app-view", id).pipe(
+			replaceStorage("OpenBot could not read an App view"),
 			Effect.map(Option.filter((row) => !row.consumed)),
 			Effect.flatMap(required),
-			Effect.flatMap((row) => StoredViews.open(secrets, StoredViews.View, row)),
-			Effect.mapError(StoredViews.failure),
+			Effect.flatMap((row) =>
+				StoredViews.open(secrets, StoredViews.View, row).pipe(
+					replaceStorage("OpenBot could not open a stored App view"),
+				),
+			),
 		)
 	const openView = (owner: string, view: View) =>
 		Effect.gen(function* () {
@@ -78,7 +131,7 @@ export const make = Effect.gen(function* () {
 				connectionId: view.connectionId,
 				body,
 			})
-		}).pipe(Effect.mapError(StoredViews.failure))
+		}).pipe(replaceStorage("OpenBot could not save an App view"))
 	const closeView = (owner: string, id: string) =>
 		db
 			.update(appSecrets)
@@ -86,12 +139,12 @@ export const make = Effect.gen(function* () {
 			.where(StoredViews.where(owner, "app-view", id))
 			.returning({ id: appSecrets.id })
 			.pipe(
+				replaceStorage("OpenBot could not close an App view"),
 				Effect.flatMap((rows) =>
 					rows.length === 0
 						? Effect.fail(ExperienceNotFound.make({ id: "App view" }))
 						: Effect.void,
 				),
-				Effect.mapError(StoredViews.failure),
 			)
 	const readInteraction = (owner: string, chat: string, operationId: string) =>
 		Effect.gen(function* () {
@@ -104,7 +157,11 @@ export const make = Effect.gen(function* () {
 				onNone: () => Effect.succeed(StoredViews.initial),
 				onSome: (row) => StoredViews.open(secrets, Api.Interaction, row),
 			})
-		}).pipe(Effect.mapError(StoredViews.failure))
+		}).pipe(
+			replaceStorage(
+				"OpenBot could not read the confirmed interaction of an App view",
+			),
+		)
 	const confirmInteraction = (
 		owner: string,
 		view: View,
@@ -145,11 +202,7 @@ export const make = Effect.gen(function* () {
 						Api.Interaction,
 						row,
 					)
-					if (previous.revision !== revision)
-						return yield* ChatConflict.make({
-							message:
-								"The App view or confirmed interaction changed. Read its current state before continuing.",
-						})
+					if (previous.revision !== revision) return yield* interactionChanged()
 					const next: Api.Interaction = { revision: revision + 1, context }
 					const body = yield* StoredViews.seal(
 						secrets,
@@ -166,19 +219,39 @@ export const make = Effect.gen(function* () {
 					return next
 				}),
 			)
-		}).pipe(Effect.mapError(StoredViews.failure))
-	const readAction = (owner: string, viewId: string, requestId: string) =>
+		}).pipe(
+			Effect.catchTag(
+				[
+					"EffectDrizzleQueryError",
+					"SqlError",
+					"SecretStorageError",
+					"SchemaError",
+				],
+				(error) =>
+					Effect.fail(error).pipe(
+						replaceStorage(
+							"OpenBot could not save the confirmed interaction of an App view",
+						),
+					),
+			),
+		)
+	const findAction = (owner: string, viewId: string, requestId: string) =>
 		read(
 			owner,
 			"app-view-action",
 			StoredViews.actionKey(viewId, requestId),
 		).pipe(
-			Effect.flatMap(required),
-			Effect.flatMap((row) =>
-				StoredViews.open(secrets, StoredViews.Action, row),
+			Effect.flatMap((found) =>
+				Effect.transposeOption(
+					Option.map(found, (row) =>
+						StoredViews.open(secrets, StoredViews.Action, row),
+					),
+				),
 			),
-			Effect.mapError(StoredViews.failure),
+			replaceStorage("OpenBot could not read an App view action"),
 		)
+	const readAction = (owner: string, viewId: string, requestId: string) =>
+		findAction(owner, viewId, requestId).pipe(Effect.flatMap(required))
 	/** Save the action of a request once. Give `false` when the request was saved before. */
 	const claimAction = (owner: string, view: View, input: Action) =>
 		Effect.gen(function* () {
@@ -212,12 +285,18 @@ export const make = Effect.gen(function* () {
 					input.arguments,
 				)
 			)
-				return yield* ChatConflict.make({
-					message:
-						"The App view or confirmed interaction changed. Read its current state before continuing.",
-				})
+				return yield* interactionChanged()
 			return false
-		}).pipe(Effect.mapError(StoredViews.failure))
+		}).pipe(
+			// `readAction` replaces its own storage failures.
+			Effect.catchTag(
+				["EffectDrizzleQueryError", "SecretStorageError", "SchemaError"],
+				(error) =>
+					Effect.fail(error).pipe(
+						replaceStorage("OpenBot could not save an App view action"),
+					),
+			),
+		)
 	const acceptAction = (
 		owner: string,
 		view: View,
@@ -244,10 +323,7 @@ export const make = Effect.gen(function* () {
 						saved.ticket !== null &&
 						!Schema.toEquivalence(Api.ActionTicket)(saved.ticket, ticket)
 					)
-						return yield* ChatConflict.make({
-							message:
-								"The App view or confirmed interaction changed. Read its current state before continuing.",
-						})
+						return yield* interactionChanged()
 					const body = yield* StoredViews.seal(
 						secrets,
 						StoredViews.Action,
@@ -262,48 +338,47 @@ export const make = Effect.gen(function* () {
 						.where(StoredViews.where(owner, "app-view-action", id))
 				}),
 			)
-			.pipe(Effect.mapError(StoredViews.failure))
+			.pipe(
+				Effect.catchTag(
+					[
+						"EffectDrizzleQueryError",
+						"SqlError",
+						"SecretStorageError",
+						"SchemaError",
+					],
+					(error) =>
+						Effect.fail(error).pipe(
+							replaceStorage(
+								"OpenBot could not save the receipt of an App view action",
+							),
+						),
+				),
+			)
 	const chats = (identity: typeof Identity.Service) =>
-		backend.forCaller(identity).pipe(
-			Effect.mapError(() =>
-				ChatConflict.make({
-					message:
-						"The Chat or App view changed. Read its current state before continuing.",
-				}),
-			),
-		)
+		backend
+			.forCaller(identity)
+			.pipe(replaceStorage("OpenBot could not open the Chats of a member"))
 	const bound = (identity: typeof Identity.Service, id: string) =>
 		Effect.gen(function* () {
 			const view = yield* getView(ownerKey(identity), id)
 			if (view.expiresAt < (yield* Clock.currentTimeMillis))
-				return yield* Api.AppViewUnavailable.make({
-					reason: "Closed",
-					message:
-						"This App view is unavailable. Its recorded text and business result are still available.",
-				})
+				return yield* viewUnavailable("Closed")
 			const stored = yield* StoredConnections.get(
 				db,
 				secrets,
 				ownerKey(identity),
 				view.connectionId,
 			).pipe(
-				Effect.mapError(() =>
-					Api.AppViewUnavailable.make({
-						reason: "ConnectionChanged",
-						message:
-							"This App view is unavailable. Its recorded text and business result are still available.",
-					}),
+				// The member removed the connection of the view.
+				Effect.catchTag("ExperienceNotFound", () =>
+					Effect.fail(viewUnavailable("ConnectionChanged")),
 				),
 			)
 			if (
 				stored.connection.state !== "Enabled" ||
 				stored.revision !== view.revision
 			)
-				return yield* Api.AppViewUnavailable.make({
-					reason: "ConnectionChanged",
-					message:
-						"This App view is unavailable. Its recorded text and business result are still available.",
-				})
+				return yield* viewUnavailable("ConnectionChanged")
 			return view
 		})
 	const locked = <A, E, R>(
@@ -318,7 +393,13 @@ export const make = Effect.gen(function* () {
 	const openClient = (
 		identity: typeof Identity.Service,
 		connectionId: string,
-	) =>
+	): Effect.Effect<
+		Opened,
+		| ConnectionsApi.AppRestricted
+		| ExperienceStorageUnavailable
+		| Api.AppViewUnavailable,
+		Scope.Scope
+	> =>
 		capabilities
 			.open({
 				owner: ownerKey(identity),
@@ -327,7 +408,7 @@ export const make = Effect.gen(function* () {
 					check: (invocation) =>
 						invocation.connection.owner === ownerKey(identity) &&
 						invocation.connection.connectionId === connectionId &&
-						(invocation.action.endsWith("/list") ||
+						(Schema.is(Client.ListAction)(invocation.action) ||
 							invocation.action === "resources/read")
 							? Effect.void
 							: Effect.fail(
@@ -339,12 +420,26 @@ export const make = Effect.gen(function* () {
 				}),
 			})
 			.pipe(
-				Effect.mapError(() =>
-					Api.AppViewUnavailable.make({
-						reason: "ConnectionChanged",
-						message:
-							"This App view is unavailable. Its recorded text and business result are still available.",
-					}),
+				// A rule of the organization and a storage failure keep their meaning.
+				// A protocol store outage is a storage failure too, and its source
+				// has already logged it.
+				Effect.catchTag(
+					["AppRestricted", "ExperienceStorageUnavailable"],
+					(error) => Effect.fail(error),
+					(
+						error,
+					): Effect.Effect<
+						never,
+						ExperienceStorageUnavailable | Api.AppViewUnavailable
+					> =>
+						error._tag === "StoreError" && error.reason === "Unavailable"
+							? Effect.fail(ExperienceStorageUnavailable.make({}))
+							: Effect.fail(error).pipe(
+									replaceUnavailable(
+										"OpenBot could not open the App connection of a view",
+										"ConnectionChanged",
+									),
+								),
 				),
 			)
 	/** The Item with the result of an App operation, in the Turn of the operation. */
@@ -362,29 +457,30 @@ export const make = Effect.gen(function* () {
 				operationId,
 			)
 			const service = yield* chats(identity)
-			const items = yield* service.turnLog(chatId, operation.turn).pipe(
-				Effect.mapError(() =>
-					ChatConflict.make({
-						message:
-							"The Chat or App view changed. Read its current state before continuing.",
-					}),
+			const items = yield* service
+				.turnLog(chatId, operation.turn)
+				.pipe(fromChats("OpenBot could not read the Turn of an App operation"))
+			const item = pipe(
+				Arr.findFirst(
+					items,
+					(item) =>
+						(itemId === undefined || item.id === itemId) &&
+						Arr.some(
+							item.content.content,
+							(message) =>
+								message.role === "tool" &&
+								Arr.some(
+									message.content,
+									(part) =>
+										part.type === "tool-result" && part.id === operation.callId,
+								),
+						),
 				),
+				Option.filter((item) => item.origin?.turn === operation.turn),
 			)
-			const item = items.find(
-				(item) =>
-					(itemId === undefined || item.id === itemId) &&
-					item.content.content.some(
-						(message) =>
-							message.role === "tool" &&
-							message.content.some(
-								(part) =>
-									part.type === "tool-result" && part.id === operation.callId,
-							),
-					),
-			)
-			if (item === undefined || item.origin?.turn !== operation.turn)
+			if (Option.isNone(item))
 				return yield* ExperienceNotFound.make({ id: operationId })
-			return { operation, item, service }
+			return { operation, item: item.value, service }
 		})
 	const binding = (identity: typeof Identity.Service, view: View) =>
 		Effect.gen(function* () {
@@ -425,82 +521,55 @@ export const make = Effect.gen(function* () {
 						itemId,
 					)
 					if (operation.source.kind !== "tool")
-						return yield* Api.AppViewUnavailable.make({
-							reason: "Declaration",
-							message:
-								"This App view is unavailable. Its recorded text and business result are still available.",
-						})
+						return yield* viewUnavailable("Declaration")
 					const opened = yield* openClient(
 						identity,
 						operation.source.connectionId,
 					)
 					if (opened.stored.revision !== operation.source.revision)
-						return yield* Api.AppViewUnavailable.make({
-							reason: "ConnectionChanged",
-							message:
-								"This App view is unavailable. Its recorded text and business result are still available.",
-						})
-					const tool = opened.tools.find(
+						return yield* viewUnavailable("ConnectionChanged")
+					const tool = Arr.findFirst(
+						opened.tools,
 						(tool) => tool.name === operation.source.name,
 					)
 					if (
-						tool === undefined ||
+						Option.isNone(tool) ||
 						operation.source.definition === undefined ||
 						!Schema.toEquivalence(Schema.Json)(
 							operation.source.definition,
-							yield* json(tool).pipe(
-								Effect.mapError(() =>
-									Api.AppViewUnavailable.make({
-										reason: "Protocol",
-										message:
-											"This App view is unavailable. Its recorded text and business result are still available.",
-									}),
+							yield* json(tool.value).pipe(
+								replaceUnavailable(
+									"OpenBot could not read the tool of an App view as JSON",
+									"Protocol",
 								),
 							),
 						)
 					)
-						return yield* Api.AppViewUnavailable.make({
-							reason: "Declaration",
-							message:
-								"This App view is unavailable. Its recorded text and business result are still available.",
-						})
-					const uri = yield* AppUi.toolResourceUri(tool).pipe(
-						Effect.mapError(() =>
-							Api.AppViewUnavailable.make({
-								reason: "Declaration",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							}),
+						return yield* viewUnavailable("Declaration")
+					const uri = yield* AppUi.toolResourceUri(tool.value).pipe(
+						replaceUnavailable(
+							"The tool of an App view names no view resource",
+							"Declaration",
 						),
 					)
 					const content = yield* opened.client
 						.readResource({ uri }, { source: "host", readOnly: true })
 						.pipe(
-							Effect.mapError(() =>
-								Api.AppViewUnavailable.make({
-									reason: "Resource",
-									message:
-										"This App view is unavailable. Its recorded text and business result are still available.",
-								}),
+							replaceUnavailable(
+								"OpenBot could not read the resource of an App view",
+								"Resource",
 							),
 						)
 					if (content._tag !== "Completed")
-						return yield* Api.AppViewUnavailable.make({
-							reason: "Resource",
-							message:
-								"This App view is unavailable. Its recorded text and business result are still available.",
-						})
+						return yield* viewUnavailable("Resource")
 					const resource = yield* AppUi.readResource(uri, content.result).pipe(
-						Effect.mapError(() =>
-							Api.AppViewUnavailable.make({
-								reason: "Resource",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							}),
+						replaceUnavailable(
+							"The resource of an App view is not a view",
+							"Resource",
 						),
 					)
 					const view: View = {
-						id: randomUUID(),
+						id: yield* newId,
 						operationId,
 						readOnly: false,
 						chat: chatId,
@@ -516,12 +585,9 @@ export const make = Effect.gen(function* () {
 							? yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
 									operation.result.result,
 								).pipe(
-									Effect.mapError(() =>
-										Api.AppViewUnavailable.make({
-											reason: "Protocol",
-											message:
-												"This App view is unavailable. Its recorded text and business result are still available.",
-										}),
+									replaceUnavailable(
+										"The saved result of an App operation is not a JSON object",
+										"Protocol",
 									),
 								)
 							: undefined
@@ -529,14 +595,10 @@ export const make = Effect.gen(function* () {
 						...(yield* binding(identity, view)),
 						resource,
 						tools: yield* Effect.forEach(opened.tools, (tool) =>
-							json(tool).pipe(
-								Effect.flatMap(Schema.decodeUnknownEffect(Schema.JsonObject)),
-								Effect.mapError(() =>
-									Api.AppViewUnavailable.make({
-										reason: "Protocol",
-										message:
-											"This App view is unavailable. Its recorded text and business result are still available.",
-									}),
+							jsonObject(tool).pipe(
+								replaceUnavailable(
+									"A tool of an App view is not a JSON object",
+									"Protocol",
 								),
 							),
 						),
@@ -560,20 +622,12 @@ export const make = Effect.gen(function* () {
 					const view = yield* bound(identity, id)
 					const opened = yield* openClient(identity, view.connectionId)
 					if (opened.stored.revision !== view.revision)
-						return yield* Api.AppViewUnavailable.make({
-							reason: "ConnectionChanged",
-							message:
-								"This App view is unavailable. Its recorded text and business result are still available.",
-						})
+						return yield* viewUnavailable("ConnectionChanged")
 					const cursor = yield* Schema.decodeEffect(
 						Schema.Struct({ cursor: Schema.optionalKey(Schema.String) }),
 					)(params).pipe(
-						Effect.mapError(() =>
-							Api.AppViewUnavailable.make({
-								reason: "Protocol",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							}),
+						Effect.mapError((error) =>
+							ExperienceInputInvalid.make({ message: error.message }),
 						),
 					)
 					const result = yield* Match.value(method).pipe(
@@ -587,22 +641,15 @@ export const make = Effect.gen(function* () {
 							opened.client.listResourceTemplates(cursor.cursor, "app"),
 						),
 						Match.exhaustive,
-						Effect.mapError(() =>
-							Api.AppViewUnavailable.make({
-								reason: "Protocol",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							}),
+						replaceUnavailable(
+							"OpenBot could not list the capabilities of an App view",
+							"Protocol",
 						),
 					)
-					return yield* json(result).pipe(
-						Effect.flatMap(Schema.decodeUnknownEffect(Schema.JsonObject)),
-						Effect.mapError(() =>
-							Api.AppViewUnavailable.make({
-								reason: "Protocol",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							}),
+					return yield* jsonObject(result).pipe(
+						replaceUnavailable(
+							"The list result of an App is not a JSON object",
+							"Protocol",
 						),
 					)
 				}),
@@ -618,18 +665,11 @@ export const make = Effect.gen(function* () {
 				Effect.scoped(
 					Effect.gen(function* () {
 						const view = yield* bound(identity, id)
-						if (view.readOnly)
-							return yield* ChatConflict.make({
-								message:
-									"The Chat or App view changed. Read its current state before continuing.",
-							})
-						const existing = yield* readAction(
+						if (view.readOnly) return yield* viewChanged()
+						const existing = yield* findAction(
 							ownerKey(identity),
 							id,
 							request.requestId,
-						).pipe(
-							Effect.asSome,
-							Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 						)
 						if (Option.isSome(existing)) {
 							yield* claimAction(ownerKey(identity), view, {
@@ -639,104 +679,89 @@ export const make = Effect.gen(function* () {
 								arguments: request.kind === "tool" ? request.arguments : {},
 								ticket: null,
 							})
-							if (existing.value.ticket === null)
-								return yield* ChatConflict.make({
-									message:
-										"The Chat or App view changed. Read its current state before continuing.",
-								})
+							if (existing.value.ticket === null) return yield* viewChanged()
 							return existing.value.ticket
 						}
 
 						const service = yield* chats(identity)
-						const current = yield* service.get(view.chat).pipe(
-							Effect.mapError(() =>
-								ChatConflict.make({
-									message:
-										"The Chat or App view changed. Read its current state before continuing.",
-								}),
-							),
-						)
+						const current = yield* service
+							.get(view.chat)
+							.pipe(fromChats("OpenBot could not read the Chat of an App view"))
 						if (
 							current.activity === "historical" ||
 							(current.activity === "active" && current.turn?.id !== view.turn)
 						)
-							return yield* ChatConflict.make({
-								message:
-									"The Chat or App view changed. Read its current state before continuing.",
-							})
+							return yield* viewChanged()
 						const opened = yield* openClient(identity, view.connectionId)
 						if (opened.stored.revision !== view.revision)
-							return yield* Api.AppViewUnavailable.make({
-								reason: "ConnectionChanged",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							})
+							return yield* viewUnavailable("ConnectionChanged")
 						const target = request.kind === "tool" ? request.name : request.uri
 						if (
 							request.kind === "tool"
-								? !opened.tools.some((tool) => tool.name === target)
-								: !opened.resources.some((resource) => resource.uri === target)
+								? !Arr.some(opened.tools, (tool) => tool.name === target)
+								: !Arr.some(
+										opened.resources,
+										(resource) => resource.uri === target,
+									)
 						)
-							return yield* Api.AppViewUnavailable.make({
-								reason: "Declaration",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							})
+							return yield* viewUnavailable("Declaration")
 						const args = request.kind === "tool" ? request.arguments : {}
-						const first = yield* claimAction(ownerKey(identity), view, {
-							requestId: request.requestId,
-							kind: request.kind,
-							target,
-							arguments: args,
-							ticket: null,
-						})
-						if (!first) {
-							const saved = yield* readAction(
-								ownerKey(identity),
-								id,
-								request.requestId,
-							)
-							if (saved.ticket !== null) return saved.ticket
-							// Admission may have worked before the receipt failed to save. Never submit it again.
-							return yield* ChatConflict.make({
-								message:
-									"The Chat or App view changed. Read its current state before continuing.",
-							})
-						}
-						const source: Api.ActionSource = {
-							_tag: "AppUiAction",
-							viewId: id,
-							requestId: request.requestId,
-							connectionId: view.connectionId,
-							revision: view.revision,
-							kind: request.kind,
-							target,
-						}
-						const ticket = yield* service
-							.startAction(view.chat, {
-								author: identity.userId,
-								action: {
-									name: "openbot_ui_" + randomUUID().replaceAll("-", ""),
+						// A client that goes away must not cut the action apart from its receipt.
+						return yield* Effect.uninterruptible(
+							Effect.gen(function* () {
+								const first = yield* claimAction(ownerKey(identity), view, {
+									requestId: request.requestId,
+									kind: request.kind,
+									target,
 									arguments: args,
-									source,
-								},
-								...(current.activity === "active" ? { turn: view.turn } : {}),
-							})
-							.pipe(
-								Effect.mapError(() =>
-									ChatConflict.make({
-										message:
-											"The Chat or App view changed. Read its current state before continuing.",
-									}),
-								),
-							)
-						yield* acceptAction(
-							ownerKey(identity),
-							view,
-							request.requestId,
-							ticket,
+									ticket: null,
+								})
+								if (!first) {
+									const saved = yield* readAction(
+										ownerKey(identity),
+										id,
+										request.requestId,
+									)
+									if (saved.ticket !== null) return saved.ticket
+									// Admission may have worked before the receipt failed to save. Never submit it again.
+									return yield* viewChanged()
+								}
+								const source: Api.ActionSource = {
+									_tag: "AppUiAction",
+									viewId: id,
+									requestId: request.requestId,
+									connectionId: view.connectionId,
+									revision: view.revision,
+									kind: request.kind,
+									target,
+								}
+								const actionId = yield* newId
+								const ticket = yield* service
+									.startAction(view.chat, {
+										author: identity.userId,
+										action: {
+											name: "openbot_ui_" + Str.replaceAll("-", "")(actionId),
+											arguments: args,
+											source,
+										},
+										...(current.activity === "active"
+											? { turn: view.turn }
+											: {}),
+									})
+									.pipe(
+										fromChats(
+											"OpenBot could not start the action of an App view",
+										),
+									)
+								yield* acceptAction(
+									ownerKey(identity),
+									view,
+									request.requestId,
+									ticket,
+								)
+								return ticket
+							}),
 						)
-						return ticket
 					}),
 				),
 			),
@@ -748,11 +773,7 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				yield* bound(identity, id)
 				const saved = yield* readAction(ownerKey(identity), id, requestId)
-				if (saved.ticket === null)
-					return yield* ChatConflict.make({
-						message:
-							"The Chat or App view changed. Read its current state before continuing.",
-					})
+				if (saved.ticket === null) return yield* viewChanged()
 				const ticket = saved.ticket
 				const recorded = Arr.findFirst(
 					yield* StoredInvocations.list(
@@ -775,12 +796,7 @@ export const make = Effect.gen(function* () {
 				const turn = yield* service.turn(ticket.chat, ticket.turn).pipe(
 					Effect.map((found) => Option.some(found.turn)),
 					Effect.catchTag("ChatConflict", () => Effect.succeedNone),
-					Effect.mapError(() =>
-						ChatConflict.make({
-							message:
-								"The Chat or App view changed. Read its current state before continuing.",
-						}),
-					),
+					fromChats("OpenBot could not read the Turn of an App view action"),
 				)
 				return {
 					ticket,
@@ -801,12 +817,7 @@ export const make = Effect.gen(function* () {
 				id,
 				Effect.flatMap(bound(identity, id), (view) =>
 					view.readOnly
-						? Effect.fail(
-								ChatConflict.make({
-									message:
-										"The Chat or App view changed. Read its current state before continuing.",
-								}),
-							)
+						? Effect.fail(viewChanged())
 						: confirmInteraction(ownerKey(identity), view, revision, context),
 				),
 			),
@@ -829,11 +840,7 @@ export const make = Effect.gen(function* () {
 				id,
 				Effect.gen(function* () {
 					const view = yield* bound(identity, id)
-					if (view.readOnly)
-						return yield* ChatConflict.make({
-							message:
-								"The Chat or App view changed. Read its current state before continuing.",
-						})
+					if (view.readOnly) return yield* viewChanged()
 					const message = yield* Schema.decodeUnknownEffect(
 						Schema.Struct({
 							content: Schema.Array(
@@ -844,12 +851,9 @@ export const make = Effect.gen(function* () {
 							),
 						}),
 					)(content).pipe(
-						Effect.mapError(() =>
-							Api.AppViewUnavailable.make({
-								reason: "Unsupported",
-								message:
-									"This App view is unavailable. Its recorded text and business result are still available.",
-							}),
+						replaceUnavailable(
+							"An App view sent a message that is not only text",
+							"Unsupported",
 						),
 					)
 					// The message reaches the Bot at its next step, or starts a Turn.
@@ -860,17 +864,16 @@ export const make = Effect.gen(function* () {
 								"Confirmed message from App " +
 								view.connectionId +
 								":\n" +
-								message.content.map((part) => part.text).join("\n"),
+								pipe(
+									message.content,
+									Arr.map((part) => part.text),
+									Arr.join("\n"),
+								),
 							author: identity.userId,
 							notice: { kind: "app", ref: view.connectionId },
 						})
 						.pipe(
-							Effect.mapError(() =>
-								ChatConflict.make({
-									message:
-										"The Chat or App view changed. Read its current state before continuing.",
-								}),
-							),
+							fromChats("OpenBot could not deliver the message of an App view"),
 						)
 				}),
 			),

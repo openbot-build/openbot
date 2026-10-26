@@ -1,4 +1,3 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
 	Chat,
@@ -7,7 +6,7 @@ import {
 	MemoryPersistence,
 	Store,
 } from "@openbot-build/core"
-import { Array as EffectArray, Deferred, Effect, Match, Schema } from "effect"
+import { Array as Arr, Deferred, Effect, Match, Schema } from "effect"
 import { Tool, Toolkit } from "effect/ai"
 import { settled } from "./ChatTest.ts"
 
@@ -22,14 +21,19 @@ const setup = Effect.gen(function* () {
 	})
 })
 const approvalRequests = (view: Chat.View<{}>) =>
-	view.state.conversation.context.prompt.content.flatMap((message) =>
+	Arr.flatMap(view.state.conversation.context.prompt.content, (message) =>
 		Match.value(message).pipe(
 			Match.when({ role: "assistant" }, (message) =>
-				message.content.filter((part) => part.type === "tool-approval-request"),
+				Arr.filter(
+					message.content,
+					(part) => part.type === "tool-approval-request",
+				),
 			),
 			Match.orElse(() => []),
 		),
 	)
+/** The JSON text of a value, so a test can match a pattern in it. */
+const json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
 it.effect(
 	"a host action checks the exact parameters without the model, and runs only when a decider allows it",
@@ -83,7 +87,7 @@ it.effect(
 					approvals: {
 						decide: (request) =>
 							Effect.sync(() => {
-								decisions = EffectArray.append(decisions, request)
+								decisions = Arr.append(decisions, request)
 								return Chat.Decision.Allow()
 							}),
 					},
@@ -106,7 +110,7 @@ it.effect(
 				text: "Exact host selection",
 			})
 			assert.match(
-				JSON.stringify(yield* store.items(chat, { turn: allowed.turn })),
+				yield* json(yield* store.items(chat, { turn: allowed.turn })),
 				/Actual receipt: Exact host selection/,
 			)
 			const invalid = yield* restored.startAction({
@@ -186,7 +190,7 @@ it.effect(
 			const view = yield* settled(runtime, second)
 			assert.strictEqual(Chat.status(view.chat)._tag, "Completed")
 			assert.match(
-				JSON.stringify(yield* store.items(second)),
+				yield* json(yield* store.items(second)),
 				/Independent receipt/,
 			)
 		}),
@@ -227,7 +231,7 @@ it.effect(
 					approvals: {
 						decide: (request) =>
 							Effect.sync(() => {
-								decisions = EffectArray.append(decisions, request)
+								decisions = Arr.append(decisions, request)
 								return Chat.Decision.Allow()
 							}),
 					},
@@ -253,7 +257,11 @@ it.effect(
 			assert.strictEqual(related.callId, "host-action-" + related.item)
 			const waiting = yield* store.read(chat)
 			assert.deepStrictEqual(
-				waiting.chat.inbox.map((entry) => [entry.id, entry.kind, entry.turn]),
+				Arr.map(waiting.chat.inbox, (entry) => [
+					entry.id,
+					entry.kind,
+					entry.turn,
+				]),
 				[[related.item, "action", original.turn]],
 			)
 			assert.strictEqual(writes, 0)
@@ -268,11 +276,12 @@ it.effect(
 			assert.strictEqual(decisions.length, 1)
 			assert.strictEqual(decisions[0]!.turn, original.turn)
 			assert.strictEqual(decisions[0]!.toolCall.id, related.callId)
-			const [request] = approvalRequests(completed).filter(
+			const [request] = Arr.filter(
+				approvalRequests(completed),
 				(part) => part.toolCallId === related.callId,
 			)
 			assert.ok(request)
-			const items = JSON.stringify(yield* store.items(chat))
+			const items = yield* json(yield* store.items(chat))
 			assert.match(items, /Original receipt/)
 			assert.match(items, /Related receipt: Specific selection/)
 		})

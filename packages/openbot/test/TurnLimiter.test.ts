@@ -1,22 +1,21 @@
 import { assert, it } from "@effect/vitest"
-import { Bot } from "@openbot-build/core"
+import { Bot, Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Cause,
 	Deferred,
 	Effect,
 	Exit,
 	Fiber,
 	Layer,
+	pipe,
+	Ref,
 	Schema,
 	Stream,
 } from "effect"
-import * as TurnLimiter from "../src/plugins/turn-limiter/TurnLimiter.ts"
-import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
-
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
+import * as TurnLimiter from "../src/plugins/turn-limiter/TurnLimiter.ts"
 import { ChatTest } from "./ChatTest.ts"
-// @effect-diagnostics strictEffectProvide:off
 
 const usage = Response.Usage.make({
 	inputTokens: {
@@ -36,6 +35,7 @@ const answer = () =>
 		Response.makePart("text-end", { id: "text" }),
 		finish(),
 	)
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 const LanguageModelTest = (
 	streamText: Parameters<typeof LanguageModel.make>[0]["streamText"],
 ) =>
@@ -105,7 +105,7 @@ it.effect(
 						}),
 					),
 				)
-				assert.ok(error instanceof TurnLimiter.InvalidMaxSteps)
+				assert.ok(Schema.is(TurnLimiter.InvalidMaxSteps)(error))
 				// NaN is not equal to itself, so use Object.is.
 				assert.ok(Object.is(error.maxSteps, maxSteps))
 			}
@@ -118,9 +118,11 @@ it.effect(
 		Effect.gen(function* () {
 			for (const maxSteps of [1, 3])
 				for (const mode of ["advance", "stream"]) {
-					let calls = 0,
-						released = 0
-					let observed: ReadonlyArray<Bot.Event<typeof tools.tools>> = []
+					const calls = yield* Ref.make(0)
+					const released = yield* Ref.make(0)
+					const observed = yield* Ref.make<
+						ReadonlyArray<Bot.Event<typeof tools.tools>>
+					>([])
 					const chat = ChatTest(
 						PluginComposition.merge(TurnLimiter.make({ maxSteps }), toolPlugin),
 					)
@@ -128,11 +130,7 @@ it.effect(
 						mode === "advance"
 							? chat.execute({ input: "echo" })
 							: chat.stream({ input: "echo" }).pipe(
-									Stream.tap((e) =>
-										Effect.sync(() => {
-											observed = EffectArray.append(observed, e)
-										}),
-									),
+									Stream.tap((e) => Ref.update(observed, Arr.append(e))),
 									Stream.runDrain,
 								)
 					const error = yield* task.pipe(
@@ -140,27 +138,26 @@ it.effect(
 						Effect.provide(
 							Layer.merge(
 								LanguageModelTest(() =>
-									Stream.suspend(() => {
-										calls++
-										return Stream.make(call(calls), finish("tool-calls")).pipe(
-											Stream.ensuring(
-												Effect.sync(() => {
-													released++
-												}),
-											),
-										)
-									}),
+									Stream.unwrap(
+										Effect.map(
+											Ref.updateAndGet(calls, (n) => n + 1),
+											(n) =>
+												Stream.make(call(n), finish("tool-calls")).pipe(
+													Stream.ensuring(Ref.update(released, (n) => n + 1)),
+												),
+										),
+									),
 								),
 								handlers,
 							),
 						),
 					)
-					assert.ok(error instanceof TurnLimiter.ModelStepLimitExceeded)
+					assert.ok(Schema.is(TurnLimiter.ModelStepLimitExceeded)(error))
 					assert.strictEqual(error.maxSteps, maxSteps)
-					assert.strictEqual(calls, maxSteps)
-					assert.strictEqual(released, maxSteps)
+					assert.strictEqual(yield* Ref.get(calls), maxSteps)
+					assert.strictEqual(yield* Ref.get(released), maxSteps)
 					assert.deepStrictEqual(
-						error.history.content.map((m) => m.role),
+						Arr.map(error.history.content, (m) => m.role),
 						[
 							"system",
 							"user",
@@ -171,18 +168,21 @@ it.effect(
 						],
 					)
 					if (mode === "stream") {
+						const seen = yield* Ref.get(observed)
 						assert.deepStrictEqual(
-							observed
-								.filter((e) => e._tag === "ModelStepStarted")
-								.map((e) => e.step),
+							pipe(
+								seen,
+								Arr.filter((e) => e._tag === "ModelStepStarted"),
+								Arr.map((e) => e.step),
+							),
 							Array.from({ length: maxSteps }, (_, i) => i + 1),
 						)
-						assert.strictEqual(observed.at(-1)?._tag, "ChatUpdated")
+						assert.strictEqual(seen.at(-1)?._tag, "ChatUpdated")
 						assert.strictEqual(
-							observed.filter((e) => e._tag === "ChatUpdated").length,
+							Arr.filter(seen, (e) => e._tag === "ChatUpdated").length,
 							maxSteps + 1,
 						)
-						for (const e of observed)
+						for (const e of seen)
 							if (
 								e._tag === "ResponsePart" &&
 								e.part.type === "tool-result" &&
@@ -204,7 +204,7 @@ it.effect(
 					PluginComposition.merge(TurnLimiter.make({ maxSteps }), toolPlugin),
 				)
 				const model = LanguageModelTest(({ prompt }) =>
-					maxSteps === 1 || prompt.content.some((m) => m.role === "tool")
+					maxSteps === 1 || Arr.some(prompt.content, (m) => m.role === "tool")
 						? answer()
 						: Stream.make(call(1), finish("tool-calls")),
 				)
@@ -262,13 +262,14 @@ it.effect(
 					),
 				),
 			)
-			assert.ok(error instanceof TurnLimiter.ModelStepLimitExceeded)
+			assert.ok(Schema.is(TurnLimiter.ModelStepLimitExceeded)(error))
 			// The pending result of the call is in the history, so no call is left open.
 			assert.ok(
-				error.history.content.some(
+				Arr.some(
+					error.history.content,
 					(message) =>
 						message.role === "tool" &&
-						message.content.some((part) => part.type === "tool-result"),
+						Arr.some(message.content, (part) => part.type === "tool-result"),
 				),
 			)
 		}),
@@ -289,8 +290,8 @@ it.effect(
 				{ concurrency: "unbounded" },
 			).pipe(Effect.provide(Layer.merge(model, handlers)))
 			for (const [index, error] of outcomes.entries()) {
-				assert.ok(error instanceof TurnLimiter.ModelStepLimitExceeded)
-				const text = JSON.stringify(error.history)
+				assert.ok(Schema.is(TurnLimiter.ModelStepLimitExceeded)(error))
+				const text = yield* encodeJson(error.history)
 				assert.match(text, new RegExp(index === 0 ? "first" : "second"))
 				assert.notMatch(text, new RegExp(index === 0 ? "second" : "first"))
 			}
@@ -300,21 +301,20 @@ it.effect(
 	"interruption unwinds limiter middleware and keeps native cancellation",
 	() =>
 		Effect.gen(function* () {
-			let started = Deferred.makeUnsafe<void>(),
-				order: ReadonlyArray<string> = []
+			const started = yield* Deferred.make<void>()
+			const order = yield* Ref.make<ReadonlyArray<string>>([])
 			const track = (name: string) =>
 				Plugin.make({ id: Plugin.Id.make(name) })(() =>
 					Effect.succeed((next, options) =>
-						Stream.suspend(() => {
-							order = EffectArray.append(order, name + ":enter")
-							return next(options).pipe(
-								Stream.ensuring(
-									Effect.sync(() => {
-										order = EffectArray.append(order, name + ":exit")
-									}),
+						Stream.unwrap(
+							Effect.map(Ref.update(order, Arr.append(name + ":enter")), () =>
+								next(options).pipe(
+									Stream.ensuring(
+										Ref.update(order, Arr.append(name + ":exit")),
+									),
 								),
-							)
-						}),
+							),
+						),
 					),
 				)
 			const chat = ChatTest(
@@ -346,7 +346,7 @@ it.effect(
 			)
 			assert.ok(Exit.isFailure(exit))
 			assert.ok(Cause.hasInterruptsOnly(exit.cause))
-			assert.deepStrictEqual(order, [
+			assert.deepStrictEqual(yield* Ref.get(order), [
 				"outer:enter",
 				"inner:enter",
 				"inner:exit",

@@ -1,5 +1,15 @@
 import { ComputersApi } from "@openbot-build/api"
-import { Clock, Effect, type FileSystem, Option, type Schema } from "effect"
+import {
+	Cause,
+	Clock,
+	type Crypto,
+	Effect,
+	type FileSystem,
+	Option,
+	type Path,
+	Redacted,
+	type Schema,
+} from "effect"
 import { HttpClient, type HttpClientError } from "effect/http"
 import { HttpApi, HttpApiClient } from "effect/http-api"
 import * as Config from "./Config.ts"
@@ -33,19 +43,27 @@ const explain =
 				return Config.ComputerError.make({
 					message:
 						"OpenBot ended this pairing. Someone denied it, or it is too old. Run 'openbot computer pair' again.",
+					cause: error,
 				})
 			case "ComputersUnavailable":
 				return Config.ComputerError.make({
 					message: "This OpenBot does not have Computers turned on.",
+					cause: error,
 				})
 			case "HttpClientError":
 				if (error.reason._tag === "TransportError")
 					return Config.ComputerError.make({
-						message: `Could not reach OpenBot at ${url}.`,
+						message: Option.match(Config.errorText(error.reason.cause), {
+							onNone: () => `Could not reach OpenBot at ${url}.`,
+							onSome: (reason) =>
+								`Could not reach OpenBot at ${url} (${reason}).`,
+						}),
+						cause: error,
 					})
 		}
 		return Config.ComputerError.make({
 			message: `OpenBot did not answer as expected: ${error.message}`,
+			cause: error,
 		})
 	}
 
@@ -64,14 +82,14 @@ export const pair = (options: {
 		readonly config: Config.ComputerConfig
 	},
 	Config.ComputerError,
-	HttpClient.HttpClient | FileSystem.FileSystem
+	HttpClient.HttpClient | FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > =>
 	Effect.gen(function* () {
 		const url = yield* Config.parseOrigin(options.url)
 		const saved = yield* Config.read(options.file)
-		const machineId = Option.match(saved, {
-			onNone: Config.makeMachineId,
-			onSome: (config) => config.machineId,
+		const machineId = yield* Option.match(saved, {
+			onNone: () => Config.makeMachineId,
+			onSome: (config) => Effect.succeed(config.machineId),
 		})
 		const client = yield* HttpApiClient.group(HooksApi, {
 			group: "computerHooks",
@@ -101,16 +119,27 @@ export const pair = (options: {
 			yield* Effect.sleep(intervalMs)
 			const status = yield* poll.pipe(
 				Effect.asSome,
-				Effect.catch((error) =>
-					error._tag === "PairingInvalid" ||
-					error._tag === "ComputersUnavailable"
-						? Effect.fail(explain(url)(error))
-						: // The network can fail for a moment. Ask again at the next interval.
-							Effect.succeedNone,
-				),
+				// The network can fail for a moment, and a proxy can answer 502, 503 or 504
+				// while OpenBot starts again. Ask again at the next interval. Every other
+				// failure does not go away, so it stops the pairing.
+				Effect.catchTag("HttpClientError", (error) => {
+					const code = error.response?.status
+					return error.reason._tag === "TransportError" ||
+						(code !== undefined && (code >= 500 || code === 429))
+						? Effect.logDebug(
+								"A poll of the pairing failed. It asks again at the next interval.",
+								Cause.fail(error),
+							).pipe(Effect.as(Option.none()))
+						: Effect.fail(error)
+				}),
+				Effect.mapError(explain(url)),
 			)
 			if (Option.isSome(status) && status.value._tag === "Approved") {
-				const config = { url, token: status.value.token, machineId }
+				const config = {
+					url,
+					token: Redacted.make(status.value.token),
+					machineId,
+				}
 				yield* Config.write(options.file, config)
 				return { computer: status.value.computer, config }
 			}

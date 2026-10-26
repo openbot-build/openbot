@@ -1,8 +1,16 @@
-import { randomBytes, randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Schema,
+} from "effect"
+import { Base64Url } from "effect/encoding"
 import {
 	developerInvitations,
 	developerMembers,
@@ -66,12 +74,14 @@ const MemberRow = Schema.Struct({
 export const make: Effect.Effect<
 	typeof DeveloperMembers.Service,
 	never,
-	PgClient.PgClient | DeveloperAccess
+	PgClient.PgClient | DeveloperAccess | Crypto.Crypto
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
+	const crypto = yield* Crypto.Crypto
+	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
 	const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
 	const admin = Effect.fn("DeveloperMembers.admin")(function* (
 		owner: string,
@@ -79,7 +89,8 @@ export const make: Effect.Effect<
 	) {
 		const proof = yield* access.ownProof(owner, id)
 		if (
-			!(yield* access.grants(owner)).some(
+			!Arr.some(
+				yield* access.grants(owner),
 				(grant) => grant.proofId === id && grant.role === "administrator",
 			)
 		)
@@ -112,10 +123,10 @@ export const make: Effect.Effect<
 				lock ? query.for("update", { of: developerInvitations }) : query,
 			))[0]
 			if (row === undefined) return yield* Api.DeveloperNotFound.make({})
-			const value = yield* Schema.decodeUnknownEffect(InvitationRow)({
+			const value = yield* Rows.decodeRow(InvitationRow)({
 				...row.invitation,
 				scope: row.scope,
-			}).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
+			})
 			return { owner: row.invitation.owner, value }
 		},
 	)
@@ -133,9 +144,7 @@ export const make: Effect.Effect<
 		and(eq(developerMembers.namespace, namespace), eq(developerMembers.id, id))
 	const toMember = (row: typeof developerMembers.$inferSelect) =>
 		Effect.gen(function* () {
-			const member = yield* Schema.decodeUnknownEffect(MemberRow)(row).pipe(
-				Effect.mapError(() => Api.DeveloperUnavailable.make({})),
-			)
+			const member = yield* Rows.decodeRow(MemberRow)(row)
 			return {
 				...member,
 				identity: yield* Rows.identityOf(row.owner),
@@ -199,10 +208,10 @@ export const make: Effect.Effect<
 			return {
 				members: yield* Effect.forEach(members, toMember),
 				invitations: yield* Effect.forEach(invitations, (row) =>
-					Schema.decodeUnknownEffect(Api.Invitation)({
+					Rows.decodeRow(Api.Invitation)({
 						...row,
 						scope: proof.value.scope,
-					}).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({}))),
+					}),
 				),
 			}
 		}),
@@ -210,7 +219,9 @@ export const make: Effect.Effect<
 			function* (owner, proofId, role) {
 				const proof = yield* admin(owner, proofId)
 				const value: Api.Invitation = {
-					id: yield* Effect.sync(() => randomBytes(32).toString("base64url")),
+					id: Base64Url.encode(
+						yield* crypto.randomBytes(32).pipe(Effect.orDie),
+					),
 					proofId,
 					scope: proof.value.scope,
 					role,
@@ -238,7 +249,7 @@ export const make: Effect.Effect<
 					const record = yield* activeInvitation(id, true)
 					const owner = ownerKey(identity)
 					const member: Api.Member = {
-						id: yield* Effect.sync(randomUUID),
+						id: yield* newId,
 						proofId: record.value.proofId,
 						identity,
 						role: record.value.role,
@@ -296,7 +307,7 @@ export const make: Effect.Effect<
 					if (record.owner !== owner) yield* admin(owner, record.value.proofId)
 					yield* Rows.stored(db.delete(developerMembers).where(memberWhere(id)))
 					yield* Rows.postNotice(db, namespace, record.owner, {
-						id: yield* Effect.sync(randomUUID),
+						id: yield* newId,
 						cardUrl: null,
 						kind: "AccessChanged",
 						issue: null,

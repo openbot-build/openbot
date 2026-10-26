@@ -13,7 +13,7 @@ import {
 	type SQL,
 	sql,
 } from "drizzle-orm"
-import { Effect } from "effect"
+import { Array as Arr, Effect } from "effect"
 
 /**
  * Changes a residual condition into a SQL condition for drizzle. `columns`
@@ -28,12 +28,13 @@ export const toWhere = (
 	columns: Readonly<Record<string, AnyColumn>>,
 ): Effect.Effect<SQL> => {
 	const column = (field: string) => columns[field]!
-	const missing = Condition.fields(condition).filter(
+	const missing = Arr.filter(
+		Condition.fields(condition),
 		(field) => columns[field] === undefined,
 	)
 	if (missing.length > 0)
 		return Effect.die(
-			new Error(`No column for the fields ${missing.join(", ")}`),
+			new Error(`No column for the fields ${Arr.join(missing, ", ")}`),
 		)
 	return Condition.fold<SQL>(condition, {
 		true: () => sql`TRUE`,
@@ -63,7 +64,7 @@ export const toWhere = (
 		},
 		in: (field, values) => {
 			const target = column(field)
-			const present = values.filter((value) => value !== null)
+			const present = Arr.filter(values, (value) => value !== null)
 			const parts = [
 				...(present.length > 0 ? [inArray(target, present)] : []),
 				...(values.includes(null) ? [isNull(target)] : []),

@@ -4,7 +4,15 @@ import {
 	ExperienceStorageUnavailable,
 } from "@openbot-build/api"
 import { Store } from "@openbot-build/protocol"
-import { Clock, Effect, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Effect,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import { and, eq, sql } from "drizzle-orm"
 import {
 	appConnections,
@@ -14,12 +22,17 @@ import {
 } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 /** An owner key is the JSON of `[organization id, user id]`. */
 const OwnerJson = Schema.fromJsonString(
 	Schema.Tuple([Schema.String, Schema.String]),
 )
+// @effect-diagnostics-next-line schemaSync:off -- Two strings always encode to JSON, so this can not throw, and many callers need the key as a plain string.
 const encodeOwner = Schema.encodeSync(OwnerJson)
+const LockJson = Schema.fromJsonString(
+	Schema.Tuple([Schema.Literal("app-connections"), Schema.String]),
+)
 
 /** The App connections of each owner, with their App records and drafts, kept in Postgres. */
 export type Error =
@@ -58,20 +71,23 @@ export const ownersOf = (session: {
 		readonly status: string
 	}>
 }) =>
-	session.memberships
-		.filter((membership) => membership.status === "active")
-		.map((membership) =>
+	pipe(
+		session.memberships,
+		Arr.filter((membership) => membership.status === "active"),
+		Arr.map((membership) =>
 			ownerKey({
 				organizationId: membership.organizationId,
 				userId: session.userId,
 			}),
-		)
+		),
+	)
 
-/** Keep the errors that callers handle. Every other storage failure becomes one error. */
-export const failure = (error: unknown) =>
-	error instanceof ExperienceNotFound || error instanceof Api.ConnectionConflict
-		? error
-		: ExperienceStorageUnavailable.make({})
+/**
+ * Log a storage failure that the caller can not act on, and replace it with
+ * one error. The error goes to the client, so it does not hold the failure.
+ */
+const unavailable = (message: string) =>
+	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
 const connectionCodec = Schema.fromJsonString(
 	Schema.toCodecJson(StoredConnection),
 )
@@ -88,10 +104,12 @@ export const open = (
 	id: string,
 	body: string,
 ) =>
-	secrets.open(body, JSON.stringify(["connection", owner, id])).pipe(
-		Effect.flatMap(Schema.decodeEffect(connectionCodec)),
-		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
-	)
+	secrets
+		.open(body, JSON.stringify(["connection", owner, id]))
+		.pipe(
+			Effect.flatMap(Schema.decodeEffect(connectionCodec)),
+			unavailable("Could not open a stored App connection."),
+		)
 const seal = (
 	secrets: Sealer,
 	owner: string,
@@ -102,7 +120,7 @@ const seal = (
 		Effect.flatMap((body) =>
 			secrets.seal(body, JSON.stringify(["connection", owner, id])),
 		),
-		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+		unavailable("Could not seal an App connection."),
 	)
 export const connectionWhere = (owner: string, id: string) =>
 	and(eq(appConnections.owner, owner), eq(appConnections.id, id))
@@ -116,11 +134,27 @@ export const list = (db: Database, secrets: Sealer, owner: string) =>
 		.where(eq(appConnections.owner, owner))
 		.orderBy(appConnections.name, appConnections.id)
 		.pipe(
+			unavailable("Could not list App connections."),
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, owner, row.id, row.body)),
 			),
-			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 		)
+
+export const find = Effect.fn("Apps.findStoredConnection")(function* (
+	db: Database,
+	secrets: Sealer,
+	owner: string,
+	id: string,
+) {
+	const rows = yield* db
+		.select()
+		.from(appConnections)
+		.where(connectionWhere(owner, id))
+		.pipe(unavailable("Could not read an App connection."))
+	return yield* Effect.transposeOption(
+		Option.map(Arr.head(rows), (row) => open(secrets, owner, id, row.body)),
+	)
+})
 
 export const get = Effect.fn("Apps.getStoredConnection")(function* (
 	db: Database,
@@ -128,13 +162,9 @@ export const get = Effect.fn("Apps.getStoredConnection")(function* (
 	owner: string,
 	id: string,
 ) {
-	const row = (yield* db
-		.select()
-		.from(appConnections)
-		.where(connectionWhere(owner, id))
-		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({}))))[0]
-	if (row === undefined) return yield* ExperienceNotFound.make({ id })
-	return yield* open(secrets, owner, id, row.body)
+	return yield* Effect.fromOption(yield* find(db, secrets, owner, id), () =>
+		ExperienceNotFound.make({ id }),
+	)
 })
 
 export const getApp = Effect.fn("Apps.getApp")(function* (
@@ -146,10 +176,10 @@ export const getApp = Effect.fn("Apps.getApp")(function* (
 		.select()
 		.from(appRecords)
 		.where(and(eq(appRecords.owner, owner), eq(appRecords.cardUrl, cardUrl)))
-		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({}))))[0]
+		.pipe(unavailable("Could not read an App record.")))[0]
 	if (row === undefined) return yield* ExperienceNotFound.make({ id: cardUrl })
 	return yield* Schema.decodeEffect(appCodec)(row.body).pipe(
-		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+		unavailable("Could not decode a stored App record."),
 	)
 })
 
@@ -164,7 +194,7 @@ export const updateApp = (db: Database, owner: string, app: Store.AppRecord) =>
 				),
 		),
 		Effect.asVoid,
-		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+		unavailable("Could not update an App record."),
 	)
 
 /**
@@ -182,15 +212,21 @@ export const save = (
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
+				const lock = yield* Schema.encodeEffect(LockJson)([
+					"app-connections",
+					owner,
+				]).pipe(Effect.orDie)
 				yield* tx.execute(
-					sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["app-connections", owner])}, 0))`,
+					sql`SELECT pg_advisory_xact_lock(hashtextextended(${lock}, 0))`,
 				)
 				const id = input.connection.connectionId
 				if (
 					input.connection.owner !== owner ||
 					input.app.cardUrl !== input.connection.cardUrl
 				)
-					return yield* ExperienceStorageUnavailable.make({})
+					return yield* Effect.die(
+						"An App connection save named another owner or another App card.",
+					)
 				const existing = (yield* tx
 					.select()
 					.from(appConnections)
@@ -226,7 +262,7 @@ export const save = (
 					})
 				const stored: StoredConnection = {
 					connection: input.connection,
-					name: input.name.trim(),
+					name: Str.trim(input.name),
 					revision: 0,
 					verification: null,
 				}
@@ -242,7 +278,9 @@ export const save = (
 				yield* tx
 					.insert(appConnections)
 					.values({ owner, id, name: stored.name, revision: 0, body })
-				if (!input.app.sources.some((source) => source.role === "manual")) {
+				if (
+					!Arr.some(input.app.sources, (source) => source.role === "manual")
+				) {
 					yield* tx
 						.insert(appIndexJobs)
 						.values({
@@ -255,7 +293,15 @@ export const save = (
 				return stored
 			}),
 		)
-		.pipe(Effect.mapError(failure))
+		.pipe(
+			Effect.catchTag(
+				["EffectDrizzleQueryError", "SqlError", "SchemaError"],
+				(error) =>
+					Effect.fail(error).pipe(
+						unavailable("Could not save an App connection."),
+					),
+			),
+		)
 
 /**
  * Change a connection under a row lock and raise its revision.
@@ -293,7 +339,9 @@ export const update = (
 					updated.connection.connectionId !== id ||
 					updated.connection.cardUrl !== previous.connection.cardUrl
 				)
-					return yield* ExperienceStorageUnavailable.make({})
+					return yield* Effect.die(
+						"An App connection change moved the connection to another owner, id or App card.",
+					)
 				const body = yield* seal(secrets, owner, id, updated)
 				yield* tx
 					.update(appConnections)
@@ -302,7 +350,15 @@ export const update = (
 				return updated
 			}),
 		)
-		.pipe(Effect.mapError(failure))
+		.pipe(
+			Effect.catchTag(
+				["EffectDrizzleQueryError", "SqlError", "SchemaError"],
+				(error) =>
+					Effect.fail(error).pipe(
+						unavailable("Could not update an App connection."),
+					),
+			),
+		)
 
 export const saveDraft = (
 	db: Database,
@@ -314,5 +370,5 @@ export const saveDraft = (
 			db.insert(appDrafts).values({ owner, id: draft.id, body }),
 		),
 		Effect.as(draft),
-		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+		unavailable("Could not save an App connection draft."),
 	)

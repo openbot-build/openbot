@@ -1,12 +1,12 @@
-import { randomUUID } from "node:crypto"
 import { ComputersApi } from "@openbot-build/api"
-import type { Chat } from "@openbot-build/core"
+import { Chat } from "@openbot-build/core"
 import { PgClient } from "@effect/sql-pg"
-import { eq } from "drizzle-orm"
 import {
+	Array as Arr,
 	Chunk,
 	Clock,
 	Context,
+	Crypto,
 	Deferred,
 	Duration,
 	Effect,
@@ -14,16 +14,16 @@ import {
 	HashMap,
 	Layer,
 	Option,
-	PubSub,
-	Queue,
+	pipe,
 	Ref,
 	Schedule,
 	Schema,
 	Scope,
 	Stream,
+	String as Str,
 } from "effect"
-import * as Db from "../database/Database.ts"
-import { computerCalls } from "../database/Schema.ts"
+import * as Background from "../app/Background.ts"
+import * as Failures from "../app/Failures.ts"
 import {
 	ComputerCallFailed,
 	type ComputerError,
@@ -31,6 +31,7 @@ import {
 	type Machine,
 	type Process,
 } from "./Computer.ts"
+import * as InstanceCalls from "./InstanceCalls.ts"
 
 /** Who a session belongs to. Only the same owner, in the same Chat, may use it. */
 export interface Owner {
@@ -40,12 +41,12 @@ export interface Owner {
 }
 
 /** The session is not there. It ended, or another owner has it. */
-export class SessionGone extends Schema.TaggedError<SessionGone>()(
-	"SessionGone",
-	{
-		id: Schema.String,
-	},
-) {}
+export class SessionGone extends Schema.TaggedError<
+	SessionGone,
+	{ readonly brand: unique symbol }
+>()("SessionGone", {
+	id: Schema.String,
+}) {}
 
 /** A session ends when nobody reads it or writes to it for this long. */
 export const idleLimit = Duration.minutes(30)
@@ -53,6 +54,8 @@ export const idleLimit = Duration.minutes(30)
 const keepLimit = 1024 * 1024
 /** Instances send calls for sessions on other instances on this channel. */
 export const channel = "openbot_computer_sessions_calls"
+/** A stored call names its session as `session:<id>`. */
+const rowPrefix = "session:"
 
 interface Session {
 	readonly id: string
@@ -103,7 +106,7 @@ const CallRow = Schema.Struct({
 	session: Schema.String,
 	owner: Schema.Struct({
 		key: Schema.String,
-		chat: Schema.optionalKey(Schema.String),
+		chat: Schema.optionalKey(Chat.Id),
 	}),
 	call: SessionCall,
 })
@@ -112,42 +115,47 @@ const CallReply = Schema.TaggedUnion({
 	Gone: {},
 	Failed: { message: Schema.String },
 })
-const encodeRow = Schema.encodeSync(Schema.fromJsonString(CallRow))
-const decodeRow = Schema.decodeUnknownOption(Schema.fromJsonString(CallRow))
-const encodeReply = Schema.encodeSync(Schema.fromJsonString(CallReply))
-const decodeReply = Schema.decodeUnknownOption(Schema.fromJsonString(CallReply))
+const encodeRow = Schema.encodeEffect(Schema.fromJsonString(CallRow))
+const decodeRow = Schema.decodeUnknownEffect(Schema.fromJsonString(CallRow))
+const encodeReply = Schema.encodeEffect(Schema.fromJsonString(CallReply))
+const decodeReply = Schema.decodeUnknownEffect(Schema.fromJsonString(CallReply))
+
+/** One C-style escape. The capture group holds the code after the backslash. */
+const escape = /\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|[nrtabefv0\\])/
+const simpleEscapes: Readonly<Record<string, string>> = {
+	n: "\n",
+	r: "\r",
+	t: "\t",
+	a: "\x07",
+	b: "\b",
+	e: "\x1b",
+	f: "\f",
+	v: "\v",
+	"0": "\0",
+	"\\": "\\",
+}
+const escaped = (code: string) =>
+	code[0] === "x" || code[0] === "u"
+		? String.fromCharCode(Number.parseInt(pipe(code, Str.slice(1)), 16))
+		: (simpleEscapes[code] ?? code)
 
 /**
  * Turns C-style escapes, such as `\x03` for Ctrl-C or `\n`, into their bytes, so a
  * model can send control keys as plain text.
  */
-export const unescape = (chars: string): Uint8Array => {
-	const text = chars.replace(
-		/\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|[nrtabefv0\\])/g,
-		(_, code: string) => {
-			if (code[0] === "x" || code[0] === "u")
-				return String.fromCharCode(Number.parseInt(code.slice(1), 16))
-			const simple: Record<string, string> = {
-				n: "\n",
-				r: "\r",
-				t: "\t",
-				a: "\x07",
-				b: "\b",
-				e: "\x1b",
-				f: "\f",
-				v: "\v",
-				"0": "\0",
-				"\\": "\\",
-			}
-			return simple[code] ?? code
-		},
+export const unescape = (chars: string): Uint8Array =>
+	new TextEncoder().encode(
+		pipe(
+			// Split keeps the capture group, so the codes of the escapes are at the odd places.
+			Str.split(chars, escape),
+			Arr.map((part, index) => (index % 2 === 1 ? escaped(part) : part)),
+			Arr.join(""),
+		),
 	)
-	return new TextEncoder().encode(text)
-}
 
 /** Joins the chunks, and keeps only the end when they are longer than `max`. */
 const joinTail = (chunks: ReadonlyArray<Uint8Array>, max: number) => {
-	const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+	const total = Arr.reduce(chunks, 0, (sum, chunk) => sum + chunk.length)
 	const all = new Uint8Array(total)
 	let at = 0
 	for (const chunk of chunks) {
@@ -193,12 +201,13 @@ export class Sessions extends Context.Service<
 >()("@openbot-build/openbot/computers/Sessions") {}
 
 export const make = Effect.gen(function* () {
-	const db = yield* Db.make
 	const client = yield* PgClient.PgClient
+	const crypto = yield* Crypto.Crypto
+	// OpenBot needs secure random numbers to run, so a failure here is a defect.
+	const newUuid = crypto.randomUUIDv4().pipe(Effect.orDie)
 	const scope = yield* Scope.Scope
 	const sessions = yield* Ref.make(HashMap.empty<string, Session>())
-	const replies = yield* PubSub.unbounded<string>()
-	yield* Effect.addFinalizer(() => PubSub.shutdown(replies))
+	const calls = yield* InstanceCalls.make(channel)
 
 	const remove = (session: Session) =>
 		Ref.update(sessions, HashMap.remove(session.id)).pipe(
@@ -264,64 +273,72 @@ export const make = Effect.gen(function* () {
 		onEnd,
 	}) =>
 		Effect.gen(function* () {
-			const sessionScope = yield* Scope.fork(scope)
-			const process = yield* machine.shell
-				.start({
-					command: request.command,
-					tty: request.tty ?? false,
-					...(request.cwd === undefined ? {} : { cwd: request.cwd }),
-					...(request.env === undefined ? {} : { env: request.env }),
-					...(request.rows === undefined ? {} : { rows: request.rows }),
-					...(request.cols === undefined ? {} : { cols: request.cols }),
-				})
-				.pipe(
-					Scope.provide(sessionScope),
-					Effect.onError((cause) =>
-						Scope.close(sessionScope, EffectExit.failCause(cause)),
-					),
-				)
-			const session: Session = {
-				id: "cse_" + randomUUID().replaceAll("-", ""),
-				owner,
-				process,
-				scope: sessionScope,
-				ended: yield* Deferred.make<Exit>(),
-				unread: yield* Ref.make(noUnread),
-				touchedAt: yield* Ref.make(yield* Clock.currentTimeMillis),
-				onEnd: yield* Ref.make(Option.fromNullishOr(onEnd)),
-			}
-			yield* Ref.update(sessions, HashMap.set(session.id, session))
-			// Keeps the output until the next read.
-			yield* process.output.pipe(
-				Stream.runForEach((chunk) =>
-					Ref.update(session.unread, (unread) => keep(unread, chunk)),
-				),
-				Effect.andThen(process.exit),
-				Effect.flatMap((exit) =>
-					Effect.gen(function* () {
-						yield* Deferred.succeed(session.ended, exit)
-						const tell = yield* Ref.getAndSet(session.onEnd, Option.none())
-						if (Option.isNone(tell)) return
-						const { output } = yield* take(session, 4096)
-						yield* remove(session)
-						yield* tell.value(exit, output)
-					}),
-				),
-				Effect.forkIn(sessionScope),
-			)
-			// A session that nobody uses ends, so it does not run for ever.
-			yield* Effect.gen(function* () {
-				while (true) {
-					yield* Effect.sleep(Duration.minutes(1))
-					const now = yield* Clock.currentTimeMillis
-					const touchedAt = yield* Ref.get(session.touchedAt)
-					if (now - touchedAt > Duration.toMillis(idleLimit)) {
-						yield* process.signal("SIGKILL").pipe(Effect.ignore)
-						yield* remove(session)
-						return
+			// Only the start can stop in the middle. A started process is then
+			// always in `sessions`, and the idle killer always watches it.
+			const session = yield* Effect.uninterruptibleMask((restore) =>
+				Effect.gen(function* () {
+					const sessionScope = yield* Scope.fork(scope)
+					const process = yield* restore(
+						machine.shell
+							.start({
+								command: request.command,
+								tty: request.tty ?? false,
+								...(request.cwd === undefined ? {} : { cwd: request.cwd }),
+								...(request.env === undefined ? {} : { env: request.env }),
+								...(request.rows === undefined ? {} : { rows: request.rows }),
+								...(request.cols === undefined ? {} : { cols: request.cols }),
+							})
+							.pipe(Scope.provide(sessionScope)),
+					).pipe(
+						Effect.onError((cause) =>
+							Scope.close(sessionScope, EffectExit.failCause(cause)),
+						),
+					)
+					const session: Session = {
+						id: "cse_" + pipe(yield* newUuid, Str.replaceAll("-", "")),
+						owner,
+						process,
+						scope: sessionScope,
+						ended: yield* Deferred.make<Exit>(),
+						unread: yield* Ref.make(noUnread),
+						touchedAt: yield* Ref.make(yield* Clock.currentTimeMillis),
+						onEnd: yield* Ref.make(Option.fromNullishOr(onEnd)),
 					}
-				}
-			}).pipe(Effect.forkIn(sessionScope))
+					yield* Ref.update(sessions, HashMap.set(session.id, session))
+					// Keeps the output until the next read.
+					yield* process.output.pipe(
+						Stream.runForEach((chunk) =>
+							Ref.update(session.unread, (unread) => keep(unread, chunk)),
+						),
+						Effect.andThen(process.exit),
+						Effect.flatMap((exit) =>
+							Effect.gen(function* () {
+								yield* Deferred.succeed(session.ended, exit)
+								const tell = yield* Ref.getAndSet(session.onEnd, Option.none())
+								if (Option.isNone(tell)) return
+								const { output } = yield* take(session, 4096)
+								yield* remove(session)
+								yield* tell.value(exit, output)
+							}),
+						),
+						Effect.forkIn(sessionScope),
+					)
+					// A session that nobody uses ends, so it does not run for ever.
+					const idle = Effect.gen(function* () {
+						const now = yield* Clock.currentTimeMillis
+						const touchedAt = yield* Ref.get(session.touchedAt)
+						return now - touchedAt > Duration.toMillis(idleLimit)
+					})
+					yield* idle.pipe(
+						Effect.delay(Duration.minutes(1)),
+						Effect.repeat({ until: (ended) => ended }),
+						Effect.andThen(process.signal("SIGKILL").pipe(Effect.ignore)),
+						Effect.andThen(remove(session)),
+						Effect.forkIn(sessionScope),
+					)
+					return session
+				}),
+			)
 			return yield* read(
 				session,
 				request.yieldTimeMs ?? ComputersApi.yieldTimeDefault,
@@ -378,69 +395,51 @@ export const make = Effect.gen(function* () {
 		call: SessionCall,
 		wait: Duration.Input,
 	) =>
-		Effect.scoped(
-			Effect.gen(function* () {
-				const subscription = yield* PubSub.subscribe(replies)
-				const callId = randomUUID()
-				const now = yield* Clock.currentTimeMillis
-				yield* db
-					.insert(computerCalls)
-					.values({
-						id: callId,
-						computerId: `session:${id}`,
-						call: encodeRow({ session: id, owner, call }),
-						createdAt: now,
-					})
-					.pipe(Effect.orDie)
-				yield* client.notify(channel, `call:${callId}`).pipe(Effect.ignore)
-				const replied = yield* Stream.fromSubscription(subscription).pipe(
-					Stream.filter((each) => each === callId),
-					Stream.runHead,
-					Effect.timeoutOption(wait),
-				)
-				const row = (yield* db
-					.select()
-					.from(computerCalls)
-					.where(eq(computerCalls.id, callId))
-					.pipe(Effect.orElseSucceed(() => [])))[0]
-				yield* db
-					.delete(computerCalls)
-					.where(eq(computerCalls.id, callId))
-					.pipe(Effect.ignore)
-				const reply =
-					Option.isNone(replied) || row?.reply == null
-						? Option.none()
-						: decodeReply(row.reply)
-				if (Option.isNone(reply) || reply.value._tag === "Gone")
+		Effect.gen(function* () {
+			const replied = yield* calls.ask({
+				id: yield* newUuid,
+				computerId: rowPrefix + id,
+				// This file builds the row, so it always encodes.
+				call: yield* encodeRow({ session: id, owner, call }).pipe(Effect.orDie),
+				wait,
+			})
+			// No instance answered in time, so no instance has the session.
+			if (Option.isNone(replied)) return yield* SessionGone.make({ id })
+			const reply = yield* decodeReply(replied.value).pipe(
+				Failures.replace("A stored session reply has a bad value", () =>
+					ComputerCallFailed.make({
+						message: "OpenBot could not read the reply of the session.",
+						retry: false,
+					}),
+				),
+			)
+			switch (reply._tag) {
+				case "Gone":
 					return yield* SessionGone.make({ id })
-				if (reply.value._tag === "Failed")
+				case "Failed":
 					return yield* ComputerCallFailed.make({
-						message: reply.value.message,
+						message: reply.message,
 						retry: false,
 					})
-				return reply.value.output
-			}),
-		)
+				case "Done":
+					return reply.output
+			}
+		})
 
 	/** Another instance asked for a call. Do it when the session is here. */
 	const onCall = (callId: string) =>
 		Effect.gen(function* () {
-			const row = (yield* db
-				.select()
-				.from(computerCalls)
-				.where(eq(computerCalls.id, callId))
-				.pipe(Effect.orElseSucceed(() => [])))[0]
-			if (row === undefined || row.reply !== null) return
-			const parsed = decodeRow(row.call)
-			if (Option.isNone(parsed)) return
-			const { session: id, owner, call } = parsed.value
-			const found = HashMap.get(yield* Ref.get(sessions), id)
-			if (Option.isNone(found)) return
-			const session = found.value
-			const reply: typeof CallReply.Type = !sameOwner(
-				session.owner,
-				owner as Owner,
+			const row = yield* calls.row(callId)
+			if (Option.isNone(row)) return
+			// Every instance gets every call, so only the instance with the session reads it.
+			const found = HashMap.get(
+				yield* Ref.get(sessions),
+				pipe(row.value.computerId, Str.slice(rowPrefix.length)),
 			)
+			if (Option.isNone(found)) return
+			const { owner, call } = yield* decodeRow(row.value.call)
+			const session = found.value
+			const reply: typeof CallReply.Type = !sameOwner(session.owner, owner)
 				? { _tag: "Gone" }
 				: yield* callLocal(session, call).pipe(
 						Effect.map((output) => ({ _tag: "Done" as const, output })),
@@ -452,33 +451,37 @@ export const make = Effect.gen(function* () {
 							}),
 						),
 					)
-			yield* db
-				.update(computerCalls)
-				.set({ reply: encodeReply(reply) })
-				.where(eq(computerCalls.id, callId))
-				.pipe(Effect.ignore)
-			yield* client.notify(channel, `reply:${callId}`).pipe(Effect.ignore)
+			// This file builds the reply, so it always encodes.
+			const encoded = yield* encodeReply(reply).pipe(Effect.orDie)
+			yield* calls.answer(callId, encoded)
 		})
 
-	yield* Effect.scoped(
-		Effect.gen(function* () {
-			const notices = yield* client.listen(channel)
-			while (true) {
-				const { payload } = yield* Queue.take(notices)
-				const [kind, id = ""] = payload.split(":")
-				if (kind === "call") yield* Effect.forkIn(onCall(id), scope)
-				else if (kind === "reply") yield* PubSub.publish(replies, id)
-			}
-		}),
-	).pipe(
-		Effect.tapError((error) =>
-			Effect.logWarning(
-				"The session listener stopped. It starts again.",
-				error,
-			),
+	/** The notices of other instances. A new listen starts when the connection breaks. */
+	const notices = Stream.unwrap(
+		Effect.map(client.listen(channel), (queue) => Stream.fromQueue(queue)),
+	)
+	yield* Background.repeat(
+		notices.pipe(
+			Stream.runForEach(({ payload }) => {
+				const [kind, id = ""] = Str.split(payload, ":")
+				return kind === "call"
+					? Effect.forkIn(
+							onCall(id).pipe(
+								Background.logFailure(
+									"A session call of another instance failed",
+								),
+							),
+							scope,
+						)
+					: kind === "reply"
+						? calls.replied(id)
+						: Effect.void
+			}),
 		),
-		Effect.retry(Schedule.spaced(Duration.seconds(1))),
-		Effect.forkScoped,
+		{
+			schedule: Schedule.spaced(Duration.seconds(1)),
+			message: "The session listener stopped. It starts again.",
+		},
 	)
 
 	/** Does a call where the session is: here, or on another instance. */

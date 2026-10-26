@@ -1,4 +1,5 @@
 import {
+	Array as Arr,
 	Data,
 	Schema,
 	SchemaTransformation,
@@ -195,17 +196,20 @@ export type Event = Data.TaggedEnum<{
 }>
 export const Event = Data.taggedEnum<Event>()
 
-export type LiveErrorReason =
-	"unsupported" | "connect" | "protocol" | "closed" | "provider"
+export const LiveErrorReason = Schema.Literals([
+	"unsupported",
+	"connect",
+	"protocol",
+	"closed",
+	"provider",
+])
+export type LiveErrorReason = typeof LiveErrorReason.Type
 
-export class LiveError extends Schema.TaggedError<LiveError>()("LiveError", {
-	reason: Schema.Literals([
-		"unsupported",
-		"connect",
-		"protocol",
-		"closed",
-		"provider",
-	]),
+export class LiveError extends Schema.TaggedError<
+	LiveError,
+	{ readonly brand: unique symbol }
+>()("LiveError", {
+	reason: LiveErrorReason,
 	message: Schema.String,
 }) {}
 
@@ -229,17 +233,17 @@ export interface LiveModel {
 export const unsupported = (capabilities: Capabilities, input: Input) => {
 	const missing = Input.$match(input, {
 		Audio: () => false,
-		Commit: () => !capabilities.turnDetection.includes("client"),
+		Commit: () => !Arr.contains(capabilities.turnDetection, "client"),
 		ClearAudio: () => false,
 		Text: () => !capabilities.inputs.text,
 		Image: () => !capabilities.inputs.image,
 		Configure: ({ config }) =>
 			(config.tools.length > 0 && !capabilities.tools) ||
-			!capabilities.turnDetection.includes(config.turnDetection) ||
-			!capabilities.audio.input.some((format) =>
+			!Arr.contains(capabilities.turnDetection, config.turnDetection) ||
+			!Arr.some(capabilities.audio.input, (format) =>
 				sameFormat(format, config.audio.input),
 			) ||
-			!capabilities.audio.output.some((format) =>
+			!Arr.some(capabilities.audio.output, (format) =>
 				sameFormat(format, config.audio.output),
 			),
 		Respond: () => false,

@@ -1,14 +1,18 @@
-import { randomBytes } from "node:crypto"
 import { type Caller, VaultsApi } from "@openbot-build/api"
 import { and, eq } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
-	type Errors as CheckErrors,
-	check,
-	filter,
-	guard,
-} from "../authorization/Check.ts"
+	Cause,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Schema,
+} from "effect"
+import { Hex } from "effect/encoding"
+import * as Failures from "../app/Failures.ts"
+import * as Check from "../authorization/Check.ts"
 import { secretProviderResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
 import * as Db from "../database/Database.ts"
@@ -24,7 +28,7 @@ export type Failure =
 	| VaultsApi.VaultConflict
 	| VaultsApi.VaultInvalid
 	| VaultsApi.VaultsUnavailable
-	| CheckErrors
+	| Check.Errors
 
 export const unavailable = () => VaultsApi.VaultsUnavailable.make({})
 const invalid = (message: string) => VaultsApi.VaultInvalid.make({ message })
@@ -33,14 +37,16 @@ const notFound = (id: string) => VaultsApi.SecretProviderNotFound.make({ id })
 const binding = (id: string) => `openbot_secret_providers:${id}:credentials`
 
 /** The opened secret holds JSON that only this file writes, from a checked request. */
-const decodeCredentials = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(VaultsApi.SecretProviderCredentials),
+const CredentialsJson = Schema.fromJsonString(
+	VaultsApi.SecretProviderCredentials,
 )
-const decodeKind = Schema.decodeUnknownSync(VaultsApi.SecretProviderKind)
+const decodeCredentials = Schema.decodeUnknownEffect(CredentialsJson)
+const encodeCredentials = Schema.encodeEffect(CredentialsJson)
+const decodeKind = Schema.decodeUnknownEffect(VaultsApi.SecretProviderKind)
 /** The hints column holds the view of the credentials, which only this file writes. */
-const decodeView = Schema.decodeUnknownSync(
-	Schema.fromJsonString(VaultsApi.SecretProviderCredentialsView),
-)
+const ViewJson = Schema.fromJsonString(VaultsApi.SecretProviderCredentialsView)
+const decodeView = Schema.decodeUnknownEffect(ViewJson)
+const encodeView = Schema.encodeEffect(ViewJson)
 
 const viewOf = (
 	credentials: Credentials,
@@ -75,19 +81,27 @@ const viewOf = (
 
 type Row = typeof secretProviders.$inferSelect
 
-const fromRow = (row: Row): Provider => ({
-	id: VaultsApi.SecretProviderId.make(row.id),
-	kind: decodeKind(row.kind),
-	name: row.name,
-	owner:
-		row.ownerUserId === null
-			? { _tag: "Organization" }
-			: { _tag: "Member", userId: row.ownerUserId },
-	credentials: decodeView(row.hints),
-	version: row.version,
-	createdAt: row.createdAt,
-	updatedAt: row.updatedAt,
-})
+/** A row with a bad value is a broken store. The log keeps the cause. */
+const fromRow = (
+	row: Row,
+): Effect.Effect<Provider, VaultsApi.VaultsUnavailable> =>
+	Effect.gen(function* () {
+		return {
+			id: VaultsApi.SecretProviderId.make(row.id),
+			kind: yield* decodeKind(row.kind),
+			name: row.name,
+			owner:
+				row.ownerUserId === null
+					? { _tag: "Organization" }
+					: { _tag: "Member", userId: row.ownerUserId },
+			credentials: yield* decodeView(row.hints),
+			version: row.version,
+			createdAt: row.createdAt,
+			updatedAt: row.updatedAt,
+		} satisfies Provider
+	}).pipe(
+		Failures.replace("A stored secret provider has a bad value", unavailable),
+	)
 
 /** The accounts at secret providers. Their tokens are sealed and never come out. */
 export class SecretProviders extends Context.Service<
@@ -95,27 +109,27 @@ export class SecretProviders extends Context.Service<
 	{
 		readonly list: (
 			caller: Caller,
-		) => Effect.Effect<ReadonlyArray<Provider>, Failure, AuthorizationServices>
+		) => Effect.Effect<ReadonlyArray<Provider>, Failure>
 		/** Reads a provider that the caller may read, and also use or change when asked. */
 		readonly get: (
 			caller: Caller,
 			id: string,
 			action?: "read" | "use" | "write",
-		) => Effect.Effect<Provider, Failure, AuthorizationServices>
+		) => Effect.Effect<Provider, Failure>
 		readonly create: (
 			caller: Caller,
 			input: VaultsApi.CreateSecretProviderRequest,
-		) => Effect.Effect<Provider, Failure, AuthorizationServices>
+		) => Effect.Effect<Provider, Failure>
 		readonly update: (
 			caller: Caller,
 			id: string,
 			input: VaultsApi.UpdateSecretProviderRequest,
-		) => Effect.Effect<Provider, Failure, AuthorizationServices>
+		) => Effect.Effect<Provider, Failure>
 		/** Fails while Vault items still read from the provider. */
 		readonly remove: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<void, Failure, AuthorizationServices>
+		) => Effect.Effect<void, Failure>
 		/** The secrets of a provider, for its reader. It checks no permission. */
 		readonly credentials: (
 			organizationId: string,
@@ -131,34 +145,49 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const readers = yield* Readers
-	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+	const crypto = yield* Crypto.Crypto
+	const { check, filter, guard } = yield* Check.make
+	const stored = (message: string) => Failures.replace(message, unavailable)
 	const where = (organizationId: string, id: string) =>
 		and(
 			eq(secretProviders.organizationId, organizationId),
 			eq(secretProviders.id, id),
 		)
 	const row = (organizationId: string, id: string) =>
-		stored(
-			db.select().from(secretProviders).where(where(organizationId, id)),
-		).pipe(Effect.map((rows) => Option.fromNullishOr(rows[0])))
+		db
+			.select()
+			.from(secretProviders)
+			.where(where(organizationId, id))
+			.pipe(
+				stored("A secret provider could not be read."),
+				Effect.map((rows) => Option.fromNullishOr(rows[0])),
+			)
 	const seal = (id: string, credentials: Credentials) =>
-		Effect.map(
-			stored(secrets.seal(JSON.stringify(credentials), binding(id))),
-			(sealed) => ({
-				credentials: sealed,
-				hints: JSON.stringify(viewOf(credentials)),
-			}),
-		)
+		Effect.gen(function* () {
+			// The credentials passed the request schema, so they always encode.
+			const json = yield* encodeCredentials(credentials).pipe(Effect.orDie)
+			return {
+				credentials: yield* secrets
+					.seal(json, binding(id))
+					.pipe(
+						stored("The credentials of a secret provider could not be sealed."),
+					),
+				hints: yield* encodeView(viewOf(credentials)).pipe(Effect.orDie),
+			}
+		})
 	/** The provider must take the token before OpenBot stores it. */
 	const verify = (credentials: Credentials) =>
-		readers
-			.make(credentials)
-			.verify.pipe(
-				Effect.mapError((error) =>
-					invalid("The provider did not take the token: " + error.message),
+		readers.make(credentials).verify.pipe(
+			Effect.tapError((error) =>
+				Effect.logInfo(
+					"OpenBot could not read a secret provider",
+					Cause.fail(error),
 				),
-			)
+			),
+			Effect.mapError((error) =>
+				invalid("The provider did not take the token: " + error.message),
+			),
+		)
 	/** A caller who cannot read a provider does not learn that it exists. */
 	const access = (
 		caller: Caller,
@@ -168,7 +197,7 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const found = yield* row(caller.organizationId, id)
 			if (Option.isNone(found)) return yield* notFound(id)
-			const provider = fromRow(found.value)
+			const provider = yield* fromRow(found.value)
 			yield* guard(
 				caller,
 				{
@@ -198,19 +227,18 @@ export const make = Effect.gen(function* () {
 						}),
 					),
 				)
-				const rows = yield* stored(
-					db
-						.select()
-						.from(secretProviders)
-						.where(
-							and(
-								eq(secretProviders.organizationId, caller.organizationId),
-								readable,
-							),
-						)
-						.orderBy(secretProviders.createdAt),
-				)
-				return rows.map(fromRow)
+				const rows = yield* db
+					.select()
+					.from(secretProviders)
+					.where(
+						and(
+							eq(secretProviders.organizationId, caller.organizationId),
+							readable,
+						),
+					)
+					.orderBy(secretProviders.createdAt)
+					.pipe(stored("The secret providers could not be listed."))
+				return yield* Effect.forEach(rows, fromRow)
 			}),
 		get: (caller, id, action = "read") => access(caller, id, action),
 		create: (caller, input) =>
@@ -227,25 +255,25 @@ export const make = Effect.gen(function* () {
 				})
 				yield* verify(input.credentials)
 				const now = yield* Clock.currentTimeMillis
-				const id = "spr_" + randomBytes(16).toString("hex")
+				const id =
+					"spr_" + Hex.encode(yield* crypto.randomBytes(16).pipe(Effect.orDie))
 				const sealed = yield* seal(id, input.credentials)
-				const inserted = yield* stored(
-					db
-						.insert(secretProviders)
-						.values({
-							organizationId: caller.organizationId,
-							id,
-							ownerUserId: userId,
-							kind: input.credentials.kind,
-							name: input.name,
-							...sealed,
-							version: 0,
-							createdAt: now,
-							updatedAt: now,
-						})
-						.returning(),
-				)
-				return fromRow(inserted[0]!)
+				const inserted = yield* db
+					.insert(secretProviders)
+					.values({
+						organizationId: caller.organizationId,
+						id,
+						ownerUserId: userId,
+						kind: input.credentials.kind,
+						name: input.name,
+						...sealed,
+						version: 0,
+						createdAt: now,
+						updatedAt: now,
+					})
+					.returning()
+					.pipe(stored("A secret provider could not be created."))
+				return yield* fromRow(inserted[0]!)
 			}),
 		update: (caller, id, input) =>
 			Effect.gen(function* () {
@@ -265,61 +293,74 @@ export const make = Effect.gen(function* () {
 						? {}
 						: yield* seal(id, input.credentials)
 				const now = yield* Clock.currentTimeMillis
-				const changed = yield* stored(
-					db
-						.update(secretProviders)
-						.set({
-							...(input.name === undefined ? {} : { name: input.name }),
-							...sealed,
-							version: provider.version + 1,
-							updatedAt: now,
-						})
-						.where(
-							and(
-								where(caller.organizationId, id),
-								eq(secretProviders.version, provider.version),
-							),
-						)
-						.returning(),
-				)
+				const changed = yield* db
+					.update(secretProviders)
+					.set({
+						...(input.name === undefined ? {} : { name: input.name }),
+						...sealed,
+						version: provider.version + 1,
+						updatedAt: now,
+					})
+					.where(
+						and(
+							where(caller.organizationId, id),
+							eq(secretProviders.version, provider.version),
+						),
+					)
+					.returning()
+					.pipe(stored("A secret provider could not be changed."))
 				const next = changed[0]
 				if (next === undefined)
 					return yield* VaultsApi.VaultConflict.make({
 						version: provider.version,
 					})
-				return fromRow(next)
+				return yield* fromRow(next)
 			}),
 		remove: (caller, id) =>
 			Effect.gen(function* () {
 				yield* access(caller, id, "write")
-				const used = yield* stored(
-					db
-						.select({ id: vaultItems.id })
-						.from(vaultItems)
-						.where(
-							and(
-								eq(vaultItems.organizationId, caller.organizationId),
-								eq(vaultItems.providerId, id),
-							),
-						)
-						.limit(1),
-				)
+				const used = yield* db
+					.select({ id: vaultItems.id })
+					.from(vaultItems)
+					.where(
+						and(
+							eq(vaultItems.organizationId, caller.organizationId),
+							eq(vaultItems.providerId, id),
+						),
+					)
+					.limit(1)
+					.pipe(
+						stored("The Vault items of a secret provider could not be read."),
+					)
 				if (used.length > 0)
 					return yield* invalid(
 						"Vault items still read from this provider. Delete them first.",
 					)
-				yield* stored(
-					db.delete(secretProviders).where(where(caller.organizationId, id)),
-				)
+				yield* db
+					.delete(secretProviders)
+					.where(where(caller.organizationId, id))
+					.pipe(stored("A secret provider could not be deleted."))
 			}),
 		credentials: (organizationId, id) =>
 			Effect.gen(function* () {
 				const found = yield* row(organizationId, id)
 				if (Option.isNone(found)) return yield* notFound(id)
-				const json = yield* stored(
-					secrets.open(found.value.credentials, binding(id)),
+				const json = yield* secrets
+					.open(found.value.credentials, binding(id))
+					.pipe(
+						stored("The credentials of a secret provider could not be opened."),
+					)
+				// The decode failure can quote the opened JSON, and it holds the token. So the log does not keep it.
+				return yield* decodeCredentials(json).pipe(
+					Effect.catchTag("SchemaError", () =>
+						Effect.logError(
+							"The stored credentials of a secret provider are not valid",
+						).pipe(
+							Effect.annotateLogs({ provider: id }),
+							Effect.andThen(Effect.fail(unavailable())),
+						),
+					),
 				)
-				return yield* stored(decodeCredentials(json))
 			}),
 	})
 })

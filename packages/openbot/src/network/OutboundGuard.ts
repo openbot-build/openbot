@@ -1,7 +1,7 @@
 import { Network } from "@openbot-build/protocol"
 import type { Resolver } from "@openbot-build/protocol/Node"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, pipe, Schema, String as Str } from "effect"
 import { isIP } from "node:net"
 // Node does not export `setGlobalDispatcher`. The `undici` package sets the
 // same global dispatcher that Node's own `fetch` reads.
@@ -14,17 +14,17 @@ import {
 import { OutboundPolicy, make, type Allow } from "./OutboundPolicy.ts"
 
 /** The error that `fetch` gives as its cause when the guard blocks a target. */
-export class OutboundBlocked extends Error {
+export class OutboundBlocked extends Schema.TaggedError<
+	OutboundBlocked,
+	{ readonly brand: unique symbol }
+>()("OutboundBlocked", { hostname: Schema.String }) {
 	readonly reason = "BlockedTarget"
-	readonly hostname: string
-	constructor(hostname: string) {
-		super(
-			`OpenBot blocked an outbound connection to ${hostname}, because it is not a public address. To allow it, add the host to OPENBOT_OUTBOUND_ALLOW.`,
-		)
-		this.name = "OutboundBlocked"
-		this.hostname = hostname
+	override get message() {
+		return `OpenBot blocked an outbound connection to ${this.hostname}, because it is not a public address. To allow it, add the host to OPENBOT_OUTBOUND_ALLOW.`
 	}
 }
+
+const isNetworkError = Schema.is(Network.NetworkError)
 
 /**
  * Builds a dispatcher that checks every new socket. Node skips the DNS lookup
@@ -40,10 +40,10 @@ export const dispatcher = (options: {
 	})
 	return new Agent({
 		connect: (target, callback) => {
-			const hostname = target.hostname.replace(/^\[|\]$/g, "")
+			const hostname = pipe(target.hostname, Str.replace(/^\[|\]$/g, ""))
 			const blocked = () => {
 				options.onBlocked?.(hostname)
-				callback(new OutboundBlocked(hostname), null)
+				callback(OutboundBlocked.make({ hostname }), null)
 			}
 			if (isIP(hostname) !== 0 && !options.allowAddress(hostname, hostname)) {
 				blocked()
@@ -51,10 +51,7 @@ export const dispatcher = (options: {
 			}
 			connect(target, (error, socket) => {
 				if (error === null) callback(null, socket)
-				else if (
-					error instanceof Network.NetworkError &&
-					error.reason === "BlockedTarget"
-				)
+				else if (isNetworkError(error) && error.reason === "BlockedTarget")
 					blocked()
 				else callback(error, null)
 			})

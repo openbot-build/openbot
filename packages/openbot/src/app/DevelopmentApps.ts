@@ -1,10 +1,20 @@
 import { html } from "./DevelopmentAppUi.ts"
 import { Document, Network } from "@openbot-build/protocol"
-import { Context, Effect, Layer, Match, Ref, Schema, Stream } from "effect"
+import {
+	Context,
+	Effect,
+	Layer,
+	Match,
+	Ref,
+	Schema,
+	Stream,
+	String as Str,
+	pipe,
+} from "effect"
 import { AppNetwork } from "../apps/AppHost.ts"
 import * as Probe from "../apps/Probe.ts"
 import { Authorization } from "./DevelopmentAuthorization.ts"
-import { Scenarios, type Mode } from "./DevelopmentScenarios.ts"
+import { Mode, Scenarios } from "./DevelopmentScenarios.ts"
 import { Business, readTool, writeTool } from "./DevelopmentBusiness.ts"
 import { Proofs } from "./DevelopmentProofs.ts"
 
@@ -13,6 +23,24 @@ const Request = Schema.Struct({
 	method: Schema.String,
 	params: Schema.optionalKey(Schema.JsonObject),
 })
+const Reply = Schema.Struct({
+	jsonrpc: Schema.Literal("2.0"),
+	id: Request.fields.id,
+	result: Schema.JsonObject,
+})
+const CallParams = Schema.Struct({
+	name: Schema.String,
+	arguments: Schema.optionalKey(Schema.Unknown),
+	requestState: Schema.optionalKey(Schema.String),
+	inputResponses: Schema.optionalKey(Schema.JsonObject),
+})
+const ReadParams = Schema.Struct({ uri: Schema.String })
+
+const notConfigured = () =>
+	Network.NetworkError.make({
+		reason: "Transport",
+		message: "No simulated App is configured for this request.",
+	})
 
 export const PublicationMode = Schema.Literals([
 	"published",
@@ -22,6 +50,8 @@ export const PublicationMode = Schema.Literals([
 	"robots-denied",
 ])
 export type PublicationMode = typeof PublicationMode.Type
+/** The etag changes when the publication, the scenario or the proof tokens change. */
+const Etag = Schema.Tuple([PublicationMode, Mode, Schema.Array(Schema.String)])
 export class Publication extends Context.Service<
 	Publication,
 	{
@@ -39,17 +69,17 @@ export const layerPublication = Layer.effect(
 	),
 )
 export const remotes = [
-	{
+	Document.Remote.make({
 		type: "streamable-http",
 		url: "https://app.development.test/mcp",
 		supportedProtocolVersions: [Document.protocolVersion],
-	},
-	{
+	}),
+	Document.Remote.make({
 		type: "streamable-http",
 		url: "https://app.development.test/protected",
 		supportedProtocolVersions: [Document.protocolVersion],
-	},
-	{
+	}),
+	Document.Remote.make({
 		type: "streamable-http",
 		url: "https://app.development.test/configured",
 		supportedProtocolVersions: [Document.protocolVersion],
@@ -61,22 +91,29 @@ export const remotes = [
 				description: "Enter development-test-key for this simulated endpoint.",
 			},
 		],
-	},
+	}),
 ] as const
-export const card: Document.ServerCard = {
+export const card = Document.ServerCard.make({
 	$schema: Document.cardSchemaUrl,
 	name: "app.development.test/simulated-app",
 	version: "1.0.0",
 	description:
 		"Simulated document App with real handlers inside the process. It contacts no external service",
 	remotes,
-}
-export const cardFor = (mode: Mode) =>
+})
+export const cardFor = (
+	mode: Mode,
+): Document.ServerCard & {
+	readonly remotes: readonly [Document.Remote, ...Array<Document.Remote>]
+} =>
 	Match.value(mode).pipe(
 		Match.when("requirements-changed", () => ({
 			...card,
 			remotes: [
-				{ ...remotes[0], url: "https://app.development.test/mcp-updated" },
+				Document.Remote.make({
+					...remotes[0],
+					url: "https://app.development.test/mcp-updated",
+				}),
 				...remotes.slice(1),
 			] as const,
 		})),
@@ -95,20 +132,22 @@ export const layerPublicNetwork = Layer.effect(
 			}) {
 				const target = new URL(url)
 				if (target.origin !== "https://app.development.test")
-					return yield* Network.NetworkError.make({
-						reason: "Transport",
-						message: "No simulated App is configured for this request.",
-					})
+					return yield* notConfigured()
 				const mode = yield* publication.mode
 				const scenario = yield* scenarios.mode
 				const tokens =
 					target.pathname === "/card.json"
 						? yield* proofs.tokens({ _tag: "AppCard", cardUrl: url })
 						: []
+				const etag = yield* Schema.encodeEffect(Schema.fromJsonString(Etag))([
+					mode,
+					scenario,
+					tokens,
+				])
 				const headers = {
 					"content-type": "application/json",
 					"cache-control": "no-cache",
-					etag: JSON.stringify([mode, scenario, tokens]),
+					etag,
 					...(mode === "noindex" && target.pathname === "/card.json"
 						? { "x-robots-tag": "noindex" }
 						: {}),
@@ -135,7 +174,9 @@ export const layerPublicNetwork = Layer.effect(
 						url,
 						status: 200,
 						headers,
-						text: JSON.stringify({
+						text: yield* Schema.encodeEffect(
+							Schema.fromJsonString(Document.ServerCard),
+						)({
 							...cardFor(scenario),
 							_meta: {
 								"openbot/developer-verification": {
@@ -150,19 +191,23 @@ export const layerPublicNetwork = Layer.effect(
 						url,
 						status: 200,
 						headers,
-						text: JSON.stringify({
-							specVersion: "1.0",
-							entries:
-								mode === "withdrawn"
-									? []
-									: [
-											{
-												identifier: "development-app",
-												type: Document.cardMediaType,
-												url: "https://app.development.test/card.json",
-											},
-										],
-						}),
+						text: yield* Schema.encodeEffect(
+							Schema.fromJsonString(Document.Catalog),
+						)(
+							Document.Catalog.make({
+								specVersion: "1.0",
+								entries:
+									mode === "withdrawn"
+										? []
+										: [
+												{
+													identifier: "development-app",
+													type: Document.cardMediaType,
+													url: "https://app.development.test/card.json",
+												},
+											],
+							}),
+						),
 					}
 				return { url, status: 404, headers, text: "Not found" }
 			}),
@@ -193,7 +238,10 @@ const network = (
 				if (
 					request.url === "https://app.development.test/protected" &&
 					!(yield* authorization.validToken(
-						request.headers["authorization"]?.replace(/^Bearer /, "") ?? "",
+						pipe(
+							request.headers["authorization"] ?? "",
+							Str.replace(/^Bearer /, ""),
+						),
 					))
 				)
 					return {
@@ -213,10 +261,7 @@ const network = (
 					request.url === "https://app.development.test/configured" &&
 					request.headers["x-development-key"] !== "development-test-key"
 				)
-					return yield* Network.NetworkError.make({
-						reason: "Transport",
-						message: "No simulated App is configured for this request.",
-					})
+					return yield* notConfigured()
 
 				if (
 					![
@@ -228,28 +273,16 @@ const network = (
 						"https://app.development.test/revoke",
 					].includes(request.url)
 				)
-					return yield* Network.NetworkError.make({
-						reason: "Transport",
-						message: "No simulated App is configured for this request.",
-					})
+					return yield* notConfigured()
 				const body = yield* Match.value(request.body).pipe(
 					Match.tag("Uint8Array", (body) =>
 						Effect.succeed(new TextDecoder().decode(body.body)),
 					),
-					Match.orElse(() =>
-						Effect.fail(
-							Network.NetworkError.make({
-								reason: "Transport",
-								message: "No simulated App is configured for this request.",
-							}),
-						),
-					),
+					Match.orElse(() => Effect.fail(notConfigured())),
 				)
-				if (request.url.endsWith("/token") || request.url.endsWith("/revoke")) {
-					const text = yield* authorization.grant(
-						body,
-						request.url.endsWith("/revoke"),
-					)
+				const revoke = Str.endsWith("/revoke")(request.url)
+				if (revoke || Str.endsWith("/token")(request.url)) {
+					const text = yield* authorization.grant(body, revoke)
 					return {
 						url: request.url,
 						status: 200,
@@ -317,80 +350,59 @@ const network = (
 						}),
 					),
 					Match.when("tools/call", () =>
-						input.params?.["name"] === writeTool.name
-							? business.write(owner, input.params["arguments"])
-							: input.params?.["name"] === readTool.name
-								? business
-										.read(
-											owner,
-											input.params["arguments"],
-											mode === "input-required"
-												? {
-														...(typeof input.params["requestState"] === "string"
-															? { requestState: input.params["requestState"] }
-															: {}),
-														...(Schema.is(Schema.JsonObject)(
-															input.params["inputResponses"],
-														)
-															? {
-																	inputResponses:
-																		input.params["inputResponses"],
-																}
-															: {}),
-													}
-												: undefined,
-										)
-										.pipe(
-											Effect.flatMap((result) =>
-												mode === "result-unknown"
-													? Effect.fail(
-															Network.NetworkError.make({
-																reason: "Transport",
-																message:
-																	"No simulated App is configured for this request.",
-															}),
-														)
-													: Effect.succeed(
-															mode === "business-failure"
-																? {
-																		isError: true,
-																		content: [
-																			{
-																				type: "text",
-																				text: "The simulated App rejected this operation.",
-																			},
-																		],
-																	}
-																: result,
-														),
-											),
-										)
-								: Effect.fail(
-										Network.NetworkError.make({
-											reason: "Transport",
-											message:
-												"No simulated App is configured for this request.",
-										}),
-									),
+						Schema.decodeUnknownEffect(CallParams)(input.params).pipe(
+							Effect.flatMap((params) =>
+								params.name === writeTool.name
+									? business.write(owner, params.arguments)
+									: params.name === readTool.name
+										? business
+												.read(
+													owner,
+													params.arguments,
+													mode === "input-required" ? params : undefined,
+												)
+												.pipe(
+													Effect.flatMap((result) =>
+														mode === "result-unknown"
+															? Effect.fail(notConfigured())
+															: Effect.succeed(
+																	mode === "business-failure"
+																		? {
+																				isError: true,
+																				content: [
+																					{
+																						type: "text",
+																						text: "The simulated App rejected this operation.",
+																					},
+																				],
+																			}
+																		: result,
+																),
+													),
+												)
+										: Effect.fail(notConfigured()),
+							),
+						),
 					),
 					Match.when("resources/read", () =>
-						Effect.succeed({
-							contents: [
-								{
-									uri: String(input.params?.["uri"] ?? ""),
-									mimeType:
-										input.params?.["uri"] === "ui://development/document"
-											? Document.uiMediaType
-											: "text/plain",
-									text:
-										input.params?.["uri"] === "ui://development/document"
-											? html("write_document")
-											: "Simulated resource content",
-								},
-							],
-							ttlMs: 60000,
-							cacheScope: "private",
-						}),
+						Schema.decodeUnknownEffect(ReadParams)(input.params).pipe(
+							Effect.map(({ uri }) => {
+								const document = uri === "ui://development/document"
+								return {
+									contents: [
+										{
+											uri,
+											mimeType: document ? Document.uiMediaType : "text/plain",
+											text: document
+												? html("write_document")
+												: "Simulated resource content",
+										},
+									],
+									ttlMs: 60000,
+									cacheScope: "private",
+								}
+							}),
+						),
 					),
 					Match.when("prompts/get", () =>
 						Effect.succeed({
@@ -405,37 +417,27 @@ const network = (
 							],
 						}),
 					),
-					Match.orElse(() =>
-						Effect.fail(
-							Network.NetworkError.make({
-								reason: "Transport",
-								message: "No simulated App is configured for this request.",
-							}),
-						),
-					),
+					Match.orElse(() => Effect.fail(notConfigured())),
 				)
+				const reply = yield* Schema.encodeEffect(Schema.fromJsonString(Reply))({
+					jsonrpc: "2.0",
+					id: input.id,
+					result: {
+						resultType: "complete",
+						...result,
+						_meta: {
+							"io.modelcontextprotocol/serverInfo": {
+								name: "Simulated development App",
+								version: "1.0.0",
+							},
+						},
+					},
+				})
 				return {
 					url: request.url,
 					status: 200,
 					headers: { "content-type": "application/json" },
-					body: Stream.succeed(
-						new TextEncoder().encode(
-							JSON.stringify({
-								jsonrpc: "2.0",
-								id: input.id,
-								result: {
-									resultType: "complete",
-									...result,
-									_meta: {
-										"io.modelcontextprotocol/serverInfo": {
-											name: "Simulated development App",
-											version: "1.0.0",
-										},
-									},
-								},
-							}),
-						),
-					),
+					body: Stream.succeed(new TextEncoder().encode(reply)),
 				}
 			}),
 	})

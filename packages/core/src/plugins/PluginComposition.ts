@@ -1,4 +1,4 @@
-import { Effect, Stream, type Brand, Scope } from "effect"
+import { Effect, Record as Rec, Stream, type Brand, Scope } from "effect"
 import { dual } from "effect/Function"
 import { Prompt, Toolkit, type Tool } from "effect/ai"
 import { Context, type Event } from "../bot/Bot.ts"
@@ -87,11 +87,20 @@ export const withStore: {
 		I,
 		BuildE,
 		BuildR
-	> => ({
-		...plugin,
-		stores: { ...plugin.stores, [plugin.id]: state } as States &
-			Readonly<Record<Brand.Brand.Unbranded<I>, D>>,
-	}),
+	> =>
+		// A spread would copy only the own fields and lose the methods of Plugin,
+		// such as `pipe`. So the fields go on a new Plugin.
+		Object.assign(
+			new Plugin<Tools, E, R, BuildE, BuildR>({
+				id: plugin.id,
+				middleware: plugin.middleware,
+			}),
+			plugin,
+			{
+				stores: { ...plugin.stores, [plugin.id]: state } as States &
+					Readonly<Record<Brand.Brand.Unbranded<I>, D>>,
+			},
+		),
 )
 
 export const mergeState: {
@@ -188,15 +197,14 @@ export const mergeState: {
 		StoreConflict
 	> =>
 		Effect.gen(function* () {
-			for (const key of Object.keys(left.stores))
-				if (Object.hasOwn(right.stores, key))
+			for (const key of Rec.keys(left.stores))
+				if (Rec.has(right.stores, key))
 					return yield* StoreConflict.make({ id: Id.make(key) })
-			const plugin = merge(left, right)
-			return {
-				...plugin,
+			// `merge` gives a new Plugin, so the stores go on it and it keeps its methods.
+			return Object.assign(merge(left, right), {
 				id,
 				stores: { ...left.stores, ...right.stores },
-			}
+			})
 		}),
 )
 

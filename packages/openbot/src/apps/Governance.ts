@@ -1,5 +1,15 @@
 import { AppIndexApi, ConnectionsApi } from "@openbot-build/api"
-import { Context, Effect, HashMap, Layer, Option, Stream } from "effect"
+import {
+	Array as Arr,
+	Context,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	Ref,
+	Stream,
+} from "effect"
+import * as Background from "../app/Background.ts"
 import { Settings } from "../settings/Settings.ts"
 
 export class Governance extends Context.Service<
@@ -14,7 +24,7 @@ export class Governance extends Context.Service<
 /**
  * The platform owns these restrictions, in its `appRestrictions` setting.
  * Ordinary user operations cannot change them. Many places ask without an
- * Effect, so this keeps the current list in a variable and updates it when
+ * Effect, so this keeps the current list in a Ref and updates it when
  * the platform settings change.
  */
 export const layer = Layer.effect(
@@ -24,32 +34,28 @@ export const layer = Layer.effect(
 		const load = settings.platform.pipe(
 			Effect.map((platform) =>
 				HashMap.fromIterable(
-					Option.match(platform, {
-						onNone: () => [],
-						onSome: (platform) => platform.document.appRestrictions,
-					}).map(
+					Arr.map(
+						Option.match(platform, {
+							onNone: () => [],
+							onSome: (platform) => platform.document.appRestrictions,
+						}),
 						(restriction) =>
 							[new URL(restriction.cardUrl).href, restriction] as const,
 					),
 				),
 			),
 		)
-		let entries = yield* load.pipe(
-			Effect.orElseSucceed(() =>
-				HashMap.empty<string, AppIndexApi.Restriction>(),
+		const entries = yield* Ref.make(
+			yield* load.pipe(
+				Effect.orElseSucceed(() =>
+					HashMap.empty<string, AppIndexApi.Restriction>(),
+				),
 			),
 		)
 		const reload = load.pipe(
-			Effect.tap((next) =>
-				Effect.sync(() => {
-					entries = next
-				}),
-			),
-			Effect.catchCause((cause) =>
-				Effect.logWarning(
-					"OpenBot could not read the App restrictions. It keeps the current ones.",
-					cause,
-				),
+			Effect.flatMap((next) => Ref.set(entries, next)),
+			Background.logFailure(
+				"OpenBot could not read the App restrictions. It keeps the current ones.",
 			),
 		)
 		yield* Stream.merge(
@@ -60,7 +66,7 @@ export const layer = Layer.effect(
 			Effect.forkScoped,
 		)
 		const find = (cardUrl: string) =>
-			HashMap.get(entries, new URL(cardUrl).href)
+			HashMap.get(Ref.getUnsafe(entries), new URL(cardUrl).href)
 		return Governance.of({
 			find,
 			check: (cardUrl) =>

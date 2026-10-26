@@ -6,9 +6,25 @@ import { appIndexEntries, appIndexJobs } from "../database/Schema.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as Db from "../database/Database.ts"
 
+const EntryJson = Schema.fromJsonString(Index.Entry)
+/** The JSON text of the last check of a job, in `app_index_jobs.check` and `app_index_results.check`. */
+export const CheckJson = Schema.fromJsonString(AppIndexApi.Check)
 /** The public Index entries in Postgres. It holds only entries that were checked independently. */
-export const decode = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(Index.Entry),
+export const decode = Schema.decodeUnknownEffect(EntryJson)
+/** The entry has its type already, so it always encodes. */
+const encode = (entry: Index.Entry) =>
+	Schema.encodeEffect(EntryJson)(entry).pipe(Effect.orDie)
+
+/**
+ * A database failure, or a stored row that does not decode. The error keeps
+ * the failure as its cause, and the callers log it.
+ */
+const unavailable = Effect.mapError((cause: unknown) =>
+	Index.IndexError.make({
+		reason: "Unavailable",
+		operation: "Public Index storage",
+		cause,
+	}),
 )
 
 /** The last check of each App in the namespace. An App that was never checked is pending. */
@@ -28,12 +44,7 @@ export const checks = (db: Db.Database, namespace: string) =>
 				),
 			),
 			Effect.map(HashMap.fromIterable),
-			Effect.mapError(() =>
-				Index.IndexError.make({
-					reason: "Unavailable",
-					operation: "Public Index storage",
-				}),
-			),
+			unavailable,
 		)
 
 export const layer = Layer.effect(
@@ -58,47 +69,27 @@ export const layer = Layer.effect(
 								? Effect.succeedNone
 								: decode(rows[0].body).pipe(Effect.asSome),
 						),
-						Effect.mapError(() =>
-							Index.IndexError.make({
-								reason: "Unavailable",
-								operation: "Public Index storage",
-							}),
-						),
+						unavailable,
 					),
 			upsert: (entry) =>
-				db
-					.insert(appIndexEntries)
-					.values({
-						namespace,
-						cardUrl: entry.cardUrl,
-						body: JSON.stringify(entry),
-					})
-					.onConflictDoUpdate({
-						target: [appIndexEntries.namespace, appIndexEntries.cardUrl],
-						set: { body: JSON.stringify(entry) },
-					})
-					.pipe(
-						Effect.as(entry),
-						Effect.mapError(() =>
-							Index.IndexError.make({
-								reason: "Unavailable",
-								operation: "Public Index storage",
+				encode(entry).pipe(
+					Effect.flatMap((body) =>
+						db
+							.insert(appIndexEntries)
+							.values({ namespace, cardUrl: entry.cardUrl, body })
+							.onConflictDoUpdate({
+								target: [appIndexEntries.namespace, appIndexEntries.cardUrl],
+								set: { body },
 							}),
-						),
 					),
+					Effect.as(entry),
+					unavailable,
+				),
 			withdraw: (cardUrl) =>
 				db
 					.delete(appIndexEntries)
 					.where(where(cardUrl))
-					.pipe(
-						Effect.asVoid,
-						Effect.mapError(() =>
-							Index.IndexError.make({
-								reason: "Unavailable",
-								operation: "Public Index storage",
-							}),
-						),
-					),
+					.pipe(Effect.asVoid, unavailable),
 		})
 	}),
 )

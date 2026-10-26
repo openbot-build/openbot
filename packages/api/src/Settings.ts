@@ -1,5 +1,5 @@
 import { Config } from "@openbot-build/core"
-import { Schema } from "effect"
+import { Schema, String as Str } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { BotId } from "./BotsApi.ts"
 import { Restriction } from "./AppIndexApi.ts"
@@ -28,7 +28,7 @@ export type SecretState = typeof SecretState.Type
 /** True when the host is this computer. Every name under .localhost is (RFC 6761). */
 export const isLoopbackHost = (hostname: string): boolean =>
 	["localhost", "127.0.0.1", "[::1]"].includes(hostname) ||
-	hostname.endsWith(".localhost")
+	Str.endsWith(".localhost")(hostname)
 
 /**
  * An origin with no path, such as `https://api.example.com`. It must use HTTPS.
@@ -66,7 +66,7 @@ export const Issuer = Schema.NonEmptyString.check(
 				issuer.password === "" &&
 				issuer.search === "" &&
 				issuer.hash === "" &&
-				!value.endsWith("/")
+				!Str.endsWith("/")(value)
 			)
 		},
 		{ message: "Expected an HTTPS issuer without a trailing slash" },
@@ -453,19 +453,19 @@ export type UpdateMemberSettingsRequest =
 	typeof UpdateMemberSettingsRequest.Type
 
 /** Someone changed the settings after you read them. Read them again, then retry. */
-export class SettingsConflict extends Schema.TaggedError<SettingsConflict>()(
-	"SettingsConflict",
-	{ version: Version },
-) {}
+export class SettingsConflict extends Schema.TaggedError<
+	SettingsConflict,
+	{ readonly brand: unique symbol }
+>()("SettingsConflict", { version: Version }) {}
 /** A value in the change is not valid, such as a role that does not exist. */
-export class SettingsInvalid extends Schema.TaggedError<SettingsInvalid>()(
-	"SettingsInvalid",
-	{ message: Schema.String },
-) {}
-export class SettingsUnavailable extends Schema.TaggedError<SettingsUnavailable>()(
-	"SettingsUnavailable",
-	{},
-) {}
+export class SettingsInvalid extends Schema.TaggedError<
+	SettingsInvalid,
+	{ readonly brand: unique symbol }
+>()("SettingsInvalid", { message: Schema.String }) {}
+export class SettingsUnavailable extends Schema.TaggedError<
+	SettingsUnavailable,
+	{ readonly brand: unique symbol }
+>()("SettingsUnavailable", {}) {}
 export const SettingsErrors = [
 	SettingsConflict.pipe(HttpApiSchema.status(409)),
 	SettingsInvalid.pipe(HttpApiSchema.status(400)),
@@ -479,7 +479,7 @@ export const SettingsErrors = [
  * A contract middleware on every endpoint makes the type of `OpenBotApi` too
  * long for TypeScript to write into declaration files (error TS7056).
  */
-export class SetupRequired extends Schema.TaggedError<SetupRequired>()(
-	"SetupRequired",
-	{},
-) {}
+export class SetupRequired extends Schema.TaggedError<
+	SetupRequired,
+	{ readonly brand: unique symbol }
+>()("SetupRequired", {}) {}

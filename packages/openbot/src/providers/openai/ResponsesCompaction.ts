@@ -1,6 +1,6 @@
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Option, Schema, String as Str } from "effect"
 import { Prompt } from "effect/ai"
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/http"
+import { HttpBody, HttpClientError, HttpClientRequest } from "effect/http"
 import { OpenAiClient } from "@effect/ai-openai"
 import { ContextCompaction } from "@openbot-build/core"
 import * as Request from "./Request.ts"
@@ -8,6 +8,31 @@ import type * as OpenAiProvider from "./OpenAiProvider.ts"
 
 const Tokens = Schema.Struct({ input_tokens: Schema.Natural })
 const Compacted = Schema.Struct({ output: Schema.Array(Schema.JsonObject) })
+
+/**
+ * A failed request keeps its error as the cause. When OpenAI answers with an
+ * error status, the message also gets the body of the answer, because only the
+ * body says why OpenAI refused the request.
+ */
+const failed = (message: string) => (error: unknown) =>
+	Effect.gen(function* () {
+		const body =
+			HttpClientError.isHttpClientError(error) &&
+			error.reason._tag === "StatusCodeError"
+				? yield* Effect.option(error.reason.response.text)
+				: Option.none<string>()
+		return yield* ContextCompaction.ContextCompactionError.make({
+			reason: "request-failed",
+			message: Option.match(
+				Option.filter(Option.map(body, Str.trim), Str.isNonEmpty),
+				{
+					onNone: () => message,
+					onSome: (text) => `${message}: ${text}`,
+				},
+			),
+			cause: error,
+		})
+	})
 
 export const make = (
 	defaults: OpenAiProvider.Defaults = {},
@@ -19,8 +44,9 @@ export const make = (
 	Effect.gen(function* () {
 		const client = yield* OpenAiClient.OpenAiClient
 		const encode = Request.encode({ upstream: client, defaults })
+		// `client.client` already fails when the status is not 2xx.
 		const post = (path: string, body: unknown) =>
-			HttpClient.filterStatusOk(client.client)
+			client.client
 				.execute(
 					HttpClientRequest.post(path, { body: HttpBody.jsonUnsafe(body) }),
 				)
@@ -39,14 +65,7 @@ export const make = (
 					})
 					return (yield* Schema.decodeUnknownEffect(Tokens)(response))
 						.input_tokens
-				}).pipe(
-					Effect.mapError((error) =>
-						ContextCompaction.ContextCompactionError.make({
-							reason: "request-failed",
-							message: String(error),
-						}),
-					),
-				),
+				}).pipe(Effect.catch(failed("The token count request failed"))),
 			compact: (request) =>
 				Effect.gen(function* () {
 					const encoded = yield* encode(request)
@@ -66,14 +85,7 @@ export const make = (
 						items: compacted.output,
 						prompt: Prompt.empty,
 					}
-				}).pipe(
-					Effect.mapError((error) =>
-						ContextCompaction.ContextCompactionError.make({
-							reason: "request-failed",
-							message: String(error),
-						}),
-					),
-				),
+				}).pipe(Effect.catch(failed("The compaction request failed"))),
 		})
 	})
 

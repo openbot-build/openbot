@@ -5,24 +5,28 @@ import {
 	Item,
 	Plugin,
 	type Turn,
-	Operation,
 } from "@openbot-build/core"
 import { Todo } from "@openbot-build/api"
 import {
+	Array as Arr,
+	Cause,
 	Context,
+	Crypto,
+	DateTime,
 	Effect,
 	HashSet,
 	type JsonSchema,
 	Layer,
 	Option,
-	Record,
+	Record as Rec,
 	Ref,
 	Schema,
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Signal, publish } from "../../bots/Signals.ts"
-import { Gate } from "../../capabilities/Gate.ts"
+import * as Background from "../../app/Background.ts"
+import { Signal, Signals } from "../../bots/Signals.ts"
+import { Answer, Gate, remember } from "../../capabilities/Gate.ts"
 import { Work } from "../../capabilities/Work.ts"
 import { Settings } from "../../settings/Settings.ts"
 import * as ChatHost from "../../chats/ChatHost.ts"
@@ -30,23 +34,13 @@ import { OpenWork } from "../../chats/OpenWork.ts"
 import * as Plans from "./Plans.ts"
 import * as Todos from "./Todos.ts"
 import { Reminders } from "./Reminders.ts"
+import * as ToolEntry from "../ToolEntry.ts"
 import { toolJson } from "../ToolJson.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/work")
 
 /** The tools of this plugin. Their parameters are JSON Schema, like App tools. */
-export type Tools = Record<
-	string,
-	Tool.Dynamic<
-		string,
-		{
-			readonly parameters: JsonSchema.JsonSchema
-			readonly success: typeof Schema.Json
-			readonly failure: typeof Schema.Never
-			readonly failureMode: "error"
-		}
-	>
->
+export type Tools = ToolEntry.Tools
 
 export const names = {
 	todos: "openbot_todos",
@@ -64,6 +58,7 @@ const RemindInput = Schema.Struct({
 	until: Schema.optionalKey(Schema.String),
 	note: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4000)),
 })
+const sameTodos = Schema.toEquivalence(Schema.Array(Todo))
 
 /** When a reminder comes, or why the input is not valid. */
 const dueAt = (
@@ -72,25 +67,18 @@ const dueAt = (
 ): number | string => {
 	if ((input.seconds === undefined) === (input.until === undefined))
 		return "Give either seconds or until, not both."
-	if (input.seconds !== undefined) return now + input.seconds * 1000
+	if (input.seconds !== undefined) {
+		const at = now + input.seconds * 1000
+		// A time past the range of a date cannot be shown, so it is not kept.
+		return Option.isNone(DateTime.make(at)) ? "seconds is too large." : at
+	}
 	const at = Date.parse(input.until!)
 	if (Number.isNaN(at))
 		return "until must be a date and time, such as 2026-10-23T09:00:00Z."
 	return Math.max(at, now)
 }
 
-/** What a handler knows about its tool call. */
-type CallContext = Toolkit.HandlerContext<Tools[string]>
-/** The ID of a tool call, or a new one when the call has none. */
-const callIdOf = (context: CallContext) =>
-	context.toolCallId ?? crypto.randomUUID()
-interface Entry {
-	readonly tool: Tools[string]
-	readonly handle: (
-		input: unknown,
-		context: CallContext,
-	) => Effect.Effect<Schema.Json>
-}
+type CallContext = ToolEntry.CallContext
 
 const text = { type: "string" } as const
 const json = toolJson
@@ -128,11 +116,12 @@ export class WorkPlugin extends Context.Service<
 
 /** Input for the next Turn. It never steers the running Turn. */
 const nextTurn = (
+	id: Item.Id,
 	content: string,
 	author: Turn.Author | undefined,
 	notice: Item.Notice,
 ): Chat.InboxEntry => ({
-	id: Item.Id.make(crypto.randomUUID()),
+	id,
 	kind: "message",
 	content: Prompt.make([{ role: "user", content }]),
 	notice,
@@ -142,15 +131,27 @@ const nextTurn = (
 export const make: Effect.Effect<
 	typeof WorkPlugin.Service,
 	never,
-	Reminders | Gate | Settings | OpenWork
+	Reminders | Gate | Settings | OpenWork | Signals | Crypto.Crypto
 > = Effect.gen(function* () {
 	const reminders = yield* Reminders
+	const signals = yield* Signals
 	const gate = yield* Gate
 	const settings = yield* Settings
 	const openWork = yield* OpenWork
+	const crypto = yield* Crypto.Crypto
+	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
+	const newItemId = Effect.map(newId, (id) => Item.Id.make(id))
+	/** The ID of a tool call, or a new one when the call has none. */
+	const callIdOf = (context: CallContext) =>
+		context.toolCallId === undefined
+			? newId
+			: Effect.succeed(context.toolCallId)
+	// The Bot plugin gives the Work of each Turn, and it runs outside this plugin.
+	// The type of a plugin cannot carry that, so each tool reads it when it runs.
 	const work = Effect.serviceOption(Work).pipe(
 		Effect.flatMap(Effect.fromOption),
 	)
+	// Work tools change the state of their Turn, so they never go to the background.
 	const entry = (
 		name: string,
 		description: string,
@@ -163,25 +164,12 @@ export const make: Effect.Effect<
 			input: unknown,
 			context: Tool.NeedsApprovalContext,
 		) => Effect.Effect<boolean>,
-	): Entry => ({
-		tool: Tool.dynamic(name, {
-			description,
-			parameters,
-			success: Schema.Json,
+	) =>
+		ToolEntry.entry(name, description, parameters, handle, {
+			log: "A work tool failed",
+			failure: "The tool could not finish. Try another way.",
 			...(needsApproval === undefined ? {} : { needsApproval }),
-			// Work tools change the state of their Turn, so they never go to the background.
-		}).annotate(Operation.Budget, "foreground") as Tools[string],
-		handle: (input, context) =>
-			handle(input, context).pipe(
-				Effect.catchCause((cause) =>
-					Effect.logWarning("A work tool failed", cause).pipe(
-						Effect.as(
-							json({ error: "The tool could not finish. Try another way." }),
-						),
-					),
-				),
-			),
-	})
+		})
 	const todoList = {
 		type: "array",
 		items: {
@@ -243,17 +231,18 @@ export const make: Effect.Effect<
 				const due = dueAt(request, now)
 				if (typeof due === "string") return json({ error: due })
 				const current = yield* work
+				const toolCallId = yield* callIdOf(context)
 				const saved = yield* reminders.start(current.caller.organizationId, {
 					// The reminder goes to a Chat of this member.
 					userId: ChatHost.ownerOf(current.chain),
 					author: ChatHost.chainAuthor(current.chain),
 					chat: current.chat,
 					turn: current.turn,
-					toolCallId: callIdOf(context),
+					toolCallId,
 					note: request.note,
 					dueAt: due,
 				})
-				yield* publish(
+				yield* signals.publish(
 					Signal.ReminderStarted({
 						organizationId: current.caller.organizationId,
 						reminder: saved.id,
@@ -261,7 +250,7 @@ export const make: Effect.Effect<
 				)
 				return json({
 					reminder: saved.id,
-					at: new Date(saved.dueAt).toISOString(),
+					at: DateTime.formatIso(DateTime.makeUnsafe(saved.dueAt)),
 				})
 			}),
 	)
@@ -289,14 +278,12 @@ export const make: Effect.Effect<
 					const current = yield* work
 					const view = yield* input.read(current.chat)
 					// The approval is for this list. A changed list needs a new approval.
-					if (
-						JSON.stringify(Todos.of(view).items) !==
-						JSON.stringify(request.items)
-					)
+					if (!sameTodos(Todos.of(view).items, request.items))
 						return json({
 							error:
 								"The todo list changed after you asked. Read it, and submit the plan again.",
 						})
+					const id = yield* newItemId
 					yield* input.store.modifyEffect({
 						chat: current.chat,
 						update: (now) =>
@@ -309,6 +296,7 @@ export const make: Effect.Effect<
 										inbox: [
 											...now.chat.inbox,
 											nextTurn(
+												id,
 												approved,
 												now.chat.turn?.id === current.turn
 													? now.chat.turn.author
@@ -327,9 +315,16 @@ export const make: Effect.Effect<
 				}),
 			(raw, context) =>
 				Effect.gen(function* () {
-					const request = yield* Schema.decodeUnknownEffect(PlanInput)(raw)
+					const decoded = yield* Schema.decodeUnknownEffect(PlanInput)(
+						raw,
+					).pipe(Effect.option)
 					// A wrong list does not ask. The handler tells the Bot why.
-					if (Todos.problem(request.items) !== undefined) return false
+					if (
+						Option.isNone(decoded) ||
+						Todos.problem(decoded.value.items) !== undefined
+					)
+						return false
+					const request = decoded.value
 					const current = yield* work
 					yield* Todos.replace({
 						store: input.store,
@@ -355,11 +350,22 @@ export const make: Effect.Effect<
 					})
 					return answer._tag !== "Allow"
 				}).pipe(
-					// When anything fails, the plan asks and never runs without a decision.
+					// When the check fails, the Turn keeps a Deny, so the plan never runs
+					// without a decision. A plain tools.call check must not decide it.
 					Effect.catchCause((cause) =>
-						Effect.logWarning("A plan could not be submitted", cause).pipe(
-							Effect.as(true),
-						),
+						Cause.hasInterruptsOnly(cause)
+							? Effect.interrupt
+							: Effect.logWarning("A plan could not be submitted", cause).pipe(
+									Effect.andThen(
+										remember(
+											context.toolCallId,
+											Answer.Deny({
+												reason: "OpenBot could not check this plan.",
+											}),
+										),
+									),
+									Effect.as(true),
+								),
 					),
 				),
 		)
@@ -370,7 +376,7 @@ export const make: Effect.Effect<
 	/** In plan mode, only the tools that say they just read stay open. */
 	const readOnly = (toolkit: Toolkit.Any) =>
 		Toolkit.make(
-			...Object.values(toolkit.tools).filter((tool) =>
+			...Arr.filter(Rec.values(toolkit.tools), (tool) =>
 				Context.get(tool.annotations, Tool.Readonly),
 			),
 		)
@@ -389,7 +395,7 @@ export const make: Effect.Effect<
 		Stream.unwrap(
 			Effect.gen(function* () {
 				const called = yield* Ref.make(false)
-				const reminded = yield* Ref.make(HashSet.empty<string>())
+				const reminded = yield* Ref.make(HashSet.empty<ReadonlyArray<Todo>>())
 				const check = (chat: Chat.Id) =>
 					Effect.gen(function* () {
 						if (yield* Ref.get(called)) return
@@ -408,12 +414,23 @@ export const make: Effect.Effect<
 						if (open.length === 0) return
 						const organizationId = ChatHost.hostState(view.chat).chain
 							.organizationId
-						const waiting = yield* openWork.count(organizationId, chat)
-						if (waiting.delegations + waiting.requests + waiting.reminders > 0)
+						// A count that fails sends no reminder, because the Bot may wait for other
+						// work. BotRecords already logs the failure.
+						const waiting = yield* Effect.option(
+							openWork.count(organizationId, chat),
+						)
+						if (Option.isNone(waiting)) return
+						if (
+							waiting.value.delegations +
+								waiting.value.requests +
+								waiting.value.reminders >
+							0
+						)
 							return
-						const key = JSON.stringify(todos.items)
-						if (HashSet.has(yield* Ref.get(reminded), key)) return
-						yield* Ref.update(reminded, HashSet.add(key))
+						// Effect compares the lists by value, so each state of the list counts once.
+						if (HashSet.has(yield* Ref.get(reminded), todos.items)) return
+						yield* Ref.update(reminded, HashSet.add(todos.items))
+						const id = yield* newItemId
 						yield* input.store.modifyEffect({
 							chat,
 							update: (current) =>
@@ -424,7 +441,7 @@ export const make: Effect.Effect<
 											inbox: [
 												...current.chat.inbox,
 												{
-													id: Item.Id.make(crypto.randomUUID()),
+													id,
 													kind: "steer" as const,
 													turn,
 													content: Prompt.make([
@@ -443,9 +460,7 @@ export const make: Effect.Effect<
 						})
 					}).pipe(
 						// The reminder is best effort. Without it, the Turn ends as usual.
-						Effect.catchCause((cause) =>
-							Effect.logWarning("The todo reminder could not be saved", cause),
-						),
+						Background.logFailure("The todo reminder could not be saved"),
 					)
 				return stream.pipe(
 					Stream.tap((event) => {
@@ -477,13 +492,13 @@ export const make: Effect.Effect<
 								? [todosEntry(input), remindEntry, submitPlanEntry(input)]
 								: [todosEntry(input), remindEntry]
 							const all = yield* options.toolkit
-							const incoming = planning
-								? (readOnly(all) as unknown as typeof all)
-								: all
-							const own = Toolkit.make(...entries.map((entry) => entry.tool))
+							const incoming = planning ? readOnly(all) : all
+							const own = Toolkit.make(
+								...Arr.map(entries, (entry) => entry.tool),
+							)
 							const handlers = yield* own.toHandlers(
-								Record.fromEntries(
-									entries.map((entry) => [entry.tool.name, entry.handle]),
+								Rec.fromEntries(
+									Arr.map(entries, (entry) => [entry.tool.name, entry.handle]),
 								),
 							)
 							const open = Todos.open(Todos.of(view))
@@ -492,16 +507,19 @@ export const make: Effect.Effect<
 								Prompt.make([
 									{
 										role: "system",
-										content: [
-											...(planning ? [planInstructions] : []),
-											todoInstructions,
-											remindInstructions,
-											...(open.length === 0
-												? []
-												: [
-														`Your todo list now:\n${Todos.describe(Todos.of(view).items)}`,
-													]),
-										].join("\n\n"),
+										content: Arr.join(
+											[
+												...(planning ? [planInstructions] : []),
+												todoInstructions,
+												remindInstructions,
+												...(open.length === 0
+													? []
+													: [
+															`Your todo list now:\n${Todos.describe(Todos.of(view).items)}`,
+														]),
+											],
+											"\n\n",
+										),
 									},
 								]),
 							)

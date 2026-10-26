@@ -2,16 +2,19 @@ import { Operation } from "@openbot-build/core"
 import { PgClient } from "@effect/sql-pg"
 import { and, asc, eq, inArray, lt } from "drizzle-orm"
 import {
+	Array as Arr,
+	Cause,
 	Clock,
 	Context,
 	Effect,
 	Layer,
-	PubSub,
 	Schedule,
 	Schema,
 	Stream,
+	String as Str,
 	type Scope,
 } from "effect"
+import * as Background from "../app/Background.ts"
 import * as Db from "../database/Database.ts"
 import { operations } from "../database/Schema.ts"
 
@@ -28,25 +31,35 @@ type Database = Effect.Success<typeof Db.make>
 const notice = (kind: "changed" | "cancel", namespace: string, id: string) =>
 	`${kind}:${namespace}:${id}`
 const parse = (payload: string) => {
-	const first = payload.indexOf(":")
-	const second = payload.indexOf(":", first + 1)
-	return first < 0 || second < 0
+	const [kind, namespace, ...id] = Str.split(payload, ":")
+	return namespace === undefined || id.length === 0
 		? undefined
-		: {
-				kind: payload.slice(0, first),
-				namespace: payload.slice(first + 1, second),
-				id: Operation.Id.make(payload.slice(second + 1)),
-			}
+		: { kind, namespace, id: Operation.Id.make(Arr.join(id, ":")) }
 }
 
 type Parsed = NonNullable<ReturnType<typeof parse>>
 
-const storageFailure = (cause: unknown) =>
-	Effect.logWarning("An Operation could not be stored", cause)
+/**
+ * Logs a failure of the store, and gives `fallback`. The store of core never
+ * fails, so the Operation goes on without the write. A stop is not a failure,
+ * so it stays a stop.
+ */
+const storageFailure =
+	<B>(fallback: B) =>
+	<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A | B, never, R> =>
+		effect.pipe(
+			Effect.catchCause((cause) =>
+				Cause.hasInterruptsOnly(cause)
+					? Effect.interrupt
+					: Effect.logWarning("An Operation could not be stored", cause).pipe(
+							Effect.as(fallback),
+						),
+			),
+		)
 
 /**
- * The notices of the channel. A failed listen waits and listens again, so a
- * Postgres restart does not end it.
+ * The notices of the channel. A failed listen is logged, and the listener
+ * waits and listens again, so a Postgres restart does not end it.
  */
 const notices_ = (client: PgClient.PgClient) =>
 	Stream.unwrap(
@@ -54,6 +67,12 @@ const notices_ = (client: PgClient.PgClient) =>
 	).pipe(
 		Stream.map((message) => parse(message.payload)),
 		Stream.filter((parsed) => parsed !== undefined),
+		Stream.tapError((error) =>
+			Effect.logWarning(
+				"The Operations listener stopped. It listens again in one second.",
+				Cause.fail(error),
+			),
+		),
 		Stream.retry(Schedule.spaced("1 second")),
 		Stream.orDie,
 	)
@@ -76,31 +95,32 @@ const makeChannel = Effect.gen(function* () {
 })
 export const layerChannel = Layer.effect(Channel, makeChannel)
 
-/** The Operations of one namespace, kept in Postgres. */
+/**
+ * The Operations of one namespace, kept in Postgres. Every server, also the one
+ * that made a change, hears of it through the shared listener (`Channel`).
+ */
 export const make = (
 	namespace: string,
-): Effect.Effect<Operation.Store, never, PgClient.PgClient | Scope.Scope> =>
+): Effect.Effect<
+	Operation.Store,
+	never,
+	PgClient.PgClient | Channel | Scope.Scope
+> =>
 	Effect.gen(function* () {
 		const db = yield* Db.make
 		const client = yield* PgClient.PgClient
-		const found = yield* Effect.serviceOption(Channel)
-		// Without the shared listener, as in a test, the notices stay in this process.
-		// A listen of its own would hold a connection that blocks the end of the pool.
-		const local = yield* PubSub.unbounded<Parsed>()
+		const listener = yield* Channel
+		// A notice that is lost is logged. A waiter also reads the records again each second.
 		const notify = (kind: "changed" | "cancel", id: string) =>
-			found._tag === "Some"
-				? client
-						.notify(channel, notice(kind, namespace, id))
-						.pipe(Effect.ignore)
-				: PubSub.publish(local, {
-						kind,
-						namespace,
-						id: Operation.Id.make(id),
-					}).pipe(Effect.asVoid)
-		const shared =
-			found._tag === "Some" ? found.value.notices : Stream.fromPubSub(local)
+			client
+				.notify(channel, notice(kind, namespace, id))
+				.pipe(
+					Background.logFailure(
+						"A notice about an Operation could not be sent",
+					),
+				)
 		const mine = (kind: string) =>
-			shared.pipe(
+			listener.notices.pipe(
 				Stream.filter(
 					(parsed) => parsed.kind === kind && parsed.namespace === namespace,
 				),
@@ -124,7 +144,7 @@ export const make = (
 						startedAt: record.startedAt,
 					})
 					yield* notify("changed", record.id)
-				}).pipe(Effect.catchCause(storageFailure)),
+				}).pipe(storageFailure(undefined)),
 			finish: (id, status, endedAt) =>
 				Effect.gen(function* () {
 					const [row] = yield* db
@@ -143,11 +163,7 @@ export const make = (
 					if (changed.length === 0) return undefined
 					yield* notify("changed", id)
 					return after
-				}).pipe(
-					Effect.catchCause((cause) =>
-						Effect.as(storageFailure(cause), undefined),
-					),
-				),
+				}).pipe(storageFailure(undefined)),
 			get: (id) =>
 				db
 					.select()
@@ -158,9 +174,7 @@ export const make = (
 							Effect.forEach(rows.slice(0, 1), (row) => decode(row.body)),
 						),
 						Effect.map((records) => records[0]),
-						Effect.catchCause((cause) =>
-							Effect.as(storageFailure(cause), undefined),
-						),
+						storageFailure(undefined),
 					),
 			list: (chat) =>
 				db
@@ -175,7 +189,7 @@ export const make = (
 						Effect.flatMap((rows) =>
 							Effect.forEach(rows, (row) => decode(row.body)),
 						),
-						Effect.catchCause((cause) => Effect.as(storageFailure(cause), [])),
+						storageFailure([]),
 					),
 			changes: mine("changed"),
 			requestCancel: (id) => notify("cancel", id),
@@ -193,7 +207,7 @@ export const make = (
 								eq(operations.status, "Running"),
 							),
 						)
-				}).pipe(Effect.catchCause(storageFailure)),
+				}).pipe(storageFailure(undefined)),
 		}
 		return store
 	})

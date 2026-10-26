@@ -83,6 +83,14 @@ const program = Effect.scoped(
 `started`、`steered` 或
 `queued`。每个 Turn 结束后，收件箱中的下一条输入启动下一个 Turn。
 
+每个 Turn 都在自己的 fiber 中运行，这个 fiber 归运行时所有。fiber 是 Effect 中的轻量线程。运行时的 Scope 关闭时，每个正在运行的 Turn 都会停止，并以
+`Interrupted` 结束。调用方用 `stream` 或 `execute`
+读取的 Turn 也是这样。在收件箱中等待的输入会留在那里，新的运行时可以用 `drain`
+启动它。如果 `stream` 的调用方提前停止读取，它的 Turn 也会停止。
+
+`events` 提供一个 Chat 的事件。带上 `after`
+时，它先提供这个修订之后的最近事件，这样新的订阅者可以赶上进度。运行时为此保留最近 64 个事件。慢的订阅者不会让内存增长：当有 1024 个事件在等它时，每个新事件都会挤掉最旧的一个。所以这样的订阅者可能会错过事件，但它总能得到最新的事件。
+
 ### 批准
 
 带 `needsApproval` 的工具在每次调用前都会先问。这时运行时会问 `Approvals`

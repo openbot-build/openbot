@@ -115,18 +115,18 @@ client what the model can do.
 
 ### From OpenBot
 
-| `type`                    | Meaning                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `session.ready`           | The session is open. It has `provider`, `model`, `capabilities`, `audio`, `turnDetection`, and `voice`.      |
-| `input.speech.started`    | The person started to talk.                                                                                  |
-| `input.speech.stopped`    | The person stopped talking.                                                                                  |
-| `input.transcript`        | Text of what the person said. `final` is `true` for the full text.                                           |
-| `output.transcript.delta` | A part of the text of the answer.                                                                            |
-| `output.done`             | The answer item `itemId` has no more sound or text.                                                          |
-| `output.stop`             | The person talks again. Stop playing the answer now.                                                         |
-| `turn.started`            | A Turn started. It has `turnId`.                                                                             |
-| `turn.completed`          | The Turn ended. `status` is `Completed`, `Failed`, or `Interrupted`.                                         |
-| `error`                   | Something went wrong. It has `code` and `message`. The session stays open, unless the model connection ends. |
+| `type`                    | Meaning                                                                                                                                               |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.ready`           | The session is open. It has `provider`, `model`, `capabilities`, `audio`, `turnDetection`, and `voice`.                                               |
+| `input.speech.started`    | The person started to talk.                                                                                                                           |
+| `input.speech.stopped`    | The person stopped talking.                                                                                                                           |
+| `input.transcript`        | Text of what the person said. `final` is `true` for the full text.                                                                                    |
+| `output.transcript.delta` | A part of the text of the answer.                                                                                                                     |
+| `output.done`             | The answer item `itemId` has no more sound or text.                                                                                                   |
+| `output.stop`             | The person talks again. Stop playing the answer now.                                                                                                  |
+| `turn.started`            | A Turn started. It has `turnId`.                                                                                                                      |
+| `turn.completed`          | The Turn ended. `status` is `Completed`, `Failed`, or `Interrupted`.                                                                                  |
+| `error`                   | Something went wrong. It has `code` and `message`. The session stays open, unless the model connection ends or OpenBot can no longer follow the Chat. |
 
 ### From the client
 
@@ -173,7 +173,8 @@ The Turn is a normal Turn of the person: the Bot uses its instructions, tools,
 and output totals.
 
 When the session opens, OpenBot gives the last text messages of the Chat to the
-Live model, so it knows what was said before.
+Live model, so it knows what was said before. When OpenBot cannot read them, the
+session starts without them.
 
 A live Chat can have one Live session at a time. Only the server of that session
 starts the Turns of the Chat. Other input waits in the Chat until a session is
@@ -203,7 +204,7 @@ in Live mode works with any backend. To add one:
    that the backend does not support.
 3. Map the `Live.Input` values to the messages of the service, and the messages
    of the service to `Live.Event` values.
-4. Add the backend to `defaultLiveBackends` in
+4. Add the backend to `layerLiveBackends` in
    `packages/openbot/src/app/OpenBot.ts`.
 
 `packages/openbot/src/providers/openai/OpenAiRealtime.ts` is the backend for the

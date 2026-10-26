@@ -1,18 +1,22 @@
-import { createHash } from "node:crypto"
 import { AppExecution, AppViewsApi } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
 import {
 	Array as Arr,
+	Cause,
+	Crypto,
 	Effect,
 	HashMap,
 	Match,
 	Option,
-	Record,
+	Record as Rec,
 	Ref,
 	Schema,
+	String as Str,
+	pipe,
 	type JsonSchema,
 } from "effect"
-import { json, failed } from "./AppResults.ts"
+import { Hex } from "effect/encoding"
+import { failed, fromOperation, json } from "./AppResults.ts"
 import type { Capabilities, Opened } from "./Capabilities.ts"
 import type { Invocations, Position } from "./Invocations.ts"
 import type { ActionPolicy } from "./ActionPolicy.ts"
@@ -36,6 +40,7 @@ export interface Services {
 	readonly invocations: typeof Invocations.Service
 	readonly policy: typeof ActionPolicy.Service
 	readonly gate: typeof Gate.Service
+	readonly crypto: Crypto.Crypto
 }
 
 /** One capability of one connection. */
@@ -72,9 +77,34 @@ interface Permits {
 		operation: Effect.Effect<A, E, R>,
 	) => Effect.Effect<A, E, R>
 }
-const hash = (value: unknown) =>
-	createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40)
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+const hash = (crypto: Crypto.Crypto, value: unknown) =>
+	Effect.gen(function* () {
+		const text = yield* encodeJson(value)
+		const digest = yield* crypto.digest(
+			"SHA-256",
+			new TextEncoder().encode(text),
+		)
+		return pipe(Hex.encode(digest), Str.slice(0, 40))
+	}).pipe(
+		// The value is JSON data and SHA-256 is always there, so a failure here is a defect.
+		Effect.orDie,
+	)
 const argumentStrings = Schema.Record(Schema.String, Schema.String)
+/** The call does not reach the App, so the issue tells the model to fix its arguments. */
+const decodeArguments = (input: unknown) =>
+	Schema.decodeUnknownEffect(argumentStrings)(input).pipe(
+		Effect.catchTag("SchemaError", (error) =>
+			Effect.fail(
+				Client.ClientError.make({
+					reason: "Schema",
+					issue:
+						"The arguments do not match the input of this App capability: " +
+						error.message,
+				}),
+			),
+		),
+	)
 const visible = (tool: Opened["tools"][number]) => {
 	const metadata = Schema.decodeUnknownOption(
 		Schema.Struct({ visibility: Schema.Array(Schema.String) }),
@@ -159,6 +189,19 @@ const bindingsFor = (
 		})
 		let entries: ReadonlyArray<Binding> = []
 		let used = occupied
+		/** The first name `openbot_<hash>` that no other tool uses yet. */
+		const freeName = (
+			origin: AppExecution.Source,
+			schema: JsonSchema.JsonSchema,
+			salt: number,
+		): Effect.Effect<string> =>
+			hash(services.crypto, [owner, origin, schema, salt]).pipe(
+				Effect.map((value) => "openbot_" + value),
+				Effect.filterOrElse(
+					(name) => !used.includes(name),
+					() => freeName(origin, schema, salt + 1),
+				),
+			)
 		const add = (
 			origin: AppExecution.Source,
 			schema: JsonSchema.JsonSchema,
@@ -166,31 +209,25 @@ const bindingsFor = (
 			needsDecision: boolean,
 			readOnly: boolean,
 			perform: Binding["perform"],
-		) => {
-			const name = Option.match(selected, {
-				onSome: (value) => value.name,
-				onNone: () => {
-					let salt = 0
-					let name: string
-					do {
-						name = "openbot_" + hash([owner, origin, schema, salt++])
-					} while (used.includes(name))
-					return name
-				},
+		) =>
+			Effect.gen(function* () {
+				const name = yield* Option.match(selected, {
+					onSome: (value) => Effect.succeed(value.name),
+					onNone: () => freeName(origin, schema, 0),
+				})
+				if (used.includes(name)) return
+				used = Arr.append(used, name)
+				entries = Arr.append(entries, {
+					name,
+					source: origin,
+					schema,
+					description,
+					needsDecision,
+					readOnly,
+					perform,
+				})
 			})
-			if (used.includes(name)) return
-			used = Arr.append(used, name)
-			entries = Arr.append(entries, {
-				name,
-				source: origin,
-				schema,
-				description,
-				needsDecision,
-				readOnly,
-				perform,
-			})
-		}
-		for (const tool of opened.tools.filter((tool) =>
+		for (const tool of Arr.filter(opened.tools, (tool) =>
 			Option.match(selected, {
 				onNone: () => visible(tool),
 				onSome: ({ source }) =>
@@ -198,7 +235,7 @@ const bindingsFor = (
 			}),
 		)) {
 			const origin = source("tool", tool.name, yield* json(tool))
-			add(
+			yield* add(
 				origin,
 				tool.inputSchema,
 				tool.description ?? "Call this App capability.",
@@ -231,14 +268,14 @@ const bindingsFor = (
 					}),
 			)
 		}
-		for (const resource of opened.resources.filter((resource) =>
+		for (const resource of Arr.filter(opened.resources, (resource) =>
 			Option.match(selected, {
 				onNone: () => true,
 				onSome: ({ source }) =>
 					source.kind === "resource" && source.target === resource.uri,
 			}),
 		))
-			add(
+			yield* add(
 				source("resource", resource.uri, yield* json(resource)),
 				{ type: "object", properties: {}, additionalProperties: false },
 				resource.description ?? "Read this App resource.",
@@ -253,31 +290,29 @@ const bindingsFor = (
 		for (const template of Option.isNone(selected)
 			? opened.resourceTemplates
 			: [])
-			add(
+			yield* add(
 				source("template", template.uriTemplate, yield* json(template)),
 				{ type: "object", additionalProperties: { type: "string" } },
 				template.description ?? "Read this App resource template.",
 				false,
 				true,
 				(input) =>
-					Effect.flatMap(
-						Schema.decodeUnknownEffect(argumentStrings)(input),
-						(values) =>
-							opened.client.readTemplate({
-								template: template.uriTemplate,
-								values,
-								source: "model",
-							}),
+					Effect.flatMap(decodeArguments(input), (values) =>
+						opened.client.readTemplate({
+							template: template.uriTemplate,
+							values,
+							source: "model",
+						}),
 					),
 			)
 		for (const prompt of Option.isNone(selected) ? opened.prompts : []) {
 			const args = prompt.arguments ?? []
-			add(
+			yield* add(
 				source("prompt", prompt.name, yield* json(prompt)),
 				{
 					type: "object",
-					properties: Record.fromEntries(
-						args.map((argument) => [
+					properties: Rec.fromEntries(
+						Arr.map(args, (argument) => [
 							argument.name,
 							{
 								type: "string",
@@ -287,9 +322,11 @@ const bindingsFor = (
 							},
 						]),
 					),
-					required: args
-						.filter((argument) => argument.required === true)
-						.map((argument) => argument.name),
+					required: pipe(
+						args,
+						Arr.filter((argument) => argument.required === true),
+						Arr.map((argument) => argument.name),
+					),
 					additionalProperties: false,
 				},
 				prompt.description ?? "Read this App prompt as external content.",
@@ -297,16 +334,17 @@ const bindingsFor = (
 				true,
 				(input) =>
 					Effect.gen(function* () {
-						const values =
-							yield* Schema.decodeUnknownEffect(argumentStrings)(input)
+						const values = yield* decodeArguments(input)
 						if (
-							args.some(
+							Arr.some(
+								args,
 								(argument) =>
 									argument.required === true &&
 									values[argument.name] === undefined,
 							) ||
-							Record.keys(values).some(
-								(name) => !args.some((argument) => argument.name === name),
+							Arr.some(
+								Rec.keys(values),
+								(name) => !Arr.some(args, (argument) => argument.name === name),
 							)
 						)
 							return yield* Client.ClientError.make({
@@ -369,12 +407,30 @@ export const prepare = (
 							owner,
 							stored.connection.connectionId,
 						).pipe(
-							Effect.mapError(() =>
-								Client.PermissionDenied.make({
-									action: invocation.action,
-									target: invocation.target,
-								}),
-							),
+							Effect.catchTags({
+								ExperienceNotFound: () =>
+									Effect.fail(
+										Client.PermissionDenied.make({
+											action: invocation.action,
+											target: invocation.target,
+										}),
+									),
+								// The policy can only deny, so a storage failure denies the call too.
+								ExperienceStorageUnavailable: (error) =>
+									Effect.logWarning(
+										"OpenBot could not read an App connection, so it denies the App call.",
+										error,
+									).pipe(
+										Effect.andThen(
+											Effect.fail(
+												Client.PermissionDenied.make({
+													action: invocation.action,
+													target: invocation.target,
+												}),
+											),
+										),
+									),
+							}),
 						)
 						if (
 							current.revision !== stored.revision ||
@@ -417,9 +473,19 @@ export const prepare = (
 							permits,
 							Arr.appendAll(
 								occupied,
-								entries.map((entry) => entry.name),
+								Arr.map(entries, (entry) => entry.name),
 							),
 							selected,
+						),
+					),
+					Effect.tapError((failure) =>
+						Effect.logInfo(
+							"An App connection could not be opened for a Turn.",
+							Cause.fail(failure),
+						).pipe(
+							Effect.annotateLogs({
+								connectionId: stored.connection.connectionId,
+							}),
 						),
 					),
 					Effect.result,
@@ -505,6 +571,22 @@ export const decide = (
 		),
 	)
 
+/** Ends a call as Failed when its failure could not become a result. It logs that failure. */
+const unconverted =
+	(source: AppExecution.Source, message: string) =>
+	(error: Schema.SchemaError) =>
+		Effect.logWarning(
+			"An App failure could not be turned into a result.",
+			Cause.fail(error),
+		).pipe(
+			Effect.as({
+				_tag: "Failed",
+				source,
+				reason: "SchemaError",
+				message,
+			} as const),
+		)
+
 /** Sends an approved App call and records it as an App operation. */
 export const execute = (
 	services: Services,
@@ -521,11 +603,13 @@ export const execute = (
 			position.owner,
 			origin.connectionId,
 		).pipe(
-			Effect.mapError(() =>
-				Client.PermissionDenied.make({
-					action: "invoke",
-					target: origin.name,
-				}),
+			Effect.catchTag("ExperienceNotFound", () =>
+				Effect.fail(
+					Client.PermissionDenied.make({
+						action: "invoke",
+						target: origin.name,
+					}),
+				),
 			),
 		)
 		if (current.revision !== origin.revision)
@@ -533,43 +617,22 @@ export const execute = (
 				action: "invoke",
 				target: origin.name,
 			})
-		return yield* Match.value(yield* binding.perform(args)).pipe(
-			Match.tag("Completed", ({ result }) =>
-				json(result).pipe(
-					Effect.map(
-						(result) =>
-							({
-								_tag: "Completed",
-								source: origin,
-								result,
-							}) as const,
-					),
-				),
-			),
-			Match.tag("InputRequired", ({ result }) =>
-				json(result).pipe(
-					Effect.map(
-						(request) =>
-							({
-								_tag: "InputRequired",
-								source: origin,
-								request,
-							}) as const,
-					),
-				),
-			),
-			Match.exhaustive,
-		)
+		return yield* fromOperation(origin)(yield* binding.perform(args))
 	}).pipe(
+		Effect.tapError((error) =>
+			Effect.logInfo("An App call failed.", Cause.fail(error)).pipe(
+				Effect.annotateLogs({
+					connectionId: origin.connectionId,
+					target: origin.name,
+				}),
+			),
+		),
 		Effect.catch((error) => failed({ source: origin, error })),
-		Effect.orElseSucceed(
-			() =>
-				({
-					_tag: "Failed",
-					source: origin,
-					reason: "SchemaError",
-					message: "The App result could not be turned into standard content.",
-				}) as const,
+		Effect.catch(
+			unconverted(
+				origin,
+				"The App result could not be turned into standard content.",
+			),
 		),
 	)
 	return services.invocations
@@ -584,16 +647,21 @@ export const execute = (
 			operation,
 		)
 		.pipe(
+			// StoredInvocations already logs a storage failure, so only these are logged here.
+			Effect.tapErrorTag(["ChatConflict", "ExperienceNotFound"], (error) =>
+				Effect.logInfo("An App call did not run.", Cause.fail(error)).pipe(
+					Effect.annotateLogs({
+						connectionId: origin.connectionId,
+						target: origin.name,
+					}),
+				),
+			),
 			Effect.catch((error) => failed({ source: origin, error })),
-			Effect.orElseSucceed(
-				() =>
-					({
-						_tag: "Failed",
-						source: origin,
-						reason: "Storage",
-						message:
-							"The App operation could not be recorded. Review its state before continuing.",
-					}) as const,
+			Effect.catch(
+				unconverted(
+					origin,
+					"The App failure could not be turned into a result. Review the operation before continuing.",
+				),
 			),
 		)
 }

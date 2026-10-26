@@ -1,8 +1,5 @@
-// Each test owns the Layers that it provides at the point where it runs.
-// @effect-diagnostics strictEffectProvide:off
-
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Match,
 	Context,
 	Deferred,
@@ -10,6 +7,7 @@ import {
 	Fiber,
 	Layer,
 	Redacted,
+	Ref,
 	Schema,
 	Stream,
 } from "effect"
@@ -121,16 +119,22 @@ const streamEvents = [
 		choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
 	},
 ]
-const sse =
-	streamEvents.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") +
-	"data: [DONE]\n\n"
+const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+const RequestBody = Schema.fromJsonString(Schema.JsonObject)
+/** The stream events as the text of a server-sent event stream. */
+const sse = Effect.map(
+	Effect.forEach(streamEvents, (event) =>
+		Effect.map(toJson(event), (data) => `data: ${data}\n\n`),
+	),
+	(events) => Arr.join(events, "") + "data: [DONE]\n\n",
+)
 
 it.effect(
 	"the public Provider keeps identity, encodes options and continues after a tool runs",
 	() =>
 		Effect.gen(function* () {
-			let requests: ReadonlyArray<Schema.JsonObject> = []
-			let toolCalls = 0
+			const requests = yield* Ref.make<ReadonlyArray<Schema.JsonObject>>([])
+			const toolCalls = yield* Ref.make(0)
 			const HttpClientTest = Layer.succeed(
 				HttpClient.HttpClient,
 				HttpClient.make((request, url) =>
@@ -145,28 +149,23 @@ it.effect(
 						return yield* Match.value(request.body).pipe(
 							Match.tag("Uint8Array", (body) =>
 								Effect.gen(function* () {
-									requests = EffectArray.append(
+									const decoded = yield* Schema.decodeEffect(RequestBody)(
+										new TextDecoder().decode(body.body),
+									)
+									const sent = yield* Ref.updateAndGet(
 										requests,
-										yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
-											JSON.parse(new TextDecoder().decode(body.body)),
-										).pipe(Effect.orDie),
+										Arr.append(decoded),
 									)
 									return HttpClientResponse.fromWeb(
 										request,
 										new globalThis.Response(
-											JSON.stringify(
-												requests.length === 1 ? toolAnswer : answer,
-											),
+											yield* toJson(sent.length === 1 ? toolAnswer : answer),
 											{ headers: { "content-type": "application/json" } },
 										),
 									)
-								}),
+								}).pipe(Effect.orDie),
 							),
-							Match.orElse(() =>
-								Effect.gen(function* () {
-									throw new Error("Expected a JSON request")
-								}),
-							),
+							Match.orElse(() => assert.fail("Expected a JSON request")),
 						)
 					}),
 				),
@@ -178,10 +177,10 @@ it.effect(
 				custom_option: "retained",
 			})
 			assert.strictEqual(provider.id, "openai-compat")
-			assert.strictEqual(requests.length, 0)
+			assert.strictEqual((yield* Ref.get(requests)).length, 0)
 			yield* Effect.gen(function* () {
 				const model = yield* provider.model(selection)
-				assert.strictEqual(requests.length, 0)
+				assert.strictEqual((yield* Ref.get(requests)).length, 0)
 				const prompt = Prompt.make([
 					{ role: "system", content: "Follow instructions." },
 					{ role: "user", content: "Echo hello." },
@@ -213,18 +212,19 @@ it.effect(
 				yield* LanguageModel.generateText({ prompt: "Use defaults." }).pipe(
 					Effect.provide(defaultModel),
 				)
-				assert.strictEqual(toolCalls, 1)
-				assert.strictEqual(requests[0]!["model"], selection.model)
-				assert.strictEqual(requests[0]!["max_tokens"], 1024)
-				assert.strictEqual(requests[0]!["reasoning_effort"], "high")
-				assert.strictEqual(requests[0]!["custom_option"], "retained")
-				assert.strictEqual(requests[0]!["service_tier"], "priority")
-				assert.match(JSON.stringify(requests[0]), /Follow instructions/)
-				assert.match(JSON.stringify(requests[0]!["tools"]), /echo/)
-				assert.match(JSON.stringify(requests[1]!["messages"]), /tool_call_id/)
-				assert.match(JSON.stringify(requests[1]!["messages"]), /hello/)
-				assert.strictEqual(requests[2]!["reasoning_effort"], "low")
-				assert.strictEqual(requests[2]!["service_tier"], "auto")
+				assert.strictEqual(yield* Ref.get(toolCalls), 1)
+				const sent = yield* Ref.get(requests)
+				assert.strictEqual(sent[0]!["model"], selection.model)
+				assert.strictEqual(sent[0]!["max_tokens"], 1024)
+				assert.strictEqual(sent[0]!["reasoning_effort"], "high")
+				assert.strictEqual(sent[0]!["custom_option"], "retained")
+				assert.strictEqual(sent[0]!["service_tier"], "priority")
+				assert.match(yield* toJson(sent[0]), /Follow instructions/)
+				assert.match(yield* toJson(sent[0]!["tools"]), /echo/)
+				assert.match(yield* toJson(sent[1]!["messages"]), /tool_call_id/)
+				assert.match(yield* toJson(sent[1]!["messages"]), /hello/)
+				assert.strictEqual(sent[2]!["reasoning_effort"], "low")
+				assert.strictEqual(sent[2]!["service_tier"], "auto")
 			}).pipe(
 				Effect.provide(
 					Layer.merge(
@@ -234,10 +234,7 @@ it.effect(
 						}).pipe(Layer.provide(HttpClientTest)),
 						tools.toLayer({
 							echo: ({ text }) =>
-								Effect.sync(() => {
-									toolCalls++
-									return text
-								}),
+								Ref.update(toolCalls, (n) => n + 1).pipe(Effect.as(text)),
 						}),
 					),
 				),
@@ -249,31 +246,31 @@ it.effect(
 	"streamed text and tool results are visible, and cancellation interrupts HTTP work",
 	() =>
 		Effect.gen(function* () {
-			let calls = 0,
-				cancelled = false
+			const calls = yield* Ref.make(0)
+			const cancelled = yield* Ref.make(false)
+			const events = yield* sse
 			const started = yield* Deferred.make<void>()
 			const HttpClientTest = Layer.succeed(
 				HttpClient.HttpClient,
-				HttpClient.make((request) => {
-					calls++
-					if (calls === 2)
-						return Deferred.succeed(started, undefined).pipe(
-							Effect.andThen(Effect.never),
-							Effect.onInterrupt(() =>
-								Effect.sync(() => {
-									cancelled = true
-								}),
-							),
-						)
-					return Effect.succeed(
-						HttpClientResponse.fromWeb(
-							request,
-							new globalThis.Response(sse, {
-								headers: { "content-type": "text/event-stream" },
-							}),
+				HttpClient.make((request) =>
+					Ref.updateAndGet(calls, (n) => n + 1).pipe(
+						Effect.flatMap((n) =>
+							n === 2
+								? Deferred.succeed(started, undefined).pipe(
+										Effect.andThen(Effect.never),
+										Effect.onInterrupt(() => Ref.set(cancelled, true)),
+									)
+								: Effect.succeed(
+										HttpClientResponse.fromWeb(
+											request,
+											new globalThis.Response(events, {
+												headers: { "content-type": "text/event-stream" },
+											}),
+										),
+									),
 						),
-					)
-				}),
+					),
+				),
 			)
 			const model = yield* OpenAiCompatProvider.make().model(selection)
 			yield* Effect.gen(function* () {
@@ -282,12 +279,14 @@ it.effect(
 					toolkit: tools,
 				}).pipe(Stream.runCollect)
 				assert.ok(
-					parts.some(
+					Arr.some(
+						parts,
 						(part) => part.type === "text-delta" && part.delta === "hello",
 					),
 				)
 				assert.ok(
-					parts.some(
+					Arr.some(
+						parts,
 						(part) => part.type === "tool-result" && part.result === "hello",
 					),
 				)
@@ -296,7 +295,7 @@ it.effect(
 				}).pipe(Stream.runDrain, Effect.forkChild)
 				yield* Deferred.await(started)
 				yield* Fiber.interrupt(fiber)
-				assert.strictEqual(cancelled, true)
+				assert.strictEqual(yield* Ref.get(cancelled), true)
 			}).pipe(
 				Effect.provide(
 					Layer.merge(
@@ -316,24 +315,25 @@ it.effect(
 
 it.effect("HTTP errors stay model errors", () =>
 	Effect.gen(function* () {
-		let calls = 0
+		const calls = yield* Ref.make(0)
 		const HttpClientTest = Layer.succeed(
 			HttpClient.HttpClient,
-			HttpClient.make((request) => {
-				calls++
-				return Effect.succeed(
-					HttpClientResponse.fromWeb(
-						request,
-						new globalThis.Response("Gateway unavailable", { status: 503 }),
+			HttpClient.make((request) =>
+				Ref.update(calls, (n) => n + 1).pipe(
+					Effect.map(() =>
+						HttpClientResponse.fromWeb(
+							request,
+							new globalThis.Response("Gateway unavailable", { status: 503 }),
+						),
 					),
-				)
-			}),
+				),
+			),
 		)
-		const result = yield* Effect.gen(function* () {
+		const error = yield* Effect.gen(function* () {
 			const model = yield* OpenAiCompatProvider.make().model(selection)
 			return yield* LanguageModel.generateText({ prompt: "Hello." }).pipe(
 				Effect.provide(model),
-				Effect.result,
+				Effect.flip,
 			)
 		}).pipe(
 			Effect.provide(
@@ -342,16 +342,8 @@ it.effect("HTTP errors stay model errors", () =>
 				),
 			),
 		)
-		assert.strictEqual(result._tag, "Failure")
-		return Match.value(result).pipe(
-			Match.tag("Failure", (result) => {
-				assert.strictEqual(result.failure._tag, "AiError")
-				assert.strictEqual(calls, 1)
-			}),
-			Match.orElse(() => {
-				throw new Error("Expected a model failure")
-			}),
-		)
+		assert.strictEqual(error._tag, "AiError")
+		assert.strictEqual(yield* Ref.get(calls), 1)
 	}),
 )
 
@@ -387,19 +379,24 @@ it.effect(
 	"the API gets the upstream model name, and the model keeps the selected ID",
 	() =>
 		Effect.gen(function* () {
-			let sent: unknown
+			const sent = yield* Ref.make<Schema.JsonObject>({})
 			const HttpClientTest = Layer.succeed(
 				HttpClient.HttpClient,
-				HttpClient.make((request) => {
-					if (request.body._tag === "Uint8Array")
-						sent = JSON.parse(new TextDecoder().decode(request.body.body))
-					return Effect.succeed(
-						HttpClientResponse.fromWeb(
+				HttpClient.make((request) =>
+					Effect.gen(function* () {
+						if (request.body._tag === "Uint8Array")
+							yield* Ref.set(
+								sent,
+								yield* Schema.decodeEffect(RequestBody)(
+									new TextDecoder().decode(request.body.body),
+								).pipe(Effect.orDie),
+							)
+						return HttpClientResponse.fromWeb(
 							request,
 							new globalThis.Response("Gateway unavailable", { status: 503 }),
-						),
-					)
-				}),
+						)
+					}),
+				),
 			)
 			const name = yield* Effect.gen(function* () {
 				const model = yield* OpenAiCompatProvider.make({
@@ -417,10 +414,7 @@ it.effect(
 					),
 				),
 			)
-			assert.strictEqual(
-				(sent as { readonly model?: unknown }).model,
-				"upstream-name",
-			)
+			assert.strictEqual((yield* Ref.get(sent))["model"], "upstream-name")
 			assert.strictEqual(name, selection.model)
 		}),
 )

@@ -248,12 +248,17 @@ change works like this:
 3. Every instance listens on that channel. It reads the new settings at once.
 
 Each cache entry also expires after 30 seconds. So an instance that misses a
-message still gets the change soon.
+message still gets the change soon. The cache does not keep a failed read. So
+after a short database error, the next request reads the settings again.
+
+When the connection that listens breaks, the instance can miss messages. So it
+forgets all the settings in its cache, and listens again after one second.
 
 A change to `publicOrigin`, to the platform identity provider, or to the sign-in
-secret changes how sign-in works. Then each instance starts a new app inside the
-same process. The new app takes requests first, and then the old one stops. No
-request is lost.
+secret changes how sign-in works. Each instance reads these values when it uses
+them, so the next request uses the new values. Sign-in gets a new setup for
+them, and the old setup closes a few minutes after its last request. Nothing
+starts again: requests and Turns that are running go on.
 
 ---
 

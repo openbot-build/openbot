@@ -1,14 +1,14 @@
-// @effect-diagnostics strictEffectProvide:off
 import { assert, it } from "@effect/vitest"
 import {
+	Array as Arr,
 	Effect,
 	Layer,
-	ManagedRuntime,
 	Match,
 	Option,
 	Schema,
 	Stream,
 	Predicate,
+	Ref,
 } from "effect"
 import {
 	LanguageModel,
@@ -32,7 +32,7 @@ import {
 } from "@openbot-build/core"
 import * as ConfigModule from "@openbot-build/core/Config"
 import { ChatTest } from "./ChatTest.ts"
-import { LanguageModelTest } from "./LanguageModelTest.ts"
+import { finish, LanguageModelTest, textParts } from "./LanguageModelTest.ts"
 
 const providerId = Provider.Id.make("test-provider")
 const modelId = Model.Id.make("test-model")
@@ -42,170 +42,168 @@ const selection = Config.Selection.make({
 	reasoningEffort: "high",
 	serviceTier: "priority",
 })
-const usage = Response.Usage.make({
-	inputTokens: {
-		total: 1,
-		uncached: 1,
-		cacheRead: undefined,
-		cacheWrite: undefined,
-	},
-	outputTokens: { total: 1, text: 1, reasoning: undefined },
-})
-const finish = Response.makePart("finish", { reason: "stop", usage })
+/** The JSON text of a value, so a test can match a pattern in it. */
+const json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
-it("configuration catalogs and selections round-trip without runtime capabilities", () => {
-	assert.strictEqual(ConfigModule.Selection, Config.Selection)
-	assert.strictEqual(ConfigModule.Compaction, Config.Compaction)
-	const schema = Schema.Struct({
-		providers: Schema.Array(Config.Provider),
-		models: Schema.Array(Config.Model),
-		selection: Config.Selection,
-		mode: Config.Mode,
-	})
-	const settings = schema.make({
-		providers: [
-			{
-				id: providerId,
-				name: "Test Provider",
-				endpoint: "https://example.com/models",
-			},
-			{
-				id: Provider.Id.make("local"),
-				name: "Local Provider",
-				endpoint: "http://localhost:8080",
-			},
-			{
-				id: Provider.Id.make("default"),
-				name: "Default Provider",
-			},
-		],
-		models: [
-			undefined,
-			Config.Compaction.Native(),
-			Config.Compaction.NonNative({ model: selection, keepRecentMessages: 3 }),
-		].map((compaction) =>
-			Config.Model.make({
-				provider: providerId,
-				id: modelId,
-				name: "Test Model",
-				reasoningEfforts: ["high"],
-				serviceTiers: ["priority"],
-				...(compaction === undefined ? {} : { compaction }),
-			}),
-		),
-		selection,
-		mode: "plan",
-	})
-	const codec = Schema.toCodecJson(schema)
-	const json = JSON.stringify(Schema.encodeSync(codec)(settings))
-	const decoded = Schema.decodeSync(codec)(JSON.parse(json))
-	assert.deepStrictEqual(decoded, settings)
-	assert.strictEqual(decoded.selection._tag, "Config.Selection")
-	const [model] = decoded.models
-	assert.ok(model)
-	assert.strictEqual(model._tag, "Config.Model")
-	assert.strictEqual(Predicate.hasProperty(model, "generateText"), false)
-	assert.deepStrictEqual(
-		decoded.models.map((model) =>
-			model.compaction === undefined
-				? "undeclared"
-				: Match.value(model.compaction).pipe(
-						Match.tagsExhaustive({
-							Native: () => "native",
-							NonNative: () => "non-native",
-						}),
-					),
-		),
-		["undeclared", "native", "non-native"],
-	)
-	assert.strictEqual(
-		Config.Compaction.$is("Native")(decoded.models[1]?.compaction),
-		true,
-	)
-	for (const invalid of [
-		true,
-		false,
-		{ _tag: "Unknown" },
-		{ _tag: "NonNative", keepRecentMessages: 0 },
-		{ _tag: "NonNative", keepRecentMessages: 1.5 },
-	]) {
-		assert.throws(() =>
-			Schema.decodeUnknownSync(Config.Model)({ ...model, compaction: invalid }),
-		)
-	}
-})
-
-it("a runtime model gives native generation and model identity only when first used", async () => {
-	let builds = 0
-	let requests = 0
-	const layer = Layer.effect(
-		LanguageModel.LanguageModel,
+it.effect(
+	"configuration catalogs and selections round-trip without runtime capabilities",
+	() =>
 		Effect.gen(function* () {
-			builds += 1
-			return yield* LanguageModel.make({
-				generateText: () =>
-					Effect.sync(() => {
-						requests += 1
-						return [
-							Response.makePart("text", { text: "native answer" }),
-							finish,
-						]
-					}),
-				streamText: () => Stream.empty,
+			assert.strictEqual(ConfigModule.Selection, Config.Selection)
+			assert.strictEqual(ConfigModule.Compaction, Config.Compaction)
+			const schema = Schema.Struct({
+				providers: Schema.Array(Config.Provider),
+				models: Schema.Array(Config.Model),
+				selection: Config.Selection,
+				mode: Config.Mode,
 			})
-		}),
-	)
-	const model = Model.make({ provider: providerId, model: modelId, layer })
-	const program = Effect.gen(function* () {
-		const provider = yield* AiModel.ProviderName
-		const name = yield* AiModel.ModelName
-		const response = yield* LanguageModel.generateText({ prompt: "hello" })
-		return { provider, name, text: response.text }
-	})
-	await using runtime = ManagedRuntime.make(model)
-	assert.strictEqual(builds, 0)
-	assert.strictEqual(requests, 0)
-	assert.deepStrictEqual(await runtime.runPromise(program), {
-		provider: providerId,
-		name: modelId,
-		text: "native answer",
-	})
-	assert.strictEqual(builds, 1)
-	assert.strictEqual(requests, 1)
-})
-
-it("a provider uses selection options and returns a model that a Chat can use", async () => {
-	let constructions = 0
-	const provider = new Provider.Provider({
-		id: providerId,
-		model: (selected) =>
-			Effect.sync(() => {
-				constructions += 1
-				const answer = `${selected.model}:${selected.reasoningEffort}:${selected.serviceTier}`
-				return Model.make({
-					provider: providerId,
-					model: selected.model,
-					layer: Layer.effect(
-						LanguageModel.LanguageModel,
-						LanguageModel.make({
-							generateText: () => Effect.succeed([]),
-							streamText: () =>
-								Stream.make(
-									Response.makePart("text-start", { id: "answer" }),
-									Response.makePart("text-delta", {
-										id: "answer",
-										delta: answer,
-									}),
-									Response.makePart("text-end", { id: "answer" }),
-									finish,
-								),
+			const settings = schema.make({
+				providers: [
+					{
+						id: providerId,
+						name: "Test Provider",
+						endpoint: "https://example.com/models",
+					},
+					{
+						id: Provider.Id.make("local"),
+						name: "Local Provider",
+						endpoint: "http://localhost:8080",
+					},
+					{
+						id: Provider.Id.make("default"),
+						name: "Default Provider",
+					},
+				],
+				models: Arr.map(
+					[
+						undefined,
+						Config.Compaction.Native(),
+						Config.Compaction.NonNative({
+							model: selection,
+							keepRecentMessages: 3,
 						}),
-					),
-				})
-			}),
-	})
-	const program = Effect.scoped(
+					],
+					(compaction) =>
+						Config.Model.make({
+							provider: providerId,
+							id: modelId,
+							name: "Test Model",
+							reasoningEfforts: ["high"],
+							serviceTiers: ["priority"],
+							...(compaction === undefined ? {} : { compaction }),
+						}),
+				),
+				selection,
+				mode: "plan",
+			})
+			const codec = Schema.fromJsonString(Schema.toCodecJson(schema))
+			const text = yield* Schema.encodeEffect(codec)(settings)
+			const decoded = yield* Schema.decodeEffect(codec)(text)
+			assert.deepStrictEqual(decoded, settings)
+			assert.strictEqual(decoded.selection._tag, "Config.Selection")
+			const [model] = decoded.models
+			assert.ok(model)
+			assert.strictEqual(model._tag, "Config.Model")
+			assert.strictEqual(Predicate.hasProperty(model, "generateText"), false)
+			assert.deepStrictEqual(
+				Arr.map(decoded.models, (model) =>
+					model.compaction === undefined
+						? "undeclared"
+						: Match.value(model.compaction).pipe(
+								Match.tagsExhaustive({
+									Native: () => "native",
+									NonNative: () => "non-native",
+								}),
+							),
+				),
+				["undeclared", "native", "non-native"],
+			)
+			assert.strictEqual(
+				Config.Compaction.$is("Native")(decoded.models[1]?.compaction),
+				true,
+			)
+			for (const invalid of [
+				true,
+				false,
+				{ _tag: "Unknown" },
+				{ _tag: "NonNative", keepRecentMessages: 0 },
+				{ _tag: "NonNative", keepRecentMessages: 1.5 },
+			]) {
+				const error = yield* Schema.decodeUnknownEffect(Config.Model)({
+					...model,
+					compaction: invalid,
+				}).pipe(Effect.flip)
+				assert.strictEqual(error._tag, "SchemaError")
+			}
+		}),
+)
+
+it.effect(
+	"a runtime model gives native generation and model identity only when first used",
+	() =>
 		Effect.gen(function* () {
+			const builds = yield* Ref.make(0)
+			const requests = yield* Ref.make(0)
+			const layer = Layer.effect(
+				LanguageModel.LanguageModel,
+				Effect.gen(function* () {
+					yield* Ref.update(builds, (n) => n + 1)
+					return yield* LanguageModel.make({
+						generateText: () =>
+							Ref.update(requests, (n) => n + 1).pipe(
+								Effect.as([
+									Response.makePart("text", { text: "native answer" }),
+									finish(),
+								]),
+							),
+						streamText: () => Stream.empty,
+					})
+				}),
+			)
+			const model = Model.make({ provider: providerId, model: modelId, layer })
+			const program = Effect.gen(function* () {
+				const provider = yield* AiModel.ProviderName
+				const name = yield* AiModel.ModelName
+				const response = yield* LanguageModel.generateText({ prompt: "hello" })
+				return { provider, name, text: response.text }
+			})
+			assert.strictEqual(yield* Ref.get(builds), 0)
+			assert.strictEqual(yield* Ref.get(requests), 0)
+			assert.deepStrictEqual(yield* program.pipe(Effect.provide(model)), {
+				provider: providerId,
+				name: modelId,
+				text: "native answer",
+			})
+			assert.strictEqual(yield* Ref.get(builds), 1)
+			assert.strictEqual(yield* Ref.get(requests), 1)
+		}),
+)
+
+it.effect(
+	"a provider uses selection options and returns a model that a Chat can use",
+	() =>
+		Effect.gen(function* () {
+			const constructions = yield* Ref.make(0)
+			const provider = new Provider.Provider({
+				id: providerId,
+				model: (selected) =>
+					Effect.gen(function* () {
+						yield* Ref.update(constructions, (n) => n + 1)
+						const answer = `${selected.model}:${selected.reasoningEffort}:${selected.serviceTier}`
+						return Model.make({
+							provider: providerId,
+							model: selected.model,
+							layer: Layer.effect(
+								LanguageModel.LanguageModel,
+								LanguageModel.make({
+									generateText: () => Effect.succeed([]),
+									streamText: () => Stream.fromArray(textParts(answer)),
+								}),
+							),
+						})
+					}),
+			})
+			assert.strictEqual(yield* Ref.get(constructions), 0)
 			const { runtime, runtimeStore, chat } = yield* ChatTest({
 				toolkit: Toolkit.empty,
 				providers: [provider],
@@ -240,26 +238,24 @@ it("a provider uses selection options and returns a model that a Chat can use", 
 				],
 			})
 			yield* configuration.select(selection)
-			return yield* runtime.execute({ chat, input: "answer" })
-		}),
-	)
-	await using runtime = ManagedRuntime.make(
-		LanguageModelTest({
-			streamText: () => Stream.die("Host fallback must not run"),
-		}),
-	)
-	assert.strictEqual(constructions, 0)
-	const result = await runtime.runPromise(program)
-	assert.strictEqual(constructions, 1)
-	const status = Chat.status(result.chat)
-	assert.ok(status._tag === "Completed")
-	assert.strictEqual(status.result.text, "test-model:high:priority")
-	assert.strictEqual(Chat.currentTurn(result.chat)!.steps, 1)
-	assert.deepStrictEqual(
-		Chat.currentTurn(result.chat)!.settings.model,
-		selection,
-	)
-})
+			const result = yield* runtime.execute({ chat, input: "answer" })
+			assert.strictEqual(yield* Ref.get(constructions), 1)
+			const status = Chat.status(result.chat)
+			assert.ok(status._tag === "Completed")
+			assert.strictEqual(status.result.text, "test-model:high:priority")
+			assert.strictEqual(Chat.currentTurn(result.chat)!.steps, 1)
+			assert.deepStrictEqual(
+				Chat.currentTurn(result.chat)!.settings.model,
+				selection,
+			)
+		}).pipe(
+			Effect.provide(
+				LanguageModelTest({
+					streamText: () => Stream.die("Host fallback must not run"),
+				}),
+			),
+		),
+)
 
 it.effect("provider model creation keeps host failures unchanged", () =>
 	Effect.gen(function* () {
@@ -282,23 +278,22 @@ it.effect(
 		const languageModel = LanguageModelTest({
 			streamText: ({ prompt }) => {
 				prompts = [...prompts, prompt]
-				return Stream.make(finish)
+				return Stream.make(finish())
 			},
 		})
 		/** The native window belongs to another model. The new model gets its messages after a note. */
-		const assertRebuilt = (
-			prompt: Prompt.Prompt | undefined,
-			input: string,
-		) => {
-			assert.ok(prompt)
-			const [note, ...rest] = prompt.content
-			assert.ok(note !== undefined && note.role === "user")
-			assert.match(JSON.stringify(note), /compacted for another model/)
-			assert.deepStrictEqual(
-				rest,
-				Prompt.concat(Prompt.make("recent input"), Prompt.make(input)).content,
-			)
-		}
+		const assertRebuilt = (prompt: Prompt.Prompt | undefined, input: string) =>
+			Effect.gen(function* () {
+				assert.ok(prompt)
+				const [note, ...rest] = prompt.content
+				assert.ok(note !== undefined && note.role === "user")
+				assert.match(yield* json(note), /compacted for another model/)
+				assert.deepStrictEqual(
+					rest,
+					Prompt.concat(Prompt.make("recent input"), Prompt.make(input))
+						.content,
+				)
+			})
 		return Effect.gen(function* () {
 			const definition = yield* Store.define({
 				stores: { marker: { scope: "state", schema: Schema.String } },
@@ -345,22 +340,24 @@ it.effect(
 			const configuration = ConfigurationOperations.modelConfiguration({
 				store,
 				chat,
-				providers: [providerId, otherProvider].map((id) => ({
+				providers: Arr.map([providerId, otherProvider], (id) => ({
 					id,
 					name: id,
 				})),
-				models: [
-					{ provider: providerId, id: modelId },
-					{ provider: providerId, id: otherModel },
-					{ provider: otherProvider, id: otherModel },
-				].map(({ provider, id }) =>
-					Config.Model.make({
-						provider,
-						id,
-						name: id,
-						reasoningEfforts: ["high", "low"],
-						serviceTiers: ["priority"],
-					}),
+				models: Arr.map(
+					[
+						{ provider: providerId, id: modelId },
+						{ provider: providerId, id: otherModel },
+						{ provider: otherProvider, id: otherModel },
+					],
+					({ provider, id }) =>
+						Config.Model.make({
+							provider,
+							id,
+							name: id,
+							reasoningEfforts: ["high", "low"],
+							serviceTiers: ["priority"],
+						}),
 				),
 			})
 			const options = Config.Selection.make({
@@ -406,8 +403,8 @@ it.effect(
 				chat,
 				input: "model switch input",
 			})
-			assertRebuilt(prompts.at(-1), "model switch input")
-			assert.notMatch(JSON.stringify(prompts.at(-1)), /first input/)
+			yield* assertRebuilt(prompts.at(-1), "model switch input")
+			assert.notMatch(yield* json(prompts.at(-1)), /first input/)
 			assert.strictEqual(modelTurn.state.conversation.context._tag, "Prompt")
 			assert.deepStrictEqual(
 				Chat.currentTurn(modelTurn.chat)!.settings.model,
@@ -444,7 +441,7 @@ it.effect(
 				chat,
 				input: "provider switch input",
 			})
-			assertRebuilt(prompts.at(-1), "provider switch input")
+			yield* assertRebuilt(prompts.at(-1), "provider switch input")
 			assert.strictEqual(providerTurn.state.conversation.context._tag, "Prompt")
 			assert.deepStrictEqual(
 				Chat.currentTurn(providerTurn.chat)!.settings.model,

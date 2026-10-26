@@ -7,19 +7,21 @@ export interface Options {
 	readonly maxSteps: number
 }
 
-export class InvalidMaxSteps extends Schema.TaggedError<InvalidMaxSteps>()(
-	"InvalidMaxSteps",
-	{
-		// The value is the bad input, so it can be NaN or Infinity.
-		// @effect-diagnostics-next-line schemaNumber:off
-		maxSteps: Schema.Number,
-	},
-) {}
+export class InvalidMaxSteps extends Schema.TaggedError<
+	InvalidMaxSteps,
+	{ readonly brand: unique symbol }
+>()("InvalidMaxSteps", {
+	// @effect-diagnostics-next-line schemaNumber:off -- The value is the bad input, so it can be NaN or Infinity.
+	maxSteps: Schema.Number,
+}) {}
 
-export class ModelStepLimitExceeded extends Schema.TaggedError<ModelStepLimitExceeded>()(
-	"ModelStepLimitExceeded",
-	{ maxSteps: Schema.Int, history: Prompt.Prompt },
-) {}
+export class ModelStepLimitExceeded extends Schema.TaggedError<
+	ModelStepLimitExceeded,
+	{ readonly brand: unique symbol }
+>()("ModelStepLimitExceeded", {
+	maxSteps: Schema.Int,
+	history: Prompt.Prompt,
+}) {}
 
 /** Limits each execution on its own, through the ReAct middleware chain. */
 export const make = ({

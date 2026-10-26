@@ -1,5 +1,5 @@
 import { Config, ContextCompaction } from "@openbot-build/core"
-import { Effect, Option } from "effect"
+import { Array as Arr, Effect, Option, Record as Rec } from "effect"
 import { Tool } from "effect/ai"
 
 /** About four characters of JSON make one token. It is a guess, not a count. */
@@ -16,7 +16,7 @@ const schemaOf = (tool: Tool.Any): unknown =>
  */
 export const estimate = (request: ContextCompaction.Request): number => {
 	const window = request.window
-	const tools = Object.values(request.toolkit.tools).map((tool) => [
+	const tools = Arr.map(Rec.values(request.toolkit.tools), (tool) => [
 		tool.name,
 		tool.description,
 		schemaOf(tool),

@@ -1,8 +1,16 @@
-// These helpers send one request and read its answer. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
-import { Effect, Option, Predicate, Schema } from "effect"
+import type { ComputersApi } from "@openbot-build/api"
+import {
+	Cause,
+	Effect,
+	Option,
+	Predicate,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
+import { Base64 } from "effect/encoding"
 import type { HttpClient, HttpClientRequest } from "effect/http"
-import { ComputerCallFailed } from "./Computer.ts"
+import { ComputerCallFailed, type ComputerError } from "./Computer.ts"
 
 /** The answer of the provider, with the whole body. */
 export interface Reply {
@@ -11,6 +19,7 @@ export interface Reply {
 }
 
 const decoder = new TextDecoder()
+const encoder = new TextEncoder()
 
 export const timedOut = Effect.fail(
 	ComputerCallFailed.make({
@@ -18,6 +27,27 @@ export const timedOut = Effect.fail(
 		retry: true,
 	}),
 )
+
+/**
+ * The request did not reach the provider, or its answer did not come back. The
+ * message stays short, because it goes to clients. The cause holds the reason,
+ * such as a refused connection, and the address of the request.
+ */
+export const unreachable = (cause: unknown) =>
+	ComputerCallFailed.make({
+		message: "The Computer provider could not be reached",
+		retry: true,
+		cause,
+	})
+
+/**
+ * Logs a call failure that has an inside cause, with that cause. The message of
+ * a failure without one, such as a wrong key, says enough, so it is not logged.
+ */
+export const logCause = (error: ComputerError) =>
+	error._tag === "ComputerCallFailed" && error.cause !== undefined
+		? Effect.logWarning("A Computer provider call failed", Cause.fail(error))
+		: Effect.void
 
 /** Sends one request and reads the whole body. Any HTTP status is a reply. */
 export const send = (
@@ -32,12 +62,7 @@ export const send = (
 				body: new Uint8Array(buffer),
 			})),
 		),
-		Effect.mapError((cause) =>
-			ComputerCallFailed.make({
-				message: `The Computer provider could not be reached: ${String(cause)}`,
-				retry: true,
-			}),
-		),
+		Effect.mapError(unreachable),
 		Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => timedOut }),
 	)
 
@@ -82,7 +107,7 @@ const detail = (reply: Reply) => {
 		string(body, "message") ??
 		string(body, "error") ??
 		string(field(body, "error"), "message")
-	return message === undefined ? "" : `: ${message.slice(0, 300)}`
+	return message === undefined ? "" : `: ${pipe(message, Str.slice(0, 300))}`
 }
 
 /** Turns a failed answer into a call failure. A wrong key does not get better with a retry. */
@@ -95,8 +120,36 @@ export const failed = (reply: Reply, what: string) =>
 		retry: reply.status === 429 || reply.status >= 500,
 	})
 
+/** The bytes of a file as the API gives them, as UTF-8 text or in base64. */
+export const fileContent = (
+	path: string,
+	encoding: ComputersApi.FileEncoding,
+	bytes: Uint8Array,
+): ComputersApi.FileContent => ({
+	path,
+	encoding,
+	content: encoding === "base64" ? Base64.encode(bytes) : decoder.decode(bytes),
+})
+
+/** The bytes of a file that the API gives, as UTF-8 text or in base64. */
+export const fileBytes = (
+	file: ComputersApi.FileContent,
+): Effect.Effect<Uint8Array, ComputerCallFailed> =>
+	file.encoding === "base64"
+		? Base64.decode(file.content).pipe(
+				Effect.fromResult,
+				Effect.mapError((error) =>
+					ComputerCallFailed.make({
+						message: `The file content is not valid base64: ${error.message}`,
+						retry: false,
+					}),
+				),
+			)
+		: Effect.succeed(encoder.encode(file.content))
+
 /** Quotes a value for `bash`, so the shell reads it as one word. */
-export const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
+export const quote = (value: string) =>
+	`'${pipe(value, Str.replaceAll("'", `'\\''`))}'`
 
 /** Reads the size of a PNG image from its header. */
 export const pngSize = (bytes: Uint8Array) => {

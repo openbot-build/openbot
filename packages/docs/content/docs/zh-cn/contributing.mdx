@@ -84,7 +84,8 @@ devenv 会为每个服务选择一个空闲端口。它从基础端口开始：P
 | -------------------------------------------------------- | ------------------------------------------------------------ |
 | `devenv shell -- pnpm install`                           | 安装所有包。                                                 |
 | `devenv shell -- pnpm build`                             | 用 tsdown 构建每个包。                                       |
-| `devenv shell -- pnpm typecheck`                         | 检查每个包的类型。                                           |
+| `devenv shell -- pnpm typecheck`                         | 检查每个包的类型和 Effect 规则。                             |
+| `devenv shell -- pnpm rules`                             | 只检查 `scripts/effect-rules.ts` 中的 Effect 规则。          |
 | `devenv shell -- pnpm -r test`                           | 运行每个包的测试。                                           |
 | `devenv shell -- pnpm test`                              | 在一次 Vitest 运行中运行所有包的测试，不构建，也不检查类型。 |
 | `devenv shell -- pnpm --filter @openbot-build/core test` | 运行一个包的测试。                                           |
@@ -181,8 +182,9 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 契约中的一个操作开始。然后由服务器处理它。每个操作都必须既能用用户令牌，也能用登录 cookie。它还必须用
 `Required` 或 `GroupRequired`
 注解说明自己需要对哪个资源的哪个操作。`packages/api/src/Authorization.ts`
-中的辅助函数 `own`、`organization` 和 `channel`
-用来生成这些注解。请看[权限](/zh-cn/docs/permissions)。
+中的辅助函数 `own`、`organization`、`channel` 和 `channels`
+用来生成这些注解。一个要求只能使用它的端点有的路径参数。`packages/api`
+中的一个测试会检查这一点。请看[权限](/zh-cn/docs/permissions)。
 
 授权代码来自 [ability](https://github.com/nmnmcc/ability) 库，也就是 npm 包
 `@nmnmcc/ability`。它的版本固定在 `package.json` 中。
@@ -195,6 +197,57 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 
 使用 Effect 的不可变数据类型，例如 `HashMap`、`Chunk` 和
 `Option`。只有真正需要时，才使用 JavaScript 的可变类型。
+
+### Effect 规则
+
+OpenBot 用 [Effect](https://effect.website)
+编写。有两项检查让代码保持 Effect 的写法。`pnpm typecheck`
+会运行这两项检查，GitHub Actions 会对每个改动运行 `pnpm typecheck`。
+
+第一项检查是 Effect 语言服务。它是 TypeScript 编译器的插件，配置在
+`tsconfig.base.json` 中。它的规则都是错误，所以 `tsc`
+会在这些地方停下。这些规则要求的内容包括：
+
+- 用 Effect 的 `Array`、`String` 和 `Record` 模块代替原生方法，导入名分别是
+  `Arr`、`Str` 和 `Rec`；
+- 时间用 `Clock` 和 `DateTime`，随机值和 ID 用 `Random` 和 `Crypto`
+  服务，环境变量用 `Config`；
+- 用 `HttpClient` 代替 `fetch`，用 `FileSystem`、`Path` 和 `ChildProcess`
+  服务代替 Node.js 模块；
+- JSON 和外部数据用 Effect Schema，通过 Effect 解码，不用 `*Sync` 函数；
+- 错误用 `Schema.TaggedError`，每个 Schema 类都带 brand；
+- 用 `Effect.gen` 和 `Effect.fn` 代替 `async` 函数和 `new Promise`；
+- 测试中用 `@effect/vitest` 的 `it.effect`、`it.live` 和 `it.layer`。
+
+有三条规则是关闭的。`apiStabilityLeak` 和 `unstableApiUsage`
+关闭，是因为 API 契约建立在 `effect/http-api` 上，而 Effect 把它标为不稳定。
+`missingPipeableSignature`
+关闭，是因为给每个导出函数加上可管道的形式只对库有用，对应用没有用。
+
+第二项检查是
+`scripts/effect-rules.ts`。它读取每个 TypeScript 文件，检查语言服务看不到的规则：
+
+| 规则               | 它禁止什么                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `blind-error-map`  | `Effect.mapError(() => ...)`、`Effect.orElseFail(() => ...)` 和 `catch: () => ...`，它们会丢掉失败的原因。按名字传入的处理函数也算在内，只要同一文件把它声明为没有参数的函数。 |
+| `throw`            | `throw`。用有类型的错误失败；代码自身的规则被破坏时用 `Effect.die`；测试中用 `assert.fail`。                                                                                   |
+| `run-outside-main` | 在程序入口（`*Main.ts` 文件）之外使用 `Effect.runPromise` 和其他 `run` 函数。                                                                                                  |
+| `fork-daemon`      | `Effect.forkDetach`。应在 scope 中 fork fiber，或把它放进 `FiberSet` 或 `FiberMap`。                                                                                           |
+| `promise-then`     | 用 `.then` 串联 Promise。应把 Promise 转成 Effect。                                                                                                                            |
+| `directive-reason` | 没有写原因的规则指令。                                                                                                                                                         |
+
+有些代码必须保持原生写法，因为外部 API 要求这样，或者 Effect 没有对应的 API。例如必须返回
+`Date`
+的 Drizzle 回调、SDK 的 Promise 回调，以及 HMAC 签名。这时只对一行关闭规则，并在
+`--` 后写明原因：
+
+```ts
+// @effect-diagnostics-next-line globalDate:off -- Drizzle calls this outside Effect and needs a Date.
+// @effect-rules-next-line throw -- The SDK reads a thrown error as a failed call.
+```
+
+指令绝不是省事的办法。测试是程序入口，所以 `test/` 文件夹中关闭了
+`strictEffectProvide`。
 
 ### 小而真实的改动
 

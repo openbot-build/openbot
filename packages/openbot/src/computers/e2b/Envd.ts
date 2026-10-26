@@ -1,19 +1,20 @@
-// These calls take a connection and a request, like the envd API. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import type { ComputersApi } from "@openbot-build/api"
 import {
-	Clock,
+	Array as Arr,
 	Deferred,
 	Effect,
 	Option,
+	Record as Rec,
 	Ref,
 	Result,
 	Schema,
 	type Scope,
 	Stream,
+	String as Str,
 } from "effect"
 import { Base64 } from "effect/encoding"
 import { type HttpClient, HttpClientRequest } from "effect/http"
+import * as Background from "../../app/Background.ts"
 import {
 	ComputerCallFailed,
 	type RunRequest,
@@ -37,6 +38,7 @@ import {
 	string,
 	type Tail,
 	tailText,
+	unreachable,
 } from "../Http.ts"
 
 /**
@@ -57,10 +59,10 @@ export const envdPort = 49983
  * The sandbox proxy answers 502 when the sandbox is not running, such as when it is
  * paused or gone. The caller then asks the platform API to resume it.
  */
-export class SandboxAway extends Schema.TaggedError<SandboxAway>()(
-	"SandboxAway",
-	{},
-) {}
+export class SandboxAway extends Schema.TaggedError<
+	SandboxAway,
+	{ readonly brand: unique symbol }
+>()("SandboxAway", {}) {}
 
 /** The user of the E2B templates. Old envd versions need it, and new ones accept it. */
 const user = "user"
@@ -177,7 +179,7 @@ export const list = (
 	}).pipe(
 		Effect.map((body) => {
 			const entries = field(body, "entries")
-			return Array.isArray(entries) ? entries.map(entry) : []
+			return Arr.isArray(entries) ? Arr.map(entries, entry) : []
 		}),
 	)
 
@@ -229,18 +231,18 @@ const bytesOf = (value: string | undefined) =>
 		? new Uint8Array(0)
 		: Result.getOrElse(Base64.decode(value), () => new Uint8Array(0))
 
+/** The error in the last envelope of a stream, or `undefined` when there is none. */
+const streamError = (message: unknown) => {
+	const error = field(message, "error")
+	return error === undefined
+		? undefined
+		: (string(error, "message") ?? string(error, "code") ?? "unknown error")
+}
+
 const onMessage = (output: Output, flags: number, message: unknown): Output => {
 	if ((flags & endOfStream) !== 0) {
-		const error = field(message, "error")
-		return error === undefined
-			? output
-			: {
-					...output,
-					error:
-						string(error, "message") ??
-						string(error, "code") ??
-						"unknown error",
-				}
+		const error = streamError(message)
+		return error === undefined ? output : { ...output, error }
 	}
 	const event = field(message, "event")
 	const start = field(event, "start")
@@ -273,142 +275,24 @@ const onMessage = (output: Output, flags: number, message: unknown): Output => {
 	return output
 }
 
+interface Envelope {
+	readonly flags: number
+	readonly message: unknown
+}
+
 /** Reads all the whole envelopes in the bytes so far, and keeps the rest for the next chunk. */
-const onChunk = (output: Output, chunk: Uint8Array): Output => {
-	const joined = new Uint8Array(output.pending.length + chunk.length)
-	joined.set(output.pending, 0)
-	joined.set(chunk, output.pending.length)
-	const view = new DataView(joined.buffer)
-	let next: Output = output
-	let offset = 0
-	while (offset + 5 <= joined.length) {
-		const flags = view.getUint8(offset)
-		const length = view.getUint32(offset + 1)
-		if (offset + 5 + length > joined.length) break
-		const body = new TextDecoder().decode(
-			joined.subarray(offset + 5, offset + 5 + length),
-		)
-		next = onMessage(next, flags, parseJson(body))
-		offset += 5 + length
-	}
-	return { ...next, pending: joined.slice(offset) }
-}
-
-/**
- * Runs a command with `bash -lc` and waits for its end. At the timeout, OpenBot kills
- * the process and gives back the output so far, with `exitCode: null`.
- */
-export const run = (
-	client: HttpClient.HttpClient,
-	connection: Connection,
-	request: RunRequest,
-) =>
-	Effect.gen(function* () {
-		const startedAt = yield* Clock.currentTimeMillis
-		const state = yield* Ref.make(startOutput)
-		const timeoutMs = (request.timeout ?? 60) * 1000
-		const http = HttpClientRequest.post(
-			`${connection.url}/process.Process/Start`,
-		).pipe(
-			HttpClientRequest.setHeaders({
-				...headers(connection),
-				"connect-protocol-version": "1",
-				// envd sends keepalive events at this interval, in seconds, so that
-				// proxies do not close a quiet stream.
-				"keepalive-ping-interval": "50",
-			}),
-			HttpClientRequest.bodyUint8Array(
-				envelope({
-					process: {
-						cmd: "/bin/bash",
-						args: ["-l", "-c", request.command],
-						envs: request.env ?? {},
-						...(request.cwd === undefined ? {} : { cwd: request.cwd }),
-					},
-					stdin: false,
-				}),
-				"application/connect+json",
-			),
-		)
-		const finished = yield* client.execute(http).pipe(
-			Effect.mapError((cause) =>
-				ComputerCallFailed.make({
-					message: `The Computer provider could not be reached: ${String(cause)}`,
-					retry: true,
-				}),
-			),
-			Effect.flatMap((response) =>
-				response.status === 200
-					? response.stream.pipe(
-							Stream.mapError((cause) =>
-								ComputerCallFailed.make({
-									message: `The Computer provider could not be reached: ${String(cause)}`,
-									retry: true,
-								}),
-							),
-							Stream.runForEach((chunk) =>
-								Ref.update(state, (output) => onChunk(output, chunk)),
-							),
-						)
-					: Effect.flatMap(
-							Effect.mapError(response.arrayBuffer, (cause) =>
-								ComputerCallFailed.make({
-									message: `The Computer provider could not be reached: ${String(cause)}`,
-									retry: true,
-								}),
-							),
-							(buffer) =>
-								checked(
-									{ status: response.status, body: new Uint8Array(buffer) },
-									"Running the command",
-								),
-						),
-			),
-			Effect.timeoutOption(timeoutMs),
-		)
-		const output = yield* Ref.get(state)
-		const endedAt = yield* Clock.currentTimeMillis
-		if (Option.isNone(finished) && output.pid !== undefined)
-			yield* unary(client, connection, "process.Process/SendSignal", {
-				process: { pid: output.pid },
-				signal: "SIGNAL_SIGKILL",
-			}).pipe(Effect.ignore)
-		if (Option.isSome(finished) && output.exitCode === undefined)
-			return yield* ComputerCallFailed.make({
-				message: `The command did not finish: ${output.error ?? "the stream ended early"}`,
-				retry: true,
-			})
-		return {
-			exitCode: Option.isNone(finished) ? null : (output.exitCode ?? null),
-			stdout: tailText(output.stdout),
-			stderr: tailText(output.stderr),
-			truncated: output.stdout.truncated || output.stderr.truncated,
-			durationMs: endedAt - startedAt,
-		} satisfies RunResult
-	})
-
-/** The signals that envd sends itself. The other signals go through `kill`. */
-const envdSignals: Partial<Record<ComputersApi.SessionSignal, string>> = {
-	SIGKILL: "SIGNAL_SIGKILL",
-	SIGTERM: "SIGNAL_SIGTERM",
-}
-
-/** The words that Go uses for signals in the status of a process. */
-const signalWords: Record<string, string> = {
-	killed: "SIGKILL",
-	terminated: "SIGTERM",
-	interrupt: "SIGINT",
-	hangup: "SIGHUP",
-	quit: "SIGQUIT",
-}
-
-/** Reads the events of a process stream from whole envelopes, and keeps the rest. */
-const events = (pending: Uint8Array, chunk: Uint8Array) => {
+const events = (
+	pending: Uint8Array,
+	chunk: Uint8Array,
+): {
+	readonly found: ReadonlyArray<Envelope>
+	readonly pending: Uint8Array
+} => {
 	const joined = new Uint8Array(pending.length + chunk.length)
 	joined.set(pending, 0)
 	joined.set(chunk, pending.length)
 	const view = new DataView(joined.buffer)
-	const found: Array<{ readonly flags: number; readonly message: unknown }> = []
+	const found: Array<Envelope> = []
 	let offset = 0
 	while (offset + 5 <= joined.length) {
 		const flags = view.getUint8(offset)
@@ -423,6 +307,113 @@ const events = (pending: Uint8Array, chunk: Uint8Array) => {
 	return { found, pending: joined.slice(offset) }
 }
 
+const onChunk = (output: Output, chunk: Uint8Array): Output => {
+	const next = events(output.pending, chunk)
+	const first: Output = { ...output, pending: next.pending }
+	return Arr.reduce(next.found, first, (acc, each) =>
+		onMessage(acc, each.flags, each.message),
+	)
+}
+
+/** The request that starts a command with `bash -lc`. */
+const startRequest = (
+	connection: Connection,
+	request: Pick<RunRequest, "command" | "cwd" | "env">,
+	extra: Readonly<Record<string, unknown>>,
+) =>
+	HttpClientRequest.post(`${connection.url}/process.Process/Start`).pipe(
+		HttpClientRequest.setHeaders({
+			...headers(connection),
+			"connect-protocol-version": "1",
+			// envd sends keepalive events at this interval, in seconds, so that
+			// proxies do not close a quiet stream.
+			"keepalive-ping-interval": "50",
+		}),
+		HttpClientRequest.bodyUint8Array(
+			envelope({
+				process: {
+					cmd: "/bin/bash",
+					args: ["-l", "-c", request.command],
+					envs: request.env ?? {},
+					...(request.cwd === undefined ? {} : { cwd: request.cwd }),
+				},
+				...extra,
+			}),
+			"application/connect+json",
+		),
+	)
+
+/**
+ * Runs a command with `bash -lc` and waits for its end. At the timeout, OpenBot kills
+ * the process and gives back the output so far, with `exitCode: null`.
+ */
+export const run = (
+	client: HttpClient.HttpClient,
+	connection: Connection,
+	request: RunRequest,
+) =>
+	Effect.gen(function* () {
+		const state = yield* Ref.make(startOutput)
+		const timeoutMs = (request.timeout ?? 60) * 1000
+		const http = startRequest(connection, request, { stdin: false })
+		const finished = yield* client.execute(http).pipe(
+			Effect.mapError(unreachable),
+			Effect.flatMap((response) =>
+				response.status === 200
+					? response.stream.pipe(
+							Stream.mapError(unreachable),
+							Stream.runForEach((chunk) =>
+								Ref.update(state, (output) => onChunk(output, chunk)),
+							),
+						)
+					: Effect.flatMap(
+							Effect.mapError(response.arrayBuffer, unreachable),
+							(buffer) =>
+								checked(
+									{ status: response.status, body: new Uint8Array(buffer) },
+									"Running the command",
+								),
+						),
+			),
+			Effect.timeoutOption(timeoutMs),
+		)
+		const output = yield* Ref.get(state)
+		if (Option.isNone(finished) && output.pid !== undefined)
+			yield* unary(client, connection, "process.Process/SendSignal", {
+				process: { pid: output.pid },
+				signal: "SIGNAL_SIGKILL",
+			}).pipe(
+				Background.logFailure(
+					"OpenBot could not stop an E2B command after its timeout",
+				),
+			)
+		if (Option.isSome(finished) && output.exitCode === undefined)
+			return yield* ComputerCallFailed.make({
+				message: `The command did not finish: ${output.error ?? "the stream ended early"}`,
+				retry: true,
+			})
+		return {
+			exitCode: Option.isNone(finished) ? null : (output.exitCode ?? null),
+			stdout: tailText(output.stdout),
+			stderr: tailText(output.stderr),
+		} satisfies RunResult
+	})
+
+/** The signals that envd sends itself. The other signals go through `kill`. */
+const envdSignals: Partial<Record<ComputersApi.SessionSignal, string>> = {
+	SIGKILL: "SIGNAL_SIGKILL",
+	SIGTERM: "SIGNAL_SIGTERM",
+}
+
+/** The words that Go uses for signals in the status of a process. */
+const signalWords: Readonly<Record<string, string>> = {
+	killed: "SIGKILL",
+	terminated: "SIGTERM",
+	interrupt: "SIGINT",
+	hangup: "SIGHUP",
+	quit: "SIGQUIT",
+}
+
 /**
  * Starts a command with `bash -lc` and gives its output as it comes. With `tty`, envd
  * gives it a terminal. Closing the Scope kills the process.
@@ -434,40 +425,19 @@ export const start = (
 ): Effect.Effect<Process, ComputerCallFailed | SandboxAway, Scope.Scope> =>
 	Effect.gen(function* () {
 		const sink = yield* ProcessSink.make
-		const pid = yield* Deferred.make<number>()
-		const unreachable = (cause: unknown) =>
-			ComputerCallFailed.make({
-				message: `The Computer provider could not be reached: ${String(cause)}`,
-				retry: true,
-			})
-		const http = HttpClientRequest.post(
-			`${connection.url}/process.Process/Start`,
-		).pipe(
-			HttpClientRequest.setHeaders({
-				...headers(connection),
-				"connect-protocol-version": "1",
-				"keepalive-ping-interval": "50",
-			}),
-			HttpClientRequest.bodyUint8Array(
-				envelope({
-					process: {
-						cmd: "/bin/bash",
-						args: ["-l", "-c", request.command],
-						envs: request.env ?? {},
-						...(request.cwd === undefined ? {} : { cwd: request.cwd }),
-					},
-					...(request.tty
-						? {
-								pty: {
-									size: { rows: request.rows ?? 24, cols: request.cols ?? 80 },
-								},
-							}
-						: {}),
-					stdin: true,
-				}),
-				"application/connect+json",
-			),
-		)
+		// The stream fails it when it ends with no start event, so nobody waits
+		// for a pid that cannot come.
+		const pid = yield* Deferred.make<number, ComputerCallFailed>()
+		const http = startRequest(connection, request, {
+			...(request.tty
+				? {
+						pty: {
+							size: { rows: request.rows ?? 24, cols: request.cols ?? 80 },
+						},
+					}
+				: {}),
+			stdin: true,
+		})
 		const response = yield* client
 			.execute(http)
 			.pipe(Effect.mapError(unreachable))
@@ -487,23 +457,16 @@ export const start = (
 				),
 			)
 		}
-		let pending = new Uint8Array(0)
-		let ended = false
+		/** True when envd reported the end of the process. */
+		const ended = yield* Ref.make(false)
+		/** Marks the end. It gives true only the first time. */
+		const firstEnd = Effect.map(Ref.getAndSet(ended, true), (done) => !done)
 		const onEvent = (flags: number, message: unknown) =>
 			Effect.gen(function* () {
 				if ((flags & endOfStream) !== 0) {
-					const error = field(message, "error")
-					if (error !== undefined && !ended) {
-						ended = true
-						yield* sink.end({
-							code: null,
-							signal: null,
-							error:
-								string(error, "message") ??
-								string(error, "code") ??
-								"unknown error",
-						})
-					}
+					const error = streamError(message)
+					if (error !== undefined && (yield* firstEnd))
+						yield* sink.end({ code: null, signal: null, error })
 					return
 				}
 				const event = field(message, "event")
@@ -519,8 +482,7 @@ export const start = (
 					yield* sink.push(bytesOf(string(data, "stderr")))
 					yield* sink.push(bytesOf(string(data, "pty")))
 				}
-				if (end !== undefined && !ended) {
-					ended = true
+				if (end !== undefined && (yield* firstEnd)) {
 					const error = string(end, "error")
 					const status = string(end, "status") ?? ""
 					// Go names the signal in words, such as `signal: killed`.
@@ -528,7 +490,9 @@ export const start = (
 					const killed =
 						word === undefined
 							? undefined
-							: (signalWords[word] ?? word.toUpperCase())
+							: Option.getOrElse(Rec.get(signalWords, word), () =>
+									Str.toUpperCase(word),
+								)
 					yield* sink.end({
 						// Protobuf JSON leaves out a value of zero, so a missing exit code is 0.
 						code: killed === undefined ? (number(end, "exitCode") ?? 0) : null,
@@ -538,24 +502,34 @@ export const start = (
 				}
 			})
 		yield* response.stream.pipe(
-			Stream.runForEach((chunk) =>
-				Effect.gen(function* () {
+			Stream.mapAccum(
+				(): Uint8Array => new Uint8Array(0),
+				(pending, chunk) => {
 					const next = events(pending, chunk)
-					pending = next.pending
-					for (const each of next.found)
-						yield* onEvent(each.flags, each.message)
-				}),
+					return [next.pending, next.found] as const
+				},
 			),
-			Effect.ignoreCause,
+			Stream.runForEach((each) => onEvent(each.flags, each.message)),
+			Background.logFailure("The E2B process stream failed"),
+			Effect.annotateLogs({ sandbox: connection.sandboxId }),
 			Effect.ensuring(
-				Effect.suspend(() =>
-					ended
-						? Effect.void
-						: sink.end({
-								code: null,
-								signal: null,
-								error: "The stream ended early.",
-							}),
+				Deferred.fail(
+					pid,
+					ComputerCallFailed.make({
+						message: "The command did not start.",
+						retry: true,
+					}),
+				).pipe(
+					Effect.andThen(Ref.get(ended)),
+					Effect.flatMap((done) =>
+						done
+							? Effect.void
+							: sink.end({
+									code: null,
+									signal: null,
+									error: "The stream ended early.",
+								}),
+					),
 				),
 			),
 			Effect.forkScoped,
@@ -590,18 +564,28 @@ export const start = (
 		const signal = (name: ComputersApi.SessionSignal) =>
 			withPid((value) => {
 				const own = envdSignals[name]
+				const bare = Str.slice(3)(name)
 				return own !== undefined
 					? unary(client, connection, "process.Process/SendSignal", {
 							process: { pid: value },
 							signal: own,
 						})
 					: run(client, connection, {
-							command: `kill -s ${name.slice(3)} -- -${value} 2>/dev/null || kill -s ${name.slice(3)} ${value}`,
+							command: `kill -s ${bare} -- -${value} 2>/dev/null || kill -s ${bare} ${value}`,
 							timeout: 10,
 						})
 			}).pipe(Effect.asVoid)
+		// A finalizer cannot be stopped, so the kill has its own time limit.
 		yield* Effect.addFinalizer(() =>
-			ended ? Effect.void : Effect.ignore(signal("SIGKILL")),
+			Effect.flatMap(Ref.get(ended), (done) =>
+				done
+					? Effect.void
+					: signal("SIGKILL").pipe(
+							Effect.timeout("10 seconds"),
+							Background.logFailure("OpenBot could not stop an E2B process"),
+							Effect.annotateLogs({ sandbox: connection.sandboxId }),
+						),
+			),
 		)
 		const process: Process = {
 			output: sink.output,

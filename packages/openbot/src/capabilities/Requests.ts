@@ -1,5 +1,4 @@
 import { Settings } from "../settings/Settings.ts"
-import { randomUUID } from "node:crypto"
 import type { Chat, Turn } from "@openbot-build/core"
 import {
 	BotsApi,
@@ -7,7 +6,18 @@ import {
 	type CodeRunsApi,
 	RequestsApi,
 } from "@openbot-build/api"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import { BotRecords } from "../bots/BotRecords.ts"
 import { Chain } from "../chats/ChatHost.ts"
 import { Grants } from "./Grants.ts"
@@ -47,15 +57,19 @@ export const superior = ({
 }: {
 	readonly deciders: ReadonlyArray<BotsApi.BotId>
 	readonly userId: string
-	readonly bot: string
-}): Approver => {
-	const index = deciders.indexOf(bot as BotsApi.BotId)
-	return index > 0
-		? { _tag: "Bot", bot: deciders[index - 1]! }
-		: { _tag: "Person", userId }
-}
+	readonly bot: BotsApi.BotId
+}): Approver =>
+	pipe(
+		Arr.findFirstIndex(deciders, (id) => id === bot),
+		Option.filter((index) => index > 0),
+		Option.flatMap((index) => Arr.get(deciders, index - 1)),
+		Option.match({
+			onNone: (): Approver => ({ _tag: "Person", userId }),
+			onSome: (bot): Approver => ({ _tag: "Bot", bot }),
+		}),
+	)
 
-const above = (stored: Stored, bot: string) =>
+const above = (stored: Stored, bot: BotsApi.BotId) =>
 	superior({
 		deciders: stored.request.chain,
 		userId: stored.chain.userId,
@@ -73,19 +87,15 @@ export const chatOf = ({
 	current,
 }: {
 	readonly chain: Chain
-	readonly bot: string
+	readonly bot: BotsApi.BotId
 	readonly current: Chat.Id
-}) => {
-	const index = chain.bots
-		.slice(0, chain.chats.length)
-		.lastIndexOf(bot as BotsApi.BotId)
-	return index >= 0 ? chain.chats[index]! : current
-}
-
-const approverKey = (approver: Approver) =>
-	approver._tag === "Person"
-		? "person:" + approver.userId
-		: "bot:" + approver.bot
+}): Chat.Id =>
+	pipe(
+		Arr.zip(chain.bots, chain.chats),
+		Arr.findLast(([id]) => id === bot),
+		Option.map(([, chat]) => chat),
+		Option.getOrElse(() => current),
+	)
 
 export interface Decision {
 	readonly by: BotsApi.Decider
@@ -184,7 +194,6 @@ export class Requests extends Context.Service<
 			| RequestsApi.RequestConflict
 			| BotsApi.BotStorageUnavailable
 		>
-		/** Closes pending requests whose time is over. Returns the closed requests. */
 		/**
 		 * Sends a pending request to the next decider without support, for example when a
 		 * review ended without a decision.
@@ -199,6 +208,11 @@ export class Requests extends Context.Service<
 			organizationId: string,
 			id: string,
 		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
+		/**
+		 * Closes pending requests whose time is over. Returns the closed requests. A request
+		 * that cannot be closed is logged and stays pending, so the next run tries it again.
+		 * The error comes only from the read of the pending requests.
+		 */
 		readonly expire: Effect.Effect<
 			ReadonlyArray<{
 				readonly organizationId: string
@@ -220,10 +234,14 @@ export const defaultTimeout = 24 * 60 * 60 * 1000
 export const make: Effect.Effect<
 	typeof Requests.Service,
 	never,
-	BotRecords | Grants | Rules | Settings
+	BotRecords | Grants | Rules | Settings | Crypto.Crypto
 > = Effect.gen(function* () {
 	const settings = yield* Settings
 	const records = yield* BotRecords
+	const crypto = yield* Crypto.Crypto
+	const newId = crypto
+		.randomUUIDv4()
+		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const grants = yield* Grants
 	const rules = yield* Rules
 	const requests = records.collection(
@@ -235,15 +253,30 @@ export const make: Effect.Effect<
 	const timeoutOf = (organizationId: string) =>
 		settings.organization(organizationId).pipe(
 			Effect.map((current) => current.document.requestTimeoutMs),
-			Effect.orElseSucceed(() => defaultTimeout),
+			// A request must have a time limit, so it gets the default one.
+			Effect.catch((error) =>
+				Effect.logWarning(
+					"The request timeout of the organization could not be read, so the request uses the default one",
+					error,
+				).pipe(Effect.as(defaultTimeout)),
+			),
 		)
+	/**
+	 * Runs a read-change-write step of one request in a transaction that holds the
+	 * lock of the request, so two steps on the same request never run at the same time.
+	 */
+	const locked = <A, E, R>(
+		organizationId: string,
+		id: string,
+		operation: Effect.Effect<A, E, R>,
+	) => records.transaction("request:" + organizationId + ":" + id, operation)
 	const put = (organizationId: string, stored: Stored) =>
 		requests
 			.put(
 				{
 					organizationId,
 					id: stored.request.id,
-					owner: approverKey(stored.request.approver),
+					owner: deciderKey(stored.request.approver),
 					scope: stored.request.chat,
 					status: stored.request.status,
 				},
@@ -264,7 +297,7 @@ export const make: Effect.Effect<
 				readonly scope: BotsApi.GrantScope
 				readonly reason?: string
 			}> = [
-				...request.endorsements.map((entry) => ({
+				...Arr.map(request.endorsements, (entry) => ({
 					by: { _tag: "Bot" as const, bot: entry.bot },
 					scope: entry.scope,
 					...(entry.reason === undefined ? {} : { reason: entry.reason }),
@@ -277,45 +310,51 @@ export const make: Effect.Effect<
 			]
 			const receivers = [
 				request.bot,
-				...request.endorsements.map((entry) => entry.bot),
+				...Arr.map(request.endorsements, (entry) => entry.bot),
 			]
-			let parent: string | undefined = undefined
-			for (let index = receivers.length - 1; index >= 0; index--) {
-				const bot = receivers[index]!
-				const giver = givers[index]!
-				const grant: BotsApi.Grant = yield* grants.create(
-					organizationId,
-					{
-						bot,
-						capability: request.capability,
-						effect: "allow",
-						scope: giver.scope,
-						...(giver.scope === "chat"
-							? {
-									chat: chatOf({
-										chain: stored.chain,
-										bot,
-										current: request.chat,
-									}),
-								}
-							: {}),
-						grantedBy: giver.by,
-						...(giver.reason === undefined ? {} : { reason: giver.reason }),
-						...(parent === undefined ? {} : { parent }),
-					},
-					// The call that waits uses a `once` decision when it runs.
-					true,
-				)
-				parent = grant.id
-			}
+			// From the top down, so each Grant can name the Grant above it as its parent.
+			yield* Effect.reduce(
+				Arr.reverse(Arr.zip(receivers, givers)),
+				() => Option.none<string>(),
+				(parent, [bot, giver]) =>
+					grants
+						.create(
+							organizationId,
+							{
+								bot,
+								capability: request.capability,
+								effect: "allow",
+								scope: giver.scope,
+								...(giver.scope === "chat"
+									? {
+											chat: chatOf({
+												chain: stored.chain,
+												bot,
+												current: request.chat,
+											}),
+										}
+									: {}),
+								grantedBy: giver.by,
+								...(giver.reason === undefined ? {} : { reason: giver.reason }),
+								...Option.match(parent, {
+									onNone: () => ({}),
+									onSome: (parent) => ({ parent }),
+								}),
+							},
+							// The call that waits uses a `once` decision when it runs.
+							true,
+						)
+						.pipe(Effect.map((grant) => Option.some(grant.id))),
+			)
 		})
 	const decide: typeof Requests.Service.decide = (
 		organizationId,
 		id,
 		decision,
 	) =>
-		records.transaction(
-			"request:" + organizationId + ":" + id,
+		locked(
+			organizationId,
+			id,
 			Effect.gen(function* () {
 				const found = yield* requests.find(organizationId, id)
 				if (Option.isNone(found))
@@ -333,7 +372,7 @@ export const make: Effect.Effect<
 					return yield* RequestsApi.RequestConflict.make({
 						message: "The request changed. Read it again and retry.",
 					})
-				if (deciderKey(decision.by) !== approverKey(request.approver))
+				if (deciderKey(decision.by) !== deciderKey(request.approver))
 					return yield* RequestsApi.RequestConflict.make({
 						message: "The request waits for another decider.",
 					})
@@ -439,6 +478,35 @@ export const make: Effect.Effect<
 			},
 		})
 	}
+	/**
+	 * Closes one request under its lock, but only when it still waits. A request that
+	 * was decided or closed in the meantime stays as it is. An expired request must also
+	 * be over its time.
+	 */
+	const closePending = (
+		organizationId: string,
+		id: string,
+		status: "expired" | "cancelled",
+	) =>
+		locked(
+			organizationId,
+			id,
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const found = yield* requests.find(organizationId, id)
+				if (
+					Option.isNone(found) ||
+					found.value.request.status !== "pending" ||
+					(status === "expired" && found.value.request.expiresAt > now)
+				)
+					return Option.none()
+				return Option.some(
+					yield* close(organizationId, found.value, status, now),
+				)
+			}),
+		)
+	const expireOne: typeof Requests.Service.expireOne = (organizationId, id) =>
+		closePending(organizationId, id, "expired")
 	return Requests.of({
 		create: (organizationId, input) =>
 			Effect.gen(function* () {
@@ -454,7 +522,7 @@ export const make: Effect.Effect<
 				return yield* put(organizationId, {
 					chain: input.chain,
 					request: {
-						id: "req_" + randomUUID().replaceAll("-", ""),
+						id: "req_" + (yield* newId),
 						bot: input.bot,
 						capability: input.capability,
 						reason: input.reason,
@@ -497,15 +565,16 @@ export const make: Effect.Effect<
 		forPerson: (organizationId, userId, status) =>
 			requests
 				.list(organizationId, {
-					owner: "person:" + userId,
+					owner: deciderKey({ _tag: "Person", userId }),
 					...(status === undefined ? {} : { status }),
 				})
-				.pipe(Effect.map((list) => list.map((stored) => stored.request))),
+				.pipe(Effect.map(Arr.map((stored) => stored.request))),
 		forChat: (organizationId, chat) =>
 			requests.list(organizationId, { scope: chat }),
 		setCall: (organizationId, id, call) =>
-			records.transaction(
-				"request:" + organizationId + ":" + id,
+			locked(
+				organizationId,
+				id,
 				Effect.gen(function* () {
 					const found = yield* requests.find(organizationId, id)
 					if (Option.isNone(found)) return
@@ -515,14 +584,16 @@ export const make: Effect.Effect<
 		pending: requests.withStatus("pending"),
 		decide,
 		pass: (organizationId, id, from) =>
-			records.transaction(
-				"request:" + organizationId + ":" + id,
+			locked(
+				organizationId,
+				id,
 				Effect.gen(function* () {
 					const found = yield* requests.find(organizationId, id)
 					if (
 						Option.isNone(found) ||
 						found.value.request.status !== "pending" ||
-						approverKey(found.value.request.approver) !== "bot:" + from
+						deciderKey(found.value.request.approver) !==
+							deciderKey({ _tag: "Bot", bot: from })
 					)
 						return Option.none()
 					const stored = found.value
@@ -538,48 +609,52 @@ export const make: Effect.Effect<
 					)
 				}),
 			),
-		expireOne: (organizationId, id) =>
-			records.transaction(
-				"request:" + organizationId + ":" + id,
-				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					const found = yield* requests.find(organizationId, id)
-					if (
-						Option.isNone(found) ||
-						found.value.request.status !== "pending" ||
-						found.value.request.expiresAt > now
-					)
-						return Option.none()
-					return Option.some(
-						yield* close(organizationId, found.value, "expired", now),
-					)
-				}),
-			),
+		expireOne,
 		expire: Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
 			const pending = yield* requests.withStatus("pending")
-			return yield* Effect.forEach(
-				pending.filter((entry) => entry.value.request.expiresAt <= now),
+			// The read holds no lock, so each request is checked again under its own lock.
+			// A decision, or another server that closed the request first, wins.
+			const closed = yield* Effect.forEach(
+				Arr.filter(pending, (entry) => entry.value.request.expiresAt <= now),
 				(entry) =>
-					close(entry.organizationId, entry.value, "expired", now).pipe(
-						Effect.map((value) => ({
+					expireOne(entry.organizationId, entry.value.request.id).pipe(
+						Effect.map(
+							Option.map((value) => ({
+								organizationId: entry.organizationId,
+								value,
+							})),
+						),
+						// One request that cannot be closed does not stop the others, because the
+						// caller signals only the requests in the list. Its transaction rolls back,
+						// so it stays pending and the next run tries it again.
+						Effect.catch((error) =>
+							Effect.logWarning(
+								"A request could not be closed. The next check tries again.",
+								error,
+							).pipe(Effect.as(Option.none())),
+						),
+						Effect.annotateLogs({
 							organizationId: entry.organizationId,
-							value,
-						})),
+							request: entry.value.request.id,
+						}),
 					),
 			)
+			return Arr.getSomes(closed)
 		}),
 		cancel: (organizationId, chat) =>
-			Effect.gen(function* () {
-				const now = yield* Clock.currentTimeMillis
-				const list = yield* requests.list(organizationId, {
-					scope: chat,
-					status: "pending",
-				})
-				yield* Effect.forEach(list, (stored) =>
-					close(organizationId, stored, "cancelled", now),
-				)
-			}),
+			requests
+				.list(organizationId, { scope: chat, status: "pending" })
+				.pipe(
+					Effect.flatMap((list) =>
+						Effect.forEach(
+							list,
+							(stored) =>
+								closePending(organizationId, stored.request.id, "cancelled"),
+							{ discard: true },
+						),
+					),
+				),
 	})
 })
 export const layer = Layer.effect(Requests, make)

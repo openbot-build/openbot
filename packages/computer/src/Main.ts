@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { NodeRuntime, NodeServices, NodeSocket } from "@effect/platform-node"
-import { Console, Effect, Layer, Option } from "effect"
+import { Array as Arr, Console, DateTime, Effect, Layer, Option } from "effect"
 import { Command, Flag } from "effect/cli"
 import { FetchHttpClient } from "effect/http"
 import * as Config from "./Config.ts"
@@ -12,6 +12,16 @@ const notPaired = Config.ComputerError.make({
 	message:
 		"This machine is not paired. Run 'openbot computer pair --url <address of OpenBot>' first.",
 })
+
+/**
+ * The time in the local time zone, in the same form as `Date.toLocaleTimeString`.
+ * OpenBot sends the time, so it can be out of the range of a date.
+ */
+const localTime = (ms: number): string =>
+	Option.match(DateTime.make(ms), {
+		onNone: () => "an unknown time",
+		onSome: (time) => DateTime.formatLocal(time, { timeStyle: "medium" }),
+	})
 
 const readSaved = (file: string) =>
 	Config.read(file).pipe(
@@ -42,22 +52,28 @@ const pair = Command.make("pair", {
 				output: {
 					showCode: (pairing, approveUrl) =>
 						Console.log(
-							[
-								`The pairing code is ${pairing.code}.`,
-								"Approve it in your OpenBot client, or send this request with your API key:",
-								`  POST ${approveUrl}`,
-								`The code works until ${new Date(pairing.expiresAt).toLocaleTimeString()}.`,
-								"Waiting for approval...",
-							].join("\n"),
+							Arr.join(
+								[
+									`The pairing code is ${pairing.code}.`,
+									"Approve it in your OpenBot client, or send this request with your API key:",
+									`  POST ${approveUrl}`,
+									`The code works until ${localTime(pairing.expiresAt)}.`,
+									"Waiting for approval...",
+								],
+								"\n",
+							),
 						),
 				},
 			})
 			yield* Console.log(
-				[
-					`OpenBot approved this machine. It is the Computer ${computer}.`,
-					`The token is saved in ${file}.`,
-					"Run 'openbot computer connect' to connect this machine.",
-				].join("\n"),
+				Arr.join(
+					[
+						`OpenBot approved this machine. It is the Computer ${computer}.`,
+						`The token is saved in ${file}.`,
+						"Run 'openbot computer connect' to connect this machine.",
+					],
+					"\n",
+				),
 			)
 		}),
 	),
@@ -94,11 +110,14 @@ const status = Command.make("status").pipe(
 			const file = yield* Config.path
 			const config = yield* readSaved(file)
 			yield* Console.log(
-				[
-					`OpenBot: ${config.url}`,
-					`Machine ID: ${config.machineId}`,
-					`Config file: ${file}`,
-				].join("\n"),
+				Arr.join(
+					[
+						`OpenBot: ${config.url}`,
+						`Machine ID: ${config.machineId}`,
+						`Config file: ${file}`,
+					],
+					"\n",
+				),
 			)
 		}),
 	),
@@ -121,9 +140,8 @@ const program = Command.run(computer, { version: Machine.version }).pipe(
 
 NodeRuntime.runMain(
 	program.pipe(
-		// This is the entry point, so it gives every service at once.
 		// The `ws` WebSocket can send the Authorization header. The global WebSocket cannot.
-		// @effect-diagnostics-next-line strictEffectProvide:off
+		// @effect-diagnostics-next-line strictEffectProvide:off -- This is the entry point, so it gives every service at once.
 		Effect.provide(
 			Layer.mergeAll(
 				NodeServices.layer,

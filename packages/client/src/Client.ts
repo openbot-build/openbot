@@ -63,9 +63,7 @@ export const layer = (options: {
 	readonly organization?: string
 	readonly onUnauthorized?: () => void
 }): Layer.Layer<Client> => {
-	const token = Option.map(Option.fromNullishOr(options.token), (token) =>
-		Redacted.isRedacted(token) ? Redacted.value(token) : token,
-	)
+	const token = Option.fromNullishOr(options.token)
 	const reportUnauthorized = (response: { readonly status: number }) =>
 		Effect.sync(() => {
 			if (response.status === 401) options.onUnauthorized?.()

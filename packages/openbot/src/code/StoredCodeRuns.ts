@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import {
 	CodeRunsApi,
 	ExperienceNotFound,
@@ -6,7 +5,17 @@ import {
 	ChatConflict,
 } from "@openbot-build/api"
 import { and, eq, isNull, lt, or } from "drizzle-orm"
-import { Effect, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Crypto,
+	Effect,
+	Option,
+	Order,
+	Schema,
+} from "effect"
+import { Hex } from "effect/encoding"
+import * as Failures from "../app/Failures.ts"
 import { codeRuns } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
@@ -34,26 +43,86 @@ export type Run = typeof Run.Type
 
 export type Error =
 	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
-/** Keep the errors that callers handle. Every other storage failure becomes one error. */
-export const failure = (error: unknown) =>
-	error instanceof ChatConflict || error instanceof ExperienceNotFound
-		? error
-		: ExperienceStorageUnavailable.make({})
+/** The errors that callers handle. */
+const isHandled = Schema.is(
+	Schema.Union([
+		ChatConflict,
+		ExperienceNotFound,
+		ExperienceStorageUnavailable,
+	]),
+)
+/**
+ * Keeps the errors that callers handle. Every other failure becomes one storage
+ * error, like `Failures.replace`: the log keeps the full cause at level Warn.
+ */
+const storageFailure =
+	(what: string) =>
+	<A, E, R>(effect: Effect.Effect<A, E, R>) =>
+		effect.pipe(
+			// `catchIf` takes the first failure of the cause, so this checks the same one.
+			Effect.tapCauseIf(
+				(cause) =>
+					Option.exists(
+						Cause.findErrorOption(cause),
+						(error) => !isHandled(error),
+					),
+				(cause) => Effect.logWarning(what, cause),
+			),
+			Effect.catchIf(
+				(error): error is Exclude<E, Error> => !isHandled(error),
+				() => Effect.fail(ExperienceStorageUnavailable.make({})),
+			),
+		)
 /** Reads only find nothing or fail to reach the database. */
 export type ReadError = ExperienceNotFound | ExperienceStorageUnavailable
 const codec = Schema.fromJsonString(Run)
 type Sealer = typeof Secrets.Service
 
+const sha256 = (crypto: Crypto.Crypto, text: string) =>
+	crypto
+		.digest("SHA-256", new TextEncoder().encode(text))
+		.pipe(Effect.map(Hex.encode))
+
+const RunKey = Schema.fromJsonString(
+	Schema.Tuple([Schema.String, Schema.String, Schema.String, Schema.String]),
+)
+
 /** The id of the program of one tool call. The same call always gets the same id. */
-export const idOf = (input: {
-	readonly owner: string
-	readonly chat: string
-	readonly turn: string
-	readonly callId: string
-}) =>
-	createHash("sha256")
-		.update(JSON.stringify([input.owner, input.chat, input.turn, input.callId]))
-		.digest("hex")
+export const idOf = (
+	crypto: Crypto.Crypto,
+	input: {
+		readonly owner: string
+		readonly chat: string
+		readonly turn: string
+		readonly callId: string
+	},
+): Effect.Effect<string> =>
+	Schema.encodeEffect(RunKey)([
+		input.owner,
+		input.chat,
+		input.turn,
+		input.callId,
+	]).pipe(
+		Effect.flatMap((key) => sha256(crypto, key)),
+		// Strings always make JSON and SHA-256 is always there, so a failure here is a defect.
+		Effect.orDie,
+	)
+
+const CallKey = Schema.fromJsonString(
+	Schema.Tuple([Schema.String, Schema.JsonObject]),
+)
+
+/** The `argumentsHash` of one App call: the hash of its binding and its arguments. */
+export const argumentsHashOf = (
+	crypto: Crypto.Crypto,
+	binding: string,
+	args: Schema.JsonObject,
+): Effect.Effect<string> =>
+	Schema.encodeEffect(CallKey)([binding, args]).pipe(
+		Effect.flatMap((key) => sha256(crypto, key)),
+		// The arguments came from JSON text and SHA-256 is always there, so a failure here is a defect.
+		Effect.orDie,
+	)
 
 /** The API form of a run. It leaves out what only the host needs. */
 export const view = (run: Run): CodeRunsApi.CodeRun => ({
@@ -64,7 +133,7 @@ export const view = (run: Run): CodeRunsApi.CodeRun => ({
 	status: run.status,
 	code: run.code,
 	reason: run.reason,
-	calls: run.calls.map(({ argumentsHash: _, ...call }) => call),
+	calls: Arr.map(run.calls, ({ argumentsHash: _, ...call }) => call),
 	result: run.result,
 	createdAt: run.createdAt,
 	updatedAt: run.updatedAt,
@@ -94,13 +163,7 @@ export const get = (
 		if (row === undefined)
 			return yield* ExperienceNotFound.make({ id: "Code run" })
 		return yield* open(secrets, row)
-	}).pipe(
-		Effect.mapError((error): ReadError =>
-			error instanceof ExperienceNotFound
-				? error
-				: ExperienceStorageUnavailable.make({}),
-		),
-	)
+	}).pipe(storageFailure("OpenBot could not read a code run."))
 
 export const list = (
 	db: Db.Database,
@@ -116,8 +179,12 @@ export const list = (
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, row)),
 			),
-			Effect.map((runs) => runs.toSorted((a, b) => a.createdAt - b.createdAt)),
-			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+			Effect.map(
+				Arr.sort(Order.mapInput(Order.Number, (run: Run) => run.createdAt)),
+			),
+			Failures.replace("OpenBot could not read the code runs of a Chat.", () =>
+				ExperienceStorageUnavailable.make({}),
+			),
 		)
 
 /** The program of a tool call in a Chat, if the call is a Code Mode call. */
@@ -144,7 +211,10 @@ export const forCall = (
 					? Effect.succeedNone
 					: Effect.asSome(open(secrets, rows[0])),
 			),
-			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+			Failures.replace(
+				"OpenBot could not read the code run of a tool call.",
+				() => ExperienceStorageUnavailable.make({}),
+			),
 		)
 
 /**
@@ -175,7 +245,7 @@ export const insert = (
 			.returning({ id: codeRuns.id })
 		if (inserted.length > 0) return { run: value, created: true }
 		return { run: yield* get(db, secrets, owner, value.id), created: false }
-	}).pipe(Effect.mapError(failure))
+	}).pipe(storageFailure("OpenBot could not save a new code run."))
 
 /**
  * Changes a run under a row lock. `update` gets the current run and its lease, and
@@ -220,7 +290,7 @@ export const change = (
 				return Option.some(next.value.run)
 			}),
 		)
-		.pipe(Effect.mapError(failure))
+		.pipe(storageFailure("OpenBot could not change a code run."))
 
 /** Runs whose host stopped while it ran them. Another host may take them over. */
 export const stale = (
@@ -247,4 +317,9 @@ export const stale = (
 				or(isNull(codeRuns.leaseUntil), lt(codeRuns.leaseUntil, now)),
 			),
 		)
-		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))
+		.pipe(
+			Failures.replace(
+				"OpenBot could not find the code runs that stopped.",
+				() => ExperienceStorageUnavailable.make({}),
+			),
+		)

@@ -7,7 +7,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "appIndex", (handlers) =>
 	Effect.gen(function* () {
 		const index = yield* PublicIndex
 		return handlers
-			.handle("listSources", () => Effect.succeed(index.sources))
+			.handle("listSources", () => index.sources)
 			.handle("searchApps", ({ query }) => index.search(query))
 			.handle("getApp", ({ query }) => index.get(query.cardUrl, query.source))
 	}),

@@ -1,8 +1,8 @@
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import { builtinRoles, PolicyInput, PolicySchema } from "./Authorization.ts"
 
 export const BuiltinRoleId = Schema.Literals(
-	builtinRoles.map((role) => role.id),
+	Arr.map(builtinRoles, (role) => role.id),
 )
 export type BuiltinRoleId = typeof BuiltinRoleId.Type
 /** The ID of a custom role. */

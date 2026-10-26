@@ -66,6 +66,24 @@
 - Put code in the folder of the feature it belongs to. Packages use each other
   only through their public entry points.
 - Importing a module must not start any I/O.
+- Follow the Effect rules on the contributing page of the docs. `pnpm typecheck`
+  checks them with the Effect language service and with
+  `scripts/effect-rules.ts`. Do not turn a rule off to save work. When code must
+  stay native, turn the rule off for one line only, and give the reason after
+  `--`.
+- A service gets the services it needs when its layer is built. Its methods do
+  not ask for other services, except for context of the request, such as
+  `Identity`.
+- A library layer asks for the platform services and the services of the outside
+  world. Program entry points and tests give them. Do not use
+  `Effect.serviceOption` to find a feature.
+- Read values from the platform settings when you use them. Do not give them to
+  a layer as arguments.
+- Every fiber has an owner: a scope, a `FiberSet`, or a `FiberMap`. In
+  `packages/openbot`, periodic work uses `Background.repeat`.
+- Never drop the cause of a failure. A public HTTP error must not carry inside
+  details, so log the inside failure first. In `packages/openbot`,
+  `Failures.replace` does this.
 
 ## Changes
 
