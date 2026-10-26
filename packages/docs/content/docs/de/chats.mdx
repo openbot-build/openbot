@@ -641,10 +641,14 @@ Arbeit starten.
 
 Die Chat-Ansicht enthält `execution.mode`, `generation`, `phase`, `chatModel`
 und `liveModel`. Der Wechsel braucht `write` und `run` auf dem Chat, Delegation
-an seinen Bot und Nutzung des Ziel-Models. Laufende Arbeit, wartende Eingaben,
-offene Freigaben, ungeklärte Werkzeugvorgänge, eine beschäftigte Live-Verbindung
-oder ein anderer Wechsel ergeben `409` mit `ChatExecutionBlocked`. Eine alte
-Revision ergibt `ChatConflict`.
+an seinen Bot und Nutzung des Ziel-Models. Laufende Arbeit, offene Freigaben,
+ungeklärte Werkzeugvorgänge, eine beschäftigte Live-Verbindung oder ein anderer
+Wechsel ergeben `409` mit `ChatExecutionBlocked`. Eine alte Revision ergibt
+`ChatConflict`. Wartender Klartext behält seine Reihenfolge und kann an den
+Zielmodus gehen. Nach einer Live-Trennung kann Chat diesen Text verarbeiten;
+Live wartet auf eine bereite Verbindung. Dateien, die schon warten, werden für
+das Ziel-Model mitgeprüft. Eingaben zur Fortsetzung von Werkzeugen müssen vor
+dem Wechsel enden.
 
 OpenBot prüft das Ziel-Model gegen gespeicherten Text, Transkripte,
 Werkzeugdaten, Bilder und Dateien. Nicht unterstützter oder unlesbarer Kontext

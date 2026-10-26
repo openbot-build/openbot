@@ -614,9 +614,13 @@ switched; its generation becomes stale and it cannot start more work.
 
 The Chat view includes `execution.mode`, `generation`, `phase`, `chatModel`, and
 `liveModel`. A switch needs `write` and `run` on the Chat, delegation to its
-Bot, and use of the target model. Running work, queued input, pending approvals,
-unresolved tool operations, a busy Live connection, or a competing switch return
-`409` with `ChatExecutionBlocked`. An old revision returns `ChatConflict`.
+Bot, and use of the target model. Running work, pending approvals, unresolved
+tool operations, a busy Live connection, or a competing switch return `409` with
+`ChatExecutionBlocked`. An old revision returns `ChatConflict`. Queued plain
+text keeps its order and can pass to the target mode. A switch to Chat can run
+text waiting after a Live disconnect; Live waits for a ready connection. Files
+already in the queue take part in the target model check. Queued tool-resume
+input must finish before switching.
 
 OpenBot checks the target model against the saved text, transcripts, tool
 records, images, and files. Unsupported or unreadable context blocks the switch;

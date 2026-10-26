@@ -21,6 +21,7 @@ import * as ManagedChats from "../src/chats/ManagedChats.ts"
 import * as Execution from "../src/chats/Execution.ts"
 import type * as Chats from "../src/chats/Chats.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
+import { untilTrue } from "./Wait.ts"
 
 const live = Config.Selection.make({
 	provider: ChatsFixture.selection.provider,
@@ -459,6 +460,256 @@ layer(ChatsFixture.layerDatabase, {
 				const after = yield* ChatsFixture.settled(chats, source.chat.id)
 				assert.strictEqual(after.inbox, 0)
 				assert.strictEqual(yield* Ref.get(calls), 1)
+			}),
+		60_000,
+	)
+
+	it.effect(
+		"queued text survives Live selection and runs once after changing to Chat",
+		() =>
+			Effect.gen(function* () {
+				yield* DatabasePostgres.migrate
+				const { chats, created, calls } = yield* setup("execution-queued-text")
+				const id = created.chat.id
+				yield* chats.switchExecution(id, {
+					expected: created.chat.revision,
+					mode: "live",
+					model: live,
+				})
+				const first = yield* chats.deliver(id, {
+					input: "First note.",
+					author: "test-user",
+				})
+				const second = yield* chats.deliver(id, {
+					input: "Second note.",
+					author: "test-user",
+				})
+				assert.strictEqual(first.delivery, "queued")
+				assert.strictEqual(second.delivery, "queued")
+				const before = yield* chats.get(id)
+				assert.strictEqual(before.chat.execution.phase, "selected")
+				assert.strictEqual(before.inbox, 2)
+				assert.strictEqual(yield* Ref.get(calls), 0)
+				const waiting = yield* chats.switchExecution(id, {
+					expected: before.chat.revision,
+					mode: "live",
+				})
+				assert.strictEqual(waiting.chat.execution.phase, "selected")
+				assert.deepStrictEqual(
+					Arr.map((yield* chats.read(id)).chat.inbox, (entry) => entry.id),
+					[first.item, second.item],
+				)
+				assert.strictEqual(yield* Ref.get(calls), 0)
+				yield* chats.switchExecution(id, {
+					expected: waiting.chat.revision,
+					mode: "chat",
+				})
+				const after = yield* ChatsFixture.settled(chats, id)
+				assert.strictEqual(after.chat.execution.mode, "chat")
+				assert.strictEqual(after.inbox, 0)
+				const turns = yield* chats.turns(id, {})
+				assert.strictEqual(turns.items.length, 1)
+				assert.deepStrictEqual(turns.items[0]?.input, [first.item, second.item])
+				assert.strictEqual(yield* Ref.get(calls), 1)
+				yield* chats.drain(id)
+				assert.strictEqual((yield* chats.turns(id, {})).items.length, 1)
+				assert.strictEqual(yield* Ref.get(calls), 1)
+			}),
+		60_000,
+	)
+
+	it.effect(
+		"queued files are checked, kept on failure and read once by a supported target",
+		() =>
+			Effect.gen(function* () {
+				yield* DatabasePostgres.migrate
+				const allowed = yield* Ref.make(false)
+				const checked = yield* Ref.make(0)
+				const { chats, created, calls } = yield* setup(
+					"execution-queued-file",
+					({ context }) =>
+						Effect.gen(function* () {
+							const files = Arr.flatMap(context.content, (message) =>
+								message.role === "user"
+									? Arr.filter(message.content, (part) => part.type === "file")
+									: [],
+							)
+							if (files.length === 0) return
+							assert.strictEqual(files.length, 1)
+							assert.strictEqual(files[0]?.mediaType, "image/png")
+							yield* Ref.update(checked, (count) => count + 1)
+							if (!(yield* Ref.get(allowed)))
+								return yield* Execution.blocked(
+									"context",
+									"This model does not take images.",
+								)
+						}),
+				)
+				const id = created.chat.id
+				yield* chats.switchExecution(id, {
+					expected: created.chat.revision,
+					mode: "live",
+					model: live,
+				})
+				const file = yield* chats.deliver(id, {
+					input: Prompt.make([
+						{
+							role: "user",
+							content: [
+								{
+									type: "file",
+									mediaType: "image/png",
+									data: new URL("https://example.test/image.png"),
+								},
+							],
+						},
+					]),
+					author: "test-user",
+				})
+				const before = yield* chats.get(id)
+				const changed = yield* chats
+					.switchExecution(id, { expected: before.chat.revision, mode: "chat" })
+					.pipe(Effect.result)
+				assert.ok(
+					Result.isFailure(changed) &&
+						changed.failure._tag === "ChatExecutionBlocked",
+				)
+				assert.strictEqual(changed.failure.reason, "context")
+				const after = yield* chats.read(id)
+				assert.strictEqual(Execution.of(after.chat).mode, "live")
+				assert.strictEqual(after.chat.inbox.length, 1)
+				assert.strictEqual(after.chat.inbox[0]?.id, file.item)
+				assert.strictEqual(yield* Ref.get(calls), 0)
+				yield* Ref.set(allowed, true)
+				yield* chats.switchExecution(id, {
+					expected: after.chat.revision,
+					mode: "chat",
+				})
+				const done = yield* ChatsFixture.settled(chats, id)
+				assert.strictEqual(done.inbox, 0)
+				assert.strictEqual(yield* Ref.get(checked), 2)
+				assert.strictEqual(yield* Ref.get(calls), 1)
+				const turns = yield* chats.turns(id, {})
+				assert.strictEqual(turns.items.length, 1)
+				assert.deepStrictEqual(turns.items[0]?.input, [file.item])
+			}),
+		60_000,
+	)
+
+	it.effect(
+		"queued approved tool input cannot move to another execution mode",
+		() =>
+			Effect.gen(function* () {
+				yield* DatabasePostgres.migrate
+				const { chats, created, calls } = yield* setup("execution-queued-tool")
+				const id = created.chat.id
+				yield* chats.switchExecution(id, {
+					expected: created.chat.revision,
+					mode: "live",
+					model: live,
+				})
+				const tool = yield* chats.deliver(id, {
+					input: "The tool was allowed.",
+					author: "test-user",
+					approved: { id: "approved-call", name: "TestTool", params: {} },
+				})
+				const before = yield* chats.get(id)
+				const changed = yield* chats
+					.switchExecution(id, { expected: before.chat.revision, mode: "chat" })
+					.pipe(Effect.result)
+				assert.ok(
+					Result.isFailure(changed) &&
+						changed.failure._tag === "ChatExecutionBlocked",
+				)
+				assert.strictEqual(changed.failure.reason, "inbox")
+				const after = yield* chats.read(id)
+				assert.strictEqual(Execution.of(after.chat).mode, "live")
+				assert.strictEqual(after.chat.inbox.length, 1)
+				assert.strictEqual(after.chat.inbox[0]?.id, tool.item)
+				assert.strictEqual(yield* Ref.get(calls), 0)
+			}),
+		60_000,
+	)
+
+	it.effect(
+		"approved input added before the snapshot cannot pass the final switch check",
+		() =>
+			Effect.gen(function* () {
+				yield* DatabasePostgres.migrate
+				const checked = yield* Ref.make(false)
+				const { chats, calls } = yield* setup(
+					"execution-approved-snapshot-race",
+					({ context }) =>
+						Ref.set(
+							checked,
+							Arr.some(
+								context.content,
+								(message) =>
+									message.role === "user" &&
+									Arr.some(
+										message.content,
+										(part) =>
+											part.type === "text" &&
+											part.text === "The tool was allowed.",
+									),
+							),
+						),
+				)
+				const source = yield* chats.create({
+					...BotFixture.direct(),
+					kind: "live",
+					model: live,
+				})
+				const sql = yield* PgClient.PgClient
+				const locked = yield* Deferred.make<void>()
+				const unlock = yield* Deferred.make<void>()
+				// Hold the first work check, after reservation and before the context snapshot.
+				const lock = yield* sql
+					.withTransaction(
+						Effect.gen(function* () {
+							yield* sql`lock table openbot_bot_records in access exclusive mode`
+							yield* Deferred.succeed(locked, undefined)
+							yield* Deferred.await(unlock)
+						}),
+					)
+					.pipe(Effect.forkScoped)
+				yield* Deferred.await(locked)
+				const change = yield* chats
+					.switchExecution(source.chat.id, {
+						expected: source.chat.revision,
+						mode: "chat",
+						model: ChatsFixture.selection,
+					})
+					.pipe(Effect.result, Effect.forkScoped)
+				yield* untilTrue(
+					"the execution reservation",
+					chats.get(source.chat.id),
+					(view) => view.chat.execution.phase === "switching",
+				)
+				const tool = yield* chats.deliver(source.chat.id, {
+					input: "The tool was allowed.",
+					author: "test-user",
+					approved: { id: "late-approved-call", name: "TestTool", params: {} },
+				})
+				assert.strictEqual(tool.delivery, "queued")
+				yield* Deferred.succeed(unlock, undefined)
+				yield* Fiber.join(lock)
+				const changed = yield* Fiber.join(change)
+				assert.strictEqual(yield* Ref.get(checked), true)
+				assert.ok(
+					Result.isFailure(changed) &&
+						changed.failure._tag === "ChatExecutionBlocked",
+				)
+				assert.strictEqual(changed.failure.reason, "inbox")
+				const after = yield* chats.read(source.chat.id)
+				assert.strictEqual(Execution.of(after.chat).mode, "live")
+				assert.strictEqual(after.chat.inbox.length, 1)
+				assert.strictEqual(after.chat.inbox[0]?.id, tool.item)
+				assert.strictEqual(
+					(yield* chats.turns(source.chat.id, {})).items.length,
+					0,
+				)
+				assert.strictEqual(yield* Ref.get(calls), 0)
 			}),
 		60_000,
 	)

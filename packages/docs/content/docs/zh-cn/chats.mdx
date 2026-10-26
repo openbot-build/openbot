@@ -557,8 +557,9 @@ Chat 的执行方式，保留同一个 Chat 和已提交的历史：
 
 Chat 视图包含 `execution.mode`、`generation`、`phase`、`chatModel` 和
 `liveModel`。切换需要 Chat 上的 `write` 和
-`run`、向 Bot 委派的权限，以及使用目标模型的权限。正在运行的工作、排队输入、待处理审批、未确定的工具操作、忙碌中的 Live 连接或另一次切换都会返回
-`409` 和 `ChatExecutionBlocked`。旧 revision 返回 `ChatConflict`。
+`run`、向 Bot 委派的权限，以及使用目标模型的权限。正在运行的工作、待处理审批、未确定的工具操作、忙碌中的 Live 连接或另一次切换都会返回
+`409` 和 `ChatExecutionBlocked`。旧 revision 返回
+`ChatConflict`。已有纯文本排队消息保持原顺序，可以交给目标方式。Live 断线后切回 Chat 可以继续处理这些文本；选择 Live 则等待连接就绪。队列中已有的文件也会检查目标模型的支持和读取权限；工具续跑输入需先处理完再切换。
 
 OpenBot 根据保存的文本、转写、工具记录、图片和文件检查目标模型。不受支持或无法读取的上下文会阻止切换，不会被静默丢弃。语言模型必须在
 `inputMediaTypes`

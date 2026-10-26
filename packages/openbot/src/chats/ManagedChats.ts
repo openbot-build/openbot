@@ -925,7 +925,6 @@ export const factory: Effect.Effect<
 												const host = ChatHost.hostState(current.chat)
 												const noTransition = {
 													...current.chat,
-													inbox: [],
 													business: {
 														...current.chat.business,
 														[chatHostId]: {
@@ -961,18 +960,7 @@ export const factory: Effect.Effect<
 															current.chat.inbox,
 															snapshot.chat.inbox.length,
 														),
-														(entry) =>
-															entry.passive !== true &&
-															Arr.every(
-																entry.content.content,
-																(message) =>
-																	message.role === "system" ||
-																	Arr.every(
-																		message.content,
-																		(part: { readonly type: string }) =>
-																			part.type === "text",
-																	),
-															),
+														Execution.isTextMessage,
 													)
 												)
 													return yield* Execution.blocked(

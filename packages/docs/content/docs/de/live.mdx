@@ -99,20 +99,24 @@ keinen Socket und startet keinen Turn. Verbinde dich erst nach dem Wechsel. Für
 die Rückkehr zu Chat wartest du auf das Ende der laufenden Arbeit und sendest
 `mode: "chat"` mit einer neuen Revision.
 
-Ein laufender Turn, wartende Arbeit, eine offene Freigabe, ein ungeklärter
-Werkzeugvorgang, eine beschäftigte Live-Verbindung oder ein anderer Wechsel
-blockiert die Änderung. OpenBot prüft auch, ob das Ziel-Model den gespeicherten
-Kontext lesen kann. Eine blockierte Änderung ergibt `409` mit
-`ChatExecutionBlocked`, `reason`, `message` und zugehörigen `ids`. Die alte
-Ausführung bleibt gewählt. Lies vor einem neuen Versuch den aktuellen Chat.
-Sende keine Nachricht oder Werkzeugoperation erneut, um einen Wechsel
-wiederherzustellen. Eine ruhende Live-Verbindung kann umgeschaltet werden; ihre
-Generation wird ungültig und sie kann keine neue Arbeit starten.
+Ein laufender Turn, eine offene Freigabe, ein ungeklärter Werkzeugvorgang, eine
+beschäftigte Live-Verbindung oder ein anderer Wechsel blockiert die Änderung.
+OpenBot prüft auch, ob das Ziel-Model den gespeicherten Kontext lesen kann. Eine
+blockierte Änderung ergibt `409` mit `ChatExecutionBlocked`, `reason`, `message`
+und zugehörigen `ids`. Die alte Ausführung bleibt gewählt. Lies vor einem neuen
+Versuch den aktuellen Chat. Sende keine Nachricht oder Werkzeugoperation erneut,
+um einen Wechsel wiederherzustellen. Eine ruhende Live-Verbindung kann
+umgeschaltet werden; ihre Generation wird ungültig und sie kann keine neue
+Arbeit starten.
 
-Während der Prüfung angenommene Textnachrichten bleiben in der Inbox für die
-gewählte Ausführung. Neue Bilder oder andere Kontextänderungen während der
-Prüfung können den Wechsel blockieren. Die Eingabe bleibt bei der ursprünglichen
-Ausführung und geht nicht verloren.
+Wartender Klartext kann an die gewählte Ausführung gehen, auch nach einer
+Live-Trennung. Die Reihenfolge bleibt gleich; nichts wird erneut gesendet. Live
+wartet auf eine bereite Verbindung, Chat startet die Eingaben nach dem Wechsel.
+Dateien, die schon warten, werden für das Ziel-Model mitgeprüft. Eingaben zur
+Fortsetzung von Werkzeugen müssen vorher enden. Auch Text, der während der
+Prüfung ankommt, bleibt für die gewählte Ausführung. Neue Bilder oder andere
+Kontextänderungen während der Prüfung können den Wechsel blockieren. Die Eingabe
+bleibt bei der ursprünglichen Ausführung und geht nicht verloren.
 
 Bei vorhandenem gemeinsamem Verlauf muss das Ziel ein konfiguriertes
 `contextWindow` haben. Ein unbekanntes Fenster blockiert den Wechsel. OpenBot

@@ -96,19 +96,23 @@ The response is the updated Chat view. `chat.execution` has `mode`,
 a Turn. Connect after the switch succeeds. To return to Chat execution, let
 current work finish, then send `mode: "chat"` with a fresh revision.
 
-A running Turn, queued work, pending approval, unresolved tool operation, busy
-Live connection, or another switch blocks the change. OpenBot also checks that
-the target model can read the saved context. A blocked change returns `409` with
+A running Turn, pending approval, unresolved tool operation, busy Live
+connection, or another switch blocks the change. OpenBot also checks that the
+target model can read the saved context. A blocked change returns `409` with
 `ChatExecutionBlocked`, a `reason`, a `message`, and any related `ids`. The old
 execution mode remains selected. Read the latest Chat before trying again; do
 not resend a message or tool operation to recover a switch. An idle Live
 connection can be switched; its generation becomes stale and it cannot start
 more work.
 
-Text messages accepted while the switch is being checked stay in the inbox for
-the selected execution. New images or other context changes during that check
-can block the switch; the input stays with the original execution and is not
-dropped.
+Queued plain text can pass to the selected execution, including text waiting
+while Live is disconnected. It stays in order and is not sent again. Selecting
+Live keeps the queue until a connection is ready; selecting Chat starts it when
+the switch completes. Files already in the queue take part in the target model
+check. Queued tool-resume input must finish before a switch. Text accepted
+during the check also stays for the selected execution. New images or other
+context changes during that check can block the switch; the input stays with the
+original execution and is not dropped.
 
 For nonempty shared history, the target must have a configured `contextWindow`.
 An unknown window blocks the switch. OpenBot uses its core token estimate on the

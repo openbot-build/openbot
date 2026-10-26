@@ -79,6 +79,21 @@ export const blocked = (
 	ids: ReadonlyArray<string> = [],
 ) => ChatExecutionBlocked.make({ reason, message, ids })
 
+/** Plain queued messages can pass to another mode without running old tool calls. */
+export const isTextMessage = (entry: Chat.InboxEntry) =>
+	entry.kind === "message" &&
+	entry.passive !== true &&
+	entry.approved === undefined &&
+	Arr.every(
+		entry.content.content,
+		(message) =>
+			message.role === "system" ||
+			Arr.every(
+				message.content,
+				(part: { readonly type: string }) => part.type === "text",
+			),
+	)
+
 /** This check runs under the same revision check that reserves the change. */
 export const idleProblem = (chat: Chat.Ref, active: boolean, now: number) => {
 	const state = ChatHost.hostState(chat)
@@ -99,11 +114,14 @@ export const idleProblem = (chat: Chat.Ref, active: boolean, now: number) => {
 			"Wait for the current Turn to end.",
 			turn === undefined ? [] : [turn.id],
 		)
-	const waiting = Arr.filter(chat.inbox, (entry) => entry.passive !== true)
+	const waiting = Arr.filter(
+		chat.inbox,
+		(entry) => entry.kind !== "message" || entry.approved !== undefined,
+	)
 	if (waiting.length > 0)
 		return blocked(
 			"inbox",
-			"Wait for the input in the Chat to finish.",
+			"Finish queued tool input before changing execution.",
 			Arr.map(waiting, (entry) => entry.id),
 		)
 	const lease = execution.lease
