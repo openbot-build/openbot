@@ -35,11 +35,84 @@ test(
 				(await account(alice.session, "/v1/platform/settings")).status,
 				403,
 			)
-			const settings = await (
+			let settings = await (
 				await account(root.session, "/v1/platform/settings")
 			).json()
 			assert.equal(settings.publicOrigin, publicOrigin)
 			assert.equal(settings.organizationCreation, "anyone")
+
+			// Scope changes use the same admin-only version check as all platform settings.
+			const identityProvider = {
+				issuer: "https://id.example.com",
+				clientId: "browser-fixture",
+				clientSecret: "fixture-secret",
+				scopes: ["openid", "profile", "email", "offline_access"],
+			}
+			assert.equal(
+				(
+					await account(alice.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: settings.version,
+						identityProvider,
+					})
+				).status,
+				403,
+			)
+			const changedScopes = await account(
+				root.session,
+				"/v1/platform/settings",
+				"PATCH",
+				{
+					expectedVersion: settings.version,
+					identityProvider,
+				},
+			)
+			assert.equal(changedScopes.status, 200)
+			settings = await changedScopes.json()
+			assert.deepEqual(
+				settings.identityProvider.scopes,
+				identityProvider.scopes,
+			)
+			assert.equal(JSON.stringify(settings).includes("fixture-secret"), false)
+			const {
+				scopes: _,
+				clientSecret: __,
+				...providerWithoutScopes
+			} = identityProvider
+			const preservedScopes = await account(
+				root.session,
+				"/v1/platform/settings",
+				"PATCH",
+				{
+					expectedVersion: settings.version,
+					identityProvider: providerWithoutScopes,
+				},
+			)
+			assert.equal(preservedScopes.status, 200)
+			const previous = settings
+			settings = await preservedScopes.json()
+			assert.deepEqual(settings.identityProvider, previous.identityProvider)
+			assert.equal(
+				(
+					await account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: previous.version,
+						identityProvider,
+					})
+				).status,
+				409,
+			)
+			assert.equal(
+				(
+					await account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: settings.version,
+						identityProvider: { ...providerWithoutScopes, scopes: ["email"] },
+					})
+				).status,
+				400,
+			)
+			const readBack = await (
+				await account(root.session, "/v1/platform/settings")
+			).json()
+			assert.deepEqual(readBack, settings)
 
 			// A deny in the ceiling wins over every allow of an organization.
 			assert.equal((await account(alice.session, "/v1/sessions")).status, 200)
@@ -289,6 +362,41 @@ test("every instance sees a settings change at once, and setup runs only once", 
 			assert.ok(Result.isSuccess(again))
 			assert.equal(again.success, "unchanged")
 			assert.equal((await setup("https://other.example.com"))._tag, "Failure")
+
+			const provider = {
+				issuer: "https://id.example.com",
+				clientId: "setup-test",
+				clientSecret: Option.none<string>(),
+			}
+			const configureProvider = (
+				scopes?: ReadonlyArray<string>,
+				force = false,
+			) =>
+				first.runPromise(
+					Setup.run({
+						publicOrigin,
+						identityProvider: Option.some({
+							...provider,
+							...(scopes === undefined ? {} : { scopes }),
+						}),
+						adminEmails: ["root@example.com"],
+						force,
+					}).pipe(Effect.result),
+				)
+			const scopes = ["openid", "profile", "email", "offline_access"]
+			assert.equal((await configureProvider(scopes, true))._tag, "Success")
+			const sameProvider = await configureProvider()
+			assert.ok(Result.isSuccess(sameProvider))
+			assert.equal(sameProvider.success, "unchanged")
+			const platform = await first.runPromise(
+				Effect.flatMap(Settings, (settings) => settings.platform),
+			)
+			assert.ok(Option.isSome(platform))
+			assert.deepEqual(platform.value.document.identityProvider?.scopes, scopes)
+			assert.equal(
+				(await configureProvider(["openid", "profile", "email"]))._tag,
+				"Failure",
+			)
 
 			// The second instance reads the defaults and keeps them in its cache.
 			const read = () =>

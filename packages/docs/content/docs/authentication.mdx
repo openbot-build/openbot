@@ -60,16 +60,17 @@ The `callbackURL` must be on the OpenBot origin. If it is not, Better Auth retur
 
 ### Set up the platform provider
 
-Register OpenBot as a client at your provider. Use `<publicOrigin>/auth/callback/oidc` as the redirect URI. OpenBot asks for the scopes `openid profile email`.
+Register OpenBot as a client at your provider. Use `<publicOrigin>/auth/callback/oidc` as the redirect URI. OpenBot asks for `openid profile email` by default. Set `identityProvider.scopes` in the platform settings when the provider needs other scopes, such as `offline_access`. The list must include `openid`.
 
 Then give the provider to OpenBot. On a new platform, the setup program does this with `--oidc-issuer`, `--oidc-client-id` and `--oidc-client-secret`. Later, a platform admin changes it with `PATCH /v1/platform/settings`. See [Platform](/docs/platform).
 
-| Setting                         | Value                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------- |
-| `identityProvider.issuer`       | The issuer URL, for example `https://id.example.com`. HTTPS, no trailing slash. |
-| `identityProvider.clientId`     | The client ID from the provider.                                                |
-| `identityProvider.clientSecret` | The client secret. Leave it out for a public client.                            |
-| `publicOrigin`                  | The public HTTPS origin of OpenBot, for example `https://api.example.com`.      |
+| Setting                         | Value                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `identityProvider.issuer`       | The issuer URL, for example `https://id.example.com`. HTTPS, no trailing slash.                  |
+| `identityProvider.clientId`     | The client ID from the provider.                                                                 |
+| `identityProvider.scopes`       | The scopes for a new sign-in. Leave out this field in a settings patch to keep the current list. |
+| `identityProvider.clientSecret` | The client secret. Leave it out for a public client.                                             |
+| `publicOrigin`                  | The public HTTPS origin of OpenBot, for example `https://api.example.com`.                       |
 
 Without a client secret, OpenBot signs in as a public client with PKCE. PKCE is a check that protects the sign-in code.
 A platform can have no provider at all. Then people sign in only through SSO connections.
@@ -320,7 +321,6 @@ OpenBot has no pages, so your client must serve these paths. Two flows add a que
   If the person is not signed in, the browser goes to `/?authorization=<flowId>`. Your client signs the person in with `POST /auth/sign-in` (see [Sign in](#sign-in)), with this address as `returnTo`. Then it calls `POST /v1/app-authorizations/<flowId>/complete` to finish the flow.
 - **Developer tests.** A developer test authorization returns to `/?developerTest=<testId>`.
 
-
 ## Keep an existing browser login during migration
 
 A gateway can forward the original Cookie and Origin to Platform. Platform verifies the cookie signature, reads the stored session, and checks active membership on every request. User IDs in headers are not authentication. Do not use an administrator token to stand in for a browser user.
@@ -329,16 +329,16 @@ The stable browser routes are GET /auth/login?returnTo=/, GET /auth/callback, an
 
 Set these deployment options when moving an existing same-origin application:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| OPENBOT_AUTH_SESSION_COOKIE | __Host-openbot-session | Existing signed session cookie name. Must start with __Host-. |
-| OPENBOT_AUTH_LOGIN_COOKIE | __Host-openbot-login | Existing OAuth state cookie name; must differ from the session cookie. |
-| OPENBOT_OIDC_PROVIDER_ID | oidc | Existing provider ID in the imported account rows. |
-| OPENBOT_OIDC_CALLBACK_PATH | /auth/callback/oidc | Public callback path registered with the identity provider. |
-| OPENBOT_OWNER_USER_IDS | Empty | Case-sensitive existing account IDs admitted as Super Administrators. |
-| OPENBOT_MEMBER_USER_IDS | Empty | Case-sensitive existing account IDs admitted with the organization default roles. |
-| OPENBOT_ALLOW_FIRST_LOGIN_ADMIN | true | Set false before importing accounts or opening a managed deployment. |
-| OPENBOT_ALLOW_MEMBER_SIGNUP | false | Allow other authenticated accounts to join an existing organization as ordinary members while an active Super Administrator exists. |
+| Variable                        | Default                  | Purpose                                                                                                                             |
+| ------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| OPENBOT_AUTH_SESSION_COOKIE     | \_\_Host-openbot-session | Existing signed session cookie name. Must start with \_\_Host-.                                                                     |
+| OPENBOT_AUTH_LOGIN_COOKIE       | \_\_Host-openbot-login   | Existing OAuth state cookie name; must differ from the session cookie.                                                              |
+| OPENBOT_OIDC_PROVIDER_ID        | oidc                     | Existing provider ID in the imported account rows.                                                                                  |
+| OPENBOT_OIDC_CALLBACK_PATH      | /auth/callback/oidc      | Public callback path registered with the identity provider.                                                                         |
+| OPENBOT_OWNER_USER_IDS          | Empty                    | Case-sensitive existing account IDs admitted as Super Administrators.                                                               |
+| OPENBOT_MEMBER_USER_IDS         | Empty                    | Case-sensitive existing account IDs admitted with the organization default roles.                                                   |
+| OPENBOT_ALLOW_FIRST_LOGIN_ADMIN | true                     | Set false before importing accounts or opening a managed deployment.                                                                |
+| OPENBOT_ALLOW_MEMBER_SIGNUP     | false                    | Allow other authenticated accounts to join an existing organization as ordinary members while an active Super Administrator exists. |
 
 An explicit owner or member ID list also prevents first-login promotion. Existing member status and roles override bootstrap settings. Suspension and removal both block existing cookies and tokens. Removal keeps an admission tombstone, so an allowed domain or bootstrap ID cannot silently restore access.
 Member signup does not restore those accounts either. It uses the authenticated account ID and does not match or merge people by email. This signup path always grants only `member`, even if the organization default roles grant more access. It does not replace the separate rules for explicit owners, member IDs or allowed domains.

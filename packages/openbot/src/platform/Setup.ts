@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto"
+import { Settings as Api } from "@openbot-build/api"
 import { Effect, Option, Schema } from "effect"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import {
@@ -15,6 +16,7 @@ export interface Input {
 	readonly identityProvider: Option.Option<{
 		readonly providerId?: string | undefined
 		readonly callbackPath?: string | undefined
+		readonly scopes?: ReadonlyArray<string> | undefined
 		readonly issuer: string
 		readonly clientId: string
 		readonly clientSecret: Option.Option<string>
@@ -101,7 +103,11 @@ export const run = (input: Input) =>
 					(document.identityProvider.providerId ?? "oidc") ===
 						(provider.providerId ?? "oidc") &&
 					(document.identityProvider.callbackPath ?? "/auth/callback/oidc") ===
-						(provider.callbackPath ?? "/auth/callback/oidc"),
+						(provider.callbackPath ?? "/auth/callback/oidc") &&
+					(provider.scopes === undefined ||
+						JSON.stringify(
+							document.identityProvider.scopes ?? Api.defaultOidcScopes,
+						) === JSON.stringify(provider.scopes)),
 			})
 		if (
 			Option.isSome(current) &&
@@ -123,6 +129,12 @@ export const run = (input: Input) =>
 					return {
 						providerId: provider.providerId ?? "oidc",
 						callbackPath: provider.callbackPath ?? "/auth/callback/oidc",
+						scopes:
+							provider.scopes ??
+							(Option.isSome(current)
+								? current.value.document.identityProvider?.scopes
+								: undefined) ??
+							Api.defaultOidcScopes,
 						issuer: provider.issuer,
 						clientId: provider.clientId,
 						clientSecret,

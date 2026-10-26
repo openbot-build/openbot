@@ -11,6 +11,13 @@
 	},
 	"localExtensions": [
 		{
+			"name": "Identity provider scopes",
+			"configuration": "platform.identityProvider.scopes",
+			"default": ["openid", "profile", "email"],
+			"source": "packages/openbot/src/auth/BetterAuth.ts",
+			"behavior": "The native OAuth SDK uses the configured scopes. Settings patches and repeated setup keep the saved scopes when the field is omitted."
+		},
+		{
 			"name": "Optional member signup",
 			"configuration": "platform.memberSignupOrganizationId",
 			"default": null,

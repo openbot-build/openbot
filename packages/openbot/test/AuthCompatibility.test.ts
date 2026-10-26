@@ -9,6 +9,28 @@ import * as BrowserHost from "./BrowserHost.ts"
 import * as BrowserRoutes from "../src/auth/BrowserRoutes.ts"
 
 const publicOrigin = "https://client.example.com"
+test("a new login uses the standard scopes when none are configured", async () => {
+	const host = await BrowserHost.start({ publicOrigin })
+	try {
+		const login = await fetch(host.address + "/auth/login", {
+			redirect: "manual",
+		})
+		assert.equal(login.status, 303)
+		const authorization = new URL(login.headers.get("location")!)
+		assert.deepEqual(
+			authorization.searchParams.get("scope")?.split(" ").sort(),
+			["email", "openid", "profile"],
+		)
+		assert.equal(
+			authorization.searchParams.get("code_challenge_method"),
+			"S256",
+		)
+		assert.ok(authorization.searchParams.get("state"))
+		assert.ok(authorization.searchParams.get("nonce"))
+	} finally {
+		await host.close()
+	}
+})
 test("browser aliases reject unsafe destinations, duplicate callbacks and cross-origin logout", async () => {
 	let calls = 0
 	const handler = BrowserRoutes.handler(
@@ -114,6 +136,7 @@ test(
 				callbackPath: "/auth/callback",
 				sessionCookie: "__Host-e-session",
 				loginCookie: "__Host-e-login",
+				scopes: ["openid", "profile", "email", "offline_access"],
 			},
 			sharedDomain: false,
 		})
@@ -123,6 +146,13 @@ test(
 				{ redirect: "manual" },
 			)
 			assert.equal(login.status, 303)
+			assert.deepEqual(
+				new URL(login.headers.get("location")!).searchParams
+					.get("scope")
+					?.split(" ")
+					.sort(),
+				["email", "offline_access", "openid", "profile"],
+			)
 			assert.ok(
 				login.headers
 					.getSetCookie()

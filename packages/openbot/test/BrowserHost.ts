@@ -52,6 +52,7 @@ export async function start(options: {
 		readonly loginCookie?: string
 		readonly providerId?: string
 		readonly callbackPath?: string
+		readonly scopes?: ReadonlyArray<string>
 	}
 	/**
 	 * Test accounts have verified emails at example.com. By default the

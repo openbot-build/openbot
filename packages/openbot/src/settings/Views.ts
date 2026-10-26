@@ -1,4 +1,4 @@
-import type { Settings as Api } from "@openbot-build/api"
+import { Settings as Api } from "@openbot-build/api"
 import { DateTime } from "effect"
 import type {
 	OrganizationDocument,
@@ -30,6 +30,7 @@ export const platform = (
 						providerId: document.identityProvider.providerId ?? "oidc",
 						callbackPath:
 							document.identityProvider.callbackPath ?? "/auth/callback/oidc",
+						scopes: document.identityProvider.scopes ?? Api.defaultOidcScopes,
 						issuer: document.identityProvider.issuer,
 						clientId: document.identityProvider.clientId,
 						clientSecret: {

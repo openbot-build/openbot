@@ -19,6 +19,7 @@ export const PlatformDocument = Schema.Struct({
 		Schema.Struct({
 			providerId: Schema.optionalKey(Api.ProviderId),
 			callbackPath: Schema.optionalKey(Api.CallbackPath),
+			scopes: Schema.optionalKey(Api.OidcScopes),
 			issuer: Api.Issuer,
 			clientId: Api.ClientId,
 			clientSecret: Schema.NullOr(Schema.String),
