@@ -30,6 +30,12 @@ names and the callback path are shared settings too. A platform setting change
 waits until active work and durable waits are clear before replacing the app.
 The old executor stops before the next one starts.
 
+The platform identity provider can set `scopes`, including `offline_access` when
+its issuer needs it. The default stays `openid`, `profile`, and `email`. An admin
+changes scopes through the existing settings API with `expectedVersion`. Leaving
+scopes out of a patch or a repeated setup keeps the saved list. The native OAuth
+SDK still owns state, nonce, PKCE, callback checks, and session cookies.
+
 The build and runtime use Node.js 26.12.1, the October 2026 security release.
 CI verifies the actual version in its shell and in the built container.
 

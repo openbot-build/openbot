@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto"
+import { Settings as SettingsApi } from "@openbot-build/api"
 import { Barrier } from "./Barrier.ts"
 import * as PrivateSession from "./PrivateSession.ts"
 import * as BrowserRoutes from "./BrowserRoutes.ts"
@@ -59,6 +60,7 @@ const attempt = <A, E>(
 interface OidcProvider {
 	readonly providerId: string
 	readonly redirectUri?: string
+	readonly scopes?: ReadonlyArray<string>
 	readonly issuer: string
 	readonly clientId: string
 	readonly clientSecret: Redacted.Redacted<string> | undefined
@@ -75,7 +77,7 @@ const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
 	redirectURI:
 		provider.redirectUri ??
 		publicOrigin + "/auth/callback/" + provider.providerId,
-	scopes: ["openid", "profile", "email"],
+	scopes: [...(provider.scopes ?? SettingsApi.defaultOidcScopes)],
 	pkce: true,
 	requireIdTokenVerification: true,
 	accountSubject: ({
@@ -144,6 +146,7 @@ export const layer = (
 								{
 									providerId: config.providerId,
 									redirectUri: config.redirectUri,
+									scopes: config.scopes,
 									issuer: config.issuer,
 									clientId: config.clientId,
 									clientSecret: config.clientSecret,

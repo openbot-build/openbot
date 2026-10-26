@@ -1,4 +1,5 @@
 import { Effect, Redacted } from "effect"
+import { Settings as Api } from "@openbot-build/api"
 import type { Configuration } from "../auth/Model.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import { browserAuthDefaults, type PlatformDocument } from "./Documents.ts"
@@ -47,6 +48,7 @@ export const authConfiguration = (input: {
 			mode: "oidc",
 			providerId: provider.providerId ?? "oidc",
 			callbackPath: provider.callbackPath ?? "/auth/callback/oidc",
+			scopes: provider.scopes ?? Api.defaultOidcScopes,
 			issuer: provider.issuer,
 			clientId: provider.clientId,
 			...(clientSecret === undefined ? {} : { clientSecret }),

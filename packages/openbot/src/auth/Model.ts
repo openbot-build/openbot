@@ -1,4 +1,5 @@
 import { DateTime, Effect, Option, Schema } from "effect"
+import { Settings } from "@openbot-build/api"
 
 export const Timestamp = Schema.String.check(
 	Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/),
@@ -69,6 +70,9 @@ export const OidcConfiguration = Schema.Struct({
 	callbackPath: Schema.String.check(
 		Schema.isPattern(/^\/auth\/callback(?:\/[A-Za-z0-9_-]+)?$/),
 	).pipe(Schema.withDecodingDefault(Effect.succeed("/auth/callback/oidc"))),
+	scopes: Settings.OidcScopes.pipe(
+		Schema.withDecodingDefault(Effect.succeed(Settings.defaultOidcScopes)),
+	),
 	clientId: Schema.NonEmptyString,
 	clientSecret: Schema.optional(Credential),
 })

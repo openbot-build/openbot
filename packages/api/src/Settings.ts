@@ -77,6 +77,24 @@ export const ProviderId = Schema.String.check(
 export const CallbackPath = Schema.String.check(
 	Schema.isPattern(/^\/auth\/callback(?:\/[A-Za-z0-9_-]+)?$/),
 )
+/** OpenID Connect needs openid. Add any other scopes that the provider requires. */
+export const OidcScopes = Schema.Array(
+	Schema.String.check(
+		Schema.isPattern(/^[\x21\x23-\x5b\x5d-\x7e]+$/),
+		Schema.isMaxLength(256),
+	),
+).check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(50),
+	Schema.makeFilter((scopes) => scopes.includes("openid"), {
+		message: "OpenID Connect scopes must include openid",
+	}),
+)
+export const defaultOidcScopes: typeof OidcScopes.Type = [
+	"openid",
+	"profile",
+	"email",
+]
 export const DeveloperVerification = Schema.Struct({
 	metadataKeys: Schema.Array(Schema.NonEmptyString),
 	dnsLabels: Schema.Array(
@@ -88,6 +106,7 @@ export const DeveloperVerification = Schema.Struct({
 export const IdentityProvider = Schema.Struct({
 	providerId: ProviderId,
 	callbackPath: CallbackPath,
+	scopes: OidcScopes,
 	issuer: Issuer,
 	clientId: ClientId,
 	/** Not set means a public client that uses PKCE only. */
@@ -97,6 +116,8 @@ export type IdentityProvider = typeof IdentityProvider.Type
 export const IdentityProviderInput = Schema.Struct({
 	providerId: Schema.optionalKey(ProviderId),
 	callbackPath: Schema.optionalKey(CallbackPath),
+	/** Leave it out to keep the current scopes. New providers use the standard scopes. */
+	scopes: Schema.optionalKey(OidcScopes),
 	issuer: Issuer,
 	clientId: ClientId,
 	/** Leave it out to keep the current secret. Send null for a public client. */
