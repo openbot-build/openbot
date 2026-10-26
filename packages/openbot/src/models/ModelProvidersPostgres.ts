@@ -1,4 +1,4 @@
-import { Model, Provider } from "@openbot-build/core"
+import { Config, Model, Provider } from "@openbot-build/core"
 import { ModelProvidersApi } from "@openbot-build/api"
 import {
 	Array as Arr,
@@ -32,6 +32,9 @@ const decodeOptions = Schema.decodeUnknownEffect(Options)
 const decodeAvailability = Schema.decodeUnknownEffect(AvailabilityJson)
 const decodeKind = Schema.decodeUnknownEffect(ModelProvidersApi.ProviderKind)
 const decodeType = Schema.decodeUnknownEffect(ModelProvidersApi.ModelType)
+const decodeMediaTypes = Schema.decodeUnknownEffect(
+	Schema.fromJsonString(Config.InputMediaTypes),
+)
 /** The values have their types already, so they always encode. */
 const encodeOptions = (options: typeof Options.Type) =>
 	Schema.encodeEffect(Options)(options).pipe(Effect.orDie)
@@ -71,6 +74,9 @@ const link = (
 			...(row.serviceTiers === null
 				? {}
 				: { serviceTiers: yield* decodeOptions(row.serviceTiers) }),
+			...(row.inputMediaTypes === null
+				? {}
+				: { inputMediaTypes: yield* decodeMediaTypes(row.inputMediaTypes) }),
 			...(row.contextWindow === null
 				? {}
 				: { contextWindow: row.contextWindow }),
@@ -102,6 +108,10 @@ const linkRows = (
 					item.serviceTiers === undefined
 						? null
 						: yield* encodeOptions(item.serviceTiers),
+				inputMediaTypes:
+					item.inputMediaTypes === undefined
+						? null
+						: yield* encodeOptions(item.inputMediaTypes),
 				contextWindow: item.contextWindow ?? null,
 				maxOutputTokens: item.maxOutputTokens ?? null,
 			}

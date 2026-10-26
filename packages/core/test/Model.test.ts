@@ -281,18 +281,19 @@ it.effect(
 				return Stream.make(finish())
 			},
 		})
-		/** The native window belongs to another model. The new model gets its messages after a note. */
-		const assertRebuilt = (prompt: Prompt.Prompt | undefined, input: string) =>
+		/** Another model reads the full portable history, not an opaque native window. */
+		const assertRebuilt = (
+			prompt: Prompt.Prompt | undefined,
+			history: Prompt.Prompt,
+			input: string,
+		) =>
 			Effect.gen(function* () {
 				assert.ok(prompt)
-				const [note, ...rest] = prompt.content
-				assert.ok(note !== undefined && note.role === "user")
-				assert.match(yield* json(note), /compacted for another model/)
 				assert.deepStrictEqual(
-					rest,
-					Prompt.concat(Prompt.make("recent input"), Prompt.make(input))
-						.content,
+					prompt.content,
+					Prompt.concat(history, Prompt.make(input)).content,
 				)
+				assert.notMatch(yield* json(prompt), /compacted for another model/)
 			})
 		return Effect.gen(function* () {
 			const definition = yield* Store.define({
@@ -329,6 +330,10 @@ it.effect(
 								{
 									id: Item.Id.make("first"),
 									content: Prompt.make("first input"),
+								},
+								{
+									id: Item.Id.make("recent"),
+									content: Prompt.make("recent input"),
 								},
 							],
 						}),
@@ -399,12 +404,13 @@ it.effect(
 			})
 			assert.strictEqual(changed.chat.seq, start.chat.seq)
 			const runtime = yield* ChatRuntime.make({ store, bot: {} })
+			const beforeModel = ChatState.promptOf(yield* store.items(chat))
 			const modelTurn = yield* runtime.execute({
 				chat,
 				input: "model switch input",
 			})
-			yield* assertRebuilt(prompts.at(-1), "model switch input")
-			assert.notMatch(yield* json(prompts.at(-1)), /first input/)
+			yield* assertRebuilt(prompts.at(-1), beforeModel, "model switch input")
+			assert.match(yield* json(prompts.at(-1)), /first input/)
 			assert.strictEqual(modelTurn.state.conversation.context._tag, "Prompt")
 			assert.deepStrictEqual(
 				Chat.currentTurn(modelTurn.chat)!.settings.model,
@@ -437,11 +443,16 @@ it.effect(
 				model: providerSwitch,
 			})
 			assert.deepStrictEqual(yield* configuration.get, providerSwitch)
+			const beforeProvider = ChatState.promptOf(yield* store.items(chat))
 			const providerTurn = yield* runtime.execute({
 				chat,
 				input: "provider switch input",
 			})
-			yield* assertRebuilt(prompts.at(-1), "provider switch input")
+			yield* assertRebuilt(
+				prompts.at(-1),
+				beforeProvider,
+				"provider switch input",
+			)
 			assert.strictEqual(providerTurn.state.conversation.context._tag, "Prompt")
 			assert.deepStrictEqual(
 				Chat.currentTurn(providerTurn.chat)!.settings.model,

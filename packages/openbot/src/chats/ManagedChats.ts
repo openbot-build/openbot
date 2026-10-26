@@ -16,9 +16,11 @@ import * as Todos from "../plugins/work/Todos.ts"
 import {
 	Array as Arr,
 	Context,
+	Clock,
 	Crypto,
 	Duration,
 	Effect,
+	Equal,
 	HashMap,
 	Layer,
 	Option,
@@ -29,7 +31,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
-import { AiError, LanguageModel, type Tool } from "effect/ai"
+import { AiError, LanguageModel, Prompt, type Tool } from "effect/ai"
 import {
 	ChatConflict,
 	ChatExecutionUnavailable,
@@ -57,6 +59,8 @@ import { HostTools } from "./HostTools.ts"
 import { toPublic, inputPrompt, response } from "./ResponseMapping.ts"
 import * as ChatEvents from "./ChatEvents.ts"
 import * as ChatHost from "./ChatHost.ts"
+import * as Execution from "./Execution.ts"
+import { ownerKey } from "../apps/StoredConnections.ts"
 import * as Compaction from "./Compaction.ts"
 import { chatHostId } from "./ChatHost.ts"
 import { OpenWork, none } from "./OpenWork.ts"
@@ -216,8 +220,7 @@ export const factory: Effect.Effect<
 						...(chain?.tokenId === undefined ? {} : { tokenId: chain.tokenId }),
 					}
 				})
-			const isLive = (chat: Chat.Ref) =>
-				ChatHost.hostState(chat).kind === "live"
+			const isLive = (chat: Chat.Ref) => Execution.of(chat).mode === "live"
 			/**
 			 * The model of a Chat. A live Chat uses the Live session of this process, and
 			 * nothing else. Other Chats use the model of their Turn, or of the Chat.
@@ -225,7 +228,10 @@ export const factory: Effect.Effect<
 			const modelFor = (chat: Chat.Ref, turn?: Turn.Record) =>
 				isLive(chat)
 					? Effect.gen(function* () {
-							const found = yield* liveSessions.find(chat.id)
+							const found = yield* liveSessions.find(
+								chat.id,
+								Execution.of(chat).generation,
+							)
 							if (Option.isNone(found))
 								return yield* ChatExecutionUnavailable.make({ chat: chat.id })
 							return withAttribution(found.value, attribution(chat.id))
@@ -375,9 +381,29 @@ export const factory: Effect.Effect<
 				// Only the process with the Live session of a live Chat runs its Turns.
 				// Input from other places waits in the inbox until that process takes it.
 				canStart: (view) =>
-					isLive(view.chat)
-						? liveSessions.has(view.chat.id)
-						: Effect.succeed(true),
+					Effect.gen(function* () {
+						const execution = Execution.of(view.chat)
+						const now = yield* Clock.currentTimeMillis
+						if (Execution.transitionActive(execution, now)) return false
+						if (!isLive(view.chat)) return true
+						const lease = execution.lease
+						if (lease === undefined)
+							return (
+								ChatHost.hostState(view.chat).execution === undefined &&
+								(yield* liveSessions.has(view.chat.id, execution.generation))
+							)
+						if (
+							lease.phase !== "ready" ||
+							lease.expiresAt <= now ||
+							lease.generation !== execution.generation
+						)
+							return false
+						return yield* liveSessions.has(
+							view.chat.id,
+							execution.generation,
+							lease.sessionId,
+						)
+					}),
 				whileRunning: (chat) => Effect.andThen(keepOpen, heartbeat(chat)),
 				bot: {
 					plugin: host,
@@ -393,7 +419,7 @@ export const factory: Effect.Effect<
 				},
 			}).pipe(Effect.provideContext(routed))
 			const read = (id: Chat.Id) => store.read(id).pipe(toPublic)
-			const info = (ref: Chat.Ref): ChatInfo => {
+			const info = (ref: Chat.Ref, now: number): ChatInfo => {
 				const state = ChatHost.hostState(ref)
 				return {
 					id: ref.id,
@@ -403,6 +429,7 @@ export const factory: Effect.Effect<
 					parent: state.parent ?? null,
 					...(state.title === undefined ? {} : { title: state.title }),
 					settings: ref.settings,
+					execution: Execution.view(ref, now),
 					...(state.planApproval === undefined
 						? {}
 						: { planApproval: state.planApproval }),
@@ -446,7 +473,7 @@ export const factory: Effect.Effect<
 							),
 						)
 					return {
-						chat: info(view.chat),
+						chat: info(view.chat, yield* Clock.currentTimeMillis),
 						status: Chat.status(view.chat)._tag,
 						turn: turn ?? null,
 						response:
@@ -457,25 +484,28 @@ export const factory: Effect.Effect<
 					}
 				})
 			const summary = (ref: Chat.Ref): Effect.Effect<ChatSummary> =>
-				Effect.map(runtime.isActive(ref.id), (active) => {
-					const turn = ref.turn
-					const latest =
-						turn === undefined ? undefined : response(ref.id, turn, [])
-					return {
-						chat: info(ref),
-						status: Chat.status(ref)._tag,
-						turn: turn?.id ?? null,
-						response:
-							latest === undefined
-								? null
-								: {
-										id: latest.id,
-										created_at: latest.created_at,
-										status: latest.status,
-									},
-						activity: activityOf(ref, active),
-					}
-				})
+				Effect.map(
+					Effect.all([runtime.isActive(ref.id), Clock.currentTimeMillis]),
+					([active, now]) => {
+						const turn = ref.turn
+						const latest =
+							turn === undefined ? undefined : response(ref.id, turn, [])
+						return {
+							chat: info(ref, now),
+							status: Chat.status(ref)._tag,
+							turn: turn?.id ?? null,
+							response:
+								latest === undefined
+									? null
+									: {
+											id: latest.id,
+											created_at: latest.created_at,
+											status: latest.status,
+										},
+							activity: activityOf(ref, active),
+						}
+					},
+				)
 			const get = (id: Chat.Id) => read(id).pipe(Effect.flatMap(project))
 			const liveCatalog =
 				options.liveCatalog ?? Effect.succeed({ providers: [], models: [] })
@@ -616,36 +646,379 @@ export const factory: Effect.Effect<
 						.modifyEffect({
 							chat: id,
 							expectedRevision: input.expected,
-							update: (current) => {
-								const { model: _model, ...rest } = current.chat.settings
-								const settings: Turn.Settings = {
-									...(model === null ? rest : current.chat.settings),
-									...(input.mode === undefined ? {} : { mode: input.mode }),
-									...(model === undefined || model === null ? {} : { model }),
-								}
-								const state = ChatHost.hostState(current.chat)
-								// A `null` makes the Chat follow its Bot and the member again.
-								const { planApproval: _approval, ...kept } = state
-								const business =
-									input.planApproval === undefined
-										? {}
-										: {
+							update: (current) =>
+								Effect.gen(function* () {
+									const now = yield* Clock.currentTimeMillis
+									const execution = Execution.of(current.chat)
+									const turn = Chat.currentTurn(current.chat)
+									if (
+										Execution.transitionActive(execution, now) ||
+										(input.model !== undefined &&
+											((yield* runtime.isActive(id)) ||
+												(turn !== undefined && !Turn.isTerminal(turn.status)) ||
+												(execution.lease !== undefined &&
+													execution.lease.expiresAt > now)))
+									)
+										return yield* ChatConflict.make({
+											message:
+												"Wait for the current work or Live connection before changing the model.",
+										})
+									const { model: _model, ...rest } = current.chat.settings
+									const settings: Turn.Settings = {
+										...(model === null ? rest : current.chat.settings),
+										...(input.mode === undefined ? {} : { mode: input.mode }),
+										...(model === undefined || model === null ? {} : { model }),
+									}
+									const state = ChatHost.hostState(current.chat)
+									// A `null` makes the Chat follow its Bot and the member again.
+									const { planApproval: _approval, ...kept } = state
+									const { chatModel: _chatModel, ...withoutChatModel } =
+										execution
+									const nextExecution =
+										model === undefined
+											? execution
+											: model === null
+												? withoutChatModel
+												: {
+														...execution,
+														...(live
+															? { liveModel: model }
+															: { chatModel: model }),
+													}
+									const nextState =
+										input.planApproval === undefined
+											? state
+											: input.planApproval === null
+												? kept
+												: { ...kept, planApproval: input.planApproval }
+									return [
+										undefined,
+										Option.some({
+											chat: {
+												settings,
 												business: {
 													...current.chat.business,
-													[chatHostId]:
-														input.planApproval === null
-															? kept
-															: { ...kept, planApproval: input.planApproval },
+													[chatHostId]: {
+														...nextState,
+														execution: nextExecution,
+													},
 												},
-											}
-								return Effect.succeed([
-									undefined,
-									Option.some({ chat: { settings, ...business } }),
-								] as const)
-							},
+											},
+										}),
+									] as const
+								}),
 						})
 						.pipe(toPublic)
 					return yield* project(view)
+				})
+			const changeExecution: typeof Chats.Service.changeExecution = (id, f) =>
+				store
+					.modifyEffect({
+						chat: id,
+						update: (current) =>
+							Effect.map(
+								f(current.chat),
+								(execution) =>
+									[
+										undefined,
+										Option.some({
+											chat: {
+												business: {
+													...current.chat.business,
+													[chatHostId]: {
+														...ChatHost.hostState(current.chat),
+														execution,
+													},
+												},
+											},
+										}),
+									] as const,
+							),
+					})
+					.pipe(Execution.toPublicExecution, Effect.asVoid)
+			const executionContext: typeof Chats.Service.executionContext = (
+				id,
+				expected,
+			) =>
+				runtime
+					.context({
+						chat: id,
+						...(expected === undefined ? {} : { expected }),
+					})
+					.pipe(toPublic)
+			const checkExecution: typeof Chats.Service.checkExecution = (
+				id,
+				generation,
+				mode,
+			) =>
+				Effect.gen(function* () {
+					const execution = Execution.of((yield* read(id)).chat)
+					return (
+						execution.generation === generation &&
+						execution.mode === mode &&
+						!Execution.transitionActive(
+							execution,
+							yield* Clock.currentTimeMillis,
+						)
+					)
+				})
+			const interruptExecution: typeof Chats.Service.interruptExecution = (
+				id,
+				generation,
+				turn,
+			) =>
+				Effect.gen(function* () {
+					if (!(yield* checkExecution(id, generation, "live"))) return
+					yield* runtime.interrupt({ chat: id, turn }).pipe(toPublic)
+				})
+			const switchExecution: typeof Chats.Service.switchExecution = (
+				id,
+				input,
+			) =>
+				Effect.gen(function* () {
+					const initial = yield* read(id)
+					const state = Execution.of(initial.chat)
+					const remembered =
+						input.mode === "live" ? state.liveModel : state.chatModel
+					const chosen =
+						input.model ??
+						remembered ??
+						(input.mode === "live"
+							? yield* liveModel(undefined)
+							: options.chatModel === undefined
+								? options.defaultModel
+								: ((yield* options.chatModel(
+										ChatHost.hostState(initial.chat).bot,
+									)) ?? options.defaultModel))
+					if (chosen === undefined)
+						return yield* ChatModelInvalid.make({
+							reason: "missing",
+							message: "Choose a model for this kind of execution.",
+						})
+					const model = yield* input.mode === "live"
+						? validateLive(chosen)
+						: validateSelection(chosen)
+					if (options.validateExecution === undefined)
+						return yield* Execution.blocked(
+							"context",
+							"This host cannot check a change of execution.",
+						)
+					const validate = options.validateExecution
+					const transitionId = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
+					const startedAt = yield* Clock.currentTimeMillis
+					const reserve = store
+						.modifyEffect({
+							chat: id,
+							expectedRevision: input.expected,
+							update: (current) =>
+								Effect.gen(function* () {
+									const problem = Execution.idleProblem(
+										current.chat,
+										yield* runtime.isActive(id),
+										startedAt,
+									)
+									if (problem !== undefined) return yield* problem
+									const execution = {
+										...Execution.of(current.chat),
+										transition: { id: transitionId, startedAt },
+									}
+									return [
+										undefined,
+										Option.some({
+											chat: {
+												business: {
+													...current.chat.business,
+													[chatHostId]: {
+														...ChatHost.hostState(current.chat),
+														execution,
+													},
+												},
+											},
+										}),
+									] as const
+								}),
+						})
+						.pipe(Execution.toPublicExecution)
+					const release = store
+						.modifyEffect({
+							chat: id,
+							update: (current) =>
+								Effect.sync(() => {
+									const execution = Execution.of(current.chat)
+									if (execution.transition?.id !== transitionId)
+										return [undefined, Option.none()] as const
+									const { transition: _transition, ...kept } = execution
+									return [
+										undefined,
+										Option.some({
+											chat: {
+												business: {
+													...current.chat.business,
+													[chatHostId]: {
+														...ChatHost.hostState(current.chat),
+														execution: kept,
+													},
+												},
+											},
+										}),
+									] as const
+								}),
+						})
+						.pipe(
+							Effect.andThen(runtime.drain(id)),
+							Background.logFailure(
+								"The Chat could not clear its execution change.",
+							),
+							Effect.asVoid,
+						)
+					return yield* Effect.acquireUseRelease(
+						reserve,
+						(reserved) =>
+							Effect.gen(function* () {
+								const chain = ChatHost.hostState(reserved.view.chat).chain
+								const work = Execution.checkWork(db, {
+									chat: id,
+									namespace,
+									organizationId: chain.organizationId,
+									owner: ownerKey({
+										organizationId: chain.organizationId,
+										userId: ChatHost.ownerOf(chain),
+									}),
+								})
+								yield* work
+								const snapshot = yield* read(id)
+								const context = yield* executionContext(
+									id,
+									snapshot.chat.revision,
+								)
+								const complete = Arr.reduce(
+									snapshot.chat.inbox,
+									context.prompt,
+									(prompt, entry) => Prompt.concat(prompt, entry.content),
+								)
+								yield* validate({
+									context: complete,
+									selection: model,
+									mode: input.mode,
+								})
+								yield* work
+								const committed = yield* store
+									.modifyEffect({
+										chat: id,
+										update: (current) =>
+											Effect.gen(function* () {
+												const execution = Execution.of(current.chat)
+												const now = yield* Clock.currentTimeMillis
+												if (
+													execution.transition?.id !== transitionId ||
+													!Execution.transitionActive(execution, now)
+												)
+													return yield* Execution.blocked(
+														"transition",
+														"The execution change ended. Read the Chat and try again.",
+													)
+												const {
+													transition: _transition,
+													lease: _lease,
+													...kept
+												} = execution
+												const host = ChatHost.hostState(current.chat)
+												const noTransition = {
+													...current.chat,
+													inbox: [],
+													business: {
+														...current.chat.business,
+														[chatHostId]: {
+															...host,
+															execution: {
+																...execution,
+																transition: undefined,
+															},
+														},
+													},
+												}
+												const problem = Execution.idleProblem(
+													noTransition,
+													yield* runtime.isActive(id),
+													now,
+												)
+												if (problem !== undefined) return yield* problem
+												if (
+													current.chat.seq !== context.seq ||
+													!Equal.equals(
+														current.state.conversation.context,
+														snapshot.state.conversation.context,
+													) ||
+													!Equal.equals(
+														Arr.take(
+															current.chat.inbox,
+															snapshot.chat.inbox.length,
+														),
+														snapshot.chat.inbox,
+													) ||
+													!Arr.every(
+														Arr.drop(
+															current.chat.inbox,
+															snapshot.chat.inbox.length,
+														),
+														(entry) =>
+															entry.passive !== true &&
+															Arr.every(
+																entry.content.content,
+																(message) =>
+																	message.role === "system" ||
+																	Arr.every(
+																		message.content,
+																		(part: { readonly type: string }) =>
+																			part.type === "text",
+																	),
+															),
+													)
+												)
+													return yield* Execution.blocked(
+														"context",
+														"The saved context changed. Read the Chat and try again.",
+													)
+												return [
+													undefined,
+													Option.some({
+														chat: {
+															settings: { ...current.chat.settings, model },
+															business: {
+																...current.chat.business,
+																[chatHostId]: {
+																	...host,
+																	execution: {
+																		...kept,
+																		mode: input.mode,
+																		generation: execution.generation + 1,
+																		...(input.mode === "live"
+																			? { liveModel: model }
+																			: { chatModel: model }),
+																	},
+																},
+															},
+														},
+													}),
+												] as const
+											}),
+									})
+									.pipe(Execution.toPublicExecution)
+								return yield* project(committed.view)
+							}).pipe(
+								Effect.timeoutOrElse({
+									duration: Execution.timeoutMillis,
+									orElse: () =>
+										Effect.fail(
+											Execution.blocked(
+												"transition",
+												"The execution change took too long. Read the Chat and try again.",
+											),
+										),
+								}),
+							),
+						() => release,
+					)
 				})
 			const change: typeof Chats.Service.change = (id, f) =>
 				store
@@ -697,28 +1070,75 @@ export const factory: Effect.Effect<
 						}),
 					}
 				})
-			const deliver: typeof Chats.Service.deliver = (id, input) =>
-				Effect.gen(function* () {
-					const view = yield* read(id)
-					// A person learns at once when no model can run the work of this Chat.
-					// A message from OpenBot waits in the Chat all the same. Input to a live
-					// Chat waits for its Live session, so it needs no model now.
-					if (input.notice === undefined && !isLive(view.chat))
-						yield* modelFor(view.chat)
-					const delivery = yield* runtime
-						.deliver({
-							chat: id,
-							input: inputPrompt(input.input),
-							author: input.author,
-							...(input.notice === undefined ? {} : { notice: input.notice }),
-							...(input.approved === undefined
-								? {}
-								: { approved: input.approved }),
-							...(input.queue === undefined ? {} : { queue: input.queue }),
-						})
-						.pipe(toPublic)
-					return yield* receipt(delivery)
-				})
+			const deliver: typeof Chats.Service.deliver = (id, input) => {
+				const attempt = (
+					left: number,
+				): Effect.Effect<
+					Chat.Delivery,
+					ServiceError | ChatExecutionUnavailable
+				> =>
+					Effect.gen(function* () {
+						const view = yield* read(id)
+						const owner = input.expectedExecution
+						if (owner !== undefined) {
+							const execution = Execution.of(view.chat)
+							const lease = execution.lease
+							const now = yield* Clock.currentTimeMillis
+							if (
+								execution.mode !== "live" ||
+								execution.generation !== owner.generation ||
+								Execution.transitionActive(execution, now) ||
+								lease?.sessionId !== owner.sessionId ||
+								lease.generation !== owner.generation ||
+								lease.phase !== "ready" ||
+								lease.expiresAt <= now
+							)
+								return yield* ChatConflict.make({
+									message: "This Live connection no longer accepts input.",
+								})
+						}
+						// A person learns at once when no model can run the work of this Chat.
+						// Input from OpenBot or for a Live session waits in the Chat all the same.
+						if (input.notice === undefined && !isLive(view.chat))
+							yield* modelFor(view.chat)
+						return yield* runtime
+							.deliver({
+								chat: id,
+								input: inputPrompt(input.input),
+								author: input.author,
+								...(owner === undefined
+									? {}
+									: { expected: view.chat.revision }),
+								...(input.notice === undefined ? {} : { notice: input.notice }),
+								...(input.approved === undefined
+									? {}
+									: { approved: input.approved }),
+								...(input.queue === undefined ? {} : { queue: input.queue }),
+								...(input.passive === undefined
+									? {}
+									: { passive: input.passive }),
+							})
+							.pipe(
+								// Only the inbox compare-and-set can return this core conflict. Nothing
+								// was added then; check the owner again before another bounded attempt.
+								Effect.matchEffect({
+									onSuccess: Effect.succeed,
+									onFailure: (
+										error,
+									): Effect.Effect<
+										Chat.Delivery,
+										ServiceError | ChatExecutionUnavailable
+									> =>
+										error._tag === "ChatConflict" &&
+										owner !== undefined &&
+										left > 0
+											? attempt(left - 1)
+											: toPublic(Effect.fail(error)),
+								}),
+							)
+					})
+				return attempt(2).pipe(Effect.flatMap(receipt))
+			}
 			/** Turns the core events of one Turn into Responses events. */
 			const follow = <E>(
 				chat: Chat.Id,
@@ -1078,6 +1498,11 @@ export const factory: Effect.Effect<
 					read,
 					list,
 					update,
+					switchExecution,
+					changeExecution,
+					executionContext,
+					checkExecution,
+					interruptExecution,
 					change,
 					remove: (id) =>
 						Effect.gen(function* () {

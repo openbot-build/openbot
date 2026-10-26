@@ -1,7 +1,16 @@
 import { assert, it } from "@effect/vitest"
-import { Chat, Live, LiveDriver } from "@openbot-build/core"
-import { Array as Arr, Effect, Option, PubSub, Ref, Schema } from "effect"
-import { LanguageModel, Tool, Toolkit } from "effect/ai"
+import { Chat, ContextWindow, Live, LiveDriver } from "@openbot-build/core"
+import {
+	Array as Arr,
+	Deferred,
+	Effect,
+	Fiber,
+	Option,
+	PubSub,
+	Ref,
+	Schema,
+} from "effect"
+import { LanguageModel, Prompt, Tool, Toolkit } from "effect/ai"
 import { ChatTest } from "./ChatTest.ts"
 
 const usage: Live.Usage = {
@@ -42,6 +51,318 @@ const said = (itemId: string, text: string) => [
 	Live.Event.OutputDone({ itemId }),
 	Live.Event.ResponseDone({ status: "completed", usage }),
 ]
+
+it.effect(
+	"an interrupted write cannot resend an input with an unknown result",
+	() =>
+		Effect.gen(function* () {
+			const events = yield* PubSub.unbounded<Live.Event>()
+			const inputs = yield* Ref.make<ReadonlyArray<Live.Input>>([])
+			const writing = yield* Deferred.make<void>()
+			const driver = yield* LiveDriver.make({
+				events,
+				base,
+				send: (input) =>
+					Ref.update(inputs, (all) => [...all, input]).pipe(
+						Effect.andThen(
+							input._tag === "Text"
+								? Deferred.succeed(writing, undefined).pipe(
+										Effect.andThen(Effect.never),
+									)
+								: Effect.void,
+						),
+					),
+			})
+			const request = LanguageModel.generateText({ prompt: "Read" }).pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+			)
+			const running = yield* Effect.forkScoped(request)
+			yield* Deferred.await(writing)
+			yield* Fiber.interrupt(running)
+			const error = yield* request.pipe(Effect.flip)
+			assert.ok(error.reason._tag === "InternalProviderError")
+			assert.deepStrictEqual(
+				Arr.map(yield* Ref.get(inputs), (input) => input._tag),
+				["Configure", "Text"],
+			)
+		}),
+)
+
+it.effect("a partial input send cannot be retried on the same connection", () =>
+	Effect.gen(function* () {
+		const events = yield* PubSub.unbounded<Live.Event>()
+		const inputs = yield* Ref.make<ReadonlyArray<Live.Input>>([])
+		const driver = yield* LiveDriver.make({
+			events,
+			base,
+			send: (input) =>
+				Ref.update(inputs, (all) => [...all, input]).pipe(
+					Effect.andThen(
+						input._tag === "Image"
+							? Effect.fail(
+									Live.LiveError.make({
+										reason: "closed",
+										message: "The send result is unknown.",
+									}),
+								)
+							: Effect.void,
+					),
+				),
+		})
+		const prompt = Prompt.make([
+			{
+				role: "user",
+				content: [
+					Prompt.textPart({ text: "Read" }),
+					Prompt.filePart({ mediaType: "image/png", data: "AQID" }),
+				],
+			},
+		])
+		for (let attempt = 0; attempt < 2; attempt++) {
+			yield* LanguageModel.generateText({ prompt }).pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+				Effect.flip,
+			)
+		}
+		assert.deepStrictEqual(
+			Arr.map(yield* Ref.get(inputs), (input) => input._tag),
+			["Configure", "Text", "Image"],
+		)
+	}),
+)
+
+it.effect(
+	"a runtime-added tool result is sent once before it becomes saved history",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([
+				said("one", "Okay"),
+				said("two", "Okay"),
+			])
+			const saved = Prompt.make([
+				{ role: "user", content: "Read" },
+				{
+					role: "assistant",
+					content: [
+						Prompt.toolCallPart({
+							id: "closed",
+							name: "Read",
+							params: {},
+							providerExecuted: false,
+						}),
+					],
+				},
+			])
+			const withResult = Prompt.concat(
+				saved,
+				Prompt.make([
+					{
+						role: "tool",
+						content: [
+							Prompt.toolResultPart({
+								id: "closed",
+								name: "Read",
+								result: "The tool is closed.",
+								isFailure: true,
+								providerExecuted: false,
+							}),
+						],
+					},
+				]),
+			)
+			yield* driver.loaded(saved)
+			yield* LanguageModel.generateText({ prompt: withResult }).pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+				Effect.provideService(
+					ContextWindow.CurrentWindow,
+					ContextWindow.fromPrompt(saved),
+				),
+			)
+			yield* LanguageModel.generateText({ prompt: withResult }).pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+				Effect.provideService(
+					ContextWindow.CurrentWindow,
+					ContextWindow.fromPrompt(withResult),
+				),
+			)
+			assert.strictEqual(
+				Arr.filter(yield* Ref.get(inputs), Live.Input.$is("ToolResult")).length,
+				1,
+			)
+		}),
+)
+
+it.effect(
+	"raw history positions survive file loading and temporary text enrichment",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([
+				said("one", "Okay"),
+				said("two", "Okay"),
+			])
+			const rawImage = Prompt.make([
+				{
+					role: "user",
+					content: [
+						Prompt.filePart({
+							mediaType: "image/png",
+							data: new URL("https://files.example/image"),
+						}),
+					],
+				},
+			])
+			const loadedImage = Prompt.make([
+				{
+					role: "user",
+					content: [
+						Prompt.filePart({
+							mediaType: "image/png",
+							data: new Uint8Array([1, 2, 3]),
+						}),
+					],
+				},
+			])
+			yield* driver.loaded(rawImage)
+			const first = Prompt.concat(
+				rawImage,
+				Prompt.make([{ role: "user", content: "First" }]),
+			)
+			yield* LanguageModel.generateText({
+				prompt: Prompt.concat(
+					loadedImage,
+					Prompt.make([{ role: "user", content: "First with memory" }]),
+				),
+			}).pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+				Effect.provideService(
+					ContextWindow.CurrentWindow,
+					ContextWindow.fromPrompt(first),
+				),
+			)
+			yield* LanguageModel.generateText({
+				prompt: Prompt.concat(
+					loadedImage,
+					Prompt.make([
+						{ role: "user", content: "First" },
+						{ role: "user", content: "Second with memory" },
+					]),
+				),
+			}).pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+				Effect.provideService(
+					ContextWindow.CurrentWindow,
+					ContextWindow.fromPrompt(
+						Prompt.concat(
+							first,
+							Prompt.make([{ role: "user", content: "Second" }]),
+						),
+					),
+				),
+			)
+			const sent = yield* Ref.get(inputs)
+			assert.deepStrictEqual(Arr.filter(sent, Live.Input.$is("Text")), [
+				Live.Input.Text({ text: "First with memory" }),
+				Live.Input.Text({ text: "Second with memory" }),
+			])
+			assert.deepStrictEqual(Arr.filter(sent, Live.Input.$is("Image")), [])
+		}),
+)
+
+it.effect(
+	"loaded history tails are not sent again and equal new input is kept",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([said("new", "Okay")])
+			const history = Prompt.make([
+				{ role: "user", content: "Earlier" },
+				{
+					role: "assistant",
+					content: [
+						Prompt.toolCallPart({
+							id: "old",
+							name: "Lookup",
+							params: {},
+							providerExecuted: false,
+						}),
+					],
+				},
+				{
+					role: "tool",
+					content: [
+						Prompt.toolResultPart({
+							id: "old",
+							name: "Lookup",
+							result: "saved",
+							isFailure: false,
+							providerExecuted: false,
+						}),
+					],
+				},
+				{ role: "user", content: "Again" },
+			])
+			yield* driver.loaded(history)
+			yield* LanguageModel.generateText({
+				prompt: Prompt.concat(
+					history,
+					Prompt.make([{ role: "user", content: "Again" }]),
+				),
+			}).pipe(Effect.provideService(LanguageModel.LanguageModel, driver.model))
+			const sent = yield* Ref.get(inputs)
+			assert.deepStrictEqual(
+				Arr.map(sent, (input) => input._tag),
+				["Configure", "Text", "Respond"],
+			)
+			assert.deepStrictEqual(Arr.filter(sent, Live.Input.$is("Text")), [
+				Live.Input.Text({ text: "Again" }),
+			])
+		}),
+)
+
+it.effect(
+	"input before an interrupted answer is not resent on the next request",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([
+				[Live.Event.ResponseDone({ status: "cancelled", usage })],
+				said("next", "Okay"),
+			])
+			const provide = Effect.provideService(
+				LanguageModel.LanguageModel,
+				driver.model,
+			)
+			const first = Prompt.make([{ role: "user", content: "Again" }])
+			yield* driver.loaded(Prompt.empty)
+			yield* LanguageModel.generateText({ prompt: first }).pipe(provide)
+			yield* LanguageModel.generateText({
+				prompt: Prompt.concat(
+					first,
+					Prompt.make([{ role: "user", content: "Again" }]),
+				),
+			}).pipe(provide)
+			assert.deepStrictEqual(
+				Arr.filter(yield* Ref.get(inputs), Live.Input.$is("Text")),
+				[
+					Live.Input.Text({ text: "Again" }),
+					Live.Input.Text({ text: "Again" }),
+				],
+			)
+		}),
+)
+
+it.effect("a changed loaded prefix fails without sending another input", () =>
+	Effect.gen(function* () {
+		const { driver, inputs } = yield* scripted([])
+		yield* driver.loaded(Prompt.make([{ role: "user", content: "Saved" }]))
+		const error = yield* LanguageModel.generateText({
+			prompt: "Replaced",
+		}).pipe(
+			Effect.provideService(LanguageModel.LanguageModel, driver.model),
+			Effect.flip,
+		)
+		assert.ok(error.reason._tag === "InternalProviderError")
+		assert.deepStrictEqual(yield* Ref.get(inputs), [])
+	}),
+)
 
 it.effect("a Turn answers through the Live connection", () =>
 	Effect.gen(function* () {
@@ -163,6 +484,67 @@ it.effect("a failure of the connection fails the Turn", () =>
 		assert.ok(status._tag === "Failed")
 		assert.strictEqual(status.code, "model_error")
 	}),
+)
+
+it.effect(
+	"new image input goes through the driver instead of being dropped",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([said("answer", "A tree.")])
+			const { runtime, chat } = yield* ChatTest().pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+			)
+			yield* runtime
+				.execute({
+					chat,
+					input: Prompt.make([
+						{
+							role: "user",
+							content: [
+								Prompt.textPart({ text: "What is here?" }),
+								Prompt.filePart({ mediaType: "image/png", data: "AQID" }),
+							],
+						},
+					]),
+				})
+				.pipe(Effect.provideService(LanguageModel.LanguageModel, driver.model))
+			const image = Arr.findFirst(
+				yield* Ref.get(inputs),
+				Live.Input.$is("Image"),
+			)
+			assert.ok(Option.isSome(image))
+			assert.strictEqual(image.value.mediaType, "image/png")
+			assert.deepStrictEqual([...image.value.bytes], [1, 2, 3])
+		}),
+)
+
+it.effect(
+	"unsupported files fail before any new input reaches the Live model",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([])
+			const { runtime, chat } = yield* ChatTest().pipe(
+				Effect.provideService(LanguageModel.LanguageModel, driver.model),
+			)
+			yield* runtime
+				.execute({
+					chat,
+					input: Prompt.make([
+						{
+							role: "user",
+							content: [
+								Prompt.textPart({ text: "Read this." }),
+								Prompt.filePart({ mediaType: "application/pdf", data: "AQID" }),
+							],
+						},
+					]),
+				})
+				.pipe(
+					Effect.provideService(LanguageModel.LanguageModel, driver.model),
+					Effect.flip,
+				)
+			assert.deepStrictEqual(yield* Ref.get(inputs), [])
+		}),
 )
 
 it.effect("unsupported inputs are found from the capabilities", () =>

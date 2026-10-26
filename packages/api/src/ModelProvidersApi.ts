@@ -1,4 +1,4 @@
-import { Model as CoreModel, Provider } from "@openbot-build/core"
+import { Config, Model as CoreModel, Provider } from "@openbot-build/core"
 import { Array as Arr, pipe, Schema } from "effect"
 import {
 	HttpApiEndpoint,
@@ -84,6 +84,8 @@ export const Model = Schema.Struct({
 	name: Schema.String,
 	reasoningEfforts: Schema.Array(Schema.String),
 	serviceTiers: Schema.Array(Schema.String),
+	/** Missing means unknown; an empty list accepts text only. */
+	inputMediaTypes: Schema.optionalKey(Config.InputMediaTypes),
 	contextWindow: Schema.optionalKey(PositiveInt),
 	maxOutputTokens: Schema.optionalKey(PositiveInt),
 	/** Only models of the platform have it. */
@@ -101,6 +103,7 @@ export const CreateModelRequest = Schema.Struct({
 	name: ModelName,
 	reasoningEfforts: Options,
 	serviceTiers: Options,
+	inputMediaTypes: Schema.optionalKey(Config.InputMediaTypes),
 	contextWindow: Schema.optionalKey(PositiveInt),
 	maxOutputTokens: Schema.optionalKey(PositiveInt),
 })
@@ -110,6 +113,8 @@ export const UpdateModelRequest = Schema.Struct({
 	name: Schema.optionalKey(ModelName),
 	reasoningEfforts: Schema.optionalKey(Options),
 	serviceTiers: Schema.optionalKey(Options),
+	/** Null removes the declaration, leaving media support unknown. */
+	inputMediaTypes: Schema.optionalKey(Schema.NullOr(Config.InputMediaTypes)),
 	/** Null removes the limit. */
 	contextWindow: Schema.optionalKey(Schema.NullOr(PositiveInt)),
 	maxOutputTokens: Schema.optionalKey(Schema.NullOr(PositiveInt)),
@@ -138,6 +143,7 @@ export const ProviderModel = Schema.Struct({
 	upstream: Schema.optionalKey(ModelName),
 	reasoningEfforts: Schema.optionalKey(Options),
 	serviceTiers: Schema.optionalKey(Options),
+	inputMediaTypes: Schema.optionalKey(Config.InputMediaTypes),
 	contextWindow: Schema.optionalKey(PositiveInt),
 	maxOutputTokens: Schema.optionalKey(PositiveInt),
 })
@@ -230,6 +236,7 @@ export const ModelCatalog = Schema.Struct({
 			name: Schema.String,
 			reasoningEfforts: Schema.Array(Schema.String),
 			serviceTiers: Schema.Array(Schema.String),
+			inputMediaTypes: Schema.optionalKey(Config.InputMediaTypes),
 			contextWindow: Schema.optionalKey(PositiveInt),
 			maxOutputTokens: Schema.optionalKey(PositiveInt),
 			/** The current price at this provider. Missing when the model has no price. */

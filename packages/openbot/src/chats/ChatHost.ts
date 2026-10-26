@@ -1,8 +1,9 @@
-import { Chat, type Plugin, type Turn } from "@openbot-build/core"
+import { Chat, Config, type Plugin, type Turn } from "@openbot-build/core"
 import {
 	BotsApi,
 	ChatKind,
 	ChatParent,
+	ChatExecutionMode,
 	PlanApproval,
 	UserTokensApi,
 } from "@openbot-build/api"
@@ -36,10 +37,46 @@ export const Chain = Schema.Struct({
 })
 export type Chain = typeof Chain.Type
 
+/** The selected models stay with the Chat when a connection closes. */
+export const ExecutionState = Schema.Struct({
+	mode: ChatExecutionMode,
+	generation: Schema.Natural,
+	chatModel: Schema.optionalKey(Config.Selection),
+	liveModel: Schema.optionalKey(Config.Selection),
+	transition: Schema.optionalKey(
+		Schema.Struct({
+			id: Schema.String,
+			startedAt: Schema.Finite,
+		}),
+	),
+	lease: Schema.optionalKey(
+		Schema.Struct({
+			sessionId: Schema.String,
+			generation: Schema.Natural,
+			expiresAt: Schema.Finite,
+			phase: Schema.Literals(["connecting", "ready"]),
+			busy: Schema.Boolean,
+		}),
+	),
+})
+export type ExecutionState = typeof ExecutionState.Type
+
 /** OpenBot data for one Chat. */
 export const ChatHostState = Schema.Struct({
+	/** Playback facts are kept apart from the text the model made. */
+	playback: Schema.optionalKey(
+		Schema.Array(
+			Schema.Struct({
+				itemId: Schema.String,
+				turnId: Schema.optionalKey(Schema.String),
+				audioEndMs: Schema.optionalKey(Schema.Natural),
+				incomplete: Schema.Literal(true),
+			}),
+		),
+	),
 	bot: BotsApi.BotId,
 	kind: ChatKind,
+	execution: Schema.optionalKey(ExecutionState),
 	parent: Schema.optionalKey(ChatParent),
 	chain: Chain,
 	/** The request that a review Chat decides. */

@@ -11,6 +11,7 @@ export interface StoredModel {
 	readonly name: string
 	readonly reasoningEfforts: ReadonlyArray<string>
 	readonly serviceTiers: ReadonlyArray<string>
+	readonly inputMediaTypes: ReadonlyArray<string> | null
 	readonly contextWindow: number | null
 	readonly maxOutputTokens: number | null
 	readonly availability: ModelProvidersApi.Availability | null
@@ -85,6 +86,9 @@ export const view = (model: StoredModel): ModelProvidersApi.Model => ({
 	name: model.name,
 	reasoningEfforts: model.reasoningEfforts,
 	serviceTiers: model.serviceTiers,
+	...(model.inputMediaTypes === null
+		? {}
+		: { inputMediaTypes: model.inputMediaTypes }),
 	...(model.contextWindow === null
 		? {}
 		: { contextWindow: model.contextWindow }),
@@ -112,6 +116,7 @@ export const effective = ({
 	upstream: link.upstream ?? model.id,
 	reasoningEfforts: link.reasoningEfforts ?? model.reasoningEfforts,
 	serviceTiers: link.serviceTiers ?? model.serviceTiers,
+	inputMediaTypes: link.inputMediaTypes ?? model.inputMediaTypes,
 	contextWindow: link.contextWindow ?? model.contextWindow,
 	maxOutputTokens: link.maxOutputTokens ?? model.maxOutputTokens,
 })

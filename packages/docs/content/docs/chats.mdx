@@ -38,6 +38,11 @@ as long as people talk to the Bot, unless you
 [delete its history](#delete-the-history). A review Chat closes after its
 decision.
 
+`kind` records why the Chat was made; `execution.mode` selects whether Chat or
+Live execution runs it now. An idle `direct` or `live` Chat can switch execution
+without changing its kind, Bot, ID, or history. Other kinds keep their existing
+execution. See [Switch between Chat and Live](#switch-between-chat-and-live).
+
 ---
 
 ## Talk to a Bot
@@ -92,9 +97,9 @@ A message can also have files that you uploaded, with `input_image` and
 
 `POST /v1/chats/:chatId/messages` takes the same body. Use it for a direct Chat,
 for a live Chat, or for a task Chat when you want to add to the work of a Bot.
-In a task Chat, the Bot reads your message as a message from you. In a live
-Chat, the message waits until a Live session is open. Other kinds of Chats
-return `409` with `ChatConflict`.
+In a task Chat, the Bot reads your message as a message from you. When
+`execution.mode` is `live`, the message waits until a Live session is open.
+Other kinds of Chats return `409` with `ChatConflict`.
 
 ### The answer
 
@@ -578,9 +583,54 @@ A wrong model returns `400` with `ChatModelInvalid`. The `reason` is
 `provider-not-found`, `model-not-found` or `unsupported-option`. See
 [Models](/docs/models) for how OpenBot gets its models.
 
-The execution mode is `build` or `plan`. `build` is the normal mode: the Bot
-does the work. In `plan` mode, the Bot writes a plan first. OpenBot saves the
-mode on the Chat and copies it into the `settings` of each new Turn.
+The Turn setting `settings.mode` is `build` or `plan`. `build` is the normal
+mode: the Bot does the work. In `plan` mode, the Bot writes a plan first.
+OpenBot saves the mode on the Chat and copies it into the `settings` of each new
+Turn. It is separate from `execution.mode`, which selects `chat` or `live`.
+
+### Switch between Chat and Live
+
+`PUT /v1/chats/:chatId/execution` changes the execution of an idle `direct` or
+`live` Chat. It keeps the same Chat and committed history:
+
+```json
+{
+	"expected": 4,
+	"mode": "live",
+	"model": {
+		"_tag": "Config.Selection",
+		"provider": "openai",
+		"model": "gpt-realtime"
+	}
+}
+```
+
+Send the current `chat.revision` as `expected`. `mode` is required; `model` is
+optional. OpenBot remembers a separate model selection for each mode. Changing
+to Live selects a model but does not connect or run it. Open the Live socket
+after the response, and wait for `session.ready` before sending input. Finish
+current work before switching back to `chat`. An idle Live connection can be
+switched; its generation becomes stale and it cannot start more work.
+
+The Chat view includes `execution.mode`, `generation`, `phase`, `chatModel`, and
+`liveModel`. A switch needs `write` and `run` on the Chat, delegation to its
+Bot, and use of the target model. Running work, queued input, pending approvals,
+unresolved tool operations, a busy Live connection, or a competing switch return
+`409` with `ChatExecutionBlocked`. An old revision returns `ChatConflict`.
+
+OpenBot checks the target model against the saved text, transcripts, tool
+records, images, and files. Unsupported or unreadable context blocks the switch;
+it is not silently dropped. Language models must declare supported file MIME
+types in `inputMediaTypes`; an unset list does not imply support and an empty
+list means text only. The Live adapter checks its own capabilities. Loading
+history does not rerun tools or start an answer. See [Live mode](/docs/live) for
+connection, context, and provider limits.
+
+Nonempty shared history requires a known target `contextWindow`. Unknown windows
+and context estimates above the input budget block the switch. OpenBot estimates
+the resolved prompt and does not compact it during a switch. The provider can
+still reject the final request; local estimates and history-load acknowledgments
+do not prove an exact token fit.
 
 ---
 

@@ -1,18 +1,11 @@
 import { Duration } from "effect"
 import { LiveApi } from "@openbot-build/api"
-import {
-	ChatState,
-	Live,
-	LiveDriver,
-	type Chat,
-	Turn,
-} from "@openbot-build/core"
+import { Live, LiveDriver, type Chat, Turn } from "@openbot-build/core"
 import {
 	Array as Arr,
-	Cause,
+	Crypto,
 	Effect,
 	Option,
-	Order,
 	PubSub,
 	Ref,
 	Result,
@@ -20,15 +13,16 @@ import {
 	Schema,
 	Stream,
 	String as Str,
-	pipe,
 } from "effect"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
-import type { Prompt } from "effect/ai"
+import { Prompt } from "effect/ai"
 import type * as Chats from "../Chats.ts"
 import type { ResolvedLive } from "../../models/ModelRegistry.ts"
 import * as Background from "../../app/Background.ts"
+import * as Failures from "../../app/Failures.ts"
 import { LiveSessions } from "./LiveSessions.ts"
+import * as LiveLease from "./LiveLease.ts"
 
 /**
  * One Live session: one client WebSocket and one connection to a Live backend. The code
@@ -96,25 +90,6 @@ const decodeClient = Schema.decodeUnknownOption(
 	Schema.fromJsonString(LiveApi.LiveClientMessage),
 )
 
-/** How many old messages go to the Live model when the session starts. */
-const historyLimit = 40
-const bySeq = Order.mapInput(
-	Order.Number,
-	(item: { readonly seq: number }) => item.seq,
-)
-
-/** The user and assistant text of some Items, oldest first. */
-const historyOf = (prompt: Prompt.Prompt): ReadonlyArray<Live.HistoryMessage> =>
-	Arr.flatMap(prompt.content, (message): ReadonlyArray<Live.HistoryMessage> => {
-		if (message.role !== "user" && message.role !== "assistant") return []
-		const text = pipe(
-			message.content,
-			Arr.flatMap((part) => (part.type === "text" ? [part.text] : [])),
-			Arr.join("\n"),
-		)
-		return text.length === 0 ? [] : [{ role: message.role, text }]
-	})
-
 /** How long the watcher waits before it reads the Chat again for changes of other servers. */
 const watchEvery = Duration.seconds(2)
 
@@ -125,12 +100,26 @@ export const run = (input: {
 	readonly author: Turn.Author
 	readonly live: ResolvedLive
 	readonly plan: Plan
+	readonly generation: number
+	readonly prepareContext: (
+		prompt: Prompt.Prompt,
+	) => Effect.Effect<Prompt.Prompt, Live.LiveError>
+	readonly storeImage: (
+		mediaType: string,
+		bytes: Uint8Array,
+	) => Effect.Effect<Prompt.Prompt, Live.LiveError>
 }) =>
 	Effect.scoped(
 		Effect.gen(function* () {
 			const { chats, chat, author, live } = input
 			const capabilities = live.model.capabilities
 			const sessions = yield* LiveSessions
+			const crypto = yield* Crypto.Crypto
+			const owner: LiveLease.Owner = {
+				chat,
+				generation: input.generation,
+				sessionId: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+			}
 			// The reader does the handshake, and the writer waits for it, so the reader comes first.
 			const reader = yield* input.socket.reader
 			const writer = yield* input.socket.writer
@@ -144,6 +133,46 @@ export const run = (input: {
 				)
 			const fail = (code: LiveApi.LiveErrorCode, message: string) =>
 				say({ type: "error", code, message })
+			const claimed = yield* LiveLease.claim(chats, owner).pipe(Effect.result)
+			if (Result.isFailure(claimed)) {
+				yield* fail(
+					"chat",
+					"The Chat already has a Live connection or changed execution.",
+				)
+				return
+			}
+			yield* Effect.addFinalizer(() =>
+				LiveLease.release(chats, owner).pipe(
+					Background.logFailure(
+						"A Live connection could not release its lease.",
+					),
+				),
+			)
+			const guard = Effect.gen(function* () {
+				while (true) {
+					if (!(yield* LiveLease.valid(chats, owner)))
+						return yield* Live.LiveError.make({
+							reason: "closed",
+							message: "The Chat changed execution.",
+						})
+					const view = yield* chats.get(chat)
+					if (view.chat.execution.phase !== "switching") return
+					yield* chats.wait(chat, view.chat.revision, Duration.millis(200))
+				}
+			}).pipe(
+				Failures.replace(
+					"A Live connection could not confirm its ownership.",
+					() =>
+						Live.LiveError.make({
+							reason: "closed",
+							message: "The Live connection no longer owns this Chat.",
+						}),
+				),
+			)
+			yield* Background.repeat(LiveLease.update(chats, owner), {
+				schedule: Schedule.spaced(LiveLease.renewEveryMillis),
+				message: "A Live connection could not renew its lease.",
+			})
 
 			const base: LiveDriver.Options["base"] = {
 				audio: input.plan.audio,
@@ -152,12 +181,26 @@ export const run = (input: {
 			}
 			const connected = yield* live.model
 				.connect({ ...base, instructions: "", tools: [] })
-				.pipe(Effect.result)
+				.pipe(
+					Effect.timeoutOrElse({
+						duration: "30 seconds",
+						orElse: () =>
+							Effect.fail(
+								Live.LiveError.make({
+									reason: "provider",
+									message: "The Live model did not connect in time.",
+								}),
+							),
+					}),
+					Effect.result,
+				)
 			if (Result.isFailure(connected)) {
 				yield* fail(connected.failure.reason, connected.failure.message)
 				return
 			}
 			const connection = connected.success
+			const ownedSend = (value: Live.Input) =>
+				guard.pipe(Effect.andThen(connection.send(value)))
 			// The hub ends with the session, also when the session is interrupted. A Turn that
 			// waits for an answer then gets this failure and ends.
 			const closed = Live.Event.Failure({
@@ -171,28 +214,49 @@ export const run = (input: {
 				(pubsub) => PubSub.end(pubsub, closed),
 			)
 			const driver = yield* LiveDriver.make({
-				send: connection.send,
+				send: ownedSend,
 				events,
 				base,
+				capabilities,
 			})
-			if (!(yield* sessions.register(chat, live.meter(driver.model)))) {
-				yield* fail("chat", "This live Chat already has an open Live session.")
+			const loaded = yield* Effect.gen(function* () {
+				if (connection.loadContext === undefined)
+					return yield* Live.LiveError.make({
+						reason: "unsupported",
+						message: "This Live backend cannot load shared context.",
+					})
+				const snapshot = yield* chats.executionContext(chat)
+				const prompt = yield* input.prepareContext(snapshot.prompt)
+				yield* Live.validateContext(prompt, capabilities)
+				yield* guard
+				yield* connection.loadContext(prompt)
+				yield* driver.loaded(snapshot.prompt)
+				yield* guard
+			}).pipe(Effect.result)
+			if (Result.isFailure(loaded)) {
+				yield* fail(
+					"chat",
+					"OpenBot could not load the full context into this Live model.",
+				)
+				yield* Effect.logWarning(
+					"A Live context could not load.",
+					loaded.failure,
+				)
 				return
 			}
-
-			const history = yield* chats.items(chat, { limit: historyLimit }).pipe(
-				Effect.map((page) =>
-					historyOf(ChatState.promptOf(Arr.sort(page.items, bySeq))),
-				),
-				Effect.catch((error) =>
-					Effect.logWarning(
-						"OpenBot could not read the history of a live Chat. The session starts without it.",
-						Cause.fail(error),
-					).pipe(Effect.as<ReadonlyArray<Live.HistoryMessage>>([])),
-				),
-			)
-			if (history.length > 0)
-				yield* connection.send(Live.Input.History({ messages: history }))
+			if (
+				!(yield* sessions.register(chat, live.meter(driver.model), {
+					generation: owner.generation,
+					sessionId: owner.sessionId,
+					check: LiveLease.valid(chats, owner).pipe(
+						Effect.orElseSucceed(() => false),
+					),
+				}))
+			) {
+				yield* fail("chat", "This Chat already has an open Live session.")
+				return
+			}
+			yield* LiveLease.update(chats, owner, { phase: "ready" })
 
 			yield* say({
 				type: "session.ready",
@@ -206,11 +270,53 @@ export const run = (input: {
 
 			/** The Turn of the Chat that runs now. */
 			const running = yield* Ref.make(Option.none<Turn.Id>())
-			const interrupt = chats
-				.interrupt(chat)
-				.pipe(
-					Background.logFailure("A live Chat could not stop its running Turn."),
-				)
+			const lastOutput = yield* Ref.make(Option.none<string>())
+			const audioPending = yield* Ref.make(false)
+			const busy = (value: boolean) =>
+				Effect.gen(function* () {
+					yield* guard
+					if ((yield* Ref.get(audioPending)) === value) return
+					yield* LiveLease.update(chats, owner, { busy: value })
+					yield* Ref.set(audioPending, value)
+				})
+			const recordPlayback = (itemId: string, audioEndMs?: number) =>
+				Effect.gen(function* () {
+					yield* guard
+					if (!Option.contains(yield* Ref.get(lastOutput), itemId)) return
+					const turn = yield* Ref.get(running)
+					yield* chats.change(chat, (state) => {
+						if (
+							state.execution?.generation !== owner.generation ||
+							state.execution.lease?.sessionId !== owner.sessionId
+						)
+							return state
+						const previous = state.playback ?? []
+						return {
+							...state,
+							playback: [
+								...Arr.filter(previous, (item) => item.itemId !== itemId),
+								{
+									itemId,
+									incomplete: true as const,
+									...(Option.isSome(turn) ? { turnId: turn.value } : {}),
+									...(audioEndMs === undefined ? {} : { audioEndMs }),
+								},
+							],
+						}
+					})
+				})
+			const interrupt = Effect.gen(function* () {
+				if (!(yield* LiveLease.valid(chats, owner))) return
+				const expected = yield* Ref.get(running)
+				if (Option.isSome(expected))
+					yield* chats.interruptExecution(
+						chat,
+						owner.generation,
+						expected.value,
+					)
+			}).pipe(
+				Background.logFailure("A live Chat could not stop its running Turn."),
+			)
 			// The client or the backend is gone, or the session is interrupted. A running Turn must end.
 			yield* Effect.addFinalizer(() =>
 				Ref.get(running).pipe(
@@ -222,6 +328,8 @@ export const run = (input: {
 
 			const interruptRunning = Effect.gen(function* () {
 				if (Option.isNone(yield* Ref.get(running))) return
+				const last = yield* Ref.get(lastOutput)
+				if (Option.isSome(last)) yield* recordPlayback(last.value)
 				yield* say({ type: "output.stop" })
 				if (capabilities.interruption)
 					yield* connection
@@ -236,14 +344,23 @@ export const run = (input: {
 			})
 
 			/** Gives what the person said to the Chat. The watcher reports the Turn. */
-			const deliver = (text: string) =>
-				chats
-					.deliver(chat, { input: text, author })
-					.pipe(
-						Effect.catch((error) =>
-							fail("chat", `OpenBot cannot take the input: ${error._tag}.`),
-						),
-					)
+			const deliver = (content: string | Prompt.Prompt, passive = false) =>
+				guard.pipe(
+					Effect.andThen(
+						chats.deliver(chat, {
+							input: content,
+							author,
+							expectedExecution: {
+								generation: owner.generation,
+								sessionId: owner.sessionId,
+							},
+							...(passive ? { passive: true } : {}),
+						}),
+					),
+					Effect.tapError((error) =>
+						fail("chat", `OpenBot cannot take the input: ${error._tag}.`),
+					),
+				)
 
 			/** The last Turn that the client heard of, and whether it heard that it ended. */
 			const heard = yield* Ref.make<
@@ -257,6 +374,7 @@ export const run = (input: {
 			const watch = Effect.gen(function* () {
 				let view = yield* chats.get(chat)
 				while (true) {
+					yield* guard
 					const turn = view.turn
 					let told = yield* Ref.get(heard)
 					if (turn !== null && turn.id !== told?.id) {
@@ -302,7 +420,8 @@ export const run = (input: {
 				Live.Event.$match(event, {
 					Ready: () => Effect.void,
 					SpeechStarted: () =>
-						say({ type: "input.speech.started" }).pipe(
+						busy(true).pipe(
+							Effect.andThen(say({ type: "input.speech.started" })),
 							Effect.andThen(interruptRunning),
 						),
 					SpeechStopped: () => say({ type: "input.speech.stopped" }),
@@ -318,11 +437,16 @@ export const run = (input: {
 								)
 							yield* driver.expect(text)
 							yield* deliver(text)
+							yield* busy(false)
 						}),
 					OutputAudio: ({ bytes }) =>
 						writer.write(bytes).pipe(Effect.ignore({ log: "Debug" })),
 					OutputTranscript: ({ itemId, delta }) =>
-						say({ type: "output.transcript.delta", itemId, delta }),
+						Ref.set(lastOutput, Option.some(itemId)).pipe(
+							Effect.andThen(
+								say({ type: "output.transcript.delta", itemId, delta }),
+							),
+						),
 					OutputDone: ({ itemId }) => say({ type: "output.done", itemId }),
 					ToolCall: () => Effect.void,
 					ResponseDone: () => Effect.void,
@@ -332,19 +456,29 @@ export const run = (input: {
 			/** Events from the backend: to the driver, and to the client. */
 			const fromBackend = connection.events.pipe(
 				Stream.runForEach((event) =>
-					PubSub.publish(events, event).pipe(Effect.andThen(onEvent(event))),
-				),
-				Effect.catch((error: Live.LiveError) =>
-					PubSub.publish(events, Live.Event.Failure({ error })).pipe(
-						Effect.andThen(fail(error.reason, error.message)),
+					guard.pipe(
+						Effect.andThen(PubSub.publish(events, event)),
+						Effect.andThen(onEvent(event)),
 					),
 				),
+				Effect.catch((error) => {
+					const failure = Schema.is(Live.LiveError)(error)
+						? error
+						: Live.LiveError.make({
+								reason: "closed",
+								message: "The Live connection could not follow its Chat.",
+							})
+					return PubSub.publish(
+						events,
+						Live.Event.Failure({ error: failure }),
+					).pipe(Effect.andThen(fail(failure.reason, failure.message)))
+				}),
 			)
 
 			const send = (value: Live.Input) =>
-				connection
-					.send(value)
-					.pipe(Effect.catch((error) => fail(error.reason, error.message)))
+				ownedSend(value).pipe(
+					Effect.catch((error) => fail(error.reason, error.message)),
+				)
 
 			const onMessage = (message: LiveApi.LiveClientMessage) => {
 				switch (message.type) {
@@ -356,21 +490,45 @@ export const run = (input: {
 							onFailure: () =>
 								fail("invalid_message", "The image data is not Base64."),
 							onSuccess: (bytes) =>
-								send(Live.Input.Image({ mediaType: message.mediaType, bytes })),
+								Effect.gen(function* () {
+									yield* guard
+									yield* Live.check(
+										capabilities,
+										Live.Input.Image({ mediaType: message.mediaType, bytes }),
+									)
+									const prompt = yield* input.storeImage(
+										message.mediaType,
+										bytes,
+									)
+									yield* deliver(prompt, true)
+								}).pipe(
+									Effect.catch((error) => fail("unsupported", error.message)),
+								),
 						})
 					case "input.audio.commit":
 						return send(Live.Input.Commit())
 					case "input.audio.clear":
-						return send(Live.Input.ClearAudio())
+						return send(Live.Input.ClearAudio()).pipe(
+							Effect.andThen(busy(false)),
+						)
 					case "response.cancel":
 						return interruptRunning
 					case "output.truncate":
-						return send(
-							Live.Input.Truncate({
-								itemId: message.itemId,
-								audioEndMs: message.audioEndMs,
-							}),
-						)
+						return Effect.gen(function* () {
+							yield* guard
+							if (!Option.contains(yield* Ref.get(lastOutput), message.itemId))
+								return yield* fail(
+									"unsupported",
+									"Only the current spoken answer can be cut short.",
+								)
+							yield* recordPlayback(message.itemId, message.audioEndMs)
+							yield* send(
+								Live.Input.Truncate({
+									itemId: message.itemId,
+									audioEndMs: message.audioEndMs,
+								}),
+							)
+						})
 				}
 			}
 
@@ -379,6 +537,7 @@ export const run = (input: {
 				while (true) {
 					for (const frame of yield* reader.pull) {
 						if (typeof frame !== "string") {
+							yield* busy(true)
 							yield* send(Live.Input.Audio({ bytes: frame }))
 							continue
 						}

@@ -147,6 +147,9 @@ const catalogModel = ({ provider, model }: Offer): Config.Model =>
 		name: model.name,
 		reasoningEfforts: model.reasoningEfforts,
 		serviceTiers: model.serviceTiers,
+		...(model.inputMediaTypes === null
+			? {}
+			: { inputMediaTypes: model.inputMediaTypes }),
 		...(model.contextWindow === null
 			? {}
 			: { maxContextWindow: model.contextWindow }),
@@ -734,6 +737,9 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								name: model.name,
 								reasoningEfforts: model.reasoningEfforts,
 								serviceTiers: model.serviceTiers,
+								...(model.inputMediaTypes === undefined
+									? {}
+									: { inputMediaTypes: model.inputMediaTypes }),
 								...(model.maxContextWindow === undefined
 									? {}
 									: { contextWindow: model.maxContextWindow }),
@@ -749,6 +755,9 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								name: model.name,
 								reasoningEfforts: model.reasoningEfforts,
 								serviceTiers: model.serviceTiers,
+								...(model.inputMediaTypes === null
+									? {}
+									: { inputMediaTypes: model.inputMediaTypes }),
 								...(model.contextWindow === null
 									? {}
 									: { contextWindow: model.contextWindow }),

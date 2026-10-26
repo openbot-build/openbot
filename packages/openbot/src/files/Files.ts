@@ -71,6 +71,11 @@ export class Files extends Context.Service<
 			caller: Caller,
 			parts: Stream.Stream<Multipart.Part, Multipart.MultipartError>,
 		) => Effect.Effect<FilesApi.FileObject, Failure>
+		/** Stores a Live image with the same limits and owner as a form upload. */
+		readonly uploadBytes: (
+			caller: Caller,
+			content: Content,
+		) => Effect.Effect<FilesApi.FileObject, Failure>
 		/** Makes a pending file and a signed address where the client puts its bytes. */
 		readonly createUpload: (
 			caller: Caller,
@@ -429,7 +434,47 @@ export const make = Effect.gen(function* () {
 			Exit.isSuccess(exit) ? Duration.minutes(5) : Duration.zero,
 	})
 
+	const uploadBytes = (caller: Caller, file: Content) =>
+		Effect.gen(function* () {
+			const document = yield* config
+			if (!document.uploads.server)
+				return yield* FilesApi.FilesDisabled.make({
+					message:
+						"Uploads through OpenBot are off. Use POST /v1/files/uploads.",
+				})
+			const { target } = yield* targetOf(document)
+			const mediaType = mediaTypeOf(file.mediaType, file.fileName)
+			yield* checkFile(document, mediaType, file.bytes.length)
+			const now = yield* Clock.currentTimeMillis
+			const row = yield* insert({
+				document,
+				caller,
+				filename: baseName(file.fileName),
+				mediaType,
+				bytes: file.bytes.length,
+				now,
+			})
+			// Failed uploads leave a pending row for the existing collector.
+			yield* logged(
+				S3.put(
+					client,
+					target,
+					row.objectKey,
+					{
+						bytes: file.bytes,
+						contentType: mediaType,
+					},
+					now,
+				),
+			)
+			const ready = yield* setStatus(row.id, "pending", "ready")
+			if (ready[0] === undefined)
+				return yield* FilesApi.FileNotFound.make({ id: row.id })
+			return view(ready[0])
+		})
+
 	return Files.of({
+		uploadBytes,
 		upload: (caller, parts) =>
 			Effect.gen(function* () {
 				const document = yield* config
@@ -438,7 +483,6 @@ export const make = Effect.gen(function* () {
 						message:
 							"Uploads through OpenBot are off. Use POST /v1/files/uploads.",
 					})
-				const { target } = yield* targetOf(document)
 				const used = yield* usedBytes(db, caller)
 				const found = yield* parts.pipe(
 					Stream.runFoldEffect(
@@ -474,32 +518,7 @@ export const make = Effect.gen(function* () {
 					return yield* FilesApi.FileInvalid.make({
 						message: "The form has no file in the field `file`.",
 					})
-				const file = found.value
-				yield* checkFile(document, file.mediaType, file.bytes.length)
-				const now = yield* Clock.currentTimeMillis
-				const row = yield* insert({
-					document,
-					caller,
-					filename: file.fileName,
-					mediaType: file.mediaType,
-					bytes: file.bytes.length,
-					now,
-				})
-				// When the bytes do not arrive, the pending row stays. The
-				// garbage collector removes it, and any bytes, later.
-				yield* logged(
-					S3.put(
-						client,
-						target,
-						row.objectKey,
-						{ bytes: file.bytes, contentType: file.mediaType },
-						now,
-					),
-				)
-				const ready = yield* setStatus(row.id, "pending", "ready")
-				if (ready[0] === undefined)
-					return yield* FilesApi.FileNotFound.make({ id: row.id })
-				return view(ready[0])
+				return yield* uploadBytes(caller, found.value)
 			}),
 		createUpload: (caller, input) =>
 			Effect.gen(function* () {

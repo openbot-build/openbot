@@ -18,6 +18,8 @@ import {
 import { LanguageModel, type Prompt, Response, Tool, Toolkit } from "effect/ai"
 import * as BackendLayers from "../src/app/BackendLayers.ts"
 import { Backend } from "../src/app/Backend.ts"
+import { Bots } from "../src/bots/Bots.ts"
+import { Files } from "../src/files/Files.ts"
 import * as ChatFeatures from "../src/chats/ChatFeatures.ts"
 import * as ChatHost from "../src/chats/ChatHost.ts"
 import * as HostTools from "../src/chats/HostTools.ts"
@@ -192,6 +194,7 @@ const backend = (input: {
 			}).pipe(Layer.provide(registry(answers))),
 		),
 	).pipe(
+		Layer.provide(Layer.merge(Layer.mock(Bots, {}), Layer.mock(Files, {}))),
 		Layer.provide(input.tools),
 		Layer.provide(
 			Layer.effect(

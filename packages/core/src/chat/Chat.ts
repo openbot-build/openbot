@@ -46,6 +46,8 @@ export const InboxEntry = Schema.Struct({
 	author: Schema.optionalKey(Turn.Author),
 	notice: Schema.optionalKey(Item.Notice),
 	approved: Schema.optionalKey(ApprovedCall),
+	/** Context, such as an image, that waits for this author's next message. */
+	passive: Schema.optionalKey(Schema.Boolean),
 })
 export type InboxEntry = typeof InboxEntry.Type
 /** The small, changing record of a Chat. The Items and the old Turns are kept apart. */
@@ -137,15 +139,21 @@ export class Approvals extends Context.Service<
 export interface DeliverInput {
 	readonly chat: Id
 	readonly input: Prompt.RawInput
+	/** Check this revision in the write that saves input. A conflict saves nothing. */
+	readonly expected?: Revision
 	/** Who the input is for. See `Turn.Author`. */
 	readonly author?: Turn.Author
 	readonly notice?: Item.Notice
 	readonly approved?: ApprovedCall
 	/** Wait for the next Turn, also when a Turn of the same author runs. */
 	readonly queue?: boolean
+	/** Saves context for the next message of this author, without starting or steering a Turn. */
+	readonly passive?: boolean
 }
 /** Input that starts a Turn at once. */
 export interface StartInput extends DeliverInput {
+	/** Only `deliver` can save input without starting a Turn. */
+	readonly passive?: never
 	/** Settings for this Turn only. */
 	readonly overrides?: Partial<Turn.Settings>
 }
@@ -175,6 +183,13 @@ export interface ActionReceipt {
 	readonly item: Item.Id
 	readonly revision: Revision
 	readonly callId: string
+}
+/** A read-only context of one Chat revision, without input that waits in the inbox. */
+export interface ContextSnapshot {
+	readonly chat: Id
+	readonly revision: Revision
+	readonly seq: Item.Seq
+	readonly prompt: Prompt.Prompt
 }
 export interface RuntimeOptions<
 	P,
@@ -210,6 +225,14 @@ export interface Runtime<
 	HostTools extends Record<string, Tool.Any> = {},
 > {
 	readonly isActive: (chat: Id) => Effect.Effect<boolean>
+	/**
+	 * Reads context that another model can use. A native model window is rebuilt from
+	 * the Item log. This does not run a model, a tool, or a memory job.
+	 */
+	readonly context: (input: {
+		readonly chat: Id
+		readonly expected?: Revision
+	}) => Effect.Effect<ContextSnapshot, RuntimeError>
 	/**
 	 * Gives input to a Chat in one atomic step. It starts a Turn when the Chat is idle,
 	 * steers the running Turn of the same author, or waits in the inbox.

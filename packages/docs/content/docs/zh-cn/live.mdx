@@ -10,8 +10,9 @@ Live 模式使用
 **WebSocket**：一个保持打开、双向传送消息的连接。OpenBot 在中间。它连接一个
 **Live 模型**，例如 OpenAI Realtime API 的模型，并把提供方的密钥留在服务器上。
 
-Live 模式在 **live Chat** 中进行：类型为 `live` 的
-[Chat](/zh-cn/docs/chats)。这个人说的每一段话都会成为其中一个普通的 Turn。所以 Bot 有它的指令、工具、Rule 和记忆，和文字 Chat 一样。Chat 保存这个人说的话和 Bot 回答的文本。声音不会被保存。
+Live 模式在 `execution.mode` 为 `live` 的 [Chat](/zh-cn/docs/chats)
+中运行。direct Chat 可以在 Chat 和 Live 执行之间切换，保留相同的 Bot、Chat
+ID、历史、工具、Rule 和记忆。这个人说的每一段话都会成为一个普通 Turn。Chat 保存语音转写和通过会话发送的图片，不保存原始音频。
 
 ---
 
@@ -29,7 +30,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 然后把 `gpt-realtime` 关联到一个 `openai`
-提供方。Live 模型从不运行文字 Turn，文字 Chat 也不能选择它。
+提供方。Live 执行使用 Live 模型，Chat 执行使用语言模型。切换执行方式会选择相应类型的模型，不会创建另一个 Chat。
 
 ---
 
@@ -50,9 +51,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | ------- | -------------------------------------------------------------------------------- |
 | `model` | 可选。一个 Live 模型，形式为 `{ "provider": "…", "model": "…" }`。默认是第一个。 |
 
-返回值是新的 Chat，状态码 `201`。它的 `settings.model`
-是 Live 模型。`PATCH /v1/chats/:chatId`
-可以把它换成另一个 Live 模型，但不能换成语言模型。没有 Live 模型时，OpenBot 返回
+返回值是新的 Chat，状态码 `201`。它的 `settings.model` 是 Live 模型，
+`execution.mode` 为 `live`。`PATCH /v1/chats/:chatId`
+只能在当前执行方式内更换模型。要切换到 Chat 执行，使用下方的执行接口。没有 Live 模型时，OpenBot 返回
 `409` 和 `LiveUnavailable`。
 
 live Chat 会出现在 `GET /v1/chats` 的列表中，`DELETE /v1/chats/:chatId`
@@ -60,10 +61,49 @@ live Chat 会出现在 `GET /v1/chats` 的列表中，`DELETE /v1/chats/:chatId`
 
 ---
 
+## 切换现有 Chat
+
+使用 `PUT /v1/chats/:chatId/execution` 切换空闲的 `direct` 或 `live`
+Chat。先读取 Chat，再传入它当前的 revision：
+
+```json
+{
+	"expected": 4,
+	"mode": "live",
+	"model": {
+		"_tag": "Config.Selection",
+		"provider": "openai",
+		"model": "gpt-realtime"
+	}
+}
+```
+
+你需要 Chat 上的 `write` 和 `run`、委派给它的 Bot 的权限，以及目标模型上的
+`models.use`。 `model`
+可选：OpenBot 会分别记住两种执行方式最后使用的模型。没有保存的选择时，Chat 执行使用 Bot 的模型，Live 执行使用第一个可用的 Live 模型。
+
+响应是更新后的 Chat 视图。`chat.execution` 包含
+`mode`、`generation`、`phase`，以及保存的 `chatModel` 和 `liveModel`。`kind`
+和 Chat
+ID 保持不变。选择 Live 不会打开连接或启动 Turn；切换成功后再连接。要回到 Chat 执行，等待当前工作结束，再用新的 revision 发送
+`mode: "chat"`。
+
+正在运行的 Turn、排队中的工作、待处理审批、结果未确定的工具操作、忙碌中的 Live 连接，或另一次切换都会阻止切换。OpenBot 还会检查目标模型是否能读取已保存的上下文。被阻止时返回
+`409` 和 `ChatExecutionBlocked`，包含 `reason`、`message` 及相关
+`ids`。原执行方式保持不变。重试前读取最新 Chat，不要为了恢复切换而重发消息或工具操作。空闲的 Live 连接允许切换；原连接的 generation 随之失效，不能再启动工作。
+
+检查切换期间收到的文本消息保留在收件箱，交给最终选定的执行方式处理。这段时间收到新图片或其他上下文变化时，切换可能被阻止；输入仍留在原执行方式中，不会丢失。
+
+共享历史非空时，目标模型必须配置
+`contextWindow`。未知窗口会阻止切换。OpenBot 用核心的 token 估算方法检查已解析的上下文，估算超过输入预算就拒绝切换；切换不会压缩历史。这个估算和提供方对历史条目的确认都不保证精确 token 数，提供方仍可能拒绝回答请求。
+
+---
+
 ## 连接
 
 在 `GET /v1/chats/:chatId/live` 打开一个 WebSocket。你需要 Chat 上的
-`run`。这个 Chat 必须是 live Chat。模型就是这个 Chat 的模型。
+`run`。这个 Chat 必须已选择
+`execution.mode: "live"`。模型是 Chat 当前选择的 Live 模型。
 
 | 查询参数        | 规则                                                                     |
 | --------------- | ------------------------------------------------------------------------ |
@@ -80,9 +120,8 @@ live Chat 会出现在 `GET /v1/chats` 的列表中，`DELETE /v1/chats/:chatId`
 `OpenBot-Organization` 头。所以当账户属于多个组织时，它在 `organization`
 中发送组织 ID。没有它，OpenBot 返回 `400` 和 `OrganizationRequired`。
 
-OpenBot 在打开 socket 之前检查请求。这个 Chat 不是 live
-Chat，或者模型没有你要的格式、声音或轮次检测时，它返回 `409` 和
-`LiveUnavailable`。
+OpenBot 在打开 socket 之前检查请求。这个 Chat 尚未选择 Live 执行，或者模型没有你要的格式、声音或轮次检测时，它返回
+`409` 和 `LiveUnavailable`。
 
 ```ts
 const socket = new WebSocket(
@@ -145,7 +184,9 @@ socket.onmessage = (event) => {
 | `inputs`             | `text` 和 `image` 说明模型接受哪些其他输入。 |
 | `voices`             | 模型的声音。                                 |
 
-客户端发送模型不支持的消息时，OpenBot 发送代码为 `unsupported` 的 `error`。
+客户端发送模型不支持的消息时，OpenBot 发送代码为 `unsupported` 的
+`error`。对于图片，`inputs.imageMediaTypes`
+列出接受的确切 MIME 类型；未设置不代表支持图片。
 
 ---
 
@@ -158,10 +199,16 @@ socket.onmessage = (event) => {
 读取它，其他客户端通过 `GET /v1/chats/:chatId/wait`
 看到它。Live 模型的用量和其他模型调用一样进入[用量](/zh-cn/docs/usage)。声音 token 计入输入和输出的总数。
 
-会话打开时，OpenBot 把 Chat 最近的文本消息交给 Live 模型，这样它知道之前说过什么。OpenBot 读不到这些消息时，会话在没有它们的情况下开始。
+在 `session.ready`
+之前，OpenBot 把保存的上下文加载到 Live 模型，并等待提供方确认。其中包括用户和助手文本、语音转写、已完成的工具调用及结果、作为只读记录的审批决定，以及受支持的图片。加载历史不会生成回答、执行工具或批准请求，也不限制为最后 40 条消息。提供方专用的推理内容和不透明的压缩状态不会跨模型传递；需要时，OpenBot 从保留的历史重建可移植的上下文。
 
-一个 live
-Chat 同一时间只能有一个 Live 会话。只有这个会话所在的服务器会开始这个 Chat 的 Turn。其他输入会在 Chat 中等待，直到有会话打开。来自
+文件通过 OpenBot 文件服务解析。OpenAI
+Live 适配器可以加载用户图片，但不能完整加载 PDF 等非图片附件。不受支持的内容、无法读取的文件、不完整的工具记录、提供方拒绝或缺少加载确认都会使连接失败。OpenBot 不会用空上下文启动，也不会静默用摘要替代文件。OpenAI 适配器关闭了提供方的自动截断。上下文仍然需要适合目标模型的窗口；提供方可以拒绝过长的历史。
+
+切回语言模型时，模型配置的 `inputMediaTypes`
+必须列出历史中图片和文件的确切 MIME 类型。空列表表示仅支持文本。未设置不代表支持媒体，OpenBot 不会根据模型名猜测。添加模型时应填写这项元数据。
+
+一个 Chat 同一时间只能有一个 Live 会话，只有选定的执行方式能启动 Turn。generation 检查会在切换后拒绝旧连接。Live 模式下，其他输入会在 Chat 中等待，直到有会话打开。来自
 `POST /v1/chats/:chatId/messages`
 的消息、[委派](/zh-cn/docs/delegation)的结果和请求的答复都是这样。会话打开时，OpenBot 会运行等待中的输入。客户端会收到这个 Chat 每个 Turn 的
 `turn.started` 和 `turn.completed`，包括不是它开始的 Turn。
@@ -179,9 +226,14 @@ Chat 同一时间只能有一个 Live 会话。只有这个会话所在的服务
 1. 写一个模块，给出 `packages/openbot/src/models/LiveBackends.ts` 中的
    `LiveBackend`。它的 `make` 给出 `@openbot-build/core/Live` 中的 `LiveModel`。
 2. 在 `capabilities` 中说明这个服务能做什么。OpenBot 从不发送后端不支持的输入。
+   `inputs.image` 为真时，在 `inputs.imageMediaTypes`
+   中列出接受的图片 MIME 类型。
 3. 把 `Live.Input` 的值映射为这个服务的消息，并把服务的消息映射为 `Live.Event`
    的值。
-4. 把后端加入 `packages/openbot/src/app/OpenBot.ts` 中的 `layerLiveBackends`。
+4. 实现
+   `Connection.loadContext(prompt)`。检查所有提示词部分，并等待提供方接受每一条历史后才成功返回。它不能启动回答、执行工具或静默遗漏内容。未实现这个方法的后端不能打开共享上下文会话。后端支持可移植的文本、图片和工具表示时，可以复用
+   `Live.contextOf` 和 `Live.validateContext`。
+5. 把后端加入 `packages/openbot/src/app/OpenBot.ts` 中的 `layerLiveBackends`。
 
 `packages/openbot/src/providers/openai/OpenAiRealtime.ts` 是 OpenAI Realtime
 API 的后端。可以把它当作例子。

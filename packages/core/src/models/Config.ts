@@ -24,6 +24,16 @@ export class Selection extends Schema.TaggedClass<
 
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
 
+/** Exact MIME types that a model accepts as input. Missing means unknown. */
+export const InputMediaTypes = Schema.Array(
+	Schema.String.check(
+		Schema.isMaxLength(200),
+		Schema.isPattern(
+			/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/,
+		),
+	),
+).check(Schema.isMaxLength(50))
+
 const CompactionSchema = Schema.TaggedUnion({
 	Native: {},
 	NonNative: {
@@ -79,6 +89,7 @@ export class Model extends Schema.TaggedClass<
 	),
 	reasoningEfforts: Schema.Array(Schema.String),
 	serviceTiers: Schema.Array(Schema.String),
+	inputMediaTypes: Schema.optional(InputMediaTypes),
 	maxInputTokens: Schema.optional(PositiveInt),
 	maxOutputTokensLimit: Schema.optional(PositiveInt),
 	maxOutputTokens: Schema.optional(PositiveInt),

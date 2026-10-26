@@ -329,7 +329,7 @@ for (const strategy of [
 }
 
 it.effect(
-	"a native window stays for its own model, and another model gets a Prompt window with a note first",
+	"a native window stays for its own model, and another model gets the full Item history",
 	() => {
 		let prompts: ReadonlyArray<Prompt.Prompt> = []
 		let windows: ReadonlyArray<ContextWindow.Window> = []
@@ -365,13 +365,9 @@ it.effect(
 			const switched = yield* runtime.execute({ chat, input: "other model" })
 			assert.strictEqual(windows[1]?._tag, "Prompt")
 			assert.strictEqual(switched.state.conversation.context._tag, "Prompt")
-			const shown = prompts[1]!.content
-			const note = shown[0]
-			assert.ok(note !== undefined && note.role === "user")
-			assert.match(yield* json(note), /compacted/)
 			const shownText = yield* json(prompts[1])
-			assert.notMatch(shownText, /whole history/)
-			assert.match(shownText, /same model.*other model/)
+			assert.match(shownText, /whole history.*same model.*other model/)
+			assert.notMatch(shownText, /not shown here|encrypted_content/)
 			assert.match(
 				yield* json(yield* runtimeStore.items(chat)),
 				/whole history/,

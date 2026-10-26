@@ -1,8 +1,13 @@
-import type { FilesApi } from "@openbot-build/api"
+import {
+	ChatExecutionBlocked,
+	type Caller,
+	type FilesApi,
+} from "@openbot-build/api"
 import { Array as Arr, Effect, Option, Predicate, Stream } from "effect"
 import { AiError, type LanguageModel, Prompt } from "effect/ai"
 import type { Files } from "./Files.ts"
 import { fileIdOf } from "./Refs.ts"
+import * as Failures from "../app/Failures.ts"
 import {
 	type Methods,
 	methodsOf,
@@ -77,6 +82,84 @@ const resolve = (
 		Effect.forEach(prompt.content, (message) => resolveMessage(load, message)),
 		Prompt.fromMessages,
 	)
+
+/** A mode change must not turn a missing or forbidden file into a text note. */
+export const context = (
+	files: Pick<Files["Service"], "get" | "load">,
+	caller: Caller,
+	prompt: Prompt.Prompt,
+) =>
+	Effect.gen(function* () {
+		const resolveStrict = <P extends Prompt.Part>(part: P) =>
+			Effect.gen(function* () {
+				if (part.type !== "file" || !(part.data instanceof URL)) return part
+				const id = fileIdOf(part.data)
+				if (Option.isNone(id))
+					return yield* ChatExecutionBlocked.make({
+						reason: "context",
+						ids: [],
+						message: "The context has a file that is not in OpenBot storage.",
+					})
+				const file = yield* files.get(caller, id.value).pipe(
+					Failures.replace("A shared context file could not be read.", () =>
+						ChatExecutionBlocked.make({
+							reason: "context",
+							ids: [id.value],
+							message:
+								"A file in the context is not available to this account.",
+						}),
+					),
+				)
+				if (file.status !== "ready")
+					return yield* ChatExecutionBlocked.make({
+						reason: "context",
+						ids: [id.value],
+						message: "A file in the context is not ready.",
+					})
+				const content = yield* files.load(id.value).pipe(
+					Failures.replace("A shared context file could not load.", () =>
+						ChatExecutionBlocked.make({
+							reason: "context",
+							ids: [id.value],
+							message: "OpenBot could not load a file in the context.",
+						}),
+					),
+				)
+				if (Option.isNone(content))
+					return yield* ChatExecutionBlocked.make({
+						reason: "context",
+						ids: [id.value],
+						message: "A file in the context was deleted.",
+					})
+				if (part.mediaType !== content.value.mediaType)
+					return yield* ChatExecutionBlocked.make({
+						reason: "context",
+						ids: [id.value],
+						message: "The stored file type does not match the context.",
+					})
+				return { ...part, data: content.value.bytes }
+			})
+		const messages = yield* Effect.forEach(
+			prompt.content,
+			(message): Effect.Effect<Prompt.Message, ChatExecutionBlocked> => {
+				switch (message.role) {
+					case "user":
+						return Effect.map(
+							Effect.forEach(message.content, resolveStrict),
+							(content) => ({ ...message, content }),
+						)
+					case "assistant":
+						return Effect.map(
+							Effect.forEach(message.content, resolveStrict),
+							(content) => ({ ...message, content }),
+						)
+					default:
+						return Effect.succeed(message)
+				}
+			},
+		)
+		return Prompt.fromMessages(messages)
+	})
 
 /** Whether a prompt names a file, so most calls skip the work. */
 const namesFile = (prompt: Prompt.Prompt) =>

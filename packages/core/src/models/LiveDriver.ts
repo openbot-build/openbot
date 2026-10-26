@@ -1,6 +1,7 @@
 import {
 	Array as Arr,
 	Effect,
+	Exit,
 	HashMap,
 	HashSet,
 	Option,
@@ -20,6 +21,7 @@ import {
 	type LanguageModel as LM,
 } from "effect/ai"
 import * as Live from "./Live.ts"
+import * as ContextWindow from "../context/ContextWindow.ts"
 
 /**
  * A LanguageModel that answers through an open Live connection. The Chat runtime runs a
@@ -33,6 +35,8 @@ export interface Driver {
 	 * connection, because the person said it. The driver then does not send it again.
 	 */
 	readonly expect: (text: string) => Effect.Effect<void>
+	/** Mark the raw saved history after the connection confirms its resolved form. */
+	readonly loaded: (prompt: Prompt.Prompt) => Effect.Effect<void>
 }
 
 export interface Options {
@@ -41,6 +45,8 @@ export interface Options {
 	readonly events: PubSub.PubSub<Live.Event>
 	/** The config without instructions and tools. The driver adds them from each request. */
 	readonly base: Omit<Live.Config, "instructions" | "tools">
+	/** Checks new input before any part is sent. */
+	readonly capabilities?: Live.Capabilities
 }
 
 /** The system text of a prompt, in order. */
@@ -90,6 +96,11 @@ const textOf = (message: Prompt.UserMessage) =>
 	)
 
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+const encodeMessage = Schema.encodeEffect(Prompt.Message)
+const messageKeys = (messages: ReadonlyArray<Prompt.Message>) =>
+	Effect.forEach(messages, (message) =>
+		encodeMessage(message).pipe(Effect.flatMap(encodeJson), Effect.orDie),
+	)
 
 /**
  * The `undefined` of a void tool goes as `null`. Every other result has a JSON form,
@@ -137,6 +148,25 @@ export const make = (
 		const configured = yield* Ref.make(Option.none<string>())
 		const answered = yield* Ref.make(HashSet.empty<string>())
 		const expected = yield* Ref.make(HashMap.empty<string, number>())
+		const loaded = yield* Ref.make(Option.none<ReadonlyArray<string>>())
+		const sendFailure = yield* Ref.make(Option.none<Live.LiveError>())
+		const send = (input: Live.Input) =>
+			options.send(input).pipe(
+				Effect.onExit((exit) =>
+					Exit.isFailure(exit)
+						? Ref.set(
+								sendFailure,
+								Option.some(
+									Live.LiveError.make({
+										reason: "closed",
+										message:
+											"A Live input may have been sent. Reconnect before sending more input.",
+									}),
+								),
+							)
+						: Effect.void,
+				),
+			)
 
 		/** Takes one expected text, if it is there. */
 		const takeExpected = (text: string) =>
@@ -153,6 +183,74 @@ export const make = (
 
 		const prepare = (request: LM.ProviderOptions) =>
 			Effect.gen(function* () {
+				const failure = yield* Ref.get(sendFailure)
+				if (Option.isSome(failure)) return yield* failure.value
+				// Wrappers may enrich text or resolve files without changing message positions.
+				// Compare the saved window, so these temporary forms are never sent twice.
+				const window = yield* Effect.serviceOption(ContextWindow.CurrentWindow)
+				const source = Option.isSome(window)
+					? window.value.prompt
+					: request.prompt
+				const messages = Arr.filter(
+					request.prompt.content,
+					(message) => message.role !== "system",
+				)
+				const saved = Arr.filter(
+					source.content,
+					(message) => message.role !== "system",
+				)
+				// The runtime can append a result for an approved tool that is now closed.
+				// It is saved after the step; the result IDs also prevent a later resend.
+				const appended = Arr.drop(messages, saved.length)
+				if (
+					saved.length > messages.length ||
+					!Arr.every(appended, (message) => message.role === "tool")
+				)
+					return yield* Live.LiveError.make({
+						reason: "protocol",
+						message:
+							"A prompt wrapper changed the history positions. Reconnect before sending more input.",
+					})
+				const keys = yield* messageKeys(saved)
+				const previous = yield* Ref.get(loaded)
+				if (
+					Option.isSome(previous) &&
+					!Arr.every(previous.value, (key, index) => keys[index] === key)
+				)
+					return yield* Live.LiveError.make({
+						reason: "protocol",
+						message:
+							"The Chat context changed after it was loaded. Reconnect before sending more input.",
+					})
+				const fresh = Option.isSome(previous)
+					? Arr.drop(messages, previous.value.length)
+					: trailing(request.prompt)
+				// Check every new file before sending even the first text part.
+				for (const message of fresh) {
+					if (message.role !== "user") continue
+					for (const part of message.content) {
+						const partType: string = part.type
+						if (part.type === "text") {
+							if (options.capabilities !== undefined)
+								yield* Live.check(
+									options.capabilities,
+									Live.Input.Text({ text: part.text }),
+								)
+							continue
+						}
+						if (part.type !== "file")
+							return yield* Live.LiveError.make({
+								reason: "unsupported",
+								message: `This Live model cannot read the input part ${partType}.`,
+							})
+						const bytes = yield* Live.imageBytes(part)
+						if (options.capabilities !== undefined)
+							yield* Live.check(
+								options.capabilities,
+								Live.Input.Image({ mediaType: part.mediaType, bytes }),
+							)
+					}
+				}
 				const config: Live.Config = {
 					...options.base,
 					instructions: instructionsOf(request.prompt),
@@ -163,20 +261,35 @@ export const make = (
 					Effect.orDie,
 				)
 				if (!Option.contains(yield* Ref.get(configured), key)) {
-					yield* options.send(Live.Input.Configure({ config }))
+					yield* send(Live.Input.Configure({ config }))
 					yield* Ref.set(configured, Option.some(key))
 				}
-				for (const message of trailing(request.prompt)) {
+				for (const message of fresh) {
 					if (message.role === "user") {
 						const text = textOf(message)
 						if (text.length > 0 && !(yield* takeExpected(text)))
-							yield* options.send(Live.Input.Text({ text }))
+							yield* send(Live.Input.Text({ text }))
+						for (const part of message.content) {
+							const partType: string = part.type
+							if (part.type === "text") continue
+							if (part.type !== "file")
+								return yield* Live.LiveError.make({
+									reason: "unsupported",
+									message: `This Live model cannot read the input part ${partType}.`,
+								})
+							yield* send(
+								Live.Input.Image({
+									mediaType: part.mediaType,
+									bytes: yield* Live.imageBytes(part),
+								}),
+							)
+						}
 					}
 					if (message.role === "tool")
 						for (const part of message.content) {
 							if (part.type !== "tool-result") continue
 							if (HashSet.has(yield* Ref.get(answered), part.id)) continue
-							yield* options.send(
+							yield* send(
 								Live.Input.ToolResult({
 									callId: part.id,
 									output: yield* outputOf(part),
@@ -185,7 +298,8 @@ export const make = (
 							yield* Ref.update(answered, HashSet.add(part.id))
 						}
 				}
-				yield* options.send(Live.Input.Respond())
+				yield* Ref.set(loaded, Option.some(keys))
+				yield* send(Live.Input.Respond())
 			})
 
 		const partsOf = (
@@ -302,6 +416,10 @@ export const make = (
 		})
 		return {
 			model,
+			loaded: (prompt) =>
+				messageKeys(
+					Arr.filter(prompt.content, (message) => message.role !== "system"),
+				).pipe(Effect.flatMap((keys) => Ref.set(loaded, Option.some(keys)))),
 			expect: (text) =>
 				Ref.update(expected, (map) =>
 					HashMap.set(

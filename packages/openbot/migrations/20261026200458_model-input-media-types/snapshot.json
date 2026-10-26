@@ -1,0 +1,81 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "49a097bc-1315-4e89-b744-1c3307edd86c",
+  "prevIds": [
+    "3499256c-1a48-4033-a765-d9660d43a518"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "openbot_models",
+        "input_media_types"
+      ],
+      "writes": [
+        "s|col|public.openbot_models.input_media_types",
+        "n|col|public.openbot_models.input_media_types",
+        "e|col|public.openbot_models.input_media_types"
+      ],
+      "reads": [
+        "n|tbl|public.openbot_models",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "openbot_provider_models",
+        "input_media_types"
+      ],
+      "writes": [
+        "s|col|public.openbot_provider_models.input_media_types",
+        "n|col|public.openbot_provider_models.input_media_types",
+        "e|col|public.openbot_provider_models.input_media_types"
+      ],
+      "reads": [
+        "n|tbl|public.openbot_provider_models",
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_models",
+        "name": "input_media_types",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_provider_models",
+        "name": "input_media_types",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

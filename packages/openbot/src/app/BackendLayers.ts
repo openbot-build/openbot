@@ -1,13 +1,25 @@
-import { Chat, Config } from "@openbot-build/core"
-import type { Identity } from "@openbot-build/api"
+import {
+	Chat,
+	Config,
+	ConfigurationOperations,
+	ContextWindow,
+	Live,
+} from "@openbot-build/core"
+import {
+	ChatExecutionBlocked,
+	ChatModelInvalid,
+	type Identity,
+} from "@openbot-build/api"
 import {
 	Cause,
+	Array as Arr,
 	Context,
 	Duration,
 	Effect,
 	Equal,
 	Hash,
 	Layer,
+	Option,
 	RcMap,
 	Scope,
 } from "effect"
@@ -16,6 +28,12 @@ import * as Chats from "../chats/Chats.ts"
 import { Backend } from "./Backend.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import * as ModelRegistry from "../models/ModelRegistry.ts"
+import { Files } from "../files/Files.ts"
+import * as ModelFiles from "../files/ModelFiles.ts"
+import * as Failures from "./Failures.ts"
+import { Bots } from "../bots/Bots.ts"
+import * as Compaction from "../chats/Compaction.ts"
+import { Prompt, Toolkit } from "effect/ai"
 
 export interface Options {
 	/**
@@ -69,6 +87,8 @@ export const layer = (options: Options = {}) =>
 		Backend,
 		Effect.gen(function* () {
 			const registry = yield* ModelRegistry.ModelRegistry
+			const files = yield* Files
+			const bots = yield* Bots
 			// The runtimes take the services and the context of this layer, so a
 			// runtime never uses the services, log annotations, spans or request
 			// of the call that happens to open it.
@@ -90,12 +110,114 @@ export const layer = (options: Options = {}) =>
 				owner: typeof Identity.Service,
 			): Pick<
 				Chats.Options,
-				"modelCatalog" | "liveCatalog" | "resolveModel"
+				| "modelCatalog"
+				| "liveCatalog"
+				| "resolveModel"
+				| "chatModel"
+				| "validateExecution"
 			> => ({
 				modelCatalog: catalogOf(registry.catalog(owner.organizationId)),
 				liveCatalog: catalogOf(registry.liveCatalog(owner.organizationId)),
 				resolveModel: (selection) =>
 					registry.resolve(owner.organizationId, selection),
+				chatModel: (bot) =>
+					bots.find(owner.organizationId, bot).pipe(
+						Effect.map((found) =>
+							Option.isSome(found) ? found.value.model : undefined,
+						),
+						Failures.replace(
+							"OpenBot could not read the Bot model for a mode change.",
+							() =>
+								ChatModelInvalid.make({
+									reason: "missing",
+									message: "OpenBot could not read the Bot model.",
+								}),
+						),
+					),
+				validateExecution: ({ context, selection, mode }) =>
+					Effect.gen(function* () {
+						const prompt = yield* ModelFiles.context(files, owner, context)
+						const catalog = yield* mode === "live"
+							? registry.liveCatalog(owner.organizationId)
+							: registry.catalog(owner.organizationId)
+						const found = Arr.findFirst(
+							catalog.models,
+							(entry) =>
+								entry.provider === selection.provider &&
+								entry.id === selection.model,
+						)
+						if (Option.isNone(found))
+							return yield* ChatExecutionBlocked.make({
+								reason: "context",
+								ids: [],
+								message: "The target model is not available.",
+							})
+						const model = found.value
+						if (mode === "live") {
+							const resolved = yield* registry.resolveLive(
+								owner.organizationId,
+								selection,
+							)
+							yield* Live.validateContext(prompt, resolved.model.capabilities)
+						} else {
+							yield* registry.resolve(owner.organizationId, selection)
+							for (const message of prompt.content) {
+								if (message.role !== "user" && message.role !== "assistant")
+									continue
+								for (const part of message.content) {
+									if (
+										part.type === "file" &&
+										!Arr.contains(model.inputMediaTypes ?? [], part.mediaType)
+									)
+										return yield* ChatExecutionBlocked.make({
+											reason: "context",
+											ids: [],
+											message: `The target model has no declared support for ${part.mediaType}.`,
+										})
+								}
+							}
+						}
+						const limits = ConfigurationOperations.contextLimits(model)
+						if (Option.isNone(limits) && prompt.content.length > 0)
+							return yield* ChatExecutionBlocked.make({
+								reason: "context",
+								ids: [],
+								message:
+									"Set the target model context window before moving shared history into it.",
+							})
+						const tokens = Compaction.estimate({
+							selection,
+							window: ContextWindow.fromPrompt(prompt),
+							instructions: Prompt.empty,
+							toolkit: Toolkit.empty,
+						})
+						if (Option.isSome(limits) && tokens > limits.value.inputTokens)
+							return yield* ChatExecutionBlocked.make({
+								reason: "context",
+								ids: [],
+								message:
+									"The shared context is too large for the target model. Keep the current execution or use a larger model.",
+							})
+					}).pipe(
+						Effect.tapError((error) =>
+							error._tag === "ChatExecutionBlocked"
+								? Effect.void
+								: Effect.logWarning(
+										"OpenBot could not prepare shared context.",
+										error,
+									),
+						),
+						Effect.mapError((error) =>
+							error._tag === "ChatExecutionBlocked"
+								? error
+								: ChatExecutionBlocked.make({
+										reason: "context",
+										ids: [],
+										message:
+											"OpenBot could not prepare the context for this model.",
+									}),
+						),
+					),
 			})
 			const context = yield* Effect.context<never>()
 			const runtimes: RcMap.RcMap<Key, Runtime> = yield* RcMap.make({
@@ -168,6 +290,16 @@ export const layer = (options: Options = {}) =>
 					read: (id) => use((chats) => chats.read(id)),
 					list: (input) => use((chats) => chats.list(input)),
 					update: (id, input) => use((chats) => chats.update(id, input)),
+					switchExecution: (id, input) =>
+						use((chats) => chats.switchExecution(id, input)),
+					changeExecution: (id, update) =>
+						use((chats) => chats.changeExecution(id, update)),
+					executionContext: (id, expected) =>
+						use((chats) => chats.executionContext(id, expected)),
+					checkExecution: (id, generation, mode) =>
+						use((chats) => chats.checkExecution(id, generation, mode)),
+					interruptExecution: (id, generation, turn) =>
+						use((chats) => chats.interruptExecution(id, generation, turn)),
 					change: (id, update) => use((chats) => chats.change(id, update)),
 					remove: (id) => use((chats) => chats.remove(id)),
 					models: (id) => use((chats) => chats.models(id)),

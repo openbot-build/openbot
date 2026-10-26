@@ -4,7 +4,6 @@ import { eq } from "drizzle-orm"
 import {
 	Array as Arr,
 	Effect,
-	HashMap,
 	Option,
 	pipe,
 	Redacted,
@@ -20,10 +19,11 @@ import * as Db from "../src/database/Database.ts"
 import { fileRefs, files } from "../src/database/Schema.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as Caller from "./Caller.ts"
+import * as FileStorageFixture from "./FileStorageFixture.ts"
 import { settled, type Send } from "./Messages.ts"
 
 const publicOrigin = "https://files.example.com"
-const storageOrigin = "http://s3.test"
+const storageOrigin = FileStorageFixture.origin
 const usage = {
 	inputTokens: { total: 10, uncached: 10, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 5, text: 5, reasoning: 0 },
@@ -48,63 +48,7 @@ const QuotaExceeded = Schema.Struct({
 	usedBytes: Schema.Finite,
 })
 
-/** An object storage in memory. It only checks that each request is signed. */
-const fakeStorage = Effect.gen(function* () {
-	const objects = yield* Ref.make(
-		HashMap.empty<
-			string,
-			{ readonly bytes: Uint8Array<ArrayBuffer>; readonly type: string }
-		>(),
-	)
-	const handle = Effect.fn("Files.storage")(function* (request: Request) {
-		const url = new URL(request.url)
-		const signed =
-			request.headers.has("authorization") ||
-			url.searchParams.has("X-Amz-Signature")
-		if (!signed) return new Response("unsigned", { status: 403 })
-		const key = url.pathname
-		switch (request.method) {
-			case "PUT": {
-				const bytes = new Uint8Array(
-					yield* Effect.promise(() => request.arrayBuffer()),
-				)
-				const length = request.headers.get("content-length")
-				if (length !== null && Number(length) !== bytes.length)
-					return new Response("bad length", { status: 400 })
-				yield* Ref.update(objects, (current) =>
-					HashMap.set(current, key, {
-						bytes,
-						type: request.headers.get("content-type") ?? "",
-					}),
-				)
-				return new Response(null, { status: 200 })
-			}
-			case "GET":
-			case "HEAD": {
-				const found = HashMap.get(yield* Ref.get(objects), key)
-				if (Option.isNone(found)) return new Response(null, { status: 404 })
-				return new Response(
-					request.method === "HEAD" ? null : new Blob([found.value.bytes]),
-					{
-						headers: {
-							"content-length": String(found.value.bytes.length),
-							"content-type": found.value.type,
-						},
-					},
-				)
-			}
-			case "DELETE":
-				yield* Ref.update(objects, HashMap.remove(key))
-				return new Response(null, { status: 204 })
-		}
-		return new Response(null, { status: 405 })
-	})
-	return {
-		/** Whether the storage keeps an object at this path. */
-		has: (key: string) => Effect.map(Ref.get(objects), HashMap.has(key)),
-		fetch: handle,
-	}
-})
+const fakeStorage = FileStorageFixture.make
 
 /** The files in the user messages of a prompt. */
 const userFiles = (prompt: Prompt.Prompt) =>

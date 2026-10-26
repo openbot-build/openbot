@@ -56,6 +56,7 @@ const talk: StoredModel = {
 	name: "Talk",
 	reasoningEfforts: [],
 	serviceTiers: [],
+	inputMediaTypes: null,
 	contextWindow: null,
 	maxOutputTokens: null,
 	availability: null,
@@ -115,6 +116,51 @@ const resolveLive = Effect.flatMap(ModelRegistry.ModelRegistry, (registry) =>
 const key = () => Effect.succeed(Redacted.make("key"))
 
 describe("The model registry", () => {
+	it.effect(
+		"keeps unknown media support unknown and applies the provider's exact media declaration",
+		() =>
+			Effect.gen(function* () {
+				for (const [modelTypes, linkTypes, expected] of [
+					[null, undefined, undefined],
+					[["image/png"], undefined, ["image/png"]],
+					[["image/png"], ["application/pdf"], ["application/pdf"]],
+					[["image/png"], [], []],
+				] as const) {
+					const catalog = yield* Effect.flatMap(
+						ModelRegistry.ModelRegistry,
+						(registry) => registry.catalog(organizationId),
+					).pipe(
+						Effect.provide(
+							registryWith({
+								models: [
+									{ ...talk, type: "language", inputMediaTypes: modelTypes },
+								],
+								providers: Effect.succeed([
+									{
+										...provider,
+										models: [
+											{
+												model: Model.Id.make("talk"),
+												modelOwner: "organization",
+												...(linkTypes === undefined
+													? {}
+													: { inputMediaTypes: linkTypes }),
+											},
+										],
+									},
+								]),
+								openKey: key,
+								backend: () =>
+									Effect.die("No model runs while reading the catalog."),
+							}),
+						),
+					)
+					assert.strictEqual(catalog.models.length, 1)
+					assert.deepStrictEqual(catalog.models[0]?.inputMediaTypes, expected)
+				}
+			}),
+	)
+
 	it.effect(
 		"says that a Live model is unavailable when its backend fails, and a bad option only when the backend does not support it",
 		() =>

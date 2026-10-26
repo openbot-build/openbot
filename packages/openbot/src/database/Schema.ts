@@ -587,6 +587,7 @@ export const models = table(
 		reasoningEfforts: text("reasoning_efforts").notNull(),
 		serviceTiers: text("service_tiers").notNull(),
 		contextWindow: integer("context_window"),
+		inputMediaTypes: text("input_media_types"),
 		maxOutputTokens: integer("max_output_tokens"),
 		availability: text(),
 		version: integer().notNull(),
@@ -615,6 +616,7 @@ export const providerModels = table(
 		reasoningEfforts: text("reasoning_efforts"),
 		serviceTiers: text("service_tiers"),
 		contextWindow: integer("context_window"),
+		inputMediaTypes: text("input_media_types"),
 		maxOutputTokens: integer("max_output_tokens"),
 	},
 	(t) => [

@@ -1,6 +1,7 @@
 import {
 	Authorization,
 	ChatConflict,
+	ChatModelInvalid,
 	ChatStorageUnavailable,
 	ChatsApi,
 	FilesApi,
@@ -10,7 +11,7 @@ import {
 	BotsApi,
 	type SendMessageRequest,
 } from "@openbot-build/api"
-import type { Chat } from "@openbot-build/core"
+import { type Chat, Config } from "@openbot-build/core"
 import { Array as Arr, Clock, Effect, Option } from "effect"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
@@ -23,6 +24,8 @@ import { Files } from "../files/Files.ts"
 import * as Check from "../authorization/Check.ts"
 import type * as Chats from "./Chats.ts"
 import * as ChatHost from "./ChatHost.ts"
+import * as Execution from "./Execution.ts"
+import { ModelRegistry } from "../models/ModelRegistry.ts"
 
 type Request<K extends keyof typeof ChatsApi.endpoints> = Omit<
 	HttpApiEndpoint.Request<(typeof ChatsApi.endpoints)[K]>,
@@ -81,6 +84,7 @@ const send = (
 const implementations = Effect.gen(function* () {
 	const current = yield* currentChats
 	const bots = yield* Bots
+	const registry = yield* ModelRegistry
 	const coordinator = yield* Coordinator
 	const delegations = yield* Delegations
 	const memoryBot = yield* MemoryBot
@@ -140,6 +144,67 @@ const implementations = Effect.gen(function* () {
 					})
 				}
 				return yield* (yield* current).update(params.chatId, payload)
+			}),
+		switchChatExecution: ({
+			params,
+			payload,
+		}: Request<"switchChatExecution">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const chats = yield* current
+				const view = yield* chats.read(params.chatId)
+				const execution = Execution.of(view.chat)
+				const bot = yield* bots.access(
+					caller,
+					ChatHost.hostState(view.chat).bot,
+					"delegate",
+				)
+				if (bot.archived)
+					return yield* BotsApi.BotInvalid.make({
+						message: "An archived Bot does no new work.",
+					})
+				const saved =
+					payload.mode === "live" ? execution.liveModel : execution.chatModel
+				let model =
+					payload.model ??
+					saved ??
+					(payload.mode === "chat" ? bot.model : undefined)
+				if (model === undefined && payload.mode === "live") {
+					const first = (yield* registry
+						.liveCatalog(caller.organizationId)
+						.pipe(
+							Failures.replace(
+								"OpenBot could not read the Live models for a change of execution.",
+								() =>
+									ChatModelInvalid.make({
+										reason: "missing",
+										message: "The organization has no Live model.",
+									}),
+							),
+						)).models[0]
+					if (first !== undefined)
+						model = Config.Selection.make({
+							provider: first.provider,
+							model: first.id,
+						})
+				}
+				if (model === undefined)
+					return yield* ChatModelInvalid.make({
+						reason: "missing",
+						message: "Choose a model for this kind of execution.",
+					})
+				yield* check(caller, {
+					action: "use",
+					resource: Authorization.Model.make({
+						organizationId: caller.organizationId,
+						provider: model.provider,
+						id: model.model,
+					}),
+				})
+				return yield* chats.switchExecution(params.chatId, {
+					...payload,
+					model,
+				})
 			}),
 		deleteChat: ({ params }: Request<"deleteChat">) =>
 			Effect.gen(function* () {

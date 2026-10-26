@@ -1,4 +1,4 @@
-import { Model } from "@openbot-build/core"
+import { Config, Model } from "@openbot-build/core"
 import { ModelProvidersApi } from "@openbot-build/api"
 import {
 	Array as Arr,
@@ -26,6 +26,8 @@ const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
 const decodeOptions = Schema.decodeUnknownEffect(Options)
 const decodeAvailability = Schema.decodeUnknownEffect(AvailabilityJson)
 const decodeType = Schema.decodeUnknownEffect(ModelProvidersApi.ModelType)
+const MediaTypes = Schema.fromJsonString(Config.InputMediaTypes)
+const decodeMediaTypes = Schema.decodeUnknownEffect(MediaTypes)
 /** The values have their types already, so they always encode. */
 const encodeOptions = (options: typeof Options.Type) =>
 	Schema.encodeEffect(Options)(options).pipe(Effect.orDie)
@@ -50,6 +52,10 @@ const stored = (
 			name: row.name,
 			reasoningEfforts: yield* decodeOptions(row.reasoningEfforts),
 			serviceTiers: yield* decodeOptions(row.serviceTiers),
+			inputMediaTypes:
+				row.inputMediaTypes === null
+					? null
+					: yield* decodeMediaTypes(row.inputMediaTypes),
 			contextWindow: row.contextWindow,
 			maxOutputTokens: row.maxOutputTokens,
 			availability:
@@ -153,6 +159,10 @@ export const make = Effect.gen(function* () {
 						name: Str.trim(input.name),
 						reasoningEfforts: yield* encodeOptions(input.reasoningEfforts),
 						serviceTiers: yield* encodeOptions(input.serviceTiers),
+						inputMediaTypes:
+							input.inputMediaTypes === undefined
+								? null
+								: yield* encodeOptions(input.inputMediaTypes),
 						contextWindow: input.contextWindow ?? null,
 						maxOutputTokens: input.maxOutputTokens ?? null,
 						availability:
@@ -212,6 +222,14 @@ export const make = Effect.gen(function* () {
 								...(patch.serviceTiers === undefined
 									? {}
 									: { serviceTiers: yield* encodeOptions(patch.serviceTiers) }),
+								...(patch.inputMediaTypes === undefined
+									? {}
+									: {
+											inputMediaTypes:
+												patch.inputMediaTypes === null
+													? null
+													: yield* encodeOptions(patch.inputMediaTypes),
+										}),
 								...(patch.contextWindow === undefined
 									? {}
 									: { contextWindow: patch.contextWindow }),

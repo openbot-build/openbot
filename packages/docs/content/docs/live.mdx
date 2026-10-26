@@ -13,11 +13,11 @@ messages both ways. OpenBot is in the middle. It connects to a **Live model**,
 such as a model of the OpenAI Realtime API, and keeps the key of the provider on
 the server.
 
-Live mode runs in a **live Chat**: a [Chat](/docs/chats) of the kind `live`.
-Each thing that the person says becomes a normal Turn in it. So the Bot has its
-instructions, its tools, its Rules, and its memory, as in a text Chat. The Chat
-keeps the text of what the person said and of what the Bot answered. Sound is
-not stored.
+Live mode runs in a [Chat](/docs/chats) whose `execution.mode` is `live`. A
+direct Chat can switch between Chat and Live execution, keeping the same Bot,
+Chat ID, history, tools, Rules, and memory. Each thing the person says becomes a
+normal Turn. The Chat keeps speech transcripts and images sent through the
+session. Raw sound is not stored.
 
 ---
 
@@ -34,8 +34,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/models
 ```
 
-Then link `gpt-realtime` to an `openai` provider. A Live model never runs text
-Turns, and a text Chat cannot choose it.
+Then link `gpt-realtime` to an `openai` provider. Live execution uses a Live
+model; Chat execution uses a language model. Switching execution selects the
+right kind of model without making another Chat.
 
 ---
 
@@ -56,9 +57,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | ------- | --------------------------------------------------------------------------------------------- |
 | `model` | Optional. A Live model, as `{ "provider": "…", "model": "…" }`. The default is the first one. |
 
-The answer is the new Chat, with `201`. Its `settings.model` is the Live model.
-`PATCH /v1/chats/:chatId` can change it to another Live model, but never to a
-language model. Without a Live model, OpenBot returns `409` with
+The answer is the new Chat, with `201`. Its `settings.model` is the Live model,
+and its `execution.mode` is `live`. `PATCH /v1/chats/:chatId` changes a model
+within the selected execution mode. To switch to Chat execution, use the
+execution route below. Without a Live model, OpenBot returns `409` with
 `LiveUnavailable`.
 
 A live Chat is in the list of `GET /v1/chats`, and `DELETE /v1/chats/:chatId`
@@ -66,10 +68,61 @@ deletes it.
 
 ---
 
+## Switch an existing Chat
+
+Use `PUT /v1/chats/:chatId/execution` to switch an idle `direct` or `live` Chat.
+Read the Chat first and send its current revision:
+
+```json
+{
+	"expected": 4,
+	"mode": "live",
+	"model": {
+		"_tag": "Config.Selection",
+		"provider": "openai",
+		"model": "gpt-realtime"
+	}
+}
+```
+
+You need `write` and `run` on the Chat, permission to delegate to its Bot, and
+`models.use` on the target model. `model` is optional: OpenBot remembers the
+last model of each execution mode. Without a saved selection, Chat execution
+uses the Bot's model and Live execution uses the first available Live model.
+
+The response is the updated Chat view. `chat.execution` has `mode`,
+`generation`, `phase`, and the saved `chatModel` and `liveModel` selections. The
+`kind` and Chat ID stay the same. Selecting Live does not open a socket or start
+a Turn. Connect after the switch succeeds. To return to Chat execution, let
+current work finish, then send `mode: "chat"` with a fresh revision.
+
+A running Turn, queued work, pending approval, unresolved tool operation, busy
+Live connection, or another switch blocks the change. OpenBot also checks that
+the target model can read the saved context. A blocked change returns `409` with
+`ChatExecutionBlocked`, a `reason`, a `message`, and any related `ids`. The old
+execution mode remains selected. Read the latest Chat before trying again; do
+not resend a message or tool operation to recover a switch. An idle Live
+connection can be switched; its generation becomes stale and it cannot start
+more work.
+
+Text messages accepted while the switch is being checked stay in the inbox for
+the selected execution. New images or other context changes during that check
+can block the switch; the input stays with the original execution and is not
+dropped.
+
+For nonempty shared history, the target must have a configured `contextWindow`.
+An unknown window blocks the switch. OpenBot uses its core token estimate on the
+resolved context and rejects an estimate beyond the input budget. Switching does
+not compact the history. This estimate and a provider's item acknowledgments are
+not exact token guarantees; the provider can still reject a response.
+
+---
+
 ## Connect
 
 Open a WebSocket at `GET /v1/chats/:chatId/live`. You need `run` on the Chat.
-The Chat must be a live Chat. The model is the model of the Chat.
+The Chat must have `execution.mode: "live"`. The model is the selected Live
+model of the Chat.
 
 | Query           | Rules                                                                                                    |
 | --------------- | -------------------------------------------------------------------------------------------------------- |
@@ -88,8 +141,9 @@ sends the ID in `organization`. Without it, OpenBot returns `400` with
 `OrganizationRequired`.
 
 OpenBot checks the request before it opens the socket. It returns `409` with
-`LiveUnavailable` when the Chat is not a live Chat, or when the model does not
-have the format, the voice, or the turn detection that you asked for.
+`LiveUnavailable` when the Chat has not selected Live execution, or when the
+model does not have the format, the voice, or the turn detection that you asked
+for.
 
 ```ts
 const socket = new WebSocket(
@@ -155,7 +209,9 @@ client what the model can do.
 | `voices`             | The voices of the model.                                       |
 
 When the client sends a message that the model does not support, OpenBot sends
-an `error` with the code `unsupported`.
+an `error` with the code `unsupported`. For images, `inputs.imageMediaTypes`
+lists the exact accepted MIME types. An absent list does not imply image
+support.
 
 ---
 
@@ -172,17 +228,36 @@ The Turn is a normal Turn of the person: the Bot uses its instructions, tools,
 [Usage](/docs/usage), as for other model calls. Sound tokens count in the input
 and output totals.
 
-When the session opens, OpenBot gives the last text messages of the Chat to the
-Live model, so it knows what was said before. When OpenBot cannot read them, the
-session starts without them.
+Before `session.ready`, OpenBot loads the saved context into the Live model and
+waits for the provider to confirm it. This includes user and assistant text,
+speech transcripts, completed tool calls and results, approval decisions as
+read-only records, and supported images. Loading history does not generate an
+answer, run a tool, or approve a request. It is not limited to the last 40
+messages. Provider-only reasoning and opaque compaction state are not moved
+between models; OpenBot rebuilds portable context from retained history when
+needed.
 
-A live Chat can have one Live session at a time. Only the server of that session
-starts the Turns of the Chat. Other input waits in the Chat until a session is
-open. This is true for a message from `POST /v1/chats/:chatId/messages`, the
-result of a [delegation](/docs/delegation), and the answer to a request. When
-the session opens, OpenBot runs the input that waits. The client gets
-`turn.started` and `turn.completed` for every Turn of the Chat, also for Turns
-that it did not start.
+Files are resolved through OpenBot's file service. The OpenAI Live adapter can
+load user images, but cannot faithfully load non-image attachments such as PDFs.
+Unsupported parts, unreadable files, incomplete tool records, provider
+rejection, and missing load confirmations fail the connection. OpenBot does not
+start with an empty context or silently replace files with summaries. The OpenAI
+adapter disables automatic provider truncation. Context must still fit the
+target model's window; a provider can reject a history that is too large.
+
+When switching back to a language model, its configured `inputMediaTypes` must
+list the exact MIME types of retained images and files. An empty list means text
+only. An unset list does not prove media support, and OpenBot does not guess
+from a model name. Set this metadata when adding the model.
+
+A Chat can have one Live session at a time, and only the selected execution mode
+can start its Turns. A generation check rejects an old connection after a
+switch. In Live mode, other input waits in the Chat until a session is open.
+This is true for a message from `POST /v1/chats/:chatId/messages`, the result of
+a [delegation](/docs/delegation), and the answer to a request. When the session
+opens, OpenBot runs the input that waits. The client gets `turn.started` and
+`turn.completed` for every Turn of the Chat, also for Turns that it did not
+start.
 
 When the person talks during an answer, OpenBot sends `output.stop`, stops the
 answer, and stops the Turn.
@@ -201,10 +276,17 @@ in Live mode works with any backend. To add one:
    `packages/openbot/src/models/LiveBackends.ts`. Its `make` gives a `LiveModel`
    from `@openbot-build/core/Live`.
 2. Say in `capabilities` what the service can do. OpenBot never sends an input
-   that the backend does not support.
+   that the backend does not support. List accepted image MIME types in
+   `inputs.imageMediaTypes` when `inputs.image` is true.
 3. Map the `Live.Input` values to the messages of the service, and the messages
    of the service to `Live.Event` values.
-4. Add the backend to `layerLiveBackends` in
+4. Implement `Connection.loadContext(prompt)`. Validate all prompt parts and
+   wait until the provider has accepted every history item before succeeding. It
+   must not start a response, run a tool, or silently omit content. A backend
+   without this method cannot open a shared-context session. Use
+   `Live.contextOf` and `Live.validateContext` when the backend supports their
+   portable text, image, and tool representation.
+5. Add the backend to `layerLiveBackends` in
    `packages/openbot/src/app/OpenBot.ts`.
 
 `packages/openbot/src/providers/openai/OpenAiRealtime.ts` is the backend for the

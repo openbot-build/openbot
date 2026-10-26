@@ -41,6 +41,12 @@ geht weiter, solange Menschen mit dem Bot sprechen, außer du
 [löschst seinen Verlauf](#den-verlauf-löschen). Ein Prüf-Chat (`review`)
 schließt nach seiner Entscheidung.
 
+`kind` hält den Grund fest, warum der Chat erstellt wurde. `execution.mode`
+wählt, ob jetzt Chat oder Live ihn ausführt. Ein ruhender Chat der Art `direct`
+oder `live` kann wechseln, ohne seine Art, den Bot, die ID oder den Verlauf zu
+ändern. Andere Arten behalten ihre Ausführung. Siehe
+[Zwischen Chat und Live wechseln](#zwischen-chat-und-live-wechseln).
+
 ---
 
 ## Mit einem Bot sprechen
@@ -96,9 +102,9 @@ Typ `input_image` und `input_file`. Siehe
 `POST /v1/chats/:chatId/messages` nimmt denselben Body. Nutze es für einen
 direkten Chat, für einen Live-Chat, oder für einen Task-Chat, wenn du der Arbeit
 eines Bots etwas hinzufügen willst. In einem Task-Chat liest der Bot deine
-Nachricht als Nachricht von dir. In einem Live-Chat wartet die Nachricht, bis
-eine Live-Session offen ist. Andere Arten von Chats ergeben `409` mit
-`ChatConflict`.
+Nachricht als Nachricht von dir. Bei `execution.mode: "live"` wartet die
+Nachricht, bis eine Live-Session offen ist. Andere Arten von Chats ergeben `409`
+mit `ChatConflict`.
 
 ### Die Antwort
 
@@ -602,10 +608,59 @@ Ein falsches Model ergibt `400` mit `ChatModelInvalid`. Der `reason` ist
 `provider-not-found`, `model-not-found` oder `unsupported-option`. Wie OpenBot
 seine Models bekommt, steht unter [Models](/de/docs/models).
 
-Der Ausführungsmodus ist `build` oder `plan`. `build` ist der normale Modus: Der
-Bot macht die Arbeit. Im Modus `plan` schreibt der Bot zuerst einen Plan.
-OpenBot speichert den Modus im Chat und kopiert ihn in die `settings` jedes
-neuen Turns.
+Die Turn-Einstellung `settings.mode` ist `build` oder `plan`. `build` ist der
+normale Modus: Der Bot macht die Arbeit. Im Modus `plan` schreibt der Bot zuerst
+einen Plan. OpenBot speichert den Modus im Chat und kopiert ihn in die
+`settings` jedes neuen Turns. Sie ist unabhängig von `execution.mode`, das
+`chat` oder `live` wählt.
+
+### Zwischen Chat und Live wechseln
+
+`PUT /v1/chats/:chatId/execution` ändert die Ausführung eines ruhenden Chats der
+Art `direct` oder `live`. Chat und gespeicherter Verlauf bleiben gleich:
+
+```json
+{
+	"expected": 4,
+	"mode": "live",
+	"model": {
+		"_tag": "Config.Selection",
+		"provider": "openai",
+		"model": "gpt-realtime"
+	}
+}
+```
+
+Sende die aktuelle `chat.revision` als `expected`. `mode` ist Pflicht, `model`
+optional. OpenBot merkt sich eine eigene Model-Auswahl für jede Ausführung. Der
+Wechsel zu Live wählt nur ein Model; er verbindet und startet es nicht. Öffne
+danach den Live-Socket und warte vor Eingaben auf `session.ready`. Beende die
+laufende Arbeit vor dem Wechsel zurück zu `chat`. Eine ruhende Live-Verbindung
+kann umgeschaltet werden; ihre Generation wird ungültig und sie kann keine neue
+Arbeit starten.
+
+Die Chat-Ansicht enthält `execution.mode`, `generation`, `phase`, `chatModel`
+und `liveModel`. Der Wechsel braucht `write` und `run` auf dem Chat, Delegation
+an seinen Bot und Nutzung des Ziel-Models. Laufende Arbeit, wartende Eingaben,
+offene Freigaben, ungeklärte Werkzeugvorgänge, eine beschäftigte Live-Verbindung
+oder ein anderer Wechsel ergeben `409` mit `ChatExecutionBlocked`. Eine alte
+Revision ergibt `ChatConflict`.
+
+OpenBot prüft das Ziel-Model gegen gespeicherten Text, Transkripte,
+Werkzeugdaten, Bilder und Dateien. Nicht unterstützter oder unlesbarer Kontext
+blockiert den Wechsel und wird nicht still weggelassen. Sprach-Models müssen
+unterstützte Datei-MIME-Typen in `inputMediaTypes` angeben. Eine fehlende Liste
+bedeutet keine Unterstützung, eine leere Liste bedeutet nur Text. Der
+Live-Adapter prüft seine eigenen Fähigkeiten. Das Laden des Verlaufs führt keine
+Werkzeuge erneut aus und startet keine Antwort. Siehe
+[Live-Modus](/de/docs/live) für Verbindungen, Kontext und Anbietergrenzen.
+
+Bei vorhandenem gemeinsamem Verlauf braucht das Ziel ein bekanntes
+`contextWindow`. Ein unbekanntes Fenster oder eine Kontextschätzung über dem
+Eingabebudget blockiert den Wechsel. OpenBot schätzt den aufgelösten Prompt und
+kompaktiert ihn beim Wechsel nicht. Der Anbieter kann die endgültige Anfrage
+weiterhin ablehnen. Lokale Schätzungen und Ladebestätigungen beweisen nicht,
+dass die genaue Tokenzahl in das Fenster passt.
 
 ---
 

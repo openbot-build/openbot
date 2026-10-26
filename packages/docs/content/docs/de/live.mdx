@@ -14,11 +14,11 @@ Nachrichten in beide Richtungen trägt. OpenBot ist in der Mitte. Es verbindet
 sich mit einem **Live-Model**, etwa einem Model der OpenAI Realtime API, und
 hält den Schlüssel des Anbieters auf dem Server.
 
-Der Live-Modus läuft in einem **Live-Chat**: einem [Chat](/de/docs/chats) der
-Art `live`. Alles, was die Person sagt, wird darin zu einem normalen Turn. So
-hat der Bot seine Anweisungen, seine Werkzeuge, seine Rules und sein Memory, wie
-in einem Text-Chat. Der Chat hält den Text dessen, was die Person gesagt und was
-der Bot geantwortet hat. Ton wird nicht gespeichert.
+Der Live-Modus läuft in einem [Chat](/de/docs/chats) mit
+`execution.mode: "live"`. Ein direkter Chat kann zwischen Chat- und
+Live-Ausführung wechseln. Bot, Chat-ID, Verlauf, Werkzeuge, Rules und Memory
+bleiben gleich. Jede gesprochene Eingabe wird zu einem normalen Turn. Der Chat
+speichert Transkripte und Bilder aus der Session, aber keine Tonaufnahmen.
 
 ---
 
@@ -35,8 +35,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/models
 ```
 
-Verknüpfe dann `gpt-realtime` mit einem `openai`-Anbieter. Ein Live-Model führt
-nie Text-Turns aus, und ein Text-Chat kann es nicht wählen.
+Verknüpfe dann `gpt-realtime` mit einem `openai`-Anbieter. Die Live-Ausführung
+nutzt ein Live-Model, die Chat-Ausführung ein Sprach-Model. Der Wechsel wählt
+die passende Art von Model, ohne einen anderen Chat anzulegen.
 
 ---
 
@@ -59,8 +60,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `model` | Optional. Ein Live-Model, als `{ "provider": "…", "model": "…" }`. Der Standard ist das erste. |
 
 Die Antwort ist der neue Chat, mit `201`. Sein `settings.model` ist das
-Live-Model. `PATCH /v1/chats/:chatId` kann es in ein anderes Live-Model ändern,
-aber nie in ein Sprach-Model. Ohne Live-Model gibt OpenBot `409` mit
+Live-Model und sein `execution.mode` ist `live`. `PATCH /v1/chats/:chatId`
+ändert das Model innerhalb der gewählten Ausführung. Nutze die folgende Route,
+um zur Chat-Ausführung zu wechseln. Ohne Live-Model gibt OpenBot `409` mit
 `LiveUnavailable` zurück.
 
 Ein Live-Chat ist in der Liste von `GET /v1/chats`, und
@@ -68,10 +70,64 @@ Ein Live-Chat ist in der Liste von `GET /v1/chats`, und
 
 ---
 
+## Einen bestehenden Chat umschalten
+
+Mit `PUT /v1/chats/:chatId/execution` wechselst du einen ruhenden Chat der Art
+`direct` oder `live`. Lies zuerst den Chat und sende seine aktuelle Revision:
+
+```json
+{
+	"expected": 4,
+	"mode": "live",
+	"model": {
+		"_tag": "Config.Selection",
+		"provider": "openai",
+		"model": "gpt-realtime"
+	}
+}
+```
+
+Du brauchst `write` und `run` auf dem Chat, das Recht zur Delegation an seinen
+Bot und `models.use` auf dem Ziel-Model. `model` ist optional: OpenBot merkt
+sich das letzte Model jeder Ausführungsart. Ohne gespeicherte Auswahl nutzt Chat
+das Model des Bots und Live das erste verfügbare Live-Model.
+
+Die Antwort ist die aktualisierte Chat-Ansicht. `chat.execution` enthält `mode`,
+`generation`, `phase` und die gespeicherten Auswahlen `chatModel` und
+`liveModel`. `kind` und Chat-ID bleiben gleich. Die Auswahl von Live öffnet
+keinen Socket und startet keinen Turn. Verbinde dich erst nach dem Wechsel. Für
+die Rückkehr zu Chat wartest du auf das Ende der laufenden Arbeit und sendest
+`mode: "chat"` mit einer neuen Revision.
+
+Ein laufender Turn, wartende Arbeit, eine offene Freigabe, ein ungeklärter
+Werkzeugvorgang, eine beschäftigte Live-Verbindung oder ein anderer Wechsel
+blockiert die Änderung. OpenBot prüft auch, ob das Ziel-Model den gespeicherten
+Kontext lesen kann. Eine blockierte Änderung ergibt `409` mit
+`ChatExecutionBlocked`, `reason`, `message` und zugehörigen `ids`. Die alte
+Ausführung bleibt gewählt. Lies vor einem neuen Versuch den aktuellen Chat.
+Sende keine Nachricht oder Werkzeugoperation erneut, um einen Wechsel
+wiederherzustellen. Eine ruhende Live-Verbindung kann umgeschaltet werden; ihre
+Generation wird ungültig und sie kann keine neue Arbeit starten.
+
+Während der Prüfung angenommene Textnachrichten bleiben in der Inbox für die
+gewählte Ausführung. Neue Bilder oder andere Kontextänderungen während der
+Prüfung können den Wechsel blockieren. Die Eingabe bleibt bei der ursprünglichen
+Ausführung und geht nicht verloren.
+
+Bei vorhandenem gemeinsamem Verlauf muss das Ziel ein konfiguriertes
+`contextWindow` haben. Ein unbekanntes Fenster blockiert den Wechsel. OpenBot
+schätzt die Tokens des aufgelösten Kontexts mit dem Kernverfahren und weist
+Schätzungen über dem Eingabebudget zurück. Der Wechsel kompaktiert den Verlauf
+nicht. Die Schätzung und die Bestätigungen der Verlaufseinträge sind keine
+genaue Tokengarantie; der Anbieter kann eine Antwort weiterhin ablehnen.
+
+---
+
 ## Verbinden
 
 Öffne einen WebSocket auf `GET /v1/chats/:chatId/live`. Du brauchst `run` auf
-dem Chat. Der Chat muss ein Live-Chat sein. Das Model ist das Model des Chats.
+dem Chat. Der Chat muss `execution.mode: "live"` gewählt haben. Das Model ist
+das ausgewählte Live-Model des Chats.
 
 | Query           | Regeln                                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -90,8 +146,9 @@ Mitglied in mehr als einer Organisation ist, schickt er die ID darum in
 `organization`. Ohne sie gibt OpenBot `400` mit `OrganizationRequired` zurück.
 
 OpenBot prüft die Anfrage, bevor es den Socket öffnet. Es gibt `409` mit
-`LiveUnavailable` zurück, wenn der Chat kein Live-Chat ist, oder wenn das Model
-das Format, die Stimme oder die Turn-Erkennung nicht hat, nach der du fragst.
+`LiveUnavailable` zurück, wenn der Chat keine Live-Ausführung gewählt hat, oder
+wenn das Model das Format, die Stimme oder die Turn-Erkennung nicht hat, nach
+der du fragst.
 
 ```ts
 const socket = new WebSocket(
@@ -157,7 +214,9 @@ Client, was das Model kann.
 | `voices`             | Die Stimmen des Models.                                                  |
 
 Wenn der Client eine Nachricht schickt, die das Model nicht kann, schickt
-OpenBot einen `error` mit dem Code `unsupported`.
+OpenBot einen `error` mit dem Code `unsupported`. Für Bilder nennt
+`inputs.imageMediaTypes` die genauen akzeptierten MIME-Typen. Eine fehlende
+Liste bedeutet keine Bildunterstützung.
 
 ---
 
@@ -174,13 +233,36 @@ ihn mit `GET /v1/chats/:chatId/turns` lesen, und andere Clients sehen ihn mit
 [Nutzung](/de/docs/usage), wie bei anderen Aufrufen von Models. Ton-Tokens
 zählen in den Summen für Eingabe und Ausgabe.
 
-Wenn die Session öffnet, gibt OpenBot dem Live-Model die letzten
-Text-Nachrichten des Chats, damit es weiß, was vorher gesagt wurde. Wenn OpenBot
-sie nicht lesen kann, startet die Session ohne sie.
+Vor `session.ready` lädt OpenBot den gespeicherten Kontext in das Live-Model und
+wartet auf die Bestätigung des Anbieters. Dazu gehören Text von User und
+Assistent, Transkripte, abgeschlossene Werkzeugaufrufe mit Ergebnissen,
+Freigabeentscheidungen als reine Verlaufsdaten und unterstützte Bilder. Das
+Laden erzeugt keine Antwort, führt kein Werkzeug aus und erteilt keine Freigabe.
+Es ist nicht auf die letzten 40 Nachrichten begrenzt. Anbieterspezifische
+Reasoning-Daten und undurchsichtige Kompaktierungsdaten werden nicht zwischen
+Models übertragen. Bei Bedarf baut OpenBot portablen Kontext aus dem
+aufbewahrten Verlauf auf.
 
-Ein Live-Chat kann zur selben Zeit eine Live-Session haben. Nur der Server
-dieser Session startet die Turns des Chats. Andere Eingaben warten im Chat, bis
-eine Session offen ist. Das gilt für eine Nachricht von
+Dateien werden über den Dateidienst von OpenBot aufgelöst. Der
+OpenAI-Live-Adapter kann User-Bilder laden, aber keine Anhänge wie PDFs
+vollständig übernehmen. Nicht unterstützte Teile, unlesbare Dateien,
+unvollständige Werkzeugdaten, Ablehnung durch den Anbieter oder fehlende
+Ladebestätigungen lassen die Verbindung scheitern. OpenBot startet nicht mit
+leerem Kontext und ersetzt Dateien nicht still durch Zusammenfassungen. Der
+OpenAI-Adapter schaltet das automatische Kürzen des Anbieters aus. Der Kontext
+muss trotzdem in das Fenster des Ziel-Models passen; der Anbieter kann einen zu
+großen Verlauf ablehnen.
+
+Beim Wechsel zurück zu einem Sprach-Model muss dessen `inputMediaTypes` die
+genauen MIME-Typen der Bilder und Dateien im Verlauf enthalten. Eine leere Liste
+bedeutet nur Text. Eine fehlende Liste beweist keine Medienunterstützung.
+OpenBot leitet sie nicht aus dem Model-Namen ab. Setze diese Angaben beim
+Hinzufügen des Models.
+
+Ein Chat kann zur selben Zeit eine Live-Session haben. Nur die gewählte
+Ausführung kann seine Turns starten. Eine Generationsprüfung weist alte
+Verbindungen nach einem Wechsel zurück. Im Live-Modus warten andere Eingaben im
+Chat, bis eine Session offen ist. Das gilt für eine Nachricht von
 `POST /v1/chats/:chatId/messages`, das Ergebnis einer
 [Delegation](/de/docs/delegation) und die Antwort auf eine Anfrage. Wenn die
 Session öffnet, führt OpenBot die wartenden Eingaben aus. Der Client bekommt
@@ -204,10 +286,17 @@ andere im Live-Modus arbeitet mit jedem Backend. So fügst du eines hinzu:
    `packages/openbot/src/models/LiveBackends.ts` gibt. Sein `make` gibt ein
    `LiveModel` aus `@openbot-build/core/Live`.
 2. Sag in `capabilities`, was der Dienst kann. OpenBot schickt nie eine Eingabe,
-   die das Backend nicht kann.
+   die das Backend nicht kann. Gib bei `inputs.image: true` die akzeptierten
+   Bild-MIME-Typen in `inputs.imageMediaTypes` an.
 3. Bilde die Werte von `Live.Input` auf die Nachrichten des Dienstes ab, und die
    Nachrichten des Dienstes auf Werte von `Live.Event`.
-4. Füge das Backend zu `layerLiveBackends` in
+4. Implementiere `Connection.loadContext(prompt)`. Prüfe alle Prompt-Teile und
+   warte, bis der Anbieter jeden Verlaufseintrag angenommen hat. Die Methode
+   darf keine Antwort starten, kein Werkzeug ausführen und nichts still
+   weglassen. Ohne sie kann ein Backend keine Session mit gemeinsamem Kontext
+   öffnen. Nutze `Live.contextOf` und `Live.validateContext`, wenn das Backend
+   deren portable Darstellung von Text, Bildern und Werkzeugen unterstützt.
+5. Füge das Backend zu `layerLiveBackends` in
    `packages/openbot/src/app/OpenBot.ts` hinzu.
 
 `packages/openbot/src/providers/openai/OpenAiRealtime.ts` ist das Backend für

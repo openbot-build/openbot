@@ -62,9 +62,6 @@ export const pendingResult = {
 	pending: true,
 	note: "This call waits for a decision. The answer comes back to this Chat as a message later.",
 }
-/** The first message of a window that was rebuilt for another model. */
-const compactedNote =
-	"Earlier messages of this Chat were compacted for another model, so they are not shown here."
 /**
  * How many events wait for a slow subscriber. When more events come, the oldest
  * go, so a slow client cannot make memory grow without limit.
@@ -531,26 +528,61 @@ export const make = <
 					return [input, approved]
 				}),
 			).pipe(Effect.map(Arr.flatten))
+		/** A native window cannot be sent to another model. Its Item log is portable. */
+		const portableContext = (view: Chat.View<P>) =>
+			Effect.gen(function* () {
+				const window = view.state.conversation.context
+				if (window._tag === "Prompt") return window.prompt
+				const items = yield* store.items(view.chat.id, {
+					before: view.chat.seq + 1,
+					order: "asc",
+				})
+				if (
+					items.length !== view.chat.seq ||
+					!Arr.every(items, (item, index) => item.seq === index + 1) ||
+					(view.chat.seq === 0 && window.items.length > 0)
+				)
+					return yield* Chat.ChatError.make({
+						reason: "unavailable",
+						message:
+							"The full Item log is needed to use this context with another model",
+					})
+				return ChatState.promptOf(items)
+			})
+		const context: Chat.Runtime<P, Tools, E, HostTools>["context"] = (input) =>
+			Effect.gen(function* () {
+				const view = yield* store.read(input.chat)
+				if (
+					input.expected !== undefined &&
+					input.expected !== view.chat.revision
+				)
+					return yield* Chat.Conflict.make({
+						chat: input.chat,
+						message: "The Chat revision is out of date",
+					})
+				const prompt = yield* portableContext(view)
+				const current = yield* store.read(input.chat)
+				if (current.chat.revision !== view.chat.revision)
+					return yield* Chat.Conflict.make({
+						chat: input.chat,
+						message: "The Chat changed while its context was read",
+					})
+				return {
+					chat: input.chat,
+					revision: view.chat.revision,
+					seq: view.chat.seq,
+					prompt,
+				}
+			})
 		/** A window for the model of a Turn. A native window of another model is rebuilt. */
-		const windowFor = (
-			window: ChatState.Conversation["context"],
-			settings: Turn.Settings,
-		) =>
-			Match.value(window).pipe(
-				Match.tag("Native", (window) =>
-					settings.model?.provider === window.provider &&
-					settings.model.model === window.model
-						? window
-						: ContextWindow.fromPrompt(
-								Prompt.concat(
-									Prompt.make([{ role: "user", content: compactedNote }]),
-									window.prompt,
-								),
-							),
-				),
-				Match.tag("Prompt", (window) => window),
-				Match.exhaustive,
-			)
+		const windowFor = (view: Chat.View<P>, settings: Turn.Settings) => {
+			const window = view.state.conversation.context
+			return window._tag === "Native" &&
+				settings.model?.provider === window.provider &&
+				settings.model.model === window.model
+				? Effect.succeed(window)
+				: Effect.map(portableContext(view), ContextWindow.fromPrompt)
+		}
 		/**
 		 * Starts a Turn in one atomic step. `select` picks the input from the inbox
 		 * of the current Chat. It gives nothing when no Turn should start.
@@ -623,10 +655,7 @@ export const make = <
 								items: Arr.map(items, (item) => item.id),
 								startedAt: yield* Clock.currentTimeMillis,
 							}
-							const window = windowFor(
-								view.state.conversation.context,
-								settings,
-							)
+							const window = yield* windowFor(view, settings)
 							const prepared: Chat.View<P> = {
 								...view,
 								state: {
@@ -766,7 +795,7 @@ export const make = <
 				const model = yield* findModel(selection)
 				const request = {
 						...input.request,
-						window: windowFor(view.state.conversation.context, {
+						window: yield* windowFor(view, {
 							...view.chat.settings,
 							model: selection,
 						}),
@@ -1757,28 +1786,30 @@ export const make = <
 					Fiber.await(launched.turn),
 				),
 			)
-		/** The first run of inbox messages that have the same author. */
+		/** The first active message, with this author's waiting context and next messages. */
 		const leading = (
 			view: Chat.View<P>,
-		): Option.Option<Arr.NonEmptyReadonlyArray<Chat.InboxEntry>> =>
-			pipe(
-				Arr.filter(view.chat.inbox, (entry) => entry.kind === "message"),
-				Arr.match({
-					onEmpty: () => Option.none(),
-					onNonEmpty: (messages) => {
-						const head = Arr.headNonEmpty(messages)
-						return Option.some(
-							Arr.prepend(
-								Arr.takeWhile(
-									Arr.tailNonEmpty(messages),
-									(entry) => entry.author === head.author,
-								),
-								head,
-							),
-						)
-					},
-				}),
+		): Option.Option<Arr.NonEmptyReadonlyArray<Chat.InboxEntry>> => {
+			const messages = Arr.filter(
+				view.chat.inbox,
+				(entry) => entry.kind === "message",
 			)
+			return Option.flatMap(
+				Arr.findFirstIndex(messages, (entry) => entry.passive !== true),
+				(index) => {
+					const head = messages[index]!
+					const before = Arr.filter(
+						Arr.take(messages, index),
+						(entry) => entry.author === head.author,
+					)
+					const after = Arr.takeWhile(
+						Arr.drop(messages, index + 1),
+						(entry) => entry.author === head.author,
+					)
+					return Option.some(Arr.appendAll(before, Arr.prepend(after, head)))
+				},
+			)
+		}
 		const drain: Chat.Runtime<P, Tools, E, HostTools>["drain"] = (chat) =>
 			Effect.gen(function* () {
 				// A quick check first. `accept` checks the same things again in one step.
@@ -1835,33 +1866,61 @@ export const make = <
 				...(input.author === undefined ? {} : { author: input.author }),
 				...(input.notice === undefined ? {} : { notice: input.notice }),
 				...(input.approved === undefined ? {} : { approved: input.approved }),
+				...(input.passive === true ? { passive: true } : {}),
 			}))
 		const deliver: Chat.Runtime<P, Tools, E, HostTools>["deliver"] = (input) =>
 			Effect.gen(function* () {
 				const entry = yield* entryOf(input)
 				const item = entry.id
-				const placed = yield* store.modifyEffect({
-					chat: input.chat,
-					update: (view) =>
-						Effect.sync(() => {
-							const current = Chat.currentTurn(view.chat)
-							const steer =
-								current !== undefined &&
-								current.status._tag === "Running" &&
-								current.author === input.author &&
-								input.queue !== true
-									? Option.some(current.id)
-									: Option.none()
-							const stored: Chat.InboxEntry = Option.match(steer, {
-								onNone: () => entry,
-								onSome: (turn) => ({ ...entry, kind: "steer", turn }),
-							})
-							return [
-								steer,
-								Option.some({ chat: { inbox: [...view.chat.inbox, stored] } }),
-							] as const
-						}),
-				})
+				const placed = yield* store
+					.modifyEffect({
+						chat: input.chat,
+						...(input.expected === undefined
+							? {}
+							: { expectedRevision: input.expected }),
+						update: (view) =>
+							Effect.sync(() => {
+								const current = Chat.currentTurn(view.chat)
+								const steer =
+									current !== undefined &&
+									current.status._tag === "Running" &&
+									current.author === input.author &&
+									input.passive !== true &&
+									input.queue !== true
+										? Option.some(current.id)
+										: Option.none()
+								const stored: Chat.InboxEntry = Option.match(steer, {
+									onNone: () => entry,
+									onSome: (turn) => ({ ...entry, kind: "steer", turn }),
+								})
+								return [
+									steer,
+									Option.some({
+										chat: { inbox: [...view.chat.inbox, stored] },
+									}),
+								] as const
+							}),
+					})
+					.pipe(
+						// This conflict is safe to retry: the inbox write did not commit.
+						Effect.catchTag(
+							"ChatStoreError",
+							(
+								error,
+							): Effect.Effect<
+								never,
+								ChatStore.ChatStoreError | Chat.Conflict
+							> =>
+								error.reason === "reference-conflict"
+									? Effect.fail(
+											Chat.Conflict.make({
+												chat: input.chat,
+												message: "The Chat changed before this input was saved",
+											}),
+										)
+									: Effect.fail(error),
+						),
+					)
 				if (Option.isSome(placed.result)) {
 					const steered: Chat.Delivery = {
 						delivery: "steered",
@@ -1872,7 +1931,7 @@ export const make = <
 					}
 					return steered
 				}
-				yield* drain(input.chat)
+				if (input.passive !== true) yield* drain(input.chat)
 				const view = yield* store.read(input.chat)
 				const current = Chat.currentTurn(view.chat)
 				const result: Chat.Delivery =
@@ -1897,6 +1956,9 @@ export const make = <
 				const entry = yield* entryOf(input)
 				const accepted = yield* accept({
 					chat: input.chat,
+					...(input.expected === undefined
+						? {}
+						: { expectedRevision: input.expected }),
 					select: () => Option.some(Arr.of(entry)),
 					...(input.author === undefined ? {} : { author: input.author }),
 					...(input.overrides === undefined
@@ -1957,6 +2019,9 @@ export const make = <
 			input,
 		) =>
 			Effect.gen(function* () {
+				// Keep this fiber, not just the Chat ID. The next Turn may start while the
+				// stored Turn is being read, and an old stop must never stop that new work.
+				const active = yield* FiberMap.get(running, input.chat)
 				const view = yield* store.read(input.chat),
 					turn = yield* requireTurn(view, input.turn)
 				if (Turn.isTerminal(turn.status))
@@ -1965,9 +2030,7 @@ export const make = <
 						turn: input.turn,
 						message: "The Turn has already ended",
 					})
-				// The target Turn is open, so a fiber of the Chat in this runtime runs it,
-				// or an older Turn that ended already. Both must stop.
-				yield* FiberMap.remove(running, input.chat)
+				if (Option.isSome(active)) yield* Fiber.interrupt(active.value)
 				// When the fiber stops, it closes the Turn, and the next input in the inbox
 				// can start a new Turn at once. Then the target Turn is no longer current,
 				// but it has ended, so this is not a conflict.
@@ -2121,6 +2184,7 @@ export const make = <
 			})
 		return {
 			isActive,
+			context,
 			deliver,
 			stream,
 			execute: (input) =>

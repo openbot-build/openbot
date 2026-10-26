@@ -251,6 +251,46 @@ export type OpenWork = typeof OpenWork.Type
 export const ChatStatus = Schema.Literals(["Idle", ...Turn.StatusTag.literals])
 export type ChatStatus = typeof ChatStatus.Type
 
+/** How the next Turn talks with its model. This is not plan or build mode. */
+export const ChatExecutionMode = Schema.Literals(["chat", "live"])
+export type ChatExecutionMode = typeof ChatExecutionMode.Type
+
+/** Selected models and the state of the connection for the next Turn. */
+export const ChatExecution = Schema.Struct({
+	mode: ChatExecutionMode,
+	generation: Schema.Natural,
+	phase: Schema.Literals(["selected", "connecting", "ready", "switching"]),
+	chatModel: Schema.optionalKey(Config.Selection),
+	liveModel: Schema.optionalKey(Config.Selection),
+})
+export type ChatExecution = typeof ChatExecution.Type
+
+export const SwitchChatExecutionRequest = Schema.Struct({
+	expected: Chat.Revision,
+	mode: ChatExecutionMode,
+	model: Schema.optionalKey(Config.Selection),
+})
+export type SwitchChatExecutionRequest = typeof SwitchChatExecutionRequest.Type
+
+/** Work must end before the Chat can change the kind of model it uses. */
+export class ChatExecutionBlocked extends Schema.TaggedError<
+	ChatExecutionBlocked,
+	{ readonly brand: unique symbol }
+>()("ChatExecutionBlocked", {
+	reason: Schema.Literals([
+		"running",
+		"inbox",
+		"approval",
+		"operation",
+		"connection",
+		"transition",
+		"kind",
+		"context",
+	]),
+	message: Schema.String,
+	ids: Schema.Array(Schema.String),
+}) {}
+
 /** What a Chat is, without its history. */
 export const ChatInfo = Schema.Struct({
 	id: Chat.Id,
@@ -261,6 +301,7 @@ export const ChatInfo = Schema.Struct({
 	/** The name of the chat on the platform of a Channel. */
 	title: Schema.optionalKey(Schema.String),
 	settings: Turn.Settings,
+	execution: ChatExecution,
 	/** Only when this Chat sets how its plans are approved. */
 	planApproval: Schema.optionalKey(PlanApproval),
 	createdAt: Schema.Finite,
@@ -467,6 +508,25 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			OpenApi.Description,
 			"Changes the mode, the model or the plan approval of the Chat. A new model also needs `models.use`.",
 		),
+		HttpApiEndpoint.put("switchChatExecution", "/v1/chats/:chatId/execution", {
+			params: chatParams,
+			payload: SwitchChatExecutionRequest,
+			success: ChatView,
+			error: [
+				...ChatOperationErrors,
+				...BotErrors,
+				ChatExecutionBlocked.pipe(HttpApiSchema.status(409)),
+				ChatExecutionUnavailable.pipe(HttpApiSchema.status(503)),
+			],
+		})
+			.annotate(Required, [
+				own("run", "Chat", "chatId"),
+				own("write", "Chat", "chatId"),
+			])
+			.annotate(
+				OpenApi.Description,
+				"Selects Chat or Live execution for an idle direct or live Chat. Keeps its history and ID. The model needs models.use. Selecting Live does not open a connection or start a Turn.",
+			),
 		HttpApiEndpoint.delete("deleteChat", "/v1/chats/:chatId", {
 			params: chatParams,
 			success: HttpApiSchema.NoContent,

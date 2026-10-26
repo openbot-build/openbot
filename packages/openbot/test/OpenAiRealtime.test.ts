@@ -1,5 +1,7 @@
 import { assert, it } from "@effect/vitest"
-import { Array as Arr, Effect } from "effect"
+import { Array as Arr, Effect, Fiber, Queue, Ref } from "effect"
+import { Prompt } from "effect/ai"
+import { TestClock } from "effect/testing"
 import { Live } from "@openbot-build/core"
 import * as OpenAiRealtime from "../src/providers/openai/OpenAiRealtime.ts"
 
@@ -25,6 +27,14 @@ const event = (value: unknown) => JSON.stringify(value)
 it("the session config asks for server turn detection without automatic answers", () => {
 	const session = OpenAiRealtime.sessionOf(config)
 	assert.strictEqual(session.instructions, "Be short.")
+	assert.strictEqual(session.truncation, "disabled")
+	assert.strictEqual(
+		OpenAiRealtime.sessionOf({
+			...config,
+			providerOptions: { truncation: "auto" },
+		}).truncation,
+		"disabled",
+	)
 	assert.deepStrictEqual(session.audio.input.format, {
 		type: "audio/pcm",
 		rate: 24000,
@@ -50,6 +60,169 @@ it("the session config asks for server turn detection without automatic answers"
 		null,
 	)
 })
+
+it.effect(
+	"portable context keeps tool work and images without starting a response",
+	() =>
+		Effect.gen(function* () {
+			const prompt = Prompt.make([
+				{
+					role: "user",
+					content: [Prompt.filePart({ mediaType: "image/png", data: "AQID" })],
+				},
+				{
+					role: "assistant",
+					content: [
+						Prompt.toolCallPart({
+							id: "call_1",
+							name: "Lookup",
+							params: { word: "tree" },
+							providerExecuted: false,
+						}),
+					],
+				},
+				{
+					role: "tool",
+					content: [
+						Prompt.toolResultPart({
+							id: "call_1",
+							name: "Lookup",
+							result: "A plant",
+							isFailure: false,
+							providerExecuted: false,
+						}),
+					],
+				},
+			])
+			const items = yield* Live.contextOf(prompt, OpenAiRealtime.capabilities)
+			const encoded = OpenAiRealtime.encodeInput(
+				Live.Input.Context({ id: "ctx", items }),
+			)
+			assert.deepStrictEqual(encoded, [
+				{
+					type: "conversation.item.create",
+					item: {
+						id: "ctx_0",
+						type: "message",
+						role: "user",
+						content: [
+							{ type: "input_image", image_url: "data:image/png;base64,AQID" },
+						],
+					},
+				},
+				{
+					type: "conversation.item.create",
+					item: {
+						id: "ctx_1",
+						type: "function_call",
+						call_id: "call_1",
+						name: "Lookup",
+						arguments: '{"word":"tree"}',
+					},
+				},
+				{
+					type: "conversation.item.create",
+					item: {
+						id: "ctx_2",
+						type: "function_call_output",
+						call_id: "call_1",
+						output: '"A plant"',
+					},
+				},
+			])
+		}),
+)
+
+it.effect(
+	"context is ready only after configuration and every item are accepted",
+	() =>
+		Effect.gen(function* () {
+			const writes = yield* Queue.unbounded<Live.Input>()
+			const loaded = yield* Ref.make(false)
+			const loader = yield* OpenAiRealtime.makeContextLoader((input) =>
+				Queue.offer(writes, input).pipe(Effect.asVoid),
+			)
+			const prompt = Prompt.make([
+				{ role: "user", content: "First" },
+				{ role: "assistant", content: "Second" },
+			])
+			const fiber = yield* loader.load(prompt).pipe(
+				Effect.tap(() => Ref.set(loaded, true)),
+				Effect.forkScoped,
+			)
+			yield* loader.accept(event({ type: "session.updated" }))
+			const input = yield* Queue.take(writes)
+			assert.ok(input._tag === "Context")
+			assert.strictEqual(yield* Ref.get(loaded), false)
+			yield* loader.accept(
+				event({
+					type: "conversation.item.added",
+					item: { id: OpenAiRealtime.contextItemId(input.id, 0) },
+				}),
+			)
+			yield* loader.accept(
+				event({
+					type: "conversation.item.created",
+					item: { id: "not_this_context" },
+				}),
+			)
+			yield* loader.accept(
+				event({
+					type: "conversation.item.done",
+					item: { id: OpenAiRealtime.contextItemId(input.id, 1) },
+				}),
+			)
+			assert.strictEqual(yield* Ref.get(loaded), false)
+			yield* loader.accept(
+				event({
+					type: "conversation.item.created",
+					item: { id: OpenAiRealtime.contextItemId(input.id, 0) },
+				}),
+			)
+			yield* Fiber.join(fiber)
+			assert.strictEqual(yield* Ref.get(loaded), true)
+			const repeated = yield* loader.load(prompt).pipe(Effect.flip)
+			assert.strictEqual(repeated.reason, "protocol")
+		}),
+)
+
+it.effect("a missing context acknowledgement fails the load", () =>
+	Effect.gen(function* () {
+		const writes = yield* Queue.unbounded<Live.Input>()
+		const loader = yield* OpenAiRealtime.makeContextLoader(
+			(input) => Queue.offer(writes, input).pipe(Effect.asVoid),
+			100,
+		)
+		yield* loader.accept(event({ type: "session.updated" }))
+		const fiber = yield* loader
+			.load(Prompt.make("Keep this."))
+			.pipe(Effect.flip, Effect.forkScoped)
+		yield* Queue.take(writes)
+		yield* TestClock.adjust("101 millis")
+		const error = yield* Fiber.join(fiber)
+		assert.strictEqual(error.reason, "protocol")
+	}),
+)
+
+it.effect("provider refusal fails context loading without a retry", () =>
+	Effect.gen(function* () {
+		const writes = yield* Queue.unbounded<Live.Input>()
+		const loader = yield* OpenAiRealtime.makeContextLoader((input) =>
+			Queue.offer(writes, input).pipe(Effect.asVoid),
+		)
+		yield* loader.accept(event({ type: "session.updated" }))
+		const fiber = yield* loader
+			.load(Prompt.make("Keep this."))
+			.pipe(Effect.flip, Effect.forkScoped)
+		yield* Queue.take(writes)
+		yield* loader.accept(
+			event({ type: "error", error: { message: "Context is too large" } }),
+		)
+		const error = yield* Fiber.join(fiber)
+		assert.strictEqual(error.reason, "provider")
+		assert.strictEqual(error.message, "Context is too large")
+	}),
+)
 
 it("inputs become Realtime client events", () => {
 	assert.deepStrictEqual(

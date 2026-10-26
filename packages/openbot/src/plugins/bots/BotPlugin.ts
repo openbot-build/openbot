@@ -1019,13 +1019,18 @@ export const make: Effect.Effect<
 			[
 				`You are ${input.bot.name}. Your role: ${input.bot.role}.`,
 				input.bot.instructions,
+				(input.state.playback?.length ?? 0) > 0
+					? "Some spoken answers in this Chat were cut short. Their generated text may be in the history, but do not assume the person heard all of it. Ask or explain again when needed."
+					: "",
 				`You work with ${input.person} now.`,
 				input.state.kind === "direct" ||
 				input.state.kind === "channel" ||
-				input.state.kind === "live"
+				(input.state.execution?.mode ??
+					(input.state.kind === "live" ? "live" : "chat")) === "live"
 					? `People talk with you in this Chat. Answer them at once. Give long work, and work with many steps, to delegations with ${names.delegate}. You can also give it to yourself. Then you stay free to answer. The result of each delegation comes back to this Chat as a message.`
 					: "",
-				input.state.kind === "live"
+				(input.state.execution?.mode ??
+					(input.state.kind === "live" ? "live" : "chat")) === "live"
 					? "This is a talk with sound. The person hears your answers and does not read them. Keep each answer short, like in a talk. Do not use Markdown, lists, tables or links. Say numbers, names and dates in a way that is easy to hear. When work takes long, say so in a few words and give it to a delegation."
 					: "",
 				input.state.kind === "task"

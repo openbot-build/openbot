@@ -2,16 +2,20 @@ import { Live } from "@openbot-build/core"
 import {
 	Array as Arr,
 	Cause,
+	Deferred,
 	Effect,
 	Exit,
+	HashSet,
 	Option,
 	Queue,
 	Redacted,
+	Ref,
 	Result,
 	Schema,
 	Stream,
 	String as Str,
 } from "effect"
+import type { Prompt } from "effect/ai"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
 import * as Failures from "../../app/Failures.ts"
@@ -34,7 +38,11 @@ export const capabilities: Live.Capabilities = {
 	tools: true,
 	interruption: true,
 	truncate: true,
-	inputs: { text: true, image: true },
+	inputs: {
+		text: true,
+		image: true,
+		imageMediaTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+	},
 	voices: [
 		"marin",
 		"cedar",
@@ -93,6 +101,8 @@ export const sessionOf = (config: Live.Config) => ({
 	})),
 	tool_choice: "auto",
 	...config.providerOptions,
+	// OpenBot owns the shared context. The provider must fail instead of dropping it.
+	truncation: "disabled",
 })
 
 const userText = (text: string) => ({
@@ -102,6 +112,45 @@ const userText = (text: string) => ({
 		role: "user",
 		content: [{ type: "input_text", text }],
 	},
+})
+
+export const contextItemId = (id: string, index: number) => `${id}_${index}`
+
+const contextEvent = (item: Live.ContextItem, id: string) => ({
+	type: "conversation.item.create",
+	item:
+		item.type === "call"
+			? {
+					id,
+					type: "function_call",
+					call_id: item.callId,
+					name: item.name,
+					arguments: item.arguments,
+				}
+			: item.type === "result"
+				? {
+						id,
+						type: "function_call_output",
+						call_id: item.callId,
+						output: item.output,
+					}
+				: {
+						id,
+						type: "message",
+						role: item.role,
+						content: Arr.map(item.content, (part) =>
+							part.type === "image"
+								? {
+										type: "input_image",
+										image_url: `data:${part.mediaType};base64,${part.data}`,
+									}
+								: {
+										type:
+											item.role === "assistant" ? "output_text" : "input_text",
+										text: part.text,
+									},
+						),
+					},
 })
 
 /** The client events for one input. */
@@ -164,6 +213,10 @@ export const encodeInput = (
 								content: [{ type: "output_text", text: message.text }],
 							},
 						},
+			),
+		Context: ({ id, items }) =>
+			Arr.map(items, (item, index) =>
+				contextEvent(item, contextItemId(id, index)),
 			),
 	})
 
@@ -434,6 +487,134 @@ export const realtimeUrl = (endpoint: string | null, model: string) => {
 	return url.toString()
 }
 
+const ContextAck = Schema.Union([
+	Schema.Struct({ type: Schema.Literal("session.updated") }),
+	// The current API ends with item.done; the older API used item.created.
+	// item.added alone does not mean that the item is complete.
+	Schema.Struct({
+		type: Schema.Literals([
+			"conversation.item.created",
+			"conversation.item.done",
+		]),
+		item: Schema.Struct({ id: Schema.String }),
+	}),
+	Schema.Struct({
+		type: Schema.Literal("error"),
+		error: Schema.Struct({ message: Schema.optional(Schema.String) }),
+	}),
+])
+const decodeContextAck = Schema.decodeUnknownOption(
+	Schema.fromJsonString(ContextAck),
+)
+
+/** Keeps context loading separate from model answers and waits for storage at the provider. */
+export const makeContextLoader = (
+	write: (input: Live.Input) => Effect.Effect<void, Live.LiveError>,
+	timeoutMs = 10000,
+) =>
+	Effect.gen(function* () {
+		const configured = yield* Deferred.make<void, Live.LiveError>()
+		const used = yield* Ref.make(false)
+		const pending = yield* Ref.make(
+			Option.none<{
+				readonly remaining: HashSet.HashSet<string>
+				readonly done: Deferred.Deferred<void, Live.LiveError>
+			}>(),
+		)
+		const fail = (error: Live.LiveError) =>
+			Effect.gen(function* () {
+				yield* Deferred.fail(configured, error)
+				const current = yield* Ref.get(pending)
+				if (Option.isSome(current))
+					yield* Deferred.fail(current.value.done, error)
+			})
+		const wait = (done: Deferred.Deferred<void, Live.LiveError>) =>
+			Deferred.await(done).pipe(
+				Effect.timeoutOrElse({
+					duration: timeoutMs,
+					orElse: () =>
+						Effect.fail(
+							Live.LiveError.make({
+								reason: "protocol",
+								message:
+									"OpenAI Realtime did not accept the Chat context in time.",
+							}),
+						),
+				}),
+			)
+		return {
+			fail,
+			accept: (text: string) =>
+				Effect.gen(function* () {
+					const ack = decodeContextAck(text)
+					if (Option.isNone(ack)) return
+					if (ack.value.type === "session.updated") {
+						yield* Deferred.succeed(configured, undefined)
+						return
+					}
+					if (ack.value.type === "error") {
+						yield* fail(
+							Live.LiveError.make({
+								reason: "provider",
+								message:
+									ack.value.error.message ??
+									"OpenAI Realtime could not load the Chat context.",
+							}),
+						)
+						return
+					}
+					const itemId = ack.value.item.id
+					const done = yield* Ref.modify(pending, (current) => {
+						if (
+							Option.isNone(current) ||
+							!HashSet.has(current.value.remaining, itemId)
+						)
+							return [
+								Option.none<Deferred.Deferred<void, Live.LiveError>>(),
+								current,
+							] as const
+						const remaining = HashSet.remove(current.value.remaining, itemId)
+						return [
+							HashSet.size(remaining) === 0
+								? Option.some(current.value.done)
+								: Option.none<Deferred.Deferred<void, Live.LiveError>>(),
+							Option.some({ ...current.value, remaining }),
+						] as const
+					})
+					if (Option.isSome(done))
+						yield* Deferred.succeed(done.value, undefined)
+				}),
+			load: (prompt: Prompt.Prompt) =>
+				Effect.gen(function* () {
+					const items = yield* Live.contextOf(prompt, capabilities)
+					if (yield* Ref.getAndSet(used, true))
+						return yield* Live.LiveError.make({
+							reason: "protocol",
+							message:
+								"The Chat context was already loaded on this connection.",
+						})
+					yield* wait(configured)
+					if (items.length === 0) return
+					// One context is loaded once into a new connection, before any new input.
+					const id = "openbot_context"
+					const done = yield* Deferred.make<void, Live.LiveError>()
+					yield* Ref.set(
+						pending,
+						Option.some({
+							remaining: HashSet.fromIterable(
+								Arr.map(items, (_, index) => contextItemId(id, index)),
+							),
+							done,
+						}),
+					)
+					yield* write(Live.Input.Context({ id, items })).pipe(
+						Effect.andThen(wait(done)),
+						Effect.ensuring(Ref.set(pending, Option.none())),
+					)
+				}),
+		}
+	})
+
 /** The backend for `openai` providers. It needs a WebSocket constructor that can send headers. */
 export const backend = Effect.gen(function* () {
 	const constructor = yield* Socket.WebSocketConstructor
@@ -468,13 +649,17 @@ export const backend = Effect.gen(function* () {
 						)
 						const writer = yield* socket.writer
 						const events = yield* Queue.unbounded<Live.Event, Live.LiveError>()
+						const context = yield* makeContextLoader((input) => write(input))
 						const decoder = new TextDecoder()
 						yield* reader.pull.pipe(
 							Effect.flatMap((frames) =>
 								Effect.forEach(frames, (frame) =>
-									decodeEvent(
-										typeof frame === "string" ? frame : decoder.decode(frame),
-									),
+									Effect.gen(function* () {
+										const text =
+											typeof frame === "string" ? frame : decoder.decode(frame)
+										yield* context.accept(text)
+										return yield* decodeEvent(text)
+									}),
 								),
 							),
 							Effect.flatMap((decoded) =>
@@ -486,6 +671,14 @@ export const backend = Effect.gen(function* () {
 									"OpenAI Realtime closed the connection",
 									error,
 								).pipe(
+									Effect.andThen(
+										context.fail(
+											Live.LiveError.make({
+												reason: "closed",
+												message: "OpenAI Realtime closed the connection.",
+											}),
+										),
+									),
 									Effect.andThen(
 										Queue.fail(
 											events,
@@ -520,6 +713,7 @@ export const backend = Effect.gen(function* () {
 						yield* write(Live.Input.Configure({ config }))
 						return {
 							send: write,
+							loadContext: context.load,
 							events: Stream.fromQueue(events),
 						} satisfies Live.Connection
 					}),

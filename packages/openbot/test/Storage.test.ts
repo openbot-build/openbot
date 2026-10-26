@@ -38,6 +38,8 @@ import * as HostTools from "../src/chats/HostTools.ts"
 import * as ModelRegistry from "../src/models/ModelRegistry.ts"
 import * as ChatsFixture from "./ChatsFixture.ts"
 import { Backend } from "../src/app/Backend.ts"
+import { Bots } from "../src/bots/Bots.ts"
+import { Files } from "../src/files/Files.ts"
 import * as Db from "../src/database/Database.ts"
 import * as BotFixture from "./BotFixture.ts"
 
@@ -412,6 +414,9 @@ it.layer(residentServices, { excludeTestServices: true })((it) => {
 				).pipe(
 					Effect.provide(
 						BackendLayers.layer().pipe(
+							Layer.provide(
+								Layer.merge(Layer.mock(Bots, {}), Layer.mock(Files, {})),
+							),
 							Layer.provide(residentTools(counters, { fail: true })),
 							// The build fails before the runtime reads the model registry.
 							Layer.provide(Layer.mock(ModelRegistry.ModelRegistry, {})),

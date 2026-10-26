@@ -3,11 +3,15 @@ import { assert, layer } from "@effect/vitest"
 import {
 	ChatSummary,
 	ChatView,
+	ChatExecutionBlocked,
+	FilesApi,
 	LiveApi,
+	ModelProvidersApi,
 	MessageReceipt,
 	UserTokensApi,
 } from "@openbot-build/api"
-import { Live } from "@openbot-build/core"
+import { Chat, Live } from "@openbot-build/core"
+import { eq } from "drizzle-orm"
 import {
 	Array as Arr,
 	Effect,
@@ -19,6 +23,7 @@ import {
 	Queue,
 	Ref,
 	Schema,
+	Schedule,
 	Stream,
 	String as Str,
 	SubscriptionRef,
@@ -28,6 +33,10 @@ import { Socket } from "effect/socket"
 import * as LiveBackends from "../src/models/LiveBackends.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as Caller from "./Caller.ts"
+import * as FileStorageFixture from "./FileStorageFixture.ts"
+import * as Db from "../src/database/Database.ts"
+import { chats as chatRows, files, fileRefs } from "../src/database/Schema.ts"
+import { fileIdOf } from "../src/files/Refs.ts"
 import { message, settled, type Send } from "./Messages.ts"
 
 const publicOrigin = "https://live.example.com"
@@ -91,59 +100,73 @@ const isType =
  * A backend that hears one fixed question in any sound, and gives one fixed answer for
  * each answer request. It keeps every input that OpenBot sent.
  */
-const fakeBackend = Effect.gen(function* () {
-	const inputs = yield* Ref.make<ReadonlyArray<Live.Input>>([])
-	const answers = yield* Ref.make(0)
-	const backend: LiveBackends.LiveBackend = {
-		kind: "openai",
-		make: ({ providerId, modelId }) =>
-			Effect.succeed({
-				provider: providerId,
-				model: modelId,
-				capabilities,
-				connect: () =>
-					Effect.gen(function* () {
-						const events = yield* Queue.unbounded<Live.Event, Live.LiveError>()
-						const send = (input: Live.Input) =>
-							Effect.gen(function* () {
-								yield* Live.check(capabilities, input)
-								yield* Ref.update(inputs, Arr.append(input))
-								if (input._tag === "Audio")
-									yield* Queue.offerAll(events, [
-										Live.Event.SpeechStarted(),
-										Live.Event.SpeechStopped(),
-										Live.Event.Committed({ itemId: "heard" }),
-										Live.Event.InputTranscript({
-											itemId: "heard",
-											text: "What time is it?",
-											final: true,
-										}),
-									])
-								if (input._tag === "Respond") {
-									const itemId =
-										"answer_" +
-										(yield* Ref.updateAndGet(answers, (count) => count + 1))
-									yield* Queue.offerAll(events, [
-										Live.Event.OutputAudio({ itemId, bytes: answerSound }),
-										Live.Event.OutputTranscript({ itemId, delta: "It is " }),
-										Live.Event.OutputTranscript({ itemId, delta: "noon." }),
-										Live.Event.OutputDone({ itemId }),
-										Live.Event.ResponseDone({
-											status: "completed",
-											usage: {
-												input: { text: 5, audio: 7, image: 0, cached: 0 },
-												output: { text: 3, audio: 9 },
-											},
-										}),
-									])
-								}
-							})
-						return { send, events: Stream.fromQueue(events) }
-					}),
-			}),
-	}
-	return { backend, inputs: Ref.get(inputs) }
-})
+const fakeBackendWith = (capabilities: Live.Capabilities) =>
+	Effect.gen(function* () {
+		const inputs = yield* Ref.make<ReadonlyArray<Live.Input>>([])
+		const answers = yield* Ref.make(0)
+		const backend: LiveBackends.LiveBackend = {
+			kind: "openai",
+			make: ({ providerId, modelId }) =>
+				Effect.succeed({
+					provider: providerId,
+					model: modelId,
+					capabilities,
+					connect: () =>
+						Effect.gen(function* () {
+							const events = yield* Queue.unbounded<
+								Live.Event,
+								Live.LiveError
+							>()
+							const send = (input: Live.Input) =>
+								Effect.gen(function* () {
+									yield* Live.check(capabilities, input)
+									yield* Ref.update(inputs, Arr.append(input))
+									if (input._tag === "Audio")
+										yield* Queue.offerAll(events, [
+											Live.Event.SpeechStarted(),
+											Live.Event.SpeechStopped(),
+											Live.Event.Committed({ itemId: "heard" }),
+											Live.Event.InputTranscript({
+												itemId: "heard",
+												text: "What time is it?",
+												final: true,
+											}),
+										])
+									if (input._tag === "Respond") {
+										const itemId =
+											"answer_" +
+											(yield* Ref.updateAndGet(answers, (count) => count + 1))
+										yield* Queue.offerAll(events, [
+											Live.Event.OutputAudio({ itemId, bytes: answerSound }),
+											Live.Event.OutputTranscript({ itemId, delta: "It is " }),
+											Live.Event.OutputTranscript({ itemId, delta: "noon." }),
+											Live.Event.OutputDone({ itemId }),
+											Live.Event.ResponseDone({
+												status: "completed",
+												usage: {
+													input: { text: 5, audio: 7, image: 0, cached: 0 },
+													output: { text: 3, audio: 9 },
+												},
+											}),
+										])
+									}
+								})
+							return {
+								send,
+								events: Stream.fromQueue(events),
+								loadContext: (prompt) =>
+									Live.contextOf(prompt, capabilities).pipe(
+										Effect.flatMap((items) =>
+											send(Live.Input.Context({ id: "history", items })),
+										),
+									),
+							}
+						}),
+				}),
+		}
+		return { backend, inputs: Ref.get(inputs) }
+	})
+const fakeBackend = fakeBackendWith(capabilities)
 
 /**
  * Opens a Live client that keeps every message and every sound frame. It
@@ -247,6 +270,280 @@ layer(
 	},
 )((it) => {
 	it.effect(
+		"Live images persist before a Turn, load after reconnect, and cannot switch to a text-only model",
+		() =>
+			Effect.gen(function* () {
+				const fake = yield* fakeBackendWith({
+					...capabilities,
+					inputs: { text: true, image: true, imageMediaTypes: ["image/png"] },
+				})
+				const storage = yield* FileStorageFixture.make
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					liveBackends: LiveBackends.layer([fake.backend]),
+					platformFetch: storage.fetch,
+					platformAdmins: ["root@example.com"],
+					bots: { memory: false },
+				})
+				const address = yield* host.address
+				const call = Caller.withCookie({ address, publicOrigin })
+				const alice = yield* host.login("alice")
+				const root = yield* host.login("root")
+				const asAlice: Send = (path, method, payload) =>
+					call(alice.session, path, method, payload)
+				const settings = yield* json(
+					Schema.Struct({ version: Schema.Finite }),
+					call(root.session, "/v1/platform/settings"),
+				)
+				yield* text(
+					call(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: settings.version,
+						files: {
+							storage: {
+								endpoint: FileStorageFixture.origin,
+								publicEndpoint: null,
+								region: "us-east-1",
+								bucket: "openbot",
+								accessKeyId: "test-access-key",
+								secretAccessKey: "test-secret-access-key",
+								forcePathStyle: true,
+							},
+						},
+					}),
+				)
+				const model = yield* json(
+					ModelProvidersApi.Model,
+					asAlice("/v1/organization/models", "POST", {
+						id: "vision-talk",
+						type: "live",
+						name: "Vision talk",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				)
+				const provider = yield* json(
+					Created,
+					asAlice("/v1/organization/model_providers", "POST", {
+						kind: "openai",
+						name: "Vision",
+						apiKey: "sk-live-0123456789",
+						models: [{ model: model.id, modelOwner: "organization" }],
+					}),
+				)
+				const selection = {
+					_tag: "Config.Selection",
+					provider: provider.id,
+					model: model.id,
+				}
+				const bot = yield* host.defaultBot(alice.session)
+				const receipt = yield* message(
+					asAlice,
+					bot,
+					"Remember this conversation before looking at my image.",
+				)
+				const chat = receipt.chat
+				const view = () => json(ChatView, asAlice(`/v1/chats/${chat}`, "GET"))
+				const original = yield* settled(asAlice, chat)
+				const unknown = yield* json(
+					ChatExecutionBlocked,
+					asAlice(`/v1/chats/${chat}/execution`, "PUT", {
+						expected: original.chat.revision,
+						mode: "live",
+						model: selection,
+					}),
+					409,
+				)
+				assert.match(unknown.message, /context window/)
+				assert.strictEqual((yield* view()).chat.execution.mode, "chat")
+				const small = yield* json(
+					ModelProvidersApi.Model,
+					asAlice(`/v1/organization/models/${model.id}`, "PATCH", {
+						expectedVersion: model.version,
+						contextWindow: 1,
+					}),
+				)
+				const afterUnknown = yield* view()
+				const tooSmall = yield* json(
+					ChatExecutionBlocked,
+					asAlice(`/v1/chats/${chat}/execution`, "PUT", {
+						expected: afterUnknown.chat.revision,
+						mode: "live",
+						model: selection,
+					}),
+					409,
+				)
+				assert.match(tooSmall.message, /too large/)
+				assert.strictEqual((yield* view()).chat.execution.mode, "chat")
+				yield* json(
+					ModelProvidersApi.Model,
+					asAlice(`/v1/organization/models/${model.id}`, "PATCH", {
+						expectedVersion: small.version,
+						contextWindow: 32000,
+					}),
+				)
+				const beforeSwitch = yield* view()
+				yield* json(
+					ChatView,
+					asAlice(`/v1/chats/${chat}/execution`, "PUT", {
+						expected: beforeSwitch.chat.revision,
+						mode: "live",
+						model: selection,
+					}),
+				)
+				const url =
+					Str.replace(/^http/, "ws")(address) + `/v1/chats/${chat}/live`
+				const headers = {
+					cookie: Caller.sessionCookie(alice.session),
+					origin: publicOrigin,
+				}
+				const client = yield* connect(url, headers)
+				yield* client.until((all) => Arr.some(all, isType("session.ready")))
+				yield* client.send(
+					yield* encodeClientMessage({
+						type: "input.image",
+						mediaType: "image/png",
+						data: "UE5HREFUQQ==",
+					}),
+				)
+				const pending = yield* view().pipe(
+					Effect.repeat({
+						until: (value) => value.inbox === 1,
+						schedule: Schedule.spaced("20 millis"),
+						times: 100,
+					}),
+				)
+				assert.strictEqual(pending.inbox, 1)
+				assert.strictEqual(pending.status, "Completed")
+				assert.strictEqual(
+					Arr.filter(yield* fake.inputs, Live.Input.$is("Respond")).length,
+					0,
+				)
+				assert.strictEqual(
+					Arr.filter(yield* fake.inputs, Live.Input.$is("Image")).length,
+					0,
+				)
+				const stored = yield* host.run(
+					Effect.flatMap(Db.make, (db) => db.select().from(files)),
+				)
+				assert.strictEqual(stored.length, 1)
+				const image = stored[0]!
+				assert.isTrue(yield* storage.has(`/openbot/files/${image.id}`))
+				const file = yield* json(
+					FilesApi.FileObject,
+					asAlice(`/v1/files/${image.id}`, "GET"),
+				)
+				assert.strictEqual(file.status, "ready")
+				assert.strictEqual(file.bytes, 7)
+				assert.strictEqual(
+					yield* text(asAlice(`/v1/files/${image.id}/content`, "GET")),
+					"PNGDATA",
+				)
+				const raw = (yield* host.run(
+					Effect.flatMap(Db.make, (db) =>
+						db
+							.select({ body: chatRows.body })
+							.from(chatRows)
+							.where(eq(chatRows.id, chat)),
+					),
+				))[0]!
+				const record = yield* Schema.decodeEffect(
+					Schema.fromJsonString(
+						Schema.Struct({ inbox: Schema.Array(Chat.InboxEntry) }),
+					),
+				)(raw.body)
+				assert.strictEqual(record.inbox.length, 1)
+				assert.strictEqual(record.inbox[0]!.passive, true)
+				const first = record.inbox[0]!.content.content[0]
+				assert.ok(first?.role === "user")
+				const part = first.content[0]
+				assert.ok(part?.type === "file" && part.data instanceof URL)
+				assert.strictEqual(Option.getOrThrow(fileIdOf(part.data)), image.id)
+
+				// The queued image is checked before it becomes history as well.
+				const blocked = yield* json(
+					ChatExecutionBlocked,
+					asAlice(`/v1/chats/${chat}/execution`, "PUT", {
+						expected: pending.chat.revision,
+						mode: "chat",
+					}),
+					409,
+				)
+				assert.match(blocked.message, /image\/png/)
+				assert.strictEqual((yield* view()).chat.execution.mode, "live")
+				yield* client.send(
+					yield* encodeClientMessage({
+						type: "input.text",
+						text: "What is in this image?",
+					}),
+				)
+				yield* client.until((all) =>
+					Arr.some(all, (entry) => entry.type === "output.transcript.delta"),
+				)
+				const completed = yield* settled(asAlice, chat)
+				assert.strictEqual(completed.inbox, 0)
+				const images = Arr.filter(yield* fake.inputs, Live.Input.$is("Image"))
+				assert.strictEqual(images.length, 1)
+				assert.strictEqual(images[0]!.mediaType, "image/png")
+				assert.strictEqual(
+					new TextDecoder().decode(images[0]!.bytes),
+					"PNGDATA",
+				)
+				assert.strictEqual(
+					Arr.filter(yield* fake.inputs, Live.Input.$is("Respond")).length,
+					1,
+				)
+				const refs = yield* host.run(
+					Effect.flatMap(Db.make, (db) =>
+						db.select().from(fileRefs).where(eq(fileRefs.file, image.id)),
+					),
+				)
+				assert.strictEqual(refs.length, 1)
+				yield* client.close
+				const disconnected = yield* view().pipe(
+					Effect.repeat({
+						until: (value) => value.chat.execution.phase === "selected",
+						schedule: Schedule.spaced("20 millis"),
+						times: 100,
+					}),
+				)
+				assert.strictEqual(disconnected.chat.execution.phase, "selected")
+				const resumed = yield* connect(url, headers)
+				yield* resumed.until((all) => Arr.some(all, isType("session.ready")))
+				const restored = Arr.findLast(
+					yield* fake.inputs,
+					Live.Input.$is("Context"),
+				)
+				assert.ok(Option.isSome(restored))
+				const restoredImages = Arr.flatMap(restored.value.items, (item) =>
+					item.type === "message"
+						? Arr.filter(item.content, (content) => content.type === "image")
+						: [],
+				)
+				assert.strictEqual(restoredImages.length, 1)
+				assert.strictEqual(
+					Arr.filter(yield* fake.inputs, Live.Input.$is("Image")).length,
+					1,
+				)
+				assert.strictEqual(
+					Arr.filter(yield* fake.inputs, Live.Input.$is("Respond")).length,
+					1,
+				)
+				const beforeRejectedSwitch = yield* view()
+				yield* json(
+					ChatExecutionBlocked,
+					asAlice(`/v1/chats/${chat}/execution`, "PUT", {
+						expected: beforeRejectedSwitch.chat.revision,
+						mode: "chat",
+					}),
+					409,
+				)
+				assert.strictEqual((yield* view()).chat.execution.mode, "live")
+				yield* resumed.close
+			}),
+		180000,
+	)
+
+	it.effect(
 		"a person talks with a Bot in a live Chat, and only the Live session starts its Turns",
 		() =>
 			Effect.gen(function* () {
@@ -290,6 +587,7 @@ layer(
 						id: "talk",
 						name: "Talk",
 						type: "live",
+						contextWindow: 32000,
 						reasoningEfforts: [],
 						serviceTiers: [],
 					}),
@@ -531,13 +829,156 @@ layer(
 				yield* keyed.until((received) =>
 					Arr.some(received, isType("session.ready")),
 				)
-				const history = Arr.findFirst(
+				const history = Arr.findLast(
 					yield* fake.inputs,
-					Live.Input.$is("History"),
+					Live.Input.$is("Context"),
 				)
 				assert.ok(Option.isSome(history))
-				assert.strictEqual(history.value.messages[0]?.text, "Remember me")
+				assert.ok(
+					Arr.some(
+						history.value.items,
+						(item) =>
+							item.type === "message" &&
+							Arr.some(
+								item.content,
+								(part) =>
+									part.type === "text" &&
+									Str.includes("Remember me")(part.text),
+							),
+					),
+				)
 				yield* keyed.close
+
+				// The same direct Chat switches in both directions. No switch creates a Turn.
+				const before = yield* json(
+					ChatView,
+					send(alice.session, `/v1/chats/${direct.chat}`),
+				)
+				const switched = yield* json(
+					ChatView,
+					send(alice.session, `/v1/chats/${direct.chat}/execution`, "PUT", {
+						expected: before.chat.revision,
+						mode: "live",
+						model: talk,
+					}),
+				)
+				assert.strictEqual(switched.chat.id, direct.chat)
+				assert.strictEqual(switched.chat.kind, "direct")
+				assert.strictEqual(switched.chat.execution.mode, "live")
+				assert.strictEqual(switched.chat.execution.phase, "selected")
+				assert.deepStrictEqual(switched.turn, before.turn)
+				const stale = yield* json(
+					Tagged,
+					send(alice.session, `/v1/chats/${direct.chat}/execution`, "PUT", {
+						expected: before.chat.revision,
+						mode: "chat",
+					}),
+					409,
+				)
+				assert.strictEqual(stale._tag, "ChatConflict")
+				const mixed = yield* connect(urlOf(direct.chat), {
+					cookie,
+					origin: publicOrigin,
+				})
+				yield* mixed.until((received) =>
+					Arr.some(received, isType("session.ready")),
+				)
+				const directHistory = Arr.findLast(
+					yield* fake.inputs,
+					Live.Input.$is("Context"),
+				)
+				assert.ok(Option.isSome(directHistory))
+				assert.ok(
+					Arr.some(
+						directHistory.value.items,
+						(item) =>
+							item.type === "message" &&
+							Arr.some(
+								item.content,
+								(part) => part.type === "text" && part.text === "Hello",
+							),
+					),
+				)
+				yield* mixed.send(
+					yield* encodeClientMessage({
+						type: "input.text",
+						text: "Continue in Live",
+					}),
+				)
+				yield* mixed.until((received) => completedTurns(received).length === 1)
+				yield* settled(asAlice, direct.chat)
+				const liveView = yield* json(
+					ChatView,
+					send(alice.session, `/v1/chats/${direct.chat}`),
+				)
+				// An idle socket can switch back using an API key. It loses ownership immediately.
+				const normal = yield* json(
+					ChatView,
+					Caller.withToken(address)(
+						token.secret,
+						`/v1/chats/${direct.chat}/execution`,
+						"PUT",
+						{
+							expected: liveView.chat.revision,
+							mode: "chat",
+						},
+					),
+				)
+				assert.strictEqual(normal.chat.kind, "direct")
+				assert.strictEqual(normal.chat.execution.mode, "chat")
+				assert.strictEqual(
+					normal.chat.execution.generation,
+					switched.chat.execution.generation + 1,
+				)
+				yield* mixed.close
+				yield* json(
+					MessageReceipt,
+					send(alice.session, `/v1/chats/${direct.chat}/messages`, "POST", {
+						input: "Back to text",
+					}),
+					202,
+				)
+				const continued = yield* settled(asAlice, direct.chat)
+				const again = yield* json(
+					ChatView,
+					send(alice.session, `/v1/chats/${direct.chat}/execution`, "PUT", {
+						expected: continued.chat.revision,
+						mode: "live",
+					}),
+				)
+				assert.strictEqual(again.chat.execution.liveModel?.model, "talk")
+				const resumed = yield* connect(urlOf(direct.chat), {
+					cookie,
+					origin: publicOrigin,
+				})
+				yield* resumed.until((received) =>
+					Arr.some(received, isType("session.ready")),
+				)
+				const resumedHistory = Arr.findLast(
+					yield* fake.inputs,
+					Live.Input.$is("Context"),
+				)
+				assert.ok(Option.isSome(resumedHistory))
+				assert.ok(
+					Arr.some(
+						resumedHistory.value.items,
+						(item) =>
+							item.type === "message" &&
+							Arr.some(
+								item.content,
+								(part) => part.type === "text" && part.text === "Back to text",
+							),
+					),
+				)
+				yield* resumed.close
+				const bob = yield* host.login("bob")
+				const denied = yield* send(
+					bob.session,
+					`/v1/chats/${direct.chat}/execution`,
+					"PUT",
+					{ expected: again.chat.revision, mode: "chat" },
+				)
+				assert.strictEqual(denied.status, 404)
 
 				// With a second organization, a browser names the organization in the query,
 				// because it cannot send the header with a WebSocket.

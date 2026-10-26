@@ -33,6 +33,11 @@ cookie。见 [身份验证](/zh-cn/docs/authentication)。
 Chat。Chat 没有终点。只要人们还在和 Bot 说话，它就一直继续，除非你[删除它的历史](#删除历史)。review
 Chat 在做出决定后关闭。
 
+`kind` 记录 Chat 的创建原因；`execution.mode`
+选择当前由 Chat 还是 Live 执行。空闲的 `direct` 或 `live`
+Chat 可以切换执行方式，不改变种类、Bot、ID 或历史。其他种类保持原有执行方式。见
+[在 Chat 和 Live 之间切换](#在-chat-和-live-之间切换)。
+
 ---
 
 ## 和 Bot 说话
@@ -86,9 +91,8 @@ Chat。第一条消息会创建这个 Chat。你需要在这个 Bot 上拥有
 
 `POST /v1/chats/:chatId/messages` 接受同样的请求体。它用于 direct Chat、live
 Chat，或者当你想给一个 Bot 的工作补充内容时，用于 task Chat。在 task
-Chat 中，Bot 把你的消息当作你发来的消息来读。在 live
-Chat 中，消息会等到有 Live 会话打开。其他种类的 Chat 会返回 `409` 和
-`ChatConflict`。
+Chat 中，Bot 把你的消息当作你发来的消息来读。`execution.mode` 为 `live`
+时，消息会等到有 Live 会话打开。其他种类的 Chat 会返回 `409` 和 `ChatConflict`。
 
 ### 回答
 
@@ -524,9 +528,45 @@ OpenBot 会保存每一个提醒。重启以后，提醒仍然会按时到来。
 `unsupported-option`。OpenBot 如何得到它的模型，见
 [Models](/zh-cn/docs/models)。
 
-执行模式是 `build` 或 `plan`。`build` 是普通模式：Bot 直接做事。在 `plan`
+Turn 设置 `settings.mode` 是 `build` 或 `plan`。`build`
+是普通模式：Bot 直接做事。在 `plan`
 模式下，Bot 先写一个计划。OpenBot 把模式保存在 Chat 上，并把它复制到每个新 Turn 的
-`settings` 中。
+`settings` 中。它与选择 `chat` 或 `live` 的 `execution.mode` 相互独立。
+
+### 在 Chat 和 Live 之间切换
+
+`PUT /v1/chats/:chatId/execution` 改变空闲的 `direct` 或 `live`
+Chat 的执行方式，保留同一个 Chat 和已提交的历史：
+
+```json
+{
+	"expected": 4,
+	"mode": "live",
+	"model": {
+		"_tag": "Config.Selection",
+		"provider": "openai",
+		"model": "gpt-realtime"
+	}
+}
+```
+
+把当前 `chat.revision` 作为 `expected` 发送。`mode` 必填，`model`
+可选。OpenBot 分别记住两种执行方式的模型。切换到 Live 只选择模型，不建立连接或启动执行。收到响应后打开 Live 连接，等待
+`session.ready` 再发送输入。切回 `chat`
+前，先处理完当前工作。空闲的 Live 连接允许切换；原连接的 generation 随之失效，不能再启动工作。
+
+Chat 视图包含 `execution.mode`、`generation`、`phase`、`chatModel` 和
+`liveModel`。切换需要 Chat 上的 `write` 和
+`run`、向 Bot 委派的权限，以及使用目标模型的权限。正在运行的工作、排队输入、待处理审批、未确定的工具操作、忙碌中的 Live 连接或另一次切换都会返回
+`409` 和 `ChatExecutionBlocked`。旧 revision 返回 `ChatConflict`。
+
+OpenBot 根据保存的文本、转写、工具记录、图片和文件检查目标模型。不受支持或无法读取的上下文会阻止切换，不会被静默丢弃。语言模型必须在
+`inputMediaTypes`
+中声明支持的文件 MIME 类型；未设置不代表支持，空列表表示仅文本。Live 适配器根据自己的能力检查。加载历史不会重新执行工具或启动回答。连接、上下文及提供方限制见
+[Live 模式](/zh-cn/docs/live)。
+
+共享历史非空时，目标必须有已知的
+`contextWindow`。窗口未知或上下文估算超过输入预算都会阻止切换。OpenBot 估算解析后的提示词，不在切换期间压缩它。提供方仍可能拒绝最终请求；本地估算和历史加载确认不保证精确适合 token 窗口。
 
 ---
 

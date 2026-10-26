@@ -26,6 +26,9 @@ import {
 	type MessageInput,
 	type MessageReceipt,
 	type UpdateChatRequest,
+	type SwitchChatExecutionRequest,
+	type ChatExecutionMode,
+	type ChatExecutionBlocked,
 	type UpdateTodosRequest,
 	type BotsApi,
 	type PlanApproval,
@@ -70,6 +73,13 @@ export interface DeliverInput {
 	readonly approved?: Chat.ApprovedCall
 	/** Wait for the next Turn, also when a Turn of the same author runs. */
 	readonly queue?: boolean
+	/** Adds context, such as an image, without starting an answer. Only the host sets this. */
+	readonly passive?: true
+	/** A Live input belongs to this saved connection. Only the host sets this. */
+	readonly expectedExecution?: {
+		readonly generation: number
+		readonly sessionId: string
+	}
 }
 
 export type ServiceError =
@@ -105,6 +115,16 @@ export interface Options {
 	 * each Bot names its model.
 	 */
 	readonly defaultModel?: Config.Selection
+	/** The Bot model to use when an old Live Chat first selects Chat execution. */
+	readonly chatModel?: (
+		bot: BotsApi.BotId,
+	) => Effect.Effect<Config.Selection | undefined, ChatModelInvalid>
+	/** Checks the full saved context without running a model or any tool. */
+	readonly validateExecution?: (input: {
+		readonly context: Prompt.Prompt
+		readonly selection: Config.Selection
+		readonly mode: ChatExecutionMode
+	}) => Effect.Effect<void, ChatExecutionBlocked>
 }
 
 export class Chats extends Context.Service<
@@ -135,6 +155,45 @@ export class Chats extends Context.Service<
 			id: Chat.Id,
 			input: UpdateChatRequest,
 		) => Effect.Effect<ChatView, ServiceError | ChatExecutionUnavailable>
+		readonly switchExecution: (
+			id: Chat.Id,
+			input: SwitchChatExecutionRequest,
+		) => Effect.Effect<
+			ChatView,
+			ServiceError | ChatExecutionUnavailable | ChatExecutionBlocked
+		>
+		/** Changes only execution state under the Chat revision lock. */
+		readonly changeExecution: (
+			id: Chat.Id,
+			update: (
+				chat: Chat.Ref,
+			) => Effect.Effect<ChatHost.ExecutionState, ChatExecutionBlocked>,
+		) => Effect.Effect<void, ServiceError | ChatExecutionBlocked>
+		/** Reads a stable saved context. Reading never starts a Turn. */
+		readonly executionContext: (
+			id: Chat.Id,
+			expected?: Chat.Revision,
+		) => Effect.Effect<
+			{
+				readonly chat: Chat.Id
+				readonly revision: Chat.Revision
+				readonly seq: Item.Seq
+				readonly prompt: Prompt.Prompt
+			},
+			ServiceError
+		>
+		/** Old connections may not send input after a change of execution. */
+		readonly checkExecution: (
+			id: Chat.Id,
+			generation: number,
+			mode: ChatExecutionMode,
+		) => Effect.Effect<boolean, ServiceError>
+		/** A closing connection can stop only the Turn that it owned. */
+		readonly interruptExecution: (
+			id: Chat.Id,
+			generation: number,
+			turn: Turn.Id,
+		) => Effect.Effect<void, ServiceError>
 		readonly change: (
 			id: Chat.Id,
 			update: (state: ChatHost.ChatHostState) => ChatHost.ChatHostState,

@@ -6,7 +6,7 @@ import {
 	LiveApi,
 	OpenBotApi,
 } from "@openbot-build/api"
-import { Config } from "@openbot-build/core"
+import { Config, Live } from "@openbot-build/core"
 import { Effect, Result } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -20,6 +20,8 @@ import * as ChatHost from "../ChatHost.ts"
 import { chainFor } from "../ChatHandlers.ts"
 import * as LiveSession from "./LiveSession.ts"
 import { LiveSessions } from "./LiveSessions.ts"
+import { Files } from "../../files/Files.ts"
+import * as ModelFiles from "../../files/ModelFiles.ts"
 
 export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 	Effect.gen(function* () {
@@ -28,6 +30,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 		const { check } = yield* Check.make
 		const registry = yield* ModelRegistry
 		const sessions = yield* LiveSessions
+		const files = yield* Files
 		const chatsOf = (caller: typeof Identity.Service) =>
 			backend
 				.forCaller(caller)
@@ -90,9 +93,10 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 					// The Chat must be a live Chat of the caller. Its model is the Live model.
 					const view = yield* chats.get(params.chatId)
 					const selection = view.chat.settings.model
-					if (view.chat.kind !== "live" || selection === undefined)
+					if (view.chat.execution.mode !== "live" || selection === undefined)
 						return yield* LiveApi.LiveUnavailable.make({
-							message: "Only a live Chat has a Live session.",
+							message:
+								"Select Live execution before opening a Live connection.",
 						})
 					const live = yield* registry
 						.resolveLive(caller.organizationId, selection)
@@ -101,6 +105,14 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 								LiveApi.LiveUnavailable.make({ message: error.message }),
 							),
 						)
+					yield* check(caller, {
+						action: "use",
+						resource: Authorization.Model.make({
+							organizationId: caller.organizationId,
+							provider: selection.provider,
+							id: selection.model,
+						}),
+					})
 					const chosen = LiveSession.plan(live.model.capabilities, query)
 					if (Result.isFailure(chosen))
 						return yield* LiveApi.LiveUnavailable.make({
@@ -128,6 +140,41 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "live", (handlers) =>
 						author: ChatHost.authorOf(caller.userId, caller.tokenId),
 						live,
 						plan: chosen.success,
+						generation: view.chat.execution.generation,
+						prepareContext: (prompt) =>
+							ModelFiles.context(files, caller, prompt).pipe(
+								Effect.mapError((error) =>
+									Live.LiveError.make({
+										reason: "unsupported",
+										message: error.message,
+									}),
+								),
+							),
+						storeImage: (mediaType, bytes) =>
+							Effect.gen(function* () {
+								const file = yield* files.uploadBytes(caller, {
+									fileName:
+										mediaType === "image/png"
+											? "live-image.png"
+											: "live-image.jpg",
+									mediaType,
+									bytes,
+								})
+								return yield* files.prompt(caller, [
+									{
+										type: "message",
+										role: "user",
+										content: [{ type: "input_image", file_id: file.id }],
+									},
+								])
+							}).pipe(
+								Failures.replace("OpenBot could not store a Live image.", () =>
+									Live.LiveError.make({
+										reason: "unsupported",
+										message: "OpenBot could not save this image.",
+									}),
+								),
+							),
 					}).pipe(
 						Effect.provideService(LiveSessions, sessions),
 						Background.logFailure("A Live session ended with an error."),

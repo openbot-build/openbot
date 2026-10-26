@@ -158,6 +158,7 @@ const jev: StoredModel = {
 	name: "Jev",
 	reasoningEfforts: [],
 	serviceTiers: [],
+	inputMediaTypes: null,
 	contextWindow: null,
 	maxOutputTokens: null,
 	availability: null,
