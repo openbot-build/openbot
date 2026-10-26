@@ -46,6 +46,7 @@ import * as StoredConnections from "../src/apps/StoredConnections.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Db from "../src/database/Database.ts"
+import { until } from "./Wait.ts"
 
 const publicOrigin = "https://openbot.fixture.test"
 
@@ -396,6 +397,15 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 				}).pipe(Effect.provide(storage))
 				yield* host.run(Effect.flatMap(IndexWork, (work) => work.runOne()))
+				// The settings write returns before PostgreSQL NOTIFY updates Governance.
+				yield* host.run(
+					until(
+						"the App restriction after the settings notice",
+						Effect.flatMap(Governance.Governance, (governance) =>
+							Effect.sync(() => governance.find(cardUrl)),
+						),
+					),
+				)
 				const response = yield* Effect.flatMap(
 					HttpClient.get(
 						address + "/v1/app-index/app?" + new URLSearchParams({ cardUrl }),
