@@ -3,7 +3,7 @@ import {
 	AppViewsApi as Api,
 	AppExecution,
 	AppExperienceApi,
-	type ChatView,
+	ChatView,
 	ConnectionsApi,
 	RequestsApi,
 } from "@openbot-build/api"
@@ -24,7 +24,7 @@ import { AppNetwork } from "../src/apps/AppHost.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as Caller from "./Caller.ts"
-import { message, settled, type Send } from "./Messages.ts"
+import { send, settled, type Send } from "./Messages.ts"
 const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 1, text: 1, reasoning: 0 },
@@ -64,7 +64,11 @@ const json = <S extends Schema.Constraint>(schema: S) =>
 	Caller.json(Schema.toCodecJson(schema))
 
 const isToolResult = Schema.is(
-	Schema.Struct({ type: Schema.Literal("tool-result"), id: Schema.String }),
+	Schema.Struct({
+		type: Schema.Literal("tool-result"),
+		id: Schema.String,
+		result: Schema.Unknown,
+	}),
 )
 
 /** The query of one page of Items, before the given Item position. */
@@ -191,8 +195,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(added.status, 201, yield* added.text)
 				const asAlice: Send = (path, method, payload) =>
 					request(path, method, payload)
-				const receipt = yield* message(asAlice, bot, "Read the document")
-				const id = receipt.chat
+				const conversation = yield* Effect.flatMap(
+					post("/v1/chats", { botId: bot, requestId: "app-views-source" }),
+					Caller.json(ChatView, 201),
+				)
+				const id = conversation.chat.id
+				yield* send(asAlice, id, "Read the document")
 				const wait = settled(asAlice, id)
 				/** Waits until a Turn after `turn` has run, and the Chat is at rest. */
 				const after = (turn: string | undefined) => {
@@ -266,7 +274,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 								Arr.isArray(m.content) &&
 								Arr.some(
 									m.content,
-									(p) => isToolResult(p) && p.id === original.callId,
+									(p) =>
+										isToolResult(p) &&
+										p.id !== original.callId &&
+										Schema.is(AppExecution.Result)(p.result) &&
+										p.result._tag === "Completed" &&
+										p.result.operationId === original.id,
 								),
 						),
 					),
@@ -281,6 +294,65 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const view = yield* json(Api.Opened)(openResponse)
 				assert.strictEqual(view.resource.mimeType, "text/html;profile=mcp-app")
 				assert.strictEqual(Str.includes("secret-work")(openBody), false)
+				assert.strictEqual(view.readOnly, false)
+				assert.notStrictEqual(view.turn, original.turn)
+				const branch = yield* Effect.flatMap(
+					post("/v1/chats/" + id + "/forks", {
+						expected: (yield* wait).chat.revision,
+						requestId: "app-views-fork",
+						reason: "fork",
+					}),
+					Caller.json(ChatView, 201),
+				)
+				const historyView = yield* Effect.flatMap(
+					post("/v1/app-operations/" + original.id + "/view", {
+						chatId: branch.chat.id,
+						itemId: item.id,
+					}),
+					json(Api.Opened),
+				)
+				assert.strictEqual(historyView.readOnly, true)
+				assert.strictEqual(
+					(yield* request(
+						"/v1/app-views/" + historyView.id + "/context",
+						"PUT",
+						{
+							revision: 0,
+							context: { text: "Do not mutate copied history" },
+						},
+					)).status,
+					409,
+				)
+				assert.strictEqual(
+					(yield* post("/v1/app-views/" + historyView.id + "/actions", {
+						kind: "tool",
+						requestId: "history-action",
+						name: "write_board",
+						arguments: { id: "alpha", text: "No" },
+					})).status,
+					409,
+				)
+				assert.strictEqual(
+					(yield* post("/v1/app-views/" + historyView.id + "/messages", {
+						content: {
+							content: [{ type: "text", text: "Do not run copied history" }],
+						},
+					})).status,
+					409,
+				)
+				const unrelated = yield* Effect.flatMap(
+					post("/v1/chats", { botId: bot, requestId: "app-views-unrelated" }),
+					Caller.json(ChatView, 201),
+				)
+				assert.strictEqual(
+					(yield* post("/v1/app-operations/" + original.id + "/view", {
+						chatId: unrelated.chat.id,
+						itemId: item.id,
+					})).status,
+					404,
+				)
+				assert.strictEqual((yield* publisher.writes).length, 0)
+
 				assert.strictEqual(
 					(yield* request(
 						"/v1/app-views/" + view.id,

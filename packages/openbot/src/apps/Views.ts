@@ -1,6 +1,7 @@
 import { Chat, Item } from "@openbot-build/core"
 import {
 	AppViewsApi as Api,
+	AppExecution,
 	type ConnectionsApi,
 	ExperienceInputInvalid,
 	ExperienceNotFound,
@@ -23,6 +24,7 @@ import {
 	Schema,
 	type Scope,
 	String as Str,
+	Stream,
 } from "effect"
 import { Backend } from "../app/Backend.ts"
 import * as Failures from "../app/Failures.ts"
@@ -442,7 +444,7 @@ export const make = Effect.gen(function* () {
 								),
 				),
 			)
-	/** The Item with the result of an App operation, in the Turn of the operation. */
+	/** Bind only committed tool history, including the result of an approved continuation. */
 	const historyBinding = (
 		identity: typeof Identity.Service,
 		operationId: string,
@@ -457,14 +459,30 @@ export const make = Effect.gen(function* () {
 				operationId,
 			)
 			const service = yield* chats(identity)
-			const items = yield* service
-				.turnLog(chatId, operation.turn)
-				.pipe(fromChats("OpenBot could not read the Turn of an App operation"))
-			const item = pipe(
-				Arr.findFirst(
-					items,
+			// Approval resumes in a new Turn with a new call ID. The host records the
+			// original operation ID in its completed tool result; model text is never a binding.
+			const item = yield* Stream.paginate(
+				undefined as Item.Seq | undefined,
+				(before) =>
+					service
+						.items(chatId, {
+							limit: 100,
+							...(before === undefined ? {} : { before }),
+						})
+						.pipe(
+							fromChats(
+								"OpenBot could not read the history of an App operation",
+							),
+							Effect.map(
+								(page) =>
+									[page.items, Option.fromNullishOr(page.next)] as const,
+							),
+						),
+			).pipe(
+				Stream.filter(
 					(item) =>
 						(itemId === undefined || item.id === itemId) &&
+						item.origin?.chat === chatId &&
 						Arr.some(
 							item.content.content,
 							(message) =>
@@ -472,11 +490,22 @@ export const make = Effect.gen(function* () {
 								Arr.some(
 									message.content,
 									(part) =>
-										part.type === "tool-result" && part.id === operation.callId,
+										part.type === "tool-result" &&
+										((chatId === operation.chat &&
+											item.origin?.turn === operation.turn &&
+											part.id === operation.callId) ||
+											(Schema.is(AppExecution.Result)(part.result) &&
+												part.result.operationId === operation.id &&
+												part.result._tag === "Completed" &&
+												operation.result?._tag === "Completed" &&
+												Schema.toEquivalence(AppExecution.Result)(
+													part.result,
+													operation.result,
+												))),
 								),
 						),
 				),
-				Option.filter((item) => item.origin?.turn === operation.turn),
+				Stream.runHead,
 			)
 			if (Option.isNone(item))
 				return yield* ExperienceNotFound.make({ id: operationId })
@@ -571,9 +600,9 @@ export const make = Effect.gen(function* () {
 					const view: View = {
 						id: Api.AppViewId.make(yield* newId),
 						operationId: operation.id,
-						readOnly: false,
+						readOnly: operation.chat !== chatId,
 						chat: chatId,
-						turn: operation.turn,
+						turn: item.origin?.turn ?? operation.turn,
 						item: item.id,
 						connectionId: operation.source.connectionId,
 						revision: operation.source.revision,

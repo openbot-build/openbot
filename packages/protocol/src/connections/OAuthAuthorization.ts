@@ -413,6 +413,7 @@ const register = Effect.fn("Authorization.register")(function* (input: {
 	const registered = yield* Effect.scoped(
 		Effect.gen(function* () {
 			const fetch = yield* Sdk.fetch({ documents: true })
+			// @effect-rules-next-line blind-error-map -- Registration errors may contain client secrets and must not retain a raw cause.
 			return yield* Effect.tryPromise({
 				try: () =>
 					Mcp.registerClient(input.metadata.issuer, {
@@ -429,7 +430,6 @@ const register = Effect.fn("Authorization.register")(function* (input: {
 						scope: Arr.join(input.scopes, " "),
 						fetchFn: fetch,
 					}),
-				// Registration failures can contain a returned client secret. Never retain their raw body in a cause or log.
 				catch: () =>
 					AuthorizationError.make({
 						reason: "ClientMetadata",
