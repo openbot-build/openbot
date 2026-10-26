@@ -8,10 +8,12 @@ import {
 	OpenBotApi,
 	Settings as SettingsApi,
 } from "@openbot-build/api"
+import type { Policy } from "@nmnmcc/ability"
 import { Array as Arr, Effect, Layer, Option, pipe, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "../app/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
+import * as Check from "../authorization/Check.ts"
 import { noMoreThanCaller } from "../authorization/Escalation.ts"
 import { organizationKey, userKey } from "../audit/Resources.ts"
 import { Roles } from "../authorization/Roles.ts"
@@ -20,6 +22,23 @@ import { Settings } from "../settings/Settings.ts"
 import * as Views from "../settings/Views.ts"
 import { PlatformAdmins } from "../platform/PlatformAdmins.ts"
 import { Organization } from "./Organization.ts"
+
+/** These kinds have one value per organization, with no owner or item ID. */
+const capabilityTargets = [
+	{ kind: "Organization", action: "read" },
+	{ kind: "Organization", action: "write" },
+	{ kind: "Member", action: "read" },
+	{ kind: "Member", action: "write" },
+	{ kind: "Role", action: "write" },
+	{ kind: "ModelProvider", action: "read" },
+	{ kind: "ModelProvider", action: "write" },
+	{ kind: "Sso", action: "read" },
+	{ kind: "Sso", action: "write" },
+	{ kind: "AuditLog", action: "read" },
+	{ kind: "Usage", action: "read" },
+	{ kind: "Budget", action: "read" },
+	{ kind: "Budget", action: "write" },
+] as const
 
 const superAdministrator = "super_administrator"
 const storageUnavailable = () =>
@@ -56,6 +75,7 @@ const organizationGroup = HttpApiBuilder.group(
 			const settings = yield* Settings
 			const registry = yield* ModelRegistry
 			const auth = yield* Authorization.Auth
+			const checks = yield* Check.make
 			const audit = yield* AuditLog
 			const record = (
 				caller: Caller,
@@ -174,6 +194,40 @@ const organizationGroup = HttpApiBuilder.group(
 			// Write handlers do not stop when the client goes away, so a change
 			// always gets its audit entry.
 			return handlers
+				.handle("getCapabilities", () =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const within: Policy.Scope<
+							Authorization.OpenBot,
+							Authorization.Kind
+						> = ($) => $.under("org", caller.organizationId)
+						const decisions = yield* Effect.forEach(
+							capabilityTargets,
+							(target) =>
+								checks
+									.allows(caller, {
+										...target,
+										within,
+									})
+									.pipe(Effect.map((allowed) => ({ ...target, allowed }))),
+						)
+						return {
+							resources: Arr.map(
+								Arr.dedupe(Arr.map(capabilityTargets, (target) => target.kind)),
+								(kind) => ({
+									kind,
+									actions: Arr.map(
+										Arr.filter(
+											decisions,
+											(item) => item.kind === kind && item.allowed,
+										),
+										(item) => item.action,
+									),
+								}),
+							),
+						}
+					}),
+				)
 				.handle("getOrganization", () =>
 					Effect.flatMap(Identity, (caller) =>
 						organization.get(caller.organizationId),

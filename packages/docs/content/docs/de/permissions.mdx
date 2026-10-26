@@ -23,6 +23,16 @@ Aufruf erlauben. Die Platform kann für jede Organisation eine Obergrenze mit
 Deny-Regeln hinzufügen. Siehe
 [Die Reihenfolge der Prüfungen](#die-reihenfolge-der-prüfungen).
 
+Mit `GET /v1/organization/capabilities` lesen Sie Ihre aktuellen Rechte. Das
+Ergebnis ist `{ resources: [{ kind, actions }] }` für `Organization`, `Member`,
+`Role`, `ModelProvider`, `Sso`, `AuditLog`, `Usage` und `Budget`. Eine leere
+Aktionsliste bedeutet, dass keine Aktion erlaubt ist. Jedes aktive Mitglied darf
+dies lesen, auch ohne `Organization.read`. Rollen, Mitgliedsrichtlinie,
+Token-Richtlinie und Plattformgrenze werden bei jedem Aufruf geprüft. Clients
+können damit Bedienelemente anzeigen. Jeder spätere Aufruf prüft seine Rechte
+weiterhin selbst. Das Ergebnis beschreibt keine Rechte an einzelnen Chats,
+Bots, Channels oder anderen Ressourcen mit einem Eigentümer.
+
 ---
 
 ## Ressourcen und Aktionen
