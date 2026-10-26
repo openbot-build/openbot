@@ -21,6 +21,8 @@ import * as Network from "./Network.ts"
 
 /** In this HTTP revision, aborting the response stream signals cancellation. */
 export class HttpTransport extends StreamableHTTPClientTransport {
+	/** Modern HTTP cancels by closing the stream; legacy also needs its notice. */
+	public modern = true
 	public override send(
 		message: JSONRPCMessage,
 		options?: Parameters<StreamableHTTPClientTransport["send"]>[1],
@@ -28,6 +30,7 @@ export class HttpTransport extends StreamableHTTPClientTransport {
 		// When SDK 2.3.1 tears down listen, it also sends the transport-independent notification.
 		// Its request AbortController has already closed the real HTTP stream.
 		if (
+			this.modern &&
 			Predicate.hasProperty(message, "method") &&
 			message.method === "notifications/cancelled" &&
 			!Predicate.hasProperty(message, "id")

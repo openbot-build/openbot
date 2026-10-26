@@ -135,6 +135,15 @@ has the reason `SchemaError`. Reading OAuth client metadata returns
 Some Apps need the user's own account. OpenBot uses OAuth with PKCE for this.
 The user signs in at the App's provider, not at OpenBot.
 
+OpenBot prefers Client ID Metadata Documents when the issuer supports a public
+client. Otherwise it uses the MCP SDK's dynamic client registration at the
+issuer's advertised HTTPS endpoint. Registered client IDs and any client secrets
+stay bound to the connection and issuer; secrets use the same encrypted store as
+tokens. Public clients, HTTP Basic and form-based client authentication are
+supported. Code exchange, refresh and revocation keep that registered identity.
+Registration is not retried after an uncertain response. Redirect, resource,
+issuer, PKCE and requested-scope checks still apply.
+
 1. Start the flow. Send the connection `revision`. Leave `scopes` empty to use
    the scopes the App asks for. `returnTo` is a same-origin path. It defaults to
    `/`.
@@ -209,6 +218,23 @@ You can also connect an MCP server that has no Server Card. Send
 `"transport": "streamable-http"`, and `headers`. Change it with
 `PUT /v1/connections/:connectionId/manual`. Set a header to `null` to remove it.
 Manual connections never go into the public [App Index](/docs/app-index).
+
+Manual connections use the MCP SDK to choose a version. They can use the modern
+`server/discover` flow or the standard 2025 `initialize` flow over Streamable
+HTTP. A connection with a publisher card keeps the version required by that
+card. Verification reports the version that the server and client chose.
+
+Exports keep the `openbot-apps-v1` format. A manual entry also has `manual` with
+its HTTPS `url`, `transport`, and required `headers` names. No header value or
+OAuth token is exported. Import makes a private draft and does not contact the
+service. Fill in its required headers and confirm the draft before using it.
+Existing exports of publisher cards still work. A restored manual connection
+gets a new private identity; it does not reuse the old credentials.
+
+Before sending a request, OpenBot refreshes an expired OAuth token under the
+connection lock. Calls share the new credential when another call already
+refreshed it. A failed refresh sends no tool request. OpenBot does not repeat an
+external write after a timeout, a broken connection or an unknown result.
 
 ---
 

@@ -153,11 +153,19 @@ export const make: Effect.Effect<
 								secrets,
 								owner,
 								key.connectionId,
-								(stored) => ({
-									...stored,
-									connection: change(stored.connection),
-									verification: null,
-								}),
+								(stored) => {
+									const connection = change(stored.connection)
+									return {
+										...stored,
+										connection,
+										verification: StoredConnections.isCredentialRotation(
+											stored.connection,
+											connection,
+										)
+											? stored.verification
+											: null,
+									}
+								},
 							),
 						),
 						Effect.map((stored) => stored.connection),

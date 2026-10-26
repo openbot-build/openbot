@@ -1,7 +1,8 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
-import { Document } from "@openbot-build/protocol"
 import {
+	AppIdentity,
+	ManualTransfer,
 	ConnectionName,
 	ConnectionDraft,
 	ConnectionId,
@@ -9,8 +10,9 @@ import {
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 export const Entry = Schema.Struct({
 	name: ConnectionName,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	remoteIndex: Schema.Natural,
+	manual: Schema.optionalKey(ManualTransfer),
 })
 export const Transfer = Schema.Struct({
 	format: Schema.Literal("openbot-apps-v1"),

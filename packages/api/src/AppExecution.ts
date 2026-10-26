@@ -1,8 +1,7 @@
-import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { Chat, Turn } from "@openbot-build/core"
 import * as Index from "./AppIndexApi.ts"
-import { Availability, ConnectionId } from "./ConnectionsApi.ts"
+import { AppIdentity, Availability, ConnectionId } from "./ConnectionsApi.ts"
 
 export const AppOperationId = Schema.String.check(
 	Schema.isMinLength(1),
@@ -14,7 +13,7 @@ export type AppOperationId = typeof AppOperationId.Type
 export const Source = Schema.Struct({
 	connectionId: ConnectionId,
 	connectionName: Schema.String,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	appName: Schema.String,
 	remoteIndex: Schema.Natural,
 	revision: Schema.Natural,
@@ -74,7 +73,7 @@ export type Invocation = typeof Invocation.Type
 export const AccessConnection = Schema.Struct({
 	id: ConnectionId,
 	name: Schema.String,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	revision: Schema.Natural,
 	enabled: Schema.Boolean,
 	availability: Availability,

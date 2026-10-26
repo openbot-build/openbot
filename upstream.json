@@ -6,7 +6,13 @@
   "localExtensions": [
     "Independent conversation Chats and immutable branches",
     "Per-Chat and per-Turn memory read and write policy",
-    "Configurable OIDC scopes, callback and existing browser cookie names"
+    "Configurable OIDC scopes, callback and existing browser cookie names",
+    "Current organization permissions from the native policy checks",
+    "Standard remote MCP negotiation with the existing SDK",
+    "OAuth client registration, secret storage and renewal with the existing SDK",
+    "One token renewal for concurrent calls without changing the same grant revision",
+    "Manual connection identities in operations and secret-free import and export",
+    "App views for approved results and read-only copied history"
   ],
   "deployment": "Isolated candidate. Account execution fencing and full historical data conversion are required before production activation."
 }

@@ -141,6 +141,16 @@ OAuth-Client-Metadaten `503 SettingsUnavailable`.
 Manche Apps brauchen das eigene Konto des Nutzers. OpenBot nutzt dafür OAuth mit
 PKCE. Der Nutzer meldet sich beim Anbieter der App an, nicht bei OpenBot.
 
+OpenBot bevorzugt Client ID Metadata Documents, wenn der Anbieter öffentliche
+Clients unterstützt. Andernfalls nutzt es die dynamische Client-Registrierung
+des MCP-SDKs am veröffentlichten HTTPS-Endpunkt. Registrierte Client-IDs und
+Client-Secrets bleiben an Connection und Anbieter gebunden. Secrets werden wie
+Tokens verschlüsselt gespeichert. Öffentliche Clients, HTTP Basic und
+formularbasierte Client-Authentifizierung werden unterstützt. Code-Austausch,
+Refresh und Widerruf verwenden dieselbe registrierte Identität. Bei unklarem
+Registrierungsergebnis erfolgt keine automatische Wiederholung. Die Prüfungen
+von Redirect, Ressource, Anbieter, PKCE und Scopes bleiben bestehen.
+
 1. Starte den Ablauf. Schicke die `revision` der Connection. Lass `scopes` leer,
    um die Scopes zu nutzen, die die App verlangt. `returnTo` ist ein Pfad mit
    demselben Ursprung. Der Standard ist `/`.
@@ -219,6 +229,25 @@ HTTPS-`url`, `"transport": "streamable-http"` und `headers`. Ändere sie mit
 `PUT /v1/connections/:connectionId/manual`. Setze einen Header auf `null`, um
 ihn zu entfernen. Manuelle Connections kommen nie in den öffentlichen
 [App Index](/de/docs/app-index).
+
+Manuelle Verbindungen wählen die Version mit dem MCP SDK. Über Streamable HTTP
+können sie den modernen Ablauf mit `server/discover` oder den Standardablauf von
+2025 mit `initialize` nutzen. Verbindungen mit einer Karte des Anbieters behalten
+die dort verlangte Version. Die Prüfung zeigt die tatsächlich gewählte Version.
+
+Exporte behalten das Format `openbot-apps-v1`. Ein manueller Eintrag enthält auch
+`manual` mit HTTPS-`url`, `transport` und den Namen der nötigen `headers`.
+Header-Werte und OAuth-Tokens werden nicht exportiert. Ein Import legt nur einen
+privaten Entwurf an und ruft den Dienst nicht auf. Fülle die nötigen Header aus
+und bestätige den Entwurf vor der Nutzung. Alte Exporte von Anbieterkarten
+bleiben gültig. Eine wiederhergestellte manuelle Verbindung erhält eine neue
+private Kennung und nutzt die alten Zugangsdaten nicht.
+
+Vor dem Senden erneuert OpenBot ein abgelaufenes OAuth-Token unter der Sperre der
+Verbindung. Hat ein anderer Aufruf es schon erneuert, wird das neue Token genutzt.
+Scheitert dies, wird kein Werkzeug aufgerufen. Nach einem Zeitlimit, einer
+unterbrochenen Verbindung oder einem unbekannten Ergebnis wiederholt OpenBot
+keinen externen Schreibzugriff.
 
 ---
 

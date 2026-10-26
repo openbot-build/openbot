@@ -17,7 +17,9 @@ import {
 	Match,
 	Option,
 	Redacted,
+	Record as Rec,
 	Schema,
+	String as Str,
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
 import * as DiscoveryService from "./Discovery.ts"
@@ -187,6 +189,35 @@ export const make: Effect.Effect<
 			})
 		return draft
 	})
+	const createManualConnection = Effect.fn("Apps.createManualConnection")(
+		function* (input: Api.ManualConnectionRequest, draftRevision?: number) {
+			const key = yield* owner
+			const existing = yield* StoredConnections.find(db, secrets, key, input.id)
+			if (Option.isSome(existing)) return yield* project(key, existing.value)
+			yield* governance.check(input.url)
+			const configured = yield* ManualConnection.configure(key)(input)
+			const protection = yield* probe.check(configured)
+			const connection = {
+				...configured.connection,
+				authorization: protection.requiresAuthorization
+					? {
+							_tag: "PendingAuthorization" as const,
+							resource: input.url,
+							scopes: protection.scopes,
+						}
+					: { _tag: "Unprotected" as const },
+			}
+			return yield* project(
+				key,
+				yield* StoredConnections.save(db, secrets, namespace, key, {
+					app: configured.app,
+					connection,
+					name: input.name,
+					...(draftRevision === undefined ? {} : { draftRevision }),
+				}),
+			)
+		},
+	)
 	return Connections.of({
 		getConnection,
 		listConnections: Effect.gen(function* () {
@@ -209,39 +240,7 @@ export const make: Effect.Effect<
 				expiresAt: (yield* Clock.currentTimeMillis) + 24 * 60 * 60 * 1000,
 			})
 		}),
-		createManualConnection: Effect.fn("Apps.createManualConnection")(
-			function* (input) {
-				const key = yield* owner
-				const existing = yield* StoredConnections.find(
-					db,
-					secrets,
-					key,
-					input.id,
-				)
-				if (Option.isSome(existing)) return yield* project(key, existing.value)
-				yield* governance.check(input.url)
-				const configured = yield* ManualConnection.configure(key)(input)
-				const protection = yield* probe.check(configured)
-				const connection = {
-					...configured.connection,
-					authorization: protection.requiresAuthorization
-						? {
-								_tag: "PendingAuthorization" as const,
-								resource: input.url,
-								scopes: protection.scopes,
-							}
-						: { _tag: "Unprotected" as const },
-				}
-				return yield* project(
-					key,
-					yield* StoredConnections.save(db, secrets, namespace, key, {
-						app: configured.app,
-						connection,
-						name: input.name,
-					}),
-				)
-			},
-		),
+		createManualConnection,
 		getConnectionDraft: getDraft,
 		createConnection: Effect.fn("Apps.confirmConnection")(function* (input) {
 			const key = yield* owner
@@ -259,6 +258,53 @@ export const make: Effect.Effect<
 					reason: "RevisionChanged",
 					message: "This draft changed. Refresh it before confirming.",
 				})
+			if (draft.manual !== undefined) {
+				if (
+					input.cardUrl !== "urn:openbot:manual:" + draft.id ||
+					input.remoteIndex !== 0
+				)
+					return yield* ExperienceNotFound.make({ id: input.cardUrl })
+				const required = Arr.map(
+					draft.manual.headers,
+					(name) => "header:" + name,
+				)
+				const missing = Arr.filter(required, (name) =>
+					Str.isEmpty(Str.trim(input.values[name] ?? "")),
+				)
+				if (missing.length > 0)
+					return yield* Api.ConnectionConfigurationInvalid.make({
+						keys: missing,
+						message:
+							"Fill in the required headers before adding this connection.",
+					})
+				const headers = Rec.fromEntries(
+					Arr.map(draft.manual.headers, (name) => [
+						name,
+						input.values["header:" + name] ?? "",
+					]),
+				)
+				const configuration = yield* Schema.decodeEffect(
+					Api.ManualConfiguration,
+				)({
+					name: input.name,
+					url: draft.manual.url,
+					transport: draft.manual.transport,
+					headers,
+				}).pipe(
+					Effect.catchTag("SchemaError", () =>
+						Effect.fail(
+							Api.ConnectionConfigurationInvalid.make({
+								keys: required,
+								message: "The manual connection headers are not valid.",
+							}),
+						),
+					),
+				)
+				return yield* createManualConnection(
+					{ id: Api.ConnectionId.make(draft.id), ...configuration },
+					input.revision,
+				)
+			}
 			const candidates = Match.value(draft.discovery).pipe(
 				Match.tag("Single", ({ candidate }) => [candidate]),
 				Match.tag("Multiple", ({ candidates }) => candidates),

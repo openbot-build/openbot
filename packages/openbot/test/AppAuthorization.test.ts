@@ -22,6 +22,7 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import { AppHost, AppNetwork } from "../src/apps/AppHost.ts"
+import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import { SqlClient } from "effect/sql"
 import { serveHttps } from "../../protocol/test/Fixture.ts"
@@ -251,6 +252,61 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* Effect.all([refresh, refresh], { concurrency: "unbounded" })
 				assert.strictEqual(yield* publisher.maxTokenRequests, 1)
 				assert.strictEqual(yield* publisher.exchanges, 3)
+				// Two readers share one refresh of the same expired credential.
+				const beforeAutomatic = yield* readConnection
+				yield* host.run(
+					Effect.gen(function* () {
+						const owner = ownerKey(alice.identity)
+						const stores = (yield* ProtocolStores.make).bind(owner)
+						const key = { owner, connectionId: connection.id }
+						const stored = yield* stores.apps.get(key)
+						const authorization = stored.authorization
+						assert.strictEqual(authorization._tag, "Authorized")
+						if (authorization._tag !== "Authorized") return
+						const credential = yield* stores.credentials.get({
+							binding: authorization.binding,
+							reference: authorization.credentialRef,
+						})
+						const credentialRef = yield* stores.credentials.put({
+							...credential,
+							expiresAt: 0,
+						})
+						yield* stores.apps.update({
+							key,
+							change: (current) => ({
+								...current,
+								authorization: { ...authorization, credentialRef },
+							}),
+						})
+					}),
+				)
+				const automatic = host.run(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const owner = ownerKey(alice.identity)
+							const client = yield* (yield* AppHost)
+								.bind(
+									owner,
+									Client.InvocationPolicy.of({ check: () => Effect.void }),
+								)
+								.open({
+									key: { owner, connectionId: connection.id },
+									clientInfo: { name: "Test", version: "1.0.0" },
+								})
+							return client.protocolVersion
+						}),
+					),
+				)
+				const checks = yield* Effect.all([automatic, automatic], {
+					concurrency: "unbounded",
+				})
+				assert.strictEqual(checks.length, 2)
+				assert.strictEqual(
+					(yield* readConnection).revision,
+					beforeAutomatic.revision,
+				)
+				assert.strictEqual(yield* publisher.exchanges, 4)
+				assert.strictEqual(yield* publisher.maxTokenRequests, 1)
 				yield* publisher.setTokenDelay(0)
 				const beforeReview = yield* readConnection
 				const reviewDraft = yield* Effect.flatMap(
@@ -277,7 +333,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					422,
 				)
 				assert.strictEqual((yield* call(callbackPath)).status, 422)
-				assert.strictEqual(yield* publisher.exchanges, 3)
+				assert.strictEqual(yield* publisher.exchanges, 4)
 				yield* host.run(
 					Effect.scoped(
 						Effect.gen(function* () {
@@ -305,7 +361,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const cancellation = yield* call(cancelled.pathname + cancelled.search)
 				assert.strictEqual(cancellation.status, 303)
 				assert.strictEqual((yield* readFlow(second.flowId)).status, "Cancelled")
-				assert.strictEqual(yield* publisher.exchanges, 3)
+				assert.strictEqual(yield* publisher.exchanges, 4)
 				yield* publisher.setCimd(false)
 				const current = yield* readConnection
 				const unsupported = yield* post(connectionPath + "/authorization", {
@@ -329,7 +385,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					(yield* call(wrongCallback.pathname + wrongCallback.search)).status,
 					422,
 				)
-				assert.strictEqual(yield* publisher.exchanges, 3)
+				assert.strictEqual(yield* publisher.exchanges, 4)
 				const expiring = yield* begin
 				yield* host.run(
 					Effect.flatMap(
@@ -345,7 +401,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					(yield* call(expired.pathname + expired.search)).status,
 					422,
 				)
-				assert.strictEqual(yield* publisher.exchanges, 3)
+				assert.strictEqual(yield* publisher.exchanges, 4)
 				const abandoned = yield* begin
 				yield* host.run(
 					Effect.flatMap(
@@ -385,7 +441,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)).status,
 					422,
 				)
-				assert.strictEqual(yield* publisher.exchanges, 4)
+				assert.strictEqual(yield* publisher.exchanges, 5)
 				for (const returnTo of [
 					"/apps?query=documents",
 					"/connections?input=publisher.test",

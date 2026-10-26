@@ -242,6 +242,9 @@ export const make: Effect.Effect<
 								Effect.map(({ metadata }) => [
 									metadata.issuer,
 									metadata.token_endpoint,
+									...(typeof metadata["registration_endpoint"] === "string"
+										? [metadata["registration_endpoint"]]
+										: []),
 									...(metadata.revocation_endpoint === undefined
 										? []
 										: [metadata.revocation_endpoint]),
@@ -252,6 +255,38 @@ export const make: Effect.Effect<
 					)
 					return yield* withNetwork(key, extra, program)
 				})
+
+			/** The credential reference avoids rotating the same refresh token twice. */
+			const refreshBeforeSend = (key: Store.ConnectionKey, reference: string) =>
+				Effect.scoped(
+					locks.withConnection(
+						key,
+						Effect.gen(function* () {
+							const current = yield* stores.apps.get(key)
+							if (current.authorization._tag !== "Authorized")
+								return yield* Client.AuthorizationRequired.make({
+									reason: "Pending",
+									scopes: [],
+								})
+							if (current.authorization.credentialRef !== reference) return
+							yield* withAuthorizationNetwork(
+								key,
+								OAuthAuthorization.refresh(key).pipe(
+									Effect.provideContext(services),
+								),
+							)
+						}),
+					),
+				).pipe(
+					Failures.replace(
+						"OpenBot could not refresh an expired App token before sending",
+						() =>
+							Client.AuthorizationRequired.make({
+								reason: "Expired",
+								scopes: [],
+							}),
+					),
+				)
 
 			const pending = (
 				key: Store.ConnectionKey,
@@ -372,19 +407,39 @@ export const make: Effect.Effect<
 				}),
 				beginAuthorization: (input) =>
 					Effect.scoped(
-						withNetwork(
-							input.key,
-							[
+						Effect.gen(function* () {
+							const connection = yield* stores.apps.get(input.key)
+							const urls = [
 								input.issuer,
 								input.clientId,
 								...(input.resourceMetadataUrl === undefined
 									? []
 									: [input.resourceMetadataUrl]),
-							],
-							OAuthAuthorization.begin(input).pipe(
-								Effect.provideContext(services),
-							),
-						),
+							]
+							const { metadata } = yield* withNetwork(
+								input.key,
+								urls,
+								OAuthAuthorization.discover({
+									resource: connection.endpoint,
+									issuer: input.issuer,
+									...(input.resourceMetadataUrl === undefined
+										? {}
+										: { resourceMetadataUrl: input.resourceMetadataUrl }),
+								}).pipe(Effect.provideContext(services)),
+							)
+							return yield* withNetwork(
+								input.key,
+								[
+									...urls,
+									...(typeof metadata["registration_endpoint"] === "string"
+										? [metadata["registration_endpoint"]]
+										: []),
+								],
+								OAuthAuthorization.begin(input).pipe(
+									Effect.provideContext(services),
+								),
+							)
+						}),
 					),
 				completeAuthorization: (input) =>
 					Effect.scoped(
@@ -415,9 +470,12 @@ export const make: Effect.Effect<
 						return yield* withNetwork(
 							input.key,
 							[],
-							McpClient.open({ ...input, eagerLists: false }).pipe(
-								Effect.provideContext(services),
-							),
+							McpClient.open({
+								...input,
+								eagerLists: false,
+								refreshAuthorization: (reference) =>
+									refreshBeforeSend(input.key, reference),
+							}).pipe(Effect.provideContext(services)),
 						)
 					}),
 				remove: (key) =>

@@ -15,11 +15,21 @@ export const ConnectionName = Schema.String.check(
 	),
 )
 export const Values = Schema.Record(Schema.String, Schema.String)
+/** An address and required header names. It contains no credential values. */
+export const ManualTransfer = Schema.Struct({
+	url: Document.Link,
+	transport: Schema.Literal("streamable-http"),
+	headers: Schema.Array(
+		Schema.String.check(Schema.isPattern(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/)),
+	).check(Schema.isMaxLength(100)),
+})
+export type ManualTransfer = typeof ManualTransfer.Type
 export const ConnectionDraft = Schema.Struct({
 	id: Schema.NonEmptyString,
 	revision: Schema.Natural,
 	input: Schema.NonEmptyString,
 	discovery: AppDiscoveryResult,
+	manual: Schema.optionalKey(ManualTransfer),
 	expiresAt: Schema.Finite,
 	imported: Schema.optionalKey(
 		Schema.Struct({ name: ConnectionName, remoteIndex: Schema.Natural }),
@@ -62,10 +72,12 @@ export type ManualConnectionUpdate = typeof ManualConnectionUpdate.Type
 const ManualIdentity = Schema.String.check(
 	Schema.isPattern(/^urn:openbot:manual:[0-9a-f-]{36}$/i),
 )
+/** A publisher card address or a private manual connection identity. */
+export const AppIdentity = Schema.Union([Document.Link, ManualIdentity])
 export const Connection = Schema.Struct({
 	id: ConnectionId,
 	name: ConnectionName,
-	cardUrl: Schema.Union([Document.Link, ManualIdentity]),
+	cardUrl: AppIdentity,
 	card: Document.ServerCard,
 	endpoint: Schema.String,
 	remoteIndex: Schema.Natural,
@@ -79,7 +91,7 @@ export type Connection = typeof Connection.Type
 export const ConnectionRequest = Schema.Struct({
 	draftId: Schema.NonEmptyString,
 	revision: Schema.Natural,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	remoteIndex: Schema.Natural,
 	name: ConnectionName,
 	values: Values,

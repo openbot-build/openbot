@@ -1,6 +1,7 @@
 import {
 	Array as Arr,
 	Effect,
+	Clock,
 	Fiber,
 	Layer,
 	Option,
@@ -14,6 +15,7 @@ import {
 import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http"
 import {
 	CatalogDiscovery,
+	Discovery,
 	MemoryStore,
 	AppConnections,
 	McpClient,
@@ -73,6 +75,9 @@ const service = Effect.gen(function* () {
 		listReads: 0,
 		inputId: "consent",
 		versions: [Document.protocolVersion],
+		manual: false,
+		legacy: false,
+		apiKey: false,
 		toolsOnly: false,
 		/** When it is true, every tools/list page names a new next page. */
 		endlessPages: false,
@@ -141,6 +146,15 @@ const service = Effect.gen(function* () {
 	const fixture = yield* serveChecked(
 		Effect.gen(function* () {
 			const http = yield* HttpServerRequest.HttpServerRequest
+			if (http.method === "GET")
+				return HttpServerResponse.empty({ status: 405 })
+			if (http.method === "DELETE")
+				return HttpServerResponse.empty({ status: 200 })
+			if (
+				state.apiKey &&
+				http.headers["authorization"] !== "Bearer fixture-key"
+			)
+				return HttpServerResponse.empty({ status: 401 })
 			const request = yield* Effect.flatMap(http.text, decodeRequest)
 			const params = yield* decodeParams(request.params ?? {})
 			requests = Arr.append(requests, {
@@ -154,7 +168,7 @@ const service = Effect.gen(function* () {
 				jsonrpc: "2.0",
 				id: request.id,
 				result: {
-					resultType: "complete",
+					...(state.legacy ? {} : { resultType: "complete" }),
 					...(Arr.contains(
 						[
 							"tools/list",
@@ -329,20 +343,36 @@ const service = Effect.gen(function* () {
 			})
 			return yield* Match.value(request.method).pipe(
 				Match.when("server/discover", () =>
+					state.legacy
+						? HttpServerResponse.json({
+								jsonrpc: "2.0",
+								id: request.id,
+								error: { code: -32601, message: "Method not found" },
+							})
+						: reply({
+								supportedVersions: state.versions,
+								capabilities: state.toolsOnly
+									? { tools: {} }
+									: {
+											tools: {
+												listChanged: true,
+											},
+											resources: {
+												listChanged: true,
+											},
+											prompts: {},
+										},
+							}),
+				),
+				Match.when("initialize", () =>
 					reply({
-						supportedVersions: state.versions,
-						capabilities: state.toolsOnly
-							? { tools: {} }
-							: {
-									tools: {
-										listChanged: true,
-									},
-									resources: {
-										listChanged: true,
-									},
-									prompts: {},
-								},
+						protocolVersion: "2025-11-25",
+						capabilities: { tools: {}, resources: {}, prompts: {} },
+						serverInfo: info,
 					}),
+				),
+				Match.when("notifications/initialized", () =>
+					Effect.succeed(HttpServerResponse.empty({ status: 202 })),
 				),
 				Match.when("tools/list", () => {
 					state.listReads++
@@ -480,7 +510,20 @@ const service = Effect.gen(function* () {
 	)
 	const prepare = Effect.gen(function* () {
 		const store = yield* Store.AppStore
-		yield* store.save({ app: record, connection })
+		yield* store.save({
+			app: state.manual
+				? {
+						...record,
+						sources: [Discovery.Source.make({ role: "manual", url: endpoint })],
+					}
+				: record,
+			connection: {
+				...connection,
+				headers: Redacted.make(
+					state.apiKey ? { Authorization: "Bearer fixture-key" } : {},
+				),
+			},
+		})
 	})
 	const connect = (inputs?: Client.InputHandler) =>
 		McpClient.open({
@@ -929,3 +972,139 @@ it.live(
 			).pipe(Effect.provide(layersOf(fixture)))
 		}).pipe(Effect.provide(NodeServices.layer)),
 )
+
+for (const apiKey of [false, true]) {
+	it.live(
+		"Manual remote MCP uses the SDK legacy handshake" +
+			(apiKey ? " with an API key" : " without sign-in"),
+		() =>
+			Effect.gen(function* () {
+				const fixture = yield* service
+				fixture.state.manual = true
+				fixture.state.legacy = true
+				fixture.state.apiKey = apiKey
+				yield* Effect.scoped(
+					Effect.gen(function* () {
+						yield* fixture.prepare
+						const client = yield* fixture.connect()
+						assert.strictEqual(client.protocolVersion, "2025-11-25")
+						assert.deepStrictEqual(client.discovery.supportedVersions, [
+							"2025-11-25",
+						])
+						assert.ok(
+							Arr.some(
+								fixture.requests,
+								(entry) => entry.request.method === "initialize",
+							),
+						)
+						const result = yield* client.callTool(
+							{ name: "Write", arguments: { text: "hello" } },
+							{ source: "host" },
+						)
+						assert.strictEqual(result._tag, "Completed")
+						assert.strictEqual(fixture.state.writes, 1)
+						const unknown = yield* Effect.result(
+							client.callTool(
+								{ name: "Drop" },
+								{ source: "host", timeoutMs: 200 },
+							),
+						)
+						assert.strictEqual(unknown._tag, "Failure")
+						if (unknown._tag === "Failure")
+							assert.strictEqual(unknown.failure._tag, "OutcomeUnknown")
+						assert.strictEqual(
+							Arr.filter(
+								fixture.requests,
+								(entry) => entry.params.name === "Drop",
+							).length,
+							1,
+						)
+						assert.strictEqual(fixture.state.writes, 2)
+					}),
+				).pipe(Effect.provide(layersOf(fixture)))
+			}).pipe(Effect.provide(NodeServices.layer)),
+	)
+}
+
+for (const refreshWorks of [true, false]) {
+	it.live(
+		"An expired credential is checked once before sending" +
+			(refreshWorks
+				? " and the new token is used"
+				: " and a failed refresh sends nothing"),
+		() =>
+			Effect.gen(function* () {
+				const fixture = yield* service
+				fixture.state.manual = true
+				fixture.state.legacy = true
+				yield* Effect.scoped(
+					Effect.gen(function* () {
+						yield* fixture.prepare
+						const apps = yield* Store.AppStore
+						const credentials = yield* Store.CredentialStore
+						const binding = Store.CredentialBinding.make({
+							...fixture.key,
+							resource: fixture.endpoint,
+							issuer: fixture.ipOrigin,
+						})
+						const save = (expiresAt: number) =>
+							Effect.gen(function* () {
+								const reference = yield* credentials.put(
+									Store.Credential.make({
+										binding,
+										accessToken: Redacted.make("fixture-key"),
+										expiresAt,
+										scopes: [],
+									}),
+								)
+								yield* apps.update({
+									key: fixture.key,
+									change: (value) => ({
+										...value,
+										authorization: {
+											_tag: "Authorized",
+											binding,
+											credentialRef: reference,
+											scopes: [],
+										},
+									}),
+								})
+								return reference
+							})
+						const expired = yield* save(0)
+						let refreshes = 0
+						const result = yield* Effect.result(
+							McpClient.open({
+								key: fixture.key,
+								clientInfo: { name: "refresh-test", version: "1.0.0" },
+								refreshAuthorization: (reference) =>
+									Effect.gen(function* () {
+										refreshes++
+										assert.strictEqual(reference, expired)
+										if (refreshWorks)
+											yield* save((yield* Clock.currentTimeMillis) + 3600000)
+									}),
+							}),
+						)
+						assert.strictEqual(refreshes, 1)
+						if (refreshWorks) {
+							assert.strictEqual(result._tag, "Success")
+							if (result._tag === "Success") {
+								yield* result.success.callTool(
+									{ name: "Write", arguments: { text: "hello" } },
+									{ source: "host" },
+								)
+								assert.strictEqual(fixture.state.writes, 1)
+								assert.strictEqual(refreshes, 1)
+							}
+						} else {
+							assert.strictEqual(result._tag, "Failure")
+							if (result._tag === "Failure")
+								assert.strictEqual(result.failure._tag, "AuthorizationRequired")
+							assert.strictEqual(fixture.requests.length, 0)
+						}
+					}),
+				).pipe(Effect.provide(layersOf(fixture)))
+			}).pipe(Effect.provide(NodeServices.layer)),
+	)
+}

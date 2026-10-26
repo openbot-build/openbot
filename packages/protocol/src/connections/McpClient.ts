@@ -226,6 +226,10 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	readonly capabilities?: Mcp.ClientCapabilities
 	readonly inputs?: InputHandler
 	readonly eagerLists?: boolean
+	/** Refresh this expired credential before sending. Never retries a tool call. */
+	readonly refreshAuthorization?: (
+		reference: string,
+	) => Effect.Effect<void, Error>
 }) {
 	const store = yield* Store.AppStore
 	const credentials = yield* Store.CredentialStore
@@ -233,6 +237,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	const active = yield* App.ConnectionScopes
 	const network = yield* Network.Network
 	const initial = yield* AppConnections.usable(options.key)
+	const app = yield* store.getApp(initial.cardUrl)
+	const manual = Arr.some(app.sources, (source) => source.role === "manual")
 	if (
 		network.identity.scope === "user" &&
 		network.identity.owner !== initial.owner
@@ -245,7 +251,13 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	return yield* Effect.gen(function* () {
 		yield* active.register({ key: options.key, scope })
 		const closed = yield* Ref.make(false)
-		const guard = Effect.fn("Client.currentConnection")(function* () {
+		const guard: (allowRefresh?: boolean) => Effect.Effect<
+			{
+				readonly connection: Store.UserConnection
+				readonly token: Option.Option<Redacted.Redacted<string>>
+			},
+			Error
+		> = Effect.fn("Client.currentConnection")(function* (allowRefresh = true) {
 			if (yield* Ref.get(closed))
 				return yield* ClientError.make({
 					reason: "Closed",
@@ -290,11 +302,16 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						if (
 							credential.expiresAt !== undefined &&
 							credential.expiresAt <= now
-						)
+						) {
+							if (allowRefresh && options.refreshAuthorization !== undefined) {
+								yield* options.refreshAuthorization(auth.credentialRef)
+								return yield* guard(false)
+							}
 							return yield* AuthorizationRequired.make({
 								reason: "Expired",
 								scopes: credential.scopes,
 							})
+						}
 						return {
 							connection,
 							token: Option.some(credential.accessToken),
@@ -345,9 +362,11 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		// callback cannot close the owner before its fiber belongs to the set.
 		const run = <A, E>(effect: Effect.Effect<A, E>) =>
 			start(Effect.andThen(Effect.yieldNow, effect))
+		// Refresh in the caller's preflight, not in this SDK-owned callback.
+		// A narrower grant closes this client's scope, which owns the callback.
 		const token = () =>
 			run(
-				guard().pipe(
+				guard(false).pipe(
 					Effect.map((current) =>
 						Option.getOrUndefined(Option.map(current.token, Redacted.value)),
 					),
@@ -384,7 +403,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		]).pipe(Effect.orDie)
 		const sdk = new Mcp.Client(options.clientInfo, {
 			versionNegotiation: {
-				mode: { pin: Document.protocolVersion },
+				mode: manual ? "auto" : { pin: Document.protocolVersion },
 				probe: { maxRetries: 0 },
 			},
 			inputRequired: { autoFulfill: false },
@@ -497,12 +516,26 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				Effect.catch((error) => mapError(error.cause)),
 			)
 		yield* invoke((signal) => sdk.connect(transport, { signal }))
-		const discovery = sdk.getDiscoverResult()
-		if (discovery === undefined)
+		const protocolVersion = sdk.getNegotiatedProtocolVersion()
+		const advertised = sdk.getServerCapabilities()
+		if (protocolVersion === undefined || advertised === undefined)
 			return yield* ClientError.make({
 				reason: "Protocol",
-				issue: "Missing real-time server discovery",
+				issue: "Missing server handshake",
 			})
+		transport.modern = sdk.getProtocolEra() === "modern"
+		// A manual legacy service has initialize data, not a publisher card.
+		// Keep that live data in the same shape for capability readers.
+		const discovery: Mcp.DiscoverResult = sdk.getDiscoverResult() ?? {
+			resultType: "complete",
+			supportedVersions: [protocolVersion],
+			capabilities: advertised,
+			...(sdk.getServerVersion() === undefined
+				? {}
+				: {
+						_meta: { [Mcp.SERVER_INFO_META_KEY]: sdk.getServerVersion() },
+					}),
+		}
 		// In SDK 2.3.1, `sdk.close()` calls `_resetConnectionState`, and that clears the server
 		// capabilities. So the check for a closed client must come first.
 		const requireCapability = Effect.fn("Client.requireCapability")(function* (
@@ -1055,6 +1088,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				},
 			),
 			key: options.key,
+			protocolVersion,
 			discovery,
 			notifications: Stream.fromPubSub(notices),
 			listTools: lists.tools,

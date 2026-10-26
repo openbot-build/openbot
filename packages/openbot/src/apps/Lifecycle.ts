@@ -9,7 +9,6 @@ import {
 	Authorization,
 	Client,
 	Discovery,
-	Document,
 	Network,
 	Store,
 } from "@openbot-build/protocol"
@@ -203,6 +202,7 @@ export const make: Effect.Effect<
 						policy: metadataPolicy,
 					})
 					return {
+						protocolVersion: opened.client.protocolVersion,
 						tools: yield* Effect.forEach(opened.tools, jsonObject),
 						resources: yield* Effect.forEach(opened.resources, jsonObject),
 						resourceTemplates: yield* Effect.forEach(
@@ -265,7 +265,6 @@ export const make: Effect.Effect<
 							_tag: "Verified",
 							capabilities: {
 								connection: yield* connections.getConnection(id),
-								protocolVersion: Document.protocolVersion,
 								...success,
 							},
 						} as const
