@@ -294,6 +294,16 @@ export class SecretProviderNotFound extends Schema.TaggedError<
 	SecretProviderNotFound,
 	{ readonly brand: unique symbol }
 >()("SecretProviderNotFound", { id: Schema.String }) {}
+/** The provider did not answer, or it failed. The same call can pass later. */
+export class SecretProviderFailed extends Schema.TaggedError<
+	SecretProviderFailed,
+	{ readonly brand: unique symbol }
+>()("SecretProviderFailed", { message: Schema.String }) {}
+/** Vault items still read from this provider. */
+export class SecretProviderInUse extends Schema.TaggedError<
+	SecretProviderInUse,
+	{ readonly brand: unique symbol }
+>()("SecretProviderInUse", { id: Schema.String }) {}
 export class VaultConflict extends Schema.TaggedError<
 	VaultConflict,
 	{ readonly brand: unique symbol }
@@ -312,6 +322,8 @@ export const VaultErrors = [
 	VaultNotFound.pipe(HttpApiSchema.status(404)),
 	VaultItemNotFound.pipe(HttpApiSchema.status(404)),
 	SecretProviderNotFound.pipe(HttpApiSchema.status(404)),
+	SecretProviderFailed.pipe(HttpApiSchema.status(502)),
+	SecretProviderInUse.pipe(HttpApiSchema.status(409)),
 	VaultConflict.pipe(HttpApiSchema.status(409)),
 	VaultInvalid.pipe(HttpApiSchema.status(400)),
 	VaultsUnavailable.pipe(HttpApiSchema.status(503)),

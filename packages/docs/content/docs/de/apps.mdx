@@ -130,6 +130,12 @@ Das Feld `availability` sagt dir, ob der Bot eine Connection nutzen kann.
 
 ---
 
+Schlägt das Laden einer App-Deklaration fehl, behält die API den
+Discovery-Fehler, auch bei Netz- und Dokumentfehlern. Ein Ergebnis, das nicht
+als JSON lesbar ist, hat den Grund `SchemaError`. Sind die
+Plattform-Einstellungen nicht lesbar, ergibt das Lesen der
+OAuth-Client-Metadaten `503 SettingsUnavailable`.
+
 ## Bei einem Konto einer App anmelden
 
 Manche Apps brauchen das eigene Konto des Nutzers. OpenBot nutzt dafür OAuth mit

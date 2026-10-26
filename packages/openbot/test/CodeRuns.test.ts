@@ -4,6 +4,7 @@ import { assert, layer } from "@effect/vitest"
 import {
 	type Caller,
 	ChatConflict,
+	CodeRunsApi,
 	Settings as SettingsApi,
 	VaultsApi,
 } from "@openbot-build/api"
@@ -143,7 +144,7 @@ layer(TestDatabase, { excludeTestServices: true, timeout: "60 seconds" })(
 					const secrets = yield* Secrets.Secrets
 					const now = yield* Clock.currentTimeMillis
 					const waiting: Stored.Run = {
-						id: "run_waiting",
+						id: CodeRunsApi.CodeRunId.make("run_waiting"),
 						chat: position.chat,
 						turn: position.turn,
 						callId: "call_waiting",

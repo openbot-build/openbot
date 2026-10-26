@@ -292,7 +292,7 @@ export const make: Effect.Effect<
 								person,
 								change: command,
 								now,
-								id: () => id,
+								id,
 							}),
 							{
 								onNone: () => ({

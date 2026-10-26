@@ -225,6 +225,9 @@ curl -X PATCH -b cookies.txt \
   https://api.example.com/v1/organization/members/u_456
 ```
 
+路径中的角色 ID 必须符合角色 ID Schema。更新成员时，如果指定的角色不存在，会返回
+`404 RoleNotFound`。
+
 ### 移除成员
 
 `DELETE /v1/organization/members/:userId` 移除成员，并撤销他们的令牌。它需要
@@ -396,6 +399,9 @@ curl -X POST -b cookies.txt \
 ---
 
 ## 错误
+
+`InvitationNotFound` 返回 `404`。请求指定邀请 ID 时，错误包含
+`invitationId`。Bot 链接的 secret 找不到邀请时，错误中没有这个字段。
 
 | 状态码 | 错误                             | 何时出现                                                          |
 | ------ | -------------------------------- | ----------------------------------------------------------------- |

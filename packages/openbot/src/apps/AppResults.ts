@@ -1,6 +1,6 @@
 import { AppExecution, ChatConflict } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
-import { Effect, Match, Schema } from "effect"
+import { Cause, Effect, Match, Schema } from "effect"
 
 const jsonText = Schema.encodeUnknownEffect(
 	Schema.fromJsonString(Schema.Unknown),
@@ -56,8 +56,7 @@ export const failed = ({
 				source,
 				reason: "OutcomeUnknown",
 				cause,
-				message:
-					"This operation may have reached the App. Check its actual state before taking another action.",
+				message: outcomeUnknownMessage,
 			} as const),
 		),
 		Match.when(Schema.is(Client.ToolFailure), ({ result }) =>
@@ -103,3 +102,22 @@ export const failed = ({
 			} as const),
 		),
 	)
+
+/** Ends a call as Failed when its failure could not become a result. It logs that failure. */
+export const unconverted =
+	(source: AppExecution.Source, message: string) =>
+	(error: Schema.SchemaError) =>
+		Effect.logWarning(
+			"An App failure could not be turned into a result.",
+			Cause.fail(error),
+		).pipe(
+			Effect.as({
+				_tag: "Failed",
+				source,
+				reason: "SchemaError",
+				message,
+			} as const),
+		)
+
+export const outcomeUnknownMessage =
+	"This operation may have reached the App. Check its actual state before taking another action."

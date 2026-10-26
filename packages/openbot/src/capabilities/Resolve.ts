@@ -24,7 +24,11 @@ export const make = Effect.gen(function* () {
 				Effect.flatMap((found) =>
 					Option.isSome(found) && found.value.chain.userId === caller.userId
 						? Effect.succeed(found.value)
-						: Effect.fail(RequestsApi.RequestNotFound.make({ request: id })),
+						: Effect.fail(
+								RequestsApi.RequestNotFound.make({
+									request: RequestsApi.CapabilityRequestId.make(id),
+								}),
+							),
 				),
 			)
 	/**
@@ -56,7 +60,7 @@ export const make = Effect.gen(function* () {
 						signals.publish(
 							Signal.RequestChanged({
 								organizationId: caller.organizationId,
-								request: id,
+								request: RequestsApi.CapabilityRequestId.make(id),
 							}),
 						),
 					),

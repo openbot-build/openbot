@@ -136,7 +136,7 @@ export const make: Effect.Effect<
 		)
 
 		return {
-			id: connection.connectionId,
+			id: Api.ConnectionId.make(connection.connectionId),
 			name: stored.name,
 			cardUrl: app.cardUrl,
 			card: app.card,
@@ -272,14 +272,11 @@ export const make: Effect.Effect<
 				return yield* ExperienceNotFound.make({ id: input.cardUrl })
 			const previous = found.value
 			const current = yield* discovery.refreshCard(previous.cardUrl).pipe(
-				Failures.replace(
-					"OpenBot could not refresh an App declaration before it confirms a connection.",
-					() =>
-						Api.ConnectionConfigurationInvalid.make({
-							message:
-								"The App declaration could not be refreshed. Discover it again before confirming.",
-							keys: [],
-						}),
+				Effect.tapErrorTag("SchemaError", (error) =>
+					Effect.logWarning("The App declaration is not valid", error),
+				),
+				Effect.mapError((error) =>
+					DiscoveryService.failure(previous.cardUrl, error),
 				),
 			)
 			if (rules.compare({ previous, current })._tag === "NeedsRevalidation")

@@ -145,7 +145,7 @@ it("the cost of a call is the tokens times the price, rounded up", () => {
 
 it("a call uses the tier of its input size and the period of its start time", () => {
 	const rates = (output: number) => ({ ...price, output })
-	const schedule = {
+	const schedule: BillingApi.PriceSchedule = {
 		timeZone: "Asia/Shanghai",
 		tiers: [
 			{ upToInputTokens: 32_000, ...rates(1) },
@@ -177,7 +177,7 @@ it("a call uses the tier of its input size and the period of its start time", ()
 	const night = Date.parse("2026-10-22T17:00:00Z")
 	assert.strictEqual(ratesOf(schedule, input(500_000), night).output, 4)
 	// A window past midnight belongs to the day that it starts.
-	const friday = {
+	const friday: BillingApi.PriceSchedule = {
 		timeZone: "UTC",
 		tiers: [{ upToInputTokens: null, ...rates(1) }],
 		periods: [

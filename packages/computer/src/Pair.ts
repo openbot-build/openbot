@@ -107,7 +107,7 @@ export const pair = (options: {
 		)
 		const poll = client.pollPairing({
 			params: { pairingId: pairing.id },
-			headers: { authorization: `Bearer ${pairing.secret}` },
+			headers: { authorization: `Bearer ${Redacted.value(pairing.secret)}` },
 		})
 		const intervalMs = Math.max(1, pairing.interval) * 1000
 		while (true) {
@@ -137,7 +137,7 @@ export const pair = (options: {
 			if (Option.isSome(status) && status.value._tag === "Approved") {
 				const config = {
 					url,
-					token: Redacted.make(status.value.token),
+					token: status.value.token,
 					machineId,
 				}
 				yield* Config.write(options.file, config)

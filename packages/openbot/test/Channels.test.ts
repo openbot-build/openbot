@@ -894,7 +894,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(
 					(yield* hook(custom.id, body, {
 						"x-openbot-timestamp": timestamp,
-						"x-openbot-signature": sign(customSecret),
+						"x-openbot-signature": sign(Redacted.value(customSecret)),
 					})).status,
 					200,
 				)

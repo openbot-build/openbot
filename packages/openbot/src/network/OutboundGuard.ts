@@ -1,7 +1,7 @@
 import { Network } from "@openbot-build/protocol"
 import type { Resolver } from "@openbot-build/protocol/Node"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { Effect, Layer, pipe, Schema, String as Str } from "effect"
+import { Effect, FiberSet, Layer, pipe, Schema, String as Str } from "effect"
 import { isIP } from "node:net"
 // Node does not export `setGlobalDispatcher`. The `undici` package sets the
 // same global dispatcher that Node's own `fetch` reads.
@@ -68,12 +68,15 @@ export const layer = (allow: Allow) => {
 	const policy = make(allow)
 	return Layer.effectDiscard(
 		Effect.gen(function* () {
-			const context = yield* Effect.context()
+			const callbacks = yield* FiberSet.make()
+			const run = yield* FiberSet.runtime(callbacks)<never>()
 			const warn = (hostname: string) =>
-				Effect.runForkWith(context)(
-					Effect.logWarning("Blocked an outbound connection").pipe(
-						Effect.annotateLogs({ hostname }),
-					),
+				run(
+					// Effect 4.0.6 registers runtime fibers after they start. Yield before logging.
+					Effect.andThen(
+						Effect.yieldNow,
+						Effect.logWarning("Blocked an outbound connection"),
+					).pipe(Effect.annotateLogs({ hostname })),
 				)
 			yield* Effect.acquireRelease(
 				Effect.sync(() => {
@@ -89,7 +92,9 @@ export const layer = (allow: Allow) => {
 					Effect.sync(() => setGlobalDispatcher(previous)).pipe(
 						// A dispatcher that cannot close must not stop the shut down.
 						Effect.andThen(
-							Effect.tryPromise(() => guarded.close()).pipe(Effect.ignore),
+							Effect.tryPromise(() => guarded.close()).pipe(
+								Effect.ignore({ log: "Debug" }),
+							),
 						),
 					),
 			)

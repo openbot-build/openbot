@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { Authorization, ChatView, UserTokensApi } from "@openbot-build/api"
@@ -70,9 +71,9 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const { token, secret } = yield* Caller.json(
 					UserTokensApi.CreatedToken,
 				)(created)
-				assert.match(secret, /^obut_[A-Za-z0-9_-]{43}$/)
+				assert.match(Redacted.value(secret), /^obut_[A-Za-z0-9_-]{43}$/)
 				assert.strictEqual(token.name, "CI pipeline")
-				assert.ok(Str.startsWith(token.prefix)(secret))
+				assert.ok(Str.startsWith(token.prefix)(Redacted.value(secret)))
 				assert.strictEqual(token.expiresAt, null)
 				assert.strictEqual(token.lastUsedAt, null)
 
@@ -117,7 +118,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(tokens.items.length, 1)
 				assert.notStrictEqual(tokens.items[0]?.lastUsedAt, null)
 				assert.strictEqual(
-					Str.includes(secret)(yield* tokensResponse.text),
+					Str.includes(Redacted.value(secret))(yield* tokensResponse.text),
 					false,
 				)
 				assert.deepStrictEqual(

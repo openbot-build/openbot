@@ -5,6 +5,7 @@ import {
 	Deferred,
 	Effect,
 	Layer,
+	Redacted,
 	Schedule,
 	Schema,
 	String as Str,
@@ -82,7 +83,7 @@ it.layer(
 				const connect = (name: string, desktop: boolean) =>
 					Effect.gen(function* () {
 						const socket = yield* Socket.makeWebSocket(url, {
-							headers: { authorization: "Bearer " + token },
+							headers: { authorization: "Bearer " + Redacted.value(token) },
 						})
 						const frames = yield* Socket.readerString(socket)
 						const writer = yield* socket.writer

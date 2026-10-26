@@ -98,10 +98,6 @@ export interface Service {
 	readonly discover: (
 		input: string,
 	) => Effect.Effect<Discovery.Result, Discovery.Error>
-	readonly list: Effect.Effect<ReadonlyArray<Store.AppRecord>, AppError>
-	readonly get: (
-		cardUrl: string,
-	) => Effect.Effect<Store.AppRecord, Store.StoreError>
 	readonly add: (
 		input: AddRequest,
 	) => Effect.Effect<
@@ -129,15 +125,14 @@ export interface Service {
 		input: CompleteAuthorizationRequest,
 	) => Effect.Effect<
 		Store.UserConnection,
-		Authorization.AuthorizationError | ProtocolApp.AppError | Store.StoreError
+		| Authorization.AuthorizationError
+		| Network.NetworkError
+		| ProtocolApp.AppError
+		| Store.StoreError
 	>
 	readonly open: (
 		input: OpenRequest,
 	) => Effect.Effect<Client.Client, Client.Error, Scope.Scope>
-	readonly setEnabled: (input: {
-		readonly key: Store.ConnectionKey
-		readonly enabled: boolean
-	}) => Effect.Effect<Store.UserConnection, AppError | Store.StoreError>
 	readonly remove: (
 		key: Store.ConnectionKey,
 	) => Effect.Effect<Removed, ProtocolApp.CleanupPending | Store.StoreError>

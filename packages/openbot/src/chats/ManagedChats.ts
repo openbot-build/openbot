@@ -24,6 +24,7 @@ import {
 	Option,
 	Ref,
 	Schedule,
+	Schema,
 	Scope,
 	Stream,
 	String as Str,
@@ -69,13 +70,22 @@ import { type Methods, methodsOf, withMethods } from "../models/ModelMethods.ts"
 /** How often a server says that its running Turns still run. */
 const heartbeatEvery = Duration.seconds(30)
 
+/** A model call has no Turn, or its Turn has no known Chat. */
+class NoTurnChat extends Schema.TaggedError<
+	NoTurnChat,
+	{ readonly brand: unique symbol }
+>()("NoTurnChat", {}) {}
+
 /**
  * A model that finds the real model at the time of each call. A Turn that starts by
  * itself, after another Turn ends, then uses the model of its own settings.
  */
 const route = (
 	template: LanguageModel.LanguageModel,
-	select: Effect.Effect<LanguageModel.LanguageModel, ChatExecutionUnavailable>,
+	select: Effect.Effect<
+		LanguageModel.LanguageModel,
+		ChatExecutionUnavailable | NoTurnChat
+	>,
 ): LanguageModel.LanguageModel => {
 	const plain = (method: string) =>
 		select.pipe(
@@ -86,7 +96,7 @@ const route = (
 					method,
 					reason: AiError.UnknownError.make({
 						description:
-							error.chat === ""
+							error._tag === "NoTurnChat"
 								? "No model is available for this Chat."
 								: `No model is available for the Chat ${error.chat}.`,
 					}),
@@ -157,11 +167,6 @@ export const factory: Effect.Effect<
 		Effect.gen(function* () {
 			const namespace = options.namespace ?? "local"
 			const keepOpen = options.keepOpen ?? Effect.void
-			/** Runs `effect` while it holds the runtime open. */
-			const held = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-				Effect.scopedWith((lease) =>
-					keepOpen.pipe(Scope.provide(lease), Effect.andThen(effect)),
-				)
 			/**
 			 * Who a model call of a Chat works for. It reads the running Turn at the time
 			 * of the call, because a Turn can have its own author.
@@ -255,13 +260,10 @@ export const factory: Effect.Effect<
 				Effect.gen(function* () {
 					// Only a Turn calls the model of a Chat, and a Turn has its Bot context.
 					const context = yield* Effect.serviceOption(Bot.Context)
-					if (Option.isNone(context))
-						return yield* ChatExecutionUnavailable.make({
-							chat: Chat.Id.make(""),
-						})
+					if (Option.isNone(context)) return yield* NoTurnChat.make({})
 					const at = yield* context.value.at.pipe(
 						Failures.replace("OpenBot could not find the Chat of a Turn.", () =>
-							ChatExecutionUnavailable.make({ chat: Chat.Id.make("") }),
+							NoTurnChat.make({}),
 						),
 					)
 					const view = yield* store
@@ -333,21 +335,12 @@ export const factory: Effect.Effect<
 					Effect.provideService(PgClient.PgClient, client),
 					Effect.provideService(StoredOperations.Channel, listener),
 				),
+				whileRunning: keepOpen,
 				settings: () =>
 					owner === undefined
 						? Effect.succeed(Operations.defaultSettings)
 						: features.operationSettings(owner.organizationId),
 			}).pipe(Effect.provideService(Crypto.Crypto, crypto))
-			// A background tool call holds the runtime open until its notice reaches the Chat.
-			const backgroundCalls: typeof Operations.Operations.Service = {
-				...operations,
-				run: (input, work, status) =>
-					operations.run(
-						{ ...input, notify: (record) => held(input.notify(record)) },
-						held(work),
-						status,
-					),
-			}
 			// Without an owner, as in a test of the Chats alone, a Turn has only the tools of the host.
 			const hostPlugin =
 				owner === undefined
@@ -358,7 +351,7 @@ export const factory: Effect.Effect<
 							owner,
 							namespace,
 							store,
-							operations: backgroundCalls,
+							operations,
 							// The plugins are made before `deliver`, so they call it later.
 							deliver:
 								options.current?.deliver ??
@@ -378,6 +371,7 @@ export const factory: Effect.Effect<
 			const catalog = options.modelCatalog
 			const runtime = yield* ChatRuntime.make({
 				store,
+				operations,
 				// Only the process with the Live session of a live Chat runs its Turns.
 				// Input from other places waits in the inbox until that process takes it.
 				canStart: (view) =>
@@ -397,7 +391,7 @@ export const factory: Effect.Effect<
 					compaction: Compaction.service,
 					approvals: features.approvals,
 				},
-			}).pipe(Effect.provideService(Operations.Operations, backgroundCalls))
+			}).pipe(Effect.provideContext(routed))
 			const read = (id: Chat.Id) => store.read(id).pipe(toPublic)
 			const info = (ref: Chat.Ref): ChatInfo => {
 				const state = ChatHost.hostState(ref)
@@ -722,7 +716,7 @@ export const factory: Effect.Effect<
 								: { approved: input.approved }),
 							...(input.queue === undefined ? {} : { queue: input.queue }),
 						})
-						.pipe(Effect.provideContext(routed), toPublic)
+						.pipe(toPublic)
 					return yield* receipt(delivery)
 				})
 			/** Turns the core events of one Turn into Responses events. */
@@ -736,6 +730,7 @@ export const factory: Effect.Effect<
 				sink: ChatEvents.Sink,
 			) =>
 				Effect.gen(function* () {
+					const queue = yield* Stream.toQueue(events, { capacity: 64 })
 					const outputs = yield* Ref.make(
 						HashMap.empty<
 							Item.Id,
@@ -785,6 +780,25 @@ export const factory: Effect.Effect<
 							response: started.value,
 						})
 					}
+					if (Option.isSome(started) && started.value.status !== "in_progress")
+						return yield* finish(started.value)
+					// A slow observer can miss a core event. The saved Turn is the final record.
+					const completed = Effect.gen(function* () {
+						while (true) {
+							const view = yield* read(chat)
+							const record = yield* findTurn(view, turn)
+							if (Option.isSome(record)) {
+								const result = yield* responseOf(view.chat, record.value)
+								if (result.status !== "in_progress")
+									return yield* finish(result)
+							}
+							yield* runtime.wait({
+								chat,
+								after: view.chat.revision,
+								timeout: "1 second",
+							})
+						}
+					})
 					/** Starts a new output message in the Response. */
 					const added = (item: Item.Id) =>
 						Effect.gen(function* () {
@@ -817,7 +831,7 @@ export const factory: Effect.Effect<
 							})
 							return entry
 						})
-					yield* events.pipe(
+					yield* Stream.fromQueue(queue).pipe(
 						Stream.filter(
 							(event) =>
 								("turn" in event && event.turn === turn) ||
@@ -898,8 +912,10 @@ export const factory: Effect.Effect<
 								}
 							}),
 						),
+						Effect.raceFirst(completed),
 					)
 				}).pipe(
+					Effect.scoped,
 					Effect.ensuring(sink.finish([])),
 					Background.logFailure("The live events of a Turn stopped"),
 				)
@@ -918,9 +934,7 @@ export const factory: Effect.Effect<
 					return { receipt: result, events: Option.some(sink.stream) }
 				})
 			const drain: typeof Chats.Service.drain = (id) =>
-				runtime
-					.drain(id)
-					.pipe(Effect.provideContext(routed), Effect.asVoid, toPublic)
+				runtime.drain(id).pipe(Effect.asVoid, toPublic)
 			const closeStale: typeof Chats.Service.closeStale = (id, turn) =>
 				Effect.gen(function* () {
 					if (yield* runtime.isActive(id)) return
@@ -943,7 +957,6 @@ export const factory: Effect.Effect<
 							...(input.author === undefined ? {} : { author: input.author }),
 						}),
 					),
-					Effect.provideContext(routed),
 					toPublic,
 				)
 			const pageSize = (limit: number | undefined) =>
@@ -1069,7 +1082,7 @@ export const factory: Effect.Effect<
 					remove: (id) =>
 						Effect.gen(function* () {
 							yield* interrupt(id)
-							yield* backgroundCalls.cancelChat(id)
+							yield* operations.cancelChat(id).pipe(toPublic)
 							const view = yield* read(id)
 							yield* store.remove(view.chat).pipe(toPublic)
 						}),
@@ -1092,7 +1105,7 @@ export const factory: Effect.Effect<
 							items: input.items,
 							revision: input.revision,
 						}).pipe(toPublic, Effect.flatMap(project)),
-					wait: (id, after, timeoutMs, afterActivity) =>
+					wait: (id, after, timeout, afterActivity) =>
 						runtime
 							.wait({
 								chat: id,
@@ -1100,7 +1113,10 @@ export const factory: Effect.Effect<
 								...(afterActivity === undefined
 									? {}
 									: { afterActive: afterActivity === "active" }),
-								timeout: Math.min(timeoutMs ?? 30000, 30000),
+								timeout: Duration.min(
+									Duration.fromInputUnsafe(timeout ?? "30 seconds"),
+									Duration.seconds(30),
+								),
 							})
 							.pipe(toPublic, Effect.flatMap(project)),
 					interrupt,
@@ -1108,7 +1124,7 @@ export const factory: Effect.Effect<
 					deliverStream,
 					drain,
 					closeStale,
-					operations: backgroundCalls,
+					operations,
 					startAction,
 					turns,
 					turn,

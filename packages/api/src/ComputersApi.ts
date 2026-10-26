@@ -1,4 +1,5 @@
-import { Array as Arr, Schema } from "effect"
+import { SecretOutput } from "./Secret.ts"
+import { Array as Arr, Schema, Struct } from "effect"
 import {
 	HttpApi,
 	HttpApiEndpoint,
@@ -247,7 +248,7 @@ export const ComputerUsage = Schema.Struct({
 export type ComputerUsage = typeof ComputerUsage.Type
 
 /** The secret that `openbot computer connect` uses. OpenBot shows it only once. */
-export const ConnectorToken = Schema.Struct({ token: Schema.String })
+export const ConnectorToken = Schema.Struct({ token: SecretOutput })
 export type ConnectorToken = typeof ConnectorToken.Type
 
 const Path = Schema.String.check(
@@ -358,13 +359,16 @@ export const ConnectorReply = Schema.Struct({
 	id: Schema.String,
 	result: Schema.TaggedUnion({
 		Done: { value: Schema.Json },
-		Failed: { message: Schema.String },
+		Failed: {
+			message: Schema.String,
+			reason: Schema.Literals(["NotFound", "Failed"]),
+		},
 	}),
 })
 export type ConnectorReply = typeof ConnectorReply.Type
 
 /** The version of the connector protocol in this contract. */
-export const connectorProtocolVersion = 2
+export const connectorProtocolVersion = 3
 
 /** The first message of a connector. It tells OpenBot what the machine can do. */
 export const ConnectorHello = Schema.Struct({
@@ -383,7 +387,8 @@ export type ConnectorHello = typeof ConnectorHello.Type
 export const ConnectorSessionId = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(128),
-)
+).pipe(Schema.brand("@openbot-build/api/ConnectorSessionId"))
+export type ConnectorSessionId = typeof ConnectorSessionId.Type
 
 /** The size of a terminal, in rows or columns of letters. */
 const TerminalSize = Schema.Int.check(
@@ -526,7 +531,7 @@ export type ResizeRequest = typeof ResizeRequest.Type
 /** What a command session gave since the last call. */
 export const SessionOutput = Schema.Struct({
 	/** Give it to the next call. It is `null` when the command has ended. */
-	session: Schema.NullOr(Schema.String),
+	session: Schema.NullOr(ConnectorSessionId),
 	running: Schema.Boolean,
 	/** `null` while the command runs, or when a signal stopped it. */
 	exitCode: Schema.NullOr(Schema.Int),
@@ -575,7 +580,7 @@ export type StartPairingRequest = typeof StartPairingRequest.Type
 export const Pairing = Schema.Struct({
 	id: PairingId,
 	code: Schema.String,
-	secret: Schema.String,
+	secret: SecretOutput,
 	interval: Schema.Int,
 	expiresAt: Schema.Finite,
 })
@@ -584,7 +589,7 @@ export type Pairing = typeof Pairing.Type
 /** `Approved` comes only once. Then the machine keeps the token and connects with it. */
 export const PairingStatus = Schema.TaggedUnion({
 	Pending: {},
-	Approved: { computer: ComputerId, token: Schema.String },
+	Approved: { computer: ComputerId, token: SecretOutput },
 })
 export type PairingStatus = typeof PairingStatus.Type
 
@@ -615,6 +620,16 @@ export class ComputerProviderNotFound extends Schema.TaggedError<
 	ComputerProviderNotFound,
 	{ readonly brand: unique symbol }
 >()("ComputerProviderNotFound", { id: Schema.String }) {}
+/** A file or folder is not there. */
+export class ComputerPathNotFound extends Schema.TaggedError<
+	ComputerPathNotFound,
+	{ readonly brand: unique symbol }
+>()("ComputerPathNotFound", { path: Schema.String }) {}
+/** Computers still use this provider. */
+export class ComputerProviderInUse extends Schema.TaggedError<
+	ComputerProviderInUse,
+	{ readonly brand: unique symbol }
+>()("ComputerProviderInUse", { id: Schema.String }) {}
 export class ComputerConflict extends Schema.TaggedError<
 	ComputerConflict,
 	{ readonly brand: unique symbol }
@@ -627,7 +642,9 @@ export class ComputerInvalid extends Schema.TaggedError<
 export class ComputerUnsupported extends Schema.TaggedError<
 	ComputerUnsupported,
 	{ readonly brand: unique symbol }
->()("ComputerUnsupported", { feature: Schema.String }) {}
+>()("ComputerUnsupported", {
+	feature: Schema.Literals([...Struct.keys(ComputerFeatures.fields), "stream"]),
+}) {}
 /** The Computer is offline or failed. */
 export class ComputerNotReady extends Schema.TaggedError<
 	ComputerNotReady,
@@ -657,10 +674,12 @@ export class PairingInvalid extends Schema.TaggedError<
 export class ComputerSessionNotFound extends Schema.TaggedError<
 	ComputerSessionNotFound,
 	{ readonly brand: unique symbol }
->()("ComputerSessionNotFound", { id: Schema.String }) {}
+>()("ComputerSessionNotFound", { id: ConnectorSessionId }) {}
 export const ComputerErrors = [
 	...AuthorizationErrors,
 	ComputerNotFound.pipe(HttpApiSchema.status(404)),
+	ComputerPathNotFound.pipe(HttpApiSchema.status(404)),
+	ComputerProviderInUse.pipe(HttpApiSchema.status(409)),
 	ComputerSessionNotFound.pipe(HttpApiSchema.status(404)),
 	ComputerProviderNotFound.pipe(HttpApiSchema.status(404)),
 	ComputerConflict.pipe(HttpApiSchema.status(409)),

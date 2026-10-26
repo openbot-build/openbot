@@ -1,4 +1,4 @@
-import type { Caller, TriggersApi } from "@openbot-build/api"
+import { BotsApi, type Caller, type TriggersApi } from "@openbot-build/api"
 import { Effect, Schema } from "effect"
 import { Bots } from "../bots/Bots.ts"
 import { Delegations } from "../bots/Delegations.ts"
@@ -52,6 +52,11 @@ export const make = Effect.gen(function* () {
 				userId: input.trigger.actor,
 			}
 			const bot = yield* bots.access(caller, input.trigger.bot, "delegate")
+			if (bot.archived)
+				return yield* BotsApi.BotInvalid.make({
+					message: "An archived Bot does no new work.",
+				})
+
 			const chats = yield* backend.forCaller(caller)
 			const chain: ChatHost.Chain = {
 				organizationId: input.organizationId,

@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import {
 	BotsApi,
-	type DelegationsApi,
+	DelegationsApi,
 	Settings as SettingsApi,
 } from "@openbot-build/api"
 import { Chat } from "@openbot-build/core"
@@ -55,7 +55,7 @@ const work = (
 		? {}
 		: { runningSince: input.runningSince }),
 	delegation: {
-		id,
+		id: DelegationsApi.DelegationId.make(id),
 		parent: { chat: input.parent },
 		bot: BotsApi.BotId.make("bot_1"),
 		chat: input.chat,

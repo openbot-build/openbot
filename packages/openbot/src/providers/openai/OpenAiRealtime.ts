@@ -499,24 +499,24 @@ export const backend = Effect.gen(function* () {
 							),
 							Effect.forkScoped,
 						)
-						const write = (input: Live.Input) => {
-							const error = Live.unsupported(capabilities, input)
-							if (error !== undefined) return Effect.fail(error)
-							return Effect.forEach(
-								encodeInput(input),
-								(event) => writer.write(JSON.stringify(event)),
-								{ discard: true },
-							).pipe(
-								Failures.replace(
-									"OpenBot cannot write to OpenAI Realtime",
-									() =>
-										Live.LiveError.make({
-											reason: "closed",
-											message: "OpenBot cannot write to OpenAI Realtime.",
-										}),
-								),
-							)
-						}
+						const write = (input: Live.Input) =>
+							Effect.gen(function* () {
+								yield* Live.check(capabilities, input)
+								return yield* Effect.forEach(
+									encodeInput(input),
+									(event) => writer.write(JSON.stringify(event)),
+									{ discard: true },
+								).pipe(
+									Failures.replace(
+										"OpenBot cannot write to OpenAI Realtime",
+										() =>
+											Live.LiveError.make({
+												reason: "closed",
+												message: "OpenBot cannot write to OpenAI Realtime.",
+											}),
+									),
+								)
+							})
 						yield* write(Live.Input.Configure({ config }))
 						return {
 							send: write,

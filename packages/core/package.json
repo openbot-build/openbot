@@ -22,8 +22,6 @@
 		"./Turn": "./dist/chat/Turn.js",
 		"./ContextCompaction": "./dist/context/ContextCompaction.js",
 		"./ContextWindow": "./dist/context/ContextWindow.js",
-		"./ConversationContext": "./dist/context/ConversationContext.js",
-		"./ConversationContextOperations": "./dist/context/ConversationContextOperations.js",
 		"./SummaryCompaction": "./dist/context/SummaryCompaction.js",
 		"./Config": "./dist/models/Config.js",
 		"./ConfigurationOperations": "./dist/models/ConfigurationOperations.js",

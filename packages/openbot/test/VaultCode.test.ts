@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { assert, it, layer } from "@effect/vitest"
-import { VaultsApi } from "@openbot-build/api"
+import { VaultsApi, ConnectionsApi } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -52,7 +52,7 @@ const binding = (
 ): Binding => ({
 	name: "openbot_send",
 	source: {
-		connectionId: "conn-1",
+		connectionId: ConnectionsApi.ConnectionId.make("conn-1"),
 		connectionName: "GitHub",
 		cardUrl: "https://apps.example.com/card",
 		appName: "GitHub",
@@ -153,7 +153,9 @@ it.effect(
 			const reveal = vaults((_organization, item, fields) =>
 				item === "vli_a" && Arr.join(fields, ",") === "token"
 					? Effect.succeed(new Map([["token", secret]]))
-					: Effect.fail(VaultReadFailed.make({ message: "No such item" })),
+					: Effect.fail(
+							VaultReadFailed.make({ retry: false, message: "No such item" }),
+						),
 			)
 			const ref = VaultCode.reference("github", "token")
 			const args = { authorization: "Bearer " + ref, id: 1 }

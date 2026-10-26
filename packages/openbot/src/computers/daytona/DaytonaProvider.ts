@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 /**
  * The driver for Daytona, hosted or self-hosted. It uses two APIs over plain HTTP,
  * with no Daytona SDK. Both take the key as a bearer token.
@@ -102,7 +103,7 @@ export const stateOf = (state: string | undefined): MachineState => {
 }
 
 const gone = (id: string) =>
-	ComputerGone.make({ reason: `The Daytona sandbox ${id} does not exist` })
+	ComputerGone.make({ message: `The Daytona sandbox ${id} does not exist` })
 
 const withoutEndSlash = Str.replace(/\/$/, "")
 
@@ -127,7 +128,7 @@ export const make = (credentials: Credentials) =>
 		const client = yield* HttpClient.HttpClient
 		const api = `${credentials.apiUrl ?? defaultApiUrl}/api`
 		const auth = {
-			authorization: `Bearer ${credentials.apiKey}`,
+			authorization: `Bearer ${Redacted.value(credentials.apiKey)}`,
 			"x-daytona-source": "openbot",
 		}
 
@@ -155,9 +156,19 @@ export const make = (credentials: Credentials) =>
 			)
 
 		const expect =
-			(what: string) =>
+			(what: string, path?: string) =>
 			(reply: Reply): Effect.Effect<Reply, ComputerCallFailed> =>
-				ok(reply) ? Effect.succeed(reply) : Effect.fail(failed(reply, what))
+				ok(reply)
+					? Effect.succeed(reply)
+					: path !== undefined && reply.status === 404
+						? Effect.fail(
+								ComputerCallFailed.make({
+									message: `The path ${path} is not there.`,
+									retry: false,
+									missingPath: path,
+								}),
+							)
+						: Effect.fail(failed(reply, what))
 
 		const verify = call(HttpClientRequest.get(`${api}/api-keys/current`)).pipe(
 			Effect.flatMap(expect("Checking the Daytona key")),
@@ -274,9 +285,12 @@ export const make = (credentials: Credentials) =>
 					build: (base: string) => HttpClientRequest.HttpClientRequest,
 					what: string,
 					timeoutMs = controlTimeoutMs,
+					path?: string,
 				) =>
 					Effect.flatMap(ensure, (base) =>
-						call(build(base), timeoutMs).pipe(Effect.flatMap(expect(what))),
+						call(build(base), timeoutMs).pipe(
+							Effect.flatMap(expect(what, path)),
+						),
 					)
 
 				const query = (
@@ -418,10 +432,7 @@ export const make = (credentials: Credentials) =>
 										signal: null,
 										error: Option.match(Cause.findErrorOption(cause), {
 											onNone: () => "OpenBot could not read the command.",
-											onSome: (error) =>
-												error._tag === "ComputerGone"
-													? error.reason
-													: error.message,
+											onSome: (error) => error.message,
 										}),
 									}),
 								),
@@ -472,6 +483,8 @@ export const make = (credentials: Credentials) =>
 							(base) =>
 								HttpClientRequest.get(query(base, "/files/download", { path })),
 							`Reading ${path}`,
+							controlTimeoutMs,
+							path,
 						).pipe(
 							Effect.map((reply) => fileContent(path, encoding, reply.body)),
 						),
@@ -494,6 +507,8 @@ export const make = (credentials: Credentials) =>
 						toolbox(
 							(base) => HttpClientRequest.get(query(base, "/files", { path })),
 							`Listing ${path}`,
+							controlTimeoutMs,
+							path,
 						).pipe(
 							Effect.map((reply) => {
 								const entries = json(reply)
@@ -507,6 +522,8 @@ export const make = (credentials: Credentials) =>
 									query(base, "/files", { path, recursive: "true" }),
 								),
 							`Removing ${path}`,
+							controlTimeoutMs,
+							path,
 						).pipe(Effect.asVoid),
 				}
 

@@ -34,7 +34,7 @@ const rules = {
 	"blind-error-map":
 		"This maps every failure to a new error and drops the old one. Name the error and keep it as the cause, log it, or map only the failures you mean with `catchTag`.",
 	"run-outside-main":
-		"Only a program entry point (a `*Main.ts` file) runs an Effect. Everywhere else, return the Effect, or use `Effect.run*With` with the current services at the edge of a Promise API.",
+		"Only a program entry point (a `*Main.ts` file) runs an Effect. Everywhere else, return the Effect. Use a scoped `FiberSet` runtime for an outside callback.",
 	throw:
 		"Do not throw. Fail with a typed error, or use `Effect.die` for a broken rule of the code. In a test, use `assert.fail`.",
 	"fork-daemon":
@@ -162,6 +162,7 @@ const runs = [
 	"runSync",
 	"runSyncExit",
 	"runFork",
+	"runForkWith",
 	"runCallback",
 ]
 

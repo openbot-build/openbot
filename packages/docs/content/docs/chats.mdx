@@ -162,6 +162,10 @@ of `response.completed`, `response.incomplete`, `response.failed` or
 `response.cancelled`. The stream only watches the Turn. If you close it, the
 Turn goes on.
 
+A slow reader can miss text events. The server also reads the saved Turn to send
+its final response, so a missed event does not leave the stream open. The final
+response has the full output and status.
+
 ### Common errors
 
 | Status | Error                      | When                                                                                       |
@@ -448,8 +452,8 @@ the Chat that you read:
 ```
 
 The answer is the view of the Chat. An old revision returns `409` with
-`ChatConflict`. So does a list where two items have the same `id`, or where more
-than one item is `in_progress`.
+`ChatConflict`. A list where two items have the same `id`, or where more than
+one item is `in_progress`, fails request validation with `400`.
 
 ---
 

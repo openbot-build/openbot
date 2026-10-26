@@ -71,7 +71,13 @@ const usage = HttpApiBuilder.group(OpenBotApi, "usage", (handlers) =>
 							limit: query.limit ?? 50,
 							...(query.after === undefined ? {} : { after: query.after }),
 						})
-						.pipe(unavailable("The usage events could not be read."))
+						.pipe(
+							Failures.replaceTag(
+								"BillingStorageError",
+								"The usage events could not be read.",
+								() => BillingApi.BillingUnavailable.make({}),
+							),
+						)
 				}),
 			)
 			.handle("getCredits", () =>

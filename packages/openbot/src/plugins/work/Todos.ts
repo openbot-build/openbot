@@ -1,6 +1,6 @@
 import type { Chat, ChatStore, Plugin } from "@openbot-build/core"
-import { ChatConflict, ChatTodos, type Todo } from "@openbot-build/api"
-import { Array as Arr, Effect, HashSet, Option, pipe, Schema } from "effect"
+import { todoProblem, ChatTodos, type Todo } from "@openbot-build/api"
+import { Array as Arr, Effect, Option, pipe, Schema } from "effect"
 
 /** The key of the todo list in the state of a Chat. */
 export const storeKey = "@openbot-build/openbot/todos"
@@ -23,13 +23,7 @@ export const open = (todos: ChatTodos): ReadonlyArray<Todo> =>
 	Arr.filter(todos.items, (item) => item.status !== "done")
 
 /** Why a list is not valid, or `undefined` when it is valid. */
-export const problem = (items: ReadonlyArray<Todo>): string | undefined => {
-	const ids = HashSet.fromIterable(Arr.map(items, (item) => item.id))
-	if (HashSet.size(ids) !== items.length) return "Each todo needs its own id."
-	if (Arr.filter(items, (item) => item.status === "in_progress").length > 1)
-		return "Only one todo can be in progress at a time."
-	return undefined
-}
+export const problem = todoProblem
 
 /** One line for each item, for the Bot to read. */
 export const describe = (items: ReadonlyArray<Todo>): string =>
@@ -50,8 +44,7 @@ export const replace = <P extends Values>(input: {
 }) =>
 	Effect.gen(function* () {
 		const reason = problem(input.items)
-		if (reason !== undefined)
-			return yield* ChatConflict.make({ message: reason })
+		if (reason !== undefined) return yield* Effect.die(reason)
 		const changed = yield* input.store.modifyEffect({
 			chat: input.chat,
 			...(input.revision === undefined

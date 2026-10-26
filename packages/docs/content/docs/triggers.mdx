@@ -99,6 +99,10 @@ with `TriggerHookDenied`.
 A new `PUT` makes a new secret, and the old one stops working.
 `DELETE /v1/triggers/:triggerId/webhook` removes the webhook.
 
+If the actor can no longer give work to the Bot, or the Bot is archived, the
+webhook returns `409 TriggerInvalid`. A storage or execution failure returns
+`503 TriggerStorageUnavailable`.
+
 ---
 
 ## Who the work is for

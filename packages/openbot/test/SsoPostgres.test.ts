@@ -63,7 +63,7 @@ it.live(
 				name: "Company",
 				issuer: "https://sso.example.com",
 				clientId: "openbot",
-				clientSecret: "sso-secret-0123456789",
+				clientSecret: Redacted.make("sso-secret-0123456789"),
 				domains: [domain],
 				enforce: false,
 			})
@@ -75,7 +75,7 @@ it.live(
 
 			const updated = yield* sso.updateConnection(organizationId, created.id, {
 				expectedVersion: created.version,
-				clientSecret: "sso-secret-9876543210",
+				clientSecret: Redacted.make("sso-secret-9876543210"),
 			})
 			assert.strictEqual(updated.version, created.version + 1)
 			assert.strictEqual(updated.clientSecretHint, "…3210")

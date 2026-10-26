@@ -6,7 +6,7 @@ import { BotErrors, BotId } from "./BotsApi.ts"
 import { Delegation, DelegationId } from "./DelegationsApi.ts"
 import { FileId, FileInvalid } from "./FilesApi.ts"
 import { PlanApproval } from "./PlanApproval.ts"
-import { Array as Arr, Schema } from "effect"
+import { Array as Arr, HashSet, Schema } from "effect"
 import { Sse } from "effect/encoding"
 import {
 	HttpApi,
@@ -382,10 +382,19 @@ export const ChatTodos = Schema.Struct({
 	items: Schema.Array(Todo).check(Schema.isMaxLength(1000)),
 })
 export type ChatTodos = typeof ChatTodos.Type
+/** Why a todo list is not valid, or undefined when it is valid. */
+export const todoProblem = (items: ReadonlyArray<Todo>): string | undefined => {
+	const ids = HashSet.fromIterable(Arr.map(items, (item) => item.id))
+	if (HashSet.size(ids) !== items.length) return "Each todo needs its own id."
+	if (Arr.filter(items, (item) => item.status === "in_progress").length > 1)
+		return "Only one todo can be in progress at a time."
+	return undefined
+}
+
 /** Replaces the whole list. `revision` guards against concurrent changes. */
 export const UpdateTodosRequest = Schema.Struct({
 	revision: Chat.Revision,
-	items: ChatTodos.fields.items,
+	items: ChatTodos.fields.items.check(Schema.makeFilter(todoProblem)),
 })
 export type UpdateTodosRequest = typeof UpdateTodosRequest.Type
 

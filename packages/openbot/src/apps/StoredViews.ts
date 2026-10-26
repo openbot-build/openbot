@@ -1,5 +1,7 @@
 import {
 	AppViewsApi as Api,
+	AppExecution,
+	ConnectionsApi,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 	ChatConflict,
@@ -23,13 +25,13 @@ import * as Failures from "../app/Failures.ts"
 export type Error =
 	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
 export const View = Schema.Struct({
-	id: Schema.String,
-	operationId: Schema.String,
+	id: Api.AppViewId,
+	operationId: AppExecution.AppOperationId,
 	readOnly: Schema.Boolean,
 	chat: Chat.Id,
 	turn: Turn.Id,
 	item: Item.Id,
-	connectionId: Schema.String,
+	connectionId: ConnectionsApi.ConnectionId,
 	revision: Schema.Natural,
 	expiresAt: Schema.Finite,
 })

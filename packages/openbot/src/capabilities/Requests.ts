@@ -315,7 +315,7 @@ export const make: Effect.Effect<
 			// From the top down, so each Grant can name the Grant above it as its parent.
 			yield* Effect.reduce(
 				Arr.reverse(Arr.zip(receivers, givers)),
-				() => Option.none<string>(),
+				() => Option.none<BotsApi.GrantId>(),
 				(parent, [bot, giver]) =>
 					grants
 						.create(
@@ -358,7 +358,9 @@ export const make: Effect.Effect<
 			Effect.gen(function* () {
 				const found = yield* requests.find(organizationId, id)
 				if (Option.isNone(found))
-					return yield* RequestsApi.RequestNotFound.make({ request: id })
+					return yield* RequestsApi.RequestNotFound.make({
+						request: RequestsApi.CapabilityRequestId.make(id),
+					})
 				const stored = found.value
 				const request = stored.request
 				if (request.status !== "pending")
@@ -522,7 +524,7 @@ export const make: Effect.Effect<
 				return yield* put(organizationId, {
 					chain: input.chain,
 					request: {
-						id: "req_" + (yield* newId),
+						id: RequestsApi.CapabilityRequestId.make("req_" + (yield* newId)),
 						bot: input.bot,
 						capability: input.capability,
 						reason: input.reason,

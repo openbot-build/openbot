@@ -1,3 +1,4 @@
+import { modelForBuild } from "./LanguageModelTest.ts"
 import { assert, it } from "@effect/vitest"
 import {
 	Order,
@@ -173,16 +174,19 @@ it.effect(
 						definition: definition,
 						persistence: yield* MemoryPersistence.make,
 					})
-					const runtime = yield* ChatRuntime.make({
+					const construction = ChatRuntime.make({
 						store: runtimeStore,
 						bot: { plugin: combined },
-					})
+					}).pipe(Effect.provide(modelForBuild))
+					const runtime = yield* construction
 					const view = yield* runtimeStore.create({})
 					const task = runtime.execute({ chat: view.chat.id, input: "hello" })
-					const preserved: StoreDependency extends Effect.Services<typeof task>
+					const preserved: StoreDependency extends Effect.Services<
+						typeof construction
+					>
 						? true
 						: false = true
-					const providedA = task.pipe(
+					const providedA = construction.pipe(
 						Effect.provideService(pluginA.store, storeA),
 					)
 					const requiresB: typeof pluginB.store.Identifier extends Effect.Services<
@@ -267,10 +271,7 @@ it.effect(
 				definition: definition,
 				persistence: yield* MemoryPersistence.make,
 			}).pipe(Effect.provideService(EncodingDependency, 7))
-			const runtime = yield* ChatRuntime.make({
-				store: runtimeStore,
-				bot: { plugin: plugin },
-			})
+
 			const view = yield* runtimeStore
 				.create({
 					value: {
@@ -287,6 +288,17 @@ it.effect(
 			assert.strictEqual(encodes, beforeConstruction)
 			assert.strictEqual(own.definition, plugin.store.definition)
 			assert.deepStrictEqual(observed, [])
+			const runtime = yield* ChatRuntime.make({
+				store: runtimeStore,
+				bot: { plugin },
+			}).pipe(
+				Effect.provideService(plugin.store, own),
+				Effect.provide(
+					LanguageModelTest({
+						streamText: () => Stream.fromArray(textParts("done")),
+					}),
+				),
+			)
 			const completed = yield* runtime
 				.execute({ chat: view.chat.id, input: "hello" })
 				.pipe(
@@ -401,7 +413,7 @@ const counterStore = (
 		const runtime = yield* ChatRuntime.make({
 			store: runtimeStore,
 			bot: {},
-		})
+		}).pipe(Effect.provide(modelForBuild))
 		const initial = yield* runtimeStore.create({
 			value: {
 				...ChatState.initial({ a: { value: 0 } }),

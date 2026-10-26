@@ -138,7 +138,7 @@ layer(Layer.merge(NodeSocket.layerWebSocketConstructorWS, NodeServices.layer), {
 				assert.deepStrictEqual(yield* connection.next, {
 					_tag: "Hello",
 					hello: {
-						version: 2,
+						version: ComputersApi.connectorProtocolVersion,
 						os: process.platform,
 						arch: process.arch,
 						desktop: false,
@@ -162,19 +162,19 @@ layer(Layer.merge(NodeSocket.layerWebSocketConstructorWS, NodeServices.layer), {
 
 				yield* connection.send({
 					_tag: "Start",
-					session: "s-1",
+					session: ComputersApi.ConnectorSessionId.make("s-1"),
 					command: "echo hi; sh -c 'exit 2'",
 					tty: false,
 				})
 				assert.deepStrictEqual(yield* connection.next, {
 					_tag: "Output",
-					session: "s-1",
+					session: ComputersApi.ConnectorSessionId.make("s-1"),
 					seq: 0,
 					data: Base64.encode("hi\n"),
 				})
 				assert.deepStrictEqual(yield* connection.next, {
 					_tag: "Exit",
-					session: "s-1",
+					session: ComputersApi.ConnectorSessionId.make("s-1"),
 					code: 2,
 					signal: null,
 				})

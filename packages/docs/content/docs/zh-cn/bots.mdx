@@ -200,6 +200,9 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 
 ## 错误
 
+`InvitationNotFound` 返回 `404`。请求指定邀请 ID 时，错误包含
+`invitationId`。Bot 链接的 secret 找不到邀请时，错误中没有这个字段。
+
 | 状态码 | 错误                    | 何时出现                                      |
 | ------ | ----------------------- | --------------------------------------------- |
 | `400`  | `BotInvalid`            | 不允许这个修改，或者你没有默认 Bot。          |
@@ -207,3 +210,6 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 | `404`  | `BotNotFound`           | 没有你可以读取的、使用这个 ID 的 Bot。        |
 | `409`  | `BotConflict`           | `expected` 已过时。请重新读取 Bot，然后再试。 |
 | `503`  | `BotStorageUnavailable` | OpenBot 无法连接到它的数据库。                |
+
+修改不存在的 Rule 时，会返回 `404 RuleNotFound`。撤销不存在的 Grant 时，会返回
+`404 GrantNotFound`。这些错误会指出缺失的 Rule 或 Grant。

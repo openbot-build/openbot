@@ -13,6 +13,7 @@ import {
 	Duration,
 	Effect,
 	Equal,
+	FiberSet,
 	Layer,
 	type LogLevel,
 	Option,
@@ -21,6 +22,7 @@ import {
 	Redacted,
 	Ref,
 	Schema,
+	Schedule,
 	Stream,
 } from "effect"
 import { HttpServerResponse } from "effect/http"
@@ -76,7 +78,10 @@ const attempt = <A, E>(
 				: cause instanceof DrizzleQueryError ||
 					  (Predicate.isError(cause) && Predicate.hasProperty(cause, "code"))
 					? Effect.andThen(
-							Effect.logError("Better Auth could not use its database.", cause),
+							Effect.logWarning(
+								"Better Auth could not use its database.",
+								cause,
+							),
 							Effect.fail(AuthUnavailable.make({ dependency: "storage" })),
 						)
 					: Effect.die(cause),
@@ -87,7 +92,10 @@ const attempt = <A, E>(
 const unavailable =
 	(dependency: AuthUnavailable["dependency"]) => (error: unknown) =>
 		Effect.andThen(
-			Effect.logError("Sign-in could not use a service that it needs.", error),
+			Effect.logWarning(
+				"Sign-in could not use a service that it needs.",
+				error,
+			),
 			Effect.fail(AuthUnavailable.make({ dependency })),
 		)
 
@@ -168,6 +176,8 @@ export const layer = (
 			const settings = yield* Settings
 			const secrets = yield* Secrets
 			const context = yield* Effect.context<never>()
+			const callbacks = yield* FiberSet.make()
+			const run = yield* FiberSet.runtime(callbacks)<never>()
 			// Every instance uses this pool, so a new instance opens no new connections.
 			const pool = yield* Effect.acquireRelease(
 				Effect.sync(() => {
@@ -178,10 +188,14 @@ export const layer = (
 					// listener, Node throws it and the process stops. pg has already
 					// removed the broken connection, so a log is enough.
 					pool.on("error", (error) => {
-						Effect.runForkWith(context)(
-							Effect.logWarning(
-								"An idle connection of the auth database pool failed",
-								error,
+						run(
+							// Effect 4.0.6 registers runtime fibers after they start. Yield before logging.
+							Effect.andThen(
+								Effect.yieldNow,
+								Effect.logWarning(
+									"An idle connection of the auth database pool failed",
+									error,
+								),
 							),
 						)
 					})
@@ -352,9 +366,16 @@ export const layer = (
 					),
 				)
 				// A missed notice must not keep old connections for ever, so also check from time to time.
-				yield* Stream.merge(
-					Stream.filter(settings.changes, (scope) => scope.kind === "signIn"),
-					Stream.tick("30 seconds"),
+				yield* Background.repeat(
+					reload.pipe(Effect.delay("30 seconds"), Effect.setContext(context)),
+					{
+						schedule: Schedule.forever,
+						message: "OpenBot could not load the SSO connections.",
+					},
+				)
+				yield* Stream.filter(
+					settings.changes,
+					(scope) => scope.kind === "signIn",
 				).pipe(
 					Stream.runForEach(() => reload),
 					// The loop lives as long as the instance, so it must not keep the
@@ -463,19 +484,13 @@ export const layer = (
 				})
 
 			return Auth.of({
-				// Better Auth calls this Web handler from outside of Effect, so it runs the borrow itself.
-				handler: (request) =>
-					Effect.runPromiseWith(context)(
-						withCurrent((_, current) =>
-							Effect.promise(() => current.sdk.handler(request)),
-						).pipe(
-							Effect.catchTag("AuthUnavailable", () =>
-								Effect.sync(() =>
-									HttpServerResponse.toWeb(unavailableResponse),
-								),
-							),
+				handle: (request) =>
+					withCurrent((_, current) =>
+						Effect.promise(() => current.sdk.handler(request)),
+					).pipe(
+						Effect.catchTag("AuthUnavailable", () =>
+							Effect.sync(() => HttpServerResponse.toWeb(unavailableResponse)),
 						),
-						{ signal: request.signal },
 					),
 				startSignIn: (input) =>
 					withCurrent((instance, current) =>

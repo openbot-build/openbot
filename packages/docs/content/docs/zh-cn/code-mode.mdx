@@ -159,6 +159,9 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 
 和 App operation 一样，OpenBot 在数据库中加密保存 code run。
 
+只有 App 操作已经存在时，调用才有
+`operationId`。在此之前，该字段不存在。工具结果也遵守此规则。
+
 ### 失败原因
 
 | `reason`         | 含义                                                      |

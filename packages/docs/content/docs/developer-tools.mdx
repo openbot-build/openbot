@@ -209,6 +209,11 @@ You can also `cancel` a running test, or `DELETE` it.
 
 ---
 
+An OAuth test keeps the reason for a refused authorization step, such as
+`FlowExpired` or `CallbackMismatch`. An unavailable connection gives
+`ConnectionUnavailable`. A missing test record gives `404 DeveloperNotFound`. A
+network or storage failure gives `503 DeveloperUnavailable`.
+
 ## Ask for indexing
 
 You do not have to wait for a user to connect your App. Ask OpenBot to check it:

@@ -6,8 +6,9 @@ import {
 	MemoryPersistence,
 	Store,
 } from "@openbot-build/core"
-import { Array as Arr, Deferred, Effect, Match, Schema } from "effect"
+import { Array as Arr, Deferred, Effect, Layer, Match, Schema } from "effect"
 import { Tool, Toolkit } from "effect/ai"
+import { unusedModel } from "./LanguageModelTest.ts"
 import { settled } from "./ChatTest.ts"
 
 const setup = Effect.gen(function* () {
@@ -56,7 +57,7 @@ it.effect(
 						"Host actions must not load a model catalog",
 					),
 				},
-			})
+			}).pipe(Effect.provide(unusedModel))
 			const chat = (yield* store.create({})).chat.id
 			const receipt = yield* runtime.startAction({
 				chat,
@@ -92,7 +93,7 @@ it.effect(
 							}),
 					},
 				},
-			})
+			}).pipe(Effect.provide(unusedModel))
 			const allowed = yield* restored.startAction({
 				chat,
 				action: {
@@ -148,7 +149,6 @@ it.effect(
 			})
 			const toolkit = Toolkit.make(gate)
 			const store = yield* setup
-			const runtime = yield* ChatRuntime.make({ store, bot: { toolkit } })
 			const first = (yield* store.create({})).chat.id
 			const second = (yield* store.create({})).chat.id
 			const handlers = yield* toolkit.toHandlers({
@@ -160,6 +160,10 @@ it.effect(
 							)
 						: Effect.succeed("Independent receipt"),
 			})
+			const runtime = yield* ChatRuntime.make({ store, bot: { toolkit } }).pipe(
+				Effect.provideContext(handlers),
+				Effect.provide(unusedModel),
+			)
 			const held = yield* runtime
 				.startAction({
 					chat: first,
@@ -236,7 +240,7 @@ it.effect(
 							}),
 					},
 				},
-			})
+			}).pipe(Effect.provideContext(handlers), Effect.provide(unusedModel))
 			const chat = (yield* store.create({})).chat.id
 			const original = yield* runtime
 				.startAction({ chat, action: { name: "Gate", arguments: {} } })
@@ -292,7 +296,14 @@ it.effect("a related host action needs the Turn to run in this runtime", () =>
 	Effect.gen(function* () {
 		const toolkit = Toolkit.make(Tool.make("Gate", { success: Schema.String }))
 		const store = yield* setup
-		const runtime = yield* ChatRuntime.make({ store, bot: { toolkit } })
+		const runtime = yield* ChatRuntime.make({ store, bot: { toolkit } }).pipe(
+			Effect.provide(
+				Layer.merge(
+					toolkit.toLayer({ Gate: () => Effect.succeed("done") }),
+					unusedModel,
+				),
+			),
+		)
 		const chat = (yield* store.create({})).chat.id
 		const done = yield* runtime
 			.startAction({ chat, action: { name: "Gate", arguments: {} } })

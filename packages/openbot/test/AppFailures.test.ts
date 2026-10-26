@@ -11,7 +11,7 @@ import { failed } from "../src/apps/AppResults.ts"
 import { toStoreError } from "../src/apps/ProtocolStores.ts"
 
 const source: AppExecution.Source = {
-	connectionId: "connection-1",
+	connectionId: ConnectionsApi.ConnectionId.make("connection-1"),
 	connectionName: "Documents",
 	cardUrl: "https://apps.example.com/card",
 	appName: "Documents",

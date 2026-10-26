@@ -70,6 +70,14 @@ after a token expires or someone revokes it.
 
 ## Call an operation
 
+Record IDs have branded types. A brand keeps an ID for one kind of record from
+being used for another kind. For example, a `ConnectionId` cannot be used as an
+`AppViewId`. Keep the ID from an API answer when you call another operation. To
+read an ID from outside the program, decode it with its schema from
+`@openbot-build/api`, such as `ConnectionsApi.ConnectionId`. Model and provider
+IDs use `Model.Id` and `Provider.Id` from `@openbot-build/core`. The JSON and
+URL values are still strings.
+
 Every operation is at `client.api.<group>.<operation>`. The names are the same
 as in the [API reference](/docs/api/). Each call takes one object with these
 optional fields:
@@ -117,6 +125,12 @@ Some groups and their pages:
 
 Every operation needs an action on a resource. A call without it fails with
 `Forbidden`. See [Permissions](/docs/permissions).
+
+The typed client uses Effect `Redacted<string>` for secret fields in request and
+response values. Wrap a new secret with `Redacted.make`. Use `Redacted.value`
+only where you must send or show the secret. JSON still sends these fields as
+strings. This covers provider keys, Vault values, SSO secrets, invitation
+secrets, tokens, webhook secrets and Computer pairing secrets.
 
 ## Handle errors
 

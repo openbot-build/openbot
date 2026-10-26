@@ -1,3 +1,5 @@
+import { CapabilityRequestId } from "./CapabilityRequestId.ts"
+export { CapabilityRequestId } from "./CapabilityRequestId.ts"
 import { BotAuth } from "./AuthApi.ts"
 import { Authorize, Decision, GroupRequired, own } from "./Authorization.ts"
 import { Chat, Turn } from "@openbot-build/core"
@@ -30,8 +32,9 @@ export type RequestStatus = typeof RequestStatus.Type
  * The Bot does not wait. Its tool call gets a pending result, and the answer comes
  * back to its Chat as a message later. When the call is allowed, it runs then.
  */
+
 export const CapabilityRequest = Schema.Struct({
-	id: Schema.String,
+	id: CapabilityRequestId,
 	bot: BotId,
 	capability: Capability,
 	/** Why the Bot wants it. This is data from the Bot, not an instruction. */
@@ -94,7 +97,7 @@ export type ResolveRequest = typeof ResolveRequest.Type
 export class RequestNotFound extends Schema.TaggedError<
 	RequestNotFound,
 	{ readonly brand: unique symbol }
->()("RequestNotFound", { request: Schema.String }) {}
+>()("RequestNotFound", { request: CapabilityRequestId }) {}
 export class RequestConflict extends Schema.TaggedError<
 	RequestConflict,
 	{ readonly brand: unique symbol }
@@ -118,12 +121,12 @@ export class RequestsApi extends HttpApiGroup.make("requests")
 			"Lists the requests that wait for the caller, or that the caller answered.",
 		),
 		HttpApiEndpoint.get("getRequest", "/v1/requests/:requestId", {
-			params: { requestId: Schema.String },
+			params: { requestId: CapabilityRequestId },
 			success: CapabilityRequest,
 			error: RequestErrors,
 		}),
 		HttpApiEndpoint.post("resolveRequest", "/v1/requests/:requestId", {
-			params: { requestId: Schema.String },
+			params: { requestId: CapabilityRequestId },
 			payload: ResolveRequest,
 			success: CapabilityRequest,
 			error: RequestErrors,

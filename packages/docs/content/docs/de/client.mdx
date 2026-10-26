@@ -73,6 +73,14 @@ abläuft oder jemand es widerruft.
 
 ## Eine Operation aufrufen
 
+Datensatz-IDs haben Markentypen (branded types). Eine Marke trennt die IDs
+verschiedener Arten von Datensätzen. So kann eine `ConnectionId` nicht als
+`AppViewId` dienen. Nutze die ID aus einer API-Antwort für weitere Aufrufe. Lies
+eine ID von außerhalb des Programms mit ihrem Schema aus `@openbot-build/api`,
+etwa `ConnectionsApi.ConnectionId`. Modell- und Anbieter-IDs nutzen `Model.Id`
+und `Provider.Id` aus `@openbot-build/core`. In JSON und URLs bleiben diese
+Werte Zeichenketten.
+
 Jede Operation liegt unter `client.api.<group>.<operation>`. Die Namen sind
 dieselben wie in der [API-Referenz](/docs/api/). Jeder Aufruf nimmt ein Objekt
 mit diesen optionalen Feldern:
@@ -120,6 +128,12 @@ Einige Gruppen und ihre Seiten:
 
 Jede Operation braucht eine Aktion auf einer Ressource. Ein Aufruf ohne sie
 schlägt mit `Forbidden` fehl. Siehe [Berechtigungen](/de/docs/permissions).
+
+Der typisierte Client nutzt Effect `Redacted<string>` für geheime Felder in
+Anfragen und Antworten. Packen Sie neue Geheimnisse mit `Redacted.make` ein.
+Nutzen Sie `Redacted.value` nur, wenn Sie den Wert senden oder zeigen müssen. In
+JSON bleiben diese Felder Strings. Das gilt für Anbieterschlüssel, Vault-Werte,
+SSO-Geheimnisse, Einladungen, Tokens, Webhooks und Computer-Kopplungen.
 
 ## Fehler behandeln
 

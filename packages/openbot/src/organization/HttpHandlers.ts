@@ -1,6 +1,7 @@
 import {
 	Account,
 	type Caller,
+	type Roles as RolesApi,
 	Identity,
 	Authorization,
 	OrganizationApi,
@@ -152,7 +153,7 @@ const organizationGroup = HttpApiBuilder.group(
 							),
 						),
 					)
-			const findRole = (caller: Caller, roleId: string) =>
+			const findRole = (caller: Caller, roleId: RolesApi.RoleId) =>
 				roles
 					.get(caller.organizationId, roleId)
 					.pipe(
@@ -271,6 +272,12 @@ const organizationGroup = HttpApiBuilder.group(
 						Effect.gen(function* () {
 							const caller = yield* Identity
 							const member = yield* target(caller, params.userId)
+							if (payload.roles !== undefined)
+								yield* Effect.forEach(
+									payload.roles,
+									(id) => findRole(caller, id),
+									{ discard: true },
+								)
 							yield* guardSuperAdministrator(caller, member, payload)
 							const updated = yield* organization
 								.updateMember(caller.organizationId, params.userId, payload)

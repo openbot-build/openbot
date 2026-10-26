@@ -77,6 +77,27 @@ const program = Effect.scoped(
 )
 ```
 
+Give the model and tool services to `ChatRuntime.make` when you build the
+runtime. Its methods keep those services, including for later Turns from the
+inbox. Pass optional features as `bot.approvals`, `bot.compaction`, and
+`operations`; a service in the caller's context does not turn a feature on.
+`drain` returns `Option<Delivery>`, with `None` when there is no input to start.
+`ConfigurationOperations.contextLimits` returns `Option<Config.ContextLimits>`.
+`Live.check` returns an Effect that fails with `LiveError` for an unsupported
+capability.
+
+`store.modifyEffect` retries a write conflict up to five times when no
+`expectedRevision` is given. Each retry reads the current Chat and runs the
+update again, so the update must have no outside effects. An explicit
+`expectedRevision` fails on conflict without a retry.
+
+`Operation.Store` methods fail with `Operation.StoreError` on a store failure.
+`get` and `finish` return `Option<Record>`; `None` means no matching record or
+no new end. `Operations.make` takes a `whileRunning` scoped Effect to hold host
+resources through the work, stored end, and notice. If the first write fails,
+the call stays in its Turn. If the end write fails, the Chat still gets its
+notice, and the failure is logged.
+
 `execute` starts a Turn, waits for it to end, and returns the Chat. `stream`
 gives events while the Turn runs. Both fail when a Turn already runs in the
 Chat.
@@ -103,8 +124,8 @@ subscriber can miss events, but it always gets the newest ones.
 ### Approvals
 
 A tool with `needsApproval` asks before each call. The runtime then asks the
-`Approvals` service. Give it as `approvals` in the Bot definition, or provide
-`Chat.Approvals`. It answers each call with one of three decisions:
+`Approvals` service. Give it as `approvals` in the Bot definition. It answers
+each call with one of three decisions:
 
 - `Chat.Decision.Allow()` runs the call now.
 - `Chat.Decision.Deny({ reason })` does not run the call. The model sees the
@@ -191,11 +212,19 @@ plugins, such as the Bot, App, and work plugins, in every Turn. The work plugin
 gives the Bot its todo list, its reminders and plan mode. You can also use the
 Turn limit plugins with your own `ChatRuntime`.
 
+`Auth.handle(request)` returns an Effect with the response. `Chats.wait` takes a
+`Duration.Input` for its timeout, such as `"30 seconds"`. The HTTP route still
+takes `timeoutMs` as a number of milliseconds.
+
 ### Memory
 
 `BotMemory` has the types and helpers of [Bot memory](/docs/memory). The server
 uses them for the memory Bot and the memory API. The schemas of the memory API
 are in `api`, as `BotMemory`.
+
+`BotMemory.apply` takes an `ids` array with one new ID for each operation, in
+the same order. `BotMemory.edit` takes a new ID string as `id`. The caller makes
+these IDs before it calls the pure helpers.
 
 ### Turn limits
 
@@ -318,6 +347,17 @@ const services = Layer.merge(
 	Layer.provide(OpenAiProvider.layerClient({ apiKey })),
 	Layer.provide(FetchHttpClient.layer),
 )
+```
+
+Get the compaction service from this layer, then pass it to the Bot:
+
+```ts
+import { ContextCompaction } from "@openbot-build/core"
+
+const runtime = Effect.gen(function* () {
+	const compaction = yield* ContextCompaction.ContextCompaction
+	return yield* ChatRuntime.make({ store, bot: { compaction } })
+}).pipe(Effect.provide(services))
 ```
 
 ### AnthropicProvider

@@ -1,3 +1,4 @@
+import { Model, Provider } from "@openbot-build/core"
 import {
 	Authorization,
 	type Caller,
@@ -47,7 +48,7 @@ export const checkUnused = (
 				current.document.botMemoryModel?.provider === input.providerId
 			)
 				return yield* ModelProvidersApi.ModelProviderInUse.make({
-					providerId: input.providerId,
+					providerId: Provider.Id.make(input.providerId),
 				})
 		}
 	})
@@ -117,7 +118,9 @@ export const layer = HttpApiBuilder.group(
 						Option.match({
 							onNone: () =>
 								Effect.fail(
-									ModelProvidersApi.ModelProviderNotFound.make({ providerId }),
+									ModelProvidersApi.ModelProviderNotFound.make({
+										providerId: Provider.Id.make(providerId),
+									}),
 								),
 							onSome: Effect.succeed,
 						}),
@@ -128,7 +131,11 @@ export const layer = HttpApiBuilder.group(
 					Effect.flatMap(
 						Option.match({
 							onNone: () =>
-								Effect.fail(ModelProvidersApi.ModelNotFound.make({ modelId })),
+								Effect.fail(
+									ModelProvidersApi.ModelNotFound.make({
+										modelId: Model.Id.make(modelId),
+									}),
+								),
 							onSome: Effect.succeed,
 						}),
 					),
@@ -301,7 +308,10 @@ export const layer = HttpApiBuilder.group(
 									organizationKey(caller.organizationId) +
 									".model." +
 									provider.id,
-								details: { providerId: provider.id, ...price },
+								details: {
+									providerId: Provider.Id.make(provider.id),
+									...price,
+								},
 							})
 							.pipe(
 								Failures.replace("Could not write the audit log", () =>
@@ -316,12 +326,12 @@ export const layer = HttpApiBuilder.group(
 						const caller = yield* Identity
 						const provider = yield* find(caller, params.providerId)
 						yield* checkUnused(settings, {
-							providerId: provider.id,
+							providerId: Provider.Id.make(provider.id),
 							organizationIds: [caller.organizationId],
 						})
 						yield* providers.delete(owned(caller), provider.id)
 						yield* record(caller, "model_provider.deleted", {
-							providerId: provider.id,
+							providerId: Provider.Id.make(provider.id),
 							name: provider.name,
 						})
 					}),

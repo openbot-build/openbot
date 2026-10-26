@@ -139,7 +139,11 @@ const provider = (input: {
 	apiKey: "sealed",
 	apiKeyHint: null,
 	models: [
-		{ model: "jev", modelOwner: "organization", upstream: "jev-latest" },
+		{
+			model: Model.Id.make("jev"),
+			modelOwner: "organization",
+			upstream: "jev-latest",
+		},
 	],
 	availability: null,
 	version: input.version ?? 1,

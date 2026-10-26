@@ -61,18 +61,7 @@ import { toolJson } from "../ToolJson.ts"
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/bots")
 
 /** The tools of this plugin. Their parameters are JSON Schema, like App tools. */
-export type Tools = Record<
-	string,
-	Tool.Dynamic<
-		string,
-		{
-			readonly parameters: JsonSchema.JsonSchema
-			readonly success: typeof Schema.Json
-			readonly failure: typeof Schema.Never
-			readonly failureMode: "error"
-		}
-	>
->
+export type Tools = import("../ToolEntry.ts").Tools
 
 /** What a handler knows about its tool call. */
 type CallContext = Toolkit.HandlerContext<Tools[string]>
@@ -360,7 +349,7 @@ export const make: Effect.Effect<
 			success: Schema.Json,
 			...(needsApproval === undefined ? {} : { needsApproval }),
 			// Delegated work already goes on by itself, so these calls stay in their Turn.
-		}).annotate(Operation.Budget, "foreground") as Tools[string],
+		}).annotate(Operation.Budget, "foreground"),
 		handle: (input, context) =>
 			handle(input, context).pipe(
 				// A wrong input is a mistake of the model, not a failure of OpenBot.
@@ -391,7 +380,7 @@ export const make: Effect.Effect<
 	/** Marks a tool that only reads, so plan mode keeps it. */
 	const reading = (entry: Entry): Entry => ({
 		...entry,
-		tool: entry.tool.annotate(Tool.Readonly, true) as Tools[string],
+		tool: entry.tool.annotate(Tool.Readonly, true),
 	})
 	/** Whether the memory Bot may add to the input of Turns and learn from them. */
 	const memoryOn = (chat: Chat.Ref) =>

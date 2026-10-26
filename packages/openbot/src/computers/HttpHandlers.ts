@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import {
 	type Caller,
 	ComputersApi,
@@ -175,7 +176,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 		/** The sessions of a caller, on a Computer that the caller may still use. */
 		const onSession = <A, E>(
 			computerId: string,
-			sessionId: string,
+			sessionId: ComputersApi.ConnectorSessionId,
 			use: (owner: { readonly key: string }) => Effect.Effect<A, E>,
 		) =>
 			Effect.gen(function* () {
@@ -289,7 +290,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					)
 					const computer = yield* computers.get(caller, params.computerId)
 					yield* record(caller, "computer.token_changed", computer, {})
-					return { token }
+					return { token: Redacted.make(token) }
 				}),
 			)
 			.handle("exec", ({ params, payload }) =>

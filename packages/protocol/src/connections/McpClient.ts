@@ -6,6 +6,7 @@ import {
 	Effect,
 	Equal,
 	Exit,
+	FiberSet,
 	Layer,
 	PubSub,
 	Redacted,
@@ -338,7 +339,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		// The SDK auth provider and notification handlers are Promise callbacks.
 		// When the guard fails, the Promise rejects with the typed error, the SDK
 		// stops the request, and `mapError` below gets the same typed error back.
-		const run = Effect.runPromiseWith(yield* Effect.context<never>())
+		const callbacks = yield* FiberSet.make().pipe(Scope.provide(scope))
+		const start = yield* FiberSet.runtimePromise(callbacks)<never>()
+		// Effect 4.0.6 adds runtime fibers after they start. Yield first so a
+		// callback cannot close the owner before its fiber belongs to the set.
+		const run = <A, E>(effect: Effect.Effect<A, E>) =>
+			start(Effect.andThen(Effect.yieldNow, effect))
 		const token = () =>
 			run(
 				guard().pipe(
@@ -455,7 +461,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				)
 			// The messages of a NetworkError are fixed texts of this package.
 			if (Schema.is(Network.NetworkError)(error))
-				return Effect.fail(
+				return logged(
+					error,
 					ClientError.make({
 						reason: "Network",
 						issue: error.message,

@@ -1,3 +1,5 @@
+import { ConnectionsApi } from "@openbot-build/api"
+import { unconverted } from "./AppResults.ts"
 import { AppExecution, AppViewsApi } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
 import {
@@ -177,7 +179,9 @@ const bindingsFor = (
 			name: string,
 			definition: Schema.Json,
 		): AppExecution.Source => ({
-			connectionId: stored.connection.connectionId,
+			connectionId: ConnectionsApi.ConnectionId.make(
+				stored.connection.connectionId,
+			),
 			connectionName: stored.name,
 			cardUrl: stored.connection.cardUrl,
 			appName: app.card.title ?? app.card.name,
@@ -463,7 +467,13 @@ export const prepare = (
 					}),
 			})
 			const result = yield* services.capabilities
-				.open({ owner, connectionId: stored.connection.connectionId, policy })
+				.open({
+					owner,
+					connectionId: ConnectionsApi.ConnectionId.make(
+						stored.connection.connectionId,
+					),
+					policy,
+				})
 				.pipe(
 					Effect.flatMap((opened) =>
 						bindingsFor(
@@ -484,7 +494,9 @@ export const prepare = (
 							Cause.fail(failure),
 						).pipe(
 							Effect.annotateLogs({
-								connectionId: stored.connection.connectionId,
+								connectionId: ConnectionsApi.ConnectionId.make(
+									stored.connection.connectionId,
+								),
 							}),
 						),
 					),
@@ -570,22 +582,6 @@ export const decide = (
 			),
 		),
 	)
-
-/** Ends a call as Failed when its failure could not become a result. It logs that failure. */
-const unconverted =
-	(source: AppExecution.Source, message: string) =>
-	(error: Schema.SchemaError) =>
-		Effect.logWarning(
-			"An App failure could not be turned into a result.",
-			Cause.fail(error),
-		).pipe(
-			Effect.as({
-				_tag: "Failed",
-				source,
-				reason: "SchemaError",
-				message,
-			} as const),
-		)
 
 /** Sends an approved App call and records it as an App operation. */
 export const execute = (

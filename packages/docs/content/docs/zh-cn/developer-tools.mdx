@@ -195,6 +195,11 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
 
 ---
 
+OAuth 测试会保留授权被拒绝的原因，例如 `FlowExpired` 或
+`CallbackMismatch`。连接不可用时，原因是
+`ConnectionUnavailable`。测试记录不存在时，返回
+`404 DeveloperNotFound`。网络或存储故障返回 `503 DeveloperUnavailable`。
+
 ## 请求收录
 
 你不必等用户来连接你的 App。可以让 OpenBot 检查它：

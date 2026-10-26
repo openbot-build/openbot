@@ -311,7 +311,7 @@ export const make = Effect.gen(function* () {
 					clientId: input.clientId,
 					...(input.clientSecret === undefined
 						? { clientSecret: null, clientSecretHint: null }
-						: yield* sealSecret(id, input.clientSecret)),
+						: yield* sealSecret(id, Redacted.value(input.clientSecret))),
 					domains: yield* encodeDomains(input.domains),
 					enforce: input.enforce,
 					version: 1,
@@ -350,7 +350,7 @@ export const make = Effect.gen(function* () {
 						? {}
 						: patch.clientSecret === null
 							? { clientSecret: null, clientSecretHint: null }
-							: yield* sealSecret(id, patch.clientSecret)
+							: yield* sealSecret(id, Redacted.value(patch.clientSecret))
 				const [updated] = yield* db
 					.update(ssoConnections)
 					.set({

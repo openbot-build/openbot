@@ -78,6 +78,7 @@ export {
 	ChatStorageUnavailable,
 	UpdateChatRequest,
 	InterruptChatRequest,
+	todoProblem,
 	Todo,
 	TodoStatus,
 	ChatTodos,

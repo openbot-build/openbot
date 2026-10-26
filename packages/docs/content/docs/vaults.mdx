@@ -54,6 +54,11 @@ notes tool.
 
 ---
 
+A provider that is still used returns `409 SecretProviderInUse` when you try to
+delete it. A provider check returns `400 SecretProviderInvalid` for wrong
+credentials or missing fields. A network failure or a temporary provider failure
+returns `502 SecretProviderFailed`.
+
 ## Add a secret provider
 
 A secret provider is only needed for secrets that are kept outside OpenBot.

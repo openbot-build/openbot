@@ -1,16 +1,5 @@
 import { Settings as Api } from "@openbot-build/api"
-import { DateTime, Effect, Option, Schema, String as Str } from "effect"
-
-export const Timestamp = Schema.String.check(
-	Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/),
-	Schema.makeFilter((value) =>
-		Option.exists(
-			DateTime.make(value),
-			(date) =>
-				Str.slice(0, 19)(DateTime.formatIso(date)) === Str.slice(0, 19)(value),
-		),
-	),
-)
+import { Effect, Schema, String as Str } from "effect"
 
 export const Credential = Schema.Redacted(Schema.NonEmptyString)
 const SharedConfiguration = Schema.Struct({
@@ -60,32 +49,12 @@ export const Configuration = Schema.Union([
 	NoProviderConfiguration,
 ])
 export type Configuration = typeof Configuration.Encoded
-export const Profile = Schema.Struct({
-	name: Schema.optional(Schema.String),
-	email: Schema.optional(Schema.String),
-	emailVerified: Schema.optional(Schema.Boolean),
-})
-export type Profile = typeof Profile.Type
-export const Membership = Schema.Struct({
-	organizationId: Schema.String,
-	name: Schema.String,
-	status: Schema.Literals(["active", "suspended"]),
-	roles: Schema.Array(Schema.String),
-})
-/** A signed-in account, its organizations, and whether it is a platform admin. */
-export const SessionInfo = Schema.Struct({
-	userId: Schema.NonEmptyString,
-	profile: Profile,
-	memberships: Schema.Array(Membership),
-	platformAdmin: Schema.Boolean,
-	expiresAt: Timestamp,
-})
-export type SessionInfo = typeof SessionInfo.Type
 export class AuthConfigurationError extends Schema.TaggedError<
 	AuthConfigurationError,
 	{ readonly brand: unique symbol }
 >()("AuthConfigurationError", {
 	field: Schema.Literals(["configuration", "publicOrigin"]),
+	cause: Schema.optional(Schema.Defect()),
 }) {}
 /**
  * Sign-in cannot work now. `settings` means that OpenBot cannot read the
@@ -95,7 +64,7 @@ export class AuthUnavailable extends Schema.TaggedError<
 	AuthUnavailable,
 	{ readonly brand: unique symbol }
 >()("AuthUnavailable", {
-	dependency: Schema.Literals(["provider", "storage", "crypto", "settings"]),
+	dependency: Schema.Literals(["provider", "storage", "settings"]),
 }) {}
 export class CredentialRejected extends Schema.TaggedError<
 	CredentialRejected,

@@ -82,7 +82,7 @@ export const withCookie =
 export const withToken =
 	(address: string) =>
 	(
-		secret: string,
+		secret: string | Redacted.Redacted<string>,
 		path: string,
 		method: HttpMethod.HttpMethod = "GET",
 		payload?: unknown,

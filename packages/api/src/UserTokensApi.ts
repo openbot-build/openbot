@@ -1,3 +1,6 @@
+import { TokenId } from "./TokenId.ts"
+export { TokenId } from "./TokenId.ts"
+import { SecretOutput } from "./Secret.ts"
 import { Schema, String as Str } from "effect"
 import {
 	HttpApiEndpoint,
@@ -23,8 +26,9 @@ export const TokenName = Schema.String.check(
 		)
 	}),
 )
+
 export const Token = Schema.Struct({
-	id: Schema.String,
+	id: TokenId,
 	name: Schema.String,
 	/** The first characters of the secret. They help people spot a token without showing it. */
 	prefix: Schema.String,
@@ -48,7 +52,7 @@ export type CreateTokenRequest = typeof CreateTokenRequest.Type
 export const CreatedToken = Schema.Struct({
 	token: Token,
 	/** Returned only once. OpenBot stores a hash of it. */
-	secret: Schema.String,
+	secret: SecretOutput,
 })
 export type CreatedToken = typeof CreatedToken.Type
 export const TokenVerification = Schema.Struct({
@@ -91,7 +95,7 @@ export const UserTokensApi = HttpApiGroup.make("userTokens")
 			"revokeToken",
 			`${UserTokensPath}/:tokenId` as const,
 			{
-				params: { tokenId: Schema.String },
+				params: { tokenId: TokenId },
 				success: HttpApiSchema.NoContent,
 				error: [...errors, TokenNotFound.pipe(HttpApiSchema.status(404))],
 			},

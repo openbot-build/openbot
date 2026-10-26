@@ -162,7 +162,9 @@ layer(home, { excludeTestServices: true })((it) => {
 				encoding: "utf8",
 			})
 			assert.strictEqual(reply.id, "call-1")
-			assert.strictEqual(reply.result._tag, "Failed")
+			if (reply.result._tag !== "Failed")
+				return assert.fail("A missing file must fail.")
+			assert.strictEqual(reply.result.reason, "NotFound")
 		}),
 	)
 
@@ -172,6 +174,7 @@ layer(home, { excludeTestServices: true })((it) => {
 			if (reply.result._tag !== "Failed")
 				return assert.fail("A Read of a folder must fail.")
 			assert.match(reply.result.message, /EISDIR/)
+			assert.strictEqual(reply.result.reason, "Failed")
 		}),
 	)
 
@@ -184,6 +187,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				const reply = yield* call(operation)
 				assert.deepStrictEqual(reply.result, {
 					_tag: "Failed",
+					reason: "Failed",
 					message: "This machine has no desktop.",
 				})
 			}

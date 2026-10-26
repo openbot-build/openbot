@@ -141,5 +141,3 @@ export type RuntimeServices<
 	Tools extends Record<string, Tool.Any>,
 	R = never,
 > = Exclude<Requirements<Tools, R | Tool.HandlersFor<Tools>>, Context>
-export type ActionServices<Tools extends Record<string, Tool.Any>, R = never> =
-	R | Exclude<RuntimeServices<Tools>, LanguageModel.LanguageModel>

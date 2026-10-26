@@ -1,8 +1,10 @@
+import { TestClock } from "effect/testing"
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
 	Deferred,
 	Effect,
+	Exit,
 	Fiber,
 	Option,
 	Order,
@@ -305,7 +307,7 @@ it.effect(
 				definition,
 				persistence: yield* MemoryPersistence.make,
 			})
-			const runtime = yield* ChatRuntime.make({ store, bot: {} })
+
 			const entered = yield* Deferred.make<void>()
 			const model = yield* LanguageModel.make({
 				generateText: () => Effect.succeed([]),
@@ -314,6 +316,9 @@ it.effect(
 						Stream.flatMap(() => Stream.never),
 					),
 			})
+			const runtime = yield* ChatRuntime.make({ store, bot: {} }).pipe(
+				Effect.provideService(LanguageModel.LanguageModel, model),
+			)
 			const first = yield* store.create({})
 			const fiber = yield* Effect.forkChild(
 				runtime
@@ -476,3 +481,75 @@ it.effect(
 			assert.deepStrictEqual(yield* store.read(view.chat.id), view)
 		}),
 )
+
+for (const explicit of [false, true]) {
+	it.effect(
+		`a write conflict ${explicit ? "keeps the given revision" : "reads the latest state and tries again"}`,
+		() =>
+			Effect.gen(function* () {
+				const definition = yield* define
+				const persistence = yield* MemoryPersistence.make
+				const other = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
+				})
+				const view = yield* other.create({})
+				let attempts = 0
+				const store = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
+					onCommit: ({ delta }) =>
+						Effect.gen(function* () {
+							attempts++
+							if (attempts === 1)
+								yield* other
+									.modifyEffect({
+										chat: view.chat.id,
+										update: (current) =>
+											Effect.succeed([
+												undefined,
+												Option.some({
+													chat: {
+														business: {
+															...current.chat.business,
+															concurrent: true,
+														},
+													},
+												}),
+											] as const),
+									})
+									.pipe(Effect.orDie)
+							yield* persistence.save(delta)
+						}),
+				})
+				const update = store.modifyEffect({
+					chat: view.chat.id,
+					...(explicit ? { expectedRevision: view.chat.revision } : {}),
+					update: (current) =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								chat: { business: { ...current.chat.business, local: true } },
+							}),
+						] as const),
+				})
+				const fiber = yield* Effect.forkChild(Effect.exit(update))
+				yield* TestClock.adjust("5 seconds")
+				const result = yield* Fiber.join(fiber)
+				assert.strictEqual(attempts, explicit ? 1 : 2)
+				if (explicit) {
+					assert.ok(Exit.isFailure(result))
+					assert.strictEqual(
+						(yield* other.read(view.chat.id)).chat.business["local"],
+						undefined,
+					)
+				} else {
+					assert.ok(Exit.isSuccess(result))
+					assert.deepStrictEqual(result.value.view.chat.business, {
+						concurrent: true,
+						local: true,
+					})
+				}
+			}),
+	)
+}

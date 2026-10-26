@@ -181,6 +181,11 @@ Publishers can also ask for a check from the
 
 ---
 
+A check has four minutes to finish. OpenBot writes its result only while the
+worker still owns the job. A late result from an old worker cannot replace the
+current entry. Reading the source list returns `503 SettingsUnavailable` when
+OpenBot cannot read the platform settings.
+
 ## Publisher withdrawal and noindex
 
 A publisher controls whether their App is in the Index:

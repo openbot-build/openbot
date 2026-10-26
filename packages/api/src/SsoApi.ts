@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Schema, SchemaTransformation } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -85,22 +85,38 @@ export type UpdateSsoConnectionRequest = typeof UpdateSsoConnectionRequest.Type
 export class DomainNotFound extends Schema.TaggedError<
 	DomainNotFound,
 	{ readonly brand: unique symbol }
->()("DomainNotFound", { domain: Schema.String }) {}
+>()("DomainNotFound", {
+	domain: Schema.String.pipe(
+		Schema.decodeTo(EmailDomain, SchemaTransformation.toLowerCase()),
+	),
+}) {}
 /** Another organization already verified this domain. */
 export class DomainTaken extends Schema.TaggedError<
 	DomainTaken,
 	{ readonly brand: unique symbol }
->()("DomainTaken", { domain: Schema.String }) {}
+>()("DomainTaken", {
+	domain: Schema.String.pipe(
+		Schema.decodeTo(EmailDomain, SchemaTransformation.toLowerCase()),
+	),
+}) {}
 /** OpenBot did not find the TXT record. DNS changes can take some time. */
 export class DomainNotVerified extends Schema.TaggedError<
 	DomainNotVerified,
 	{ readonly brand: unique symbol }
->()("DomainNotVerified", { domain: Schema.String }) {}
+>()("DomainNotVerified", {
+	domain: Schema.String.pipe(
+		Schema.decodeTo(EmailDomain, SchemaTransformation.toLowerCase()),
+	),
+}) {}
 /** An SSO connection still uses the domain. */
 export class DomainInUse extends Schema.TaggedError<
 	DomainInUse,
 	{ readonly brand: unique symbol }
->()("DomainInUse", { domain: Schema.String }) {}
+>()("DomainInUse", {
+	domain: Schema.String.pipe(
+		Schema.decodeTo(EmailDomain, SchemaTransformation.toLowerCase()),
+	),
+}) {}
 export class SsoConnectionNotFound extends Schema.TaggedError<
 	SsoConnectionNotFound,
 	{ readonly brand: unique symbol }
@@ -130,7 +146,11 @@ const errors = [
 	SsoUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 
-const DomainParams = { domain: Schema.String }
+const DomainParams = {
+	domain: Schema.String.pipe(
+		Schema.decodeTo(EmailDomain, SchemaTransformation.toLowerCase()),
+	),
+}
 const ConnectionParams = { connectionId: Schema.String }
 
 export class SsoApi extends HttpApiGroup.make("sso").add(

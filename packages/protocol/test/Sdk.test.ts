@@ -1,8 +1,20 @@
 import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
-import { Array as Arr, Effect, Schema, Stream, String as Str } from "effect"
+import {
+	Array as Arr,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Ref,
+	Schema,
+	Scope,
+	Stream,
+	String as Str,
+} from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 // Sdk is not a public entry point, so this file uses the source modules.
+import * as OAuthAuthorization from "../src/connections/OAuthAuthorization.ts"
 import * as HttpNetwork from "../src/network/HttpNetwork.ts"
 import * as Network from "../src/network/Network.ts"
 import * as Sdk from "../src/network/Sdk.ts"
@@ -115,4 +127,90 @@ it.live(
 				),
 			)
 		}).pipe(Effect.provide(NodeServices.layer)),
+)
+
+it.effect(
+	"the SDK owner stops a request that has not returned its headers",
+	() =>
+		Effect.gen(function* () {
+			const owner = yield* Scope.fork(yield* Effect.scope)
+			const started = yield* Deferred.make<void>()
+			const stopped = yield* Ref.make(false)
+			const request = Deferred.succeed(started, undefined).pipe(
+				Effect.andThen(Effect.never),
+				Effect.ensuring(Ref.set(stopped, true)),
+			)
+			const fetch = yield* Sdk.fetch().pipe(
+				Scope.provide(owner),
+				Effect.provideService(Network.Network, {
+					identity: { scope: "user", owner: "alice" },
+					execute: () => request,
+					readDocument: () => request,
+				}),
+			)
+			const pending = yield* Effect.tryPromise(() =>
+				fetch("https://example.test/mcp"),
+			).pipe(Effect.forkScoped)
+			yield* Deferred.await(started)
+			yield* Scope.close(owner, Exit.void)
+			assert.isTrue(yield* Ref.get(stopped))
+			assert.isTrue(Exit.isFailure(yield* Fiber.await(pending)))
+		}),
+)
+
+it.effect("OAuth discovery keeps a network failure as a network failure", () =>
+	Effect.gen(function* () {
+		const failure = Network.NetworkError.make({
+			reason: "BlockedTarget",
+			message: "The target is blocked.",
+		})
+		const error = yield* OAuthAuthorization.discoverResource({
+			resource: "https://example.test/mcp",
+		}).pipe(
+			Effect.provideService(Network.Network, {
+				identity: { scope: "user", owner: "alice" },
+				execute: () => Effect.fail(failure),
+				readDocument: () => Effect.fail(failure),
+			}),
+			Effect.flip,
+		)
+		assert.strictEqual(error, failure)
+	}),
+)
+
+it.effect("the SDK owner stops a response body that has not ended", () =>
+	Effect.gen(function* () {
+		const owner = yield* Scope.fork(yield* Effect.scope)
+		const started = yield* Deferred.make<void>()
+		const stopped = yield* Ref.make(false)
+		const fetch = yield* Sdk.fetch().pipe(
+			Scope.provide(owner),
+			Effect.provideService(Network.Network, {
+				identity: { scope: "user", owner: "alice" },
+				readDocument: () => Effect.die("This request reads a stream."),
+				execute: (request) =>
+					Effect.succeed({
+						url: request.url,
+						status: 200,
+						headers: {},
+						body: Stream.fromEffectDrain(
+							Deferred.succeed(started, undefined),
+						).pipe(
+							Stream.concat(Stream.never),
+							Stream.ensuring(Ref.set(stopped, true)),
+						),
+					}),
+			}),
+		)
+		const response = yield* Effect.promise(() =>
+			fetch("https://example.test/mcp"),
+		)
+		const reading = yield* Effect.tryPromise(() => response.text()).pipe(
+			Effect.forkScoped,
+		)
+		yield* Deferred.await(started)
+		yield* Scope.close(owner, Exit.void)
+		yield* Fiber.await(reading)
+		assert.isTrue(yield* Ref.get(stopped))
+	}),
 )

@@ -123,6 +123,10 @@ curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
 
 ---
 
+刷新 App 声明失败时，API 会保留发现错误，包括网络和文档错误。结果无法读取为 JSON 时，原因是
+`SchemaError`。读取 OAuth 客户端元数据时，如果无法读取平台设置，会返回
+`503 SettingsUnavailable`。
+
 ## 登录 App 账号
 
 有些 App 需要用户自己的账号。OpenBot 为此使用带 PKCE 的 OAuth。用户在 App 的提供方登录，而不是在 OpenBot 登录。

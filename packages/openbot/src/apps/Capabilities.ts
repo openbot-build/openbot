@@ -1,12 +1,6 @@
+import { CatalogDiscovery } from "@openbot-build/protocol"
 import { ConnectionsApi as Api } from "@openbot-build/api"
-import {
-	App,
-	Client,
-	Discovery,
-	Document,
-	Store,
-	Ui,
-} from "@openbot-build/protocol"
+import { App, Client, Discovery, Store, Ui } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Context,
@@ -187,7 +181,7 @@ export const make: Effect.Effect<
 	const governance = yield* Governance
 	const discovery = yield* Discovery.Discovery
 	const scopes = yield* App.ConnectionScopes
-	const sameRemote = Schema.toEquivalence(Schema.UndefinedOr(Document.Remote))
+	const sameRemote = CatalogDiscovery.sameConnection
 	return Capabilities.of({
 		open: Effect.fn("Apps.openCapabilities")(function* (input) {
 			const stored = yield* StoredConnections.get(

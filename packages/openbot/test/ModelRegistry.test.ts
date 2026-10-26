@@ -36,7 +36,13 @@ const provider: Stored = {
 	endpoint: null,
 	apiKey: "sealed",
 	apiKeyHint: null,
-	models: [{ model: "talk", modelOwner: "organization", upstream: "talk-1" }],
+	models: [
+		{
+			model: Model.Id.make("talk"),
+			modelOwner: "organization",
+			upstream: "talk-1",
+		},
+	],
 	availability: null,
 	version: 1,
 	createdAt: 1,
@@ -201,7 +207,11 @@ describe("The model registry", () => {
 				kind: "typesafe",
 				endpoint: "https://decisions.example.com/v1",
 				models: [
-					{ model: "jev", modelOwner: "organization", upstream: "jev-latest" },
+					{
+						model: Model.Id.make("jev"),
+						modelOwner: "organization",
+						upstream: "jev-latest",
+					},
 				],
 				version,
 			})

@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import {
 	BotsApi,
+	DelegationsApi,
 	ChatConflict,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
@@ -45,7 +46,7 @@ const work = (
 		? {}
 		: { window: { timeMs: input.window, steps: 0, costMicros: 0 } }),
 	delegation: {
-		id: "dlg_1",
+		id: DelegationsApi.DelegationId.make("dlg_1"),
 		parent: { chat: Chat.Id.make("chat_parent") },
 		bot: BotsApi.BotId.make("bot_1"),
 		chat: Chat.Id.make("chat_task"),

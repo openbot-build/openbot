@@ -5,14 +5,7 @@ import {
 	type OrganizationApi,
 	SsoApi,
 } from "@openbot-build/api"
-import {
-	Array as Arr,
-	DateTime,
-	Effect,
-	Option,
-	String as Str,
-	Struct,
-} from "effect"
+import { Array as Arr, DateTime, Effect, Option, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "../app/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
@@ -94,7 +87,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "sso", (handlers) =>
 					const caller = yield* Identity
 					const domain = yield* sso.verifyDomain(
 						caller.organizationId,
-						Str.toLowerCase(params.domain),
+						params.domain,
 					)
 					yield* record(caller, "domain.verified", { domain: domain.domain })
 					return domain
@@ -103,10 +96,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "sso", (handlers) =>
 			.handle("removeDomain", ({ params }) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
-					yield* sso.removeDomain(
-						caller.organizationId,
-						Str.toLowerCase(params.domain),
-					)
+					yield* sso.removeDomain(caller.organizationId, params.domain)
 					yield* record(caller, "domain.removed", { domain: params.domain })
 				}),
 			)

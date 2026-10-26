@@ -1,5 +1,11 @@
 import { Chat, type Plugin, type Turn } from "@openbot-build/core"
-import { BotsApi, ChatKind, ChatParent, PlanApproval } from "@openbot-build/api"
+import {
+	BotsApi,
+	ChatKind,
+	ChatParent,
+	PlanApproval,
+	UserTokensApi,
+} from "@openbot-build/api"
 import type * as Todos from "../plugins/work/Todos.ts"
 import { Option, Schema, String as Str } from "effect"
 
@@ -19,7 +25,7 @@ export const Chain = Schema.Struct({
 	organizationId: Schema.String,
 	userId: Schema.String,
 	/** The token that started the work, when a token did. The work never does more than it may. */
-	tokenId: Schema.optionalKey(Schema.String),
+	tokenId: Schema.optionalKey(UserTokensApi.TokenId),
 	/**
 	 * The member whose Chats hold the work, when it is not `userId`. In a chat Channel,
 	 * the Chats belong to the actor of the Channel, and each Turn works for its speaker.
@@ -88,12 +94,12 @@ export const authorOf = (userId: string, tokenId?: string): Turn.Author =>
 /** The member and the token of an author. */
 export const parseAuthor = (
 	author: Turn.Author,
-): { readonly userId: string; readonly tokenId?: string } =>
+): { readonly userId: string; readonly tokenId?: UserTokensApi.TokenId } =>
 	Option.match(Str.indexOf("#")(author), {
 		onNone: () => ({ userId: author }),
 		onSome: (at) => ({
 			userId: Str.slice(0, at)(author),
-			tokenId: Str.slice(at + 1)(author),
+			tokenId: UserTokensApi.TokenId.make(Str.slice(at + 1)(author)),
 		}),
 	})
 

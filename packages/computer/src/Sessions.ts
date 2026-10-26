@@ -273,7 +273,9 @@ export const make = <E>(
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
-		const running = yield* Ref.make(HashMap.empty<string, Process>())
+		const running = yield* Ref.make(
+			HashMap.empty<ComputersApi.ConnectorSessionId, Process>(),
+		)
 		// Node gives output in callbacks. The callbacks put messages in this queue,
 		// and one fiber sends them in order. The queue has no fixed size, because an
 		// `Exit` must always go in. The commands pause in its place.
@@ -344,7 +346,7 @@ export const make = <E>(
 			),
 		)
 
-		const sinkFor = (session: string): Sink => {
+		const sinkFor = (session: ComputersApi.ConnectorSessionId): Sink => {
 			let seq = 0
 			return {
 				output: (bytes) => {
@@ -421,7 +423,7 @@ export const make = <E>(
 		})
 
 		const withSession = (
-			session: string,
+			session: ComputersApi.ConnectorSessionId,
 			use: (child: Process) => void,
 		): Effect.Effect<void> =>
 			Ref.get(running).pipe(

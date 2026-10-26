@@ -9,7 +9,7 @@ import {
 	Record as Rec,
 } from "effect"
 import { dual } from "effect/Function"
-import type { Chat, Item, Turn } from "@openbot-build/core"
+import type { Chat, Item, Operation, Turn } from "@openbot-build/core"
 import {
 	ChatNotFound,
 	ChatStorageUnavailable,
@@ -20,7 +20,7 @@ import {
 import { Prompt, type Response } from "effect/ai"
 import type { ServiceError } from "./Chats.ts"
 
-type Failure = Chat.RuntimeError | ServiceError
+type Failure = Chat.RuntimeError | ServiceError | Operation.StoreError
 
 const conflict = (error: { readonly message: string }) =>
 	ChatConflict.make({ message: error.message })
@@ -38,6 +38,7 @@ const publicError = (error: Failure): ServiceError =>
 		Match.tag("ChatNotFound", (error) =>
 			ChatNotFound.make({ chat: error.chat }),
 		),
+		Match.tag("OperationStoreError", () => ChatStorageUnavailable.make({})),
 		Match.tag("ChatStoreError", (error) =>
 			error.reason === "reference-conflict"
 				? conflict(error)

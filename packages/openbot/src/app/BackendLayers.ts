@@ -174,8 +174,8 @@ export const layer = (options: Options = {}) =>
 					todos: (id) => use((chats) => chats.todos(id)),
 					updateTodos: (id, input) =>
 						use((chats) => chats.updateTodos(id, input)),
-					wait: (id, after, timeoutMs, afterActivity) =>
-						use((chats) => chats.wait(id, after, timeoutMs, afterActivity)),
+					wait: (id, after, timeout, afterActivity) =>
+						use((chats) => chats.wait(id, after, timeout, afterActivity)),
 					interrupt: (id) => use((chats) => chats.interrupt(id)),
 					deliver: (id, input) => use((chats) => chats.deliver(id, input)),
 					// The live events run as long as the scope of the caller, so the

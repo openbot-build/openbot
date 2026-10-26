@@ -45,6 +45,12 @@ one. You cannot delete a provider while Computers use it.
 
 ---
 
+A file call returns `404 ComputerPathNotFound` when the path does not exist.
+Other provider failures keep `502 ComputerProviderFailed`. Deleting a provider
+that still has Computers returns `409 ComputerProviderInUse`. Connectors use
+protocol version 3. A failed reply has `reason: "NotFound"` for a missing path
+and `reason: "Failed"` for other failures.
+
 ## Create and use a Computer
 
 ```sh

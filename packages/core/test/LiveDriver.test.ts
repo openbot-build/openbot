@@ -46,7 +46,9 @@ const said = (itemId: string, text: string) => [
 it.effect("a Turn answers through the Live connection", () =>
 	Effect.gen(function* () {
 		const { driver, inputs } = yield* scripted([said("answer_1", "Hello")])
-		const { runtime, chat } = yield* ChatTest()
+		const { runtime, chat } = yield* ChatTest().pipe(
+			Effect.provideService(LanguageModel.LanguageModel, driver.model),
+		)
 		const view = yield* runtime
 			.execute({ chat, input: "Hi" })
 			.pipe(Effect.provideService(LanguageModel.LanguageModel, driver.model))
@@ -67,7 +69,9 @@ it.effect("text that the person said is not sent again", () =>
 			said("answer_1", "One"),
 			said("answer_2", "Two"),
 		])
-		const { runtime, chat } = yield* ChatTest()
+		const { runtime, chat } = yield* ChatTest().pipe(
+			Effect.provideService(LanguageModel.LanguageModel, driver.model),
+		)
 		const provide = Effect.provideService(
 			LanguageModel.LanguageModel,
 			driver.model,
@@ -100,7 +104,9 @@ it.effect("a tool call runs in OpenBot and its result goes back", () => {
 			],
 			said("answer_2", "The sun is a star."),
 		])
-		const { runtime, chat } = yield* ChatTest({ toolkit })
+		const { runtime, chat } = yield* ChatTest({ toolkit }).pipe(
+			Effect.provideService(LanguageModel.LanguageModel, driver.model),
+		)
 		const view = yield* runtime
 			.execute({ chat, input: "What is the sun?" })
 			.pipe(Effect.provideService(LanguageModel.LanguageModel, driver.model))
@@ -140,7 +146,9 @@ it.effect("a failure of the connection fails the Turn", () =>
 				}),
 			],
 		])
-		const { runtime, chat } = yield* ChatTest()
+		const { runtime, chat } = yield* ChatTest().pipe(
+			Effect.provideService(LanguageModel.LanguageModel, driver.model),
+		)
 		const error = yield* runtime
 			.execute({ chat, input: "Hi" })
 			.pipe(
@@ -157,33 +165,26 @@ it.effect("a failure of the connection fails the Turn", () =>
 	}),
 )
 
-it("unsupported inputs are found from the capabilities", () => {
-	const capabilities: Live.Capabilities = {
-		audio: { input: [base.audio.input], output: [base.audio.output] },
-		turnDetection: ["server"],
-		inputTranscription: true,
-		tools: true,
-		interruption: true,
-		truncate: false,
-		inputs: { text: true, image: false },
-		voices: [],
-	}
-	assert.strictEqual(
-		Live.unsupported(capabilities, Live.Input.Text({ text: "Hi" })),
-		undefined,
-	)
-	assert.strictEqual(
-		Live.unsupported(
-			capabilities,
+it.effect("unsupported inputs are found from the capabilities", () =>
+	Effect.gen(function* () {
+		const capabilities: Live.Capabilities = {
+			audio: { input: [base.audio.input], output: [base.audio.output] },
+			turnDetection: ["server"],
+			inputTranscription: true,
+			tools: true,
+			interruption: true,
+			truncate: false,
+			inputs: { text: true, image: false },
+			voices: [],
+		}
+		yield* Live.check(capabilities, Live.Input.Text({ text: "Hi" }))
+		for (const input of [
 			Live.Input.Image({ mediaType: "image/png", bytes: new Uint8Array() }),
-		)?.reason,
-		"unsupported",
-	)
-	assert.ok(Live.unsupported(capabilities, Live.Input.Commit()))
-	assert.ok(
-		Live.unsupported(
-			capabilities,
+			Live.Input.Commit(),
 			Live.Input.Truncate({ itemId: "a", audioEndMs: 10 }),
-		),
-	)
-})
+		]) {
+			const error = yield* Live.check(capabilities, input).pipe(Effect.flip)
+			assert.strictEqual(error.reason, "unsupported")
+		}
+	}),
+)

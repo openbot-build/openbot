@@ -212,6 +212,7 @@ export const connect = (options: {
 											id: message.call.id,
 											result: {
 												_tag: "Failed",
+												reason: "Failed",
 												message:
 													"The connector could not do the call. Its log has the details.",
 											},

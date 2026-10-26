@@ -45,7 +45,7 @@ export class SessionGone extends Schema.TaggedError<
 	SessionGone,
 	{ readonly brand: unique symbol }
 >()("SessionGone", {
-	id: Schema.String,
+	id: ComputersApi.ConnectorSessionId,
 }) {}
 
 /** A session ends when nobody reads it or writes to it for this long. */
@@ -58,7 +58,7 @@ export const channel = "openbot_computer_sessions_calls"
 const rowPrefix = "session:"
 
 interface Session {
-	readonly id: string
+	readonly id: ComputersApi.ConnectorSessionId
 	readonly owner: Owner
 	readonly process: Process
 	readonly scope: Scope.Closeable
@@ -103,7 +103,7 @@ const SessionCall = Schema.TaggedUnion({
 })
 type SessionCall = typeof SessionCall.Type
 const CallRow = Schema.Struct({
-	session: Schema.String,
+	session: ComputersApi.ConnectorSessionId,
 	owner: Schema.Struct({
 		key: Schema.String,
 		chat: Schema.optionalKey(Chat.Id),
@@ -185,17 +185,17 @@ export class Sessions extends Context.Service<
 		}) => Effect.Effect<ComputersApi.SessionOutput, ComputerError>
 		readonly write: (
 			owner: Owner,
-			id: string,
+			id: ComputersApi.ConnectorSessionId,
 			request: ComputersApi.WriteStdinRequest,
 		) => Effect.Effect<ComputersApi.SessionOutput, ComputerError | SessionGone>
 		readonly resize: (
 			owner: Owner,
-			id: string,
+			id: ComputersApi.ConnectorSessionId,
 			request: ComputersApi.ResizeRequest,
 		) => Effect.Effect<void, ComputerError | SessionGone>
 		readonly close: (
 			owner: Owner,
-			id: string,
+			id: ComputersApi.ConnectorSessionId,
 		) => Effect.Effect<ComputersApi.SessionOutput, ComputerError | SessionGone>
 	}
 >()("@openbot-build/openbot/computers/Sessions") {}
@@ -206,7 +206,9 @@ export const make = Effect.gen(function* () {
 	// OpenBot needs secure random numbers to run, so a failure here is a defect.
 	const newUuid = crypto.randomUUIDv4().pipe(Effect.orDie)
 	const scope = yield* Scope.Scope
-	const sessions = yield* Ref.make(HashMap.empty<string, Session>())
+	const sessions = yield* Ref.make(
+		HashMap.empty<ComputersApi.ConnectorSessionId, Session>(),
+	)
 	const calls = yield* InstanceCalls.make(channel)
 
 	const remove = (session: Session) =>
@@ -295,7 +297,9 @@ export const make = Effect.gen(function* () {
 						),
 					)
 					const session: Session = {
-						id: "cse_" + pipe(yield* newUuid, Str.replaceAll("-", "")),
+						id: ComputersApi.ConnectorSessionId.make(
+							"cse_" + pipe(yield* newUuid, Str.replaceAll("-", "")),
+						),
 						owner,
 						process,
 						scope: sessionScope,
@@ -332,7 +336,9 @@ export const make = Effect.gen(function* () {
 					yield* idle.pipe(
 						Effect.delay(Duration.minutes(1)),
 						Effect.repeat({ until: (ended) => ended }),
-						Effect.andThen(process.signal("SIGKILL").pipe(Effect.ignore)),
+						Effect.andThen(
+							process.signal("SIGKILL").pipe(Effect.ignore({ log: "Debug" })),
+						),
 						Effect.andThen(remove(session)),
 						Effect.forkIn(sessionScope),
 					)
@@ -347,7 +353,7 @@ export const make = Effect.gen(function* () {
 		})
 
 	/** The session on this instance, when the owner may use it. */
-	const own = (owner: Owner, id: string) =>
+	const own = (owner: Owner, id: ComputersApi.ConnectorSessionId) =>
 		Ref.get(sessions).pipe(
 			Effect.map((all) =>
 				HashMap.get(all, id).pipe(
@@ -377,12 +383,16 @@ export const make = Effect.gen(function* () {
 					yield* session.process.resize(call.request.rows, call.request.cols)
 					return null
 				case "Close": {
-					yield* session.process.signal("SIGTERM").pipe(Effect.ignore)
+					yield* session.process
+						.signal("SIGTERM")
+						.pipe(Effect.ignore({ log: "Debug" }))
 					const stopped = yield* Deferred.await(session.ended).pipe(
 						Effect.timeoutOption("5 seconds"),
 					)
 					if (Option.isNone(stopped))
-						yield* session.process.signal("SIGKILL").pipe(Effect.ignore)
+						yield* session.process
+							.signal("SIGKILL")
+							.pipe(Effect.ignore({ log: "Debug" }))
 					return yield* read(session, 2000, ComputersApi.maxOutputBytesDefault)
 				}
 			}
@@ -391,7 +401,7 @@ export const make = Effect.gen(function* () {
 	/** Sends a call to the instance with the session, and waits for its reply. */
 	const callRemote = (
 		owner: Owner,
-		id: string,
+		id: ComputersApi.ConnectorSessionId,
 		call: SessionCall,
 		wait: Duration.Input,
 	) =>
@@ -434,7 +444,9 @@ export const make = Effect.gen(function* () {
 			// Every instance gets every call, so only the instance with the session reads it.
 			const found = HashMap.get(
 				yield* Ref.get(sessions),
-				pipe(row.value.computerId, Str.slice(rowPrefix.length)),
+				yield* Schema.decodeEffect(ComputersApi.ConnectorSessionId)(
+					pipe(row.value.computerId, Str.slice(rowPrefix.length)),
+				),
 			)
 			if (Option.isNone(found)) return
 			const { owner, call } = yield* decodeRow(row.value.call)
@@ -446,8 +458,7 @@ export const make = Effect.gen(function* () {
 						Effect.catch((error) =>
 							Effect.succeed({
 								_tag: "Failed" as const,
-								message:
-									error._tag === "ComputerGone" ? error.reason : error.message,
+								message: error.message,
 							}),
 						),
 					)
@@ -487,7 +498,7 @@ export const make = Effect.gen(function* () {
 	/** Does a call where the session is: here, or on another instance. */
 	const route = (
 		owner: Owner,
-		id: string,
+		id: ComputersApi.ConnectorSessionId,
 		call: SessionCall,
 		wait: Duration.Input,
 	): Effect.Effect<

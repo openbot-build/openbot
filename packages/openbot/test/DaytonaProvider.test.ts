@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -85,7 +86,7 @@ const empty = (status: number) =>
 
 const credentials: DaytonaProvider.Credentials = {
 	kind: "daytona",
-	apiKey: "dtn-test-key",
+	apiKey: Redacted.make("dtn-test-key"),
 	apiUrl: "https://daytona.test",
 	target: "eu",
 }
@@ -290,6 +291,10 @@ it.effect(
 			assert.strictEqual(remove.url.searchParams.get("recursive"), "true")
 			const missing = yield* Effect.flip(machine.shell.read("/nope", "utf8"))
 			assert.strictEqual(missing._tag, "ComputerCallFailed")
+			assert.strictEqual(
+				missing._tag === "ComputerCallFailed" && missing.missingPath,
+				"/nope",
+			)
 			assert.strictEqual(
 				missing._tag === "ComputerCallFailed" && missing.retry,
 				false,

@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { ConnectionsApi, RequestsApi, VaultsApi } from "@openbot-build/api"
@@ -46,15 +47,23 @@ const Draft = Schema.Struct({ id: Schema.String, revision: Schema.Int })
 /** Gives a value as JSON text. */
 const jsonText = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
-/** A password manager in memory. A token called `bad` does not work. */
+/** A password manager in memory, with failed tokens and network calls. */
 const readers = Layer.succeed(
 	Readers,
 	Readers.of({
 		make: (credentials) => ({
 			verify:
-				credentials.kind !== "bitwarden" && credentials.token === "bad"
-					? Effect.fail(VaultReadFailed.make({ message: "Wrong token" }))
-					: Effect.void,
+				credentials.kind !== "bitwarden" &&
+				Redacted.value(credentials.token) === "bad"
+					? Effect.fail(
+							VaultReadFailed.make({ retry: false, message: "Wrong token" }),
+						)
+					: credentials.kind !== "bitwarden" &&
+						  Redacted.value(credentials.token) === "offline"
+						? Effect.fail(
+								VaultReadFailed.make({ retry: true, message: "No answer" }),
+							)
+						: Effect.void,
 			read: (_source, fields) =>
 				Arr.every(fields, (field) => field === "password")
 					? Effect.succeed(
@@ -62,7 +71,9 @@ const readers = Layer.succeed(
 								Arr.map(fields, (field) => [field, remoteSecret] as const),
 							),
 						)
-					: Effect.fail(VaultReadFailed.make({ message: "No such field" })),
+					: Effect.fail(
+							VaultReadFailed.make({ retry: false, message: "No such field" }),
+						),
 		}),
 	}),
 )
@@ -266,6 +277,21 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}),
 					400,
 				)
+				const offline = yield* call("POST", "/v1/secret-providers", {
+					name: "Offline",
+					credentials: {
+						kind: "onepassword",
+						url: "https://connect.example.com",
+						token: "offline",
+					},
+				})
+				const offlineError = yield* read(
+					offline,
+					502,
+					VaultsApi.SecretProviderFailed,
+				)
+				assert.strictEqual(offlineError._tag, "SecretProviderFailed")
+
 				const provider = yield* read(
 					yield* call("POST", "/v1/secret-providers", {
 						name: "1Password",
@@ -369,7 +395,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				// A provider cannot go while an item reads from it.
 				yield* text(
 					yield* call("DELETE", `/v1/secret-providers/${provider.id}`),
-					400,
+					409,
 				)
 				yield* text(
 					yield* call("PUT", `/v1/vaults/${vault.id}/bots/${bot}`),

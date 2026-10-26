@@ -972,11 +972,14 @@ export const make: Effect.Effect<
 											cleanupRemote: "Pending" as const,
 											reason: null,
 										}),
-										Failure: () => ({
+										Failure: ({ failure }) => ({
 											authorization: "Failed" as const,
 											status: "AwaitingAuthorization" as const,
 											cleanupRemote: current.value.cleanupRemote,
-											reason: "AuthorizationCouldNotComplete",
+											reason:
+												failure._tag === "DeveloperConflict"
+													? failure.reason
+													: "AuthorizationCouldNotComplete",
 										}),
 									}),
 								)

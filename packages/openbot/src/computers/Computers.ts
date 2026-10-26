@@ -11,6 +11,7 @@ import {
 	Layer,
 	Option,
 	Schema,
+	Schedule,
 } from "effect"
 import { Base64, Base64Url, Hex } from "effect/encoding"
 import * as Background from "../app/Background.ts"
@@ -68,6 +69,8 @@ export const newToken = (crypto: Crypto.Crypto) =>
 	)
 
 export type Failure =
+	| ComputersApi.ComputerProviderInUse
+	| ComputersApi.ComputerPathNotFound
 	| ComputersApi.ComputerNotFound
 	| ComputersApi.ComputerProviderNotFound
 	| ComputersApi.ComputerConflict
@@ -132,7 +135,9 @@ const fromRow = (
 const fromDriver = (error: ComputerError) =>
 	error._tag === "ComputerGone"
 		? ComputersApi.ComputerNotReady.make({ state: "offline" })
-		: ComputersApi.ComputerProviderFailed.make({ message: error.message })
+		: error.missingPath !== undefined
+			? ComputersApi.ComputerPathNotFound.make({ path: error.missingPath })
+			: ComputersApi.ComputerProviderFailed.make({ message: error.message })
 
 /**
  * Checks a file before a driver or a connector gets it. Bad base64 is a bad
@@ -501,13 +506,20 @@ export const make = Effect.gen(function* () {
 				...machine.shell,
 				start: (request) =>
 					Effect.tap(machine.shell.start(request), (process) =>
-						markActive(organizationId, id).pipe(
-							Background.logFailure(
-								"OpenBot could not mark a Computer as active",
-							),
-							Effect.delay(activeInterval),
-							Effect.forever,
-							Effect.raceFirst(process.exit),
+						Effect.scoped(
+							Effect.gen(function* () {
+								yield* Background.repeat(
+									markActive(organizationId, id).pipe(
+										Effect.delay(activeInterval),
+									),
+									{
+										schedule: Schedule.forever,
+										message: "OpenBot could not mark a Computer as active",
+									},
+								)
+								yield* process.exit
+							}),
+						).pipe(
 							Effect.annotateLogs({
 								computer: id,
 								organization: organizationId,
@@ -824,8 +836,7 @@ export const make = Effect.gen(function* () {
 				const { row: current } = yield* access(caller, id, "use")
 				const machine = yield* machineOf(current)
 				if (current.state === "paused" && machine.pausable !== undefined) {
-					yield* work(machine.pausable.resume)
-					yield* setState(caller.organizationId, id, "running")
+					yield* resumeStored(caller.organizationId, id, machine.pausable)
 				}
 				return yield* reread(caller.organizationId, id)
 			}),
@@ -838,8 +849,7 @@ export const make = Effect.gen(function* () {
 					})
 				const machine = yield* machineOf(current)
 				if (current.state === "paused" && machine.pausable !== undefined) {
-					yield* work(machine.pausable.resume)
-					yield* setState(caller.organizationId, id, "running")
+					yield* resumeStored(caller.organizationId, id, machine.pausable)
 				} else yield* markActive(caller.organizationId, id)
 				const computer = yield* reread(caller.organizationId, id)
 				return {

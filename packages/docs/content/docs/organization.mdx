@@ -238,6 +238,9 @@ curl -X PATCH -b cookies.txt \
   https://api.example.com/v1/organization/members/u_456
 ```
 
+Role IDs in paths must match the role ID schema. A member update that names a
+role which does not exist returns `404 RoleNotFound`.
+
 ### Remove a member
 
 `DELETE /v1/organization/members/:userId` removes the member and revokes their
@@ -414,6 +417,10 @@ on `AuditLog`.
 ---
 
 ## Errors
+
+`InvitationNotFound` returns `404`. It has `invitationId` when the request names
+an invitation. When a Bot link secret matches no invitation, this field is
+absent.
 
 | Status | Error                            | When                                                                                      |
 | ------ | -------------------------------- | ----------------------------------------------------------------------------------------- |

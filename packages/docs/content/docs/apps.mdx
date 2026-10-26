@@ -125,6 +125,11 @@ The `availability` field tells you if the Bot can use a connection.
 
 ---
 
+If refreshing an App declaration fails, the API keeps the discovery error,
+including network and document failures. A result that cannot be read as JSON
+has the reason `SchemaError`. Reading OAuth client metadata returns
+`503 SettingsUnavailable` when platform settings cannot be read.
+
 ## Sign in to an App account
 
 Some Apps need the user's own account. OpenBot uses OAuth with PKCE for this.

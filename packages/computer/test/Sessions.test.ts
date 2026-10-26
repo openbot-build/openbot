@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node"
-import type { ComputersApi } from "@openbot-build/api"
+import { ComputersApi } from "@openbot-build/api"
 import { assert, layer } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -76,7 +76,11 @@ const harness = Effect.fnUntraced(function* (options?: {
 		}
 	})
 	const input = (session: string, text: string) =>
-		sessions.handle({ _tag: "Input", session, data: Base64.encode(text) })
+		sessions.handle({
+			_tag: "Input",
+			session: ComputersApi.ConnectorSessionId.make(session),
+			data: Base64.encode(text),
+		})
 	return { sessions, read, input, all: Ref.get(taken) }
 })
 
@@ -93,7 +97,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				const { sessions, read, all } = yield* harness()
 				yield* sessions.handle({
 					_tag: "Start",
-					session: "s-1",
+					session: ComputersApi.ConnectorSessionId.make("s-1"),
 					command:
 						'echo out; echo err >&2; pwd; echo "$GREETING"; sh -c "exit 3"',
 					cwd: "/",
@@ -107,7 +111,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				)
 				assert.deepStrictEqual(exitOf(result), {
 					_tag: "Exit",
-					session: "s-1",
+					session: ComputersApi.ConnectorSessionId.make("s-1"),
 					code: 3,
 					signal: null,
 				})
@@ -128,7 +132,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				const { sessions, read, input } = yield* harness()
 				yield* sessions.handle({
 					_tag: "Start",
-					session: "cat",
+					session: ComputersApi.ConnectorSessionId.make("cat"),
 					command: "cat",
 					tty: false,
 				})
@@ -146,25 +150,28 @@ layer(home, { excludeTestServices: true })((it) => {
 			const { sessions, read } = yield* harness()
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "sleep",
+				session: ComputersApi.ConnectorSessionId.make("sleep"),
 				command: "sleep 30 & echo started; wait",
 				tty: false,
 			})
 			yield* read(/started/)
 			yield* sessions.handle({
 				_tag: "Signal",
-				session: "sleep",
+				session: ComputersApi.ConnectorSessionId.make("sleep"),
 				signal: "SIGTERM",
 			})
 			assert.strictEqual(exitOf(yield* read()).signal, "SIGTERM")
 
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "close",
+				session: ComputersApi.ConnectorSessionId.make("close"),
 				command: "sleep 30",
 				tty: false,
 			})
-			yield* sessions.handle({ _tag: "Close", session: "close" })
+			yield* sessions.handle({
+				_tag: "Close",
+				session: ComputersApi.ConnectorSessionId.make("close"),
+			})
 			const closed = exitOf(yield* read())
 			assert.strictEqual(closed.session, "close")
 			assert.strictEqual(closed.code, null)
@@ -177,7 +184,7 @@ layer(home, { excludeTestServices: true })((it) => {
 			const { sessions, read } = yield* harness()
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "s-1",
+				session: ComputersApi.ConnectorSessionId.make("s-1"),
 				command: "true",
 				cwd: "no-such-folder",
 				tty: false,
@@ -197,7 +204,7 @@ layer(home, { excludeTestServices: true })((it) => {
 			const { sessions, read } = yield* harness()
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "s-1",
+				session: ComputersApi.ConnectorSessionId.make("s-1"),
 				command: "true",
 				cwd: "plain-file/inner",
 				tty: false,
@@ -216,7 +223,7 @@ layer(home, { excludeTestServices: true })((it) => {
 			const { sessions, read } = yield* harness()
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "s-1",
+				session: ComputersApi.ConnectorSessionId.make("s-1"),
 				command: "true",
 				env: { BROKEN: "a\u0000b" },
 				tty: false,
@@ -244,7 +251,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				})
 				yield* sessions.handle({
 					_tag: "Start",
-					session: "slow",
+					session: ComputersApi.ConnectorSessionId.make("slow"),
 					command: `seq 1 300000; touch ${marker}`,
 					tty: false,
 				})
@@ -286,7 +293,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				})
 				yield* sessions.handle({
 					_tag: "Start",
-					session: "tty",
+					session: ComputersApi.ConnectorSessionId.make("tty"),
 					command: "seq 1 3000",
 					tty: true,
 				})
@@ -312,7 +319,7 @@ layer(home, { excludeTestServices: true })((it) => {
 			const { sessions, read, all } = yield* harness({ maxFrame: 100 })
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "seq",
+				session: ComputersApi.ConnectorSessionId.make("seq"),
 				command: "seq 1 1000",
 				tty: false,
 			})
@@ -339,7 +346,7 @@ layer(home, { excludeTestServices: true })((it) => {
 			const { sessions, read } = yield* harness()
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "tty",
+				session: ComputersApi.ConnectorSessionId.make("tty"),
 				command: "tty; stty size",
 				tty: true,
 				rows: 30,
@@ -356,13 +363,13 @@ layer(home, { excludeTestServices: true })((it) => {
 			const { sessions, read, input } = yield* harness()
 			yield* sessions.handle({
 				_tag: "Start",
-				session: "tty",
+				session: ComputersApi.ConnectorSessionId.make("tty"),
 				command: "read line; stty size",
 				tty: true,
 			})
 			yield* sessions.handle({
 				_tag: "Resize",
-				session: "tty",
+				session: ComputersApi.ConnectorSessionId.make("tty"),
 				rows: 50,
 				cols: 120,
 			})
@@ -378,7 +385,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				const { sessions, read, input } = yield* harness()
 				yield* sessions.handle({
 					_tag: "Start",
-					session: "cat",
+					session: ComputersApi.ConnectorSessionId.make("cat"),
 					command: "cat",
 					tty: true,
 				})
@@ -392,7 +399,7 @@ layer(home, { excludeTestServices: true })((it) => {
 
 				yield* sessions.handle({
 					_tag: "Start",
-					session: "sleep",
+					session: ComputersApi.ConnectorSessionId.make("sleep"),
 					command: "echo started; sleep 30",
 					tty: true,
 				})
@@ -400,7 +407,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				yield* input("sleep", "\x03")
 				assert.deepStrictEqual(exitOf(yield* read()), {
 					_tag: "Exit",
-					session: "sleep",
+					session: ComputersApi.ConnectorSessionId.make("sleep"),
 					code: null,
 					signal: "SIGINT",
 				})
@@ -417,7 +424,7 @@ layer(home, { excludeTestServices: true })((it) => {
 					const { sessions, read } = yield* harness()
 					yield* sessions.handle({
 						_tag: "Start",
-						session: "a",
+						session: ComputersApi.ConnectorSessionId.make("a"),
 						command: `echo $$ > ${marker}; echo started; sleep 30`,
 						tty: false,
 					})

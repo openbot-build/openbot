@@ -1,9 +1,11 @@
+import { SettingsUnavailable } from "./SettingsErrors.ts"
 import { Authorization, Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { ReturnTo, NoStore } from "./AuthApi.ts"
 import {
 	Errors as ConnectionErrors,
+	ConnectionId,
 	connectionParams,
 } from "./ConnectionsApi.ts"
 import { Required, own } from "./Authorization.ts"
@@ -31,7 +33,7 @@ export const Started = Schema.TaggedUnion({
 export type Started = typeof Started.Type
 export const State = Schema.Struct({
 	flowId: Schema.NonEmptyString,
-	connectionId: Schema.NonEmptyString,
+	connectionId: ConnectionId,
 	returnTo: ReturnTo,
 	expiresAt: Schema.Finite,
 	issuer: Document.Link,
@@ -107,6 +109,7 @@ export const AppAuthorizationPublicApi = HttpApiGroup.make(
 ).add(
 	HttpApiEndpoint.get("appClientMetadata", "/v1/apps/client-metadata", {
 		success: Authorization.ClientMetadata,
+		error: SettingsUnavailable.pipe(HttpApiSchema.status(503)),
 	}),
 	HttpApiEndpoint.get("appAuthorizationCallback", "/auth/apps/callback", {
 		success: HttpApiSchema.Empty(303),

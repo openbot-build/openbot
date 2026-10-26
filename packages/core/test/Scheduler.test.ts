@@ -422,7 +422,7 @@ it.effect(
 				)
 				assert.strictEqual((yield* runtimeStore.turns(first.chat)).length, 1)
 				const next = yield* runtime.drain(first.chat)
-				assert.strictEqual(next?.item, first.steered.item)
+				assert.strictEqual(Option.getOrThrow(next).item, first.steered.item)
 				yield* settled(runtime, first.chat)
 				const turns = yield* runtimeStore.turns(first.chat)
 				assert.deepStrictEqual(
@@ -444,7 +444,7 @@ it.effect(
 	() =>
 		Effect.gen(function* () {
 			const { runtime, runtimeStore, chat } = yield* ChatTest()
-			assert.strictEqual(yield* runtime.drain(chat), undefined)
+			assert.isTrue(Option.isNone(yield* runtime.drain(chat)))
 			const waiting = ChatItem.Id.make("waiting")
 			yield* runtimeStore.modifyEffect({
 				chat,
@@ -466,16 +466,16 @@ it.effect(
 					] as const),
 			})
 			const delivery = yield* runtime.drain(chat)
-			assert.ok(delivery !== undefined)
-			assert.strictEqual(delivery.delivery, "started")
-			assert.strictEqual(delivery.item, waiting)
+			assert.ok(Option.isSome(delivery))
+			assert.strictEqual(delivery.value.delivery, "started")
+			assert.strictEqual(delivery.value.item, waiting)
 			const done = yield* settled(runtime, chat)
 			const turn = Chat.currentTurn(done.chat)!
-			assert.strictEqual(turn.id, delivery.turn)
+			assert.strictEqual(turn.id, delivery.value.turn)
 			assert.strictEqual(turn.author, "ada")
 			assert.deepStrictEqual(turn.input, [waiting])
 			assert.strictEqual(turn.status._tag, "Completed")
-			assert.strictEqual(yield* runtime.drain(chat), undefined)
+			assert.isTrue(Option.isNone(yield* runtime.drain(chat)))
 		}).pipe(
 			Effect.provide(
 				LanguageModelTest({
@@ -506,7 +506,7 @@ it.effect(
 					bot: {},
 				})
 				assert.strictEqual(yield* restored.isActive(chat), false)
-				assert.strictEqual(yield* restored.drain(chat), undefined)
+				assert.isTrue(Option.isNone(yield* restored.drain(chat)))
 				const queued = yield* restored.deliver({
 					chat,
 					input: "stay queued",
@@ -521,8 +521,8 @@ it.effect(
 				assert.strictEqual(Chat.status(stopped.chat)._tag, "Interrupted")
 				assert.strictEqual(stopped.chat.inbox.length, 1)
 				const next = yield* restored.drain(chat)
-				assert.ok(next !== undefined)
-				assert.strictEqual(next.item, queued.item)
+				assert.ok(Option.isSome(next))
+				assert.strictEqual(next.value.item, queued.item)
 				const done = yield* settled(restored, chat)
 				assert.strictEqual(Chat.currentTurn(done.chat)!.author, "bob")
 				assert.strictEqual(Chat.status(done.chat)._tag, "Completed")

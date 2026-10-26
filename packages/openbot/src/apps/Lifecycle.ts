@@ -109,7 +109,7 @@ export const hostFailure =
 			Match.tag("CleanupPending", (pending) =>
 				Effect.fail(
 					Api.ConnectionCleanupPending.make({
-						connectionId: pending.key.connectionId,
+						connectionId: Api.ConnectionId.make(pending.key.connectionId),
 						stage: pending.stage,
 						message:
 							"This connection is stopped. Retry cleanup to finish removing it.",
@@ -184,7 +184,7 @@ export const make: Effect.Effect<
 	const key = (id: string) =>
 		Effect.map(Identity, (identity) => ({
 			owner: ownerKey(identity),
-			connectionId: id,
+			connectionId: Api.ConnectionId.make(id),
 		}))
 	return Lifecycle.of({
 		verify: Effect.fn("Apps.verifyConnection")(function* (id) {
@@ -409,7 +409,7 @@ export const make: Effect.Effect<
 						const configured = yield* ManualConnection.configure(owned.owner)({
 							...valid,
 							headers,
-							id,
+							id: Api.ConnectionId.make(id),
 						})
 						const protection = yield* probe.check(configured)
 						yield* scopes.close(owned)
@@ -455,7 +455,7 @@ export const make: Effect.Effect<
 					)
 					if (stored.connection.state === "CleanupPending")
 						return yield* Api.ConnectionCleanupPending.make({
-							connectionId: id,
+							connectionId: Api.ConnectionId.make(id),
 							stage: "Connection",
 							message: "Finish cleanup before changing this connection.",
 						})
@@ -529,13 +529,17 @@ export const make: Effect.Effect<
 							}),
 						),
 					)
-					const current = yield* discovery
-						.refreshCard(candidate.cardUrl)
-						.pipe(
-							Effect.mapError((error) =>
-								DiscoveryService.failure(candidate.cardUrl, error),
+					const current = yield* discovery.refreshCard(candidate.cardUrl).pipe(
+						Effect.tapErrorTag("SchemaError", (error) =>
+							Effect.logWarning(
+								"OpenBot could not read the App card.",
+								Cause.fail(error),
 							),
-						)
+						),
+						Effect.mapError((error) =>
+							DiscoveryService.failure(candidate.cardUrl, error),
+						),
+					)
 					if (
 						rules.compare({ previous: candidate, current })._tag ===
 						"NeedsRevalidation"

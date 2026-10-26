@@ -131,7 +131,7 @@ const rule = (
 	owner: BotsApi.Bot,
 	author: BotsApi.Decider,
 ): BotsApi.Rule => ({
-	id,
+	id: BotsApi.RuleId.make(id),
 	bot: owner.id,
 	author,
 	text: "The Bot may search.",
@@ -210,7 +210,7 @@ describe("The capability check", () => {
 							grants: {
 								match: () =>
 									Effect.succeedSome<BotsApi.Grant>({
-										id: "grt_once",
+										id: BotsApi.GrantId.make("grt_once"),
 										bot: bot.id,
 										capability: { action: "tools.call", target: "search" },
 										effect: "allow",

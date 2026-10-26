@@ -1,3 +1,4 @@
+import { Settings as SettingsApi } from "@openbot-build/api"
 import {
 	AppAuthorizationApi as Api,
 	ConnectionsApi,
@@ -72,7 +73,10 @@ export class Authorizations extends Context.Service<
 	Authorizations,
 	{
 		/** The client metadata for the current public origin, for its public route. */
-		readonly metadata: Effect.Effect<Authorization.ClientMetadata>
+		readonly metadata: Effect.Effect<
+			Authorization.ClientMetadata,
+			SettingsApi.SettingsUnavailable
+		>
 		readonly begin: (
 			id: string,
 			input: Api.Request,
@@ -177,7 +181,9 @@ const sdkFailure = (
 		Match.tag("CleanupPending", (error) =>
 			Effect.fail(
 				ConnectionsApi.ConnectionCleanupPending.make({
-					connectionId: error.key.connectionId,
+					connectionId: ConnectionsApi.ConnectionId.make(
+						error.key.connectionId,
+					),
 					stage: error.stage,
 					message:
 						"This connection is stopped. Retry cleanup to finish removing its account access.",
@@ -573,7 +579,9 @@ export const make: Effect.Effect<
 	})
 	return Authorizations.of({
 		metadata: Effect.flatMap(
-			Platform.publicOriginInRequest(settings),
+			Platform.publicOriginOr(settings, () =>
+				SettingsApi.SettingsUnavailable.make({}),
+			),
 			ClientMetadata.metadata,
 		),
 		begin: Effect.fn("AppAuthorizations.begin")(function* (id, input) {

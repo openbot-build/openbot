@@ -148,7 +148,7 @@ layer(folder, { excludeTestServices: true })((it) => {
 				assert.strictEqual(start.os, process.platform)
 				assert.strictEqual(start.arch, process.arch)
 				assert.strictEqual(start.hostname, Machine.name())
-				assert.strictEqual(start.version, 2)
+				assert.strictEqual(start.version, ComputersApi.connectorProtocolVersion)
 				assert.ok(start.machineId.length >= 16)
 				assert.strictEqual(first.config.url, openbot.url)
 				assert.strictEqual(first.config.machineId, start.machineId)

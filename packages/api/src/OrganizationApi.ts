@@ -198,19 +198,19 @@ export class LastSuperAdministrator extends Schema.TaggedError<
 export class RoleNotFound extends Schema.TaggedError<
 	RoleNotFound,
 	{ readonly brand: unique symbol }
->()("RoleNotFound", { roleId: Schema.String }) {}
+>()("RoleNotFound", { roleId: RoleId }) {}
 /** Members or the settings still use the role. Give them another role first. */
 export class RoleInUse extends Schema.TaggedError<
 	RoleInUse,
 	{ readonly brand: unique symbol }
 >()("RoleInUse", {
-	roleId: Schema.String,
+	roleId: RoleId,
 }) {}
 /** Built-in roles cannot change. */
 export class RoleReadOnly extends Schema.TaggedError<
 	RoleReadOnly,
 	{ readonly brand: unique symbol }
->()("RoleReadOnly", { roleId: Schema.String }) {}
+>()("RoleReadOnly", { roleId: RoleId }) {}
 /** Only platform admins can create organizations on this platform. */
 export class OrganizationCreationDisabled extends Schema.TaggedError<
 	OrganizationCreationDisabled,
@@ -282,7 +282,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 		params: { userId: Schema.String },
 		payload: UpdateMemberRequest,
 		success: Member,
-		error: memberErrors,
+		error: [...memberErrors, RoleNotFound.pipe(HttpApiSchema.status(404))],
 	})
 		.annotate(Required, writeMembers)
 		.annotate(
@@ -354,7 +354,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 		"Lists the built-in roles and the custom roles of the organization.",
 	),
 	HttpApiEndpoint.get("getRole", "/v1/organization/roles/:roleId", {
-		params: { roleId: Schema.String },
+		params: { roleId: RoleId },
 		success: Role,
 		error: roleErrors,
 	}),
@@ -369,7 +369,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 			"Creates a custom role. Its policy cannot allow anything that you cannot do yourself.",
 		),
 	HttpApiEndpoint.patch("updateRole", "/v1/organization/roles/:roleId", {
-		params: { roleId: Schema.String },
+		params: { roleId: RoleId },
 		payload: UpdateRoleRequest,
 		success: Role,
 		error: roleErrors,
@@ -380,7 +380,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 			"Changes a custom role. Every member with the role gets the new policy at once.",
 		),
 	HttpApiEndpoint.delete("deleteRole", "/v1/organization/roles/:roleId", {
-		params: { roleId: Schema.String },
+		params: { roleId: RoleId },
 		success: HttpApiSchema.NoContent,
 		error: roleErrors,
 	})

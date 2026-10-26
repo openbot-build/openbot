@@ -126,6 +126,7 @@ const service = Effect.gen(function* () {
 					type: "streamable-http",
 					url: fixture.ipOrigin + "/mcp",
 					supportedProtocolVersions: [Document.protocolVersion],
+					variables: { mode: { default: "read", description: "Old text" } },
 				},
 			],
 		}),
@@ -346,6 +347,17 @@ it.live(
 					yield* fixture.setCard({
 						...(yield* fixture.card),
 						description: "After",
+						remotes: [
+							{
+								...(yield* fixture.card).remotes![0]!,
+								variables: {
+									mode: Document.Input.make({
+										default: "read",
+										description: "New text",
+									}),
+								},
+							},
+						],
 					})
 					const discovery = yield* Discovery.Discovery
 					let candidate = yield* discovery.refreshCard(

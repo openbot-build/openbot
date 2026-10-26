@@ -92,6 +92,9 @@ curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
 会生成新的密钥，旧的密钥就不能用了。`DELETE /v1/triggers/:triggerId/webhook`
 会删除 webhook。
 
+如果执行者已不能向 Bot 分派任务，或 Bot 已归档，webhook 会返回
+`409 TriggerInvalid`。存储或执行故障会返回 `503 TriggerStorageUnavailable`。
+
 ---
 
 ## 工作为谁服务

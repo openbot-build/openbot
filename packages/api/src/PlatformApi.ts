@@ -1,3 +1,4 @@
+import { Model as CoreModel, Provider } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
 	HttpApiEndpoint,
@@ -79,8 +80,8 @@ const errors = [
 	OrganizationStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 
-const ProviderParams = { providerId: Schema.String }
-const ModelParams = { modelId: Schema.String }
+const ProviderParams = { providerId: Provider.Id }
+const ModelParams = { modelId: CoreModel.Id }
 
 /** The settings of the whole deployment. Only platform admins can use it. */
 export class PlatformApi extends HttpApiGroup.make("platform")

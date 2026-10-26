@@ -1,4 +1,5 @@
-import { BillingApi } from "@openbot-build/api"
+import { Model, Provider } from "@openbot-build/core"
+import { BillingApi, UserTokensApi } from "@openbot-build/api"
 import {
 	and,
 	desc,
@@ -58,7 +59,6 @@ import * as Db from "../database/Database.ts"
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 /**
  * The cursor of a page of usage events is `<time>.<id>` of the last event on the page.
- * A cursor that does not decode starts at the first page.
  */
 const UsageCursor = Schema.TemplateLiteralParser([
 	Schema.Finite,
@@ -113,7 +113,7 @@ const priceView = (row: PriceRow) =>
 	Effect.map(
 		decodeSchedule(row.schedule),
 		(schedule): BillingApi.ModelPrice => ({
-			model: row.modelId,
+			model: Model.Id.make(row.modelId),
 			...schedule,
 			effectiveFrom: iso(row.effectiveFrom),
 		}),
@@ -133,10 +133,11 @@ const eventView = (row: EventRow) =>
 			turnId: row.turnId,
 			botId: row.botId,
 			userId: row.userId,
-			tokenId: row.tokenId,
-			provider: row.providerId,
+			tokenId:
+				row.tokenId === null ? null : UserTokensApi.TokenId.make(row.tokenId),
+			provider: Provider.Id.make(row.providerId),
 			providerOwner,
-			model: row.modelId,
+			model: Model.Id.make(row.modelId),
 			inputUncached: row.inputUncached,
 			inputCacheRead: row.inputCacheRead,
 			inputCacheWrite: row.inputCacheWrite,
@@ -333,7 +334,7 @@ export const make = Effect.gen(function* () {
 				start,
 			)
 			return {
-				id: row.id,
+				id: BillingApi.BudgetId.make(row.id),
 				scope,
 				scopeId: row.scopeId,
 				period,
@@ -725,7 +726,16 @@ export const make = Effect.gen(function* () {
 					const after =
 						page.after === undefined
 							? undefined
-							: Option.getOrUndefined(decodeCursor(page.after))
+							: yield* Effect.fromOption(decodeCursor(page.after)).pipe(
+									Effect.catchTag("NoSuchElementError", () =>
+										Effect.fail(
+											BillingApi.UsageQueryInvalid.make({
+												message:
+													"`after` is not a `next` value from this list.",
+											}),
+										),
+									),
+								)
 					const rows = yield* db
 						.select()
 						.from(usageEvents)
@@ -837,7 +847,9 @@ export const make = Effect.gen(function* () {
 						.from(budgets)
 						.where(budgetWhere(organizationId, id))
 					if (row === undefined)
-						return yield* BillingApi.BudgetNotFound.make({ budgetId: id })
+						return yield* BillingApi.BudgetNotFound.make({
+							budgetId: BillingApi.BudgetId.make(id),
+						})
 					return yield* budgetView(row, yield* Clock.currentTimeMillis)
 				}),
 			),
@@ -881,7 +893,9 @@ export const make = Effect.gen(function* () {
 								.where(budgetWhere(organizationId, id))
 								.for("update")
 							if (row === undefined)
-								return yield* BillingApi.BudgetNotFound.make({ budgetId: id })
+								return yield* BillingApi.BudgetNotFound.make({
+									budgetId: BillingApi.BudgetId.make(id),
+								})
 							if (row.version !== input.expectedVersion)
 								return yield* BillingApi.BudgetConflict.make({
 									message: `The budget changed. Its version is now ${row.version}.`,
@@ -912,7 +926,9 @@ export const make = Effect.gen(function* () {
 						.where(budgetWhere(organizationId, id))
 						.returning({ id: budgets.id })
 					if (deleted.length === 0)
-						return yield* BillingApi.BudgetNotFound.make({ budgetId: id })
+						return yield* BillingApi.BudgetNotFound.make({
+							budgetId: BillingApi.BudgetId.make(id),
+						})
 				}),
 			),
 	})

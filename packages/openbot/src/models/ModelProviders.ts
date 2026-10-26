@@ -1,3 +1,4 @@
+import { Provider } from "@openbot-build/core"
 import type { ModelProvidersApi } from "@openbot-build/api"
 import {
 	Context,
@@ -137,7 +138,7 @@ export const linkedOwner = ({
 
 /** The API form. The key only shows whether it is set and its last characters. */
 export const view = (provider: Stored): ModelProvidersApi.ModelProvider => ({
-	id: provider.id,
+	id: Provider.Id.make(provider.id),
 	owner: provider.owner.kind,
 	kind: provider.kind,
 	name: provider.name,

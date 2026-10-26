@@ -56,7 +56,7 @@ export class Grants extends Context.Service<
 			id: string,
 		) => Effect.Effect<
 			ReadonlyArray<Grant>,
-			BotsApi.BotNotFound | BotsApi.BotStorageUnavailable
+			BotsApi.GrantNotFound | BotsApi.BotStorageUnavailable
 		>
 	}
 >()("@openbot-build/openbot/capabilities/Grants") {}
@@ -139,7 +139,7 @@ export const make: Effect.Effect<
 				const now = yield* Clock.currentTimeMillis
 				return yield* put(organizationId, {
 					...input,
-					id: "grt_" + (yield* newId),
+					id: BotsApi.GrantId.make("grt_" + (yield* newId)),
 					status: used === true && input.scope === "once" ? "used" : "active",
 					createdAt: now,
 				})
@@ -155,7 +155,9 @@ export const make: Effect.Effect<
 				Effect.gen(function* () {
 					const grant = yield* grants.find(organizationId, id)
 					if (Option.isNone(grant) || grant.value.bot !== bot)
-						return yield* BotsApi.BotNotFound.make({ bot: id })
+						return yield* BotsApi.GrantNotFound.make({
+							grant: BotsApi.GrantId.make(id),
+						})
 					if (grant.value.status === "revoked") return []
 					return yield* revokeTree(organizationId, grant.value)
 				}),

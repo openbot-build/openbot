@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { BotsApi, type Caller, VaultsApi } from "@openbot-build/api"
 import { and, eq, inArray } from "drizzle-orm"
 import {
@@ -29,6 +30,8 @@ type Item = VaultsApi.VaultItem
 type Source = VaultsApi.VaultItemSource
 
 export type Failure =
+	| VaultsApi.SecretProviderInUse
+	| VaultsApi.SecretProviderFailed
 	| VaultsApi.VaultNotFound
 	| VaultsApi.VaultItemNotFound
 	| VaultsApi.SecretProviderNotFound
@@ -286,7 +289,7 @@ export const make = Effect.gen(function* () {
 		input: {
 			readonly source: Source
 			readonly fields: ReadonlyArray<string> | undefined
-			readonly values: Readonly<Record<string, string>> | undefined
+			readonly values: Readonly<Record<string, unknown>> | undefined
 		},
 	) =>
 		Effect.gen(function* () {
@@ -333,7 +336,9 @@ export const make = Effect.gen(function* () {
 						),
 					),
 					Effect.mapError((error) =>
-						invalid("OpenBot could not read the item: " + error.message),
+						error.retry
+							? VaultsApi.SecretProviderFailed.make({ message: error.message })
+							: invalid("OpenBot could not read the item: " + error.message),
 					),
 				)
 			return input.fields
@@ -359,8 +364,11 @@ export const make = Effect.gen(function* () {
 			if (Arr.some(rows, (found) => found.id !== except))
 				return yield* invalid(`The Vault already has an item called ${name}.`)
 		})
-	const sealValues = (id: string, values: Readonly<Record<string, string>>) =>
-		Effect.flatMap(encodeValues(values), (json) =>
+	const sealValues = (
+		id: string,
+		values: Readonly<Record<string, Redacted.Redacted<string>>>,
+	) =>
+		Effect.flatMap(encodeValues(Rec.map(values, Redacted.value)), (json) =>
 			secrets
 				.seal(json, valuesBinding(id))
 				.pipe(stored("The values of a Vault item could not be sealed.")),
@@ -736,11 +744,15 @@ export const make = Effect.gen(function* () {
 					.pipe(stored("A Vault item could not be read."))
 				const found = rows[0]
 				if (found === undefined)
-					return yield* VaultReadFailed.make({ message: "The item is gone." })
+					return yield* VaultReadFailed.make({
+						retry: false,
+						message: "The item is gone.",
+					})
 				const item = yield* fromItemRow(found)
 				if (item.source._tag === "Builtin") {
 					if (found.values === null)
 						return yield* VaultReadFailed.make({
+							retry: false,
 							message: "The builtin item has no values.",
 						})
 					const values = yield* decodeValues(
@@ -754,6 +766,7 @@ export const make = Effect.gen(function* () {
 					)
 					if (missing.length > 0)
 						return yield* VaultReadFailed.make({
+							retry: false,
 							message: `The item has no field with the name ${Arr.join(missing, ", ")}`,
 						})
 					return new Map(
@@ -776,6 +789,7 @@ export const make = Effect.gen(function* () {
 							Effect.andThen(
 								Effect.fail(
 									VaultReadFailed.make({
+										retry: false,
 										message: "OpenBot could not open the item.",
 									}),
 								),
@@ -784,6 +798,7 @@ export const make = Effect.gen(function* () {
 					SecretProviderNotFound: (error) =>
 						Effect.fail(
 							VaultReadFailed.make({
+								retry: false,
 								message: "The secret provider of the item is gone.",
 								cause: error,
 							}),
@@ -791,6 +806,7 @@ export const make = Effect.gen(function* () {
 					VaultsUnavailable: (error) =>
 						Effect.fail(
 							VaultReadFailed.make({
+								retry: true,
 								message: "OpenBot could not open the item.",
 								cause: error,
 							}),

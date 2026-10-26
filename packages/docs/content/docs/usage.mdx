@@ -49,6 +49,9 @@ Some calls are not recorded:
 
 ---
 
+An invalid page cursor returns `400 UsageQueryInvalid`. A price needs at least
+one tier, so every token count has a price.
+
 ## Prices
 
 A price belongs to one model at one provider, because the same model can cost a

@@ -54,7 +54,7 @@ const columnsOf = (ref: Schema.Json, chat: Chat.Id) =>
 		const host = record.business[chatHostId]
 		if (host === undefined)
 			return yield* ChatStore.ChatStoreError.make({
-				reason: "reference-conflict",
+				reason: "decode-failed",
 				message: "The Chat revision is out of date",
 			})
 		return {

@@ -1,3 +1,4 @@
+import { SettingsUnavailable } from "./SettingsErrors.ts"
 import { Document, Index } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
@@ -85,6 +86,7 @@ const errors = [
 export const AppIndexApi = HttpApiGroup.make("appIndex").add(
 	HttpApiEndpoint.get("listSources", "/v1/app-index/sources", {
 		success: Schema.Array(Source),
+		error: SettingsUnavailable.pipe(HttpApiSchema.status(503)),
 	}),
 	HttpApiEndpoint.get("searchApps", "/v1/app-index/apps", {
 		query: Query.fields,

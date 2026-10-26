@@ -233,7 +233,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(denied.status, 401)
 				const started = yield* json(
 					Schema.Struct({ delegation: DelegationsApi.DelegationId }),
-					webhook(daily.id, hook.secret, { order: 42 }),
+					webhook(daily.id, Redacted.value(hook.secret), { order: 42 }),
 				)
 				const hooked = yield* completed(started.delegation)
 				assert.ok(hooked.chat !== null)
@@ -250,7 +250,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					}),
 				)
 				assert.strictEqual(disabled.nextRunAt, null)
-				const off = yield* webhook(daily.id, hook.secret, {})
+				const off = yield* webhook(daily.id, Redacted.value(hook.secret), {})
 				assert.strictEqual(off.status, 401)
 
 				// Bob cannot see the trigger of Alice, and a member cannot make shared triggers.
@@ -296,6 +296,50 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 			}),
 		{ timeout: 120000 },
+	)
+
+	it.effect(
+		"a webhook reports a lasting failure when its Bot is archived",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					model: yield* echo,
+				})
+				const { send, json, webhook } = yield* client(host)
+				const alice = yield* host.login("trigger-archived-bot")
+				const bot = yield* host.defaultBot(alice.session)
+				const trigger = yield* json(
+					TriggersApi.Trigger,
+					send(alice.session, "/v1/triggers", "POST", { prompt: "Say hello." }),
+				)
+				const hook = yield* json(
+					TriggersApi.WebhookSecret,
+					send(alice.session, "/v1/triggers/" + trigger.id + "/webhook", "PUT"),
+				)
+				const current = yield* json(
+					Schema.Struct({ revision: Schema.Natural }),
+					send(alice.session, "/v1/bots/" + bot),
+				)
+				const archived = yield* send(
+					alice.session,
+					"/v1/bots/" + bot,
+					"PATCH",
+					{ expected: current.revision, archived: true },
+				)
+				assert.strictEqual(archived.status, 200, yield* archived.text)
+				const failed = yield* webhook(
+					trigger.id,
+					Redacted.value(hook.secret),
+					{},
+				)
+				assert.strictEqual(failed.status, 409)
+				assert.strictEqual(
+					(yield* Caller.json(TriggersApi.TriggerInvalid, 409)(failed))._tag,
+					"TriggerInvalid",
+				)
+			}),
+		{ timeout: 60000 },
 	)
 
 	it.effect(

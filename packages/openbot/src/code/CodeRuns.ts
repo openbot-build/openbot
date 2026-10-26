@@ -52,7 +52,7 @@ export const ToolResult = Schema.Struct({
 		Schema.Struct({
 			index: Schema.Natural,
 			binding: Schema.String,
-			operationId: Schema.String,
+			operationId: Schema.optionalKey(Schema.String),
 			outcome: Schema.Literals(["Waiting", "Denied", "Done"]),
 		}),
 	),
@@ -72,7 +72,11 @@ export const toolResult = (run: Stored.Run): ToolResult => ({
 	calls: Arr.map(run.calls, (call) => ({
 		index: call.index,
 		binding: call.binding,
-		operationId: call.operationId,
+		...(call.operationId === undefined
+			? {}
+			: call.operationId === undefined
+				? undefined
+				: { operationId: call.operationId }),
 		outcome: call.outcome._tag,
 	})),
 })
@@ -177,7 +181,9 @@ const settledOf = (call: Stored.StoredCall, outcome: Ended): Settled => {
 				error: errorText(
 					"AppCallDenied",
 					"A decider did not allow this call: " + outcome.reason,
-					{ operationId: call.operationId },
+					call.operationId === undefined
+						? undefined
+						: { operationId: call.operationId },
 				),
 			}
 		case "Done": {
@@ -195,10 +201,15 @@ const settledOf = (call: Stored.StoredCall, outcome: Ended): Settled => {
 						ok: false,
 						error: errorText(
 							"AppInputRequired",
-							"The App needs more input. Answer App operation " +
-								call.operationId +
-								" outside the program.",
-							{ operationId: call.operationId, request: result.request },
+							"The App needs more input. Answer it outside the program.",
+							{
+								...(call.operationId === undefined
+									? {}
+									: call.operationId === undefined
+										? undefined
+										: { operationId: call.operationId }),
+								request: result.request,
+							},
 						),
 					}
 				case "Failed":
@@ -206,7 +217,11 @@ const settledOf = (call: Stored.StoredCall, outcome: Ended): Settled => {
 						index: call.index,
 						ok: false,
 						error: errorText("AppCallFailed", result.message, {
-							operationId: call.operationId,
+							...(call.operationId === undefined
+								? {}
+								: call.operationId === undefined
+									? undefined
+									: { operationId: call.operationId }),
 							reason: result.reason,
 						}),
 					}
@@ -644,7 +659,10 @@ export const make: Effect.Effect<
 							.pipe(Effect.map(Option.map((value) => value.id)))
 						const waiting: Stored.StoredCall = {
 							...base,
-							operationId: Option.getOrElse(operation, () => ""),
+							...Option.match(operation, {
+								onNone: () => ({}),
+								onSome: (operationId) => ({ operationId }),
+							}),
 							outcome: { _tag: "Waiting" },
 						}
 						yield* record(waiting)
@@ -675,7 +693,9 @@ export const make: Effect.Effect<
 							).pipe(
 								Effect.map((result) => ({
 									...call,
-									operationId: result.operationId ?? call.operationId,
+									...(result.operationId === undefined
+										? {}
+										: { operationId: result.operationId }),
 									outcome: { _tag: "Done", result } as const,
 								})),
 							),
@@ -801,7 +821,7 @@ export const make: Effect.Effect<
 				callId: input.callId,
 			})
 			const fresh: Stored.Run = {
-				id,
+				id: CodeRunsApi.CodeRunId.make(id),
 				chat: input.position.chat,
 				turn: input.position.turn,
 				callId: input.callId,

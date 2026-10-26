@@ -89,10 +89,13 @@ const randomBytes = (crypto: Crypto.Crypto, size: number) =>
 /** The credentials of the API, with the secrets that OpenBot makes itself. */
 export const fromInput = (
 	crypto: Crypto.Crypto,
-	input: ChannelsApi.ChannelCredentials,
+	value: ChannelsApi.ChannelCredentials,
 	current?: Credentials,
 ): Effect.Effect<Credentials> =>
 	Effect.gen(function* () {
+		const input = yield* Schema.encodeEffect(ChannelsApi.ChannelCredentials)(
+			value,
+		).pipe(Effect.orDie)
 		switch (input.kind) {
 			case "slack":
 			case "lark":

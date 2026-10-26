@@ -286,6 +286,15 @@ App 可以显示一个交互式视图。工具在它的元数据中链接到一�
 | `@openbot-build/protocol/NodeHttpServer`     | 带有公网规则的 Node 网络层。     |
 | `@openbot-build/protocol/McpApps`            | MCP Apps 视图的浏览器宿主。      |
 
+`McpPublisher.layer` 和 `layerProtected` 接收普通发布数据，在层启动时检查一次。
+`registerUi` 在 Effect 中检查普通 UI 资源数据。错误输入通过有类型的错误返回。
+
+`CatalogDiscovery.sameConnection`
+比较远端中会影响连接的部分。只改说明文字或扩展字段会保留连接和登录状态。更改输入格式或秘密标记需要重新检查。
+
+OAuth 网络失败保留
+`NetworkError`。这不表示提供方拒绝了授权。关闭连接作用域会停止未完成的 SDK 请求，包括仍在等待响应头或已存令牌的请求。
+
 发布一个小 App：
 
 ```ts

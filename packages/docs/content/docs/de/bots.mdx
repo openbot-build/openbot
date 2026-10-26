@@ -233,6 +233,10 @@ und teilen. Siehe [Berechtigungen](/de/docs/permissions).
 
 ## Fehler
 
+`InvitationNotFound` gibt `404` zurück. Wenn die Anfrage eine Einladung nennt,
+enthält der Fehler `invitationId`. Passt das Secret eines Bot-Links zu keiner
+Einladung, fehlt dieses Feld.
+
 | Status | Fehler                  | Wann                                                                   |
 | ------ | ----------------------- | ---------------------------------------------------------------------- |
 | `400`  | `BotInvalid`            | Die Änderung ist nicht erlaubt, oder du hast keinen Standard-Bot.      |
@@ -240,3 +244,7 @@ und teilen. Siehe [Berechtigungen](/de/docs/permissions).
 | `404`  | `BotNotFound`           | Es gibt keinen Bot mit dieser ID, den du lesen darfst.                 |
 | `409`  | `BotConflict`           | `expected` ist veraltet. Lies den Bot neu und versuche es noch einmal. |
 | `503`  | `BotStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                |
+
+Eine Änderung an einer fehlenden Rule ergibt `404 RuleNotFound`. Beim Widerruf
+eines fehlenden Grants kommt `404 GrantNotFound`. Diese Fehler nennen die
+fehlende Rule oder den fehlenden Grant.

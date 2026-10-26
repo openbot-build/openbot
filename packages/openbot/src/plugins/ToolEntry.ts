@@ -6,10 +6,10 @@ import { toolJson } from "./ToolJson.ts"
 /** Tools whose parameters are JSON Schema, like App tools. Their handlers never fail. */
 export type Tools = Record<
 	string,
-	Tool.Dynamic<
+	Tool.Tool<
 		string,
 		{
-			readonly parameters: JsonSchema.JsonSchema
+			readonly parameters: typeof Schema.Unknown
 			readonly success: typeof Schema.Json
 			readonly failure: typeof Schema.Never
 			readonly failureMode: "error"
@@ -60,7 +60,7 @@ export const entry = <E>(
 		...(options.needsApproval === undefined
 			? {}
 			: { needsApproval: options.needsApproval }),
-	}).annotate(Operation.Budget, "foreground") as Tools[string],
+	}).annotate(Operation.Budget, "foreground"),
 	handle: (input, context) =>
 		handle(input, context).pipe(
 			Effect.catchCause((cause) =>

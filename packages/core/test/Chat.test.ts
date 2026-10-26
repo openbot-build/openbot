@@ -399,28 +399,26 @@ it.effect(
 	},
 )
 
-it.effect(
-	"the Approvals service can come from the context of the runtime",
-	() => {
-		const calls = { value: 0 },
-			prompts = { value: [] as ReadonlyArray<Prompt.Prompt> }
-		let decisions = 0
-		return Effect.gen(function* () {
-			const { runtime, chat } = yield* ChatTest({ toolkit: approved }).pipe(
-				Effect.provideService(Chat.Approvals, {
-					decide: () =>
-						Effect.sync(() => {
-							decisions++
-							return Chat.Decision.Allow()
-						}),
-				}),
-			)
-			yield* runtime.execute({ chat, input: "from the context" })
-			assert.strictEqual(decisions, 1)
-			assert.strictEqual(calls.value, 1)
-		}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
-	},
-)
+it.effect("the runtime uses its explicit Approvals service", () => {
+	const calls = { value: 0 },
+		prompts = { value: [] as ReadonlyArray<Prompt.Prompt> }
+	let decisions = 0
+	return Effect.gen(function* () {
+		const { runtime, chat } = yield* ChatTest({
+			toolkit: approved,
+			approvals: {
+				decide: () =>
+					Effect.sync(() => {
+						decisions++
+						return Chat.Decision.Allow()
+					}),
+			},
+		})
+		yield* runtime.execute({ chat, input: "from the options" })
+		assert.strictEqual(decisions, 1)
+		assert.strictEqual(calls.value, 1)
+	}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
+})
 
 it.effect("two calls in one step get one decision each", () => {
 	const calls = { value: 0 },

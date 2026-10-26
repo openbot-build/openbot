@@ -1,3 +1,4 @@
+import { SecretOutput } from "./Secret.ts"
 import { Array as Arr, Schema } from "effect"
 import {
 	HttpApi,
@@ -169,7 +170,7 @@ export const UpdateChannelRequest = Schema.Struct({
 export type UpdateChannelRequest = typeof UpdateChannelRequest.Type
 
 /** The signing secret of a custom Channel. OpenBot shows it only once. */
-export const ChannelSecret = Schema.Struct({ secret: Schema.String })
+export const ChannelSecret = Schema.Struct({ secret: SecretOutput })
 export type ChannelSecret = typeof ChannelSecret.Type
 
 /** A person on a platform, linked to a member of the organization. */

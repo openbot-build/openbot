@@ -232,6 +232,20 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(yield* tagOf(unknownRole), "SettingsInvalid")
 
+				const missingMemberRole = yield* account(
+					alice.session,
+					member(bob.identity.userId),
+					"PATCH",
+					{ roles: ["role_" + Str.repeat(32)("0")] },
+				)
+				assert.strictEqual(missingMemberRole.status, 404)
+				assert.strictEqual(yield* tagOf(missingMemberRole), "RoleNotFound")
+				const unchangedMember = yield* json(
+					OrganizationApi.Member,
+					account(alice.session, member(bob.identity.userId)),
+				)
+				assert.deepStrictEqual(unchangedMember.roles, ["member"])
+
 				// A custom role that only reads the audit log.
 				const role = yield* json(
 					Roles.Role,

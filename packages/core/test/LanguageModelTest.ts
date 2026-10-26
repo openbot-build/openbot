@@ -1,4 +1,12 @@
-import { Array as Arr, Effect, Layer, Match, Option, pipe } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Layer,
+	Match,
+	Option,
+	Stream,
+	pipe,
+} from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 
 /** Token usage for a test response: one input token and one output token. */
@@ -61,3 +69,20 @@ export const lastText = (prompt: Prompt.Prompt) =>
 		Arr.last,
 		Option.getOrElse(() => ""),
 	)
+
+/** A model for a test that must not call it. */
+export const unusedModel = LanguageModelTest({
+	streamText: () => Stream.die("The test must not call the model"),
+	generateText: () => Effect.die("The test must not call the model"),
+})
+
+/** Uses the test model in the build context. Store-only tests use a model that must not run. */
+export const modelForBuild = Layer.unwrap(
+	Effect.map(
+		Effect.serviceOption(LanguageModel.LanguageModel),
+		Option.match({
+			onNone: () => unusedModel,
+			onSome: (model) => Layer.succeed(LanguageModel.LanguageModel, model),
+		}),
+	),
+)

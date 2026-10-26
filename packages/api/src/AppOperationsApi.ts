@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { Invocation } from "./AppExecution.ts"
+import { Invocation, AppOperationId } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { ChatConflict, chatParams } from "./ChatsApi.ts"
 import { Required, own } from "./Authorization.ts"
@@ -11,7 +11,7 @@ const errors = [
 ]
 export const AppOperationsApi = HttpApiGroup.make("appOperations").add(
 	HttpApiEndpoint.get("get", "/v1/app-operations/:id", {
-		params: { id: Schema.String },
+		params: { id: AppOperationId },
 		success: Invocation,
 		error: errors,
 	}),
@@ -21,7 +21,7 @@ export const AppOperationsApi = HttpApiGroup.make("appOperations").add(
 		error: errors,
 	}).annotate(Required, [own("read", "Chat", "chatId")]),
 	HttpApiEndpoint.post("respond", "/v1/app-operations/:id/inputs", {
-		params: { id: Schema.String },
+		params: { id: AppOperationId },
 		payload: Schema.Struct({
 			round: Schema.Natural,
 			responses: Schema.JsonObject,

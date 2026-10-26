@@ -1,3 +1,5 @@
+import { Model } from "@openbot-build/core"
+import { BillingApi } from "@openbot-build/api"
 import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -31,8 +33,8 @@ const tokens = {
 	outputReasoning: 0,
 }
 /** A price of one tier. The call above costs `inputUncached / 1000` micro-USD. */
-const priceOf = (inputUncached: number) => ({
-	model: call.modelId,
+const priceOf = (inputUncached: number): BillingApi.SetModelPriceRequest => ({
+	model: Model.Id.make(call.modelId),
 	tiers: [
 		{
 			upToInputTokens: null,

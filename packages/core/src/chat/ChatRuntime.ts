@@ -315,15 +315,16 @@ export const make = <
 >(
 	options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 ): Effect.Effect<
-	Chat.Runtime<P, Tools, E, R, HostTools>,
+	Chat.Runtime<P, Tools, E, HostTools>,
 	BuildE,
-	BuildR | Scope.Scope
+	BuildR | R | Bot.RuntimeServices<Tools, R> | Scope.Scope
 > =>
 	Effect.gen(function* () {
 		type Event = Bot.Event<
 			Toolkit.MergedTools<[Toolkit.Toolkit<Tools>, Toolkit.Toolkit<HostTools>]>,
 			P
 		>
+		const services = yield* Effect.context<R | Bot.RuntimeServices<Tools, R>>()
 		const bot = options.bot
 		const store = options.store
 		const basePlugin =
@@ -358,15 +359,8 @@ export const make = <
 			() => IdGenerator.defaultIdGenerator,
 		)
 		const id = () => generator.generateId()
-		// The services of the bot come first. Otherwise the host may provide them.
-		const compactionService =
-			bot.compaction === undefined
-				? Effect.serviceOption(ContextCompaction.ContextCompaction)
-				: Effect.succeedSome(bot.compaction)
-		const approvals =
-			bot.approvals === undefined
-				? yield* Effect.serviceOption(Chat.Approvals)
-				: Option.some(bot.approvals)
+		const compactionService = Option.fromUndefinedOr(bot.compaction)
+		const approvals = Option.fromUndefinedOr(bot.approvals)
 		const decide = (
 			request: Chat.ApprovalRequest,
 		): Effect.Effect<Chat.Decision> =>
@@ -375,7 +369,7 @@ export const make = <
 					Effect.succeed(Chat.Decision.Pending({ result: pendingResult })),
 				onSome: (service) => service.decide(request),
 			})
-		const operations = yield* Effect.serviceOption(Operations.Operations)
+		const operations = Option.fromUndefinedOr(options.operations)
 		const findModel = (selection: Config.Selection | undefined) =>
 			(bot.modelCatalog ?? Effect.succeed([])).pipe(
 				Effect.map((models) =>
@@ -762,7 +756,7 @@ export const make = <
 						message: "The Chat changed since it was read",
 					})
 				const selection = input.selection ?? view.chat.settings.model
-				const service = yield* compactionService
+				const service = compactionService
 				if (selection === undefined || Option.isNone(service))
 					return yield* ContextCompaction.ContextCompactionError.make({
 						reason: "unsupported",
@@ -781,11 +775,8 @@ export const make = <
 					beforeTokens = yield* compaction.count(request)
 				if (
 					Option.exists(
-						model,
-						(model) =>
-							beforeTokens >
-							(ConfigurationOperations.contextLimits(model).inputTokens ??
-								Infinity),
+						Option.flatMap(model, ConfigurationOperations.contextLimits),
+						(limits) => beforeTokens > limits.inputTokens,
 					)
 				)
 					return yield* ContextCompaction.ContextCompactionError.make({
@@ -824,20 +815,15 @@ export const make = <
 									// @effect-diagnostics-next-line strictEffectProvide:off -- The host picks the summary model, and it is given to this one generation only.
 									return yield* program.pipe(Effect.provide(summaryModel))
 								}
-								const languageModel =
-									configuration.model === undefined
-										? yield* Effect.serviceOption(LanguageModel.LanguageModel)
-										: Option.none()
-								if (Option.isNone(languageModel))
+								if (configuration.model !== undefined)
 									return yield* ContextCompaction.ContextCompactionError.make({
 										reason: "unsupported",
-										message:
-											"No provider or LanguageModel is available for non-native compaction",
+										message: "No provider is available for the summary model",
 									})
 								return yield* program.pipe(
 									Effect.provideService(
 										LanguageModel.LanguageModel,
-										languageModel.value,
+										Context.get(services, LanguageModel.LanguageModel),
 									),
 								)
 							}),
@@ -943,8 +929,6 @@ export const make = <
 								const definitions: Toolkit.Any = yield* inner.toolkit
 								const toolkit = definitions as Toolkit.Toolkit<Tools>
 								const raw = yield* toolkit
-								const services =
-									yield* Effect.context<Bot.RuntimeServices<Tools, R>>()
 								const toolHandlers = Option.isNone(operations)
 									? raw
 									: inBackground(raw, operations.value, {
@@ -953,13 +937,7 @@ export const make = <
 											...(turnRecord.author === undefined
 												? {}
 												: { author: turnRecord.author }),
-											notify: (input) =>
-												deliver(input).pipe(
-													// The notice can start a Turn, and a Turn needs the services of a Turn, such
-													// as its model. The caller gives them for each call, and the background call
-													// ends after this Turn, so it keeps the services of this Turn.
-													Effect.provideContext(services),
-												),
+											notify: deliver,
 										})
 								const loop = (
 									n: number,
@@ -1054,14 +1032,17 @@ export const make = <
 														),
 												},
 											)
-											const compaction = yield* compactionService
+											const compaction = compactionService
+											const limits = Option.flatMap(
+												model,
+												ConfigurationOperations.contextLimits,
+											)
 											// The window of a model can come from its own setting or from its limit.
 											if (
 												action === undefined &&
 												selection !== undefined &&
 												Option.isSome(model) &&
-												ConfigurationOperations.contextLimits(model.value)
-													.contextWindow !== undefined &&
+												Option.isSome(limits) &&
 												Option.isSome(compaction)
 											) {
 												const request = {
@@ -1075,11 +1056,8 @@ export const make = <
 													),
 												}
 												const tokens = yield* compaction.value.count(request),
-													limits = ConfigurationOperations.contextLimits(
-														model.value,
-													),
-													autoCompactTokens = limits.autoCompactTokens
-												if (tokens > (limits.inputTokens ?? Infinity))
+													autoCompactTokens = limits.value.autoCompactTokens
+												if (tokens > limits.value.inputTokens)
 													return yield* ContextCompaction.ContextCompactionError.make(
 														{
 															reason: "input-too-large",
@@ -1089,7 +1067,6 @@ export const make = <
 													)
 												if (
 													model.value.compaction !== undefined &&
-													autoCompactTokens !== undefined &&
 													tokens >= autoCompactTokens
 												) {
 													const before = view
@@ -1589,7 +1566,7 @@ export const make = <
 		): Stream.Stream<
 			Event,
 			Chat.RuntimeError | Bot.ExecutionError<Tools, E>,
-			Bot.RuntimeServices<Tools, R>
+			never
 		> => {
 			const next = (
 				phase: Accepted<P>,
@@ -1673,6 +1650,7 @@ export const make = <
 			// one of a Turn that no caller waits for. So this logs it once, with its
 			// cause, and closes the Turn if no phase did.
 			return next(accepted).pipe(
+				Stream.provideContext(services),
 				Stream.onExit((exit) =>
 					Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)
 						? Effect.void
@@ -1801,7 +1779,7 @@ export const make = <
 					},
 				}),
 			)
-		const drain: Chat.Runtime<P, Tools, E, R, HostTools>["drain"] = (chat) =>
+		const drain: Chat.Runtime<P, Tools, E, HostTools>["drain"] = (chat) =>
 			Effect.gen(function* () {
 				// A quick check first. `accept` checks the same things again in one step.
 				const view = yield* store.read(chat)
@@ -1811,7 +1789,7 @@ export const make = <
 					(yield* isActive(chat)) ||
 					Option.isNone(leading(view))
 				)
-					return undefined
+					return Option.none()
 				return yield* Effect.uninterruptibleMask((restore) =>
 					Effect.gen(function* () {
 						const started = yield* admission.withPermits(1)(
@@ -1828,7 +1806,7 @@ export const make = <
 								return Option.some({ accepted: accepted.value, launched })
 							}),
 						)
-						if (Option.isNone(started)) return undefined
+						if (Option.isNone(started)) return Option.none()
 						const { accepted, launched } = started.value
 						yield* untilStarted(launched)
 						const delivery: Chat.Delivery = {
@@ -1838,7 +1816,7 @@ export const make = <
 							item: accepted.item,
 							revision: accepted.view.chat.revision,
 						}
-						return delivery
+						return Option.some(delivery)
 					}),
 				)
 			})
@@ -1858,9 +1836,7 @@ export const make = <
 				...(input.notice === undefined ? {} : { notice: input.notice }),
 				...(input.approved === undefined ? {} : { approved: input.approved }),
 			}))
-		const deliver: Chat.Runtime<P, Tools, E, R, HostTools>["deliver"] = (
-			input,
-		) =>
+		const deliver: Chat.Runtime<P, Tools, E, HostTools>["deliver"] = (input) =>
 			Effect.gen(function* () {
 				const entry = yield* entryOf(input)
 				const item = entry.id
@@ -1935,7 +1911,7 @@ export const make = <
 					})
 				return accepted.value
 			})
-		const stream: Chat.Runtime<P, Tools, E, R, HostTools>["stream"] = (input) =>
+		const stream: Chat.Runtime<P, Tools, E, HostTools>["stream"] = (input) =>
 			Stream.unwrap(
 				Effect.uninterruptibleMask((restore) =>
 					Effect.gen(function* () {
@@ -1977,7 +1953,7 @@ export const make = <
 					}),
 				),
 			)
-		const interrupt: Chat.Runtime<P, Tools, E, R, HostTools>["interrupt"] = (
+		const interrupt: Chat.Runtime<P, Tools, E, HostTools>["interrupt"] = (
 			input,
 		) =>
 			Effect.gen(function* () {
@@ -2003,7 +1979,7 @@ export const make = <
 		const positionOf = (event: Event) =>
 			"view" in event ? Chat.position(event.view.chat) : event.at
 		const revision = (event: Event) => positionOf(event).revision
-		const events: Chat.Runtime<P, Tools, E, R, HostTools>["events"] = (input) =>
+		const events: Chat.Runtime<P, Tools, E, HostTools>["events"] = (input) =>
 			Stream.unwrap(
 				Effect.gen(function* () {
 					yield* store.read(input.chat)
@@ -2030,7 +2006,7 @@ export const make = <
 					)
 				}),
 			)
-		const wait: Chat.Runtime<P, Tools, E, R, HostTools>["wait"] = (input) =>
+		const wait: Chat.Runtime<P, Tools, E, HostTools>["wait"] = (input) =>
 			Effect.scoped(
 				Effect.gen(function* () {
 					// The fiber belongs to the scope of this call, so it stops on every return.
@@ -2058,37 +2034,15 @@ export const make = <
 					return yield* store.read(input.chat)
 				}),
 			)
-		const withActionDriver = <A, EX, RX>(
-			action: Turn.Action,
-			operation: Effect.Effect<A, EX, RX>,
+		const startAction: Chat.Runtime<P, Tools, E, HostTools>["startAction"] = (
+			input,
 		) =>
-			Effect.gen(function* () {
-				const existing = yield* Effect.serviceOption(
-					LanguageModel.LanguageModel,
-				)
-				const driver = yield* Option.match(existing, {
-					onSome: Effect.succeed,
-					onNone: () =>
-						HostActionDriver.make({ action, callId: "host-action" }),
-				})
-				return yield* operation.pipe(
-					Effect.provideService(LanguageModel.LanguageModel, driver),
-				)
-			})
-		const startAction: Chat.Runtime<
-			P,
-			Tools,
-			E,
-			R,
-			HostTools
-		>["startAction"] = (input) =>
 			Effect.gen(function* () {
 				const content = Prompt.make(
 					input.input ?? "Host-selected action: " + input.action.name,
 				)
 				if (input.turn === undefined) {
-					const accepted = yield* withActionDriver(
-						input.action,
+					const accepted = yield* Effect.suspend(() =>
 						Effect.uninterruptibleMask((restore) =>
 							Effect.gen(function* () {
 								const { accepted, launched } = yield* admission.withPermits(1)(
@@ -2180,7 +2134,7 @@ export const make = <
 			status: store.read,
 			events,
 			wait,
-			compact,
+			compact: (input) => compact(input).pipe(Effect.provideContext(services)),
 		}
 	})
 export const layer: {
@@ -2195,8 +2149,12 @@ export const layer: {
 	>(
 		options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 	): <I>(
-		tag: Context.Service<I, Chat.Runtime<P, Tools, E, R, HostTools>>,
-	) => Layer.Layer<I, BuildE, Exclude<BuildR, Scope.Scope>>
+		tag: Context.Service<I, Chat.Runtime<P, Tools, E, HostTools>>,
+	) => Layer.Layer<
+		I,
+		BuildE,
+		Exclude<BuildR | R | Bot.RuntimeServices<Tools, R>, Scope.Scope>
+	>
 	<
 		I,
 		P,
@@ -2207,9 +2165,13 @@ export const layer: {
 		BuildR = never,
 		HostTools extends Record<string, Tool.Any> = {},
 	>(
-		tag: Context.Service<I, Chat.Runtime<P, Tools, E, R, HostTools>>,
+		tag: Context.Service<I, Chat.Runtime<P, Tools, E, HostTools>>,
 		options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
-	): Layer.Layer<I, BuildE, Exclude<BuildR, Scope.Scope>>
+	): Layer.Layer<
+		I,
+		BuildE,
+		Exclude<BuildR | R | Bot.RuntimeServices<Tools, R>, Scope.Scope>
+	>
 } = dual(
 	2,
 	<
@@ -2222,7 +2184,7 @@ export const layer: {
 		BuildR = never,
 		HostTools extends Record<string, Tool.Any> = {},
 	>(
-		tag: Context.Service<I, Chat.Runtime<P, Tools, E, R, HostTools>>,
+		tag: Context.Service<I, Chat.Runtime<P, Tools, E, HostTools>>,
 		options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 	) => Layer.effect(tag, make(options)),
 )

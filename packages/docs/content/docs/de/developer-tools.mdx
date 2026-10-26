@@ -219,6 +219,11 @@ abbrechen oder mit `DELETE` löschen.
 
 ---
 
+Ein OAuth-Test behält den Grund für einen abgelehnten Schritt, etwa
+`FlowExpired` oder `CallbackMismatch`. Eine nicht nutzbare Verbindung ergibt
+`ConnectionUnavailable`. Fehlt der Test, kommt `404 DeveloperNotFound`. Netz-
+und Speicherfehler ergeben `503 DeveloperUnavailable`.
+
 ## Die Aufnahme in den Index anfordern
 
 Du musst nicht warten, bis ein Nutzer deine App verbindet. Bitte OpenBot, sie zu

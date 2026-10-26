@@ -6,7 +6,7 @@ import {
 	MemoryPersistence,
 	Store,
 } from "@openbot-build/core"
-import { Effect, Ref, Stream } from "effect"
+import { Effect, Option, Ref, Stream } from "effect"
 import { LanguageModelTest, textParts } from "./LanguageModelTest.ts"
 import { settled } from "./ChatTest.ts"
 
@@ -35,7 +35,7 @@ it.effect(
 			const waiting = yield* runtime.status(chat)
 			assert.strictEqual(Chat.currentTurn(waiting.chat), undefined)
 			assert.strictEqual(waiting.chat.inbox.length, 1)
-			assert.strictEqual(yield* runtime.drain(chat), undefined)
+			assert.isTrue(Option.isNone(yield* runtime.drain(chat)))
 
 			const refused = yield* runtime
 				.execute({ chat, input: "Now" })
@@ -48,7 +48,7 @@ it.effect(
 
 			yield* Ref.set(allowed, true)
 			const drained = yield* runtime.drain(chat)
-			assert.strictEqual(drained?.delivery, "started")
+			assert.strictEqual(Option.getOrThrow(drained).delivery, "started")
 			const done = yield* settled(runtime, chat)
 			assert.strictEqual(Chat.status(done.chat)._tag, "Completed")
 			assert.strictEqual(done.chat.inbox.length, 0)

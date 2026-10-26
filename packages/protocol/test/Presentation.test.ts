@@ -16,7 +16,6 @@ import {
 	Document,
 	Index,
 	McpPublisher,
-	Publisher,
 	Network,
 } from "@openbot-build/protocol"
 
@@ -37,7 +36,7 @@ const example = {
 	},
 }
 const presentation = { version: "1", examples: [example] }
-const card = {
+const card: typeof Document.ServerCard.Encoded = {
 	$schema: Document.cardSchemaUrl,
 	name: "example.notes/notes",
 	title: "Notes",
@@ -73,12 +72,9 @@ it.effect(
 	"published presentation survives discovery and public Index serialization without reading images or running work",
 	() =>
 		Effect.gen(function* () {
-			const decodedPublication = yield* Schema.decodeUnknownEffect(
-				Publisher.Publication,
-			)(publication)
 			const publisher = HttpRouter.toWebHandler(
 				McpPublisher.layer({
-					publication: decodedPublication,
+					publication,
 					register: Effect.void,
 				}),
 				{ disableLogger: true },

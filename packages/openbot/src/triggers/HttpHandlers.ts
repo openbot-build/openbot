@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import {
 	type Caller,
 	Identity,
@@ -146,7 +147,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "triggers", (handlers) =>
 					})
 					return {
 						url: publicOrigin + "/v1/hooks/triggers/" + trigger.id,
-						secret,
+						secret: Redacted.make(secret),
 					}
 				}),
 			)
@@ -184,10 +185,27 @@ export const layerHooks = HttpApiBuilder.group(
 						...found.value,
 						data: payload,
 					}).pipe(
-						// The actor can no longer give work to the Bot, or the task could
-						// not be saved. The caller of the webhook learns only that it failed.
-						Failures.replace("A webhook could not fire its trigger.", () =>
-							TriggersApi.TriggerStorageUnavailable.make({}),
+						Effect.catchTag(
+							["Forbidden", "BotNotFound", "BotInvalid"],
+							(error) =>
+								Effect.logWarning(
+									"The trigger cannot give work to its Bot",
+									error,
+								).pipe(
+									Effect.andThen(
+										TriggersApi.TriggerInvalid.make({
+											message:
+												"The trigger actor cannot give work to this Bot.",
+										}),
+									),
+								),
+						),
+						Effect.catchTag("TriggerInvalid", Effect.fail, (error) =>
+							Effect.fail(error).pipe(
+								Failures.replace("A webhook could not fire its trigger.", () =>
+									TriggersApi.TriggerStorageUnavailable.make({}),
+								),
+							),
 						),
 						Effect.annotateLogs({
 							trigger: found.value.trigger.id,

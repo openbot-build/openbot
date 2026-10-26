@@ -350,7 +350,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					revision: replaced.chat.revision,
 					items: [todo("d", "pending"), todo("d", "pending")],
 				})
-				assert.strictEqual(twice.status, 409)
+				assert.strictEqual(twice.status, 400)
 
 				// Another member cannot read the list.
 				const bob = yield* host.login("work-bob")

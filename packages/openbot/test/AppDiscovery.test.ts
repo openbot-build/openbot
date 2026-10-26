@@ -311,8 +311,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 		organizationId: "local-organization",
 	}
 	const auth = Auth.Auth.of({
-		handler: () =>
-			Promise.reject(new Error("Discovery must not call Better Auth routes")),
+		handle: () => Effect.die("Discovery must not call Better Auth routes"),
 		signInProvider: () => Effect.succeedNone,
 		startSignIn: () => Effect.die("Discovery must not start a sign-in"),
 		resolveSession: (credential) =>

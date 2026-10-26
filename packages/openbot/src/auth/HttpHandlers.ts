@@ -7,7 +7,7 @@ import {
 	UserTokensApi,
 } from "@openbot-build/api"
 import { Effect, Layer, Option } from "effect"
-import { HttpEffect, HttpRouter, HttpServerResponse } from "effect/http"
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "../app/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
@@ -134,7 +134,19 @@ export const layerBetterAuth = Layer.unwrap(
 		return HttpRouter.add(
 			"*",
 			`${AuthApi.AuthBasePath}/*` as const,
-			HttpEffect.fromWebHandler(auth.handler).pipe(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const request = yield* HttpServerRequest.HttpServerRequest
+					const controller = yield* Effect.acquireRelease(
+						Effect.sync(() => new AbortController()),
+						(controller) => Effect.sync(() => controller.abort()),
+					)
+					const web = yield* HttpServerRequest.toWeb(request, {
+						signal: controller.signal,
+					})
+					return HttpServerResponse.fromWeb(yield* auth.handle(web))
+				}),
+			).pipe(
 				Effect.map(HttpServerResponse.setHeader("cache-control", "no-store")),
 			),
 		)

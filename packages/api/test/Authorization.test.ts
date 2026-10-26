@@ -1,7 +1,14 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Condition } from "@nmnmcc/ability"
+import { Condition, Policy } from "@nmnmcc/ability"
 import type { Params } from "@nmnmcc/ability/HttpApi"
-import { Array as Arr, Context, Option, pipe, String as Str } from "effect"
+import {
+	Array as Arr,
+	Context,
+	HashSet,
+	Option,
+	pipe,
+	String as Str,
+} from "effect"
 import {
 	HttpApi,
 	type HttpApiEndpoint,
@@ -12,6 +19,9 @@ import {
 	Required,
 	type Requirement,
 } from "../src/Authorization.ts"
+import * as Authorization from "../src/Authorization.ts"
+import { CapabilityRequestId } from "../src/CapabilityRequestId.ts"
+import { ConnectionId } from "../src/ConnectionId.ts"
 import { OpenBotApi } from "../src/OpenBotApi.ts"
 
 interface Endpoint {
@@ -59,12 +69,12 @@ const requirementsOf = ({
 const paramsRead = (requirement: Requirement): ReadonlyArray<string> => {
 	if (requirement.within === undefined) return []
 	// The proxy writes down each name that the scope reads.
-	const read = new Set<string>()
+	let read = HashSet.empty<string>()
 	const params: Params = new Proxy(
 		{},
 		{
 			get: (_, key) => {
-				if (typeof key === "string") read.add(key)
+				if (typeof key === "string") read = HashSet.add(read, key)
 				return "value"
 			},
 		},
@@ -107,5 +117,131 @@ describe("Authorization", () => {
 			)
 		})
 		assert.deepStrictEqual(problems, [])
+	})
+})
+
+describe("Authorization with branded IDs", () => {
+	const principal = {
+		kind: "member",
+		organizationId: "org_a",
+		userId: "user_a",
+	} as const
+	const member = Option.getOrThrow(
+		Arr.findFirst(Authorization.builtinRoles, (role) => role.id === "member"),
+	).policy
+	const policies = [
+		member,
+		Policy.all([member, Authorization.defaultTokenPolicy]),
+	]
+
+	it("own connection rules cover lists and IDs but keep other owners out", () => {
+		for (const policy of policies) {
+			assert.strictEqual(
+				Policy.coverage(policy, {
+					principal,
+					action: "write",
+					kind: "Connection",
+					within: ($) =>
+						$.under(
+							"org",
+							$.principal("organizationId"),
+							"user",
+							$.principal("userId"),
+						),
+				})._tag,
+				"All",
+			)
+			assert.strictEqual(
+				Policy.coverage(policy, {
+					principal,
+					action: "read",
+					kind: "Connection",
+					within: ($) =>
+						$.and(
+							$.under(
+								"org",
+								$.principal("organizationId"),
+								"user",
+								$.principal("userId"),
+							),
+							$.eq("id", ConnectionId.make("connection_a")),
+						),
+				})._tag,
+				"All",
+			)
+			assert.strictEqual(
+				Policy.coverage(policy, {
+					principal,
+					action: "read",
+					kind: "Connection",
+					within: ($) => $.under("org", "org_a", "user", "user_b"),
+				})._tag,
+				"None",
+			)
+		}
+	})
+
+	it("a token rule still limits a connection by its ID", () => {
+		const token = Policy.define(Authorization.OpenBot)(function* (_) {
+			yield* _.allow("read", Authorization.Connection, {
+				when: ($) => $.eq("id", ConnectionId.make("connection_a")),
+			})
+		})
+		const policy = Policy.all([member, token])
+		for (const [id, expected] of [
+			["connection_a", "All"],
+			["connection_b", "None"],
+		] as const) {
+			assert.strictEqual(
+				Policy.coverage(policy, {
+					principal,
+					action: "read",
+					kind: "Connection",
+					within: ($) =>
+						$.and(
+							$.under(
+								"org",
+								$.principal("organizationId"),
+								"user",
+								$.principal("userId"),
+							),
+							$.eq("id", ConnectionId.make(id)),
+						),
+				})._tag,
+				expected,
+			)
+		}
+	})
+
+	it("own request rules cover IDs but keep other organizations out", () => {
+		for (const policy of policies) {
+			assert.strictEqual(
+				Policy.coverage(policy, {
+					principal,
+					action: "resolve",
+					kind: "Request",
+					within: ($) =>
+						$.and(
+							$.under(
+								"org",
+								$.principal("organizationId"),
+								"user",
+								$.principal("userId"),
+							),
+							$.eq("id", CapabilityRequestId.make("request_a")),
+						),
+				})._tag,
+				"All",
+			)
+			assert.strictEqual(
+				Policy.coverage(policy, {
+					principal,
+					action: "resolve",
+					kind: "Request",
+					within: ($) => $.under("org", "org_b", "user", "user_a"),
+				})._tag,
+				"None",
+			)
+		}
 	})
 })

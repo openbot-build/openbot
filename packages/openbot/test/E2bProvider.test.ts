@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -86,7 +87,7 @@ const json = (value: unknown, status = 200) =>
 
 const credentials: E2bProvider.Credentials = {
 	kind: "e2b",
-	apiKey: "e2b-test-key",
+	apiKey: Redacted.make("e2b-test-key"),
 	apiUrl: "https://api.e2b.test",
 	sandboxDomain: "e2b.test",
 }
@@ -461,12 +462,16 @@ it.effect("E2B maps a missing file to a failure that a retry cannot fix", () =>
 		const error = yield* Effect.flip(machine.shell.read("/x", "utf8"))
 		assert.strictEqual(error._tag, "ComputerCallFailed")
 		assert.strictEqual(
+			error._tag === "ComputerCallFailed" && error.missingPath,
+			"/x",
+		)
+		assert.strictEqual(
 			error._tag === "ComputerCallFailed" && error.retry,
 			false,
 		)
 		assert.match(
 			error._tag === "ComputerCallFailed" ? error.message : "",
-			/does not exist/,
+			/is not there/,
 		)
 	}),
 )

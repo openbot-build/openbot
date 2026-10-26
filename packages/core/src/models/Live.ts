@@ -3,7 +3,7 @@ import {
 	Data,
 	Schema,
 	SchemaTransformation,
-	type Effect,
+	Effect,
 	type Scope,
 	type Stream,
 } from "effect"
@@ -230,7 +230,7 @@ export interface LiveModel {
 }
 
 /** Fails when the capabilities do not allow the input. Backends call it in `send`. */
-export const unsupported = (capabilities: Capabilities, input: Input) => {
+export const check = (capabilities: Capabilities, input: Input) => {
 	const missing = Input.$match(input, {
 		Audio: () => false,
 		Commit: () => !Arr.contains(capabilities.turnDetection, "client"),
@@ -253,9 +253,11 @@ export const unsupported = (capabilities: Capabilities, input: Input) => {
 		History: () => false,
 	})
 	return missing
-		? LiveError.make({
-				reason: "unsupported",
-				message: `This Live model does not support the input ${input._tag}.`,
-			})
-		: undefined
+		? Effect.fail(
+				LiveError.make({
+					reason: "unsupported",
+					message: `This Live model does not support the input ${input._tag}.`,
+				}),
+			)
+		: Effect.void
 }

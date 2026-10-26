@@ -146,7 +146,10 @@ it.effect(
 	"a call that ends inside its budget gives its result in the Turn",
 	() =>
 		Effect.gen(function* () {
-			const { runtime, chat } = yield* ChatTest({ toolkit: Toolkit.make(Slow) })
+			const { runtime, chat } = yield* ChatTest(
+				{ toolkit: Toolkit.make(Slow) },
+				{ operations: yield* Operations.Operations },
+			)
 			const view = yield* runtime.execute({ chat, input: "go" })
 			assert.deepStrictEqual(toolResults(view), ["done value"])
 			const service = yield* Operations.Operations
@@ -171,9 +174,12 @@ it.effect(
 			const started = yield* Deferred.make<void>()
 			const gate = yield* Deferred.make<void>()
 			yield* Effect.gen(function* () {
-				const { runtime, runtimeStore, chat } = yield* ChatTest({
-					toolkit: Toolkit.make(Slow),
-				})
+				const { runtime, runtimeStore, chat } = yield* ChatTest(
+					{
+						toolkit: Toolkit.make(Slow),
+					},
+					{ operations: yield* Operations.Operations },
+				)
 				const first = yield* executePast(
 					runtime.execute({ chat, input: "go" }),
 					started,
@@ -219,7 +225,10 @@ it.effect("a foreground tool keeps its Turn until it ends", () =>
 	Effect.gen(function* () {
 		const started = yield* Deferred.make<void>()
 		yield* Effect.gen(function* () {
-			const { runtime, chat } = yield* ChatTest({ toolkit: Toolkit.make(Held) })
+			const { runtime, chat } = yield* ChatTest(
+				{ toolkit: Toolkit.make(Held) },
+				{ operations: yield* Operations.Operations },
+			)
 			const view = yield* executePast(
 				runtime.execute({ chat, input: "go" }),
 				started,
@@ -250,7 +259,10 @@ it.effect("a Chat at its limit keeps more calls in the Turn", () =>
 	Effect.gen(function* () {
 		const started = yield* Deferred.make<void>()
 		yield* Effect.gen(function* () {
-			const { runtime, chat } = yield* ChatTest({ toolkit: Toolkit.make(Slow) })
+			const { runtime, chat } = yield* ChatTest(
+				{ toolkit: Toolkit.make(Slow) },
+				{ operations: yield* Operations.Operations },
+			)
 			const view = yield* executePast(
 				runtime.execute({ chat, input: "go" }),
 				started,
@@ -280,7 +292,10 @@ it.effect("calls that start at the same time do not pass the limit", () =>
 		const starts = yield* Ref.make(0)
 		const started = yield* Deferred.make<void>()
 		yield* Effect.gen(function* () {
-			const { runtime, chat } = yield* ChatTest({ toolkit: Toolkit.make(Slow) })
+			const { runtime, chat } = yield* ChatTest(
+				{ toolkit: Toolkit.make(Slow) },
+				{ operations: yield* Operations.Operations },
+			)
 			const view = yield* executePast(
 				runtime.execute({ chat, input: "go" }),
 				started,
@@ -332,9 +347,12 @@ it.effect("cancel stops a background call and tells its Chat", () =>
 		const started = yield* Deferred.make<void>()
 		const stoppedTool = yield* Deferred.make<void>()
 		yield* Effect.gen(function* () {
-			const { runtime, runtimeStore, chat } = yield* ChatTest({
-				toolkit: Toolkit.make(Slow),
-			})
+			const { runtime, runtimeStore, chat } = yield* ChatTest(
+				{
+					toolkit: Toolkit.make(Slow),
+				},
+				{ operations: yield* Operations.Operations },
+			)
 			const first = yield* executePast(
 				runtime.execute({ chat, input: "go" }),
 				started,
@@ -375,7 +393,10 @@ it.effect("a call that runs too long fails", () =>
 	Effect.gen(function* () {
 		const started = yield* Deferred.make<void>()
 		yield* Effect.gen(function* () {
-			const { runtime, chat } = yield* ChatTest({ toolkit: Toolkit.make(Slow) })
+			const { runtime, chat } = yield* ChatTest(
+				{ toolkit: Toolkit.make(Slow) },
+				{ operations: yield* Operations.Operations },
+			)
 			const first = yield* executePast(
 				runtime.execute({ chat, input: "go" }),
 				started,
@@ -415,9 +436,12 @@ it.effect(
 		Effect.gen(function* () {
 			const started = yield* Deferred.make<void>()
 			yield* Effect.gen(function* () {
-				const { runtime, chat } = yield* ChatTest({
-					toolkit: Toolkit.make(Slow),
-				})
+				const { runtime, chat } = yield* ChatTest(
+					{
+						toolkit: Toolkit.make(Slow),
+					},
+					{ operations: yield* Operations.Operations },
+				)
 				const first = yield* executePast(
 					runtime.execute({ chat, input: "go" }),
 					started,
@@ -533,6 +557,7 @@ it.effect("an Operation of another Chat is not found", () =>
 			.get(Chat.Id.make("other"), Operation.Id.make("op"))
 			.pipe(Effect.flip)
 		assert.strictEqual(error._tag, "OperationNotFound")
+		assert.ok(error._tag === "OperationNotFound")
 		assert.strictEqual(error.id, "op")
 		const found = yield* service.get(
 			Chat.Id.make("one"),
@@ -685,4 +710,214 @@ it.effect(
 				failure.message,
 			)
 		}),
+)
+
+it.effect("store failures keep their meaning and cause", () =>
+	Effect.gen(function* () {
+		const failure = Operation.StoreError.make({
+			message: "The store is down",
+			cause: "database failure",
+		})
+		const store = yield* Operation.memoryStore
+		const operations = yield* Operations.make({
+			store: {
+				...store,
+				get: () => Effect.fail(failure),
+				list: () => Effect.fail(failure),
+			},
+		})
+		const chat = Chat.Id.make("failed-store"),
+			id = Operation.Id.make("failed-operation")
+		for (const read of [
+			operations.get(chat, id),
+			operations.list(chat),
+			operations.wait(chat, [id], "1 second"),
+			operations.cancel(chat, id),
+			operations.cancelChat(chat),
+		]) {
+			const error = yield* read.pipe(Effect.flip)
+			assert.strictEqual(error, failure)
+		}
+	}).pipe(Effect.provide(crypto)),
+)
+
+for (const end of ["result", "timeout", "cancel"] as const) {
+	it.effect(`a failed insert keeps the call in its Turn until ${end}`, () =>
+		Effect.gen(function* () {
+			const store = yield* Operation.memoryStore
+			const inserted = yield* Deferred.make<void>()
+			const started = yield* Deferred.make<void>()
+			const stopped = yield* Deferred.make<void>()
+			const gate = yield* Deferred.make<string>()
+			const operations = yield* Operations.make({
+				store: {
+					...store,
+					insert: () =>
+						Deferred.succeed(inserted, undefined).pipe(
+							Effect.andThen(
+								Effect.fail(
+									Operation.StoreError.make({ message: "The insert failed" }),
+								),
+							),
+						),
+				},
+				settings: () =>
+					Effect.succeed({
+						budget: "10 millis",
+						maxDuration: "1 second",
+						limit: 1,
+					}),
+			})
+			const fiber = yield* Effect.forkChild(
+				operations.run(
+					{
+						chat: Chat.Id.make("failed-insert"),
+						turn: Turn.Id.make("turn"),
+						callId: "call",
+						tool: "test",
+						notify: () =>
+							Effect.die("A foreground call must not send a notice"),
+					},
+					Deferred.succeed(started, undefined).pipe(
+						Effect.andThen(Deferred.await(gate)),
+						Effect.ensuring(Deferred.succeed(stopped, undefined)),
+					),
+					() => Operation.Status.Completed({ result: "done" }),
+				),
+			)
+			yield* Deferred.await(started)
+			yield* TestClock.adjust("10 millis")
+			yield* Deferred.await(inserted)
+			if (end === "cancel") {
+				yield* Fiber.interrupt(fiber)
+				yield* Deferred.await(stopped)
+				return
+			}
+			if (end === "result") yield* Deferred.succeed(gate, "kept result")
+			else yield* TestClock.adjust("1 second")
+			const outcome = yield* Fiber.join(fiber)
+			assert.ok(outcome._tag === "Done")
+			if (end === "result") {
+				assert.ok(Exit.isSuccess(outcome.exit))
+				assert.strictEqual(outcome.exit.value, "kept result")
+			} else assert.ok(Exit.isFailure(outcome.exit))
+		}).pipe(Effect.provide(crypto)),
+	)
+}
+
+it.effect("a failed end write still gives the result to the Chat", () =>
+	Effect.gen(function* () {
+		const store = yield* Operation.memoryStore
+		const started = yield* Deferred.make<void>()
+		const gate = yield* Deferred.make<void>()
+		const notice = yield* Deferred.make<Operation.Record>()
+		const operations = yield* Operations.make({
+			store: {
+				...store,
+				finish: () =>
+					Effect.fail(
+						Operation.StoreError.make({ message: "The end write failed" }),
+					),
+			},
+			settings: () =>
+				Effect.succeed({
+					budget: "10 millis",
+					maxDuration: "1 hour",
+					limit: 1,
+				}),
+		})
+		const fiber = yield* Effect.forkChild(
+			operations.run(
+				{
+					chat: Chat.Id.make("end-write"),
+					turn: Turn.Id.make("turn"),
+					callId: "call",
+					tool: "test",
+					notify: (record) =>
+						Deferred.succeed(notice, record).pipe(Effect.asVoid),
+				},
+				Deferred.succeed(started, undefined).pipe(
+					Effect.andThen(Deferred.await(gate)),
+				),
+				() => Operation.Status.Completed({ result: "result" }),
+			),
+		)
+		yield* Deferred.await(started)
+		yield* TestClock.adjust("10 millis")
+		assert.strictEqual((yield* Fiber.join(fiber))._tag, "Background")
+		yield* Deferred.succeed(gate, undefined)
+		const record = yield* Deferred.await(notice)
+		assert.deepStrictEqual(
+			record.status,
+			Operation.Status.Completed({ result: "result" }),
+		)
+	}).pipe(Effect.provide(crypto)),
+)
+
+it.effect("a host lease stays held through the end write and notice", () =>
+	Effect.gen(function* () {
+		const store = yield* Operation.memoryStore
+		const count = yield* Ref.make(0)
+		const started = yield* Deferred.make<void>(),
+			work = yield* Deferred.make<void>(),
+			writing = yield* Deferred.make<void>(),
+			finish = yield* Deferred.make<void>(),
+			notifying = yield* Deferred.make<void>(),
+			notify = yield* Deferred.make<void>(),
+			closed = yield* Deferred.make<void>()
+		const operations = yield* Operations.make({
+			store: {
+				...store,
+				finish: (...args) =>
+					Deferred.succeed(writing, undefined).pipe(
+						Effect.andThen(Deferred.await(finish)),
+						Effect.andThen(store.finish(...args)),
+					),
+			},
+			whileRunning: Effect.acquireRelease(
+				Ref.update(count, (n) => n + 1),
+				() =>
+					Ref.update(count, (n) => n - 1).pipe(
+						Effect.andThen(Deferred.succeed(closed, undefined)),
+					),
+			),
+			settings: () =>
+				Effect.succeed({
+					budget: "10 millis",
+					maxDuration: "1 hour",
+					limit: 1,
+				}),
+		})
+		const fiber = yield* Effect.forkChild(
+			operations.run(
+				{
+					chat: Chat.Id.make("lease"),
+					turn: Turn.Id.make("turn"),
+					callId: "call",
+					tool: "test",
+					notify: () =>
+						Deferred.succeed(notifying, undefined).pipe(
+							Effect.andThen(Deferred.await(notify)),
+						),
+				},
+				Deferred.succeed(started, undefined).pipe(
+					Effect.andThen(Deferred.await(work)),
+				),
+				() => Operation.Status.Completed({ result: "done" }),
+			),
+		)
+		yield* Deferred.await(started)
+		yield* TestClock.adjust("10 millis")
+		assert.strictEqual((yield* Fiber.join(fiber))._tag, "Background")
+		yield* Deferred.succeed(work, undefined)
+		yield* Deferred.await(writing)
+		yield* TestClock.adjust("20 minutes")
+		assert.strictEqual(yield* Ref.get(count), 1)
+		yield* Deferred.succeed(finish, undefined)
+		yield* Deferred.await(notifying)
+		assert.strictEqual(yield* Ref.get(count), 1)
+		yield* Deferred.succeed(notify, undefined)
+		yield* Deferred.await(closed)
+		assert.strictEqual(yield* Ref.get(count), 0)
+	}).pipe(Effect.provide(crypto)),
 )

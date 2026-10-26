@@ -17,7 +17,6 @@ export default defineConfig({
 		index: "src/index.ts",
 		"chat/Chat": "src/chat/Chat.ts",
 		"models/Config": "src/models/Config.ts",
-		"context/ConversationContext": "src/context/ConversationContext.ts",
 		"models/Live": "src/models/Live.ts",
 		"models/LiveDriver": "src/models/LiveDriver.ts",
 		"models/Model": "src/models/Model.ts",
@@ -32,8 +31,6 @@ export default defineConfig({
 		"context/ContextWindow": "src/context/ContextWindow.ts",
 		"context/SummaryCompaction": "src/context/SummaryCompaction.ts",
 		"context/ContextCompaction": "src/context/ContextCompaction.ts",
-		"context/ConversationContextOperations":
-			"src/context/ConversationContextOperations.ts",
 		"plugins/PluginComposition": "src/plugins/PluginComposition.ts",
 		"plugins/PluginState": "src/plugins/PluginState.ts",
 	},

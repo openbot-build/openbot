@@ -39,6 +39,8 @@ export const defaultSettings: Settings = {
 	limit: 8,
 }
 export interface Options {
+	/** Holds host resources until the work, stored end and notice are done. */
+	readonly whileRunning?: Effect.Effect<void, never, Scope.Scope>
 	readonly store: Operation.Store
 	readonly settings?: (chat: ChatIdentity.Id) => Effect.Effect<Settings>
 }
@@ -73,10 +75,13 @@ export class Operations extends Context.Service<
 		readonly get: (
 			chat: ChatIdentity.Id,
 			id: Operation.Id,
-		) => Effect.Effect<Operation.Record, Operation.NotFound>
+		) => Effect.Effect<
+			Operation.Record,
+			Operation.NotFound | Operation.StoreError
+		>
 		readonly list: (
 			chat: ChatIdentity.Id,
-		) => Effect.Effect<ReadonlyArray<Operation.Record>>
+		) => Effect.Effect<ReadonlyArray<Operation.Record>, Operation.StoreError>
 		/**
 		 * Waits until one of the Operations has an end, or until `timeout`. It gives
 		 * the records as they are then.
@@ -85,17 +90,25 @@ export class Operations extends Context.Service<
 			chat: ChatIdentity.Id,
 			ids: ReadonlyArray<Operation.Id>,
 			timeout: Duration.Input,
-		) => Effect.Effect<ReadonlyArray<Operation.Record>, Operation.NotFound>
+		) => Effect.Effect<
+			ReadonlyArray<Operation.Record>,
+			Operation.NotFound | Operation.StoreError
+		>
 		/** Stops an Operation. It gives the record as it is then. */
 		readonly cancel: (
 			chat: ChatIdentity.Id,
 			id: Operation.Id,
-		) => Effect.Effect<Operation.Record, Operation.NotFound>
+		) => Effect.Effect<
+			Operation.Record,
+			Operation.NotFound | Operation.StoreError
+		>
 		/**
 		 * Stops every Operation of a Chat, such as when the Chat is deleted. It stops
 		 * the Operations that this server runs, and asks other servers to stop theirs.
 		 */
-		readonly cancelChat: (chat: ChatIdentity.Id) => Effect.Effect<void>
+		readonly cancelChat: (
+			chat: ChatIdentity.Id,
+		) => Effect.Effect<void, Operation.StoreError>
 	}
 >()("@openbot-build/core/chat/Operations") {}
 
@@ -218,7 +231,7 @@ export const make = (
 				}
 				const phase = yield* Ref.make<Phase>("waiting")
 				const done = yield* Deferred.make<Exit.Exit<A, E>>()
-				const inserted = yield* Deferred.make<void>()
+				const inserted = yield* Deferred.make<boolean>()
 				// The time limit ended while the caller still waits, so the caller must
 				// move the call to the background, and the end is stored there.
 				const timeUp = yield* Deferred.make<void>()
@@ -233,14 +246,31 @@ export const make = (
 					Effect.gen(function* () {
 						// The wait stays interruptible. When the caller stops before it
 						// completes `inserted`, it must still be able to stop this fiber.
-						yield* Deferred.await(inserted)
+						if (!(yield* Deferred.await(inserted))) {
+							yield* Ref.update(local, HashMap.remove(id))
+							return
+						}
 						// When the store has the end, the Chat must get its notice too. So an
 						// interruption waits until both are done.
 						yield* Effect.uninterruptible(
 							Effect.gen(function* () {
 								const endedAt = yield* Clock.currentTimeMillis
-								const finished = yield* store.finish(id, end, endedAt)
-								if (finished !== undefined) yield* input.notify(finished)
+								const finished = yield* store
+									.finish(id, end, endedAt)
+									.pipe(
+										Effect.catch((error) =>
+											Effect.logWarning(
+												"Could not store the end of an Operation",
+												error,
+											).pipe(
+												Effect.annotateLogs(annotations),
+												Effect.as(
+													Option.some({ ...record, status: end, endedAt }),
+												),
+											),
+										),
+									)
+								if (Option.isSome(finished)) yield* input.notify(finished.value)
 							}).pipe(Effect.ensuring(Ref.update(local, HashMap.remove(id)))),
 						)
 					})
@@ -274,6 +304,11 @@ export const make = (
 							}
 							if (before === "waiting")
 								yield* Deferred.succeed(timeUp, undefined)
+							if (!(yield* Deferred.await(inserted)))
+								yield* Deferred.succeed(
+									done,
+									Exit.failCause(Cause.die(tooLong)),
+								)
 							yield* Effect.logInfo(
 								"An Operation ran past its time limit",
 							).pipe(Effect.annotateLogs(annotations))
@@ -310,7 +345,9 @@ export const make = (
 							return yield* restore(foreground)
 						// The child fiber can be interrupted, even when it is forked here.
 						const fiber = yield* Effect.forkIn(
-							body.pipe(Effect.ensuring(release(input.chat))),
+							Effect.scoped(
+								Effect.andThen(options.whileRunning ?? Effect.void, body),
+							).pipe(Effect.ensuring(release(input.chat))),
 							scope,
 						)
 
@@ -340,15 +377,33 @@ export const make = (
 						if (!moved)
 							return {
 								_tag: "Done" as const,
-								exit: yield* restore(Deferred.await(done)),
+								exit: yield* restore(Deferred.await(done)).pipe(
+									Effect.onInterrupt(() => Fiber.interrupt(fiber)),
+								),
 							}
 						const entry: Local = { chat: input.chat, fiber }
 						yield* Ref.update(local, HashMap.set(id, entry))
 						// `finish` waits for `inserted`, so complete it even when the insert
 						// dies. Then `store.finish` finds no record and announces nothing.
-						yield* store
-							.insert(record)
-							.pipe(Effect.ensuring(Deferred.succeed(inserted, undefined)))
+						const stored = yield* store.insert(record).pipe(
+							Effect.as(true),
+							Effect.catch((error) =>
+								Effect.logWarning(
+									"Could not store a background Operation",
+									error,
+								).pipe(Effect.annotateLogs(annotations), Effect.as(false)),
+							),
+							Effect.onExit((exit) =>
+								Deferred.succeed(inserted, Exit.isSuccess(exit) && exit.value),
+							),
+						)
+						if (!stored)
+							return {
+								_tag: "Done" as const,
+								exit: yield* restore(Deferred.await(done)).pipe(
+									Effect.onInterrupt(() => Fiber.interrupt(fiber)),
+								),
+							}
 						return { _tag: "Background" as const, record }
 					}),
 				)
@@ -356,10 +411,14 @@ export const make = (
 
 		const get = (chat: ChatIdentity.Id, id: Operation.Id) =>
 			store.get(id).pipe(
-				Effect.filterOrFail(
-					(record): record is Operation.Record =>
-						record !== undefined && record.chat === chat,
-					() => Operation.NotFound.make({ id }),
+				Effect.flatMap(
+					Option.match({
+						onNone: () => Effect.fail(Operation.NotFound.make({ id })),
+						onSome: (record) =>
+							record.chat === chat
+								? Effect.succeed(record)
+								: Effect.fail(Operation.NotFound.make({ id })),
+					}),
 				),
 			)
 

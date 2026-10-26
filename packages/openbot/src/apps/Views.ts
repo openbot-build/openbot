@@ -569,8 +569,8 @@ export const make = Effect.gen(function* () {
 						),
 					)
 					const view: View = {
-						id: yield* newId,
-						operationId,
+						id: Api.AppViewId.make(yield* newId),
+						operationId: operation.id,
 						readOnly: false,
 						chat: chatId,
 						turn: operation.turn,
@@ -728,7 +728,7 @@ export const make = Effect.gen(function* () {
 								}
 								const source: Api.ActionSource = {
 									_tag: "AppUiAction",
-									viewId: id,
+									viewId: view.id,
 									requestId: request.requestId,
 									connectionId: view.connectionId,
 									revision: view.revision,

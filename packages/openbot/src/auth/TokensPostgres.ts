@@ -43,7 +43,7 @@ const view = (
 	Schema.decodeEffect(PolicyJson)(row.policy).pipe(
 		storageUnavailable("The stored policy of a token does not decode."),
 		Effect.map((policy) => ({
-			id: row.id,
+			id: UserTokensApi.TokenId.make(row.id),
 			name: row.name,
 			prefix: row.prefix,
 			policy,
@@ -127,7 +127,7 @@ export const make: Effect.Effect<
 							lastUsedAt: null,
 						}
 						yield* tx.insert(tokens).values(row)
-						return { token: yield* view(row), secret }
+						return { token: yield* view(row), secret: Redacted.make(secret) }
 					}),
 				)
 			}).pipe(
@@ -214,7 +214,7 @@ export const make: Effect.Effect<
 					kind: "user_token" as const,
 					userId: row.userId,
 					organizationId: row.organizationId,
-					tokenId: row.id,
+					tokenId: UserTokensApi.TokenId.make(row.id),
 				}
 			}),
 	})

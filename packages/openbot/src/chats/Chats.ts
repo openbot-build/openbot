@@ -1,3 +1,4 @@
+import type { Duration } from "effect"
 import {
 	Chat,
 	ChatStore,
@@ -148,7 +149,7 @@ export class Chats extends Context.Service<
 		readonly wait: (
 			id: Chat.Id,
 			after: Chat.Revision,
-			timeoutMs?: number,
+			timeout?: Duration.Input,
 			afterActivity?: ChatActivity,
 		) => Effect.Effect<ChatView, ServiceError>
 		/** Stops the running Turn. It does nothing when no Turn runs. */
@@ -260,7 +261,6 @@ export type Instance = typeof Chats.Service & {
 		ChatHost.Values,
 		{},
 		Chat.ChatNotFound | Chat.ChatError | ChatStore.ChatStoreError,
-		never,
 		PluginTools
 	>
 	readonly store: ChatStore.Store<ChatHost.Values>

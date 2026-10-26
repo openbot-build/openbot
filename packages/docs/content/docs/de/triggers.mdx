@@ -103,6 +103,10 @@ abgeschalteter Trigger gibt `401` mit `TriggerHookDenied` zurück.
 Ein neues `PUT` erstellt ein neues Geheimnis, und das alte funktioniert nicht
 mehr. `DELETE /v1/triggers/:triggerId/webhook` entfernt den Webhook.
 
+Darf der Akteur dem Bot keine Arbeit mehr geben, oder ist der Bot archiviert,
+kommt `409 TriggerInvalid`. Ein Speicher- oder Ausführungsfehler ergibt
+`503 TriggerStorageUnavailable`.
+
 ---
 
 ## Für wen die Arbeit ist

@@ -1404,7 +1404,7 @@ export const layer = Layer.effect(
 				const stored = found.value
 				const pause = stored.delegation.pause
 				if (stored.delegation.status !== "paused" || pause === undefined) return
-				const root = pause.delegation ?? id
+				const root = pause.delegation ?? stored.delegation.id
 				const chats = yield* chatsFor({ organizationId, userId: stored.userId })
 				if (stored.delegation.chat !== null)
 					yield* chats
@@ -1420,7 +1420,11 @@ export const layer = Layer.effect(
 							child.delegation.id,
 							["running"],
 							(current) =>
-								paused(current, { limit: pause.limit, now, delegation: root }),
+								paused(current, {
+									limit: pause.limit,
+									now,
+									delegation: root,
+								}),
 						)
 						if (Option.isSome(stopped) && child.delegation.chat !== null)
 							yield* chats

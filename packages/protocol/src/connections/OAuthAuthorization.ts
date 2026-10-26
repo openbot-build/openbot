@@ -263,11 +263,13 @@ export const discoverResource = Effect.fn("Authorization.discoverResource")(
 							fetch,
 						),
 					catch: (error) =>
-						AuthorizationError.make({
-							reason: "Metadata",
-							issue: "Protected Resource Metadata discovery failed",
-							cause: error,
-						}),
+						Schema.is(Network.NetworkError)(error)
+							? error
+							: AuthorizationError.make({
+									reason: "Metadata",
+									issue: "Protected Resource Metadata discovery failed",
+									cause: error,
+								}),
 				})
 				const resource = yield* ResourceMetadata.decode(prm)
 				if (resource.resource !== options.resource)
@@ -314,12 +316,14 @@ export const discover = Effect.fn("Authorization.discover")(
 							protocolVersion: Document.protocolVersion,
 						}),
 					catch: (error) =>
-						AuthorizationError.make({
-							reason: "Metadata",
-							issue:
-								"Authorization server discovery failed or issuer did not match",
-							cause: error,
-						}),
+						Schema.is(Network.NetworkError)(error)
+							? error
+							: AuthorizationError.make({
+									reason: "Metadata",
+									issue:
+										"Authorization server discovery failed or issuer did not match",
+									cause: error,
+								}),
 				})
 				// SDK 2.3.1 checks OIDC but removes OAuth extension fields such as revocation_endpoint.
 				// Keep the bounded source document only after the SDK has checked its issuer.
@@ -649,11 +653,13 @@ export const complete = Effect.fn("Authorization.complete")(
 							fetchFn: fetch,
 						}),
 					catch: (error) =>
-						AuthorizationError.make({
-							reason: "GrantRejected",
-							issue: "Authorization code exchange failed",
-							cause: error,
-						}),
+						Schema.is(Network.NetworkError)(error)
+							? error
+							: AuthorizationError.make({
+									reason: "GrantRejected",
+									issue: "Authorization code exchange failed",
+									cause: error,
+								}),
 				})
 			}),
 		)
@@ -738,11 +744,13 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 						fetchFn: fetch,
 					}),
 				catch: (error) =>
-					AuthorizationError.make({
-						reason: "RefreshFailed",
-						issue: "Refresh grant was rejected",
-						cause: error,
-					}),
+					Schema.is(Network.NetworkError)(error)
+						? error
+						: AuthorizationError.make({
+								reason: "RefreshFailed",
+								issue: "Refresh grant was rejected",
+								cause: error,
+							}),
 			})
 		}),
 	)

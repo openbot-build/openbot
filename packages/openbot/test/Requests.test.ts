@@ -110,6 +110,8 @@ const memoryRecords = Effect.gen(function* () {
 			}
 		},
 		transaction: (_key, operation) => lock.withPermits(1)(operation),
+		// The transaction already holds the one lock for all keys.
+		lock: () => Effect.void,
 	}
 	return { service, afterStatusRead }
 })

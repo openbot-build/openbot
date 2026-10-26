@@ -201,14 +201,16 @@ export const layer = (
 	)
 
 /** The local object storage. Its secret key is always set. */
-type Storage = Api.FileStorageInput & { readonly secretAccessKey: string }
+type Storage = Api.FileStorageInput & {
+	readonly secretAccessKey: Redacted.Redacted<string>
+}
 
 /** The local RustFS that devenv starts. Without it, development has no file storage. */
 const fileStorage = Config.all({
 	endpoint: Config.schema(Api.StorageEndpoint, "OPENBOT_DEV_S3_ENDPOINT"),
 	bucket: Config.schema(Api.BucketName, "OPENBOT_DEV_S3_BUCKET"),
 	accessKeyId: Config.String("OPENBOT_DEV_S3_ACCESS_KEY_ID"),
-	secretAccessKey: Config.String("OPENBOT_DEV_S3_SECRET_ACCESS_KEY"),
+	secretAccessKey: Config.Redacted("OPENBOT_DEV_S3_SECRET_ACCESS_KEY"),
 }).pipe(
 	Config.map((storage): Storage => ({
 		...storage,
@@ -244,11 +246,7 @@ const createBucket = (storage: Storage) =>
 	Effect.gen(function* () {
 		const client = yield* HttpClient.HttpClient
 		const now = yield* Clock.currentTimeMillis
-		yield* S3.createBucket(
-			client,
-			{ ...storage, secretAccessKey: Redacted.make(storage.secretAccessKey) },
-			now,
-		)
+		yield* S3.createBucket(client, storage, now)
 	}).pipe(
 		Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
 		Background.logFailure("The development bucket was not made"),

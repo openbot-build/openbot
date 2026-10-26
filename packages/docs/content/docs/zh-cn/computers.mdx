@@ -38,6 +38,12 @@ OpenBot 在保存密钥之前，会先向提供方检查它。密钥永远不会
 
 ---
 
+文件调用中的路径不存在时，会返回
+`404 ComputerPathNotFound`。其他提供商故障仍返回
+`502 ComputerProviderFailed`。删除仍有 Computer 的提供商时，会返回
+`409 ComputerProviderInUse`。连接器使用协议版本 3。失败响应中，路径不存在使用
+`reason: "NotFound"`，其他失败使用 `reason: "Failed"`。
+
 ## 创建和使用 Computer
 
 ```sh

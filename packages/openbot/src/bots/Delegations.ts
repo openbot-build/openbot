@@ -45,7 +45,7 @@ export interface CreateInput {
 	readonly author: Turn.Author
 	readonly chain: Chain
 	readonly parent: Delegation["parent"]
-	readonly trigger?: string
+	readonly trigger?: Delegation["trigger"]
 	readonly bot: BotsApi.BotId
 	readonly task: string
 	readonly reason?: string
@@ -205,7 +205,7 @@ export const make: Effect.Effect<
 							? {}
 							: { runningSince: input.runningSince }),
 						delegation: {
-							id,
+							id: DelegationsApi.DelegationId.make(id),
 							parent: input.parent,
 							...(input.trigger === undefined
 								? {}

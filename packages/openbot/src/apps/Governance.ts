@@ -7,6 +7,7 @@ import {
 	Layer,
 	Option,
 	Ref,
+	Schedule,
 	Stream,
 } from "effect"
 import * as Background from "../app/Background.ts"
@@ -58,9 +59,13 @@ export const layer = Layer.effect(
 				"OpenBot could not read the App restrictions. It keeps the current ones.",
 			),
 		)
-		yield* Stream.merge(
-			Stream.filter(settings.changes, (scope) => scope.kind === "platform"),
-			Stream.tick("30 seconds"),
+		yield* Background.repeat(reload.pipe(Effect.delay("30 seconds")), {
+			schedule: Schedule.forever,
+			message: "OpenBot could not read the App restrictions.",
+		})
+		yield* Stream.filter(
+			settings.changes,
+			(scope) => scope.kind === "platform",
 		).pipe(
 			Stream.runForEach(() => reload),
 			Effect.forkScoped,

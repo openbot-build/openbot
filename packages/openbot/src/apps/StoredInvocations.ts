@@ -1,3 +1,4 @@
+import { outcomeUnknownMessage } from "./AppResults.ts"
 import {
 	AppExecution,
 	ExperienceNotFound,
@@ -62,8 +63,7 @@ export const open = (
 							operationId: value.id,
 							source: value.source,
 							reason: "OutcomeUnknown",
-							message:
-								"This operation may have reached the App. Check its actual state before taking another action.",
+							message: outcomeUnknownMessage,
 						}
 					: value.result,
 		})

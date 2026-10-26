@@ -1,4 +1,4 @@
-import { Context, Data, Schema, type Effect } from "effect"
+import { Data, Schema, type Effect } from "effect"
 import * as ModelRuntime from "./Model.ts"
 import * as ProviderRuntime from "./Provider.ts"
 import type * as Chat from "../chat/Chat.ts"
@@ -45,9 +45,9 @@ export const ServiceTier = Schema.Struct({
 })
 
 export interface ContextLimits {
-	readonly contextWindow?: number
-	readonly inputTokens?: number
-	readonly autoCompactTokens?: number
+	readonly contextWindow: number
+	readonly inputTokens: number
+	readonly autoCompactTokens: number
 }
 
 /** Model catalog data that can be serialized. Executable models live in Model. */
@@ -155,12 +155,6 @@ export type RuntimeModelConfiguration = ModelConfigurationOperations<
 	never
 >
 
-/** Manages host configuration. Provider builds the executable model separately. */
-export class ModelConfiguration extends Context.Service<
-	ModelConfiguration,
-	ModelConfigurationOperations
->()("@openbot-build/core/models/Config/ModelConfiguration") {}
-
 export class ExecutionModeError extends Schema.TaggedError<
 	ExecutionModeError,
 	{ readonly brand: unique symbol }
@@ -189,9 +183,3 @@ export type RuntimeExecutionMode = ExecutionModeOperations<
 	Chat.ChatNotFound | Chat.Conflict | ChatStore.ChatStoreError,
 	never
 >
-
-/** Configuration for the current Chat, bound by the host. */
-export class ExecutionMode extends Context.Service<
-	ExecutionMode,
-	ExecutionModeOperations
->()("@openbot-build/core/models/Config/ExecutionMode") {}

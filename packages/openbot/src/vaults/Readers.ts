@@ -1,8 +1,11 @@
+import { Redacted } from "effect"
 import type { VaultsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Context,
 	Effect,
+	HashMap,
+	Option,
 	Layer,
 	pipe,
 	Predicate,
@@ -21,6 +24,7 @@ export class VaultReadFailed extends Schema.TaggedError<
 	{ readonly brand: unique symbol }
 >()("VaultReadFailed", {
 	message: Schema.String,
+	retry: Schema.Boolean,
 	cause: Schema.optional(Schema.Defect()),
 }) {}
 
@@ -50,8 +54,8 @@ const decodeJson = Schema.decodeUnknownEffect(
 	Schema.fromJsonString(Schema.Unknown),
 )
 
-const failed = (message: string, cause?: unknown) =>
-	VaultReadFailed.make({ message, cause })
+const failed = (message: string, cause?: unknown, retry = false) =>
+	VaultReadFailed.make({ message, cause, retry })
 
 /** Sends one request and gives back the JSON body of a good answer. */
 const fetchJson = (
@@ -67,13 +71,17 @@ const fetchJson = (
 			})),
 		),
 		Effect.mapError((error) =>
-			failed(`${what}: the password manager did not answer`, error),
+			failed(`${what}: the password manager did not answer`, error, true),
 		),
 		Effect.timeoutOrElse({
 			duration: timeoutMs,
 			orElse: () =>
 				Effect.fail(
-					failed(`${what}: the password manager did not answer in time`),
+					failed(
+						`${what}: the password manager did not answer in time`,
+						undefined,
+						true,
+					),
 				),
 		}),
 		Effect.flatMap(({ status, text }) => {
@@ -86,7 +94,13 @@ const fetchJson = (
 					failed(`${what}: the password manager has no such item`),
 				)
 			if (status < 200 || status >= 300)
-				return Effect.fail(failed(`${what} failed with HTTP ${status}`))
+				return Effect.fail(
+					failed(
+						`${what} failed with HTTP ${status}`,
+						undefined,
+						status === 429 || status >= 500,
+					),
+				)
 			return decodeJson(text).pipe(
 				// @effect-rules-next-line blind-error-map -- The answer can hold secrets, and the decode failure holds the answer, so the error must not keep it.
 				Effect.mapError(() => failed(`${what}: the answer is not JSON`)),
@@ -105,16 +119,25 @@ const string = (value: unknown): string | undefined =>
 
 /** Takes the asked fields from all fields of an item. */
 const pick = (
-	found: ReadonlyMap<string, string>,
+	found: HashMap.HashMap<string, string>,
 	fields: ReadonlyArray<string>,
 ): Effect.Effect<ReadonlyMap<string, string>, VaultReadFailed> => {
-	const missing = Arr.filter(fields, (name) => !found.has(name))
+	const missing = Arr.filter(fields, (name) => !HashMap.has(found, name))
 	if (missing.length > 0)
 		return Effect.fail(
 			failed(`The item has no field with the name ${Arr.join(missing, ", ")}`),
 		)
 	return Effect.succeed(
-		new Map(Arr.map(fields, (name) => [name, found.get(name)!] as const)),
+		new Map(
+			Arr.flatMap(fields, (name) =>
+				Option.toArray(
+					Option.map(
+						HashMap.get(found, name),
+						(value) => [name, value] as const,
+					),
+				),
+			),
+		),
 	)
 }
 
@@ -148,17 +171,20 @@ export const onePassword = (
 				"Reading the 1Password item",
 			).pipe(
 				Effect.flatMap((item) => {
-					const found = new Map<string, string>()
+					let found = HashMap.empty<string, string>()
 					for (const entry of list(field(item, "fields"))) {
 						const value = string(field(entry, "value"))
 						if (value === undefined) continue
 						const purpose = string(field(entry, "purpose"))
-						if (purpose === "USERNAME") found.set("username", value)
-						if (purpose === "PASSWORD") found.set("password", value)
+						if (purpose === "USERNAME")
+							found = HashMap.set(found, "username", value)
+						if (purpose === "PASSWORD")
+							found = HashMap.set(found, "password", value)
 						const id = string(field(entry, "id"))
-						if (id !== undefined && !found.has(id)) found.set(id, value)
+						if (id !== undefined && !HashMap.has(found, id))
+							found = HashMap.set(found, id, value)
 						const label = string(field(entry, "label"))
-						if (label !== undefined) found.set(label, value)
+						if (label !== undefined) found = HashMap.set(found, label, value)
 					}
 					return pick(found, fields)
 				}),
@@ -216,27 +242,28 @@ export const bitwarden = (
 					`/object/item/${id}`,
 					"Reading the Bitwarden item",
 				)
-				const found = new Map<string, string>()
+				let found = HashMap.empty<string, string>()
 				const login = field(item, "login")
 				for (const key of ["username", "password"] as const) {
 					const value = string(field(login, key))
-					if (value !== undefined) found.set(key, value)
+					if (value !== undefined) found = HashMap.set(found, key, value)
 				}
 				const notes = string(field(item, "notes"))
-				if (notes !== undefined) found.set("notes", notes)
+				if (notes !== undefined) found = HashMap.set(found, "notes", notes)
 				for (const entry of list(field(item, "fields"))) {
 					const name = string(field(entry, "name"))
 					const value = string(field(entry, "value"))
-					if (name !== undefined && value !== undefined) found.set(name, value)
+					if (name !== undefined && value !== undefined)
+						found = HashMap.set(found, name, value)
 				}
-				if (fields.includes("totp") && !found.has("totp")) {
+				if (fields.includes("totp") && !HashMap.has(found, "totp")) {
 					const code = string(
 						field(
 							yield* get(`/object/totp/${id}`, "Reading the Bitwarden code"),
 							"data",
 						),
 					)
-					if (code !== undefined) found.set("totp", code)
+					if (code !== undefined) found = HashMap.set(found, "totp", code)
 				}
 				return yield* pick(found, fields)
 			})
@@ -254,7 +281,10 @@ export const hashiCorp = (
 		fetchJson(
 			client,
 			HttpClientRequest.get(credentials.url + path).pipe(
-				HttpClientRequest.setHeader("X-Vault-Token", credentials.token),
+				HttpClientRequest.setHeader(
+					"X-Vault-Token",
+					Redacted.value(credentials.token),
+				),
 				credentials.namespace === undefined
 					? (request) => request
 					: HttpClientRequest.setHeader(
@@ -280,10 +310,11 @@ export const hashiCorp = (
 			return get(`/v1/${mount}/data/${path}`, "Reading the Vault secret").pipe(
 				Effect.flatMap((body) => {
 					const data = field(field(body, "data"), "data")
-					const found = new Map<string, string>()
+					let found = HashMap.empty<string, string>()
 					if (Predicate.isObject(data))
 						for (const [key, value] of Rec.toEntries(data))
-							found.set(
+							found = HashMap.set(
+								found,
 								key,
 								Predicate.isString(value) ? value : JSON.stringify(value),
 							)

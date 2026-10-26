@@ -1,3 +1,4 @@
+import { Model, Provider } from "@openbot-build/core"
 import { ModelProvidersApi } from "@openbot-build/api"
 import {
 	Array as Arr,
@@ -60,7 +61,7 @@ const link = (
 ): Effect.Effect<ModelProvidersApi.ProviderModel, Schema.SchemaError> =>
 	Effect.gen(function* () {
 		return {
-			model: row.modelId,
+			model: Model.Id.make(row.modelId),
 			modelOwner:
 				row.modelOwnerKind === "platform" ? "platform" : "organization",
 			...(row.upstream === null ? {} : { upstream: row.upstream }),
@@ -348,7 +349,10 @@ export const make = Effect.gen(function* () {
 					yield* checkEndpoint(input.kind, endpoint)
 					const now = yield* Clock.currentTimeMillis
 					const id = yield* newId
-					const apiKey = yield* secrets.seal(input.apiKey, binding(id))
+					const apiKey = yield* secrets.seal(
+						Redacted.value(input.apiKey),
+						binding(id),
+					)
 					const row = {
 						id,
 						...ownerColumns(owner),
@@ -356,7 +360,7 @@ export const make = Effect.gen(function* () {
 						name: Str.trim(input.name),
 						endpoint,
 						apiKey,
-						apiKeyHint: hint(input.apiKey),
+						apiKeyHint: hint(Redacted.value(input.apiKey)),
 						availability:
 							owner.kind === "platform"
 								? yield* encodeAvailability(input.availability)
@@ -388,7 +392,7 @@ export const make = Effect.gen(function* () {
 							.for("update")
 						if (row === undefined)
 							return yield* ModelProvidersApi.ModelProviderNotFound.make({
-								providerId: id,
+								providerId: Provider.Id.make(id),
 							})
 						if (row.version !== patch.expectedVersion)
 							return yield* ModelProvidersApi.ModelProviderConflict.make({
@@ -403,8 +407,11 @@ export const make = Effect.gen(function* () {
 							patch.apiKey === undefined
 								? undefined
 								: {
-										apiKey: yield* secrets.seal(patch.apiKey, binding(id)),
-										apiKeyHint: hint(patch.apiKey),
+										apiKey: yield* secrets.seal(
+											Redacted.value(patch.apiKey),
+											binding(id),
+										),
+										apiKeyHint: hint(Redacted.value(patch.apiKey)),
 									}
 						if (patch.models !== undefined) {
 							yield* checkLinks(tx, owner, kind, patch.models)
@@ -438,12 +445,12 @@ export const make = Effect.gen(function* () {
 							.returning()
 						if (updated === undefined)
 							return yield* ModelProvidersApi.ModelProviderNotFound.make({
-								providerId: id,
+								providerId: Provider.Id.make(id),
 							})
 						const [result] = yield* withLinks([updated], tx)
 						if (result === undefined)
 							return yield* ModelProvidersApi.ModelProviderNotFound.make({
-								providerId: id,
+								providerId: Provider.Id.make(id),
 							})
 						return result
 					}),
@@ -460,7 +467,7 @@ export const make = Effect.gen(function* () {
 						rows.length === 0
 							? Effect.fail(
 									ModelProvidersApi.ModelProviderNotFound.make({
-										providerId: id,
+										providerId: Provider.Id.make(id),
 									}),
 								)
 							: Effect.void,

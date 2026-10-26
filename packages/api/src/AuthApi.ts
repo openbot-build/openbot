@@ -1,3 +1,4 @@
+import { SettingsUnavailable } from "./SettingsErrors.ts"
 import { Context, Redacted, Schema, String as Str } from "effect"
 import {
 	HttpApiEndpoint,
@@ -161,7 +162,12 @@ export class SessionAuth extends HttpApiMiddleware.Service<
 }) {}
 export class OriginCheck extends HttpApiMiddleware.Service<OriginCheck>()(
 	"@openbot-build/api/AuthApi/OriginCheck",
-	{ error: ForbiddenOrigin.pipe(HttpApiSchema.status(403)) },
+	{
+		error: [
+			ForbiddenOrigin.pipe(HttpApiSchema.status(403)),
+			SettingsUnavailable.pipe(HttpApiSchema.status(503)),
+		],
+	},
 ) {}
 export class NoStore extends HttpApiMiddleware.Service<NoStore>()(
 	"@openbot-build/api/AuthApi/NoStore",

@@ -74,7 +74,10 @@ export const make = (
 						parameters: JsonSchema.JsonSchema,
 						handle: (
 							input: unknown,
-						) => Effect.Effect<Schema.Json, Schema.SchemaError>,
+						) => Effect.Effect<
+							Schema.Json,
+							Schema.SchemaError | Operation.StoreError
+						>,
 					) =>
 						ToolEntry.entry(name, description, parameters, handle, {
 							log: "An operation tool failed",

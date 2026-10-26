@@ -26,8 +26,6 @@ import {
 } from "effect"
 import { ProtocolStores, toStoreError } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { eq } from "drizzle-orm"
-import { appRecords } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { Governance } from "./Governance.ts"
@@ -324,19 +322,6 @@ export const make: Effect.Effect<
 				)
 			const host: BoundApp = {
 				discover: discovery.resolve,
-				list: db
-					.select()
-					.from(appRecords)
-					.where(eq(appRecords.owner, owner))
-					.pipe(
-						Effect.flatMap((rows) =>
-							Effect.forEach(rows, (row) =>
-								Schema.decodeEffect(StoredConnections.appCodec)(row.body),
-							),
-						),
-						Effect.mapError(appError),
-					),
-				get: stores.apps.getApp,
 				listConnections: StoredConnections.list(db, secrets, owner).pipe(
 					Effect.map(Arr.map((row) => row.connection)),
 					Effect.mapError(appError),
@@ -435,31 +420,6 @@ export const make: Effect.Effect<
 							),
 						)
 					}),
-				setEnabled: ({ key, enabled }) =>
-					keyChecked(key).pipe(
-						Effect.andThen(
-							StoredConnections.update(
-								db,
-								secrets,
-								owner,
-								key.connectionId,
-								(stored) => ({
-									...stored,
-									verification: null,
-									connection: {
-										...stored.connection,
-										state: enabled
-											? stored.connection.state === "Disabled"
-												? "Enabled"
-												: stored.connection.state
-											: "Disabled",
-									},
-								}),
-							).pipe(Effect.mapError(toStoreError("Update owned App state"))),
-						),
-						Effect.tap(() => active.close(key)),
-						Effect.map((row) => row.connection),
-					),
 				remove: (key) =>
 					Effect.gen(function* () {
 						yield* revoke(key)
@@ -553,8 +513,6 @@ export const make: Effect.Effect<
 				revokeAuthorization: (key) =>
 					locks.withConnection(key, host.revokeAuthorization(key)),
 				remove: (key) => locks.withConnection(key, host.remove(key)),
-				setEnabled: (input) =>
-					locks.withConnection(input.key, host.setEnabled(input)),
 			}
 		},
 	})

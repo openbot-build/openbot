@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { type Caller, ComputersApi } from "@openbot-build/api"
 import { and, eq } from "drizzle-orm"
 import {
@@ -58,6 +59,7 @@ const encodeHints = Schema.encodeEffect(HintsJson)
 type Row = typeof computerProviders.$inferSelect
 
 export type Failure =
+	| ComputersApi.ComputerProviderInUse
 	| ComputersApi.ComputerProviderNotFound
 	| ComputersApi.ComputerConflict
 	| ComputersApi.ComputerInvalid
@@ -69,7 +71,7 @@ const binding = (id: string) => `openbot_computer_providers:${id}:credentials`
 
 /** The last characters of the API key. The other fields are not secret. */
 const hintsOf = (credentials: Credentials) => ({
-	apiKey: hint(credentials.apiKey),
+	apiKey: hint(Redacted.value(credentials.apiKey)),
 })
 
 const viewOf = (
@@ -347,9 +349,7 @@ export const make = Effect.gen(function* () {
 						.limit(1),
 				)
 				if (used.length > 0)
-					return yield* ComputersApi.ComputerInvalid.make({
-						message: "Computers still use this provider. Delete them first.",
-					})
+					return yield* ComputersApi.ComputerProviderInUse.make({ id })
 				yield* stored(
 					db.delete(computerProviders).where(where(caller.organizationId, id)),
 				)

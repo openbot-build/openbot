@@ -44,7 +44,7 @@ export class Rules extends Context.Service<
 			input: BotsApi.UpdateRuleRequest,
 		) => Effect.Effect<
 			Rule,
-			BotsApi.BotNotFound | BotsApi.BotConflict | BotsApi.BotStorageUnavailable
+			BotsApi.RuleNotFound | BotsApi.BotConflict | BotsApi.BotStorageUnavailable
 		>
 	}
 >()("@openbot-build/openbot/capabilities/Rules") {}
@@ -80,7 +80,7 @@ export const make: Effect.Effect<
 				const now = yield* Clock.currentTimeMillis
 				return yield* put(organizationId, {
 					...input,
-					id: "rul_" + (yield* newId),
+					id: BotsApi.RuleId.make("rul_" + (yield* newId)),
 					version: 0,
 					createdAt: now,
 					updatedAt: now,
@@ -92,7 +92,9 @@ export const make: Effect.Effect<
 				Effect.gen(function* () {
 					const found = yield* rules.find(organizationId, id)
 					if (Option.isNone(found) || found.value.bot !== bot)
-						return yield* BotsApi.BotNotFound.make({ bot: id })
+						return yield* BotsApi.RuleNotFound.make({
+							rule: BotsApi.RuleId.make(id),
+						})
 					const rule = found.value
 					if (rule.version !== input.expected)
 						return yield* BotsApi.BotConflict.make({

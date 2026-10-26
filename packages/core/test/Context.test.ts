@@ -21,7 +21,6 @@ import {
 	Config,
 	ContextCompaction,
 	ContextWindow,
-	ConversationContextOperations,
 	Item,
 	Model,
 	Provider,
@@ -90,14 +89,7 @@ it.effect(
 				})
 			const before = yield* selected(runtimeStore, chat)
 			const log = yield* runtimeStore.items(chat)
-			const service = ConversationContextOperations.make({
-				store: runtimeStore,
-				runtime,
-				chat,
-				request,
-			})
-			const result = yield* service.compact({ targetTokens: 20 })
-			assert.ok(Option.isNone(result.summary))
+			const result = yield* runtime.compact({ chat, request, targetTokens: 20 })
 			assert.strictEqual(result.afterTokens, 10)
 			assert.strictEqual(yield* test.compactions, 1)
 			const compacted = yield* runtimeStore.read(chat)
@@ -142,9 +134,6 @@ it.effect(
 				yield* json(yield* freshStore.items(chat)),
 				/whole history.*continue/,
 			)
-			const load = yield* service.load({ additional: "tail" })
-			assert.strictEqual(load.window._tag, "Native")
-			assert.strictEqual(load.estimatedTokens, 10)
 		}).pipe(
 			Effect.provide(
 				Layer.merge(
@@ -338,30 +327,6 @@ for (const strategy of [
 		},
 	)
 }
-
-it.effect("summarize only returns text and changes nothing", () =>
-	Effect.gen(function* () {
-		const { runtime, runtimeStore, chat } = yield* ChatTest()
-		const before = yield* selected(runtimeStore, chat)
-		const summary = yield* ConversationContextOperations.make({
-			store: runtimeStore,
-			runtime,
-			chat,
-			request,
-		}).summarize
-		assert.strictEqual(summary.text, "summary")
-		assert.strictEqual(summary.sourceMessages, 1)
-		assert.deepStrictEqual(yield* runtimeStore.read(chat), before)
-	}).pipe(
-		Effect.provide(
-			LanguageModelTest({
-				streamText: () => Stream.empty,
-				generateText: () =>
-					Effect.succeed([Response.makePart("text", { text: "summary" })]),
-			}),
-		),
-	),
-)
 
 it.effect(
 	"a native window stays for its own model, and another model gets a Prompt window with a note first",

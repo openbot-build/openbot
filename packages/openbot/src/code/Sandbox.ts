@@ -110,7 +110,7 @@ export const make: Effect.Effect<
 					cause,
 				),
 			),
-			Effect.catch(() => Effect.succeed(false)),
+			Effect.orElseSucceed(() => false),
 		),
 	)
 	const run: typeof Sandbox.Service.run = (program, answer) =>
@@ -142,7 +142,10 @@ export const make: Effect.Effect<
 								message: error instanceof Error ? error.message : String(error),
 								error,
 								outOfMemory:
-									"code" in error && error.code === "ERR_WORKER_OUT_OF_MEMORY",
+									typeof error === "object" &&
+									error !== null &&
+									"code" in error &&
+									error.code === "ERR_WORKER_OUT_OF_MEMORY",
 							})
 						})
 						worker.on("exit", (code) => {
@@ -155,7 +158,9 @@ export const make: Effect.Effect<
 						return worker
 					}),
 					(worker) =>
-						Effect.tryPromise(() => worker.terminate()).pipe(Effect.ignore),
+						Effect.tryPromise(() => worker.terminate()).pipe(
+							Effect.ignore({ log: "Debug" }),
+						),
 				)
 				const post = (message: ToWorker) =>
 					Effect.sync(() => worker.postMessage(message))

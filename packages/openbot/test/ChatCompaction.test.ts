@@ -1,6 +1,14 @@
 import * as BotFixture from "./BotFixture.ts"
 import { assert, layer } from "@effect/vitest"
-import { Effect, Ref, Schema, Stream, String as Str } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Option,
+	Ref,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
 import { LanguageModel, Response } from "effect/ai"
 import * as ChatHost from "../src/chats/ChatHost.ts"
 import * as ManagedChats from "../src/chats/ManagedChats.ts"
@@ -89,6 +97,56 @@ layer(ChatsFixture.layerDatabase, {
 				// The history keeps every Item, also those that are only in the summary.
 				const items = yield* chats.items(chat, { limit: 100 })
 				assert.ok(Str.includes("Part 0:")(yield* encodeJson(items.items)))
+			}),
+		60000,
+	)
+	it.effect(
+		"a slow event reader still gets one final response after the Turn ends",
+		() =>
+			Effect.gen(function* () {
+				yield* DatabasePostgres.migrate
+				const model = yield* LanguageModel.make({
+					generateText: () => Effect.succeed([]),
+					streamText: () =>
+						Stream.fromIterable([
+							Response.makePart("text-start", { id: "answer" }),
+							...Arr.replicate(
+								Response.makePart("text-delta", {
+									id: "answer",
+									delta: "word ",
+								}),
+								2048,
+							),
+							Response.makePart("text-end", { id: "answer" }),
+							Response.makePart("finish", { reason: "stop", usage }),
+						]),
+				})
+				const chats = yield* ManagedChats.make({
+					...ChatsFixture.models(model),
+					namespace: "slow-events",
+				}).pipe(Effect.provide(HostTools.none))
+				const chat = (yield* chats.create(BotFixture.direct())).chat.id
+				const result = yield* chats.deliverStream(chat, {
+					input: "Write a long answer",
+					author: ChatHost.authorOf("test-user"),
+				})
+				assert.ok(Option.isSome(result.events))
+				yield* ChatsFixture.settled(chats, chat)
+				const events = yield* Stream.runCollect(result.events.value).pipe(
+					Effect.timeout("10 seconds"),
+				)
+				assert.strictEqual(
+					Arr.filter(events, (event) => event.event === "response.completed")
+						.length,
+					1,
+				)
+				assert.strictEqual(
+					Arr.last(events).pipe(
+						Option.map((event) => event.event),
+						Option.getOrElse(() => "none"),
+					),
+					"response.completed",
+				)
 			}),
 		60000,
 	)

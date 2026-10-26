@@ -1,8 +1,4 @@
-import {
-	Authorization,
-	type Caller,
-	type RequestsApi,
-} from "@openbot-build/api"
+import { Authorization, type Caller, RequestsApi } from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
 import type { ChatResponseSseEvent } from "@openbot-build/api"
 import {
@@ -109,18 +105,20 @@ type Choice = typeof Choice.Type
 
 /** The value of an approval button: the request, the choice and the revision it saw. */
 const Button = Schema.TemplateLiteralParser([
-	Schema.NonEmptyString,
+	RequestsApi.CapabilityRequestId,
 	" ",
 	Choice,
 	" ",
 	Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 ]).pipe(
 	Schema.decodeTo(
-		Schema.Struct({
-			request: Schema.String,
-			choice: Choice,
-			revision: Schema.Int,
-		}),
+		Schema.toType(
+			Schema.Struct({
+				request: RequestsApi.CapabilityRequestId,
+				choice: Choice,
+				revision: Schema.Int,
+			}),
+		),
 		SchemaTransformation.transform({
 			decode: ([request, , choice, , revision]) => ({
 				request,
@@ -133,7 +131,11 @@ const Button = Schema.TemplateLiteralParser([
 	),
 )
 
-const buttonValue = (request: string, choice: Choice, revision: number) =>
+const buttonValue = (
+	request: RequestsApi.CapabilityRequestId,
+	choice: Choice,
+	revision: number,
+) =>
 	Schema.encodeEffect(Button)({ request, choice, revision }).pipe(
 		// A stored request always has an ID and a revision of 0 or more, so a failure here is a defect.
 		Effect.orDie,
@@ -562,7 +564,7 @@ export const layer = (options: Options = {}) =>
 							event,
 							"You may not use this Channel. Ask an administrator of your organization.",
 						)
-						return Effect.void
+						return () => Effect.void
 					}
 					const found = yield* chatOf(organizationId, stored, event).pipe(
 						Effect.asSome,
@@ -588,7 +590,7 @@ export const layer = (options: Options = {}) =>
 							event,
 							"This Channel cannot work now: its actor cannot give work to its Bot. Ask an administrator to check the Channel.",
 						)
-						return Effect.void
+						return () => Effect.void
 					}
 					const { chat, owner } = found.value
 					const chats = yield* backend.forCaller({
@@ -601,15 +603,16 @@ export const layer = (options: Options = {}) =>
 						event.conversation.kind === "group"
 							? `${yield* nameOf(organizationId, userId)}: ${event.text}`
 							: event.text
-					return deliverMessage({
-						organizationId,
-						stored,
-						chats,
-						chat,
-						conversation: event.conversation.key,
-						text,
-						author: userId,
-					})
+					return () =>
+						deliverMessage({
+							organizationId,
+							stored,
+							chats,
+							chat,
+							conversation: event.conversation.key,
+							text,
+							author: userId,
+						})
 				})
 
 			const onAction = (
@@ -679,7 +682,8 @@ export const layer = (options: Options = {}) =>
 						claimed.channelId,
 					)
 					// A deleted or disabled Channel drops its events.
-					if (Option.isNone(found) || !found.value.enabled) return Effect.void
+					if (Option.isNone(found) || !found.value.enabled)
+						return () => Effect.void
 					const stored = found.value
 					const channel = yield* registry.get(claimed.organizationId, stored)
 					const event = claimed.event
@@ -688,7 +692,7 @@ export const layer = (options: Options = {}) =>
 						event.conversation.kind === "group" &&
 						!event.mentioned
 					)
-						return Effect.void
+						return () => Effect.void
 					const identity = yield* channels.identity(
 						stored.id,
 						event.sender.externalId,
@@ -702,13 +706,13 @@ export const layer = (options: Options = {}) =>
 								}),
 							)
 						yield* askToLink(claimed.organizationId, stored, channel, event)
-						return Effect.void
+						return () => Effect.void
 					}
 					const userId = identity.value.userId
 					if (event._tag === "Message")
 						return yield* onMessage(claimed, stored, channel, event, userId)
 					yield* onAction(claimed, stored, channel, event, userId)
-					return Effect.void
+					return () => Effect.void
 				})
 
 			/**
@@ -969,21 +973,21 @@ export const layer = (options: Options = {}) =>
 			 * while the work runs. A batch can take longer than one lease, and another
 			 * instance must not take its items then. The renewal stops with the batch.
 			 */
-			const whileClaimed = <I, E, R>(
+			const whileClaimed = <I, E, R, ExtendError>(
 				items: ReadonlyArray<I>,
-				extend: (items: ReadonlyArray<I>) => Effect.Effect<void, unknown>,
+				extend: (items: ReadonlyArray<I>) => Effect.Effect<void, ExtendError>,
 				work: (item: I) => Effect.Effect<void, E, R>,
 			) =>
 				items.length === 0
 					? Effect.void
 					: Effect.scoped(
 							Effect.gen(function* () {
-								yield* Effect.sleep(renewEvery).pipe(
-									Effect.andThen(extend(items)),
-									// One failed renewal does not stop the next one.
-									Background.logFailure("A Channel lease could not be renewed"),
-									Effect.forever,
-									Effect.forkScoped,
+								yield* Background.repeat(
+									extend(items).pipe(Effect.delay(renewEvery)),
+									{
+										schedule: Schedule.forever,
+										message: "A Channel lease could not be renewed",
+									},
 								)
 								yield* Effect.forEach(items, work, {
 									concurrency: 4,
@@ -1005,7 +1009,7 @@ export const layer = (options: Options = {}) =>
 								// reach the Chat twice.
 								Effect.uninterruptibleMask((restore) =>
 									restore(handleEvent(entry)).pipe(
-										Effect.flatten,
+										Effect.flatMap((deliver) => deliver()),
 										Effect.andThen(queue.finishEvent(entry)),
 									),
 								),

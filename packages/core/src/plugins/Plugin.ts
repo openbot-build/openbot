@@ -62,7 +62,7 @@ export type StoreEffect<A, E, R> = Effect.Effect<
 	R
 >
 
-/** Safe operations, like those of SynchronizedRef, on this plugin's optional value. */
+/** Operations on this plugin's optional value. An update may run again after a write conflict, so it must have no outside effects. */
 export interface StoreOperations<A, E = never, R = never> {
 	readonly get: StoreEffect<Option.Option<A>, E, R>
 	readonly snapshot: StoreEffect<StoreState<A>, E, R>

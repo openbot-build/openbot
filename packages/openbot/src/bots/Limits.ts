@@ -1,3 +1,4 @@
+import { RequestsApi } from "@openbot-build/api"
 import type { Chat } from "@openbot-build/core"
 import type { BotsApi, DelegationsApi } from "@openbot-build/api"
 import {
@@ -74,7 +75,7 @@ export const paused = (
 		readonly limit: Limit
 		readonly now: number
 		/** The work above whose limit was reached, when it was not this work. */
-		readonly delegation?: string
+		readonly delegation?: DelegationsApi.DelegationId
 		readonly request?: string | null
 	},
 ): Stored => {
@@ -87,7 +88,10 @@ export const paused = (
 			usage: usageOf(stored, input.now),
 			pause: {
 				limit: input.limit,
-				request: input.request ?? null,
+				request:
+					input.request == null
+						? null
+						: RequestsApi.CapabilityRequestId.make(input.request),
 				...(input.delegation === undefined
 					? {}
 					: { delegation: input.delegation }),
@@ -300,7 +304,10 @@ export const make: Effect.Effect<
 							...stored,
 							delegation: {
 								...stored.delegation,
-								pause: { ...stored.delegation.pause!, request },
+								pause: {
+									...stored.delegation.pause!,
+									request: RequestsApi.CapabilityRequestId.make(request),
+								},
 							},
 						}),
 						(stored) => stored.delegation.pause?.request === null,

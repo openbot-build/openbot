@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import {
 	Account,
 	BotsApi,
@@ -6,14 +7,7 @@ import {
 	OrganizationApi,
 	OpenBotApi,
 } from "@openbot-build/api"
-import {
-	Array as Arr,
-	Effect,
-	Option,
-	pipe,
-	Schema,
-	String as Str,
-} from "effect"
+import { Array as Arr, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "../app/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
@@ -112,12 +106,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 			.handle("listBots", ({ query }) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
-					return yield* bots.list(caller, {
-						...(query.archived === undefined
-							? {}
-							: { archived: query.archived === "true" }),
-						...(query.bot === undefined ? {} : { bot: query.bot }),
-					})
+					return yield* bots.list(caller, query)
 				}),
 			)
 			.handle(
@@ -156,16 +145,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
 					const { home, viewer } = yield* memoryOf(caller, params.botId)
-					const tags =
-						query.tags === undefined
-							? []
-							: pipe(
-									query.tags,
-									Str.split(","),
-									Arr.map(Str.trim),
-									Arr.filter((tag) => tag.length > 0),
-								)
-					return yield* memories.view(home, viewer, tags)
+					return yield* memories.view(home, viewer, query.tags ?? [])
 				}),
 			)
 			.handle(
@@ -408,7 +388,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 						})
 						return {
 							invitation,
-							secret,
+							secret: secret === null ? null : Redacted.make(secret),
 							url: InvitationLinks.urlOf(origin, invitation.path, secret),
 						}
 					}),
@@ -444,7 +424,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 					const secret = link === null ? null : yield* sealed(links.open(link))
 					return {
 						invitation,
-						secret,
+						secret: secret === null ? null : Redacted.make(secret),
 						url: InvitationLinks.urlOf(
 							yield* publicOrigin,
 							invitation.path,
@@ -503,7 +483,9 @@ export const layerInvitations = HttpApiBuilder.group(
 								: payload.secret !== undefined
 									? ({
 											_tag: "Link",
-											secretHash: yield* links.hashOf(payload.secret),
+											secretHash: yield* links.hashOf(
+												Redacted.value(payload.secret),
+											),
 										} as const)
 									: undefined
 						if (by === undefined)

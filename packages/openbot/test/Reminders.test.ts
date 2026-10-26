@@ -82,6 +82,8 @@ const memoryRecords = Layer.effect(
 				}
 			},
 			transaction: (_key, operation) => lock.withPermits(1)(operation),
+			// The transaction already holds the one lock for all keys.
+			lock: () => Effect.void,
 		})
 	}),
 )

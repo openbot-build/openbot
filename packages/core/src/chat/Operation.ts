@@ -4,6 +4,7 @@ import {
 	Data,
 	Effect,
 	HashMap,
+	Option,
 	Order,
 	PubSub,
 	Ref,
@@ -77,8 +78,16 @@ export class NotFound extends Schema.TaggedError<
 }) {}
 
 /** Where Operations are kept. Hosts keep them in a database. */
+export class StoreError extends Schema.TaggedError<
+	StoreError,
+	{ readonly brand: unique symbol }
+>()("OperationStoreError", {
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
+
 export interface Store {
-	readonly insert: (record: Record) => Effect.Effect<void>
+	readonly insert: (record: Record) => Effect.Effect<void, StoreError>
 	/**
 	 * Gives a Running Operation its end. It returns the new record, or nothing when
 	 * the Operation already had an end.
@@ -87,9 +96,11 @@ export interface Store {
 		id: Id,
 		status: Status,
 		endedAt: number,
-	) => Effect.Effect<Record | undefined>
-	readonly get: (id: Id) => Effect.Effect<Record | undefined>
-	readonly list: (chat: ChatIdentity.Id) => Effect.Effect<ReadonlyArray<Record>>
+	) => Effect.Effect<Option.Option<Record>, StoreError>
+	readonly get: (id: Id) => Effect.Effect<Option.Option<Record>, StoreError>
+	readonly list: (
+		chat: ChatIdentity.Id,
+	) => Effect.Effect<ReadonlyArray<Record>, StoreError>
 	/** The ids of Operations that changed. A host with more servers sends changes from all. */
 	readonly changes: Stream.Stream<Id>
 	/**
@@ -100,7 +111,9 @@ export interface Store {
 	/** The ids that other servers asked this server to stop. */
 	readonly cancelRequests: Stream.Stream<Id>
 	/** Says that this server still runs these Operations. */
-	readonly heartbeat: (ids: ReadonlyArray<Id>) => Effect.Effect<void>
+	readonly heartbeat: (
+		ids: ReadonlyArray<Id>,
+	) => Effect.Effect<void, StoreError>
 }
 
 /** A Store in memory, for tests and for one process. */
@@ -117,21 +130,16 @@ export const memoryStore: Effect.Effect<Store> = Effect.gen(function* () {
 			Ref.modify(records, (current) => {
 				const found = HashMap.get(current, id)
 				if (found._tag === "None" || isTerminal(found.value.status))
-					return [undefined, current] as const
+					return [Option.none<Record>(), current] as const
 				const next: Record = { ...found.value, status, endedAt }
-				return [next, HashMap.set(current, id, next)] as const
+				return [Option.some(next), HashMap.set(current, id, next)] as const
 			}).pipe(
 				Effect.tap((record) =>
-					record === undefined ? Effect.void : PubSub.publish(changed, id),
+					Option.isNone(record) ? Effect.void : PubSub.publish(changed, id),
 				),
 			),
 		get: (id) =>
-			Ref.get(records).pipe(
-				Effect.map((current) => HashMap.get(current, id)),
-				Effect.map((found) =>
-					found._tag === "Some" ? found.value : undefined,
-				),
-			),
+			Ref.get(records).pipe(Effect.map((current) => HashMap.get(current, id))),
 		list: (chat) =>
 			Ref.get(records).pipe(
 				Effect.map((current) =>

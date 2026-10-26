@@ -245,6 +245,9 @@ curl -X PATCH -b cookies.txt \
   https://api.example.com/v1/organization/members/u_456
 ```
 
+Rollen-IDs in Pfaden müssen zum Schema passen. Nennt eine Änderung an einem
+Mitglied eine fehlende Rolle, kommt `404 RoleNotFound`.
+
 ### Ein Member entfernen
 
 `DELETE /v1/organization/members/:userId` entfernt das Member und widerruft
@@ -424,6 +427,10 @@ neuesten zuerst. Es braucht `read` auf `AuditLog`.
 ---
 
 ## Fehler
+
+`InvitationNotFound` gibt `404` zurück. Wenn die Anfrage eine Einladung nennt,
+enthält der Fehler `invitationId`. Passt das Secret eines Bot-Links zu keiner
+Einladung, fehlt dieses Feld.
 
 | Status | Fehler                           | Wann                                                                                                   |
 | ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------ |

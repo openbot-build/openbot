@@ -1,3 +1,4 @@
+import { unconverted } from "./AppResults.ts"
 import { organizationOf } from "./StoredConnections.ts"
 import {
 	AppExecution,
@@ -223,18 +224,10 @@ export const make: Effect.Effect<
 								Effect.catch((error) =>
 									failed({ source: value.source, error }),
 								),
-								Effect.catch((error) =>
-									Effect.logWarning(
-										"An App failure could not be turned into a result.",
-										Cause.fail(error),
-									).pipe(
-										Effect.as({
-											_tag: "Failed",
-											source: value.source,
-											reason: "Schema",
-											message:
-												"The App continuation returned invalid standard content.",
-										} as const),
+								Effect.catch(
+									unconverted(
+										value.source,
+										"The App continuation returned invalid standard content.",
 									),
 								),
 							),

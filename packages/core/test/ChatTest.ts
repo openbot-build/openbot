@@ -10,6 +10,8 @@ import {
 import { Array as Arr, Effect } from "effect"
 import { type Tool } from "effect/ai"
 
+import { modelForBuild } from "./LanguageModelTest.ts"
+
 /**
  * A runtime over a store in memory, and one new Chat.
  * It needs a Scope: the runtime stops when the Scope closes.
@@ -25,6 +27,7 @@ export const ChatTest = <
 	options: {
 		/** Give the same persistence to a second store, as after a restart. */
 		readonly persistence?: ChatStore.Persistence
+		readonly operations?: typeof import("@openbot-build/core").Operations.Operations.Service
 	} = {},
 ) =>
 	Effect.gen(function* () {
@@ -37,7 +40,13 @@ export const ChatTest = <
 			definition,
 			persistence,
 		})
-		const runtime = yield* ChatRuntime.make({ store: runtimeStore, bot })
+		const runtime = yield* ChatRuntime.make({
+			store: runtimeStore,
+			bot,
+			...(options.operations === undefined
+				? {}
+				: { operations: options.operations }),
+		}).pipe(Effect.provide(modelForBuild))
 		const view = yield* runtimeStore.create({})
 		return {
 			definition,

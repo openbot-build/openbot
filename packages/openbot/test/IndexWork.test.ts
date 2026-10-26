@@ -4,6 +4,7 @@ import { AppIndexApi as Api } from "@openbot-build/api"
 import {
 	CatalogDiscovery,
 	Discovery,
+	Indexing,
 	PublicIndexing,
 	RobotsPolicy,
 	Client,
@@ -18,6 +19,7 @@ import {
 	Layer,
 	Option,
 	Redacted,
+	Ref,
 	Schedule,
 	Schema,
 	String as Str,
@@ -93,8 +95,9 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const database = yield* Postgres.start
 				const website = yield* Fixture.start()
 				const publisher = yield* Fixture.start()
+				const replaceClaim = yield* Ref.make(false)
 				const indexStorage = IndexStorage.layer
-				const indexing = PublicIndexing.layer.pipe(
+				const indexing = PublicIndexing.layerInspection.pipe(
 					Layer.provide(CatalogDiscovery.layerRules),
 					Layer.provide(RobotsPolicy.layer),
 					Layer.provide(
@@ -103,11 +106,33 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							cas: [website.ca],
 						}),
 					),
-					Layer.provide(indexStorage),
 				)
+				const checked = Layer.effect(
+					Indexing.PublicationInspection,
+					Effect.gen(function* () {
+						const inspection = yield* Indexing.PublicationInspection
+						const db = yield* Db.make
+						return Indexing.PublicationInspection.of({
+							inspect: (input, previous) =>
+								inspection.inspect(input, previous).pipe(
+									Effect.tap(() =>
+										Effect.gen(function* () {
+											if (yield* Ref.get(replaceClaim))
+												yield* db
+													.update(appIndexJobs)
+													.set({ claim: "new-worker" })
+													.where(eq(appIndexJobs.cardUrl, input.cardUrl))
+													.pipe(Effect.orDie)
+										}),
+									),
+								),
+						})
+					}),
+				).pipe(Layer.provide(indexing))
+
 				const layers = Layer.merge(
 					PublicIndex.layer({}),
-					Work.layer().pipe(Layer.provide(indexing)),
+					Work.layer().pipe(Layer.provide(checked)),
 				).pipe(
 					Layer.provideMerge(indexStorage),
 					Layer.provide(Governance.layer),
@@ -137,6 +162,26 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					assert.strictEqual(first.entry.cardUrl, cardUrl)
 					assert.strictEqual(first.check?._tag, "Indexed")
 					assert.strictEqual(yield* work.runOne(), false)
+					// A worker that lost its claim must not change the public entry.
+					yield* publisher.setDescription("Old worker result")
+					yield* enqueue
+					yield* Ref.set(replaceClaim, true)
+					yield* work.runOne()
+					assert.strictEqual(
+						(yield* index.get(cardUrl)).entry.card.description,
+						first.entry.card.description,
+					)
+					const held = (yield* db
+						.select()
+						.from(appIndexJobs)
+						.where(eq(appIndexJobs.cardUrl, cardUrl)))[0]
+					assert.strictEqual(held?.claim, "new-worker")
+					yield* Ref.set(replaceClaim, false)
+					yield* db
+						.update(appIndexJobs)
+						.set({ claim: null, leaseUntil: 0 })
+						.where(eq(appIndexJobs.cardUrl, cardUrl))
+
 					yield* publisher.setDescription("Updated project documents")
 					yield* TestClock.adjust("1 hour")
 					yield* work.runOne()

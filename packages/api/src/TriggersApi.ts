@@ -1,3 +1,4 @@
+import { SecretOutput } from "./Secret.ts"
 import { DelegationId } from "./DelegationsApi.ts"
 import { Schema } from "effect"
 import {
@@ -15,11 +16,8 @@ import {
 	GroupRequired,
 } from "./Authorization.ts"
 
-export const TriggerId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/TriggerId"))
-export type TriggerId = typeof TriggerId.Type
+export { TriggerId } from "./TriggerId.ts"
+import { TriggerId } from "./TriggerId.ts"
 
 /** A member owns their own triggers. The organization owns shared triggers. */
 export const TriggerOwner = Schema.TaggedUnion({
@@ -93,7 +91,7 @@ export type UpdateTriggerRequest = typeof UpdateTriggerRequest.Type
 /** The secret of a webhook. OpenBot shows it only once. */
 export const WebhookSecret = Schema.Struct({
 	url: Schema.String,
-	secret: Schema.String,
+	secret: SecretOutput,
 })
 export type WebhookSecret = typeof WebhookSecret.Type
 
@@ -202,6 +200,7 @@ export class TriggerHooksApi extends HttpApiGroup.make("triggerHooks").add(
 			HttpApiSchema.status(202),
 		),
 		error: [
+			TriggerInvalid.pipe(HttpApiSchema.status(409)),
 			TriggerHookDenied.pipe(HttpApiSchema.status(401)),
 			TriggerStorageUnavailable.pipe(HttpApiSchema.status(503)),
 		],

@@ -1,3 +1,6 @@
+import { CapabilityRequestIdBrand } from "./CapabilityRequestId.ts"
+import { ConnectionIdBrand } from "./ConnectionId.ts"
+import { Model as CoreModel, Provider } from "@openbot-build/core"
 /**
  * The authorization model of OpenBot, made with `@nmnmcc/ability`.
  *
@@ -50,10 +53,13 @@ export class File extends Resource.Class<File>()("File", {
 	path: (f) => ["org", f.organizationId, "user", f.ownerUserId, "file", f.id],
 }) {}
 
+// Ability 1.0.1 cannot prove scope coverage for string length checks.
+// These internal resource fields keep the ID brands without those checks.
+// The HTTP, storage and button schemas still check the full IDs.
 /** The requests of the Bots of a user for new capabilities. */
 export class Request extends Resource.Class<Request>()("Request", {
 	actions: ["resolve"],
-	fields: ownFields,
+	fields: { ...ownFields, id: CapabilityRequestIdBrand },
 	path: (f) => [
 		"org",
 		f.organizationId,
@@ -66,7 +72,7 @@ export class Request extends Resource.Class<Request>()("Request", {
 
 export class Connection extends Resource.Class<Connection>()("Connection", {
 	actions: ["read", "write"],
-	fields: ownFields,
+	fields: { ...ownFields, id: ConnectionIdBrand },
 	path: (f) => [
 		"org",
 		f.organizationId,
@@ -188,8 +194,8 @@ export class Model extends Resource.Class<Model>()("Model", {
 	actions: ["use"],
 	fields: {
 		organizationId: Schema.String,
-		provider: Schema.String,
-		id: Schema.String,
+		provider: Provider.Id,
+		id: CoreModel.Id,
 	},
 	path: (f) => ["org", f.organizationId, "model", f.provider, f.id],
 }) {}

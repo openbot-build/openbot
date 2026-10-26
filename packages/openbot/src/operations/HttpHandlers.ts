@@ -28,6 +28,12 @@ const ownChat = (chats: Chats, id: Chat.Id) =>
 			() => ChatStorageUnavailable.make({}),
 		),
 	)
+const unavailable = Failures.replaceTag(
+	"OperationStoreError",
+	"OpenBot could not read the Operation store",
+	() => ChatStorageUnavailable.make({}),
+)
+
 const notFound = (error: { readonly id: Operation.Id }) =>
 	Effect.fail(OperationNotFound.make({ id: error.id }))
 
@@ -54,21 +60,27 @@ export const layer = HttpApiBuilder.group(
 			return handlers
 				.handle("list", ({ params }) =>
 					Effect.flatMap(chatsFor(params.chatId), (chats) =>
-						chats.operations.list(params.chatId),
+						chats.operations.list(params.chatId).pipe(unavailable),
 					),
 				)
 				.handle("get", ({ params }) =>
 					Effect.flatMap(chatsFor(params.chatId), (chats) =>
 						chats.operations
 							.get(params.chatId, params.id)
-							.pipe(Effect.catchTag("OperationNotFound", notFound)),
+							.pipe(
+								Effect.catchTag("OperationNotFound", notFound),
+								unavailable,
+							),
 					),
 				)
 				.handle("cancel", ({ params }) =>
 					Effect.flatMap(chatsFor(params.chatId), (chats) =>
 						chats.operations
 							.cancel(params.chatId, params.id)
-							.pipe(Effect.catchTag("OperationNotFound", notFound)),
+							.pipe(
+								Effect.catchTag("OperationNotFound", notFound),
+								unavailable,
+							),
 					),
 				)
 		}),

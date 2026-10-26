@@ -46,15 +46,6 @@ export const publicOriginOr = <E>(
 	)
 
 /**
- * Reads the public origin while the server answers a request, for code that
- * has no error for it. The setup check of the server read the platform
- * settings for the same request a moment before, from the same cache, so a
- * failure here is a defect.
- */
-export const publicOriginInRequest = (settings: typeof Settings.Service) =>
-	Effect.orDie(publicOrigin(settings))
-
-/**
  * The part of the platform settings that sign-in is made from. When it
  * changes, sign-in needs a new Better Auth instance. Other settings are read
  * each time they are used.
@@ -148,10 +139,10 @@ export const changeFiles = (
 			storage: {
 				...fields,
 				secretAccessKey: yield* secrets.seal(
-					secretAccessKey,
+					Redacted.value(secretAccessKey),
 					bindings.fileStorageSecret,
 				),
-				secretAccessKeyHint: hint(secretAccessKey),
+				secretAccessKeyHint: hint(Redacted.value(secretAccessKey)),
 			},
 		}
 	})

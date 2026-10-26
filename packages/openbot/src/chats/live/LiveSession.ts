@@ -1,3 +1,4 @@
+import { Duration } from "effect"
 import { LiveApi } from "@openbot-build/api"
 import {
 	ChatState,
@@ -115,7 +116,7 @@ const historyOf = (prompt: Prompt.Prompt): ReadonlyArray<Live.HistoryMessage> =>
 	})
 
 /** How long the watcher waits before it reads the Chat again for changes of other servers. */
-const watchMs = 2000
+const watchEvery = Duration.seconds(2)
 
 export const run = (input: {
 	readonly socket: Socket.Socket
@@ -137,7 +138,9 @@ export const run = (input: {
 				encodeServer(message).pipe(
 					// The server makes each message from the schema, so a message that does not encode is a bug.
 					Effect.orDie,
-					Effect.flatMap((text) => writer.write(text).pipe(Effect.ignore)),
+					Effect.flatMap((text) =>
+						writer.write(text).pipe(Effect.ignore({ log: "Debug" })),
+					),
 				)
 			const fail = (code: LiveApi.LiveErrorCode, message: string) =>
 				say({ type: "error", code, message })
@@ -280,7 +283,7 @@ export const run = (input: {
 									"A live Chat could not start the input that waits.",
 								),
 							)
-					view = yield* chats.wait(chat, view.chat.revision, watchMs)
+					view = yield* chats.wait(chat, view.chat.revision, watchEvery)
 				}
 			}).pipe(
 				// A short storage failure must not end the session.
@@ -316,7 +319,8 @@ export const run = (input: {
 							yield* driver.expect(text)
 							yield* deliver(text)
 						}),
-					OutputAudio: ({ bytes }) => writer.write(bytes).pipe(Effect.ignore),
+					OutputAudio: ({ bytes }) =>
+						writer.write(bytes).pipe(Effect.ignore({ log: "Debug" })),
 					OutputTranscript: ({ itemId, delta }) =>
 						say({ type: "output.transcript.delta", itemId, delta }),
 					OutputDone: ({ itemId }) => say({ type: "output.done", itemId }),
@@ -389,14 +393,14 @@ export const run = (input: {
 						yield* onMessage(message.value)
 					}
 				}
-			}).pipe(Effect.ignore)
+			}).pipe(Effect.ignore({ log: "Debug" }))
 
 			// The finalizers above end the running Turn and the hub.
 			yield* Effect.raceAllFirst([fromClient, fromBackend, watch]).pipe(
 				Effect.ensuring(
 					writer
 						.write(new Socket.CloseEvent(1000, "closed"))
-						.pipe(Effect.ignore),
+						.pipe(Effect.ignore({ log: "Debug" })),
 				),
 			)
 		}),

@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 /**
  * The driver for any service that speaks the E2B API, such as E2B, PPIO, or a
  * self-hosted E2B. It uses two APIs over plain HTTP, with no E2B SDK:
@@ -81,7 +82,7 @@ const hostOf = (connection: Envd.Connection, port: number) =>
 	})
 
 const gone = (id: string) =>
-	ComputerGone.make({ reason: `The E2B sandbox ${id} does not exist` })
+	ComputerGone.make({ message: `The E2B sandbox ${id} does not exist` })
 
 export const make = (credentials: Credentials) =>
 	Effect.gen(function* () {
@@ -95,7 +96,9 @@ export const make = (credentials: Credentials) =>
 			send(
 				client,
 				request.pipe(
-					HttpClientRequest.setHeaders({ "x-api-key": credentials.apiKey }),
+					HttpClientRequest.setHeaders({
+						"x-api-key": Redacted.value(credentials.apiKey),
+					}),
 				),
 				timeoutMs,
 			)

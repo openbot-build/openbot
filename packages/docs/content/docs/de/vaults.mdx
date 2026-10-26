@@ -58,6 +58,11 @@ Notizen-Tool.
 
 ---
 
+Beim Löschen eines noch genutzten Anbieters kommt `409 SecretProviderInUse`.
+Eine Prüfung gibt bei falschen Zugangsdaten oder fehlenden Feldern
+`400 SecretProviderInvalid` zurück. Ein Netzfehler oder ein kurzer Ausfall des
+Anbieters führt zu `502 SecretProviderFailed`.
+
 ## Einen Secret-Provider hinzufügen
 
 Ein Secret-Provider ist nur für Geheimnisse nötig, die außerhalb von OpenBot

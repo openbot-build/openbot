@@ -1,3 +1,4 @@
+import { sameConnection } from "../discovery/CatalogDiscovery.ts"
 import {
 	Option,
 	HashMap,
@@ -16,7 +17,6 @@ import * as OAuthAuthorization from "./OAuthAuthorization.ts"
 
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Store from "./Store.ts"
-import * as Document from "../Document.ts"
 import {
 	AppError,
 	CleanupPending,
@@ -198,28 +198,6 @@ export const remove = Effect.fn("App.remove")(function* (
 	return { _tag: "Removed", key } as const
 })
 
-/** The parts of a remote that change what a connection talks to. */
-const remoteDescription = (card: Document.ServerCard, index: number) =>
-	Option.fromNullishOr(card.remotes?.[index]).pipe(
-		Option.map((remote) => ({
-			type: remote.type,
-			url: remote.url,
-			versions: remote.supportedProtocolVersions,
-			variables: remote.variables,
-			headers: remote.headers,
-		})),
-	)
-const sameDescription = Option.makeEquivalence(
-	Schema.toEquivalence(
-		Schema.Struct({
-			type: Schema.String,
-			url: Schema.String,
-			versions: Schema.optional(Schema.Array(Schema.String)),
-			variables: Schema.optional(Schema.Record(Schema.String, Document.Input)),
-			headers: Schema.optional(Schema.Array(Document.HeaderInput)),
-		}),
-	),
-)
 const sameConfiguration = Schema.toEquivalence(
 	Schema.Record(Schema.String, Schema.String),
 )
@@ -261,9 +239,9 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 			}),
 		) ||
 		remoteIndex !== connection.remoteIndex ||
-		!sameDescription(
-			remoteDescription(service.card, connection.remoteIndex),
-			remoteDescription(candidate.card, remoteIndex),
+		!sameConnection(
+			service.card.remotes?.[connection.remoteIndex],
+			candidate.card.remotes?.[remoteIndex],
 		) ||
 		!sameConfiguration(values, Redacted.value(connection.configuration)) ||
 		Match.value(auth).pipe(

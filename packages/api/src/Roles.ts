@@ -8,7 +8,8 @@ export type BuiltinRoleId = typeof BuiltinRoleId.Type
 /** The ID of a custom role. */
 export const CustomRoleId = Schema.String.check(
 	Schema.isPattern(/^role_[a-z0-9]{32}$/),
-)
+).pipe(Schema.brand("@openbot-build/api/CustomRoleId"))
+export type CustomRoleId = typeof CustomRoleId.Type
 export const RoleId = Schema.Union([BuiltinRoleId, CustomRoleId])
 export type RoleId = typeof RoleId.Type
 export const isBuiltinRole = Schema.is(BuiltinRoleId)

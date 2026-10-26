@@ -8,6 +8,7 @@ import {
 	Context,
 	Effect,
 	Layer,
+	Option,
 	Schedule,
 	Schema,
 	Stream,
@@ -39,23 +40,18 @@ const parse = (payload: string) => {
 
 type Parsed = NonNullable<ReturnType<typeof parse>>
 
-/**
- * Logs a failure of the store, and gives `fallback`. The store of core never
- * fails, so the Operation goes on without the write. A stop is not a failure,
- * so it stays a stop.
- */
-const storageFailure =
-	<B>(fallback: B) =>
-	<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A | B, never, R> =>
-		effect.pipe(
-			Effect.catchCause((cause) =>
-				Cause.hasInterruptsOnly(cause)
-					? Effect.interrupt
-					: Effect.logWarning("An Operation could not be stored", cause).pipe(
-							Effect.as(fallback),
-						),
-			),
-		)
+/** Keeps a storage failure distinct from an Operation that is not there. */
+const storageFailure = <A, E, R>(
+	effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, Operation.StoreError, R> =>
+	effect.pipe(
+		Effect.mapError((cause) =>
+			Operation.StoreError.make({
+				message: "The Operation store could not complete the call.",
+				cause,
+			}),
+		),
+	)
 
 /**
  * The notices of the channel. A failed listen is logged, and the listener
@@ -144,14 +140,14 @@ export const make = (
 						startedAt: record.startedAt,
 					})
 					yield* notify("changed", record.id)
-				}).pipe(storageFailure(undefined)),
+				}).pipe(storageFailure),
 			finish: (id, status, endedAt) =>
 				Effect.gen(function* () {
 					const [row] = yield* db
 						.select()
 						.from(operations)
 						.where(and(where(id), eq(operations.status, "Running")))
-					if (row === undefined) return undefined
+					if (row === undefined) return Option.none()
 					const before = yield* decode(row.body)
 					const after: Operation.Record = { ...before, status, endedAt }
 					// Only the first end counts, so the update checks the status again.
@@ -160,10 +156,10 @@ export const make = (
 						.set({ status: status._tag, body: yield* encode(after) })
 						.where(and(where(id), eq(operations.status, "Running")))
 						.returning({ id: operations.id })
-					if (changed.length === 0) return undefined
+					if (changed.length === 0) return Option.none()
 					yield* notify("changed", id)
-					return after
-				}).pipe(storageFailure(undefined)),
+					return Option.some(after)
+				}).pipe(storageFailure),
 			get: (id) =>
 				db
 					.select()
@@ -173,8 +169,8 @@ export const make = (
 						Effect.flatMap((rows) =>
 							Effect.forEach(rows.slice(0, 1), (row) => decode(row.body)),
 						),
-						Effect.map((records) => records[0]),
-						storageFailure(undefined),
+						Effect.map(Arr.head),
+						storageFailure,
 					),
 			list: (chat) =>
 				db
@@ -189,7 +185,7 @@ export const make = (
 						Effect.flatMap((rows) =>
 							Effect.forEach(rows, (row) => decode(row.body)),
 						),
-						storageFailure([]),
+						storageFailure,
 					),
 			changes: mine("changed"),
 			requestCancel: (id) => notify("cancel", id),
@@ -207,7 +203,7 @@ export const make = (
 								eq(operations.status, "Running"),
 							),
 						)
-				}).pipe(storageFailure(undefined)),
+				}).pipe(storageFailure),
 		}
 		return store
 	})

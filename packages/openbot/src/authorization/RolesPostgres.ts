@@ -30,7 +30,7 @@ const view = (
 	Schema.decodeEffect(PolicyJson)(row.policy).pipe(
 		Effect.mapError(unavailable),
 		Effect.map((policy) => ({
-			id: row.id,
+			id: RolesApi.CustomRoleId.make(row.id),
 			name: row.name,
 			description: row.description,
 			builtin: false,
@@ -111,7 +111,9 @@ export const make = Effect.gen(function* () {
 					.returning()
 					.pipe(Effect.mapError(unavailable))
 				if (row === undefined)
-					return yield* OrganizationApi.RoleNotFound.make({ roleId })
+					return yield* OrganizationApi.RoleNotFound.make({
+						roleId,
+					})
 				return yield* view(row)
 			}),
 		delete: (organizationId, roleId) =>
@@ -123,7 +125,9 @@ export const make = Effect.gen(function* () {
 					.returning({ id: roles.id })
 					.pipe(Effect.mapError(unavailable))
 				if (deleted.length === 0)
-					return yield* OrganizationApi.RoleNotFound.make({ roleId })
+					return yield* OrganizationApi.RoleNotFound.make({
+						roleId,
+					})
 			}),
 	})
 })

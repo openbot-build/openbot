@@ -1,3 +1,4 @@
+import { Model } from "@openbot-build/core"
 import type { ModelProvidersApi } from "@openbot-build/api"
 import { Context, DateTime, type Effect, type Option } from "effect"
 import type { Owner } from "./ModelProviders.ts"
@@ -78,7 +79,7 @@ export const modelKey = ({
 
 /** The API form. */
 export const view = (model: StoredModel): ModelProvidersApi.Model => ({
-	id: model.id,
+	id: Model.Id.make(model.id),
 	owner: model.owner.kind,
 	type: model.type,
 	name: model.name,
@@ -104,7 +105,7 @@ export const effective = ({
 	readonly model: StoredModel
 	readonly link: ModelProvidersApi.ProviderModel
 }) => ({
-	id: model.id,
+	id: Model.Id.make(model.id),
 	owner: model.owner.kind,
 	type: model.type,
 	name: model.name,

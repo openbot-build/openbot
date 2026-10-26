@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Settings as Api } from "@openbot-build/api"
-import { Config, Effect, Layer, Option, Redacted } from "effect"
+import { Config, Effect, Layer, Option } from "effect"
 import { Command, Flag } from "effect/cli"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
 import * as SecretFiles from "../configuration/SecretFiles.ts"
@@ -163,7 +163,7 @@ const setup = Command.make("openbot setup", {
 				endpoint: input.s3Endpoint,
 				bucket: input.s3Bucket,
 				accessKeyId: input.s3AccessKeyId,
-				secretAccessKey: Option.map(input.s3SecretAccessKey, Redacted.value),
+				secretAccessKey: input.s3SecretAccessKey,
 			}).pipe(
 				Option.map((storage) => ({
 					...storage,

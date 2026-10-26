@@ -259,7 +259,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const noteFile = yield* Effect.flatMap(
 					upload(
 						address,
-						{ token: secret },
+						{ token: Redacted.value(secret) },
 						form("note.txt", "text/plain", "a note"),
 					),
 					Caller.json(FilesApi.FileObject, 201),

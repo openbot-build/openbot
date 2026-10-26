@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { BotsApi } from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
-import { Effect, HashMap, Layer, Option, Ref } from "effect"
+import { Effect, HashMap, Layer, Ref } from "effect"
 import { Prompt } from "effect/ai"
 import * as Approvals from "../src/capabilities/Approvals.ts"
 import { Answer, Gate } from "../src/capabilities/Gate.ts"
@@ -92,7 +92,7 @@ describe("Approvals", () => {
 		Effect.gen(function* () {
 			const kept = yield* Ref.make<ReadonlyArray<string>>([])
 			const decision = yield* decide({
-				find: () => Effect.succeed(Option.some(waiting)),
+				find: () => Effect.succeedSome(waiting),
 				setCall: (_organizationId, _id, call) =>
 					Ref.update(kept, (names) => [...names, call.name]),
 			})
@@ -115,7 +115,7 @@ describe("Approvals", () => {
 		() =>
 			Effect.gen(function* () {
 				const decision = yield* decide({
-					find: () => Effect.succeed(Option.some(waiting)),
+					find: () => Effect.succeedSome(waiting),
 					setCall: () => down,
 				})
 				assert.deepStrictEqual(decision, pending)

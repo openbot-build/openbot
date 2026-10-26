@@ -1,6 +1,7 @@
 import {
 	Array as Arr,
 	Effect,
+	Cause,
 	FileSystem,
 	Option,
 	Order,
@@ -32,9 +33,15 @@ export const searchFolders = Effect.fn("Dispatch.searchFolders")(
 	}) {
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
-		const realScript = yield* fs
-			.realPath(options.script)
-			.pipe(Effect.orElseSucceed(() => options.script))
+		const realScript = yield* fs.realPath(options.script).pipe(
+			Effect.tapError((error) =>
+				Effect.logDebug(
+					"Could not read the command file path.",
+					Cause.fail(error),
+				),
+			),
+			Effect.orElseSucceed(() => options.script),
+		)
 		const real = path.dirname(realScript)
 		const binFolder = (folder: string) =>
 			path.basename(folder) === "node_modules"
@@ -67,6 +74,11 @@ export const searchFolders = Effect.fn("Dispatch.searchFolders")(
 const isExecutable = (file: string) =>
 	Effect.flatMap(FileSystem.FileSystem, (fs) => fs.stat(file)).pipe(
 		Effect.map((info) => info.type === "File" && (info.mode & 0o111) !== 0),
+		Effect.tapError((error) =>
+			error.reason._tag === "NotFound"
+				? Effect.void
+				: Effect.logDebug("Could not check a command file.", Cause.fail(error)),
+		),
 		Effect.orElseSucceed(() => false),
 	)
 
@@ -90,6 +102,14 @@ export const list = Effect.fn("Dispatch.list")(function* (
 	const nameOf = Str.slice(prefix.length)
 	const inFolder = (folder: string) =>
 		fs.readDirectory(folder).pipe(
+			Effect.tapError((error) =>
+				error.reason._tag === "NotFound"
+					? Effect.void
+					: Effect.logDebug(
+							"Could not read a command folder.",
+							Cause.fail(error),
+						),
+			),
 			Effect.orElseSucceed((): ReadonlyArray<string> => []),
 			Effect.flatMap((entries) =>
 				Effect.filter(

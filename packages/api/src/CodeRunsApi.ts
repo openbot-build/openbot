@@ -13,6 +13,12 @@ import { chatParams } from "./ChatsApi.ts"
  */
 
 /** The longest program that the Bot can send, in characters. */
+export const CodeRunId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+).pipe(Schema.brand("@openbot-build/api/CodeRunId"))
+export type CodeRunId = typeof CodeRunId.Type
+
 export const maxCodeLength = 100_000
 export const Code = Schema.String.check(
 	Schema.isMinLength(1),
@@ -37,7 +43,7 @@ export const CodeCall = Schema.Struct({
 	binding: Schema.String,
 	source: AppExecution.Source,
 	/** The App operation of the call. Read it at `/v1/app-operations/:id`. */
-	operationId: Schema.String,
+	operationId: Schema.optionalKey(AppExecution.AppOperationId),
 	outcome: CallOutcome,
 })
 export type CodeCall = typeof CodeCall.Type
@@ -83,7 +89,7 @@ export type CodeRunStatus = typeof CodeRunStatus.Type
 
 /** One program and all its App calls. */
 export const CodeRun = Schema.Struct({
-	id: Schema.String,
+	id: CodeRunId,
 	chat: Chat.Id,
 	turn: Turn.Id,
 	/** The tool call of the Bot that started the program. */
@@ -101,7 +107,7 @@ export type CodeRun = typeof CodeRun.Type
 
 /** A capability request from a program names the program and the call. */
 export const RequestCode = Schema.Struct({
-	run: Schema.String,
+	run: CodeRunId,
 	index: Schema.Natural,
 	/** The whole program, so a decider can see what the call is for. */
 	code: Schema.String,
@@ -110,7 +116,7 @@ export type RequestCode = typeof RequestCode.Type
 
 export const CodeRunsApi = HttpApiGroup.make("codeRuns").add(
 	HttpApiEndpoint.get("get", "/v1/code-runs/:id", {
-		params: { id: Schema.String },
+		params: { id: CodeRunId },
 		success: CodeRun,
 		error: ExperienceErrors,
 	}),

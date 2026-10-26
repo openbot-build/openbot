@@ -374,7 +374,7 @@ export const make = Effect.gen(function* () {
 		extendEvents: (events) =>
 			Effect.gen(function* () {
 				// Without a condition, the update would change every row.
-				if (!Arr.isArrayNonEmpty(events)) return
+				if (!Arr.isReadonlyArrayNonEmpty(events)) return
 				const now = yield* Clock.currentTimeMillis
 				yield* stored(
 					db
@@ -596,7 +596,7 @@ export const make = Effect.gen(function* () {
 		extendDeliveries: (deliveries) =>
 			Effect.gen(function* () {
 				// Without a condition, the update would change every row.
-				if (!Arr.isArrayNonEmpty(deliveries)) return
+				if (!Arr.isReadonlyArrayNonEmpty(deliveries)) return
 				const now = yield* Clock.currentTimeMillis
 				// Only the lease changes. `finishDelivery` reads `updatedAt` to find a newer body.
 				yield* stored(

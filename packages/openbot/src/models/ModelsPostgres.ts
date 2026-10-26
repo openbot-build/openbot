@@ -1,3 +1,4 @@
+import { Model } from "@openbot-build/core"
 import { ModelProvidersApi } from "@openbot-build/api"
 import {
 	Array as Arr,
@@ -188,7 +189,7 @@ export const make = Effect.gen(function* () {
 							.for("update")
 						if (row === undefined)
 							return yield* ModelProvidersApi.ModelNotFound.make({
-								modelId: id,
+								modelId: Model.Id.make(id),
 							})
 						if (row.version !== patch.expectedVersion)
 							return yield* ModelProvidersApi.ModelConflict.make({
@@ -232,7 +233,7 @@ export const make = Effect.gen(function* () {
 							.returning()
 						if (updated === undefined)
 							return yield* ModelProvidersApi.ModelNotFound.make({
-								modelId: id,
+								modelId: Model.Id.make(id),
 							})
 						return yield* stored(updated)
 					}),
@@ -250,7 +251,7 @@ export const make = Effect.gen(function* () {
 							.for("update")
 						if (row === undefined)
 							return yield* ModelProvidersApi.ModelNotFound.make({
-								modelId: id,
+								modelId: Model.Id.make(id),
 							})
 						const links = yield* tx
 							.select({
@@ -278,7 +279,9 @@ export const make = Effect.gen(function* () {
 									link.ownerId === columns.ownerId,
 							)
 						)
-							return yield* ModelProvidersApi.ModelInUse.make({ modelId: id })
+							return yield* ModelProvidersApi.ModelInUse.make({
+								modelId: Model.Id.make(id),
+							})
 						const others = Arr.map(links, (link) => link.providerId)
 						if (others.length > 0) {
 							const now = yield* Clock.currentTimeMillis

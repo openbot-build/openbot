@@ -1,3 +1,4 @@
+import { Settings as SettingsApi } from "@openbot-build/api"
 import {
 	Account,
 	type AccountCaller,
@@ -80,8 +81,9 @@ export const layerOrigin = Layer.effect(
 		return (httpEffect) =>
 			Effect.gen(function* () {
 				const request = yield* HttpServerRequest.HttpServerRequest
-				// The contract gives this check no error for unreadable settings.
-				const publicOrigin = yield* Platform.publicOriginInRequest(settings)
+				const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
+					SettingsApi.SettingsUnavailable.make({}),
+				)
 				if (request.headers["origin"] !== publicOrigin)
 					return yield* AuthApi.ForbiddenOrigin.make({})
 				return yield* httpEffect

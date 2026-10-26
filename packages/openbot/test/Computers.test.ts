@@ -535,7 +535,7 @@ it.layer(
 						"/v1/computer-providers/" + provider.id,
 						"DELETE",
 					)).status,
-					400,
+					409,
 				)
 				assert.strictEqual(
 					(yield* send(alice.session, path, "DELETE")).status,
@@ -607,7 +607,7 @@ it.layer(
 				const { send, json } = client(host)
 				const alice = yield* host.login("pair-alice")
 				const machine = {
-					version: 2,
+					version: ComputersApi.connectorProtocolVersion,
 					os: "linux",
 					arch: "x64",
 					desktop: false,
@@ -624,7 +624,7 @@ it.layer(
 						"/v1/hooks/computers/pairings/" + pairing.id + "/poll",
 						"POST",
 						undefined,
-						{ authorization: "Bearer " + secret },
+						{ authorization: "Bearer " + Redacted.value(secret) },
 					)
 
 				const pairing = yield* pair
@@ -635,7 +635,10 @@ it.layer(
 						_tag: "Pending",
 					},
 				)
-				assert.strictEqual((yield* poll(pairing, "ocp_wrong")).status, 404)
+				assert.strictEqual(
+					(yield* poll(pairing, Redacted.make("ocp_wrong"))).status,
+					404,
+				)
 				// People may type the code in small letters and without the dash.
 				const typed = pipe(pairing.code, Str.replace("-", ""), Str.toLowerCase)
 				const shown = yield* json(
@@ -680,7 +683,7 @@ it.layer(
 				assert.ok(denied)
 				// An old connector cannot connect. It must update first.
 				const refused = yield* Effect.gen(function* () {
-					const old = yield* connect(approved.token)
+					const old = yield* connect(Redacted.value(approved.token))
 					const reader = yield* old.reader
 					const writer = yield* old.writer
 					yield* writer.write(
@@ -699,7 +702,7 @@ it.layer(
 				assert.strictEqual(refused, 4426)
 				const path = "/v1/computers/" + computer.id
 				yield* Effect.gen(function* () {
-					const socket = yield* connect(approved.token)
+					const socket = yield* connect(Redacted.value(approved.token))
 					const frames = yield* Socket.readerString(socket)
 					const writer = yield* socket.writer
 					const reply = (message: ComputersApi.FromConnector) =>
@@ -735,7 +738,7 @@ it.layer(
 							yield* reply({
 								_tag: "Hello",
 								hello: {
-									version: 2,
+									version: ComputersApi.connectorProtocolVersion,
 									os: "linux",
 									arch: "x64",
 									desktop: false,

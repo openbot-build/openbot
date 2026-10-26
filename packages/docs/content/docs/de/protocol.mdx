@@ -339,6 +339,21 @@ Repositorys.
 | `@openbot-build/protocol/NodeHttpServer`     | Node-Netzwerk-Layer mit den Regeln für das öffentliche Netz. |
 | `@openbot-build/protocol/McpApps`            | Browser-Host für MCP-Apps-Ansichten.                         |
 
+`McpPublisher.layer` und `layerProtected` nehmen einfache Daten für die
+Veröffentlichung an. Sie prüfen sie einmal beim Start des Layers. `registerUi`
+prüft einfache UI-Ressourcendaten in seinem Effect. Falsche Eingaben geben einen
+Fehler mit Typ zurück.
+
+`CatalogDiscovery.sameConnection` vergleicht die Teile eines Remotes, die eine
+Verbindung ändern. Neue Beschreibungstexte oder Erweiterungsfelder erhalten die
+Verbindung und die Anmeldung. Ein neues Eingabeformat oder eine Änderung der
+Kennzeichnung als geheim braucht eine neue Prüfung.
+
+OAuth-Netzfehler bleiben `NetworkError`. Sie bedeuten nicht, dass der Anbieter
+die Freigabe abgelehnt hat. Das Schließen des Verbindungs-Scopes stoppt offene
+SDK-Anfragen. Das gilt auch beim Warten auf Antwort-Header oder gespeicherte
+Tokens.
+
 Eine kleine App veröffentlichen:
 
 ```ts

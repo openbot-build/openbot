@@ -6,7 +6,13 @@ import {
 	OpenBot,
 	Server,
 } from "@openbot-build/openbot"
-import { AuthApi, Caller, Identity, OpenBotApi } from "@openbot-build/api"
+import {
+	AuthApi,
+	Caller,
+	Identity,
+	OpenBotApi,
+	UserTokensApi,
+} from "@openbot-build/api"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	Clock,
@@ -586,7 +592,7 @@ it.live(
 				Auth.Model.AuthUnavailable.make({ dependency: "storage" }),
 			)
 			const auth = Layer.mock(Auth.Auth, {
-				handler: () => Promise.resolve(new Response(null, { status: 503 })),
+				handle: () => Effect.succeed(new Response(null, { status: 503 })),
 				signInProvider: () => Effect.succeedNone,
 				resolveSession: (credential) =>
 					Redacted.value(credential) !== "signed-session"
@@ -620,7 +626,7 @@ it.live(
 								kind: "user_token" as const,
 								userId: "key-user",
 								organizationId: "key-user",
-								tokenId: "key-1",
+								tokenId: UserTokensApi.TokenId.make("key-1"),
 							})
 						: Effect.fail(
 								Auth.Model.CredentialRejected.make({ kind: "token" }),

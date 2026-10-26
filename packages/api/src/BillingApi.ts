@@ -1,3 +1,5 @@
+import { TokenId } from "./TokenId.ts"
+import { Model, Provider } from "@openbot-build/core"
 import { DateTime, Option, Schema } from "effect"
 import {
 	HttpApi,
@@ -54,8 +56,7 @@ export const PriceTier = Schema.Struct({
 	...Rates.fields,
 })
 export type PriceTier = typeof PriceTier.Type
-export const PriceTiers = Schema.Array(PriceTier).check(
-	Schema.isMinLength(1),
+export const PriceTiers = Schema.NonEmptyArray(PriceTier).check(
 	Schema.isMaxLength(20),
 	Schema.makeFilter((tiers: ReadonlyArray<PriceTier>) => {
 		for (const [index, tier] of tiers.entries()) {
@@ -146,14 +147,14 @@ export type PriceSchedule = typeof PriceSchedule.Type
 
 /** The price of a model at one provider. */
 export const ModelPrice = Schema.Struct({
-	model: Schema.String,
+	model: Model.Id,
 	...PriceSchedule.fields,
 	/** The time from which this price applies. */
 	effectiveFrom: Schema.String,
 })
 export type ModelPrice = typeof ModelPrice.Type
 export const SetModelPriceRequest = Schema.Struct({
-	model: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+	model: Model.Id.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
 	/** Leave it out for `UTC`. */
 	timeZone: Schema.optionalKey(TimeZone),
 	tiers: PriceTiers,
@@ -187,11 +188,11 @@ export const UsageEvent = Schema.Struct({
 	turnId: Schema.NullOr(Schema.String),
 	botId: Schema.NullOr(Schema.String),
 	userId: Schema.NullOr(Schema.String),
-	tokenId: Schema.NullOr(Schema.String),
-	provider: Schema.String,
+	tokenId: Schema.NullOr(TokenId),
+	provider: Provider.Id,
 	/** `platform` when the platform paid for the call, `organization` when the organization used its own API key. */
 	providerOwner: Schema.Literals(["platform", "organization"]),
-	model: Schema.String,
+	model: Model.Id,
 	inputUncached: Schema.Int,
 	inputCacheRead: Schema.Int,
 	inputCacheWrite: Schema.Int,
@@ -283,8 +284,14 @@ export type BudgetPeriod = typeof BudgetPeriod.Type
 export const BudgetMode = Schema.Literals(["hard", "soft"])
 export type BudgetMode = typeof BudgetMode.Type
 
+export const BudgetId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+).pipe(Schema.brand("@openbot-build/api/BudgetId"))
+export type BudgetId = typeof BudgetId.Type
+
 export const Budget = Schema.Struct({
-	id: Schema.String,
+	id: BudgetId,
 	scope: BudgetScope,
 	/** The user ID, Bot ID or token ID. For `organization` it is the organization ID. */
 	scopeId: Schema.String,
@@ -323,7 +330,7 @@ export type UpdateBudgetRequest = typeof UpdateBudgetRequest.Type
 export class BudgetNotFound extends Schema.TaggedError<
 	BudgetNotFound,
 	{ readonly brand: unique symbol }
->()("BudgetNotFound", { budgetId: Schema.String }) {}
+>()("BudgetNotFound", { budgetId: BudgetId }) {}
 /** Someone changed the budget after you read it, or a budget for the same scope and period exists. */
 export class BudgetConflict extends Schema.TaggedError<
 	BudgetConflict,
@@ -400,7 +407,7 @@ export class UsageApi extends HttpApiGroup.make("usage")
 	.middleware(Authorize)
 	.middleware(BotAuth) {}
 
-const budgetParams = { budgetId: Schema.String }
+const budgetParams = { budgetId: BudgetId }
 
 /** Spending limits of the organization, its members, its Bots and its user tokens. */
 export class BudgetsApi extends HttpApiGroup.make("budgets")

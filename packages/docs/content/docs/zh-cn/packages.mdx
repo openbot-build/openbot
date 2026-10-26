@@ -74,6 +74,23 @@ const program = Effect.scoped(
 )
 ```
 
+创建运行时时，把模型和工具服务提供给
+`ChatRuntime.make`。它的方法会保留这些服务，包括之后由收件箱启动的 Turn。请通过
+`bot.approvals`、`bot.compaction` 和 `operations`
+显式传入可选功能；调用方上下文中的服务不会启用功能。 `drain` 返回
+`Option<Delivery>`，没有可启动的输入时返回 `None`。
+`ConfigurationOperations.contextLimits` 返回 `Option<Config.ContextLimits>`。
+`Live.check` 返回 Effect，不支持所需能力时以 `LiveError` 失败。
+
+没有给出 `expectedRevision` 时，`store.modifyEffect`
+遇到写入冲突会最多重试五次。每次重试都会读取当前 Chat 并重新运行更新，所以更新不能产生外部副作用。显式给出
+`expectedRevision` 时，冲突会直接失败，不会重试。
+
+`Operation.Store` 的方法在存储失败时返回 `Operation.StoreError`。 `get` 和
+`finish` 返回 `Option<Record>`；`None` 表示没有匹配的记录或没有新的结束状态。
+`Operations.make` 接受带 Scope 的 `whileRunning`
+Effect，在工作、保存结束状态和通知期间持有宿主资源。首次写入失败时，调用会留在当前 Turn 中。结束状态写入失败时，Chat 仍会收到通知，并记录失败。
+
 `execute` 启动一个 Turn，等待它结束，然后返回这个 Chat。`stream`
 在 Turn 运行时提供事件。如果 Chat 中已经有一个 Turn 在运行，两者都会失败。
 
@@ -94,8 +111,7 @@ const program = Effect.scoped(
 ### 批准
 
 带 `needsApproval` 的工具在每次调用前都会先问。这时运行时会问 `Approvals`
-服务。你可以在 Bot 定义中把它作为 `approvals` 提供，也可以提供
-`Chat.Approvals`。它对每次调用给出三种决定之一：
+服务。请在 Bot 定义中把它作为 `approvals` 提供。它对每次调用给出三种决定之一：
 
 - `Chat.Decision.Allow()` 让调用现在运行。
 - `Chat.Decision.Deny({ reason })` 不运行这个调用。模型会看到原因。
@@ -178,11 +194,18 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用它的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。你也可以在自己的
 `ChatRuntime` 中使用 Turn 限制插件。
 
+`Auth.handle(request)` 返回包含响应的 Effect。`Chats.wait` 的超时接受
+`Duration.Input`，例如 `"30 seconds"`。HTTP 路由仍通过 `timeoutMs` 接受毫秒数。
+
 ### 记忆
 
 `BotMemory` 包含
 [Bot 记忆](/zh-cn/docs/memory)的类型和辅助函数。服务器用它们实现记忆 Bot 和记忆 API。记忆 API 的 schema 在
 `api` 中，名为 `BotMemory`。
+
+`BotMemory.apply` 接受 `ids` 数组，其中每个操作按顺序对应一个新 ID。
+`BotMemory.edit` 的 `id`
+是一个新的 ID 字符串。调用方在调用这些纯辅助函数前生成 ID。
 
 ### Turn 限制
 
@@ -303,6 +326,17 @@ const services = Layer.merge(
 	Layer.provide(OpenAiProvider.layerClient({ apiKey })),
 	Layer.provide(FetchHttpClient.layer),
 )
+```
+
+从这个层取得压缩服务，再把它传给 Bot：
+
+```ts
+import { ContextCompaction } from "@openbot-build/core"
+
+const runtime = Effect.gen(function* () {
+	const compaction = yield* ContextCompaction.ContextCompaction
+	return yield* ChatRuntime.make({ store, bot: { compaction } })
+}).pipe(Effect.provide(services))
 ```
 
 ### AnthropicProvider

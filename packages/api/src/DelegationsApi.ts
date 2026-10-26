@@ -1,3 +1,5 @@
+import { CapabilityRequestId } from "./CapabilityRequestId.ts"
+import { TriggerId } from "./TriggerId.ts"
 import { BotAuth } from "./AuthApi.ts"
 import { Chat, Turn } from "@openbot-build/core"
 import { Authorize, GroupRequired, own } from "./Authorization.ts"
@@ -14,7 +16,7 @@ import {
 export const DelegationId = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(128),
-)
+).pipe(Schema.brand("@openbot-build/api/DelegationId"))
 export type DelegationId = typeof DelegationId.Type
 
 /** The status of a Delegation that has ended. */
@@ -92,7 +94,7 @@ export type DelegationUsage = typeof DelegationUsage.Type
  */
 export const DelegationPause = Schema.Struct({
 	limit: DelegationLimit,
-	request: Schema.NullOr(Schema.String),
+	request: Schema.NullOr(CapabilityRequestId),
 	delegation: Schema.optionalKey(DelegationId),
 	at: Schema.Finite,
 })
@@ -106,7 +108,7 @@ export const Delegation = Schema.Struct({
 	id: DelegationId,
 	parent: DelegationParent,
 	/** The trigger that gave the work. */
-	trigger: Schema.optionalKey(Schema.String),
+	trigger: Schema.optionalKey(TriggerId),
 	bot: BotId,
 	/** The task Chat of the work. It is `null` until the work starts. */
 	chat: Schema.NullOr(Chat.Id),
@@ -130,7 +132,7 @@ export type Delegation = typeof Delegation.Type
 export class DelegationNotFound extends Schema.TaggedError<
 	DelegationNotFound,
 	{ readonly brand: unique symbol }
->()("DelegationNotFound", { delegation: Schema.String }) {}
+>()("DelegationNotFound", { delegation: DelegationId }) {}
 export class DelegationConflict extends Schema.TaggedError<
 	DelegationConflict,
 	{ readonly brand: unique symbol }

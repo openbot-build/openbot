@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import { VaultsApi } from "@openbot-build/api"
 import { Array as Arr, Effect, Record as Rec, Ref, String as Str } from "effect"
@@ -49,7 +50,7 @@ it.effect("1Password Connect finds fields by label, ID and purpose", () =>
 		const reader = Readers.onePassword(client, {
 			kind: "onepassword",
 			url: "https://connect.example.com",
-			token: "op-token",
+			token: Redacted.make("op-token"),
 		})
 		yield* reader.verify
 		const values = yield* reader.read(
@@ -150,7 +151,7 @@ it.effect(
 			const reader = Readers.hashiCorp(client, {
 				kind: "hashicorp",
 				url: "https://vault.example.com",
-				token: "hvs.test",
+				token: Redacted.make("hvs.test"),
 				mount: "kv/",
 				namespace: "team",
 			})

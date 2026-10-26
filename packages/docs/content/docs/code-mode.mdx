@@ -175,6 +175,9 @@ place of the secret.
 
 OpenBot keeps code runs sealed in the database, like App operations.
 
+A call has `operationId` only after an App operation exists. Before that, the
+field is absent. The tool result follows the same rule.
+
 ### Failure reasons
 
 | `reason`         | Meaning                                                         |

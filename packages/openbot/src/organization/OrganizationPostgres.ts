@@ -124,7 +124,7 @@ const invitationView = (
 ): Effect.Effect<OrganizationApi.Invitation, OrganizationUnavailable> =>
 	Effect.gen(function* () {
 		return {
-			id: row.id,
+			id: OrganizationApi.InvitationId.make(row.id),
 			organizationId: row.organizationId,
 			organizationName: row.organizationName,
 			// Only Bot links have no email, and this view never shows them.
@@ -148,7 +148,7 @@ const botInvitationView = (
 ): Effect.Effect<BotsApi.BotInvitation, OrganizationUnavailable> =>
 	Effect.gen(function* () {
 		return {
-			id: row.id,
+			id: OrganizationApi.InvitationId.make(row.id),
 			bot: yield* decodeBotId(row.botId),
 			email: row.email,
 			prefix: row.prefix,
@@ -223,7 +223,7 @@ export const make: Effect.Effect<
 	const recordJoin = (
 		organizationId: string,
 		account: Account,
-		roles: ReadonlyArray<string>,
+		roles: typeof Roles.Type,
 	) =>
 		audit
 			.record({
@@ -240,7 +240,7 @@ export const make: Effect.Effect<
 		tx: Transaction,
 		organizationId: string,
 		account: Account,
-		roles: ReadonlyArray<string>,
+		roles: typeof Roles.Type,
 		now: number,
 	) =>
 		Effect.gen(function* () {
@@ -737,7 +737,7 @@ export const make: Effect.Effect<
 				)
 				if (row === undefined)
 					return yield* OrganizationApi.InvitationNotFound.make({
-						invitationId,
+						invitationId: OrganizationApi.InvitationId.make(invitationId),
 					})
 				const current = yield* invitationView(row, now)
 				if (current.status !== "pending")
@@ -773,7 +773,7 @@ export const make: Effect.Effect<
 		answerInvitation: (userId, invitationId, answer) =>
 			Effect.gen(function* () {
 				const notFound = OrganizationApi.InvitationNotFound.make({
-					invitationId,
+					invitationId: OrganizationApi.InvitationId.make(invitationId),
 				})
 				const account = yield* accountOf(userId)
 				const [row] = yield* invitationRows(eq(invitations.id, invitationId))
@@ -918,7 +918,7 @@ export const make: Effect.Effect<
 				const found = yield* botInvitationRow(organizationId, bot, invitationId)
 				if (Option.isNone(found))
 					return yield* OrganizationApi.InvitationNotFound.make({
-						invitationId,
+						invitationId: OrganizationApi.InvitationId.make(invitationId),
 					})
 				const row = found.value
 				return {
@@ -941,7 +941,7 @@ export const make: Effect.Effect<
 				const found = yield* botInvitationRow(organizationId, bot, invitationId)
 				if (Option.isNone(found))
 					return yield* OrganizationApi.InvitationNotFound.make({
-						invitationId,
+						invitationId: OrganizationApi.InvitationId.make(invitationId),
 					})
 				const current = yield* botInvitationView(found.value, now)
 				if (current.status !== "pending")
@@ -963,9 +963,14 @@ export const make: Effect.Effect<
 		takeBotInvitation: (userId, by) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const id = by._tag === "Email" ? by.invitationId : ""
 				const notFound = OrganizationApi.InvitationNotFound.make({
-					invitationId: id,
+					...(by._tag === "Email"
+						? {
+								invitationId: OrganizationApi.InvitationId.make(
+									by.invitationId,
+								),
+							}
+						: {}),
 				})
 				const [row] = yield* db
 					.select()

@@ -2,10 +2,21 @@ import { Chat, Item, Turn } from "@openbot-build/core"
 import { Client, Ui } from "@openbot-build/protocol"
 import { Array as Arr, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { Source, Invocation, InvocationStatus } from "./AppExecution.ts"
+import {
+	Source,
+	Invocation,
+	InvocationStatus,
+	AppOperationId,
+} from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
-import { AppRestricted } from "./ConnectionsApi.ts"
+import { AppRestricted, ConnectionId } from "./ConnectionsApi.ts"
 import { ChatConflict } from "./ChatsApi.ts"
+
+export const AppViewId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+).pipe(Schema.brand("@openbot-build/api/AppViewId"))
+export type AppViewId = typeof AppViewId.Type
 
 export const Interaction = Schema.Struct({
 	revision: Schema.Natural,
@@ -13,8 +24,8 @@ export const Interaction = Schema.Struct({
 })
 export type Interaction = typeof Interaction.Type
 export const Binding = Schema.Struct({
-	id: Schema.String,
-	operationId: Schema.String,
+	id: AppViewId,
+	operationId: AppOperationId,
 	readOnly: Schema.Boolean,
 	chat: Chat.Id,
 	turn: Turn.Id,
@@ -51,9 +62,9 @@ export const ActionKind = Schema.Literals(
 )
 export type ActionKind = typeof ActionKind.Type
 export const ActionSource = Schema.TaggedStruct("AppUiAction", {
-	viewId: Schema.String,
+	viewId: AppViewId,
 	requestId: Schema.String,
-	connectionId: Schema.String,
+	connectionId: ConnectionId,
 	revision: Schema.Natural,
 	kind: ActionKind,
 	target: Schema.String,
@@ -101,7 +112,7 @@ const errors = [
 ]
 export const AppViewsApi = HttpApiGroup.make("appViews").add(
 	HttpApiEndpoint.post("open", "/v1/app-operations/:operationId/view", {
-		params: { operationId: Schema.String },
+		params: { operationId: AppOperationId },
 		payload: Schema.Struct({
 			chatId: Chat.Id,
 			itemId: Item.Id,
@@ -110,17 +121,17 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 		error: errors,
 	}),
 	HttpApiEndpoint.get("get", "/v1/app-views/:viewId", {
-		params: { viewId: Schema.String },
+		params: { viewId: AppViewId },
 		success: Binding,
 		error: errors,
 	}),
 	HttpApiEndpoint.delete("close", "/v1/app-views/:viewId", {
-		params: { viewId: Schema.String },
+		params: { viewId: AppViewId },
 		success: Schema.Void,
 		error: errors,
 	}),
 	HttpApiEndpoint.post("read", "/v1/app-views/:viewId/read", {
-		params: { viewId: Schema.String },
+		params: { viewId: AppViewId },
 		payload: Schema.Struct({
 			method: ViewReadAction,
 			params: Schema.JsonObject,
@@ -129,18 +140,18 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 		error: errors,
 	}),
 	HttpApiEndpoint.post("act", "/v1/app-views/:viewId/actions", {
-		params: { viewId: Schema.String },
+		params: { viewId: AppViewId },
 		payload: ActionRequest,
 		success: ActionTicket.pipe(HttpApiSchema.status(202)),
 		error: errors,
 	}),
 	HttpApiEndpoint.get("operation", "/v1/app-views/:viewId/actions/:requestId", {
-		params: { viewId: Schema.String, requestId: Schema.String },
+		params: { viewId: AppViewId, requestId: Schema.String },
 		success: Observation,
 		error: errors,
 	}),
 	HttpApiEndpoint.put("confirmContext", "/v1/app-views/:viewId/context", {
-		params: { viewId: Schema.String },
+		params: { viewId: AppViewId },
 		payload: Schema.Struct({
 			revision: Schema.Natural,
 			context: Schema.JsonObject,
@@ -152,14 +163,14 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 		"interaction",
 		"/v1/app-operations/:operationId/interaction",
 		{
-			params: { operationId: Schema.String },
+			params: { operationId: AppOperationId },
 			query: { chatId: Chat.Id },
 			success: Interaction,
 			error: errors,
 		},
 	),
 	HttpApiEndpoint.post("message", "/v1/app-views/:viewId/messages", {
-		params: { viewId: Schema.String },
+		params: { viewId: AppViewId },
 		payload: Schema.Struct({ content: Schema.JsonObject }),
 		success: Schema.Void,
 		error: errors,

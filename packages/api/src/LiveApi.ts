@@ -1,3 +1,4 @@
+import { Model, Provider } from "@openbot-build/core"
 import { BotAuth } from "./AuthApi.ts"
 import { Config, Live, Turn } from "@openbot-build/core"
 import { Authorize, Required, own } from "./Authorization.ts"
@@ -93,8 +94,8 @@ export type LiveErrorCode = typeof LiveErrorCode.Type
 export const LiveServerMessage = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("session.ready"),
-		provider: Schema.String,
-		model: Schema.String,
+		provider: Provider.Id,
+		model: Model.Id,
 		capabilities: Capabilities,
 		audio: Schema.Struct({ input: AudioFormat, output: AudioFormat }),
 		turnDetection: Schema.Literals(["server", "client"]),

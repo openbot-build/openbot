@@ -514,6 +514,12 @@ it.effect(
 			for (const account of [
 				{ default: "two", choices: ["one", "two"] },
 				{ default: "one", choices: ["two", "one"] },
+				{
+					default: "one",
+					choices: ["one", "two"],
+					format: "string" as const,
+					isSecret: true,
+				},
 			]) {
 				assert.strictEqual(
 					CatalogDiscovery.compare({

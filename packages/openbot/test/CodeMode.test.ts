@@ -4,6 +4,7 @@ import { assert, it } from "@effect/vitest"
 import {
 	type ChatView,
 	CodeRunsApi,
+	ConnectionsApi,
 	RequestsApi,
 	UserTokensApi,
 } from "@openbot-build/api"
@@ -695,7 +696,7 @@ it.effect(
 			): Binding => ({
 				name: "openbot_" + toolName,
 				source: {
-					connectionId,
+					connectionId: ConnectionsApi.ConnectionId.make(connectionId),
 					connectionName,
 					cardUrl: "https://apps.example.com/card",
 					appName: "Example",

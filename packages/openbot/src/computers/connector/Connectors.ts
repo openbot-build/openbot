@@ -58,7 +58,7 @@ const partLength = 6000
 const SessionNotice = Schema.Union([
 	Schema.Struct({ to: Schema.String, message: ComputersApi.ToConnector }),
 	Schema.Struct({
-		from: Schema.String,
+		from: ComputersApi.ConnectorSessionId,
 		/** The order of the messages of a session. Notices can come out of order. */
 		order: Schema.Int,
 		message: ComputersApi.FromConnector,
@@ -193,7 +193,9 @@ interface Local {
 	readonly replace: Effect.Effect<void>
 	readonly waiting: Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<Result>>>
 	/** The command sessions on this connection. */
-	readonly sessions: Ref.Ref<HashMap.HashMap<string, Route>>
+	readonly sessions: Ref.Ref<
+		HashMap.HashMap<ComputersApi.ConnectorSessionId, Route>
+	>
 }
 
 /**
@@ -279,7 +281,9 @@ export const make = Effect.gen(function* () {
 				),
 			),
 		)
-	const owned = yield* Ref.make(HashMap.empty<string, Owned>())
+	const owned = yield* Ref.make(
+		HashMap.empty<ComputersApi.ConnectorSessionId, Owned>(),
+	)
 
 	/** Gives a message of the machine to the sink of its session. */
 	const deliverTo = (
@@ -305,7 +309,7 @@ export const make = Effect.gen(function* () {
 
 	/** Passes output of the machine to the instance that started the session. */
 	const forward = (
-		session: string,
+		session: ComputersApi.ConnectorSessionId,
 		order: Ref.Ref<number>,
 		message: ComputersApi.FromConnector,
 	) =>
@@ -351,7 +355,10 @@ export const make = Effect.gen(function* () {
 					const order = yield* Ref.make(0)
 					yield* Ref.update(
 						found.value.sessions,
-						HashMap.set<string, Route>(message.session, Route.Away({ order })),
+						HashMap.set<ComputersApi.ConnectorSessionId, Route>(
+							message.session,
+							Route.Away({ order }),
+						),
 					)
 				}
 				yield* found.value.send(message)
@@ -623,7 +630,9 @@ export const make = Effect.gen(function* () {
 						const waiting = yield* Ref.make(
 							HashMap.empty<string, Deferred.Deferred<Result>>(),
 						)
-						const sessions = yield* Ref.make(HashMap.empty<string, Route>())
+						const sessions = yield* Ref.make(
+							HashMap.empty<ComputersApi.ConnectorSessionId, Route>(),
+						)
 						const connection: Local = {
 							id,
 							send,
@@ -809,7 +818,7 @@ export const make = Effect.gen(function* () {
 					: (yield* isConnected(computerId))
 						? yield* callRemote(computerId, call, wait)
 						: yield* ComputerGone.make({
-								reason: "The machine is not connected.",
+								message: "The machine is not connected.",
 							})
 				if (Option.isNone(result))
 					return yield* ComputerCallFailed.make({
@@ -820,6 +829,9 @@ export const make = Effect.gen(function* () {
 					return yield* ComputerCallFailed.make({
 						message: result.value.message,
 						retry: false,
+						...(result.value.reason === "NotFound" && "path" in operation
+							? { missingPath: operation.path }
+							: {}),
 					})
 				return result.value.value
 			}),
@@ -836,13 +848,16 @@ export const make = Effect.gen(function* () {
 			}),
 		start: (computerId, request) =>
 			Effect.gen(function* () {
-				const session = yield* newUuid
+				const session = ComputersApi.ConnectorSessionId.make(yield* newUuid)
 				const sink = yield* ProcessSink.make
 				const found = yield* local(computerId)
 				if (Option.isSome(found))
 					yield* Ref.update(
 						found.value.sessions,
-						HashMap.set<string, Route>(session, Route.Here({ sink })),
+						HashMap.set<ComputersApi.ConnectorSessionId, Route>(
+							session,
+							Route.Here({ sink }),
+						),
 					)
 				else if (yield* isConnected(computerId))
 					yield* Ref.update(
@@ -859,7 +874,7 @@ export const make = Effect.gen(function* () {
 					)
 				else
 					return yield* ComputerGone.make({
-						reason: "The machine is not connected.",
+						message: "The machine is not connected.",
 					})
 				const send = (message: ComputersApi.ToConnector) =>
 					Option.isSome(found)

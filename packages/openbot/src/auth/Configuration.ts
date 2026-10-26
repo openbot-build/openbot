@@ -27,6 +27,7 @@ export const resolve = (configuration: Configuration) =>
 	Schema.decodeEffect(ResolvedConfiguration)(configuration).pipe(
 		Effect.mapError((error) =>
 			AuthConfigurationError.make({
+				cause: error,
 				field: Arr.some(
 					SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues,
 					(issue) => issue.path?.[0] === "publicOrigin",

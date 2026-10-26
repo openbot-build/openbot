@@ -1,3 +1,5 @@
+import { Model, Provider } from "@openbot-build/core"
+import { Redacted } from "effect"
 import {
 	Account,
 	type AccountCaller,
@@ -106,7 +108,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 				.pipe(
 					Effect.flatMap(
 						Effect.fromOption(() =>
-							ModelProvidersApi.ModelProviderNotFound.make({ providerId }),
+							ModelProvidersApi.ModelProviderNotFound.make({
+								providerId: Provider.Id.make(providerId),
+							}),
 						),
 					),
 				)
@@ -116,7 +120,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 				.pipe(
 					Effect.flatMap(
 						Effect.fromOption(() =>
-							ModelProvidersApi.ModelNotFound.make({ modelId }),
+							ModelProvidersApi.ModelNotFound.make({
+								modelId: Model.Id.make(modelId),
+							}),
 						),
 					),
 				)
@@ -181,11 +187,15 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 																? { clientSecret: null, clientSecretHint: null }
 																: {
 																		clientSecret: yield* secrets.seal(
-																			identityProvider.clientSecret,
+																			Redacted.value(
+																				identityProvider.clientSecret,
+																			),
 																			bindings.identityProviderSecret,
 																		),
 																		clientSecretHint: hint(
-																			identityProvider.clientSecret,
+																			Redacted.value(
+																				identityProvider.clientSecret,
+																			),
 																		),
 																	}),
 													}
@@ -438,7 +448,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						yield* record(account, {
 							action: "model_price.set",
 							resource: platformKey,
-							details: { providerId: provider.id, ...price },
+							details: { providerId: Provider.Id.make(provider.id), ...price },
 						})
 						return price
 					}),
@@ -509,14 +519,17 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 							unavailable("Could not list the organizations"),
 						)
 						yield* checkUnused(settings, {
-							providerId: provider.id,
+							providerId: Provider.Id.make(provider.id),
 							organizationIds,
 						})
 						yield* providers.delete(platformOwner, provider.id)
 						yield* record(account, {
 							action: "model_provider.deleted",
 							resource: platformKey,
-							details: { providerId: provider.id, name: provider.name },
+							details: {
+								providerId: Provider.Id.make(provider.id),
+								name: provider.name,
+							},
 						})
 					}),
 				{ uninterruptible: true },

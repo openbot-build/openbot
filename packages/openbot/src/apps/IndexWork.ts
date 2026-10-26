@@ -10,6 +10,7 @@ import {
 	Layer,
 	Match,
 	Option,
+	Result,
 	Schedule,
 	Schema,
 } from "effect"
@@ -211,7 +212,8 @@ export const layer = (options: Options = {}) =>
 		Effect.gen(function* () {
 			const db = yield* Db.make
 			const namespace = yield* IndexNamespace
-			const indexing = yield* Indexing.Indexing
+			const inspection = yield* Indexing.PublicationInspection
+			const index = yield* Index.IndexStore
 			const governance = yield* Governance
 			const crypto = yield* Crypto.Crypto
 			const uuid = crypto.randomUUIDv4().pipe(Effect.orDie)
@@ -273,6 +275,7 @@ export const layer = (options: Options = {}) =>
 				claim: Claim,
 				check: AppIndexApi.Check,
 				nextCheckAt: number,
+				write: Effect.Effect<void, Index.IndexError>,
 			) =>
 				db
 					.transaction((tx) =>
@@ -303,6 +306,7 @@ export const layer = (options: Options = {}) =>
 										generation: claim.generation,
 									}),
 								)
+							yield* write
 							yield* tx
 								.insert(appIndexResults)
 								.values({
@@ -338,25 +342,58 @@ export const layer = (options: Options = {}) =>
 					)
 			const verify = (claim: Claim) =>
 				Effect.gen(function* () {
-					const sync: Effect.Effect<
-						Indexing.SyncResult,
-						Index.IndexError | Indexing.IndexingError
-					> = Option.match(governance.find(claim.cardUrl), {
-						onNone: () =>
-							indexing.sync(
-								Indexing.Input.make({
+					const sync = Effect.gen(function* () {
+						const restriction = governance.find(claim.cardUrl)
+						if (Option.isSome(restriction))
+							return {
+								result: {
+									_tag: "Excluded",
 									cardUrl: claim.cardUrl,
-									sources: claim.sources,
-								}),
-							),
-						onSome: (restriction) =>
-							Effect.succeed<Indexing.SyncResult>({
-								_tag: "Excluded",
+									reason: restriction.value.reason,
+								} satisfies Indexing.SyncResult,
+								write: Effect.void,
+							}
+						const previous = yield* index.get(claim.cardUrl)
+						const inspected = yield* inspection.inspect(
+							Indexing.Input.make({
 								cardUrl: claim.cardUrl,
-								reason: restriction.reason,
+								sources: claim.sources,
 							}),
+							previous,
+						)
+						return Match.value(inspected).pipe(
+							Match.tagsExhaustive({
+								Eligible: ({ entry }) => ({
+									result: {
+										_tag: "Indexed",
+										entry,
+									} satisfies Indexing.SyncResult,
+									write: Effect.asVoid(index.upsert(entry)),
+								}),
+								Excluded: ({ cardUrl, reason, withdraw }) =>
+									withdraw && Option.isSome(previous)
+										? {
+												result: {
+													_tag: "Withdrawn",
+													cardUrl,
+													reason,
+												} satisfies Indexing.SyncResult,
+												write: index.withdraw(cardUrl),
+											}
+										: {
+												result: {
+													_tag: "Excluded",
+													cardUrl,
+													reason,
+												} satisfies Indexing.SyncResult,
+												write: Effect.void,
+											},
+								Unconfirmed: (result) => ({ result, write: Effect.void }),
+							}),
+						)
 					})
 					const outcome = yield* sync.pipe(
+						Effect.timeout("4 minutes"),
 						// The saved check has a fixed text, so the log keeps the reason.
 						Effect.tapCauseIf(Cause.hasFails, (cause) =>
 							Effect.logWarning(
@@ -383,7 +420,7 @@ export const layer = (options: Options = {}) =>
 								}) as const,
 						),
 						Match.tag("Success", ({ success }) =>
-							Match.value(success).pipe(
+							Match.value(success.result).pipe(
 								Match.tagsExhaustive({
 									Indexed: () => ({ _tag: "Indexed", attemptedAt }) as const,
 									Excluded: ({ reason }) =>
@@ -401,7 +438,12 @@ export const layer = (options: Options = {}) =>
 						Match.tag("Failed", "Unconfirmed", () => retryMs),
 						Match.orElse(() => intervalMs),
 					)
-					yield* finish(claim, check, attemptedAt + delay)
+					yield* finish(
+						claim,
+						check,
+						attemptedAt + delay,
+						Result.isSuccess(outcome) ? outcome.success.write : Effect.void,
+					)
 					return true
 				})
 			return IndexWork.of({

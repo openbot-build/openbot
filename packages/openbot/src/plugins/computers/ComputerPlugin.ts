@@ -154,7 +154,7 @@ const ExecInput = Schema.Struct({
 	}),
 }).pipe(Schema.encodeKeys(snakeKeys))
 const WriteStdinInput = Schema.Struct({
-	session: Schema.String.annotate({
+	session: ComputersApi.ConnectorSessionId.annotate({
 		description: `The session ID from ${names.exec}.`,
 	}),
 	...ComputersApi.WriteStdinRequest.fields,
@@ -407,11 +407,9 @@ export const make = Effect.gen(function* () {
 		const read = readonly
 			? definition.annotate(Tool.Readonly, true)
 			: definition
-		const marked = (
-			HashSet.has(foreground, name)
-				? read.annotate(Operation.Budget, "foreground")
-				: read
-		) as Tools[string]
+		const marked = HashSet.has(foreground, name)
+			? read.annotate(Operation.Budget, "foreground")
+			: read
 		const run = (raw: unknown) =>
 			decode(raw).pipe(
 				Effect.flatMap(handle),

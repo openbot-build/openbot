@@ -13,6 +13,7 @@ import {
 	Effect,
 	Fiber,
 	Layer,
+	Redacted,
 	Option,
 	pipe,
 	Queue,
@@ -105,8 +106,7 @@ const fakeBackend = Effect.gen(function* () {
 						const events = yield* Queue.unbounded<Live.Event, Live.LiveError>()
 						const send = (input: Live.Input) =>
 							Effect.gen(function* () {
-								const error = Live.unsupported(capabilities, input)
-								if (error !== undefined) return yield* error
+								yield* Live.check(capabilities, input)
 								yield* Ref.update(inputs, Arr.append(input))
 								if (input._tag === "Audio")
 									yield* Queue.offerAll(events, [
@@ -526,7 +526,7 @@ layer(
 					201,
 				)
 				const keyed = yield* connect(liveUrl, {
-					authorization: "Bearer " + token.secret,
+					authorization: "Bearer " + Redacted.value(token.secret),
 				})
 				yield* keyed.until((received) =>
 					Arr.some(received, isType("session.ready")),

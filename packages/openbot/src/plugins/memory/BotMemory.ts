@@ -122,7 +122,8 @@ export const apply = (input: {
 	readonly evidence: ReadonlyArray<Evidence>
 	readonly operations: ReadonlyArray<Operation>
 	readonly now: number
-	readonly id: () => string
+	/** One new id for each operation, in the same order. An operation that adds no entry leaves its id unused. */
+	readonly ids: ReadonlyArray<string>
 }): Applied => {
 	// `HashMap` compares the sources by value.
 	const known = HashMap.fromIterable(
@@ -137,6 +138,7 @@ export const apply = (input: {
 			readonly rejected: number
 		},
 		operation: Operation,
+		id: string,
 	): typeof state => {
 		const reject = { ...state, rejected: state.rejected + 1 }
 		const put = (entry: Entry, reason?: string) => ({
@@ -162,7 +164,6 @@ export const apply = (input: {
 				const evidence = sources.value
 				// Content from an App must not become memory by itself.
 				if (Arr.every(evidence, (source) => source.outside)) return state
-				const id = input.id()
 				return {
 					...put({
 						id,
@@ -190,7 +191,6 @@ export const apply = (input: {
 				)
 				if (Option.isNone(supports)) return reject
 				const found = supports.value
-				const id = input.id()
 				return {
 					...put({
 						id,
@@ -281,7 +281,7 @@ export const apply = (input: {
 		}
 	}
 	const result = Arr.reduce(
-		input.operations,
+		Arr.zip(input.operations, input.ids),
 		{
 			entries: HashMap.fromIterable(
 				Arr.map(input.pool, (entry) => [entry.id, entry] as const),
@@ -291,7 +291,7 @@ export const apply = (input: {
 			reasons: [] as ReadonlyArray<string>,
 			rejected: 0,
 		},
-		step,
+		(state, [operation, id]) => step(state, operation, id),
 	)
 	return {
 		entries: Arr.flatMap(Arr.fromIterable(result.changed), (id) =>
@@ -317,12 +317,12 @@ export const edit = (input: {
 	readonly person: Person
 	readonly change: Edit
 	readonly now: number
-	readonly id: () => string
+	readonly id: string
 }): Option.Option<Entry> => {
 	const { person, change, now } = input
 	if (change._tag === "Remember")
 		return Option.some({
-			id: input.id(),
+			id: input.id,
 			layer: "pinned",
 			content: change.content,
 			tags: Arr.dedupe([

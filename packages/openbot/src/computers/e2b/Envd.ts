@@ -79,12 +79,22 @@ const headers = (connection: Connection) => ({
 const checked = (
 	reply: Reply,
 	what: string,
+	path?: string,
 ): Effect.Effect<Reply, ComputerCallFailed | SandboxAway> =>
 	reply.status === 502
 		? Effect.fail(SandboxAway.make())
 		: ok(reply)
 			? Effect.succeed(reply)
-			: Effect.fail(failed(reply, what))
+			: path !== undefined &&
+				  (reply.status === 404 || string(json(reply), "code") === "not_found")
+				? Effect.fail(
+						ComputerCallFailed.make({
+							message: `The path ${path} is not there.`,
+							retry: false,
+							missingPath: path,
+						}),
+					)
+				: Effect.fail(failed(reply, what))
 
 const callTimeoutMs = 60_000
 
@@ -94,6 +104,7 @@ const unary = (
 	connection: Connection,
 	method: string,
 	body: unknown,
+	path?: string,
 ) =>
 	send(
 		client,
@@ -106,7 +117,7 @@ const unary = (
 		),
 		callTimeoutMs,
 	).pipe(
-		Effect.flatMap((reply) => checked(reply, method)),
+		Effect.flatMap((reply) => checked(reply, method, path)),
 		Effect.map(json),
 	)
 
@@ -125,7 +136,7 @@ export const read = (
 		),
 		callTimeoutMs,
 	).pipe(
-		Effect.flatMap((reply) => checked(reply, `Reading ${path}`)),
+		Effect.flatMap((reply) => checked(reply, `Reading ${path}`, path)),
 		Effect.map((reply) => reply.body),
 	)
 
@@ -173,10 +184,16 @@ export const list = (
 	connection: Connection,
 	path: string,
 ) =>
-	unary(client, connection, "filesystem.Filesystem/ListDir", {
+	unary(
+		client,
+		connection,
+		"filesystem.Filesystem/ListDir",
+		{
+			path,
+			depth: 1,
+		},
 		path,
-		depth: 1,
-	}).pipe(
+	).pipe(
 		Effect.map((body) => {
 			const entries = field(body, "entries")
 			return Arr.isArray(entries) ? Arr.map(entries, entry) : []
@@ -189,9 +206,13 @@ export const remove = (
 	connection: Connection,
 	path: string,
 ) =>
-	unary(client, connection, "filesystem.Filesystem/Remove", { path }).pipe(
-		Effect.asVoid,
-	)
+	unary(
+		client,
+		connection,
+		"filesystem.Filesystem/Remove",
+		{ path },
+		path,
+	).pipe(Effect.asVoid)
 
 /** Puts one JSON message in the envelope of the Connect protocol: flags, length, body. */
 export const envelope = (message: unknown, flags = 0) => {

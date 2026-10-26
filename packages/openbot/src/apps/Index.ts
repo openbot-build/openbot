@@ -1,3 +1,4 @@
+import { Settings as SettingsApi } from "@openbot-build/api"
 import { AppIndexApi as Api } from "@openbot-build/api"
 import { type Index as ProtocolIndex, Network } from "@openbot-build/protocol"
 import {
@@ -51,7 +52,10 @@ export class PublicIndex extends Context.Service<
 	PublicIndex,
 	{
 		/** The sources, with the address of the OpenBot Index at the current public origin. */
-		readonly sources: Effect.Effect<ReadonlyArray<Api.Source>>
+		readonly sources: Effect.Effect<
+			ReadonlyArray<Api.Source>,
+			SettingsApi.SettingsUnavailable
+		>
 		readonly search: (input: Api.Query) => Effect.Effect<Api.Page, Error>
 		readonly get: (
 			cardUrl: string,
@@ -287,7 +291,9 @@ export const make = (
 		})
 		return PublicIndex.of({
 			sources: Effect.map(
-				Platform.publicOriginInRequest(settings),
+				Platform.publicOriginOr(settings, () =>
+					SettingsApi.SettingsUnavailable.make({}),
+				),
 				(publicOrigin) =>
 					Arr.map(providersAt(publicOrigin), (provider) => provider.source),
 			),

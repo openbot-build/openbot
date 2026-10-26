@@ -1,3 +1,6 @@
+import { SettingsUnavailable } from "./SettingsErrors.ts"
+export { SettingsUnavailable } from "./SettingsErrors.ts"
+import { SecretInput } from "./Secret.ts"
 import { Config } from "@openbot-build/core"
 import { Schema, String as Str } from "effect"
 import { HttpApiSchema } from "effect/http-api"
@@ -14,11 +17,7 @@ import { PlanApproval } from "./PlanApproval.ts"
  */
 export const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
-/** A secret goes in, but it never comes out. The hint shows its last characters. */
-export const SecretInput = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(4096),
-)
+export { SecretInput, SecretOutput } from "./Secret.ts"
 export const SecretState = Schema.Struct({
 	set: Schema.Boolean,
 	hint: Schema.NullOr(Schema.String),
@@ -462,10 +461,6 @@ export class SettingsInvalid extends Schema.TaggedError<
 	SettingsInvalid,
 	{ readonly brand: unique symbol }
 >()("SettingsInvalid", { message: Schema.String }) {}
-export class SettingsUnavailable extends Schema.TaggedError<
-	SettingsUnavailable,
-	{ readonly brand: unique symbol }
->()("SettingsUnavailable", {}) {}
 export const SettingsErrors = [
 	SettingsConflict.pipe(HttpApiSchema.status(409)),
 	SettingsInvalid.pipe(HttpApiSchema.status(400)),

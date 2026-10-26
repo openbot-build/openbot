@@ -20,7 +20,9 @@ const implementations = Effect.gen(function* () {
 					),
 				)
 			if (Option.isNone(found) || found.value.userId !== caller.userId)
-				return yield* DelegationsApi.DelegationNotFound.make({ delegation: id })
+				return yield* DelegationsApi.DelegationNotFound.make({
+					delegation: DelegationsApi.DelegationId.make(id),
+				})
 			return { caller, stored: found.value }
 		})
 	return {

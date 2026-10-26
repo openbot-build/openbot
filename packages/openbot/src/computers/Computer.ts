@@ -9,6 +9,8 @@ export class ComputerCallFailed extends Schema.TaggedError<
 	message: Schema.String,
 	/** False when trying again cannot help, such as a wrong key. */
 	retry: Schema.Boolean,
+	/** The path of a file or folder that is not there. */
+	missingPath: Schema.optionalKey(Schema.String),
 	/** The inside failure, such as a refused connection. It is for the log only. */
 	cause: Schema.optional(Schema.Defect()),
 }) {}
@@ -18,7 +20,7 @@ export class ComputerGone extends Schema.TaggedError<
 	ComputerGone,
 	{ readonly brand: unique symbol }
 >()("ComputerGone", {
-	reason: Schema.String,
+	message: Schema.String,
 }) {}
 
 export type ComputerError = ComputerCallFailed | ComputerGone

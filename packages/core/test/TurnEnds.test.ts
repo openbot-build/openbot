@@ -121,7 +121,6 @@ it.effect(
 		return Effect.gen(function* () {
 			const entered = yield* Deferred.make<void>(),
 				release = yield* Deferred.make<void>()
-			const { runtime, runtimeStore, chat } = yield* ChatTest({ toolkit })
 			const handlers = yield* toolkit.toHandlers({
 				Wait: () =>
 					Deferred.succeed(entered, undefined).pipe(
@@ -129,6 +128,9 @@ it.effect(
 						Effect.as("waited"),
 					),
 			})
+			const { runtime, runtimeStore, chat } = yield* ChatTest({ toolkit }).pipe(
+				Effect.provideContext(handlers),
+			)
 			const action = yield* runtime
 				.startAction({ chat, action: { name: "Wait", arguments: {} } })
 				.pipe(Effect.provideContext(handlers))

@@ -232,6 +232,42 @@ export const make: Effect.Effect<
 				),
 			)
 		})
+	const authorizationFailure =
+		(id: string, message: string) =>
+		(
+			error:
+				| Authorization.AuthorizationError
+				| App.AppError
+				| Store.StoreError
+				| Network.NetworkError
+				| Schema.SchemaError
+				| Api.DeveloperInputInvalid,
+		): Effect.Effect<
+			never,
+			| Api.DeveloperConflict
+			| Api.DeveloperNotFound
+			| Api.DeveloperUnavailable
+			| Api.DeveloperInputInvalid
+		> => {
+			if (error._tag === "DeveloperInputInvalid") return Effect.fail(error)
+			if (error._tag === "AuthorizationError")
+				return Effect.logInfo(
+					"A developer test authorization step was refused.",
+					error,
+				).pipe(
+					Effect.annotateLogs({ testId: id }),
+					Effect.andThen(Api.DeveloperConflict.make({ reason: error.reason })),
+				)
+			if (error._tag === "AppError")
+				return Effect.fail(
+					Api.DeveloperConflict.make({ reason: "ConnectionUnavailable" }),
+				)
+			if (error._tag === "StoreError" && error.reason === "Missing")
+				return Effect.fail(Api.DeveloperNotFound.make({}))
+			return Effect.fail(error).pipe(
+				Failures.replace(message, () => Api.DeveloperUnavailable.make({})),
+			)
+		}
 	return DeveloperTestRuntime.of({
 		execute: (owner, id) =>
 			Effect.scoped(
@@ -497,16 +533,10 @@ export const make: Effect.Effect<
 						}),
 					),
 				).pipe(
-					// A bad network target keeps its own error.
-					Effect.catchTag("DeveloperInputInvalid", Effect.fail, (error) =>
-						Effect.fail(error).pipe(
-							Failures.replace(
-								"Could not start the authorization of a test.",
-								() =>
-									Api.DeveloperConflict.make({
-										reason: "AuthorizationCouldNotStart",
-									}),
-							),
+					Effect.catch(
+						authorizationFailure(
+							id,
+							"Could not start the authorization of a test.",
 						),
 					),
 				)
@@ -524,12 +554,11 @@ export const make: Effect.Effect<
 				const flow = yield* bound.flows
 					.get({ key: { owner, connectionId: id }, flowId })
 					.pipe(
-						Failures.replace(
-							"Could not read the authorization flow of a test.",
-							() =>
-								Api.DeveloperConflict.make({
-									reason: "AuthorizationFlowUnavailable",
-								}),
+						Effect.catch(
+							authorizationFailure(
+								id,
+								"Could not read the authorization flow of a test.",
+							),
 						),
 					)
 				yield* Effect.scoped(
@@ -544,16 +573,10 @@ export const make: Effect.Effect<
 						}),
 					),
 				).pipe(
-					// A bad network target keeps its own error.
-					Effect.catchTag("DeveloperInputInvalid", Effect.fail, (error) =>
-						Effect.fail(error).pipe(
-							Failures.replace(
-								"Could not complete the authorization of a test.",
-								() =>
-									Api.DeveloperConflict.make({
-										reason: "AuthorizationCouldNotComplete",
-									}),
-							),
+					Effect.catch(
+						authorizationFailure(
+							id,
+							"Could not complete the authorization of a test.",
 						),
 					),
 				)

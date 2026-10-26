@@ -1,3 +1,5 @@
+import { Array as Arr, String as Str, SchemaTransformation, pipe } from "effect"
+import { SecretOutput } from "./Secret.ts"
 import { AccountAuth, BotAuth, NoStore, ReturnTo } from "./AuthApi.ts"
 import {
 	Authorize,
@@ -148,10 +150,22 @@ export const Capability = Schema.Struct({
 export type Capability = typeof Capability.Type
 
 /** A person, a Bot, or a Rule that made a decision. */
+export const GrantId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+).pipe(Schema.brand("@openbot-build/api/GrantId"))
+export type GrantId = typeof GrantId.Type
+
+export const RuleId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+).pipe(Schema.brand("@openbot-build/api/RuleId"))
+export type RuleId = typeof RuleId.Type
+
 export const Decider = Schema.TaggedUnion({
 	Person: { userId: Schema.String },
 	Bot: { bot: BotId },
-	Rule: { rule: Schema.String },
+	Rule: { rule: RuleId },
 })
 export type Decider = typeof Decider.Type
 
@@ -168,7 +182,7 @@ export type GrantStatus = typeof GrantStatus.Type
 
 /** A stored decision about one capability of one Bot. The Bot never sees it. */
 export const Grant = Schema.Struct({
-	id: Schema.String,
+	id: GrantId,
 	bot: BotId,
 	capability: Capability,
 	effect: Decision,
@@ -177,7 +191,7 @@ export const Grant = Schema.Struct({
 	grantedBy: Decider,
 	reason: Schema.optionalKey(Schema.String),
 	/** The Grant of the decider that this Grant came from. Revoking it revokes this one too. */
-	parent: Schema.optionalKey(Schema.String),
+	parent: Schema.optionalKey(GrantId),
 	status: GrantStatus,
 	createdAt: Schema.Finite,
 })
@@ -200,7 +214,7 @@ export type RuleStatus = typeof RuleStatus.Type
  * A judge model reads it. Only a Rule that the judge quotes can allow a request.
  */
 export const Rule = Schema.Struct({
-	id: Schema.String,
+	id: RuleId,
 	bot: BotId,
 	author: Decider,
 	text: Schema.String,
@@ -230,12 +244,38 @@ export const UpdateBotMemoryRequest = Schema.Struct({
 })
 export type UpdateBotMemoryRequest = typeof UpdateBotMemoryRequest.Type
 /** Only entries with all of these tags. Separate the tags with commas. */
-const memoryQuery = { tags: Schema.optionalKey(Schema.NonEmptyString) }
+const memoryQuery = {
+	tags: Schema.optionalKey(
+		Schema.NonEmptyString.pipe(
+			Schema.decodeTo(
+				Schema.Array(Schema.NonEmptyString),
+				SchemaTransformation.transform({
+					decode: (text): ReadonlyArray<string> =>
+						pipe(
+							text,
+							Str.split(","),
+							Arr.map(Str.trim),
+							Arr.filter(Str.isNonEmpty),
+						),
+					encode: Arr.join(","),
+				}),
+			),
+		),
+	),
+}
 
 export class BotNotFound extends Schema.TaggedError<
 	BotNotFound,
 	{ readonly brand: unique symbol }
 >()("BotNotFound", { bot: Schema.String }) {}
+export class RuleNotFound extends Schema.TaggedError<
+	RuleNotFound,
+	{ readonly brand: unique symbol }
+>()("RuleNotFound", { rule: RuleId }) {}
+export class GrantNotFound extends Schema.TaggedError<
+	GrantNotFound,
+	{ readonly brand: unique symbol }
+>()("GrantNotFound", { grant: GrantId }) {}
 export class BotConflict extends Schema.TaggedError<
 	BotConflict,
 	{ readonly brand: unique symbol }
@@ -300,7 +340,7 @@ export type CreateBotInvitationRequest = typeof CreateBotInvitationRequest.Type
  */
 export const BotInvitationSecret = Schema.Struct({
 	invitation: BotInvitation,
-	secret: Schema.NullOr(Schema.String),
+	secret: Schema.NullOr(SecretOutput),
 	url: Schema.NullOr(Schema.String),
 })
 export type BotInvitationSecret = typeof BotInvitationSecret.Type
@@ -309,7 +349,9 @@ export const AcceptBotInvitationRequest = Schema.Struct({
 	invitation: Schema.optionalKey(InvitationId),
 	/** The secret of an invitation link. */
 	secret: Schema.optionalKey(
-		Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+		Schema.RedactedFromValue(
+			Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+		),
 	),
 	/**
 	 * The organization where you use the Bot. You must be an active member of it.
@@ -329,7 +371,17 @@ export class BotsApi extends HttpApiGroup.make("bots")
 	.add(
 		HttpApiEndpoint.get("listBots", "/v1/bots", {
 			query: {
-				archived: Schema.optionalKey(Schema.Literals(["true", "false"])),
+				archived: Schema.optionalKey(
+					Schema.Literals(["true", "false"]).pipe(
+						Schema.decodeTo(
+							Schema.Boolean,
+							SchemaTransformation.transform({
+								decode: (text) => text === "true",
+								encode: (flag) => (flag ? "true" : "false"),
+							}),
+						),
+					),
+				),
 				bot: Schema.optionalKey(BotId),
 			},
 			success: Schema.Array(Bot),
@@ -423,10 +475,10 @@ export class BotsApi extends HttpApiGroup.make("bots")
 			"Adds a Rule that the caller wrote for this Bot. A Rule from a person is active at once.",
 		),
 		HttpApiEndpoint.patch("updateRule", "/v1/bots/:botId/rules/:ruleId", {
-			params: { ...botParams, ruleId: Schema.String },
+			params: { ...botParams, ruleId: RuleId },
 			payload: UpdateRuleRequest,
 			success: Rule,
-			error: BotErrors,
+			error: [...BotErrors, RuleNotFound.pipe(HttpApiSchema.status(404))],
 		}).annotate(
 			OpenApi.Description,
 			"Changes the text of a Rule, confirms a proposed Rule, or retires a Rule.",
@@ -446,9 +498,9 @@ export class BotsApi extends HttpApiGroup.make("bots")
 			error: BotErrors,
 		}),
 		HttpApiEndpoint.delete("revokeGrant", "/v1/bots/:botId/grants/:grantId", {
-			params: { ...botParams, grantId: Schema.String },
+			params: { ...botParams, grantId: GrantId },
 			success: HttpApiSchema.NoContent,
-			error: BotErrors,
+			error: [...BotErrors, GrantNotFound.pipe(HttpApiSchema.status(404))],
 		}).annotate(
 			OpenApi.Description,
 			"Revokes a Grant and every Grant that came from it.",

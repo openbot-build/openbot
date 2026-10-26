@@ -110,59 +110,65 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 const routePath = (url: string): `/${string}` =>
 	`/${pipe(new URL(url).pathname, Str.slice(1))}`
 
+const serve = <E, R>(
+	config: Valid,
+	register: Effect.Effect<void, E, R | McpServer.McpServer>,
+) => {
+	const mcp = McpServer.layerHttp({
+		name: config.card.name,
+		version: config.card.version,
+		description: config.card.description,
+		websiteUrl: config.card.websiteUrl,
+		path: routePath(config.mcpUrl),
+		protocols: [McpProtocol.v2026_07_28],
+		allowedOrigins: config.allowedOrigins,
+	})
+	const docs = HttpRouter.use((router) =>
+		Effect.gen(function* () {
+			yield* router.add("GET", routePath(config.cardUrl), (request) =>
+				Effect.succeed(
+					documentResponse({
+						request,
+						url: config.cardUrl,
+						value: config.card,
+						mediaType: Document.cardMediaType,
+						config,
+					}),
+				),
+			)
+			yield* router.add("GET", routePath(config.catalogUrl), (request) =>
+				Effect.succeed(
+					documentResponse({
+						request,
+						url: config.catalogUrl,
+						value: config.catalog,
+						mediaType: Document.catalogMediaType,
+						config,
+					}),
+				),
+			)
+		}),
+	)
+	return Layer.merge(
+		docs,
+		Layer.effectDiscard(register).pipe(Layer.provideMerge(mcp)),
+	)
+}
+
 /** Register native Effect tools, resources and prompts in the publisher Scope. */
 export const layer = <E, R>(options: {
-	readonly publication: Publication
+	readonly publication: typeof Publication.Encoded
 	readonly register: Effect.Effect<void, E, R | McpServer.McpServer>
 }) =>
 	Layer.unwrap(
-		Effect.gen(function* () {
-			const config = yield* validate(options.publication)
-			const mcp = McpServer.layerHttp({
-				name: config.card.name,
-				version: config.card.version,
-				description: config.card.description,
-				websiteUrl: config.card.websiteUrl,
-				path: routePath(config.mcpUrl),
-				protocols: [McpProtocol.v2026_07_28],
-				allowedOrigins: config.allowedOrigins,
-			})
-			const docs = HttpRouter.use((router) =>
-				Effect.gen(function* () {
-					yield* router.add("GET", routePath(config.cardUrl), (request) =>
-						Effect.succeed(
-							documentResponse({
-								request,
-								url: config.cardUrl,
-								value: config.card,
-								mediaType: Document.cardMediaType,
-								config,
-							}),
-						),
-					)
-					yield* router.add("GET", routePath(config.catalogUrl), (request) =>
-						Effect.succeed(
-							documentResponse({
-								request,
-								url: config.catalogUrl,
-								value: config.catalog,
-								mediaType: Document.catalogMediaType,
-								config,
-							}),
-						),
-					)
-				}),
-			)
-			return Layer.merge(
-				docs,
-				Layer.effectDiscard(options.register).pipe(Layer.provideMerge(mcp)),
-			)
-		}),
+		Effect.map(validate(options.publication), (config) =>
+			serve(config, options.register),
+		),
 	)
 
 /** A protected route cannot be built without TokenVerifier and AccessPolicy. */
 export const layerProtected = <E, R>(options: {
-	readonly publication: Publication
+	readonly publication: typeof Publication.Encoded
 	readonly protection: Omit<Protection.Options, "resource" | "allowedOrigins">
 	readonly register: Effect.Effect<void, E, R | McpServer.McpServer>
 }) =>
@@ -189,10 +195,7 @@ export const layerProtected = <E, R>(options: {
 					issue: "PRM (Protected Resource Metadata) must use its own route",
 				})
 			return Layer.merge(
-				layer({
-					publication,
-					register: options.register,
-				}).pipe(
+				serve(publication, options.register).pipe(
 					Layer.provide(PublisherProtection.middleware(protection).layer),
 				),
 				PublisherProtection.layerMetadata(protection),
@@ -293,7 +296,7 @@ export const catalogLinkHtml = (catalogUrl: string) =>
 	)
 
 export const registerUi = Effect.fn("Publisher.registerUi")(function* (
-	input: UiResource,
+	input: typeof UiResource.Encoded,
 ) {
 	const resource = yield* UiResource.decode(input)
 	const server = yield* McpServer.McpServer

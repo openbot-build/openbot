@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { assert, layer } from "@effect/vitest"
 import {
 	BotMemory,
@@ -119,9 +120,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.ok(
 					link.secret !== null &&
-						Str.startsWith(BotsApi.InvitationSecretPrefix)(link.secret),
+						Str.startsWith(BotsApi.InvitationSecretPrefix)(
+							Redacted.value(link.secret),
+						),
 				)
-				assert.strictEqual(link.url, publicOrigin + "/join#" + link.secret)
+				assert.strictEqual(
+					link.url,
+					publicOrigin + "/join#" + Redacted.value(link.secret!),
+				)
 				assert.strictEqual(link.invitation.email, null)
 				assert.strictEqual(link.invitation.expiresAt, null)
 				const again = yield* json(
@@ -131,7 +137,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						`/v1/bots/${guide.id}/invitations/${link.invitation.id}/secret`,
 					),
 				)
-				assert.strictEqual(again.secret, link.secret)
+				assert.deepStrictEqual(again.secret, link.secret)
 				// People of other organizations cannot manage the invitations.
 				assert.strictEqual(
 					(yield* send(carol.session, `/v1/bots/${guide.id}/invitations`))
@@ -150,7 +156,21 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						send(session, "/v1/bot-invitations/accept", "POST", payload),
 						status,
 					)
-				const linked = yield* accept(carol.session, { secret: link.secret })
+				const missing = yield* send(
+					carol.session,
+					"/v1/bot-invitations/accept",
+					"POST",
+					{
+						secret: "missing-invitation-secret",
+					},
+				)
+				assert.strictEqual(missing.status, 404)
+				assert.deepStrictEqual(yield* missing.json, {
+					_tag: "InvitationNotFound",
+				})
+				const linked = yield* accept(carol.session, {
+					secret: Redacted.value(link.secret!),
+				})
 				assert.notStrictEqual(linked.id, guide.id)
 				assert.strictEqual(linked.name, "Guide")
 				assert.deepStrictEqual(linked.owner, {
@@ -162,7 +182,9 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					bot: guide.id,
 				})
 				assert.strictEqual(
-					(yield* accept(carol.session, { secret: link.secret })).id,
+					(yield* accept(carol.session, {
+						secret: Redacted.value(link.secret!),
+					})).id,
 					linked.id,
 				)
 				const listed = yield* json(
@@ -374,7 +396,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					token.secret,
 					"/v1/bot-invitations/accept",
 					"POST",
-					{ secret: link.secret },
+					{ secret: Redacted.value(link.secret!) },
 				)
 				assert.strictEqual(joined.status, 200, yield* joined.text)
 
@@ -390,7 +412,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const frank = yield* host.login("sharing-frank")
 				assert.strictEqual(
 					(yield* send(frank.session, "/v1/bot-invitations/accept", "POST", {
-						secret: link.secret,
+						secret: Redacted.value(link.secret!),
 					})).status,
 					400,
 				)

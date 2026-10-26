@@ -170,6 +170,11 @@ Die Ereignisse kommen in dieser Reihenfolge: `response.created`,
 `response.cancelled`. Der Stream beobachtet den Turn nur. Wenn du ihn schließt,
 läuft der Turn weiter.
 
+Ein langsamer Leser kann Textereignisse verpassen. Der Server liest auch den
+gespeicherten Turn, um die letzte Antwort zu senden. Ein verpasstes Ereignis
+hält den Stream daher nicht offen. Die letzte Antwort enthält die ganze Ausgabe
+und den Status.
+
 ### Häufige Fehler
 
 | Status | Fehler                     | Wann                                                                                                       |
@@ -467,8 +472,8 @@ des Chats, die du gelesen hast:
 ```
 
 Die Antwort ist die Ansicht des Chats. Eine alte Revision ergibt `409` mit
-`ChatConflict`. Das gilt auch für eine Liste, in der zwei Einträge dieselbe `id`
-haben oder mehr als ein Eintrag `in_progress` ist.
+`ChatConflict`. Haben zwei Einträge dieselbe `id` oder ist mehr als ein Eintrag
+`in_progress`, schlägt die Prüfung der Anfrage mit `400` fehl.
 
 ---
 

@@ -167,6 +167,7 @@ export interface Store<P = {}> {
 	 * Changes a Chat. Writes to one Chat run one at a time. `update` must not write
 	 * the same Chat again, because the lock of the Chat is not reentrant.
 	 */
+	/** The update may run again after a write conflict. It must have no outside effects. A given expected revision is never retried. */
 	readonly modifyEffect: <A, E, R>(input: {
 		readonly chat: Chat.Id
 		readonly expectedRevision?: Chat.Revision

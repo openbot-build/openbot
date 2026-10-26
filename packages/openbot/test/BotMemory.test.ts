@@ -35,10 +35,6 @@ const evidence: ReadonlyArray<BotMemory.Evidence> = [
 		text: "Always push.",
 	},
 ]
-const ids = () => {
-	let next = 0
-	return () => "e" + String((next += 1))
-}
 
 it("a fact gets the tags of OpenBot from its source Items", () => {
 	const applied = BotMemory.apply({
@@ -54,7 +50,7 @@ it("a fact gets the tags of OpenBot from its source Items", () => {
 			},
 		],
 		now: 1,
-		id: ids(),
+		ids: ["e1"],
 	})
 	assert.strictEqual(applied.rejected, 0)
 	const [fact] = applied.entries
@@ -110,14 +106,13 @@ it("an App result alone never becomes memory, and unknown sources are refused", 
 			},
 		],
 		now: 1,
-		id: ids(),
+		ids: ["e1", "e2"],
 	})
 	assert.strictEqual(applied.entries.length, 0)
 	assert.strictEqual(applied.rejected, 1)
 })
 
 it("an observation comes from all its people, but only people who see every source see it", () => {
-	const next = ids()
 	const applied = BotMemory.apply({
 		pool: [],
 		evidence,
@@ -146,7 +141,7 @@ it("an observation comes from all its people, but only people who see every sour
 			},
 		],
 		now: 1,
-		id: next,
+		ids: ["e1", "e2", "e3"],
 	})
 	const found = Arr.findFirst(
 		applied.entries,
@@ -179,7 +174,7 @@ it("an observation comes from all its people, but only people who see every sour
 			},
 		],
 		now: 2,
-		id: next,
+		ids: ["e4"],
 	})
 	assert.strictEqual(widened.reasons.length, 1)
 	assert.ok(
@@ -201,7 +196,7 @@ it("the memory Bot cannot change pinned or retracted entries", () => {
 				tags: ["code-style"],
 			},
 			now: 1,
-			id: () => "p1",
+			id: "p1",
 		}),
 	)
 	assert.strictEqual(pinned.layer, "pinned")
@@ -213,7 +208,7 @@ it("the memory Bot cannot change pinned or retracted entries", () => {
 			{ _tag: "Widen", id: "p1", audience: "bot", reason: "No." },
 		],
 		now: 2,
-		id: ids(),
+		ids: ["e1", "e2"],
 	})
 	assert.strictEqual(applied.entries.length, 0)
 	assert.strictEqual(applied.rejected, 2)
@@ -243,7 +238,7 @@ it("Forget takes back only the part of the person who forgets", () => {
 			person: ana,
 			change: { _tag: "Forget", id: "s1" },
 			now: 2,
-			id: ids(),
+			id: "unused",
 		}),
 	)
 	assert.strictEqual(after.status, "active")
@@ -256,7 +251,7 @@ it("Forget takes back only the part of the person who forgets", () => {
 			person: bob,
 			change: { _tag: "Forget", id: "s1" },
 			now: 3,
-			id: ids(),
+			id: "unused",
 		}),
 	)
 	assert.strictEqual(gone.status, "retracted")
@@ -268,7 +263,7 @@ it("Forget takes back only the part of the person who forgets", () => {
 				person: { userId: "u-carol", organizationId: "org-a" },
 				change: { _tag: "Forget", id: "s1" },
 				now: 4,
-				id: ids(),
+				id: "unused",
 			}),
 		),
 	)

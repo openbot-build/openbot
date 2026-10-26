@@ -9,6 +9,7 @@ import {
 	PubSub,
 	RcMap,
 	Schema,
+	Schedule,
 	Scope,
 	Semaphore,
 	Stream,
@@ -126,8 +127,8 @@ export const make = <S extends Plugin.Stores>(
 					Effect.andThen(publish({ _tag: "Committed", previous, view, items })),
 				),
 			)
-		const modifyEffect: ChatStore.Store<P>["modifyEffect"] = (input) =>
-			atomic(input.chat)(
+		const modifyEffect: ChatStore.Store<P>["modifyEffect"] = (input) => {
+			const cycle = atomic(input.chat)(
 				Effect.gen(function* () {
 					const before = yield* read(input.chat)
 					if (
@@ -195,6 +196,20 @@ export const make = <S extends Plugin.Stores>(
 					return { result, view, items }
 				}),
 			)
+			return input.expectedRevision !== undefined
+				? cycle
+				: cycle.pipe(
+						Effect.retry({
+							schedule: Schedule.exponential("10 millis").pipe(
+								Schedule.jittered,
+							),
+							times: 5,
+							while: (error) =>
+								Schema.is(ChatStore.ChatStoreError)(error) &&
+								error.reason === "reference-conflict",
+						}),
+					)
+		}
 		const create: ChatStore.Store<P>["create"] = (input) =>
 			Effect.gen(function* () {
 				// The id comes first, so a create takes the same lock as the other writes to that Chat.

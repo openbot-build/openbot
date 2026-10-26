@@ -8,6 +8,7 @@ import {
 	Array as Arr,
 	Effect,
 	Exit,
+	FiberSet,
 	pipe,
 	Predicate,
 	Record as Rec,
@@ -67,10 +68,15 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 	const maxMessageBytes = options.maxMessageBytes ?? defaultMaxMessageBytes
 	const network = yield* Network.Network
 	const ownerScope = yield* Effect.scope
-	const context = yield* Effect.context<Scope.Scope>()
-	// A failed Effect rejects the Promise, which is how a fetch callback reports an error.
-	const run = Effect.runPromiseWith(context)
-	const fork = Effect.runForkWith(context)
+	const ownerSignal = yield* Effect.abortSignal
+	const callbacks = yield* FiberSet.make()
+	// The owner stops pending SDK calls when it closes.
+	const start = yield* FiberSet.runtimePromise(callbacks)<never>()
+	// Effect 4.0.6 adds runtime fibers after they start. Yield first so a
+	// callback cannot close the owner before its fiber belongs to the set.
+	const run = <A, E>(effect: Effect.Effect<A, E>, options: Effect.RunOptions) =>
+		start(Effect.andThen(Effect.yieldNow, effect), options)
+	const fork = yield* FiberSet.runtime(callbacks)<never>()
 	const callback: FetchLike = (input, init) => {
 		const request = new Request(input, init)
 		return run(
@@ -156,13 +162,18 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 						})
 					}
 					// The SDK reads a whole JSON body, and each whole SSE event, into memory.
-					const body = yield* Stream.toReadableStreamEffect(
+					const context = yield* Effect.context<never>()
+					const body = Stream.toReadableStreamWith(
 						reply.body.pipe(
 							mediaType(reply.headers) === "text/event-stream"
 								? HttpNetwork.eventLimit(maxMessageBytes)
 								: HttpNetwork.limit(maxMessageBytes),
 							Stream.ensuring(Scope.close(scope, Exit.void)),
 						),
+						context,
+						// A normal body end closes its request scope. Only the owner or
+						// the caller stops the stream, so body failures keep their cause.
+						{ signal: AbortSignal.any([ownerSignal, request.signal]) },
 					)
 					return new Response(body, {
 						status: reply.status,

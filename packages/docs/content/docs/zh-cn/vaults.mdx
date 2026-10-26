@@ -38,6 +38,11 @@ Bot 只能在 [Code Mode](/zh-cn/docs/code-mode)
 
 ---
 
+删除仍在使用的提供商时，会返回
+`409 SecretProviderInUse`。检查提供商时，凭据错误或字段缺失会返回
+`400 SecretProviderInvalid`。网络故障或提供商暂时故障会返回
+`502 SecretProviderFailed`。
+
 ## 添加机密提供方
 
 只有存放在 OpenBot 之外的机密才需要机密提供方。

@@ -218,6 +218,10 @@ Bots. Administrators may also change and share them. See
 
 ## Errors
 
+`InvitationNotFound` returns `404`. It has `invitationId` when the request names
+an invitation. When a Bot link secret matches no invitation, this field is
+absent.
+
 | Status | Error                   | When                                                   |
 | ------ | ----------------------- | ------------------------------------------------------ |
 | `400`  | `BotInvalid`            | The change is not allowed, or you have no default Bot. |
@@ -225,3 +229,7 @@ Bots. Administrators may also change and share them. See
 | `404`  | `BotNotFound`           | There is no Bot with this ID that you may read.        |
 | `409`  | `BotConflict`           | `expected` is old. Read the Bot again and retry.       |
 | `503`  | `BotStorageUnavailable` | OpenBot cannot reach its database.                     |
+
+Changing a Rule that does not exist returns `404 RuleNotFound`. Revoking a Grant
+that does not exist returns `404 GrantNotFound`. These errors name the missing
+Rule or Grant.

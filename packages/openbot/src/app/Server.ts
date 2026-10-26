@@ -194,7 +194,10 @@ export const layerFixed = (
 						force: true,
 						authSecret: Option.some(auth.secret),
 						fileStorage: Option.fromUndefinedOr(options.fileStorage),
-					}).pipe(Effect.orDie)
+					}).pipe(
+						// force: true replaces the settings, so SetupAlreadyDone cannot occur.
+						Effect.catchTag("SetupAlreadyDone", (error) => Effect.die(error)),
+					)
 				}),
 			).pipe(Layer.provide(PlatformAdminsPostgres.layer)),
 		),

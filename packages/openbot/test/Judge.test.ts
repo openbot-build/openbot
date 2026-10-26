@@ -1,6 +1,6 @@
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import type { BotsApi } from "@openbot-build/api"
+import { BotsApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Cause,
@@ -21,7 +21,7 @@ import { AnyModel } from "../src/models/ModelRegistry.ts"
 import { bot } from "./BotFixture.ts"
 
 const rule = (id: string, text: string): BotsApi.Rule => ({
-	id,
+	id: BotsApi.RuleId.make(id),
 	bot: bot.id,
 	author: { _tag: "Person", userId: "alice" },
 	text,
@@ -122,7 +122,7 @@ it.effect(
 			assert.strictEqual(verdict.decision, "allow")
 			assert.deepStrictEqual(verdict.citations, [
 				{
-					rule: "rule_read",
+					rule: BotsApi.RuleId.make("rule_read"),
 					quote: "The Bot may call read_docs.",
 				},
 			])

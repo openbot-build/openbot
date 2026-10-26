@@ -3,6 +3,7 @@ import {
 	Data,
 	Schema,
 	type Duration,
+	type Option,
 	type Effect,
 	type Scope,
 	type Stream,
@@ -14,6 +15,7 @@ import * as Item from "./Item.ts"
 import * as ChatState from "./ChatState.ts"
 import { PromptJson } from "../store/PromptCodec.ts"
 import type * as ChatStore from "../store/ChatStore.ts"
+import type * as Operations from "./Operations.ts"
 import type * as Bot from "../bot/Bot.ts"
 import type * as ContextCompaction from "../context/ContextCompaction.ts"
 export { Id, Revision } from "./ChatIdentity.ts"
@@ -190,6 +192,8 @@ export interface RuntimeOptions<
 	 * is no, input waits in the inbox, and a runtime that may start it drains it later.
 	 * A host uses it when only one process can run the Turns of a Chat.
 	 */
+	/** Background tool calls, when the host turns them on. */
+	readonly operations?: typeof Operations.Operations.Service
 	readonly canStart?: (view: View<P>) => Effect.Effect<boolean>
 	/**
 	 * Runs while a Turn of the Chat runs: from its start until the runtime has
@@ -203,7 +207,6 @@ export interface Runtime<
 	P = {},
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
-	R = never,
 	HostTools extends Record<string, Tool.Any> = {},
 > {
 	readonly isActive: (chat: Id) => Effect.Effect<boolean>
@@ -214,7 +217,7 @@ export interface Runtime<
 	 */
 	readonly deliver: (
 		input: DeliverInput,
-	) => Effect.Effect<Delivery, RuntimeError, Bot.RuntimeServices<Tools, R>>
+	) => Effect.Effect<Delivery, RuntimeError>
 	/**
 	 * Starts a Turn and returns its events. It fails when the Chat is not idle.
 	 * The Turn stops when the caller stops reading, or when the runtime closes.
@@ -226,20 +229,15 @@ export interface Runtime<
 			Toolkit.MergedTools<[Toolkit.Toolkit<Tools>, Toolkit.Toolkit<HostTools>]>,
 			P
 		>,
-		RuntimeError | Bot.ExecutionError<Tools, E>,
-		Bot.RuntimeServices<Tools, R>
+		RuntimeError | Bot.ExecutionError<Tools, E>
 	>
 	/** Like `stream`, then waits for the end of the Turn. */
 	readonly execute: (
 		input: StartInput,
-	) => Effect.Effect<
-		View<P>,
-		RuntimeError | Bot.ExecutionError<Tools, E>,
-		Bot.RuntimeServices<Tools, R>
-	>
+	) => Effect.Effect<View<P>, RuntimeError | Bot.ExecutionError<Tools, E>>
 	readonly startAction: (
 		input: ActionInput,
-	) => Effect.Effect<ActionReceipt, RuntimeError, Bot.ActionServices<Tools, R>>
+	) => Effect.Effect<ActionReceipt, RuntimeError>
 	readonly interrupt: (input: {
 		readonly chat: Id
 		readonly turn: Turn.Id
@@ -247,11 +245,7 @@ export interface Runtime<
 	/** Starts the next Turn from the inbox, when the Chat is idle and input waits. */
 	readonly drain: (
 		chat: Id,
-	) => Effect.Effect<
-		Delivery | undefined,
-		RuntimeError,
-		Bot.RuntimeServices<Tools, R>
-	>
+	) => Effect.Effect<Option.Option<Delivery>, RuntimeError>
 	readonly status: (chat: Id) => Effect.Effect<View<P>, RuntimeError>
 	readonly wait: (input: {
 		readonly chat: Id
@@ -284,8 +278,7 @@ export interface Runtime<
 			readonly beforeTokens: number
 			readonly afterTokens: number
 		},
-		RuntimeError | E,
-		R
+		RuntimeError | E
 	>
 }
 export class Chat extends Context.Service<Chat, Runtime>()(

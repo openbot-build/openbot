@@ -51,6 +51,12 @@ ihn nutzen.
 
 ---
 
+Ein Dateiaufruf gibt `404 ComputerPathNotFound` zurück, wenn der Pfad fehlt.
+Andere Anbieterfehler bleiben `502 ComputerProviderFailed`. Ein Anbieter mit
+Computern kann nicht gelöscht werden: `409 ComputerProviderInUse`. Connectors
+nutzen Protokollversion 3. Eine fehlende Datei ergibt `reason: "NotFound"`;
+andere Fehler ergeben `reason: "Failed"`.
+
 ## Einen Computer erstellen und nutzen
 
 ```sh

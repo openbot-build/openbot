@@ -156,9 +156,7 @@ export const ratesOf = (
 			tiers,
 			(tier) => tier.upToInputTokens === null || input <= tier.upToInputTokens,
 		),
-		Option.getOrThrowWith(
-			() => new Error("No price tier fits the input tokens of the call"),
-		),
+		Option.getOrElse(() => Arr.lastNonEmpty(tiers)),
 	)
 }
 
@@ -253,7 +251,7 @@ export class Billing extends Context.Service<
 				readonly items: ReadonlyArray<BillingApi.UsageEvent>
 				readonly next: string | null
 			},
-			BillingStorageError
+			BillingStorageError | BillingApi.UsageQueryInvalid
 		>
 		readonly credits: (
 			organizationId: string,

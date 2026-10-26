@@ -153,6 +153,8 @@ data: {"type":"response.output_text.delta","chat":"chat_7d21…","turn":"t-19aa"
 `response.completed`、`response.incomplete`、`response.failed` 或
 `response.cancelled` 之一。这个流只是观察 Turn。如果你关闭它，Turn 会继续运行。
 
+读取较慢时，可能会错过文字事件。服务器还会读取已保存的 Turn 来发送最终响应，所以漏掉事件不会让流一直保持打开。最终响应包含完整输出和状态。
+
 ### 常见错误
 
 | 状态码 | 错误                       | 何时出现                                                                             |
@@ -406,7 +408,7 @@ Turn 的状态变成 `Interrupted`，响应的状态变成
 ```
 
 返回的是 Chat 的视图。旧的 revision 会返回 `409` 和 `ChatConflict`。如果两项的
-`id` 相同，或者不止一项是 `in_progress`，也会返回同样的错误。
+`id` 相同，或者不止一项是 `in_progress`，请求校验会失败并返回 `400`。
 
 ---
 

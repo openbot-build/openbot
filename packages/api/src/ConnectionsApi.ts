@@ -1,3 +1,5 @@
+import { ConnectionId } from "./ConnectionId.ts"
+export { ConnectionId } from "./ConnectionId.ts"
 import { App, Discovery, Document } from "@openbot-build/protocol"
 import { Schema, String as Str } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
@@ -47,7 +49,7 @@ export const ManualConfiguration = Schema.Struct({
 })
 export type ManualConfiguration = typeof ManualConfiguration.Type
 export const ManualConnectionRequest = Schema.Struct({
-	id: Schema.String.check(Schema.isUUID()),
+	id: ConnectionId.check(Schema.isUUID()),
 	...ManualConfiguration.fields,
 })
 export type ManualConnectionRequest = typeof ManualConnectionRequest.Type
@@ -61,7 +63,7 @@ const ManualIdentity = Schema.String.check(
 	Schema.isPattern(/^urn:openbot:manual:[0-9a-f-]{36}$/i),
 )
 export const Connection = Schema.Struct({
-	id: Schema.NonEmptyString,
+	id: ConnectionId,
 	name: ConnectionName,
 	cardUrl: Schema.Union([Document.Link, ManualIdentity]),
 	card: Document.ServerCard,
@@ -141,7 +143,7 @@ export class ConnectionCleanupPending extends Schema.TaggedError<
 	ConnectionCleanupPending,
 	{ readonly brand: unique symbol }
 >()("ConnectionCleanupPending", {
-	connectionId: Schema.String,
+	connectionId: ConnectionId,
 	stage: App.CleanupStage,
 	message: Schema.String,
 }) {}
@@ -153,7 +155,7 @@ export const Errors = [
 	ConnectionConflict.pipe(HttpApiSchema.status(409)),
 	ConnectionConfigurationInvalid.pipe(HttpApiSchema.status(422)),
 ] as const
-export const connectionParams = { connectionId: Schema.NonEmptyString }
+export const connectionParams = { connectionId: ConnectionId }
 export class ConnectionsApi extends HttpApiGroup.make("connections").add(
 	HttpApiEndpoint.post("createManualConnection", "/v1/connections/manual", {
 		payload: ManualConnectionRequest,

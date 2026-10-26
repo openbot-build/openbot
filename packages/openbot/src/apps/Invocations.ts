@@ -230,7 +230,7 @@ export const make: Effect.Effect<
 			// Only tool calls need a decision. Reading resources and prompts does not.
 			const covered = input.source.kind !== "tool"
 			return yield* put(input.owner, {
-				id: yield* id(input, input.callId),
+				id: AppExecution.AppOperationId.make(yield* id(input, input.callId)),
 				chat: input.chat,
 				turn: input.turn,
 				callId: input.callId,

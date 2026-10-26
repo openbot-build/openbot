@@ -1,5 +1,7 @@
+import { SecretInput, SecretOutput } from "../src/Secret.ts"
+import { UpdateTodosRequest } from "../src/ChatsApi.ts"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Redacted, Schema } from "effect"
 import { SignInRequest } from "../src/AuthApi.ts"
 import { Limit } from "../src/Page.ts"
 
@@ -28,3 +30,39 @@ describe("Schemas", () => {
 		}),
 	)
 })
+
+it.effect(
+	"secrets hide their value in logs and keep their JSON wire value",
+	() =>
+		Effect.gen(function* () {
+			const secret = yield* Schema.decodeEffect(SecretInput)("test-secret")
+			assert.isTrue(Redacted.isRedacted(secret))
+			assert.notInclude(String(secret), "test-secret")
+			assert.notInclude(
+				yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+					secret,
+				),
+				"test-secret",
+			)
+			assert.strictEqual(
+				yield* Schema.encodeEffect(SecretOutput)(secret),
+				"test-secret",
+			)
+			yield* Effect.flip(Schema.decodeEffect(SecretInput)(""))
+		}),
+)
+
+it.effect("todo input rejects repeated ids and two items in progress", () =>
+	Effect.gen(function* () {
+		const decode = Schema.decodeUnknownEffect(UpdateTodosRequest)
+		const item = { id: "one", content: "Read the file", status: "in_progress" }
+		yield* Effect.flip(decode({ revision: 0, items: [item, item] }))
+		yield* Effect.flip(
+			decode({ revision: 0, items: [item, { ...item, id: "two" }] }),
+		)
+		yield* decode({
+			revision: 0,
+			items: [item, { ...item, id: "two", status: "pending" }],
+		})
+	}),
+)

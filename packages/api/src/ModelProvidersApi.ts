@@ -1,3 +1,4 @@
+import { Model as CoreModel, Provider } from "@openbot-build/core"
 import { Array as Arr, pipe, Schema } from "effect"
 import {
 	HttpApiEndpoint,
@@ -43,7 +44,7 @@ export const Endpoint = Schema.NonEmptyString.check(
 )
 
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
-const ModelId = Schema.String.check(
+const ModelId = CoreModel.Id.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(200),
 )
@@ -77,7 +78,7 @@ export type ModelOwner = ProviderOwner
  */
 export const Model = Schema.Struct({
 	/** The ID is unique for its owner. A provider sends it as the model name unless the link sets `upstream`. */
-	id: Schema.String,
+	id: CoreModel.Id,
 	owner: ModelOwner,
 	type: ModelType,
 	name: Schema.String,
@@ -156,7 +157,7 @@ export const ProviderModels = Schema.Array(ProviderModel).check(
 
 export const ModelProvider = Schema.Struct({
 	/** A provider ID is unique in the whole platform. A model selection names it. */
-	id: Schema.String,
+	id: Provider.Id,
 	owner: ProviderOwner,
 	kind: ProviderKind,
 	name: Schema.String,
@@ -214,7 +215,7 @@ export type UpdatePlatformModelProviderRequest =
 export const ModelCatalog = Schema.Struct({
 	providers: Schema.Array(
 		Schema.Struct({
-			id: Schema.String,
+			id: Provider.Id,
 			owner: ProviderOwner,
 			kind: ProviderKind,
 			name: Schema.String,
@@ -222,8 +223,8 @@ export const ModelCatalog = Schema.Struct({
 	),
 	models: Schema.Array(
 		Schema.Struct({
-			provider: Schema.String,
-			id: Schema.String,
+			provider: Provider.Id,
+			id: CoreModel.Id,
 			owner: ModelOwner,
 			type: ModelType,
 			name: Schema.String,
@@ -241,7 +242,7 @@ export type ModelCatalog = typeof ModelCatalog.Type
 export class ModelProviderNotFound extends Schema.TaggedError<
 	ModelProviderNotFound,
 	{ readonly brand: unique symbol }
->()("ModelProviderNotFound", { providerId: Schema.String }) {}
+>()("ModelProviderNotFound", { providerId: Provider.Id }) {}
 export class ModelProviderConflict extends Schema.TaggedError<
 	ModelProviderConflict,
 	{ readonly brand: unique symbol }
@@ -254,11 +255,11 @@ export class ModelProviderInvalid extends Schema.TaggedError<
 export class ModelProviderInUse extends Schema.TaggedError<
 	ModelProviderInUse,
 	{ readonly brand: unique symbol }
->()("ModelProviderInUse", { providerId: Schema.String }) {}
+>()("ModelProviderInUse", { providerId: Provider.Id }) {}
 export class ModelNotFound extends Schema.TaggedError<
 	ModelNotFound,
 	{ readonly brand: unique symbol }
->()("ModelNotFound", { modelId: Schema.String }) {}
+>()("ModelNotFound", { modelId: CoreModel.Id }) {}
 export class ModelConflict extends Schema.TaggedError<
 	ModelConflict,
 	{ readonly brand: unique symbol }
@@ -268,7 +269,7 @@ export class ModelInUse extends Schema.TaggedError<
 	ModelInUse,
 	{ readonly brand: unique symbol }
 >()("ModelInUse", {
-	modelId: Schema.String,
+	modelId: CoreModel.Id,
 }) {}
 export class ModelProvidersUnavailable extends Schema.TaggedError<
 	ModelProvidersUnavailable,
@@ -286,8 +287,8 @@ export const ModelProviderErrors = [
 ] as const
 const errors = [...ModelProviderErrors, ...AuthorizationErrors] as const
 
-const ProviderParams = { providerId: Schema.String }
-const ModelParams = { modelId: Schema.String }
+const ProviderParams = { providerId: Provider.Id }
+const ModelParams = { modelId: CoreModel.Id }
 
 /** The models and model providers of the organization. API keys go in, but they never come out. */
 export class ModelProvidersApi extends HttpApiGroup.make("modelProviders").add(

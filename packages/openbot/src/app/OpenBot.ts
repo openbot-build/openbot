@@ -172,7 +172,10 @@ const layerHelperModel = Layer.effect(
 	Judge.HelperModel,
 	Effect.map(ModelRegistry.ModelRegistry, (registry) => {
 		const unavailable = (error: Config.ModelConfigurationError) =>
-			Judge.HelperModelUnavailable.make({ message: error.message })
+			Judge.HelperModelUnavailable.make({
+				message: error.message,
+				cause: error,
+			})
 		return Judge.HelperModel.of({
 			rules: (organizationId) =>
 				Effect.mapError(registry.rulesModel(organizationId), unavailable),
@@ -246,10 +249,9 @@ const layerBots = BotLayers.layer.pipe(Layer.provide(layerHelperModel))
 
 /** The App Index, the work that reads App Catalogs into it, and its store. */
 const layerIndex = (options: Options) => {
-	const indexing = PublicIndexing.layer.pipe(
+	const indexing = PublicIndexing.layerInspection.pipe(
 		Layer.provide(CatalogDiscovery.layerRules),
 		Layer.provide(RobotsPolicy.layer),
-		Layer.provide(IndexStore.layer),
 	)
 	const work = IndexWork.layerWorker(options.indexWork).pipe(
 		Layer.provideMerge(

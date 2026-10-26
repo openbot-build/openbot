@@ -26,7 +26,7 @@ export class Roles extends Context.Service<
 		) => Effect.Effect<ReadonlyArray<RolesApi.Role>, RolesUnavailable>
 		readonly get: (
 			organizationId: string,
-			roleId: string,
+			roleId: RolesApi.RoleId,
 		) => Effect.Effect<Option.Option<RolesApi.Role>, RolesUnavailable>
 		readonly create: (
 			organizationId: string,
@@ -34,7 +34,7 @@ export class Roles extends Context.Service<
 		) => Effect.Effect<RolesApi.Role, RolesUnavailable>
 		readonly update: (
 			organizationId: string,
-			roleId: string,
+			roleId: RolesApi.RoleId,
 			patch: RolesApi.UpdateRoleRequest,
 		) => Effect.Effect<
 			RolesApi.Role,
@@ -45,7 +45,7 @@ export class Roles extends Context.Service<
 		/** The caller checks that nothing uses the role first. */
 		readonly delete: (
 			organizationId: string,
-			roleId: string,
+			roleId: RolesApi.RoleId,
 		) => Effect.Effect<
 			void,
 			| OrganizationApi.RoleNotFound

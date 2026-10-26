@@ -4,11 +4,9 @@ import {
 	Cause,
 	Context,
 	Effect,
-	type JsonSchema,
 	Layer,
 	Option,
 	pipe,
-	Record as Rec,
 	Schema,
 	Stream,
 	String as Str,
@@ -25,18 +23,7 @@ import { toolJson } from "../ToolJson.ts"
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/channels")
 
 /** The tools of this plugin. Their parameters are JSON Schema, like App tools. */
-export type Tools = Record<
-	string,
-	Tool.Dynamic<
-		string,
-		{
-			readonly parameters: JsonSchema.JsonSchema
-			readonly success: typeof Schema.Json
-			readonly failure: typeof Schema.Never
-			readonly failureMode: "error"
-		}
-	>
->
+export type Tools = import("../ToolEntry.ts").Tools
 
 export const names = { send: "openbot_channel_send" } as const
 
@@ -157,7 +144,7 @@ export const make = Effect.gen(function* () {
 													),
 										),
 									),
-							}) as Tools[string]
+							})
 							const handle = (raw: unknown) =>
 								Effect.gen(function* () {
 									const request =
@@ -194,9 +181,9 @@ export const make = Effect.gen(function* () {
 									),
 								)
 							const own = Toolkit.make(send)
-							const handlers = yield* own.toHandlers(
-								Rec.fromEntries([[send.name, handle]]),
-							)
+							const handlers = yield* own.toHandlers({
+								openbot_channel_send: handle,
+							})
 							const where = Option.match(here, {
 								onNone: () => "a chat",
 								onSome: (chat) =>

@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { type Caller, VaultsApi } from "@openbot-build/api"
 import { and, eq } from "drizzle-orm"
 import {
@@ -24,6 +25,8 @@ type Provider = VaultsApi.SecretProvider
 type Credentials = VaultsApi.SecretProviderCredentials
 
 export type Failure =
+	| VaultsApi.SecretProviderFailed
+	| VaultsApi.SecretProviderInUse
 	| VaultsApi.SecretProviderNotFound
 	| VaultsApi.VaultConflict
 	| VaultsApi.VaultInvalid
@@ -56,7 +59,7 @@ const viewOf = (
 			return {
 				kind: "onepassword",
 				url: credentials.url,
-				token: { set: true, hint: hint(credentials.token) },
+				token: { set: true, hint: hint(Redacted.value(credentials.token)) },
 			}
 		case "bitwarden":
 			return {
@@ -65,14 +68,16 @@ const viewOf = (
 				token: {
 					set: credentials.token !== undefined,
 					hint:
-						credentials.token === undefined ? null : hint(credentials.token),
+						credentials.token === undefined
+							? null
+							: hint(Redacted.value(credentials.token)),
 				},
 			}
 		case "hashicorp":
 			return {
 				kind: "hashicorp",
 				url: credentials.url,
-				token: { set: true, hint: hint(credentials.token) },
+				token: { set: true, hint: hint(Redacted.value(credentials.token)) },
 				mount: credentials.mount ?? "secret",
 				namespace: credentials.namespace ?? null,
 			}
@@ -185,7 +190,9 @@ export const make = Effect.gen(function* () {
 				),
 			),
 			Effect.mapError((error) =>
-				invalid("The provider did not take the token: " + error.message),
+				error.retry
+					? VaultsApi.SecretProviderFailed.make({ message: error.message })
+					: invalid("The provider did not take the token: " + error.message),
 			),
 		)
 	/** A caller who cannot read a provider does not learn that it exists. */
@@ -333,9 +340,7 @@ export const make = Effect.gen(function* () {
 						stored("The Vault items of a secret provider could not be read."),
 					)
 				if (used.length > 0)
-					return yield* invalid(
-						"Vault items still read from this provider. Delete them first.",
-					)
+					return yield* VaultsApi.SecretProviderInUse.make({ id })
 				yield* db
 					.delete(secretProviders)
 					.where(where(caller.organizationId, id))

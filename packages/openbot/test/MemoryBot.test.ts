@@ -142,6 +142,7 @@ const records = Effect.gen(function* () {
 	return BotRecords.of({
 		collection,
 		transaction: (_key, operation) => operation,
+		lock: () => Effect.void,
 	})
 })
 

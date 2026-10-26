@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API to compare secrets in constant time.
 import { timingSafeEqual } from "node:crypto"
 import { type Caller, ComputersApi } from "@openbot-build/api"
@@ -171,7 +172,7 @@ export const make = Effect.gen(function* () {
 				return {
 					id: ComputersApi.PairingId.make(id),
 					code,
-					secret,
+					secret: Redacted.make(secret),
 					interval: pollInterval,
 					expiresAt,
 				}
@@ -217,7 +218,7 @@ export const make = Effect.gen(function* () {
 				return {
 					_tag: "Approved",
 					computer,
-					token,
+					token: Redacted.make(token),
 				} as const
 			}),
 		get: (code) =>

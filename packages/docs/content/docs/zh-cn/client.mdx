@@ -68,6 +68,14 @@ const id = await Effect.runPromise(
 
 ## 调用操作
 
+记录 ID 使用品牌类型（branded
+type）。品牌可以防止把一种记录的 ID 用在另一种记录上。例如，`ConnectionId`
+不能用作
+`AppViewId`。调用后续操作时，请保留并使用 API 应答中的 ID。读取程序外部的 ID 时，用
+`@openbot-build/api` 中的对应 schema 解码，例如
+`ConnectionsApi.ConnectionId`。模型和提供方 ID 使用 `@openbot-build/core` 的
+`Model.Id` 和 `Provider.Id`。JSON 和 URL 中的值仍是字符串。
+
 每个操作都位于 `client.api.<group>.<operation>`。名称和
 [API 参考](/docs/api/)中的相同。每次调用接受一个对象，它有以下可选字段：
 
@@ -114,6 +122,10 @@ const tasks =
 
 每个操作都需要对某个资源的一个操作权限。没有它的调用会以 `Forbidden`
 失败。请看[权限](/zh-cn/docs/permissions)。
+
+类型客户端中的请求和响应密钥字段使用 Effect `Redacted<string>`。用
+`Redacted.make` 包装新密钥。只有必须发送或显示密钥时，才调用
+`Redacted.value`。JSON 中这些字段仍是字符串。这包括提供商密钥、Vault 值、SSO 密钥、邀请密钥、令牌、Webhook 密钥和 Computer 配对密钥。
 
 ## 处理错误
 

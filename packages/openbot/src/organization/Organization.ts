@@ -1,5 +1,6 @@
 import type {
 	BotsApi,
+	Roles,
 	AuthApi,
 	OrganizationApi,
 	PlatformApi,
@@ -152,7 +153,7 @@ export class Organization extends Context.Service<
 		readonly createInvitation: (input: {
 			readonly organizationId: string
 			readonly email: string
-			readonly roles: ReadonlyArray<string>
+			readonly roles: ReadonlyArray<Roles.RoleId>
 			readonly invitedBy: string
 		}) => Effect.Effect<
 			OrganizationApi.Invitation,
@@ -260,7 +261,7 @@ export class Organization extends Context.Service<
 		/** Whether a member or the default roles use a role. */
 		readonly roleInUse: (
 			organizationId: string,
-			roleId: string,
+			roleId: Roles.RoleId,
 		) => Effect.Effect<boolean, OrganizationUnavailable>
 	}
 >()("@openbot-build/openbot/organization/Organization") {}

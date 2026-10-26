@@ -808,25 +808,13 @@ export const make: Effect.Effect<
 				)
 				const applied = yield* settle(
 					memories.change(job.home, (current) => {
-						const unused = ids.values()
-						let short = false
 						const result = BotMemory.apply({
 							pool: current,
 							evidence,
 							operations: plan.value.operations,
 							now,
-							id: () => {
-								const next = unused.next()
-								if (next.done !== true) return next.value
-								short = true
-								return ""
-							},
+							ids,
 						})
-						// The change is not saved, because the code broke its own rule.
-						if (short)
-							return Effect.die(
-								"The memory Bot needs more new ids than it made.",
-							)
 						return Effect.succeed({
 							entries: result.entries,
 							by: "memory_bot" as const,

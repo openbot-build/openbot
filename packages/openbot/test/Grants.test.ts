@@ -92,7 +92,7 @@ const grant = (
 		readonly chat?: Chat.Id
 	},
 ): BotsApi.Grant => ({
-	id,
+	id: BotsApi.GrantId.make(id),
 	bot,
 	capability: {
 		action: "tools.call",

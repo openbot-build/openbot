@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import {
 	type BotsApi,
 	type Caller,
@@ -301,7 +302,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "channels", (handlers) =>
 						channelKey(caller.organizationId, current.id),
 						{},
 					)
-					return { secret }
+					return { secret: Redacted.make(secret) }
 				}),
 			)
 			.handle("listChannelIdentities", ({ params }) =>

@@ -58,7 +58,8 @@ export const checkLiveChannels = (input: {
 			),
 		)
 		const own = yield* PluginState.make({ store, plugin })
-		const runtime = yield* ChatRuntime.make({ store, bot: { plugin } })
+		const runtimeConstruction = ChatRuntime.make({ store, bot: { plugin } })
+		const runtime = yield* runtimeConstruction
 		const read = store.read(input.chat),
 			items = store.items(input.chat, { order: "desc" })
 		const modified = store.modifyEffect({
@@ -95,6 +96,11 @@ export const checkLiveChannels = (input: {
 					? true
 					: false
 			>,
+			Assert<
+				PluginDependency extends Effect.Services<typeof runtimeConstruction>
+					? true
+					: false
+			>,
 			Assert<Effect.Services<typeof read> extends never ? true : false>,
 			Assert<Effect.Services<typeof items> extends never ? true : false>,
 			Assert<
@@ -103,11 +109,7 @@ export const checkLiveChannels = (input: {
 			Assert<
 				PluginDependency extends Effect.Services<typeof modified> ? true : false
 			>,
-			Assert<
-				PluginDependency extends Effect.Services<typeof execution>
-					? true
-					: false
-			>,
+			Assert<Effect.Services<typeof execution> extends never ? true : false>,
 			Assert<
 				"plugin-error" extends Effect.Error<typeof execution> ? true : false
 			>,
@@ -116,9 +118,7 @@ export const checkLiveChannels = (input: {
 					? false
 					: true
 			>,
-			Assert<
-				PluginDependency extends Effect.Services<typeof delivery> ? true : false
-			>,
+			Assert<Effect.Services<typeof delivery> extends never ? true : false>,
 			Assert<
 				"plugin-error" extends Effect.Error<typeof delivery> ? false : true
 			>,
@@ -129,6 +129,7 @@ export const checkLiveChannels = (input: {
 				"own-update-error" extends Effect.Error<typeof ownUpdate> ? true : false
 			>,
 		] = [
+			true,
 			true,
 			true,
 			true,
@@ -225,11 +226,7 @@ export const checkHostConstructionChannels = (input: {
 					? true
 					: false
 			>,
-			Assert<
-				PluginDependency extends Effect.Services<typeof execution>
-					? true
-					: false
-			>,
+			Assert<Effect.Services<typeof execution> extends never ? true : false>,
 			Assert<
 				"host-execution-error" extends Effect.Error<typeof execution>
 					? true
@@ -285,8 +282,8 @@ export const checkConstructionChannels = ({
 			>,
 			Assert<
 				PluginDependency extends Effect.Services<typeof construction>
-					? false
-					: true
+					? true
+					: false
 			>,
 			Assert<
 				Bot.Context extends Effect.Services<typeof construction> ? false : true
@@ -306,11 +303,7 @@ export const checkConstructionChannels = ({
 					? false
 					: true
 			>,
-			Assert<
-				PluginDependency extends Effect.Services<typeof execution>
-					? true
-					: false
-			>,
+			Assert<Effect.Services<typeof execution> extends never ? true : false>,
 			Assert<
 				"execution-error" extends Effect.Error<typeof execution> ? true : false
 			>,

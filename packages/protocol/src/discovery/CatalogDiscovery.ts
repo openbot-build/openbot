@@ -34,31 +34,47 @@ import {
 	type Result,
 } from "./Discovery.ts"
 
+/** The input fields that change how a connection sends a request. */
+const connectionInput = (input: Document.Input | Document.HeaderInput) => ({
+	value: input.value,
+	default: input.default,
+	isRequired: input.isRequired,
+	choices: input.choices,
+	format: input.format,
+	isSecret: input.isSecret,
+})
+const connectionDescription = (remote: Document.Remote | undefined) =>
+	remote === undefined
+		? undefined
+		: {
+				url: remote.url,
+				type: remote.type,
+				versions: remote.supportedProtocolVersions,
+				variables: Rec.map(remote.variables ?? {}, connectionInput),
+				headers: Arr.map(remote.headers ?? [], (header) => ({
+					name: header.name,
+					...connectionInput(header),
+					variables: Rec.map(header.variables ?? {}, connectionInput),
+				})),
+			}
+
+/** Text and extension fields do not change a connection. */
+export const sameConnection = (
+	previous: Document.Remote | undefined,
+	current: Document.Remote | undefined,
+): boolean =>
+	Equal.equals(connectionDescription(previous), connectionDescription(current))
+
 export const compare = (options: {
 	readonly previous: Candidate
 	readonly current: Candidate
 }): Update => {
-	const hints = (candidate: Candidate) =>
-		Arr.map(candidate.endpoints, ({ remote }) => ({
-			url: remote.url,
-			type: remote.type,
-			versions: remote.supportedProtocolVersions,
-			variables: Rec.map(remote.variables ?? {}, (input) => [
-				input.value,
-				input.default,
-				input.isRequired,
-				input.choices,
-			]),
-			headers: Arr.map(remote.headers ?? [], (h) => [
-				h.name,
-				h.value,
-				h.default,
-				h.isRequired,
-				h.choices,
-				h.variables,
-			]),
-		}))
-	return Equal.equals(hints(options.previous), hints(options.current))
+	const previous = options.previous.endpoints
+	const current = options.current.endpoints
+	return previous.length === current.length &&
+		Arr.every(previous, (endpoint, index) =>
+			sameConnection(endpoint.remote, current[index]?.remote),
+		)
 		? { _tag: "DescriptionUpdated", candidate: options.current }
 		: {
 				_tag: "NeedsRevalidation",

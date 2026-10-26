@@ -1,3 +1,5 @@
+import { operations as rows } from "../src/database/Schema.ts"
+import { eq } from "drizzle-orm"
 import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { Chat, Operation, Operations, Turn } from "@openbot-build/core"
@@ -7,6 +9,7 @@ import {
 	Effect,
 	Fiber,
 	Layer,
+	Option,
 	Redacted,
 	Schedule,
 	Stream,
@@ -80,11 +83,11 @@ it.layer(database, { excludeTestServices: true })((it) => {
 				yield* first.insert(record("op-1"))
 				assert.deepStrictEqual(
 					yield* second.get(Operation.Id.make("op-1")),
-					record("op-1"),
+					Option.some(record("op-1")),
 				)
-				assert.strictEqual(
+				assert.deepStrictEqual(
 					yield* other.get(Operation.Id.make("op-1")),
-					undefined,
+					Option.none(),
 				)
 				const ended = yield* first.finish(
 					Operation.Id.make("op-1"),
@@ -92,17 +95,17 @@ it.layer(database, { excludeTestServices: true })((it) => {
 					5,
 				)
 				assert.deepStrictEqual(
-					ended?.status,
+					Option.getOrThrow(ended).status,
 					Operation.Status.Completed({ result: "done" }),
 				)
 				// Only the first end counts.
-				assert.strictEqual(
+				assert.deepStrictEqual(
 					yield* second.finish(
 						Operation.Id.make("op-1"),
 						Operation.Status.Cancelled(),
 						6,
 					),
-					undefined,
+					Option.none(),
 				)
 				assert.deepStrictEqual(
 					Arr.map(yield* second.list(chat), (each) => each.status._tag),
@@ -139,7 +142,8 @@ it.layer(database, { excludeTestServices: true })((it) => {
 					undefined,
 				)
 				assert.strictEqual(
-					(yield* store.get(Operation.Id.make("op-2")))?.status._tag,
+					Option.getOrThrow(yield* store.get(Operation.Id.make("op-2"))).status
+						._tag,
 					"Interrupted",
 				)
 			}),
@@ -178,6 +182,32 @@ it.layer(database, { excludeTestServices: true })((it) => {
 				if (outcome._tag !== "Background") return
 				const stopped = yield* elsewhere.cancel(chat, outcome.record.id)
 				assert.strictEqual(stopped.status._tag, "Cancelled")
+			}),
+		60000,
+	)
+})
+
+it.layer(database, { excludeTestServices: true })((it) => {
+	it.effect(
+		"an unreadable Operation is a store failure and does not look missing",
+		() =>
+			Effect.gen(function* () {
+				const store = yield* StoredOperations.make("broken")
+				const db = yield* Db.make
+				const id = Operation.Id.make("broken-op")
+				assert.deepStrictEqual(yield* store.get(id), Option.none())
+				yield* store.insert(record(id))
+				yield* db
+					.update(rows)
+					.set({ body: "broken JSON" })
+					.where(eq(rows.id, id))
+				const error = yield* Effect.flip(store.get(id))
+				assert.strictEqual(error._tag, "OperationStoreError")
+				assert.ok(error.cause !== undefined)
+				assert.strictEqual(
+					(yield* Effect.flip(store.list(chat)))._tag,
+					"OperationStoreError",
+				)
 			}),
 		60000,
 	)

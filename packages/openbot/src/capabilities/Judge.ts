@@ -23,7 +23,7 @@ import { AnyModel } from "../models/ModelRegistry.ts"
 export const Verdict = Schema.Struct({
 	decision: Schema.Literals([...Authorization.Decision.literals, "no_match"]),
 	citations: Schema.Array(
-		Schema.Struct({ rule: Schema.String, quote: Schema.String }),
+		Schema.Struct({ rule: BotsApi.RuleId, quote: Schema.String }),
 	),
 	explanation: Schema.String,
 })
@@ -47,7 +47,10 @@ export const RulesModel = AnyModel
 export class HelperModelUnavailable extends Schema.TaggedError<
 	HelperModelUnavailable,
 	{ readonly brand: unique symbol }
->()("HelperModelUnavailable", { message: Schema.String }) {}
+>()("HelperModelUnavailable", {
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
 /**
  * The models for work that OpenBot does itself. Each kind of work has its own
@@ -121,7 +124,7 @@ const JudgeInput = Schema.Struct({
 		reason: Schema.String,
 	}),
 	rules: Schema.Array(
-		Schema.Struct({ id: Schema.String, text: Schema.String }),
+		Schema.Struct({ id: BotsApi.RuleId, text: Schema.String }),
 	),
 })
 type JudgeInput = typeof JudgeInput.Type

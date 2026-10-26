@@ -713,13 +713,13 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					return {
 						providers: [
 							...Arr.map(builtin?.providers ?? [], (provider) => ({
-								id: provider.id,
+								id: CoreProvider.Id.make(provider.id),
 								owner: "platform" as const,
 								kind: "openai-compat" as const,
 								name: provider.name,
 							})),
 							...Arr.map(current.providers, (provider) => ({
-								id: provider.id,
+								id: CoreProvider.Id.make(provider.id),
 								owner: provider.owner.kind,
 								kind: provider.kind,
 								name: provider.name,
@@ -727,8 +727,8 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						],
 						models: [
 							...Arr.map(builtin?.models ?? [], (model) => ({
-								provider: model.provider,
-								id: model.id,
+								provider: CoreProvider.Id.make(model.provider),
+								id: CoreModel.Id.make(model.id),
 								owner: "platform" as const,
 								type: "language" as const,
 								name: model.name,
@@ -742,8 +742,8 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 									: { maxOutputTokens: model.maxOutputTokensLimit }),
 							})),
 							...Arr.map(current.offers, ({ provider, model }) => ({
-								provider: provider.id,
-								id: model.id,
+								provider: CoreProvider.Id.make(provider.id),
+								id: CoreModel.Id.make(model.id),
 								owner: model.owner,
 								type: model.type,
 								name: model.name,

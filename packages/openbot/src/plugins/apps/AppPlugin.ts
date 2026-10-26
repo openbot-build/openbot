@@ -37,10 +37,10 @@ import * as Db from "../../database/Database.ts"
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/k-apps")
 export type Tools = Record<
 	string,
-	Tool.Dynamic<
+	Tool.Tool<
 		string,
 		{
-			readonly parameters: JsonSchema.JsonSchema
+			readonly parameters: typeof Schema.Unknown
 			readonly success: typeof AppExecution.ToolResult
 			readonly failure: typeof Schema.Never
 			readonly failureMode: "error"
@@ -244,7 +244,7 @@ const entryOf = (
 						),
 					)
 			: false,
-	}).annotate(Tool.Readonly, binding.readOnly) as Entry["tool"],
+	}).annotate(Tool.Readonly, binding.readOnly),
 	handle: (input, context) =>
 		Effect.gen(function* () {
 			if (context.toolCallId === undefined)

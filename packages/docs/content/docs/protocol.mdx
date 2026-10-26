@@ -318,6 +318,19 @@ other registries. See how OpenBot does this in [App Index](/docs/app-index).
 | `@openbot-build/protocol/NodeHttpServer`     | Node network layers with the public network rules. |
 | `@openbot-build/protocol/McpApps`            | Browser host for MCP Apps views.                   |
 
+`McpPublisher.layer` and `layerProtected` take plain publication data and check
+it once when the layer starts. `registerUi` checks plain UI resource data in its
+Effect. Bad input fails with a typed error.
+
+`CatalogDiscovery.sameConnection` compares the parts of a remote that affect a
+connection. A change to description text or an extension field keeps the
+connection and its sign-in. A change to an input format or its secret flag needs
+a new check.
+
+OAuth network failures keep `NetworkError`. They do not mean that the provider
+refused a grant. Closing the connection scope stops pending SDK requests,
+including requests that still wait for response headers or stored tokens.
+
 Publish a small App:
 
 ```ts

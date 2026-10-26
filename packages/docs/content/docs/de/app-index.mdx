@@ -189,6 +189,12 @@ anfordern.
 
 ---
 
+Eine Prüfung hat vier Minuten Zeit. OpenBot schreibt das Ergebnis nur, solange
+der Worker den Auftrag noch besitzt. Ein spätes Ergebnis eines alten Workers
+kann den aktuellen Eintrag nicht ersetzen. Die Quellenliste gibt
+`503 SettingsUnavailable` zurück, wenn OpenBot die Plattform-Einstellungen nicht
+lesen kann.
+
 ## Rückzug durch den Herausgeber und noindex
 
 Ein Herausgeber bestimmt, ob seine App im Index ist:

@@ -16,12 +16,17 @@ export class CallFailed extends Schema.TaggedError<
 	{ readonly brand: unique symbol }
 >()("CallFailed", {
 	message: Schema.String,
+	reason: Schema.Literals(["NotFound", "Failed"]),
 	/** The failure below, such as a file system error. */
 	cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
 const failed = (error: PlatformError.PlatformError) =>
-	CallFailed.make({ message: Config.platformErrorText(error), cause: error })
+	CallFailed.make({
+		message: Config.platformErrorText(error),
+		cause: error,
+		reason: error.reason._tag === "NotFound" ? "NotFound" : "Failed",
+	})
 
 type Call = ComputersApi.ConnectorCall
 type Reply = ComputersApi.ConnectorReply
@@ -112,7 +117,10 @@ const operate = Effect.fnUntraced(function* (
 			return null
 		case "Screenshot":
 		case "Desktop":
-			return yield* CallFailed.make({ message: "This machine has no desktop." })
+			return yield* CallFailed.make({
+				message: "This machine has no desktop.",
+				reason: "Failed",
+			})
 	}
 })
 
@@ -129,7 +137,11 @@ export const execute = (
 		Effect.catch((error) =>
 			Effect.succeed<Reply>({
 				id: call.id,
-				result: { _tag: "Failed", message: error.message },
+				result: {
+					_tag: "Failed",
+					message: error.message,
+					reason: error.reason,
+				},
 			}),
 		),
 	)
