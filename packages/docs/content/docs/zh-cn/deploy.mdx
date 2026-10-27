@@ -523,14 +523,47 @@ devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-un
 
 ## 内部 GitLab 发布与源码交付
 
-GitLab 流水线与镜像均固定 Node.js 26.12.1，执行构建、类型检查、测试与发布脚本测试，
-构建两个原生镜像并通过生产 Compose 检查后，归档同一提交。
-生产 bundle 不包含开发登录入口。仅受保护的 ref 会发布提交标签，并在 `image.env`
-输出镜像摘要；部署须固定摘要，不使用浮动 `latest`。
+GitLab 流水线与镜像均固定 Node.js
+26.12.1。流水线执行构建、类型检查、测试与发布脚本测试，构建两个原生镜像，并检查生产 Compose 服务。生产 bundle 不包含开发登录入口。MR 流水线执行相同检查并保留 CI 产物；只有受保护的 ref 才能发布长期保留的 Generic
+Packages。
 
-AGPL 对应源码通过同一提交的 `git archive` 生成，包含 `LICENSE`、`upstream.json`、
-构建文件与迁移源码。源码上传到长期保留的 GitLab Generic Package
-`openbot-source/<commit>/source.tar.gz` 后，重新下载校验摘要；同一版本若已存在不同
-内容则中止发布。CI 产物包含 `image.env`、`SHA256SUMS`、镜像和源码归档，
-源码包不随 CI 产物过期删除。部署时公开对应版本的源码地址及校验值。
-构建成功不代表已上线；发布负责人须先排空并停止旧执行实例，再启动替代实例。
+受保护的 ref 默认用 `docker save` 导出镜像，再压缩为
+`platform.tar.gz`。对应的 AGPL 源码由同一提交的 `git archive` 生成，包含
+`LICENSE`、
+`upstream.json`、构建文件与迁移源码。两个归档均以完整提交 ID 为版本，发布到 GitLab
+Generic Packages：
+
+- `openbot-image/<commit>/platform.tar.gz`
+- `openbot-source/<commit>/source.tar.gz`
+
+同一路径已存在包时，发布程序先比对内容；若字节不同，则停止发布，绝不覆盖。每次上传后都重新下载并核对 SHA-256。镜像归档和源码归档均通过校验后，受保护 ref 的发布作业才算成功。检查或包发布失败都会使作业失败。
+
+受保护的发布还在 `openbot-image/<commit>/release.json` 长期保存版本 1 发布清单，
+记录提交、镜像标签和 ID、`amd64` 架构、Node.js 26.12.1 及两个包的地址和校验值，
+不含 Registry 镜像摘要。
+
+CI 产物包含两个归档、`SHA256SUMS` 和 `image.env`。Generic
+Packages 不随 CI 产物到期删除。`image.env`
+记录提交及镜像标识；受保护的发布还会记录包地址和校验值：
+
+| 变量                                                        | 含义                            |
+| ----------------------------------------------------------- | ------------------------------- |
+| `OPENBOT_RELEASE`                                           | 镜像和源码共同对应的完整提交 ID |
+| `OPENBOT_IMAGE`                                             | 归档中保存的本地镜像标签        |
+| `OPENBOT_IMAGE_ID`                                          | 实际 Docker 镜像 ID             |
+| `OPENBOT_IMAGE_ARCHIVE_URL`、`OPENBOT_IMAGE_ARCHIVE_SHA256` | 镜像包地址和 SHA-256            |
+| `OPENBOT_SOURCE_URL`、`OPENBOT_SOURCE_SHA256`               | 源码包地址和 SHA-256            |
+| `OPENBOT_RELEASE_MANIFEST_URL` | 长期发布清单地址 |
+| `OPENBOT_RELEASE_MANIFEST_SHA256` | 发布清单 SHA-256 |
+
+部署前先确认两个包属于同一提交，并核对 SHA-256。使用 `docker load`
+加载已校验的镜像归档后，再核对镜像 ID、`org.opencontainers.image.revision`
+标签、`amd64` 架构和 Node.js
+26.12.1 运行时。归档校验值和镜像 ID 都不是 Registry 镜像摘要。每个部署版本应公开对应源码的准确地址和校验值。
+
+Registry 发布是可选项。仅受保护的 ref 可设置 `OPENBOT_PUBLISH_REGISTRY=true`
+启用，且须先完成两个归档包的校验。推送镜像后，只有读回并核对成功才记录
+`OPENBOT_REGISTRY_IMAGE`。从 Registry 部署时固定使用该摘要，不能使用浮动
+`latest` 标签。未开启此选项时，发布流程不依赖 Registry。
+
+发布成功不代表已经上线。本分支使用独立的新数据库，并且只允许一个活动执行实例。发布负责人须先排空并停止旧实例，再启动替代实例。在完整的执行排空和隔离机制具备之前，继续阻止 native 到 native 的升级；仅生成新镜像不代表可以安全升级。

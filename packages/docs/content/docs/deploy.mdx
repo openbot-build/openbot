@@ -574,19 +574,61 @@ members. Provision the organization and its administrator explicitly first.
 ## Internal GitLab releases and source delivery
 
 The included GitLab pipeline uses the same pinned Node.js 26.12.1 as the Docker
-image. It runs build, typecheck, tests and release-script tests, builds both native
-images, checks the production Compose services, then archives the exact commit.
-The production bundle does not contain the development sign-in entry point.
-Protected refs publish an immutable commit tag and return a registry digest in
-`image.env`; deployment must use that digest, not a floating `latest` tag.
+image. It runs build, typecheck, tests and release-script tests, builds both
+native images, and checks the production Compose services. The production bundle
+does not contain the development sign-in entry point. Merge request pipelines
+run the same checks and keep CI artifacts. Only protected refs publish durable
+generic packages.
 
-The corresponding AGPL source is created with `git archive` from that same
-commit, including `LICENSE`, `upstream.json`, build files and migration sources.
-It is uploaded to the durable GitLab Generic Package
-`openbot-source/<commit>/source.tar.gz`, then downloaded and checksum verified.
-A pre-existing package with different contents aborts publication. CI artifacts
-include `image.env`, `SHA256SUMS`, the image archive and source archive, but the
-source package outlives the artifact retention period. Expose the exact source
-URL and checksum with each deployed version. A successful build is not a
-production deployment; stop and drain the old execution instance before the
-release owner starts a replacement.
+The default release for a protected ref uses an image archive made with
+`docker save`, compressed as `platform.tar.gz`. The corresponding AGPL source
+comes from `git archive` of the same commit. It includes `LICENSE`,
+`upstream.json`, build files and migrations. Both archives go to GitLab Generic
+Packages under their full commit ID:
+
+- `openbot-image/<commit>/platform.tar.gz`
+- `openbot-source/<commit>/source.tar.gz`
+
+If a package already exists, the publisher checks its bytes first. Different
+contents at the same path stop the release; they are never replaced. After each
+upload, the publisher downloads the package and checks its SHA-256. Both archive
+checks must pass before a protected release job can succeed. Failed checks or
+package publication fail the job.
+
+Protected releases also keep a version 1 manifest at
+`openbot-image/<commit>/release.json`, with the commit, image tag and ID, `amd64`,
+Node.js 26.12.1, and both package URLs and checksums, without a registry digest.
+
+CI artifacts include both archives, `SHA256SUMS` and `image.env`. The generic
+packages remain available after CI artifacts expire. `image.env` records the
+commit and image identity. Protected releases also record the package URLs and
+checksums:
+
+| Variable                                                    | Meaning                                       |
+| ----------------------------------------------------------- | --------------------------------------------- |
+| `OPENBOT_RELEASE`                                           | Full commit ID shared by the image and source |
+| `OPENBOT_IMAGE`                                             | Local image tag saved in the archive          |
+| `OPENBOT_IMAGE_ID`                                          | Actual Docker image ID                        |
+| `OPENBOT_IMAGE_ARCHIVE_URL`, `OPENBOT_IMAGE_ARCHIVE_SHA256` | Image package URL and SHA-256                 |
+| `OPENBOT_SOURCE_URL`, `OPENBOT_SOURCE_SHA256`               | Source package URL and SHA-256                |
+| `OPENBOT_RELEASE_MANIFEST_URL` | Durable release manifest URL |
+| `OPENBOT_RELEASE_MANIFEST_SHA256` | Release manifest SHA-256 |
+
+Before deployment, check that both packages name the same commit and verify
+their SHA-256 values. Load the verified image archive with `docker load`, then
+check the image ID, its `org.opencontainers.image.revision` label, its `amd64`
+architecture and its Node.js 26.12.1 runtime. An archive checksum or image ID is
+not a registry digest. Expose the exact source URL and checksum with each
+deployed version.
+
+Registry publication is optional. Set `OPENBOT_PUBLISH_REGISTRY=true` to enable
+it for a protected ref. It runs after both archive packages pass their checks
+and records `OPENBOT_REGISTRY_IMAGE` only after the pushed image is read back
+and checked. Use that exact digest when deploying from the registry, never a
+floating `latest` tag. Without this option, the release needs no registry.
+
+A successful release is not a production deployment. This branch uses a fresh,
+isolated database and one active execution instance. The release owner must
+drain and stop the old instance before starting its replacement.
+Native-to-native upgrades stay blocked until a complete execution drain and
+fencing path is in place; a new image alone does not make such an upgrade safe.

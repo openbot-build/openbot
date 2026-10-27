@@ -14,8 +14,8 @@ stages: [check, build]
   tags: [docker, privileged, arm64]
   variables:
     # Keep native TypeScript builds within the runner memory budget.
-    GOMEMLIMIT: 1GiB
-    GOGC: "50"
+    GOMEMLIMIT: 512MiB
+    GOGC: "25"
     GIT_CONFIG_COUNT: "1"
     GIT_CONFIG_KEY_0: safe.directory
     GIT_CONFIG_VALUE_0: $CI_PROJECT_DIR
@@ -48,7 +48,11 @@ check:
       devenv --profile ci shell -- bash -euo pipefail -c 'pnpm -r
       --workspace-concurrency=1 exec tsc -p tsconfig.json --noEmit; pnpm exec
       tsc -p scripts/tsconfig.json --noEmit; pnpm rules'
-    - devenv --profile ci shell -- pnpm -r --workspace-concurrency=1 test
+    - >-
+      devenv --profile ci shell -- bash -euo pipefail -c '
+      export GOMEMLIMIT=512MiB GOGC=25 GOMAXPROCS=2;
+      printf "Test compiler: GOMEMLIMIT=%s GOGC=%s GOMAXPROCS=%s\n" "$GOMEMLIMIT" "$GOGC" "$GOMAXPROCS";
+      pnpm -r --workspace-concurrency=1 test'
     - devenv --profile ci shell -- node --test deploy/docker/*.test.mjs
 
 platform-image:

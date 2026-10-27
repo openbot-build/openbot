@@ -593,17 +593,64 @@ Organisation und Administrator müssen vorher ausdrücklich eingerichtet werden.
 Die GitLab-Pipeline und das Image verwenden Node.js 26.12.1. Die Pipeline führt
 Build, Typprüfung, Tests und Tests der Veröffentlichungsskripte aus, baut beide
 nativen Images und prüft die produktiven Compose-Dienste. Das produktive Bundle
-enthält keinen Entwicklungseinstieg für die Anmeldung. Nur geschützte Refs
-veröffentlichen Commit-Tags und einen Image-Digest in `image.env`. Ein Deployment
-verwendet diesen Digest, keinen beweglichen `latest`-Tag.
+enthält keinen Entwicklungseinstieg für die Anmeldung. Merge-Request-Pipelines
+führen dieselben Prüfungen aus und behalten CI-Artefakte. Nur geschützte Refs
+veröffentlichen dauerhaft gespeicherte Generic Packages.
 
-Der zugehörige AGPL-Quellcode stammt aus `git archive` desselben Commits und
-enthält `LICENSE`, `upstream.json`, Build-Dateien und Migrationen. Er wird dauerhaft
-als GitLab Generic Package `openbot-source/<commit>/source.tar.gz` gespeichert,
-erneut heruntergeladen und per Prüfsumme geprüft. Abweichender Inhalt unter
-demselben Versionsnamen bricht die Veröffentlichung ab. CI-Artefakte enthalten
-`image.env`, `SHA256SUMS`, Image- und Quellcodearchiv; das Quellcodepaket bleibt
-auch nach Ablauf der CI-Artefakte verfügbar. Veröffentlichen Sie Quellcodeadresse
-und Prüfsumme jeder eingesetzten Version. Ein erfolgreicher Build ist noch kein
-Deployment. Der Verantwortliche lässt den bisherigen Ausführungsprozess zuerst
-leerlaufen und beendet ihn, bevor er den Ersatz startet.
+Für geschützte Refs wird das Image standardmäßig mit `docker save` exportiert
+und als `platform.tar.gz` komprimiert. Der zugehörige AGPL-Quellcode kommt aus
+`git archive` desselben Commits. Er enthält `LICENSE`, `upstream.json`,
+Build-Dateien und Migrationen. Beide Archive werden als GitLab Generic Packages
+unter der vollständigen Commit-ID gespeichert:
+
+- `openbot-image/<commit>/platform.tar.gz`
+- `openbot-source/<commit>/source.tar.gz`
+
+Wenn ein Paket bereits existiert, prüft das Skript zuerst seinen Inhalt.
+Abweichende Bytes unter demselben Pfad stoppen die Veröffentlichung. Sie werden
+nie ersetzt. Nach jedem Upload lädt das Skript das Paket erneut herunter und
+prüft dessen SHA-256. Beide Archive müssen diese Prüfung bestehen, bevor der
+Release-Job eines geschützten Refs erfolgreich sein kann. Fehler bei Prüfungen
+oder bei der Paketveröffentlichung lassen den Job fehlschlagen.
+
+Geschützte Releases speichern außerdem dauerhaft ein Manifest der Version 1
+unter `openbot-image/<commit>/release.json`, mit Commit, Image-Tag und ID,
+`amd64`, Node.js 26.12.1 sowie Adressen und Prüfsummen beider Pakete, ohne
+Registry-Digest.
+
+CI-Artefakte enthalten beide Archive, `SHA256SUMS` und `image.env`. Die Generic
+Packages bleiben nach Ablauf der CI-Artefakte verfügbar. `image.env` enthält
+Commit und Image-Kennung. Releases geschützter Refs enthalten außerdem die
+Paketadressen und Prüfsummen:
+
+| Variable                                                    | Bedeutung                                                 |
+| ----------------------------------------------------------- | --------------------------------------------------------- |
+| `OPENBOT_RELEASE`                                           | Vollständige gemeinsame Commit-ID von Image und Quellcode |
+| `OPENBOT_IMAGE`                                             | Lokaler Image-Tag im Archiv                               |
+| `OPENBOT_IMAGE_ID`                                          | Tatsächliche Docker-Image-ID                              |
+| `OPENBOT_IMAGE_ARCHIVE_URL`, `OPENBOT_IMAGE_ARCHIVE_SHA256` | Adresse und SHA-256 des Image-Pakets                      |
+| `OPENBOT_SOURCE_URL`, `OPENBOT_SOURCE_SHA256`               | Adresse und SHA-256 des Quellcodepakets                   |
+| `OPENBOT_RELEASE_MANIFEST_URL` | Adresse des dauerhaft gespeicherten Release-Manifests |
+| `OPENBOT_RELEASE_MANIFEST_SHA256` | SHA-256 des Release-Manifests |
+
+Prüfen Sie vor dem Deployment, dass beide Pakete zum selben Commit gehören und
+ihre SHA-256-Werte stimmen. Laden Sie das geprüfte Image-Archiv mit
+`docker load`. Prüfen Sie danach die Image-ID, das Label
+`org.opencontainers.image.revision`, die Architektur `amd64` und die
+Node.js-Laufzeit 26.12.1. Eine Archivprüfsumme oder Image-ID ist kein
+Registry-Digest. Veröffentlichen Sie die genaue Quellcodeadresse und Prüfsumme
+jeder eingesetzten Version.
+
+Die Registry-Veröffentlichung ist optional. Mit `OPENBOT_PUBLISH_REGISTRY=true`
+wird sie für einen geschützten Ref aktiviert. Sie läuft erst nach erfolgreicher
+Prüfung beider Archivpakete. `OPENBOT_REGISTRY_IMAGE` wird nur gespeichert,
+nachdem das gepushte Image erneut geladen und geprüft wurde. Verwenden Sie bei
+einem Deployment aus der Registry diesen genauen Digest, keinen beweglichen
+`latest`-Tag. Ohne diese Option braucht die Veröffentlichung keine Registry.
+
+Ein erfolgreicher Release ist noch kein Deployment. Dieser Zweig nutzt eine
+neue, getrennte Datenbank und nur einen aktiven Ausführungsprozess. Der
+Verantwortliche lässt den alten Prozess leerlaufen und beendet ihn, bevor er den
+Ersatz startet. Upgrades zwischen nativen Versionen bleiben gesperrt, bis ein
+vollständiger Ablauf zum Leeren und Sperren der Ausführung bereitsteht. Ein
+neues Image allein macht ein solches Upgrade nicht sicher.
