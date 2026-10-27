@@ -14,7 +14,8 @@
 	"bin": {
 		"openbot-server": "./dist/Main.js",
 		"openbot-migrate": "./dist/Migrate.js",
-		"openbot-setup": "./dist/Setup.js"
+		"openbot-setup": "./dist/Setup.js",
+		"openbot-provision": "./dist/Provision.js"
 	},
 	"exports": {
 		".": "./dist/index.js",
@@ -27,7 +28,8 @@
 		"start:development": "node dist/DevelopmentMain.js",
 		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run",
 		"migrate": "node dist/Migrate.js",
-		"setup": "node dist/Setup.js"
+		"setup": "node dist/Setup.js",
+		"provision": "node dist/Provision.js"
 	},
 	"dependencies": {
 		"@better-auth/drizzle-adapter": "1.7.8",

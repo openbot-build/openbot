@@ -332,7 +332,14 @@ export const fileDefaults: Omit<Files, "storage"> = {
 	unusedMs: 24 * 60 * 60 * 1000,
 }
 
+/** Explicit opt-in destination for new, verified platform accounts. */
+export const MemberSignupOrganizationId = Schema.String.check(
+	Schema.isPattern(/^org_[A-Za-z0-9_-]+$/),
+	Schema.isMaxLength(200),
+)
+
 export const PlatformSettings = Schema.Struct({
+	memberSignupOrganizationId: Schema.NullOr(MemberSignupOrganizationId),
 	browserAuth: BrowserAuth,
 	version: Version,
 	/**
@@ -360,6 +367,9 @@ export const PlatformSettings = Schema.Struct({
 })
 export type PlatformSettings = typeof PlatformSettings.Type
 export const UpdatePlatformSettingsRequest = Schema.Struct({
+	memberSignupOrganizationId: Schema.optionalKey(
+		Schema.NullOr(MemberSignupOrganizationId),
+	),
 	browserAuth: Schema.optionalKey(BrowserAuth),
 	expectedVersion: Version,
 	publicOrigin: Schema.optionalKey(PublicOrigin),

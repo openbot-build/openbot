@@ -57,6 +57,8 @@ export class Organization extends Context.Service<
 		readonly admit: (
 			account: Account,
 			only: Option.Option<string>,
+			/** Only the trusted primary OIDC session resolver enables public signup. */
+			options?: { readonly platformSignIn: boolean },
 		) => Effect.Effect<
 			ReadonlyArray<AuthApi.Membership>,
 			OrganizationUnavailable

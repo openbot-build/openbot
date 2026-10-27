@@ -541,3 +541,69 @@ devenv shell -- hadolint deploy/docker/Dockerfile
 devenv shell -- dive --ci --source docker openbot:local
 devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot:local
 ```
+
+## Vorhandene Anmeldung bei der Einrichtung behalten
+
+Das produktive `Setup.mjs` übernimmt Provider-ID, Callback-Pfad, Scopes,
+Cookie-Namen und den bisherigen Sitzungsschlüssel. Führen Sie die Einrichtung
+vor dem Serverstart für die Zieldatenbank aus. Nicht angegebene Provider-,
+Dateispeicher- und Browser-Einstellungen bleiben erhalten; eine neue Plattform
+verwendet die Standardwerte. Ein ausgelassenes Client-Secret bleibt nur bei
+unverändertem Issuer und Client-ID erhalten. Löschen Sie Zugangsdaten ausdrücklich
+über die Plattform-API. Änderungen vorhandener Einstellungen benötigen `--force`.
+
+Die folgenden Flags lesen auch die passende Umgebungsvariable oder, wenn diese
+fehlt, `/run/secrets/<NAME>`. Flags haben Vorrang vor Umgebungsvariablen. Verwenden
+Sie für Geheimnisse Dateien, keine Prozessargumente oder CI-Protokolle.
+
+| Flag | Variable | Wert |
+| --- | --- | --- |
+| `--public-origin` | `OPENBOT_SETUP_PUBLIC_ORIGIN` | Öffentliche Origin |
+| `--oidc-issuer` | `OPENBOT_SETUP_OIDC_ISSUER` | Bisheriger OIDC-Issuer |
+| `--oidc-client-id` | `OPENBOT_SETUP_OIDC_CLIENT_ID` | Bisherige Client-ID |
+| `--oidc-client-secret` | `OPENBOT_SETUP_OIDC_CLIENT_SECRET` | Client-Secret |
+| `--oidc-provider-id` | `OPENBOT_SETUP_OIDC_PROVIDER_ID` | Stabile Provider-ID |
+| `--oidc-callback-path` | `OPENBOT_SETUP_OIDC_CALLBACK_PATH` | Zum Beispiel `/auth/callback` |
+| `--oidc-scopes` | `OPENBOT_SETUP_OIDC_SCOPES` | JSON-Array mit `openid`; `offline_access` nur bei Unterstützung des Issuers |
+| `--browser-auth` | `OPENBOT_SETUP_BROWSER_AUTH` | JSON mit `sessionCookie`, `loginCookie`, `sessionTtlMs` |
+| `--auth-secret` | `OPENBOT_SETUP_AUTH_SECRET` | Bisheriger Sitzungsschlüssel |
+| `--member-signup-organization-id` | `OPENBOT_SETUP_MEMBER_SIGNUP_ORGANIZATION_ID` | Explizite vorhandene Organisations-ID |
+
+Beispiel für Browser-Einstellungen:
+`{"sessionCookie":"__Host-existing-session","loginCookie":"__Host-existing-login","sessionTtlMs":2592000000}`.
+Mindestens ein `--admin-email` bleibt erforderlich. Die Registrierung erteilt
+keine Plattform-Administratorrechte.
+
+### Optionale öffentliche Mitgliederregistrierung
+
+Die Funktion ist standardmäßig aus. Plattform-Administratoren setzen
+`memberSignupOrganizationId` mit `expectedVersion` über
+`PATCH /v1/platform/settings` oder bei der Einrichtung. Die Zielorganisation
+muss aktiv sein und einen aktiven Super Administrator haben. Nur neue Konten
+mit bestätigter E-Mail des primären OIDC-Providers und ohne vorhandene
+Mitgliedschaft erhalten die normale Rolle `member`. Vorhandene Mitgliedschaften
+in anderen Organisationen, entfernte oder gesperrte Mitglieder, Organisations-SSO
+und gesperrte Zielorganisationen sind ausgeschlossen. Konten werden nicht anhand
+der E-Mail zusammengeführt. Domänenbeitritt und Einladungen bleiben unverändert.
+`null` schaltet die Registrierung aus, ohne bestehende Mitglieder zu entfernen.
+Organisation und Administrator müssen vorher ausdrücklich eingerichtet werden.
+
+## Interne GitLab-Veröffentlichung und Quellcode
+
+Die GitLab-Pipeline und das Image verwenden Node.js 26.12.1. Die Pipeline führt
+Build, Typprüfung, Tests und Tests der Veröffentlichungsskripte aus, baut beide
+nativen Images und prüft die produktiven Compose-Dienste. Das produktive Bundle
+enthält keinen Entwicklungseinstieg für die Anmeldung. Nur geschützte Refs
+veröffentlichen Commit-Tags und einen Image-Digest in `image.env`. Ein Deployment
+verwendet diesen Digest, keinen beweglichen `latest`-Tag.
+
+Der zugehörige AGPL-Quellcode stammt aus `git archive` desselben Commits und
+enthält `LICENSE`, `upstream.json`, Build-Dateien und Migrationen. Er wird dauerhaft
+als GitLab Generic Package `openbot-source/<commit>/source.tar.gz` gespeichert,
+erneut heruntergeladen und per Prüfsumme geprüft. Abweichender Inhalt unter
+demselben Versionsnamen bricht die Veröffentlichung ab. CI-Artefakte enthalten
+`image.env`, `SHA256SUMS`, Image- und Quellcodearchiv; das Quellcodepaket bleibt
+auch nach Ablauf der CI-Artefakte verfügbar. Veröffentlichen Sie Quellcodeadresse
+und Prüfsumme jeder eingesetzten Version. Ein erfolgreicher Build ist noch kein
+Deployment. Der Verantwortliche lässt den bisherigen Ausführungsprozess zuerst
+leerlaufen und beendet ihn, bevor er den Ersatz startet.

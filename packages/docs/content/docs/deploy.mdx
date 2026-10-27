@@ -524,3 +524,69 @@ devenv shell -- hadolint deploy/docker/Dockerfile
 devenv shell -- dive --ci --source docker openbot:local
 devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot:local
 ```
+
+## Preserve an existing login during setup
+
+The production `Setup.mjs` program supports the existing identity provider ID,
+callback path, scopes, browser cookie names and session signing secret. This
+allows moving a deployment without silently changing its OAuth identity. Run
+setup against the intended database before starting the server. Omitted provider,
+file storage and browser settings preserve their existing values; a new platform
+uses the normal defaults. An omitted client secret preserves the credential only
+when issuer and client ID match. Clear credentials through the platform settings
+API explicitly. `--force` is required to change existing settings.
+
+The following flags also read the corresponding environment variable, or a file
+with that name under `/run/secrets/` when the environment variable is absent.
+Flags take precedence. Keep signing and client secrets in files instead of shell
+arguments or CI logs.
+
+| Flag | Variable | Value |
+| --- | --- | --- |
+| `--public-origin` | `OPENBOT_SETUP_PUBLIC_ORIGIN` | Canonical public origin |
+| `--oidc-issuer` | `OPENBOT_SETUP_OIDC_ISSUER` | Existing OIDC issuer |
+| `--oidc-client-id` | `OPENBOT_SETUP_OIDC_CLIENT_ID` | Existing client ID |
+| `--oidc-client-secret` | `OPENBOT_SETUP_OIDC_CLIENT_SECRET` | Client secret |
+| `--oidc-provider-id` | `OPENBOT_SETUP_OIDC_PROVIDER_ID` | Stable provider ID |
+| `--oidc-callback-path` | `OPENBOT_SETUP_OIDC_CALLBACK_PATH` | Such as `/auth/callback` |
+| `--oidc-scopes` | `OPENBOT_SETUP_OIDC_SCOPES` | JSON array including `openid`; request `offline_access` when the issuer supports it |
+| `--browser-auth` | `OPENBOT_SETUP_BROWSER_AUTH` | JSON with `sessionCookie`, `loginCookie`, `sessionTtlMs` |
+| `--auth-secret` | `OPENBOT_SETUP_AUTH_SECRET` | Existing session signing secret |
+| `--member-signup-organization-id` | `OPENBOT_SETUP_MEMBER_SIGNUP_ORGANIZATION_ID` | Explicit existing organization ID |
+
+For example, browser settings can contain
+`{"sessionCookie":"__Host-existing-session","loginCookie":"__Host-existing-login","sessionTtlMs":2592000000}`.
+Supply at least one `--admin-email`. Signup never grants platform administration.
+
+### Optional public member signup
+
+Public signup is disabled by default. A platform administrator can set
+`memberSignupOrganizationId` through `PATCH /v1/platform/settings`, with the
+current `expectedVersion`, or through setup. The destination must already have
+an active Super Administrator. New accounts with a verified email from the
+configured primary OIDC provider join as ordinary `member` users only. Existing
+memberships in any organization, removed or suspended users, organization SSO
+sessions and suspended destinations do not qualify. No email-based account
+linking occurs. Domain joining and invitations retain their native behavior.
+Set the field to `null` to disable public signup; this does not remove existing
+members. Provision the organization and its administrator explicitly first.
+
+## Internal GitLab releases and source delivery
+
+The included GitLab pipeline uses the same pinned Node.js 26.12.1 as the Docker
+image. It runs build, typecheck, tests and release-script tests, builds both native
+images, checks the production Compose services, then archives the exact commit.
+The production bundle does not contain the development sign-in entry point.
+Protected refs publish an immutable commit tag and return a registry digest in
+`image.env`; deployment must use that digest, not a floating `latest` tag.
+
+The corresponding AGPL source is created with `git archive` from that same
+commit, including `LICENSE`, `upstream.json`, build files and migration sources.
+It is uploaded to the durable GitLab Generic Package
+`openbot-source/<commit>/source.tar.gz`, then downloaded and checksum verified.
+A pre-existing package with different contents aborts publication. CI artifacts
+include `image.env`, `SHA256SUMS`, the image archive and source archive, but the
+source package outlives the artifact retention period. Expose the exact source
+URL and checksum with each deployed version. A successful build is not a
+production deployment; stop and drain the old execution instance before the
+release owner starts a replacement.

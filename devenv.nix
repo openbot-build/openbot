@@ -8,6 +8,15 @@
 {
   devenv.warnOnNewVersion = false;
 
+  # CI needs the same locked Node runtime, without developer dotenv files or formatter hooks.
+  profiles.ci.module = { lib, pkgs, ... }: {
+    dotenv.enable = lib.mkForce false;
+    treefmt.enable = lib.mkForce false;
+    packages = lib.mkForce ([ config.languages.javascript.package ] ++ (with pkgs; [
+      git corepack docker-client openssl ripgrep postgresql_18 hadolint
+    ]));
+  };
+
   dotenv = {
     enable = true;
     filename = ".env.development";

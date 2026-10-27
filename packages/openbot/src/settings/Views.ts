@@ -22,6 +22,7 @@ export const platform = (
 ): Api.PlatformSettings => {
 	const { document } = snapshot
 	return {
+		memberSignupOrganizationId: document.memberSignupOrganizationId ?? null,
 		browserAuth: browserAuthOf(document),
 		version: snapshot.version,
 		publicOrigin: document.publicOrigin,
@@ -30,7 +31,8 @@ export const platform = (
 				? null
 				: {
 						providerId: document.identityProvider.providerId ?? "oidc",
-						callbackPath: document.identityProvider.callbackPath ?? "/auth/callback/oidc",
+						callbackPath:
+							document.identityProvider.callbackPath ?? "/auth/callback/oidc",
 						scopes: document.identityProvider.scopes ?? Api.defaultOidcScopes,
 						issuer: document.identityProvider.issuer,
 						clientId: document.identityProvider.clientId,

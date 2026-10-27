@@ -111,7 +111,9 @@ const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
 			? undefined
 			: Redacted.value(provider.clientSecret),
 	discoveryUrl: provider.issuer + "/.well-known/openid-configuration",
-	redirectURI: provider.redirectUri ?? publicOrigin + "/auth/callback/" + provider.providerId,
+	redirectURI:
+		provider.redirectUri ??
+		publicOrigin + "/auth/callback/" + provider.providerId,
 	scopes: [...(provider.scopes ?? ["openid", "profile", "email"])],
 	pkce: true,
 	requireIdTokenVerification: true,
@@ -474,11 +476,14 @@ export const layer = (
 							)
 						)
 							return yield* CredentialRejected.make({ kind: "session" })
-						return Option.some(used.value.organizationId)
+						return {
+							organization: Option.some(used.value.organizationId),
+							provider,
+						}
 					}
 					if (Option.exists(byEmail, (connection) => connection.enforce))
 						return yield* CredentialRejected.make({ kind: "session" })
-					return Option.none<string>()
+					return { organization: Option.none<string>(), provider }
 				})
 
 			return Auth.of({
@@ -486,15 +491,24 @@ export const layer = (
 					withCurrent((instance, current) =>
 						BrowserRoutes.handler(instance.config, {
 							handler: (request) => current.sdk.handler(request),
-							signIn: (returnTo) => instance.config.mode === "oidc"
-								? current.sdk.api.signInSocial({
-									body: { provider: instance.config.providerId, callbackURL: instance.config.publicOrigin + returnTo },
-									headers: new Headers({origin: instance.config.publicOrigin}),
-									request: new Request(instance.config.publicOrigin + "/auth/login"),
-									asResponse: true,
-								})
-								: Promise.resolve(new Response(null, {status: 503})),
-							signOut: (headers) => current.sdk.api.signOut({headers, asResponse: true}),
+							signIn: (returnTo) =>
+								instance.config.mode === "oidc"
+									? current.sdk.api.signInSocial({
+											body: {
+												provider: instance.config.providerId,
+												callbackURL: instance.config.publicOrigin + returnTo,
+											},
+											headers: new Headers({
+												origin: instance.config.publicOrigin,
+											}),
+											request: new Request(
+												instance.config.publicOrigin + "/auth/login",
+											),
+											asResponse: true,
+										})
+									: Promise.resolve(new Response(null, { status: 503 })),
+							signOut: (headers) =>
+								current.sdk.api.signOut({ headers, asResponse: true }),
 						})(request),
 					).pipe(
 						Effect.catchTag("AuthUnavailable", () =>
@@ -560,7 +574,7 @@ export const layer = (
 								Effect.gen(function* () {
 									if (result === null)
 										return yield* CredentialRejected.make({ kind: "session" })
-									const ssoOrganization = yield* checkProvider(
+									const signIn = yield* checkProvider(
 										current.connections,
 										result.user,
 									)
@@ -572,7 +586,14 @@ export const layer = (
 									}
 									const memberships = yield* organization.admit(
 										account,
-										ssoOrganization,
+										signIn.organization,
+										{
+											platformSignIn:
+												instance.config.mode === "oidc" &&
+												Option.isNone(signIn.organization) &&
+												Option.getOrUndefined(signIn.provider) ===
+													instance.config.providerId,
+										},
 									)
 									const platformAdmin = yield* admins.check(account)
 									return {

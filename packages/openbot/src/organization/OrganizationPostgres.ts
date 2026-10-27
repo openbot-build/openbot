@@ -36,6 +36,7 @@ import {
 	invitations,
 	members,
 	organizationDomains,
+	memberSignupExclusions,
 	organizations,
 	tokens,
 } from "../database/Schema.ts"
@@ -314,12 +315,23 @@ export const make: Effect.Effect<
 			return Option.fromNullishOr(row?.organizationId)
 		})
 
-	const admit: (typeof Organization.Service)["admit"] = (account, only) =>
+	const admit: (typeof Organization.Service)["admit"] = (
+		account,
+		only,
+		options,
+	) =>
 		Effect.gen(function* () {
 			const before = yield* memberships(account.id)
+			const excluded = yield* db
+				.select({ organizationId: memberSignupExclusions.organizationId })
+				.from(memberSignupExclusions)
+				.where(eq(memberSignupExclusions.userId, account.id))
+				.pipe(Effect.mapError(unavailable))
 			const target = Option.filter(
 				Option.isSome(only) ? only : yield* domainOrganization(account),
-				(id) => !Arr.some(before, (member) => member.organizationId === id),
+				(id) =>
+					!Arr.some(before, (member) => member.organizationId === id) &&
+					!Arr.some(excluded, (entry) => entry.organizationId === id),
 			)
 			if (Option.isSome(target)) {
 				const organizationId = target.value
@@ -331,11 +343,80 @@ export const make: Effect.Effect<
 						.transaction((tx) =>
 							Effect.gen(function* () {
 								yield* lockMembers(tx, organizationId)
+								const excluded = yield* tx
+									.select({ userId: memberSignupExclusions.userId })
+									.from(memberSignupExclusions)
+									.where(
+										and(
+											eq(memberSignupExclusions.organizationId, organizationId),
+											eq(memberSignupExclusions.userId, account.id),
+										),
+									)
+									.limit(1)
+								if (excluded.length > 0) return false
 								return yield* join(tx, organizationId, account, roles, now)
 							}),
 						)
 						.pipe(Effect.mapError(unavailable))
 					if (joined) yield* recordJoin(organizationId, account, roles)
+					return yield* memberships(account.id)
+				}
+			}
+			// Public signup never changes an existing membership, crosses an SSO boundary,
+			// or grants administrator roles. It is opt-in for trusted primary OIDC sessions.
+			if (
+				options?.platformSignIn === true &&
+				Option.isNone(only) &&
+				before.length === 0 &&
+				excluded.length === 0 &&
+				account.emailVerified === true &&
+				account.email !== undefined
+			) {
+				const platform = yield* settings.platform
+				const signup = Option.isSome(platform)
+					? platform.value.document.memberSignupOrganizationId
+					: null
+				if (signup !== null && signup !== undefined) {
+					const now = yield* Clock.currentTimeMillis
+					const joined = yield* db
+						.transaction((tx) =>
+							Effect.gen(function* () {
+								yield* lockMembers(tx, signup)
+								const [organization] = yield* tx
+									.select({ status: organizations.status })
+									.from(organizations)
+									.where(eq(organizations.id, signup))
+								if (organization?.status !== "active") return false
+								// Removed and suspended rows are authoritative, including other organizations.
+								const existing = yield* tx
+									.select({ userId: members.userId })
+									.from(members)
+									.where(eq(members.userId, account.id))
+									.limit(1)
+								if (existing.length > 0) return false
+								const revoked = yield* tx
+									.select({ userId: memberSignupExclusions.userId })
+									.from(memberSignupExclusions)
+									.where(eq(memberSignupExclusions.userId, account.id))
+									.limit(1)
+								if (revoked.length > 0) return false
+								const owners = yield* tx
+									.select({ userId: members.userId })
+									.from(members)
+									.where(
+										and(
+											eq(members.organizationId, signup),
+											eq(members.status, "active"),
+											sql`${members.roles}::jsonb ? 'super_administrator'`,
+										),
+									)
+									.limit(1)
+								if (owners.length === 0) return false
+								return yield* join(tx, signup, account, ["member"], now)
+							}),
+						)
+						.pipe(Effect.mapError(unavailable))
+					if (joined) yield* recordJoin(signup, account, ["member"])
 					return yield* memberships(account.id)
 				}
 			}
@@ -638,6 +719,16 @@ export const make: Effect.Effect<
 									eq(tokens.userId, userId),
 								),
 							)
+						// Keep the denial in the same transaction as removal. An invitation can
+						// explicitly add the person again; automatic admission cannot.
+						yield* tx
+							.insert(memberSignupExclusions)
+							.values({
+								organizationId,
+								userId,
+								removedAt: yield* Clock.currentTimeMillis,
+							})
+							.onConflictDoNothing()
 						yield* tx.delete(members).where(memberWhere(organizationId, userId))
 					}),
 				() => null,

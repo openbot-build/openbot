@@ -1515,3 +1515,29 @@ export const fileRefs = table(
 		index("openbot_file_refs_chat").on(t.namespace, t.chat),
 	],
 )
+
+/** A single offline setup receipt. It contains no sign-in or provider secrets. */
+export const provisions = table("openbot_provisions", {
+	id: text().primaryKey(),
+	inputDigest: text().notNull(),
+	dataDigest: text().notNull(),
+	result: text().notNull(),
+})
+
+/** Removed members cannot regain access through automatic signup or domain/SSO admission. */
+export const memberSignupExclusions = table(
+	"openbot_member_signup_exclusions",
+	{
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => openbot_auth_user.id, { onDelete: "cascade" }),
+		removedAt: bigint("removed_at", { mode: "number" }).notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.userId] }),
+		index("openbot_member_signup_exclusions_user").on(t.userId),
+	],
+)

@@ -1,0 +1,233 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "ce27fd8d-baf6-467f-911d-43e08eb93251",
+  "prevIds": [
+    "d8b58b5d-bec9-4f6e-ad16-14a879ceb714"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "openbot_member_signup_exclusions"
+      ],
+      "writes": [
+        "s|tbl|public.openbot_member_signup_exclusions",
+        "n|tbl|public.openbot_member_signup_exclusions",
+        "e|tbl|public.openbot_member_signup_exclusions",
+        "n|rel|public.openbot_member_signup_exclusions",
+        "n|type|public.openbot_member_signup_exclusions",
+        "n|rel|public.openbot_member_signup_exclusions_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "openbot_member_signup_exclusions",
+        "openbot_member_signup_exclusions_user"
+      ],
+      "writes": [
+        "s|idx|public.openbot_member_signup_exclusions_user",
+        "n|idx|public.openbot_member_signup_exclusions_user",
+        "e|idx|public.openbot_member_signup_exclusions_user",
+        "n|rel|public.openbot_member_signup_exclusions_user"
+      ],
+      "reads": [
+        "n|tbl|public.openbot_member_signup_exclusions",
+        "n|sch|public",
+        "n|col|public.openbot_member_signup_exclusions.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "openbot_member_signup_exclusions"
+      ],
+      "writes": [
+        "s|fk|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_VaiQ841vbEjc_fkey",
+        "n|fk|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_VaiQ841vbEjc_fkey",
+        "e|fk|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_VaiQ841vbEjc_fkey",
+        "n|con|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_VaiQ841vbEjc_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.openbot_member_signup_exclusions",
+        "n|sch|public",
+        "n|tbl|public.openbot_organizations",
+        "n|sch|public",
+        "n|col|public.openbot_member_signup_exclusions.organization_id",
+        "n|col|public.openbot_organizations.id",
+        "e|uniqueness|public.openbot_organizations.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "openbot_member_signup_exclusions"
+      ],
+      "writes": [
+        "s|fk|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_7o0vmnR20VtS_fkey",
+        "n|fk|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_7o0vmnR20VtS_fkey",
+        "e|fk|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_7o0vmnR20VtS_fkey",
+        "n|con|public.openbot_member_signup_exclusions.openbot_member_signup_exclusions_7o0vmnR20VtS_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.openbot_member_signup_exclusions",
+        "n|sch|public",
+        "n|tbl|public.openbot_auth_user",
+        "n|sch|public",
+        "n|col|public.openbot_member_signup_exclusions.user_id",
+        "n|col|public.openbot_auth_user.id",
+        "e|uniqueness|public.openbot_auth_user.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "openbot_member_signup_exclusions",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_member_signup_exclusions",
+        "name": "organization_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_member_signup_exclusions",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_member_signup_exclusions",
+        "name": "removed_at",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_member_signup_exclusions",
+        "name": "openbot_member_signup_exclusions_user",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_member_signup_exclusions",
+        "name": "openbot_member_signup_exclusions_VaiQ841vbEjc_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "organization_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "openbot_organizations",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_member_signup_exclusions",
+        "name": "openbot_member_signup_exclusions_7o0vmnR20VtS_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "user_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "openbot_auth_user",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_member_signup_exclusions",
+        "name": "openbot_member_signup_exclusions_pkey",
+        "columns": [
+          "organization_id",
+          "user_id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}
