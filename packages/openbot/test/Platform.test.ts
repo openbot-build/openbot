@@ -70,6 +70,95 @@ const tagOf = (response: HttpClientResponse.HttpClientResponse) =>
 // The host and the database are real, so the tests use real time.
 layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 	it.effect(
+		"OIDC scope changes need platform access and a current version, and preserve hidden secrets",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					sharedDomain: false,
+					platformAdmins: ["root@example.com"],
+				})
+				const account = Caller.withCookie({
+					address: yield* host.address,
+					publicOrigin,
+				})
+				const root = yield* host.login("root")
+				const alice = yield* host.login("alice")
+				const initial = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings"),
+				)
+				const identityProvider = {
+					issuer: "https://id.example.com",
+					clientId: "browser-fixture",
+					clientSecret: "fixture-secret",
+					scopes: ["openid", "profile", "email", "offline_access"],
+				}
+				assert.strictEqual(
+					(yield* account(alice.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: initial.version,
+						identityProvider,
+					})).status,
+					403,
+				)
+				const response = yield* account(
+					root.session,
+					"/v1/platform/settings",
+					"PATCH",
+					{ expectedVersion: initial.version, identityProvider },
+				)
+				const changed = yield* decode(
+					SettingsApi.PlatformSettings,
+					200,
+				)(response)
+				assert.deepStrictEqual(
+					changed.identityProvider?.scopes,
+					identityProvider.scopes,
+				)
+				assert.strictEqual(
+					Str.includes("fixture-secret")(yield* response.text),
+					false,
+				)
+				const providerWithoutScopes = {
+					issuer: identityProvider.issuer,
+					clientId: identityProvider.clientId,
+				}
+				const preserved = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: changed.version,
+						identityProvider: providerWithoutScopes,
+					}),
+					200,
+				)
+				assert.deepStrictEqual(
+					preserved.identityProvider,
+					changed.identityProvider,
+				)
+				assert.strictEqual(
+					(yield* account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: initial.version,
+						identityProvider,
+					})).status,
+					409,
+				)
+				assert.strictEqual(
+					(yield* account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: preserved.version,
+						identityProvider: { ...providerWithoutScopes, scopes: ["email"] },
+					})).status,
+					400,
+				)
+				const readBack = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings"),
+				)
+				assert.deepStrictEqual(readBack, preserved)
+			}),
+		{ timeout: 60000 },
+	)
+
+	it.effect(
 		"Only platform admins change the platform, and the ceiling denies in every organization",
 		() =>
 			Effect.gen(function* () {

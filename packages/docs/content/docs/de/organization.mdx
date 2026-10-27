@@ -446,3 +446,23 @@ Einladung, fehlt dieses Feld.
 | `409`  | `SettingsConflict`               | Jemand hat die Einstellungen geändert, nachdem du sie gelesen hast.                                    |
 | `409`  | `LastSuperAdministrator`         | Nach der Änderung gäbe es keinen aktiven Super Administrator mehr.                                     |
 | `503`  | `OrganizationStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                                |
+
+## Anmeldung in einer bestehenden Organisation
+
+`memberSignupOrganizationId` in den Plattform-Einstellungen ist zunächst `null`.
+Mit einer festen Organisations-ID kann ein neues Konto als `member` beitreten.
+Das Konto muss den Haupt-OIDC-Anbieter der Plattform nutzen und eine bestätigte
+E-Mail-Adresse haben. Es darf keine bestehende Mitgliedschaft oder einen
+Entfernungsvermerk haben. Die Einstellung führt keine Konten anhand ihrer
+E-Mail-Adresse zusammen und ändert keine Organisation, die SSO oder eine
+bestätigte Domain gewählt hat.
+
+Die Zielorganisation muss aktiv sein und einen aktiven Super Administrator
+haben. Prüfung und Eintrag nutzen dieselbe Sperre für Mitgliederänderungen. Der
+Beitritt gibt nur die Rolle `member`, ohne direkte Regeln. Bei einer verwalteten
+Plattform sollte `organizationCreation` auf `platform_admins` stehen.
+
+Gesperrte Mitgliedschaften bleiben gesperrt. Beim Entfernen eines Mitglieds
+bleibt ein interner Vermerk. Eine spätere Anmeldung oder Domain-Zulassung kann
+den Zugriff nicht wiederherstellen. Eine ausdrückliche Einladung kann den
+Zugriff nach den üblichen Prüfungen wieder erlauben.

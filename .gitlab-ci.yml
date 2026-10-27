@@ -13,6 +13,9 @@ stages: [check, build]
   image: ghcr.io/cachix/devenv/devenv:v2.4.0
   tags: [docker, privileged, arm64]
   variables:
+    # Keep native TypeScript builds within the runner memory budget.
+    GOMEMLIMIT: 1GiB
+    GOGC: "50"
     GIT_CONFIG_COUNT: "1"
     GIT_CONFIG_KEY_0: safe.directory
     GIT_CONFIG_VALUE_0: $CI_PROJECT_DIR
@@ -40,9 +43,12 @@ check:
   extends: .devenv
   stage: check
   script:
-    - devenv --profile ci shell -- pnpm build
-    - devenv --profile ci shell -- pnpm typecheck
-    - devenv --profile ci shell -- pnpm -r test
+    - devenv --profile ci shell -- pnpm -r --workspace-concurrency=1 build
+    - >-
+      devenv --profile ci shell -- bash -euo pipefail -c 'pnpm -r
+      --workspace-concurrency=1 exec tsc -p tsconfig.json --noEmit; pnpm exec
+      tsc -p scripts/tsconfig.json --noEmit; pnpm rules'
+    - devenv --profile ci shell -- pnpm -r --workspace-concurrency=1 test
     - devenv --profile ci shell -- node --test deploy/docker/*.test.mjs
 
 platform-image:

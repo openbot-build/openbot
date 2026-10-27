@@ -56,6 +56,7 @@ import * as PostgresTest from "./PostgresTest.ts"
 import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
+import { Settings } from "../src/settings/Settings.ts"
 
 /** The services of the login test: the Node services and the fetch HTTP client. */
 const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
@@ -771,6 +772,30 @@ layer(platform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual((yield* request("/health")).status, 200)
 				assert.strictEqual((yield* request("/docs")).status, 200)
+				// Setup keeps omitted secrets. Clear the stored secret explicitly before
+				// checking that the same database can use a public client after restart.
+				yield* Effect.provideContext(
+					Effect.gen(function* () {
+						const settings = yield* Settings
+						const current = yield* settings.platform
+						assert.ok(Option.isSome(current))
+						yield* settings.updatePlatform(
+							current.value.version,
+							(document) => {
+								assert.ok(document.identityProvider !== null)
+								return Effect.succeed({
+									...document,
+									identityProvider: {
+										...document.identityProvider,
+										clientSecret: null,
+										clientSecretHint: null,
+									},
+								})
+							},
+						)
+					}),
+					running.services,
+				)
 				publicClient = true
 				yield* restart
 				const publicLogin = yield* complete("public-client-user")
