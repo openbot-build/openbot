@@ -7,8 +7,9 @@ description:
 Für Entwickler. Das [Entwicklerhandbuch](/de/docs/developers) führt zu
 API-Arbeit, App-Veröffentlichung und Änderungen am Projekt.
 
-Diese Seite legt das Zieldesign fest. Der Umbau läuft noch. Er ist nicht bereit
-für einen Umzug von Produktionsdaten. Der letzte Abschnitt nennt offene Arbeit.
+Diese Seite beschreibt das gemeinsame Ausführungsdesign. Bestehende Daten
+werden in einem Wartungsfenster mit geprüfter Migration umgewandelt. Der letzte
+Abschnitt verweist auf Funktions- und Freigabeprüfungen.
 
 ## Umfang
 
@@ -146,12 +147,13 @@ ersetzt wurde. Das Ende des Aufrufers und das Aufräumen von einem anderen Knote
 nutzen dasselbe gespeicherte Ergebnis.
 
 App-Anmeldung und Token-Erneuerung speichern mit jedem Ergebnis einen Auftrag
-zum Aufräumen, auch bei einem späten Ergebnis. Der Auftrag gehört der Plattform.
-Der Verlust von Mitgliedsrechten stoppt ihn daher nicht. Beim Speichern des
-Tokens werden die Aufruf-ID, die Zugangsdaten und das Endereignis in einer
-Transaktion geschrieben. Das Aufräumen wartet auf die ursprüngliche Ausführung
-und spätere Arbeit an der Verbindung. Ein gespeichertes Token bleibt im Besitz
-seiner Verbindung. Andere Aufträge bleiben offen, solange eine Verbindung oder
+zum Aufräumen, auch bei einem späten Ergebnis. Ein Dienst räumt für die
+Quellorganisation auf. Der Verlust von Mitgliedsrechten stoppt ihn daher nicht.
+Beim Speichern des Tokens werden Aufruf-ID, Zugangsdaten und Endereignis in
+einer Transaktion geschrieben. Das Aufräumen eines ungenutzten Ergebnisses
+wartet auf die Quellausführung. Entfernen oder Ersetzen übergibt ein gespeichertes
+Token in derselben Transaktion an die Bereinigung. Diese kann vor dem Ende der
+Quelle laufen. Andere Aufträge bleiben offen, solange eine Verbindung oder
 ein Entwicklertest denselben Aussteller und OAuth-Client nutzt. OAuth-Server
 können verbundene Tokens gemeinsam widerrufen, auch wenn ihre Zeichenfolgen
 verschieden sind. Ein dauerhafter Zeitgeber prüft nach der Freigabe erneut. Die
@@ -293,10 +295,10 @@ Sicherungen nur vor Wiederaufnahme des Verkehrs zurückspielen. Nach neuen
 externen Aktionen vorwärts reparieren, damit Rücksetzen keinen Schreibvorgang
 wiederholt.
 
-## Prüfungen und offene Arbeit
+## Prüfungen und Freigabe
 
 Die [Prüfungen des Ausführungsdesigns](/de/docs/architecture-checks) zeigen
-Fähigkeiten, Quelltests, entfernte Pfade und offene Freigabenachweise.
+Fähigkeiten, Quelltests, entfernte Pfade und Freigabenachweise.
 
 Die Funktionsbasis sind 581 Tests. Neue Tests prüfen gespeicherte Befehle,
 Generationen, Abbruch, späte Ergebnisse, langsame Leser, Rechteänderungen und
@@ -347,25 +349,34 @@ Verbindung nutzen gemeinsame Ausführungsbefehle. Ein gespeicherter Leseaufruf
 schlägt die Änderung vor. Die letzte Transaktion prüft Aufrufer, Revision und
 Generation. Ihr Prüfpunkt nennt das gespeicherte Ergebnis. Es bleibt auch nach
 dem Entfernen der Verbindung lesbar. Eine ersetzte Freigabe geht in derselben
-Transaktion an die Plattform zur Bereinigung.
+Transaktion an den Dienst zur Bereinigung.
 
-Folgende Arbeit blockiert die Freigabe noch:
+Vorbereitung einer Anmeldung, Code-Austausch, Erneuerung, Widerruf, Entfernen,
+Zurücksetzen und Dateipflege nutzen gemeinsame Ausführungsdatensätze. Die
+Bereinigung von Entwicklertests nutzt gespeicherte Aufrufe, Signale und Timer.
+Sie hat keinen eigenen Worker und keinen lokalen Koordinationspfad mehr.
 
-- Code-Austausch und Bereinigung von Entwicklertests aus den alten Workern und
-  lokalen Abläufen verlagern. Vorbereitung einer Anmeldung, Code-Austausch,
-  Erneuerung, Widerruf, Entfernen, Zurücksetzen und Dateipflege nutzen
-  gemeinsame Ausführungsdatensätze.
-- Vollständige Servertests für jeden physischen Adapter abschließen. Zwei
-  Ressourcenprozesse prüfen Besitzerverlust, langsames Schließen, verlorene
-  Antworten, getrenntes Datenbanknetz und spätes Schließen nach Ersatz. Ohne
-  gespeichertes Schließergebnis bleibt ein Laufzeitrecht unbekannt.
-- Das lokale Hilfsmodelllimit durch gemeinsame Zulassung ersetzen.
-- Vollständige Altdatenumwandlung, Fortschrittsdaten und Startsperre bauen und
-  erproben. Schema-Migrationen allein sind keine Datenumwandlung.
-- Fehler-, Rechte-, Geheimnis- und Migrationstests vervollständigen.
-  Modulabhängigkeiten prüfen und entfernte Koordinationspfade nachweisen.
-- Vollständigen Build, Typprüfung, alle Pakettests, Compose-Prüfungen,
-  Image-Scans, Docs-Build und CI vor Merge und Push bestehen.
+Hilfsmodellaufrufe für den Speicher nutzen gemeinsame PostgreSQL-Permits. Ein
+Permit hält einen Platz im gemeinsamen Aufruflimit. Modell-Token-Grenzen nutzen
+gemeinsame Zähler in
+der Datenbank. Vor dem Senden muss die aktuelle Ausführung ihr Permit weiter
+besitzen. Eine Knotenübernahme setzt die gemeinsame Grenze daher nicht zurück.
 
-Der Umbau ist erst fertig, wenn alle erhaltenen Funktionen dieses Design nutzen
-und die alten Koordinationspfade entfernt sind.
+Die Datenumwandlung speichert Fortschritt und prüft alte Datensätze. Erst dann
+lässt die Startsperre neue Server zu. Tests prüfen verschlüsselte Daten,
+unterbrochene Arbeit, Wiederholungen und Fortsetzung nach einem Teilumzug.
+Schema-Migration und Datenumwandlung sind zwei Schritte desselben
+Wartungsbefehls.
+
+Vollständige Server- und Zweiprozess-Tests prüfen Besitzerverlust, langsames
+Schließen, verlorene Antworten, getrenntes Datenbanknetz und spätes Schließen
+nach Ersatz. Eine physische Lease ohne gespeichertes Schließergebnis bleibt
+unbekannt. Die Prüfungen decken auch Rechte, Geheimnisse, Verbrauch und
+Modulabhängigkeiten ab.
+
+Für eine Freigabe die [CI-Läufe](https://github.com/openbot-build/openbot/actions/workflows/ci.yml)
+für genau diesen Commit lesen. Build, Typprüfung, Pakettests, Compose-Prüfungen,
+Image-Layer-Prüfungen und Schwachstellenscan müssen bestehen. Ein Push nach
+`main` veröffentlicht auch die geprüften Images. Der [Docs-Workflow](https://github.com/openbot-build/openbot/actions/workflows/docs.yml)
+baut und veröffentlicht die Dokumentation für diesen Commit. Testzahlen und ein
+erfolgreicher Lauf eines anderen Commits ersetzen diese Freigabeprüfungen nicht.

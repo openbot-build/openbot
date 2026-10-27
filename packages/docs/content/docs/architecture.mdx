@@ -6,15 +6,16 @@ description: The shared design for stored work, state, and events.
 For developers. Start with the [developer manual](/docs/developers) to choose
 API work, App publishing, or project changes.
 
-This page fixes the target design. The change is still in progress. It is not
-ready for a production data move. The last section lists the work still needed.
+This page describes the shared execution design. Existing data moves through
+the checked migration during a maintenance window. The last section links the
+feature and release checks.
 
 ## Scope
 
 OpenBot stays headless and API first. It keeps Bots, Chats, tools, delegation,
 approval, memory, Code Mode, Apps, indexing, Computers, Channels, triggers, live
 sessions, organizations, SSO, files, Vaults, models, and billing. `core` and
-`protocol` must still work on their own.
+`protocol` still work on their own.
 
 PostgreSQL and object storage are the only required outside services. OpenBot
 nodes use authenticated private HTTP RPC to call each other. RPC means a call to
@@ -131,12 +132,13 @@ route was replaced. Protocol clients use the same close result when a caller
 ends its scope or a remote cleanup closes it.
 
 App authorization exchange and refresh save a cleanup command with each grant
-result, including a late result. The command belongs to the platform, so loss of
-member access does not stop cleanup. Installation records the call ID in the
-same transaction as the credential and the final event. Cleanup waits for the
-source execution and any later connection work. An installed grant keeps its
-connection as its owner. Other cleanup stays pending while any connection or
-developer test uses the same issuer and OAuth client. OAuth servers may revoke
+result, including a late result. A service runs cleanup for the source
+organization, so loss of member access does not stop cleanup. Installation
+records the call ID in the same transaction as the credential and the final
+event. Cleanup of an unused result waits for the source execution. Removing or
+replacing an installed grant hands it to cleanup in the same transaction; that
+cleanup can run before the source ends. Other cleanup stays pending while any
+connection or developer test uses the same issuer and OAuth client. OAuth servers may revoke
 related tokens together, even when their strings differ. A durable timer checks
 again after users release those grants. The check covers all OpenBot owners.
 
@@ -260,10 +262,10 @@ conversion must resume after a stop and be safe to run again. Restore a backup
 only before traffic resumes. After outside actions resume, repair forward so
 rollback cannot repeat a write.
 
-## Checks and remaining work
+## Checks and release
 
 See the [execution design checks](/docs/architecture-checks) for the capability
-map, source test cases, removed paths, and open release evidence.
+map, source test cases, removed paths, and release evidence.
 
 The feature baseline is 581 tests. New tests cover durable commands, generation
 checks, cancellation, late results, slow readers, access changes, and usage.
@@ -306,24 +308,31 @@ Connection checks, updates, manual changes, and revalidation now use common
 execution commands. A saved read proposes a change. The final transaction checks
 the current caller, revision, and generation before applying it. Its checkpoint
 names the saved result, so results remain readable after a connection is
-removed. A replaced grant moves to platform cleanup in that same transaction.
+removed. A replaced grant moves to service cleanup in that same transaction.
 
-The following work still blocks release:
+Authorization preparation, code exchange, refresh, revocation, removal, reset,
+and file maintenance use common execution records. Developer test cleanup uses
+saved calls, signals, and timers. It no longer has its own worker or local
+coordination path.
 
-- Move developer test code exchange and cleanup off their old worker and local
-  coordination paths. Authorization preparation, code exchange, refresh,
-  revocation, removal, reset, and file maintenance use common execution records.
-- Complete full-server checks for each physical adapter. Two resource processes
-  now cover owner loss, slow close, lost replies, database network loss, and
-  late close after replacement. A lease with no saved close result stays
-  unknown.
-- Replace the memory helper's node-local permit limit with shared admission.
-- Build and rehearse the full old-data conversion, progress records, and startup
-  gate. The schema migrations alone are not this conversion.
-- Complete the failure, access, secret, and migration test matrix. Enforce
-  module dependency rules and report the removed coordination paths.
-- Pass full builds, type checks, all package tests, Compose checks, image scans,
-  docs builds, and CI before merging and pushing the release.
+Memory helper calls use shared PostgreSQL permits. A permit holds one place in
+the shared call limit. Model token limits use database buckets, which are shared
+counters. The current execution must still own its permit before sending, so
+node takeover does not reset the shared limit.
 
-The change is complete only when all retained features use this design and the
-old coordination paths are removed.
+The data converter saves progress and checks old records before the startup
+gate allows new servers to run. Tests cover encrypted data, interrupted work,
+repeat runs, and recovery after a partial move. Schema migration and data
+conversion are separate steps of the same maintenance command.
+
+Full-server and two-process tests cover owner loss, slow close, lost replies,
+database network loss, and late close after replacement. A physical lease with
+no saved close result stays unknown. The checks also cover access, secrets,
+usage, and module dependencies.
+
+For a release, read the [CI runs](https://github.com/openbot-build/openbot/actions/workflows/ci.yml)
+for that exact commit. The build, typecheck, package tests, Compose checks, image
+layer checks, and vulnerability scan must pass. A push to `main` also publishes
+the checked images. The [Docs workflow](https://github.com/openbot-build/openbot/actions/workflows/docs.yml)
+builds and deploys the docs for that commit. Test counts and a passing run from
+another commit do not replace these release checks.
