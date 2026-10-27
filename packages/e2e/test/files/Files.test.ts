@@ -3,6 +3,7 @@ import {
 	Caller,
 	Devices,
 	Messages,
+	Wait,
 } from "@openbot-build/openbot/testing"
 import { assert, layer } from "@effect/vitest"
 import { FilesApi, ChatCommandReceipt, UserTokensApi } from "@openbot-build/api"
@@ -496,11 +497,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				yield* host.restart
 				yield* storage.failDeletes(false)
-				yield* until(
+				// A saved retry uses the 10-second message poll. Its storage call
+				// and state write also need time after that poll.
+				yield* Wait.untilTrue(
 					"the delete resumes after restart",
-					host
-						.run(Devices.fileDeleteStatus(cleanupId))
-						.pipe(Effect.map((status) => status === "completed")),
+					host.run(Devices.fileDeleteStatus(cleanupId)),
+					(status) => status === "completed",
+					{ spacing: "100 millis", times: 199 },
 				)
 				assert.isAtLeast((yield* calls).length, 2)
 				assert.equal(
