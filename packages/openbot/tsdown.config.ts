@@ -18,17 +18,21 @@ export default defineConfig({
 		...config.exports,
 		exclude: ["Main", "Migrate", "Setup", "DevelopmentMain", "code/Worker"],
 		customExports(exports) {
-			return Object.fromEntries(
-				Object.entries(exports).map(([key, value]) => {
-					const name = key.split("/").at(-1)
-					return [
-						key === "."
-							? key
-							: `./${name === "Migrations" ? "StorageMigration" : name}`,
-						value,
-					]
-				}),
-			)
+			return {
+				...Object.fromEntries(
+					Object.entries(exports).map(([key, value]) => {
+						const name = key.split("/").at(-1)
+						return [
+							key === "."
+								? key
+								: `./${name === "Migrations" ? "StorageMigration" : name}`,
+							value,
+						]
+					}),
+				),
+				// Keep the test source export when the build writes the package exports.
+				"./testing": "./test/Testing.ts",
+			}
 		},
 		bin: {
 			"openbot-server": "./src/app/Main.ts",

@@ -5,25 +5,20 @@
  * program gave the call away. The App result goes through `redact` before the
  * program or the model sees it.
  */
-import type { VaultsApi } from "@openbot-build/api"
-import { Client } from "@openbot-build/protocol"
+import type { AppCalls, Vaults as VaultsModel } from "@openbot-build/domain"
 import {
 	Array as Arr,
-	Cause,
-	Effect,
 	HashMap,
 	Option,
 	Order,
 	pipe,
 	Predicate,
 	Record as Rec,
-	Result,
-	Schema,
+	type Schema,
 	String as Str,
 } from "effect"
 import { Base64, Base64Url, Hex } from "effect/encoding"
-import type { Binding } from "../apps/Bindings.ts"
-import type { Usable, Vaults } from "./Vaults.ts"
+import type { Usable } from "./Vaults.ts"
 
 /** An item with the name that programs use, such as `github`. */
 export interface Entry {
@@ -84,7 +79,7 @@ export const find = (args: Schema.Json): ReadonlyArray<Reference> =>
 	)
 
 /** Puts each value in place of its reference. `values` has `<alias>/<field>` keys. */
-const substitute = (
+export const substitute = (
 	value: unknown,
 	values: HashMap.HashMap<string, string>,
 ): unknown => {
@@ -168,8 +163,8 @@ export const redact = (
 
 /** True when the item lets its values go to this App tool. */
 export const allows = (
-	exits: ReadonlyArray<VaultsApi.VaultExit>,
-	source: Binding["source"],
+	exits: ReadonlyArray<VaultsModel.VaultExit>,
+	source: AppCalls.Source,
 ) =>
 	Arr.some(
 		exits,
@@ -178,137 +173,6 @@ export const allows = (
 			exit.connection === source.connectionId &&
 			(exit.tool === null || exit.tool === source.name),
 	)
-
-/** Takes the values out of an App error. Errors without App data stay as they are. */
-const redactError = (
-	error: Client.Error | Schema.SchemaError,
-	secrets: ReadonlyArray<Secret>,
-): Client.Error => {
-	if (Schema.isSchemaError(error))
-		return Client.ClientError.make({
-			reason: "Schema",
-			issue: "The App call does not match the schema of the tool.",
-		})
-	switch (error._tag) {
-		case "ToolFailure": {
-			// The redaction can change keys and other text, so the result may no longer be a tool result.
-			const result = redact(error.result, secrets)
-			return Schema.is(Client.ToolFailure.fields.result)(result)
-				? Client.ToolFailure.make({ result })
-				: Client.ClientError.make({
-						reason: "Schema",
-						issue: "The App result could not be shown without its secrets.",
-					})
-		}
-		case "ClientError":
-			return Client.ClientError.make({
-				reason: error.reason,
-				issue: redactText(error.issue, secrets),
-			})
-		default:
-			return error
-	}
-}
-
-/**
- * Checks the references in the arguments of one App call. With no reference, the
- * binding stays as it is. Otherwise the result is a binding that reads the values
- * when it sends the call. It fails with the message for the program when a reference
- * is not allowed. Only App tools take references, never reads of resources or prompts.
- */
-export const guard = (
-	vaults: typeof Vaults.Service,
-	organizationId: string,
-	entries: ReadonlyArray<Entry>,
-	binding: Binding,
-	args: Schema.JsonObject,
-): Result.Result<
-	{ readonly binding: Binding; readonly references: number },
-	string
-> => {
-	const references = find(args)
-	if (references.length === 0) return Result.succeed({ binding, references: 0 })
-	if (binding.source.kind !== "tool")
-		return Result.fail(
-			"Vault references can only go to App tools, not to resources or prompts.",
-		)
-	const check = (
-		reference: Reference,
-	): Result.Result<
-		{ readonly entry: Entry; readonly field: string },
-		string
-	> => {
-		const { alias, field } = reference
-		const found = Arr.findFirst(entries, (entry) => entry.alias === alias)
-		if (Option.isNone(found))
-			return Result.fail(`There is no Vault item with the name ${alias}.`)
-		const entry = found.value
-		if (!Arr.contains(entry.usable.item.fields, field))
-			return Result.fail(`The Vault item ${alias} has no field ${field}.`)
-		if (!allows(entry.usable.item.exits, binding.source))
-			return Result.fail(
-				`The Vault item ${alias} may not go to ${binding.source.connectionName} / ${binding.source.name}.`,
-			)
-		return Result.succeed({ entry, field })
-	}
-	const checked = Result.all(Arr.map(references, check))
-	if (Result.isFailure(checked)) return Result.fail(checked.failure)
-	// Aliases never look like numbers, so the record keeps the order of the references.
-	const wanted = pipe(
-		Arr.groupBy(checked.success, ({ entry }) => entry.alias),
-		Rec.values,
-		Arr.map((group) => ({
-			entry: Arr.headNonEmpty(group).entry,
-			fields: Arr.map(group, ({ field }) => field),
-		})),
-	)
-	const perform: Binding["perform"] = (input) =>
-		Effect.gen(function* () {
-			const values = Arr.flatten(
-				yield* Effect.forEach(wanted, ({ entry, fields }) =>
-					vaults.reveal(organizationId, entry.usable.item.id, fields).pipe(
-						Effect.tapError((error) =>
-							Effect.logInfo(
-								"OpenBot could not read a Vault item",
-								Cause.fail(error),
-							).pipe(Effect.annotateLogs({ item: entry.usable.item.id })),
-						),
-						Effect.mapError((error) =>
-							Client.ClientError.make({
-								reason: "InputUnavailable",
-								issue: `OpenBot could not read the Vault item ${entry.alias}: ${error.message}`,
-							}),
-						),
-						Effect.map((read) =>
-							Arr.map(
-								Arr.fromIterable(read),
-								([field, value]) => [entry.alias + "/" + field, value] as const,
-							),
-						),
-					),
-				),
-			)
-			const secrets = Arr.map(values, ([key, value]) => ({ key, value }))
-			const result = yield* binding
-				.perform(substitute(input, HashMap.fromIterable(values)))
-				.pipe(Effect.mapError((error) => redactError(error, secrets)))
-			// The answers to more input would come back on another path, where nothing takes the values out.
-			if (result._tag === "InputRequired")
-				return yield* Client.ClientError.make({
-					reason: "InputUnavailable",
-					issue:
-						"The App asked for more input. A call with Vault values cannot do that.",
-				})
-			return {
-				_tag: "Completed",
-				result: redact(result.result, secrets),
-			} as const
-		})
-	return Result.succeed({
-		binding: { ...binding, perform },
-		references: references.length,
-	})
-}
 
 const comment = (text: string) =>
 	pipe(text, Str.replaceAll("*/", "* /"), Str.slice(0, 500))

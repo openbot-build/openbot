@@ -1,0 +1,186 @@
+---
+title: Vaults
+description:
+  Collect secrets from many providers, and let Bots use them in Code Mode
+  without seeing them.
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+A **Vault** is a collection of secrets that a Bot may use but never see, such as
+logins and API keys. Each secret in a Vault can come from another place: OpenBot
+itself, 1Password, Bitwarden or HashiCorp Vault. So one Vault can put together
+the secrets of a team from all the places where the team keeps them.
+
+A Bot uses the secrets only in [Code Mode](/docs/developers/code-mode). The
+program of the Bot gets a **reference**, not the secret. OpenBot puts the secret
+in place of the reference only when it sends an App tool call, and only to the
+tools that you allow.
+
+| Word            | Meaning                                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Vault           | A named collection of items. A Bot gets the right to use a whole Vault.                         |
+| Item            | One secret thing in a Vault, such as a login. It has fields, such as `username` and `password`. |
+| Secret provider | Your account at a password manager or a secrets service. Items read their values from it.       |
+| Reference       | A short text such as `⟦vault:github/token⟧`. It stands for one field. It is not the secret.     |
+| Exit            | A place where the values of an item may go: the arguments of a tool of one App connection.      |
+
+---
+
+## How OpenBot keeps the secret
+
+1. **The program never has the secret.** In the sandbox, `vault.github.token` is
+   only the text `⟦vault:github/token⟧`. When the program changes it, for
+   example with base64, it changes only the reference text. A changed reference
+   is not a reference any more.
+2. **OpenBot puts the secret in at the exit.** After the program gives an App
+   call away, OpenBot finds each reference in the string arguments. It checks
+   that the Bot has the right to use the Vault and that the item allows this
+   tool. Then it reads the value and sends the call. The program does not see
+   the arguments with the value.
+3. **A decider sees the call.** A call with a reference is always a
+   [request](/docs/developers/requests), also for a tool that only reads. The
+   decider sees the reference and the tool, not the secret.
+4. **OpenBot takes the secret out of the result.** Before the program or the
+   model sees the App result, OpenBot puts `⟦hidden:github/token⟧` in place of
+   the value. It also takes out the value in base64, base64url, hexadecimal, URL
+   and JSON forms. Values shorter than 4 characters stay in the result.
+5. **The records have only references.** Code runs, App operations and requests
+   keep the arguments with references. Results are kept without the secret.
+
+The exits are the important part. Step 4 is only a second line: an App can still
+give the secret back in a form that OpenBot does not know, such as a hash or
+part of it. So allow an item only for tools that you trust with it. Do not allow
+it for a tool that writes its arguments where the Bot can read them, such as a
+notes tool.
+
+---
+
+A provider that is still used returns `409 SecretProviderInUse` when you try to
+delete it. A provider check returns `400 SecretProviderInvalid` for wrong
+credentials or missing fields. A network failure or a temporary provider failure
+returns `502 SecretProviderFailed`.
+
+## Add a secret provider
+
+See [Secret providers](/docs/admin/secret-providers).
+
+## Create a Vault
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Team secrets"}' \
+  https://api.example.com/v1/vaults
+```
+
+Send `"shared": true` to make a shared Vault of the organization.
+`GET /v1/vaults` lists your Vaults and the shared ones. `GET`, `PATCH` and
+`DELETE /v1/vaults/:vaultId` read, change and delete one. Deleting a Vault
+deletes its items and the rights of Bots. The secret providers keep their
+secrets.
+
+---
+
+## Add an item
+
+An item says where the secret is, which fields programs may use, and where the
+values may go. The items of one Vault can come from different places:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"github","description":"The GitHub token of the team.","source":{"_tag":"OnePassword","provider":"spr_...","vault":"<vault id>","item":"<item id>"},"fields":["password"],"exits":[{"_tag":"App","connection":"<connection id>","tool":"create_issue"}]}' \
+  https://api.example.com/v1/vaults/vlt_.../items
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"deploy","source":{"_tag":"Builtin"},"values":{"key":"..."},"exits":[{"_tag":"App","connection":"<connection id>","tool":null}]}' \
+  https://api.example.com/v1/vaults/vlt_.../items
+```
+
+| Field         | What it is                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| `name`        | The name for programs, such as `github` in `vault.github.password`. Small letters, digits and `_`.  |
+| `description` | Optional. Tells the Bot what the item is for. Do not put a secret in it.                            |
+| `source`      | Where the values are. See the table below.                                                          |
+| `fields`      | The fields that programs may use. For a `Builtin` item, leave it out.                               |
+| `values`      | Only for a `Builtin` item: the values by field, such as `{"token":"ghp_..."}`. They never come out. |
+| `exits`       | Where the values may go. `"tool": null` allows every tool of the connection. With none, nothing.    |
+
+| `source` tag  | Fields                      | Fields of the item                                                                                      |
+| ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `Builtin`     | none                        | The keys of `values`. OpenBot keeps them, sealed with `OPENBOT_SECRET_KEYS`.                            |
+| `OnePassword` | `provider`, `vault`, `item` | The label or ID of each field. The username and password of a login are also `username` and `password`. |
+| `Bitwarden`   | `provider`, `item`          | `username`, `password`, `notes`, custom fields by name, and `totp`, the current one-time code.          |
+| `HashiCorp`   | `provider`, `path`          | Each key of the secret, such as `bots/github`.                                                          |
+
+The `provider` must be of the kind of the tag, and you must be able to use it.
+OpenBot reads the item once to check that its fields are there. `GET`, `PATCH`
+and `DELETE /v1/vaults/:vaultId/items/:itemId` read, change and delete an item.
+Send new `values` to change a `Builtin` item. A `Builtin` item stays `Builtin`.
+You need `write` on the Vault.
+
+---
+
+## Let a Bot use a Vault
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/vaults/vlt_.../bots/bot_...
+```
+
+The Bot can then use every item of the Vault, each only where its exits allow.
+You must be able to use the Vault and to change the Bot.
+`GET /v1/vaults/:vaultId/bots` lists the Bots with the right.
+`DELETE /v1/vaults/:vaultId/bots/:botId` takes the right away. The right also
+ends when the Bot is archived.
+
+---
+
+## Use an item in Code Mode
+
+The Bot sees its items in the Code Mode tools: their names, fields, descriptions
+and exits, never their values. In a program, `vault.<item>.<field>` is a
+reference. Put it in a string argument of an App tool, alone or in a longer
+string:
+
+```js
+const issue = await apps.github.create_issue({
+	token: vault.github.password,
+	title: "Build failed",
+})
+return issue.structuredContent.url
+```
+
+The items of all the Vaults of the Bot are in `vault`. When two Vaults have an
+item with the same name, the second is `vault.github_2`. A call with a reference
+that the Bot may not use throws an `Error` with the name `VaultDenied`, and
+OpenBot sends nothing. A call with a reference cannot go to a resource or a
+prompt. When the App asks for more input, the call fails, because the answers
+would come back without this check.
+
+---
+
+## Permissions
+
+`Vault` and `SecretProvider` are [resources](/docs/permissions) with three
+actions each:
+
+| Resource         | Action  | What it lets you do                                                      |
+| ---------------- | ------- | ------------------------------------------------------------------------ |
+| `Vault`          | `read`  | Read Vaults, their items, and the Bots that may use them.                |
+| `Vault`          | `write` | Add, change and delete Vaults and their items, and set their values.     |
+| `Vault`          | `use`   | Let your Bots use Vaults in Code Mode.                                   |
+| `SecretProvider` | `read`  | Read the accounts at secret providers.                                   |
+| `SecretProvider` | `write` | Add, change and delete accounts at secret providers, and their tokens.   |
+| `SecretProvider` | `use`   | Let Vault items read their secrets from an account at a secret provider. |
+
+A member has every action on their own Vaults and providers, and `read` and
+`use` on shared ones. An administrator can also `write` shared ones. A caller
+who cannot read a Vault or a provider gets `404`, as if it did not exist. The
+[audit log](/docs/organization#audit-log) records each change, with
+`vault.created`, `vault.item.created`, `vault.granted`,
+`secret_provider.created` and the other actions.

@@ -1,0 +1,73 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "2c120bbf-b8d1-49aa-8f0a-f3dc032bbae0",
+	"prevIds": ["c0ada2d1-6c95-4567-a920-c75491227f96"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_inbox",
+				"position"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.position",
+				"n|col|public.openbot_channel_inbox.position",
+				"e|col|public.openbot_channel_inbox.position"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_inbox",
+				"execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_inbox.execution_id",
+				"n|col|public.openbot_channel_inbox.execution_id",
+				"e|col|public.openbot_channel_inbox.execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_channel_inbox", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "position",
+				"type": "bigserial",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

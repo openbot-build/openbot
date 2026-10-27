@@ -1,0 +1,29 @@
+---
+title: "Code Mode einrichten"
+description: "Code Mode einrichten"
+---
+
+Für den Plattformbetrieb.
+
+## Code Mode einschalten
+
+Code Mode ist am Anfang aus. Ein Admin der Platform schaltet ihn in den
+[Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform) ein:
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":3,"codeMode":{"enabled":true,"timeoutMs":30000,"memoryMb":64,"outputBytes":65536}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+| Feld          | Was es ist                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `enabled`     | Bei `true` bekommen Bots die Tools von Code Mode in jedem Turn, der Connections zu Apps hat.                  |
+| `timeoutMs`   | Wie lange ein Lauf eines Programms dauern darf. Die Zeit, in der es auf Aufrufe von Apps wartet, zählt nicht. |
+| `memoryMb`    | Wie viel Speicher ein Programm nutzen darf.                                                                   |
+| `outputBytes` | Der größte Rückgabewert eines Programms und die größte Menge an Log-Text, die es behält.                      |
+
+Diese Grenzen schützen den Server. Sie sind keine Grenzen für den Bot. Jede
+Instanz von OpenBot nutzt dieselben Grenzen. So verhält sich ein Programm
+gleich, wenn eine andere Instanz es noch einmal ausführt.

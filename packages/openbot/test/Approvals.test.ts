@@ -1,124 +1,137 @@
-import { assert, describe, it } from "@effect/vitest"
-import { BotsApi } from "@openbot-build/api"
-import { Chat, Turn } from "@openbot-build/core"
-import { Effect, HashMap, Layer, Ref } from "effect"
-import { Prompt } from "effect/ai"
+import { PgClient } from "@effect/sql-pg"
+import { assert, layer } from "@effect/vitest"
+import { Chat } from "@openbot-build/core"
+import { Execution } from "@openbot-build/domain"
+import { Effect, Option, Ref } from "effect"
 import * as Approvals from "../src/capabilities/Approvals.ts"
-import { Answer, Gate } from "../src/capabilities/Gate.ts"
-import { Requests, type Stored } from "../src/capabilities/Requests.ts"
-import { Work } from "../src/capabilities/Work.ts"
-import { bot } from "./BotFixture.ts"
+import { RequestCommands } from "../src/capabilities/RequestCommands.ts"
+import { Requests } from "../src/capabilities/Requests.ts"
+import { Store } from "../src/execution/Store.ts"
+import * as Fixture from "./GateFixture.ts"
 
-const chat = Chat.Id.make("chat_1")
-const turn = Turn.Id.make("turn_1")
-const chain = {
-	organizationId: "org_1",
-	userId: "user_1",
-	bots: [bot.id],
-	chats: [],
-}
-
-/** A request for a tool call that runs again when a decider allows it. */
-const waiting = {
-	request: {
-		id: "request_1",
-		capability: { action: "tools.call", target: "search" },
-	},
-	chain,
-} as unknown as Stored
-
-const down = Effect.fail(BotsApi.BotStorageUnavailable.make({}))
-
-/** Asks Approvals about one call. The Gate makes a request that waits for a decider. */
-const decide = (requests: Partial<Requests["Service"]>) =>
-	Effect.gen(function* () {
-		const checks = yield* Ref.make(HashMap.empty<string, Answer>())
-		const approvals = yield* Chat.Approvals
-		return yield* approvals
-			.decide({
-				chat,
-				turn,
-				approvalId: "approval_1",
-				toolCall: Prompt.toolCallPart({
-					id: "call_1",
-					name: "search",
-					params: { query: "tea" },
-					providerExecuted: false,
-				}),
-			})
-			.pipe(
-				Effect.provideService(
-					Work,
-					Work.of({
-						caller: {
-							kind: "member",
-							organizationId: "org_1",
-							userId: "user_1",
-						},
-						namespace: "org_1:user_1",
-						bot,
-						chain,
-						deciders: [bot.id],
-						chat,
-						turn,
-						checks,
-					}),
-				),
-			)
-	}).pipe(
-		Effect.provide(
-			Approvals.layer.pipe(
-				Layer.provide([
-					Layer.succeed(Gate, {
-						...({} as Gate["Service"]),
-						check: () =>
-							Effect.succeed(Answer.Pending({ request: "request_1" })),
-					}),
-					Layer.succeed(Requests, {
-						...({} as Requests["Service"]),
-						...requests,
-					}),
-				]),
-			),
-		),
-	)
-
-const pending = Chat.Decision.Pending({
-	result: Approvals.pendingResult("request_1"),
-})
-
-describe("Approvals", () => {
-	it.effect("keeps the call that waits for a request", () =>
-		Effect.gen(function* () {
-			const kept = yield* Ref.make<ReadonlyArray<string>>([])
-			const decision = yield* decide({
-				find: () => Effect.succeedSome(waiting),
-				setCall: (_organizationId, _id, call) =>
-					Ref.update(kept, (names) => [...names, call.name]),
-			})
-			assert.deepStrictEqual(decision, pending)
-			assert.deepStrictEqual(yield* Ref.get(kept), ["search"])
-		}),
-	)
-
-	it.effect(
-		"says the call waits when the request cannot be read after the Gate made it",
-		() =>
+layer(Fixture.services, { excludeTestServices: true, timeout: "60 seconds" })(
+	(it) => {
+		it.effect("a waiting approval keeps its full call through takeover", () =>
 			Effect.gen(function* () {
-				const decision = yield* decide({ find: () => down })
-				assert.deepStrictEqual(decision, pending)
-			}),
-	)
-
-	it.effect(
-		"says the call waits when the call cannot be kept with its request",
-		() =>
-			Effect.gen(function* () {
-				const decision = yield* decide({
-					find: () => Effect.succeedSome(waiting),
-					setCall: () => down,
+				const test = yield* Fixture.setup("approval-call")
+				const gate = yield* test.build()
+				const answer = yield* gate.check(test.attempt)
+				if (answer._tag !== "Pending")
+					return assert.fail("Expected a waiting request")
+				const pending = Chat.Decision.Pending({
+					result: Approvals.pendingResult(answer.request),
 				})
-				assert.deepStrictEqual(decision, pending)
+				assert.deepEqual(
+					yield* Approvals.durable(gate).decide(test.approval),
+					pending,
+				)
+				const saved = Option.getOrThrow(
+					yield* (yield* Requests).find(
+						Fixture.actor.organizationId,
+						answer.request,
+					),
+				)
+				assert.deepEqual(saved.call, {
+					name: test.call.name,
+					params: { query: "A private note." },
+					source: { view: "private-view" },
+				})
+				const resumed = yield* test.build(
+					yield* (yield* Store).takeOver(test.fence),
+				)
+				assert.deepEqual(yield* resumed.check(test.attempt), answer)
+				assert.deepEqual(
+					yield* Approvals.durable(resumed).decide(test.approval),
+					pending,
+				)
+				assert.lengthOf(
+					yield* (yield* Requests).forChat(
+						Fixture.actor.organizationId,
+						test.frame.chat,
+					),
+					1,
+				)
 			}),
-	)
-})
+		)
+
+		it.effect("a saved waiting answer needs no second request lookup", () =>
+			Effect.gen(function* () {
+				const test = yield* Fixture.setup("approval-read-down")
+				const commands = yield* RequestCommands
+				const unavailable = yield* Ref.make(false)
+				const gate = yield* test.build().pipe(
+					Effect.provideService(RequestCommands, {
+						...commands,
+						load: (key) =>
+							Ref.get(unavailable).pipe(
+								Effect.flatMap((down) =>
+									down
+										? Effect.fail(
+												Execution.StorageError.make({
+													cause: "The request store is down.",
+												}),
+											)
+										: commands.load(key),
+								),
+							),
+					}),
+				)
+				const answer = yield* gate.check(test.attempt)
+				if (answer._tag !== "Pending")
+					return assert.fail("Expected a waiting request")
+				yield* Ref.set(unavailable, true)
+				assert.deepEqual(
+					yield* Approvals.durable(gate).decide(test.approval),
+					Chat.Decision.Pending({
+						result: Approvals.pendingResult(answer.request),
+					}),
+				)
+			}),
+		)
+
+		it.effect(
+			"a failed call write rolls back the request and its notification",
+			() =>
+				Effect.gen(function* () {
+					const test = yield* Fixture.setup("approval-write-down")
+					const sql = yield* PgClient.PgClient
+					yield* sql`create function reject_approval_command() returns trigger language plpgsql as $$ begin if NEW.key like 'request:%' then raise exception 'The command store is down.'; end if; return NEW; end $$`
+					yield* sql`create trigger reject_approval_command before insert on openbot_execution_commands for each row execute function reject_approval_command()`
+					yield* Effect.addFinalizer(() =>
+						sql`drop trigger if exists reject_approval_command on openbot_execution_commands`.pipe(
+							Effect.orDie,
+						),
+					)
+					const gate = yield* test.build()
+					const answer = yield* Approvals.durable(gate).decide(test.approval)
+					assert.equal(answer._tag, "Deny")
+					assert.isEmpty(
+						yield* (yield* Requests).forChat(
+							Fixture.actor.organizationId,
+							test.frame.chat,
+						),
+					)
+					const children =
+						yield* sql`select id from openbot_executions where namespace = ${test.fence.namespace} and id <> ${test.fence.id}`
+					assert.isEmpty(children)
+					const outbox =
+						yield* sql`select execution_id from openbot_execution_outbox where namespace = ${test.fence.namespace} and execution_id <> ${test.fence.id}`
+					assert.isEmpty(outbox)
+					yield* sql`drop trigger reject_approval_command on openbot_execution_commands`
+					const resumed = yield* test.build(
+						yield* (yield* Store).takeOver(test.fence),
+					)
+					assert.equal(
+						(yield* Approvals.durable(resumed).decide(test.approval))._tag,
+						"Pending",
+					)
+					const saved = yield* (yield* Requests).forChat(
+						Fixture.actor.organizationId,
+						test.frame.chat,
+					)
+					assert.lengthOf(saved, 1)
+					assert.deepEqual(saved[0]?.call?.params, test.call.params)
+				}),
+		)
+	},
+)

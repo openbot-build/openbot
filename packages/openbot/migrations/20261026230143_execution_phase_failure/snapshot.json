@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "f263c207-4ee9-4c61-aa66-003f47eee38b",
+	"prevIds": ["fe68ef75-e7dc-4d26-adfc-4353f471fa99"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_executions",
+				"phase_failed"
+			],
+			"writes": [
+				"s|col|public.openbot_executions.phase_failed",
+				"n|col|public.openbot_executions.phase_failed",
+				"e|col|public.openbot_executions.phase_failed"
+			],
+			"reads": ["n|tbl|public.openbot_executions", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "phase_failed",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "false",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

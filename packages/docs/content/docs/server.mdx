@@ -3,6 +3,9 @@ title: Run from code
 description: Start OpenBot from your own TypeScript program.
 ---
 
+For developers. Start with the [developer manual](/docs/developers) to choose
+API work, App publishing, or project changes.
+
 The `openbot` program covers most needs. When you need more, you can start
 OpenBot from your own program. Then you can add your own models, tools, routes,
 and App Index sources.
@@ -33,30 +36,30 @@ same program as an Effect, for when you run it yourself. Give it
 `NodeServices.layer`.
 
 `EnvironmentConfiguration.load` gives the same settings: `host`, `port`,
-`databaseUrl`, `secretKeys`, and `outboundAllow`. You can also write these
-values in code.
+`databaseUrl`, `secretKeys`, `clusterSecret`, `clusterHost`, and
+`outboundAllow`. You can also write these values in code.
 
 The program still needs a platform. Run the setup program once before people use
 it. See [Platform](/docs/platform#setup).
 
 ## What the package exports
 
-| Export                                                   | What it is                                                                                                              |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `Server.layerLive(options)`                              | OpenBot with its own Node.js HTTP server and the real services from outside. `openbot-server` runs it.                  |
-| `Server.layer(options)`                                  | The same server, without the services that it needs. See [Services that OpenBot needs](#services-that-openbot-needs).   |
-| `Server.layerFixed(options)`                             | Like `Server.layer`, but it first writes one sign-in configuration to the platform settings. For tests and development. |
-| `Server.layerApp(options)`                               | The OpenBot routes and services, for an HTTP server that you already have.                                              |
-| `Server.layerApi`                                        | Only the HTTP routes.                                                                                                   |
-| `Launch.main(make)`, `Launch.server(make)`               | Runs the Layer from `make` as `openbot-server` does.                                                                    |
-| `OpenBot.layerShared(options)`                           | The services that live as long as the instance: the database pool, the secret keys, and the shared settings.            |
-| `OpenBot.layer(options)`                                 | The services behind the routes: sign-in, tokens, permissions, storage, Chats, and Apps.                                 |
-| `OpenBot.layerOutside`                                   | The real services from outside of OpenBot, such as the network of Apps.                                                 |
-| `OpenBot.layerLive(options)`                             | `OpenBot.layer` with the real services from outside, and no tools of the host.                                          |
-| `HostTools`                                              | The tools that your program gives to every Chat. See [Add a tool](#add-a-tool).                                         |
-| `DatabasePostgres`                                       | The database Layer and the `migrate` program.                                                                           |
-| `EnvironmentConfiguration`                               | Reads the instance settings from environment variables.                                                                 |
-| `Auth`, `Chats`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                                                      |
+| Export                                                  | What it is                                                                                                              |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `Server.layerLive(options)`                             | OpenBot with its own Node.js HTTP server and the real services from outside. `openbot-server` runs it.                  |
+| `Server.layer(options)`                                 | The same server, without the services that it needs. See [Services that OpenBot needs](#services-that-openbot-needs).   |
+| `Server.layerFixed(options)`                            | Like `Server.layer`, but it first writes one sign-in configuration to the platform settings. For tests and development. |
+| `Server.layerApp(options)`                              | The OpenBot routes and services, for an HTTP server that you already have.                                              |
+| `Server.layerApi`                                       | Only the HTTP routes.                                                                                                   |
+| `Launch.main(make)`, `Launch.server(make)`              | Runs the Layer from `make` as `openbot-server` does.                                                                    |
+| `OpenBot.layerShared(options)`                          | The services that live as long as the instance: the database pool, the secret keys, and the shared settings.            |
+| `OpenBot.layer(options)`                                | The services behind the routes: sign-in, tokens, permissions, storage, Chats, and Apps.                                 |
+| `OpenBot.layerOutside`                                  | The real services from outside of OpenBot, such as the network of Apps.                                                 |
+| `OpenBot.layerLive(options)`                            | `OpenBot.layer` with the real services from outside, and no tools of the host.                                          |
+| `HostTools`                                             | The tools that your program gives to every Chat. See [Add a tool](#add-a-tool).                                         |
+| `DatabasePostgres`                                      | The database Layer and the `migrate` program.                                                                           |
+| `EnvironmentConfiguration`                              | Reads the instance settings from environment variables.                                                                 |
+| `Auth`, `Chats`, `AppHost`, `AppTools`, `Configuration` | Service types for advanced setups.                                                                                      |
 
 The subpath `@openbot-build/openbot/Development` exports the development server.
 See [Run the development server](#run-the-development-server).
@@ -71,12 +74,14 @@ program gives them the shared services.
 
 ### Instance options
 
-| Option        | Type               | What it is                                                               |
-| ------------- | ------------------ | ------------------------------------------------------------------------ |
-| `host`        | `string`           | Required. The address to listen on, such as `127.0.0.1`.                 |
-| `port`        | `number`           | Required. The port to listen on, such as `3000`.                         |
-| `databaseUrl` | `Redacted<string>` | Required. The PostgreSQL URL.                                            |
-| `secretKeys`  | `Redacted<string>` | The secret key list. See [Secret keys](/docs/configuration#secret-keys). |
+| Option          | Type               | What it is                                                                          |
+| --------------- | ------------------ | ----------------------------------------------------------------------------------- |
+| `host`          | `string`           | Required. The address to listen on, such as `127.0.0.1`.                            |
+| `port`          | `number`           | Required. The port to listen on, such as `3000`.                                    |
+| `databaseUrl`   | `Redacted<string>` | Required. The PostgreSQL URL.                                                       |
+| `secretKeys`    | `Redacted<string>` | The secret key list. See [Secret keys](/docs/configuration#secret-keys).            |
+| `clusterSecret` | `Redacted<string>` | Required. At least 32 characters. All nodes use the same secret for private RPC.    |
+| `clusterHost`   | `string`           | Optional. The address other nodes can reach. It defaults to the bound HTTP address. |
 
 ### Sign-in
 
@@ -97,13 +102,13 @@ Each server gives the app services to your program, so tests can use them.
 
 ### App options
 
-| Option          | What it does                                                                                                      |
-| --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `builtinModels` | Models that every organization can use, given in code. See [Models](/docs/models#built-in-models).                |
-| `defaultModel`  | The model of a new Chat when its Bot names none. It is one of `builtinModels`. Only a simulated platform sets it. |
-| `routes`        | A Layer with your own HTTP routes.                                                                                |
-| `indexSources`  | More sources for the App Index search, next to the OpenBot Index.                                                 |
-| `indexWork`     | Timing of the App Index worker: `{ intervalMs, retryMs }`.                                                        |
+| Option                       | What it does                                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `builtinModels`              | Models that every organization can use, given in code. See [Models](/docs/models#built-in-models).                |
+| `builtinModels.defaultModel` | The model of a new Chat when its Bot names none. It is one of `builtinModels`. Only a simulated platform sets it. |
+| `routes`                     | A Layer with your own HTTP routes.                                                                                |
+| `indexSources`               | More sources for the App Index search, next to the OpenBot Index.                                                 |
+| `indexWork`                  | Timing of the App Index worker: `{ intervalMs, retryMs }`.                                                        |
 
 Some values were options before. They are settings in the database now, so every
 instance shares them:
@@ -158,15 +163,15 @@ The options `chats`, `discovery`, `computerDrivers`, `liveBackends`,
 ## Chats
 
 Models come from the model providers in the database and from `builtinModels`.
-See [Models](/docs/models). [Bot memory](/docs/memory) follows `botMemory` in
-the [organization settings](/docs/organization#settings).
+See [Models](/docs/models). [Bot memory](/docs/developers/memory) follows
+`botMemory` in the [organization settings](/docs/organization#settings).
 
-Each member has one Chat runtime in each server process. The runtime holds the
-running Turns of the member and the background tool calls of their Chats. The
-server makes it at the first request of the member. After 10 minutes with no
-request, no running Turn, and no background tool call, the server closes it to
-free its memory. The next request makes it again from the database, so nothing
-is lost. One member never waits while the runtime of another member is made.
+The server keeps application services and active executions. Each Turn builds
+its model and tools in its own scope. A saved execution identity carries the
+member, original token, Bot, and delegation limits. Requests do not keep a
+member runtime open. One Chat admits one advancing Turn at a time. Its commands,
+checkpoints, events, and results stay in PostgreSQL across nodes and restarts.
+Closing an HTTP stream closes observation; cancellation is a separate command.
 
 ### Add a tool
 
@@ -214,7 +219,7 @@ Launch.main(server)
 Add `needsApproval: true` to `Tool.make` when each call needs a decision.
 OpenBot then checks the capability `tools.call` for it. When the call needs a
 decider, the Bot gets a pending result, and the call runs later when it is
-allowed. See [Requests](/docs/requests).
+allowed. See [Requests](/docs/developers/requests).
 
 ---
 
@@ -254,26 +259,16 @@ environment variable. Every instance must use the same one.
 
 ## Migrate the database
 
-`DatabasePostgres.migrate` applies the migrations. `OpenBot.layerShared` only
-checks that the tables exist, and fails if they do not. Run migrations in their
-own program before you start the server:
+`DatabasePostgres.migrate` prepares the schema and the initial data gate. It can
+mark only an empty database ready. Use the maintenance command for a full
+upgrade. It needs `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`. Stop all
+instances before running it. `OpenBot.layerShared` checks both the schema and
+the completed data version before it starts services. Its shared lock stays open
+for the server lifetime. See [Deploy](/docs/deploy#prepare-the-database) for the
+backup and recovery steps.
 
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import { Config, Effect, Layer } from "effect"
-
-NodeRuntime.runMain(
-	DatabasePostgres.migrate.pipe(
-		Effect.provide(
-			Layer.unwrap(
-				Effect.map(Config.Redacted("OPENBOT_DATABASE_URL"), (databaseUrl) =>
-					DatabasePostgres.layer({ databaseUrl }),
-				),
-			).pipe(Layer.provide(NodeServices.layer)),
-		),
-	),
-)
+```sh
+pnpm --filter @openbot-build/openbot migrate
 ```
 
 ## Run the development server

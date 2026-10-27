@@ -1,0 +1,96 @@
+---
+title: 端到端检查
+description: 运行 API 检查、真实模型检查和论文实验。
+---
+
+这些检查使用公开 API、构建出的命令、真实的本地服务器和临时 PostgreSQL 数据库。端到端检查会跟随一项任务，经过这些部分，并检查结果。部分外部服务使用固定的测试回复。Cloudflare 检查使用真实的模型服务。
+
+## 运行项目检查
+
+从项目根目录运行命令。构建必须在测试开始前完成。测试运行时，不要在另一个 shell 中构建。构建会替换测试和子进程读取的
+`dist` 文件。
+
+```sh
+devenv shell -- pnpm build
+devenv shell -- pnpm typecheck
+devenv shell -- pnpm test:e2e
+devenv shell -- pnpm -r test
+```
+
+所有端到端检查都放在 `packages/e2e` 中，包名为 `@openbot-build/e2e`。根目录命令
+`pnpm test:e2e`
+会运行该包的类型检查和测试。构建完成后，用以下命令运行一个任务组：
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/read-docs
+```
+
+`packages/e2e/test` 中的文件夹按用户任务命名。`packages/e2e/scenarios.json`
+记录每项任务的检查和缺口，并区分普通、边界和极端场景。普通场景检查常见结果。边界场景检查接近规则限制的输入或状态。极端场景检查有界的大量输入、重复任务、丢失或恢复。这些名称不代表已经测试了所有可能的输入或故障。
+
+包的测试命令也会检查测试代码的类型。`pnpm test`
+会在一次 Vitest 运行中运行所有测试文件，但不会构建包或检查测试代码的类型。`e2e`
+以外的包测试检查较小的单元和产品部件。测试会自行创建并删除本地数据库。它们不使用生产数据库。
+
+## API 范围
+
+`packages/e2e/test/api-access/ApiE2E.test.ts`
+读取 HTTP 契约，并向受保护的路由发送真实请求。它检查每条受保护路由的未登录请求。对于每个受保护的写入操作，它检查带有会话 cookie、但缺少 Origin 或使用错误 Origin 的两种情况。这是访问权限检查。它不能证明每条路由都能完成每项有效任务。路由和请求数量来自当前契约。JSON 报告记录每次运行的确切数量。公开路由和钩子路由列在固定清单中，因此意外删除身份验证规则不会让检查范围悄悄缩小。
+
+端到端包按用户任务对检查分组：
+
+| 任务组                       | `packages/e2e/test` 中的文件夹                |
+| ---------------------------- | --------------------------------------------- |
+| 登录和启动服务器             | `sign-in`、`start-server`                     |
+| 读取和更改组织设置           | `organizations`、`admin-settings`             |
+| 聊天、批准工具调用和恢复任务 | `chat`、`approve-tool-calls`、`chat-recovery` |
+| 使用和共享 Bot               | `bot-work`                                    |
+| 连接 App 和使用协议服务      | `connect-apps`、`protocol-service`            |
+| 读取和写入文件               | `files`                                       |
+| 连接渠道和设置触发器         | `connect-channels`、`triggers`                |
+| 运行代码和连接计算机         | `run-code`、`connect-computers`               |
+| 使用实时会话和模型服务       | `live-chat`、`use-models`                     |
+| 运行命令和阅读文档           | `cli`、`read-docs`                            |
+
+文档检查通过本地 HTTP 端口提供构建出的站点。它们检查主页的全部 35 种语言、手册的三种语言、API 参考、搜索文件、图标、每个构建出的文件、本地链接和解码后的锚点。API 页面只有英语语言链接。检查不会获取外部链接。这些是静态站点检查。它们不运行浏览器，也不测试交互式搜索和菜单。
+
+CLI 检查会启动构建出的命令。计算机检查包含真实终端。协议检查使用独立客户端和本地服务器。单元和组件检查仍放在
+`core`、`domain`、`api`、`client`、`openbot`、`cli`、`computer`、`protocol` 和
+`protocol-test` 包中。
+
+## 真实模型检查
+
+只有设置
+`OPENBOT_E2E_LIVE=true`，才会运行真实模型检查。默认运行会跳过它。它需要 Cloudflare 账户和具有 Workers
+AI 访问权限的 API 令牌。账户的免费额度用完后，服务调用会产生费用。请把凭据放在版本控制以外。
+
+测试用 `Server.layerFixed`
+创建会话，再启动构建出的生产入口调用真实模型。会话设置不得留下索引任务或失败记录。测试检查 cookie 和 API 令牌调用、流式回复、保存的历史、重复命令、用量和令牌撤销。这些小任务不能用于判断模型质量。
+
+在本地 shell 或机密存储中设置以下变量。不要把密钥放在命令参数或纳入版本控制的文件中。
+
+| 变量                              | 值                                                                 |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `OPENBOT_E2E_LIVE`                | 设为 `true`，运行真实服务检查                                      |
+| `OPENBOT_E2E_CLOUDFLARE_ENDPOINT` | 账户的 Workers AI OpenAI 兼容基础 URL                              |
+| `OPENBOT_E2E_CLOUDFLARE_KEY`      | API 令牌                                                           |
+| `OPENBOT_E2E_CLOUDFLARE_MODEL`    | 可选的模型 ID；默认值为 `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| `OPENBOT_E2E_EVIDENCE`            | 可选的结果 JSON 绝对路径                                           |
+
+构建完成后运行：
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/use-models/Cloudflare.test.ts
+```
+
+如果未设置
+`OPENBOT_E2E_LIVE=true`，这个测试会被跳过。跳过真实服务测试不代表服务检查成功。
+
+## 限制
+
+完整测试运行覆盖的是已命名的输入和路径。它不能覆盖所有可能的输入、网络故障或外部服务状态。自动生成的访问检查并不覆盖该端点的全部任务。小型模型运行也不是生产负载测试。
+
+真实的第三方渠道投递、SSO 服务、云计算机服务、对象存储和语音播放，都需要各自的服务账户和测试资源。固定测试服务器检查这些路径的本地契约。它们不能证明真实的第三方部署正常工作。
+
+开发工具请看[参与贡献](/zh-cn/docs/contributing)。HTTP 契约请看
+[API 参考](/docs/api)。

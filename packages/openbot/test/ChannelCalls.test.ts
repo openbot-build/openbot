@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { Network, NetworkError } from "@openbot-build/protocol/Network"
@@ -91,9 +92,9 @@ it.effect(
 const larkSecrets: LarkChannel.Secrets = {
 	domain: "feishu",
 	appId: "cli_test",
-	appSecret: "lark-app-secret",
-	verificationToken: "lark-token",
-	encryptKey: "lark-encrypt-key",
+	appSecret: Redacted.make("lark-app-secret"),
+	verificationToken: Redacted.make("lark-token"),
+	encryptKey: Redacted.make("lark-encrypt-key"),
 }
 
 const isTokenRequest = (request: HttpClientRequest.HttpClientRequest) =>
@@ -124,9 +125,13 @@ it.live(
 			yield* Effect.forEach(
 				Arr.range(1, 4),
 				() =>
-					channel.send(Target.Conversation({ conversation: "oc_1" }), {
-						markdown: "hello",
-					}),
+					channel.send(
+						Target.Conversation({ conversation: "oc_1" }),
+						{
+							markdown: "hello",
+						},
+						"message-key",
+					),
 				{ concurrency: "unbounded" },
 			)
 			assert.strictEqual(yield* Ref.get(tokenRequests), 1)
@@ -143,9 +148,13 @@ it.effect("A Lark tenant token failure keeps the reason that Lark gave", () =>
 			})
 		const channel = yield* LarkChannel.make(larkSecrets, call)
 		const failure = yield* Effect.flip(
-			channel.send(Target.Conversation({ conversation: "oc_1" }), {
-				markdown: "hello",
-			}),
+			channel.send(
+				Target.Conversation({ conversation: "oc_1" }),
+				{
+					markdown: "hello",
+				},
+				"message-key",
+			),
 		)
 		assert.strictEqual(failure.retry, false)
 		assert.strictEqual(
@@ -166,7 +175,10 @@ it.effect("A custom Channel says what is wrong with a body or an answer", () =>
 				json,
 			}))
 		const channel = CustomChannel.make(
-			{ endpoint: "https://custom.example.com/hook", secret },
+			{
+				endpoint: "https://custom.example.com/hook",
+				secret: Redacted.make(secret),
+			},
 			call,
 		)
 		const now = 1_700_000_000_000
@@ -188,9 +200,13 @@ it.effect("A custom Channel says what is wrong with a body or an answer", () =>
 			/^the body is not a CustomEvent: .*conversation/s,
 		)
 		const failure = yield* Effect.flip(
-			channel.send(Target.Conversation({ conversation: "room-1" }), {
-				markdown: "hello",
-			}),
+			channel.send(
+				Target.Conversation({ conversation: "room-1" }),
+				{
+					markdown: "hello",
+				},
+				"message-key",
+			),
 		)
 		assert.strictEqual(failure.retry, false)
 		assert.match(

@@ -1,5 +1,5 @@
-import { ChannelsApi } from "@openbot-build/api"
-import { Clock, Effect, Schema } from "effect"
+import { Channels } from "@openbot-build/domain"
+import { Clock, Effect, Redacted, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
 	Channel,
@@ -14,20 +14,18 @@ import { hmacHex, recentSeconds, sameSecret } from "../Text.ts"
 export interface Secrets {
 	readonly endpoint: string
 	/** The signing secret. A custom Channel without one takes no events and sends nothing. */
-	readonly secret: string | null
+	readonly secret: Redacted.Redacted<string> | null
 }
 
 const signature = (secret: string, timestamp: string, body: string) =>
 	"sha256=" + hmacHex(secret, `${timestamp}.${body}`)
 
 const decodeEvent = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(ChannelsApi.CustomEvent),
+	Schema.fromJsonString(Channels.CustomEvent),
 )
-const decodeResult = Schema.decodeUnknownEffect(
-	ChannelsApi.CustomDeliveryResult,
-)
+const decodeResult = Schema.decodeUnknownEffect(Channels.CustomDeliveryResult)
 const encodeDelivery = Schema.encodeEffect(
-	Schema.fromJsonString(ChannelsApi.CustomDelivery),
+	Schema.fromJsonString(Channels.CustomDelivery),
 )
 
 /**
@@ -45,7 +43,12 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 			!recentSeconds(timestamp, request.now)
 		)
 			return yield* ChannelDenied.make({ reason: "missing or old signature" })
-		if (!sameSecret(given, signature(secrets.secret, timestamp, request.body)))
+		if (
+			!sameSecret(
+				given,
+				signature(Redacted.value(secrets.secret), timestamp, request.body),
+			)
+		)
 			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		const value = yield* decodeEvent(request.body).pipe(
 			Effect.mapError((error) =>
@@ -92,7 +95,7 @@ const buttons = (message: OutboundMessage) =>
 	message.buttons === undefined ? {} : { buttons: message.buttons }
 
 export const make = (secrets: Secrets, call: Call): Channel => {
-	const deliver = (delivery: ChannelsApi.CustomDelivery) =>
+	const deliver = (delivery: Channels.CustomDelivery) =>
 		Effect.gen(function* () {
 			if (secrets.secret === null)
 				return yield* ChannelDeliveryFailed.make({
@@ -108,7 +111,11 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 				HttpClientRequest.post(secrets.endpoint).pipe(
 					HttpClientRequest.setHeaders({
 						"x-openbot-timestamp": timestamp,
-						"x-openbot-signature": signature(secrets.secret, timestamp, body),
+						"x-openbot-signature": signature(
+							Redacted.value(secrets.secret),
+							timestamp,
+							body,
+						),
 					}),
 					HttpClientRequest.bodyText(body, "application/json"),
 				),

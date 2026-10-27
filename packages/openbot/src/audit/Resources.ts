@@ -1,14 +1,14 @@
+import type { Triggers } from "@openbot-build/domain"
 /**
  * The names of resources in the audit log, such as
  * `openbot.org.<org>.user.<user>.bot.<id>`. They are only labels. The
  * policies in `../authorization` decide who may do what.
  */
 import type {
-	BotsApi,
-	ComputersApi,
-	TriggersApi,
-	VaultsApi,
-} from "@openbot-build/api"
+	Bots as BotsModel,
+	Computers as ComputersModel,
+	Vaults as VaultsModel,
+} from "@openbot-build/domain"
 import { pipe, String as Str } from "effect"
 import { rootOf } from "../authorization/Resources.ts"
 
@@ -48,7 +48,7 @@ export const botPlace = ({
 export const botKey = (bot: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: BotsApi.BotOwner
+	readonly owner: BotsModel.BotOwner
 }) =>
 	botPlace({
 		organizationId: bot.organizationId,
@@ -71,7 +71,7 @@ export const triggerPlace = (input: {
 export const triggerKey = (trigger: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: TriggersApi.TriggerOwner
+	readonly owner: Triggers.TriggerOwner
 }) =>
 	triggerPlace({
 		organizationId: trigger.organizationId,
@@ -99,7 +99,7 @@ export const computerPlace = (input: {
 export const computerKey = (input: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: ComputersApi.ComputerOwner
+	readonly owner: ComputersModel.ComputerOwner
 	readonly kind: "computer" | "computer_provider"
 }) =>
 	computerPlace({
@@ -114,7 +114,7 @@ export const computerKey = (input: {
 export const vaultKey = (vault: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: VaultsApi.VaultOwner
+	readonly owner: VaultsModel.VaultOwner
 }) =>
 	(vault.owner._tag === "Member"
 		? userKey({
@@ -129,7 +129,7 @@ export const vaultKey = (vault: {
 export const secretProviderKey = (provider: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: VaultsApi.VaultOwner
+	readonly owner: VaultsModel.VaultOwner
 }) =>
 	(provider.owner._tag === "Member"
 		? userKey({

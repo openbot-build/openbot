@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_channel_deliveries" ADD COLUMN "execution_id" text;

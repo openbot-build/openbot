@@ -1,4 +1,5 @@
-import { DeveloperApi as Api } from "@openbot-build/api"
+import { Developers } from "@openbot-build/domain"
+
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
 import {
@@ -30,45 +31,47 @@ export class DeveloperMembers extends Context.Service<
 			proofId: string,
 		) => Effect.Effect<
 			{
-				readonly members: ReadonlyArray<Api.Member>
-				readonly invitations: ReadonlyArray<Api.Invitation>
+				readonly members: ReadonlyArray<Developers.Member>
+				readonly invitations: ReadonlyArray<Developers.Invitation>
 			},
-			Api.Failure
+			Developers.Failure
 		>
 		readonly invite: (
 			owner: string,
 			proofId: string,
-			role: Api.MemberRole,
-		) => Effect.Effect<Api.Invitation, Api.Failure>
-		readonly preview: (id: string) => Effect.Effect<Api.Invitation, Api.Failure>
+			role: Developers.MemberRole,
+		) => Effect.Effect<Developers.Invitation, Developers.Failure>
+		readonly preview: (
+			id: string,
+		) => Effect.Effect<Developers.Invitation, Developers.Failure>
 		readonly accept: (
 			identity: { readonly organizationId: string; readonly userId: string },
 			id: string,
-		) => Effect.Effect<Api.Grant, Api.Failure>
+		) => Effect.Effect<Developers.Grant, Developers.Failure>
 		readonly revoke: (
 			owner: string,
 			id: string,
-		) => Effect.Effect<Api.Invitation, Api.Failure>
+		) => Effect.Effect<Developers.Invitation, Developers.Failure>
 		readonly change: (
 			owner: string,
 			id: string,
-			role: Api.MemberRole,
-		) => Effect.Effect<Api.Member, Api.Failure>
+			role: Developers.MemberRole,
+		) => Effect.Effect<Developers.Member, Developers.Failure>
 		readonly remove: (
 			owner: string,
 			id: string,
-		) => Effect.Effect<void, Api.Failure>
+		) => Effect.Effect<void, Developers.Failure>
 	}
 >()("@openbot-build/openbot/apps/DeveloperMembers") {}
 
 const InvitationRow = Schema.Struct({
-	...Api.Invitation.fields,
-	scope: Rows.Json(Api.ManagementScope),
+	...Developers.Invitation.fields,
+	scope: Rows.Json(Developers.ManagementScope),
 })
 const MemberRow = Schema.Struct({
 	id: Schema.String,
 	proofId: Schema.String,
-	role: Api.MemberRole,
+	role: Developers.MemberRole,
 })
 
 export const make: Effect.Effect<
@@ -82,7 +85,8 @@ export const make: Effect.Effect<
 	const access = yield* DeveloperAccess
 	const crypto = yield* Crypto.Crypto
 	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
-	const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
+	const conflict = (reason: string) =>
+		Developers.DeveloperConflict.make({ reason })
 	const admin = Effect.fn("DeveloperMembers.admin")(function* (
 		owner: string,
 		id: string,
@@ -94,7 +98,7 @@ export const make: Effect.Effect<
 				(grant) => grant.proofId === id && grant.role === "administrator",
 			)
 		)
-			return yield* Api.DeveloperForbidden.make({})
+			return yield* Developers.DeveloperForbidden.make({})
 		return proof
 	})
 	const invitationWhere = (id: string) =>
@@ -122,7 +126,7 @@ export const make: Effect.Effect<
 			const row = (yield* Rows.stored(
 				lock ? query.for("update", { of: developerInvitations }) : query,
 			))[0]
-			if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+			if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
 			const value = yield* Rows.decodeRow(InvitationRow)({
 				...row.invitation,
 				scope: row.scope,
@@ -133,7 +137,7 @@ export const make: Effect.Effect<
 	const setInvitation = (
 		id: string,
 		change: {
-			readonly status: Api.Invitation["status"]
+			readonly status: Developers.Invitation["status"]
 			readonly acceptedBy?: string
 		},
 	) =>
@@ -148,7 +152,7 @@ export const make: Effect.Effect<
 			return {
 				...member,
 				identity: yield* Rows.identityOf(row.owner),
-			} satisfies Api.Member
+			} satisfies Developers.Member
 		})
 	/** Read a member and lock its row until the transaction ends. */
 	const lockMember = Effect.fn("DeveloperMembers.lockMember")(function* (
@@ -157,7 +161,7 @@ export const make: Effect.Effect<
 		const row = (yield* Rows.stored(
 			db.select().from(developerMembers).where(memberWhere(id)).for("update"),
 		))[0]
-		if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+		if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
 		return { owner: row.owner, value: yield* toMember(row) }
 	})
 	const activeInvitation = Effect.fn("DeveloperMembers.activeInvitation")(
@@ -208,7 +212,7 @@ export const make: Effect.Effect<
 			return {
 				members: yield* Effect.forEach(members, toMember),
 				invitations: yield* Effect.forEach(invitations, (row) =>
-					Rows.decodeRow(Api.Invitation)({
+					Rows.decodeRow(Developers.Invitation)({
 						...row,
 						scope: proof.value.scope,
 					}),
@@ -218,7 +222,7 @@ export const make: Effect.Effect<
 		invite: Effect.fn("DeveloperMembers.invite")(
 			function* (owner, proofId, role) {
 				const proof = yield* admin(owner, proofId)
-				const value: Api.Invitation = {
+				const value: Developers.Invitation = {
 					id: Base64Url.encode(
 						yield* crypto.randomBytes(32).pipe(Effect.orDie),
 					),
@@ -248,7 +252,7 @@ export const make: Effect.Effect<
 				Effect.gen(function* () {
 					const record = yield* activeInvitation(id, true)
 					const owner = ownerKey(identity)
-					const member: Api.Member = {
+					const member: Developers.Member = {
 						id: yield* newId,
 						proofId: record.value.proofId,
 						identity,
@@ -286,7 +290,10 @@ export const make: Effect.Effect<
 					if (record.value.status === "Accepted")
 						return yield* conflict("InvitationAlreadyAccepted")
 					yield* setInvitation(id, { status: "Revoked" })
-					return { ...record.value, status: "Revoked" } satisfies Api.Invitation
+					return {
+						...record.value,
+						status: "Revoked",
+					} satisfies Developers.Invitation
 				}),
 			),
 		change: (owner, id, role) =>
@@ -297,7 +304,7 @@ export const make: Effect.Effect<
 					yield* Rows.stored(
 						db.update(developerMembers).set({ role }).where(memberWhere(id)),
 					)
-					return { ...record.value, role } satisfies Api.Member
+					return { ...record.value, role } satisfies Developers.Member
 				}),
 			),
 		remove: (owner, id) =>

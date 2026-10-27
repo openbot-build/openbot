@@ -1,0 +1,100 @@
+---
+title: "发布和检查项目"
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+面向修改或发布 OpenBot 的项目贡献者。
+
+## GitHub Actions
+
+工作流 `.github/workflows/ci.yml`
+有两个作业。第一个作业通过后，第二个作业才会运行。
+
+| 作业     | 做什么                                                                      |
+| -------- | --------------------------------------------------------------------------- |
+| `check`  | 在 `devenv shell` 中运行 `pnpm build`、`pnpm typecheck` 和 `pnpm -r test`。 |
+| `images` | 构建、检查、扫描并发布 Docker 镜像。                                        |
+
+两个作业都在 `ubuntu-latest` 上运行。它们先用 Determinate
+Nix 安装器安装 Nix，再安装 devenv
+2.4.0。[Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action)
+把 Nix 的构建结果存进 GitHub
+Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `devenv.cachix.org`
+下载预先构建好的 devenv 包。`check` 作业把 pnpm 存储放在缓存中。
+
+`images` 作业执行以下步骤：
+
+1. [hadolint](https://github.com/hadolint/hadolint) 和 `docker buildx bake lint`
+   检查 `Dockerfile`。后者运行
+   [Docker 构建检查](https://docs.docker.com/build/checks/)。
+2. Docker Bake 构建两个镜像。构建层保存在 GitHub
+   Actions 缓存中，每个镜像一份缓存，所以之后的运行只构建有变化的部分。
+3. `deploy/docker/check.sh` 检查镜像。请看[检查镜像](#检查镜像)。
+4. [dive](https://github.com/wagoodman/dive) 检查镜像层没有浪费空间。
+5. [Trivy](https://trivy.dev) 扫描两个镜像。如果镜像有已知的、已有修复的 `HIGH`
+   或 `CRITICAL`
+   漏洞，作业就会失败。Trivy 看不到 Node.js 的版本，因为 Node.js 是复制进镜像的，不是作为软件包安装的。
+6. 作业把两个镜像保存为 `images-<commit-sha>` 制品，保留七天。
+7. 对于推送，作业会发布镜像。它使用构建缓存，所以不会再构建一次。
+
+工作流在拉取请求、推送到 `main` 以及 `v1.2.3`
+这样的标签时运行。它只在推送时发布镜像：
+
+| 事件                | 发布的标签                 |
+| ------------------- | -------------------------- |
+| 推送到 `main`       | `<commit-sha>` 和 `latest` |
+| `v1.2.3` 这样的标签 | `<commit-sha>` 和 `v1.2.3` |
+
+镜像发布到 GitHub 容器仓库，地址是 `ghcr.io/openbot-build/openbot` 和
+`ghcr.io/openbot-build/openbot/protocol-test`。工作流不会部署 OpenBot。要在 Compose 中使用已发布的镜像，请拉取它，并打上
+`openbot:<tag>` 标签。
+
+### 发布文档网站
+
+工作流 `.github/workflows/docs.yml` 把文档网站发布到
+[GitHub Pages](https://docs.github.com/pages)，地址是
+[openbot.build](https://openbot.build)。每次推送到 `main`
+时它都会运行。你也可以在 Actions 标签页中手动启动它。
+
+| 作业     | 做什么                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------- |
+| `build`  | 在 `devenv shell` 中运行 `pnpm --filter "@openbot-build/docs..." build`。这会构建文档及其需要的包。 |
+| `deploy` | 把 `packages/docs/dist` 发送到 GitHub Pages。                                                       |
+
+`build` 作业把 `DOCS_URL` 设为
+`https://openbot.build`。Astro 用它生成完整的页面链接，例如站点地图。同一时间只运行一个部署。
+
+仓库设置必须把 Pages 的来源设为 **GitHub Actions**，并把 `openbot.build`
+设为自定义域名。`openbot.build` 的 DNS 必须指向 GitHub Pages。请看
+[Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
+
+### 检查镜像
+
+`deploy/docker/check.sh` 用测试设置启动 `compose.production.yaml`。额外的文件
+`compose.check.yaml`
+去掉主机端口，并添加第二个 OpenBot 节点、设置服务和检查服务。两个节点共享数据库和密钥，每个节点使用独立的私有主机名。`setup`
+在 `migrate` 之后、两个节点启动之前运行。`check` 服务运行检查。`check.env`
+保存测试设置。其中没有任何真实的密钥。
+
+`check` 服务在两个 OpenBot 节点和协议测试服务都健康之后，在 Compose 网络中运行
+`check.mjs`。它检查：
+
+- 不带密钥和带错误密钥时，`/v1/chats` 都返回 `401`，
+- 两个节点的 `/openapi.json` 都正常工作，
+- 私有 RPC 拒绝缺少密钥或密钥错误的请求，
+- 每个节点都能用共享密钥调用另一节点，
+- 协议测试的 Catalog 有正确的公开源，
+- 协议测试服务上的 MCP 发现正常工作。
+
+脚本还检查空数据库、重复迁移、两个执行节点的注册地址，以及服务器运行时拒绝迁移的行为。每次检查都使用独立的 Compose 项目，结束后删除该项目和测试数据库。工作流恢复和节点故障由包测试验证；镜像检查验证生产配置的连接和启动。
+
+在你的电脑上运行同样的检查：
+
+```sh
+devenv shell -- pnpm images
+devenv shell -- pnpm images:check
+devenv shell -- hadolint deploy/docker/Dockerfile
+devenv shell -- dive --ci --source docker openbot:local
+devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot:local
+```

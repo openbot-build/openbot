@@ -1,6 +1,8 @@
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
 import * as OutboundPolicy from "../network/OutboundPolicy.ts"
-import { AppDiscoveryFailed, type AppDiscoveryResult } from "@openbot-build/api"
+import * as Failures from "../errors/Failures.ts"
+import { AppDiscovery } from "@openbot-build/domain"
+
 import {
 	Array as Arr,
 	Effect,
@@ -11,8 +13,8 @@ import {
 	type Schema,
 } from "effect"
 
-const invalidInput = (input: string): AppDiscoveryFailed =>
-	AppDiscoveryFailed.make({
+const invalidInput = (input: string): AppDiscovery.Failed =>
+	AppDiscovery.Failed.make({
 		reason: "InvalidInput",
 		issues: [
 			{
@@ -27,34 +29,34 @@ const invalidInput = (input: string): AppDiscoveryFailed =>
 export const failure = (
 	input: string,
 	error: Discovery.Error,
-): AppDiscoveryFailed =>
+): AppDiscovery.Failed =>
 	Match.value(error).pipe(
 		Match.tagsExhaustive({
 			InvalidLink: () => invalidInput(input),
 			SchemaError: () =>
-				AppDiscoveryFailed.make({
+				AppDiscovery.Failed.make({
 					reason: "Document",
 					issues: [
 						{ url: input, reason: "Invalid discovery document or link" },
 					],
 				}),
 			InvalidDocument: ({ issue }) =>
-				AppDiscoveryFailed.make({
+				AppDiscovery.Failed.make({
 					reason: "Document",
 					issues: [{ url: input, reason: issue }],
 				}),
 			IncompatibleCard: ({ reason }) =>
-				AppDiscoveryFailed.make({
+				AppDiscovery.Failed.make({
 					reason: "IncompatibleCard",
 					issues: [{ url: input, reason }],
 				}),
 			NetworkError: ({ reason, message }) =>
-				AppDiscoveryFailed.make({
+				AppDiscovery.Failed.make({
 					reason,
 					issues: [{ url: input, reason: message }],
 				}),
 			DiscoveryError: ({ reason, issues }) =>
-				AppDiscoveryFailed.make({
+				AppDiscovery.Failed.make({
 					reason: Match.value(reason).pipe(
 						Match.when("Configuration", () => "Document" as const),
 						Match.orElse((reason) => reason),
@@ -66,23 +68,24 @@ export const failure = (
 
 export const discover: (
 	input: string,
-) => Effect.Effect<
-	AppDiscoveryResult,
-	AppDiscoveryFailed,
-	Discovery.Discovery
-> = Effect.fn("Apps.discover")(function* (input) {
-	// Check the caller's link apart from decoding the publisher document.
-	// Both failures mean that the caller's link is not valid.
-	yield* CatalogDiscovery.inputLink(input).pipe(
-		Effect.catchTag(["InvalidLink", "SchemaError"], () =>
-			Effect.fail(invalidInput(input)),
-		),
-	)
-	const discovery = yield* Discovery.Discovery
-	return yield* discovery
-		.resolve(input)
-		.pipe(Effect.mapError((error) => failure(input, error)))
-})
+) => Effect.Effect<Discovery.Result, AppDiscovery.Failed, Discovery.Discovery> =
+	Effect.fn("Apps.discover")(function* (input) {
+		// Check the caller's link apart from decoding the publisher document.
+		// Both failures mean that the caller's link is not valid.
+		yield* CatalogDiscovery.inputLink(input).pipe(
+			Failures.replace("The App discovery input is not valid", () =>
+				invalidInput(input),
+			),
+		)
+		const discovery = yield* Discovery.Discovery
+		return yield* discovery
+			.resolve(input)
+			.pipe(
+				Failures.map("The App publication could not be found", (error) =>
+					failure(input, error),
+				),
+			)
+	})
 
 /**
  * The configuration fields to fix after `configureEndpoint` fails. A link that is not

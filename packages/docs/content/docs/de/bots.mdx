@@ -1,250 +1,34 @@
 ---
-title: Bots
-description:
-  Halte ein Team aus dauerhaften Bots. Jeder hat seine eigene Rolle, seine Chats
-  und sein Gedächtnis.
+title: "Bots wählen und verwalten"
+description: "Bots wählen und verwalten"
 ---
 
-Ein **Bot** ist ein Arbeiter mit einer Rolle, zum Beispiel ein Programmierer,
-ein Autor oder ein Designer. Jeder Bot hat seine eigenen Anweisungen, seine
-eigenen [Chats](/de/docs/chats) und sein eigenes Langzeitgedächtnis. Du sprichst
-mit einem Bot. Er gibt Arbeit an andere Bots oder an sich selbst. So ist er
-immer frei, dir zu antworten. Diese Seite zeigt, wie du mit einem Bot sprichst,
-und die Routen unter `/v1/bots`. Jede Route nimmt ein User-Token oder das
-Session-Cookie an. Siehe [Authentifizierung](/de/docs/authentication).
-
----
-
-## Mit einem Bot sprechen
-
-Jeder Bot ist ein dauerhafter Arbeiter. Er lebt, bis du ihn archivierst, und er
-lernt mit der Zeit aus seiner Arbeit. Es gibt keine andere Art von Bot.
-
-Um mit einem Bot zu sprechen, schicke ihm eine Nachricht:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"input":"Plan three days in Rome."}' \
-  https://api.example.com/v1/bots/$BOT/messages
-```
-
-Die Nachricht geht in deinen einen Chat mit diesem Bot. OpenBot erstellt den
-Chat beim ersten Mal. Du erstellst, wählst oder schließt nie einen Chat. Der Bot
-antwortet sofort. Wenn die Arbeit lang ist, gibt der Bot sie an eine
-[Delegation](/de/docs/delegation) und bleibt frei, dir zu antworten. Das
-Ergebnis kommt später in deinen Chat zurück. Siehe [Chats](/de/docs/chats).
-
-Ein **oberster Bot** ist ein Bot, der einem Member oder der Organisation gehört,
-nicht einem anderen Bot. Du kannst einen obersten Bot als deinen
-[Standard-Bot](#dein-standard-bot) wählen.
-
-Ein Bot kann auch selbst Bots besitzen. Siehe
-[Bots, die Bots besitzen](#bots-die-bots-besitzen).
-
-### Dein Standard-Bot
-
-Dein **Standard-Bot** ist der Bot, mit dem ein Client zuerst spricht. Auch ein
-[Trigger](/de/docs/triggers) ohne Bot gibt seine Aufgabe an ihn. OpenBot
-erstellt keine Bots für dich. Ein neues Member hat also keinen Standard-Bot.
-Dann schlägt ein Trigger ohne Bot mit `400` und `BotInvalid` fehl.
-
-Um deinen Standard-Bot zu setzen, erstelle einen Bot. Schicke dann seine ID in
-deinen Member-Einstellungen:
-
-```sh
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expectedVersion":0,"defaultBot":"bot_5c0e…"}' \
-  https://openbot.example.com/v1/me/settings
-```
-
-`expectedVersion` ist die `version` aus `GET /v1/me/settings`. Der Bot muss
-einer deiner eigenen obersten Bots oder ein gemeinsamer Bot sein, und du
-brauchst `delegate` für ihn. Sonst gibt OpenBot `400` mit `SettingsInvalid`
-zurück. Sende `null`, um deinen Standard-Bot zu entfernen.
-
-Du kannst deinen Standard-Bot trotzdem archivieren. Danach schlägt ein Trigger
-ohne Bot fehl, bis du einen anderen Standard-Bot wählst.
-
-Ältere Versionen von OpenBot haben für jedes Member einen Main Bot erstellt.
-Beim Update wird jeder Main Bot ein normaler Bot und der Standard-Bot seines
-Members. Sein Gedächtnis und seine Grants bleiben.
-
-### Keine Grenzen, die ein Bot kennt
-
-Bots haben keine Liste von Dingen, die sie tun dürfen. Ein Bot probiert es
-einfach. Wenn er zum ersten Mal etwas Neues versucht, zum Beispiel einen Bot
-erstellen oder ein App-Werkzeug aufrufen, entscheidet die Stelle über ihm. Siehe
-[Requests](/de/docs/requests). Die Entscheidungen werden gespeichert. So wachsen
-die Grenzen jedes Bots aus echter Arbeit.
-
----
+Ein Bot ist ein dauerhafter Helfer mit Name, Rolle, Anweisungen und
+[Gedächtnis](/de/docs/memory). Wähle im Client einen eigenen oder für dich
+verfügbaren Bot.
 
 ## Einen Bot erstellen
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Programmer","role":"Writes and reviews TypeScript code","instructions":"Write small, tested changes. Explain each change in one short paragraph."}' \
-  https://api.example.com/v1/bots
-```
+Gib ihm einen Namen, eine Aufgabe und klare Anweisungen. Wähle ein verfügbares
+Sprachmodel. Ein Bot im Produktivbetrieb kann ohne Model nicht antworten. Frage
+die Verwaltung nach Zugriff, wenn du keinen Bot erstellen oder kein Model wählen
+kannst.
 
-| Feld           | Bedeutung                                                                                                         |
-| -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `name`         | Pflicht. Ein kurzer Name. OpenBot entfernt Leerzeichen am Anfang und Ende. Der Rest muss 1 bis 100 Zeichen haben. |
-| `role`         | Pflicht. Was der Bot tut, in einer Zeile. Andere Bots lesen sie, um Arbeiter auszuwählen.                         |
-| `instructions` | Pflicht. Die dauerhaften Anweisungen des Bots, wie eine Stellenbeschreibung.                                      |
-| `model`        | Optional. Das Model der Chats dieses Bots, wenn ein Chat kein eigenes wählt.                                      |
-| `planApproval` | Optional. Wie die Pläne dieses Bots erlaubt werden. Siehe [Plan-Modus](/de/docs/chats#plan-modus).                |
-| `shared`       | Optional. `true` erstellt einen Bot der Organisation, den jedes Member nutzen kann.                               |
-| `bot`          | Optional. Die ID des Bots, dem der neue Bot gehört. Du kannst es nicht zusammen mit `shared` nutzen.              |
+Du kannst einen Standard-Bot für Clients wählen, die ihn nutzen. Auch ein
+[Trigger](/de/docs/triggers) ohne genannten Bot nutzt ihn. Ein neues Konto hat
+keinen Standard-Bot.
 
-Ein Bot ohne `model` kann nicht antworten. Seine erste Nachricht schlägt mit
-`400` und `ChatModelInvalid` fehl. Siehe
-[Models](/de/docs/models#ein-model-auswählen).
+## Mit einem Bot arbeiten
 
-OpenBot antwortet mit `201` und dem Bot:
+Sende eine Aufgabe im [Chat](/de/docs/chats). Der Bot kann lange Arbeit an sich
+selbst oder andere Bots [delegieren](/de/docs/delegation). Neue Handlungen
+können deine [Entscheidung](/de/docs/requests) brauchen. Ein geteilter Bot nutzt
+die Rechte und App-Verbindungen der Person, für die er arbeitet.
 
-```json
-{
-	"id": "bot_5c0e…",
-	"owner": { "_tag": "Member", "userId": "u-1" },
-	"name": "Programmer",
-	"role": "Writes and reviews TypeScript code",
-	"instructions": "Write small, tested changes. …",
-	"archived": false,
-	"revision": 0,
-	"createdAt": 1792486800000,
-	"updatedAt": 1792486800000
-}
-```
+## Einen Bot ändern oder archivieren
 
-`owner` ist `Member`, `Organization` oder `Bot`. Ein gemeinsamer Bot arbeitet
-mit den Berechtigungen und App-Verbindungen des Members, das ihn nutzt. Er
-arbeitet nie mit denen der Person, die ihn erstellt hat.
-
-## Bots auflisten, lesen und ändern
-
-`GET /v1/bots` listet deine eigenen Bots und die gemeinsamen Bots auf, die du
-nutzen darfst. Füge `?archived=false` hinzu, um archivierte Bots auszublenden.
-Füge `?bot=<id>` hinzu, um die Bots aufzulisten, die einem Bot gehören.
-
-`GET /v1/bots/:botId` gibt einen Bot zurück.
-
-```sh
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":0,"instructions":"Write small changes with tests first."}' \
-  https://api.example.com/v1/bots/$BOT
-```
-
-`expected` ist die aktuelle `revision`. Du kannst `name` (mit denselben Regeln
-wie oben), `role`, `instructions`, `model` (sende `null`, um es zu entfernen),
-`planApproval` (sende `null`, um es zu entfernen) und `archived` ändern. Wenn du
-einen Bot archivierst, archiviert OpenBot auch jeden Bot, der ihm gehört, und
-die Bots darunter. Wenn du die Archivierung aufhebst, kommt nur dieser eine Bot
-zurück.
-
----
-
-## Bots, die Bots besitzen
-
-Ein Bot kann Bots besitzen. So kann ein Bot sein eigenes Team bauen, und jedes
-Teammitglied behält sein eigenes Gedächtnis.
-
-- Ein Bot erstellt einen Bot, der ihm gehört, mit dem Werkzeug
-  `openbot_create_bot`. Eine Person erstellt einen mit `POST /v1/bots` und dem
-  Feld `bot`. Das Werkzeug nimmt `name`, `role`, `instructions` und `model` in
-  derselben Form wie `POST /v1/bots`, und einen `reason`.
-- Ein Bot, den ein anderer Bot mit dem Werkzeug erstellt, bekommt das `model`
-  des Bots, der ihn erstellt. Der Aufruf des Werkzeugs kann ein anderes `model`
-  nennen.
-- Der Besitzer ist
-  `{ "_tag": "Bot", "bot": "<owner ID>", "userId": "<member>" }`. `userId` ist
-  das Member an der Spitze des Besitzer-Baums. Es ist `null`, wenn die
-  Organisation den obersten Bot besitzt.
-- Ein Bot kann sich selbst und den Bots, die ihm gehören, ohne Request Arbeit
-  geben.
-- Die **Besitzer-Kette** eines Bots geht über seine Besitzer nach oben bis zu
-  einem obersten Bot und dann bis zur Person. Zum Beispiel: **Person → Assistant
-  → Worker → Scout**. Requests eines Bots gehen diese Kette hinauf, auch wenn
-  eine Person direkt mit dem Bot arbeitet. Siehe
-  [Requests](/de/docs/requests#die-kette-der-entscheider).
-- Über einem obersten Bot steht die Person, die mit ihm arbeitet. Das gilt für
-  deine eigenen obersten Bots und für gemeinsame Bots.
-
-Ein Bot braucht keinen Helfer-Bot, um den Kontext einer Arbeit zu behalten. Er
-kann einer früheren Delegation mehr Arbeit geben, und diese Arbeit geht im
-selben Task-Chat weiter. Siehe
-[Delegation](/de/docs/delegation#zu-früherer-arbeit-hinzufügen).
-
----
-
-## Was ein Bot in jedem Turn weiß
-
-OpenBot fügt diese Dinge zu den Anweisungen jedes Turns hinzu:
-
-- den Namen, die Rolle und die Anweisungen des Bots,
-- die Person, mit der er gerade arbeitet, mit ihrem Namen und ihrer Member-ID.
-  In einem [Channel](/de/docs/channels) ist es die Person, die die Nachricht des
-  Turns geschrieben hat,
-- in welcher Art von Chat er ist:
-  - in einem direkten Chat oder einem Channel-Chat sprechen Menschen mit ihm,
-    also muss er sofort antworten. Er gibt lange Arbeit an Delegationen,
-    vielleicht an sich selbst, und bleibt frei zu antworten,
-  - in einem Task-Chat macht er eine Aufgabe für den Bot, der sie ihm gegeben
-    hat. Seine letzte Antwort ist das Ergebnis. Er darf nicht sagen, dass er
-    fertig ist, solange er noch offene Arbeit hat,
-  - in einem Prüf-Chat entscheidet er über einen Request,
-- dass er eine Fähigkeit mit einem kurzen Grund nutzt, und dass eine Antwort,
-  die eine Entscheidung braucht, später als Nachricht zurückkommt,
-- dass Text, der mit `[OpenBot]` beginnt, von OpenBot kommt, nicht von einer
-  Person. Er ist also Daten, keine Anweisungen,
-- dass er Erfahrung aus seiner früheren Arbeit mitbringt, und dass die aktuellen
-  Anweisungen gegen sie gewinnen,
-- eine Liste der [offenen Arbeit](/de/docs/chats#offene-arbeit) des Chats: seine
-  Delegationen, Requests und Erinnerungen.
-
-Der [Memory-Bot](/de/docs/memory#der-memory-bot) kann die Eingabe des Turns auch
-mit dem neu schreiben, was hilft. Der Bot sieht die Änderungen als seine eigene
-Erfahrung. Er hat das Tool `confide`, und er kennt es nur als einen Ort, an dem
-er sagt, wie seine Arbeit läuft.
-
-Du kannst einen Bot auch mit Personen in anderen Organisationen
-[teilen](/de/docs/sharing). Sie bekommen einen verknüpften Bot mit `source`, der
-deinen Bot nutzt.
-
----
-
-## Berechtigungen
-
-| Aktion auf `Bot` | Damit kannst du                                                                               |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| `read`           | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                         |
-| `write`          | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                          |
-| `delegate`       | Mit einem Bot sprechen und ihm Arbeit geben, von einem Client oder von einem anderen Bot aus. |
-| `share`          | Personen einladen, einen [Bot zu nutzen](/de/docs/sharing).                                   |
-
-Der Pfad deiner eigenen Bots ist `org / <org> / user / <you> / bot / <id>`. Ein
-gemeinsamer Bot hat keinen Besitzer: sein `ownerUserId` ist `null`. Members
-dürfen gemeinsame Bots lesen und nutzen. Administratoren dürfen sie auch ändern
-und teilen. Siehe [Berechtigungen](/de/docs/permissions).
-
-## Fehler
-
-`InvitationNotFound` gibt `404` zurück. Wenn die Anfrage eine Einladung nennt,
-enthält der Fehler `invitationId`. Passt das Secret eines Bot-Links zu keiner
-Einladung, fehlt dieses Feld.
-
-| Status | Fehler                  | Wann                                                                   |
-| ------ | ----------------------- | ---------------------------------------------------------------------- |
-| `400`  | `BotInvalid`            | Die Änderung ist nicht erlaubt, oder du hast keinen Standard-Bot.      |
-| `403`  | `Forbidden`             | Du darfst den Bot lesen, aber nicht ändern oder nutzen.                |
-| `404`  | `BotNotFound`           | Es gibt keinen Bot mit dieser ID, den du lesen darfst.                 |
-| `409`  | `BotConflict`           | `expected` ist veraltet. Lies den Bot neu und versuche es noch einmal. |
-| `503`  | `BotStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                |
-
-Eine Änderung an einer fehlenden Rule ergibt `404 RuleNotFound`. Beim Widerruf
-eines fehlenden Grants kommt `404 GrantNotFound`. Diese Fehler nennen die
-fehlende Rule oder den fehlenden Grant.
+Mit den nötigen Rechten kannst du Name, Rolle, Anweisungen oder Model ändern.
+Archivieren betrifft auch die Bots, die ihm gehören. Wiederherstellen betrifft
+nur diesen Bot. War er dein Standard-Bot, wähle einen anderen, bevor du
+entsprechende Trigger nutzt. Weitere Regeln stehen unter
+[Bots teilen](/de/docs/sharing).

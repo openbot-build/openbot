@@ -1,6 +1,6 @@
-import { Duration, Effect, Option, Predicate, Schema, Stream } from "effect"
+import { Context, Duration, Effect, Option, Predicate, Schema } from "effect"
 import { Prompt } from "effect/ai"
-import { Bot, Plugin } from "@openbot-build/core"
+import { Plugin } from "@openbot-build/core"
 
 export interface Options {
 	/** Maximum time for one execution, for example `"5 minutes"`. */
@@ -33,7 +33,7 @@ export class TimeLimitExceeded extends Schema.TaggedError<
 }) {}
 
 /**
- * Limits each execution on its own, through the ReAct middleware chain.
+ * Declares a time limit. The runner applies it from the saved Turn start.
  * When the time is up, it stops the execution at once, also in the middle
  * of a model step or a tool call.
  */
@@ -44,32 +44,28 @@ export const make = ({
 		Duration.fromInput(maxDuration),
 		(d) => Duration.isFinite(d) && Duration.isPositive(d),
 	)
-	const middleware: Plugin.Middleware<
-		{},
-		InvalidMaxDuration | TimeLimitExceeded
-	> = (next, options) =>
-		Stream.unwrap(
-			Effect.gen(function* () {
-				if (Option.isNone(duration))
-					return yield* InvalidMaxDuration.make({ maxDuration })
-
-				const context = yield* Bot.Context
-				return next(options).pipe(
-					Stream.interruptWhen(
-						Effect.sleep(duration.value).pipe(
-							Effect.andThen(context.history),
-							Effect.flatMap((history) =>
+	return Plugin.make({
+		id: Plugin.Id.make("@openbot-build/openbot/time-limiter"),
+	})<{}, InvalidMaxDuration | TimeLimitExceeded>(() =>
+		Effect.succeed({
+			tools: {},
+			handlers: Context.empty(),
+			beforeStep: () =>
+				Option.isNone(duration)
+					? Effect.fail(InvalidMaxDuration.make({ maxDuration }))
+					: Effect.succeed(true),
+			...(Option.isNone(duration)
+				? {}
+				: {
+						timeLimit: {
+							duration: duration.value,
+							error: (history: Prompt.Prompt) =>
 								TimeLimitExceeded.make({
 									maxDuration: duration.value,
 									history,
 								}),
-							),
-						),
-					),
-				)
-			}),
-		)
-	return Plugin.make({
-		id: Plugin.Id.make("@openbot-build/openbot/time-limiter"),
-	})(() => Effect.succeed(middleware))
+						},
+					}),
+		}),
+	)
 }

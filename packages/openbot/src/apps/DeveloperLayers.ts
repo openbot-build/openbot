@@ -1,3 +1,5 @@
+import * as TestCleanup from "./TestCleanup.ts"
+import * as TestCommands from "./TestCommands.ts"
 import { Layer } from "effect"
 import {
 	CatalogDiscovery,
@@ -5,36 +7,40 @@ import {
 	RobotsPolicy,
 } from "@openbot-build/protocol"
 import * as AppInspections from "./AppInspections.ts"
+import * as ProofCommands from "./ProofCommands.ts"
 import * as Access from "./DeveloperAccess.ts"
 import * as Members from "./DeveloperMembers.ts"
 import * as Reports from "./DeveloperReports.ts"
 import * as Tests from "./DeveloperTests.ts"
 import * as Indexing from "./DeveloperIndexing.ts"
 import * as Notifications from "./DeveloperNotifications.ts"
+import * as Watches from "./DeveloperWatches.ts"
 import * as Monitor from "./DeveloperMonitor.ts"
 import * as TestRuntime from "./DeveloperTestRuntime.ts"
 import * as TestStores from "./DeveloperTestStores.ts"
-import { AppConnections } from "@openbot-build/protocol"
+import * as ConnectionScopes from "../resources/ConnectionScopes.ts"
 
 /**
  * The services of the developer center. They use the public network, the DNS
  * check of domains and the network of Apps that the host gives.
  */
-export const layer = Layer.mergeAll(
+export const services = Layer.mergeAll(
 	Members.layer,
+	ProofCommands.layer,
 	Reports.layer,
 	Indexing.layer,
 	Notifications.layer,
-	Monitor.layerWorker.pipe(Layer.provideMerge(Monitor.layer)),
-	Tests.layerWorker,
+	Monitor.layer,
 ).pipe(
 	Layer.provideMerge(
 		Tests.layer.pipe(
-			Layer.provide(
-				TestRuntime.layer.pipe(
+			Layer.provideMerge(
+				Layer.mergeAll(TestCommands.layer, TestCleanup.layer).pipe(
 					Layer.provideMerge(TestStores.layer),
-					Layer.provide(AppConnections.layerConnectionScopes.pipe(Layer.fresh)),
 				),
+			),
+			Layer.provideMerge(
+				TestRuntime.layer.pipe(Layer.provideMerge(TestStores.layer)),
 			),
 			Layer.provide(CatalogDiscovery.layerRules),
 		),
@@ -54,4 +60,9 @@ export const layer = Layer.mergeAll(
 			),
 		),
 	),
+	Layer.provideMerge(Watches.layer),
+)
+
+export const layer = services.pipe(
+	Layer.provide(ConnectionScopes.layerDeveloper),
 )

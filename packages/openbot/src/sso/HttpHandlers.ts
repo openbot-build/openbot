@@ -1,13 +1,9 @@
-import {
-	type Caller,
-	Identity,
-	OpenBotApi,
-	type OrganizationApi,
-	SsoApi,
-} from "@openbot-build/api"
+import { OpenBotApi, type OrganizationApi, SsoApi } from "@openbot-build/api"
+
+import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, DateTime, Effect, Option, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { organizationKey } from "../audit/Resources.ts"
 import * as Platform from "../settings/Platform.ts"

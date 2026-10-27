@@ -1,5 +1,9 @@
-import { Settings as SettingsApi } from "@openbot-build/api"
-import { AppIndexApi as Api } from "@openbot-build/api"
+import {
+	AppIndex as Domain,
+	Settings as SettingsDomain,
+} from "@openbot-build/domain"
+import * as Models from "./IndexModels.ts"
+
 import { type Index as ProtocolIndex, Network } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -23,24 +27,24 @@ import { IndexNamespace } from "./IndexNamespace.ts"
 import * as IndexStore from "./IndexStore.ts"
 import { Governance } from "./Governance.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Platform from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 
 export type Error =
-	| Api.IndexInputInvalid
-	| Api.IndexNotFound
-	| Api.IndexUnavailable
-	| Api.IndexRestricted
+	| Domain.IndexInputInvalid
+	| Domain.IndexNotFound
+	| Domain.IndexUnavailable
+	| Domain.IndexRestricted
 export interface SourceProvider {
-	readonly source: Api.Source
+	readonly source: Domain.Source
 	readonly entries: Effect.Effect<
 		ReadonlyArray<ProtocolIndex.Entry>,
-		Api.IndexUnavailable
+		Domain.IndexUnavailable
 	>
 	readonly checks?: Effect.Effect<
-		HashMap.HashMap<string, Api.Check>,
-		Api.IndexUnavailable
+		HashMap.HashMap<string, Domain.Check>,
+		Domain.IndexUnavailable
 	>
 }
 export interface Options {
@@ -53,14 +57,14 @@ export class PublicIndex extends Context.Service<
 	{
 		/** The sources, with the address of the OpenBot Index at the current public origin. */
 		readonly sources: Effect.Effect<
-			ReadonlyArray<Api.Source>,
-			SettingsApi.SettingsUnavailable
+			ReadonlyArray<Domain.Source>,
+			SettingsDomain.SettingsUnavailable
 		>
-		readonly search: (input: Api.Query) => Effect.Effect<Api.Page, Error>
+		readonly search: (input: Domain.Query) => Effect.Effect<Models.Page, Error>
 		readonly get: (
 			cardUrl: string,
 			source?: string,
-		) => Effect.Effect<Api.App, Error>
+		) => Effect.Effect<Models.App, Error>
 	}
 >()("@openbot-build/openbot/apps/PublicIndex") {}
 
@@ -75,7 +79,7 @@ const Cursor = Schema.fromJsonString(
 )
 /** The order of Apps on a page and in a cursor: by name, then by card URL. */
 const byKey = Order.Struct({ name: Order.String, cardUrl: Order.String })
-const keyOf = (app: Api.App) => ({
+const keyOf = (app: Models.App) => ({
 	name: app.entry.card.name,
 	cardUrl: app.entry.cardUrl,
 })
@@ -85,7 +89,7 @@ const sameSources = Arr.makeEquivalence(Equivalence.String)
 const matches = (
 	entry: ProtocolIndex.Entry,
 	query: string,
-): Api.App["matches"] => {
+): Models.App["matches"] => {
 	if (query === "") return []
 	return pipe(
 		[
@@ -124,7 +128,7 @@ export const make = (
 		const settings = yield* Settings
 		const localId = "openbot"
 		/** The OpenBot Index of this platform. Its address follows the public origin. */
-		const localSource = (publicOrigin: string): Api.Source => ({
+		const localSource = (publicOrigin: string): Domain.Source => ({
 			id: localId,
 			name:
 				options.simulated === true
@@ -140,7 +144,7 @@ export const make = (
 				source: localSource(publicOrigin),
 				checks: IndexStore.checks(db, namespace).pipe(
 					Failures.replace("Public Index checks could not be read", () =>
-						Api.IndexUnavailable.make({
+						Domain.IndexUnavailable.make({
 							issues: [
 								{
 									source: localId,
@@ -159,7 +163,7 @@ export const make = (
 							Effect.forEach(rows, (row) => IndexStore.decode(row.body)),
 						),
 						Failures.replace("Public Index entries could not be read", () =>
-							Api.IndexUnavailable.make({
+							Domain.IndexUnavailable.make({
 								issues: [
 									{
 										source: localId,
@@ -176,7 +180,7 @@ export const make = (
 			selected?: string,
 		) {
 			const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
-				Api.IndexUnavailable.make({
+				Domain.IndexUnavailable.make({
 					issues: [
 						{
 							source: localId,
@@ -190,7 +194,7 @@ export const make = (
 				(provider) => selected === undefined || provider.source.id === selected,
 			)
 			if (chosen.length === 0)
-				return yield* Api.IndexNotFound.make({
+				return yield* Domain.IndexNotFound.make({
 					message: "This Index source is unavailable.",
 				})
 			const outcomes = yield* Effect.forEach(
@@ -200,7 +204,7 @@ export const make = (
 						entries: provider.entries,
 						checks:
 							provider.checks ??
-							Effect.succeed(HashMap.empty<string, Api.Check>()),
+							Effect.succeed(HashMap.empty<string, Domain.Check>()),
 					}).pipe(
 						Effect.map(({ entries, checks }) => ({
 							source: provider.source,
@@ -212,7 +216,7 @@ export const make = (
 							Effect.succeed({
 								source: provider.source,
 								entries: Option.none<ReadonlyArray<ProtocolIndex.Entry>>(),
-								checks: HashMap.empty<string, Api.Check>(),
+								checks: HashMap.empty<string, Domain.Check>(),
 								issues: error.issues,
 							}),
 						),
@@ -221,7 +225,7 @@ export const make = (
 			)
 			const issues = Arr.flatMap(outcomes, (outcome) => outcome.issues)
 			if (Arr.every(outcomes, (outcome) => Option.isNone(outcome.entries)))
-				return yield* Api.IndexUnavailable.make({ issues })
+				return yield* Domain.IndexUnavailable.make({ issues })
 			const listed = Arr.flatMap(outcomes, (outcome) =>
 				Arr.map(
 					Option.getOrElse(outcome.entries, () => []),
@@ -231,7 +235,7 @@ export const make = (
 							_tag: "Indexed",
 							attemptedAt: entry.checkedAt,
 						} as const
-						const check: Api.Check = Option.match(
+						const check: Domain.Check = Option.match(
 							HashMap.get(outcome.checks, entry.cardUrl),
 							{
 								onNone: () => indexed,
@@ -248,9 +252,14 @@ export const make = (
 					},
 				),
 			)
+			const restrictions = yield* governance.snapshot.pipe(
+				Failures.replace("Could not read App restrictions.", () =>
+					Domain.IndexUnavailable.make({ issues: [] }),
+				),
+			)
 			const apps = Arr.reduce(
 				listed,
-				HashMap.empty<string, Api.App>(),
+				HashMap.empty<string, Models.App>(),
 				(apps, { source, entry, check }) =>
 					check._tag === "Excluded" || check._tag === "Withdrawn"
 						? apps
@@ -258,17 +267,17 @@ export const make = (
 								apps,
 								entry.cardUrl,
 								Option.match(HashMap.get(apps, entry.cardUrl), {
-									onNone: (): Api.App => ({
+									onNone: (): Models.App => ({
 										entry,
 										sources: [source],
 										matches: [],
 										check,
-										...Option.match(governance.find(entry.cardUrl), {
+										...Option.match(HashMap.get(restrictions, entry.cardUrl), {
 											onNone: () => ({}),
 											onSome: (restriction) => ({ restriction }),
 										}),
 									}),
-									onSome: (app): Api.App => ({
+									onSome: (app): Models.App => ({
 										...app,
 										sources: Arr.dedupeWith(
 											[...app.sources, source],
@@ -292,7 +301,7 @@ export const make = (
 		return PublicIndex.of({
 			sources: Effect.map(
 				Platform.publicOriginOr(settings, () =>
-					SettingsApi.SettingsUnavailable.make({}),
+					SettingsDomain.SettingsUnavailable.make({}),
 				),
 				(publicOrigin) =>
 					Arr.map(providersAt(publicOrigin), (provider) => provider.source),
@@ -310,7 +319,7 @@ export const make = (
 						: yield* Schema.decodeEffect(Cursor)(input.cursor).pipe(
 								Effect.catchTag("SchemaError", () =>
 									Effect.fail(
-										Api.IndexInputInvalid.make({
+										Domain.IndexInputInvalid.make({
 											message: "Invalid page cursor.",
 										}),
 									),
@@ -322,7 +331,7 @@ export const make = (
 						!sameSources(cursor.sources, collected.sources) ||
 						!sameSources(cursor.unavailable, collected.unavailable))
 				)
-					return yield* Api.IndexInputInvalid.make({
+					return yield* Domain.IndexInputInvalid.make({
 						message:
 							"The search or its sources changed. Return to the first page to refresh results.",
 					})
@@ -361,20 +370,21 @@ export const make = (
 				}
 			}),
 			get: Effect.fn("PublicIndex.get")(function* (cardUrl, source) {
-				yield* governance
-					.check(cardUrl)
-					.pipe(
-						Effect.mapError(({ restriction }) =>
-							Api.IndexRestricted.make({ restriction }),
-						),
-					)
+				yield* governance.check(cardUrl).pipe(
+					Effect.catchTags({
+						AppRestricted: ({ restriction }) =>
+							Effect.fail(Domain.IndexRestricted.make({ restriction })),
+						ExperienceStorageUnavailable: () =>
+							Effect.fail(Domain.IndexUnavailable.make({ issues: [] })),
+					}),
+				)
 				const collected = yield* collect(source)
 				return yield* Arr.findFirst(
 					collected.apps,
 					(app) => app.entry.cardUrl === new URL(cardUrl).href,
 				).pipe(
 					Effect.fromOption(() =>
-						Api.IndexNotFound.make({
+						Domain.IndexNotFound.make({
 							message: "This App is not in the selected public Index.",
 						}),
 					),
@@ -388,7 +398,7 @@ export const layer = (options: Options) =>
 
 /** Read another OpenBot Index that the configuration names. Never forward user credentials. */
 export const remoteProvider = (
-	source: Api.Source,
+	source: Domain.Source,
 ): Effect.Effect<SourceProvider, never, Network.PublicNetwork> =>
 	Effect.gen(function* () {
 		const network = yield* Network.PublicNetwork
@@ -396,7 +406,7 @@ export const remoteProvider = (
 		const unreadable = Failures.replace(
 			"An Index source could not be read",
 			() =>
-				Api.IndexUnavailable.make({
+				Domain.IndexUnavailable.make({
 					issues: [
 						{
 							source: source.id,
@@ -410,7 +420,7 @@ export const remoteProvider = (
 			seen: HashSet.HashSet<string>,
 		): Effect.Effect<
 			ReadonlyArray<ProtocolIndex.Entry>,
-			Api.IndexUnavailable
+			Domain.IndexUnavailable
 		> =>
 			Effect.gen(function* () {
 				const url = new URL(source.url)
@@ -425,7 +435,7 @@ export const remoteProvider = (
 					).pipe(
 						Effect.annotateLogs({ source: source.id, status: response.status }),
 					)
-					return yield* Api.IndexUnavailable.make({
+					return yield* Domain.IndexUnavailable.make({
 						issues: [
 							{
 								source: source.id,
@@ -435,26 +445,28 @@ export const remoteProvider = (
 					})
 				}
 				const page = yield* Schema.decodeEffect(
-					Schema.fromJsonString(Api.Page),
+					Schema.fromJsonString(Models.Page),
 				)(response.text).pipe(unreadable)
 				if (page.issues.length > 0) {
-					yield* Effect.logWarning(
-						"An Index source returned incomplete results",
-						page.issues,
-					).pipe(Effect.annotateLogs({ source: source.id }))
-					return yield* Api.IndexUnavailable.make({
-						issues: [
-							{
-								source: source.id,
-								message: "This Index source returned incomplete results.",
-							},
-						],
-					})
+					return yield* Effect.fail(page.issues).pipe(
+						Failures.replace(
+							"An Index source returned incomplete results",
+							() =>
+								Domain.IndexUnavailable.make({
+									issues: [
+										{
+											source: source.id,
+											message: "This Index source returned incomplete results.",
+										},
+									],
+								}),
+						),
+					)
 				}
 				const entries = Arr.map(page.apps, (app) => app.entry)
 				if (page.nextCursor === null) return entries
 				if (HashSet.has(seen, page.nextCursor))
-					return yield* Api.IndexUnavailable.make({
+					return yield* Domain.IndexUnavailable.make({
 						issues: [
 							{
 								source: source.id,

@@ -5,6 +5,10 @@ description:
   der Platform mit Credits.
 ---
 
+Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
+Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
+[Administrationshandbuch](/de/docs/admin).
+
 OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes
 Member, jeder Bot und jedes User-Token verbraucht hat und was sie gekostet
 haben. Ein Token ist ein kleines Stück Text, das ein Model liest oder schreibt.
@@ -26,28 +30,46 @@ viel Geld ausgegeben ist. Eine Platform kann Organisationen **Credits**
 
 ## Was OpenBot aufzeichnet
 
-OpenBot zeichnet jeden Aufruf eines Model auf, der eine Antwort bekommt. Jedes
-Usage event hat eine `source` (Quelle):
+OpenBot zeichnet einen Model-Aufruf auf, bevor er zum Anbieter geht. Jedes Usage
+event hat eine `source` (Quelle):
 
-| `source`     | Was den Aufruf gemacht hat                                                             |
-| ------------ | -------------------------------------------------------------------------------------- |
-| `turn`       | Ein Schritt eines Model in einem Turn eines [Chats](/de/docs/chats).                   |
-| `compaction` | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt.            |
-| `judge`      | Das Model, das [Rules](/de/docs/rules) prüft.                                          |
-| `bot_memory` | Der [Memory-Bot](/de/docs/memory#der-memory-bot): was er lernt, ergänzt und antwortet. |
-| `other`      | Jeder andere Aufruf.                                                                   |
+| `source`     | Was den Aufruf gemacht hat                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| `turn`       | Ein Schritt eines Model in einem Turn eines [Chats](/de/docs/developers/chats).                   |
+| `compaction` | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt.                       |
+| `judge`      | Das Model, das [Rules](/de/docs/developers/rules) prüft.                                          |
+| `bot_memory` | Der [Memory-Bot](/de/docs/developers/memory#der-memory-bot): was er lernt, ergänzt und antwortet. |
+| `other`      | Jeder andere Aufruf.                                                                              |
 
 Ein Usage event hat auch den Chat (`chatId`), den Turn, den Bot, das Member und
-das User-Token, wenn der Aufruf sie hat. In einem [Channel](/de/docs/channels)
-ist das Member die Person, die die Nachricht geschrieben hat.
+das User-Token, wenn der Aufruf sie hat. In einem
+[Channel](/de/docs/developers/channels) ist das Member die Person, die die
+Nachricht geschrieben hat.
 
-Manche Aufrufe zeichnet OpenBot nicht auf:
+Jeder Aufruf hat eine feste `id`. Ein dauerhafter Schritt hat auch eine
+`executionId`. Sein `status` ist während der Arbeit `pending`. Mit bestätigter
+Nutzung ist er `confirmed`, ohne Nutzung `unknown`. Unbekannte Token-Zahlen und
+Kosten sind `null`, nicht null Tokens. Derselbe Beleg wird nie zweimal
+berechnet.
 
-- Ein Aufruf, der fehlschlägt, bevor das Model antwortet.
-- Ein Stream, der vor seinem Ende stoppt, zum Beispiel wenn du einen Turn
-  unterbrichst. Das Model zählt diese Tokens vielleicht trotzdem.
-- Ein Schritt, der eine Aktion des Host noch einmal ausführt. Er ruft kein Model
-  auf.
+Vor dem Senden hält OpenBot einen Schätzwert in `reservedMicros` frei. Es
+rechnet mit etwa vier Textzeichen pro Eingabe-Token und 1.024 Ausgabe-Tokens.
+Andere Eingaben bekommen eine grobe Größe. Die echten Kosten können höher sein.
+Der Schätzwert bleibt nach dem Ende in `estimatedMicros` stehen. Das Feld ist
+`null`, wenn ein alter Datensatz seinen Schätzwert nicht mehr hat.
+
+Wenn der Aufruf endet, gibt OpenBot die Reservierung frei. Fehlende Nutzung
+bleibt `unknown` und nimmt kein Guthaben. Ein neuer Besitzer gibt auch
+Reservierungen älterer Versuche frei. Ein später Beleg des Anbieters bucht die
+echten Kosten nur einmal. Die Summe zählt bestätigte `calls`, `pendingCalls` und
+`unknownCalls` getrennt. Eine Host-Aktion ohne Model-Aufruf hat keine
+Model-Nutzung.
+
+Fehler bei Modellkosten und Token-Raten speichern die ganze Ursache in einem
+verschlüsselten Fehlerdatensatz. Öffentliche Fehler und normale Logs enthalten
+nur eine sichere Klasse und eine Fehler-ID. Wenn das Speichern bestätigter
+Nutzung fehlschlägt, bleiben auch Aufruf-ID und Token-Zahlen für die Reparatur
+erhalten. Unbekannte Nutzung wird dadurch nicht zu Kosten von null.
 
 ---
 
@@ -98,9 +120,11 @@ anderes Model ergibt `400` mit `ModelProviderInvalid`. Der
 [Katalog der Models](/de/docs/models#ein-model-auswählen) zeigt den aktuellen
 `price` jedes Model.
 
-Ein neuer Preis gilt für Aufrufe, die ab jetzt beginnen. Jedes Usage event
-behält die Kosten aus der Zeit des Aufrufs. Alte Kosten ändern sich also nie.
-OpenBot rundet die Kosten jedes Aufrufs auf ganze Mikro-USD auf.
+Ein neuer Preis gilt für Aufrufe, die ab jetzt beginnen. Jede Reservierung liest
+den Preis aus der Datenbank und behält eine Kopie. Eine Preisänderung auf einem
+anderen Knoten oder das Entfernen des Anbieters ändert den Preis dieses Aufrufs
+nicht. Gespeicherte Nutzung behält ihre Kosten. OpenBot rundet die Kosten jedes
+Aufrufs auf ganze Mikro-USD auf.
 
 Ein Model ohne Preis kostet 0. OpenBot zeichnet seine Aufrufe trotzdem auf. Sie
 zählen aber nicht für Budgets und nehmen keine Credits.
@@ -277,8 +301,8 @@ Kosten von den Credits kamen.
 
 ## Budgets
 
-Ein Budget stoppt Ausgaben an einer Grenze. Du kannst ein Budget für vier
-Bereiche setzen:
+Ein Budget prüft Model-Aufrufe gegen eine Ausgabengrenze. Du kannst ein Budget
+für vier Bereiche setzen:
 
 | `scope`        | `scopeId`                                    | Was zählt                                               |
 | -------------- | -------------------------------------------- | ------------------------------------------------------- |
@@ -292,16 +316,24 @@ Mitternacht UTC. Jeder Bereich kann ein Budget für jeden Zeitraum haben.
 
 Jedes Budget hat auch einen `mode`:
 
-- Ein `hard`-Budget stoppt Aufrufe von Models, wenn die Ausgaben im Zeitraum
-  `limitMicros` erreichen. Der Aufruf schlägt fehl, also schlägt der Turn mit
-  einem Fehler des Model fehl. Der nächste Zeitraum beginnt wieder bei 0.
+- Ein `hard`-Budget stoppt einen Model-Aufruf, wenn sein Schätzwert zusammen mit
+  bestätigten Kosten des Zeitraums und allen reservierten Beträgen die Grenze
+  überschreitet. Der Aufruf schlägt fehl, also schlägt der Turn mit einem Fehler
+  des Models fehl.
 - Ein `soft`-Budget stoppt nie einen Aufruf. Es zeigt nur `exceeded: true`.
 
-Ein Budget zählt jeden Aufruf mit Preis, auch die Aufrufe mit dem eigenen
-Schlüssel der Organisation. OpenBot prüft die Budgets vor jedem Aufruf eines
-Model, nicht nur am Anfang eines Turn. Ein langer Turn stoppt bei seinem
-nächsten Aufruf eines Model. Die Ausgaben können die Grenze also um die Kosten
-eines Aufrufs überschreiten.
+Ein Budget zählt jeden Aufruf mit Preis, auch mit dem eigenen Schlüssel. Vor dem
+Aufruf prüft OpenBot bestätigte Kosten und offene Reservierungen zusammen. Alle
+Knoten teilen diese Prüfung. Der Aufruf stoppt, wenn der Schätzwert nicht passt.
+Offene Reservierungen zählen auch nach dem Beginn eines neuen Tags oder Monats.
+Beendete Aufrufe geben sie frei, auch bei unbekannter Nutzung. Bestätigte Kosten
+zählen in dem Zeitraum, in dem der Beleg gespeichert wird. Die Endkosten können
+höher als der Schätzwert sein. Das Budget garantiert daher nicht, dass die
+Rechnung des Anbieters unter der Grenze bleibt.
+
+Ein alter Aufruf mit unbekannter Nutzung blockiert keine neuen Aufrufe. Sein
+Schätzwert bleibt zur Prüfung gespeichert. Fehlende alte Schätzwerte bleiben
+`null`. Nur ein bestätigter Beleg des Anbieters kann seine Kosten abrechnen.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -368,8 +400,14 @@ Solange Credits an sind:
 - Jeder Aufruf eines Model der Platform nimmt seine Kosten vom Guthaben.
 - Wenn das Guthaben 0 oder weniger ist, schlagen Aufrufe der Models der Platform
   fehl. Aufrufe mit dem eigenen Schlüssel der Organisation funktionieren weiter.
-- Das Guthaben kann um die Kosten eines Aufrufs unter 0 fallen. OpenBot prüft
-  das Guthaben nämlich vor einem Aufruf und nimmt die Kosten danach.
+- OpenBot prüft das Guthaben und reservierte Beträge vor einem Aufruf. Ein
+  bestätigter Beleg zieht die echten Kosten vom Guthaben ab und gibt die
+  Reservierung frei. Kosten über dem Schätzwert können das Guthaben unter 0
+  senken.
+- Ein beendeter Aufruf mit unbekannter Nutzung gibt seine Reservierung frei,
+  ohne Guthaben zu nehmen. Sein Schätzwert bleibt gespeichert. Ein später
+  bestätigter Beleg bucht seine echten Kosten einmal. Das kann das Guthaben
+  unter 0 senken.
 
 Aufrufe mit dem eigenen Schlüssel der Organisation nehmen nie Credits, auch wenn
 Credits an sind.
@@ -438,15 +476,18 @@ Bucket lässt einen kurzen Schub Arbeit mit voller Geschwindigkeit durch.
 
 Ein Aufruf eines Model nimmt aus jedem Bucket seiner Bereiche:
 
-- **Vor dem Aufruf** wartet er, bis kein Bucket Schulden hat. Er schlägt nicht
-  fehl. OpenBot prüft die Budgets und die Credits erst nach dem Warten.
+- **Vor dem Aufruf** nimmt er eine Schätzung der Eingabe aus jedem gemeinsamen
+  Bucket und wartet. Ohne Stream nimmt er auch eine grobe Schätzung der Ausgabe.
+  OpenBot prüft die Budgets und Credits erst nach dem Warten.
 - **Während das Model streamt**, liest OpenBot die Ausgabe vom Anbieter in einen
   Puffer. Es schickt jedes Stück erst weiter, wenn die Buckets Platz dafür
   haben. Ein Token sind etwa vier Zeichen. So kommt die Ausgabe mit
   gleichmäßiger Geschwindigkeit.
-- **Wenn der Aufruf endet**, legt OpenBot die echten Eingabe-Tokens und
-  Ausgabe-Tokens in die Buckets. Wenn ein Bucket dadurch Schulden hat, wartet
-  der nächste Aufruf, bis sich der Bucket wieder füllt.
+- **Wenn der Aufruf endet**, ersetzen bestätigte Mengen die Schätzungen. Mehr
+  Tokens erhöhen die Schulden. Nicht genutzte Schätzungen gehen in die Buckets
+  zurück. Auch bei einem Stop während der Ausgabe zählen die bereits gesendeten
+  Mengen des Anbieters. Ohne bestätigte Mengen bleibt die Schätzung für die Rate
+  bestehen. Dies kostet kein Geld.
 
 Der Platform-Admin setzt die höchsten Raten in den
 [Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform). Eine
@@ -463,10 +504,11 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-Jede Instanz von OpenBot hält ihre eigenen Buckets im Speicher. Mit mehr als
-einer Instanz kann ein Bereich auf jeder Instanz bis zur Rate verbrauchen. Ein
-Turn läuft auf einer Instanz, aber die Turns eines Chats und die Arbeit, die er
-abgibt, können auf vielen Instanzen laufen.
+Alle Instanzen teilen die Buckets in PostgreSQL. Eine Transaktion nimmt die
+Tokens aller Bereiche. Die Uhr der Datenbank steuert das Auffüllen. Mehr
+Instanzen erhöhen die Rate eines Bereichs nicht. Ein Stop beim Warten löscht die
+gemeinsamen Schulden nicht. Bei einem Fehler der Datenbank darf kein neuer
+Model-Aufruf beginnen, bis OpenBot die Raten wieder prüfen kann.
 
 ---
 

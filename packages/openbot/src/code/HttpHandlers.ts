@@ -1,27 +1,24 @@
-import { Identity, OpenBotApi } from "@openbot-build/api"
-import { Array as Arr, Effect } from "effect"
+import { OpenBotApi } from "@openbot-build/api"
+import { Identity } from "@openbot-build/domain"
+import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { ownerKey } from "../apps/StoredConnections.ts"
-import { CodeRuns } from "./CodeRuns.ts"
-import { view } from "./StoredCodeRuns.ts"
+import * as Queries from "./CodeQueries.ts"
+import * as HttpErrors from "../execution/HttpErrors.ts"
 
-/** Each caller reads only the programs of their own Chats. */
 export const layer = HttpApiBuilder.group(OpenBotApi, "codeRuns", (handlers) =>
 	Effect.gen(function* () {
-		const runs = yield* CodeRuns
-		const owner = Effect.map(Identity, ownerKey)
+		const queries = yield* Queries.make
+		const safe = yield* HttpErrors.make
 		return handlers
 			.handle("get", ({ params }) =>
-				Effect.flatMap(owner, (owner) =>
-					runs.get(owner, params.id).pipe(Effect.map(view)),
-				),
+				Effect.flatMap(Identity, (caller) =>
+					queries.read(caller, params.id),
+				).pipe(safe),
 			)
 			.handle("list", ({ params }) =>
-				Effect.flatMap(owner, (owner) =>
-					runs
-						.list(owner, params.chatId)
-						.pipe(Effect.map((list) => Arr.map(list, view))),
-				),
+				Effect.flatMap(Identity, (caller) =>
+					queries.list(caller, params.chatId),
+				).pipe(safe),
 			)
 	}),
 )

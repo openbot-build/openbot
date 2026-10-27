@@ -5,6 +5,7 @@ import config from "../tsdown.config.ts"
 import { originPlaceholder, page } from "./src/Pages.ts"
 
 export default defineConfig([
+	// Keep the source ./testing entry in package.json when building the program.
 	{ ...config, entry: ["src/Main.ts"], dts: false, exports: false },
 	{
 		...config,

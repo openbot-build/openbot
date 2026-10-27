@@ -1,7 +1,45 @@
 import * as Mcp from "@modelcontextprotocol/client"
-import { Context, Effect, Scope, Stream, Schema } from "effect"
+import {
+	Cause,
+	Context,
+	Effect,
+	Option,
+	Redacted,
+	Scope,
+	Stream,
+	Schema,
+} from "effect"
 import * as App from "./App.ts"
 import * as Store from "./Store.ts"
+
+const inside = Symbol.for("@openbot-build/protocol/Client/inside")
+
+/** Keep the full failure for the host to seal, outside the public error schema. */
+export const withCause = <E extends object>(
+	error: E,
+	cause: Cause.Cause<unknown>,
+): E => {
+	// Native Error objects need a private field across typed error mapping.
+	Object.defineProperty(error, inside, {
+		value: Redacted.make(cause),
+		enumerable: false,
+		configurable: true,
+	})
+	return error
+}
+
+/** Read private diagnostics at a host boundary. Seal them before storage. */
+export const errorCause = (
+	error: unknown,
+): Option.Option<Redacted.Redacted<Cause.Cause<unknown>>> => {
+	if (typeof error !== "object" || error === null) return Option.none()
+	const saved: unknown = Object.getOwnPropertyDescriptor(error, inside)?.value
+	if (!Redacted.isRedacted(saved)) return Option.none()
+	const cause = Redacted.value(saved)
+	return Cause.isCause(cause)
+		? Option.some(Redacted.make(cause))
+		: Option.none()
+}
 
 /** The MCP methods that list what an App offers. */
 export const ListAction = Schema.Literals([
@@ -52,6 +90,7 @@ export class ClientError extends Schema.TaggedError<
 >()("ClientError", {
 	reason: Schema.Literals([
 		"Protocol",
+		"PolicyUnavailable",
 		"Network",
 		"Schema",
 		"UnsupportedCapability",
@@ -103,7 +142,7 @@ export class InvocationPolicy extends Context.Service<
 	{
 		readonly check: (
 			invocation: Invocation,
-		) => Effect.Effect<void, PermissionDenied>
+		) => Effect.Effect<void, PermissionDenied | ClientError>
 	}
 >()("@openbot-build/protocol/connections/Client/InvocationPolicy") {}
 

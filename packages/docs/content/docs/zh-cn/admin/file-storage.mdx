@@ -1,0 +1,55 @@
+---
+title: "文件存储"
+description: "文件存储"
+---
+
+面向平台运维人员。
+
+## 设置存储
+
+平台管理员在平台设置中以 `files.storage` 设置存储。也可以用 `openbot setup`
+设置。见[平台](/zh-cn/docs/platform#设置)。
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expectedVersion": 3,
+    "files": {
+      "storage": {
+        "endpoint": "https://s3.us-east-1.amazonaws.com",
+        "publicEndpoint": null,
+        "region": "us-east-1",
+        "bucket": "openbot-files",
+        "accessKeyId": "AKIA…",
+        "secretAccessKey": "…",
+        "forcePathStyle": false
+      },
+      "uploads": { "server": true, "direct": true }
+    }
+  }' \
+  https://api.example.com/v1/platform/settings
+```
+
+| 字段                      | 含义                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| `storage.endpoint`        | OpenBot 访问存储的地址，不带路径。                                                              |
+| `storage.publicEndpoint`  | 客户端直接上传时放字节的地址。`null` 表示 `endpoint`。当 OpenBot 通过私有网络访问存储时使用它。 |
+| `storage.region`          | 存储的区域，例如 `us-east-1`。                                                                  |
+| `storage.bucket`          | bucket。使用前先创建它。                                                                        |
+| `storage.accessKeyId`     | 访问密钥 ID。                                                                                   |
+| `storage.secretAccessKey` | 密钥。OpenBot 加密保存它，它永远不会返回。不填则保留当前的密钥。                                |
+| `storage.forcePathStyle`  | 把 bucket 放在路径里，例如 `https://host/bucket/key`。MinIO 和 RustFS 需要 `true`。             |
+| `uploads.server`          | 允许用 `POST /v1/files` 通过 OpenBot 上传。                                                     |
+| `uploads.direct`          | 允许用 `POST /v1/files/uploads` 直接上传。                                                      |
+| `maxBytes`                | 最大的文件，单位是字节。                                                                        |
+| `quotaBytes`              | 一个成员的所有文件加起来最多能占的字节数。`null` 表示没有配额。                                 |
+| `mediaTypes`              | 人们可以上传的媒体类型。`image/*` 接受所有图片。                                                |
+| `unusedMs`                | 没有 Chat 保留的文件保留多久，单位是毫秒。                                                      |
+
+`"storage": null` 会移除存储。之后没有人能上传文件。
+
+OpenBot 通过它的出站保护访问存储。私有网络上的存储必须在
+`OPENBOT_OUTBOUND_ALLOW` 中。见[出站连接](/zh-cn/docs/configuration#出站连接)。
+
+访问密钥需要能在 bucket 中放入、读取和删除对象。不要让 bucket 自己让对象过期：由 OpenBot 决定文件何时消失。

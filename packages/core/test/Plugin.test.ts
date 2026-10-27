@@ -117,8 +117,10 @@ it.effect(
 			Chat.ChatError,
 			StoreDependency
 		>({ id: idA, store: a })((ctx) =>
-			Effect.succeed((next, options) =>
-				Stream.unwrap(
+			Effect.succeed({
+				tools: {},
+				handlers: Context.empty(),
+				beforeStep: () =>
 					Effect.gen(function* () {
 						assert.strictEqual(ctx.store.definition, a)
 						const own = yield* ctx.store
@@ -126,10 +128,9 @@ it.effect(
 						const state = yield* own.snapshot
 						assert.strictEqual(Option.getOrThrow(state.value).value, 7)
 						seen = Arr.append(seen, "a")
-						return next(options)
+						return true
 					}),
-				),
-			),
+			}),
 		)
 		const pluginB = Plugin.make<
 			typeof idB,
@@ -137,17 +138,18 @@ it.effect(
 			Chat.ChatError,
 			StoreDependency
 		>({ id: idB, store: b })((ctx) =>
-			Effect.succeed((next, options) =>
-				Stream.unwrap(
+			Effect.succeed({
+				tools: {},
+				handlers: Context.empty(),
+				beforeStep: () =>
 					Effect.gen(function* () {
 						const own = yield* ctx.store
 						assert.strictEqual(own, storeB)
 						yield* own.get
 						seen = Arr.append(seen, "b")
-						return next(options)
+						return true
 					}),
-				),
-			),
+			}),
 		)
 		assert.strictEqual(pluginA.id, "a")
 		assert.strictEqual(pluginA.store.definition, a)
@@ -220,7 +222,7 @@ it.effect(
 	},
 )
 it.effect(
-	"one plugin builds its runtime and store in order, reads state in middleware and checks the revision of a write",
+	"one plugin builds its runtime and store in order, reads state in a hook and checks the revision of a write",
 	() =>
 		Effect.gen(function* () {
 			class EncodingDependency extends Context.Service<
@@ -249,8 +251,10 @@ it.effect(
 				b = declaration()
 			let observed: ReadonlyArray<number> = []
 			const plugin = Plugin.make({ id: pluginId("a"), store: a })((ctx) =>
-				Effect.succeed((next, options) =>
-					Stream.unwrap(
+				Effect.succeed({
+					tools: {},
+					handlers: Context.empty(),
+					beforeStep: () =>
 						Effect.gen(function* () {
 							const own = yield* ctx.store
 							const state = yield* own.snapshot
@@ -258,10 +262,9 @@ it.effect(
 								observed,
 								Option.getOrThrow(state.value).value,
 							)
-							return next(options)
+							return true
 						}),
-					),
-				),
+				}),
 			)
 			const definition = yield* Store.define({
 				stores: { ...plugin.stores, b },
@@ -397,7 +400,7 @@ const counterStore = (
 ) =>
 	Effect.gen(function* () {
 		const plugin = Plugin.make({ id: pluginId("a"), store: declaration() })(
-			() => Effect.succeed((next, options) => next(options)),
+			() => Effect.succeed({ tools: {}, handlers: Context.empty() }),
 		)
 		const definition = yield* Store.define({
 			stores: plugin.stores,
@@ -441,7 +444,7 @@ it.effect(
 					scope: "record" as const,
 					schema: Schema.Struct({ value: Schema.Natural }),
 				},
-			})(() => Effect.succeed((next, options) => next(options)))
+			})(() => Effect.succeed({ tools: {}, handlers: Context.empty() }))
 			const definition = yield* Store.define({
 				stores: plugin.stores,
 				schemaVersion: "chat/1",
@@ -922,123 +925,123 @@ it.effect("Store writes return and notify only after the change is saved", () =>
 	}),
 )
 
-it.effect(
-	"scoped plugin construction waits until first use, lasts across Turns and keeps runtime resources separate",
-	() => {
-		let constructions = 0
-		let services = 0
-		let uses: ReadonlyArray<number> = []
-		const plugin = Plugin.make({ id: Plugin.Id.make("resident") })(() => {
-			constructions++
-			return Effect.gen(function* () {
-				const count = yield* Ref.make(0)
-				const ready = yield* Deferred.make<void>()
-				yield* Effect.forkScoped(
-					Effect.acquireRelease(
-						Effect.sync(() => {
-							services++
-						}),
-						() =>
-							Effect.sync(() => {
-								services--
-							}),
-					).pipe(
-						Effect.andThen(Deferred.succeed(ready, undefined)),
-						Effect.andThen(Effect.never),
-					),
-				)
-				yield* Deferred.await(ready)
-				return (next, options) =>
-					Stream.unwrap(
-						Effect.gen(function* () {
-							uses = Arr.append(
-								uses,
-								yield* Ref.updateAndGet(count, (n) => n + 1),
-							)
-							return next(options)
-						}),
-					)
-			})
-		})
-		const combined = PluginComposition.merge(
-			plugin,
-			Plugin.make({ id: Plugin.Id.make("pass") })(() =>
-				Effect.succeed((next, options) => next(options)),
-			),
-		)
-		assert.strictEqual(constructions, 0)
+it.effect("plugin construction and its fibers belong to each Turn", () => {
+	let constructions = 0
+	let services = 0
+	let uses: ReadonlyArray<number> = []
+	const plugin = Plugin.make({ id: Plugin.Id.make("resident") })(() => {
+		constructions++
 		return Effect.gen(function* () {
-			const blocked = yield* Deferred.make<void>()
-			yield* Effect.scoped(
-				Effect.gen(function* () {
-					const parent = yield* Effect.scope
-					const firstScope = yield* Scope.fork(parent)
-					const secondScope = yield* Scope.fork(parent)
-					const first = yield* ChatTest({ plugin: combined }).pipe(
-						Scope.provide(firstScope),
-					)
-					assert.strictEqual(constructions, 1)
-					assert.strictEqual(services, 1)
-					yield* first.runtime.execute({ chat: first.chat, input: "one" })
-					yield* first.runtime
-						.stream({ chat: first.chat, input: "two" })
-						.pipe(Stream.runDrain)
-					assert.strictEqual(services, 1)
-					assert.strictEqual(constructions, 1)
-					assert.deepStrictEqual(uses, [1, 2])
-					const second = yield* ChatTest({ plugin: combined }).pipe(
-						Scope.provide(secondScope),
-					)
-					yield* second.runtime.execute({
-						chat: second.chat,
-						input: "independent",
-					})
-					assert.strictEqual(services, 2)
-					assert.deepStrictEqual(uses, [1, 2, 1])
-					const receipt = yield* first.runtime.deliver({
-						chat: first.chat,
-						input: "block",
-					})
-					assert.strictEqual(receipt.delivery, "started")
-					yield* Deferred.await(blocked)
-					yield* first.runtime.interrupt({
-						chat: receipt.chat,
-						turn: receipt.turn!,
-					})
-					assert.strictEqual(services, 2)
-					yield* Scope.close(firstScope, Exit.succeed(undefined))
-					assert.strictEqual(services, 1)
-					yield* Scope.close(secondScope, Exit.succeed(undefined))
-					assert.strictEqual(services, 0)
-				}),
-			).pipe(
-				Effect.provide(
-					LanguageModelTest({
-						streamText: ({ prompt }) =>
-							Arr.some(
-								prompt.content,
-								(message) =>
-									message.role === "user" &&
-									Arr.some(
-										message.content,
-										(part) => part.type === "text" && part.text === "block",
-									),
-							)
-								? Stream.fromEffect(Deferred.succeed(blocked, undefined)).pipe(
-										Stream.flatMap(() => Stream.never),
-									)
-								: Stream.fromArray(textParts("done")),
+			const count = yield* Ref.make(0)
+			const ready = yield* Deferred.make<void>()
+			yield* Effect.forkScoped(
+				Effect.acquireRelease(
+					Effect.sync(() => {
+						services++
 					}),
+					() =>
+						Effect.sync(() => {
+							services--
+						}),
+				).pipe(
+					Effect.andThen(Deferred.succeed(ready, undefined)),
+					Effect.andThen(Effect.never),
 				),
 			)
-			assert.strictEqual(constructions, 2)
-			assert.strictEqual(services, 0)
+			yield* Deferred.await(ready)
+			return {
+				tools: {},
+				handlers: Context.empty(),
+				beforeStep: () =>
+					Effect.gen(function* () {
+						uses = Arr.append(
+							uses,
+							yield* Ref.updateAndGet(count, (n) => n + 1),
+						)
+						return true
+					}),
+			}
 		})
-	},
-)
+	})
+	const combined = PluginComposition.merge(
+		plugin,
+		Plugin.make({ id: Plugin.Id.make("pass") })(() =>
+			Effect.succeed({ tools: {}, handlers: Context.empty() }),
+		),
+	)
+	assert.strictEqual(constructions, 0)
+	return Effect.gen(function* () {
+		const blocked = yield* Deferred.make<void>()
+		yield* Effect.scoped(
+			Effect.gen(function* () {
+				const parent = yield* Effect.scope
+				const firstScope = yield* Scope.fork(parent)
+				const secondScope = yield* Scope.fork(parent)
+				const first = yield* ChatTest({ plugin: combined }).pipe(
+					Scope.provide(firstScope),
+				)
+				assert.strictEqual(constructions, 0)
+				assert.strictEqual(services, 0)
+				yield* first.runtime.execute({ chat: first.chat, input: "one" })
+				yield* first.runtime
+					.stream({ chat: first.chat, input: "two" })
+					.pipe(Stream.runDrain)
+				assert.strictEqual(services, 0)
+				assert.strictEqual(constructions, 2)
+				assert.deepStrictEqual(uses, [1, 1])
+				const second = yield* ChatTest({ plugin: combined }).pipe(
+					Scope.provide(secondScope),
+				)
+				yield* second.runtime.execute({
+					chat: second.chat,
+					input: "independent",
+				})
+				assert.strictEqual(services, 0)
+				assert.deepStrictEqual(uses, [1, 1, 1])
+				const receipt = yield* first.runtime.deliver({
+					chat: first.chat,
+					input: "block",
+				})
+				assert.strictEqual(receipt.delivery, "started")
+				yield* Deferred.await(blocked)
+				assert.strictEqual(services, 1)
+				yield* first.runtime.interrupt({
+					chat: receipt.chat,
+					turn: receipt.turn!,
+				})
+				assert.strictEqual(services, 0)
+				yield* Scope.close(firstScope, Exit.succeed(undefined))
+				assert.strictEqual(services, 0)
+				yield* Scope.close(secondScope, Exit.succeed(undefined))
+				assert.strictEqual(services, 0)
+			}),
+		).pipe(
+			Effect.provide(
+				LanguageModelTest({
+					streamText: ({ prompt }) =>
+						Arr.some(
+							prompt.content,
+							(message) =>
+								message.role === "user" &&
+								Arr.some(
+									message.content,
+									(part) => part.type === "text" && part.text === "block",
+								),
+						)
+							? Stream.fromEffect(Deferred.succeed(blocked, undefined)).pipe(
+									Stream.flatMap(() => Stream.never),
+								)
+							: Stream.fromArray(textParts("done")),
+				}),
+			),
+		)
+		assert.strictEqual(constructions, 4)
+		assert.strictEqual(services, 0)
+	})
+})
 
 it.effect(
-	"combined constructors keep onion order and release partly built plugins on failure",
+	"combined constructors keep hook order and release partly built plugins on failure",
 	() => {
 		let calls: ReadonlyArray<string> = []
 		const plugin = (name: string) =>
@@ -1053,19 +1056,19 @@ it.effect(
 								calls = Arr.append(calls, "release-" + name)
 							}),
 					)
-					return (next, options) =>
-						Stream.unwrap(
+					return {
+						tools: {},
+						handlers: Context.empty(),
+						beforeStep: () =>
 							Effect.sync(() => {
 								calls = Arr.append(calls, "enter-" + name)
-								return next(options).pipe(
-									Stream.ensuring(
-										Effect.sync(() => {
-											calls = Arr.append(calls, "exit-" + name)
-										}),
-									),
-								)
+								return true
 							}),
-						)
+						afterStep: () =>
+							Effect.sync(() => {
+								calls = Arr.append(calls, "exit-" + name)
+							}),
+					}
 				}),
 			)
 		const combined = PluginComposition.merge(plugin("a"), plugin("b"))
@@ -1088,8 +1091,8 @@ it.effect(
 				"build-b",
 				"enter-a",
 				"enter-b",
-				"exit-b",
 				"exit-a",
+				"exit-b",
 				"release-b",
 				"release-a",
 			])
@@ -1098,7 +1101,11 @@ it.effect(
 				Effect.fail("build-failed" as const),
 			)
 			const result = yield* Effect.scoped(
-				ChatTest({ plugin: PluginComposition.merge(plugin("a"), failed) }),
+				ChatTest({ plugin: PluginComposition.merge(plugin("a"), failed) }).pipe(
+					Effect.flatMap(({ runtime, chat }) =>
+						runtime.execute({ chat, input: "one" }),
+					),
+				),
 			).pipe(Effect.result)
 			assert.ok(Result.isFailure(result))
 			assert.strictEqual(result.failure, "build-failed")
@@ -1113,35 +1120,38 @@ it.effect(
 		let seen: ReadonlyArray<string> = []
 		const tracked = <Name extends "a" | "b">(name: Name) =>
 			Plugin.make({ id: pluginId(name) })(() =>
-				Effect.succeed((next, options) =>
-					Stream.unwrap(
+				Effect.succeed({
+					tools: {},
+					handlers: Context.empty(),
+					beforeStep: () =>
 						Effect.sync(() => {
 							seen = Arr.append(seen, name)
-							return next(options)
+							return true
 						}),
-					),
-				),
+				}),
 			)
 		const after = Plugin.make({ id: Plugin.Id.make("after") })(() =>
-			Effect.succeed((next, options) =>
-				Stream.unwrap(
+			Effect.succeed({
+				tools: {},
+				handlers: Context.empty(),
+				beforeStep: () =>
 					Effect.sync(() => {
 						seen = Arr.append(seen, "after")
-						return next(options)
+						return true
 					}),
-				),
-			),
+			}),
 		)
 		const stored = Plugin.make({ id: pluginId("a"), store: declaration() })(
 			() =>
-				Effect.succeed((next, options) =>
-					Stream.unwrap(
+				Effect.succeed({
+					tools: {},
+					handlers: Context.empty(),
+					beforeStep: () =>
 						Effect.sync(() => {
 							seen = Arr.append(seen, "a")
-							return next(options)
+							return true
 						}),
-					),
-				),
+				}),
 		)
 		const withStore = PluginComposition.withStore(tracked("b"), declaration())
 		return Effect.gen(function* () {

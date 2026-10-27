@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "a92eeb10-a4f8-407e-9b11-edc680eeb09f",
+	"prevIds": ["c51d5565-d002-4db8-8c47-4f24058587d2"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_calls",
+				"completionSequence"
+			],
+			"writes": [
+				"s|col|public.openbot_execution_calls.completionSequence",
+				"n|col|public.openbot_execution_calls.completionSequence",
+				"e|col|public.openbot_execution_calls.completionSequence"
+			],
+			"reads": ["n|tbl|public.openbot_execution_calls", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_calls",
+				"name": "completionSequence",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

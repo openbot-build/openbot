@@ -1,0 +1,326 @@
+---
+title: Delegation
+description:
+  Wie Bots Arbeit an andere Bots oder an sich selbst geben und die Ergebnisse
+  zurückbekommen.
+---
+
+Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
+erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
+mit dem [Entwicklerhandbuch](/de/docs/developers).
+
+**Delegation** heißt, dass ein Bot einem Bot eine Aufgabe gibt. Die Aufgabe kann
+an einen anderen Bot gehen oder an denselben Bot. Die Arbeit läuft in ihrem
+eigenen **Task-Chat**, mit ihrem eigenen Kontext, zur selben Zeit wie andere
+Arbeit. Der Bot, der die Arbeit gegeben hat, wartet nicht. Er macht weiter, oder
+er beendet seine Antwort. Wenn die Arbeit endet, kommt das Ergebnis als
+[Mitteilung](/de/docs/developers/chats#mitteilungen) in seinen Chat zurück. So
+bleibt ein Bot immer frei, Menschen zu antworten, und viel Arbeit kann parallel
+laufen. Jedes Stück Arbeit hat **Grenzen**: eine Zeitgrenze, und wenn du willst,
+eine Grenze für Modellschritte und ein Budget. An einer Grenze pausiert die
+Arbeit, und ein Entscheider sagt, ob sie weitergeht. Diese Seite zeigt die
+Bot-Werkzeuge, wie die Arbeit läuft und endet, ihre Grenzen, und wie du sie
+beobachtest und stoppst.
+
+---
+
+## Die Bot-Werkzeuge
+
+OpenBot gibt jedem Bot diese Werkzeuge:
+
+| Werkzeug                    | Was es tut                                                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `openbot_list_bots`         | Listet die Bots auf, denen er Arbeit geben kann, mit ihren Rollen.                                                          |
+| `openbot_bot_details`       | Liest die Rolle und die Anweisungen eines Bots.                                                                             |
+| `openbot_delegate`          | Gibt einem Bot oder sich selbst eine Aufgabe. Es kehrt sofort zurück.                                                       |
+| `openbot_cancel_delegation` | Stoppt Arbeit, die sein Chat abgegeben hat.                                                                                 |
+| `openbot_create_bot`        | Erstellt einen neuen Bot, der ihm gehört. Siehe [Bots, die Bots besitzen](/de/docs/developers/bots#bots-die-bots-besitzen). |
+
+---
+
+## Arbeit abgeben
+
+`openbot_delegate` nimmt diese Felder:
+
+| Feld         | Bedeutung                                                                                                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task`       | Pflicht. Was zu tun ist, mit allem, was die Arbeit braucht. Der andere Bot sieht den Chat nicht, der die Arbeit gibt.                                                                   |
+| `limits`     | Pflicht. Die Grenzen der Arbeit: `timeMs`, und wenn du willst `steps` und `budgetMicros`. Sie haben dieselbe Form wie die `limits` der Arbeit, die du liest. Siehe [Grenzen](#grenzen). |
+| `bot`        | Optional. Die ID des Bots, der die Arbeit macht. Ohne dieses Feld gibt der Bot die Arbeit an sich selbst.                                                                               |
+| `reason`     | Warum der Bot diese Arbeit gibt. Es ist Pflicht für einen Bot, der ihm nicht gehört. Ein Entscheider liest es.                                                                          |
+| `delegation` | Optional. Die ID früherer Arbeit dieses Chats. Die neue Aufgabe geht mit ihr weiter. Siehe [Zu früherer Arbeit hinzufügen](#zu-früherer-arbeit-hinzufügen).                             |
+
+Das Werkzeug kehrt sofort zurück:
+
+```json
+{
+	"delegation": "dlg_9f1e…",
+	"status": "queued",
+	"note": "The work runs on its own. Its result comes back to this Chat as a message. Go on with other work, or end your answer now."
+}
+```
+
+Wer die Arbeit bekommen kann:
+
+- **Der Bot selbst.** Lass `bot` weg. Ein neuer Helfer mit derselben Rolle und
+  ohne Verlauf macht die Arbeit. Das braucht keine Entscheidung.
+- **Ein Bot, der ihm gehört.** Das braucht keine Entscheidung.
+- **Jeder andere Bot.** Das ist die Fähigkeit `bots.delegate`, und sie braucht
+  einen `reason`. Beim ersten Mal muss der Entscheider über dem Bot zustimmen.
+  Siehe [Requests](/de/docs/developers/requests). Solange der Entscheider
+  entscheidet, ist der Status `authorizing`. Wenn die Arbeit erlaubt wird,
+  startet sie. Wenn sie abgelehnt wird, wird der Status `failed`, und der Chat
+  bekommt eine Mitteilung mit dem Grund.
+
+Es gibt keine Grenze dafür, wie tief Arbeit geht oder wie viel Arbeit zur selben
+Zeit läuft. Ein Bot kann sich selbst Arbeit geben, und diese Arbeit kann wieder
+Arbeit geben. Bot A kann Bot B Arbeit geben, und B kann A wieder Arbeit geben.
+Nichts wartet, also bleibt nichts hängen. Die [Grenzen](#grenzen) jedes Stücks
+Arbeit und [Budgets und Rate Limits](/de/docs/usage) stoppen Arbeit, die zu
+lange läuft oder zu viel kostet.
+
+### Zu früherer Arbeit hinzufügen
+
+Um demselben Kontext mehr Arbeit zu geben, sende die ID früherer Arbeit als
+`delegation`. Die Arbeit muss aus demselben Chat kommen.
+
+- Wenn diese Arbeit noch läuft, geht die neue `task` als Nachricht in ihren
+  Task-Chat. Der Bot dort liest sie bei seinem nächsten Schritt. Die ID bleibt
+  dieselbe, und die Arbeit behält ihre Grenzen.
+- Wenn diese Arbeit beendet ist, erstellt OpenBot eine neue Delegation im selben
+  Task-Chat, mit den neuen Grenzen. So hat der Bot dort noch seinen ganzen
+  Verlauf.
+
+---
+
+## Wo die Arbeit läuft
+
+Jede Delegation läuft in einem Task-Chat des Bots, der die Arbeit macht. Der
+Task-Chat hat `kind: "task"` und einen `parent` mit dem Chat und der Delegation,
+die die Arbeit gegeben haben. Seine erste Eingabe ist eine Mitteilung mit der
+Aufgabe, zum Beispiel `[OpenBot] Assistant gives you this task: …`. Siehe
+[Chats](/de/docs/developers/chats).
+
+Die Arbeit ist für dieselbe Person wie die Arbeit, die sie gegeben hat. Also
+entscheiden die [Berechtigungen](/de/docs/permissions) dieser Person, was der
+Bot darf, und Requests gehen an dieselben Entscheider. Ein Task-Chat gehört dem
+Besitzer des Chats, der die Arbeit gegeben hat. In einem
+[Channel](/de/docs/developers/channels) ist das der Actor des Channel. Der
+Besitzer kann Task-Chats lesen wie seine anderen Chats.
+
+Eine Person kann einem Task-Chat auch mit `POST /v1/chats/:chatId/messages` eine
+Nachricht schicken. Der Bot dort liest sie als Nachricht von der Person.
+
+---
+
+## Wann die Arbeit endet
+
+Die Arbeit eines Task-Chats endet, wenn einer seiner Turns endet und der Chat
+keine [offene Arbeit](/de/docs/developers/chats#offene-arbeit) hat. Offene
+Arbeit ist die Arbeit, die der Task-Chat abgegeben hat, seine Requests, die auf
+eine Entscheidung warten, seine Erinnerungen und Eingaben in seiner Inbox.
+Solange etwas davon offen ist, bleibt die Arbeit `running`. Die Ergebnisse
+kommen als Mitteilungen zurück, sie starten neue Turns, und die Arbeit geht
+weiter.
+
+Das Ende des letzten Turns gibt das Ergebnis:
+
+| Der Turn endet als | Die Arbeit wird | `result`                                   |
+| ------------------ | --------------- | ------------------------------------------ |
+| `Completed`        | `completed`     | Die letzte Antwort des Bots.               |
+| `Failed`           | `failed`        | Der Fehler.                                |
+| `Interrupted`      | `cancelled`     | Ein Hinweis, dass die Arbeit gestoppt hat. |
+
+Dann bekommt der Chat, der die Arbeit gegeben hat, eine Mitteilung, zum
+Beispiel:
+
+```text
+[OpenBot] The work dlg_9f1e… that you gave to Programmer is done.
+
+Result:
+Added the endpoint and two tests.
+```
+
+Die Mitteilung geht durch die [Inbox](/de/docs/developers/chats#die-inbox)
+dieses Chats. Wenn der Chat frei ist, startet sie einen neuen Turn, und der Bot
+macht mit dem Ergebnis weiter. Wenn der Bot vielen Bots Arbeit gegeben hat,
+kommt jedes Ergebnis für sich zurück, sobald es fertig ist.
+
+Eine Person kann in einem beendeten Task-Chat eine neue Runde starten. Der
+Nachrichtenbefehl legt eine neue Delegation und einen neuen Turn in derselben
+Datenbanktransaktion an. Ein Versuch mit demselben Befehlsschlüssel gibt
+denselben Turn zurück. Die alte Arbeit behält ihr Ergebnis. Die neue Runde
+behält die Grenzen des ersten Aufrufers und Tokens sowie aller späteren
+Eingaben. Vor jedem neuen externen Aufruf prüft OpenBot die aktuellen Rechte. Am
+Ende bekommt auch der übergeordnete Chat das Ergebnis.
+
+Eine späte Meldung kommt in den Verlauf der beendeten Arbeit. Sie startet keine
+neue Runde von selbst.
+
+---
+
+## Grenzen
+
+Jedes Stück Arbeit hat Grenzen. Wenn es eine erreicht, **pausiert** es, und der
+Entscheider über dem Bot, der die Arbeit macht, sagt, ob es weitergeht.
+
+| Grenze   | Pflicht | Was zählt                                                                                                |
+| -------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `time`   | Ja      | Die Laufzeit der Arbeit seit ihrem Start. Zeit in einer Pause zählt nicht.                               |
+| `steps`  | Nein    | Die Modellschritte des Task-Chats. Ein Schritt ist ein Aufruf des Modells.                               |
+| `budget` | Nein    | Die Kosten der Modellaufrufe des Task-Chats und aller Arbeit, die er abgegeben hat, Schicht für Schicht. |
+
+Ein Bot gibt die Grenzen in `limits` von `openbot_delegate`, zum Beispiel
+`{ "timeMs": 1800000, "steps": 40 }`. Sie haben dieselbe Form wie die `limits`
+der Arbeit, die du [liest](#die-arbeit-beobachten): `timeMs` von 1 Sekunde bis
+30 Tage, und `steps` und `budgetMicros` ab 1. Arbeit von einem
+[Trigger](/de/docs/developers/triggers) und Arbeit von vor den Grenzen haben
+keine eigenen Grenzen. Sie bekommen die Zeitgrenze `delegationTimeLimitMs` der
+[Organization](/de/docs/organization#einstellungen) und keine anderen Grenzen.
+Ein Modell ohne Preis kostet 0, also verbraucht es nie ein Budget. Siehe
+[Nutzung](/de/docs/usage#preise).
+
+OpenBot prüft die Schritte und das Budget vor jedem Modellschritt. Die Zeit
+prüft es am Ende der Zeit, auch wenn gerade kein Schritt läuft. Dann:
+
+1. Die Arbeit wird `paused`. Ihr Turn darf keinen neuen Aufruf senden und keinen
+   neuen Chat-Schritt speichern. Ein gesendeter Aufruf kann noch antworten.
+   OpenBot speichert das Ergebnis und bestätigten Verbrauch. Erst nach einer
+   Erlaubnis nutzt der Turn das Ergebnis.
+2. Die Arbeit, die sie abgegeben hat, pausiert auch, Schicht für Schicht. Jedes
+   Stück davon bekommt eine `pause` mit `delegation`, der ID der Arbeit an der
+   Grenze. Es fragt nicht selbst nach einer Entscheidung. Es wartet auf die
+   Entscheidung über die Arbeit darüber.
+3. OpenBot prüft die Fähigkeit `delegations.continue` für den Bot der pausierten
+   Arbeit, wie jeden anderen [Request](/de/docs/developers/requests). Das Ziel
+   ist die ID der Arbeit, und `arguments` enthält das `limit`. Meist macht das
+   einen Request für den Entscheider über diesem Bot: seinen Besitzer-Bot oder
+   die Person ganz oben.
+
+Während der Pause bleibt neue Eingabe in der gespeicherten Warteschlange. Kein
+neuer Modellschritt beginnt. Eine Pause durch den Besitzer zeigt dessen ID. Sie
+braucht keinen zweiten Request und keinen kopierten Pause-Eintrag. Der
+Eltern-Chat zeigt die Arbeit als pausiert.
+
+Der Entscheider beantwortet den Request:
+
+- **Erlauben:** Die Arbeit geht weiter. Ihre Grenzen starten ab jetzt neu, also
+  bekommt sie dieselbe Zeit, dieselben Schritte und dasselbe Budget noch einmal.
+  Der `reason` der Entscheidung geht als Nachricht in den Task-Chat, so kann der
+  Entscheider dem Bot weitere Anweisungen geben. Die Arbeit darunter geht auch
+  weiter. Der nächste Schritt liest die Nachricht, bevor er seine Eingabe
+  speichert. Ein gesendeter Schritt behält seine Eingabe und sein Ergebnis.
+- **Ablehnen:** Die Arbeit stoppt und wird `cancelled`, mit der Arbeit darunter.
+  Der Eltern-Chat bekommt eine Mitteilung, dass die Arbeit gestoppt hat. Der
+  Grund bleibt im Request. Dasselbe passiert ohne rechtzeitige Antwort. Bekannte
+  Ergebnisse bleiben im Verlauf. Der Turn ist unterbrochen, die Arbeit hat kein
+  erfolgreiches Ergebnis.
+- **Fragen:** Der Entscheider stellt eine Frage. Das ist eine Ablehnung mit der
+  Frage, also stoppt die Arbeit auch, und der Eltern-Chat bekommt die Frage mit
+  dem Ergebnis.
+
+Eine Entscheidung mit dem Scope `chat` oder `lifetime` wird als Grant behalten.
+Dann geht dieselbe Arbeit an derselben Grenze ohne neuen Request weiter.
+
+---
+
+## Die Arbeit beobachten
+
+`GET /v1/chats/:chatId/delegations` listet die Arbeit auf, die ein Chat
+abgegeben hat. `GET /v1/delegations/:delegationId` liest ein Stück Arbeit. Du
+siehst nur die Arbeit deiner eigenen Chats. Andere Arbeit ergibt `404` mit
+`DelegationNotFound`.
+
+Der Datensatz hat `executionId`, `executionStatus` und `failure`. Der fachliche
+`status` und der Zustand der Ausführung sind getrennt. Lies Ereignisse mit
+`GET /v1/executions/:executionId/observe?afterSequence=0`. Ein Abbruch setzt
+`executionStatus` zuerst auf `cancelling`. Die Arbeit endet erst, wenn ihre
+Ressourcen und ihre untergeordnete Arbeit freigegeben sind. Ein unbekanntes
+externes Ergebnis wartet auf eine Entscheidung.
+
+```json
+{
+	"id": "dlg_9f1e…",
+	"executionId": "019c3a6a-7b00-7000-8000-000000000001",
+	"executionStatus": "running",
+	"failure": null,
+	"parent": { "chat": "chat_7d21…", "turn": "t-12", "toolCallId": "call-3" },
+	"bot": "bot_5c0e…",
+	"chat": "chat_c81d…",
+	"status": "running",
+	"task": "Add the endpoint for the trip list, with tests.",
+	"reason": "The Programmer writes the code of this project.",
+	"result": null,
+	"limits": { "timeMs": 1800000, "steps": 40 },
+	"usage": { "timeMs": 5000, "steps": 3, "costMicros": 0 },
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486805000
+}
+```
+
+`chat` ist der Task-Chat. Er ist `null`, bis die Arbeit startet. Arbeit von
+einem [Trigger](/de/docs/developers/triggers) hat `trigger` und einen `parent`
+ohne `turn` und ohne `toolCallId`.
+
+`limits` enthält die Grenzen: `timeMs`, und `steps` und `budgetMicros`, wenn die
+Arbeit sie hat. Ein Budget ist in Mikro-USD: ein US-Dollar sind 1.000.000
+Mikro-USD. `usage` ist, was die Arbeit seit ihrem Start genutzt hat. Ihr
+`costMicros` sind die Kosten, als OpenBot sie zuletzt geprüft hat. Arbeit von
+vor den Grenzen hat keines der beiden Felder.
+
+Pausierte Arbeit hat `pause`:
+
+| Feld         | Bedeutung                                                                               |
+| ------------ | --------------------------------------------------------------------------------------- |
+| `limit`      | `time`, `steps` oder `budget`.                                                          |
+| `request`    | Der Request, der entscheidet, ob die Arbeit weitergeht. `null` für die Arbeit darunter. |
+| `delegation` | Nur für die Arbeit darunter: die ID der Arbeit darüber, deren Grenze erreicht wurde.    |
+| `at`         | Wann die Arbeit pausiert hat.                                                           |
+
+| Status        | Bedeutung                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `authorizing` | Die Arbeit wartet darauf, dass ein [Request](/de/docs/developers/requests) beantwortet wird.     |
+| `queued`      | Die Arbeit darf starten. OpenBot startet sie jetzt.                                              |
+| `running`     | Der Bot arbeitet daran.                                                                          |
+| `paused`      | Die Arbeit hat eine Grenze erreicht und wartet auf eine Entscheidung. Siehe [Grenzen](#grenzen). |
+| `completed`   | Die Arbeit ist fertig. `result` enthält die letzte Antwort.                                      |
+| `failed`      | Die Arbeit ist fehlgeschlagen oder wurde nicht erlaubt. `result` sagt, warum.                    |
+| `cancelled`   | Die Arbeit wurde gestoppt.                                                                       |
+
+---
+
+## Die Arbeit stoppen
+
+Es gibt vier Wege, Arbeit zu stoppen:
+
+- Der Bot ruft `openbot_cancel_delegation` mit der ID der `delegation` und einem
+  optionalen `reason` auf. Sein Chat bekommt keine Mitteilung, weil der Bot die
+  Arbeit selbst gestoppt hat.
+- Du rufst `POST /v1/delegations/:delegationId/cancel` mit
+  `{ "commandKey": "stop-work-1" }` auf. Die Antwort ist `202` mit einem
+  Ausführungsbeleg. Behalte den Schlüssel bei einem neuen Versuch. Nach der
+  Freigabe bekommt der übergeordnete Chat eine Mitteilung.
+- Du [unterbrichst](/de/docs/developers/chats#unterbrechen) den Chat, der die
+  Arbeit gegeben hat, mit `{ "delegations": true }`.
+- Du [löschst](/de/docs/developers/chats#den-verlauf-löschen) den Chat, der die
+  Arbeit gegeben hat.
+
+Ein Abbruch stoppt den laufenden Turn des Task-Chats. Er stoppt auch die Arbeit,
+die der Task-Chat abgegeben hat, Schicht für Schicht, und seine Requests und
+Erinnerungen. Jedes Stück Arbeit wird `cancelled`.
+
+Ein normales Unterbrechen stoppt nur den laufenden Turn. Die Arbeit, die der
+Chat abgegeben hat, geht weiter.
+
+---
+
+## Fehler
+
+| Status | Fehler                         | Wann                                                        |
+| ------ | ------------------------------ | ----------------------------------------------------------- |
+| `404`  | `DelegationNotFound`           | In deinen Chats gibt es keine Arbeit mit dieser ID.         |
+| `409`  | `DelegationConflict`           | Die Arbeit hat sich zur selben Zeit geändert. Lies sie neu. |
+| `503`  | `DelegationStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                     |
+
+Alle Felder findest du in der
+[Delegations-Referenz](/docs/api/operations/tags/delegations/).

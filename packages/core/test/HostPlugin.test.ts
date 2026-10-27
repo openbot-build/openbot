@@ -7,15 +7,24 @@ import {
 	Plugin,
 	Store,
 } from "@openbot-build/core"
-import { Array as Arr, Context, Effect, Option, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Context,
+	Effect,
+	Option,
+	Ref,
+	Schema,
+	Stream,
+} from "effect"
 import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
-import { finish, textParts } from "./LanguageModelTest.ts"
+import { ChatTest } from "./ChatTest.ts"
+import { LanguageModelTest, finish, textParts } from "./LanguageModelTest.ts"
 
 class CallerDependency extends Context.Service<CallerDependency, string>()(
 	"@openbot-build/core/test/HostPlugin.test/CallerDependency",
 ) {}
 it.effect(
-	"a scoped host plugin owns its dynamic handlers, and caller tools keep the dependencies the caller gave them",
+	"a scoped tool registration owns its dynamic handlers, and caller tools keep the dependencies the caller gave them",
 	() => {
 		let opened = 0
 		let closed = 0
@@ -29,40 +38,27 @@ it.effect(
 			parameters: { type: "object", properties: {} },
 			success: Schema.String,
 		})
-		const hostPlugin = Plugin.make({ id: Plugin.Id.make("hosted-test") })<{
-			HostedTool: typeof hosted
-		}>(() =>
-			Effect.succeed((next, input) =>
-				Stream.scoped(
-					Stream.unwrap(
-						Effect.gen(function* () {
-							yield* Effect.acquireRelease(
-								Effect.sync(() => {
-									opened++
-								}),
-								() =>
-									Effect.sync(() => {
-										closed++
-									}),
-							)
-							const incoming = yield* input.toolkit
-							const toolkit = Toolkit.make(hosted)
-							const handlers = yield* toolkit.toHandlers({
-								HostedTool: () =>
-									Effect.sync(() => {
-										hostedCalls++
-										return "owned by this Turn"
-									}),
-							})
-							return next({
-								...input,
-								toolkit: Effect.succeed(Toolkit.merge(incoming, toolkit)),
-							}).pipe(Stream.provideContext(handlers))
-						}),
-					),
-				),
-			),
-		)
+		const registerTools = Effect.gen(function* () {
+			yield* Effect.acquireRelease(
+				Effect.sync(() => {
+					opened++
+				}),
+				() =>
+					Effect.sync(() => {
+						closed++
+					}),
+			)
+			const toolkit = Toolkit.make(hosted)
+			const handlers = yield* toolkit.toHandlers({
+				HostedTool: () =>
+					Effect.sync(() => {
+						hostedCalls++
+						return "owned by this Turn"
+					}),
+			})
+			return { tools: toolkit.tools, handlers }
+		})
+
 		return Effect.gen(function* () {
 			const model = yield* LanguageModel.make({
 				generateText: () => Effect.succeed([]),
@@ -111,7 +107,7 @@ it.effect(
 					})
 					const runtime = yield* ChatRuntime.make({
 						store,
-						bot: { toolkit: callerToolkit, hostPlugin },
+						bot: { toolkit: callerToolkit, registerTools },
 					})
 					const view = yield* store.create({})
 					assert.strictEqual(opened, 0)
@@ -144,4 +140,53 @@ it.effect(
 			assert.strictEqual(closed, 2)
 		})
 	},
+)
+
+it.effect("plugin construction resources belong to each Turn", () =>
+	Effect.gen(function* () {
+		const opened = yield* Ref.make(0)
+		const closed = yield* Ref.make(0)
+		const plugin = Plugin.make({ id: Plugin.Id.make("turn-resources") })(() =>
+			Effect.acquireRelease(
+				Ref.update(opened, (n) => n + 1),
+				() => Ref.update(closed, (n) => n + 1),
+			).pipe(Effect.as({ tools: {}, handlers: Context.empty() })),
+		)
+		const { runtime, chat } = yield* ChatTest({ plugin })
+		assert.equal(yield* Ref.get(opened), 0)
+		for (const input of ["first", "second"]) {
+			yield* runtime.execute({ chat, input })
+			assert.equal(yield* Ref.get(opened), yield* Ref.get(closed))
+		}
+		assert.equal(yield* Ref.get(opened), 2)
+	}).pipe(
+		Effect.provide(
+			LanguageModelTest({
+				streamText: () => Stream.fromArray(textParts("done")),
+			}),
+		),
+	),
+)
+
+it.effect("a plugin construction failure fails its Turn", () =>
+	Effect.gen(function* () {
+		const plugin = Plugin.make({ id: Plugin.Id.make("failed-build") })(() =>
+			Effect.fail("The tool connection failed." as const),
+		)
+		const { runtime, runtimeStore, chat } = yield* ChatTest({ plugin })
+		const error = yield* runtime
+			.execute({ chat, input: "hello" })
+			.pipe(Effect.flip)
+		assert.equal(error, "The tool connection failed.")
+		assert.equal(
+			Chat.status((yield* runtimeStore.read(chat)).chat)._tag,
+			"Failed",
+		)
+	}).pipe(
+		Effect.provide(
+			LanguageModelTest({
+				streamText: () => Stream.die("The model must not run."),
+			}),
+		),
+	),
 )

@@ -7,3 +7,4 @@ export const layer = (options: {
 }) => PgClient.layer({ url: options.databaseUrl })
 export const migrate = StorageMigration.initialize
 export const check = StorageMigration.check
+export const checkStartup = StorageMigration.checkStartup

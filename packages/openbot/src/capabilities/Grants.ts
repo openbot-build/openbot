@@ -1,5 +1,5 @@
 import type { Chat } from "@openbot-build/core"
-import { BotsApi } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -19,6 +19,11 @@ type Grant = BotsApi.Grant
 export class Grants extends Context.Service<
 	Grants,
 	{
+		/** Read a saved Grant, including one that was used or revoked. */
+		readonly find: (
+			organizationId: string,
+			id: BotsApi.GrantId,
+		) => Effect.Effect<Option.Option<Grant>, BotsApi.BotStorageUnavailable>
 		/**
 		 * The Grant that decides a request, if there is one. A deny Grant wins over an allow Grant.
 		 * Chat Grants only count in their own Chat.
@@ -90,20 +95,27 @@ export const make: Effect.Effect<
 		grant: Grant,
 	): Effect.Effect<ReadonlyArray<Grant>, BotsApi.BotStorageUnavailable> =>
 		Effect.gen(function* () {
+			// Each child takes the same lock as use before it reads its state.
+			yield* records.lock("grant:" + organizationId + ":" + grant.id)
+			const current = yield* grants.find(organizationId, grant.id)
+			if (Option.isNone(current) || current.value.status === "revoked")
+				return []
 			const revoked = yield* put(organizationId, {
-				...grant,
+				...current.value,
 				status: "revoked",
 			})
 			const children = yield* grants.list(organizationId, {
 				scope: grant.id,
-				status: "active",
 			})
-			const below = yield* Effect.forEach(children, (child) =>
-				revokeTree(organizationId, child),
+			// A used Grant may still serve its saved call after a restart.
+			const below = yield* Effect.forEach(
+				Arr.filter(children, (child) => child.status !== "revoked"),
+				(child) => revokeTree(organizationId, child),
 			)
 			return [revoked, ...Arr.flatten(below)]
 		})
 	return Grants.of({
+		find: grants.find,
 		match: (input) =>
 			grants
 				.list(input.organizationId, {

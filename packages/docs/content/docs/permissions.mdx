@@ -3,6 +3,10 @@ title: Permissions
 description: Resources, actions, policies and roles.
 ---
 
+For organization administrators. You need the rights named for each task. Only a
+platform admin can change settings under `/v1/platform`. Start with the
+[administrator manual](/docs/admin).
+
 This page shows how OpenBot decides if a caller may do something. Every call to
 `/v1` names what it needs: an action on a resource. OpenBot checks it before the
 call runs.
@@ -29,59 +33,59 @@ add a ceiling with deny rules for every organization. See
 List them with `GET /v1/organization/resources`. Each item has the kind, the
 actions, the fields and the path of one resource.
 
-| Resource           | Action     | What it allows                                                                                     |
-| ------------------ | ---------- | -------------------------------------------------------------------------------------------------- |
-| `Chat`             | `read`     | Read Chats, their history and the work that they gave away.                                        |
-| `Chat`             | `write`    | Change, interrupt and delete Chats, and cancel the work that they gave away.                       |
-| `Chat`             | `run`      | Send messages to Bots, so that they work in a Chat.                                                |
-| `File`             | `read`     | Read your [files](/docs/files) and their bytes.                                                    |
-| `File`             | `write`    | Upload and delete your files.                                                                      |
-| `Request`          | `resolve`  | Answer the requests of your Bots for new capabilities.                                             |
-| `Bot`              | `read`     | Read Bots, their memory, Rules and Grants.                                                         |
-| `Bot`              | `write`    | Create and change Bots, their memory, Rules and Grants.                                            |
-| `Bot`              | `delegate` | Give work to a Bot, from a client or from another Bot.                                             |
-| `Bot`              | `share`    | Invite people to [use a Bot](/docs/sharing), and manage its members.                               |
-| `Trigger`          | `read`     | Read [triggers](/docs/triggers): their schedules and webhooks.                                     |
-| `Trigger`          | `write`    | Create, change and delete triggers, and set their webhook secrets.                                 |
-| `Channel`          | `read`     | Read the [Channels](/docs/channels) of the organization and the people linked to them.             |
-| `Channel`          | `write`    | Create, change and delete Channels, set their secrets, and unlink people.                          |
-| `Channel`          | `use`      | Talk with the Bot of a Channel, and let your Bots post to it.                                      |
-| `ChannelIdentity`  | `read`     | Read your linked accounts on the platforms of Channels.                                            |
-| `ChannelIdentity`  | `write`    | Link and unlink your accounts on the platforms of Channels.                                        |
-| `Computer`         | `read`     | Read [Computers](/docs/computers), the Bots that may use them, and their usage.                    |
-| `Computer`         | `write`    | Create, change and delete Computers, pair machines, and make connector tokens.                     |
-| `Computer`         | `use`      | Run commands, change files, open ports and use the desktop, and let your Bots use them.            |
-| `ComputerProvider` | `read`     | Read the accounts at Computer providers.                                                           |
-| `ComputerProvider` | `write`    | Add, change and delete accounts at Computer providers, and their keys.                             |
-| `ComputerProvider` | `use`      | Create Computers with an account at a Computer provider.                                           |
-| `Vault`            | `read`     | Read [Vaults](/docs/vaults), their items, and the Bots that may use them. Secrets are never shown. |
-| `Vault`            | `write`    | Add, change and delete Vaults and their items, and set their values.                               |
-| `Vault`            | `use`      | Let your Bots use Vaults in Code Mode.                                                             |
-| `SecretProvider`   | `read`     | Read the accounts at [secret providers](/docs/vaults#add-a-secret-provider).                       |
-| `SecretProvider`   | `write`    | Add, change and delete accounts at secret providers, and their tokens.                             |
-| `SecretProvider`   | `use`      | Let Vault items read their secrets from an account at a secret provider.                           |
-| `Connection`       | `read`     | Read App connections and App accounts.                                                             |
-| `Connection`       | `write`    | Create, change and delete App connections, and sign in to App accounts.                            |
-| `App`              | `use`      | Find Apps, and use App operations and App views.                                                   |
-| `App`              | `publish`  | Use the developer tools for Apps that you publish.                                                 |
-| `Model`            | `use`      | Choose a model for a Chat, and see it in the model catalog.                                        |
-| `Token`            | `read`     | List API tokens.                                                                                   |
-| `Token`            | `write`    | Create and revoke API tokens.                                                                      |
-| `Organization`     | `read`     | Read the organization and its settings.                                                            |
-| `Organization`     | `write`    | Change the organization and its settings.                                                          |
-| `Member`           | `read`     | List members, their roles and their policies.                                                      |
-| `Member`           | `write`    | Change the roles, policies and status of members, and remove members.                              |
-| `Role`             | `write`    | Create, change and delete the custom roles of the organization.                                    |
-| `ModelProvider`    | `read`     | Read the models and model providers of the organization. Keys are never shown.                     |
-| `ModelProvider`    | `write`    | Add, change and remove the models, model providers and keys of the organization.                   |
-| `Sso`              | `read`     | Read the email domains and SSO connections.                                                        |
-| `Sso`              | `write`    | Add and verify email domains, and change SSO connections.                                          |
-| `AuditLog`         | `read`     | Read the audit log.                                                                                |
-| `Usage`            | `read`     | Read the [model usage](/docs/usage) and its cost, and the credits of the organization.             |
-| `Budget`           | `read`     | Read the [budgets](/docs/usage#budgets) and how much of them is spent.                             |
-| `Budget`           | `write`    | Create, change and delete budgets.                                                                 |
-| `Platform`         | `read`     | Read the platform settings, organizations, admins and shared models and model providers.           |
-| `Platform`         | `write`    | Change the platform settings, organizations, admins and shared models and model providers.         |
+| Resource           | Action     | What it allows                                                                                                |
+| ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `Chat`             | `read`     | Read Chats, their history and the work that they gave away.                                                   |
+| `Chat`             | `write`    | Change, interrupt and delete Chats, and cancel the work that they gave away.                                  |
+| `Chat`             | `run`      | Send messages to Bots, so that they work in a Chat.                                                           |
+| `File`             | `read`     | Read your [files](/docs/developers/files) and their bytes.                                                    |
+| `File`             | `write`    | Upload and delete your files.                                                                                 |
+| `Request`          | `resolve`  | Answer the requests of your Bots for new capabilities.                                                        |
+| `Bot`              | `read`     | Read Bots, their memory, Rules and Grants.                                                                    |
+| `Bot`              | `write`    | Create and change Bots, their memory, Rules and Grants.                                                       |
+| `Bot`              | `delegate` | Give work to a Bot, from a client or from another Bot.                                                        |
+| `Bot`              | `share`    | Invite people to [use a Bot](/docs/developers/sharing), and manage its members.                               |
+| `Trigger`          | `read`     | Read [triggers](/docs/developers/triggers): their schedules and webhooks.                                     |
+| `Trigger`          | `write`    | Create, change and delete triggers, and set their webhook secrets.                                            |
+| `Channel`          | `read`     | Read the [Channels](/docs/developers/channels) of the organization and the people linked to them.             |
+| `Channel`          | `write`    | Create, change and delete Channels, set their secrets, and unlink people.                                     |
+| `Channel`          | `use`      | Talk with the Bot of a Channel, and let your Bots post to it.                                                 |
+| `ChannelIdentity`  | `read`     | Read your linked accounts on the platforms of Channels.                                                       |
+| `ChannelIdentity`  | `write`    | Link and unlink your accounts on the platforms of Channels.                                                   |
+| `Computer`         | `read`     | Read [Computers](/docs/developers/computers), the Bots that may use them, and their usage.                    |
+| `Computer`         | `write`    | Create, change and delete Computers, pair machines, and make connector tokens.                                |
+| `Computer`         | `use`      | Run commands, change files, open ports and use the desktop, and let your Bots use them.                       |
+| `ComputerProvider` | `read`     | Read the accounts at Computer providers.                                                                      |
+| `ComputerProvider` | `write`    | Add, change and delete accounts at Computer providers, and their keys.                                        |
+| `ComputerProvider` | `use`      | Create Computers with an account at a Computer provider.                                                      |
+| `Vault`            | `read`     | Read [Vaults](/docs/developers/vaults), their items, and the Bots that may use them. Secrets are never shown. |
+| `Vault`            | `write`    | Add, change and delete Vaults and their items, and set their values.                                          |
+| `Vault`            | `use`      | Let your Bots use Vaults in Code Mode.                                                                        |
+| `SecretProvider`   | `read`     | Read the accounts at [secret providers](/docs/developers/vaults#add-a-secret-provider).                       |
+| `SecretProvider`   | `write`    | Add, change and delete accounts at secret providers, and their tokens.                                        |
+| `SecretProvider`   | `use`      | Let Vault items read their secrets from an account at a secret provider.                                      |
+| `Connection`       | `read`     | Read App connections and App accounts.                                                                        |
+| `Connection`       | `write`    | Create, change and delete App connections, and sign in to App accounts.                                       |
+| `App`              | `use`      | Find Apps, and use App operations and App views.                                                              |
+| `App`              | `publish`  | Use the developer tools for Apps that you publish.                                                            |
+| `Model`            | `use`      | Choose a model for a Chat, and see it in the model catalog.                                                   |
+| `Token`            | `read`     | List API tokens.                                                                                              |
+| `Token`            | `write`    | Create and revoke API tokens.                                                                                 |
+| `Organization`     | `read`     | Read the organization and its settings.                                                                       |
+| `Organization`     | `write`    | Change the organization and its settings.                                                                     |
+| `Member`           | `read`     | List members, their roles and their policies.                                                                 |
+| `Member`           | `write`    | Change the roles, policies and status of members, and remove members.                                         |
+| `Role`             | `write`    | Create, change and delete the custom roles of the organization.                                               |
+| `ModelProvider`    | `read`     | Read the models and model providers of the organization. Keys are never shown.                                |
+| `ModelProvider`    | `write`    | Add, change and remove the models, model providers and keys of the organization.                              |
+| `Sso`              | `read`     | Read the email domains and SSO connections.                                                                   |
+| `Sso`              | `write`    | Add and verify email domains, and change SSO connections.                                                     |
+| `AuditLog`         | `read`     | Read the audit log.                                                                                           |
+| `Usage`            | `read`     | Read the [model usage](/docs/usage) and its cost, and the credits of the organization.                        |
+| `Budget`           | `read`     | Read the [budgets](/docs/usage#budgets) and how much of them is spent.                                        |
+| `Budget`           | `write`    | Create, change and delete budgets.                                                                            |
+| `Platform`         | `read`     | Read the platform settings, organizations, admins and shared models and model providers.                      |
+| `Platform`         | `write`    | Change the platform settings, organizations, admins and shared models and model providers.                    |
 
 `Platform` is only for platform admins. See [The platform](#the-platform).
 
@@ -116,7 +120,12 @@ for needs `write` on Bots of that owner.
 
 ## Policies
 
-A policy is JSON. This policy lets the caller read and change their own Chats:
+A policy is JSON text. The HTTP fields `policy` and `ceiling` are strings in
+requests and responses. To send a policy object, use `JSON.stringify(policy)`
+once for that field, then encode the outer request as JSON. The typed client
+does this with the policy Codec (the Schema that reads and writes the policy).
+
+The text below lets the caller read and change their own Chats:
 
 ```json
 {
@@ -144,6 +153,18 @@ A policy is JSON. This policy lets the caller read and change their own Chats:
 OpenBot checks every policy when it reads it. A kind, an action or a field that
 does not exist gives `400`. A policy in a request may have at most 100 rules,
 and may be at most 8 levels deep.
+
+Ability 3.0.0 also sets limits for stored policies: 32 policy levels, 64
+condition levels, 5 parts in a field path, and 10000 structural units. Units
+include rules, conditions, operands, list items and meta values. Policy text has
+at most 1000000 UTF-16 code units. Field lists use real paths or `*`; patterns
+such as `owner*` are not valid.
+
+Before an upgrade, stop all servers and run `openbot-migrate`. The new migration
+changes the platform ceiling from an object to JSON text. Role, member and token
+columns already hold JSON text. Clients must send strings for `policy` and
+`ceiling`. Old policies must meet the new limits and field rules. A policy that
+cannot load grants no access.
 
 ### Rules
 
@@ -242,18 +263,28 @@ one, must also allow the call. With no answer, the answer is no.
 OpenBot reads these policies again for each check. So a change to a role, a
 member or a token works at once.
 
+An execution keeps its resource owner separate from the person who started it.
+For Channel work, the speaker and each saved caller must pass the policy on the
+actual resource owner. A later check reads their current rights again. An
+approval cannot change that owner or remove a token limit.
+
 A list, such as `GET /v1/triggers`, only has the resources that the caller may
 read. OpenBot changes the policy into a condition on the list, for most lists in
 the database query itself. So a deny rule on one resource hides it from the list
 too.
 
-A few lists do not hide resources in this way: `GET /v1/chats`, `GET /v1/files`,
-`GET /v1/connections` and `GET /v1/organization/channels`. They need the action
-on every resource of their kind that the caller can get to: all of the caller's
-Chats, files or App connections, or all the Channels of the organization. A call
-that makes a new one of these needs `write` on all of them in the same way. So a
-deny rule on one Chat, file, App connection or Channel makes these calls fail
-with `403`.
+List conditions and direct checks give the same answer for a missing owner. For
+example, `NOT (ownerUserId = "member")` includes a shared resource whose
+`ownerUserId` is `null`.
+
+Lists of Chats, files, App connections and Channels apply the policy in the
+database query. A deny rule hides only the matching items. With no items that
+the caller may read, the list is empty. File pages and their next cursor count
+only the files that the caller may read. A file cursor must still belong to the
+caller and pass the current read policy.
+
+Creating a Chat, file, App connection or Channel still needs `write` on the full
+scope of that kind. List filtering does not give write access.
 
 ### Tokens never do more than their member
 
@@ -284,7 +315,7 @@ This example makes a token that can only read your Chats:
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Dashboard","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read"],"resources":["Chat"]}]}}' \
+  -d '{"name":"Dashboard","policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\"],\"resources\":[\"Chat\"]}]}"}' \
   https://api.example.com/v1/user/tokens
 ```
 
@@ -329,7 +360,7 @@ This example stops a member from running work, but lets them read their Chats:
 curl -X PATCH -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Deny","actions":["run"],"resources":["Chat"]}]}}' \
+  -d '{"policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Deny\",\"actions\":[\"run\"],\"resources\":[\"Chat\"]}]}"}' \
   https://api.example.com/v1/organization/members/u_456
 ```
 
@@ -342,7 +373,7 @@ roles needs `write` on `Role`.
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","resolve"],"resources":["Chat","Request"],"when":{"_tag":"Under","prefix":[{"_tag":"Literal","value":"org"},{"_tag":"Principal","path":"organizationId"},{"_tag":"Literal","value":"user"},{"_tag":"Principal","path":"userId"}]}}]}}' \
+  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\",\"resolve\"],\"resources\":[\"Chat\",\"Request\"],\"when\":{\"_tag\":\"Under\",\"prefix\":[{\"_tag\":\"Literal\",\"value\":\"org\"},{\"_tag\":\"Principal\",\"path\":\"organizationId\"},{\"_tag\":\"Literal\",\"value\":\"user\"},{\"_tag\":\"Principal\",\"path\":\"userId\"}]}}]}"}' \
   https://api.example.com/v1/organization/roles
 ```
 

@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_files" ADD COLUMN "cleanup_execution_id" text;

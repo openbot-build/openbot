@@ -1,26 +1,26 @@
+import { Lifecycle } from "./Lifecycle.ts"
+import * as ExecutionHttpErrors from "../execution/HttpErrors.ts"
 import { Redacted } from "effect"
 import {
-	type Caller,
 	ComputersApi,
-	Identity,
 	OpenBotApi,
 	type OrganizationApi,
 } from "@openbot-build/api"
+
+import { Execution, type Caller, Identity } from "@openbot-build/domain"
 import { Effect, Option, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { computerKey } from "../audit/Resources.ts"
-import type { ComputerError, Machine } from "./Computer.ts"
+import type { ComputerCallFailed, ComputerError, Machine } from "./Computer.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
 import { checkFile, Computers } from "./Computers.ts"
 import { Connectors } from "./connector/Connectors.ts"
 import { Drivers } from "./Drivers.ts"
-import * as Http from "./Http.ts"
 import { Pairings } from "./Pairings.ts"
-import { SessionGone, Sessions } from "./Sessions.ts"
-import { ownerKey } from "../apps/StoredConnections.ts"
+import { type Owner, SessionGone, Sessions } from "./Sessions.ts"
 
 const desktopOf = (machine: Machine) =>
 	machine.desktop === undefined
@@ -63,22 +63,24 @@ export const layerProviders = HttpApiBuilder.group(
 			const verify = (credentials: ComputersApi.ComputerProviderCredentials) =>
 				drivers.make(credentials).pipe(
 					Effect.flatMap((driver) => driver.verify),
-					Effect.tapError(Http.logCause),
 					// A failure that can pass, such as a timeout, does not say that the key is wrong.
-					Effect.mapError((error) =>
-						error.retry
-							? ComputersApi.ComputerProviderFailed.make({
-									message: error.message,
-								})
-							: ComputersApi.ComputerInvalid.make({
-									message:
-										"The provider did not take the key: " + error.message,
-								}),
+					Failures.map(
+						"The Computer provider check failed",
+						(error: ComputerCallFailed) =>
+							error.retry
+								? ComputersApi.ComputerProviderFailed.make({
+										message: "The Computer provider did not answer.",
+									})
+								: ComputersApi.ComputerInvalid.make({
+										message: "The provider did not take the key.",
+									}),
 					),
 				)
 			return handlers
 				.handle("listComputerProviders", () =>
-					Effect.flatMap(Identity, (caller) => providers.list(caller)),
+					Effect.flatMap(Identity, (caller) =>
+						providers.list({ owner: caller, actor: caller }),
+					),
 				)
 				.handle("createComputerProvider", ({ payload }) =>
 					Effect.gen(function* () {
@@ -128,6 +130,8 @@ export const layerProviders = HttpApiBuilder.group(
 export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 	Effect.gen(function* () {
 		const computers = yield* Computers
+		const lifecycle = yield* Lifecycle
+		const executionHttp = yield* ExecutionHttpErrors.make
 		const pairings = yield* Pairings
 		const sessions = yield* Sessions
 		const audit = yield* AuditLog
@@ -162,27 +166,44 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 		) =>
 			Effect.gen(function* () {
 				const caller = yield* Identity
-				const { machine } = yield* computers.machine(caller, id)
-				return yield* use(machine)
+				const { machine } = yield* computers.machine(
+					{ owner: caller, actor: caller },
+					id,
+				)
+				return yield* use(machine).pipe(sessionFailure)
 			})
+		const sessionFailure = <A, E, R>(
+			effect: Effect.Effect<A, Execution.Failure | E, R>,
+		) =>
+			Effect.catchIf(effect, Schema.is(Execution.Failure), (failure) =>
+				Effect.fail(ComputersApi.ComputerExecutionFailed.make({ failure })),
+			)
 		/** Maps the errors of the machine, and keeps a missing session as it is. */
-		const workOn = <A>(effect: Effect.Effect<A, ComputerError | SessionGone>) =>
+		const workOn = <A>(
+			effect: Effect.Effect<A, ComputerError | SessionGone | Execution.Failure>,
+		) =>
 			effect.pipe(
 				Effect.catchIf(
-					(error): error is ComputerError => !Schema.is(SessionGone)(error),
+					(error): error is ComputerError =>
+						!Schema.is(SessionGone)(error) &&
+						!Schema.is(Execution.Failure)(error),
 					(error) => computers.work(Effect.fail(error)),
 				),
+				sessionFailure,
 			)
 		/** The sessions of a caller, on a Computer that the caller may still use. */
 		const onSession = <A, E>(
 			computerId: string,
 			sessionId: ComputersApi.ConnectorSessionId,
-			use: (owner: { readonly key: string }) => Effect.Effect<A, E>,
+			use: (owner: Owner) => Effect.Effect<A, E>,
 		) =>
 			Effect.gen(function* () {
 				const caller = yield* Identity
-				yield* computers.get(caller, computerId)
-				return yield* use({ key: ownerKey(caller) }).pipe(
+				yield* computers.get(caller, computerId, "use")
+				return yield* use({
+					identity: { owner: caller, actor: caller },
+					computer: computerId,
+				}).pipe(
 					Effect.catchIf(
 						(error): error is Extract<E, SessionGone> =>
 							Schema.is(SessionGone)(error),
@@ -195,17 +216,22 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 			})
 		return handlers
 			.handle("listComputers", ({ query }) =>
-				Effect.flatMap(Identity, (caller) => computers.list(caller, query.bot)),
+				Effect.flatMap(Identity, (caller) =>
+					computers.list({ owner: caller, actor: caller }, query.bot),
+				),
 			)
 			.handle("createComputer", ({ payload }) =>
-				Effect.gen(function* () {
-					const caller = yield* Identity
-					const computer = yield* computers.create(caller, payload)
-					yield* record(caller, "computer.created", computer, {
-						source: computer.source._tag,
-					})
-					return computer
-				}),
+				executionHttp(
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const { commandKey, ...request } = payload
+						return yield* lifecycle.submit(
+							{ owner: caller, actor: caller },
+							commandKey,
+							{ _tag: "Create", request },
+						)
+					}),
+				),
 			)
 			.handle("getComputer", ({ params }) =>
 				Effect.flatMap(Identity, (caller) =>
@@ -224,17 +250,17 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					return computer
 				}),
 			)
-			.handle("deleteComputer", ({ params }) =>
-				Effect.gen(function* () {
-					const caller = yield* Identity
-					const computer = yield* computers.get(
-						caller,
-						params.computerId,
-						"write",
-					)
-					yield* computers.remove(caller, params.computerId)
-					yield* record(caller, "computer.deleted", computer, {})
-				}),
+			.handle("deleteComputer", ({ params, payload }) =>
+				executionHttp(
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						return yield* lifecycle.submit(
+							{ owner: caller, actor: caller },
+							payload.commandKey,
+							{ _tag: "Remove", id: params.computerId },
+						)
+					}),
+				),
 			)
 			.handle("listComputerBots", ({ params }) =>
 				Effect.flatMap(Identity, (caller) =>
@@ -271,14 +297,28 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					computers.usage(caller, params.computerId),
 				),
 			)
-			.handle("pauseComputer", ({ params }) =>
-				Effect.flatMap(Identity, (caller) =>
-					computers.pause(caller, params.computerId),
+			.handle("pauseComputer", ({ params, payload }) =>
+				executionHttp(
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						return yield* lifecycle.submit(
+							{ owner: caller, actor: caller },
+							payload.commandKey,
+							{ _tag: "Pause", id: params.computerId },
+						)
+					}),
 				),
 			)
-			.handle("resumeComputer", ({ params }) =>
-				Effect.flatMap(Identity, (caller) =>
-					computers.resume(caller, params.computerId),
+			.handle("resumeComputer", ({ params, payload }) =>
+				executionHttp(
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						return yield* lifecycle.submit(
+							{ owner: caller, actor: caller },
+							payload.commandKey,
+							{ _tag: "Resume", id: params.computerId },
+						)
+					}),
 				),
 			)
 			.handle("setConnectorToken", ({ params }) =>
@@ -297,11 +337,21 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 				Effect.flatMap(Identity, (caller) =>
 					onMachine(params.computerId, (machine) =>
 						computers.work(
-							sessions.exec({
-								owner: { key: ownerKey(caller) },
-								machine,
-								request: payload,
-							}),
+							sessions
+								.exec({
+									owner: {
+										identity: { owner: caller, actor: caller },
+										computer: params.computerId,
+									},
+									machine,
+									request: payload,
+								})
+								.pipe(
+									sessionFailure,
+									Effect.catchTag("SessionGone", () =>
+										Effect.fail(ComputersApi.ComputersUnavailable.make({})),
+									),
+								),
 						),
 					),
 				),
@@ -351,7 +401,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
 					const { computer, machine } = yield* computers.machine(
-						caller,
+						{ owner: caller, actor: caller },
 						params.computerId,
 					)
 					if (machine.ports === undefined)
@@ -443,6 +493,7 @@ export const layerHooks = HttpApiBuilder.group(
 							),
 						)
 						yield* connectors.serve({
+							organizationId,
 							computerId: id,
 							socket,
 							online: (hello) =>

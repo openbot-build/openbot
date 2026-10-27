@@ -1,5 +1,9 @@
-import { type Caller, FilesApi, type MessageInput } from "@openbot-build/api"
-import { and, desc, eq, inArray, lt, notExists, sql } from "drizzle-orm"
+import * as Objects from "./Objects.ts"
+import { FileTasks } from "./FileTasks.ts"
+import { Files as FilesApi, type MessageInput } from "@openbot-build/domain"
+
+import { Authorization, Execution, type Caller } from "@openbot-build/domain"
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import {
 	Array as Arr,
 	Cache,
@@ -14,7 +18,6 @@ import {
 	Option,
 	Predicate,
 	Record as Rec,
-	Redacted,
 	Ref,
 	Stream,
 	String as Str,
@@ -23,27 +26,17 @@ import {
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
 import { HttpClient, Multipart } from "effect/http"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
+import * as Check from "../authorization/Check.ts"
+import { toWhere } from "../authorization/Sql.ts"
 import * as Db from "../database/Database.ts"
-import { fileRefs, files } from "../database/Schema.ts"
-import { Secrets } from "../secrets/Secrets.ts"
-import {
-	filesDefaults,
-	filesOf,
-	type FilesDocument,
-	quotaOf,
-} from "../settings/Documents.ts"
-import { bindings } from "../settings/Platform.ts"
-import { Settings } from "../settings/Settings.ts"
+import { files } from "../database/Schema.ts"
+import { type FilesDocument, quotaOf } from "../settings/Documents.ts"
 import { fileUrl } from "./Refs.ts"
 import * as S3 from "./S3.ts"
 
 /** A signed upload address works this long. */
 export const uploadLifetimeSeconds = 15 * 60
-/** A pending file that nobody completed is garbage after this time. */
-export const pendingLifetimeMs = 60 * 60 * 1000
-/** How many files one step of the garbage collector deletes. */
-const deleteBatch = 100
 
 /** The bytes of a file for a model call. */
 export interface Content {
@@ -83,7 +76,10 @@ export class Files extends Context.Service<
 		readonly list: (
 			caller: Caller,
 			query: { readonly limit?: number; readonly after?: string },
-		) => Effect.Effect<FilesApi.FilePage, Failure>
+		) => Effect.Effect<
+			FilesApi.FilePage,
+			Failure | Authorization.PolicyUnavailable
+		>
 		readonly get: (
 			caller: Caller,
 			id: string,
@@ -103,7 +99,15 @@ export class Files extends Context.Service<
 		readonly remove: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<void, Failure>
+		) => Effect.Effect<
+			void,
+			| Failure
+			| Execution.Forbidden
+			| Execution.StorageError
+			| Execution.Conflict
+			| Execution.KeyConflict
+			| Execution.NotFound
+		>
 		/**
 		 * The prompt of a message. Each file part must name a ready file of the
 		 * caller. The prompt names the files, so the Chat does not keep their bytes.
@@ -119,8 +123,6 @@ export class Files extends Context.Service<
 		readonly load: (
 			id: string,
 		) => Effect.Effect<Option.Option<Content>, FilesApi.FilesUnavailable>
-		/** One step of the garbage collector. Many instances can run it at the same time. */
-		readonly collect: Effect.Effect<void, FilesApi.FilesUnavailable>
 	}
 >()("@openbot-build/openbot/files/Files") {}
 
@@ -185,56 +187,30 @@ const view = (row: Row): FilesApi.FileObject => ({
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const settings = yield* Settings
-	const secrets = yield* Secrets
+	const checks = yield* Check.make
+	const objects = yield* Objects.make
+	const tasks = yield* FileTasks
 	const client = yield* HttpClient.HttpClient
 	const crypto = yield* Crypto.Crypto
 	const stored = Failures.replace("A file query failed", () =>
 		FilesApi.FilesUnavailable.make({}),
 	)
 
-	/** The file settings, or the defaults before `openbot setup`. */
-	const config = settings.platform.pipe(
+	const config = objects.config.pipe(
 		Failures.replace("Could not read the file settings", () =>
 			FilesApi.FilesUnavailable.make({}),
 		),
-		Effect.map(
-			Option.match({
-				onNone: () => filesDefaults,
-				onSome: (snapshot) => filesOf(snapshot.document),
-			}),
-		),
 	)
-	/** The storage target of storage settings that are there. */
-	const targetFor = (storage: NonNullable<FilesDocument["storage"]>) =>
-		Effect.gen(function* () {
-			const secretAccessKey = yield* secrets
-				.open(storage.secretAccessKey, bindings.fileStorageSecret)
-				.pipe(
-					Failures.replace("Could not open the key of the file storage", () =>
-						FilesApi.FilesUnavailable.make({}),
-					),
-				)
-			return {
-				target: {
-					endpoint: storage.endpoint,
-					region: storage.region,
-					bucket: storage.bucket,
-					accessKeyId: storage.accessKeyId,
-					secretAccessKey: Redacted.make(secretAccessKey),
-					forcePathStyle: storage.forcePathStyle,
-				} satisfies S3.Target,
-				publicEndpoint: storage.publicEndpoint ?? storage.endpoint,
-			}
-		})
 	const targetOf = (document: FilesDocument) =>
-		Effect.gen(function* () {
-			if (document.storage === null)
-				return yield* FilesApi.FilesDisabled.make({
-					message: "The platform has no file storage.",
-				})
-			return yield* targetFor(document.storage)
-		})
+		objects
+			.target(document)
+			.pipe(
+				Failures.replaceTag(
+					"SecretStorageError",
+					"Could not open the key of the file storage",
+					() => FilesApi.FilesUnavailable.make({}),
+				),
+			)
 	const logged = <A>(
 		effect: Effect.Effect<A, S3.StorageError, Crypto.Crypto>,
 	) =>
@@ -322,6 +298,7 @@ export const make = Effect.gen(function* () {
 				bytes: input.bytes,
 				status: "pending",
 				objectKey: "files/" + id,
+				cleanupExecutionId: null,
 				createdAt: input.now,
 				updatedAt: input.now,
 			}
@@ -568,9 +545,28 @@ export const make = Effect.gen(function* () {
 			}),
 		list: (caller, query) =>
 			Effect.gen(function* () {
+				const allowed = yield* checks
+					.filter(caller, {
+						action: "read",
+						kind: "File",
+						within: ($) =>
+							$.and(
+								$.eq("organizationId", caller.organizationId),
+								$.eq("ownerUserId", caller.userId),
+							),
+					})
+					.pipe(
+						Effect.flatMap((condition) =>
+							toWhere(condition, {
+								organizationId: files.organizationId,
+								ownerUserId: files.userId,
+								id: files.id,
+							}),
+						),
+					)
 				const limit = query.limit ?? 50
 				// A file that was deleted after the page before still works as the
-				// cursor while its row is there, so the owner is checked but not the status.
+				// cursor while its row is there. Its owner and read policy still apply.
 				const after =
 					query.after === undefined
 						? undefined
@@ -580,6 +576,7 @@ export const make = Effect.gen(function* () {
 									.from(files)
 									.where(
 										and(
+											allowed,
 											eq(files.id, query.after),
 											eq(files.organizationId, caller.organizationId),
 											eq(files.userId, caller.userId),
@@ -588,7 +585,8 @@ export const make = Effect.gen(function* () {
 							))[0]
 				if (query.after !== undefined && after === undefined)
 					return yield* FilesApi.FileInvalid.make({
-						message: `The cursor ${query.after} names none of your files. Ask for the list again without after.`,
+						message:
+							"The cursor does not name a file that you may read. Ask for the list again without after.",
 					})
 				const rows = yield* stored(
 					db
@@ -596,6 +594,7 @@ export const make = Effect.gen(function* () {
 						.from(files)
 						.where(
 							and(
+								allowed,
 								eq(files.organizationId, caller.organizationId),
 								eq(files.userId, caller.userId),
 								inArray(files.status, ["pending", "ready"]),
@@ -636,12 +635,7 @@ export const make = Effect.gen(function* () {
 					Stream.fromEffect(logged(Effect.fail(error))),
 				)
 			}),
-		remove: (caller, id) =>
-			Effect.gen(function* () {
-				const row = yield* find(caller, id)
-				yield* setStatus(row.id, row.status, "deleting")
-				yield* Cache.invalidate(cache, row.objectKey)
-			}),
+		remove: tasks.remove,
 		prompt: (caller, input) =>
 			Effect.gen(function* () {
 				if (Predicate.isString(input)) return Prompt.make(input)
@@ -738,74 +732,6 @@ export const make = Effect.gen(function* () {
 					bytes,
 				}))
 			}),
-		collect: Effect.gen(function* () {
-			const document = yield* config
-			const now = yield* Clock.currentTimeMillis
-			yield* stored(
-				db
-					.update(files)
-					.set({ status: "deleting", updatedAt: now })
-					.where(
-						and(
-							eq(files.status, "pending"),
-							lt(files.updatedAt, now - pendingLifetimeMs),
-						),
-					),
-			)
-			yield* stored(
-				db
-					.update(files)
-					.set({ status: "deleting", updatedAt: now })
-					.where(
-						and(
-							eq(files.status, "ready"),
-							lt(files.updatedAt, now - document.unusedMs),
-							notExists(
-								db
-									.select({ file: fileRefs.file })
-									.from(fileRefs)
-									.where(eq(fileRefs.file, files.id)),
-							),
-						),
-					),
-			)
-			// Without storage, the rows wait until there is storage again.
-			if (document.storage === null) return
-			const { target } = yield* targetFor(document.storage)
-			const doomed = yield* stored(
-				db
-					.select({ id: files.id, objectKey: files.objectKey })
-					.from(files)
-					.where(eq(files.status, "deleting"))
-					.orderBy(files.updatedAt)
-					.limit(deleteBatch),
-			)
-			// Deleting an object twice is safe, so other instances may do the same rows.
-			yield* Effect.forEach(
-				doomed,
-				(row) =>
-					Effect.gen(function* () {
-						const doomedRow = and(
-							eq(files.id, row.id),
-							eq(files.status, "deleting"),
-						)
-						// An object that storage will not delete goes to the back, so it
-						// cannot stop the other rows.
-						yield* logged(S3.remove(client, target, row.objectKey, now)).pipe(
-							Effect.tapError(() =>
-								stored(
-									db.update(files).set({ updatedAt: now }).where(doomedRow),
-								),
-							),
-						)
-						yield* stored(db.delete(files).where(doomedRow))
-						yield* Cache.invalidate(cache, row.objectKey)
-					}).pipe(
-						Effect.annotateLogs({ file: row.id, objectKey: row.objectKey }),
-					),
-				{ concurrency: 4, discard: true },
-			)
-		}),
 	})
 })
 

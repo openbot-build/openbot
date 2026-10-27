@@ -4,6 +4,10 @@ description:
   Verbinde OpenBot mit Sprachmodellen, über Models und Model Providers.
 ---
 
+Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
+Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
+[Administrationshandbuch](/de/docs/admin).
+
 Ein Bot braucht ein Sprachmodell, um zu arbeiten. OpenBot enthält kein Modell.
 Du verbindest eins. OpenBot speichert dafür zwei Arten von Einträgen:
 
@@ -34,7 +38,7 @@ Jedes Model hat einen von drei Typen:
   schreibt keinen Text. Es kann Rules beurteilen. Jev von TypeSafe ist ein
   Beispiel. Siehe [Decision-Model](#decision-model).
 - Ein `live`-Model spricht in Echtzeit mit einer Person, mit Ton. Nur der
-  [Live-Modus](/de/docs/live) nutzt es.
+  [Live-Modus](/de/docs/developers/live) nutzt es.
 
 Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben.
 Siehe [Eingebaute Models](#eingebaute-models).
@@ -240,17 +244,17 @@ Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzung
 nennt ihr eigenes Model:
 
-- **Ein neuer [Chat](/de/docs/chats)** nutzt das `model` seines
-  [Bots](/de/docs/bots). Wenn der Bot kein Model hat, schlägt die erste
-  Nachricht an ihn mit `400`, `ChatModelInvalid` und dem Grund `missing` fehl.
-  Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein
+- **Ein neuer [Chat](/de/docs/developers/chats)** nutzt das `model` seines
+  [Bots](/de/docs/developers/bots). Wenn der Bot kein Model hat, schlägt die
+  erste Nachricht an ihn mit `400`, `ChatModelInvalid` und dem Grund `missing`
+  fehl. Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein
   `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/bots/:id`.
-- **Das Prüf-Modell für [Rules](/de/docs/rules)** nutzt `rulesModel` in den
-  [Einstellungen der Organization](/de/docs/organization#einstellungen). Wenn es
-  `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person
-  oder ein Bot.
-- **[Bot-Memory](/de/docs/memory)** nutzt `botMemoryModel` in denselben
-  Einstellungen. Wenn es `null` ist, lernen Bots nichts.
+- **Das Prüf-Modell für [Rules](/de/docs/developers/rules)** nutzt `rulesModel`
+  in den [Einstellungen der Organization](/de/docs/organization#einstellungen).
+  Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine
+  Person oder ein Bot.
+- **[Bot-Memory](/de/docs/developers/memory)** nutzt `botMemoryModel` in
+  denselben Einstellungen. Wenn es `null` ist, lernen Bots nichts.
 
 `rulesModel` kann ein `language`-Model oder ein `decision`-Model sein.
 `botMemoryModel` muss ein `language`-Model sein, weil der Memory-Bot Text
@@ -326,7 +330,7 @@ noch nicht über einen `openai-compat`-Anbieter fragen. Du kannst es dort
 verknüpfen, aber nutze einen `typesafe`-Anbieter, um es zu fragen.
 
 Das Prüf-Modell für Rules kann ein Decision-Model nutzen. Setze `rulesModel`
-darauf. Siehe [Das Prüf-Modell](/de/docs/rules#das-prüf-modell).
+darauf. Siehe [Das Prüf-Modell](/de/docs/developers/rules#das-prüf-modell).
 
 ## Ohne Model arbeiten
 
@@ -343,163 +347,16 @@ Eine Nachricht an einen Bot schlägt mit dem Status `503` und dem Fehler
 
 Eine Mitteilung von OpenBot, zum Beispiel das Ergebnis einer Delegation, kommt
 trotzdem in die Inbox ihres Chats. Siehe
-[Mitteilungen](/de/docs/chats#mitteilungen).
+[Mitteilungen](/de/docs/developers/chats#mitteilungen).
 
 ---
 
 ## Eingebaute Models
 
-Wenn du OpenBot aus deinem eigenen Programm startest, kannst du mit der Option
-`builtinModels` Models im Code angeben. Siehe
-[Aus Code starten](/de/docs/server).
-
-- Jede Organization kann sie nutzen.
-- Die API kann sie nicht ändern.
-- Sie erscheinen in der Liste der Models neben den gespeicherten Anbietern.
-
-`builtinModels` hat drei Felder:
-
-| Feld        | Was es ist                                                                                   |
-| ----------- | -------------------------------------------------------------------------------------------- |
-| `providers` | Die Anbieter, die erscheinen sollen, zum Beispiel `{ id, name }`.                            |
-| `models`    | Die Models, die erscheinen sollen, als Werte vom Typ `Config.Model`.                         |
-| `resolve`   | Eine Funktion, die eine Auswahl bekommt und ein Effect mit einem `LanguageModel` zurückgibt. |
-
-Die Option `defaultModel` nennt eines dieser Models. Ein neuer Chat bekommt es,
-wenn sein Bot kein Model nennt. Nur eine simulierte Plattform setzt es, zum
-Beispiel die Entwicklung oder ein Test. Auf einer echten Plattform nennt jeder
-Bot sein Model.
-
-Dieses Beispiel gibt ein Anthropic-Modell an, mit einem Schlüssel aus der
-Umgebung deines Programms:
-
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Config, Model, Provider } from "@openbot-build/core"
-import {
-	AnthropicProvider,
-	EnvironmentConfiguration,
-	Server,
-} from "@openbot-build/openbot"
-import { Context, Effect, Layer, Redacted } from "effect"
-import { LanguageModel } from "effect/ai"
-import { FetchHttpClient } from "effect/http"
-
-const selection = Config.Selection.make({
-	provider: Provider.Id.make("house"),
-	model: Model.Id.make("claude-sonnet-4-5"),
-})
-
-NodeRuntime.runMain(
-	Effect.scoped(
-		Effect.gen(function* () {
-			const settings = yield* EnvironmentConfiguration.load
-			// Baue das Modell einmal. Es lebt so lange wie das Programm.
-			const layer = Layer.unwrap(
-				AnthropicProvider.make({ max_tokens: 4096 }).model(selection),
-			).pipe(
-				Layer.provide(
-					AnthropicProvider.layerClient({
-						apiKey: Redacted.make(process.env.ANTHROPIC_API_KEY ?? ""),
-					}),
-				),
-				Layer.provide(FetchHttpClient.layer),
-			)
-			const claude = Context.get(
-				yield* Layer.build(layer),
-				LanguageModel.LanguageModel,
-			)
-			const builtinModels = {
-				providers: [{ id: selection.provider, name: "House models" }],
-				models: [
-					Config.Model.make({
-						provider: selection.provider,
-						id: selection.model,
-						name: "Claude Sonnet 4.5",
-						reasoningEfforts: [],
-						serviceTiers: [],
-					}),
-				],
-				resolve: (requested: Config.Selection) =>
-					requested.model === selection.model
-						? Effect.succeed(claude)
-						: Effect.fail(
-								new Config.ModelConfigurationError({
-									reason: "model-not-found",
-									message: "This model is not available",
-								}),
-							),
-			}
-			return yield* Layer.launch(
-				Server.layerLive({ ...settings, builtinModels }).pipe(
-					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
-				),
-			)
-		}),
-	),
-)
-```
-
-Wenn `resolve` fehlschlägt, gibt das Starten eines Turn `503` zurück. Der
-Einstiegspunkt für die Entwicklung nutzt `builtinModels` für seine Test-Modelle.
-Ein vollständiges Beispiel findest du in
-`packages/openbot/src/app/DevelopmentModel.ts`.
-
-### Anbieter-Module
-
-Ein Anbieter-Modul macht aus einem Modell-Namen ein `LanguageModel` für eine Art
-von API. `@openbot-build/openbot` exportiert drei davon. Jedes hat dieselben
-Teile:
-
-| Teil                        | Was er tut                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| `make(defaults?)`           | Erstellt einen Anbieter. `defaults` sind Request-Optionen für jeden Aufruf.      |
-| `provider.model(selection)` | Gibt den Model-Layer für eine Auswahl zurück. Er schickt keine Requests.         |
-| `layerClient(options)`      | Erstellt den HTTP-Client. Gib `apiKey` an, und `apiUrl` für eine andere Adresse. |
-| `layer(tag, defaults?)`     | Legt den Anbieter in einen Service, den du benennst.                             |
-
-| Modul                  | Anbieter-ID     | API                                                                                                                    |
-| ---------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `OpenAiProvider`       | `openai`        | OpenAI Responses API. `ResponsesCompaction` fügt die eingebaute Kontext-Verdichtung für deine eigenen Programme hinzu. |
-| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API und Dienste, die sie nachbauen.                                                            |
-| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API.                                                                                                |
-
-OpenBot nutzt diese Module auch für die gespeicherten Anbieter.
-Kontext-Verdichtung (Context Compaction) macht einen langen Verlauf kürzer,
-damit er in das Kontextfenster des Modells passt. OpenBot macht das für jeden
-Chat mit einer Zusammenfassung, die das Model des Chats schreibt. Standardmäßig
-nutzt es `ResponsesCompaction` nicht. Siehe
-[Kompaktierung](/de/docs/chats#kompaktierung). Ein kurzes Beispiel für jeden
-Anbieter findest du unter [Pakete](/de/docs/packages).
-
----
+Für diese Entwicklungsaufgabe siehe
+[Model-Backends](/de/docs/developers/model-backends).
 
 ## Models für die Entwicklung
 
-Der Server für die Entwicklung (`devenv shell -- pnpm dev`) ruft kein echtes
-Modell auf. Er nutzt stattdessen Test-Modelle. Sie geben jedes Mal dieselbe
-Antwort. So kannst du Clients ohne Kosten testen.
-
-Die Anbieter-ID ist `development`. Die Model-IDs sind:
-
-| Model          | Was es tut                                                                                            |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| `mock-text`    | Der Standard. Gibt sofort einen festen Text zurück.                                                   |
-| `mock-slow`    | Gibt Text langsam über zehn Sekunden zurück. Nutze es, um Streams und Unterbrechungen zu testen.      |
-| `mock-tool`    | Ruft ein harmloses Test-Tool auf, das eine Entscheidung braucht. Siehe [Requests](/de/docs/requests). |
-| `mock-app`     | Ruft ein Tool der Test-App auf und gibt ihren echten Inhalt zurück.                                   |
-| `mock-failure` | Schickt etwas Text und schlägt dann absichtlich mit einem Fehler des Modells fehl.                    |
-
-Die Token-Zahlen in ihren Antworten sind nicht echt. Um eins auszuwählen,
-speichere es in einem Chat:
-
-```sh
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"expected":1,"model":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
-  http://localhost/v1/chats/$CHAT_ID
-```
-
-Der Einstiegspunkt für die Entwicklung gibt diese Models mit `builtinModels` an.
-So kann jede Organization der Platform für die Entwicklung sie nutzen. Er gibt
-`mock-text` als `defaultModel` an. So bekommt ein neuer Chat es, wenn sein Bot
-kein Model nennt. Das Programm für den Betrieb nutzt sie nie.
+Für diese Entwicklungsaufgabe siehe
+[Model-Backends](/de/docs/developers/model-backends).

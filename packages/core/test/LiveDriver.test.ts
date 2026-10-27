@@ -1,12 +1,12 @@
 import { assert, it } from "@effect/vitest"
 import { Chat, Live, LiveDriver } from "@openbot-build/core"
 import { Array as Arr, Effect, Option, PubSub, Ref, Schema } from "effect"
-import { LanguageModel, Tool, Toolkit } from "effect/ai"
+import { LanguageModel, Prompt, Tool, Toolkit } from "effect/ai"
 import { ChatTest } from "./ChatTest.ts"
 
 const usage: Live.Usage = {
-	input: { text: 3, audio: 10, image: 0, cached: 2 },
-	output: { text: 4, audio: 20 },
+	input: { total: 15, text: 5, audio: 10, image: 0, cached: 2 },
+	output: { total: 24, text: 4, audio: 20 },
 }
 
 const base: LiveDriver.Options["base"] = {
@@ -57,9 +57,40 @@ it.effect("a Turn answers through the Live connection", () =>
 		assert.ok(turn.status._tag === "Completed")
 		assert.strictEqual(turn.status.result.text, "Hello")
 		assert.strictEqual(turn.usage?.[0]?.inputTokens.total, 15)
+		assert.strictEqual(turn.usage?.[0]?.inputTokens.uncached, 13)
+		assert.strictEqual(turn.usage?.[0]?.inputTokens.cacheRead, 2)
 		assert.strictEqual(turn.usage?.[0]?.outputTokens.total, 24)
 		const tags = Arr.map(yield* Ref.get(inputs), (input) => input._tag)
 		assert.deepStrictEqual(tags, ["Configure", "Text", "Respond"])
+	}),
+)
+
+it.effect("a finished Live answer keeps missing usage unknown", () =>
+	Effect.gen(function* () {
+		const { driver } = yield* scripted([
+			[
+				Live.Event.OutputTranscript({ itemId: "answer", delta: "Hello" }),
+				Live.Event.OutputDone({ itemId: "answer" }),
+				Live.Event.ResponseDone({
+					status: "completed",
+					usage: {
+						input: {
+							total: undefined,
+							text: 5,
+							audio: 10,
+							image: 0,
+							cached: 2,
+						},
+						output: { total: undefined, text: 4, audio: 20 },
+					},
+				}),
+			],
+		])
+		const answer = yield* driver.model.generateText({ prompt: "Hi" })
+		assert.strictEqual(answer.text, "Hello")
+		assert.isUndefined(answer.usage.inputTokens.total)
+		assert.isUndefined(answer.usage.inputTokens.uncached)
+		assert.isUndefined(answer.usage.outputTokens.total)
 	}),
 )
 
@@ -187,4 +218,129 @@ it.effect("unsupported inputs are found from the capabilities", () =>
 			assert.strictEqual(error.reason, "unsupported")
 		}
 	}),
+)
+
+it.effect(
+	"a new Live connection restores calls before sending their result and does not repeat text",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([
+				said("after-restart", "Done"),
+			])
+			const prompt = Prompt.make([
+				{ role: "user", content: [{ type: "text", text: "Find the word" }] },
+				{
+					role: "assistant",
+					content: [
+						{
+							type: "tool-call",
+							id: "lookup",
+							name: "Lookup",
+							params: { word: "sun" },
+							providerExecuted: false,
+						},
+					],
+				},
+				{
+					role: "tool",
+					content: [
+						{
+							type: "tool-result",
+							id: "lookup",
+							name: "Lookup",
+							result: "a star",
+							isFailure: false,
+							providerExecuted: false,
+						},
+					],
+				},
+			])
+			yield* driver.model.generateText({ prompt })
+			const sent = yield* Ref.get(inputs)
+			assert.deepStrictEqual(
+				Arr.map(sent, (input) => input._tag),
+				["Configure", "History", "ToolResult", "Respond"],
+			)
+			const restored = Arr.findFirst(sent, Live.Input.$is("History"))
+			assert.ok(Option.isSome(restored))
+			assert.deepStrictEqual(restored.value.messages, [
+				{ role: "user", text: "Find the word" },
+				{
+					role: "assistant",
+					callId: "openbot_history_call_0",
+					name: "Lookup",
+					arguments: '{"word":"sun"}',
+				},
+			])
+			const fresh = yield* scripted([said("new", "Hello")])
+			yield* fresh.driver.model.generateText({ prompt: "New input" })
+			const once = yield* Ref.get(fresh.inputs)
+			assert.deepStrictEqual(Arr.filter(once, Live.Input.$is("Text")), [
+				Live.Input.Text({ text: "New input" }),
+			])
+			assert.strictEqual(Arr.filter(once, Live.Input.$is("History")).length, 0)
+		}),
+)
+
+it.effect(
+	"restored calls with the same provider ID keep separate results",
+	() =>
+		Effect.gen(function* () {
+			const { driver, inputs } = yield* scripted([said("restored", "Done")])
+			const call = (word: string) =>
+				Prompt.makeMessage("assistant", {
+					content: [
+						Prompt.makePart("tool-call", {
+							id: "same",
+							name: "Lookup",
+							params: { word },
+							providerExecuted: false,
+						}),
+					],
+				})
+			const result = (value: string) =>
+				Prompt.makeMessage("tool", {
+					content: [
+						Prompt.makePart("tool-result", {
+							id: "same",
+							name: "Lookup",
+							result: value,
+							isFailure: false,
+							providerExecuted: false,
+						}),
+					],
+				})
+			yield* driver.model.generateText({
+				prompt: Prompt.make([
+					call("one"),
+					result("first"),
+					call("two"),
+					result("second"),
+				]),
+			})
+			const sent = yield* Ref.get(inputs)
+			const history = Arr.findFirst(sent, Live.Input.$is("History"))
+			assert.ok(Option.isSome(history))
+			assert.deepStrictEqual(history.value.messages, [
+				{
+					role: "assistant",
+					callId: "openbot_history_call_0",
+					name: "Lookup",
+					arguments: '{"word":"one"}',
+				},
+				{ role: "tool", callId: "openbot_history_call_0", output: '"first"' },
+				{
+					role: "assistant",
+					callId: "openbot_history_call_1",
+					name: "Lookup",
+					arguments: '{"word":"two"}',
+				},
+			])
+			assert.deepStrictEqual(Arr.filter(sent, Live.Input.$is("ToolResult")), [
+				Live.Input.ToolResult({
+					callId: "openbot_history_call_1",
+					output: '"second"',
+				}),
+			])
+		}),
 )

@@ -1405,7 +1405,7 @@ layer(migratedDatabase, { excludeTestServices: true, timeout: "120 seconds" })(
 				const sql = yield* PgClient.PgClient
 				// A later migration changes policies into ability policies. The keys of
 				// Chats become paths with `chat`, so the rules about Chats stay.
-				const decodePolicy = decodeJson(Authorization.PolicySchema)
+				const decodePolicy = Schema.decodeEffect(Authorization.PolicySchema)
 				for (const table of [
 					"openbot_roles",
 					"openbot_members",

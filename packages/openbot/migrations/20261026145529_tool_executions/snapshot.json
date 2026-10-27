@@ -1,0 +1,434 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "481c96c1-993c-4424-98a3-eccc9af6785f",
+	"prevIds": ["8654cad5-c6fe-44bb-a701-422ee7595e59"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_tool_executions"],
+			"writes": [
+				"s|tbl|public.openbot_tool_executions",
+				"n|tbl|public.openbot_tool_executions",
+				"e|tbl|public.openbot_tool_executions",
+				"n|rel|public.openbot_tool_executions",
+				"n|type|public.openbot_tool_executions",
+				"n|rel|public.openbot_tool_executions_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_tool_executions",
+				"openbot_tool_executions_execution"
+			],
+			"writes": [
+				"s|idx|public.openbot_tool_executions_execution",
+				"n|idx|public.openbot_tool_executions_execution",
+				"e|idx|public.openbot_tool_executions_execution",
+				"n|rel|public.openbot_tool_executions_execution"
+			],
+			"reads": [
+				"n|tbl|public.openbot_tool_executions",
+				"n|sch|public",
+				"n|col|public.openbot_tool_executions.namespace",
+				"n|col|public.openbot_tool_executions.execution_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_tool_executions",
+				"openbot_tool_executions_call"
+			],
+			"writes": [
+				"s|idx|public.openbot_tool_executions_call",
+				"n|idx|public.openbot_tool_executions_call",
+				"e|idx|public.openbot_tool_executions_call",
+				"n|rel|public.openbot_tool_executions_call"
+			],
+			"reads": [
+				"n|tbl|public.openbot_tool_executions",
+				"n|sch|public",
+				"n|col|public.openbot_tool_executions.namespace",
+				"n|col|public.openbot_tool_executions.parent_execution_id",
+				"n|col|public.openbot_tool_executions.item",
+				"n|col|public.openbot_tool_executions.call_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_tool_executions",
+				"openbot_tool_executions_chat"
+			],
+			"writes": [
+				"s|idx|public.openbot_tool_executions_chat",
+				"n|idx|public.openbot_tool_executions_chat",
+				"e|idx|public.openbot_tool_executions_chat",
+				"n|rel|public.openbot_tool_executions_chat"
+			],
+			"reads": [
+				"n|tbl|public.openbot_tool_executions",
+				"n|sch|public",
+				"n|col|public.openbot_tool_executions.namespace",
+				"n|col|public.openbot_tool_executions.chat"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_tool_executions"],
+			"writes": [
+				"s|fk|public.openbot_tool_executions.openbot_tool_executions_f6JVGzvig7ID_fkey",
+				"n|fk|public.openbot_tool_executions.openbot_tool_executions_f6JVGzvig7ID_fkey",
+				"e|fk|public.openbot_tool_executions.openbot_tool_executions_f6JVGzvig7ID_fkey",
+				"n|con|public.openbot_tool_executions.openbot_tool_executions_f6JVGzvig7ID_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_tool_executions",
+				"n|sch|public",
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_tool_executions.namespace",
+				"n|col|public.openbot_tool_executions.execution_id",
+				"n|col|public.openbot_executions.namespace",
+				"n|col|public.openbot_executions.id",
+				"e|uniqueness|public.openbot_executions.id.namespace"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_tool_executions"],
+			"writes": [
+				"s|fk|public.openbot_tool_executions.openbot_tool_executions_RDkKn7rsXUZe_fkey",
+				"n|fk|public.openbot_tool_executions.openbot_tool_executions_RDkKn7rsXUZe_fkey",
+				"e|fk|public.openbot_tool_executions.openbot_tool_executions_RDkKn7rsXUZe_fkey",
+				"n|con|public.openbot_tool_executions.openbot_tool_executions_RDkKn7rsXUZe_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_tool_executions",
+				"n|sch|public",
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_tool_executions.namespace",
+				"n|col|public.openbot_tool_executions.parent_execution_id",
+				"n|col|public.openbot_executions.namespace",
+				"n|col|public.openbot_executions.id",
+				"e|uniqueness|public.openbot_executions.id.namespace"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_tool_executions",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "parent_execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "chat",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "turn",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "item",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "call_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "detached",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "false",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "openbot_tool_executions_execution",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "execution_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "openbot_tool_executions_call",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "parent_execution_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "item",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "call_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "openbot_tool_executions_chat",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "chat",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "openbot_tool_executions_f6JVGzvig7ID_fkey",
+				"nameExplicit": false,
+				"columns": ["namespace", "execution_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_executions",
+				"columnsTo": ["namespace", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "openbot_tool_executions_RDkKn7rsXUZe_fkey",
+				"nameExplicit": false,
+				"columns": ["namespace", "parent_execution_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_executions",
+				"columnsTo": ["namespace", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_tool_executions",
+				"name": "openbot_tool_executions_pkey",
+				"columns": ["namespace", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

@@ -1,35 +1,19 @@
-import { Redacted } from "effect"
+import { ChannelRemoval } from "./ChannelRemoval.ts"
+import { ChannelConfig } from "./ChannelConfig.ts"
+import * as HttpErrors from "../execution/HttpErrors.ts"
 import {
-	type BotsApi,
-	type Caller,
 	ChannelsApi,
-	Identity,
 	OpenBotApi,
 	type OrganizationApi,
 } from "@openbot-build/api"
-import {
-	Array as Arr,
-	Clock,
-	Crypto,
-	Effect,
-	Option,
-	Record as Rec,
-	type Schema,
-} from "effect"
-import { Base64Url } from "effect/encoding"
+import { type Caller, Identity } from "@openbot-build/domain"
+import { Array as Arr, Clock, Effect, Option, type Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Background from "../app/Background.ts"
-import * as Failures from "../app/Failures.ts"
-import { Bots } from "../bots/Bots.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { organizationKey, segment } from "../audit/Resources.ts"
-import {
-	Channels,
-	type Credentials,
-	fromInput,
-	type StoredChannel,
-} from "./Channels.ts"
+import { Channels, type StoredChannel } from "./Channels.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 import * as Platform from "../settings/Platform.ts"
@@ -50,10 +34,10 @@ const view = (
 export const layer = HttpApiBuilder.group(OpenBotApi, "channels", (handlers) =>
 	Effect.gen(function* () {
 		const channels = yield* Channels
-		const registry = yield* ChannelRegistry
-		const bots = yield* Bots
+		const config = yield* ChannelConfig
+		const removal = yield* ChannelRemoval
+		const safe = yield* HttpErrors.make
 		const audit = yield* AuditLog
-		const crypto = yield* Crypto.Crypto
 		const settings = yield* Settings
 		/** The webhook addresses use the public origin of the platform now. */
 		const publicOrigin = Platform.publicOriginOr(settings, () =>
@@ -88,108 +72,23 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "channels", (handlers) =>
 					}),
 				),
 			)
-		/**
-		 * The Chats of a Channel work for the caller, who becomes its actor. So the caller
-		 * must be able to give work to the Bot, and the Bot must belong to the organization.
-		 */
-		const checkBot = (caller: Caller, id: BotsApi.BotId) =>
-			bots.access(caller, id, "delegate").pipe(
-				Effect.catchTags({
-					BotNotFound: () =>
-						Effect.fail(
-							ChannelsApi.ChannelInvalid.make({
-								message: `There is no Bot ${id}.`,
-							}),
-						),
-					BotConflict: () =>
-						Effect.fail(ChannelsApi.ChannelsUnavailable.make({})),
-					BotInvalid: () =>
-						Effect.fail(ChannelsApi.ChannelsUnavailable.make({})),
-					BotStorageUnavailable: () =>
-						Effect.fail(ChannelsApi.ChannelsUnavailable.make({})),
-				}),
-				Effect.flatMap((bot) =>
-					bot.owner._tag === "Organization"
-						? Effect.void
-						: Effect.fail(
-								ChannelsApi.ChannelInvalid.make({
-									message:
-										"The Bot of a Channel must be a shared Bot of the organization.",
-								}),
-							),
-				),
-			)
-		/**
-		 * Tells the platform the webhook, for platforms that take it by API. A platform
-		 * that refuses the webhook gives `ChannelInvalid`. A platform that is down or
-		 * busy gives `ChannelsUnavailable`, because the input may be right.
-		 */
-		const register = (origin: string, id: string, credentials: Credentials) =>
-			registry.build(id, credentials).pipe(
-				Effect.flatMap((channel) =>
-					channel.register(`${origin}/v1/hooks/channels/${id}`),
-				),
-				Effect.scoped,
-				Effect.catchIf(
-					(failure) => !failure.retry,
-					(failure) =>
-						Effect.fail(
-							ChannelsApi.ChannelInvalid.make({
-								message: `The platform did not take the webhook: ${failure.message}`,
-							}),
-						),
-				),
-				Failures.replaceTag(
-					"ChannelDeliveryFailed",
-					"The platform could not take the webhook now.",
-					() => ChannelsApi.ChannelsUnavailable.make({}),
-				),
-			)
 		return handlers
 			.handle("listChannels", () =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
 					const origin = yield* publicOrigin
-					const list = yield* channels.list(caller.organizationId)
+					const list = yield* channels.list(caller)
 					return Arr.map(list, (channel) => view(origin, channel))
 				}),
 			)
 			.handle("createChannel", ({ payload }) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
-					const origin = yield* publicOrigin
-					yield* checkBot(caller, payload.bot)
-					const credentials = yield* fromInput(crypto, payload.credentials)
-					const channel = yield* channels.create({
-						organizationId: caller.organizationId,
-						actor: caller.userId,
-						name: payload.name,
-						bot: payload.bot,
-						credentials,
-						linkPath: payload.linkPath ?? null,
-						enabled: payload.enabled ?? true,
-					})
-					// A platform that refuses the webhook, or a request that stops, leaves no
-					// Channel behind.
-					yield* register(origin, channel.id, credentials).pipe(
-						Effect.onError(() =>
-							channels
-								.remove(caller.organizationId, channel.id)
-								.pipe(
-									Background.logFailure(
-										"OpenBot could not remove a Channel that the platform did not take.",
-									),
-								),
-						),
+					return view(
+						yield* publicOrigin,
+						yield* config.create(caller, payload.commandKey, payload),
 					)
-					yield* record(
-						caller,
-						"channel.created",
-						channelKey(caller.organizationId, channel.id),
-						{ kind: channel.kind, bot: channel.bot },
-					)
-					return view(origin, channel)
-				}),
+				}).pipe(safe),
 			)
 			.handle("getChannel", ({ params }) =>
 				Effect.gen(function* () {
@@ -201,109 +100,36 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "channels", (handlers) =>
 			.handle("updateChannel", ({ params, payload }) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
-					const origin = yield* publicOrigin
-					const current = yield* found(caller, params.channelId)
-					if (
-						payload.credentials !== undefined &&
-						payload.credentials.kind !== current.kind
+					return view(
+						yield* publicOrigin,
+						yield* config.update(
+							caller,
+							payload.commandKey,
+							params.channelId,
+							payload,
+						),
 					)
-						return yield* ChannelsApi.ChannelInvalid.make({
-							message: "The kind of a Channel cannot change.",
-						})
-					yield* checkBot(caller, payload.bot ?? current.bot)
-					const credentials =
-						payload.credentials === undefined
-							? undefined
-							: yield* fromInput(
-									crypto,
-									payload.credentials,
-									yield* channels.credentials(
-										caller.organizationId,
-										current.id,
-									),
-								)
-					if (credentials !== undefined)
-						yield* register(origin, current.id, credentials)
-					const channel = yield* channels.update(
-						caller.organizationId,
-						current.id,
+				}).pipe(safe),
+			)
+			.handle("deleteChannel", ({ params, payload }) =>
+				Effect.flatMap(Identity, (caller) =>
+					removal.request(caller, params.channelId, payload.commandKey),
+				).pipe(safe),
+			)
+			.handle("setChannelSecret", ({ params, payload }) =>
+				Effect.gen(function* () {
+					const caller = yield* Identity
+					const result = yield* config.rotate(
+						caller,
+						payload.commandKey,
+						params.channelId,
 						payload.expectedVersion,
-						{
-							actor: caller.userId,
-							...(payload.name === undefined ? {} : { name: payload.name }),
-							...(payload.bot === undefined ? {} : { bot: payload.bot }),
-							...(credentials === undefined ? {} : { credentials }),
-							...(payload.linkPath === undefined
-								? {}
-								: { linkPath: payload.linkPath }),
-							...(payload.enabled === undefined
-								? {}
-								: { enabled: payload.enabled }),
-						},
 					)
-					yield* record(
-						caller,
-						"channel.updated",
-						channelKey(caller.organizationId, channel.id),
-						{
-							changes: Arr.filter(
-								Rec.keys<string, unknown>(payload),
-								(key) => key !== "expectedVersion",
-							),
-						},
-					)
-					return view(origin, channel)
-				}),
-			)
-			.handle("deleteChannel", ({ params }) =>
-				Effect.gen(function* () {
-					const caller = yield* Identity
-					if (
-						!(yield* channels.remove(caller.organizationId, params.channelId))
-					)
-						return yield* ChannelsApi.ChannelNotFound.make({
-							id: params.channelId,
-						})
-					yield* record(
-						caller,
-						"channel.deleted",
-						channelKey(caller.organizationId, params.channelId),
-						{},
-					)
-				}),
-			)
-			.handle("setChannelSecret", ({ params }) =>
-				Effect.gen(function* () {
-					const caller = yield* Identity
-					const current = yield* found(caller, params.channelId)
-					const credentials = yield* channels.credentials(
-						caller.organizationId,
-						current.id,
-					)
-					if (credentials.kind !== "custom")
-						return yield* ChannelsApi.ChannelInvalid.make({
-							message: "Only a custom Channel has a signing secret.",
-						})
-					const secret =
-						"ocs_" +
-						Base64Url.encode(
-							// A platform without secure random numbers cannot keep secrets, so a failure here is a defect.
-							yield* crypto.randomBytes(32).pipe(Effect.orDie),
-						)
-					yield* channels.update(
-						caller.organizationId,
-						current.id,
-						current.version,
-						{ actor: caller.userId, credentials: { ...credentials, secret } },
-					)
-					yield* record(
-						caller,
-						"channel.secret_changed",
-						channelKey(caller.organizationId, current.id),
-						{},
-					)
-					return { secret: Redacted.make(secret) }
-				}),
+					return {
+						secret: result.secret,
+						channel: view(yield* publicOrigin, result.channel),
+					}
+				}).pipe(safe),
 			)
 			.handle("listChannelIdentities", ({ params }) =>
 				Effect.gen(function* () {
@@ -428,27 +254,25 @@ export const layerHooks = HttpApiBuilder.group(
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
 						const found = yield* channels.find(params.channelId)
-						if (Option.isNone(found) || !found.value.channel.enabled)
+						if (
+							Option.isNone(found) ||
+							!found.value.channel.enabled ||
+							found.value.channel.needsAuthorization
+						)
 							return yield* ChannelsApi.ChannelHookDenied.make({})
 						const { organizationId, channel: stored } = found.value
 						// A Channel that went away since `find` is denied, like one that is not there.
 						const channel = yield* registry
-							.get(organizationId, stored)
+							.get(organizationId, stored.id)
 							.pipe(
 								Effect.catchTag("ChannelNotFound", () =>
 									Effect.fail(ChannelsApi.ChannelHookDenied.make({})),
 								),
 							)
 						const body = yield* request.text.pipe(
-							Effect.catch((error) =>
-								Effect.logInfo(
-									"OpenBot could not read the body of a Channel webhook",
-									error,
-								).pipe(
-									Effect.andThen(
-										Effect.fail(ChannelsApi.ChannelHookDenied.make({})),
-									),
-								),
+							Failures.replace(
+								"OpenBot could not read the body of a Channel webhook",
+								() => ChannelsApi.ChannelHookDenied.make({}),
 							),
 						)
 						const received = yield* channel
@@ -458,15 +282,10 @@ export const layerHooks = HttpApiBuilder.group(
 								now: yield* Clock.currentTimeMillis,
 							})
 							.pipe(
-								Effect.catchTag("ChannelDenied", (failure) =>
-									Effect.logInfo(
-										"A Channel webhook was denied",
-										failure.reason,
-									).pipe(
-										Effect.andThen(
-											Effect.fail(ChannelsApi.ChannelHookDenied.make({})),
-										),
-									),
+								Failures.replaceTag(
+									"ChannelDenied",
+									"A Channel webhook was denied",
+									() => ChannelsApi.ChannelHookDenied.make({}),
 								),
 							)
 						yield* queue.receive(organizationId, stored.id, received.events)

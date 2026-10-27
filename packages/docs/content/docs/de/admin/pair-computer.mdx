@@ -1,0 +1,58 @@
+---
+title: "Eine Maschine koppeln"
+description: "Eine Maschine koppeln"
+---
+
+Für die Verwaltung dieses Dienstes. Nutze ein Konto mit den unten genannten
+Rechten.
+
+## Deine eigene Maschine koppeln
+
+Installiere die Kommandozeilen-Tools und kopple dann die Maschine:
+
+```sh
+npm install -g @openbot-build/cli @openbot-build/computer
+openbot computer pair --url https://api.example.com
+```
+
+Der Befehl zeigt einen Code, zum Beispiel `KDTW-7Q3M`. Er gilt 10 Minuten. Prüfe
+die Maschine und erlaube sie:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" -d '{}' \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M/approve
+```
+
+Nur eine Person kann eine Maschine erlauben.
+`POST /v1/computer-pairings/:code/deny` beendet die Kopplung. Nachdem du sie
+erlaubt hast, speichert der Befehl sein Token in
+`~/.config/openbot/computer.json` und endet. Verbinde dann die Maschine:
+
+```sh
+openbot computer connect
+```
+
+Der Befehl hält eine Verbindung zu OpenBot offen. Darum braucht die Maschine
+keinen offenen Port. Nach einer Unterbrechung verbindet er sich von selbst
+wieder. `openbot computer status` zeigt die gespeicherte Adresse und die ID der
+Maschine.
+
+OpenBot nimmt nur Connectors an, die Version 3 des Connector-Protokolls
+sprechen. Ein älteres `openbot-computer` kann sich nicht verbinden, und OpenBot
+sagt ihm, dass es ein Upgrade braucht. Installiere die neue Version auf der
+Maschine und verbinde sie wieder:
+
+```sh
+npm install -g @openbot-build/computer
+openbot computer connect
+```
+
+Wenn dieselbe Maschine sich in derselben Organisation wieder koppelt, behält sie
+ihren Computer und bekommt ein neues Token. Für Server und Skripte erstellst du
+einen Computer mit `"source":{"_tag":"Connector"}`. Dann erstellst du ein Token
+mit `PUT /v1/computers/:computerId/connector-token`. Ein neues Token schließt
+die alte Verbindung.

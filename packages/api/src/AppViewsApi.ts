@@ -1,39 +1,40 @@
-import { Chat, Item, Turn } from "@openbot-build/core"
-import { Client, Ui } from "@openbot-build/protocol"
-import { Array as Arr, Schema } from "effect"
+import { Chat, Item } from "@openbot-build/core"
+import { Ui } from "@openbot-build/protocol"
+import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import {
-	Source,
-	Invocation,
-	InvocationStatus,
-	AppOperationId,
-} from "./AppExecution.ts"
+import { AppViews, Execution } from "@openbot-build/domain"
+import { AppOperationId } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
-import { AppRestricted, ConnectionId } from "./ConnectionsApi.ts"
-import { ChatConflict } from "./ChatsApi.ts"
+import { AppRestricted } from "./ConnectionsApi.ts"
+import { errors as executionErrors } from "./ExecutionsApi.ts"
+import {
+	ChatNotFound,
+	ChatStorageUnavailable,
+	ChatModelInvalid,
+	ChatConflict,
+} from "./ChatsApi.ts"
 
-export const AppViewId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/AppViewId"))
-export type AppViewId = typeof AppViewId.Type
+export const {
+	AppViewId,
+	Binding,
+	ActionRequest,
+	ActionTicket,
+	Interaction,
+	AppViewUnavailable,
+	ViewReadAction,
+	ActionKind,
+	ActionSource,
+} = AppViews
+export type AppViewId = AppViews.AppViewId
+export type Binding = AppViews.Binding
+export type ActionRequest = AppViews.ActionRequest
+export type ActionTicket = AppViews.ActionTicket
+export type Interaction = AppViews.Interaction
+export type AppViewUnavailable = AppViews.AppViewUnavailable
+export type ViewReadAction = AppViews.ViewReadAction
+export type ActionKind = AppViews.ActionKind
+export type ActionSource = AppViews.ActionSource
 
-export const Interaction = Schema.Struct({
-	revision: Schema.Natural,
-	context: Schema.NullOr(Schema.JsonObject),
-})
-export type Interaction = typeof Interaction.Type
-export const Binding = Schema.Struct({
-	id: AppViewId,
-	operationId: AppOperationId,
-	readOnly: Schema.Boolean,
-	chat: Chat.Id,
-	turn: Turn.Id,
-	item: Item.Id,
-	source: Source,
-	interaction: Interaction,
-})
-export type Binding = typeof Binding.Type
 export const Opened = Schema.Struct({
 	...Binding.fields,
 	resource: Ui.Resource,
@@ -42,70 +43,12 @@ export const Opened = Schema.Struct({
 	result: Schema.optionalKey(Schema.JsonObject),
 })
 export type Opened = typeof Opened.Type
-export const ActionRequest = Schema.Union([
-	Schema.Struct({
-		kind: Schema.Literal("tool"),
-		requestId: Schema.NonEmptyString,
-		name: Schema.NonEmptyString,
-		arguments: Schema.JsonObject,
-	}),
-	Schema.Struct({
-		kind: Schema.Literal("resource"),
-		requestId: Schema.NonEmptyString,
-		uri: Schema.NonEmptyString,
-	}),
-])
-export type ActionRequest = typeof ActionRequest.Type
-/** The kind of an action that an App view asks for. It comes from `ActionRequest`. */
-export const ActionKind = Schema.Literals(
-	Arr.map(ActionRequest.members, (member) => member.fields.kind.literal),
-)
-export type ActionKind = typeof ActionKind.Type
-export const ActionSource = Schema.TaggedStruct("AppUiAction", {
-	viewId: AppViewId,
-	requestId: Schema.String,
-	connectionId: ConnectionId,
-	revision: Schema.Natural,
-	kind: ActionKind,
-	target: Schema.String,
-})
-export type ActionSource = typeof ActionSource.Type
-/** The list methods that an App view may call. A view cannot list prompts. */
-export const ViewReadAction = Client.ListAction.pick([
-	"tools/list",
-	"resources/list",
-	"resources/templates/list",
-])
-export type ViewReadAction = typeof ViewReadAction.Type
-export const ActionTicket = Schema.Struct({
-	chat: Chat.Id,
-	turn: Turn.Id,
-	item: Item.Id,
-	callId: Schema.String,
-	revision: Chat.Revision,
-})
-export type ActionTicket = typeof ActionTicket.Type
-export const Observation = Schema.Struct({
-	ticket: ActionTicket,
-	status: Schema.Literals(["Queued", ...InvocationStatus.literals]),
-	operation: Schema.NullOr(Invocation),
-})
-export class AppViewUnavailable extends Schema.TaggedError<
-	AppViewUnavailable,
-	{ readonly brand: unique symbol }
->()("AppViewUnavailable", {
-	reason: Schema.Literals([
-		"Declaration",
-		"Resource",
-		"ConnectionChanged",
-		"Closed",
-		"Unsupported",
-		"Protocol",
-	]),
-	message: Schema.String,
-}) {}
 const errors = [
 	...ExperienceErrors,
+	...executionErrors,
+	ChatNotFound.pipe(HttpApiSchema.status(404)),
+	ChatStorageUnavailable.pipe(HttpApiSchema.status(503)),
+	ChatModelInvalid.pipe(HttpApiSchema.status(400)),
 	AppViewUnavailable.pipe(HttpApiSchema.status(409)),
 	AppRestricted.pipe(HttpApiSchema.status(403)),
 	ChatConflict.pipe(HttpApiSchema.status(409)),
@@ -145,11 +88,6 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 		success: ActionTicket.pipe(HttpApiSchema.status(202)),
 		error: errors,
 	}),
-	HttpApiEndpoint.get("operation", "/v1/app-views/:viewId/actions/:requestId", {
-		params: { viewId: AppViewId, requestId: Schema.String },
-		success: Observation,
-		error: errors,
-	}),
 	HttpApiEndpoint.put("confirmContext", "/v1/app-views/:viewId/context", {
 		params: { viewId: AppViewId },
 		payload: Schema.Struct({
@@ -171,8 +109,11 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 	),
 	HttpApiEndpoint.post("message", "/v1/app-views/:viewId/messages", {
 		params: { viewId: AppViewId },
-		payload: Schema.Struct({ content: Schema.JsonObject }),
-		success: Schema.Void,
+		payload: Schema.Struct({
+			commandKey: Execution.CommandKey,
+			content: Schema.JsonObject,
+		}),
+		success: ActionTicket.pipe(HttpApiSchema.status(202)),
 		error: errors,
 	}),
 )

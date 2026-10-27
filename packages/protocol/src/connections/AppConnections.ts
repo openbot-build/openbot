@@ -65,6 +65,7 @@ export const layerConnectionScopes = Layer.effect(
 						),
 					),
 				)
+				return { close: Scope.close(scope, Exit.void) }
 			}, Effect.uninterruptible),
 			close: Effect.fn("ConnectionScopes.close")(function* (key) {
 				const id = [key.owner, key.connectionId] as const

@@ -1,9 +1,10 @@
 import { Redacted } from "effect"
-import { BotsApi, type Caller, VaultsApi } from "@openbot-build/api"
+import { Vaults as VaultsModel } from "@openbot-build/domain"
+import { Bots as BotsModel } from "@openbot-build/domain"
+import { type Caller } from "@openbot-build/domain"
 import { and, eq, inArray } from "drizzle-orm"
 import {
 	Array as Arr,
-	Cause,
 	Clock,
 	Context,
 	Crypto,
@@ -14,7 +15,7 @@ import {
 	Schema,
 } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Check from "../authorization/Check.ts"
 import { vaultResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
@@ -25,19 +26,19 @@ import { Secrets } from "../secrets/Secrets.ts"
 import { Readers, VaultReadFailed } from "./Readers.ts"
 import { SecretProviders } from "./SecretProviders.ts"
 
-type Vault = VaultsApi.Vault
-type Item = VaultsApi.VaultItem
-type Source = VaultsApi.VaultItemSource
+type Vault = VaultsModel.Vault
+type Item = VaultsModel.VaultItem
+type Source = VaultsModel.VaultItemSource
 
 export type Failure =
-	| VaultsApi.SecretProviderInUse
-	| VaultsApi.SecretProviderFailed
-	| VaultsApi.VaultNotFound
-	| VaultsApi.VaultItemNotFound
-	| VaultsApi.SecretProviderNotFound
-	| VaultsApi.VaultConflict
-	| VaultsApi.VaultInvalid
-	| VaultsApi.VaultsUnavailable
+	| VaultsModel.SecretProviderInUse
+	| VaultsModel.SecretProviderFailed
+	| VaultsModel.VaultNotFound
+	| VaultsModel.VaultItemNotFound
+	| VaultsModel.SecretProviderNotFound
+	| VaultsModel.VaultConflict
+	| VaultsModel.VaultInvalid
+	| VaultsModel.VaultsUnavailable
 	| Check.Errors
 
 /** What a Bot may know about an item it may use. It has no values. */
@@ -46,10 +47,10 @@ export interface Usable {
 	readonly vaultName: string
 }
 
-export const unavailable = () => VaultsApi.VaultsUnavailable.make({})
-const invalid = (message: string) => VaultsApi.VaultInvalid.make({ message })
-const notFound = (id: string) => VaultsApi.VaultNotFound.make({ id })
-const itemNotFound = (id: string) => VaultsApi.VaultItemNotFound.make({ id })
+export const unavailable = () => VaultsModel.VaultsUnavailable.make({})
+const invalid = (message: string) => VaultsModel.VaultInvalid.make({ message })
+const notFound = (id: string) => VaultsModel.VaultNotFound.make({ id })
+const itemNotFound = (id: string) => VaultsModel.VaultItemNotFound.make({ id })
 
 const valuesBinding = (id: string) => `openbot_vault_items:${id}:values`
 
@@ -60,7 +61,7 @@ const kindOf = {
 	HashiCorp: "hashicorp",
 } as const satisfies Record<
 	Exclude<Source["_tag"], "Builtin">,
-	VaultsApi.SecretProviderKind
+	VaultsModel.SecretProviderKind
 >
 
 const providerOf = (source: Source) =>
@@ -72,9 +73,11 @@ const ValuesJson = Schema.fromJsonString(
 )
 const decodeValues = Schema.decodeUnknownEffect(ValuesJson)
 /** The source, fields and exits columns hold JSON that only this file writes. */
-const SourceJson = Schema.fromJsonString(VaultsApi.VaultItemSource)
-const FieldsJson = Schema.fromJsonString(Schema.Array(VaultsApi.VaultFieldName))
-const ExitsJson = Schema.fromJsonString(Schema.Array(VaultsApi.VaultExit))
+const SourceJson = Schema.fromJsonString(VaultsModel.VaultItemSource)
+const FieldsJson = Schema.fromJsonString(
+	Schema.Array(VaultsModel.VaultFieldName),
+)
+const ExitsJson = Schema.fromJsonString(Schema.Array(VaultsModel.VaultExit))
 const decodeSource = Schema.decodeUnknownEffect(SourceJson)
 const decodeFields = Schema.decodeUnknownEffect(FieldsJson)
 const decodeExits = Schema.decodeUnknownEffect(ExitsJson)
@@ -85,14 +88,14 @@ const encodeSource = (source: Source) =>
 	Schema.encodeEffect(SourceJson)(source).pipe(Effect.orDie)
 const encodeFields = (fields: ReadonlyArray<string>) =>
 	Schema.encodeEffect(FieldsJson)(fields).pipe(Effect.orDie)
-const encodeExits = (exits: ReadonlyArray<VaultsApi.VaultExit>) =>
+const encodeExits = (exits: ReadonlyArray<VaultsModel.VaultExit>) =>
 	Schema.encodeEffect(ExitsJson)(exits).pipe(Effect.orDie)
 
 type VaultRow = typeof vaults.$inferSelect
 type ItemRow = typeof vaultItems.$inferSelect
 
 const fromRow = (row: VaultRow): Vault => ({
-	id: VaultsApi.VaultId.make(row.id),
+	id: VaultsModel.VaultId.make(row.id),
 	name: row.name,
 	owner:
 		row.ownerUserId === null
@@ -106,11 +109,11 @@ const fromRow = (row: VaultRow): Vault => ({
 /** A row with a bad value is a broken store. The log keeps the cause. */
 const fromItemRow = (
 	row: ItemRow,
-): Effect.Effect<Item, VaultsApi.VaultsUnavailable> =>
+): Effect.Effect<Item, VaultsModel.VaultsUnavailable> =>
 	Effect.gen(function* () {
 		return {
-			id: VaultsApi.VaultItemId.make(row.id),
-			vault: VaultsApi.VaultId.make(row.vaultId),
+			id: VaultsModel.VaultItemId.make(row.id),
+			vault: VaultsModel.VaultId.make(row.vaultId),
 			name: row.name,
 			description: row.description,
 			source: yield* decodeSource(row.source),
@@ -140,12 +143,12 @@ export class Vaults extends Context.Service<
 		) => Effect.Effect<Vault, Failure>
 		readonly create: (
 			caller: Caller,
-			input: VaultsApi.CreateVaultRequest,
+			input: VaultsModel.CreateVaultRequest,
 		) => Effect.Effect<Vault, Failure>
 		readonly update: (
 			caller: Caller,
 			id: string,
-			input: VaultsApi.UpdateVaultRequest,
+			input: VaultsModel.UpdateVaultRequest,
 		) => Effect.Effect<Vault, Failure>
 		readonly remove: (
 			caller: Caller,
@@ -163,13 +166,13 @@ export class Vaults extends Context.Service<
 		readonly createItem: (
 			caller: Caller,
 			vaultId: string,
-			input: VaultsApi.CreateVaultItemRequest,
+			input: VaultsModel.CreateVaultItemRequest,
 		) => Effect.Effect<Item, Failure>
 		readonly updateItem: (
 			caller: Caller,
 			vaultId: string,
 			itemId: string,
-			input: VaultsApi.UpdateVaultItemRequest,
+			input: VaultsModel.UpdateVaultItemRequest,
 		) => Effect.Effect<Item, Failure>
 		readonly removeItem: (
 			caller: Caller,
@@ -179,22 +182,22 @@ export class Vaults extends Context.Service<
 		readonly bots: (
 			caller: Caller,
 			vaultId: string,
-		) => Effect.Effect<ReadonlyArray<VaultsApi.VaultAccess>, Failure>
+		) => Effect.Effect<ReadonlyArray<VaultsModel.VaultAccess>, Failure>
 		readonly grant: (
 			caller: Caller,
 			vaultId: string,
-			bot: BotsApi.BotId,
-		) => Effect.Effect<VaultsApi.VaultAccess, Failure>
+			bot: BotsModel.BotId,
+		) => Effect.Effect<VaultsModel.VaultAccess, Failure>
 		readonly revoke: (
 			caller: Caller,
 			vaultId: string,
-			bot: BotsApi.BotId,
+			bot: BotsModel.BotId,
 		) => Effect.Effect<void, Failure>
 		/** The items of the Vaults that a Bot has the right to use. It checks no permission. An archived Bot has none. */
 		readonly usable: (
 			organizationId: string,
 			bot: string,
-		) => Effect.Effect<ReadonlyArray<Usable>, VaultsApi.VaultsUnavailable>
+		) => Effect.Effect<ReadonlyArray<Usable>, VaultsModel.VaultsUnavailable>
 		/** The values of fields of an item, for Code Mode only. It checks no permission. */
 		readonly reveal: (
 			organizationId: string,
@@ -329,16 +332,12 @@ export const make = Effect.gen(function* () {
 				.make(credentials)
 				.read(source, input.fields)
 				.pipe(
-					Effect.tapError((error) =>
-						Effect.logInfo(
-							"OpenBot could not read a secret provider",
-							Cause.fail(error),
-						),
-					),
-					Effect.mapError((error) =>
+					Failures.map("OpenBot could not read a secret provider", (error) =>
 						error.retry
-							? VaultsApi.SecretProviderFailed.make({ message: error.message })
-							: invalid("OpenBot could not read the item: " + error.message),
+							? VaultsModel.SecretProviderFailed.make({
+									message: "OpenBot could not read the secret provider.",
+								})
+							: invalid("OpenBot could not read the item."),
 					),
 				)
 			return input.fields
@@ -433,7 +432,9 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const vault = yield* access(caller, id, "write")
 				if (input.expectedVersion !== vault.version)
-					return yield* VaultsApi.VaultConflict.make({ version: vault.version })
+					return yield* VaultsModel.VaultConflict.make({
+						version: vault.version,
+					})
 				const now = yield* Clock.currentTimeMillis
 				const changed = yield* db
 					.update(vaults)
@@ -452,7 +453,9 @@ export const make = Effect.gen(function* () {
 					.pipe(stored("A Vault could not be changed."))
 				const next = changed[0]
 				if (next === undefined)
-					return yield* VaultsApi.VaultConflict.make({ version: vault.version })
+					return yield* VaultsModel.VaultConflict.make({
+						version: vault.version,
+					})
 				return fromRow(next)
 			}),
 		remove: (caller, id) =>
@@ -522,7 +525,9 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const item = yield* itemAccess(caller, vaultId, itemId, "write")
 				if (input.expectedVersion !== item.version)
-					return yield* VaultsApi.VaultConflict.make({ version: item.version })
+					return yield* VaultsModel.VaultConflict.make({
+						version: item.version,
+					})
 				if (input.name !== undefined)
 					yield* nameFree(caller.organizationId, vaultId, input.name, itemId)
 				const source = input.source ?? item.source
@@ -585,7 +590,9 @@ export const make = Effect.gen(function* () {
 					.pipe(stored("A Vault item could not be changed."))
 				const next = changed[0]
 				if (next === undefined)
-					return yield* VaultsApi.VaultConflict.make({ version: item.version })
+					return yield* VaultsModel.VaultConflict.make({
+						version: item.version,
+					})
 				return yield* fromItemRow(next)
 			}),
 		removeItem: (caller, vaultId, itemId) =>
@@ -616,8 +623,8 @@ export const make = Effect.gen(function* () {
 					.orderBy(vaultAccess.grantedAt)
 					.pipe(stored("The Bots of a Vault could not be read."))
 				return Arr.map(rows, (entry) => ({
-					vault: VaultsApi.VaultId.make(entry.vaultId),
-					bot: BotsApi.BotId.make(entry.bot),
+					vault: VaultsModel.VaultId.make(entry.vaultId),
+					bot: BotsModel.BotId.make(entry.bot),
 					grantedBy: entry.grantedBy,
 					grantedAt: entry.grantedAt,
 				}))
@@ -660,7 +667,7 @@ export const make = Effect.gen(function* () {
 					.pipe(stored("A Vault right could not be read."))
 				const saved = rows[0]!
 				return {
-					vault: VaultsApi.VaultId.make(vaultId),
+					vault: VaultsModel.VaultId.make(vaultId),
 					bot,
 					grantedBy: saved.grantedBy,
 					grantedAt: saved.grantedAt,
@@ -779,22 +786,17 @@ export const make = Effect.gen(function* () {
 				)
 				return yield* readers.make(credentials).read(item.source, fields)
 			}).pipe(
-				// A failure of the reader keeps its message. `stored` and `fromItemRow` have logged the store failures.
+				// The boundary seals the decode cause, which can hold secret values.
+				Failures.replaceTag(
+					"SchemaError",
+					"The stored values of a Vault item are not valid",
+					() =>
+						VaultReadFailed.make({
+							retry: false,
+							message: "OpenBot could not open the item.",
+						}),
+				),
 				Effect.catchTags({
-					// The decode failure can quote the opened values, so neither the log nor the error keeps it.
-					SchemaError: () =>
-						Effect.logError(
-							"The stored values of a Vault item are not valid",
-						).pipe(
-							Effect.andThen(
-								Effect.fail(
-									VaultReadFailed.make({
-										retry: false,
-										message: "OpenBot could not open the item.",
-									}),
-								),
-							),
-						),
 					SecretProviderNotFound: (error) =>
 						Effect.fail(
 							VaultReadFailed.make({

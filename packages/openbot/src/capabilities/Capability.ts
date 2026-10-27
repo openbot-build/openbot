@@ -1,9 +1,7 @@
-import {
-	Authorization,
-	type BotsApi,
-	type Caller,
-	type ComputersApi,
-} from "@openbot-build/api"
+import { type Computers as ComputersApi } from "@openbot-build/domain"
+import { type Bots as BotsApi } from "@openbot-build/domain"
+import { Authorization } from "@openbot-build/domain"
+import { type ExecutionIdentity } from "@openbot-build/domain"
 import type { Authorizer } from "@nmnmcc/ability"
 import { Crypto, Effect, Schema, String as Str } from "effect"
 import { Hex } from "effect/encoding"
@@ -46,7 +44,8 @@ export const hash = (crypto: Crypto.Crypto, value: unknown) =>
  * the member it works for, so this check comes first.
  */
 export const memberTarget = (input: {
-	readonly caller: Caller
+	readonly owner: ExecutionIdentity["owner"]
+	readonly channel?: NonNullable<ExecutionIdentity["channel"]>
 	readonly capability: Capability
 	readonly chat: string
 	/** The target Bot, for actions on a Bot. */
@@ -55,12 +54,11 @@ export const memberTarget = (input: {
 	readonly self: BotsApi.Bot
 	/**
 	 * The owner of the target Computer, or of the Computer provider for `computers.create`.
-	 * Without it, OpenBot uses the member as the owner, so a shared target is denied.
+	 * Without it, OpenBot uses the owner of the work, so a shared target is denied.
 	 */
 	readonly computerOwner?: ComputersApi.ComputerOwner
 }): Authorizer.Target<Authorization.OpenBot> => {
-	const organizationId = input.caller.organizationId
-	const userId = input.caller.userId
+	const { organizationId, userId } = input.owner
 	const personal: ComputersApi.ComputerOwner = { _tag: "Member", userId }
 	switch (input.capability.action) {
 		case "apps.call":
@@ -100,6 +98,15 @@ export const memberTarget = (input: {
 		case "plans.run":
 		case "delegations.continue":
 		case "tools.call":
+			// Channel work uses the Channel's rights. Its stored Chat belongs to its owner.
+			if (input.channel !== undefined)
+				return {
+					action: "use",
+					resource: Authorization.Channel.make({
+						organizationId,
+						id: input.channel.id,
+					}),
+				}
 			return {
 				action: "run",
 				resource: Authorization.Chat.make({

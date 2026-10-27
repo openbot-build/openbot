@@ -1,0 +1,257 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "a69e338a-b11d-4e0c-a478-5d3ebaeb89a5",
+	"prevIds": ["e0104702-b86c-4e35-aa56-b203148e00f8"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_delegation_periods"],
+			"writes": [
+				"s|tbl|public.openbot_delegation_periods",
+				"n|tbl|public.openbot_delegation_periods",
+				"e|tbl|public.openbot_delegation_periods",
+				"n|rel|public.openbot_delegation_periods",
+				"n|type|public.openbot_delegation_periods",
+				"n|rel|public.openbot_delegation_periods_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_usage_events",
+				"openbot_usage_events_execution"
+			],
+			"writes": [
+				"s|idx|public.openbot_usage_events_execution",
+				"n|idx|public.openbot_usage_events_execution",
+				"e|idx|public.openbot_usage_events_execution",
+				"n|rel|public.openbot_usage_events_execution"
+			],
+			"reads": [
+				"n|tbl|public.openbot_usage_events",
+				"n|sch|public",
+				"n|col|public.openbot_usage_events.execution_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_delegation_periods",
+				"openbot_delegation_periods_open"
+			],
+			"writes": [
+				"s|idx|public.openbot_delegation_periods_open",
+				"n|idx|public.openbot_delegation_periods_open",
+				"e|idx|public.openbot_delegation_periods_open",
+				"n|rel|public.openbot_delegation_periods_open"
+			],
+			"reads": [
+				"n|tbl|public.openbot_delegation_periods",
+				"n|sch|public",
+				"n|col|public.openbot_delegation_periods.namespace",
+				"n|col|public.openbot_delegation_periods.execution_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_delegation_periods"],
+			"writes": [
+				"s|fk|public.openbot_delegation_periods.openbot_delegation_periods_2nu1Mt8vpUZO_fkey",
+				"n|fk|public.openbot_delegation_periods.openbot_delegation_periods_2nu1Mt8vpUZO_fkey",
+				"e|fk|public.openbot_delegation_periods.openbot_delegation_periods_2nu1Mt8vpUZO_fkey",
+				"n|con|public.openbot_delegation_periods.openbot_delegation_periods_2nu1Mt8vpUZO_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_delegation_periods",
+				"n|sch|public",
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_delegation_periods.namespace",
+				"n|col|public.openbot_delegation_periods.execution_id",
+				"n|col|public.openbot_executions.namespace",
+				"n|col|public.openbot_executions.id",
+				"e|uniqueness|public.openbot_executions.id.namespace"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_delegation_periods",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "epoch",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "started_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "ended_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_usage_events",
+				"name": "openbot_usage_events_execution",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "execution_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "openbot_delegation_periods_open",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "execution_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": "\"ended_at\" is null",
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "openbot_delegation_periods_2nu1Mt8vpUZO_fkey",
+				"nameExplicit": false,
+				"columns": ["namespace", "execution_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_executions",
+				"columnsTo": ["namespace", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_delegation_periods",
+				"name": "openbot_delegation_periods_pkey",
+				"columns": ["namespace", "execution_id", "epoch"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

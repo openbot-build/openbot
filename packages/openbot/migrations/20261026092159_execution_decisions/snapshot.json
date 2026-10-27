@@ -1,0 +1,193 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "5c9a6774-3d30-4a88-9eb3-4754957c7f98",
+	"prevIds": ["b32a7359-ead2-4285-b18a-7ebc47e8242b"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_execution_decisions"],
+			"writes": [
+				"s|tbl|public.openbot_execution_decisions",
+				"n|tbl|public.openbot_execution_decisions",
+				"e|tbl|public.openbot_execution_decisions",
+				"n|rel|public.openbot_execution_decisions",
+				"n|type|public.openbot_execution_decisions",
+				"n|rel|public.openbot_execution_decisions_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_execution_decisions"],
+			"writes": [
+				"s|fk|public.openbot_execution_decisions.openbot_execution_decisions_EcAlMfnl5jqv_fkey",
+				"n|fk|public.openbot_execution_decisions.openbot_execution_decisions_EcAlMfnl5jqv_fkey",
+				"e|fk|public.openbot_execution_decisions.openbot_execution_decisions_EcAlMfnl5jqv_fkey",
+				"n|con|public.openbot_execution_decisions.openbot_execution_decisions_EcAlMfnl5jqv_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_decisions",
+				"n|sch|public",
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_execution_decisions.namespace",
+				"n|col|public.openbot_execution_decisions.execution_id",
+				"n|col|public.openbot_executions.namespace",
+				"n|col|public.openbot_executions.id",
+				"e|uniqueness|public.openbot_executions.id.namespace"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_execution_decisions",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "choices",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "answer",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "answered_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "openbot_execution_decisions_EcAlMfnl5jqv_fkey",
+				"nameExplicit": false,
+				"columns": ["namespace", "execution_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_executions",
+				"columnsTo": ["namespace", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_decisions",
+				"name": "openbot_execution_decisions_pkey",
+				"columns": ["namespace", "execution_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

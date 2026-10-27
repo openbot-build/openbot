@@ -1,5 +1,6 @@
-import { Authorization, type Caller, Identity } from "@openbot-build/api"
-import { Condition, Policy, type Rule } from "@nmnmcc/ability"
+import { Authorization } from "@openbot-build/domain"
+import { type Caller, Identity } from "@openbot-build/domain"
+import { Condition, Policy } from "@nmnmcc/ability"
 import { Array as Arr, Effect, HashMap, Option } from "effect"
 import type { Errors } from "./Check.ts"
 
@@ -9,7 +10,7 @@ const everything = Policy.define(Authorization.OpenBot)(function* (_) {
 })
 
 /** Every allow rule in a policy tree, in any place of the tree. */
-const allowRules = (node: Policy.Node): ReadonlyArray<Rule.Any> => {
+const allowRules = (node: Policy.Node): Policy.RulesNode["rules"] => {
 	switch (node._tag) {
 		case "Rules":
 			return Arr.filter(node.rules, (rule) => rule._tag === "Allow")

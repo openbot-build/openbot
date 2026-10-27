@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import { Array as Arr, Effect } from "effect"
+import { Execution } from "@openbot-build/domain"
 import { Live } from "@openbot-build/core"
 import * as OpenAiRealtime from "../src/providers/openai/OpenAiRealtime.ts"
 
@@ -19,6 +20,14 @@ const config: Live.Config = {
 	},
 	turnDetection: "server",
 }
+
+const decodeEvent = (text: string) =>
+	OpenAiRealtime.decodeEvent(text, () =>
+		Effect.succeed({
+			errorId: Execution.ErrorId.make("test-realtime"),
+			category: "unavailable",
+		}),
+	)
 
 const event = (value: unknown) => JSON.stringify(value)
 
@@ -92,10 +101,51 @@ it("inputs become Realtime client events", () => {
 	])
 })
 
+it("history keeps a tool call before its result and before new sound", () => {
+	assert.deepStrictEqual(
+		OpenAiRealtime.encodeInput(
+			Live.Input.History({
+				messages: [
+					{
+						role: "assistant",
+						callId: "call_1",
+						name: "Lookup",
+						arguments: "{}",
+					},
+					{ role: "tool", callId: "call_1", output: '"ok"' },
+				],
+			}),
+		),
+		[
+			{
+				type: "conversation.item.create",
+				previous_item_id: "root",
+				item: {
+					id: "openbot_history_0",
+					type: "function_call",
+					call_id: "call_1",
+					name: "Lookup",
+					arguments: "{}",
+				},
+			},
+			{
+				type: "conversation.item.create",
+				previous_item_id: "openbot_history_0",
+				item: {
+					id: "openbot_history_1",
+					type: "function_call_output",
+					call_id: "call_1",
+					output: '"ok"',
+				},
+			},
+		],
+	)
+})
+
 it.effect("Realtime server events become Live events", () =>
 	Effect.gen(function* () {
 		assert.deepStrictEqual(
-			yield* OpenAiRealtime.decodeEvent(
+			yield* decodeEvent(
 				event({
 					type: "conversation.item.input_audio_transcription.completed",
 					item_id: "item_1",
@@ -111,7 +161,7 @@ it.effect("Realtime server events become Live events", () =>
 				}),
 			],
 		)
-		const [audio] = yield* OpenAiRealtime.decodeEvent(
+		const [audio] = yield* decodeEvent(
 			event({
 				type: "response.output_audio.delta",
 				item_id: "a",
@@ -121,7 +171,7 @@ it.effect("Realtime server events become Live events", () =>
 		assert.ok(audio?._tag === "OutputAudio")
 		assert.deepStrictEqual([...audio.bytes], [1, 2, 3])
 		assert.deepStrictEqual(
-			yield* OpenAiRealtime.decodeEvent(
+			yield* decodeEvent(
 				event({
 					type: "response.output_item.done",
 					item: {
@@ -142,7 +192,7 @@ it.effect("Realtime server events become Live events", () =>
 			],
 		)
 		assert.deepStrictEqual(
-			yield* OpenAiRealtime.decodeEvent(
+			yield* decodeEvent(
 				event({
 					type: "response.done",
 					response: {
@@ -151,7 +201,7 @@ it.effect("Realtime server events become Live events", () =>
 							input_tokens: 30,
 							output_tokens: 20,
 							input_token_details: {
-								text_tokens: 10,
+								text_tokens: 15,
 								audio_tokens: 15,
 								image_tokens: 0,
 								cached_tokens: 5,
@@ -165,15 +215,15 @@ it.effect("Realtime server events become Live events", () =>
 				Live.Event.ResponseDone({
 					status: "completed",
 					usage: {
-						input: { text: 10, audio: 15, image: 0, cached: 5 },
-						output: { text: 4, audio: 16 },
+						input: { total: 30, text: 15, audio: 15, image: 0, cached: 5 },
+						output: { total: 20, text: 4, audio: 16 },
 					},
 				}),
 			],
 		)
 		// A cancel when no answer runs is not a failure.
 		assert.deepStrictEqual(
-			yield* OpenAiRealtime.decodeEvent(
+			yield* decodeEvent(
 				event({
 					type: "error",
 					error: { code: "response_cancel_not_active", message: "No answer" },
@@ -182,10 +232,42 @@ it.effect("Realtime server events become Live events", () =>
 			[],
 		)
 		assert.deepStrictEqual(
-			yield* OpenAiRealtime.decodeEvent(event({ type: "rate_limits.updated" })),
+			yield* decodeEvent(event({ type: "rate_limits.updated" })),
 			[],
 		)
-		assert.deepStrictEqual(yield* OpenAiRealtime.decodeEvent("not json"), [])
+		assert.deepStrictEqual(yield* decodeEvent("not json"), [])
+	}),
+)
+
+it.effect("Realtime keeps missing token counts unknown", () =>
+	Effect.gen(function* () {
+		for (const usage of [undefined, null, {}]) {
+			const [done] = yield* decodeEvent(
+				event({
+					type: "response.done",
+					response: { status: "completed", usage },
+				}),
+			)
+			assert.ok(done?._tag === "ResponseDone")
+			assert.isUndefined(done.usage.input.total)
+			assert.isUndefined(done.usage.output.total)
+			assert.isUndefined(done.usage.input.cached)
+		}
+		const [done] = yield* decodeEvent(
+			event({
+				type: "response.done",
+				response: {
+					status: "completed",
+					usage: { input_tokens: 30, output_tokens: 20 },
+				},
+			}),
+		)
+		assert.ok(done?._tag === "ResponseDone")
+		assert.strictEqual(done.usage.input.total, 30)
+		assert.strictEqual(done.usage.output.total, 20)
+		assert.isUndefined(done.usage.input.text)
+		assert.isUndefined(done.usage.input.cached)
+		assert.isUndefined(done.usage.output.audio)
 	}),
 )
 
@@ -202,7 +284,7 @@ it.effect(
 				}),
 			]
 			for (const text of texts) {
-				const events = yield* OpenAiRealtime.decodeEvent(text)
+				const events = yield* decodeEvent(text)
 				assert.strictEqual(events.length, 1)
 				const [failure] = events
 				assert.ok(failure?._tag === "Failure")

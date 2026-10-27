@@ -1,4 +1,7 @@
-import { Identity, OpenBotApi } from "@openbot-build/api"
+import * as HttpErrors from "../execution/HttpErrors.ts"
+import { OpenBotApi } from "@openbot-build/api"
+
+import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Files } from "./Files.ts"
@@ -6,6 +9,7 @@ import { Files } from "./Files.ts"
 export const layer = HttpApiBuilder.group(OpenBotApi, "files", (handlers) =>
 	Effect.gen(function* () {
 		const files = yield* Files
+		const errors = yield* HttpErrors.make
 		return handlers
 			.handle("uploadFile", ({ payload }) =>
 				Effect.flatMap(Identity, (caller) => files.upload(caller, payload)),
@@ -33,7 +37,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "files", (handlers) =>
 			)
 			.handle("deleteFile", ({ params }) =>
 				Effect.flatMap(Identity, (caller) =>
-					files.remove(caller, params.fileId),
+					files.remove(caller, params.fileId).pipe(errors),
 				),
 			)
 	}),

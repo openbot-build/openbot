@@ -1,5 +1,5 @@
 import { Network } from "@openbot-build/protocol/Network"
-import { type Context, Effect, Stream } from "effect"
+import { Array as Arr, type Context, Effect, Stream } from "effect"
 import { type HttpClient, type HttpClientRequest } from "effect/http"
 import { ChannelDeliveryFailed } from "./Channel.ts"
 import { parse } from "./Json.ts"
@@ -119,6 +119,9 @@ export const failed = (reply: Reply, message: string) => {
 	return ChannelDeliveryFailed.make({
 		message,
 		retry: reply.status === 429 || reply.status >= 500,
+		...(Arr.contains([400, 401, 403, 404, 422, 429], reply.status)
+			? { outcome: "rejected" as const }
+			: {}),
 		...(reply.status === 429 && Number.isFinite(after)
 			? { retryAfterMs: after * 1000 }
 			: {}),

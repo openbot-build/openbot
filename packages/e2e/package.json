@@ -1,0 +1,33 @@
+{
+	"name": "@openbot-build/e2e",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"private": true,
+	"type": "module",
+	"description": "End-to-end tests for OpenBot user tasks.",
+	"scripts": {
+		"build": "tsc -p tsconfig.json --noEmit",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "tsc -p tsconfig.json --noEmit && vitest run"
+	},
+	"devDependencies": {
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/cli": "workspace:*",
+		"@openbot-build/client": "workspace:*",
+		"@openbot-build/computer": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/docs": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/openbot": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/protocol-test": "workspace:*",
+		"@effect/platform-node": "4.0.6",
+		"@effect/sql-pg": "4.0.6",
+		"@effect/vitest": "4.0.6",
+		"@modelcontextprotocol/client": "2.3.1",
+		"effect": "4.0.6",
+		"jose": "6.2.12",
+		"parse5": "8.0.1",
+		"vitest": "5.0.5"
+	}
+}

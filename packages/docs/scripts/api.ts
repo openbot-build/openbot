@@ -52,6 +52,11 @@ const groups = [
 		"Talk to a Bot. Each Bot has one Chat with each person, and the Bot always answers at once.",
 	],
 	[
+		"executions",
+		"Executions",
+		"Read saved execution events, send a cancel command, and answer a decision.",
+	],
+	[
 		"live",
 		"Live",
 		"Talk with a Bot in real time, with sound, over one WebSocket.",
@@ -140,9 +145,9 @@ const groups = [
 		"Pages that an App sends you back to after authorization.",
 	],
 	[
-		"operations",
-		"Background tool calls",
-		"Read and stop the tool calls of a Chat that run in the background.",
+		"toolCalls",
+		"Tool calls",
+		"Read the tool calls of a Chat and their saved results.",
 	],
 	[
 		"appOperations",

@@ -1,9 +1,33 @@
+import { SqlClient } from "effect/sql"
+import { Secrets } from "../secrets/Secrets.ts"
+import { Store, storage, type Key } from "../execution/Store.ts"
+import { ownerKey } from "../apps/StoredConnections.ts"
+export const workflowName = "openbot.trigger-schedule"
+export const ScheduleInput = Schema.Struct({
+	triggerId: Domain.TriggerId,
+	revision: Schema.Natural,
+	dueAt: Schema.Finite,
+})
+export interface Saved {
+	readonly trigger: Trigger
+	readonly caller: Option.Option<Caller>
+}
+const Data = Schema.fromJsonString(
+	Schema.Struct({ prompt: Schema.String, caller: Schema.NullOr(Caller) }),
+)
+const binding = (organizationId: string, id: string) =>
+	Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))([
+		"trigger",
+		organizationId,
+		id,
+	])
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API to compare secrets in constant time.
 import { timingSafeEqual } from "node:crypto"
-import { BotsApi, type Caller, TriggersApi } from "@openbot-build/api"
-import { and, eq, lte } from "drizzle-orm"
+import { Triggers as Domain } from "@openbot-build/domain"
+import { Bots as BotsApi } from "@openbot-build/domain"
+import { Caller, Execution } from "@openbot-build/domain"
+import { and, eq } from "drizzle-orm"
 import {
-	Array as Arr,
 	Clock,
 	Context,
 	Cron,
@@ -12,16 +36,17 @@ import {
 	Layer,
 	Option,
 	Result,
+	Schema,
 } from "effect"
 import { Base64Url, Hex } from "effect/encoding"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Check from "../authorization/Check.ts"
 import { triggerResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
 import { triggers } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
 
-type Trigger = TriggersApi.Trigger
+type Trigger = Domain.Trigger
 type Row = typeof triggers.$inferSelect
 
 const encoder = new TextEncoder()
@@ -32,7 +57,7 @@ const encoder = new TextEncoder()
  * 30). `Cron.next` throws then, so this catches it.
  */
 export const nextRun = (input: {
-	readonly schedule: TriggersApi.Schedule
+	readonly schedule: Domain.Schedule
 	readonly now: number
 }) =>
 	Cron.parse(input.schedule.cron, input.schedule.timeZone ?? "UTC").pipe(
@@ -50,10 +75,10 @@ export const nextRun = (input: {
 	)
 
 export type Failure =
-	| TriggersApi.TriggerNotFound
-	| TriggersApi.TriggerConflict
-	| TriggersApi.TriggerInvalid
-	| TriggersApi.TriggerStorageUnavailable
+	| Domain.TriggerNotFound
+	| Domain.TriggerConflict
+	| Domain.TriggerInvalid
+	| Domain.TriggerStorageUnavailable
 	| Check.Errors
 
 /** The triggers of an organization: their prompts, schedules and webhooks. */
@@ -74,7 +99,7 @@ export class Triggers extends Context.Service<
 			input: {
 				readonly bot: BotsApi.BotId
 				readonly prompt: string
-				readonly schedule?: TriggersApi.Schedule
+				readonly schedule?: Domain.Schedule
 				readonly shared?: boolean
 				readonly enabled?: boolean
 			},
@@ -83,7 +108,7 @@ export class Triggers extends Context.Service<
 		readonly update: (
 			caller: Caller,
 			id: string,
-			input: TriggersApi.UpdateTriggerRequest,
+			input: Domain.Change,
 		) => Effect.Effect<Trigger, Failure>
 		readonly remove: (
 			caller: Caller,
@@ -110,34 +135,44 @@ export class Triggers extends Context.Service<
 				readonly organizationId: string
 				readonly trigger: Trigger
 			}>,
-			TriggersApi.TriggerStorageUnavailable
+			Domain.TriggerStorageUnavailable
 		>
-		/**
-		 * The triggers whose schedule is due, in every organization. Each one moves on to
-		 * its next time in the same step, so two instances never fire it twice.
-		 */
-		readonly due: Effect.Effect<
-			ReadonlyArray<{
-				readonly organizationId: string
-				readonly trigger: Trigger
-			}>,
-			TriggersApi.TriggerStorageUnavailable
+		readonly read: (
+			organizationId: string,
+			id: string,
+			lock?: boolean,
+		) => Effect.Effect<Option.Option<Saved>, Domain.TriggerStorageUnavailable>
+		readonly advance: (
+			key: Key,
+			trigger: Trigger,
+		) => Effect.Effect<
+			void,
+			| Execution.StorageError
+			| Execution.Conflict
+			| Execution.Forbidden
+			| Execution.NotFound
+			| Execution.KeyConflict
 		>
+
 		readonly fired: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<void, TriggersApi.TriggerStorageUnavailable>
+		) => Effect.Effect<void, Domain.TriggerStorageUnavailable>
 	}
 >()("@openbot-build/openbot/triggers/Triggers") {}
 
-const fromRow = (row: Row): Trigger => ({
-	id: TriggersApi.TriggerId.make(row.id),
+const view = (
+	row: Row,
+	prompt: string,
+	needsAuthorization: boolean,
+): Trigger => ({
+	id: Domain.TriggerId.make(row.id),
 	owner:
 		row.ownerUserId === null
 			? { _tag: "Organization" }
 			: { _tag: "Member", userId: row.ownerUserId },
 	bot: BotsApi.BotId.make(row.bot),
-	prompt: row.prompt,
+	prompt,
 	schedule:
 		row.scheduleCron === null
 			? null
@@ -150,7 +185,12 @@ const fromRow = (row: Row): Trigger => ({
 	webhook: row.hookSecretHash !== null,
 	actor: row.actor,
 	enabled: row.enabled,
+	needsAuthorization,
 	nextRunAt: row.nextRunAt,
+	executionId:
+		row.scheduleExecutionId === null
+			? null
+			: Execution.Id.make(row.scheduleExecutionId),
 	lastFiredAt: row.lastFiredAt,
 	revision: row.revision,
 	createdAt: row.createdAt,
@@ -165,6 +205,31 @@ const nextOf = (trigger: Pick<Trigger, "schedule" | "enabled">, now: number) =>
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
+	const sql = yield* SqlClient.SqlClient
+	const secrets = yield* Secrets
+	const store = yield* Store
+	const fromRow = (row: Row) =>
+		Effect.gen(function* () {
+			const data = yield* secrets
+				.open(row.prompt, yield* binding(row.organizationId, row.id))
+				.pipe(Effect.flatMap(Schema.decodeEffect(Data)))
+			if (
+				data.caller !== null &&
+				(data.caller.organizationId !== row.organizationId ||
+					data.caller.userId !== row.actor)
+			)
+				return yield* Domain.TriggerInvalid.make({
+					message: "The trigger identity does not match its record.",
+				})
+			return {
+				trigger: view(row, data.prompt, data.caller === null),
+				caller: Option.fromNullishOr(data.caller),
+			}
+		}).pipe(
+			Failures.replace("The saved trigger could not be opened.", () =>
+				Domain.TriggerStorageUnavailable.make({}),
+			),
+		)
 	const crypto = yield* Crypto.Crypto
 	const { check: checkAct, filter, guard } = yield* Check.make
 	// OpenBot needs secure random numbers and SHA-256 to run, so a failure here is a defect.
@@ -173,28 +238,73 @@ export const make = Effect.gen(function* () {
 	const sha = (value: string) =>
 		crypto.digest("SHA-256", encoder.encode(value)).pipe(Effect.orDie)
 	const stored = (message: string) =>
-		Failures.replace(message, () =>
-			TriggersApi.TriggerStorageUnavailable.make({}),
-		)
+		Failures.replace(message, () => Domain.TriggerStorageUnavailable.make({}))
 	const where = (organizationId: string, id: string) =>
 		and(eq(triggers.organizationId, organizationId), eq(triggers.id, id))
-	const find = (organizationId: string, id: string) =>
-		db
-			.select()
-			.from(triggers)
-			.where(where(organizationId, id))
-			.pipe(
+	const read = (organizationId: string, id: string, lock = false) =>
+		Effect.gen(function* () {
+			const query = db.select().from(triggers).where(where(organizationId, id))
+			const rows = yield* (lock ? query.for("update") : query).pipe(
 				stored("A trigger could not be read."),
-				Effect.map((rows) =>
-					Option.map(Option.fromNullishOr(rows[0]), fromRow),
-				),
 			)
+			return rows[0] === undefined
+				? Option.none<Saved>()
+				: Option.some(yield* fromRow(rows[0]))
+		})
+	const find = (organizationId: string, id: string) =>
+		read(organizationId, id).pipe(
+			Effect.map(Option.map((value) => value.trigger)),
+		)
+	const schedule = (caller: Caller, trigger: Trigger) =>
+		Effect.gen(function* () {
+			if (trigger.nextRunAt === null) return null
+			const receipt = yield* store.submit(
+				ownerKey(caller),
+				Execution.CommandKey.make(
+					`trigger-schedule:${trigger.id}:${trigger.revision}:${trigger.nextRunAt}`,
+				),
+				{
+					workflow: workflowName,
+					resource: { kind: "TriggerSchedule", id: trigger.id },
+					identity: {
+						owner: {
+							organizationId: caller.organizationId,
+							userId: caller.userId,
+						},
+						actor: caller,
+						botId: trigger.bot,
+					},
+					input: {
+						triggerId: trigger.id,
+						revision: trigger.revision,
+						dueAt: trigger.nextRunAt,
+					},
+				},
+			)
+			return receipt.executionId
+		})
+	const cancelSchedule = (saved: Saved) =>
+		saved.trigger.executionId === null || Option.isNone(saved.caller)
+			? Effect.void
+			: store
+					.cancel(
+						{
+							namespace: ownerKey(saved.caller.value),
+							id: saved.trigger.executionId,
+						},
+						Execution.CommandKey.make(
+							`trigger-stop:${saved.trigger.executionId}`,
+						),
+						saved.caller.value,
+					)
+					.pipe(Effect.asVoid)
+
 	/** A caller who cannot read a trigger does not learn that it exists. */
 	const access = (caller: Caller, id: string, action: "read" | "write") =>
 		Effect.gen(function* () {
 			const found = yield* find(caller.organizationId, id)
 			if (Option.isNone(found))
-				return yield* TriggersApi.TriggerNotFound.make({ id })
+				return yield* Domain.TriggerNotFound.make({ id })
 			yield* guard(
 				caller,
 				{
@@ -205,68 +315,103 @@ export const make = Effect.gen(function* () {
 					}),
 				},
 				{
-					hide: () => TriggersApi.TriggerNotFound.make({ id }),
+					hide: () => Domain.TriggerNotFound.make({ id }),
 				},
 			)
 			return found.value
 		})
-	const check = (schedule: TriggersApi.Schedule | null, now: number) =>
+	const check = (schedule: Domain.Schedule | null, now: number) =>
 		schedule === null
 			? Effect.void
 			: Result.match(nextRun({ schedule, now }), {
 					onFailure: (message) =>
-						Effect.fail(TriggersApi.TriggerInvalid.make({ message })),
+						Effect.fail(Domain.TriggerInvalid.make({ message })),
 					onSuccess: () => Effect.void,
 				})
 	const save = (
-		organizationId: string,
+		caller: Caller,
 		trigger: Trigger,
 		hash: string | null,
 		expected?: number,
 	) =>
-		Effect.gen(function* () {
-			const values = {
-				organizationId,
-				id: trigger.id,
-				ownerUserId:
-					trigger.owner._tag === "Member" ? trigger.owner.userId : null,
-				bot: trigger.bot,
-				prompt: trigger.prompt,
-				scheduleCron: trigger.schedule?.cron ?? null,
-				scheduleTimeZone: trigger.schedule?.timeZone ?? null,
-				nextRunAt: trigger.nextRunAt,
-				lastFiredAt: trigger.lastFiredAt,
-				hookSecretHash: hash,
-				actor: trigger.actor,
-				enabled: trigger.enabled,
-				revision: trigger.revision,
-				createdAt: trigger.createdAt,
-				updatedAt: trigger.updatedAt,
-			}
-			if (expected === undefined) {
-				yield* db
-					.insert(triggers)
-					.values(values)
-					.pipe(stored("A trigger could not be created."))
-				return trigger
-			}
-			const changed = yield* db
-				.update(triggers)
-				.set(values)
-				.where(
-					and(
-						where(organizationId, trigger.id),
-						eq(triggers.revision, expected),
+		sql
+			.withTransaction(
+				Effect.gen(function* () {
+					const organizationId = caller.organizationId
+					const previous = yield* read(organizationId, trigger.id, true)
+					const sealed = yield* secrets
+						.seal(
+							yield* Schema.encodeEffect(Data)({
+								prompt: trigger.prompt,
+								caller,
+							}),
+							yield* binding(organizationId, trigger.id),
+						)
+						.pipe(stored("The trigger input could not be saved."))
+					const values = {
+						organizationId,
+						id: trigger.id,
+						ownerUserId:
+							trigger.owner._tag === "Member" ? trigger.owner.userId : null,
+						bot: trigger.bot,
+						prompt: sealed,
+						scheduleCron: trigger.schedule?.cron ?? null,
+						scheduleTimeZone: trigger.schedule?.timeZone ?? null,
+						nextRunAt: trigger.nextRunAt,
+						lastFiredAt: Option.isSome(previous)
+							? previous.value.trigger.lastFiredAt
+							: trigger.lastFiredAt,
+						hookSecretHash: hash,
+						actor: trigger.actor,
+						enabled: trigger.enabled,
+						revision: trigger.revision,
+						createdAt: trigger.createdAt,
+						updatedAt: trigger.updatedAt,
+					}
+					if (expected === undefined) {
+						yield* db
+							.insert(triggers)
+							.values(values)
+							.pipe(stored("A trigger could not be created."))
+					} else {
+						const changed = yield* db
+							.update(triggers)
+							.set(values)
+							.where(
+								and(
+									where(organizationId, trigger.id),
+									eq(triggers.revision, expected),
+								),
+							)
+							.returning({ id: triggers.id })
+							.pipe(stored("A trigger could not be changed."))
+						if (changed.length === 0)
+							return yield* Domain.TriggerConflict.make({
+								message: "The trigger changed. Read it again and retry.",
+							})
+					}
+					if (Option.isSome(previous))
+						yield* cancelSchedule(previous.value).pipe(
+							stored("The old trigger timer could not stop."),
+						)
+					const executionId = yield* schedule(caller, trigger).pipe(
+						stored("The trigger timer could not start."),
+					)
+					yield* db
+						.update(triggers)
+						.set({ scheduleExecutionId: executionId })
+						.where(where(organizationId, trigger.id))
+						.pipe(stored("The trigger timer could not be saved."))
+					return { ...trigger, lastFiredAt: values.lastFiredAt, executionId }
+				}),
+			)
+			.pipe(
+				Effect.catchTag(["SqlError", "SchemaError"], (error) =>
+					Effect.fail(error).pipe(
+						stored("The trigger change could not commit."),
 					),
-				)
-				.returning({ id: triggers.id })
-				.pipe(stored("A trigger could not be changed."))
-			if (changed.length === 0)
-				return yield* TriggersApi.TriggerConflict.make({
-					message: "The trigger changed. Read it again and retry.",
-				})
-			return trigger
-		})
+				),
+			)
 	const hashOf = (organizationId: string, id: string) =>
 		db
 			.select({ hash: triggers.hookSecretHash })
@@ -292,7 +437,7 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const current = yield* access(caller, id, "write")
 			if (expected !== undefined && expected !== current.revision)
-				return yield* TriggersApi.TriggerConflict.make({
+				return yield* Domain.TriggerConflict.make({
 					message: "The trigger changed. Read it again and retry.",
 				})
 			const now = yield* Clock.currentTimeMillis
@@ -300,6 +445,7 @@ export const make = Effect.gen(function* () {
 			const trigger: Trigger = {
 				...next.trigger,
 				actor: caller.userId,
+				needsAuthorization: false,
 				nextRunAt: nextOf(next.trigger, now),
 				revision: current.revision + 1,
 				updatedAt: now,
@@ -308,7 +454,7 @@ export const make = Effect.gen(function* () {
 				next.hash === undefined
 					? yield* hashOf(caller.organizationId, id)
 					: next.hash
-			return yield* save(caller.organizationId, trigger, hash, current.revision)
+			return yield* save(caller, trigger, hash, current.revision)
 		})
 	return Triggers.of({
 		list: (caller) =>
@@ -334,12 +480,14 @@ export const make = Effect.gen(function* () {
 					)
 					.orderBy(triggers.createdAt)
 					.pipe(stored("The triggers could not be listed."))
-				return Arr.map(rows, fromRow)
+				return yield* Effect.forEach(rows, (row) =>
+					fromRow(row).pipe(Effect.map((value) => value.trigger)),
+				)
 			}),
 		get: (caller, id, action = "read") => access(caller, id, action),
 		create: (caller, input) =>
 			Effect.gen(function* () {
-				const owner: TriggersApi.TriggerOwner =
+				const owner: Domain.TriggerOwner =
 					input.shared === true
 						? { _tag: "Organization" }
 						: { _tag: "Member", userId: caller.userId }
@@ -360,7 +508,7 @@ export const make = Effect.gen(function* () {
 				yield* check(schedule, now)
 				const enabled = input.enabled ?? true
 				const trigger: Trigger = {
-					id: TriggersApi.TriggerId.make(
+					id: Domain.TriggerId.make(
 						"trg_" + Hex.encode(yield* randomBytes(16)),
 					),
 					owner,
@@ -370,13 +518,15 @@ export const make = Effect.gen(function* () {
 					webhook: false,
 					actor: caller.userId,
 					enabled,
+					needsAuthorization: false,
 					nextRunAt: nextOf({ schedule, enabled }, now),
+					executionId: null,
 					lastFiredAt: null,
 					revision: 0,
 					createdAt: now,
 					updatedAt: now,
 				}
-				return yield* save(caller.organizationId, trigger, null)
+				return yield* save(caller, trigger, null)
 			}),
 		update: (caller, id, input) =>
 			change(caller, id, input.expected, (current, now) =>
@@ -398,14 +548,29 @@ export const make = Effect.gen(function* () {
 				}),
 			),
 		remove: (caller, id) =>
-			Effect.gen(function* () {
-				const trigger = yield* access(caller, id, "write")
-				yield* db
-					.delete(triggers)
-					.where(where(caller.organizationId, id))
-					.pipe(stored("A trigger could not be deleted."))
-				return trigger
-			}),
+			sql
+				.withTransaction(
+					Effect.gen(function* () {
+						const saved = yield* read(caller.organizationId, id, true)
+						const trigger = yield* access(caller, id, "write")
+						yield* db
+							.delete(triggers)
+							.where(where(caller.organizationId, id))
+							.pipe(stored("A trigger could not be deleted."))
+						if (Option.isSome(saved))
+							yield* cancelSchedule(saved.value).pipe(
+								stored("The deleted trigger timer could not stop."),
+							)
+						return trigger
+					}),
+				)
+				.pipe(
+					Effect.catchTag("SqlError", (error) =>
+						Effect.fail(error).pipe(
+							stored("The trigger delete could not commit."),
+						),
+					),
+				),
 		setWebhook: (caller, id) =>
 			Effect.gen(function* () {
 				const secret = "otg_" + Base64Url.encode(yield* randomBytes(32))
@@ -430,46 +595,50 @@ export const make = Effect.gen(function* () {
 					return Option.none()
 				const expected = Buffer.from(row.hookSecretHash, "hex")
 				if (!timingSafeEqual(expected, yield* sha(secret))) return Option.none()
+				const saved = yield* fromRow(row)
+				if (Option.isNone(saved.caller)) return Option.none()
 				return Option.some({
 					organizationId: row.organizationId,
-					trigger: fromRow(row),
+					trigger: saved.trigger,
 				})
 			}),
-		due: db
-			.transaction((tx) =>
-				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					const rows = yield* tx
-						.select()
-						.from(triggers)
-						.where(
-							and(eq(triggers.enabled, true), lte(triggers.nextRunAt, now)),
+		read,
+		advance: (key, trigger) =>
+			sql
+				.withTransaction(
+					Effect.gen(function* () {
+						const execution = yield* store.loadMember(key)
+						const found = yield* read(
+							execution.identity.owner.organizationId,
+							trigger.id,
+							true,
 						)
-						.limit(100)
-						.for("update", { skipLocked: true })
-					return yield* Effect.forEach(rows, (row) =>
-						Effect.gen(function* () {
-							const trigger = fromRow(row)
-							const next = nextOf(trigger, now)
-							if (next === null && trigger.enabled && trigger.schedule !== null)
-								yield* Effect.logWarning(
-									"A trigger schedule has no next time, so the trigger stops firing by itself.",
-								).pipe(
-									Effect.annotateLogs({
-										trigger: row.id,
-										organization: row.organizationId,
-									}),
-								)
-							yield* tx
-								.update(triggers)
-								.set({ nextRunAt: next })
-								.where(where(row.organizationId, row.id))
-							return { organizationId: row.organizationId, trigger }
-						}),
-					)
-				}),
-			)
-			.pipe(stored("The due triggers could not be read.")),
+						if (
+							Option.isNone(found) ||
+							found.value.trigger.executionId !== key.id ||
+							found.value.trigger.revision !== trigger.revision
+						)
+							return yield* Execution.Conflict.make({ id: key.id })
+						const next = {
+							...found.value.trigger,
+							nextRunAt: nextOf(
+								found.value.trigger,
+								yield* Clock.currentTimeMillis,
+							),
+						}
+						if (Option.isNone(found.value.caller))
+							return yield* Execution.Forbidden.make({})
+						const executionId = yield* schedule(found.value.caller.value, next)
+						yield* db
+							.update(triggers)
+							.set({
+								nextRunAt: next.nextRunAt,
+								scheduleExecutionId: executionId,
+							})
+							.where(where(execution.identity.owner.organizationId, trigger.id))
+					}),
+				)
+				.pipe(storage),
 		fired: (organizationId, id) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis

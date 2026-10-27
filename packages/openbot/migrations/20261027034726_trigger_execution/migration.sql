@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_triggers" ADD COLUMN "schedule_execution_id" text;

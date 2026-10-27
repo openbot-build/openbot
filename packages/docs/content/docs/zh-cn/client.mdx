@@ -3,6 +3,8 @@ title: 客户端
 description: 用 TypeScript 调用 OpenBot，请求和错误都有类型。
 ---
 
+面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+
 `@openbot-build/client`
 是 OpenBot 的 TypeScript 客户端。它和服务器基于同一份 API 契约构建。每个请求、应答和错误都有类型。你在运行代码之前，编辑器就会指出错误。
 
@@ -19,7 +21,8 @@ OpenBot 的包还没有发布到 npm。请在 OpenBot 工作区中使用它们�
 {
 	"dependencies": {
 		"@openbot-build/client": "workspace:*",
-		"effect": "4.0.5"
+		"effect": "4.0.6",
+		"@effect/platform-node": "4.0.6"
 	}
 }
 ```
@@ -30,20 +33,21 @@ OpenBot 的包还没有发布到 npm。请在 OpenBot 工作区中使用它们�
 服务。Layer 是 Effect 中用来构建服务的“配方”。
 
 ```ts
-import { Client, layer } from "@openbot-build/client"
+import { Chats, layer } from "@openbot-build/client"
+import { NodeCrypto } from "@effect/platform-node"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
-	const client = yield* Client
-	const receipt = yield* client.api.chats.sendBotMessage({
-		params: { botId },
-		payload: { input: "Write the release notes." },
+	const command = yield* Chats.botMessage(botId, {
+		input: "Write the release notes.",
 	})
+	const receipt = yield* command.send
 	return receipt.chat
 })
 
 const id = await Effect.runPromise(
 	program.pipe(
+		Effect.provide(NodeCrypto.layer),
 		Effect.provide(
 			layer({
 				baseUrl: "https://api.example.com",
@@ -54,6 +58,13 @@ const id = await Effect.runPromise(
 )
 ```
 
+每次操作只准备一次命令。回复丢失后重试 `command.send`， `command.commandKey`
+保持不变。`Chats.message` 用同样方式向已有 Chat 发送消息。回执包含执行 ID；用
+`client.api.executions.observe` 和上次保存的 `afterSequence`
+观察执行。关闭观察不会取消工作。`Executions.cancel` 和 `Executions.decide`
+也会准备带稳定键的命令。这些辅助函数需要平台的 `Crypto`
+服务；上面的 Node.js 示例使用 `NodeCrypto.layer`。
+
 | 选项             | 必需 | 作用                                                                                                  |
 | ---------------- | ---- | ----------------------------------------------------------------------------------------------------- |
 | `baseUrl`        | 是   | OpenBot 的源，例如 `https://api.example.com`。                                                        |
@@ -61,7 +72,7 @@ const id = await Effect.runPromise(
 | `organization`   | 否   | 组织 ID。使用会话 cookie 时，它以 `OpenBot-Organization` 头发送。使用令牌时会忽略它。                 |
 | `onUnauthorized` | 否   | 一个函数，在受保护的请求返回 `401` 时运行。                                                           |
 
-如何创建用户令牌，请看[认证](/zh-cn/docs/authentication)。
+如何创建用户令牌，请看[认证](/zh-cn/docs/developers/authentication)。
 
 客户端从不保存令牌，也从不把令牌放进 URL。`onUnauthorized`
 不会登录，也不会重试请求。用它来通知用户，例如在令牌过期或被撤销之后。
@@ -127,6 +138,55 @@ const tasks =
 `Redacted.make` 包装新密钥。只有必须发送或显示密钥时，才调用
 `Redacted.value`。JSON 中这些字段仍是字符串。这包括提供商密钥、Vault 值、SSO 密钥、邀请密钥、令牌、Webhook 密钥和 Computer 配对密钥。
 
+## 观察和控制执行
+
+命令回执包含 `executionId`、`commandKey` 和
+`sequence`。它表示命令已保存，不代表外部操作已经结束。使用
+`GET /v1/executions/:executionId` 读取 `status` 和 `failure`。失败只包含
+`category` 和 `errorId`。
+
+通过 `GET /v1/executions/:executionId/events?afterSequence=0`
+读取已保存的事件。分页结果包含 `events`、`afterSequence` 和
+`terminal`。保存返回的游标，用于下一页。实时事件使用 SSE，即服务器事件流：
+
+```sh
+curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/executions/$EXECUTION_ID/observe?afterSequence=0"
+```
+
+每条 SSE 消息的事件名为 `execution`。数据包含 `executionId`、`sequence`、
+`createdAt` 和 `body`。保存最后处理的序号，断线后将它作为 `afterSequence`
+发送。每个子执行使用独立游标。文本事件含 `step` 和
+`attempt`，不要拼接不同尝试的文本。`Executions.observe(id, cursor)` 以 Effect
+Stream 返回这些事件。关闭事件流不会取消已接受的工作。
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"cancel-work-1"}' \
+  "https://api.example.com/v1/executions/$EXECUTION_ID/cancel"
+```
+
+取消和决策端点返回 HTTP
+200 和命令回执。资源释放或外部结果未知时，取消后的执行可以保持
+`cancelling`。终态为 `completed`、`failed`、`cancelled` 和 `interrupted`。
+`waiting` 和 `outcome_unknown` 仍需要继续处理或作出决定。
+
+`DecisionNeeded` 事件给出 `decisionId` 和允许的 `choices`。选取其中一个，发送到
+`POST /v1/executions/:executionId/decisions`：
+
+```json
+{
+	"commandKey": "answer-work-1",
+	"decisionId": "<saved decision id>",
+	"answer": "stop"
+}
+```
+
+重试时保留相同命令键和正文。相同键配不同正文会返回
+`409 ExecutionKeyConflict`。决定不会移除当前权限或 token 限制。API
+key 和同源 cookie 使用相同的应用检查。
+
 ## 处理错误
 
 每次失败的调用都会给出一个带类型的错误。类型 `ClientError` 列出了所有错误：
@@ -188,7 +248,7 @@ const ClientLive = layer({
 发送请求，所以浏览器会带上 cookie。浏览器还会加上 `Origin`
 头。对于修改数据的请求，OpenBot 会检查它是否正好等于平台设置中的
 `publicOrigin`。用 `GET /auth/session`
-读取这个人所属的组织。请看[认证](/zh-cn/docs/authentication#读取和结束登录)。
+读取这个人所属的组织。请看[认证](/zh-cn/docs/developers/authentication#读取和结束登录)。
 
 如何在同源上提供你的 Web 应用，请看[部署](/zh-cn/docs/deploy#同源的自有客户端)。
 
@@ -244,16 +304,25 @@ const program = Effect.gen(function* () {
 视图客户端不持有任何凭据。每个请求都经过 OpenBot，所以常规的能力检查都会生效：
 
 - 它检查每个应答都是有效的 MCP 结果。
-- 它把每个操作只发送一次，并带上新的请求 ID。
-- 然后它每 250 毫秒检查一次已保存的操作，直到得到最终结果。它从不重发操作。
+- 它为每个动作使用一个命令键。
+- 它跟随已保存的子执行事件，首个 Turn 结束后也继续观察。
+- 结果事件到达后，它读取已保存的 App 结果。等待期间不会重发动作。
 
-关闭视图后，客户端停止检查。OpenBot 已经接受的操作仍会运行到结束。
+`Executions.observe(id, afterSequence)` 从保存的游标读取一个执行。
+`Executions.observeTree(id)`
+从头观察执行及其子执行。每个子执行有自己的序号。使用 `stopAt: ["AppCall"]`
+可读取 App 事件而不读取其决策子执行。View 桥接使用这个范围；读取 App 结果不要求审批权限。
+`AppViews.act` 和 `AppViews.message` 创建带固定键的命令；应答丢失后复用它的
+`send` Effect。
+
+关闭视图后，客户端停止检查。OpenBot 已经接受的操作仍会运行到结束。所有服务器节点按每个视图的顺序保存关闭、上下文修改和新消息。关闭保存后，等待中的请求不能修改上下文或添加消息。服务器重启不会关闭视图。视图的有效期和当前访问权限仍然生效。
 
 ---
 
 ## 展示告解
 
-Bot 用 `confide` 工具说出工作情况，[记忆 Bot](/zh-cn/docs/memory#bot-如何学习)
+Bot 用 `confide`
+工具说出工作情况，[记忆 Bot](/zh-cn/docs/developers/memory#bot-如何学习)
 会回答它。人可以读到这些内容：`GET /v1/chats/:chatId/confessions`
 会列出它们，这些调用也在 Chat 的历史中。但 Bot 在那里说话比在回答中更放得开。所以不要让人太容易读到它们：
 

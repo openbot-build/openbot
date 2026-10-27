@@ -1,18 +1,18 @@
 import type { Chat, Turn } from "@openbot-build/core"
-import type { BotsApi, Caller } from "@openbot-build/api"
-import { Context, type HashMap, type Ref } from "effect"
+import type { Bots as BotsApi } from "@openbot-build/domain"
+import type { ExecutionIdentity } from "@openbot-build/domain"
+import { Context } from "effect"
 import type { Chain } from "../chats/ChatHost.ts"
-import type { Answer } from "./Gate.ts"
 
 /**
  * The Bot that runs the current Turn, and who it works for.
- * The Bot plugin gives it to each Turn. Capability checks read it.
+ * The Turn host builds it before the tools. Capability checks read it.
  */
 export class Work extends Context.Service<
 	Work,
 	{
-		/** The member, with the token that started the work when there was one. */
-		readonly caller: Caller
+		/** The owner, actor and original token of this work. */
+		readonly identity: ExecutionIdentity
 		readonly namespace: string
 		readonly bot: BotsApi.Bot
 		/** The delegation chain: who gave the work to whom. */
@@ -21,18 +21,5 @@ export class Work extends Context.Service<
 		readonly deciders: ReadonlyArray<BotsApi.BotId>
 		readonly chat: Chat.Id
 		readonly turn: Turn.Id
-		/**
-		 * The answer of each capability check in this Turn, by tool call. When a tool
-		 * asks for approval, its answer comes from here.
-		 */
-		readonly checks: Ref.Ref<HashMap.HashMap<string, Answer>>
 	}
 >()("@openbot-build/openbot/capabilities/Work") {}
-
-/** The caller that a chain acts for. */
-export const callerOf = (chain: Chain): Caller => ({
-	kind: chain.tokenId === undefined ? "member" : "user_token",
-	organizationId: chain.organizationId,
-	userId: chain.userId,
-	...(chain.tokenId === undefined ? {} : { tokenId: chain.tokenId }),
-})

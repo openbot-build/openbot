@@ -22,6 +22,11 @@
 	},
 	"files": [
 		"dist",
-		"guide.md"
-	]
+		"guide.md",
+		"src",
+		"test/Testing.ts"
+	],
+	"exports": {
+		"./testing": "./test/Testing.ts"
+	}
 }

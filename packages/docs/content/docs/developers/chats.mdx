@@ -1,0 +1,664 @@
+---
+title: Chats
+description:
+  Talk to a Bot. It always answers at once, and long work runs in parallel.
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+A **Chat** is a conversation with a [Bot](/docs/developers/bots). You do not
+make Chats, pick them or close them. You send a message to a Bot, and OpenBot
+keeps one Chat for you and that Bot. The Bot always answers at once. Long work
+goes to other Chats that run in parallel, and the results come back to your Chat
+later. This page shows how to talk to a Bot and how to read a Chat. Every route
+accepts a user token or the session cookie. See
+[Authentication](/docs/developers/authentication).
+
+| Term     | Meaning                                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------ |
+| Turn     | One run of the Bot: it reads new input, takes model steps and tool calls, and gives an answer.                     |
+| Item     | One record in the history of a Chat, such as a message, a model answer, a tool call or a tool result.              |
+| Inbox    | The input that waits for a Turn. See [The inbox](#the-inbox).                                                      |
+| Notice   | Input from OpenBot, not from a person, such as the result of work that the Bot gave away. See [Notices](#notices). |
+| Revision | `chat.revision`. A number that goes up with every change to the Chat.                                              |
+
+---
+
+## Kinds of Chats
+
+OpenBot makes every Chat itself. `kind` says why a Chat exists:
+
+| Kind      | When OpenBot makes it                                                                                                                | Who owns it                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| `direct`  | The first time a person sends a message to a Bot.                                                                                    | That person.                              |
+| `channel` | The first message in a chat of a [Channel](/docs/developers/channels).                                                               | The actor of the Channel.                 |
+| `task`    | Each time a Bot gives work to a Bot, or a [trigger](/docs/developers/triggers) fires. See [Delegation](/docs/developers/delegation). | The owner of the Chat that gave the work. |
+| `review`  | A Bot must decide a [request](/docs/developers/requests).                                                                            | The person that the request is for.       |
+| `live`    | Each time a person calls `POST /v1/bots/:botId/live`. See [Live mode](/docs/developers/live).                                        | That person.                              |
+
+Each person has one direct Chat with each Bot. A Chat has no end. It goes on for
+as long as people talk to the Bot, unless you
+[delete its history](#delete-the-history). A review Chat closes after its
+decision.
+
+---
+
+## Talk to a Bot
+
+Send a message to a Bot with `POST /v1/bots/:botId/messages`:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Plan three days in Rome.","commandKey":"trip-1"}' \
+  https://api.example.com/v1/bots/$BOT/messages
+```
+
+The message goes to your direct Chat with this Bot. The first message makes the
+Chat. You need `delegate` on the Bot. To know which Bot to talk to first, read
+`defaultBot` from `GET /v1/me/settings`. See
+[Your default Bot](/docs/developers/bots#your-default-bot).
+
+| Field        | Meaning                                                                     |
+| ------------ | --------------------------------------------------------------------------- |
+| `input`      | Required. Text, or a list of user messages (see below).                     |
+| `commandKey` | Required. A key for this command. Keep the same key and body when retrying. |
+| `queue`      | Optional. `true` waits for a new Turn instead of steering the current one.  |
+
+There is no `expected` revision. A message is always taken.
+
+`input` takes text. These three forms are the same:
+
+```json
+"Plan three days in Rome."
+```
+
+```json
+[{ "role": "user", "content": "Plan three days in Rome." }]
+```
+
+```json
+[
+	{
+		"type": "message",
+		"role": "user",
+		"content": [{ "type": "input_text", "text": "Plan three days in Rome." }]
+	}
+]
+```
+
+Unknown fields return `400`.
+
+A message can also have files that you uploaded, with `input_image` and
+`input_file` parts. See
+[Give a file to a Bot](/docs/developers/files#give-a-file-to-a-bot).
+
+`POST /v1/chats/:chatId/messages` takes the same body. Use it for a direct Chat,
+for a live Chat, or for a task Chat when you want to add to the work of a Bot.
+In a task Chat, the Bot reads your message as a message from you. In a live
+Chat, the message waits until a Live session is open. Other kinds of Chats
+return `409` with `ChatConflict`.
+
+### The answer
+
+OpenBot returns `202` after it saves the command:
+
+```json
+{
+	"executionId": "<executionId>",
+	"commandKey": "trip-1",
+	"sequence": 2,
+	"chat": "chat_7d21…",
+	"turn": "t-19aa"
+}
+```
+
+The receipt names the saved execution and its Turn, also when the input must
+wait. The same command key and body return the same receipt. A changed body with
+the same key returns `409` with `ExecutionKeyConflict`.
+
+Use `GET /v1/executions/:executionId` for state. Read the saved answer with
+`GET /v1/chats/:chatId/turns/:turnId`. Sending a message does not wait for its
+answer. The SDK `Chats.message` and `Chats.botMessage` prepare a command once
+and reuse its key for network retries.
+
+### Stream the answer
+
+Use the receipt to open the execution event stream. Server-Sent Events (SSE) is
+a format for events over HTTP:
+
+```sh
+curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/executions/$EXECUTION_ID/observe?afterSequence=0"
+```
+
+Each `execution` event has a saved `sequence` and a `body`. Keep the sequence
+and send it as `afterSequence` when reconnecting. `Text` carries the step and
+attempt, so output from a restarted model call stays separate. `State` records
+status, and `Result` names the saved business result.
+
+Events are saved before they are sent. Slow readers catch up from the event log.
+The saved terminal event can be read again after a lost connection. Closing
+observation does not cancel work. Use the explicit execution cancel command.
+`GET /v1/executions/:executionId/events` gives the same log in pages.
+
+### Common errors
+
+| Status | Error                      | When                                                                                       |
+| ------ | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `400`  | `ChatModelInvalid`         | The Chat has no model. The Bot needs a `model`. See [Models](/docs/models#choose-a-model). |
+| `400`  | `FileInvalid`              | A file part names a file that is not one of your ready files, or is not an image.          |
+| `403`  | `Forbidden`                | You may not give work to this Bot.                                                         |
+| `404`  | `BotNotFound`              | There is no Bot with this ID that you may use.                                             |
+| `404`  | `ChatNotFound`             | You have no Chat with this ID.                                                             |
+| `409`  | `ChatConflict`             | This kind of Chat takes no messages from people.                                           |
+| `503`  | `ChatExecutionUnavailable` | OpenBot has no model to run the Turn.                                                      |
+| `503`  | `ChatStorageUnavailable`   | OpenBot cannot reach its database.                                                         |
+
+---
+
+## The inbox
+
+Each Chat has an **inbox**. Every input goes into it first: a message from a
+person, or a notice from OpenBot. The inbox gives each input to a Turn by these
+rules:
+
+1. **The Chat is idle.** The input starts a new Turn at once. All the inputs of
+   the same author that wait in the inbox go into that Turn.
+2. **A Turn of the same author runs.** The input steers the Turn: the Bot reads
+   it at its next model step.
+3. **A Turn of another author runs.** The input waits. It starts its own Turn
+   after the running Turn ends. This happens in a group chat of a Channel, where
+   many people talk.
+4. **A Turn ends.** The next input in the inbox starts the next Turn. This
+   happens after every end: `Completed`, `Failed` and `Interrupted`.
+
+The **author** is the person that the input is for. For a message, it is the
+person who sends it, with the way they signed in. So a message with another user
+token of the same person counts as another author. A notice has the author of
+the work that it is about.
+
+A Turn that ends before it reads a steer message gives it back to the inbox, so
+no input is lost. The view of a Chat shows the number of inputs that wait in
+`inbox`.
+
+---
+
+## Notices
+
+A Turn never waits. Anything that takes outside time comes back later as a
+**notice**: a new input from OpenBot, not from a person.
+
+- A Bot gives work to a Bot. The tool call returns at once. When the work ends,
+  its result comes back as a notice. See
+  [Delegation](/docs/developers/delegation).
+- A tool call needs a decision. The tool call gets a pending result at once. The
+  answer comes back as a notice. When the call is allowed, it runs then. See
+  [Requests](/docs/developers/requests).
+- A Bot asks for a [reminder](#reminders). The note comes back as a notice at
+  that time.
+
+A notice is an input Item with `origin.notice`. Its `kind` says what it is
+about, and `ref` names the thing, such as the ID of a delegation:
+
+| `kind`       | What it brings                                                            |
+| ------------ | ------------------------------------------------------------------------- |
+| `delegation` | The result of work that this Chat gave away.                              |
+| `task`       | The task of a task Chat.                                                  |
+| `request`    | The answer to a request. An allowed call runs with it.                    |
+| `review`     | The request that a review Chat decides.                                   |
+| `plan`       | The answer to a plan. See [Plan mode](#plan-mode).                        |
+| `reminder`   | The note of a reminder.                                                   |
+| `code`       | The end of a [Code Mode](/docs/developers/code-mode) program that waited. |
+| `app`        | A message from an [App view](/docs/developers/apps#app-views).            |
+| `todos`      | A reminder about the open items of the [todo list](#todo-list).           |
+
+The text of a notice starts with `[OpenBot]`. The Bot knows that such text comes
+from OpenBot, not from a person, and it reads it as data, not as instructions.
+The [memory Bot](/docs/developers/memory#the-memory-bot) never takes a notice as
+the words of a person.
+
+A notice goes through the inbox like a message. So when you talk to the Bot, a
+result can come in at the same time. It steers your Turn or waits for the next
+one.
+
+---
+
+## Open work
+
+**Open work** is the work of a Chat that has not ended yet: the work that it
+gave to Bots, its requests that wait for a decision, and its reminders. Each one
+comes back as a notice later.
+
+`open` in the view of a Chat counts it:
+
+```json
+{ "delegations": 2, "requests": 0, "reminders": 1 }
+```
+
+The Bot sees a list of its open work at the start of each Turn: the ID, the Bot
+and the first line of each delegation, each request, and each reminder with its
+time. So it knows what will come back.
+
+Open work also decides when the work of a task Chat ends. See
+[Delegation](/docs/developers/delegation#when-the-work-ends).
+
+---
+
+## Background work
+
+A tool call has a time budget. If it ends in time, the model gets its result in
+the same Turn. Otherwise, it keeps its execution and continues in the
+background:
+
+```json
+{ "executionId": "0f3c…", "status": "running", "background": true }
+```
+
+A wait for approval can also free the Turn. When the tool ends, a saved notice
+of kind `tool` gives the result to the Chat. A restart resumes saved work. An
+unknown outside result waits for a decision. It is not a completed call.
+
+| Tool                       | What it does                                                            |
+| -------------------------- | ----------------------------------------------------------------------- |
+| `openbot_execution_status` | Reads a tool execution and its saved result.                            |
+| `openbot_execution_wait`   | Waits for one of the named executions, for at most 30 seconds.          |
+| `openbot_execution_cancel` | Requests cancellation. `cancelling` means release is still in progress. |
+
+Work tools that change their Turn stay in the foreground. App calls, Code Mode
+and delegated work have saved executions. Computer commands keep their own
+sessions. The organization sets the time budget, maximum time and number of
+active tools. See [Organization settings](/docs/organization#settings).
+
+| Route                                     | What it does                                        |
+| ----------------------------------------- | --------------------------------------------------- |
+| `GET /v1/chats/:chatId/tool-calls`        | Lists tools with their own execution, oldest first. |
+| `GET /v1/chats/:chatId/tool-calls/:id`    | Reads the tool record and its saved output.         |
+| `GET /v1/executions/:executionId/observe` | Reads saved events from a sequence.                 |
+| `POST /v1/executions/:executionId/cancel` | Sends a cancel command with a `commandKey`.         |
+
+A tool record has its own `id`, an `executionId`, and the exact Chat, Turn, item
+and step in `position`. These are separate from a model's `callId`, which it may
+reuse in another step. A saved output does not replace the execution status or
+its safe failure. An App call has a separate App resource ID.
+
+---
+
+## Read a Chat
+
+`GET /v1/chats` lists your direct Chats, channel Chats and live Chats, oldest
+first. Add `bot=<id>` to list the Chats of one Bot. Add `kind=<kind>` to list
+one kind, such as `task` or `review`. Each summary has `chat`, `status`, `turn`,
+a short `response` and `executionId`.
+
+`GET /v1/chats/:chatId` returns the view of one Chat. Reading never starts work.
+Here is a short form of it:
+
+```json
+{
+	"chat": {
+		"id": "chat_7d21…",
+		"revision": 4,
+		"kind": "direct",
+		"bot": "bot_3f9a…",
+		"parent": null,
+		"settings": { "mode": "build" },
+		"createdAt": 1792486800000
+	},
+	"status": "Running",
+	"turn": { "id": "t-19aa", "status": { "_tag": "Running" } },
+	"response": { "id": "t-19aa", "status": "in_progress" },
+	"executionId": "<executionId>",
+	"inbox": 0,
+	"open": { "delegations": 1, "requests": 0, "reminders": 0 }
+}
+```
+
+| Field         | Meaning                                                                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `chat`        | The Chat: its `kind`, its `bot`, and its `settings`. `parent` names the Chat and the delegation that gave the work of a task Chat. A channel Chat has a `title`: the name of the chat on the platform. |
+| `status`      | `Idle` before the first Turn. After that, the status of the last Turn: `Running`, `Completed`, `Failed` or `Interrupted`.                                                                              |
+| `turn`        | The current Turn, or the last one.                                                                                                                                                                     |
+| `response`    | The answer of that Turn.                                                                                                                                                                               |
+| `executionId` | The saved execution ID of this Turn, or `null` when no execution is linked. Use the execution API to read its state and events.                                                                        |
+| `inbox`       | The number of inputs that wait for a Turn.                                                                                                                                                             |
+| `open`        | The [open work](#open-work).                                                                                                                                                                           |
+
+The view holds no history. Read the history with these routes:
+
+| Route                                       | What it returns                                                                                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/chats/:chatId/items`               | The Items of the Chat, newest first. Use `limit` (1 to 100, default 50). Send `next` as `before` to read older Items. This is the main way to read a long Chat. |
+| `GET /v1/chats/:chatId/turns`               | The Turn records, oldest first. Use `limit` and `after` (a Turn ID). The answer is `{ "items": [...], "next": "<turnId>" \| null }`.                            |
+| `GET /v1/chats/:chatId/turns/:turnId`       | `{ "turn": {...}, "response": {...} }`.                                                                                                                         |
+| `GET /v1/chats/:chatId/turns/:turnId/items` | The Items of one Turn, with `after` (an Item ID) and `limit`.                                                                                                   |
+
+A Turn record has `status`, `settings`, `steps`, `usage`, `input` (the IDs of
+its input Items), `items`, `startedAt` and `completedAt`. `author` is the person
+that the Turn works for. In a [Channel](/docs/developers/channels), it is the
+person who wrote the message. Each Item has `id`, `seq` (its place in the
+history), `content` and `origin` (`chat`, `turn`, `step`, and `notice` for a
+notice).
+
+To follow work, use the saved `executionId`. Events have a sequence number. Send
+the last number as `afterSequence` after a lost connection. Closing the stream
+only stops observation. Cancel work with an explicit execution command. The old
+Chat wait route and local `activity` field have been removed.
+
+```sh
+curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/executions/$EXECUTION/observe?afterSequence=4"
+```
+
+Chat reads do not open a member runtime. The list applies the current read
+policy in the database query. A token that can read only some Chats gets only
+those Chats. A valid token with no matching Chats gets an empty list.
+
+More routes read the work of a Chat:
+
+| Route                                  | What it lists                                                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/chats/:chatId/delegations`    | The work that this Chat gave to Bots. See [Delegation](/docs/developers/delegation#watch-the-work).                     |
+| `GET /v1/chats/:chatId/confessions`    | What the Bot said with `confide`. See [Show confessions](/docs/client#show-confessions).                                |
+| `GET /v1/chats/:chatId/enrichments`    | How the memory Bot wrote the input of each Turn again. See [Memory](/docs/developers/memory#confessions-and-additions). |
+| `GET /v1/chats/:chatId/code-runs`      | The [Code Mode](/docs/developers/code-mode) programs of the Chat.                                                       |
+| `GET /v1/chats/:chatId/app-operations` | The [App](/docs/developers/apps) calls of the Chat.                                                                     |
+
+---
+
+## Interrupt
+
+`POST /v1/chats/:chatId/interrupt` stops the running Turn:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"stop-1"}' \
+  https://api.example.com/v1/chats/$CHAT/interrupt
+```
+
+The API returns `202` with an execution receipt. Watch its `executionId` until
+it ends. The stop stays pending while the Turn releases its resources. The Turn
+then becomes `Interrupted` and its response becomes `cancelled`. When no Turn
+runs, its state stays the same. Use the same command key for a retry.
+
+An interrupt stops only the Turn. The work that the Chat gave to Bots goes on,
+and its results still come back. Its requests and reminders stay open too. To
+stop all of it, send `{ "commandKey": "stop-all-1", "delegations": true }`. Then
+OpenBot also cancels the work that the Chat gave away, with the work that this
+work gave away, and the requests and reminders of the Chat.
+
+After the interrupt, the next input in the inbox starts the next Turn.
+
+---
+
+## Todo list
+
+A Chat has a todo list. The Bot keeps it with the tool `openbot_todos` when its
+work has more than one step. Each item has an `id`, a `content` and a `status`:
+`pending`, `in_progress` or `done`. Only one item can be `in_progress` at a
+time.
+
+While an item is not `done`, the Bot goes on working. When the Bot wants to end
+the Turn with open items, OpenBot gives it a notice with the open items, and the
+Bot takes one more step. OpenBot does this only once for each state of the list.
+It does not do it while the Chat has [open work](#open-work), because that work
+comes back as a notice. When every item is `done` at the end of a Turn, the list
+becomes empty, so an old list does not stay in a Chat that never ends.
+
+Read the list with `GET /v1/chats/:chatId/todos`:
+
+```json
+{
+	"items": [
+		{ "id": "read", "content": "Read the open issues", "status": "done" },
+		{ "id": "fix", "content": "Fix the login bug", "status": "in_progress" }
+	]
+}
+```
+
+Replace the whole list with `PUT /v1/chats/:chatId/todos`. Send the revision of
+the Chat that you read:
+
+```json
+{
+	"revision": 7,
+	"items": [
+		{ "id": "fix", "content": "Fix the login bug", "status": "pending" }
+	]
+}
+```
+
+The answer is the view of the Chat. An old revision returns `409` with
+`ChatConflict`. A list where two items have the same `id`, or where more than
+one item is `in_progress`, fails request validation with `400`.
+
+---
+
+## Reminders
+
+A Bot can come back to something later with the tool `openbot_remind`. It gives
+`seconds`, or `until` with a date and time, such as `2026-10-23T09:00:00Z`, and
+a `note`. The tool returns
+`{ "reminder": "rem_…", "executionId": "…", "at": "<time>" }` at once, and the
+Turn goes on. At that time, the note comes back to the Chat as a notice.
+
+Each reminder has a saved execution and a durable timer. A durable timer is a
+wake-up time kept in PostgreSQL. After a restart, the execution wakes at its
+saved time, or at once if that time has passed. OpenBot checks the current
+permissions before it sends the note. The note, reminder state and execution
+result commit in one transaction. A retry does not add a second note.
+
+Use the execution ID to read events or cancel this reminder. A cancel first sets
+`cancelling`; the execution then closes as `cancelled`.
+
+A reminder is [open work](#open-work). An interrupt with
+`{ "delegations": true }` cancels it. So does a cancel of the work of its task
+Chat, and the deletion of its Chat.
+
+---
+
+## Plan mode
+
+In `plan` mode, the Bot looks things up, but it does not change anything yet. It
+gets only the tools that just read: the Bot tools that list and read Bots, App
+resources and prompts, and the App tools that the organization lists in
+`appReadRules`. It also gets the todo tool, the reminder tool and
+`openbot_submit_plan`.
+
+When the plan is ready, the Bot calls `openbot_submit_plan` with the steps as a
+todo list and a short summary. OpenBot saves the list and checks the capability
+`plans.run`, like any [request](/docs/developers/requests).
+
+- When the plan is allowed at once, the Chat moves to `build` mode. A new Turn
+  starts after this one, with all tools, and the Bot carries out the plan.
+- When the plan needs a decision, the tool returns a pending result at once, and
+  the Turn ends. When the plan is allowed later, the Chat moves to `build` mode,
+  and a notice starts a new Turn that carries out the plan.
+- When the plan is denied, a notice gives the Bot the reason. The Chat stays in
+  `plan` mode.
+- When OpenBot cannot check the plan, the plan does not run. The tool gives the
+  Bot the reason, and the Chat stays in `plan` mode.
+
+The approval setting says who answers and what happens when nobody answers in
+time:
+
+```json
+{ "approver": "person", "timeoutMs": 600000, "onTimeout": "run" }
+```
+
+| Field       | Values             | What it does                                                                                              |
+| ----------- | ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `approver`  | `chain`, `person`  | `chain` asks the decider above the Bot, so a Grant or a Rule can answer. `person` always asks the person. |
+| `timeoutMs` | 1 second to 7 days | How long the request waits.                                                                               |
+| `onTimeout` | `run`, `stay`      | `run` carries out the plan when nobody answers in time. `stay` keeps the Chat in `plan` mode.             |
+
+You can set it in four places. The most specific one that is set wins, also when
+it is looser:
+
+1. The Chat: `planApproval` with `PATCH /v1/chats/:chatId`. Send `null` to
+   remove it.
+2. The Bot: `planApproval` on the [Bot](/docs/developers/bots).
+3. You: `PATCH /v1/me/settings` with
+   `{ "expectedVersion": 0, "planApproval": { ... } }`. Read your settings with
+   `GET /v1/me/settings`. The same settings hold your
+   [default Bot](/docs/developers/bots#your-default-bot).
+4. The organization: `planApproval` in its
+   [settings](/docs/organization#settings). It is only the default. It cannot
+   forbid a looser setting.
+
+---
+
+## Models and execution mode
+
+A new Chat, including a review Chat, uses the `model` of its Bot. A test or
+development platform can give `builtinModels.defaultModel` when the Bot has
+none. A linked Bot also uses that default when its model is not in the receiving
+organization. Without a valid model, creation fails and leaves no Chat or Turn.
+A live Chat uses its own Live model catalog. A saved review keeps its model on
+replay; a new send still checks current model rights.
+`GET /v1/chats/:chatId/models` shows the models you can pick:
+
+```json
+{
+	"selected": {
+		"_tag": "Config.Selection",
+		"provider": "development",
+		"model": "mock-text"
+	},
+	"providers": [
+		{ "id": "development", "name": "Development scenarios (simulated)" }
+	],
+	"models": [
+		{
+			"_tag": "Config.Model",
+			"provider": "development",
+			"id": "mock-text",
+			"name": "mock-text (simulated)",
+			"reasoningEfforts": [],
+			"serviceTiers": []
+		}
+	]
+}
+```
+
+Creating a Chat and changing its settings or todo list do not open a model or a
+member runtime. These writes use saved records and check current rights. Each
+settings or todo change must name the current revision.
+
+Change the settings of a Chat with `PATCH /v1/chats/:chatId`:
+
+```json
+{
+	"expected": 4,
+	"mode": "plan",
+	"model": {
+		"_tag": "Config.Selection",
+		"provider": "development",
+		"model": "mock-slow"
+	}
+}
+```
+
+| Field          | Meaning                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `expected`     | Required. The current `chat.revision`. An old revision returns `409` with `ChatConflict`.                                   |
+| `mode`         | Optional. `build` or `plan`.                                                                                                |
+| `model`        | Optional. The model of this Chat. It also needs `use` on the `Model`. `null` makes the Chat use the model of its Bot again. |
+| `planApproval` | Optional. See [Plan mode](#plan-mode). `null` removes it.                                                                   |
+
+A wrong model returns `400` with `ChatModelInvalid`. The `reason` is
+`provider-not-found`, `model-not-found` or `unsupported-option`. See
+[Models](/docs/models) for how OpenBot gets its models.
+
+The execution mode is `build` or `plan`. `build` is the normal mode: the Bot
+does the work. In `plan` mode, the Bot writes a plan first. OpenBot saves the
+mode on the Chat and copies it into the `settings` of each new Turn.
+
+---
+
+## Compaction
+
+A Chat has no end, so its history can grow larger than the context window of its
+model. The context window is the most text that a model can read at once.
+**Compaction** makes the old part shorter, so that it fits.
+
+Before each model step, OpenBot guesses the input tokens of the Chat. About four
+characters of JSON make one token. When the guess reaches 90% of the context
+window of the model, the model of the Chat writes a summary of the older
+context. The newest messages stay as they are.
+
+- The context window comes from the model in the catalog. See `contextWindow` in
+  [Models](/docs/models#add-a-model).
+- A model in code, such as a [built-in model](/docs/models#built-in-models), can
+  set a lower limit with `autoCompactTokenLimit`.
+- A model with no known context window is not compacted.
+
+The history always keeps every Item, and `GET /v1/chats/:chatId/items` shows all
+of them. Only what the model reads gets smaller. The summary calls have the
+usage source `compaction`. See [Usage](/docs/usage).
+
+OpenBot does not use the native compaction of a provider by default, such as
+`/responses/compact` of OpenAI. A program that runs the
+[core library](/docs/packages#core) can give its own `ContextCompaction`
+service, such as `ResponsesCompaction.layer()`.
+
+---
+
+## Delete the history
+
+`DELETE /v1/chats/:chatId` takes `{ "commandKey": "delete-1" }` and returns
+`202` with an execution receipt. It closes the Chat to new work, cancels its
+open work, and waits for resource release before it removes the history. A retry
+with the same key gives the same receipt, also after the Chat is gone. Direct,
+channel and live Chats can be deleted. Task and review Chats return `409` with
+`ChatConflict`.
+
+The Chat then no longer keeps the
+[files](/docs/developers/files#how-files-go-away) that it named.
+
+After you delete a direct Chat, your next message to the Bot starts a new, empty
+Chat with a new ID. In the same way, the next message in the chat of a deleted
+channel Chat starts a new Chat. What the Bot learned from the Chat stays in its
+[Bot memory](/docs/developers/memory). To remove that too, purge the tag
+`chat:<id>`. See
+[Read and change it](/docs/developers/memory#read-and-change-it).
+
+---
+
+## When a server stops
+
+The execution engine assigns work to one server at a time. After that server
+stops, another server resumes from saved steps. The old server cannot advance
+state after a new owner takes over.
+
+A saved outside result is reused. An unfinished model call can start a new
+attempt; its output is marked separately. An outside write without a known
+result or a safe retry key waits in `outcome_unknown` for a decision. OpenBot
+does not call it complete or send it again without that decision.
+
+Only confirmed provider usage is charged. Unknown usage stays marked unknown.
+See all fields in the [Chats reference](/docs/api/operations/tags/chats/).
+
+## Chats from an older version
+
+A data upgrade keeps Chat IDs, Items and past Turns. It also keeps old tool
+results. The tool list and read routes return these as `_tag: "Imported"`
+records. They have `chat`, `turn`, `kind` and `endedAt`. They have no
+`position`, `deadline` or `detached` field because the old record did not save
+those facts. Read `status` and `failure` from their linked execution. Old
+pending requests and delegations stay in history. They do not count as open work
+or appear in the model's list of work that will return.
+
+Old work has no proof of its original token. The upgrade does not run it again.
+Pending inputs leave the live inbox and stay in sealed history. Old task Chats
+stay as history; send new work through the parent Chat.
+
+If a direct Chat's old Turn has `outcome_unknown`, review its saved calls and
+send a `stop` decision for each unknown call through the execution decision
+route. The stop records your choice; it does not undo an outside action. New
+input returns `409` with `ChatConflict` until that execution ends. Then new
+input starts a fresh Turn with the current caller's rights. It cannot reuse the
+old caller's rights or run unresolved old calls.

@@ -1,14 +1,11 @@
 import { Model, Provider } from "@openbot-build/core"
-import {
-	Authorization,
-	type Caller,
-	Identity,
-	ModelProvidersApi,
-	OpenBotApi,
-} from "@openbot-build/api"
+import { ModelProvidersApi, OpenBotApi } from "@openbot-build/api"
+
+import { Authorization } from "@openbot-build/domain"
+import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Billing } from "../billing/Billing.ts"
 import { organizationKey } from "../audit/Resources.ts"

@@ -1,0 +1,46 @@
+---
+title: "Add a Live backend"
+description: "Add a Live backend"
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+For developers who add a server backend.
+
+## Add a Live backend
+
+A **Live backend** connects OpenBot to one kind of Live service. Everything else
+in Live mode works with any backend. To add one:
+
+1. Write a module that gives a `LiveBackend` from
+   `packages/openbot/src/models/LiveBackends.ts`. Its `make` gives a `LiveModel`
+   from `@openbot-build/core/Live`.
+2. Say in `capabilities` what the service can do. OpenBot never sends an input
+   that the backend does not support.
+3. Map the `Live.Input` values to the messages of the service, and the messages
+   of the service to `Live.Event` values.
+4. Add the backend to `layerLiveBackends` in
+   `packages/openbot/src/app/OpenBot.ts`.
+
+`packages/openbot/src/providers/openai/OpenAiRealtime.ts` is the backend for the
+OpenAI Realtime API. Use it as an example.
+
+A service that does not give the text of the speech cannot keep the history of
+the Chat. OpenBot does not open a session with such a model yet.
+
+Set `ResponseDone.usage.input.total` and `output.total` from the provider's
+confirmed counts. Set a missing count to `undefined`, including missing detail
+counts. Cached input tokens are part of the input total. Do not add them again
+or use `Live.emptyUsage` when the provider gives no usage report. Such usage
+stays unknown and is not charged.
+
+`Live.Input.History` restores text, function calls, and function results. Insert
+it before any current sound input. Keep its order: each call must be present
+before its result. The driver sends history once, from the saved model prompt.
+Do not load another copy of Chat history in the backend.
+
+The caller owns the connection scope. When an RPC fails or is interrupted, the
+server retires that connection. Release the socket in its finalizer. Do not
+replay sound or keep an old response for the next model request.

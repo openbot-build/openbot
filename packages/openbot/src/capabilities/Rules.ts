@@ -1,4 +1,4 @@
-import { BotsApi } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
 import {
 	Clock,
 	Context,

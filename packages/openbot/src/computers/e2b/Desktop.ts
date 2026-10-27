@@ -1,4 +1,4 @@
-import type { ComputersApi } from "@openbot-build/api"
+import type { Computers as ComputerData } from "@openbot-build/domain"
 import { Array as Arr, Option, Record as Rec, String as Str } from "effect"
 import { quote } from "../Http.ts"
 
@@ -105,7 +105,7 @@ const move = (x: number, y: number) => `xdotool mousemove --sync ${x} ${y}`
 const scroll = (button: number, amount: number) =>
 	amount === 0 ? [] : [`xdotool click --repeat ${Math.abs(amount)} ${button}`]
 
-const action = (step: ComputersApi.DesktopAction): ReadonlyArray<string> => {
+const action = (step: ComputerData.DesktopAction): ReadonlyArray<string> => {
 	switch (step._tag) {
 		case "Click":
 			return [
@@ -138,5 +138,5 @@ const action = (step: ComputersApi.DesktopAction): ReadonlyArray<string> => {
 }
 
 /** One script that does all the actions in order, and stops at the first that fails. */
-export const actions = (steps: ReadonlyArray<ComputersApi.DesktopAction>) =>
+export const actions = (steps: ReadonlyArray<ComputerData.DesktopAction>) =>
 	Arr.join([start, "set -e", ...Arr.flatMap(steps, action)], "\n")

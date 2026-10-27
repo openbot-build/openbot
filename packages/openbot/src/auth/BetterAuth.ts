@@ -1,4 +1,5 @@
 import { AuthApi } from "@openbot-build/api"
+
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import { betterAuth } from "better-auth/minimal"
 import { APIError } from "better-auth/api"
@@ -15,7 +16,6 @@ import {
 	Equal,
 	FiberSet,
 	Layer,
-	type LogLevel,
 	Option,
 	Predicate,
 	RcMap,
@@ -41,7 +41,10 @@ import {
 import { developmentLogin } from "./DevelopmentLogin.ts"
 import { ResolvedConfiguration } from "./Configuration.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
-import * as Background from "../app/Background.ts"
+import * as Background from "../execution/Background.ts"
+import * as Failures from "../errors/Failures.ts"
+import * as Report from "../errors/Report.ts"
+import type { Records } from "../errors/Records.ts"
 
 /**
  * The Better Auth provider ID of the platform provider. Its callback is
@@ -50,19 +53,11 @@ import * as Background from "../app/Background.ts"
  */
 const providerId = "oidc"
 
-/** The Effect log level of each Better Auth log level. */
-const logLevels = {
-	debug: "Debug",
-	info: "Info",
-	warn: "Warn",
-	error: "Error",
-} as const satisfies Record<string, LogLevel.Severity>
-
 /**
  * SDK rejections and database errors go to the typed error channel. Other
- * errors are programming errors, so they are defects. The log keeps each
- * rejection, because the typed error does not. `tryPromise` keeps the
- * rejection as the `cause` of its `UnknownError`.
+ * errors are programming errors, so they are defects. The mapped error keeps
+ * each rejection private until the outside boundary saves it. `tryPromise`
+ * keeps the rejection as the `cause` of its `UnknownError`.
  */
 const attempt = <A, E>(
 	run: (signal: AbortSignal) => Promise<A>,
@@ -71,32 +66,30 @@ const attempt = <A, E>(
 	Effect.tryPromise((signal) => run(signal)).pipe(
 		Effect.catch(({ cause }): Effect.Effect<never, E | AuthUnavailable> =>
 			cause instanceof APIError
-				? Effect.andThen(
-						Effect.logWarning("Better Auth refused a call.", cause),
-						Effect.fail(onApiError(cause)),
+				? Effect.fail(cause).pipe(
+						Failures.replace("Better Auth refused a call.", () =>
+							onApiError(cause),
+						),
 					)
 				: cause instanceof DrizzleQueryError ||
 					  (Predicate.isError(cause) && Predicate.hasProperty(cause, "code"))
-					? Effect.andThen(
-							Effect.logWarning(
-								"Better Auth could not use its database.",
-								cause,
+					? Effect.fail(cause).pipe(
+							Failures.replace("Better Auth could not use its database.", () =>
+								AuthUnavailable.make({ dependency: "storage" }),
 							),
-							Effect.fail(AuthUnavailable.make({ dependency: "storage" })),
 						)
 					: Effect.die(cause),
 		),
 	)
 
-/** Logs the failure of a service that sign-in needs, and gives the error of the Auth service. */
+/** Keep a service failure private until the outside boundary saves it. */
 const unavailable =
-	(dependency: AuthUnavailable["dependency"]) => (error: unknown) =>
-		Effect.andThen(
-			Effect.logWarning(
-				"Sign-in could not use a service that it needs.",
-				error,
+	(dependency: AuthUnavailable["dependency"]) =>
+	<E>(error: E) =>
+		Effect.fail(error).pipe(
+			Failures.replace("Sign-in could not use a service that it needs.", () =>
+				AuthUnavailable.make({ dependency }),
 			),
-			Effect.fail(AuthUnavailable.make({ dependency })),
 		)
 
 /** One OpenID Connect provider for Better Auth: the platform provider, or the SSO connection of an organization. */
@@ -164,7 +157,7 @@ export const layer = (
 ): Layer.Layer<
 	Auth,
 	never,
-	Organization | PlatformAdmins | Sso | Settings | Secrets
+	Organization | PlatformAdmins | Sso | Settings | Secrets | Records
 > =>
 	Layer.effect(
 		Auth,
@@ -175,6 +168,8 @@ export const layer = (
 			const sso = yield* Sso
 			const settings = yield* Settings
 			const secrets = yield* Secrets
+			const report = yield* Report.make
+			const background = yield* Background.make
 			const context = yield* Effect.context<never>()
 			const callbacks = yield* FiberSet.make()
 			const run = yield* FiberSet.runtime(callbacks)<never>()
@@ -192,7 +187,7 @@ export const layer = (
 							// Effect 4.0.6 registers runtime fibers after they start. Yield before logging.
 							Effect.andThen(
 								Effect.yieldNow,
-								Effect.logWarning(
+								report(
 									"An idle connection of the auth database pool failed",
 									error,
 								),
@@ -205,7 +200,9 @@ export const layer = (
 				(pool) =>
 					Effect.tryPromise(() => pool.end()).pipe(
 						Effect.catch((error) =>
-							Effect.logWarning("The auth database pool did not close", error),
+							report("The auth database pool did not close", error).pipe(
+								Effect.asVoid,
+							),
 						),
 					),
 			)
@@ -257,13 +254,19 @@ export const layer = (
 					secret: Redacted.value(config.secret),
 					database,
 					trustedOrigins: [config.publicOrigin],
-					// Better Auth writes its own logs, such as route errors, through this
-					// function. Send them to the Effect logger.
+					// SDK messages can hold tokens or SQL values. Seal them before logging.
 					logger: {
 						log: (level, message, ...args) =>
-							Effect.runSyncWith(context)(
-								Effect.logWithLevel(logLevels[level])(message, ...args).pipe(
-									Effect.annotateLogs({ source: "better-auth" }),
+							run(
+								// Effect 4.0.6 registers runtime fibers after they start. Yield before reporting.
+								Effect.yieldNow.pipe(
+									Effect.andThen(
+										report("Better Auth wrote a diagnostic record", {
+											level,
+											message,
+											args,
+										}),
+									),
 								),
 							),
 					},
@@ -361,12 +364,17 @@ export const layer = (
 							Equal.equals(next.versions, previous.versions) ? previous : next,
 						),
 					),
-					Background.logFailure(
-						"OpenBot could not load the SSO connections. It keeps the current ones.",
+					Effect.catchCause((cause) =>
+						Cause.hasInterruptsOnly(cause)
+							? Effect.void
+							: report(
+									"OpenBot could not load the SSO connections. It keeps the current ones.",
+									cause,
+								).pipe(Effect.asVoid),
 					),
 				)
 				// A missed notice must not keep old connections for ever, so also check from time to time.
-				yield* Background.repeat(
+				yield* background.repeat(
 					reload.pipe(Effect.delay("30 seconds"), Effect.setContext(context)),
 					{
 						schedule: Schedule.forever,

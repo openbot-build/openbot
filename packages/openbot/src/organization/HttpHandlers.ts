@@ -1,16 +1,15 @@
 import {
-	Account,
-	type Caller,
 	type Roles as RolesApi,
-	Identity,
-	Authorization,
 	OrganizationApi,
 	OpenBotApi,
 	Settings as SettingsApi,
 } from "@openbot-build/api"
+
+import { Authorization } from "@openbot-build/domain"
+import { Account, type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Layer, Option, pipe, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { noMoreThanCaller } from "../authorization/Escalation.ts"
 import { organizationKey, userKey } from "../audit/Resources.ts"

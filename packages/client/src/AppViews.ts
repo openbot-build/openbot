@@ -10,13 +10,15 @@ import {
 	Cause,
 	Crypto,
 	Effect,
-	Match,
 	Option,
-	Ref,
-	Schedule,
 	Schema,
+	Stream,
+	type PlatformError,
 } from "effect"
-import { Client } from "./Client.ts"
+import { Client, type ClientError } from "./Client.ts"
+import { AppViews, AppCalls, Execution } from "@openbot-build/domain"
+import { prepare, type Command } from "./Command.ts"
+import { observeTree, type ObservationError } from "./Executions.ts"
 
 /** The failure of a view request when nothing more is known. */
 const failed = () =>
@@ -27,10 +29,6 @@ const failed = () =>
 	})
 const decode = <A>(schema: StandardSchemaV1<unknown, A>, input: unknown) =>
 	decodeStandard(() => schema, input, failed)
-/** A failure of a request to the App view API. */
-type ViewFailure = Effect.Error<
-	ReturnType<(typeof Client.Service)["api"]["appViews"]["read"]>
->
 /** The `ClientError` reason for each reason of `AppViewUnavailable`. */
 const reasons = {
 	Declaration: "Protocol",
@@ -52,7 +50,7 @@ const reasons = {
 const rejected = (action: string, target: string) => {
 	const denied = () =>
 		Effect.fail(ProtocolClient.PermissionDenied.make({ action, target }))
-	return <A>(request: Effect.Effect<A, ViewFailure>) =>
+	return <A>(request: Effect.Effect<A, ClientError | ObservationError>) =>
 		Effect.catchTags(
 			request,
 			{
@@ -87,6 +85,7 @@ const rejected = (action: string, target: string) => {
 					),
 				AppRestricted: denied,
 				Forbidden: denied,
+				ExecutionForbidden: denied,
 				MembershipRequired: denied,
 				ForbiddenOrigin: denied,
 			},
@@ -99,19 +98,7 @@ const rejected = (action: string, target: string) => {
 }
 export const toolResult = (value: unknown) =>
 	decode(specTypeSchemas.CallToolResult, value)
-type Observation = typeof Api.Observation.Type
-/** The statuses after which the status of an action does not change again. */
-const Final = Api.Observation.fields.status.pick([
-	"Completed",
-	"Failed",
-	"OutcomeUnknown",
-	"Rejected",
-])
-const isFinal = (
-	observed: Observation,
-): observed is Observation & { readonly status: typeof Final.Type } =>
-	Schema.is(Final)(observed.status)
-/** A bridge without credentials, tied to one view that the server owns. Polling never sends an action again. */
+/** A bridge tied to one saved view. Closing it only stops observation. */
 export const make = Effect.fn("AppViews.make")(function* (
 	opened: Api.Opened,
 	owner: string,
@@ -120,7 +107,9 @@ export const make = Effect.fn("AppViews.make")(function* (
 	const { api } = yield* Client
 	const crypto = yield* Crypto.Crypto
 	/** A new ID for each action, made when the action runs. */
-	const newRequestId = crypto.randomUUIDv4().pipe(Effect.orDie)
+	const newCommandKey = crypto
+		.randomUUIDv4()
+		.pipe(Effect.map(Execution.CommandKey.make), Effect.orDie)
 	const params = { viewId: opened.id }
 	const key = { owner, connectionId: opened.source.connectionId }
 	const read = Effect.fn("AppViews.read")(function* (
@@ -134,7 +123,7 @@ export const make = Effect.fn("AppViews.make")(function* (
 			})
 			.pipe(rejected(method, opened.id))
 	})
-	/** One span covers the action request and all the polling after it. */
+	/** Follow saved child links. Approval can outlive the Turn that started it. */
 	const invoke = Effect.fn("AppViews.invoke")(function* (
 		payload: Api.ActionRequest,
 	) {
@@ -144,75 +133,73 @@ export const make = Effect.fn("AppViews.make")(function* (
 				: { action: "resources/read", target: payload.uri }
 		yield* Effect.annotateCurrentSpan({ action, target })
 		const answer = rejected(action, target)
-		// The generated client takes a union of request objects, not one object with a union
-		// payload. TypeScript needs each branch narrowed, even though the calls look the same.
-		yield* (
-			payload.kind === "tool"
-				? api.appViews.act({ params, payload })
-				: api.appViews.act({ params, payload })
-		).pipe(answer)
-		const observe = api.appViews
-			.operation({ params: { ...params, requestId: payload.requestId } })
-			.pipe(answer)
-		const seen = yield* Ref.make(Option.none<Observation["status"]>())
-		const notify = (observed: Observation) =>
-			Ref.getAndSet(seen, Option.some(observed.status)).pipe(
-				Effect.flatMap((previous) =>
-					Option.contains(previous, observed.status)
-						? Effect.void
-						: Effect.sync(onChange),
-				),
-			)
-		const observed = yield* observe.pipe(
-			Effect.tap(notify),
-			Effect.repeat({
-				schedule: Schedule.spaced("250 millis"),
-				until: isFinal,
-			}),
-			// With a schedule, the type that `repeat` gives does not see the `until`
-			// check, so this checks the status again for the type.
-			Effect.filterOrElse(isFinal, () =>
-				Effect.die("The App view stopped polling before a final status."),
+		const receipt = yield* api.appViews.act({ params, payload }).pipe(answer)
+		const observed = yield* observeTree(receipt.executionId, {
+			stopAt: ["AppCall"],
+		}).pipe(
+			Stream.provideService(Client, { api }),
+			Stream.tap((event) =>
+				event.body._tag === "State" || event.body._tag === "DecisionNeeded"
+					? Effect.sync(onChange)
+					: Effect.void,
 			),
-		)
-		const result = observed.operation?.result
-		return yield* Match.value(observed.status).pipe(
-			Match.when("Completed", () =>
-				result?._tag === "Completed"
-					? Effect.succeed(result.result)
-					: Effect.fail(failed()),
-			),
-			Match.when("Failed", () =>
-				result?._tag !== "Failed"
-					? Effect.fail(failed())
-					: result.result !== undefined
-						? Effect.succeed(result.result)
-						: Effect.fail(
-								ProtocolClient.ClientError.make({
-									reason: "Protocol",
-									issue: result.message,
-								}),
+			Stream.mapEffect((event) =>
+				Effect.gen(function* () {
+					if (
+						event.body._tag !== "Result" &&
+						!(
+							event.body._tag === "State" &&
+							event.body.status === "outcome_unknown"
+						)
+					)
+						return Option.none<AppCalls.ExecutionView>()
+					const execution = yield* api.executions.get({
+						params: { executionId: event.executionId },
+					})
+					if (execution.resource.kind !== "AppCall")
+						return Option.none<AppCalls.ExecutionView>()
+					return yield* api.appOperations
+						.get({
+							params: {
+								id: AppCalls.AppOperationId.make(execution.resource.id),
+							},
+						})
+						.pipe(
+							Effect.asSome,
+							Effect.map(
+								Option.filter(
+									(saved) =>
+										Execution.isTerminal(saved.status) ||
+										saved.status === "outcome_unknown",
+								),
 							),
+						)
+				}),
 			),
-			Match.when("OutcomeUnknown", () =>
-				Effect.fail(
-					ProtocolClient.OutcomeUnknown.make({
-						key,
-						target,
-						cause: Option.getOrElse(
-							Schema.decodeUnknownOption(
-								ProtocolClient.OutcomeUnknown.fields.cause,
-							)(result?._tag === "Failed" ? result.cause : undefined),
-							() => "Network" as const,
-						),
-					}),
-				),
-			),
-			Match.when("Rejected", () =>
-				Effect.fail(ProtocolClient.PermissionDenied.make({ action, target })),
-			),
-			Match.exhaustive,
+			Stream.filter(Option.isSome),
+			Stream.map((value) => value.value),
+			Stream.runHead,
+			answer,
 		)
+		if (Option.isNone(observed)) return yield* failed()
+		const saved = observed.value
+		if (saved.status === "outcome_unknown")
+			return yield* ProtocolClient.OutcomeUnknown.make({
+				key,
+				target,
+				cause: "Network",
+			})
+		if (saved.status === "completed" && saved.result?._tag === "Completed")
+			return saved.result.result
+		if (saved.failure?.category === "forbidden")
+			return yield* ProtocolClient.PermissionDenied.make({ action, target })
+		return yield* ProtocolClient.ClientError.make({
+			reason: "Protocol",
+			issue:
+				saved.failure === null
+					? "The App action has no saved result."
+					: `The App action failed. Error ID: ${saved.failure.errorId}`,
+		})
 	})
 	const client: UiClient = {
 		key,
@@ -245,10 +232,10 @@ export const make = Effect.fn("AppViews.make")(function* (
 					}),
 				),
 				Effect.flatMap((args) =>
-					Effect.flatMap(newRequestId, (requestId) =>
+					Effect.flatMap(newCommandKey, (commandKey) =>
 						invoke({
 							kind: "tool",
-							requestId,
+							commandKey,
 							name: input.name,
 							arguments: args,
 						}),
@@ -271,8 +258,8 @@ export const make = Effect.fn("AppViews.make")(function* (
 							],
 						},
 					})
-				: Effect.flatMap(newRequestId, (requestId) =>
-						invoke({ kind: "resource", requestId, uri: input.uri }),
+				: Effect.flatMap(newCommandKey, (commandKey) =>
+						invoke({ kind: "resource", commandKey, uri: input.uri }),
 					).pipe(
 						Effect.flatMap((value) =>
 							decode(specTypeSchemas.ReadResourceResult, value),
@@ -281,4 +268,58 @@ export const make = Effect.fn("AppViews.make")(function* (
 					),
 	}
 	return client
+})
+
+type Action = (
+	| Omit<
+			Extract<AppViews.ActionRequest, { readonly kind: "tool" }>,
+			"commandKey"
+	  >
+	| Omit<
+			Extract<AppViews.ActionRequest, { readonly kind: "resource" }>,
+			"commandKey"
+	  >
+) & { readonly commandKey?: Execution.CommandKey }
+
+/** Keep one key for an action, including retries after a lost reply. */
+export const act = Effect.fn("AppViews.act")(function* (
+	viewId: AppViews.AppViewId,
+	input: Action,
+): Effect.fn.Return<
+	Command<AppViews.ActionTicket, ClientError>,
+	PlatformError.PlatformError,
+	Client | Crypto.Crypto
+> {
+	const { api } = yield* Client
+	return yield* prepare(
+		(commandKey) =>
+			api.appViews.act({
+				params: { viewId },
+				payload: { ...input, commandKey },
+			}),
+		input.commandKey,
+	)
+})
+
+/** A text message uses the same durable Chat command path. */
+export const message = Effect.fn("AppViews.message")(function* (
+	viewId: AppViews.AppViewId,
+	input: {
+		readonly content: Schema.JsonObject
+		readonly commandKey?: Execution.CommandKey
+	},
+): Effect.fn.Return<
+	Command<AppViews.ActionTicket, ClientError>,
+	PlatformError.PlatformError,
+	Client | Crypto.Crypto
+> {
+	const { api } = yield* Client
+	return yield* prepare(
+		(commandKey) =>
+			api.appViews.message({
+				params: { viewId },
+				payload: { ...input, commandKey },
+			}),
+		input.commandKey,
+	)
 })

@@ -1,17 +1,19 @@
+import * as ExecutionHandlers from "../execution/HttpHandlers.ts"
 import * as DeveloperHandlers from "../apps/DeveloperHttpHandlers.ts"
 import * as AppExperienceHandlers from "../apps/ExperienceHttpHandlers.ts"
 import { OpenBotApi, service } from "@openbot-build/api"
+
 import { Effect, Layer } from "effect"
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api"
 import * as AppViewHandlers from "../apps/ViewHttpHandlers.ts"
 import * as AppHandlers from "../apps/HttpHandlers.ts"
-import * as AppOperationHandlers from "../apps/OperationHttpHandlers.ts"
+import * as AppToolHandlers from "../apps/OperationHttpHandlers.ts"
 import * as CodeRunHandlers from "../code/HttpHandlers.ts"
 import * as IndexHandlers from "../apps/IndexHttpHandlers.ts"
 import * as AppAuthorizationHandlers from "../apps/AuthorizationHttpHandlers.ts"
 import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
 import * as ChatHandlers from "../chats/ChatHandlers.ts"
-import * as OperationHandlers from "../operations/HttpHandlers.ts"
+import * as ToolHandlers from "../chats/ToolHttpHandlers.ts"
 import * as LiveHandlers from "../chats/live/LiveHandlers.ts"
 import * as DelegationHandlers from "../bots/DelegationHandlers.ts"
 import * as BotHandlers from "../bots/HttpHandlers.ts"
@@ -42,7 +44,7 @@ export const layerPlatform = Layer.mergeAll(
 				DeveloperHandlers.layerPublic,
 				DeveloperHandlers.layer,
 				AppHandlers.layer,
-				AppOperationHandlers.layer,
+				AppToolHandlers.layer,
 				CodeRunHandlers.layer,
 				AppViewHandlers.layer,
 				AppExperienceHandlers.layer,
@@ -50,7 +52,8 @@ export const layerPlatform = Layer.mergeAll(
 				AppAuthorizationHandlers.layer,
 				ConnectionHandlers.layer,
 				ChatHandlers.layerPlatform,
-				OperationHandlers.layer,
+				ToolHandlers.layer,
+				ExecutionHandlers.layer,
 				LiveHandlers.layer,
 				DelegationHandlers.layerPlatform,
 				BotHandlers.layer,

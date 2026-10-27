@@ -1,6 +1,7 @@
-import { BotsApi, type Caller } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
+import { type Caller } from "@openbot-build/domain"
 import { Effect } from "effect"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { Settings } from "../settings/Settings.ts"
 import { Bots, type Failure } from "./Bots.ts"
 

@@ -1,3 +1,4 @@
+import * as Secrets from "../src/secrets/Secrets.ts"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Chat, Turn } from "@openbot-build/core"
@@ -9,6 +10,7 @@ import {
 	Option,
 	pipe,
 	Ref,
+	Redacted,
 	Semaphore,
 	String as Str,
 } from "effect"
@@ -59,17 +61,6 @@ const memoryRecords = Layer.effect(
 								Arr.map((row) => row.value as never),
 							),
 						),
-					withStatus: (status) =>
-						Effect.map(all, (list) =>
-							pipe(
-								list,
-								Arr.filter((row) => row.keys.status === status),
-								Arr.map((row) => ({
-									organizationId: row.keys.organizationId,
-									value: row.value as never,
-								})),
-							),
-						),
 					put: (keys, value) =>
 						Ref.update(rows, (map) =>
 							HashMap.set(map, key(keys.organizationId, keys.id), {
@@ -89,7 +80,15 @@ const memoryRecords = Layer.effect(
 )
 
 const layer = Layer.effect(Reminders.Reminders, Reminders.make).pipe(
-	Layer.provide(Layer.mergeAll(memoryRecords, NodeCrypto.layer)),
+	Layer.provide(
+		Layer.mergeAll(
+			memoryRecords,
+			Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))).pipe(
+				Layer.provide(NodeCrypto.layer),
+			),
+			NodeCrypto.layer,
+		),
+	),
 )
 
 const start = Effect.gen(function* () {
@@ -129,7 +128,7 @@ describe("Reminders", () => {
 					Option.map(first, (claimed) => claimed.status),
 					Option.some("done"),
 				)
-				// A sleeper and the check each minute can both find the reminder.
+				// A late owner cannot change the same finished reminder again.
 				assert.isTrue(
 					Option.isNone(
 						yield* reminders.change(
@@ -172,7 +171,10 @@ describe("Reminders", () => {
 				)
 				assert.isTrue(Option.isSome(again))
 				assert.deepStrictEqual(
-					Arr.map(yield* reminders.due, (entry) => entry.value.id),
+					Arr.map(
+						yield* reminders.forChat(organizationId, reminder.chat),
+						(entry) => entry.id,
+					),
 					[reminder.id],
 				)
 				yield* reminders.change(

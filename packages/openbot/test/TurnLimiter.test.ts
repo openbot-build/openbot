@@ -3,6 +3,7 @@ import { Bot, Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import {
 	Array as Arr,
 	Cause,
+	Context,
 	Deferred,
 	Effect,
 	Exit,
@@ -59,28 +60,31 @@ const call = (n: number) =>
 		providerExecuted: false,
 	})
 const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
-	Effect.succeed((next, options) =>
-		next({
-			...options,
-			toolkit: Effect.map(options.toolkit, (current) =>
-				Toolkit.merge(current, tools),
-			),
-			instructions: Prompt.concat(options.instructions, [
-				{ role: "system", content: "Use Echo" },
-			]),
+	Effect.map(
+		Effect.context<Tool.HandlersFor<typeof tools.tools>>(),
+		(handlers) => ({
+			tools: tools.tools,
+			handlers,
+			instructions: Prompt.make([{ role: "system", content: "Use Echo" }]),
 		}),
 	),
 )
+
 it.effect(
-	"invalid limits fail only when run, before inner middleware or any model request",
+	"invalid limits fail only when run, before later hooks or any model request",
 	() =>
 		Effect.gen(function* () {
 			let enters = 0,
 				calls = 0
 			const inner = Plugin.make({ id: Plugin.Id.make("inner") })(() =>
-				Effect.succeed((next, options) => {
-					enters++
-					return next(options)
+				Effect.succeed({
+					tools: {},
+					handlers: Context.empty(),
+					beforeStep: () =>
+						Effect.sync(() => {
+							enters++
+							return true
+						}),
 				}),
 			)
 			for (const maxSteps of [
@@ -246,8 +250,9 @@ it.effect(
 		Effect.gen(function* () {
 			const selected = Toolkit.make(Echo.setNeedsApproval(true))
 			const plugin = Plugin.make({ id: Plugin.Id.make("selected") })(() =>
-				Effect.succeed((next, options) =>
-					next({ ...options, toolkit: Effect.succeed(selected) }),
+				Effect.map(
+					Effect.context<Tool.HandlersFor<typeof selected.tools>>(),
+					(handlers) => ({ tools: selected.tools, handlers }),
 				),
 			)
 			const chat = ChatTest(
@@ -298,24 +303,17 @@ it.effect(
 		}),
 )
 it.effect(
-	"interruption unwinds limiter middleware and keeps native cancellation",
+	"interruption releases plugin resources and keeps native cancellation",
 	() =>
 		Effect.gen(function* () {
 			const started = yield* Deferred.make<void>()
 			const order = yield* Ref.make<ReadonlyArray<string>>([])
 			const track = (name: string) =>
 				Plugin.make({ id: Plugin.Id.make(name) })(() =>
-					Effect.succeed((next, options) =>
-						Stream.unwrap(
-							Effect.map(Ref.update(order, Arr.append(name + ":enter")), () =>
-								next(options).pipe(
-									Stream.ensuring(
-										Ref.update(order, Arr.append(name + ":exit")),
-									),
-								),
-							),
-						),
-					),
+					Effect.acquireRelease(
+						Ref.update(order, Arr.append(name + ":enter")),
+						() => Ref.update(order, Arr.append(name + ":exit")),
+					).pipe(Effect.as({ tools: {}, handlers: Context.empty() })),
 				)
 			const chat = ChatTest(
 				PluginComposition.merge(

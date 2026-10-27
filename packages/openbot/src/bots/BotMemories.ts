@@ -1,6 +1,9 @@
+import { MemoryLogs } from "./MemoryLogs.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 import { PgClient } from "@effect/sql-pg"
-import { BotMemory as Api, BotsApi } from "@openbot-build/api"
-import * as Failures from "../app/Failures.ts"
+import { BotMemory as Api } from "@openbot-build/domain"
+import { Bots as BotsApi } from "@openbot-build/domain"
+import * as Failures from "../errors/Failures.ts"
 import * as BotMemory from "../plugins/memory/BotMemory.ts"
 import * as Audience from "../plugins/memory/Audience.ts"
 import {
@@ -9,6 +12,7 @@ import {
 	Context,
 	Crypto,
 	Effect,
+	HashMap,
 	HashSet,
 	Layer,
 	Option,
@@ -124,21 +128,41 @@ interface Row {
 export const make: Effect.Effect<
 	typeof BotMemories.Service,
 	never,
-	BotRecords | PgClient.PgClient | Crypto.Crypto
+	BotRecords | PgClient.PgClient | Crypto.Crypto | Secrets | MemoryLogs
 > = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
 	const records = yield* BotRecords
 	const crypto = yield* Crypto.Crypto
+	const secrets = yield* Secrets
+	const bindContent = (home: Home, id: string) =>
+		Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))([
+			"bot-memory",
+			home.organizationId,
+			home.bot,
+			id,
+			"content",
+		])
 	const versions = records.collection(
 		"memory_pool",
 		Schema.Struct({ version: Schema.Natural }),
 	)
-	const logs = records.collection(
-		"memory_log",
-		Schema.Struct({ bot: BotsApi.BotId, entry: BotMemory.LogEntry }),
+	const sourcePolicies = records.collection(
+		"memory_source_policy",
+		Schema.Struct({
+			entry: Schema.String,
+			policies: Schema.Array(BotMemory.SourcePolicy),
+		}),
 	)
+	const policyId = (home: Home, id: string) => JSON.stringify([home.bot, id])
+	const { changes: logs } = yield* MemoryLogs
 	const pool = (home: Home) =>
 		Effect.gen(function* () {
+			const policies = HashMap.fromIterable(
+				Arr.map(
+					yield* sourcePolicies.list(home.organizationId, { owner: home.bot }),
+					(value) => [value.entry, value.policies] as const,
+				),
+			)
 			const rows =
 				yield* sql<Row>`SELECT id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at FROM openbot_bot_memories WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} ORDER BY updated_at DESC, id`
 			const tags = yield* sql<{
@@ -150,13 +174,22 @@ export const make: Effect.Effect<
 				Arr.map((row) => row.tag),
 			)
 			return yield* Effect.forEach(rows, (row) =>
-				Effect.flatMap(decodeSources(row.sources), (sources) =>
-					decodeEntry({
+				Effect.gen(function* () {
+					const sources = yield* decodeSources(row.sources)
+					const content = yield* secrets.open(
+						row.content,
+						yield* bindContent(home, row.id),
+					)
+					return yield* decodeEntry({
 						id: row.id,
 						layer: row.layer,
-						content: row.content,
+						content,
 						tags: Option.getOrElse(Rec.get(byEntry, row.id), () => []),
 						sources,
+						...Option.match(HashMap.get(policies, row.id), {
+							onNone: () => ({}),
+							onSome: (sourcePolicies) => ({ sourcePolicies }),
+						}),
 						...(row.confidence === null ? {} : { confidence: row.confidence }),
 						status: row.status,
 						createdAt: Number(row.created_at),
@@ -164,8 +197,8 @@ export const make: Effect.Effect<
 						...(row.invalidated_at === null
 							? {}
 							: { invalidatedAt: Number(row.invalidated_at) }),
-					}),
-				),
+					})
+				}),
 			)
 		}).pipe(storageUnavailable("The memory of a Bot could not be read."))
 	const version = (home: Home) =>
@@ -178,7 +211,11 @@ export const make: Effect.Effect<
 		Effect.gen(function* () {
 			// The entry has its type already, so its sources always encode.
 			const sources = yield* encodeSources(entry.sources).pipe(Effect.orDie)
-			yield* sql`INSERT INTO openbot_bot_memories (organization_id, home_bot, id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at) VALUES (${home.organizationId}, ${home.bot}, ${entry.id}, ${entry.layer}, ${entry.content}, ${sources}, ${entry.confidence ?? null}, ${entry.status}, ${entry.createdAt}, ${entry.updatedAt}, ${entry.invalidatedAt ?? null}) ON CONFLICT (organization_id, home_bot, id) DO UPDATE SET layer = EXCLUDED.layer, content = EXCLUDED.content, sources = EXCLUDED.sources, confidence = EXCLUDED.confidence, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at, invalidated_at = EXCLUDED.invalidated_at`
+			const content = yield* secrets.seal(
+				entry.content,
+				yield* bindContent(home, entry.id),
+			)
+			yield* sql`INSERT INTO openbot_bot_memories (organization_id, home_bot, id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at) VALUES (${home.organizationId}, ${home.bot}, ${entry.id}, ${entry.layer}, ${content}, ${sources}, ${entry.confidence ?? null}, ${entry.status}, ${entry.createdAt}, ${entry.updatedAt}, ${entry.invalidatedAt ?? null}) ON CONFLICT (organization_id, home_bot, id) DO UPDATE SET layer = EXCLUDED.layer, content = EXCLUDED.content, sources = EXCLUDED.sources, confidence = EXCLUDED.confidence, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at, invalidated_at = EXCLUDED.invalidated_at`
 			yield* sql`DELETE FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND memory_id = ${entry.id}`
 			if (entry.tags.length > 0)
 				yield* sql`INSERT INTO openbot_bot_memory_tags ${sql.insert(
@@ -189,6 +226,22 @@ export const make: Effect.Effect<
 						tag,
 					})),
 				)}`
+			if (entry.sourcePolicies === undefined)
+				yield* sourcePolicies.remove(
+					home.organizationId,
+					policyId(home, entry.id),
+				)
+			else
+				yield* sourcePolicies.put(
+					{
+						organizationId: home.organizationId,
+						id: policyId(home, entry.id),
+						owner: home.bot,
+						scope: entry.id,
+						status: "",
+					},
+					{ entry: entry.id, policies: entry.sourcePolicies },
+				)
 		}).pipe(storageUnavailable("A memory entry could not be written."))
 	/** Gives the new version and writes its log entry. */
 	const bump = (
@@ -267,11 +320,13 @@ export const make: Effect.Effect<
 	) =>
 		Effect.all([pool(home), version(home)]).pipe(
 			Effect.map(([entries, current]) => ({
-				entries: Arr.filter(
+				entries: pipe(
 					entries,
-					(entry) =>
-						Audience.visible(entry.tags, viewer) &&
+					Arr.filter(BotMemory.visible(entries, viewer)),
+					Arr.filter((entry) =>
 						Arr.every(tags, (tag) => entry.tags.includes(tag)),
+					),
+					Arr.map(BotMemory.publicEntry),
 				),
 				version: current,
 			})),
@@ -327,7 +382,7 @@ export const make: Effect.Effect<
 					const seen = HashSet.fromIterable(
 						pipe(
 							entries,
-							Arr.filter((entry) => Audience.visible(entry.tags, viewer)),
+							Arr.filter(BotMemory.visible(entries, viewer)),
 							Arr.map((entry) => entry.id),
 						),
 					)
@@ -352,6 +407,13 @@ export const make: Effect.Effect<
 							"The memory entries of a tag could not be removed.",
 						),
 					)
+					if (removed.length > 0)
+						yield* Effect.forEach(removed, (entry) =>
+							sourcePolicies.remove(
+								home.organizationId,
+								policyId(home, entry.id),
+							),
+						)
 					if (removed.length > 0)
 						yield* bump(
 							home,

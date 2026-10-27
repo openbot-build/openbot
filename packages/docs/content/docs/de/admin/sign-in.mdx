@@ -1,0 +1,27 @@
+---
+title: "Anmeldung einrichten"
+---
+
+Für den Plattformbetrieb. Richte den Anbieter vor der ersten Anmeldung ein.
+
+## Den Platform-Anbieter einrichten
+
+Registriere OpenBot als Client bei deinem Anbieter. Nutze
+`<publicOrigin>/auth/callback/oidc` als Redirect-URI. OpenBot fragt nach den
+Scopes `openid profile email`.
+
+Dann gib OpenBot den Anbieter. Auf einer neuen Platform macht das das
+Einrichtungsprogramm mit `--oidc-issuer`, `--oidc-client-id` und
+`--oidc-client-secret`. Später ändert ein Platform-Admin ihn mit
+`PATCH /v1/platform/settings`. Siehe [Platform](/de/docs/platform).
+
+| Einstellung                     | Wert                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| `identityProvider.issuer`       | Die Issuer-URL, zum Beispiel `https://id.example.com`. HTTPS, ohne Schrägstrich am Ende. |
+| `identityProvider.clientId`     | Die Client-ID vom Anbieter.                                                              |
+| `identityProvider.clientSecret` | Das Client-Secret. Lass es bei einem öffentlichen Client weg.                            |
+| `publicOrigin`                  | Der öffentliche HTTPS-Origin von OpenBot, zum Beispiel `https://api.example.com`.        |
+
+Ohne Client-Secret meldet sich OpenBot als öffentlicher Client mit PKCE an. PKCE
+ist eine Prüfung, die den Anmeldecode schützt. Eine Platform kann auch gar
+keinen Anbieter haben. Dann melden sich Menschen nur über SSO-Verbindungen an.

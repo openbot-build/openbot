@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "d7aa42ba-ed15-4329-a6cb-79566cb07eb9",
+	"prevIds": ["077c9e40-4a55-413c-b269-8140d5e6bb71"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channels",
+				"execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_channels.execution_id",
+				"n|col|public.openbot_channels.execution_id",
+				"e|col|public.openbot_channels.execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_channels", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

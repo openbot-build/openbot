@@ -1,0 +1,41 @@
+---
+title: "Computer-Provider"
+description: "Computer-Provider"
+---
+
+Für die Verwaltung dieses Dienstes. Nutze ein Konto mit den unten genannten
+Rechten.
+
+## Einen Computer-Provider hinzufügen
+
+Ein **Computer-Provider** ist dein Konto bei einem Dienst, der Sandboxes
+betreibt.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Sandboxes","credentials":{"kind":"e2b","apiKey":"e2b_..."}}' \
+  https://api.example.com/v1/computer-providers
+```
+
+| Art       | Felder                              | Was es ist                                                                                                                                                              |
+| --------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Jeder Dienst, der die E2B-API spricht: E2B, PPIO, Alibaba Cloud Bot Sandbox oder dein eigenes E2B. Setze `apiUrl` und `sandboxDomain` für einen anderen Dienst als E2B. |
+| `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, gehostet oder dein eigenes. `target` ist die Region, zum Beispiel `us` oder `eu`.                                                                              |
+
+OpenBot prüft den Schlüssel beim Provider, bevor es ihn speichert. Der Schlüssel
+kommt nie wieder heraus. Die API zeigt nur seine letzten Zeichen. Sende
+`"shared": true`, um einen gemeinsamen Provider der Organisation zu erstellen.
+
+`GET /v1/computer-providers` listet deine Provider und die gemeinsamen. `GET`,
+`PATCH` und `DELETE /v1/computer-providers/:providerId` lesen, ändern und
+löschen einen Provider. Du kannst einen Provider nicht löschen, solange Computer
+ihn nutzen.
+
+---
+
+Ein Dateiaufruf gibt `404 ComputerPathNotFound` zurück, wenn der Pfad fehlt.
+Andere Anbieterfehler bleiben `502 ComputerProviderFailed`. Ein Anbieter mit
+Computern kann nicht gelöscht werden: `409 ComputerProviderInUse`. Connectors
+nutzen Protokollversion 3. Eine fehlende Datei ergibt `reason: "NotFound"`;
+andere Fehler ergeben `reason: "Failed"`.

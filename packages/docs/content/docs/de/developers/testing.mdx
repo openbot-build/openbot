@@ -1,0 +1,138 @@
+---
+title: End-to-End-Prüfungen
+description:
+  Führe API-Prüfungen, Prüfungen mit echten Models und Paper-Experimente aus.
+---
+
+Diese Prüfungen nutzen die öffentliche API, gebaute Befehle, echte lokale Server
+und kurzlebige PostgreSQL-Datenbanken. Eine End-to-End-Prüfung folgt einer
+Aufgabe durch diese Teile und prüft das Ergebnis. Einige externe Dienste nutzen
+feste Testantworten. Die Cloudflare-Prüfung nutzt einen echten Model-Dienst.
+
+## Die Projektprüfungen ausführen
+
+Führe die Befehle im Stammverzeichnis des Projekts aus. Der Build muss fertig
+sein, bevor die Tests starten. Starte keinen Build in einer anderen Shell,
+während Tests laufen. Ein Build ersetzt `dist`-Dateien, die Tests und
+Kindprozesse laden.
+
+```sh
+devenv shell -- pnpm build
+devenv shell -- pnpm typecheck
+devenv shell -- pnpm test:e2e
+devenv shell -- pnpm -r test
+```
+
+Alle End-to-End-Prüfungen liegen in `packages/e2e`. Der Paketname ist
+`@openbot-build/e2e`. Der Befehl `pnpm test:e2e` im Stammverzeichnis führt die
+Typprüfung und die Tests dieses Pakets aus. Führe nach einem Build mit diesem
+Befehl eine Aufgabengruppe aus:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/read-docs
+```
+
+Die Ordner in `packages/e2e/test` sind nach Benutzeraufgaben benannt.
+`packages/e2e/scenarios.json` hält die Prüfungen und Lücken jeder Aufgabe fest.
+Es trennt normale Fälle, Grenzfälle und Extremfälle. Ein normaler Fall prüft das
+übliche Ergebnis. Ein Grenzfall prüft eine Eingabe oder einen Zustand nahe der
+Grenze einer Regel. Ein Extremfall prüft eine große begrenzte Menge, wiederholte
+Arbeit, Verlust oder Wiederherstellung. Diese Namen bedeuten nicht, dass alle
+möglichen Eingaben oder Fehler geprüft wurden.
+
+Die Testbefehle der Pakete prüfen auch die Typen der Tests. `pnpm test` führt
+alle Testdateien in einem Vitest-Lauf aus. Es baut keine Pakete und prüft keine
+Testtypen. Pakettests außerhalb von `e2e` prüfen kleinere Einheiten und Teile
+des Produkts. Die Tests erstellen und entfernen ihre eigenen lokalen
+Datenbanken. Sie nutzen keine Produktionsdatenbank.
+
+## API-Umfang
+
+`packages/e2e/test/api-access/ApiE2E.test.ts` liest den HTTP-Vertrag und sendet
+echte Anfragen an seine geschützten Routen. Es prüft jede geschützte Route ohne
+Anmeldung. Für jeden geschützten Schreibzugriff prüft es ein Session-Cookie mit
+einem fehlenden und einem falschen Origin. Das ist eine Zugriffsprüfung. Sie
+belegt nicht, dass jede Route jede gültige Aufgabe erfüllt. Die Zahl der Routen
+und Anfragen stammt aus dem aktuellen Vertrag. Der JSON-Bericht hält die genaue
+Zahl für jeden Lauf fest. Öffentliche Routen und Hook-Routen stehen in einer
+festen Liste. So sinkt die Abdeckung nicht unbemerkt, wenn eine Regel zur
+Anmeldung aus Versehen entfernt wird.
+
+Das End-to-End-Paket ordnet die Prüfungen nach Benutzeraufgaben:
+
+| Aufgabengruppe                                       | Ordner in `packages/e2e/test`                 |
+| ---------------------------------------------------- | --------------------------------------------- |
+| Anmelden und den Server starten                      | `sign-in`, `start-server`                     |
+| Organisationseinstellungen lesen und ändern          | `organizations`, `admin-settings`             |
+| Chatten, Tool-Aufrufe erlauben und Arbeit fortsetzen | `chat`, `approve-tool-calls`, `chat-recovery` |
+| Bots nutzen und freigeben                            | `bot-work`                                    |
+| Apps verbinden und einen Protokolldienst nutzen      | `connect-apps`, `protocol-service`            |
+| Dateien lesen und schreiben                          | `files`                                       |
+| Kanäle verbinden und Auslöser einstellen             | `connect-channels`, `triggers`                |
+| Code ausführen und Computer verbinden                | `run-code`, `connect-computers`               |
+| Live-Sessions und Model-Dienste nutzen               | `live-chat`, `use-models`                     |
+| Befehle ausführen und die Dokumentation lesen        | `cli`, `read-docs`                            |
+
+Die Dokumentationsprüfungen stellen die gebaute Website auf einem lokalen
+HTTP-Port bereit. Sie prüfen alle 35 Sprachen der Startseite, drei Sprachen des
+Handbuchs, die API-Referenz, Suchdateien, das Symbol, jede gebaute Datei, lokale
+Links und dekodierte Anker. API-Seiten haben nur englische Sprachlinks. Externe
+Links werden nicht abgerufen. Das sind Prüfungen der statischen Website. Sie
+starten keinen Browser und prüfen weder die interaktive Suche noch Menüs.
+
+Die CLI-Prüfungen starten gebaute Befehle. Die Computer-Prüfungen nutzen auch
+ein echtes Terminal. Protokollprüfungen nutzen unabhängige Clients und lokale
+Server. Einheiten- und Komponentenprüfungen bleiben in den Paketen `core`,
+`domain`, `api`, `client`, `openbot`, `cli`, `computer`, `protocol` und
+`protocol-test`.
+
+## Prüfung mit einem echten Model
+
+Die Prüfung mit einem echten Model läuft nur mit `OPENBOT_E2E_LIVE=true`. Der
+normale Lauf überspringt sie. Sie braucht ein Cloudflare-Konto und ein API-Token
+mit Zugriff auf Workers AI. Wenn das kostenlose Kontingent des Kontos
+aufgebraucht ist, kosten die Aufrufe Geld. Halte Zugangsdaten außerhalb der
+Versionsverwaltung.
+
+Der Test erstellt eine Session mit `Server.layerFixed`. Dann startet er den
+gebauten Produktionseinstieg, um das echte Model aufzurufen. Die Einrichtung der
+Session darf keine Index-Arbeit oder Fehler zurücklassen. Der Test prüft Aufrufe
+mit Cookie und API-Token, gestreamte Antworten, gespeicherte Verläufe,
+wiederholte Befehle, Verbrauch und den Widerruf von Tokens. Diese kleinen
+Aufgaben erlauben keine Aussage über die Qualität des Models.
+
+Setze diese Variablen in einer lokalen Shell oder einem Secret-Speicher. Lege
+den Schlüssel nicht in einem Befehlsargument oder einer versionierten Datei ab.
+
+| Variable                          | Wert                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------- |
+| `OPENBOT_E2E_LIVE`                | `true`, um die Prüfung des echten Dienstes zu starten                           |
+| `OPENBOT_E2E_CLOUDFLARE_ENDPOINT` | Die OpenAI-kompatible Basis-URL von Workers AI für das Konto                    |
+| `OPENBOT_E2E_CLOUDFLARE_KEY`      | Das API-Token                                                                   |
+| `OPENBOT_E2E_CLOUDFLARE_MODEL`    | Optionale Model-ID; der Standard ist `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| `OPENBOT_E2E_EVIDENCE`            | Optionaler absoluter Pfad für das Ergebnis als JSON                             |
+
+Führe nach dem Build diesen Befehl aus:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/use-models/Cloudflare.test.ts
+```
+
+Ohne `OPENBOT_E2E_LIVE=true` wird dieser Test übersprungen. Ein übersprungener
+Test des echten Dienstes ist keine erfolgreiche Dienstprüfung.
+
+## Grenzen
+
+Ein vollständiger Testlauf deckt die benannten Eingaben und Pfade ab. Er kann
+nicht alle möglichen Eingaben, Netzwerkfehler oder Zustände externer Dienste
+abdecken. Eine erzeugte Zugriffsprüfung deckt nicht alle Aufgaben ihres
+Endpunkts ab. Ein Lauf mit einem kleinen Modell ist kein Lasttest für die
+Produktion.
+
+Echte Zustellung über externe Kanäle, SSO-Anbieter, Cloud-Computer-Anbieter,
+Objektspeicher und Sprachwiedergabe brauchen eigene Dienstkonten und
+Testressourcen. Feste Testserver prüfen den lokalen Vertrag für diese Pfade. Sie
+belegen nicht, dass ein echter externer Dienst funktioniert.
+
+Unter [Mitwirken](/de/docs/contributing) findest du die Entwicklungswerkzeuge.
+Die [API-Referenz](/docs/api) beschreibt den HTTP-Vertrag.

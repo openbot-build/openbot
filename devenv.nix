@@ -18,7 +18,11 @@
     umask 077
     if [ ! -f .env.development ]; then
       sed -e "s/^OPENBOT_SECRET_KEYS=$/OPENBOT_SECRET_KEYS=dev:$(openssl rand -hex 32)/" \
+        -e "s/^OPENBOT_CLUSTER_SECRET=$/OPENBOT_CLUSTER_SECRET=$(openssl rand -hex 32)/" \
         .env.development.example > .env.development
+    fi
+    if ! rg -q '^OPENBOT_CLUSTER_SECRET=' .env.development; then
+      printf '\nOPENBOT_CLUSTER_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env.development
     fi
     echo "Run pnpm dev to sign in with the local development account."
   '';

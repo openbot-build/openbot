@@ -3,6 +3,8 @@ title: 部署
 description: 在你自己的服务器上运行 OpenBot。
 ---
 
+面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/docs/admin)开始。
+
 本页介绍如何在生产环境中运行 OpenBot。你要构建 Docker 镜像，准备数据库，设置平台，然后在反向代理后面启动服务器。每个设置项的说明，请看[配置](/zh-cn/docs/configuration)。
 
 ---
@@ -71,32 +73,42 @@ OpenBot 先从环境变量读取每个设置。如果没有设置该变量，Ope
 ## 用 Docker 运行
 
 把设置写进一个文件，例如 `openbot.env`。它只需要 `OPENBOT_DATABASE_URL` 和
-`OPENBOT_SECRET_KEYS`。可以从 `deploy/docker/production.env.example`
-开始。`docker run` 不会替换 `${POSTGRES_PASSWORD}`，所以请自己写出完整的
-`OPENBOT_DATABASE_URL`。
+`OPENBOT_SECRET_KEYS` 和 `OPENBOT_CLUSTER_SECRET`。可以从
+`deploy/docker/production.env.example` 开始。`docker run` 不会替换
+`${POSTGRES_PASSWORD}`，所以请自己写出完整的 `OPENBOT_DATABASE_URL`。
 
 生成一次密钥：
 
 ```sh
 echo "OPENBOT_SECRET_KEYS=k1:$(openssl rand -hex 32)" >> openbot.env
+echo "OPENBOT_CLUSTER_SECRET=$(openssl rand -hex 32)" >> openbot.env
 ```
 
 请看[密钥](/zh-cn/docs/configuration#机密密钥)。
+
+节点间的私有调用使用 `/internal/executions/rpc` 和
+`/internal/resources/rpc`。请只在私有网络开放这两个路径。所有节点使用同一个随机密钥。多节点部署中，为每个节点设置不同且可访问的主机地址。私有 RPC 客户端与 App 的出站网络检查分开。
 
 <Steps>
 <Step>
 
 ### 准备数据库
 
-迁移程序只需要
-`OPENBOT_DATABASE_URL`。在启动服务器之前运行它。每次发布新版本之前，也要再运行一次：
+迁移程序需要 `OPENBOT_DATABASE_URL` 和
+`OPENBOT_SECRET_KEYS`。运行前停止所有 OpenBot 实例。备份数据库和对象存储键的清单。保留旧密钥，数据转换需要用它们打开旧记录。首次启动服务器和每次发布新版本之前都要运行：
 
 ```sh
 docker run --rm --env-file openbot.env \
   openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
 ```
 
-多次运行它是安全的。它只应用数据库还没有的迁移。迁移只能向前。没有办法撤销迁移，所以请先做备份。
+转换中断后，再运行同一命令。每一批数据与进度一起提交。损坏的记录会停止转换，并留下加密的错误报告。程序检查数量、引用、密钥和状态后，才将数据版本标记为就绪。检查通过前，服务器不能启动。运行中的服务器持有共享数据库锁；转换程序需要独占锁。
+
+备份保留资源 ID、历史和待处理决策。结果不明的旧外部动作保留为
+`outcome_unknown`。没有安全检查点的工作标记为
+`interrupted`，并保留原因。缺少原始 token 的记录不能变成不受限制的成员调用。
+
+恢复流量前可以还原备份。重新执行外部动作后，应向前修复数据。不要还原旧数据并重复这些动作。
 
 </Step>
 <Step>
@@ -131,7 +143,7 @@ docker run -d --name openbot --env-file openbot.env \
   -p 127.0.0.1:8080:3000 openbot:$OPENBOT_RELEASE
 ```
 
-服务器启动时，会检查数据库是否有全部的表。如果没有，它会停止，你会在日志中看到错误。
+服务器启动时，会检查表结构和已完成的数据版本。任一检查失败，它都会停止，并在日志中写入错误。
 
 </Step>
 <Step>
@@ -189,13 +201,12 @@ pnpm --filter @openbot-build/openbot start
 Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。即使你只用 OpenBot，这个文件也需要
 `PROTOCOL_TEST_PUBLIC_ORIGIN`。
 
-Compose 以 `/run/secrets`
-中文件的形式把密钥交给容器，而不是用环境变量。这些密钥是
-`POSTGRES_PASSWORD`、`OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。Compose 从
-`.env.production` 读取它们的值。 `openbot` 服务只拿到
+Compose 以 `/run/secrets` 中文件的形式提供 `POSTGRES_PASSWORD`、
 `OPENBOT_DATABASE_URL`、`OPENBOT_SECRET_KEYS` 和
-`OPENBOT_OUTBOUND_ALLOW`。它没有其他环境变量，因为其他所有设置都存放在数据库中。`migrate`
-服务只拿到 `OPENBOT_DATABASE_URL`。
+`OPENBOT_CLUSTER_SECRET`。这些值来自 `.env.production`。`openbot` 服务还接收
+`OPENBOT_OUTBOUND_ALLOW` 和
+`OPENBOT_CLUSTER_HOST`。产品设置保存在数据库中。`migrate` 服务需要
+`OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。
 
 在模板中，`OPENBOT_DATABASE_URL` 使用
 `${POSTGRES_PASSWORD}`，所以密码只需要设置一次。
@@ -209,6 +220,7 @@ Compose 以 `/run/secrets`
 cp deploy/docker/production.env.example .env.production
 openssl rand -hex 32           # 把输出用作 POSTGRES_PASSWORD
 echo "k1:$(openssl rand -hex 32)"  # 把输出用作 OPENBOT_SECRET_KEYS
+openssl rand -hex 32           # 把输出用作 OPENBOT_CLUSTER_SECRET
 ```
 
 在 `.env.production` 中填写这些值。
@@ -269,7 +281,8 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 </Step>
 </Steps>
 
-要发布新版本，请构建新镜像，设置新的 `OPENBOT_RELEASE`，备份数据库，然后再次运行
+要发布新版本，请构建新镜像并设置新的
+`OPENBOT_RELEASE`。停止全部 OpenBot 实例，备份数据库和对象键清单，再运行
 `up -d --wait`。新的 OpenBot 启动前，`migrate` 会再次运行。不要删除 `postgres`
 卷。它保存着你的全部数据。
 
@@ -278,11 +291,16 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 你可以在一个负载均衡器后面运行多个 OpenBot 实例。给每个实例：
 
 - 相同的 `OPENBOT_DATABASE_URL`，
-- 相同的 `OPENBOT_SECRET_KEYS`，
+- 相同的 `OPENBOT_SECRET_KEYS` 和 `OPENBOT_CLUSTER_SECRET`，
+- 各不相同、且其他节点都能访问的 `OPENBOT_CLUSTER_HOST`，
 - 相同的
   `OPENBOT_OUTBOUND_ALLOW`（如果你设置了它）。参见[出站连接](/zh-cn/docs/configuration#出站连接)。
 
-其他什么都不需要。所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。迁移程序和设置程序只运行一次，不要在每个实例上都运行。
+每个节点使用自己的私有地址，不要使用负载均衡器的地址。扩容 Compose 的 `openbot`
+服务时，必须为每个新节点配置独立主机名。`compose.check.yaml`
+中的两个节点展示了这种配置。
+
+所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。迁移程序和设置程序只运行一次，不要在每个实例上都运行。
 
 ---
 
@@ -293,10 +311,11 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 代理必须：
 
+- 拒绝所有访问 `/internal/` 下路径的公开请求，
+
 - 把 `Origin`、`Cookie` 和 `Authorization` 头原样转发给 OpenBot，
 - 不缓冲响应，因为 Turn 可以用服务器发送事件（SSE）流式输出，
-- 允许长时间的响应。`GET /v1/chats/:id/wait`
-  最多可以等待 30 秒，而一个流会持续到它的 Turn 结束。
+- 允许长时间的响应。执行事件流可以保持打开，直到执行结束。
 
 <Tabs items={["nginx", "Caddy"]}>
 <Tab value="nginx">
@@ -307,6 +326,10 @@ server {
     server_name api.example.com;
     ssl_certificate /etc/ssl/api.example.com.pem;
     ssl_certificate_key /etc/ssl/api.example.com.key;
+
+    location /internal/ {
+        return 404;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -325,8 +348,13 @@ server {
 
 ```txt
 api.example.com {
-    reverse_proxy 127.0.0.1:8080 {
-        flush_interval -1
+    handle /internal/* {
+        respond 404
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8080 {
+            flush_interval -1
+        }
     }
 }
 ```
@@ -354,7 +382,7 @@ api.example.com {
 `/`。你的客户端还必须处理这些返回地址：
 
 - App 授权之后的 `/?authorization=<flowId>`。接下来调用
-  `completeAppAuthorization`。请看 [App](/zh-cn/docs/apps)。
+  `completeAppAuthorization`。请看 [App](/zh-cn/docs/developers/apps)。
 - 开发者测试授权之后的
   `/?developerTest=<testId>`。请看[开发者工具](/zh-cn/docs/developer-tools)。
 
@@ -371,7 +399,7 @@ api.example.com {
    它保存平台和组织的设置、账户、组织及其成员、用户令牌、模型和模型提供方、SSO 连接、审计日志、Bot、Chat 及其历史，以及 App 连接。
 2. **`OPENBOT_SECRET_KEYS`。**
    这些密钥用来解密数据库中的机密：App 密钥、模型提供方密钥、SSO 客户端密钥和登录密钥。没有这些密钥，数据库备份无法恢复这些机密。
-3. **[文件](/zh-cn/docs/files)的 bucket。**
+3. **[文件](/zh-cn/docs/developers/files)的 bucket。**
    它保存人们上传的文件的字节。数据库只记录它们的名字。
 
 使用 Compose 时，这样备份数据库：
@@ -394,90 +422,4 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 ## GitHub Actions
 
-工作流 `.github/workflows/ci.yml`
-有两个作业。第一个作业通过后，第二个作业才会运行。
-
-| 作业     | 做什么                                                                      |
-| -------- | --------------------------------------------------------------------------- |
-| `check`  | 在 `devenv shell` 中运行 `pnpm build`、`pnpm typecheck` 和 `pnpm -r test`。 |
-| `images` | 构建、检查、扫描并发布 Docker 镜像。                                        |
-
-两个作业都在 `ubuntu-latest` 上运行。它们先用 Determinate
-Nix 安装器安装 Nix，再安装 devenv
-2.4.0。[Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action)
-把 Nix 的构建结果存进 GitHub
-Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `devenv.cachix.org`
-下载预先构建好的 devenv 包。`check` 作业把 pnpm 存储放在缓存中。
-
-`images` 作业执行以下步骤：
-
-1. [hadolint](https://github.com/hadolint/hadolint) 和 `docker buildx bake lint`
-   检查 `Dockerfile`。后者运行
-   [Docker 构建检查](https://docs.docker.com/build/checks/)。
-2. Docker Bake 构建两个镜像。构建层保存在 GitHub
-   Actions 缓存中，每个镜像一份缓存，所以之后的运行只构建有变化的部分。
-3. `deploy/docker/check.sh` 检查镜像。请看[检查镜像](#检查镜像)。
-4. [dive](https://github.com/wagoodman/dive) 检查镜像层没有浪费空间。
-5. [Trivy](https://trivy.dev) 扫描两个镜像。如果镜像有已知的、已有修复的 `HIGH`
-   或 `CRITICAL`
-   漏洞，作业就会失败。Trivy 看不到 Node.js 的版本，因为 Node.js 是复制进镜像的，不是作为软件包安装的。
-6. 作业把两个镜像保存为 `images-<commit-sha>` 制品，保留七天。
-7. 对于推送，作业会发布镜像。它使用构建缓存，所以不会再构建一次。
-
-工作流在拉取请求、推送到 `main` 以及 `v1.2.3`
-这样的标签时运行。它只在推送时发布镜像：
-
-| 事件                | 发布的标签                 |
-| ------------------- | -------------------------- |
-| 推送到 `main`       | `<commit-sha>` 和 `latest` |
-| `v1.2.3` 这样的标签 | `<commit-sha>` 和 `v1.2.3` |
-
-镜像发布到 GitHub 容器仓库，地址是 `ghcr.io/openbot-build/openbot` 和
-`ghcr.io/openbot-build/openbot/protocol-test`。工作流不会部署 OpenBot。要在 Compose 中使用已发布的镜像，请拉取它，并打上
-`openbot:<tag>` 标签。
-
-### 发布文档网站
-
-工作流 `.github/workflows/docs.yml` 把文档网站发布到
-[GitHub Pages](https://docs.github.com/pages)，地址是
-[openbot.build](https://openbot.build)。每次推送到 `main`
-时它都会运行。你也可以在 Actions 标签页中手动启动它。
-
-| 作业     | 做什么                                                                                              |
-| -------- | --------------------------------------------------------------------------------------------------- |
-| `build`  | 在 `devenv shell` 中运行 `pnpm --filter "@openbot-build/docs..." build`。这会构建文档及其需要的包。 |
-| `deploy` | 把 `packages/docs/dist` 发送到 GitHub Pages。                                                       |
-
-`build` 作业把 `DOCS_URL` 设为
-`https://openbot.build`。Astro 用它生成完整的页面链接，例如站点地图。同一时间只运行一个部署。
-
-仓库设置必须把 Pages 的来源设为 **GitHub Actions**，并把 `openbot.build`
-设为自定义域名。`openbot.build` 的 DNS 必须指向 GitHub Pages。请看
-[Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
-
-### 检查镜像
-
-`deploy/docker/check.sh` 用测试设置启动 `compose.production.yaml`。额外的文件
-`compose.check.yaml` 去掉主机端口，并添加两个服务。`setup` 服务在 `migrate`
-之后、`openbot` 启动之前，用测试值运行设置程序。`check`
-服务运行检查。`check.env` 保存测试设置。其中没有任何真实的密钥。
-
-`check` 服务在 OpenBot 和协议测试服务都健康之后，在 Compose 网络中运行
-`check.mjs`。它检查：
-
-- 不带密钥和带错误密钥时，`/v1/chats` 都返回 `401`，
-- `/openapi.json` 正常工作，
-- 协议测试的 Catalog 有正确的公开源，
-- 协议测试服务上的 MCP 发现正常工作。
-
-所以这项检查也证明，迁移、设置程序、密钥文件和健康检查在真实的生产配置中都能正常工作。最后，脚本会删除容器和测试数据库。
-
-在你的电脑上运行同样的检查：
-
-```sh
-devenv shell -- pnpm images
-devenv shell -- pnpm images:check
-devenv shell -- hadolint deploy/docker/Dockerfile
-devenv shell -- dive --ci --source docker openbot:local
-devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot:local
-```
+此开发任务请参见 [发布和检查项目](/zh-cn/docs/developers/publishing).

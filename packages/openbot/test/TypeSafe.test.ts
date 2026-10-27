@@ -1,3 +1,4 @@
+import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
@@ -11,7 +12,8 @@ import {
 import { Decision, DecisionModel } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { Billing } from "../src/billing/Billing.ts"
+import { Execution } from "@openbot-build/domain"
+import { Billing, type Tokens } from "../src/billing/Billing.ts"
 import { TokenThrottle } from "../src/billing/TokenThrottle.ts"
 import * as ModelRegistry from "../src/models/ModelRegistry.ts"
 import * as LiveBackends from "../src/models/LiveBackends.ts"
@@ -170,9 +172,12 @@ const jev: StoredModel = {
 const registryWith = (input: {
 	readonly providers: ReadonlyArray<Stored>
 	readonly http: Layer.Layer<HttpClient.HttpClient>
+	readonly opened?: Ref.Ref<number>
+	readonly recorded?: Ref.Ref<ReadonlyArray<Tokens>>
 }) =>
 	Layer.effect(ModelRegistry.ModelRegistry, ModelRegistry.make()).pipe(
 		Layer.provide([
+			ErrorRecordsFixture.layer,
 			Layer.succeed(ModelProviders, {
 				list: () => Effect.die("unused"),
 				get: () => Effect.die("unused"),
@@ -180,7 +185,11 @@ const registryWith = (input: {
 				create: () => Effect.die("unused"),
 				update: () => Effect.die("unused"),
 				delete: () => Effect.die("unused"),
-				openKey: () => Effect.succeed(Redacted.make("ts-key-0123")),
+				openKey: () =>
+					(input.opened === undefined
+						? Effect.void
+						: Ref.update(input.opened, (n) => n + 1)
+					).pipe(Effect.as(Redacted.make("ts-key-0123"))),
 			}),
 			Layer.succeed(Models, {
 				list: () => Effect.die("unused"),
@@ -208,10 +217,23 @@ const registryWith = (input: {
 				changes: Stream.empty,
 			}),
 			LiveBackends.empty,
-			// The registry meters only the calls of language models. These tests
-			// use decision models, so the spending services are never called.
-			Layer.mock(Billing, {}),
-			Layer.mock(TokenThrottle, {}),
+			Layer.mock(Billing, {
+				reserve: () =>
+					Effect.succeed({
+						id: Execution.CallId.make("typesafe-call"),
+						startedAt: 0,
+					}),
+				record: (_, tokens) =>
+					input.recorded === undefined
+						? Effect.void
+						: Ref.update(input.recorded, Arr.append(tokens)),
+				unknown: () => Effect.void,
+			}),
+			Layer.succeed(TokenThrottle, {
+				scopes: () => Effect.succeed([]),
+				take: () => Effect.void,
+				charge: () => Effect.succeed(0),
+			}),
 			input.http,
 		]),
 	)
@@ -225,18 +247,17 @@ const selection = (providerId: string) =>
 it.effect("the registry builds the decision model that a selection names", () =>
 	Effect.gen(function* () {
 		const http = yield* fakeTypeSafe
+		const opened = yield* Ref.make(0)
+		const recorded = yield* Ref.make<ReadonlyArray<Tokens>>([])
 		const label = yield* Effect.gen(function* () {
 			const registry = yield* ModelRegistry.ModelRegistry
 			const model = yield* registry.decision(
 				organizationId,
 				selection("prov_ts"),
 			)
-			const again = yield* registry.decision(
-				organizationId,
-				selection("prov_ts"),
-			)
-			// The registry builds each decision model once.
-			assert.strictEqual(again, model)
+			yield* registry.decision(organizationId, selection("prov_ts"))
+			// The base model is shared; each lookup has its own meter.
+			assert.strictEqual(yield* Ref.get(opened), 1)
 			const answer = yield* DecisionModel.decide(Triage, {
 				input: "I paid two times.",
 			}).pipe(Effect.provideService(DecisionModel.DecisionModel, model))
@@ -246,10 +267,21 @@ it.effect("the registry builds the decision model that a selection names", () =>
 				registryWith({
 					providers: [provider({ id: "prov_ts", kind: "typesafe" })],
 					http: http.layer,
+					opened,
+					recorded,
 				}),
 			),
 		)
 		assert.strictEqual(label, "billing")
+		assert.deepStrictEqual(yield* Ref.get(recorded), [
+			{
+				inputUncached: 12,
+				inputCacheRead: 0,
+				inputCacheWrite: 0,
+				outputText: 0,
+				outputReasoning: 0,
+			},
+		])
 		const sent = yield* Ref.get(http.sent)
 		assert.strictEqual(
 			sent[0]?.url,

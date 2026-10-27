@@ -1,0 +1,173 @@
+---
+title: 快速开始
+description: 在你的电脑上运行 OpenBot，并完成第一次调用。
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+本页使用测试账户和测试模型，在你的电脑上启动 OpenBot。你不需要身份提供方，也不需要模型密钥。
+
+---
+
+## 前提条件
+
+你需要：
+
+1. [devenv](https://devenv.sh)
+   2.3 或更新版本。它提供合适版本的 Node.js、pnpm、PostgreSQL 工具和 Docker 命令行工具。
+2. 一个正在运行的 [Docker](https://docs.docker.com/get-docker/)
+   服务。开发数据库和对象存储在 Docker 中运行。
+3. 一份代码：
+
+```sh
+git clone https://github.com/openbot-build/openbot.git
+cd openbot
+```
+
+所有命令都在代码的顶层文件夹中运行，并放在 `devenv shell --` 里面。
+
+---
+
+## 启动 OpenBot
+
+<Steps>
+
+<Step>
+
+### 生成本地设置
+
+```sh
+devenv shell -- pnpm dev:setup
+```
+
+这条命令会生成 `.env.development`，其中有一个新的密钥。如果你有旧版本留下的
+`.env.development`，请先删除它。
+
+</Step>
+
+<Step>
+
+### 启动服务器
+
+```sh
+devenv shell -- pnpm dev
+```
+
+这条命令会在 Docker 中启动 PostgreSQL 和 RustFS，构建 OpenBot，更新数据库，然后在
+`http://localhost` 启动 OpenBot。在 Linux 上，devenv 第一次会用 `sudo`
+要求你输入密码。它的代理需要这样才能监听 80 端口。开发服务器会自己设置好平台，所以你不需要运行设置程序。第一次启动可能需要几分钟。按
+**Ctrl+C** 停止。你的数据会保留在数据库中。
+
+</Step>
+
+<Step>
+
+### 登录
+
+```sh
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+在开发环境中，这会立即让你登录本地测试账户
+`developer@localhost.test`。登录 cookie 会保存到
+`cookies.txt`。这个账户是平台管理员。它现在还没有组织。
+
+</Step>
+
+<Step>
+
+### 创建组织
+
+Bots、Chats 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你自己创建一个：
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: http://localhost' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"My lab"}' \
+  http://localhost/v1/organizations
+```
+
+你是这个组织的 Super Administrator（超级管理员）。
+
+</Step>
+
+<Step>
+
+### 创建用户令牌
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: http://localhost' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"local"}' \
+  http://localhost/v1/user/tokens
+```
+
+这个令牌属于你的新组织。回答中有一个以 `obut_` 开头的
+`secret`。它只显示一次，所以请保存好：
+
+```sh
+export OPENBOT_TOKEN=obut_...
+```
+
+</Step>
+
+<Step>
+
+### 创建 Bot
+
+你把工作交给一个
+[Bot](/zh-cn/docs/developers/bots)。新账号没有 Bot，所以先创建一个：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences.","model":{"_tag":"Config.Selection","provider":"development","model":"mock-text"}}' \
+  http://localhost/v1/bots
+```
+
+从回答中取出
+`id`。如果想在不指定 Bot 时也用这个 Bot，把它设为你的[默认 Bot](/zh-cn/docs/developers/bots#你的默认-bot)。
+
+</Step>
+
+<Step>
+
+### 和你的 Bot 说话
+
+给你的 Bot 发一条消息：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"Hello"}' \
+  http://localhost/v1/bots/<botId>/messages
+```
+
+OpenBot 会创建你和这个 Bot 的 Chat，这条消息会启动一个 Turn。Turn 在后台运行，你会立即得到
+`202`，其中有 `delivery: "started"`。加上
+`"stream": true`，就能以实时流的形式得到回答。要在之后读取回答，请从回答中取出
+`chat`，然后调用 `GET /v1/chats/<chatId>`。
+
+</Step>
+
+</Steps>
+
+测试模型 `mock-text` 的回答是 `Development response:`
+加上你的输入。其他测试模型见 [Models](/zh-cn/docs/models)。
+
+---
+
+## 下一步
+
+- 阅读 [Chats](/zh-cn/docs/developers/chats) 和 Turns 的工作方式。
+- 使用真实的身份提供方：[身份验证](/zh-cn/docs/developers/authentication) 和
+  [Platform](/zh-cn/docs/platform)。
+- 添加真实的模型：[Models](/zh-cn/docs/models)。
+- 在服务器上运行 OpenBot：[部署](/zh-cn/docs/deploy)。
+
+此示例选择开发用测试模型。正式环境的 Bot 需要选择管理员提供的模型。

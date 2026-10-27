@@ -1,7 +1,9 @@
+import { Secrets } from "../../secrets/Secrets.ts"
+import * as Failures from "../../errors/Failures.ts"
 import { Chat, Turn } from "@openbot-build/core"
-import type { BotsApi } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
+import { Execution } from "@openbot-build/domain"
 import {
-	Array as Arr,
 	Clock,
 	Context,
 	Crypto,
@@ -23,6 +25,7 @@ export type ReminderStatus = typeof ReminderStatus.Type
  */
 export const Reminder = Schema.Struct({
 	id: Schema.String,
+	executionId: Schema.optionalKey(Execution.Id),
 	userId: Schema.String,
 	author: Turn.Author,
 	chat: Chat.Id,
@@ -44,29 +47,20 @@ export class Reminders extends Context.Service<
 			organizationId: string,
 			input: Pick<
 				Reminder,
-				"userId" | "author" | "chat" | "turn" | "toolCallId" | "note" | "dueAt"
-			>,
+				| "userId"
+				| "author"
+				| "chat"
+				| "turn"
+				| "toolCallId"
+				| "note"
+				| "dueAt"
+				| "executionId"
+			> & { readonly id?: string },
 		) => Effect.Effect<Reminder, BotsApi.BotStorageUnavailable>
 		readonly find: (
 			organizationId: string,
 			id: string,
 		) => Effect.Effect<Option.Option<Reminder>, BotsApi.BotStorageUnavailable>
-		/** The open reminders in every organization. */
-		readonly open: Effect.Effect<
-			ReadonlyArray<{
-				readonly organizationId: string
-				readonly value: Reminder
-			}>,
-			BotsApi.BotStorageUnavailable
-		>
-		/** The reminders whose time came, in every organization. */
-		readonly due: Effect.Effect<
-			ReadonlyArray<{
-				readonly organizationId: string
-				readonly value: Reminder
-			}>,
-			BotsApi.BotStorageUnavailable
-		>
 		/**
 		 * Changes the status of a reminder when it has the status `from`, and gives the
 		 * changed reminder. It gives None when the status is not `from`. The step holds
@@ -90,11 +84,81 @@ export class Reminders extends Context.Service<
 export const make: Effect.Effect<
 	typeof Reminders.Service,
 	never,
-	BotRecords | Crypto.Crypto
+	BotRecords | Crypto.Crypto | Secrets
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
+	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
-	const reminders = records.collection("reminder", Reminder, ReminderStatus)
+	const rows = records.collection(
+		"reminder",
+		Schema.Struct({ id: Schema.String, sealed: Schema.String }),
+		ReminderStatus,
+	)
+	const codec = Schema.fromJsonString(Reminder)
+	const binding = (organizationId: string, id: string) =>
+		Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))([
+			"reminder",
+			organizationId,
+			id,
+		])
+	const hide = Failures.replace(
+		"The saved reminder could not be read or written.",
+		() => BotsApi.BotStorageUnavailable.make({}),
+	)
+	const decode = (
+		organizationId: string,
+		row: { readonly id: string; readonly sealed: string },
+	) =>
+		Effect.gen(function* () {
+			const value = yield* secrets.open(
+				row.sealed,
+				yield* binding(organizationId, row.id),
+			)
+			const record = yield* Schema.decodeEffect(codec)(value)
+			if (record.id !== row.id)
+				return yield* BotsApi.BotStorageUnavailable.make({})
+			return record
+		}).pipe(hide)
+	const reminders = {
+		find: (organizationId: string, id: string) =>
+			rows.find(organizationId, id).pipe(
+				Effect.flatMap(
+					Option.match({
+						onNone: () => Effect.succeedNone,
+						onSome: (row) => decode(organizationId, row).pipe(Effect.asSome),
+					}),
+				),
+			),
+		list: (
+			organizationId: string,
+			filter: { readonly scope: string; readonly status: ReminderStatus },
+		) =>
+			rows
+				.list(organizationId, filter)
+				.pipe(
+					Effect.flatMap((rows) =>
+						Effect.forEach(rows, (row) => decode(organizationId, row)),
+					),
+				),
+
+		put: (
+			keys: {
+				readonly organizationId: string
+				readonly id: string
+				readonly owner: string
+				readonly scope: string
+				readonly status: ReminderStatus
+			},
+			value: Reminder,
+		) =>
+			Effect.gen(function* () {
+				const sealed = yield* secrets.seal(
+					yield* Schema.encodeEffect(codec)(value),
+					yield* binding(keys.organizationId, keys.id),
+				)
+				yield* rows.put(keys, { id: keys.id, sealed })
+			}).pipe(hide),
+	}
 	const keys = (organizationId: string, reminder: Reminder) => ({
 		organizationId,
 		id: reminder.id,
@@ -106,8 +170,13 @@ export const make: Effect.Effect<
 		start: (organizationId, input) =>
 			Effect.gen(function* () {
 				const id =
+					input.id ??
+					input.executionId ??
 					"rem_" +
-					Str.slice(0, 32)(yield* hash(crypto, [input.chat, input.toolCallId]))
+						Str.slice(
+							0,
+							32,
+						)(yield* hash(crypto, [input.chat, input.turn, input.toolCallId]))
 				return yield* records.transaction(
 					id,
 					Effect.gen(function* () {
@@ -125,12 +194,6 @@ export const make: Effect.Effect<
 				)
 			}),
 		find: reminders.find,
-		open: reminders.withStatus("waiting"),
-		due: Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			const open = yield* reminders.withStatus("waiting")
-			return Arr.filter(open, (entry) => entry.value.dueAt <= now)
-		}),
 		change: (organizationId, id, from, to) =>
 			records.transaction(
 				id,

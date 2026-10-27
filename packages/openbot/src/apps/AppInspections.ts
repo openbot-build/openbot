@@ -1,6 +1,9 @@
-import { DeveloperApi as Api } from "@openbot-build/api"
+import * as Models from "./DeveloperModels.ts"
+import { Developers } from "@openbot-build/domain"
+
 import {
 	CatalogDiscovery,
+	Client,
 	Discovery,
 	Index,
 	Indexing,
@@ -15,6 +18,7 @@ import {
 	Layer,
 	Match,
 	Option,
+	Redacted,
 	pipe,
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
@@ -22,14 +26,19 @@ import { discover } from "./Discovery.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as IndexStore from "./IndexStore.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
+import * as Report from "../errors/Report.ts"
+import type { Records } from "../errors/Records.ts"
 
 export class AppInspections extends Context.Service<
 	AppInspections,
 	{
 		readonly inspect: (
 			input: string,
-		) => Effect.Effect<Api.InspectionReport, Api.DeveloperInputInvalid>
+		) => Effect.Effect<
+			Models.InspectionReport,
+			Developers.DeveloperInputInvalid
+		>
 	}
 >()("@openbot-build/openbot/apps/AppInspections") {}
 
@@ -40,8 +49,10 @@ export const make: Effect.Effect<
 	| Indexing.PublicationInspection
 	| Index.IndexStore
 	| PgClient.PgClient
+	| Records
 > = Effect.gen(function* () {
 	const inspection = yield* Indexing.PublicationInspection
+	const report = yield* Report.make
 	const index = yield* Index.IndexStore
 	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
@@ -50,23 +61,24 @@ export const make: Effect.Effect<
 		inspect: (input) =>
 			Effect.gen(function* () {
 				yield* CatalogDiscovery.inputLink(input).pipe(
-					Effect.catchTag(["InvalidLink", "SchemaError"], () =>
-						Effect.fail(
-							Api.DeveloperInputInvalid.make({
-								message: "Enter a domain or an HTTPS link without credentials.",
-							}),
-						),
+					Failures.replace("The App inspection input is not valid", () =>
+						Developers.DeveloperInputInvalid.make({
+							message: "Enter a domain or an HTTPS link without credentials.",
+						}),
 					),
 				)
 				const checkedAt = yield* Clock.currentTimeMillis
 				const found = yield* discover(input).pipe(
 					Effect.provideService(Discovery.Discovery, discovery),
+					Effect.tapCauseIf(Cause.hasFails, (cause) =>
+						report("The App publication could not be found", cause),
+					),
 					Effect.result,
 				)
 				return yield* Match.value(found).pipe(
 					Match.tagsExhaustive({
 						Failure: ({ failure }) =>
-							Effect.succeed<Api.InspectionReport>({
+							Effect.succeed<Models.InspectionReport>({
 								input,
 								checkedAt,
 								apps: [],
@@ -113,12 +125,9 @@ export const make: Effect.Effect<
 												entry: index.get(candidate.cardUrl),
 												checks: IndexStore.checks(db, namespace),
 											}).pipe(
-												// The report then says "Unknown", so the log keeps the reason.
+												// The report says "Unknown". The sealed record keeps the reason.
 												Effect.tapCauseIf(Cause.hasFails, (cause) =>
-													Effect.logWarning(
-														"Public Index state could not be read",
-														cause,
-													),
+													report("Public Index state could not be read", cause),
 												),
 												Effect.result,
 											)
@@ -131,6 +140,22 @@ export const make: Effect.Effect<
 													Option.none(),
 												)
 												.pipe(
+													Effect.tap((result) =>
+														Option.match(Client.errorCause(result), {
+															onNone: () => Effect.void,
+															onSome: (cause) =>
+																report(
+																	"The App publication could not be checked",
+																	Redacted.value(cause),
+																),
+														}),
+													),
+													Effect.tapCauseIf(Cause.hasFails, (cause) =>
+														report(
+															"The App publication could not be checked",
+															cause,
+														),
+													),
 													Effect.catchTag("IndexingError", (error) =>
 														Effect.succeed<Indexing.InspectionResult>({
 															_tag: "Unconfirmed",
@@ -146,7 +171,8 @@ export const make: Effect.Effect<
 															cardUrl: candidate.cardUrl,
 															reason: error.reason,
 															url: error.url,
-															issue: error.issue,
+															issue:
+																"The App publication could not be checked.",
 														}),
 													),
 												)
@@ -177,13 +203,13 @@ export const make: Effect.Effect<
 										}),
 									{ concurrency: 4 },
 								)
-								const issues: ReadonlyArray<Api.Issue> = [
+								const issues: ReadonlyArray<Developers.Issue> = [
 									...pipe(
 										apps,
 										Arr.filter(
 											(app) => (app.candidate.card.icons?.length ?? 0) === 0,
 										),
-										Arr.map((app): Api.Issue => ({
+										Arr.map((app): Developers.Issue => ({
 											code: "MissingIcon",
 											fieldPath: "icons",
 											impacts: ["discovery"],
@@ -205,7 +231,7 @@ export const make: Effect.Effect<
 										message: issue.reason,
 										repair: "Repair this Card declaration and inspect again.",
 									})),
-									...Arr.flatMap(apps, (app): ReadonlyArray<Api.Issue> =>
+									...Arr.flatMap(apps, (app): ReadonlyArray<Developers.Issue> =>
 										Match.value(app.eligibility).pipe(
 											Match.tagsExhaustive({
 												Eligible: () => [],
@@ -267,7 +293,7 @@ export const make: Effect.Effect<
 					"IndexingError",
 					"A discovered Card URL is not a valid indexing input",
 					() =>
-						Api.DeveloperInputInvalid.make({
+						Developers.DeveloperInputInvalid.make({
 							message: "The publication input could not be checked.",
 						}),
 				),

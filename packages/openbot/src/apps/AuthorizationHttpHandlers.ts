@@ -1,4 +1,6 @@
+import * as HttpErrors from "../execution/HttpErrors.ts"
 import { AppAuthorizationApi as Api, OpenBotApi } from "@openbot-build/api"
+
 import { Effect, Layer, Option, String as Str, pipe } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -24,24 +26,31 @@ export const layer = Layer.merge(
 	HttpApiBuilder.group(OpenBotApi, "appAuthorization", (handlers) =>
 		Effect.gen(function* () {
 			const authorization = yield* Authorizations
+			const safe = yield* HttpErrors.make
 			return handlers
 				.handle("beginAppAuthorization", ({ params, payload }) =>
-					authorization.begin(params.connectionId, payload),
+					authorization.begin(params.connectionId, payload).pipe(safe),
 				)
 				.handle("getAppAuthorization", ({ params }) =>
-					authorization.get(params.flowId),
+					authorization.get(params.flowId).pipe(safe),
 				)
-				.handle("completeAppAuthorization", ({ params }) =>
-					authorization.complete(params.flowId),
+				.handle("completeAppAuthorization", ({ params, payload }) =>
+					authorization.complete(params.flowId, payload.commandKey).pipe(safe),
 				)
-				.handle("revokeAppAuthorization", ({ params }) =>
-					authorization.revoke(params.connectionId),
+				.handle("getAppAuthorizationAction", ({ params }) =>
+					authorization.action(params.executionId).pipe(safe),
+				)
+				.handle("revokeAppAuthorization", ({ params, payload }) =>
+					authorization
+						.revoke(params.connectionId, payload.commandKey)
+						.pipe(safe),
 				)
 		}),
 	),
 	HttpApiBuilder.group(OpenBotApi, "appAuthorizationPublic", (handlers) =>
 		Effect.gen(function* () {
 			const authorization = yield* Authorizations
+			const safe = yield* HttpErrors.make
 			const auth = yield* Auth
 			const settings = yield* Settings
 			return handlers
@@ -60,6 +69,7 @@ export const layer = Layer.merge(
 							),
 						)
 						return yield* authorization.receive(request.url, owner).pipe(
+							safe,
 							Effect.map((receipt) => {
 								const target = new URL(
 									receipt.requiresLogin ? "/" : receipt.returnTo,

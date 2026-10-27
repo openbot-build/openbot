@@ -24,10 +24,14 @@ const PrivateState = Schema.Struct({
 	),
 })
 type PrivateState = typeof PrivateState.Type
+export const privateStateCodec = Schema.fromJsonString(
+	Schema.toCodecJson(PrivateState),
+)
 export interface BoundTestStores {
 	readonly apps: typeof Store.AppStore.Service
 	readonly credentials: typeof Store.CredentialStore.Service
 	readonly flows: typeof Authorization.FlowStore.Service
+	readonly snapshot: Effect.Effect<PrivateState, Store.StoreError>
 	readonly clear: Effect.Effect<void, Store.StoreError>
 }
 export class DeveloperTestStores extends Context.Service<
@@ -47,7 +51,7 @@ export const make: Effect.Effect<
 	const namespace = yield* IndexNamespace
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
-	const codec = Schema.fromJsonString(Schema.toCodecJson(PrivateState))
+	const codec = privateStateCodec
 	const flowCodec = Schema.fromJsonString(
 		Schema.toCodecJson(Authorization.Flow),
 	)
@@ -75,7 +79,9 @@ export const make: Effect.Effect<
 				Rows.getTest(db, namespace, id, lock).pipe(
 					Effect.catchTags({
 						DeveloperNotFound: () => missing(),
-						DeveloperUnavailable: unavailable,
+
+						ExecutionStorageError: unavailable,
+						SchemaError: unavailable,
 					}),
 					Effect.flatMap((record) =>
 						record.owner === owner
@@ -131,7 +137,9 @@ export const make: Effect.Effect<
 					const record = yield* Rows.getFlow(db, namespace, flowId).pipe(
 						Effect.catchTags({
 							DeveloperNotFound: () => missing(),
-							DeveloperUnavailable: unavailable,
+
+							ExecutionStorageError: unavailable,
+							SchemaError: unavailable,
 						}),
 					)
 					if (record.owner !== owner || record.testId !== id)
@@ -139,6 +147,7 @@ export const make: Effect.Effect<
 					return record
 				})
 			return {
+				snapshot: read,
 				apps: Store.AppStore.of({
 					save: (input) =>
 						Effect.gen(function* () {
@@ -174,7 +183,7 @@ export const make: Effect.Effect<
 								yield* write({ ...(yield* read), connection })
 								return connection
 							}),
-						).pipe(Effect.catchTag("DeveloperUnavailable", unavailable)),
+						).pipe(Effect.catchTag("ExecutionStorageError", unavailable)),
 					updateApp: () =>
 						Effect.fail(
 							Store.StoreError.make({
@@ -209,7 +218,7 @@ export const make: Effect.Effect<
 								})
 								return reference
 							}),
-						).pipe(Effect.catchTag("DeveloperUnavailable", unavailable)),
+						).pipe(Effect.catchTag("ExecutionStorageError", unavailable)),
 					get: (input) =>
 						Effect.gen(function* () {
 							const current = yield* read
@@ -300,7 +309,7 @@ export const make: Effect.Effect<
 									value: { ...record.value, status: "Exchanging" },
 								}).pipe(Effect.mapError(unavailable))
 							}),
-						).pipe(Effect.catchTag("DeveloperUnavailable", unavailable)),
+						).pipe(Effect.catchTag("ExecutionStorageError", unavailable)),
 				}),
 				clear: Effect.gen(function* () {
 					yield* setPrivateState(null)

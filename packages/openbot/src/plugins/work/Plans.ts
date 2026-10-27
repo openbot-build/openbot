@@ -1,5 +1,5 @@
-import { PlanApproval } from "@openbot-build/api"
-import type { BotsApi } from "@openbot-build/api"
+import { PlanApproval } from "@openbot-build/domain"
+import type { Bots as BotsApi } from "@openbot-build/domain"
 import { Effect } from "effect"
 import type { Settings } from "../../settings/Settings.ts"
 import type * as ChatHost from "../../chats/ChatHost.ts"

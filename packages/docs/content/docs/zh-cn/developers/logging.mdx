@@ -1,0 +1,45 @@
+---
+title: "添加错误日志记录器"
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+面向修改或发布 OpenBot 的项目贡献者。
+
+## 把错误发送到你自己的服务
+
+当你从自己的代码中运行 OpenBot 时，用 `Logger.layer` 添加一个日志器。使用
+`mergeWithExisting: true`
+来保留其他日志器。在服务器外部提供它，这样它会一直保持打开，直到服务器关闭。
+
+```ts
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
+import { Effect, Layer, Logger, References } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const alerts = Logger.layer(
+	[
+		Logger.make((log) => {
+			if (log.logLevel !== "Error" && log.logLevel !== "Fatal") return
+			const annotations = log.fiber.getRef(References.CurrentLogAnnotations)
+			// 只发送你需要的值，比如发给一个聊天机器人。
+			console.log("alert", annotations["source"], annotations["operation"])
+		}),
+	],
+	{ mergeWithExisting: true },
+)
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		return yield* Layer.launch(
+			Server.layerLive(settings).pipe(
+				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+			),
+		)
+	}).pipe(Effect.provide(alerts)),
+)
+```
+
+日志器不能阻塞。要调用一个慢的服务，请把每个事件放进队列，再从后台 fiber 发送。fiber 是 Effect 运行的一种轻量线程。

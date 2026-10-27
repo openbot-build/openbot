@@ -1,0 +1,481 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "660b3338-9e71-4085-ab54-04df1ecf56d0",
+	"prevIds": ["22b99ec9-b57f-41cb-8653-6701cca03234"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_execution_permits"],
+			"writes": [
+				"s|tbl|public.openbot_execution_permits",
+				"n|tbl|public.openbot_execution_permits",
+				"e|tbl|public.openbot_execution_permits",
+				"n|rel|public.openbot_execution_permits",
+				"n|type|public.openbot_execution_permits",
+				"n|rel|public.openbot_execution_permits_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_resource_leases"],
+			"writes": [
+				"s|tbl|public.openbot_resource_leases",
+				"n|tbl|public.openbot_resource_leases",
+				"e|tbl|public.openbot_resource_leases",
+				"n|rel|public.openbot_resource_leases",
+				"n|type|public.openbot_resource_leases",
+				"n|rel|public.openbot_resource_leases_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"estimated_micros"
+			],
+			"writes": [
+				"s|col|public.openbot_usage_events.estimated_micros",
+				"n|col|public.openbot_usage_events.estimated_micros",
+				"e|col|public.openbot_usage_events.estimated_micros"
+			],
+			"reads": ["n|tbl|public.openbot_usage_events", "n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_execution_permits",
+				"openbot_execution_permits_pool"
+			],
+			"writes": [
+				"s|idx|public.openbot_execution_permits_pool",
+				"n|idx|public.openbot_execution_permits_pool",
+				"e|idx|public.openbot_execution_permits_pool",
+				"n|rel|public.openbot_execution_permits_pool"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_permits",
+				"n|sch|public",
+				"n|col|public.openbot_execution_permits.pool",
+				"n|col|public.openbot_execution_permits.deadline"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_resource_leases",
+				"openbot_resource_leases_resource"
+			],
+			"writes": [
+				"s|idx|public.openbot_resource_leases_resource",
+				"n|idx|public.openbot_resource_leases_resource",
+				"e|idx|public.openbot_resource_leases_resource",
+				"n|rel|public.openbot_resource_leases_resource"
+			],
+			"reads": [
+				"n|tbl|public.openbot_resource_leases",
+				"n|sch|public",
+				"n|col|public.openbot_resource_leases.namespace",
+				"n|col|public.openbot_resource_leases.kind",
+				"n|col|public.openbot_resource_leases.id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_execution_permits"],
+			"writes": [
+				"s|fk|public.openbot_execution_permits.openbot_execution_permits_K5nTJ0nXb9Nk_fkey",
+				"n|fk|public.openbot_execution_permits.openbot_execution_permits_K5nTJ0nXb9Nk_fkey",
+				"e|fk|public.openbot_execution_permits.openbot_execution_permits_K5nTJ0nXb9Nk_fkey",
+				"n|con|public.openbot_execution_permits.openbot_execution_permits_K5nTJ0nXb9Nk_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_permits",
+				"n|sch|public",
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_execution_permits.namespace",
+				"n|col|public.openbot_execution_permits.execution_id",
+				"n|col|public.openbot_executions.namespace",
+				"n|col|public.openbot_executions.id",
+				"e|uniqueness|public.openbot_executions.id.namespace"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_execution_permits",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_resource_leases",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_usage_events",
+				"name": "estimated_micros",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "generation",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "pool",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "deadline",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "lease",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "node",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "host",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "port",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "result",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "openbot_execution_permits_pool",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "pool",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "deadline",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "openbot_resource_leases_resource",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "kind",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "openbot_execution_permits_K5nTJ0nXb9Nk_fkey",
+				"nameExplicit": false,
+				"columns": ["namespace", "execution_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_executions",
+				"columnsTo": ["namespace", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_permits",
+				"name": "openbot_execution_permits_pkey",
+				"columns": ["namespace", "execution_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_leases",
+				"name": "openbot_resource_leases_pkey",
+				"columns": ["lease"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

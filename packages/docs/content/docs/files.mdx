@@ -1,247 +1,41 @@
 ---
-title: Files
-description:
-  Upload pictures, PDFs and other files, and give them to a Bot in a message.
+title: "Work with files"
+description: "Work with files"
 ---
 
-A **file** is a picture, a PDF, or another document that you give to OpenBot.
-You upload it once, and then you name it in a message to a Bot. The model of the
-Bot sees the file.
-
-OpenBot keeps the bytes of each file in **object storage**: a service that
-stores files and speaks the S3 API, such as AWS S3, Cloudflare R2, MinIO or
-RustFS. A platform admin sets up the storage. See
-[Set up storage](#set-up-storage).
-
-Every file belongs to one member of one organization. Other people cannot read
-it.
-
----
-
-## Upload a file
-
-There are two ways to upload. A platform admin can turn each of them on or off.
-
-### Through OpenBot
-
-Send the file as `multipart/form-data` to `POST /v1/files`. The field `file` has
-the file. OpenBot takes other fields, such as `purpose`, but it does not use
-them.
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -F file=@photo.png \
-  https://api.example.com/v1/files
-```
-
-```json
-{
-	"id": "file_6f1c…",
-	"object": "file",
-	"filename": "photo.png",
-	"mediaType": "image/png",
-	"bytes": 52731,
-	"status": "ready",
-	"createdAt": 1793000000000
-}
-```
-
-The file is `ready` at once. OpenBot reads the media type from the form. When
-the form says `application/octet-stream`, OpenBot guesses the type from the end
-of the file name, such as `.png` or `.pdf`.
-
-### Directly to storage
-
-For large files, the client can put the bytes in storage itself. Then the bytes
-do not go through OpenBot.
-
-1. Ask for an upload address with `POST /v1/files/uploads`:
-
-   ```sh
-   curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"filename":"report.pdf","mediaType":"application/pdf","bytes":1048576}' \
-     https://api.example.com/v1/files/uploads
-   ```
-
-   ```json
-   {
-   	"file": { "id": "file_9a2e…", "status": "pending", "…": "…" },
-   	"url": "https://s3.example.com/openbot/files/file_9a2e…?X-Amz-Signature=…",
-   	"method": "PUT",
-   	"headers": {
-   		"content-type": "application/pdf",
-   		"content-length": "1048576"
-   	},
-   	"expiresAt": 1793000900000
-   }
-   ```
-
-2. Send the bytes with `PUT` to `url`, with these `headers`. The address works
-   for 15 minutes. The signature covers the media type and the size, so storage
-   takes no other bytes.
-
-3. Complete the file with `POST /v1/files/:fileId/complete`. OpenBot checks that
-   the bytes are in storage with the right size. Then the file is `ready`.
-
-A file that nobody completes within one hour is deleted.
-
-<Callout type="info">
-	A browser can only put the bytes in storage when the bucket allows its origin.
-	Set the CORS rules of the bucket for this.
-</Callout>
-
-### Limits
-
-The platform settings say how large a file can be, and which media types OpenBot
-takes. By default, a file can have up to 20 MB, and these types are allowed:
-
-- `image/png`, `image/jpeg`, `image/gif`, `image/webp`
-- `application/pdf`
-- `text/plain`
-
-Each model takes only some types. A file that the model does not take makes the
-Turn fail. So keep the list to types that your models can read.
-
-A platform admin can also give each member a quota with `files.quotaBytes`. The
-quota is the most bytes that the files of one member may take together. Pending
-files count too, so a direct upload keeps its space before the bytes arrive. A
-file that does not fit returns `413` with `FileQuotaExceeded`, with `quotaBytes`
-and `usedBytes`. Delete files to get the space back. By default, there is no
-quota.
-
----
+Give a file to a Bot when its task needs a document or image. Your platform must
+have file storage, and your client must support uploads.
 
 ## Give a file to a Bot
 
-Name a file in the `content` of a message. `input_image` takes a file with a
-media type that starts with `image/`. `input_file` takes any file, such as a
-PDF.
+Upload the file through your client. Wait until the upload is ready, then attach
+it to a message and say what the Bot should do with it. An upload on its own
+does not send the file to a Bot. The chosen model must support the kind of
+input.
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "input": [{
-      "role": "user",
-      "content": [
-        { "type": "input_text", "text": "What is in this picture?" },
-        { "type": "input_image", "file_id": "file_6f1c…" }
-      ]
-    }]
-  }' \
-  https://api.example.com/v1/bots/$BOT/messages
-```
+## Keep or delete a file
 
-The file must be one of your own files, and it must be `ready`. If not, OpenBot
-returns `400` with `FileInvalid`.
+You can read and delete your own files. A Chat that refers to a file keeps it.
+After you delete the Chat, an unused file may be removed. Unused files normally
+expire after 24 hours; your platform can set another time. Keep another copy of
+files you need to keep.
 
-The Chat keeps only the ID of the file, not its bytes. Before each model call,
-OpenBot reads the bytes from storage. When a file was deleted, the model sees a
-short note in its place.
+Deleting a file makes it unavailable even in earlier messages. A Bot then sees a
+short note in place of its content.
 
----
+OpenBot saves the deletion task in the same database transaction that hides the
+file. A shared workflow removes the bytes and then the file record. Failed
+storage calls have a saved error ID and retry after a growing delay. A restart
+keeps that task and its saved results. One persistent retention task finds old,
+unused files; each instance does not run its own deletion loop.
 
-## Read and delete files
+The data move keeps an old unfinished deletion as interrupted work. Send a new
+delete request to resume it with your current access. Repeated requests share
+the active task. A task with an unknown outside result stays stopped until its
+decision is resolved.
 
-| Request                         | What it does                                         |
-| ------------------------------- | ---------------------------------------------------- |
-| `GET /v1/files`                 | Lists your files, newest first. Use `next` for more. |
-| `GET /v1/files/:fileId`         | Reads one file.                                      |
-| `GET /v1/files/:fileId/content` | Gives the bytes of a ready file.                     |
-| `DELETE /v1/files/:fileId`      | Deletes a file at once. Returns `204`.               |
+## Fix an upload problem
 
-`GET /v1/files/:fileId/content` sends the bytes while they come from storage, so
-a large file does not wait in the memory of OpenBot. When storage fails before
-the bytes start, the answer is `503`. When it fails after that, the answer stops
-early. Compare the length with `bytes` of the file to see that you have all of
-it.
-
-You need `read` on `File` to read files, and `write` on `File` to upload and
-delete them. Every member has both for their own files. See
-[Permissions](/docs/permissions).
-
----
-
-## How files go away
-
-OpenBot deletes files that nobody needs. This is **garbage collection**. Every
-instance runs it once a minute, and many instances can run it at the same time.
-
-- A Chat that names a file keeps it. The file stays while the Chat lives.
-- When you delete the Chat, it no longer keeps the file. See
-  [Delete the history](/docs/chats#delete-the-history).
-- A file that no Chat keeps is deleted when nobody used it for a time. The
-  default time is 24 hours. A platform admin can change it with
-  `files.unusedMs`.
-- A file that nobody completed is deleted after one hour.
-- A file that you delete goes away at once. Its bytes leave storage at the next
-  run.
-
-When there is no storage, OpenBot keeps the rows of deleted files. It removes
-their bytes when storage comes back.
-
----
-
-## Set up storage
-
-A platform admin sets the storage in the platform settings, as `files.storage`.
-It can also be set with `openbot setup`. See [Platform](/docs/platform#setup).
-
-```sh
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "expectedVersion": 3,
-    "files": {
-      "storage": {
-        "endpoint": "https://s3.us-east-1.amazonaws.com",
-        "publicEndpoint": null,
-        "region": "us-east-1",
-        "bucket": "openbot-files",
-        "accessKeyId": "AKIA…",
-        "secretAccessKey": "…",
-        "forcePathStyle": false
-      },
-      "uploads": { "server": true, "direct": true }
-    }
-  }' \
-  https://api.example.com/v1/platform/settings
-```
-
-| Field                     | Meaning                                                                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `storage.endpoint`        | Where OpenBot reaches the storage, with no path.                                                                                    |
-| `storage.publicEndpoint`  | Where clients put bytes for a direct upload. `null` means `endpoint`. Use it when OpenBot reaches the storage on a private network. |
-| `storage.region`          | The region of the storage, such as `us-east-1`.                                                                                     |
-| `storage.bucket`          | The bucket. Make it before you use it.                                                                                              |
-| `storage.accessKeyId`     | The access key ID.                                                                                                                  |
-| `storage.secretAccessKey` | The secret key. OpenBot stores it encrypted, and it never comes back. Leave it out to keep the current one.                         |
-| `storage.forcePathStyle`  | Put the bucket in the path, as in `https://host/bucket/key`. MinIO and RustFS need `true`.                                          |
-| `uploads.server`          | Allow uploads through OpenBot with `POST /v1/files`.                                                                                |
-| `uploads.direct`          | Allow direct uploads with `POST /v1/files/uploads`.                                                                                 |
-| `maxBytes`                | The largest file, in bytes.                                                                                                         |
-| `quotaBytes`              | The most bytes that the files of one member may take together. `null` means no quota.                                               |
-| `mediaTypes`              | The media types that people can upload. `image/*` takes every image.                                                                |
-| `unusedMs`                | How long a file that no Chat keeps stays, in milliseconds.                                                                          |
-
-`"storage": null` removes the storage. Then nobody can upload files.
-
-OpenBot reaches the storage through its outbound guard. Storage on a private
-network must be in `OPENBOT_OUTBOUND_ALLOW`. See
-[Outbound connections](/docs/configuration#outbound-connections).
-
-The access key needs to put, read and delete objects in the bucket. Do not let
-the bucket expire objects by itself: OpenBot decides when a file goes away.
-
----
-
-## Errors
-
-| Status | Error               | When                                                                                |
-| ------ | ------------------- | ----------------------------------------------------------------------------------- |
-| `400`  | `FileInvalid`       | The file is too large, has a type that the platform does not take, or is not ready. |
-| `404`  | `FileNotFound`      | You have no file with this ID.                                                      |
-| `413`  | `FileQuotaExceeded` | The file does not fit in the space that is left in your quota.                      |
-| `409`  | `FilesDisabled`     | The platform has no storage, or this way of upload is off.                          |
-| `503`  | `FilesUnavailable`  | OpenBot cannot reach its database or the storage.                                   |
+Check the file type, size, and your storage allowance. A file that is still
+uploading is not ready for a message. If storage is unavailable or your client
+cannot upload, contact your administrator or client provider with the error.

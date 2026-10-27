@@ -1,0 +1,95 @@
+---
+title: "配置 Channel"
+description: "配置 Channel"
+---
+
+面向负责配置此服务的管理员。请使用具有下述权限的账户。
+
+## 添加 Channel
+
+由管理员添加 Channel。这需要 `Channel` 上的 `write`。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"channel-team-slack-1","name":"Team Slack","bot":"bot_...","linkPath":"/link","credentials":{"kind":"slack","botToken":"xoxb-...","signingSecret":"..."}}' \
+  https://api.example.com/v1/organization/channels
+```
+
+| 字段          | 作用                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `name`        | 一个简短的名字。                                                                           |
+| `bot`         | 负责回答的 Bot。它必须是组织的共享 Bot。                                                   |
+| `credentials` | 平台的机密。见下文。它们可以写入，但永远不会返回。返回结果只显示 `set` 和一个 `hint`。     |
+| `linkPath`    | 可选。你的公开 origin 上的一个路径，你的客户端在这里让人[关联账户](/zh-cn/docs/channels)。 |
+| `enabled`     | 可选。`false` 会停用这个 Channel。它的 webhook 之后会返回 `401`。                          |
+
+返回 `201` 和这个 Channel。把它的 `webhookUrl`
+交给平台。调用者成为这个 Channel 的 **actor**。Channel 的聊天是 actor 的
+[Chats](/zh-cn/docs/developers/chats)。actor 必须能把工作交给这个 Bot。
+
+`GET`、`PATCH` 和 `DELETE /v1/organization/channels/:channelId`
+读取、修改和删除一个 Channel。修改需要 `expectedVersion`，也就是你读到的
+`version`。旧的 version 会返回 `409` 和
+`ChannelConflict`。修改会让调用者成为 actor。不填 `credentials`
+就会保留原来的机密。Channel 的类型不能修改。
+
+创建和修改命令都需要
+`commandKey`。网络调用失败后，重发同一命令时保留这个键。新键表示新命令。SDK 的
+`Channels.create`、`Channels.update` 和 `Channels.rotateSecret`
+会生成一次键。重试时复用返回的 `send` effect。
+
+Channel 的 `executionId` 指向配置执行。`201` 表示配置和工作已一起保存。读取
+`/v1/executions/:executionId`
+或订阅其事件，检查注册结果。平台明确拒绝时，Channel 会保留，执行记录给出安全错误。响应丢失或结果不明时，状态为
+`outcome_unknown`，等待决定。后续配置执行会等前一次结束，重启后也一样。
+
+轮换密钥也需要 `commandKey` 和 `expectedVersion`。响应包含 `secret` 和
+`channel`。重试同一命令会返回相同的密钥和版本，不会再次轮换。请妥善保存结果。
+
+平台明确限流拒绝时，OpenBot 最多尝试五次。等待时间会保存，重启后仍然有效。每次尝试前都会重新检查当前权限。回复丢失不适用此重试规则。飞书每次尝试使用同一个消息键。飞书只保留这个键一小时，所以未知结果仍需决定。
+
+删除请求的正文需要 `commandKey`，返回 `202` 和执行回执。SDK 的 `Channels.remove`
+会生成一次键。Channel 会立即停止接收新输入和配置修改。删除执行会等待所有已保存的收件、观察、发送和配置工作停止并释放资源，然后才删除 Channel 及其关联。Chat 和执行历史会保留。外部结果不明时，仍需在对应执行上提交决定，删除会继续等待。关闭事件流不会取消删除。显式取消删除后，Channel 保持停用；之后可以通过修改重新启用。
+
+数据升级后，旧 Channel 可能显示
+`needsAuthorization: true`。其设置、密钥、链接和历史会保留，`enabled`
+值也不变，但它不接收输入，也不启动发送或观察任务。管理员必须保存一次修改或轮换密钥，用当前权限建立新的调用身份，之后
+`needsAuthorization` 变为
+`false`。结果未知的旧任务仍需等待决定；保存新设置不会重放这些任务。
+
+### Slack
+
+`credentials`：`{ "kind": "slack", "botToken": "xoxb-...", "signingSecret": "..." }`
+
+1. 在 Slack 应用中打开 **Event Subscriptions**，把 `webhookUrl`
+   作为请求 URL。添加机器人事件 `app_mention` 和 `message.im`。
+2. 用同一个 `webhookUrl` 打开 **Interactivity**，这样机器人的按钮才能用。
+3. 给机器人 `chat:write`、`app_mentions:read` 和 `im:history`
+   这些权限范围（scope）。
+
+OpenBot 会检查每个请求的 `X-Slack-Signature`。超过 5 分钟的请求会被拒绝。
+
+### Lark
+
+`credentials`：`{ "kind": "lark", "domain": "feishu", "appId": "cli_...", "appSecret": "...", "verificationToken": "...", "encryptKey": "..." }`
+
+在中国使用飞书时，`domain` 是 `feishu`；在其他地方使用 Lark 时，它是
+`lark`。在 Lark 应用中设置一个 **Encrypt Key**，并把 `webhookUrl`
+作为事件和卡片回调的请求 URL。添加事件
+`im.message.receive_v1`。OpenBot 会检查每个事件的签名和验证令牌（verification
+token）。
+
+### Telegram
+
+`credentials`：`{ "kind": "telegram", "botToken": "123456:..." }`
+
+OpenBot 会替你调用
+`setWebhook`，并带上它自己的一个密钥。Telegram 每次发来更新时都会带回这个密钥。在群组中，机器人只会收到提到它或回复它的消息，除非你关闭它的隐私模式。
+
+## 执行检查
+
+Channel 配置保存完整调用人，包括修改配置时使用的 API
+token。其限制继续约束后续工作。如果权限变更后 Channel 停止工作，请检查 token 和成员权限。
+
+输入、回复和卡片都有执行记录。发送结果未知时，需要通过执行 API 提交决策。允许重试前先检查平台。重启不会替你作出这个决定。新服务器启动前，旧 Channel 队列数据必须通过维护窗口的数据转换。

@@ -1,0 +1,202 @@
+---
+title: Live mode
+description:
+  Talk with a Bot in real time. Sound goes in and out over one WebSocket.
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+In **Live mode**, a person talks with a Bot in real time. The client sends the
+sound of the person, and the Bot answers with sound and text. The person can
+talk while the Bot talks, and the Bot stops.
+
+Live mode uses a **WebSocket**: one connection that stays open and carries
+messages both ways. OpenBot is in the middle. It connects to a **Live model**,
+such as a model of the OpenAI Realtime API, and keeps the key of the provider on
+the server.
+
+Live mode runs in a **live Chat**: a [Chat](/docs/developers/chats) of the kind
+`live`. Each thing that the person says becomes a normal Turn in it. So the Bot
+has its instructions, its tools, its Rules, and its memory, as in a text Chat.
+The Chat keeps the text of what the person said and of what the Bot answered.
+Sound is not stored.
+
+---
+
+## Add a Live model
+
+See [Live models](/docs/admin/live-models).
+
+## Make a live Chat
+
+`POST /v1/bots/:botId/live` makes a new live Chat of yours with a Bot. You need
+`bots.delegate` on the Bot and `models.use` on the Live model. Each call makes a
+new Chat, so each talk can have its own history.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  https://api.example.com/v1/bots/$BOT_ID/live
+```
+
+| Field   | Rules                                                                                         |
+| ------- | --------------------------------------------------------------------------------------------- |
+| `model` | Optional. A Live model, as `{ "provider": "…", "model": "…" }`. The default is the first one. |
+
+The answer is the new Chat, with `201`. Its `settings.model` is the Live model.
+`PATCH /v1/chats/:chatId` can change it to another Live model, but never to a
+language model. Without a Live model, OpenBot returns `409` with
+`LiveUnavailable`.
+
+A live Chat is in the list of `GET /v1/chats`, and `DELETE /v1/chats/:chatId`
+deletes it.
+
+---
+
+## Connect
+
+Open a WebSocket at `GET /v1/chats/:chatId/live`. You need `read` and `run` on
+the Chat. The Chat must be a live Chat. The model is the model of the Chat.
+
+| Query           | Rules                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| `voice`         | Optional. A voice from `capabilities.voices`.                                                            |
+| `inputFormat`   | Optional. The sound that the client sends, such as `pcm16@24000`. The default is the first of the model. |
+| `outputFormat`  | Optional. The sound that the client wants back. The default is the first of the model.                   |
+| `turnDetection` | Optional. `server`: the model hears when the person stops. `client`: push-to-talk.                       |
+| `organization`  | Optional. The organization of a browser session, when the account has more than one.                     |
+
+A program sends `Authorization: Bearer <token>`. A browser sends the session
+cookie. Then the page must be on the public origin of OpenBot. Otherwise OpenBot
+returns `403` with `ForbiddenOrigin`, so a page on another site cannot use your
+cookie. A browser cannot send the `OpenBot-Organization` header with a
+WebSocket. So when the account is a member of more than one organization, it
+sends the ID in `organization`. Without it, OpenBot returns `400` with
+`OrganizationRequired`.
+
+OpenBot checks the request before it opens the socket. It returns `409` with
+`LiveUnavailable` when the Chat is not a live Chat, or when the model does not
+have the format, the voice, or the turn detection that you asked for.
+
+```ts
+const socket = new WebSocket(
+	"wss://api.example.com/v1/chats/" + chatId + "/live?voice=marin",
+)
+socket.binaryType = "arraybuffer"
+socket.onmessage = (event) => {
+	if (typeof event.data === "string") console.log(JSON.parse(event.data))
+	else play(new Uint8Array(event.data))
+}
+```
+
+---
+
+## Messages
+
+A **text frame** has one JSON message. A **binary frame** has sound. The client
+sends sound in the input format, and OpenBot sends sound in the output format.
+`pcm16` is 16-bit signed little-endian PCM with one channel.
+
+The protocol is the same for every Live model. The first message tells the
+client what the model can do.
+
+### From OpenBot
+
+| `type`                    | Meaning                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `session.ready`           | The session is open. It has `provider`, `model`, `capabilities`, `audio`, `turnDetection`, and `voice`. |
+| `command.accepted`        | The command is saved. `receipt` has `executionId`, `commandKey`, and `sequence`.                        |
+| `session.reconnect`       | The next Turn needs another model. Open a new connection.                                               |
+| `input.speech.started`    | The person started to talk.                                                                             |
+| `input.speech.stopped`    | The person stopped talking.                                                                             |
+| `input.transcript`        | Text of what the person said. `final` is `true` for the full text.                                      |
+| `output.transcript.delta` | A part of the text of the answer.                                                                       |
+| `output.done`             | The answer item `itemId` has no more sound or text.                                                     |
+| `output.stop`             | The person talks again. Stop playing the answer now.                                                    |
+| `turn.started`            | The connection follows a Turn. It has `turnId` and `executionId`.                                       |
+| `turn.completed`          | The saved execution ended. It has `turnId`, `executionId`, and `status`.                                |
+| `error`                   | Safe `code` and `message`. Internal failures also have `failure` with an error ID.                      |
+
+Provider, protocol, and socket errors keep their full cause in sealed records.
+The client gets a safe message and error ID. Ordinary logs do not contain the
+provider response or socket data.
+
+### From the client
+
+| `type`               | Meaning                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `input.text`         | Typed text and a required `commandKey`. Reuse the key when retrying.                        |
+| `input.image`        | An image, such as a frame of video. `data` is Base64. Only when `inputs.image` is true.     |
+| `input.audio.commit` | The person stopped talking. Only with `client` turn detection.                              |
+| `input.audio.clear`  | Forget the sound that is not committed.                                                     |
+| `response.cancel`    | A cancel request with a required `commandKey`. Observe the execution for its end.           |
+| `output.truncate`    | The person heard the answer `itemId` only up to `audioEndMs`. Only when `truncate` is true. |
+
+### Capabilities
+
+`capabilities` in `session.ready` says what the Live model can do:
+
+| Field                | Meaning                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| `audio`              | The `input` and `output` formats.                              |
+| `turnDetection`      | `server`, `client`, or both.                                   |
+| `inputTranscription` | The model gives the text of what the person says.              |
+| `tools`              | The model can call the tools of the Bot.                       |
+| `interruption`       | The model can stop a running answer.                           |
+| `truncate`           | The model can forget the part of an answer that was not heard. |
+| `inputs`             | `text` and `image` say which other inputs the model takes.     |
+| `voices`             | The voices of the model.                                       |
+
+When the client sends a message that the model does not support, OpenBot sends
+an `error` with the code `unsupported`.
+
+---
+
+## Turns and history
+
+Speech becomes saved input with a stable command key. The shared execution
+engine runs its Turn. The node with the WebSocket holds sound and the physical
+model connection. The execution can run on another node through private,
+authenticated RPC. Only one Live connection can hold a Chat at a time.
+
+A Turn waits for a connection with its saved model selection. Changing the Chat
+model affects later Turns. Reconnect first restores the model of an open Turn.
+When the next Turn needs another model, `session.reconnect` asks the client to
+open a new connection.
+
+The first model request on a new connection restores the saved prompt: text,
+tool calls, and their results. Each restored call has its own wire ID, even if
+old steps reused a provider ID. The current input is sent once. A history read
+failure stops the request. It does not start an empty conversation.
+
+The Turn uses the Bot instructions, tools, approvals, and current rights. Read
+its saved state and text through the same execution API as a text Chat. The
+WebSocket carries sound and live text; the execution event log gives the saved
+text and final result after a lost connection. Sound is not saved or replayed.
+
+Closing the socket ends observation and sound. It does not cancel submitted
+work. A model call whose connection was lost has an unknown result and needs a
+decision. An interrupted RPC retires its connection, so its late answer cannot
+become the answer to a later request. Only confirmed usage is charged.
+
+OpenBot uses the total token counts sent by the provider. Cached tokens are part
+of the input total. They are not added a second time. If either total is
+missing, the usage stays unknown and the budget reservation is released. A
+completed answer with no usage report does not become a zero-cost call.
+
+Talking during an answer requests cancellation and sends `output.stop`. The
+execution stays `cancelling` until its resources end. An unknown outside result
+can still need a decision. Open a new sound connection after interruption.
+
+If OpenBot proves that a request was not sent, it saves a failed call with its
+error ID. It does not ask whether to repeat an unknown action. Replaying that
+call reads the saved failure. A lost reply after send still needs a decision.
+
+---
+
+## Add a Live backend
+
+See [Add a Live backend](/docs/developers/live-backend).

@@ -18,6 +18,7 @@ import { TestClock } from "effect/testing"
 import { BotRecords } from "../src/bots/BotRecords.ts"
 import * as Judge from "../src/capabilities/Judge.ts"
 import { AnyModel } from "../src/models/ModelRegistry.ts"
+import { Records } from "../src/errors/Records.ts"
 import { bot } from "./BotFixture.ts"
 
 const rule = (id: string, text: string): BotsApi.Rule => ({
@@ -41,10 +42,12 @@ const noRecords = Layer.mock(BotRecords, {
 	collection: () => ({
 		find: () => Effect.succeedNone,
 		list: () => Effect.succeed([]),
-		withStatus: () => Effect.succeed([]),
 		put: () => Effect.void,
 		remove: () => Effect.void,
 	}),
+})
+const noFailures = Layer.mock(Records, {
+	record: () => Effect.die("No failure record was expected."),
 })
 
 /** A judge with a decision model that gives fixed answers. It keeps every request. */
@@ -56,6 +59,7 @@ const judgeWith = Effect.fn("Judge.judgeWith")(function* (answers: {
 	const layer = Layer.effect(Judge.Judge, Judge.make).pipe(
 		Layer.provide([
 			noRecords,
+			noFailures,
 			NodeCrypto.layer,
 			Layer.effect(
 				Judge.HelperModel,
@@ -163,6 +167,7 @@ const judgeAnswering = (answer: Effect.Effect<never>) =>
 	Layer.effect(Judge.Judge, Judge.make).pipe(
 		Layer.provide([
 			noRecords,
+			noFailures,
 			NodeCrypto.layer,
 			Layer.effect(
 				Judge.HelperModel,

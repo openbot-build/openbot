@@ -14,6 +14,9 @@ patchedDependencies:
   "@effect/ai-openai@4.0.6":
     hash: hlayjeukwzl7xjzgk4hhn4b7qa
     path: patches/@effect__ai-openai@4.0.6.patch
+  "@nmnmcc/ability@3.0.0":
+    hash: uhsjthkgohxm4ycaha7mezfs2m
+    path: patches/@nmnmcc__ability@3.0.0.patch
   effect@4.0.6:
     hash: sjqjutaw2n7kkagy3tqbjfx5oy
     path: patches/effect@4.0.6.patch
@@ -58,11 +61,14 @@ importers:
   packages/api:
     dependencies:
       "@nmnmcc/ability":
-        specifier: 1.0.1
-        version: 1.0.1(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
+        specifier: 3.0.0
+        version: 3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
@@ -101,12 +107,22 @@ importers:
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
       effect:
         specifier: 4.0.6
         version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
+    devDependencies:
+      "@effect/vitest":
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
 
   packages/computer:
     dependencies:
@@ -185,6 +201,82 @@ importers:
         specifier: 26.6.5
         version: 26.6.5
 
+  packages/domain:
+    dependencies:
+      "@nmnmcc/ability":
+        specifier: 3.0.0
+        version: 3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      "@effect/vitest":
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/e2e:
+    devDependencies:
+      "@effect/platform-node":
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))(redis@6.3.0)
+      "@effect/sql-pg":
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
+      "@effect/vitest":
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      "@modelcontextprotocol/client":
+        specifier: 2.3.1
+        version: 2.3.1
+      "@openbot-build/api":
+        specifier: workspace:*
+        version: link:../api
+      "@openbot-build/cli":
+        specifier: workspace:*
+        version: link:../cli
+      "@openbot-build/client":
+        specifier: workspace:*
+        version: link:../client
+      "@openbot-build/computer":
+        specifier: workspace:*
+        version: link:../computer
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
+      "@openbot-build/docs":
+        specifier: workspace:*
+        version: link:../docs
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
+      "@openbot-build/openbot":
+        specifier: workspace:*
+        version: link:../openbot
+      "@openbot-build/protocol":
+        specifier: workspace:*
+        version: link:../protocol
+      "@openbot-build/protocol-test":
+        specifier: workspace:*
+        version: link:../../protocol-test
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
   packages/openbot:
     dependencies:
       "@better-auth/drizzle-adapter":
@@ -212,14 +304,17 @@ importers:
         specifier: 0.32.0
         version: 0.32.0
       "@nmnmcc/ability":
-        specifier: 1.0.1
-        version: 1.0.1(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
+        specifier: 3.0.0
+        version: 3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
@@ -1704,10 +1799,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  "@nmnmcc/ability@1.0.1":
+  "@nmnmcc/ability@3.0.0":
     resolution:
       {
-        integrity: sha512-IWOL6vRdV4szYl+ANLBLL+bGyxlsfZsvzpzkq3dLGI2DVU21RR9wL8dC5OwPtJUcZoGgjjXjo2hgAul3tIUHsg==,
+        integrity: sha512-uA3n8gQpRbPCHbXPLql48W0PHtFp8nhMwnvP+FEai1592cFNnsizxo8Wldj0/jFH31fT14ebwqs8Dln/e9NQNw==,
       }
     peerDependencies:
       effect: 4.0.*
@@ -6924,7 +7019,7 @@ snapshots:
   "@next/swc-win32-x64-msvc@16.3.8":
     optional: true
 
-  "@nmnmcc/ability@1.0.1(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))":
+  "@nmnmcc/ability@3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))":
     dependencies:
       effect: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
 

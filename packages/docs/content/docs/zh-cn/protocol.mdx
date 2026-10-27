@@ -3,6 +3,8 @@ title: App Protocol
 description: 把 App 发布到网上，让任何 Bot 宿主都能找到并使用它。
 ---
 
+面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+
 **OpenBot App
 Protocol**（App 协议）是一种在网上发布 App 的开放方式。发布之后，任何 Bot 宿主都能找到这个 App，连接它，并使用它。你不需要开发者账户、注册中心或审核。有一个你自己控制的 HTTPS 地址就够了。
 
@@ -250,7 +252,7 @@ App 可以显示一个交互式视图。工具在它的元数据中链接到一�
 不是访问控制。如果你从 Catalog 中删除了 Card，宿主会在下次检查时删除对应的 Index 条目。无法访问的 Catalog 不算删除。
 
 发布、添加或调用 App 都不需要注册中心。宿主也可以读取其他注册中心。OpenBot 的做法请看
-[App Index](/zh-cn/docs/app-index)。
+[App Index](/zh-cn/docs/developers/app-index)。
 
 ---
 
@@ -294,6 +296,11 @@ App 可以显示一个交互式视图。工具在它的元数据中链接到一�
 
 OAuth 网络失败保留
 `NetworkError`。这不表示提供方拒绝了授权。关闭连接作用域会停止未完成的 SDK 请求，包括仍在等待响应头或已存令牌的请求。
+
+持久执行宿主使用 `OAuthAuthorization.prepare`、`redeem`、`renew` 和
+`revokeCredential`。这些函数返回流程或凭据，不写入宿主的存储。显示登录 URL 前先保存流程。发送授权码交换或令牌刷新前先记录调用。加密保存返回的凭据，再与连接状态一起提交。交换结果丢失时需要确认；未经确认，不要再次发送授权码或刷新令牌。撤销使用固定凭据，可以重复执行。独立使用的
+`begin`、`complete`、`refresh` 和 `revoke`
+也会更新所提供的存储，但不提供跨进程重启恢复。
 
 发布一个小 App：
 

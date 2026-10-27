@@ -1,4 +1,11 @@
-import { AppAuthorizationApi, DeveloperApi as Api } from "@openbot-build/api"
+import type {
+	Result as TestResult,
+	Preparation,
+	Exchange,
+} from "./TestCommands.ts"
+import { Records } from "../errors/Records.ts"
+import { Developers, Execution as Executions } from "@openbot-build/domain"
+
 import {
 	App,
 	Authorization,
@@ -21,6 +28,7 @@ import {
 	Option,
 	Ref,
 	Schema,
+	Redacted,
 	Scope,
 } from "effect"
 import { AppNetwork } from "./AppHost.ts"
@@ -31,56 +39,37 @@ import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { capabilityLists, pages } from "./Capabilities.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Platform from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 
-export type Execution =
-	| {
-			readonly _tag: "Completed"
-			readonly stages: ReadonlyArray<Api.TestStage>
-	  }
-	| {
-			readonly _tag: "Failed"
-			readonly stages: ReadonlyArray<Api.TestStage>
-			readonly reason: string
-	  }
-	| {
-			readonly _tag: "AwaitingAuthorization"
-			readonly stages: ReadonlyArray<Api.TestStage>
-			readonly issuers: ReadonlyArray<string>
-			readonly scopes: ReadonlyArray<string>
-			readonly resourceMetadataUrl?: string
-	  }
+export type Execution = TestResult
 export class DeveloperTestRuntime extends Context.Service<
 	DeveloperTestRuntime,
 	{
 		readonly execute: (
 			owner: string,
 			id: string,
-		) => Effect.Effect<Execution, Api.Failure>
-		readonly begin: (
+			steps: {
+				readonly check: Effect.Effect<void, Developers.Failure>
+				readonly progress: (
+					stages: ReadonlyArray<Developers.TestStage>,
+				) => Effect.Effect<void, Developers.Failure>
+			},
+		) => Effect.Effect<Execution, Developers.Failure>
+		readonly prepare: (
 			owner: string,
 			id: string,
 			input: {
 				readonly issuer?: string
 				readonly scopes: ReadonlyArray<string>
 			},
-		) => Effect.Effect<Api.TestAuthorization, Api.Failure>
-		readonly complete: (
+		) => Effect.Effect<Preparation, Developers.Failure>
+		readonly exchange: (
 			owner: string,
 			id: string,
-			flowId: string,
-			callback: string,
-		) => Effect.Effect<void, Api.Failure>
-		readonly revoke: (
-			owner: string,
-			id: string,
-		) => Effect.Effect<AppAuthorizationApi.Revocation["_tag"], Api.Failure>
-		readonly clear: (
-			owner: string,
-			id: string,
-		) => Effect.Effect<void, Api.Failure>
+			input: Exchange,
+		) => Effect.Effect<OAuthAuthorization.Grant, Developers.Failure>
 	}
 >()("@openbot-build/openbot/apps/DeveloperTestRuntime") {}
 const policy = Client.InvocationPolicy.of({
@@ -101,9 +90,9 @@ const listNames = [
 	"resourceTemplates",
 	"prompts",
 ] as const
-const uncheckedLists: ReadonlyArray<Api.TestStage> = Arr.map(
+const uncheckedLists: ReadonlyArray<Developers.TestStage> = Arr.map(
 	listNames,
-	(name): Api.TestStage => ({
+	(name): Developers.TestStage => ({
 		name,
 		status: "NotChecked",
 		items: [],
@@ -121,11 +110,12 @@ export const make: Effect.Effect<
 	| App.ConnectionScopes
 	| DeveloperAccess
 	| Settings
+	| Records
 > = Effect.gen(function* () {
+	const errors = yield* Records
 	const settings = yield* Settings
 	const stores = yield* DeveloperTestStores
 	const db = yield* Db.make
-	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const network = yield* AppNetwork
 	const crypto = yield* Crypto.Crypto
@@ -147,9 +137,10 @@ export const make: Effect.Effect<
 			| Client.InvocationPolicy
 			| Crypto.Crypto
 		>,
+		check: Effect.Effect<void, Developers.Failure> = Effect.void,
 	): Effect.Effect<
 		A,
-		E | Api.DeveloperInputInvalid | Store.StoreError,
+		E | Developers.DeveloperInputInvalid | Store.StoreError,
 		| Exclude<
 				R,
 				| Network.Network
@@ -171,7 +162,7 @@ export const make: Effect.Effect<
 			]).pipe(
 				Effect.catchTag("SchemaError", () =>
 					Effect.fail(
-						Api.DeveloperInputInvalid.make({
+						Developers.DeveloperInputInvalid.make({
 							message: "Test network targets must be valid HTTPS URLs.",
 						}),
 					),
@@ -201,6 +192,7 @@ export const make: Effect.Effect<
 											target: invocation.target,
 										})
 									return Effect.gen(function* () {
+										yield* check
 										const test = yield* Rows.getTest(db, namespace, id)
 										if (
 											test.owner !== owner ||
@@ -241,41 +233,35 @@ export const make: Effect.Effect<
 				| Store.StoreError
 				| Network.NetworkError
 				| Schema.SchemaError
-				| Api.DeveloperInputInvalid,
-		): Effect.Effect<
-			never,
-			| Api.DeveloperConflict
-			| Api.DeveloperNotFound
-			| Api.DeveloperUnavailable
-			| Api.DeveloperInputInvalid
-		> => {
+				| Developers.DeveloperInputInvalid,
+		): Effect.Effect<never, Developers.Failure> => {
 			if (error._tag === "DeveloperInputInvalid") return Effect.fail(error)
-			if (error._tag === "AuthorizationError")
-				return Effect.logInfo(
-					"A developer test authorization step was refused.",
-					error,
-				).pipe(
-					Effect.annotateLogs({ testId: id }),
-					Effect.andThen(Api.DeveloperConflict.make({ reason: error.reason })),
-				)
-			if (error._tag === "AppError")
-				return Effect.fail(
-					Api.DeveloperConflict.make({ reason: "ConnectionUnavailable" }),
-				)
 			if (error._tag === "StoreError" && error.reason === "Missing")
-				return Effect.fail(Api.DeveloperNotFound.make({}))
-			return Effect.fail(error).pipe(
-				Failures.replace(message, () => Api.DeveloperUnavailable.make({})),
-			)
+				return Effect.fail(Developers.DeveloperNotFound.make({}))
+			const failure =
+				error._tag === "AuthorizationError"
+					? Developers.DeveloperConflict.make({ reason: error.reason })
+					: error._tag === "AppError"
+						? Developers.DeveloperConflict.make({
+								reason: "ConnectionUnavailable",
+							})
+						: Developers.DeveloperUnavailable.make({})
+			return errors
+				.record(Cause.fail(error), "external")
+				.pipe(
+					Effect.annotateLogs({ testId: id, operation: message }),
+					Effect.andThen(Effect.fail(failure)),
+				)
 		}
 	return DeveloperTestRuntime.of({
-		execute: (owner, id) =>
+		execute: (owner, id, steps) =>
 			Effect.scoped(
 				withNetwork(
 					owner,
 					id,
 					[],
 					Effect.gen(function* () {
+						yield* steps.check
 						const client = yield* McpClient.open({
 							key: { owner, connectionId: id },
 							clientInfo: {
@@ -285,7 +271,7 @@ export const make: Effect.Effect<
 							capabilities: {},
 							eagerLists: false,
 						})
-						let stages: ReadonlyArray<Api.TestStage> = [
+						let stages: ReadonlyArray<Developers.TestStage> = [
 							{
 								name: "negotiation",
 								status: "Passed",
@@ -314,30 +300,7 @@ export const make: Effect.Effect<
 									),
 								),
 							)
-						const progress = (stages: ReadonlyArray<Api.TestStage>) =>
-							inTransaction(
-								Effect.gen(function* () {
-									const record = yield* Rows.getTest(db, namespace, id, true)
-									if (
-										record.owner !== owner ||
-										record.value.status !== "Running"
-									)
-										return
-									yield* Rows.putTest(db, namespace, {
-										...record,
-										value: {
-											...record.value,
-											stages: [
-												...Arr.filter(
-													record.value.stages,
-													(stage) => stage.name === "configuration",
-												),
-												...stages,
-											],
-										},
-									})
-								}),
-							)
+						const progress = steps.progress
 						yield* progress(stages)
 						const capabilities = capabilityLists(client)
 						const lists = Arr.map(listNames, (name) => ({
@@ -374,20 +337,28 @@ export const make: Effect.Effect<
 								continue
 							}
 							yield* Ref.set(partial, [])
+							yield* steps.check
 							const result = yield* list.read().pipe(
 								Effect.flatMap(
 									Schema.decodeUnknownEffect(Schema.Array(Schema.JsonObject)),
 								),
 								Effect.tapCauseIf(Cause.hasFails, (cause) =>
-									Effect.logInfo(
-										"A developer test could not read a list of the App.",
-										cause,
-									).pipe(Effect.annotateLogs({ testId: id, list: list.name })),
+									errors
+										.record(cause, "external")
+										.pipe(
+											Effect.annotateLogs({ testId: id, list: list.name }),
+											Effect.asVoid,
+										),
 								),
 								Effect.result,
 							)
+							if (
+								result._tag === "Failure" &&
+								Schema.is(Executions.StorageError)(result.failure)
+							)
+								return yield* result.failure
 							const read = yield* Ref.get(partial)
-							const stage: Api.TestStage = Match.value(result).pipe(
+							const stage: Developers.TestStage = Match.value(result).pipe(
 								Match.tagsExhaustive({
 									Success: ({ success }) => ({
 										name: list.name,
@@ -417,6 +388,7 @@ export const make: Effect.Effect<
 								}
 							: { _tag: "Completed" as const, stages }
 					}),
+					steps.check,
 				),
 			).pipe(
 				Effect.catchTag("AuthorizationRequired", (error) =>
@@ -431,6 +403,7 @@ export const make: Effect.Effect<
 								const connection = yield* stores
 									.bind(owner, id)
 									.apps.get({ owner, connectionId: id })
+								yield* steps.check
 								const resource = yield* OAuthAuthorization.discoverResource({
 									resource: connection.endpoint,
 									...(error.resourceMetadataUrl === undefined
@@ -461,39 +434,38 @@ export const make: Effect.Effect<
 						),
 					),
 				),
-				// Rows logs its own storage failures.
-				Effect.tapCauseIf(
-					(cause) =>
-						Option.exists(
-							Cause.findErrorOption(cause),
-							(error) => error._tag !== "DeveloperUnavailable",
-						),
-					(cause) =>
-						Effect.logInfo(
-							"A developer test could not connect to the App.",
-							cause,
-						).pipe(Effect.annotateLogs({ testId: id })),
+				Effect.tapCause((cause) =>
+					errors.record(cause, "external").pipe(Effect.asVoid),
 				),
-				Effect.catch((error) =>
-					Effect.succeed<Execution>({
-						_tag: "Failed",
-						stages: [
-							{
-								name: "negotiation",
-								status: "Failed",
-								items: [],
-								reason: "ConnectionFailed",
-							},
-							...uncheckedLists,
-						],
-						reason: error._tag,
-					}),
+				Effect.catchIf(
+					(error) =>
+						!Schema.is(Executions.StorageError)(error) &&
+						!Schema.is(Executions.Conflict)(error) &&
+						!Schema.is(Executions.Forbidden)(error) &&
+						!Schema.is(Executions.NotFound)(error) &&
+						!Schema.isSchemaError(error),
+					(error) =>
+						Effect.succeed<Execution>({
+							_tag: "Failed",
+							stages: [
+								{
+									name: "negotiation",
+									status: "Failed",
+									items: [],
+									reason: "ConnectionFailed",
+								},
+								...uncheckedLists,
+							],
+							reason: error._tag,
+						}),
 				),
+				Effect.tap(() => steps.check),
 			),
-		begin: (owner, id, input) =>
+		prepare: (owner, id, input) =>
 			Effect.gen(function* () {
 				const test = yield* Rows.getTest(db, namespace, id)
-				if (test.owner !== owner) return yield* Api.DeveloperNotFound.make({})
+				if (test.owner !== owner)
+					return yield* Developers.DeveloperNotFound.make({})
 				const issuer = yield* Option.fromNullishOr(input.issuer).pipe(
 					Option.orElse(() =>
 						test.value.issuers.length === 1
@@ -502,14 +474,27 @@ export const make: Effect.Effect<
 					),
 					Option.filter((issuer) => test.value.issuers.includes(issuer)),
 					Effect.fromOption(() =>
-						Api.DeveloperConflict.make({ reason: "SelectDeclaredIssuer" }),
+						Developers.DeveloperConflict.make({
+							reason: "SelectDeclaredIssuer",
+						}),
 					),
 				)
 				const scopes =
 					input.scopes.length === 0 ? test.value.requestedScopes : input.scopes
 				const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
-					Api.DeveloperUnavailable.make({}),
+					Developers.DeveloperUnavailable.make({}),
 				)
+				const connection = yield* stores
+					.bind(owner, id)
+					.apps.get({ owner, connectionId: id })
+					.pipe(
+						Effect.catch(
+							authorizationFailure(
+								id,
+								"Could not read the connection of a test.",
+							),
+						),
+					)
 				const pending = yield* Effect.scoped(
 					withNetwork(
 						owner,
@@ -521,8 +506,8 @@ export const make: Effect.Effect<
 								? []
 								: [test.resourceMetadataUrl]),
 						],
-						OAuthAuthorization.begin({
-							key: { owner, connectionId: id },
+						OAuthAuthorization.prepare({
+							connection,
 							issuer,
 							clientId: publicOrigin + "/v1/apps/client-metadata",
 							redirectUri: publicOrigin + "/auth/developer/apps/callback",
@@ -540,134 +525,31 @@ export const make: Effect.Effect<
 						),
 					),
 				)
-				const flow = yield* Rows.getFlow(db, namespace, pending.flowId)
-				const value: Api.TestAuthorization = {
-					...flow.value,
-					authorizationUrl: pending.authorizationUrl,
+				return {
+					flow: pending.flow,
+					authorizationUrl: pending.pending.authorizationUrl,
 				}
-				yield* Rows.putFlow(db, namespace, { ...flow, value })
-				return value
 			}),
-		complete: (owner, id, flowId, callback) =>
-			Effect.gen(function* () {
-				const bound = stores.bind(owner, id)
-				const flow = yield* bound.flows
-					.get({ key: { owner, connectionId: id }, flowId })
-					.pipe(
-						Effect.catch(
-							authorizationFailure(
-								id,
-								"Could not read the authorization flow of a test.",
-							),
-						),
-					)
-				yield* Effect.scoped(
-					withNetwork(
-						owner,
+		exchange: (owner, id, input) =>
+			Effect.scoped(
+				withNetwork(
+					owner,
+					id,
+					[input.flow.metadata.issuer, input.flow.metadata.token_endpoint],
+					OAuthAuthorization.redeem({
+						connection: input.connection,
+						flow: input.flow,
+						callbackUrl: Redacted.value(input.callback),
+					}),
+				),
+			).pipe(
+				Effect.catch(
+					authorizationFailure(
 						id,
-						[flow.metadata.issuer, flow.metadata.token_endpoint],
-						OAuthAuthorization.complete({
-							key: { owner, connectionId: id },
-							flowId,
-							callbackUrl: callback,
-						}),
-					),
-				).pipe(
-					Effect.catch(
-						authorizationFailure(
-							id,
-							"Could not complete the authorization of a test.",
-						),
-					),
-				)
-			}),
-		revoke: (owner, id) =>
-			Effect.gen(function* () {
-				const bound = stores.bind(owner, id)
-				const found = yield* bound.apps.get({ owner, connectionId: id }).pipe(
-					Effect.asSome,
-					Effect.catchTag("StoreError", (error) =>
-						error.reason === "Missing"
-							? Effect.succeedNone
-							: Effect.fail(error),
-					),
-					Failures.replace("Could not read the connection of a test.", () =>
-						Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
-					),
-				)
-				if (Option.isNone(found)) return "LocalOnly" as const
-				const connection = found.value
-				yield* bound.apps
-					.update({
-						key: connection,
-						change: (current) => ({ ...current, state: "Disabled" }),
-					})
-					.pipe(
-						Failures.replace(
-							"Could not turn off the connection of a test.",
-							() =>
-								Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
-						),
-					)
-				yield* active.close(connection)
-				return yield* Match.value(connection.authorization).pipe(
-					Match.tag("Authorized", (auth) =>
-						Effect.scoped(
-							withNetwork(
-								owner,
-								id,
-								[
-									auth.binding.issuer,
-									...(auth.resourceMetadataUrl === undefined
-										? []
-										: [auth.resourceMetadataUrl]),
-								],
-								Effect.gen(function* () {
-									const discovered = yield* OAuthAuthorization.discover({
-										resource: connection.endpoint,
-										issuer: auth.binding.issuer,
-										...(auth.resourceMetadataUrl === undefined
-											? {}
-											: { resourceMetadataUrl: auth.resourceMetadataUrl }),
-									})
-									return yield* withNetwork(
-										owner,
-										id,
-										[
-											auth.binding.issuer,
-											discovered.metadata.token_endpoint,
-											...(discovered.metadata.revocation_endpoint === undefined
-												? []
-												: [discovered.metadata.revocation_endpoint]),
-											...(auth.resourceMetadataUrl === undefined
-												? []
-												: [auth.resourceMetadataUrl]),
-										],
-										OAuthAuthorization.revokeRemote(connection).pipe(
-											Effect.map((result) => result._tag),
-										),
-									)
-								}),
-							),
-						),
-					),
-					Match.orElse(() => Effect.succeed("LocalOnly" as const)),
-					// The remote revocation stays pending after any failure, and runs again later.
-					Failures.replace(
-						"Could not revoke the authorization of a test.",
-						() =>
-							Api.DeveloperConflict.make({ reason: "RemoteRevocationPending" }),
-					),
-				)
-			}),
-		clear: (owner, id) =>
-			stores
-				.bind(owner, id)
-				.clear.pipe(
-					Failures.replace("Could not clear the local data of a test.", () =>
-						Api.DeveloperConflict.make({ reason: "LocalCleanupPending" }),
+						"Could not exchange the test authorization code.",
 					),
 				),
+			),
 	})
 })
 export const layer = Layer.effect(DeveloperTestRuntime, make)

@@ -1,11 +1,12 @@
+import * as HttpErrors from "../execution/HttpErrors.ts"
 import { Redacted } from "effect"
 import {
-	type Caller,
-	Identity,
 	OpenBotApi,
 	type OrganizationApi,
 	TriggersApi,
 } from "@openbot-build/api"
+
+import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, type Schema, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Bots } from "../bots/Bots.ts"
@@ -13,7 +14,7 @@ import * as DefaultBot from "../bots/DefaultBot.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { triggerKey } from "../audit/Resources.ts"
 import * as Platform from "../settings/Platform.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { Settings } from "../settings/Settings.ts"
 import * as Fire from "./Fire.ts"
 import { Triggers } from "./Triggers.ts"
@@ -174,6 +175,7 @@ export const layerHooks = HttpApiBuilder.group(
 		Effect.gen(function* () {
 			const triggers = yield* Triggers
 			const fire = yield* Fire.make
+			const safe = yield* HttpErrors.make
 			return handlers.handle("fireTrigger", ({ params, headers, payload }) =>
 				Effect.gen(function* () {
 					const denied = TriggersApi.TriggerHookDenied.make({})
@@ -181,38 +183,14 @@ export const layerHooks = HttpApiBuilder.group(
 					if (match === null) return yield* denied
 					const found = yield* triggers.verifyHook(params.triggerId, match[1]!)
 					if (Option.isNone(found)) return yield* denied
-					const delegation = yield* fire({
-						...found.value,
+					const receipt = yield* fire({
+						organizationId: found.value.organizationId,
+						id: found.value.trigger.id,
+						revision: found.value.trigger.revision,
+						key: headers["idempotency-key"],
 						data: payload,
-					}).pipe(
-						Effect.catchTag(
-							["Forbidden", "BotNotFound", "BotInvalid"],
-							(error) =>
-								Effect.logWarning(
-									"The trigger cannot give work to its Bot",
-									error,
-								).pipe(
-									Effect.andThen(
-										TriggersApi.TriggerInvalid.make({
-											message:
-												"The trigger actor cannot give work to this Bot.",
-										}),
-									),
-								),
-						),
-						Effect.catchTag("TriggerInvalid", Effect.fail, (error) =>
-							Effect.fail(error).pipe(
-								Failures.replace("A webhook could not fire its trigger.", () =>
-									TriggersApi.TriggerStorageUnavailable.make({}),
-								),
-							),
-						),
-						Effect.annotateLogs({
-							trigger: found.value.trigger.id,
-							organization: found.value.organizationId,
-						}),
-					)
-					return { delegation }
+					}).pipe(safe)
+					return receipt
 				}),
 			)
 		}),

@@ -1,0 +1,135 @@
+---
+title: Code Mode
+description: 让 Bot 写一段调用 App 工具的小程序。
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+在 **Code Mode**
+中，Bot 不再一次调用一个 App 工具，而是写一段简短的 JavaScript 程序。程序调用这些工具，处理它们的结果，只把 Bot 需要的内容交回。这样可以节省 token，因为大的结果留在程序里，不会进入模型的上下文。程序也可以同时调用很多工具。
+
+Code
+Mode 不给 Bot 任何新的权限。程序中的每次 App 调用都经过和普通 App 工具调用相同的[能力检查](/zh-cn/docs/developers/requests)。每次调用也都是一个普通的
+[App operation](/zh-cn/docs/developers/apps#app-操作)。
+
+| 词       | 含义                                                                       |
+| -------- | -------------------------------------------------------------------------- |
+| 程序     | Bot 写的 JavaScript 代码。它是一个 async 函数的函数体。                    |
+| 绑定     | 程序可以调用的一个 App 能力，比如 `apps.work_calendar.list_events`。       |
+| 沙箱     | 程序运行的封闭环境。里面没有网络、没有文件、没有定时器，也没有 Node.js。   |
+| Code run | 一个程序以及它所有 App 调用的记录。用 `GET /v1/code-runs/:id` 读取。       |
+| 重放     | 做出决定后，同一个程序的新一次运行。已经运行过的调用会给出保存下来的结果。 |
+
+---
+
+## 打开 Code Mode
+
+参见 [配置 Code Mode](/zh-cn/docs/admin/code-mode).
+
+## Bot 如何使用它
+
+Bot 会多得到两个工具。它们和普通的 App 工具并存，不会取代它们。
+
+| 工具               | 作用                                                        |
+| ------------------ | ----------------------------------------------------------- |
+| `openbot_code_api` | 显示绑定的 TypeScript 声明。Bot 可以按词语或按连接搜索。    |
+| `openbot_run_code` | 运行一个程序，交回它的结果、日志行，以及它的 App 调用列表。 |
+
+每个绑定有两部分：连接和能力。一个名为 "Work calendar" 的连接中有工具
+`list-events`，它会变成
+`apps.work_calendar.list_events`。`apps.call("work_calendar.list_events", args)`
+的作用相同。资源和 prompt 也会变成读取用的绑定。一个程序可以是这样的：
+
+```js
+const [today, tomorrow] = await Promise.all([
+	apps.work_calendar.list_events({ day: "2026-10-23" }),
+	apps.work_calendar.list_events({ day: "2026-10-24" }),
+])
+const busy = [today, tomorrow].flatMap(
+	(result) => result.structuredContent.events,
+)
+console.log("events", busy.length)
+return busy.filter((event) => event.attendees > 10).map((event) => event.title)
+```
+
+工具调用会把 App 发来的结果交给程序。调用不成功时，程序会得到一个 `Error`：
+
+| Error 名称         | 原因                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | 决定者没有允许这次调用。                                                                                |
+| `AppCallFailed`    | App 调用失败。`details.reason` 说明原因。                                                               |
+| `AppInputRequired` | App 需要更多输入。请在代码之外回答 `details.operationId` 中的 App operation。                           |
+| `VaultDenied`      | 调用里有一个 Bot 不能在这里使用的 [Vault](/zh-cn/docs/developers/vaults) 引用。OpenBot 什么都没有发送。 |
+
+程序可以捕获这些错误，然后继续运行。
+
+---
+
+## 当调用需要决定时
+
+有些 App 调用需要决定，比如会写入数据的工具。这时程序停在这次调用上。Turn 不会等待：程序的工具调用马上得到一个待定的结果，Bot 继续工作。[请求](/zh-cn/docs/developers/requests)的
+`app` 中是这次 App 调用，`code` 中是这个程序：
+
+```json
+{
+	"capability": { "action": "apps.call", "target": "conn-7/send_email" },
+	"toolCallId": "call-9",
+	"app": {
+		"id": "…",
+		"callId": "call-9:1",
+		"arguments": { "to": "team@example.com" }
+	},
+	"code": { "run": "8f1c…", "index": 1, "code": "const notes = await …" }
+}
+```
+
+做出决定后，OpenBot 在后台从头再运行一次程序。已经运行过的每次调用都会给出保存下来的结果，OpenBot 不会再把它发给 App。然后程序会越过刚才等待的调用继续运行。程序结束时，它的结果作为[通知](/zh-cn/docs/developers/chats#通知)回到这个 Chat，Bot 带着结果继续工作。
+
+只有程序每次都按相同的顺序做相同的调用，这种方式才行得通。所以程序在
+`Date.now()` 中看到的是固定的时间，`Math.random()`
+每次运行都给出相同的数字。如果程序做了和上次不同的调用，OpenBot 会以
+`ReplayMismatch`
+停止它。程序等待期间连接发生变化时，就可能出现这种情况。不会有任何调用被误发。
+
+---
+
+## 使用机密
+
+程序可以使用 [Vault](/zh-cn/docs/developers/vaults)
+中的机密，但看不到它们。Bot 在 `apps` 旁边还有 `vault`。`vault.github.token`
+是一个引用，例如
+`⟦vault:github/token⟧`，不是机密。只有当 OpenBot 发出条目允许的 App 工具调用时，才会放入机密。带引用的调用总是需要决定。App 结果回来时，机密的位置是
+`⟦hidden:github/token⟧`。
+
+---
+
+## 读取 code run
+
+`GET /v1/chats/:chatId/code-runs` 列出 Chat 的程序。`GET /v1/code-runs/:id`
+读取一个程序。两者都检查来源 Chat 的当前读取权限。API key 和 session
+cookie 使用相同检查。
+
+code run 有业务 `id` 和 `executionId`。`status`
+使用统一执行状态。通过执行 API 订阅或取消。`result`
+保存程序输出。失败只带安全分类和错误 ID，完整原因加密保存在服务器。
+
+`calls` 按程序顺序列出调用。每项有 `index`、`binding`、`app` 和
+`rejection`。`app`
+是 App 执行视图，包含自己的业务 ID、执行 ID 和已保存结果。子执行创建前，`app`
+为 null。在提交前被拒绝的调用有安全的 `rejection` 名称和消息。
+
+代码、参数和调用结果加密保存在数据库。等待审批时，统一决策日志会让当前 Turn 不再等待。程序保留自己的执行，完成后发送通知。
+
+升级后，旧程序保留原有 ID、已保存的结果和 App 调用关联。你可以通过同一历史 API 读取这些记录。缺少原始调用方或检查点的程序会标记为中断。结果不明的写入会保留为未知状态。读取旧程序不会重新执行它。
+
+### 失败原因
+
+| `reason`         | 含义                                                      |
+| ---------------- | --------------------------------------------------------- |
+| `Error`          | 程序抛出了一个它没有捕获的错误。                          |
+| `Timeout`        | 程序用完了它的全部时间。                                  |
+| `Memory`         | 程序用完了它的全部内存。                                  |
+| `OutputTooLarge` | 程序返回的数据超过了 `outputBytes` 允许的大小。           |
+| `ReplayMismatch` | 程序做了和上次运行不同的调用。                            |
+| `Cancelled`      | 程序被停止了。                                            |
+| `Unavailable`    | OpenBot 无法运行或保存这个程序，或者 Code Mode 是关闭的。 |

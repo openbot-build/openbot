@@ -1,4 +1,5 @@
 import { OpenBotApi } from "@openbot-build/api"
+
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { PublicIndex } from "./Index.ts"

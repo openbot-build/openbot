@@ -1,4 +1,5 @@
-import { Array as Arr, Effect, HashMap, Layer, Stream } from "effect"
+import { Execution } from "@openbot-build/domain"
+import { Array as Arr, Effect, HashMap, Layer, Stream, Option } from "effect"
 import { Organization } from "../src/organization/Organization.ts"
 import { AuditLog } from "../src/audit/AuditLog.ts"
 import * as AuthorizationLayer from "../src/authorization/Layer.ts"
@@ -133,7 +134,10 @@ export const layerUnusedPlatform = Layer.mergeAll(
 	layerDefaultSettings,
 	Layer.succeed(RateLimiter, { hit: () => Effect.void }),
 	Layer.mock(Billing, {
-		check: () => Effect.void,
+		reserve: () =>
+			Effect.succeed({ id: Execution.CallId.make("usage_test"), startedAt: 0 }),
+		unknown: () => Effect.void,
+		releaseExecution: () => Effect.succeed(true),
 		record: () => Effect.void,
 		currentPrices: () => Effect.succeed(HashMap.empty()),
 		botSpend: () => Effect.succeed(0),
@@ -142,7 +146,7 @@ export const layerUnusedPlatform = Layer.mergeAll(
 	Layer.mock(PlatformAdmins, { check: () => Effect.succeed(false) }),
 	Layer.mock(ModelProviders, { available: () => Effect.succeed([]) }),
 	Layer.mock(Models, { available: () => Effect.succeed([]) }),
-	Layer.mock(ModelRegistry, {}),
+	Layer.mock(ModelRegistry, { defaultModel: Option.none() }),
 	Layer.mock(Sso, {
 		all: Effect.succeed([]),
 		openSecret: () => Effect.succeedNone,

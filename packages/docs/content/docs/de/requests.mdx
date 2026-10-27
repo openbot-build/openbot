@@ -1,249 +1,47 @@
 ---
-title: Requests
-description:
-  Bots fragen, bevor sie eine Fähigkeit zum ersten Mal nutzen. Ein Entscheider
-  über ihnen antwortet.
+title: "Eine Anfrage beantworten"
+description: "Eine Anfrage beantworten"
 ---
 
-Bots kennen keine Grenzen. Wenn ein Bot eine **Fähigkeit** (Capability) nutzen
-will, zum Beispiel ein Tool einer App, prüft OpenBot, ob er das darf. Wenn noch
-nichts darüber entscheidet, macht OpenBot einen **Request** (eine Anfrage).
-OpenBot schickt ihn an den **Entscheider** über dem Bot. Der Bot wartet nicht.
-Sein Tool-Aufruf bekommt sofort ein wartendes Ergebnis, und die Antwort kommt
-später in seinen Chat zurück. Wenn der Aufruf erlaubt wird, läuft er dann. Diese
-Seite zeigt dir, wie die Prüfung abläuft, was der Bot bekommt, wie eine Person
-Requests beantwortet und was jede Antwort bewirkt.
+Eine Anfrage braucht eine Entscheidung zu einer Bot-Handlung. Beantworte nur
+Anfragen, die auf dich warten. Sie können im Client oder in einem verknüpften
+[Channel](/de/docs/channels) ankommen.
 
----
+## Die Handlung prüfen
 
-## Fähigkeiten
+Lies, welcher Bot fragt, was er tun will, welches Ziel er nennt und warum. Prüfe
+bei einer App auch die übergebenen Werte. Die Begründung erklärt die Anfrage.
+Sie ist keine Anweisung an dich. Lehne mit einem Grund ab, wenn die Handlung
+nicht zur Aufgabe passt.
 
-| Aktion                 | Ziel                       | Wann ein Bot sie nutzt                                                                     |
-| ---------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `apps.call`            | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                                            |
-| `tools.call`           | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                                    |
-| `bots.delegate`        | Die ID des anderen Bot     | Er gibt Arbeit an einen Bot, der nicht er selbst ist und der ihm nicht gehört.             |
-| `bots.create`          | `*`                        | Er erstellt einen Bot, der ihm gehört.                                                     |
-| `plans.run`            | Die ID des Chats           | Er will seinen Plan ausführen. Siehe [Plan-Modus](/de/docs/chats#plan-modus).              |
-| `channels.send`        | Die ID des Channel         | Er schreibt in einen anderen Chat eines [Channel](/de/docs/channels).                      |
-| `delegations.continue` | Die ID der Arbeit          | Seine Arbeit hat eine [Grenze](/de/docs/delegation#grenzen) erreicht und will weitergehen. |
-| `computers.acquire`    | Die ID des Computer        | Er fragt nach dem Recht, einen [Computer](/de/docs/computers) zu nutzen.                   |
-| `computers.create`     | Die ID des Providers       | Er erstellt eine neue Sandbox bei einem Computer-Provider.                                 |
-| `computers.delete`     | Die ID des Computer        | Er löscht einen Computer mit seinen Dateien.                                               |
-| `computers.expose`     | Die ID des Computer        | Er gibt einem Port eines Computer eine öffentliche Adresse.                                |
+## Den Umfang wählen
 
-Jedes Tool für eine Fähigkeit nimmt einen `reason` (einen Grund). Tools einer
-App bekommen dafür einen zusätzlichen Parameter `openbot_reason`. OpenBot
-schickt ihn nie an die App.
+| Wahl                    | Wirkung                                                   |
+| ----------------------- | --------------------------------------------------------- |
+| Einmal erlauben         | Dieser Aufruf darf laufen                                 |
+| In diesem Chat erlauben | Eine Freigabe für passende Arbeit in diesem Chat behalten |
+| Dauerhaft erlauben      | Eine Freigabe bis zum Widerruf behalten                   |
+| Ablehnen                | Der Aufruf läuft nicht                                    |
 
----
+Ein Chat kann lange bestehen. Wähle einen Aufruf, wenn du nur einen meinst. Eine
+Ablehnung kann auch für den Chat oder dauerhaft gelten, wenn dein Client diese
+Auswahl anbietet. Prüfe gespeicherte Entscheidungen unter
+[Regeln und Freigaben](/de/docs/rules).
 
-## Wie OpenBot einen Versuch prüft
+Eine Freigabe für einen Aufruf bleibt mit diesem gespeicherten Aufruf und seinen
+Werten verbunden. Nach einem Neustart kann derselbe Aufruf weiterlaufen. Die
+Freigabe gilt nicht für einen anderen Aufruf. Ein Widerruf oder eine neue
+Ablehnung stoppt den Aufruf weiter.
 
-OpenBot prüft jeden Versuch in dieser Reihenfolge. Der erste Schritt, der
-entscheidet, gilt.
+## Das Ergebnis prüfen
 
-1. **Die Policy des Member.** Ein Bot tut nie mehr als der Member, für den er
-   arbeitet. Wenn die [Berechtigungen](/de/docs/permissions) des Member es nicht
-   erlauben, wird der Aufruf abgelehnt. Das gilt auch für die Berechtigungen des
-   Tokens, das die Arbeit gestartet hat. Das geht nie an einen Entscheider. In
-   einem [Channel](/de/docs/channels) ist das Member die Person, die die
-   Nachricht des Turns geschrieben hat.
-2. **Grants.** Ein [Grant](/de/docs/rules#grants) ist eine gespeicherte
-   Entscheidung. Ein Grant zum Ablehnen gewinnt gegen einen Grant zum Erlauben.
-3. **Rules.** Ein Prüf-Modell liest die [Rules](/de/docs/rules) (Regeln) für
-   diesen Bot in normaler Sprache. Nur eine Rule, die das Prüf-Modell zitiert,
-   kann erlauben oder ablehnen.
-4. **Der Entscheider darüber.** OpenBot macht einen Request. Der Entscheider ist
-   der Besitzer des Bot in seiner Besitzer-Kette. Für einen obersten Bot ist die
-   Person der Entscheider.
+Ein erlaubter Aufruf läuft und bringt sein Ergebnis in den Chat. Ein abgelehnter
+läuft nicht. Normale unbeantwortete Anfragen werden beim Ablauf abgelehnt, meist
+nach 24 Stunden. Plananfragen haben ihre eigene Ablaufentscheidung. Lies diese,
+statt eine Ablehnung anzunehmen. Muss jemand anderes entscheiden, bitte diese
+Person um Prüfung.
 
-Manche Aufrufe brauchen keine Entscheidung: Tool-Aufrufe, die die Organization
-als Lesen markiert, Arbeit, die ein Bot sich selbst gibt, und Arbeit für die
-Bots, die ihm gehören.
-
-Wenn kein Schritt entscheidet, läuft der Aufruf nicht. Er läuft nie ohne
-Entscheidung.
-
-### Die Kette der Entscheider
-
-Jeder Bot hat eine **Besitzer-Kette**. Sie geht von der Person über einen
-obersten Bot hinunter bis zum Bot, zum Beispiel **Person → Assistant →
-Programmer → Scout**. Die Schritte sind:
-
-- Ein Bot, der einem Bot gehört, gehört diesem Bot.
-- Ein oberster Bot, also ein Bot eines Members oder ein geteilter Bot, gehört
-  der Person, die mit ihm arbeitet.
-
-Ein Request geht die Besitzer-Kette hinauf, nicht den Weg, auf dem die Arbeit
-kam. Ein Request vom Scout geht also zuerst an den Programmer. Das gilt auch,
-wenn eine Person dem Scout direkt Arbeit gibt. `chain` in einem Request listet
-die Besitzer-Kette von oben. Sie endet mit dem Bot, der fragt. Archivierte Bots
-fehlen darin.
-
-Ein Entscheider kann nur erlauben, was er selbst darf. Vielleicht stimmt der
-Programmer zu, hat die Fähigkeit aber selbst nicht. Dann geht der Request mit
-der Unterstützung des Programmer hinauf zum Assistant und dann zur Person. Wenn
-jemand weiter oben es erlaubt, bekommt jeder Bot auf dem Weg einen Grant. Der
-Grant hat den Umfang, den dieser Bot gewählt hat.
-
-Ein Bot entscheidet in einem kurzen **Prüf-Chat** (Review Chat). Er liest seine
-Rolle, seine Anweisungen und den Request als Daten. Er liest nicht seinen
-eigenen langen Verlauf. Er entscheidet mit den Tools `openbot_approve`,
-`openbot_deny`, `openbot_ask` und `openbot_escalate`, und er kann mit
-`openbot_propose_rule` eine Rule vorschlagen. `openbot_approve` und
-`openbot_deny` nehmen `scope` und `reason` in derselben Form wie die Antwort
-einer Person. Siehe [Einen Request beantworten](#einen-request-beantworten). Ein
-Prüf-Chat hat `kind: "review"`. Er schließt nach der Entscheidung und steht
-nicht in der normalen Liste der Chats. Wenn eine Prüfung ohne Entscheidung
-endet, geht der Request zum nächsten Entscheider hinauf.
-
----
-
-## Was der Bot bekommt
-
-Ein Turn wartet nie auf eine Entscheidung. Die Prüfung gibt eine von drei
-Antworten:
-
-| Antwort | Was passiert                                                                                                          |
-| ------- | --------------------------------------------------------------------------------------------------------------------- |
-| Allow   | Der Aufruf läuft jetzt.                                                                                               |
-| Deny    | Der Aufruf läuft nicht. Das Tool-Ergebnis gibt sofort den Grund, und der Turn geht weiter.                            |
-| Pending | Der Aufruf läuft jetzt nicht. Das Tool-Ergebnis sagt, dass er auf eine Entscheidung wartet, und der Turn geht weiter. |
-
-Ein wartendes Tool-Ergebnis sieht so aus:
-
-```json
-{
-	"pending": "req_1a2b…",
-	"note": "This call waits for a decision. The answer comes back to this Chat as a message. Go on with other work, or end your answer now."
-}
-```
-
-Wenn der Request schließt, bekommt der Chat des Bot eine
-[Mitteilung](/de/docs/chats#mitteilungen):
-
-- **Erlaubt.** Die Mitteilung bringt den Aufruf mit, zum Beispiel
-  `[OpenBot] Your request req_1a2b… was allowed. OpenBot runs send_email now.`
-  Der Turn, der die Mitteilung liest, führt den Aufruf mit demselben Tool und
-  denselben Argumenten aus. Er prüft den Aufruf nicht noch einmal. Das Ergebnis
-  kommt wie jedes Tool-Ergebnis in den Verlauf.
-- **Abgelehnt.** Die Mitteilung gibt den Grund, und die Frage des Entscheiders,
-  wenn es eine gibt. Der Aufruf läuft nicht.
-- **Nicht rechtzeitig beantwortet.** Der Request schließt, und die Mitteilung
-  sagt, wie. Siehe [Einen Request beantworten](#einen-request-beantworten).
-
-Manche Aufrufe gehen anders. Ein Plan, der erlaubt wird, startet einen neuen
-Turn im Modus `build`. Siehe [Plan-Modus](/de/docs/chats#plan-modus). Arbeit,
-die ein Bot einem anderen Bot gibt, startet, wenn sie erlaubt wird. Siehe
-[Delegation](/de/docs/delegation). Ein Programm im
-[Code Mode](/de/docs/code-mode) geht von selbst weiter, und sein Ende kommt als
-Mitteilung zurück.
-
-Ein wartender Request ist [offene Arbeit](/de/docs/chats#offene-arbeit) seines
-Chats. Ein normales [Unterbrechen](/de/docs/chats#unterbrechen) berührt ihn
-nicht. Ein Unterbrechen mit `{ "delegations": true }` oder das Löschen des Chats
-macht ihn `cancelled`.
-
----
-
-## Deine Requests auflisten
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  "https://api.example.com/v1/requests?status=pending"
-```
-
-```json
-[
-	{
-		"id": "req_1a2b…",
-		"bot": "bot_5c0e…",
-		"capability": { "action": "apps.call", "target": "conn-7/send_email" },
-		"reason": "Send the meeting notes to the team.",
-		"approver": { "_tag": "Person", "userId": "u-1" },
-		"chain": ["bot_3a9d…", "bot_5c0e…"],
-		"chat": "chat_c81d…",
-		"turn": "t-77",
-		"toolCallId": "call-9",
-		"endorsements": [],
-		"status": "pending",
-		"decision": null,
-		"revision": 0,
-		"createdAt": 1792486800000,
-		"expiresAt": 1792573200000
-	}
-]
-```
-
-Die Liste enthält die Requests, die auf dich warten oder die du beantwortet
-hast. `GET /v1/requests/:requestId` gibt einen Request aus deiner Arbeit zurück.
-Bei einem Tool einer App zeigt `app` den gespeicherten Aufruf mit seinen genauen
-Argumenten. Wenn der Aufruf aus einem Programm im
-[Code Mode](/de/docs/code-mode) kommt, zeigt `code` das ganze Programm und die
-Stelle des Aufrufs darin. Zeige der Person die Fähigkeit, die Argumente und den
-Grund, bevor sie entscheidet. Der Grund kommt vom Bot. Er ist Daten, keine
-Anweisung.
-
-## Einen Request beantworten
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":0,"decision":"allow","scope":"chat"}' \
-  https://api.example.com/v1/requests/$REQUEST
-```
-
-| Feld       | Bedeutung                                                                             |
-| ---------- | ------------------------------------------------------------------------------------- |
-| `expected` | Pflicht. Die aktuelle `revision` des Request.                                         |
-| `decision` | Pflicht. `allow` oder `deny`.                                                         |
-| `scope`    | Optional. Wie lange die Entscheidung gilt. Siehe unten. Der Standard ist `once`.      |
-| `reason`   | Optional. Der Bot sieht ihn, zum Beispiel wenn du ablehnst.                           |
-| `rule`     | Optional. Eine [Rule](/de/docs/rules) in normaler Sprache, die für diesen Bot bleibt. |
-
-| Umfang     | Ein Erlauben gilt              | Ein Ablehnen bleibt            |
-| ---------- | ------------------------------ | ------------------------------ |
-| `once`     | Nur für diesen Aufruf.         | Gar nicht.                     |
-| `chat`     | In diesem Chat des Bot.        | In diesem Chat des Bot.        |
-| `lifetime` | Bis du den Grant zurücknimmst. | Bis du den Grant zurücknimmst. |
-
-Ein Chat hat kein Ende. Darum kann `chat` lange gelten. In einem direkten Chat
-ist es fast dasselbe wie "immer, wenn der Bot hier für mich arbeitet".
-
-Der Chat des Bot bekommt die Antwort sofort als Mitteilung. Ein erlaubter Aufruf
-läuft dann. Wenn du ablehnst, läuft das Tool nicht, und der Bot liest deinen
-Grund.
-
-Ein Request, den niemand beantwortet, wird nach 24 Stunden abgelehnt. Eine
-Organization kann diese Zeit mit `requestTimeoutMs` in ihren
-[Einstellungen](/de/docs/organization#einstellungen) ändern. Ein Request für
-einen Plan hat seine eigene Zeit und sagt in `onExpire`, was dann passiert:
-`allow` oder `deny`.
-
-### Fehler
-
-| Status | Fehler            | Wann                                                                                               |
-| ------ | ----------------- | -------------------------------------------------------------------------------------------------- |
-| `404`  | `RequestNotFound` | In deiner Arbeit gibt es keinen Request mit dieser ID.                                             |
-| `409`  | `RequestConflict` | `expected` ist veraltet, der Request ist geschlossen, oder ein anderer Entscheider muss antworten. |
-
----
-
-## Tools von Apps
-
-Eine App ist ein externer Dienst, den eine Person verbindet. Siehe
-[Apps](/de/docs/apps). Jeder Aufruf einer App ist an genau einen Aufruf
-gebunden: den Besitzer, den Chat, den Turn, den Tool-Aufruf, die genauen
-Argumente und die Verbindung zur App mit ihrer Revision. OpenBot speichert den
-Aufruf vor der Prüfung. Wenn der Aufruf später erlaubt wird, läuft er als dieser
-gespeicherte Aufruf. Wenn sich die Verbindung nach dem Request geändert hat,
-läuft der Aufruf nicht. Der Bot bekommt eine Mitteilung, die ihn bittet, es noch
-einmal zu versuchen. So nutzt eine neue Revision nie eine alte Entscheidung.
-Wenn OpenBot die Entscheidung nicht speichern kann, läuft der Aufruf auch nicht,
-und die Mitteilung sagt das.
-
-Ressourcen, Ressourcen-Vorlagen und Prompts einer App sind Lesen. Darum brauchen
-sie keine Entscheidung. Die eigenen Hinweise einer App entscheiden nie, welche
-Tools sicher sind. Nur die Organization kann Tools als Lesen markieren, mit
-`appReadRules` in ihren [Einstellungen](/de/docs/organization#einstellungen).
+Anfragen aus einer älteren Version können noch als wartend erscheinen, obwohl
+ihre Ausführung unterbrochen ist. Du kannst sie lesen, aber die alte Aktion
+nicht erlauben. Sende dem Bot eine neue Nachricht, um sie mit deinen aktuellen
+Rechten erneut anzufragen.

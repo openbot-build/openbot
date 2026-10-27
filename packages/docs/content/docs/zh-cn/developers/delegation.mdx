@@ -1,0 +1,265 @@
+---
+title: 委派
+description: Bots 如何把工作交给其他 Bots 或交给自己，并拿回结果。
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+**委派**（Delegation）是指一个 Bot 把任务交给一个 Bot。任务可以交给另一个 Bot，也可以交给同一个 Bot。工作在它自己的
+**task Chat**
+中运行，有自己的上下文，并和其他工作同时进行。交出工作的 Bot 不会等待。它继续做事，或者结束它的回答。工作结束时，结果作为[通知](/zh-cn/docs/developers/chats#通知)回到它的 Chat。所以 Bot 总是有空回答人，而且很多工作可以并行运行。每项工作都有**限制**：一个时间限制，如果需要，还可以有模型步数限制和预算。工作到达一个限制时会暂停，由决策者决定它是否继续。本页介绍 Bot 工具、工作如何运行和结束、它的限制，以及如何查看和停止它。
+
+---
+
+## Bot 工具
+
+OpenBot 给每个 Bot 提供这些工具：
+
+| 工具                        | 作用                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `openbot_list_bots`         | 列出它可以分派工作的 Bots，以及它们的角色。                                                       |
+| `openbot_bot_details`       | 读取某个 Bot 的角色和指令。                                                                       |
+| `openbot_delegate`          | 把任务交给一个 Bot，或者交给它自己。它马上返回。                                                  |
+| `openbot_cancel_delegation` | 停止它的 Chat 交出去的工作。                                                                      |
+| `openbot_create_bot`        | 创建一个归它所有的新 Bot。见 [拥有 Bots 的 Bots](/zh-cn/docs/developers/bots#拥有-bots-的-bots)。 |
+
+---
+
+## 分派工作
+
+`openbot_delegate` 接收这些字段：
+
+| 字段         | 含义                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `task`       | 必填。要做什么，以及这项工作需要的一切。另一个 Bot 看不到交出工作的那个 Chat。                                                 |
+| `limits`     | 必填。工作的限制：`timeMs`，需要时再加上 `steps` 和 `budgetMicros`。它和你读取到的工作的 `limits` 格式相同。见 [限制](#限制)。 |
+| `bot`        | 可选。做这项工作的 Bot 的 ID。不填时，Bot 把工作交给它自己。                                                                   |
+| `reason`     | Bot 为什么交出这项工作。交给它不拥有的 Bot 时必须填写。决策者会读它。                                                          |
+| `delegation` | 可选。这个 Chat 之前某项工作的 ID。新的任务接着那项工作继续。见 [接着之前的工作](#接着之前的工作)。                            |
+
+这个工具马上返回：
+
+```json
+{
+	"delegation": "dlg_9f1e…",
+	"status": "queued",
+	"note": "The work runs on its own. Its result comes back to this Chat as a message. Go on with other work, or end your answer now."
+}
+```
+
+谁可以接到工作：
+
+- **Bot 自己。** 不填
+  `bot`。一个角色相同、没有历史的新助手来做这项工作。这不需要决定。
+- **它拥有的 Bot。** 这不需要决定。
+- **任何其他 Bot。** 这是能力 `bots.delegate`，需要一个
+  `reason`。第一次时，Bot 上方的决策者必须同意。见
+  [Requests](/zh-cn/docs/developers/requests)。决策者做决定时，状态是
+  `authorizing`。工作被允许时，它就开始。被拒绝时，状态变成
+  `failed`，Chat 会收到一条带有原因的通知。
+
+工作能往下走多深，同时能运行多少工作，都没有限制。Bot 可以把工作交给自己，那项工作又可以交出更多工作。Bot
+A 可以把工作交给 Bot
+B，B 也可以把工作交回给 A。没有谁在等待，所以不会卡住。每项工作的[限制](#限制)，以及[预算和速率限制](/zh-cn/docs/usage)，会拦住运行太久或花费太多的工作。
+
+### 接着之前的工作
+
+要在同一个上下文中再交出工作，请把之前那项工作的 ID 作为 `delegation`
+发送。那项工作必须来自同一个 Chat。
+
+- 那项工作还在运行时，新的 `task` 会作为一条消息进入它的 task
+  Chat。那里的 Bot 在下一步读取它。ID 保持不变，工作保留它的限制。
+- 那项工作已经结束时，OpenBot 在同一个 task
+  Chat 中创建一个新的委派，使用新的限制。所以那里的 Bot 仍然有它全部的历史。
+
+---
+
+## 工作在哪里运行
+
+每个委派都在做这项工作的 Bot 的一个 task Chat 中运行。task Chat 的 `kind` 为
+`"task"`，它的 `parent`
+指出交出工作的 Chat 和委派。它的第一条输入是一条带着任务的通知，例如
+`[OpenBot] Assistant gives you this task: …`。见
+[Chats](/zh-cn/docs/developers/chats)。
+
+这项工作和交出它的工作为同一个人服务。所以这个人的[权限](/zh-cn/docs/permissions)决定 Bot 可以做什么，请求也会交给同样的决策者。task
+Chat 属于交出工作的那个 Chat 的所有者。在
+[Channel](/zh-cn/docs/developers/channels)
+中，所有者是这个 Channel 的 actor。所有者可以像读取自己其他的 Chat 一样读取 task
+Chat。
+
+人也可以用 `POST /v1/chats/:chatId/messages` 给 task
+Chat 发消息。那里的 Bot 会把它当作这个人发来的消息来读。
+
+---
+
+## 工作何时结束
+
+当 task
+Chat 的一个 Turn 结束，而且这个 Chat 没有[未完成的工作](/zh-cn/docs/developers/chats#未完成的工作)时，它的工作就结束了。未完成的工作包括这个 task
+Chat 交出去的工作、它等待决定的请求、它的提醒，以及它收件箱中的输入。只要还有其中一项没完成，工作就保持
+`running`。结果作为通知回来，它们会启动新的 Turn，工作接着进行。
+
+最后一个 Turn 的结束方式决定结果：
+
+| Turn 的结束状态 | 工作变成    | `result`                 |
+| --------------- | ----------- | ------------------------ |
+| `Completed`     | `completed` | Bot 最后的回答。         |
+| `Failed`        | `failed`    | 错误。                   |
+| `Interrupted`   | `cancelled` | 一条说明工作已停止的话。 |
+
+然后，交出工作的 Chat 会收到一条通知，例如：
+
+```text
+[OpenBot] The work dlg_9f1e… that you gave to Programmer is done.
+
+Result:
+Added the endpoint and two tests.
+```
+
+这条通知经过那个 Chat 的[收件箱](/zh-cn/docs/developers/chats#收件箱)。Chat 空闲时，它会启动一个新 Turn，Bot 带着结果继续工作。当 Bot 把工作交给了很多 Bots 时，每个结果一准备好就单独回来。
+
+task 人可以在已结束的 task
+Chat 中开始新一轮工作。消息命令在同一个数据库事务中创建新的委派和 Turn。使用同一个命令键重试会返回同一个 Turn。旧工作保留原来的结果。新一轮工作保留原始调用人和 token 的限制，也保留所有后续输入带来的限制。每次新的外部调用前，OpenBot 都会检查当前权限。这一轮结束后，父 Chat 也会收到结果。
+
+迟到的通知会加入已结束工作的历史，不会自行开始新一轮工作。
+
+---
+
+## 限制
+
+每项工作都有限制。工作到达其中一个限制时，它会**暂停**，由做这项工作的 Bot 上方的决策者决定它是否继续。
+
+| 限制     | 必填 | 计算什么                                                               |
+| -------- | ---- | ---------------------------------------------------------------------- |
+| `time`   | 是   | 工作从开始起的运行时间。暂停的时间不算。                               |
+| `steps`  | 否   | task Chat 的模型步数。一步就是对模型的一次调用。                       |
+| `budget` | 否   | task Chat 的模型调用花费，加上它交出去的所有工作的花费，一层一层地算。 |
+
+Bot 在 `openbot_delegate` 的 `limits` 中给出限制，例如
+`{ "timeMs": 1800000, "steps": 40 }`。它和你[读取](#查看工作)到的工作的 `limits`
+格式相同：`timeMs` 从 1 秒到 30 天，`steps` 和 `budgetMicros`
+从 1 开始。来自[触发器](/zh-cn/docs/developers/triggers)的工作，以及在有限制之前就存在的工作，没有自己的限制。它们使用[组织](/zh-cn/docs/organization#设置)的时间限制
+`delegationTimeLimitMs`，没有其他限制。没有价格的模型花费为 0，所以它永远不会用完预算。见[用量](/zh-cn/docs/usage#价格)。
+
+OpenBot 在每个模型步之前检查步数和预算。时间到的那一刻它检查时间，即使当时没有步在运行。然后：
+
+1. 工作变成
+   `paused`。它的 Turn 不能发起新的外部调用，也不能提交新的 Chat 步骤。已发送的调用仍可能返回。OpenBot 保存结果和已确认用量，但在决定允许继续前不会使用结果。
+2. 它交出去的工作也一层一层地暂停。其中每一项都会得到一个带有 `delegation` 的
+   `pause`，`delegation`
+   是到达限制的那项工作的 ID。它自己不请求决定，而是等待对它上方那项工作的决定。
+3. OpenBot 像对待其他[请求](/zh-cn/docs/developers/requests)一样，为暂停的工作的 Bot 检查能力
+   `delegations.continue`。目标是这项工作的 ID，`arguments` 中有
+   `limit`。通常这会为那个 Bot 上方的决策者创建一个请求：它的所有者 Bot，或者最上面的人。
+
+工作暂停时，新输入保存在队列中，不会开始新的模型步骤。继承的暂停会显示上方工作的 ID。它不需要第二个请求或复制的暂停记录。父 Chat 将这项工作列为已暂停。
+
+决策者回答这个请求：
+
+- **允许：**
+  工作继续。它的限制从现在重新开始，所以它再一次得到同样的时间、步数和预算。决定的
+  `reason` 会作为一条消息进入 task
+  Chat，所以决策者可以给 Bot 进一步的指示。它下面的工作也会继续。下一步在保存输入前读取这条消息。已发送的步骤保留原来的输入和结果。
+- **拒绝：** 工作停止并变成
+  `cancelled`，它下面的工作也一样。父 Chat 收到工作已停止的通知，原因保存在请求中。没有人及时回答时也是这样。已知调用结果保留在历史中，但 Turn 标记为中断，工作没有成功结果。
+- **提问：**
+  决策者提出一个问题。这是带着问题的拒绝，所以工作也会停止，父 Chat 会在结果中收到这个问题。
+
+范围为 `chat` 或 `lifetime`
+的决定会作为一个 Grant 保存。之后同一项工作在同一个限制处会继续，不需要新的请求。
+
+---
+
+## 查看工作
+
+`GET /v1/chats/:chatId/delegations`
+列出一个 Chat 交出去的工作。`GET /v1/delegations/:delegationId`
+读取一项工作。你只能看到你自己的 Chat 的工作。其他工作会返回 `404` 和
+`DelegationNotFound`。
+
+记录包含 `executionId`、`executionStatus` 和 `failure`。业务 `status`
+与执行状态分别保存。通过
+`GET /v1/executions/:executionId/observe?afterSequence=0` 读取事件。取消先将
+`executionStatus` 设为
+`cancelling`。资源和子工作释放后，工作才会结束。结果未知的外部动作会等待决定。
+
+```json
+{
+	"id": "dlg_9f1e…",
+	"executionId": "019c3a6a-7b00-7000-8000-000000000001",
+	"executionStatus": "running",
+	"failure": null,
+	"parent": { "chat": "chat_7d21…", "turn": "t-12", "toolCallId": "call-3" },
+	"bot": "bot_5c0e…",
+	"chat": "chat_c81d…",
+	"status": "running",
+	"task": "Add the endpoint for the trip list, with tests.",
+	"reason": "The Programmer writes the code of this project.",
+	"result": null,
+	"limits": { "timeMs": 1800000, "steps": 40 },
+	"usage": { "timeMs": 5000, "steps": 3, "costMicros": 0 },
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486805000
+}
+```
+
+`chat` 是 task Chat。工作开始之前它是
+`null`。来自[触发器](/zh-cn/docs/developers/triggers)的工作有 `trigger`，它的
+`parent` 没有 `turn` 和 `toolCallId`。
+
+`limits` 保存限制：`timeMs`，以及工作有的话还有 `steps` 和
+`budgetMicros`。预算的单位是 micro-USD：1 美元是 1,000,000 micro-USD。`usage`
+是工作从开始起用掉的量。它的 `costMicros`
+是 OpenBot 上一次检查时的花费。在有限制之前就存在的工作没有这两个字段。
+
+暂停的工作有 `pause`：
+
+| 字段         | 含义                                              |
+| ------------ | ------------------------------------------------- |
+| `limit`      | `time`、`steps` 或 `budget`。                     |
+| `request`    | 决定工作是否继续的请求。下面的工作为 `null`。     |
+| `delegation` | 只用于下面的工作：它上方到达限制的那项工作的 ID。 |
+| `at`         | 工作暂停的时间。                                  |
+
+| 状态          | 含义                                                                 |
+| ------------- | -------------------------------------------------------------------- |
+| `authorizing` | 工作在等待一个 [request](/zh-cn/docs/developers/requests) 得到回答。 |
+| `queued`      | 工作可以开始了。OpenBot 现在启动它。                                 |
+| `running`     | Bot 正在做这项工作。                                                 |
+| `paused`      | 工作到达了一个限制，正在等待决定。见 [限制](#限制)。                 |
+| `completed`   | 工作已完成。`result` 保存最后的回答。                                |
+| `failed`      | 工作失败了，或者没有被允许。`result` 说明原因。                      |
+| `cancelled`   | 工作被停止了。                                                       |
+
+---
+
+## 停止工作
+
+有四种方式停止工作：
+
+- Bot 调用 `openbot_cancel_delegation`，带上 `delegation` ID 和可选的
+  `reason`。它的 Chat 不会收到通知，因为是 Bot 自己停止了这项工作。
+- 你调用 `POST /v1/delegations/:delegationId/cancel`，请求体为
+  `{ "commandKey": "stop-work-1" }`。响应为
+  `202`，包含执行回执。重试时保留同一个键。资源释放后，父 Chat 会收到通知。
+- 你用 `{ "delegations": true }`
+  [中断](/zh-cn/docs/developers/chats#中断)交出工作的 Chat。
+- 你[删除](/zh-cn/docs/developers/chats#删除历史)交出工作的 Chat。
+
+取消会停止 task Chat 中正在运行的 Turn。它还会一层一层地停止这个 task
+Chat 交出去的工作，以及它的请求和提醒。每项工作都变成 `cancelled`。
+
+普通的中断只停止正在运行的 Turn。这个 Chat 交出去的工作会继续。
+
+---
+
+## 错误
+
+| 状态码 | 错误                           | 何时出现                           |
+| ------ | ------------------------------ | ---------------------------------- |
+| `404`  | `DelegationNotFound`           | 你的 Chat 中没有这个 ID 的工作。   |
+| `409`  | `DelegationConflict`           | 工作同时发生了变化。请重新读取它。 |
+| `503`  | `DelegationStorageUnavailable` | OpenBot 无法连接到它的数据库。     |
+
+所有字段见 [Delegations 参考](/docs/api/operations/tags/delegations/)。

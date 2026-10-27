@@ -128,17 +128,17 @@ export type Update =
 			readonly reason: "ConnectionDescriptionChanged"
 	  }
 
-export type Result =
-	| {
-			readonly _tag: "Single"
-			readonly candidate: Candidate
-			readonly issues: ReadonlyArray<Issue>
-	  }
-	| {
-			readonly _tag: "Multiple"
-			readonly candidates: readonly [Candidate, Candidate, ...Array<Candidate>]
-			readonly issues: ReadonlyArray<Issue>
-	  }
+/** A saved discovery result keeps the same candidate and issue types as discovery. */
+export const Result = Schema.TaggedUnion({
+	Single: { candidate: Candidate, issues: Schema.Array(Issue) },
+	Multiple: {
+		candidates: Schema.TupleWithRest(Schema.Tuple([Candidate, Candidate]), [
+			Candidate,
+		]),
+		issues: Schema.Array(Issue),
+	},
+})
+export type Result = typeof Result.Type
 
 export const DiscoveryErrorReason = Schema.Literals([
 	"NoDeclaration",

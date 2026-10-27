@@ -30,7 +30,7 @@ const startTurn = `curl -H "Authorization: Bearer $OPENBOT_API_KEY" \\
 
 const endpoints = `POST  /v1/bots/:botId/messages
 POST  /v1/chats/:chatId/messages
-GET   /v1/chats/:chatId/wait
+GET   /v1/executions/:executionId/observe
 POST  /v1/chats/:chatId/interrupt
 GET   /v1/delegations/:delegationId
 POST  /v1/delegations/:delegationId/cancel

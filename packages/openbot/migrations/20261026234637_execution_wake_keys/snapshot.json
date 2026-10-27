@@ -1,0 +1,102 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "50a92c63-e47f-4123-b666-3f8aac7c4b7d",
+	"prevIds": ["a69e338a-b11d-4e0c-a478-5d3ebaeb89a5"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_events",
+				"event_key"
+			],
+			"writes": [
+				"s|col|public.openbot_execution_events.event_key",
+				"n|col|public.openbot_execution_events.event_key",
+				"e|col|public.openbot_execution_events.event_key"
+			],
+			"reads": ["n|tbl|public.openbot_execution_events", "n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_execution_events",
+				"openbot_execution_events_key"
+			],
+			"writes": [
+				"s|idx|public.openbot_execution_events_key",
+				"n|idx|public.openbot_execution_events_key",
+				"e|idx|public.openbot_execution_events_key",
+				"n|rel|public.openbot_execution_events_key"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_events",
+				"n|sch|public",
+				"n|col|public.openbot_execution_events.namespace",
+				"n|col|public.openbot_execution_events.execution_id",
+				"n|col|public.openbot_execution_events.event_key"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_events",
+				"name": "event_key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_events",
+				"name": "openbot_execution_events_key",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "execution_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "event_key",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		}
+	]
+}

@@ -6,7 +6,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { LanguageModel, Prompt } from "effect/ai"
+import { LanguageModel, Prompt, type Response } from "effect/ai"
 import * as ContextCompaction from "./ContextCompaction.ts"
 import * as ContextWindow from "./ContextWindow.ts"
 import { PromptJson } from "../store/PromptCodec.ts"
@@ -42,8 +42,25 @@ const links = (message: Prompt.Message): ReadonlyArray<string> =>
 		),
 	)
 
-/** Summarizes older context with the given model and keeps recent messages unchanged. */
-export const compact: ContextCompaction.NonNativeCompact = (input) =>
+/** The host can save the model result before applying it to the context. */
+export type Prepared =
+	| { readonly _tag: "Unchanged"; readonly window: ContextWindow.Window }
+	| {
+			readonly _tag: "Summary"
+			readonly prompt: Prompt.Prompt
+			readonly complete: (
+				text: string,
+				reason: Response.FinishReason,
+			) => Effect.Effect<
+				ContextWindow.Window,
+				ContextCompaction.ContextCompactionError
+			>
+	  }
+
+/** Build the model input and keep linked tool calls together. This does no model I/O. */
+export const prepare = (
+	input: ContextCompaction.NonNativeRequest,
+): Effect.Effect<Prepared, ContextCompaction.ContextCompactionError> =>
 	Effect.gen(function* () {
 		const systems = Arr.filter(
 			input.prompt.content,
@@ -77,7 +94,11 @@ export const compact: ContextCompaction.NonNativeCompact = (input) =>
 							),
 						),
 		)
-		if (boundary === 0) return ContextWindow.fromPrompt(input.prompt)
+		if (boundary === 0)
+			return {
+				_tag: "Unchanged",
+				window: ContextWindow.fromPrompt(input.prompt),
+			}
 		const source = Prompt.fromMessages(messages.slice(0, boundary))
 		const encoded = yield* encodePromptJsonString(source).pipe(
 			Effect.mapError((error) =>
@@ -88,7 +109,8 @@ export const compact: ContextCompaction.NonNativeCompact = (input) =>
 				}),
 			),
 		)
-		const response = yield* LanguageModel.generateText({
+		return {
+			_tag: "Summary",
 			prompt: Prompt.make([
 				{
 					role: "system",
@@ -96,35 +118,47 @@ export const compact: ContextCompaction.NonNativeCompact = (input) =>
 				},
 				{ role: "user", content: encoded },
 			]),
+			complete: (text, reason) =>
+				Effect.gen(function* () {
+					if (Str.isEmpty(Str.trim(text)) || reason === "length")
+						return yield* ContextCompaction.ContextCompactionError.make({
+							reason: "request-failed",
+							message:
+								"The summary is empty, or the output token limit cut it short",
+						})
+					return ContextWindow.fromPrompt(
+						Prompt.fromMessages([
+							...systems,
+							Prompt.userMessage({
+								content: [
+									Prompt.textPart({
+										text: `Summary of earlier conversation:\n${text}`,
+									}),
+								],
+							}),
+							...messages.slice(boundary),
+						]),
+					)
+				}),
+		}
+	})
+
+/** The standalone adapter makes one model request in the caller's scope. */
+export const compact: ContextCompaction.NonNativeCompact = (input) =>
+	Effect.gen(function* () {
+		const prepared = yield* prepare(input)
+		if (prepared._tag === "Unchanged") return prepared.window
+		const response = yield* LanguageModel.generateText({
+			prompt: prepared.prompt,
 			toolChoice: "none",
 		}).pipe(
-			Effect.mapError((error) =>
+			Effect.mapError((cause) =>
 				ContextCompaction.ContextCompactionError.make({
 					reason: "request-failed",
 					message: "The model could not make the summary",
-					cause: error,
+					cause,
 				}),
 			),
 		)
-		if (
-			Str.isEmpty(Str.trim(response.text)) ||
-			response.finishReason === "length"
-		)
-			return yield* ContextCompaction.ContextCompactionError.make({
-				reason: "request-failed",
-				message: "The summary is empty, or the output token limit cut it short",
-			})
-		return ContextWindow.fromPrompt(
-			Prompt.fromMessages([
-				...systems,
-				Prompt.userMessage({
-					content: [
-						Prompt.textPart({
-							text: `Summary of earlier conversation:\n${response.text}`,
-						}),
-					],
-				}),
-				...messages.slice(boundary),
-			]),
-		)
+		return yield* prepared.complete(response.text, response.finishReason)
 	})

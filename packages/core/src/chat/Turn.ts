@@ -3,7 +3,9 @@ import { Id } from "./TurnIdentity.ts"
 import * as ChatIdentity from "./ChatIdentity.ts"
 import * as Item from "./Item.ts"
 import * as Config from "../models/Config.ts"
-import { Response } from "effect/ai"
+import { Prompt, Response } from "effect/ai"
+import * as ModelStep from "./ModelStep.ts"
+import { PromptJson } from "../store/PromptCodec.ts"
 export { Id } from "./TurnIdentity.ts"
 
 export const Settings = Schema.Struct({
@@ -50,6 +52,24 @@ export const Status = Data.taggedEnum<Status>()
  */
 export const Author = Schema.String.check(Schema.isMinLength(1))
 export type Author = typeof Author.Type
+/** Saved model and tool results for a step that has not reached its state commit. */
+export const PendingStep = Schema.Struct({
+	step: Schema.Natural,
+	item: Item.Id,
+	input: PromptJson,
+	before: PromptJson,
+	model: Schema.optionalKey(
+		Schema.Struct({ ...ModelStep.Result.fields, output: PromptJson }),
+	),
+	after: PromptJson,
+})
+export type PendingStep = typeof PendingStep.Type
+/** The complete saved prompt at a model or tool checkpoint. */
+export const stepPrompt = (saved: PendingStep): Prompt.Prompt =>
+	Prompt.concat(
+		Prompt.concat(saved.input, saved.before),
+		Prompt.concat(saved.model?.output ?? Prompt.empty, saved.after),
+	)
 export const Record = Schema.Struct({
 	id: Id,
 	chat: ChatIdentity.Id,
@@ -61,6 +81,7 @@ export const Record = Schema.Struct({
 	),
 	status: StatusSchema,
 	steps: Schema.Natural,
+	pendingStep: Schema.optionalKey(PendingStep),
 	usage: Schema.optionalKey(Schema.Array(Response.Usage)),
 	input: Schema.Array(Item.Id),
 	items: Schema.Array(Item.Id),

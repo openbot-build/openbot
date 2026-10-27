@@ -1,14 +1,13 @@
-import { Chat, Item } from "@openbot-build/core"
+import { Chat, Item, Turn } from "@openbot-build/core"
 import {
-	AppViewsApi as Api,
-	type ConnectionsApi,
+	type AppIndex,
 	ExperienceInputInvalid,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	Identity,
 	ChatConflict,
-	type ChatExecutionUnavailable,
-} from "@openbot-build/api"
+} from "@openbot-build/domain"
+
+import { Identity, Execution, AppCalls, AppViews } from "@openbot-build/domain"
 import { AppUi, Client } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -22,26 +21,30 @@ import {
 	pipe,
 	Schema,
 	type Scope,
-	String as Str,
 } from "effect"
-import { Backend } from "../app/Backend.ts"
-import * as Failures from "../app/Failures.ts"
-import type * as Chats from "../chats/Chats.ts"
+import * as AppQueries from "./AppQueries.ts"
+import * as ChatQueries from "../chats/ChatQueries.ts"
+import * as ChatErrors from "../chats/ChatErrors.ts"
+import * as TaskMessages from "../chats/TaskMessages.ts"
+import { Store, transactionFailures } from "../execution/Store.ts"
+import { ActionPolicy } from "./ActionPolicy.ts"
+import * as Hex from "effect/encoding/Hex"
+import { Prompt } from "effect/ai"
+import { SqlClient } from "effect/sql"
+import * as Failures from "../errors/Failures.ts"
 import { Capabilities, type Opened } from "./Capabilities.ts"
-import { ConnectionLocks } from "./ConnectionLocks.ts"
 import { appSecrets } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey } from "./StoredConnections.ts"
-import * as StoredInvocations from "./StoredInvocations.ts"
 import * as StoredViews from "./StoredViews.ts"
-import { type Action, type View } from "./StoredViews.ts"
+import { type View } from "./StoredViews.ts"
 import { json, jsonObject } from "./AppResults.ts"
 import * as Db from "../database/Database.ts"
 
 /** The error of a view that can not go on. The text and the result of its operation stay. */
-const viewUnavailable = (reason: Api.AppViewUnavailable["reason"]) =>
-	Api.AppViewUnavailable.make({
+const viewUnavailable = (reason: AppViews.AppViewUnavailable["reason"]) =>
+	AppViews.AppViewUnavailable.make({
 		reason,
 		message:
 			"This App view is unavailable. Its recorded text and business result are still available.",
@@ -59,38 +62,19 @@ const interactionChanged = () =>
 /** Logs a failure that the caller can not act on, then fails with `AppViewUnavailable` in its place. */
 const replaceUnavailable = (
 	message: string,
-	reason: Api.AppViewUnavailable["reason"],
+	reason: AppViews.AppViewUnavailable["reason"],
 ) => Failures.replace(message, () => viewUnavailable(reason))
 /** Logs a storage failure, then fails with `ExperienceStorageUnavailable` in its place. */
 const replaceStorage = (message: string) =>
 	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
-/**
- * Gives each failure of the Chats service its meaning for App views. A
- * conflict stays a conflict, a missing Chat is not found, and a bad model is
- * bad input. Only the other failures become `ExperienceStorageUnavailable`.
- */
-const fromChats =
-	(message: string) =>
-	<A, R>(
-		self: Effect.Effect<A, Chats.ServiceError | ChatExecutionUnavailable, R>,
-	) =>
-		self.pipe(
-			Effect.catchTags({
-				ChatNotFound: (error) =>
-					Effect.fail(ExperienceNotFound.make({ id: error.chat })),
-				ChatModelInvalid: (error) =>
-					Effect.fail(ExperienceInputInvalid.make({ message: error.message })),
-				ChatStorageUnavailable: (error) =>
-					Effect.fail(error).pipe(replaceStorage(message)),
-				ChatExecutionUnavailable: (error) =>
-					Effect.fail(error).pipe(replaceStorage(message)),
-			}),
-		)
-
 export const make = Effect.gen(function* () {
-	const backend = yield* Backend
+	const apps = yield* AppQueries.make
+	const chats = yield* ChatQueries.make
+	const inputs = yield* TaskMessages.make
+	const store = yield* Store
+	const policy = yield* ActionPolicy
+	const sql = yield* SqlClient.SqlClient
 	const capabilities = yield* Capabilities
-	const locks = yield* ConnectionLocks
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
@@ -155,7 +139,7 @@ export const make = Effect.gen(function* () {
 			)
 			return yield* Option.match(found, {
 				onNone: () => Effect.succeed(StoredViews.initial),
-				onSome: (row) => StoredViews.open(secrets, Api.Interaction, row),
+				onSome: (row) => StoredViews.open(secrets, AppViews.Interaction, row),
 			})
 		}).pipe(
 			replaceStorage(
@@ -172,7 +156,7 @@ export const make = Effect.gen(function* () {
 			const id = StoredViews.interactionKey(view.chat, view.operationId)
 			const initialBody = yield* StoredViews.seal(
 				secrets,
-				Api.Interaction,
+				AppViews.Interaction,
 				owner,
 				"app-ui-state",
 				id,
@@ -199,14 +183,14 @@ export const make = Effect.gen(function* () {
 						return yield* ExperienceNotFound.make({ id: "App view" })
 					const previous = yield* StoredViews.open(
 						secrets,
-						Api.Interaction,
+						AppViews.Interaction,
 						row,
 					)
 					if (previous.revision !== revision) return yield* interactionChanged()
-					const next: Api.Interaction = { revision: revision + 1, context }
+					const next: AppViews.Interaction = { revision: revision + 1, context }
 					const body = yield* StoredViews.seal(
 						secrets,
-						Api.Interaction,
+						AppViews.Interaction,
 						owner,
 						"app-ui-state",
 						id,
@@ -235,132 +219,10 @@ export const make = Effect.gen(function* () {
 					),
 			),
 		)
-	const findAction = (owner: string, viewId: string, requestId: string) =>
-		read(
-			owner,
-			"app-view-action",
-			StoredViews.actionKey(viewId, requestId),
-		).pipe(
-			Effect.flatMap((found) =>
-				Effect.transposeOption(
-					Option.map(found, (row) =>
-						StoredViews.open(secrets, StoredViews.Action, row),
-					),
-				),
-			),
-			replaceStorage("OpenBot could not read an App view action"),
-		)
-	const readAction = (owner: string, viewId: string, requestId: string) =>
-		findAction(owner, viewId, requestId).pipe(Effect.flatMap(required))
-	/** Save the action of a request once. Give `false` when the request was saved before. */
-	const claimAction = (owner: string, view: View, input: Action) =>
-		Effect.gen(function* () {
-			const id = StoredViews.actionKey(view.id, input.requestId)
-			const body = yield* StoredViews.seal(
-				secrets,
-				StoredViews.Action,
-				owner,
-				"app-view-action",
-				id,
-				input,
-			)
-			const inserted = yield* db
-				.insert(appSecrets)
-				.values({
-					owner,
-					kind: "app-view-action",
-					id,
-					connectionId: view.connectionId,
-					body,
-				})
-				.onConflictDoNothing()
-				.returning({ id: appSecrets.id })
-			if (inserted.length !== 0) return true
-			const saved = yield* readAction(owner, view.id, input.requestId)
-			if (
-				saved.kind !== input.kind ||
-				saved.target !== input.target ||
-				!Schema.toEquivalence(Schema.JsonObject)(
-					saved.arguments,
-					input.arguments,
-				)
-			)
-				return yield* interactionChanged()
-			return false
-		}).pipe(
-			// `readAction` replaces its own storage failures.
-			Effect.catchTag(
-				["EffectDrizzleQueryError", "SecretStorageError", "SchemaError"],
-				(error) =>
-					Effect.fail(error).pipe(
-						replaceStorage("OpenBot could not save an App view action"),
-					),
-			),
-		)
-	const acceptAction = (
-		owner: string,
-		view: View,
-		requestId: string,
-		ticket: Api.ActionTicket,
-	) =>
-		db
-			.transaction((tx) =>
-				Effect.gen(function* () {
-					const id = StoredViews.actionKey(view.id, requestId)
-					const row = (yield* tx
-						.select()
-						.from(appSecrets)
-						.where(StoredViews.where(owner, "app-view-action", id))
-						.for("update"))[0]
-					if (row === undefined)
-						return yield* ExperienceNotFound.make({ id: "App view" })
-					const saved = yield* StoredViews.open(
-						secrets,
-						StoredViews.Action,
-						row,
-					)
-					if (
-						saved.ticket !== null &&
-						!Schema.toEquivalence(Api.ActionTicket)(saved.ticket, ticket)
-					)
-						return yield* interactionChanged()
-					const body = yield* StoredViews.seal(
-						secrets,
-						StoredViews.Action,
-						owner,
-						"app-view-action",
-						id,
-						{ ...saved, ticket },
-					)
-					yield* tx
-						.update(appSecrets)
-						.set({ body })
-						.where(StoredViews.where(owner, "app-view-action", id))
-				}),
-			)
-			.pipe(
-				Effect.catchTag(
-					[
-						"EffectDrizzleQueryError",
-						"SqlError",
-						"SecretStorageError",
-						"SchemaError",
-					],
-					(error) =>
-						Effect.fail(error).pipe(
-							replaceStorage(
-								"OpenBot could not save the receipt of an App view action",
-							),
-						),
-				),
-			)
-	const chats = (identity: typeof Identity.Service) =>
-		backend
-			.forCaller(identity)
-			.pipe(replaceStorage("OpenBot could not open the Chats of a member"))
 	const bound = (identity: typeof Identity.Service, id: string) =>
 		Effect.gen(function* () {
 			const view = yield* getView(ownerKey(identity), id)
+			yield* chats.read(identity, view.chat).pipe(ChatErrors.map)
 			if (view.expiresAt < (yield* Clock.currentTimeMillis))
 				return yield* viewUnavailable("Closed")
 			const stored = yield* StoredConnections.get(
@@ -386,18 +248,33 @@ export const make = Effect.gen(function* () {
 		id: string,
 		task: Effect.Effect<A, E, R>,
 	) =>
-		locks.withConnection(
-			{ owner: ownerKey(identity), connectionId: "view:" + id },
-			task,
-		)
+		sql
+			.withTransaction(
+				Effect.gen(function* () {
+					// The row lock also guards requests from another server.
+					yield* db
+						.select({ id: appSecrets.id })
+						.from(appSecrets)
+						.where(StoredViews.where(ownerKey(identity), "app-view", id))
+						.for("update")
+					return yield* task
+				}),
+			)
+			.pipe(
+				Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], (error) =>
+					Effect.fail(error).pipe(
+						replaceStorage("OpenBot could not change an App view"),
+					),
+				),
+			)
 	const openClient = (
 		identity: typeof Identity.Service,
 		connectionId: string,
 	): Effect.Effect<
 		Opened,
-		| ConnectionsApi.AppRestricted
+		| AppIndex.AppRestricted
 		| ExperienceStorageUnavailable
-		| Api.AppViewUnavailable,
+		| AppViews.AppViewUnavailable,
 		Scope.Scope
 	> =>
 		capabilities
@@ -430,10 +307,14 @@ export const make = Effect.gen(function* () {
 						error,
 					): Effect.Effect<
 						never,
-						ExperienceStorageUnavailable | Api.AppViewUnavailable
+						ExperienceStorageUnavailable | AppViews.AppViewUnavailable
 					> =>
 						error._tag === "StoreError" && error.reason === "Unavailable"
-							? Effect.fail(ExperienceStorageUnavailable.make({}))
+							? Effect.fail(error).pipe(
+									replaceStorage(
+										"OpenBot could not read the App view connection",
+									),
+								)
 							: Effect.fail(error).pipe(
 									replaceUnavailable(
 										"OpenBot could not open the App connection of a view",
@@ -450,16 +331,15 @@ export const make = Effect.gen(function* () {
 		itemId?: Item.Id,
 	) =>
 		Effect.gen(function* () {
-			const operation = yield* StoredInvocations.get(
-				db,
-				secrets,
-				ownerKey(identity),
-				operationId,
+			const { operation, position } = yield* apps.history(
+				identity,
+				AppCalls.AppOperationId.make(operationId),
 			)
-			const service = yield* chats(identity)
-			const items = yield* service
-				.turnLog(chatId, operation.turn)
-				.pipe(fromChats("OpenBot could not read the Turn of an App operation"))
+			if (operation.chat !== chatId)
+				return yield* ExperienceNotFound.make({ id: operationId })
+			const { items } = yield* chats
+				.turn(identity, chatId, operation.turn)
+				.pipe(ChatErrors.map)
 			const item = pipe(
 				Arr.findFirst(
 					items,
@@ -476,20 +356,20 @@ export const make = Effect.gen(function* () {
 								),
 						),
 				),
-				Option.filter((item) => item.origin?.turn === operation.turn),
+				Option.filter(
+					(item) =>
+						item.origin?.chat === position.chat &&
+						item.origin.turn === position.turn &&
+						item.origin.step === position.step,
+				),
 			)
 			if (Option.isNone(item))
 				return yield* ExperienceNotFound.make({ id: operationId })
-			return { operation, item: item.value, service }
+			return { operation, item: item.value }
 		})
 	const binding = (identity: typeof Identity.Service, view: View) =>
 		Effect.gen(function* () {
-			const operation = yield* StoredInvocations.get(
-				db,
-				secrets,
-				ownerKey(identity),
-				view.operationId,
-			)
+			const operation = yield* apps.read(identity, view.operationId)
 			return {
 				id: view.id,
 				operationId: view.operationId,
@@ -569,7 +449,7 @@ export const make = Effect.gen(function* () {
 						),
 					)
 					const view: View = {
-						id: Api.AppViewId.make(yield* newId),
+						id: AppViews.AppViewId.make(yield* newId),
 						operationId: operation.id,
 						readOnly: false,
 						chat: chatId,
@@ -610,11 +490,20 @@ export const make = Effect.gen(function* () {
 		get: (identity: typeof Identity.Service, id: string) =>
 			Effect.flatMap(bound(identity, id), (view) => binding(identity, view)),
 		close: (identity: typeof Identity.Service, id: string) =>
-			locked(identity, id, closeView(ownerKey(identity), id)),
+			locked(
+				identity,
+				id,
+				getView(ownerKey(identity), id).pipe(
+					Effect.flatMap((view) =>
+						chats.read(identity, view.chat).pipe(ChatErrors.map),
+					),
+					Effect.andThen(closeView(ownerKey(identity), id)),
+				),
+			),
 		read: (
 			identity: typeof Identity.Service,
 			id: string,
-			method: Api.ViewReadAction,
+			method: AppViews.ViewReadAction,
 			params: Schema.JsonObject,
 		) =>
 			Effect.scoped(
@@ -626,8 +515,10 @@ export const make = Effect.gen(function* () {
 					const cursor = yield* Schema.decodeEffect(
 						Schema.Struct({ cursor: Schema.optionalKey(Schema.String) }),
 					)(params).pipe(
-						Effect.mapError((error) =>
-							ExperienceInputInvalid.make({ message: error.message }),
+						Failures.replace("An App view sent an invalid page cursor", () =>
+							ExperienceInputInvalid.make({
+								message: "The page cursor must be text.",
+							}),
 						),
 					)
 					const result = yield* Match.value(method).pipe(
@@ -657,155 +548,140 @@ export const make = Effect.gen(function* () {
 		act: (
 			identity: typeof Identity.Service,
 			id: string,
-			request: Api.ActionRequest,
+			request: AppViews.ActionRequest,
 		) =>
-			locked(
-				identity,
-				id,
-				Effect.scoped(
-					Effect.gen(function* () {
-						const view = yield* bound(identity, id)
-						if (view.readOnly) return yield* viewChanged()
-						const existing = yield* findAction(
-							ownerKey(identity),
-							id,
-							request.requestId,
+			Effect.scoped(
+				Effect.gen(function* () {
+					const view = yield* bound(identity, id)
+					if (view.readOnly) return yield* viewChanged()
+					const namespace = ownerKey(identity)
+					const name =
+						"openbot_ui_" +
+						Hex.encode(
+							yield* crypto.digest(
+								"SHA-256",
+								new TextEncoder().encode(
+									yield* Schema.encodeEffect(
+										Schema.fromJsonString(Schema.Array(Schema.String)),
+									)([id, request.commandKey]),
+								),
+							),
 						)
-						if (Option.isSome(existing)) {
-							yield* claimAction(ownerKey(identity), view, {
-								requestId: request.requestId,
-								kind: request.kind,
-								target: request.kind === "tool" ? request.name : request.uri,
-								arguments: request.kind === "tool" ? request.arguments : {},
-								ticket: null,
-							})
-							if (existing.value.ticket === null) return yield* viewChanged()
-							return existing.value.ticket
-						}
-
-						const service = yield* chats(identity)
-						const current = yield* service
-							.get(view.chat)
-							.pipe(fromChats("OpenBot could not read the Chat of an App view"))
-						if (
-							current.activity === "historical" ||
-							(current.activity === "active" && current.turn?.id !== view.turn)
-						)
-							return yield* viewChanged()
-						const opened = yield* openClient(identity, view.connectionId)
-						if (opened.stored.revision !== view.revision)
-							return yield* viewUnavailable("ConnectionChanged")
-						const target = request.kind === "tool" ? request.name : request.uri
-						if (
-							request.kind === "tool"
-								? !Arr.some(opened.tools, (tool) => tool.name === target)
-								: !Arr.some(
-										opened.resources,
-										(resource) => resource.uri === target,
-									)
-						)
-							return yield* viewUnavailable("Declaration")
-						const args = request.kind === "tool" ? request.arguments : {}
-						// A client that goes away must not cut the action apart from its receipt.
-						return yield* Effect.uninterruptible(
-							Effect.gen(function* () {
-								const first = yield* claimAction(ownerKey(identity), view, {
-									requestId: request.requestId,
-									kind: request.kind,
-									target,
-									arguments: args,
-									ticket: null,
-								})
-								if (!first) {
-									const saved = yield* readAction(
-										ownerKey(identity),
-										id,
-										request.requestId,
-									)
-									if (saved.ticket !== null) return saved.ticket
-									// Admission may have worked before the receipt failed to save. Never submit it again.
-									return yield* viewChanged()
-								}
-								const source: Api.ActionSource = {
-									_tag: "AppUiAction",
-									viewId: view.id,
-									requestId: request.requestId,
-									connectionId: view.connectionId,
-									revision: view.revision,
-									kind: request.kind,
-									target,
-								}
-								const actionId = yield* newId
-								const ticket = yield* service
-									.startAction(view.chat, {
-										author: identity.userId,
-										action: {
-											name: "openbot_ui_" + Str.replaceAll("-", "")(actionId),
-											arguments: args,
-											source,
-										},
-										...(current.activity === "active"
-											? { turn: view.turn }
-											: {}),
-									})
-									.pipe(
-										fromChats(
-											"OpenBot could not start the action of an App view",
-										),
-									)
-								yield* acceptAction(
-									ownerKey(identity),
-									view,
-									request.requestId,
-									ticket,
-								)
-								return ticket
-							}),
-						)
-					}),
-				),
-			),
-		operation: (
-			identity: typeof Identity.Service,
-			id: string,
-			requestId: string,
-		) =>
-			Effect.gen(function* () {
-				yield* bound(identity, id)
-				const saved = yield* readAction(ownerKey(identity), id, requestId)
-				if (saved.ticket === null) return yield* viewChanged()
-				const ticket = saved.ticket
-				const recorded = Arr.findFirst(
-					yield* StoredInvocations.list(
-						db,
-						secrets,
-						ownerKey(identity),
-						ticket.chat,
-					),
-					(operation) =>
-						operation.turn === ticket.turn &&
-						operation.callId === ticket.callId,
-				)
-				if (Option.isSome(recorded))
-					return {
-						ticket,
-						status: recorded.value.status,
-						operation: recorded.value,
+					const target = request.kind === "tool" ? request.name : request.uri
+					const args = request.kind === "tool" ? request.arguments : {}
+					const source: AppViews.ActionSource = {
+						_tag: "AppUiAction",
+						viewId: view.id,
+						requestId: request.commandKey,
+						connectionId: view.connectionId,
+						revision: view.revision,
+						kind: request.kind,
+						target,
 					}
-				const service = yield* chats(identity)
-				const turn = yield* service.turn(ticket.chat, ticket.turn).pipe(
-					Effect.map((found) => Option.some(found.turn)),
-					Effect.catchTag("ChatConflict", () => Effect.succeedNone),
-					fromChats("OpenBot could not read the Turn of an App view action"),
-				)
-				return {
-					ticket,
-					status: Option.exists(turn, (turn) => turn.status._tag === "Running")
-						? ("Queued" as const)
-						: ("Failed" as const),
-					operation: null,
-				}
-			}),
+					const action = { name, arguments: args, source }
+					// The public command is checked before discovery. A retry keeps its first definition.
+					const command = {
+						actor: identity,
+						body: { kind: "app-view-action", view: id, request },
+					}
+					const previous = yield* store.receipt(
+						namespace,
+						request.commandKey,
+						command,
+					)
+					if (Option.isSome(previous)) {
+						const execution = yield* store.get({
+							namespace,
+							id: previous.value.executionId,
+						})
+						return {
+							...previous.value,
+							chat: view.chat,
+							turn: Turn.Id.make(execution.resource.id),
+						}
+					}
+					const opened = yield* openClient(identity, view.connectionId)
+					if (opened.stored.revision !== view.revision)
+						return yield* viewUnavailable("ConnectionChanged")
+					const declaration: Option.Option<unknown> =
+						request.kind === "tool"
+							? Arr.findFirst(opened.tools, (tool) => tool.name === target)
+							: Arr.findFirst(
+									opened.resources,
+									(resource) => resource.uri === target,
+								)
+					if (Option.isNone(declaration))
+						return yield* viewUnavailable("Declaration")
+					const original = yield* apps.read(identity, view.operationId)
+					const origin: AppCalls.Source = {
+						...original.source,
+						kind: request.kind,
+						name: target,
+						definition: yield* json(declaration.value),
+					}
+					const parameters =
+						request.kind === "tool"
+							? yield* jsonObject(
+									Option.getOrThrow(
+										Arr.findFirst(opened.tools, (tool) => tool.name === target),
+									).inputSchema,
+								)
+							: { type: "object", properties: {}, additionalProperties: false }
+					const actionDefinition = {
+						name,
+						parameters,
+						readOnly: yield* policy.isRead({
+							organizationId: identity.organizationId,
+							source: origin,
+						}),
+						local: true,
+						idempotent: false,
+						inputState: yield* json({
+							kind: "app",
+							input: "host",
+							source: origin,
+						}),
+					}
+					const receipt = yield* sql
+						.withTransaction(
+							store.accept(namespace, request.commandKey, command, () =>
+								Effect.gen(function* () {
+									yield* db
+										.select()
+										.from(appSecrets)
+										.where(StoredViews.where(namespace, "app-view", id))
+										.for("update")
+									yield* bound(identity, id)
+									const receipt = yield* inputs
+										.message(
+											namespace,
+											Execution.CommandKey.make(yield* newId),
+											{
+												caller: identity,
+												chat: view.chat,
+												content: Prompt.make("Host-selected action: " + name),
+												queue: true,
+												action,
+												actionDefinition,
+											},
+										)
+										.pipe(ChatErrors.map)
+									return { executionId: receipt.executionId, start: false }
+								}),
+							),
+						)
+						.pipe(transactionFailures)
+					const execution = yield* store.get({
+						namespace,
+						id: receipt.executionId,
+					})
+					return {
+						...receipt,
+						chat: view.chat,
+						turn: Turn.Id.make(execution.resource.id),
+					}
+				}),
+			),
 		confirmContext: (
 			identity: typeof Identity.Service,
 			id: string,
@@ -834,6 +710,7 @@ export const make = Effect.gen(function* () {
 			identity: typeof Identity.Service,
 			id: string,
 			content: Schema.JsonObject,
+			commandKey: Execution.CommandKey,
 		) =>
 			locked(
 				identity,
@@ -856,25 +733,32 @@ export const make = Effect.gen(function* () {
 							"Unsupported",
 						),
 					)
-					// The message reaches the Bot at its next step, or starts a Turn.
-					const service = yield* chats(identity)
-					yield* service
-						.deliver(view.chat, {
-							input:
+					const receipt = yield* inputs
+						.message(ownerKey(identity), commandKey, {
+							caller: identity,
+							chat: view.chat,
+							queue: false,
+							notice: { kind: "app", ref: view.id },
+							content: Prompt.make(
 								"Confirmed message from App " +
-								view.connectionId +
-								":\n" +
-								pipe(
-									message.content,
-									Arr.map((part) => part.text),
-									Arr.join("\n"),
-								),
-							author: identity.userId,
-							notice: { kind: "app", ref: view.connectionId },
+									view.connectionId +
+									":\n" +
+									Arr.join(
+										Arr.map(message.content, (part) => part.text),
+										"\n",
+									),
+							),
 						})
-						.pipe(
-							fromChats("OpenBot could not deliver the message of an App view"),
-						)
+						.pipe(ChatErrors.map)
+					const execution = yield* store.get({
+						namespace: ownerKey(identity),
+						id: receipt.executionId,
+					})
+					return {
+						...receipt,
+						chat: view.chat,
+						turn: Turn.Id.make(execution.resource.id),
+					}
 				}),
 			),
 	}

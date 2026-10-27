@@ -5,6 +5,10 @@ description:
   geteilte Models und Model Providers.
 ---
 
+Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
+brauchst je nach Aufgabe Serverzugriff oder Plattformrechte. Beginne mit dem
+[Administrationshandbuch](/de/docs/admin).
+
 Die Platform ist die ganze OpenBot-Installation. Eine Platform hat viele
 Organizations. Admins der Platform betreiben die Platform. Diese Seite zeigt
 dir, wie du sie einrichtest und wie du sie mit `/v1/platform` verwaltest.
@@ -79,7 +83,7 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
 | `--oidc-client-id`       | Mit dem Issuer   | Die Client-ID bei diesem Anbieter.                                                                                                  |
 | `--oidc-client-secret`   | Nein             | Das Client-Secret. Lass es weg für einen öffentlichen Client, der PKCE nutzt.                                                       |
 | `--admin-email`          | Mindestens einer | Eine Person mit dieser bestätigten E-Mail wird Admin der Platform, wenn sie sich anmeldet. Wiederhole das Flag für mehr Personen.   |
-| `--s3-endpoint`          | Mit dem Bucket   | Die Adresse des Objektspeichers für [Dateien](/de/docs/files), etwa `https://s3.us-east-1.amazonaws.com`.                           |
+| `--s3-endpoint`          | Mit dem Bucket   | Die Adresse des Objektspeichers für [Dateien](/de/docs/developers/files), etwa `https://s3.us-east-1.amazonaws.com`.                |
 | `--s3-public-endpoint`   | Nein             | Die Adresse, an die Clients Dateien beim direkten Hochladen senden, wenn sie nicht `--s3-endpoint` ist.                             |
 | `--s3-region`            | Nein             | Die Region des Speichers. Der Standard ist `us-east-1`.                                                                             |
 | `--s3-bucket`            | Mit der Adresse  | Der Bucket für Dateien.                                                                                                             |
@@ -134,10 +138,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	"identityProvider": {
 		"issuer": "https://id.example.com",
 		"clientId": "openbot",
-		"clientSecret": { "set": true, "hint": "…k9Qz" }
+		"clientSecret": {
+			"set": true,
+			"hint": "…k9Qz"
+		}
 	},
 	"organizationCreation": "anyone",
-	"ceiling": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
+	"ceiling": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[]}",
 	"appRestrictions": [],
 	"codeMode": {
 		"enabled": false,
@@ -145,7 +152,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"memoryMb": 64,
 		"outputBytes": 65536
 	},
-	"rateLimit": { "requestsPerMinute": null },
+	"rateLimit": {
+		"requestsPerMinute": null
+	},
 	"tokenRate": {
 		"organization": null,
 		"member": null,
@@ -154,7 +163,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	},
 	"files": {
 		"storage": null,
-		"uploads": { "server": true, "direct": true },
+		"uploads": {
+			"server": true,
+			"direct": true
+		},
 		"maxBytes": 20971520,
 		"quotaBytes": null,
 		"mediaTypes": [
@@ -178,11 +190,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `identityProvider`     | Der OpenID-Connect-Anbieter der Platform, oder `null`, wenn sich Menschen nur über SSO-Verbindungen anmelden.                      |
 | `organizationCreation` | Wer eine Organization erstellen kann: `anyone` oder `platform_admins`. Siehe [Organizations erstellen](#organizations-erstellen).  |
 | `ceiling`              | Eine Policy mit Deny-Regeln für jede Organization. Siehe [Obergrenze für Policies](#obergrenze-für-policies).                      |
-| `appRestrictions`      | Apps, die der App Index versteckt. Siehe [App Index](/de/docs/app-index#sperren-durch-den-host).                                   |
-| `codeMode`             | Ob Bots Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                   |
+| `appRestrictions`      | Apps, die der App Index versteckt. Siehe [App Index](/de/docs/developers/app-index#sperren-durch-den-host).                        |
+| `codeMode`             | Ob Bots Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/developers/code-mode#code-mode-einschalten).        |
 | `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/docs/usage#rate-limit).                  |
 | `tokenRate`            | Die höchsten Token Rates jedes Bereichs. Organisationen können nur kleinere setzen. Siehe [Token Rate](/de/docs/usage#token-rate). |
-| `files`                | Der Objektspeicher und die Grenzen für [Dateien](/de/docs/files#den-speicher-einrichten).                                          |
+| `files`                | Der Objektspeicher und die Grenzen für [Dateien](/de/docs/developers/files#den-speicher-einrichten).                               |
 | `updatedAt`            | Wann sich die Einstellungen zuletzt geändert haben.                                                                                |
 
 ### Geheimnisse kommen nie zurück
@@ -245,18 +257,7 @@ hinzuzufügen:
 ```json
 {
 	"expectedVersion": 4,
-	"ceiling": {
-		"_tag": "Rules",
-		"algorithm": "denyOverrides",
-		"rules": [
-			{
-				"_tag": "Deny",
-				"actions": ["write"],
-				"resources": ["ModelProvider"],
-				"reason": "The platform gives the model providers."
-			}
-		]
-	}
+	"ceiling": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Deny\",\"actions\":[\"write\"],\"resources\":[\"ModelProvider\"],\"reason\":\"The platform gives the model providers.\"}]}"
 }
 ```
 
@@ -383,7 +384,7 @@ Platform sie nennen, wenn du es erstellst:
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Platform admin","expiresInDays":30,"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","write"],"resources":["Platform"]}]}}' \
+  -d '{"name":"Platform admin","expiresInDays":30,"policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\",\"write\"],\"resources\":[\"Platform\"]}]}"}' \
   https://api.example.com/v1/user/tokens
 ```
 

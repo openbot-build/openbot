@@ -1,4 +1,5 @@
-import type { Caller, UserTokensApi } from "@openbot-build/api"
+import type { Tokens as TokensModel } from "@openbot-build/domain"
+import type { Caller } from "@openbot-build/domain"
 import { Context, type Effect, type Option, type Redacted } from "effect"
 import type { AuthUnavailable, CredentialRejected } from "./Model.ts"
 
@@ -13,31 +14,31 @@ export class Tokens extends Context.Service<
 	{
 		readonly create: (
 			owner: Owner,
-			input: UserTokensApi.CreateTokenRequest,
+			input: TokensModel.CreateTokenRequest,
 		) => Effect.Effect<
-			UserTokensApi.CreatedToken,
-			UserTokensApi.TokenLimitReached | UserTokensApi.TokenStorageUnavailable
+			TokensModel.CreatedToken,
+			TokensModel.TokenLimitReached | TokensModel.TokenStorageUnavailable
 		>
 		readonly list: (
 			owner: Owner,
 		) => Effect.Effect<
-			ReadonlyArray<UserTokensApi.Token>,
-			UserTokensApi.TokenStorageUnavailable
+			ReadonlyArray<TokensModel.Token>,
+			TokensModel.TokenStorageUnavailable
 		>
 		readonly revoke: (
 			owner: Owner,
 			id: string,
 		) => Effect.Effect<
-			UserTokensApi.Token,
-			UserTokensApi.TokenNotFound | UserTokensApi.TokenStorageUnavailable
+			TokensModel.Token,
+			TokensModel.TokenNotFound | TokensModel.TokenStorageUnavailable
 		>
 		/** Find one token of the caller, for its policies. */
 		readonly find: (
 			owner: Owner,
 			id: string,
 		) => Effect.Effect<
-			Option.Option<UserTokensApi.Token>,
-			UserTokensApi.TokenStorageUnavailable
+			Option.Option<TokensModel.Token>,
+			TokensModel.TokenStorageUnavailable
 		>
 		/** Find the caller for a secret, and record when the secret was last used. */
 		readonly authenticate: (

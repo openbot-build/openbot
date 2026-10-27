@@ -1,0 +1,47 @@
+import { defineConfig } from "tsdown"
+import config from "../../tsdown.config.ts"
+
+export default defineConfig({
+	...config,
+	entry: {
+		Email: "src/Email.ts",
+		Invitation: "src/Invitation.ts",
+		SettingsErrors: "src/SettingsErrors.ts",
+		Secret: "src/Secret.ts",
+		Roles: "src/Roles.ts",
+		Settings: "src/Settings.ts",
+		Organizations: "src/Organizations.ts",
+		Models: "src/Models.ts",
+		Tokens: "src/Tokens.ts",
+		Sso: "src/Sso.ts",
+		Platform: "src/Platform.ts",
+		Accounts: "src/Accounts.ts",
+		BotSharing: "src/BotSharing.ts",
+
+		AppConnections: "src/AppConnections.ts",
+		AppDiscovery: "src/AppDiscovery.ts",
+		AppAuthorizations: "src/AppAuthorizations.ts",
+		Developers: "src/Developers.ts",
+		Files: "src/Files.ts",
+		index: "src/index.ts",
+		Channels: "src/Channels.ts",
+		Computers: "src/Computers.ts",
+		Live: "src/Live.ts",
+		AppCalls: "src/AppCalls.ts",
+		AppIndex: "src/AppIndex.ts",
+		CodeRuns: "src/CodeRuns.ts",
+		Requests: "src/Requests.ts",
+		Delegations: "src/Delegations.ts",
+		Billing: "src/Billing.ts",
+		Bots: "src/Bots.ts",
+		BotMemory: "src/BotMemory.ts",
+		PlanApproval: "src/PlanApproval.ts",
+		Chats: "src/Chats.ts",
+		Name: "src/Name.ts",
+
+		Authorization: "src/Authorization.ts",
+		Execution: "src/Execution.ts",
+		ToolExecution: "src/ToolExecution.ts",
+		Vaults: "src/Vaults.ts",
+	},
+})

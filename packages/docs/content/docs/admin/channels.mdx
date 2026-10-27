@@ -1,0 +1,120 @@
+---
+title: "Set up Channels"
+description: "Set up Channels"
+---
+
+For the administrator who sets up this service. Use an account with the rights
+named below.
+
+## Add a Channel
+
+An administrator adds a Channel. It needs `write` on `Channel`.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"channel-team-slack-1","name":"Team Slack","bot":"bot_...","linkPath":"/link","credentials":{"kind":"slack","botToken":"xoxb-...","signingSecret":"..."}}' \
+  https://api.example.com/v1/organization/channels
+```
+
+| Field         | What it does                                                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `name`        | A short name.                                                                                                          |
+| `bot`         | The Bot that answers. It must be a shared Bot of the organization.                                                     |
+| `credentials` | The secrets of the platform. See below. They go in, but they never come out. The answer shows only `set` and a `hint`. |
+| `linkPath`    | Optional. A path on your public origin where your client lets a person [link their account](/docs/channels).           |
+| `enabled`     | Optional. `false` stops the Channel. Its webhook then returns `401`.                                                   |
+
+The answer is `201` with the Channel. Give its `webhookUrl` to the platform. The
+caller becomes the **actor** of the Channel. The chats of the Channel are
+[Chats](/docs/developers/chats) of the actor. The actor must be able to give
+work to the Bot.
+
+`GET`, `PATCH` and `DELETE /v1/organization/channels/:channelId` read, change
+and delete one Channel. A change needs `expectedVersion`, the `version` that you
+read. An old version returns `409` with `ChannelConflict`. A change makes the
+caller the actor. Leave out `credentials` to keep the secrets. The kind of a
+Channel cannot change.
+
+Create and change commands need a `commandKey`. Keep it when a network call
+fails and you send the same command again. A new key means a new command. The
+SDK `Channels.create`, `Channels.update`, and `Channels.rotateSecret` prepare
+these keys once. Reuse the returned `send` effect for a retry.
+
+The Channel's `executionId` names its configuration work. A `201` response means
+the configuration and work were saved together. Read
+`/v1/executions/:executionId` or observe its events to learn whether
+registration ended. A platform rejection keeps the Channel and gives a safe
+execution failure. A lost or unclear reply sets `outcome_unknown` and waits for
+a decision. Later configuration work waits for the prior work to end, even after
+a restart.
+
+Secret rotation also needs `commandKey` and `expectedVersion`. Its response
+holds `secret` and `channel`. Retrying that command returns the same secret and
+version; it does not rotate again. Keep the result private.
+
+A confirmed rate-limit refusal can run again, up to five total attempts. OpenBot
+saves the wait time and keeps it after a restart. It checks current rights
+before each attempt. A lost reply does not allow this retry. Lark sends use the
+same message key on each attempt. Lark keeps that key for one hour, so an
+unknown result still needs a decision.
+
+Deletion needs a body with `commandKey`. It returns `202` and an execution
+receipt. The SDK `Channels.remove` prepares this key once. The Channel stops
+accepting input and new configuration at once. The removal waits for all saved
+input, watch, delivery and configuration work to stop and release its resources.
+Only then does it delete the Channel and its links. Its Chats and execution
+history stay. An unknown outside result still needs a decision on that
+execution; removal waits for it. Closing the event stream does not cancel
+removal. An explicit cancellation keeps the Channel disabled. A later change can
+turn it on.
+
+After a data upgrade, an old Channel can have `needsAuthorization: true`. Its
+settings, secrets, links and history stay. Its `enabled` value stays too, but it
+accepts no input and starts no delivery or watch work. An administrator must
+save a change or rotate its secret to set a new caller with current rights. This
+clears `needsAuthorization`. Old work with an unknown result still waits for a
+decision; saving new settings does not replay it.
+
+### Slack
+
+`credentials`:
+`{ "kind": "slack", "botToken": "xoxb-...", "signingSecret": "..." }`
+
+1. In the Slack app, turn on **Event Subscriptions** with the `webhookUrl` as
+   the request URL. Add the bot events `app_mention` and `message.im`.
+2. Turn on **Interactivity** with the same `webhookUrl`, so the buttons of the
+   bot work.
+3. Give the bot the scopes `chat:write`, `app_mentions:read` and `im:history`.
+
+OpenBot checks the `X-Slack-Signature` of each request. A request older than 5
+minutes is refused.
+
+### Lark
+
+`credentials`:
+`{ "kind": "lark", "domain": "feishu", "appId": "cli_...", "appSecret": "...", "verificationToken": "...", "encryptKey": "..." }`
+
+`domain` is `feishu` for Feishu in China and `lark` for Lark in other places. In
+the Lark app, set an **Encrypt Key** and use the `webhookUrl` as the request URL
+for events and for card callbacks. Add the event `im.message.receive_v1`.
+OpenBot checks the signature and the verification token of each event.
+
+### Telegram
+
+`credentials`: `{ "kind": "telegram", "botToken": "123456:..." }`
+
+OpenBot calls `setWebhook` for you with a secret of its own. Telegram sends that
+secret back with each update. In a group, the bot gets only messages that name
+it or answer it, unless you turn off its privacy mode.
+
+## Execution checks
+
+Channel settings keep the full caller, including the API token that made the
+change. The token limits still apply to future Channel work. Check the token and
+member rights when a Channel stops after a permission change.
+
+Input, replies, and cards have execution records. An unknown send result waits
+for a decision through the execution API. Check the platform before allowing a
+retry. A restart does not make that decision for you. Old Channel queue data
+must pass the maintenance-window conversion before the new server starts.

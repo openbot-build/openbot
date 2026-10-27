@@ -1,4 +1,4 @@
-import type { BillingApi } from "@openbot-build/api"
+import { type Billing as BillingApi, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Context,
@@ -186,7 +186,11 @@ export class SpendingBlocked extends Schema.TaggedError<
 export class BillingStorageError extends Schema.TaggedError<
 	BillingStorageError,
 	{ readonly brand: unique symbol }
->()("BillingStorageError", { cause: Schema.Defect() }) {}
+>()("BillingStorageError", {
+	cause: Schema.Defect(),
+	/** Only a database failure may retry a result commit. */
+	retryable: Schema.optionalKey(Schema.Boolean),
+}) {}
 
 /** The organization does not exist. */
 export class OrganizationMissing extends Schema.TaggedError<
@@ -199,23 +203,42 @@ export interface Range {
 	readonly to: number
 }
 
+/** The owner of one durable execution attempt. */
+export interface ExecutionOwner {
+	readonly executionId: Execution.Id
+	readonly generation: number
+}
+export interface CallIdentity extends ExecutionOwner {
+	readonly id: Execution.CallId
+}
+
 /** Usage, prices, budgets and credits. All money is in micro-USD. */
 export class Billing extends Context.Service<
 	Billing,
 	{
-		/** Fails when a hard budget is spent, or when credits are on and none are left. */
-		readonly check: (
+		/** Reserve an estimate before a provider call. Reuse its ID on a safe retry. */
+		readonly reserve: (
 			call: Call,
 			attribution: Attribution,
-		) => Effect.Effect<void, SpendingBlocked | BillingStorageError>
-		/** Adds the usage of one finished model call, and takes its cost from the credits when they apply. */
+			estimate: Tokens,
+			identity?: CallIdentity,
+		) => Effect.Effect<
+			{ readonly id: Execution.CallId; readonly startedAt: number },
+			SpendingBlocked | BillingStorageError
+		>
+		/** Settle confirmed usage once, and release its estimate. */
 		readonly record: (
-			call: Call,
-			attribution: Attribution,
+			id: Execution.CallId,
 			tokens: Tokens,
-			/** The time that the call started. It chooses the period of the price. */
-			startedAt: number,
 		) => Effect.Effect<void, BillingStorageError>
+		/** The provider did not confirm usage. Release the hold and keep the estimate. */
+		readonly unknown: (
+			id: Execution.CallId,
+		) => Effect.Effect<void, BillingStorageError>
+		/** Release old or ended attempts. Keep unknown usage. Reject a stale owner. */
+		readonly releaseExecution: (
+			owner: ExecutionOwner,
+		) => Effect.Effect<boolean, BillingStorageError>
 		readonly prices: (
 			providerId: string,
 		) => Effect.Effect<

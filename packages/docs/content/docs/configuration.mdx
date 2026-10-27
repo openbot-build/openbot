@@ -5,6 +5,10 @@ description:
   setting lives.
 ---
 
+For platform operators. These tasks affect the whole deployment. Have server
+access or platform admin rights as the task requires. Start with the
+[administrator manual](/docs/admin).
+
 OpenBot can run as many instances. An instance is one running OpenBot server
 process. All instances of one deployment use the same database. This page lists
 the few values that each instance reads when it starts. It also shows where
@@ -22,9 +26,9 @@ There are two kinds of settings:
   PostgreSQL. You change them through the API, and every instance uses the
   change at once.
 
-There is one exception: `OPENBOT_SECRET_KEYS`. Every instance needs the same
-keys. But these keys encrypt the secrets in the database, so they cannot live in
-the database. Each instance reads them from its environment.
+There are two exceptions: `OPENBOT_SECRET_KEYS` and `OPENBOT_CLUSTER_SECRET`.
+Every node needs the same values. They protect stored data and private node
+messages, so each node reads them from its environment or secret files.
 
 If a required value is missing or wrong, OpenBot does not start. It writes a
 configuration error to the log.
@@ -35,16 +39,23 @@ configuration error to the log.
 
 This is the complete list of environment variables that the server reads.
 
-| Variable                 | Required | Default     | Meaning                                                             |
-| ------------------------ | -------- | ----------- | ------------------------------------------------------------------- |
-| `OPENBOT_HOST`           | No       | `127.0.0.1` | The network address that the server listens on.                     |
-| `OPENBOT_PORT`           | No       | `3000`      | The port that the server listens on.                                |
-| `OPENBOT_DATABASE_URL`   | Yes      |             | A PostgreSQL connection URL.                                        |
-| `OPENBOT_SECRET_KEYS`    | Yes      |             | The keys that encrypt secrets in the database. See below.           |
-| `OPENBOT_OUTBOUND_ALLOW` | No       |             | Private hosts and IP ranges that OpenBot may connect to. See below. |
+| Variable                 | Required | Default       | Meaning                                                             |
+| ------------------------ | -------- | ------------- | ------------------------------------------------------------------- |
+| `OPENBOT_HOST`           | No       | `127.0.0.1`   | The network address that the server listens on.                     |
+| `OPENBOT_PORT`           | No       | `3000`        | The port that the server listens on.                                |
+| `OPENBOT_CLUSTER_SECRET` | Yes      |               | The shared private RPC secret. At least 32 characters.              |
+| `OPENBOT_CLUSTER_HOST`   | No       | Bound address | The host that other nodes can reach on the server port.             |
+| `OPENBOT_DATABASE_URL`   | Yes      |               | A PostgreSQL connection URL.                                        |
+| `OPENBOT_SECRET_KEYS`    | Yes      |               | The keys that encrypt secrets in the database. See below.           |
+| `OPENBOT_OUTBOUND_ALLOW` | No       |               | Private hosts and IP ranges that OpenBot may connect to. See below. |
 
 The Docker image sets `OPENBOT_HOST=0.0.0.0` and `OPENBOT_PORT=3000`, so the
 server can take traffic from outside the container.
+
+Private node calls use `/internal/executions/rpc`. Keep this path inside your
+private network. Give every node the same random secret. Set a distinct
+reachable host for each node when you use more than one node. The private RPC
+client is separate from the App network guard.
 
 ### Database
 
@@ -240,19 +251,20 @@ Some values were options in code before. They are settings now, too:
 
 ### How a change reaches every instance
 
-Each instance keeps the settings in a cache, a short-lived copy in memory. A
-change works like this:
+Each settings read uses the committed database row. A change works like this:
 
-1. The API writes the new settings to the database.
-2. It sends a PostgreSQL `NOTIFY` message on the channel `openbot_settings`.
-3. Every instance listens on that channel. It reads the new settings at once.
+1. The API writes the new settings in a transaction.
+2. PostgreSQL sends `NOTIFY` on `openbot_settings` when that transaction
+   commits.
+3. Subscribers use the notice to react to the change. The next read sees the row
+   even if a notice is lost.
 
-Each cache entry also expires after 30 seconds. So an instance that misses a
-message still gets the change soon. The cache does not keep a failed read. So
-after a short database error, the next request reads the settings again.
+There is no settings cache that can keep old access rights. A failed read fails
+the action. App restrictions do not become empty when their store is down. A
+list reads one restriction snapshot, so all its entries use the same rules.
 
-When the connection that listens breaks, the instance can miss messages. So it
-forgets all the settings in its cache, and listens again after one second.
+If the listener connection breaks, it logs the failure and listens again after
+one second. Reads still use the database while the listener reconnects.
 
 A change to `publicOrigin`, to the platform identity provider, or to the sign-in
 secret changes how sign-in works. Each instance reads these values when it uses
@@ -330,7 +342,7 @@ Only the development entry point reads `OPENBOT_DEV_PUBLIC_ORIGIN`. It needs no
 setup step. At each start, it writes the platform settings for this origin
 itself. It makes the local account `developer@localhost.test` a platform admin,
 and it turns on the local test sign-in. See
-[Authentication](/docs/authentication#development-account).
+[Authentication](/docs/developers/authentication#development-account).
 
 The production program never uses the local test account. There is no switch for
 it.
@@ -340,11 +352,11 @@ your machine, such as Ollama, set `OPENBOT_OUTBOUND_ALLOW=localhost` in
 `.env.development`. See [Outbound connections](#outbound-connections).
 
 devenv also starts [RustFS](https://rustfs.com), a small object storage, for
-[files](/docs/files). It runs in Docker. Its data lives in the Docker volume
-`openbot-dev-rustfs`. At each start, the development entry point makes the
-bucket `openbot` and writes the storage into the platform settings. RustFS is at
-`127.0.0.1`, a private address. So the development entry point opens that one
-host for itself. You do not need to add it to `OPENBOT_OUTBOUND_ALLOW`.
+[files](/docs/developers/files). It runs in Docker. Its data lives in the Docker
+volume `openbot-dev-rustfs`. At each start, the development entry point makes
+the bucket `openbot` and writes the storage into the platform settings. RustFS
+is at `127.0.0.1`, a private address. So the development entry point opens that
+one host for itself. You do not need to add it to `OPENBOT_OUTBOUND_ALLOW`.
 
 To use another database, set `OPENBOT_DATABASE_URL` in `.env.development`. See
 [Contributing](/docs/contributing).

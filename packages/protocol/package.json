@@ -8,7 +8,9 @@
 	"files": [
 		"dist",
 		"src",
-		"README.md"
+		"README.md",
+		"test/Testing.ts",
+		"test/Fixture.ts"
 	],
 	"exports": {
 		".": "./dist/main.js",
@@ -40,7 +42,8 @@
 		"./McpPublisher": "./dist/publication/McpPublisher.js",
 		"./Protection": "./dist/publication/Protection.js",
 		"./Publisher": "./dist/publication/Publisher.js",
-		"./PublisherProtection": "./dist/publication/PublisherProtection.js"
+		"./PublisherProtection": "./dist/publication/PublisherProtection.js",
+		"./testing": "./test/Testing.ts"
 	},
 	"scripts": {
 		"build": "tsdown",

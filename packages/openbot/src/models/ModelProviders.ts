@@ -1,5 +1,5 @@
 import { Provider } from "@openbot-build/core"
-import type { ModelProvidersApi } from "@openbot-build/api"
+import type { Models as ModelsModel } from "@openbot-build/domain"
 import {
 	Context,
 	DateTime,
@@ -36,25 +36,25 @@ export const ownerOf = (columns: {
 export interface Stored {
 	readonly id: string
 	readonly owner: Owner
-	readonly kind: ModelProvidersApi.ProviderKind
+	readonly kind: ModelsModel.ProviderKind
 	readonly name: string
 	readonly endpoint: string | null
 	readonly apiKey: string
 	readonly apiKeyHint: string | null
 	/** The links to the models that the provider offers, in order. */
-	readonly models: ReadonlyArray<ModelProvidersApi.ProviderModel>
-	readonly availability: ModelProvidersApi.Availability | null
+	readonly models: ReadonlyArray<ModelsModel.ProviderModel>
+	readonly availability: ModelsModel.Availability | null
 	readonly version: number
 	readonly createdAt: number
 	readonly updatedAt: number
 }
 
 export type Errors =
-	| ModelProvidersApi.ModelNotFound
-	| ModelProvidersApi.ModelProviderNotFound
-	| ModelProvidersApi.ModelProviderConflict
-	| ModelProvidersApi.ModelProviderInvalid
-	| ModelProvidersApi.ModelProvidersUnavailable
+	| ModelsModel.ModelNotFound
+	| ModelsModel.ModelProviderNotFound
+	| ModelsModel.ModelProviderConflict
+	| ModelsModel.ModelProviderInvalid
+	| ModelsModel.ModelProvidersUnavailable
 
 /** The model providers of the platform and of each organization, with their keys. */
 export class ModelProviders extends Context.Service<
@@ -64,37 +64,37 @@ export class ModelProviders extends Context.Service<
 			owner: Owner,
 		) => Effect.Effect<
 			ReadonlyArray<Stored>,
-			ModelProvidersApi.ModelProvidersUnavailable
+			ModelsModel.ModelProvidersUnavailable
 		>
 		readonly get: (
 			owner: Owner,
 			id: string,
 		) => Effect.Effect<
 			Option.Option<Stored>,
-			ModelProvidersApi.ModelProvidersUnavailable
+			ModelsModel.ModelProvidersUnavailable
 		>
 		/** The providers that an organization can use: its own, and the shared ones it may use. */
 		readonly available: (
 			organizationId: string,
 		) => Effect.Effect<
 			ReadonlyArray<Stored>,
-			ModelProvidersApi.ModelProvidersUnavailable
+			ModelsModel.ModelProvidersUnavailable
 		>
 		readonly create: (
 			owner: Owner,
-			input: ModelProvidersApi.CreatePlatformModelProviderRequest,
+			input: ModelsModel.CreatePlatformModelProviderRequest,
 		) => Effect.Effect<Stored, Errors>
 		readonly update: (
 			owner: Owner,
 			id: string,
-			patch: ModelProvidersApi.UpdatePlatformModelProviderRequest,
+			patch: ModelsModel.UpdatePlatformModelProviderRequest,
 		) => Effect.Effect<Stored, Errors>
 		readonly delete: (owner: Owner, id: string) => Effect.Effect<void, Errors>
 		readonly openKey: (
 			provider: Stored,
 		) => Effect.Effect<
 			Redacted.Redacted<string>,
-			ModelProvidersApi.ModelProvidersUnavailable
+			ModelsModel.ModelProvidersUnavailable
 		>
 	}
 >()("@openbot-build/openbot/models/ModelProviders") {}
@@ -106,7 +106,7 @@ export const usableBy = ({
 }: {
 	readonly provider: {
 		readonly owner: Owner
-		readonly availability: ModelProvidersApi.Availability | null
+		readonly availability: ModelsModel.Availability | null
 	}
 	readonly organizationId: string
 }) => {
@@ -130,14 +130,14 @@ export const linkedOwner = ({
 	link,
 }: {
 	readonly provider: { readonly owner: Owner }
-	readonly link: ModelProvidersApi.ProviderModel
+	readonly link: ModelsModel.ProviderModel
 }): Owner =>
 	link.modelOwner === "platform" || provider.owner.kind === "platform"
 		? platformOwner
 		: provider.owner
 
 /** The API form. The key only shows whether it is set and its last characters. */
-export const view = (provider: Stored): ModelProvidersApi.ModelProvider => ({
+export const view = (provider: Stored): ModelsModel.ModelProvider => ({
 	id: Provider.Id.make(provider.id),
 	owner: provider.owner.kind,
 	kind: provider.kind,

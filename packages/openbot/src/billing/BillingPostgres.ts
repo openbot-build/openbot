@@ -1,5 +1,10 @@
 import { Model, Provider } from "@openbot-build/core"
-import { BillingApi, UserTokensApi } from "@openbot-build/api"
+import {
+	Billing as BillingApi,
+	TokenId,
+	Execution,
+} from "@openbot-build/domain"
+
 import {
 	and,
 	desc,
@@ -15,19 +20,14 @@ import {
 import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import {
 	Array as Arr,
-	Cache,
 	Clock,
 	Crypto,
 	DateTime,
-	Duration,
 	Effect,
-	Exit,
 	HashMap,
 	Layer,
 	Option,
-	pipe,
 	Predicate,
-	Record as Rec,
 	Schema,
 	SchemaTransformation,
 	String as Str,
@@ -42,6 +42,7 @@ import {
 	tokens,
 	usageEvents,
 } from "../database/Schema.ts"
+import { executions, executionCalls } from "../database/ExecutionSchema.ts"
 import {
 	type Attribution,
 	Billing,
@@ -54,6 +55,7 @@ import {
 	type Price,
 	SpendingBlocked,
 } from "./Billing.ts"
+import { PgClient } from "@effect/sql-pg"
 import * as Db from "../database/Database.ts"
 
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
@@ -80,7 +82,6 @@ const encodeCursor = (cursor: typeof UsageCursor.Type) =>
 	)
 
 /** A price change on another instance reaches this instance after at most this time. */
-const priceTimeToLive = Duration.seconds(30)
 
 type PriceRow = typeof modelPrices.$inferSelect
 type BudgetRow = typeof budgets.$inferSelect
@@ -123,28 +124,35 @@ const eventView = (row: EventRow) =>
 	Effect.map(
 		Effect.all({
 			source: decodeSource(row.source),
+			status: decodeStored(BillingApi.UsageStatus)(row.status),
 			providerOwner: decodeProviderOwner(row.providerOwner),
 		}),
-		({ source, providerOwner }): BillingApi.UsageEvent => ({
-			id: row.id,
+		({ source, providerOwner, status }): BillingApi.UsageEvent => ({
+			id: Execution.CallId.make(row.id),
+			executionId:
+				row.executionId === null ? null : Execution.Id.make(row.executionId),
+			status,
+			startedAt: iso(row.startedAt ?? row.occurredAt),
+			reservedMicros: row.reservedMicros,
+			estimatedMicros: row.estimatedMicros,
+			estimatedTokens: row.estimatedTokens,
 			occurredAt: iso(row.occurredAt),
 			source,
 			chatId: row.chatId,
 			turnId: row.turnId,
 			botId: row.botId,
 			userId: row.userId,
-			tokenId:
-				row.tokenId === null ? null : UserTokensApi.TokenId.make(row.tokenId),
+			tokenId: row.tokenId === null ? null : TokenId.make(row.tokenId),
 			provider: Provider.Id.make(row.providerId),
 			providerOwner,
 			model: Model.Id.make(row.modelId),
-			inputUncached: row.inputUncached,
-			inputCacheRead: row.inputCacheRead,
-			inputCacheWrite: row.inputCacheWrite,
-			outputText: row.outputText,
-			outputReasoning: row.outputReasoning,
+			inputUncached: status === "confirmed" ? row.inputUncached : null,
+			inputCacheRead: status === "confirmed" ? row.inputCacheRead : null,
+			inputCacheWrite: status === "confirmed" ? row.inputCacheWrite : null,
+			outputText: status === "confirmed" ? row.outputText : null,
+			outputReasoning: status === "confirmed" ? row.outputReasoning : null,
 			priced: row.priceId !== null,
-			costMicros: row.costMicros,
+			costMicros: status === "confirmed" ? row.costMicros : null,
 			charged: row.charged,
 		}),
 	)
@@ -186,7 +194,18 @@ const scopeIdOf = (
 const sumOf = <T>(value: T) =>
 	sql<number>`coalesce(sum(${value}), 0)`.mapWith(Number)
 const totals = {
-	calls: sql<number>`count(*)`.mapWith(Number),
+	calls:
+		sql<number>`count(*) FILTER (WHERE ${usageEvents.status} = 'confirmed')`.mapWith(
+			Number,
+		),
+	pendingCalls:
+		sql<number>`count(*) FILTER (WHERE ${usageEvents.status} = 'pending')`.mapWith(
+			Number,
+		),
+	unknownCalls:
+		sql<number>`count(*) FILTER (WHERE ${usageEvents.status} = 'unknown')`.mapWith(
+			Number,
+		),
 	inputUncached: sumOf(usageEvents.inputUncached),
 	inputCacheRead: sumOf(usageEvents.inputCacheRead),
 	inputCacheWrite: sumOf(usageEvents.inputCacheWrite),
@@ -230,11 +249,13 @@ const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 	Effect.catchIf(
 		effect,
 		(error): error is Extract<E, DatabaseError> => isDatabaseError(error),
-		(cause) => Effect.fail(BillingStorageError.make({ cause })),
+		(cause) =>
+			Effect.fail(BillingStorageError.make({ cause, retryable: true })),
 	)
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
+	const client = yield* PgClient.PgClient
 	const crypto = yield* Crypto.Crypto
 	const newId = (prefix: string) =>
 		Effect.map(
@@ -258,7 +279,7 @@ export const make = Effect.gen(function* () {
 						lte(modelPrices.effectiveFrom, at),
 					),
 				)
-				.orderBy(desc(modelPrices.effectiveFrom))
+				.orderBy(desc(modelPrices.effectiveFrom), desc(modelPrices.position))
 				.limit(1)
 			return row === undefined
 				? Option.none<Price>()
@@ -268,35 +289,6 @@ export const make = Effect.gen(function* () {
 						schedule: yield* decodeSchedule(row.schedule),
 					})
 		})
-
-	/**
-	 * The current price of each model, for a short time. Calls that miss at the
-	 * same time share one read. A failed read stays out of the cache.
-	 */
-	const prices = yield* Cache.makeWith(
-		([providerId, modelId]: readonly [providerId: string, modelId: string]) =>
-			Effect.flatMap(Clock.currentTimeMillis, (now) =>
-				priceAtFromStorage(providerId, modelId, now),
-			),
-		{
-			capacity: 1_000,
-			timeToLive: (exit) =>
-				Exit.isSuccess(exit) ? priceTimeToLive : Duration.zero,
-		},
-	)
-
-	/**
-	 * The price of a model at the start of a call. When the current price took
-	 * effect after the call started, the price before it comes from storage.
-	 */
-	const priceAt = (providerId: string, modelId: string, startedAt: number) =>
-		Cache.get(prices, [providerId, modelId]).pipe(
-			Effect.filterOrElse(
-				(current) =>
-					!Option.exists(current, (price) => price.effectiveFrom > startedAt),
-				() => priceAtFromStorage(providerId, modelId, startedAt),
-			),
-		)
 
 	/** The spend of the usage events that match the filter. */
 	const spend = (where: SQL | undefined) =>
@@ -461,152 +453,324 @@ export const make = Effect.gen(function* () {
 							),
 						),
 					),
-		check: (call, attribution) =>
+		reserve: (call, attribution, estimate, identity) =>
 			stored(
-				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					const rows = yield* db
-						.select()
-						.from(budgets)
-						.where(
-							and(
-								eq(budgets.organizationId, call.organizationId),
-								eq(budgets.mode, "hard"),
-							),
-						)
-					const scoped = yield* Effect.forEach(rows, (budget) =>
-						Effect.map(decodeScope(budget.scopeKind), (scope) => ({
-							budget,
-							scope,
-						})),
-					)
-					const hard = yield* pipe(
-						scoped,
-						Arr.filter(
-							({ budget, scope }) =>
-								scopeIdOf(scope, call, attribution) === budget.scopeId,
-						),
-						Effect.forEach(({ budget, scope }) =>
-							Effect.map(decodePeriod(budget.period), (period) => ({
-								budget,
-								scope,
-								start: periodStart(period, now),
-							})),
-						),
-					)
-					if (hard.length > 0) {
-						const starts = Arr.map(hard, ({ start }) => start)
-						// One pass over the rows of this month gives the spend of every budget.
-						const columns = Rec.fromEntries(
-							Arr.map(hard, ({ budget, scope, start }, index) => {
-								const column = scopeColumn(scope)
-								const filter =
-									column === undefined
-										? sql`${usageEvents.occurredAt} >= ${start}`
-										: sql`${usageEvents.occurredAt} >= ${start} AND ${column} = ${budget.scopeId}`
-								return [
-									"b" + index,
-									sql<number>`coalesce(sum(${usageEvents.costMicros}) FILTER (WHERE ${filter}), 0)`.mapWith(
-										Number,
+				client.withTransaction(
+					Effect.gen(function* () {
+						// Lock the execution before the budget. An old node cannot reserve after takeover.
+						if (identity !== undefined) {
+							const [execution] = yield* db
+								.select()
+								.from(executions)
+								.where(eq(executions.id, identity.executionId))
+								.for("update")
+							const [sending] = yield* db
+								.select()
+								.from(executionCalls)
+								.where(
+									and(
+										eq(executionCalls.id, identity.id),
+										eq(executionCalls.executionId, identity.executionId),
+										eq(executionCalls.generation, identity.generation),
+										eq(executionCalls.status, "sending"),
 									),
-								] as const
-							}),
-						)
-						const [spent] = yield* db
-							.select(columns)
+								)
+							if (
+								execution?.generation !== identity.generation ||
+								execution.status !== "running" ||
+								execution.organizationId !== call.organizationId ||
+								sending === undefined
+							)
+								return yield* BillingStorageError.make({
+									cause: "The model call has no current execution owner.",
+								})
+						}
+						// One lock makes budget checks and reservations agree across nodes.
+						yield* client`select pg_advisory_xact_lock(hashtextextended(${call.organizationId}, 42))`
+						const id =
+							identity?.id ?? Execution.CallId.make(yield* newId("usage_"))
+						const [prior] = yield* db
+							.select()
 							.from(usageEvents)
+							.where(eq(usageEvents.id, id))
+						if (prior !== undefined) {
+							if (
+								prior.organizationId !== call.organizationId ||
+								prior.providerId !== call.providerId ||
+								prior.modelId !== call.modelId ||
+								prior.providerOwner !== call.providerOwner ||
+								prior.userId !== (attribution.userId ?? null) ||
+								prior.tokenId !== (attribution.tokenId ?? null) ||
+								prior.executionId !== (identity?.executionId ?? null) ||
+								prior.chatId !== (attribution.chatId ?? null) ||
+								prior.turnId !== (attribution.turnId ?? null) ||
+								prior.botId !== (attribution.botId ?? null) ||
+								prior.source !== attribution.source
+							)
+								return yield* BillingStorageError.make({
+									cause: "The model call ID belongs to another call.",
+								})
+							return { id, startedAt: prior.startedAt ?? prior.occurredAt }
+						}
+						const now = yield* Clock.currentTimeMillis
+						const price = yield* priceAtFromStorage(
+							call.providerId,
+							call.modelId,
+							now,
+						)
+						const reserved = Option.match(price, {
+							onNone: () => 0,
+							onSome: (price) =>
+								costOf(estimate, ratesOf(price.schedule, estimate, now)),
+						})
+						const rows = yield* db
+							.select()
+							.from(budgets)
 							.where(
 								and(
-									eq(usageEvents.organizationId, call.organizationId),
-									gte(usageEvents.occurredAt, Math.min(...starts)),
+									eq(budgets.organizationId, call.organizationId),
+									eq(budgets.mode, "hard"),
 								),
 							)
-						for (const [index, { budget }] of hard.entries()) {
-							if (Number(spent?.["b" + index] ?? 0) >= budget.limitMicros)
+						for (const budget of rows) {
+							const scope = yield* decodeScope(budget.scopeKind)
+							if (scopeIdOf(scope, call, attribution) !== budget.scopeId)
+								continue
+							const column = scopeColumn(scope)
+							const start = periodStart(yield* decodePeriod(budget.period), now)
+							const [sum] = yield* db
+								.select({
+									spent:
+										sql<number>`coalesce(sum(case when ${usageEvents.occurredAt} >= ${start} then ${usageEvents.costMicros} else 0 end + ${usageEvents.reservedMicros}), 0)`.mapWith(
+											Number,
+										),
+								})
+								.from(usageEvents)
+								.where(
+									and(
+										eq(usageEvents.organizationId, call.organizationId),
+										column === undefined
+											? undefined
+											: eq(column, budget.scopeId),
+									),
+								)
+							const used = sum?.spent ?? 0
+							if (
+								used >= budget.limitMicros ||
+								used + reserved > budget.limitMicros
+							)
 								return yield* SpendingBlocked.make({
 									reason: "budget",
 									budgetId: budget.id,
-									message: `The ${budget.period} budget of this ${budget.scopeKind} is spent.`,
+									message: `The ${budget.period} budget of this ${budget.scopeKind} has no room for this call.`,
 								})
 						}
-					}
-					if (call.providerOwner === "platform") {
-						const [credits] = yield* db
-							.select()
-							.from(organizationCredits)
-							.where(
-								eq(organizationCredits.organizationId, call.organizationId),
+						if (call.providerOwner === "platform") {
+							const [credits] = yield* db
+								.select()
+								.from(organizationCredits)
+								.where(
+									eq(organizationCredits.organizationId, call.organizationId),
+								)
+								.for("update")
+							const [sum] = yield* db
+								.select({ held: sumOf(usageEvents.reservedMicros) })
+								.from(usageEvents)
+								.where(
+									and(
+										eq(usageEvents.organizationId, call.organizationId),
+										eq(usageEvents.providerOwner, "platform"),
+									),
+								)
+							const held = sum?.held ?? 0
+							if (
+								credits?.enabled === true &&
+								(credits.balanceMicros <= held ||
+									credits.balanceMicros < held + reserved)
 							)
-						if (credits?.enabled === true && credits.balanceMicros <= 0)
-							return yield* SpendingBlocked.make({
-								reason: "credits",
-								message: "The organization has no credits left.",
-							})
-					}
-				}),
+								return yield* SpendingBlocked.make({
+									reason: "credits",
+									message: "The organization has no credits for this call.",
+								})
+						}
+						yield* db.insert(usageEvents).values({
+							id,
+							executionId: identity?.executionId ?? null,
+							organizationId: call.organizationId,
+							status: "pending",
+							startedAt: now,
+							occurredAt: now,
+							estimatedMicros: reserved,
+							reservedMicros: reserved,
+							estimatedTokens:
+								estimate.inputUncached +
+								estimate.inputCacheRead +
+								estimate.inputCacheWrite +
+								estimate.outputText +
+								estimate.outputReasoning,
+							source: attribution.source,
+							chatId: attribution.chatId ?? null,
+							turnId: attribution.turnId ?? null,
+							botId: attribution.botId ?? null,
+							userId: attribution.userId ?? null,
+							tokenId: attribution.tokenId ?? null,
+							providerId: call.providerId,
+							providerOwner: call.providerOwner,
+							modelId: call.modelId,
+							inputUncached: 0,
+							inputCacheRead: 0,
+							inputCacheWrite: 0,
+							outputText: 0,
+							outputReasoning: 0,
+							costMicros: 0,
+							charged: false,
+							priceSchedule: yield* Option.match(price, {
+								onNone: () => Effect.succeed(null),
+								onSome: (price) => encodeSchedule(price.schedule),
+							}),
+							priceId: Option.match(price, {
+								onNone: () => null,
+								onSome: (price) => price.id,
+							}),
+						})
+						return { id, startedAt: now }
+					}),
+				),
 			),
-		record: (call, attribution, used, startedAt) =>
+		record: (id, used) =>
 			stored(
-				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					// The price at the start of the call applies, also when the call ends later.
-					const price = yield* priceAt(call.providerId, call.modelId, startedAt)
-					const id = yield* newId("usage_")
-					const cost = Option.match(price, {
-						onNone: () => 0,
-						onSome: (price) =>
-							costOf(used, ratesOf(price.schedule, used, startedAt)),
-					})
-					yield* db.transaction((tx) =>
-						Effect.gen(function* () {
-							const [credits] =
-								call.providerOwner === "platform"
-									? yield* tx
-											.select()
-											.from(organizationCredits)
-											.where(
-												eq(
-													organizationCredits.organizationId,
-													call.organizationId,
-												),
-											)
-											.for("update")
-									: []
-							const charged = credits?.enabled === true
-							yield* tx.insert(usageEvents).values({
-								id,
-								organizationId: call.organizationId,
-								occurredAt: now,
-								source: attribution.source,
-								chatId: attribution.chatId ?? null,
-								turnId: attribution.turnId ?? null,
-								botId: attribution.botId ?? null,
-								userId: attribution.userId ?? null,
-								tokenId: attribution.tokenId ?? null,
-								providerId: call.providerId,
-								providerOwner: call.providerOwner,
-								modelId: call.modelId,
+				client.withTransaction(
+					Effect.gen(function* () {
+						const [row] = yield* db
+							.select()
+							.from(usageEvents)
+							.where(eq(usageEvents.id, id))
+							.for("update")
+						if (row === undefined)
+							return yield* BillingStorageError.make({
+								cause: "The model call has no reservation.",
+							})
+						if (row.status === "confirmed") {
+							if (
+								row.inputUncached !== used.inputUncached ||
+								row.inputCacheRead !== used.inputCacheRead ||
+								row.inputCacheWrite !== used.inputCacheWrite ||
+								row.outputText !== used.outputText ||
+								row.outputReasoning !== used.outputReasoning
+							)
+								return yield* BillingStorageError.make({
+									cause: "The model call already has different usage.",
+								})
+							return
+						}
+						const now = yield* Clock.currentTimeMillis
+						const startedAt = row.startedAt ?? row.occurredAt
+						// The reservation keeps its price even when the provider is removed.
+						if (row.priceId !== null && row.priceSchedule === null)
+							return yield* BillingStorageError.make({
+								cause: "The reserved price is missing.",
+							})
+						const cost =
+							row.priceSchedule === null
+								? 0
+								: costOf(
+										used,
+										ratesOf(
+											yield* decodeSchedule(row.priceSchedule),
+											used,
+											startedAt,
+										),
+									)
+						const [credits] =
+							row.providerOwner === "platform"
+								? yield* db
+										.select()
+										.from(organizationCredits)
+										.where(
+											eq(
+												organizationCredits.organizationId,
+												row.organizationId,
+											),
+										)
+										.for("update")
+								: []
+						const charged = credits?.enabled === true
+						yield* db
+							.update(usageEvents)
+							.set({
 								...used,
-								priceId: Option.match(price, {
-									onNone: () => null,
-									onSome: (price) => price.id,
-								}),
+								status: "confirmed",
+								occurredAt: now,
+								reservedMicros: 0,
 								costMicros: cost,
 								charged,
 							})
-							if (charged && cost > 0)
-								yield* tx
-									.update(organizationCredits)
-									.set({
-										balanceMicros: sql`${organizationCredits.balanceMicros} - ${cost}`,
-										updatedAt: now,
-									})
-									.where(
-										eq(organizationCredits.organizationId, call.organizationId),
-									)
-						}),
+							.where(eq(usageEvents.id, id))
+						if (charged && cost > 0)
+							yield* db
+								.update(organizationCredits)
+								.set({
+									balanceMicros: sql`${organizationCredits.balanceMicros} - ${cost}`,
+									updatedAt: now,
+								})
+								.where(
+									eq(organizationCredits.organizationId, row.organizationId),
+								)
+					}),
+				),
+			),
+		unknown: (id) =>
+			stored(
+				db
+					.update(usageEvents)
+					.set({ status: "unknown", reservedMicros: 0 })
+					.where(
+						and(
+							eq(usageEvents.id, id),
+							inArray(usageEvents.status, ["pending", "unknown"]),
+						),
 					)
-				}),
+					.pipe(Effect.asVoid),
+			),
+		releaseExecution: (owner) =>
+			stored(
+				client.withTransaction(
+					Effect.gen(function* () {
+						const [execution] = yield* db
+							.select()
+							.from(executions)
+							.where(eq(executions.id, owner.executionId))
+							.for("update")
+						if (execution?.generation !== owner.generation) return false
+						const terminal = Execution.isTerminal(
+							yield* decodeStored(Execution.Status)(execution.status),
+						)
+						yield* db
+							.update(usageEvents)
+							.set({ status: "unknown", reservedMicros: 0 })
+							.where(
+								and(
+									eq(usageEvents.executionId, owner.executionId),
+									inArray(usageEvents.status, ["pending", "unknown"]),
+									terminal
+										? undefined
+										: inArray(
+												usageEvents.id,
+												db
+													.select({ id: executionCalls.id })
+													.from(executionCalls)
+													.where(
+														and(
+															eq(executionCalls.executionId, owner.executionId),
+															lt(executionCalls.generation, owner.generation),
+														),
+													),
+											),
+								),
+							)
+						return true
+					}),
+				),
 			),
 		prices: (providerId) =>
 			stored(
@@ -621,7 +785,11 @@ export const make = Effect.gen(function* () {
 								lte(modelPrices.effectiveFrom, now),
 							),
 						)
-						.orderBy(modelPrices.modelId, desc(modelPrices.effectiveFrom))
+						.orderBy(
+							modelPrices.modelId,
+							desc(modelPrices.effectiveFrom),
+							desc(modelPrices.position),
+						)
 					return yield* Effect.forEach(rows, priceView)
 				}),
 			),
@@ -646,7 +814,6 @@ export const make = Effect.gen(function* () {
 							createdAt: now,
 						})
 						.returning()
-					yield* Cache.invalidate(prices, [providerId, input.model])
 					return yield* priceView(row!)
 				}),
 			),
@@ -672,6 +839,7 @@ export const make = Effect.gen(function* () {
 							modelPrices.providerId,
 							modelPrices.modelId,
 							desc(modelPrices.effectiveFrom),
+							desc(modelPrices.position),
 						)
 					return HashMap.fromIterable(
 						yield* Effect.forEach(rows, (row) =>
@@ -709,6 +877,8 @@ export const make = Effect.gen(function* () {
 						groupBy,
 						total: total ?? {
 							calls: 0,
+							pendingCalls: 0,
+							unknownCalls: 0,
 							inputUncached: 0,
 							inputCacheRead: 0,
 							inputCacheWrite: 0,

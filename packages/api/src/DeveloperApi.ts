@@ -1,36 +1,24 @@
+import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
+import { AppIndex, Execution, Developers } from "@openbot-build/domain"
 import { Schema } from "effect"
 import { Discovery, Indexing } from "@openbot-build/protocol"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { Check, Restriction } from "./AppIndexApi.ts"
+import { Check } from "./AppIndexApi.ts"
 
-export class DeveloperInputInvalid extends Schema.TaggedError<
-	DeveloperInputInvalid,
-	{ readonly brand: unique symbol }
->()("DeveloperInputInvalid", {
-	message: Schema.String,
-	keys: Schema.optionalKey(Schema.Array(Schema.String)),
-}) {}
-export class DeveloperNotFound extends Schema.TaggedError<
-	DeveloperNotFound,
-	{ readonly brand: unique symbol }
->()("DeveloperNotFound", {}) {}
-export class DeveloperForbidden extends Schema.TaggedError<
-	DeveloperForbidden,
-	{ readonly brand: unique symbol }
->()("DeveloperForbidden", {}) {}
-export class DeveloperConflict extends Schema.TaggedError<
-	DeveloperConflict,
-	{ readonly brand: unique symbol }
->()("DeveloperConflict", { reason: Schema.String }) {}
-export class DeveloperUnavailable extends Schema.TaggedError<
-	DeveloperUnavailable,
-	{ readonly brand: unique symbol }
->()("DeveloperUnavailable", {}) {}
-export class DeveloperRestricted extends Schema.TaggedError<
-	DeveloperRestricted,
-	{ readonly brand: unique symbol }
->()("DeveloperRestricted", { restriction: Restriction }) {}
+export const DeveloperInputInvalid = Developers.DeveloperInputInvalid
+export type DeveloperInputInvalid = Developers.DeveloperInputInvalid
+export const DeveloperNotFound = Developers.DeveloperNotFound
+export type DeveloperNotFound = Developers.DeveloperNotFound
+export const DeveloperForbidden = Developers.DeveloperForbidden
+export type DeveloperForbidden = Developers.DeveloperForbidden
+export const DeveloperConflict = Developers.DeveloperConflict
+export type DeveloperConflict = Developers.DeveloperConflict
+export const DeveloperUnavailable = Developers.DeveloperUnavailable
+export type DeveloperUnavailable = Developers.DeveloperUnavailable
+export const DeveloperRestricted = Developers.DeveloperRestricted
+export type DeveloperRestricted = Developers.DeveloperRestricted
 export const Errors = [
+	...ExecutionErrors,
 	DeveloperRestricted.pipe(HttpApiSchema.status(403)),
 	DeveloperInputInvalid.pipe(HttpApiSchema.status(400)),
 	DeveloperNotFound.pipe(HttpApiSchema.status(404)),
@@ -38,27 +26,10 @@ export const Errors = [
 	DeveloperConflict.pipe(HttpApiSchema.status(409)),
 	DeveloperUnavailable.pipe(HttpApiSchema.status(503)),
 ]
-export type Failure =
-	| DeveloperRestricted
-	| DeveloperInputInvalid
-	| DeveloperNotFound
-	| DeveloperForbidden
-	| DeveloperConflict
-	| DeveloperUnavailable
+export type Failure = Developers.Failure
 
-export const Issue = Schema.Struct({
-	code: Schema.String,
-	impacts: Schema.optionalKey(
-		Schema.Array(Schema.Literals(["discovery", "indexing", "connection"])),
-	),
-	stage: Schema.Literals(["publication", "catalog", "card", "indexing"]),
-	severity: Schema.Literals(["blocking", "suggestion"]),
-	source: Schema.String,
-	fieldPath: Schema.optionalKey(Schema.String),
-	message: Schema.String,
-	repair: Schema.String,
-})
-export type Issue = typeof Issue.Type
+export const Issue = Developers.Issue
+export type Issue = Developers.Issue
 export const StoredIndex = Schema.TaggedUnion({
 	Known: { check: Schema.NullOr(Check) },
 	Unknown: {},
@@ -69,198 +40,59 @@ export const InspectedApp = Schema.Struct({
 	stored: StoredIndex,
 })
 export const InspectionReport = Schema.Struct({
-	input: Schema.String,
-	checkedAt: Schema.Finite,
+	...Developers.ReportState.fields,
 	apps: Schema.Array(InspectedApp),
-	issues: Schema.Array(Issue),
 	stages: Schema.Array(Indexing.InspectionStage),
 })
 export type InspectionReport = typeof InspectionReport.Type
-export const ManagementScope = Schema.TaggedUnion({
-	PublisherHostname: { hostname: Schema.NonEmptyString },
-	AppCard: { cardUrl: Schema.NonEmptyString },
-})
-export type ManagementScope = typeof ManagementScope.Type
-export const Challenge = Schema.Struct({
-	id: Schema.String,
-	scope: ManagementScope,
-	token: Schema.String,
-	createdAt: Schema.Finite,
-	expiresAt: Schema.Finite,
-	status: Schema.Literals(["Pending", "Confirmed", "Revoked", "Expired"]),
-})
-export type Challenge = typeof Challenge.Type
-export const Proof = Schema.Struct({
-	id: Schema.String,
-	transition: Schema.Natural,
-	scope: ManagementScope,
-	status: Schema.Literals([
-		"Confirmed",
-		"Unconfirmed",
-		"Suspended",
-		"Relinquished",
-	]),
-	confirmedAt: Schema.NullOr(Schema.Finite),
-	validUntil: Schema.Finite,
-	nextVerificationAt: Schema.Finite,
-	reason: Schema.NullOr(Schema.String),
-})
-export type Proof = typeof Proof.Type
-export const MemberRole = Schema.Literals(["maintainer", "viewer"])
-export type MemberRole = typeof MemberRole.Type
-export const Grant = Schema.Struct({
-	proofId: Schema.String,
-	memberId: Schema.optionalKey(Schema.String),
-	scope: ManagementScope,
-	role: Schema.Literals(["administrator", ...MemberRole.literals]),
-})
-export type Grant = typeof Grant.Type
+export const ManagementScope = Developers.ManagementScope
+export type ManagementScope = Developers.ManagementScope
+export const Challenge = Developers.Challenge
+export type Challenge = Developers.Challenge
+export const Proof = Developers.Proof
+export type Proof = Developers.Proof
+export const MemberRole = Developers.MemberRole
+export type MemberRole = Developers.MemberRole
+export const Grant = Developers.Grant
+export type Grant = Developers.Grant
 export const ManagedApp = Schema.Struct({
-	cardUrl: Schema.String,
+	...Developers.ManagedAppState.fields,
 	candidate: Discovery.Candidate,
-	grants: Schema.Array(Grant),
 })
 export type ManagedApp = typeof ManagedApp.Type
-export const Invitation = Schema.Struct({
-	id: Schema.String,
-	proofId: Schema.String,
-	scope: ManagementScope,
-	role: MemberRole,
-	expiresAt: Schema.Finite,
-	status: Schema.Literals(["Pending", "Accepted", "Revoked"]),
-})
-export type Invitation = typeof Invitation.Type
-export const Member = Schema.Struct({
-	id: Schema.String,
-	proofId: Schema.String,
-	identity: Schema.Struct({
-		organizationId: Schema.String,
-		userId: Schema.String,
-	}),
-	role: MemberRole,
-})
-export type Member = typeof Member.Type
+export const Invitation = Developers.Invitation
+export type Invitation = Developers.Invitation
+export const Member = Developers.Member
+export type Member = Developers.Member
 export const SavedReport = Schema.Struct({
-	id: Schema.String,
-	cardUrl: Schema.String,
-	createdBy: Schema.String,
+	...Developers.SavedReportState.fields,
 	report: InspectionReport,
 })
 export type SavedReport = typeof SavedReport.Type
-export const PersonalReport = Schema.Struct({
-	id: Schema.String,
-	cardUrl: Schema.String,
-	checkedAt: Schema.Finite,
-})
-export type PersonalReport = typeof PersonalReport.Type
-export const ReportDiff = Schema.Struct({
-	introduced: Schema.Array(Issue),
-	resolved: Schema.Array(Issue),
-	persisting: Schema.Array(Issue),
-})
-export type ReportDiff = typeof ReportDiff.Type
-export const TestStage = Schema.Struct({
-	name: Schema.Literals([
-		"configuration",
-		"negotiation",
-		"tools",
-		"resources",
-		"resourceTemplates",
-		"prompts",
-	]),
-	status: Schema.Literals(["Passed", "Failed", "NotAdvertised", "NotChecked"]),
-	items: Schema.Array(Schema.JsonObject),
-	reason: Schema.NullOr(Schema.String),
-})
-export type TestStage = typeof TestStage.Type
-export const TestAuthorization = Schema.Struct({
-	flowId: Schema.String,
-	status: Schema.Literals([
-		"Waiting",
-		"Received",
-		"Exchanging",
-		"Succeeded",
-		"Failed",
-		"Cancelled",
-		"Expired",
-	]),
-	issuer: Schema.String,
-	resource: Schema.String,
-	scopes: Schema.Array(Schema.String),
-	expiresAt: Schema.Finite,
-	authorizationUrl: Schema.String,
-})
-export type TestAuthorization = typeof TestAuthorization.Type
+export const PersonalReport = Developers.PersonalReport
+export type PersonalReport = Developers.PersonalReport
+export const ReportDiff = Developers.ReportDiff
+export type ReportDiff = Developers.ReportDiff
+export const TestStage = Developers.TestStage
+export type TestStage = Developers.TestStage
+export const TestAuthorization = Developers.TestAuthorization
+export type TestAuthorization = Developers.TestAuthorization
 /** How far the cleanup of a connection test has come. */
-export const CleanupProgress = Schema.Literals([
-	"NotRequired",
-	"Pending",
-	"Complete",
-])
-export type CleanupProgress = typeof CleanupProgress.Type
+export const CleanupProgress = Developers.CleanupProgress
+export type CleanupProgress = Developers.CleanupProgress
 export const ConnectionTest = Schema.Struct({
-	id: Schema.String,
-	cardUrl: Schema.String,
+	...Developers.TestState.fields,
 	candidate: Discovery.Candidate,
-	remoteIndex: Schema.Natural,
-	endpoint: Schema.NullOr(Schema.String),
-	configurationKeys: Schema.Array(Schema.String),
-	issuers: Schema.Array(Schema.String),
-	requestedScopes: Schema.Array(Schema.String),
-	createdAt: Schema.Finite,
-	expiresAt: Schema.Finite,
-	status: Schema.Literals([
-		"Queued",
-		"Running",
-		"AwaitingConfiguration",
-		"AwaitingAuthorization",
-		"Succeeded",
-		"Failed",
-		"Cancelled",
-		"Interrupted",
-	]),
-	checkedAt: Schema.NullOr(Schema.Finite),
-	stages: Schema.Array(TestStage),
-	cleanup: CleanupProgress,
-	cleanupRemote: Schema.Literals([...CleanupProgress.literals, "LocalOnly"]),
-	cleanupLocal: CleanupProgress.pick(["Pending", "Complete"]),
-	authorization: Schema.NullOr(TestAuthorization),
-	reason: Schema.NullOr(Schema.String),
 })
 export type ConnectionTest = typeof ConnectionTest.Type
-/** The status of index work after OpenBot accepts an index request. */
-export const IndexJobStatus = Schema.Literals([
-	"Waiting",
-	"Verifying",
-	"Completed",
-])
-export type IndexJobStatus = typeof IndexJobStatus.Type
-export const IndexRequest = Schema.Struct({
-	id: Schema.String,
-	cardUrl: Schema.String,
-	generation: Schema.String,
-	acceptedAt: Schema.Finite,
-	status: Schema.Literals(["Accepted", ...IndexJobStatus.literals]),
-	check: Schema.NullOr(Check),
-	restriction: Schema.NullOr(Restriction),
-})
-export type IndexRequest = typeof IndexRequest.Type
-export const Subscription = Schema.Struct({
-	cardUrl: Schema.String,
-	enabled: Schema.Boolean,
-})
-export type Subscription = typeof Subscription.Type
-export const Notice = Schema.Struct({
-	id: Schema.String,
-	cardUrl: Schema.NullOr(Schema.String),
-	kind: Schema.Literals(["IssueAppeared", "IssueResolved", "AccessChanged"]),
-	issue: Schema.NullOr(Issue),
-	reason: Schema.NullOr(Schema.String),
-	reportId: Schema.NullOr(Schema.String),
-	createdAt: Schema.Finite,
-	readAt: Schema.NullOr(Schema.Finite),
-})
-export type Notice = typeof Notice.Type
+export const IndexJobStatus = AppIndex.JobStatus
+export type IndexJobStatus = AppIndex.JobStatus
+export const IndexRequest = Developers.IndexRequest
+export type IndexRequest = Developers.IndexRequest
+export const Subscription = Developers.Subscription
+export type Subscription = Developers.Subscription
+export const Notice = Developers.Notice
+export type Notice = Developers.Notice
 const Id = { id: Schema.String }
 const Card = { cardUrl: Schema.String }
 const Page = { before: Schema.optionalKey(Schema.String) }
@@ -301,9 +133,12 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.post("requestIndexing", "/v1/developer/indexing", {
-			payload: Schema.Struct({ cardUrl: Schema.String }),
+			payload: Schema.Struct({
+				cardUrl: Schema.String,
+				commandKey: Execution.CommandKey,
+			}),
 			success: IndexRequest,
-			error: Errors,
+			error: [...Errors, ...ExecutionErrors],
 		}),
 	)
 	.add(
@@ -359,28 +194,32 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	.add(
 		HttpApiEndpoint.post("runTest", "/v1/developer/tests/:id/run", {
 			params: Id,
-			success: ConnectionTest,
+			payload: Schema.Struct({ commandKey: Execution.CommandKey }),
+			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.post("cancelTest", "/v1/developer/tests/:id/cancel", {
 			params: Id,
-			success: ConnectionTest,
+			payload: Schema.Struct({ commandKey: Execution.CommandKey }),
+			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.post("cleanupTest", "/v1/developer/tests/:id/cleanup", {
 			params: Id,
-			success: ConnectionTest,
+			payload: Schema.Struct({ commandKey: Execution.CommandKey }),
+			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.delete("deleteTest", "/v1/developer/tests/:id", {
 			params: Id,
-			success: Schema.Void,
+			query: Schema.Struct({ commandKey: Execution.CommandKey }),
+			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
 		}),
 	)
@@ -391,10 +230,11 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 			{
 				params: Id,
 				payload: Schema.Struct({
+					commandKey: Execution.CommandKey,
 					issuer: Schema.optionalKey(Schema.String),
 					scopes: Schema.Array(Schema.String),
 				}),
-				success: ConnectionTest,
+				success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 				error: Errors,
 			},
 		),
@@ -403,7 +243,12 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 		HttpApiEndpoint.post(
 			"completeTestAuthorization",
 			"/v1/developer/tests/:id/authorization/complete",
-			{ params: Id, success: ConnectionTest, error: Errors },
+			{
+				params: Id,
+				payload: Schema.Struct({ commandKey: Execution.CommandKey }),
+				success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
+				error: Errors,
+			},
 		),
 	)
 	.add(
@@ -433,7 +278,8 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	.add(
 		HttpApiEndpoint.post("verifyClaim", "/v1/developer/claims/:id/verify", {
 			params: Id,
-			success: Proof,
+			payload: Schema.Struct({ commandKey: Execution.CommandKey }),
+			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
 		}),
 	)
@@ -445,9 +291,17 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 		}),
 	)
 	.add(
-		HttpApiEndpoint.post("verifyProof", "/v1/developer/proofs/:id/verify", {
+		HttpApiEndpoint.get("getProof", "/v1/developer/proofs/:id", {
 			params: Id,
 			success: Proof,
+			error: Errors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("verifyProof", "/v1/developer/proofs/:id/verify", {
+			params: Id,
+			payload: Schema.Struct({ commandKey: Execution.CommandKey }),
+			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
 		}),
 	)

@@ -1,0 +1,58 @@
+---
+prev: false
+title: "Entwicklerhandbuch"
+description: "Entwicklerhandbuch"
+---
+
+Dieses Handbuch ist für Entwickler, deren Software OpenBot nutzt oder erweitert.
+API-Zugriff gibt keine zusätzlichen Rechte. Jede Anfrage handelt weiterhin für
+ihren Aufrufer.
+
+## Einen Client verbinden
+
+Du brauchst eine OpenBot-Adresse und ein Konto in einer Organisation. Nutze den
+[lokalen API-Schnellstart](/de/docs/developers/quickstart), wenn du einen
+Testserver brauchst.
+
+1. Baue
+   [Anmeldung, Organisationswahl und Tokens](/de/docs/developers/authentication)
+   ein.
+2. Nutze den [TypeScript-Client](/de/docs/client) oder die
+   [HTTP-Referenz](/docs/api/).
+3. Sende [Bot-Nachrichten](/de/docs/developers/bots), lies
+   [Chat-Ergebnisse und Streams](/de/docs/developers/chats) und bearbeite
+   [Anfragen](/de/docs/developers/requests).
+4. Ergänze [Dateien](/de/docs/developers/files),
+   [Apps](/de/docs/developers/apps) oder
+   [Live-Sitzungen](/de/docs/developers/live) nach Bedarf.
+
+Die API-Anleitungen in der Seitenleiste beschreiben Felder, Antwortzustände und
+Fehler. Der Client stellt seine eigenen Ansichten und Rückkehrpfade bereit.
+
+## Eine App veröffentlichen
+
+Du brauchst die Kontrolle über den App-Dienst und seine öffentliche
+HTTPS-Adresse.
+
+1. Veröffentliche die Dokumente nach dem [App Protocol](/de/docs/protocol).
+2. Prüfe sie mit dem [Protokoll-Testdienst](/de/docs/protocol-test).
+3. Nutze die [Werkzeuge für Herausgeber](/de/docs/developer-tools), um Kontrolle
+   nachzuweisen, Verbindungen zu testen und Aufnahme in den Index anzufragen.
+4. Lies den [App-Index-Vertrag](/de/docs/developers/app-index) zu Suche und
+   Rückzug.
+
+## An OpenBot arbeiten
+
+1. Lies [Mitwirken](/de/docs/contributing) für Einrichtung, Prüfungen und
+   Projektregeln.
+2. Lies die [Paketgrenzen](/de/docs/packages) und den
+   [Ausführungsentwurf](/de/docs/architecture).
+3. Nutze [Aus Code starten](/de/docs/server) für den Serveraufbau. Ergänze dort
+   [Model-Backends](/de/docs/developers/model-backends),
+   [Live-Backends](/de/docs/developers/live-backend) oder
+   [Logger](/de/docs/developers/logging).
+4. Folge bei Projektveröffentlichungen den
+   [Schritten zur Veröffentlichung und Prüfung](/de/docs/developers/publishing).
+
+Installation und Geheimnisse im Produktivbetrieb gehören ins
+[Administrationshandbuch](/de/docs/admin).

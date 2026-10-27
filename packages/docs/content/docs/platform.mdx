@@ -5,6 +5,10 @@ description:
   model providers.
 ---
 
+For platform operators. These tasks affect the whole deployment. Have server
+access or platform admin rights as the task requires. Start with the
+[administrator manual](/docs/admin).
+
 The platform is the whole OpenBot deployment. One platform has many
 organizations. Platform admins run the platform. This page shows how to set it
 up and how to manage it with `/v1/platform`.
@@ -69,21 +73,21 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-| Flag                     | Required          | What it does                                                                                                   |
-| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`        | Yes               | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.          |
-| `--oidc-issuer`          | With the ID       | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                             |
-| `--oidc-client-id`       | With issuer       | The client ID at that provider.                                                                                |
-| `--oidc-client-secret`   | No                | The client secret. Leave it out for a public client that uses PKCE.                                            |
-| `--admin-email`          | At least one      | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people. |
-| `--s3-endpoint`          | With the bucket   | The address of the object storage for [files](/docs/files), such as `https://s3.us-east-1.amazonaws.com`.      |
-| `--s3-public-endpoint`   | No                | The address where clients put files with a direct upload, when it is not `--s3-endpoint`.                      |
-| `--s3-region`            | No                | The region of the storage. The default is `us-east-1`.                                                         |
-| `--s3-bucket`            | With the endpoint | The bucket for files.                                                                                          |
-| `--s3-access-key-id`     | With the endpoint | The access key ID for the storage.                                                                             |
-| `--s3-secret-access-key` | With the endpoint | The secret key for the storage.                                                                                |
-| `--s3-path-style`        | No                | Put the bucket in the path. MinIO and RustFS need it.                                                          |
-| `--force`                | No                | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.         |
+| Flag                     | Required          | What it does                                                                                                         |
+| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `--public-origin`        | Yes               | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.                |
+| `--oidc-issuer`          | With the ID       | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                                   |
+| `--oidc-client-id`       | With issuer       | The client ID at that provider.                                                                                      |
+| `--oidc-client-secret`   | No                | The client secret. Leave it out for a public client that uses PKCE.                                                  |
+| `--admin-email`          | At least one      | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people.       |
+| `--s3-endpoint`          | With the bucket   | The address of the object storage for [files](/docs/developers/files), such as `https://s3.us-east-1.amazonaws.com`. |
+| `--s3-public-endpoint`   | No                | The address where clients put files with a direct upload, when it is not `--s3-endpoint`.                            |
+| `--s3-region`            | No                | The region of the storage. The default is `us-east-1`.                                                               |
+| `--s3-bucket`            | With the endpoint | The bucket for files.                                                                                                |
+| `--s3-access-key-id`     | With the endpoint | The access key ID for the storage.                                                                                   |
+| `--s3-secret-access-key` | With the endpoint | The secret key for the storage.                                                                                      |
+| `--s3-path-style`        | No                | Put the bucket in the path. MinIO and RustFS need it.                                                                |
+| `--force`                | No                | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.               |
 
 Set `--oidc-issuer` and `--oidc-client-id` together, or leave both out. Leave
 both out when people sign in only through the [SSO connections](/docs/sso) of
@@ -130,10 +134,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	"identityProvider": {
 		"issuer": "https://id.example.com",
 		"clientId": "openbot",
-		"clientSecret": { "set": true, "hint": "…k9Qz" }
+		"clientSecret": {
+			"set": true,
+			"hint": "…k9Qz"
+		}
 	},
 	"organizationCreation": "anyone",
-	"ceiling": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
+	"ceiling": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[]}",
 	"appRestrictions": [],
 	"codeMode": {
 		"enabled": false,
@@ -141,7 +148,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"memoryMb": 64,
 		"outputBytes": 65536
 	},
-	"rateLimit": { "requestsPerMinute": null },
+	"rateLimit": {
+		"requestsPerMinute": null
+	},
 	"tokenRate": {
 		"organization": null,
 		"member": null,
@@ -150,7 +159,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	},
 	"files": {
 		"storage": null,
-		"uploads": { "server": true, "direct": true },
+		"uploads": {
+			"server": true,
+			"direct": true
+		},
 		"maxBytes": 20971520,
 		"quotaBytes": null,
 		"mediaTypes": [
@@ -174,11 +186,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `identityProvider`     | The platform OpenID Connect provider, or `null` when people sign in only through SSO connections.                       |
 | `organizationCreation` | Who can create an organization: `anyone` or `platform_admins`. See [Organization creation](#organization-creation).     |
 | `ceiling`              | A policy with deny rules for every organization. See [Policy ceiling](#policy-ceiling).                                 |
-| `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/app-index#host-restrictions).                                      |
-| `codeMode`             | Whether Bots can use Code Mode, and its limits. See [Code Mode](/docs/code-mode#turn-on-code-mode).                     |
+| `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/developers/app-index#host-restrictions).                           |
+| `codeMode`             | Whether Bots can use Code Mode, and its limits. See [Code Mode](/docs/developers/code-mode#turn-on-code-mode).          |
 | `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/docs/usage#rate-limit).                     |
 | `tokenRate`            | The highest token rates of each scope. Organizations can only set lower ones. See [Token rate](/docs/usage#token-rate). |
-| `files`                | The object storage and the limits for [files](/docs/files#set-up-storage).                                              |
+| `files`                | The object storage and the limits for [files](/docs/developers/files#set-up-storage).                                   |
 | `updatedAt`            | When the settings last changed.                                                                                         |
 
 ### Secrets never come back
@@ -239,18 +251,7 @@ This ceiling stops every organization from adding its own model providers:
 ```json
 {
 	"expectedVersion": 4,
-	"ceiling": {
-		"_tag": "Rules",
-		"algorithm": "denyOverrides",
-		"rules": [
-			{
-				"_tag": "Deny",
-				"actions": ["write"],
-				"resources": ["ModelProvider"],
-				"reason": "The platform gives the model providers."
-			}
-		]
-	}
+	"ceiling": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Deny\",\"actions\":[\"write\"],\"resources\":[\"ModelProvider\"],\"reason\":\"The platform gives the model providers.\"}]}"
 }
 ```
 
@@ -374,7 +375,7 @@ create it:
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Platform admin","expiresInDays":30,"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","write"],"resources":["Platform"]}]}}' \
+  -d '{"name":"Platform admin","expiresInDays":30,"policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\",\"write\"],\"resources\":[\"Platform\"]}]}"}' \
   https://api.example.com/v1/user/tokens
 ```
 

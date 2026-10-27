@@ -1,0 +1,127 @@
+---
+title: End-to-end checks
+description: Run the API checks, real model checks, and paper experiments.
+---
+
+These checks use the public API, built commands, real local servers, and
+short-lived PostgreSQL databases. An end-to-end check follows a task through
+those parts and checks its result. Some outside services use fixed test replies.
+The Cloudflare check uses a real model service.
+
+## Run the project checks
+
+Run commands from the project root. The build must finish before tests start. Do
+not build in another shell while tests run: a build replaces `dist` files that
+tests and child processes load.
+
+```sh
+devenv shell -- pnpm build
+devenv shell -- pnpm typecheck
+devenv shell -- pnpm test:e2e
+devenv shell -- pnpm -r test
+```
+
+All end-to-end checks live in `packages/e2e`, under the package name
+`@openbot-build/e2e`. The root command `pnpm test:e2e` runs that package's type
+check and tests. To run one task group after a build, use:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/read-docs
+```
+
+Folders in `packages/e2e/test` name user tasks. `packages/e2e/scenarios.json`
+records the checks and gaps for each task. It separates normal, edge, and
+extreme cases. A normal case checks the usual result. An edge case checks an
+input or state near a rule's limit. An extreme case checks a large bounded set,
+repeated work, loss, or recovery. These names do not mean that all possible
+inputs or failures have been tested.
+
+Package test commands also check test types. `pnpm test` runs all test files in
+one Vitest run, but does not build packages or check test types. Package tests
+outside `e2e` check smaller units and parts of the product. Tests make and
+remove their own local databases. They do not use a production database.
+
+## API scope
+
+`packages/e2e/test/api-access/ApiE2E.test.ts` reads the HTTP contract and sends
+real requests to its protected routes. It checks each protected route without
+sign-in. For each protected write, it checks a session cookie with both a
+missing Origin and a wrong Origin. This is an access check. It does not prove
+that every route completes every valid task. Route and request counts come from
+the current contract. The JSON report records the exact counts for each run.
+Public and hook routes are named in a fixed list, so an accidental removal of an
+authentication rule does not silently reduce coverage.
+
+The end-to-end package groups checks by user task:
+
+| Task group                                 | Folder in `packages/e2e/test`                 |
+| ------------------------------------------ | --------------------------------------------- |
+| Sign in and start the server               | `sign-in`, `start-server`                     |
+| Read and change organization settings      | `organizations`, `admin-settings`             |
+| Chat, approve tool calls, and recover work | `chat`, `approve-tool-calls`, `chat-recovery` |
+| Use and share bots                         | `bot-work`                                    |
+| Connect apps and use a protocol service    | `connect-apps`, `protocol-service`            |
+| Read and write files                       | `files`                                       |
+| Connect channels and set triggers          | `connect-channels`, `triggers`                |
+| Run code and connect computers             | `run-code`, `connect-computers`               |
+| Use live sessions and model services       | `live-chat`, `use-models`                     |
+| Run commands and read docs                 | `cli`, `read-docs`                            |
+
+The docs checks serve the built site on a local HTTP port. They check all 35
+home languages, three manual languages, the API reference, search files, the
+icon, every built file, local links, and decoded anchors. API pages have only
+English language links. External links are not fetched. These are static site
+checks; they do not run a browser or test interactive search and menus.
+
+The CLI checks start built commands. The computer checks include a real
+terminal. Protocol checks use independent clients and local servers. Unit and
+component checks stay in the `core`, `domain`, `api`, `client`, `openbot`,
+`cli`, `computer`, `protocol`, and `protocol-test` packages.
+
+## Real model check
+
+The real model check runs only when `OPENBOT_E2E_LIVE=true` is set. The default
+run skips it. It needs a Cloudflare account and API token with Workers AI
+access. It makes paid service calls when the account's free allowance is used
+up. Keep credentials outside tracked files.
+
+The test makes a session with `Server.layerFixed`, then starts the built
+production entry to call the real model. Session setup must leave no index work
+or failures. It checks cookie and API-token calls, streamed replies, saved
+history, repeated commands, usage, and token revocation. It makes no claim about
+model quality from these small tasks.
+
+Set these variables in a local shell or secret store. Do not put the key in a
+command argument or a tracked file.
+
+| Variable                          | Value                                                                        |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `OPENBOT_E2E_LIVE`                | `true` to run the real service check                                         |
+| `OPENBOT_E2E_CLOUDFLARE_ENDPOINT` | The account Workers AI OpenAI-compatible base URL                            |
+| `OPENBOT_E2E_CLOUDFLARE_KEY`      | The API token                                                                |
+| `OPENBOT_E2E_CLOUDFLARE_MODEL`    | Optional model ID; the default is `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| `OPENBOT_E2E_EVIDENCE`            | Optional absolute path for the result JSON                                   |
+
+After the build, run:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/use-models/Cloudflare.test.ts
+```
+
+Without `OPENBOT_E2E_LIVE=true`, this one test is skipped. A skipped
+real-service test is not a successful service check.
+
+## Limits
+
+A full test run covers the named inputs and paths. It cannot cover all possible
+inputs, network faults, or outside service states. A generated access check is
+not full task coverage of its endpoint. A small model run is not a production
+load test.
+
+Real third-party channel delivery, SSO providers, cloud computer providers,
+object stores, and voice playback need their own service accounts and test
+resources. Fixed test servers check the local contract for these paths. They do
+not establish that a live third-party deployment is working.
+
+See [Contributing](/docs/contributing) for the development tools and
+[the API reference](/docs/api) for the HTTP contract.

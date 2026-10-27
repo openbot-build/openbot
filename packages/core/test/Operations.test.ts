@@ -21,6 +21,7 @@ import {
 	type Item,
 	Operation,
 	Operations,
+	Plugin,
 	Turn,
 } from "@openbot-build/core"
 import { ChatTest, settled } from "./ChatTest.ts"
@@ -220,6 +221,80 @@ it.effect(
 			)
 		}),
 )
+
+for (const source of ["plugin", "registration"] as const) {
+	for (const budget of ["0 millis", "50 millis"] as const) {
+		it.effect(
+			`a background tool holds its ${source} resources with a ${budget} budget`,
+			() =>
+				Effect.gen(function* () {
+					const started = yield* Deferred.make<void>()
+					const gate = yield* Deferred.make<void>()
+					const released = yield* Deferred.make<void>()
+					const builds = yield* Ref.make(0)
+					const closes = yield* Ref.make(0)
+					const toolkit = Toolkit.make(Slow)
+					const registerTools = Effect.gen(function* () {
+						const build = yield* Ref.updateAndGet(builds, (n) => n + 1)
+						const closed = yield* Effect.acquireRelease(
+							Ref.make(false),
+							(closed) =>
+								Ref.set(closed, true).pipe(
+									Effect.andThen(Ref.update(closes, (n) => n + 1)),
+									Effect.andThen(
+										build === 1
+											? Deferred.succeed(released, undefined)
+											: Effect.void,
+									),
+								),
+						)
+						const handlers = yield* toolkit.toHandlers({
+							Slow: () =>
+								Effect.gen(function* () {
+									yield* Deferred.succeed(started, undefined)
+									yield* Deferred.await(gate)
+									assert.isFalse(yield* Ref.get(closed))
+									return "done"
+								}),
+						})
+						return { tools: toolkit.tools, handlers }
+					})
+					const plugin = Plugin.make({
+						id: Plugin.Id.make("held-tool-resources"),
+					})<typeof toolkit.tools>(() => registerTools)
+
+					yield* Effect.gen(function* () {
+						const service = yield* Operations.Operations
+						const { runtime, chat } = yield* ChatTest(
+							source === "plugin" ? { hostPlugin: plugin } : { registerTools },
+							{ operations: service },
+						)
+						yield* executePast(
+							runtime.execute({ chat, input: "go" }),
+							started,
+							budget,
+						)
+						const [running] = yield* service.list(chat)
+						assert.ok(running)
+						assert.equal(running.status._tag, "Running")
+						assert.equal(yield* Ref.get(builds), 1)
+						assert.equal(yield* Ref.get(closes), 0)
+						yield* Deferred.succeed(gate, undefined)
+						const [ended] = yield* service.wait(chat, [running.id], "5 seconds")
+						assert.deepStrictEqual(
+							ended?.status,
+							Operation.Status.Completed({ result: "done" }),
+						)
+						yield* Deferred.await(released)
+					}).pipe(
+						Effect.provide(
+							Layer.mergeAll(model("Slow"), operations({ budget })),
+						),
+					)
+				}),
+		)
+	}
+}
 
 it.effect("a foreground tool keeps its Turn until it ends", () =>
 	Effect.gen(function* () {
@@ -568,51 +643,6 @@ it.effect("an Operation of another Chat is not found", () =>
 )
 
 it.effect(
-	"cancelChat asks other servers to stop the running Operations of the Chat",
-	() =>
-		Effect.gen(function* () {
-			const base = yield* Operation.memoryStore
-			const requested = yield* Ref.make<ReadonlyArray<Operation.Id>>([])
-			const store: Operation.Store = {
-				...base,
-				requestCancel: (id) => Ref.update(requested, Arr.append(id)),
-			}
-			const service = yield* Operations.make({ store })
-			const record = (
-				id: string,
-				chat: string,
-				status: Operation.Status,
-			): Operation.Record => ({
-				id: Operation.Id.make(id),
-				chat: Chat.Id.make(chat),
-				turn: Turn.Id.make("turn"),
-				callId: "call-1",
-				tool: "Slow",
-				kind: "tool",
-				status,
-				startedAt: 0,
-			})
-			yield* Effect.forEach(
-				[
-					record("running", "one", Operation.Status.Running()),
-					record(
-						"ended",
-						"one",
-						Operation.Status.Completed({ result: "done" }),
-					),
-					record("other", "two", Operation.Status.Running()),
-				],
-				store.insert,
-				{ discard: true },
-			)
-			yield* service.cancelChat(Chat.Id.make("one"))
-			assert.deepStrictEqual(yield* Ref.get(requested), [
-				Operation.Id.make("running"),
-			])
-		}).pipe(Effect.scoped, Effect.provide(crypto)),
-)
-
-it.effect(
 	"a background call that ends while its Chat is cancelled still tells the Chat once",
 	() =>
 		Effect.gen(function* () {
@@ -728,16 +758,20 @@ it.effect("store failures keep their meaning and cause", () =>
 		})
 		const chat = Chat.Id.make("failed-store"),
 			id = Operation.Id.make("failed-operation")
-		for (const read of [
+		const reads: ReadonlyArray<
+			Effect.Effect<unknown, Operation.NotFound | Operation.StoreError>
+		> = [
 			operations.get(chat, id),
 			operations.list(chat),
 			operations.wait(chat, [id], "1 second"),
 			operations.cancel(chat, id),
-			operations.cancelChat(chat),
-		]) {
-			const error = yield* read.pipe(Effect.flip)
+		]
+		for (const read of reads) {
+			const error = yield* read.pipe(Effect.asVoid, Effect.flip)
 			assert.strictEqual(error, failure)
 		}
+		// Stopping local work does not need a read from the store.
+		yield* operations.cancelChat(chat)
 	}).pipe(Effect.provide(crypto)),
 )
 
@@ -854,7 +888,7 @@ it.effect("a failed end write still gives the result to the Chat", () =>
 	}).pipe(Effect.provide(crypto)),
 )
 
-it.effect("a host lease stays held through the end write and notice", () =>
+it.effect("call resources stay open through the end write and notice", () =>
 	Effect.gen(function* () {
 		const store = yield* Operation.memoryStore
 		const count = yield* Ref.make(0)
@@ -874,13 +908,7 @@ it.effect("a host lease stays held through the end write and notice", () =>
 						Effect.andThen(store.finish(...args)),
 					),
 			},
-			whileRunning: Effect.acquireRelease(
-				Ref.update(count, (n) => n + 1),
-				() =>
-					Ref.update(count, (n) => n - 1).pipe(
-						Effect.andThen(Deferred.succeed(closed, undefined)),
-					),
-			),
+
 			settings: () =>
 				Effect.succeed({
 					budget: "10 millis",
@@ -891,6 +919,13 @@ it.effect("a host lease stays held through the end write and notice", () =>
 		const fiber = yield* Effect.forkChild(
 			operations.run(
 				{
+					acquire: Effect.acquireRelease(
+						Ref.update(count, (n) => n + 1),
+						() =>
+							Ref.update(count, (n) => n - 1).pipe(
+								Effect.andThen(Deferred.succeed(closed, undefined)),
+							),
+					),
 					chat: Chat.Id.make("lease"),
 					turn: Turn.Id.make("turn"),
 					callId: "call",

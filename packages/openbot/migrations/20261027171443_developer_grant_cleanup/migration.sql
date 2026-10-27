@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_developer_tests" ADD COLUMN "grant_cleanup_execution_id" text;

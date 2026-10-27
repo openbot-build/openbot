@@ -3,6 +3,8 @@ title: 从代码中运行
 description: 在你自己的 TypeScript 程序中启动 OpenBot。
 ---
 
+面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+
 `openbot`
 程序能满足大多数需要。如果你需要更多，可以在自己的程序中启动 OpenBot。这样你就能加入自己的模型、工具、路由和 App
 Index 来源。
@@ -28,29 +30,29 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 是同一个程序的 Effect 形式，供你自己运行。请把 `NodeServices.layer` 交给它。
 
 `EnvironmentConfiguration.load`
-给出同样的设置：`host`、`port`、`databaseUrl`、`secretKeys` 和
-`outboundAllow`。你也可以在代码中直接写出这些值。
+给出同样的设置：`host`、`port`、`databaseUrl`、`secretKeys`、`clusterSecret`、`clusterHost`
+和 `outboundAllow`。你也可以在代码中直接写出这些值。
 
 这个程序仍然需要一个平台。在用户使用之前，先运行一次设置程序。请看[平台](/zh-cn/docs/platform#设置)。
 
 ## 包导出了什么
 
-| 导出                                                     | 是什么                                                                            |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `Server.layerLive(options)`                              | 带有自己的 Node.js HTTP 服务器和真实外部服务的 OpenBot。`openbot-server` 运行它。 |
-| `Server.layer(options)`                                  | 同样的服务器，但不带它需要的服务。请看[OpenBot 需要的服务](#openbot-需要的服务)。 |
-| `Server.layerFixed(options)`                             | 和 `Server.layer` 一样，但它先把一份登录配置写入平台设置。用于测试和开发。        |
-| `Server.layerApp(options)`                               | OpenBot 的路由和服务，用于你已有的 HTTP 服务器。                                  |
-| `Server.layerApi`                                        | 只有 HTTP 路由。                                                                  |
-| `Launch.main(make)`、`Launch.server(make)`               | 像 `openbot-server` 一样运行 `make` 给出的 Layer。                                |
-| `OpenBot.layerShared(options)`                           | 与实例同生命周期的服务：数据库连接池、密钥和共享设置。                            |
-| `OpenBot.layer(options)`                                 | 路由背后的服务：登录、令牌、权限、存储、Chat 和 App。                             |
-| `OpenBot.layerOutside`                                   | 来自 OpenBot 外部的真实服务，例如 App 的网络。                                    |
-| `OpenBot.layerLive(options)`                             | 带有真实外部服务、没有宿主工具的 `OpenBot.layer`。                                |
-| `HostTools`                                              | 你的程序交给每个 Chat 的工具。请看[添加工具](#添加工具)。                         |
-| `DatabasePostgres`                                       | 数据库 Layer 和 `migrate` 程序。                                                  |
-| `EnvironmentConfiguration`                               | 从环境变量读取实例设置。                                                          |
-| `Auth`、`Chats`、`AppHost`、`AppPlugin`、`Configuration` | 用于高级配置的服务类型。                                                          |
+| 导出                                                    | 是什么                                                                            |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `Server.layerLive(options)`                             | 带有自己的 Node.js HTTP 服务器和真实外部服务的 OpenBot。`openbot-server` 运行它。 |
+| `Server.layer(options)`                                 | 同样的服务器，但不带它需要的服务。请看[OpenBot 需要的服务](#openbot-需要的服务)。 |
+| `Server.layerFixed(options)`                            | 和 `Server.layer` 一样，但它先把一份登录配置写入平台设置。用于测试和开发。        |
+| `Server.layerApp(options)`                              | OpenBot 的路由和服务，用于你已有的 HTTP 服务器。                                  |
+| `Server.layerApi`                                       | 只有 HTTP 路由。                                                                  |
+| `Launch.main(make)`、`Launch.server(make)`              | 像 `openbot-server` 一样运行 `make` 给出的 Layer。                                |
+| `OpenBot.layerShared(options)`                          | 与实例同生命周期的服务：数据库连接池、密钥和共享设置。                            |
+| `OpenBot.layer(options)`                                | 路由背后的服务：登录、令牌、权限、存储、Chat 和 App。                             |
+| `OpenBot.layerOutside`                                  | 来自 OpenBot 外部的真实服务，例如 App 的网络。                                    |
+| `OpenBot.layerLive(options)`                            | 带有真实外部服务、没有宿主工具的 `OpenBot.layer`。                                |
+| `HostTools`                                             | 你的程序交给每个 Chat 的工具。请看[添加工具](#添加工具)。                         |
+| `DatabasePostgres`                                      | 数据库 Layer 和 `migrate` 程序。                                                  |
+| `EnvironmentConfiguration`                              | 从环境变量读取实例设置。                                                          |
+| `Auth`、`Chats`、`AppHost`、`AppTools`、`Configuration` | 用于高级配置的服务类型。                                                          |
 
 子路径 `@openbot-build/openbot/Development` 导出开发服务器。见
 [运行开发服务器](#运行开发服务器)。
@@ -64,12 +66,14 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 
 ### 实例选项
 
-| 选项          | 类型               | 是什么                                                     |
-| ------------- | ------------------ | ---------------------------------------------------------- |
-| `host`        | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                       |
-| `port`        | `number`           | 必需。监听的端口，例如 `3000`。                            |
-| `databaseUrl` | `Redacted<string>` | 必需。PostgreSQL URL。                                     |
-| `secretKeys`  | `Redacted<string>` | 密钥列表。请看[密钥](/zh-cn/docs/configuration#机密密钥)。 |
+| 选项            | 类型               | 是什么                                                     |
+| --------------- | ------------------ | ---------------------------------------------------------- |
+| `host`          | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                       |
+| `port`          | `number`           | 必需。监听的端口，例如 `3000`。                            |
+| `databaseUrl`   | `Redacted<string>` | 必需。PostgreSQL URL。                                     |
+| `secretKeys`    | `Redacted<string>` | 密钥列表。请看[密钥](/zh-cn/docs/configuration#机密密钥)。 |
+| `clusterSecret` | `Redacted<string>` | 必填。至少 32 个字符。所有节点使用相同机密认证私有 RPC。   |
+| `clusterHost`   | `string`           | 可选。其他节点能访问的地址。默认使用绑定的 HTTP 地址。     |
 
 ### 登录
 
@@ -84,13 +88,13 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 
 ### 应用选项
 
-| 选项            | 作用                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------ |
-| `builtinModels` | 在代码中给出、每个组织都能使用的模型。请看[模型](/zh-cn/docs/models#内置模型)。                              |
-| `defaultModel`  | 当新 Chat 的 Bot 没有指定模型时，这个 Chat 使用的模型。它是 `builtinModels` 中的一个。只有模拟的平台设置它。 |
-| `routes`        | 一个带有你自己 HTTP 路由的 Layer。                                                                           |
-| `indexSources`  | App Index 搜索的更多来源，与 OpenBot Index 并列。                                                            |
-| `indexWork`     | App Index 后台任务的时间设置：`{ intervalMs, retryMs }`。                                                    |
+| 选项                         | 作用                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `builtinModels`              | 在代码中给出、每个组织都能使用的模型。请看[模型](/zh-cn/docs/models#内置模型)。                              |
+| `builtinModels.defaultModel` | 当新 Chat 的 Bot 没有指定模型时，这个 Chat 使用的模型。它是 `builtinModels` 中的一个。只有模拟的平台设置它。 |
+| `routes`                     | 一个带有你自己 HTTP 路由的 Layer。                                                                           |
+| `indexSources`               | App Index 搜索的更多来源，与 OpenBot Index 并列。                                                            |
+| `indexWork`                  | App Index 后台任务的时间设置：`{ intervalMs, retryMs }`。                                                    |
 
 有些值以前是选项。现在它们是数据库中的设置，所以每个实例都共享它们：
 
@@ -142,10 +146,10 @@ Launch.main((settings) =>
 ## Chats
 
 模型来自数据库中的模型提供方和 `builtinModels`。请看[模型](/zh-cn/docs/models)。
-[Bot 记忆](/zh-cn/docs/memory)遵循[组织设置](/zh-cn/docs/organization#设置)中的
+[Bot 记忆](/zh-cn/docs/developers/memory)遵循[组织设置](/zh-cn/docs/organization#设置)中的
 `botMemory`。
 
-在每个服务器进程中，每个成员有一个 Chat 运行时。运行时保存这个成员正在运行的 Turn，以及其 Chat 的后台工具调用。服务器在成员的第一个请求时创建它。如果 10 分钟内没有请求、没有运行中的 Turn，也没有后台工具调用，服务器就关闭它，释放内存。下一个请求会从数据库重新创建它，所以不会丢失任何东西。创建一个成员的运行时，不会让另一个成员等待。
+服务器持有应用级服务和活动执行。每个 Turn 在自己的作用域中创建模型和工具。保存的执行身份包含成员、原始 token、Bot 和委派限制。请求不再维持成员运行时。每个 Chat 同时只允许一个 Turn 推进。命令、检查点、事件和结果保存在 PostgreSQL 中，可跨节点和重启继续使用。关闭 HTTP 事件流只关闭观察；取消使用独立命令。
 
 ### 添加工具
 
@@ -191,7 +195,7 @@ Launch.main(server)
 如果每次调用都需要一个决定，就在 `Tool.make` 中加上
 `needsApproval: true`。这样 OpenBot 会为它检查能力
 `tools.call`。当这次调用需要决策者时，Bot 会得到一个待定的结果，调用会在之后被允许时运行。请看
-[Request](/zh-cn/docs/requests)。
+[Request](/zh-cn/docs/developers/requests)。
 
 ---
 
@@ -229,25 +233,15 @@ Server.layerLive({ ...settings, routes })
 
 ## 迁移数据库
 
-`DatabasePostgres.migrate` 应用迁移。`OpenBot.layerShared`
-只检查表是否存在，不存在就失败。在启动服务器之前，用单独的程序运行迁移：
+`DatabasePostgres.migrate`
+准备表结构和初始数据门禁。它只能将空数据库标记为就绪。完整升级使用维护命令，需要
+`OPENBOT_DATABASE_URL` 和
+`OPENBOT_SECRET_KEYS`。运行前停止所有实例。`OpenBot.layerShared`
+在启动服务前检查表结构和已完成的数据版本。它在服务器的整个生命周期内持有共享锁。备份和恢复步骤见
+[部署](/zh-cn/docs/deploy#准备数据库)。
 
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { DatabasePostgres } from "@openbot-build/openbot"
-import { Config, Effect, Layer } from "effect"
-
-NodeRuntime.runMain(
-	DatabasePostgres.migrate.pipe(
-		Effect.provide(
-			Layer.unwrap(
-				Effect.map(Config.Redacted("OPENBOT_DATABASE_URL"), (databaseUrl) =>
-					DatabasePostgres.layer({ databaseUrl }),
-				),
-			).pipe(Layer.provide(NodeServices.layer)),
-		),
-	),
-)
+```sh
+pnpm --filter @openbot-build/openbot migrate
 ```
 
 ## 运行开发服务器

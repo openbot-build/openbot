@@ -3,6 +3,9 @@ title: App Protocol
 description: Publish an App on the web so that any Bot host can find and use it.
 ---
 
+For developers. Start with the [developer manual](/docs/developers) to choose
+API work, App publishing, or project changes.
+
 The **OpenBot App Protocol** is an open way to publish an App on the web. Any
 Bot host can then find the App, connect to it, and use it. You do not need a
 developer account, a registry, or a review. An HTTPS address that you control is
@@ -275,7 +278,8 @@ control. If you remove the Card from your Catalog, the host removes the Index
 entry at its next check. A Catalog that cannot be reached is not a removal.
 
 No registry is needed to publish, add, or call an App. A host may also read
-other registries. See how OpenBot does this in [App Index](/docs/app-index).
+other registries. See how OpenBot does this in
+[App Index](/docs/developers/app-index).
 
 ---
 
@@ -330,6 +334,16 @@ a new check.
 OAuth network failures keep `NetworkError`. They do not mean that the provider
 refused a grant. Closing the connection scope stops pending SDK requests,
 including requests that still wait for response headers or stored tokens.
+
+For a host with durable execution, use `OAuthAuthorization.prepare`, `redeem`,
+`renew`, and `revokeCredential`. These functions return a flow or grant without
+writing the host's stores. Save a flow before showing its sign-in URL. Record a
+code exchange or token refresh before sending it. Seal the returned grant, then
+commit it with the connection state. A lost exchange result needs a decision; do
+not send the code or refresh token again without one. Revocation uses a fixed
+grant and can be repeated. The standalone `begin`, `complete`, `refresh`, and
+`revoke` functions also update the given stores. They do not provide recovery
+across process restarts.
 
 Publish a small App:
 

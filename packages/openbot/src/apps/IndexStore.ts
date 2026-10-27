@@ -1,4 +1,5 @@
-import { AppIndexApi } from "@openbot-build/api"
+import { AppIndex } from "@openbot-build/domain"
+
 import { Index } from "@openbot-build/protocol"
 import { Effect, HashMap, Layer, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
@@ -8,7 +9,7 @@ import * as Db from "../database/Database.ts"
 
 const EntryJson = Schema.fromJsonString(Index.Entry)
 /** The JSON text of the last check of a job, in `app_index_jobs.check` and `app_index_results.check`. */
-export const CheckJson = Schema.fromJsonString(AppIndexApi.Check)
+export const CheckJson = Schema.fromJsonString(AppIndex.Check)
 /** The public Index entries in Postgres. It holds only entries that were checked independently. */
 export const decode = Schema.decodeUnknownEffect(EntryJson)
 /** The entry has its type already, so it always encodes. */
@@ -38,7 +39,7 @@ export const checks = (db: Db.Database, namespace: string) =>
 				Effect.forEach(rows, (row) =>
 					row.check === null
 						? Effect.succeed([row.cardUrl, { _tag: "Pending" }] as const)
-						: Schema.decodeEffect(Schema.fromJsonString(AppIndexApi.Check))(
+						: Schema.decodeEffect(Schema.fromJsonString(AppIndex.Check))(
 								row.check,
 							).pipe(Effect.map((check) => [row.cardUrl, check] as const)),
 				),

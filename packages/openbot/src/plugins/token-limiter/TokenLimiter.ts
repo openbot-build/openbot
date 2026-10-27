@@ -1,6 +1,6 @@
-import { Effect, Match, Ref, Schema, Stream } from "effect"
+import { Array as Arr, Context, Effect, Schema } from "effect"
 import { Prompt } from "effect/ai"
-import { Bot, Plugin } from "@openbot-build/core"
+import { Plugin } from "@openbot-build/core"
 
 export interface Options {
 	/** Maximum number of input and output tokens in one execution. */
@@ -25,7 +25,7 @@ export class TokenLimitExceeded extends Schema.TaggedError<
 }) {}
 
 /**
- * Limits each execution on its own, through the ReAct middleware chain.
+ * Checks saved usage before each model step, including after recovery.
  * A model step that has started can finish. The next step fails when the
  * used tokens reach the limit.
  */
@@ -33,50 +33,28 @@ export const make = ({
 	maxTokens,
 }: Options): Plugin.Plugin<{}, InvalidMaxTokens | TokenLimitExceeded> => {
 	const valid = Number.isSafeInteger(maxTokens) && maxTokens >= 1
-	const middleware: Plugin.Middleware<
-		{},
-		InvalidMaxTokens | TokenLimitExceeded
-	> = (next, options) =>
-		Stream.unwrap(
-			Effect.gen(function* () {
-				if (!valid) return yield* InvalidMaxTokens.make({ maxTokens })
-
-				const context = yield* Bot.Context
-				const used = yield* Ref.make(0)
-				return next(options).pipe(
-					Stream.tap((event) =>
-						Match.value(event).pipe(
-							Match.tag("ResponsePart", ({ part }) =>
-								part.type === "finish"
-									? Ref.update(
-											used,
-											(total) =>
-												total +
-												(part.usage.inputTokens.total ?? 0) +
-												(part.usage.outputTokens.total ?? 0),
-										)
-									: Effect.void,
-							),
-							Match.tag("ModelStepStarted", () =>
-								Effect.gen(function* () {
-									const usedTokens = yield* Ref.get(used)
-									if (usedTokens >= maxTokens) {
-										const history = yield* context.history
-										return yield* TokenLimitExceeded.make({
-											maxTokens,
-											usedTokens,
-											history,
-										})
-									}
-								}),
-							),
-							Match.orElse(() => Effect.void),
-						),
-					),
-				)
-			}),
-		)
 	return Plugin.make({
 		id: Plugin.Id.make("@openbot-build/openbot/token-limiter"),
-	})(() => Effect.succeed(middleware))
+	})<{}, InvalidMaxTokens | TokenLimitExceeded>(() =>
+		Effect.succeed({
+			tools: {},
+			handlers: Context.empty(),
+			beforeStep: ({ turn, history, kind }) => {
+				if (!valid) return Effect.fail(InvalidMaxTokens.make({ maxTokens }))
+				const usedTokens = Arr.reduce(
+					turn.usage ?? [],
+					0,
+					(total, usage) =>
+						total +
+						(usage.inputTokens.total ?? 0) +
+						(usage.outputTokens.total ?? 0),
+				)
+				return kind === "model" && usedTokens >= maxTokens
+					? Effect.fail(
+							TokenLimitExceeded.make({ maxTokens, usedTokens, history }),
+						)
+					: Effect.succeed(true)
+			},
+		}),
+	)
 }

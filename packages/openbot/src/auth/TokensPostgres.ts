@@ -1,4 +1,6 @@
-import { Authorization, UserTokensApi } from "@openbot-build/api"
+import { Tokens as TokensModel } from "@openbot-build/domain"
+
+import { Authorization } from "@openbot-build/domain"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
@@ -17,33 +19,31 @@ import { and, count, eq, sql } from "drizzle-orm"
 import { tokens } from "../database/Schema.ts"
 import { Tokens } from "./Tokens.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Db from "../database/Database.ts"
 
 const day = 24 * 60 * 60 * 1000
 /** Do not write on every request, but keep the usage information useful. */
 const lastUsedResolution = 60 * 1000
 
-const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
+const PolicyJson = Authorization.PolicySchema
 /** The lock key of the tokens of one member. */
 const LockKey = Schema.fromJsonString(
 	Schema.Tuple([Schema.Literal("tokens"), Schema.String, Schema.String]),
 )
 /** Fails with `TokenStorageUnavailable` in place of a storage failure, and logs the failure. */
 const storageUnavailable = (message: string) =>
-	Failures.replace(message, () =>
-		UserTokensApi.TokenStorageUnavailable.make({}),
-	)
+	Failures.replace(message, () => TokensModel.TokenStorageUnavailable.make({}))
 /** The policy column holds JSON that only this file writes, from a checked policy. */
 const encodePolicy = (policy: typeof PolicyJson.Type) =>
 	Schema.encodeEffect(PolicyJson)(policy).pipe(Effect.orDie)
 const view = (
 	row: typeof tokens.$inferSelect,
-): Effect.Effect<UserTokensApi.Token, UserTokensApi.TokenStorageUnavailable> =>
+): Effect.Effect<TokensModel.Token, TokensModel.TokenStorageUnavailable> =>
 	Schema.decodeEffect(PolicyJson)(row.policy).pipe(
 		storageUnavailable("The stored policy of a token does not decode."),
 		Effect.map((policy) => ({
-			id: UserTokensApi.TokenId.make(row.id),
+			id: TokensModel.TokenId.make(row.id),
 			name: row.name,
 			prefix: row.prefix,
 			policy,
@@ -100,23 +100,20 @@ export const make: Effect.Effect<
 							.select({ total: count() })
 							.from(tokens)
 							.where(owned(owner))
-						if ((existing?.total ?? 0) >= UserTokensApi.MaxTokens)
-							return yield* UserTokensApi.TokenLimitReached.make({
-								limit: UserTokensApi.MaxTokens,
+						if ((existing?.total ?? 0) >= TokensModel.MaxTokens)
+							return yield* TokensModel.TokenLimitReached.make({
+								limit: TokensModel.MaxTokens,
 							})
 						const now = yield* Clock.currentTimeMillis
 						const secret =
-							UserTokensApi.SecretPrefix +
+							TokensModel.SecretPrefix +
 							Base64Url.encode(yield* Effect.orDie(crypto.randomBytes(32)))
 						const row = {
 							id: yield* Effect.orDie(crypto.randomUUIDv4()),
 							organizationId: owner.organizationId,
 							userId: owner.userId,
 							name: Str.trim(input.name),
-							prefix: Str.slice(
-								0,
-								UserTokensApi.SecretPrefix.length + 8,
-							)(secret),
+							prefix: Str.slice(0, TokensModel.SecretPrefix.length + 8)(secret),
 							hash: yield* hash(secret),
 							policy: yield* encodePolicy(policy),
 							createdAt: now,
@@ -135,10 +132,10 @@ export const make: Effect.Effect<
 				Failures.replaceTag(
 					"EffectDrizzleQueryError",
 					"A token could not be created.",
-					() => UserTokensApi.TokenStorageUnavailable.make({}),
+					() => TokensModel.TokenStorageUnavailable.make({}),
 				),
 				Failures.replaceTag("SqlError", "A token could not be created.", () =>
-					UserTokensApi.TokenStorageUnavailable.make({}),
+					TokensModel.TokenStorageUnavailable.make({}),
 				),
 			),
 		list: (owner) =>
@@ -160,7 +157,7 @@ export const make: Effect.Effect<
 					storageUnavailable("A token could not be revoked."),
 					Effect.flatMap(([row]) =>
 						row === undefined
-							? Effect.fail(UserTokensApi.TokenNotFound.make({}))
+							? Effect.fail(TokensModel.TokenNotFound.make({}))
 							: Effect.succeed(row),
 					),
 					Effect.flatMap(view),
@@ -179,7 +176,7 @@ export const make: Effect.Effect<
 		authenticate: (credential) =>
 			Effect.gen(function* () {
 				const secret = Redacted.value(credential)
-				if (!Str.startsWith(UserTokensApi.SecretPrefix)(secret))
+				if (!Str.startsWith(TokensModel.SecretPrefix)(secret))
 					return yield* CredentialRejected.make({ kind: "token" })
 				const [row] = yield* db
 					.select()
@@ -214,7 +211,7 @@ export const make: Effect.Effect<
 					kind: "user_token" as const,
 					userId: row.userId,
 					organizationId: row.organizationId,
-					tokenId: UserTokensApi.TokenId.make(row.id),
+					tokenId: TokensModel.TokenId.make(row.id),
 				}
 			}),
 	})

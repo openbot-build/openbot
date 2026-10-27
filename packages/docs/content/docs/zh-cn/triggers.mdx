@@ -1,122 +1,22 @@
 ---
-title: 触发器
-description: 按计划时间或通过 webhook，用一句 prompt 把一个任务交给一个 Bot。
+title: "定时运行工作"
+description: "定时运行工作"
 ---
 
-**触发器**用一句 prompt 把一个任务交给一个 Bot。它可以按计划时间触发，也可以通过 webhook 触发，或者两者都有。它只做这一件事：怎么完成工作由 Bot 决定。Bot 可以先做计划、维护[待办列表](/zh-cn/docs/chats#待办列表)，也可以把工作交给其他 Bot。任务结束时，结果会进入你和这个 Bot 的
-[Chat](/zh-cn/docs/chats)。
+触发器按时间安排或外部事件启动 Bot 工作。通过客户端提供的触发器操作进行设置。
 
----
+## 设置任务
 
-## 创建触发器
+选择 Bot，并写明它应收到的消息。未指定 Bot 时，触发器使用默认 Bot。请确认该 Bot 可用且有模型。
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"Check the open issues and sum them up.","schedule":{"cron":"0 9 * * 1-5","timeZone":"Europe/Berlin"}}' \
-  https://api.example.com/v1/triggers
-```
+选择单次或重复执行的时间，并核对时区。对于外部事件，webhook 是其他服务用来启动任务的回调地址。只把地址和机密交给应当启动任务的服务。
 
-| 字段       | 作用                                                                                |
-| ---------- | ----------------------------------------------------------------------------------- |
-| `prompt`   | 任务。                                                                              |
-| `bot`      | 可选。做这项工作的 Bot。不填时由你的[默认 Bot](/zh-cn/docs/bots#你的默认-bot)来做。 |
-| `schedule` | 可选。触发器什么时候自己触发。                                                      |
-| `shared`   | 可选。`true` 表示创建属于组织的共享触发器。                                         |
-| `enabled`  | 可选。`false` 表示触发器不会触发。默认是 `true`。                                   |
+重启会保留时间安排。错过执行时间后，OpenBot 恢复时会启动一个任务。升级后，客户端可能要求你重新确认触发器。请用当前权限检查并保存设置，再让它继续运行。旧工作不会以新权限重新启动。
 
-返回 `201` 和这个触发器。它有 `nextRunAt`（计划下一次触发的时间）和
-`lastFiredAt`。
+## 检查执行
 
-`GET /v1/triggers` 列出你自己的触发器和共享的触发器。`GET`、`PATCH` 和
-`DELETE /v1/triggers/:triggerId` 读取、修改和删除一个触发器。修改需要
-`expected`，也就是你读到的 `revision`。旧的 revision 会返回 `409` 和
-`TriggerConflict`。
+在客户端查看触发历史和任务结果。触发器启动的工作仍使用你的权限，可能需要你[作出决定](/zh-cn/docs/requests)。模型、连接或默认 Bot 不再可用时，任务也可能失败。
 
----
+## 修改或停止触发器
 
-## 一次触发做什么
-
-每次触发都把任务作为一个[委派](/zh-cn/docs/delegation)交给 Bot。工作在这个 Bot 的一个新 task
-Chat 中运行。它的第一条输入是这句 prompt，来自“一个触发器”。这个委派有
-`trigger`，其中是触发器的 ID。
-
-工作结束时，结果作为[通知](/zh-cn/docs/chats#通知)进入 actor 和这个 Bot 的 direct
-Chat。那个 Chat 还不存在时，OpenBot 会创建它。所以 Bot 在那里读到结果，它可以把结果告诉 actor，或者接着做这项工作。[审计日志](/zh-cn/docs/organization#审计日志)会记录
-`trigger.fired`，并在 `details.delegation` 中记下委派的 ID。
-
-要找到触发器的工作，请为那个 direct Chat 读取
-`GET /v1/chats/:chatId/delegations`，或者用 `GET /v1/chats?kind=task&bot=<id>`
-列出这个 Bot 的 task Chat。
-
----
-
-## 计划时间
-
-计划时间有一个五个字段的 `cron` 文本，例如 `0 9 * * 1-5`
-表示工作日的 9:00。`timeZone` 是 IANA 时区，例如
-`Europe/Berlin`。不填时使用 UTC。无效的 cron 文本会返回 `400` 和
-`TriggerInvalid`。永远不会触发的 cron 文本，例如
-`0 0 30 2 *`（2 月 30 日），也会返回同样的错误。
-
-OpenBot 每 15 秒查找一次到期的计划。有多台服务器运行时，每个触发器也只触发一次。
-
----
-
-## Webhooks
-
-`PUT /v1/triggers/:triggerId/webhook`
-会生成一个 webhook 密钥。OpenBot 只显示一次：
-
-```json
-{
-	"url": "https://api.example.com/v1/hooks/triggers/trg_4c1e...",
-	"secret": "otg_..."
-}
-```
-
-另一个系统用这个密钥触发它：
-
-```sh
-curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"issue": 42}' \
-  https://api.example.com/v1/hooks/triggers/trg_4c1e...
-```
-
-返回 `202` 和
-`delegation`。JSON 内容会和任务一起交给 Bot。OpenBot 会标明它是另一个系统发来的数据，不是指令。密钥错误、触发器没有 webhook，或者触发器已停用，都会返回
-`401` 和 `TriggerHookDenied`。
-
-再次 `PUT`
-会生成新的密钥，旧的密钥就不能用了。`DELETE /v1/triggers/:triggerId/webhook`
-会删除 webhook。
-
-如果执行者已不能向 Bot 分派任务，或 Bot 已归档，webhook 会返回
-`409 TriggerInvalid`。存储或执行故障会返回 `503 TriggerStorageUnavailable`。
-
----
-
-## 工作为谁服务
-
-触发器的工作为它的 **actor**
-服务，也就是最后一个创建或修改这个触发器或它的 webhook 的成员。所以你修改它以后，你就成了 actor。task
-Chat 属于 actor，结果也会进入 actor 的 Chat。actor 必须能把工作交给这个 Bot。如果 actor 不再能这样做，触发器就不会触发。
-
-Bot 的工作方式和在任何任务中一样。它没有额外的限制，需要新能力时用
-[requests](/zh-cn/docs/requests) 申请。这些请求会交给 actor。
-
----
-
-## 权限
-
-| `Trigger` 上的操作 | 允许做什么                                          |
-| ------------------ | --------------------------------------------------- |
-| `read`             | 读取触发器：它们的计划时间和 webhook。              |
-| `write`            | 创建、修改和删除触发器，并设置它们的 webhook 密钥。 |
-
-你自己的触发器的路径是
-`org / <org> / user / <you> / trigger / <id>`。共享触发器没有所有者：它的
-`ownerUserId` 是
-`null`。每个成员都能读取共享触发器，管理员可以修改它们。列表中只有你可以读取的触发器。见
-[权限](/zh-cn/docs/permissions)。
+不应再启动工作时，关闭触发器。已启动的任务需要另行检查。需求变化后，修改任务或时间安排。权限和模型故障请联系管理员；webhook 配置请联系接入服务的提供者。

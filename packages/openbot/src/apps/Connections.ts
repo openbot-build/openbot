@@ -1,11 +1,15 @@
 import {
-	AppDiscoveryFailed,
-	ConnectionsApi as Api,
+	Authorization,
+	AppConnections as Api,
+	AppIndex,
+	AppDiscovery,
+	ConnectionId,
 	ExperienceInputInvalid,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 	Identity,
-} from "@openbot-build/api"
+} from "@openbot-build/domain"
+import type * as Models from "./ConnectionModels.ts"
 import { Discovery, Store } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -13,6 +17,7 @@ import {
 	Context,
 	Crypto,
 	Effect,
+	HashMap,
 	Layer,
 	Match,
 	Option,
@@ -20,50 +25,53 @@ import {
 	Schema,
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
+import { sql } from "drizzle-orm"
+import * as Check from "../authorization/Check.ts"
+import { toWhere } from "../authorization/Sql.ts"
 import * as DiscoveryService from "./Discovery.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
 import { Secrets } from "../secrets/Secrets.ts"
-import { appDrafts } from "../database/Schema.ts"
-import { IndexNamespace } from "./IndexNamespace.ts"
+import { appConnections, appDrafts } from "../database/Schema.ts"
+import { IndexWork } from "./IndexWork.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey, type StoredConnection } from "./StoredConnections.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 
 export type Error =
 	| ExperienceInputInvalid
 	| ExperienceNotFound
 	| ExperienceStorageUnavailable
-	| AppDiscoveryFailed
+	| AppDiscovery.Failed
 	| Api.ConnectionConflict
 	| Api.ConnectionConfigurationInvalid
-	| Api.AppRestricted
+	| AppIndex.AppRestricted
 /** Every private operation still explicitly needs the request identity. @effect-expect-leaking Identity */
 export class Connections extends Context.Service<
 	Connections,
 	{
 		readonly listConnections: Effect.Effect<
-			ReadonlyArray<Api.Connection>,
-			Error,
+			ReadonlyArray<Models.Connection>,
+			Error | Authorization.PolicyUnavailable,
 			Identity
 		>
 		readonly getConnection: (
 			id: string,
-		) => Effect.Effect<Api.Connection, Error, Identity>
+		) => Effect.Effect<Models.Connection, Error, Identity>
 		readonly prepareConnection: (
 			input: string,
-		) => Effect.Effect<Api.ConnectionDraft, Error, Identity>
+		) => Effect.Effect<Models.Draft, Error, Identity>
 		readonly createManualConnection: (
 			input: Api.ManualConnectionRequest,
-		) => Effect.Effect<Api.Connection, Error, Identity>
+		) => Effect.Effect<Models.Connection, Error, Identity>
 		readonly getConnectionDraft: (
 			id: string,
-		) => Effect.Effect<Api.ConnectionDraft, Error, Identity>
+		) => Effect.Effect<Models.Draft, Error, Identity>
 		readonly createConnection: (
-			input: Api.ConnectionRequest,
-		) => Effect.Effect<Api.Connection, Error, Identity>
+			input: Models.Create,
+		) => Effect.Effect<Models.Connection, Error, Identity>
 	}
 >()("@openbot-build/openbot/apps/Connections") {}
 
@@ -76,19 +84,23 @@ export const make: Effect.Effect<
 	| Discovery.Rules
 	| Probe
 	| Governance
+	| IndexWork
 	| Crypto.Crypto
+	| Authorization.Auth
 > = Effect.gen(function* () {
+	const checks = yield* Check.make
 	const governance = yield* Governance
 	const crypto = yield* Crypto.Crypto
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const namespace = yield* IndexNamespace
+	const index = yield* IndexWork
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
 	const probe = yield* Probe
 	const project = Effect.fn("Apps.projectConnection")(function* (
 		owner: string,
 		stored: StoredConnection,
+		restrictions?: Effect.Success<typeof governance.snapshot>,
 	) {
 		const connection = stored.connection
 		const app = yield* StoredConnections.getApp(db, owner, connection.cardUrl)
@@ -136,7 +148,7 @@ export const make: Effect.Effect<
 		)
 
 		return {
-			id: Api.ConnectionId.make(connection.connectionId),
+			id: ConnectionId.make(connection.connectionId),
 			name: stored.name,
 			cardUrl: app.cardUrl,
 			card: app.card,
@@ -146,10 +158,17 @@ export const make: Effect.Effect<
 			configuration,
 			enabled: connection.state === "Enabled",
 			revision: stored.revision,
-			availability: Option.match(governance.find(connection.cardUrl), {
-				onNone: () => availability,
-				onSome: (restriction) => ({ _tag: "Restricted", restriction }) as const,
-			}),
+			availability: Option.match(
+				HashMap.get(
+					restrictions ?? (yield* governance.snapshot),
+					new URL(connection.cardUrl).href,
+				),
+				{
+					onNone: () => availability,
+					onSome: (restriction) =>
+						({ _tag: "Restricted", restriction }) as const,
+				},
+			),
 		}
 	})
 	const owner = Effect.map(Identity, ownerKey)
@@ -190,10 +209,31 @@ export const make: Effect.Effect<
 	return Connections.of({
 		getConnection,
 		listConnections: Effect.gen(function* () {
-			const key = yield* owner
+			const caller = yield* Identity
+			const key = ownerKey(caller)
+			const allowed = yield* checks
+				.filter(caller, {
+					action: "read",
+					kind: "Connection",
+					within: ($) =>
+						$.and(
+							$.eq("organizationId", caller.organizationId),
+							$.eq("ownerUserId", caller.userId),
+						),
+				})
+				.pipe(
+					Effect.flatMap((condition) =>
+						toWhere(condition, {
+							organizationId: sql`${caller.organizationId}`,
+							ownerUserId: sql`${caller.userId}`,
+							id: appConnections.id,
+						}),
+					),
+				)
+			const restrictions = yield* governance.snapshot
 			return yield* Effect.forEach(
-				yield* StoredConnections.list(db, secrets, key),
-				(row) => project(key, row),
+				yield* StoredConnections.list(db, secrets, key, allowed),
+				(row) => project(key, row, restrictions),
 			)
 		}),
 		prepareConnection: Effect.fn("Apps.prepareConnection")(function* (input) {
@@ -234,7 +274,7 @@ export const make: Effect.Effect<
 				}
 				return yield* project(
 					key,
-					yield* StoredConnections.save(db, secrets, namespace, key, {
+					yield* StoredConnections.save(db, secrets, index, key, {
 						app: configured.app,
 						connection,
 						name: input.name,
@@ -271,14 +311,13 @@ export const make: Effect.Effect<
 			if (Option.isNone(found))
 				return yield* ExperienceNotFound.make({ id: input.cardUrl })
 			const previous = found.value
-			const current = yield* discovery.refreshCard(previous.cardUrl).pipe(
-				Effect.tapErrorTag("SchemaError", (error) =>
-					Effect.logWarning("The App declaration is not valid", error),
-				),
-				Effect.mapError((error) =>
-					DiscoveryService.failure(previous.cardUrl, error),
-				),
-			)
+			const current = yield* discovery
+				.refreshCard(previous.cardUrl)
+				.pipe(
+					Failures.map("The App declaration is not valid", (error) =>
+						DiscoveryService.failure(previous.cardUrl, error),
+					),
+				)
 			if (rules.compare({ previous, current })._tag === "NeedsRevalidation")
 				return yield* Api.ConnectionConflict.make({
 					reason: "CandidateChanged",
@@ -336,7 +375,7 @@ export const make: Effect.Effect<
 			}
 			return yield* project(
 				key,
-				yield* StoredConnections.save(db, secrets, namespace, key, {
+				yield* StoredConnections.save(db, secrets, index, key, {
 					app,
 					connection,
 					name: input.name,

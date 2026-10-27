@@ -5,6 +5,8 @@ import {
 	Effect,
 	Scope,
 	Stream,
+	type Schema,
+	type Duration,
 } from "effect"
 import {
 	LanguageModel,
@@ -13,6 +15,7 @@ import {
 	type Toolkit,
 	type Tool,
 } from "effect/ai"
+import type * as ModelStep from "../chat/ModelStep.ts"
 import type * as Chat from "../chat/Chat.ts"
 import type * as ChatStore from "../store/ChatStore.ts"
 import type * as Turn from "../chat/Turn.ts"
@@ -21,6 +24,25 @@ import type * as Plugin from "../plugins/Plugin.ts"
 import type * as Config from "../models/Config.ts"
 import type * as Provider from "../models/Provider.ts"
 import type * as ContextCompaction from "../context/ContextCompaction.ts"
+
+/** Tools and their handlers. The host opens resources in the caller's Scope. */
+export interface ToolRegistration<
+	Tools extends Record<string, Tool.Any> = {},
+	E = never,
+	R = never,
+> extends Pick<
+	Plugin.Options<Toolkit.Any, E, R>,
+	"beforeStep" | "afterStep" | "transformPrompt"
+> {
+	readonly tools: Tools
+	readonly handlers: EffectContext.Context<Tool.HandlersFor<Tools>>
+	readonly instructions?: Prompt.Prompt
+	/** The runner applies this limit from the saved Turn start, including after recovery. */
+	readonly timeLimit?: {
+		readonly duration: Duration.Duration
+		readonly error: (history: Prompt.Prompt) => E
+	}
+}
 
 /** Reusable capabilities. Conversation identity and resources belong to Chats. */
 export interface Definition<
@@ -34,12 +56,20 @@ export interface Definition<
 	readonly plugin?: Plugin.Plugin<Tools, E, R, BuildE, BuildR>
 	/** A host plugin owns its extra handlers and codecs inside the execution Scope. */
 	readonly hostPlugin?: Plugin.Plugin<HostTools, E, R, BuildE, BuildR>
+	/** Resolve tools without starting a model loop or wrapping its event stream. */
+	readonly registerTools?: Effect.Effect<
+		ToolRegistration<HostTools, E | BuildE, R>,
+		E | BuildE,
+		R | BuildR | Context | Scope.Scope
+	>
 	readonly toolkit?:
 		Toolkit.Toolkit<Tools> | Effect.Effect<Toolkit.Toolkit<Tools>, E, R>
 	readonly toolChoice?: LanguageModel.GenerateTextOptions<Tools>["toolChoice"]
 	readonly concurrency?: LanguageModel.GenerateTextOptions<Tools>["concurrency"]
 	readonly modelCatalog?: Effect.Effect<ReadonlyArray<Config.Model>>
-	readonly providers?: ReadonlyArray<Provider.Provider<E, R, R>>
+	readonly providers?: ReadonlyArray<
+		Provider.Provider<E, Exclude<R, Context>, Exclude<R, Context>>
+	>
 	readonly compaction?: typeof ContextCompaction.ContextCompaction.Service
 	/** Decides tool calls that ask for approval. The host may provide one instead. */
 	readonly approvals?: typeof Chat.Approvals.Service
@@ -128,6 +158,10 @@ type ExecutionToolError<T> =
 			: never
 		: never
 export type ExecutionError<Tools extends Record<string, Tool.Any>, E = never> =
+	| Schema.SchemaError
+	| ModelStep.UnresolvedCalls
+	| ModelStep.Incomplete
+	| ModelStep.Failed
 	| E
 	| LanguageModel.ExtractError<{ readonly toolkit: Toolkit.WithHandler<Tools> }>
 	| ExecutionToolError<Tools[keyof Tools]>

@@ -1,13 +1,11 @@
-import { Effect, Record as Rec, Stream, type Brand, Scope } from "effect"
+import { Effect, Record as Rec, type Brand, Scope } from "effect"
 import { dual } from "effect/Function"
-import { Prompt, Toolkit, type Tool } from "effect/ai"
-import { Context, type Event } from "../bot/Bot.ts"
+import { type Toolkit, type Tool } from "effect/ai"
+import * as Registration from "./ToolRegistration.ts"
 import {
 	Id,
 	Plugin,
 	StoreConflict,
-	type Next,
-	type Options,
 	type StateDeclaration,
 	type Stateful,
 	type Stores,
@@ -93,7 +91,7 @@ export const withStore: {
 		Object.assign(
 			new Plugin<Tools, E, R, BuildE, BuildR>({
 				id: plugin.id,
-				middleware: plugin.middleware,
+				register: plugin.register,
 			}),
 			plugin,
 			{
@@ -208,7 +206,7 @@ export const mergeState: {
 		}),
 )
 
-/** Composes left outside right. Each middleware maps parameters at run time. */
+/** Builds tools in order and combines their hooks and state declarations. */
 export const merge: {
 	<
 		Right extends Record<string, Tool.Any>,
@@ -279,69 +277,15 @@ export const merge: {
 			Exclude<LeftBuildR | RightBuildR, Scope.Scope>
 		>({
 			id: Id.make(left.id + "+" + right.id),
-			middleware: Effect.gen(function* () {
+			register: Effect.gen(function* () {
 				const scope = yield* Effect.scope
-				const leftMiddleware = yield* left.middleware.pipe(
+				const first = yield* left.register.pipe(
 					Effect.provideService(Scope.Scope, scope),
 				)
-				const rightMiddleware = yield* right.middleware.pipe(
+				const second = yield* right.register.pipe(
 					Effect.provideService(Scope.Scope, scope),
 				)
-				return <InputE, InputR, NextE, NextR>(
-					next: Next<NextE, NextR>,
-					options: Options<Toolkit.Any, InputE, InputR>,
-				) =>
-					Stream.suspend(() =>
-						leftMiddleware<
-							InputE,
-							InputR,
-							NextE | RightE,
-							NextR | RightR | Context
-						>(
-							<TK extends Toolkit.Any, ToolkitE, ToolkitR>(
-								inner: Options<TK, ToolkitE, ToolkitR>,
-							) =>
-								Stream.unwrap(
-									Effect.map(Context, (context) => {
-										const { toolkit: _, instructions, ...runOptions } = inner
-										return Context.provide(
-											Stream.suspend(() =>
-												rightMiddleware<ToolkitE, ToolkitR, NextE, NextR>(
-													next,
-													inner,
-												),
-											).pipe(
-												// The continuation carries all tools so far. Each plugin records only its own additions.
-												Stream.map(
-													(event) => event as Event<Toolkit.MergedTools<[TK]>>,
-												),
-											),
-											{
-												...context,
-												options: runOptions,
-												history: Effect.flatMap(context.step, (step) =>
-													step === 0
-														? Effect.succeed(
-																Prompt.concat(instructions, inner.prompt),
-															)
-														: context.history,
-												),
-											},
-										)
-									}),
-								),
-							options,
-						).pipe(
-							Stream.map(
-								(event) =>
-									event as Event<
-										Toolkit.MergedTools<
-											[Toolkit.Toolkit<Left>, Toolkit.Toolkit<Right>]
-										>
-									>,
-							),
-						),
-					)
+				return Registration.merge(first, second)
 			}),
 		}),
 )

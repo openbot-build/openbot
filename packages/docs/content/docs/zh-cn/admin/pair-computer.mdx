@@ -1,0 +1,51 @@
+---
+title: "配对机器"
+description: "配对机器"
+---
+
+面向负责配置此服务的管理员。请使用具有下述权限的账户。
+
+## 配对你自己的机器
+
+先安装命令行工具，然后配对这台机器：
+
+```sh
+npm install -g @openbot-build/cli @openbot-build/computer
+openbot computer pair --url https://api.example.com
+```
+
+命令会显示一个代码，例如
+`KDTW-7Q3M`。它在 10 分钟内有效。检查这台机器，然后批准它：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" -d '{}' \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M/approve
+```
+
+只有人可以批准一台机器。`POST /v1/computer-pairings/:code/deny`
+停止配对。你批准之后，命令把它的令牌保存在 `~/.config/openbot/computer.json`
+中，然后结束。接着连接这台机器：
+
+```sh
+openbot computer connect
+```
+
+它保持一个到 OpenBot 的连接，所以机器不需要打开端口。连接断开后，它会自己重新连接。`openbot computer status`
+显示保存的地址和机器 ID。
+
+OpenBot 只接受使用第 3 版连接协议的 connector。旧版 `openbot-computer`
+不能连接，OpenBot 会让它升级。在这台机器上安装新版本，然后重新连接：
+
+```sh
+npm install -g @openbot-build/computer
+openbot computer connect
+```
+
+同一台机器在同一个组织中再次配对时，它会保留自己的 Computer，并得到一个新令牌。对于服务器和脚本，用
+`"source":{"_tag":"Connector"}` 创建一台 Computer，然后用
+`PUT /v1/computers/:computerId/connector-token`
+创建一个令牌。新令牌会关闭旧的连接。

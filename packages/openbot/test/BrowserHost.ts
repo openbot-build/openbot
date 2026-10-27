@@ -27,7 +27,7 @@ import {
 	String as Str,
 	SynchronizedRef,
 } from "effect"
-import { LanguageModel, type Prompt, Response, Tool, Toolkit } from "effect/ai"
+import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import {
 	Cookies,
 	FetchHttpClient,
@@ -61,6 +61,8 @@ export interface Options {
 	readonly publicOrigin: string
 	readonly port?: number
 	readonly model?: typeof LanguageModel.LanguageModel.Service
+	readonly contextWindow?: number
+	readonly hostTools?: Layer.Layer<HostTools.HostTools>
 	readonly discovery?: Layer.Layer<Discovery.Discovery>
 	readonly appProbe?: Layer.Layer<Probe.Probe>
 	readonly appNetwork?: Layer.Layer<AppHost.AppNetwork>
@@ -93,11 +95,8 @@ export interface Options {
 		readonly retryMs?: number
 	}
 	/** How often the trigger worker looks for schedules that are due. */
-	readonly triggerIntervalMs?: number
 	/** How often the Channel worker looks for new events and messages. */
-	readonly channelIntervalMs?: number
-	/** How often the file garbage collector runs. */
-	readonly fileIntervalMs?: number
+
 	/**
 	 * Answers the HTTP calls of the server to other places, such as Slack.
 	 * Without it, such a call fails.
@@ -391,8 +390,8 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 				description: "A model with fixed answers for browser integration tests",
 				reasoningEfforts: ["low", "high"],
 				serviceTiers: ["default", "priority"],
-				contextWindow: 32000,
-				maxOutputTokens: 4000,
+				contextWindow: options.contextWindow ?? 32000,
+				maxOutputTokens: options.contextWindow === undefined ? 4000 : 100,
 			}),
 		],
 	}
@@ -403,18 +402,13 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		...(options.indexWork === undefined
 			? {}
 			: { indexWork: options.indexWork }),
-		...(options.triggerIntervalMs === undefined
-			? {}
-			: { triggers: { interval: options.triggerIntervalMs } }),
-		...(options.channelIntervalMs === undefined
-			? {}
-			: { channels: { interval: options.channelIntervalMs } }),
-		...(options.fileIntervalMs === undefined
-			? {}
-			: { files: { interval: options.fileIntervalMs } }),
+
 		host: "127.0.0.1",
 		port: options.port ?? 0,
 		databaseUrl: Redacted.make(database.url),
+		clusterSecret: Redacted.make(
+			"test-cluster-secret-with-at-least-32-characters",
+		),
 		secretKeys: Redacted.make(
 			"test:" +
 				"1111111111111111111111111111111111111111111111111111111111111111",
@@ -435,11 +429,11 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 					builtinModels: {
 						...catalog,
 						resolve: () => Effect.succeed(options.model ?? model),
+						defaultModel: Config.Selection.make({
+							provider: provider_,
+							model: modelId,
+						}),
 					},
-					defaultModel: Config.Selection.make({
-						provider: provider_,
-						model: modelId,
-					}),
 				}),
 	}
 	// The migration has its own database pool. It closes after the migration.
@@ -466,7 +460,17 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		Layer.provide(
 			Layer.merge(
 				outside,
-				HostTools.layer({ toolkit, handlers: () => handlers }),
+				options.hostTools ??
+					HostTools.layer({
+						toolkit,
+						handlers: () => handlers,
+						instructions: Prompt.make([
+							{
+								role: "system",
+								content: "The host tools belong to this test server.",
+							},
+						]),
+					}),
 			),
 		),
 		Layer.provideMerge(OpenBot.layerShared(configuration)),

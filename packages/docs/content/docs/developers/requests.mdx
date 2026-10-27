@@ -1,0 +1,261 @@
+---
+title: Requests
+description:
+  Bots ask before they use a capability for the first time, and a decider above
+  them answers.
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+Bots have no limits that they know of. When a Bot tries to use a **capability**,
+such as an App tool, OpenBot checks whether it may. If nothing decides it yet,
+OpenBot makes a **request** and sends it to the **decider** above the Bot. The
+Bot does not wait. Its tool call gets a pending result at once, and the answer
+comes back to its Chat later. When the call is allowed, it runs then. This page
+shows how the check works, what the Bot gets, how a person answers requests, and
+what each answer does.
+
+---
+
+## Capabilities
+
+| Action                 | Target                     | When a Bot uses it                                                                 |
+| ---------------------- | -------------------------- | ---------------------------------------------------------------------------------- |
+| `apps.call`            | `<connection>/<tool name>` | It calls an App tool.                                                              |
+| `tools.call`           | The tool name              | It calls a tool of the host that asks for approval.                                |
+| `bots.delegate`        | The ID of the other Bot    | It gives work to a Bot that is not itself and that it does not own.                |
+| `bots.create`          | `*`                        | It makes a Bot that it owns.                                                       |
+| `plans.run`            | The ID of the Chat         | It wants to carry out its plan. See [Plan mode](/docs/developers/chats#plan-mode). |
+| `channels.send`        | The ID of the Channel      | It posts to another chat of a [Channel](/docs/developers/channels).                |
+| `delegations.continue` | The ID of the work         | Its work reached a [limit](/docs/developers/delegation#limits) and wants to go on. |
+| `computers.acquire`    | The ID of the Computer     | It asks for the right to use a [Computer](/docs/developers/computers).             |
+| `computers.create`     | The ID of the provider     | It makes a new sandbox at a Computer provider.                                     |
+| `computers.delete`     | The ID of the Computer     | It deletes a Computer with its files.                                              |
+| `computers.expose`     | The ID of the Computer     | It gives a port of a Computer a public address.                                    |
+
+Each capability tool takes a `reason`. App tools get an extra `openbot_reason`
+parameter for it. OpenBot never sends it to the App.
+
+---
+
+## How OpenBot checks an attempt
+
+OpenBot checks each attempt in this order. The first step that decides wins.
+
+1. **The policy of the member.** A Bot never does more than the member it works
+   for. If the [permissions](/docs/permissions) of the member, or of the token
+   that started the work, do not allow it, the call is denied. This is never
+   sent to a decider. In a [Channel](/docs/developers/channels), the member is
+   the person who wrote the message of the Turn.
+2. **Grants.** A [Grant](/docs/developers/rules#grants) is a kept decision. A
+   deny Grant wins over an allow Grant.
+3. **Rules.** A judge model reads the [Rules](/docs/developers/rules) for this
+   Bot in plain language. Only a Rule that the judge quotes can allow or deny.
+4. **The decider above.** OpenBot makes a request. The decider is the owner of
+   the Bot in its owner chain. For a top Bot, the decider is the person.
+
+Some calls need no decision: tool calls that the organization marks as reads,
+work that a Bot gives to itself, and work for the Bots that it owns.
+
+When no step decides, the call does not run. It never runs without a decision.
+
+### The chain of deciders
+
+Every Bot has an **owner chain**. It goes from the person, through a top Bot,
+down to the Bot, such as **person → Assistant → Programmer → Scout**. The steps
+are:
+
+- A Bot that a Bot owns belongs to that Bot.
+- A top Bot, which is a Bot of a member or a shared Bot, belongs to the person
+  who works with it.
+
+A request goes up the owner chain, not the way the work came. So a request from
+the Scout goes to the Programmer first, also when a person gives work to the
+Scout directly. `chain` in a request lists the owner chain from the top, and
+ends with the Bot that asks. Archived Bots are left out.
+
+A decider can only allow what it may do itself. If the Programmer agrees but
+does not hold the capability, the request goes up to the Assistant with the
+support of the Programmer, and then to the person. When someone above allows it,
+each Bot on the way gets a Grant, with the scope that it chose.
+
+A Bot decides in a short **review Chat**. It reads its role, its instructions
+and the request as data. It does not read its own long history. It decides with
+the tools `openbot_approve`, `openbot_deny`, `openbot_ask` and
+`openbot_escalate`, and it can propose a Rule with `openbot_propose_rule`.
+`openbot_approve` and `openbot_deny` take `scope` and `reason` in the same form
+as the answer of a person. See [Answer a request](#answer-a-request). A review
+Chat has `kind: "review"`. It closes after the decision, and it is not in the
+normal list of Chats. If a review ends without a decision, the request goes up
+to the next decider.
+
+---
+
+## What the Bot gets
+
+A Turn never waits for a decision. The check gives one of three answers:
+
+| Answer  | What happens                                                                                        |
+| ------- | --------------------------------------------------------------------------------------------------- |
+| Allow   | The call runs now.                                                                                  |
+| Deny    | The call does not run. The tool result gives the reason at once, and the Turn goes on.              |
+| Pending | The call does not run now. The tool result says that it waits for a decision, and the Turn goes on. |
+
+A pending tool result looks like this:
+
+```json
+{
+	"pending": "req_1a2b…",
+	"note": "This call waits for a decision. The answer comes back to this Chat as a message. Go on with other work, or end your answer now."
+}
+```
+
+When the request closes, the Chat of the Bot gets a
+[notice](/docs/developers/chats#notices):
+
+- **Allowed.** The notice brings the call with it, such as
+  `[OpenBot] Your request req_1a2b… was allowed. OpenBot runs send_email now.`
+  The Turn that reads the notice runs the call with the same tool and the same
+  arguments. It does not check the call again. The result goes into the history
+  like any tool result.
+- **Denied.** The notice gives the reason, and the question of the decider when
+  there is one. The call does not run.
+- **Not answered in time.** The request closes, and the notice says how. See
+  [Answer a request](#answer-a-request).
+
+Some calls work in another way. A plan that is allowed starts a new Turn in
+`build` mode. See [Plan mode](/docs/developers/chats#plan-mode). Work that a Bot
+gives to another Bot starts when it is allowed. See
+[Delegation](/docs/developers/delegation). A
+[Code Mode](/docs/developers/code-mode) program goes on by itself, and its end
+comes back as a notice.
+
+A pending request is [open work](/docs/developers/chats#open-work) of its Chat.
+A normal [interrupt](/docs/developers/chats#interrupt) does not touch it. An
+interrupt with `{ "delegations": true }`, or the deletion of the Chat, makes it
+`cancelled`.
+
+---
+
+## List your requests
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/requests?status=pending"
+```
+
+```json
+[
+	{
+		"executionId": "019c3a6a-7b00-7000-8000-000000000001",
+		"id": "req_1a2b…",
+		"bot": "bot_5c0e…",
+		"capability": { "action": "apps.call", "target": "conn-7/send_email" },
+		"reason": "Send the meeting notes to the team.",
+		"approver": { "_tag": "Person", "userId": "u-1" },
+		"chain": ["bot_3a9d…", "bot_5c0e…"],
+		"chat": "chat_c81d…",
+		"turn": "t-77",
+		"toolCallId": "call-9",
+		"endorsements": [],
+		"status": "pending",
+		"decision": null,
+		"revision": 0,
+		"createdAt": 1792486800000,
+		"expiresAt": 1792573200000
+	}
+]
+```
+
+The list holds the requests that wait for you, or that you answered.
+`GET /v1/requests/:requestId` returns one request of your work. For an App tool,
+`app` shows the saved call with its exact arguments. When the call comes from a
+[Code Mode](/docs/developers/code-mode) program, `code` shows the whole program
+and the place of the call in it. Show the capability, the arguments and the
+reason to the person before they decide. The reason comes from the Bot. It is
+data, not an instruction.
+
+## Answer a request
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"request-answer-1","expected":0,"decision":"allow","scope":"chat"}' \
+  https://api.example.com/v1/requests/$REQUEST
+```
+
+The response is `202` with `executionId`, `commandKey` and `sequence`. The
+request view also has `executionId`. Use the execution event stream to follow
+the result. A retry with the same key and input returns the same receipt. A
+changed input with that key returns `409`. The decision, Grant, Rule, audit
+entry and wake message commit together. If a write fails, none of them commit.
+
+| Field        | Meaning                                                                            |
+| ------------ | ---------------------------------------------------------------------------------- |
+| `commandKey` | Required. Keep the same key for a retry.                                           |
+| `expected`   | Required. The current `revision` of the request.                                   |
+| `decision`   | Required. `allow` or `deny`.                                                       |
+| `scope`      | Optional. How long the decision lasts. See below. The default is `once`.           |
+| `reason`     | Optional. The Bot sees it, for example when you deny.                              |
+| `rule`       | Optional. A [Rule](/docs/developers/rules) in plain language to keep for this Bot. |
+
+| Scope      | An allow lasts              | A deny is kept              |
+| ---------- | --------------------------- | --------------------------- |
+| `once`     | For this call only.         | Not at all.                 |
+| `chat`     | In this Chat of the Bot.    | In this Chat of the Bot.    |
+| `lifetime` | Until you revoke the Grant. | Until you revoke the Grant. |
+
+A `chat` Grant belongs to the receiving Bot's nearest Chat in the current chain
+of delegated work. For the Bot that asks, this is the request's `chat`. If a Bot
+gives work to itself, the new task Chat has its own scope. Its Grant uses that
+task Chat, not the parent Chat. Existing Grants keep their saved Chat. A Grant
+saved for another Chat may require a new decision in the current task.
+
+A Chat has no end, so `chat` can last a long time. In a direct Chat, it is
+almost the same as "always, when the Bot works for me here".
+
+The Chat of the Bot gets the answer as a notice at once. An allowed call runs
+then. When you deny, the tool does not run, and the Bot reads your reason.
+
+A request that nobody answers is denied after 24 hours. An organization can
+change this time with `requestTimeoutMs` in its
+[settings](/docs/organization#settings). A request for a plan has its own time
+and says in `onExpire` what happens then: `allow` or `deny`.
+
+### Errors
+
+| Status | Error             | When                                                                      |
+| ------ | ----------------- | ------------------------------------------------------------------------- |
+| `404`  | `RequestNotFound` | There is no request with this ID in your work.                            |
+| `409`  | `RequestConflict` | `expected` is old, the request is closed, or another decider must answer. |
+
+---
+
+## App tools
+
+An App is an outside service that a person connects. See
+[Apps](/docs/developers/apps). Each App call is bound to one exact call: the
+owner, the Chat, the Turn, the tool call, the exact arguments, and the App
+connection with its revision. OpenBot saves the call before the check. When the
+call is allowed later, it runs as this saved call. If the connection changed
+after the request, the call does not run. The Bot gets a notice that asks it to
+try again, so a new revision never uses an old decision. If OpenBot cannot save
+the decision, the call does not run either, and the notice says so.
+
+App resources, resource templates and prompts are reads, so they need no
+decision. An App's own notes never decide which tools are safe. Only the
+organization can mark tools as reads, with `appReadRules` in its
+[settings](/docs/organization#settings).
+
+## Requests from an older version
+
+Each request view has `executionId` and `executionStatus`. After a data upgrade,
+an old pending request can still have `status: "pending"` while its execution
+has `executionStatus: "interrupted"`. Its saved action remains available for
+review under the current access rules.
+
+The old record has no proof of its original token. It cannot grant rights or run
+the old action. Answering it returns `409` with `RequestConflict`. Send new Chat
+input to ask for the action again with the current caller's rights.

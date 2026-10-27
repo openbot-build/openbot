@@ -1,0 +1,168 @@
+---
+title: Live 模式
+description: 和 Bot 实时对话。声音通过一个 WebSocket 进出。
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+在
+**Live 模式**中，一个人和 Bot 实时对话。客户端发送这个人的声音，Bot 用声音和文本回答。这个人可以在 Bot 说话时开口，Bot 就会停下。
+
+Live 模式使用
+**WebSocket**：一个保持打开、双向传送消息的连接。OpenBot 在中间。它连接一个
+**Live 模型**，例如 OpenAI Realtime API 的模型，并把提供方的密钥留在服务器上。
+
+Live 模式在 **live Chat** 中进行：类型为 `live` 的
+[Chat](/zh-cn/docs/developers/chats)。这个人说的每一段话都会成为其中一个普通的 Turn。所以 Bot 有它的指令、工具、Rule 和记忆，和文字 Chat 一样。Chat 保存这个人说的话和 Bot 回答的文本。声音不会被保存。
+
+---
+
+## 添加 Live 模型
+
+参见 [实时模型](/zh-cn/docs/admin/live-models).
+
+## 创建 live Chat
+
+`POST /v1/bots/:botId/live` 为你和一个 Bot 创建一个新的 live
+Chat。你需要 Bot 上的 `bots.delegate` 和 Live 模型上的
+`models.use`。每次调用都会创建一个新的 Chat，所以每次对话可以有自己的历史。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  https://api.example.com/v1/bots/$BOT_ID/live
+```
+
+| 字段    | 规则                                                                             |
+| ------- | -------------------------------------------------------------------------------- |
+| `model` | 可选。一个 Live 模型，形式为 `{ "provider": "…", "model": "…" }`。默认是第一个。 |
+
+返回值是新的 Chat，状态码 `201`。它的 `settings.model`
+是 Live 模型。`PATCH /v1/chats/:chatId`
+可以把它换成另一个 Live 模型，但不能换成语言模型。没有 Live 模型时，OpenBot 返回
+`409` 和 `LiveUnavailable`。
+
+live Chat 会出现在 `GET /v1/chats` 的列表中，`DELETE /v1/chats/:chatId`
+可以删除它。
+
+---
+
+## 连接
+
+在 `GET /v1/chats/:chatId/live` 打开一个 WebSocket。你需要 Chat 上的
+`run`。这个 Chat 必须是 live Chat。模型就是这个 Chat 的模型。
+
+| 查询参数        | 规则                                                                     |
+| --------------- | ------------------------------------------------------------------------ |
+| `voice`         | 可选。`capabilities.voices` 中的一个声音。                               |
+| `inputFormat`   | 可选。客户端发送的声音格式，例如 `pcm16@24000`。默认是模型的第一个格式。 |
+| `outputFormat`  | 可选。客户端想收到的声音格式。默认是模型的第一个格式。                   |
+| `turnDetection` | 可选。`server`：模型听出这个人何时停下。`client`：按住说话。             |
+| `organization`  | 可选。浏览器会话的组织，在账户属于多个组织时使用。                       |
+
+程序发送
+`Authorization: Bearer <token>`。浏览器发送会话 cookie，这时页面必须在 OpenBot 的公开来源上。否则 OpenBot 返回
+`403` 和
+`ForbiddenOrigin`，所以其他网站的页面不能使用你的 cookie。浏览器不能在 WebSocket 上发送
+`OpenBot-Organization` 头。所以当账户属于多个组织时，它在 `organization`
+中发送组织 ID。没有它，OpenBot 返回 `400` 和 `OrganizationRequired`。
+
+OpenBot 在打开 socket 之前检查请求。这个 Chat 不是 live
+Chat，或者模型没有你要的格式、声音或轮次检测时，它返回 `409` 和
+`LiveUnavailable`。
+
+```ts
+const socket = new WebSocket(
+	"wss://api.example.com/v1/chats/" + chatId + "/live?voice=marin",
+)
+socket.binaryType = "arraybuffer"
+socket.onmessage = (event) => {
+	if (typeof event.data === "string") console.log(JSON.parse(event.data))
+	else play(new Uint8Array(event.data))
+}
+```
+
+---
+
+## 消息
+
+一个**文本帧**放一条 JSON 消息。一个**二进制帧**放声音。客户端按输入格式发送声音，OpenBot 按输出格式发送声音。`pcm16`
+是单声道、16 位有符号、小端序的 PCM。
+
+这个协议对每个 Live 模型都一样。第一条消息告诉客户端这个模型能做什么。
+
+### 来自 OpenBot
+
+| `type`                    | 含义                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| `session.ready`           | 会话已打开。它有 `provider`、`model`、`capabilities`、`audio`、`turnDetection` 和 `voice`。 |
+| `command.accepted`        | 命令已保存。`receipt` 包含 `executionId`、`commandKey` 和 `sequence`。                      |
+| `session.reconnect`       | 下一个 Turn 需要另一模型。请建立新连接。                                                    |
+| `input.speech.started`    | 这个人开始说话。                                                                            |
+| `input.speech.stopped`    | 这个人停止说话。                                                                            |
+| `input.transcript`        | 这个人说的话的文本。完整文本的 `final` 是 `true`。                                          |
+| `output.transcript.delta` | 回答文本的一部分。                                                                          |
+| `output.done`             | 回答项 `itemId` 没有更多声音或文本了。                                                      |
+| `output.stop`             | 这个人又开始说话。现在停止播放回答。                                                        |
+| `turn.started`            | 连接开始观察 Turn。包含 `turnId` 和 `executionId`。                                         |
+| `turn.completed`          | 保存的执行已结束。包含 `turnId`、`executionId` 和 `status`。                                |
+| `error`                   | 安全的 `code` 和 `message`。内部失败还带有含错误 ID 的 `failure`。                          |
+
+供应商、协议和连接错误会把完整原因保存到加密记录。客户端只收到安全消息和错误 ID。普通日志不包含供应商响应或连接数据。
+
+### 来自客户端
+
+| `type`               | 含义                                                                         |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `input.text`         | 输入文本，必须带 `commandKey`。重试时复用该键。                              |
+| `input.image`        | 一张图片，例如视频的一帧。`data` 是 Base64。只在 `inputs.image` 为真时可用。 |
+| `input.audio.commit` | 这个人停止说话。只用于 `client` 轮次检测。                                   |
+| `input.audio.clear`  | 丢掉还没提交的声音。                                                         |
+| `response.cancel`    | 取消请求，必须带 `commandKey`。观察执行以确定何时结束。                      |
+| `output.truncate`    | 这个人只听到了回答 `itemId` 的前 `audioEndMs`。只在 `truncate` 为真时可用。  |
+
+### 能力
+
+`session.ready` 中的 `capabilities` 说明 Live 模型能做什么：
+
+| 字段                 | 含义                                         |
+| -------------------- | -------------------------------------------- |
+| `audio`              | `input` 和 `output` 的格式。                 |
+| `turnDetection`      | `server`、`client`，或两者都有。             |
+| `inputTranscription` | 模型给出这个人说的话的文本。                 |
+| `tools`              | 模型可以调用 Bot 的工具。                    |
+| `interruption`       | 模型可以停止正在进行的回答。                 |
+| `truncate`           | 模型可以忘掉回答中没被听到的部分。           |
+| `inputs`             | `text` 和 `image` 说明模型接受哪些其他输入。 |
+| `voices`             | 模型的声音。                                 |
+
+客户端发送模型不支持的消息时，OpenBot 发送代码为 `unsupported` 的 `error`。
+
+---
+
+## Turn 和历史
+
+语音文本作为带稳定命令键的输入保存。共享执行引擎运行 Turn。WebSocket 所在节点持有声音和实际模型连接。执行可以在其他节点运行，通过经过认证的私有 RPC 使用该连接。一个 Chat 同时只能有一个 Live 连接。
+
+Turn 等待与已保存模型设置匹配的连接。修改 Chat 模型只影响后续 Turn。重连先恢复未完成 Turn 的模型。下一个 Turn 需要另一模型时，`session.reconnect`
+要求客户端建立新连接。
+
+新连接的首次模型请求恢复保存的提示：文本、工具调用和结果。即使旧步骤复用了供应商调用 ID，每次恢复的调用也有自己的传输 ID。当前输入只发送一次。历史读取失败会使请求失败，不会开始空白对话。
+
+Turn 使用 Bot 的指令、工具、审批和当前权限。与文本 Chat 一样，通过执行 API 读取保存的状态和文本。WebSocket 传输声音和实时文本；断线后，执行事件日志提供已保存的文本和最终结果。声音不保存，也不重放。
+
+关闭 WebSocket 会结束观察和声音，不会取消已提交的工作。模型调用期间连接丢失，结果记为未知并等待决定。RPC 中断后，连接停止使用，迟到回答不能混入下一请求。只结算已确认的用量。
+
+OpenBot 使用供应商返回的 token 总数。缓存 token 已包含在输入总数中，不会再次相加。缺少任一总数时，用量保持未知，并释放预算预留。已完成但没有用量报告的回答，不会被记成零消耗调用。
+
+回答期间开始说话会请求取消，并发送 `output.stop`。执行保持
+`cancelling`，直到资源结束。未知的外部结果仍可能需要决定。中断后须重新建立声音连接。
+
+如果 OpenBot 能确认请求尚未发送，会保存调用失败和错误 ID，不会把它当作结果未知的动作来请求重试确认。重放该调用时读取已保存的失败。发送后丢失响应仍需要决策。
+
+---
+
+## 添加 Live 后端
+
+参见 [添加实时后端](/zh-cn/docs/developers/live-backend).

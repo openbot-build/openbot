@@ -80,9 +80,14 @@ const paramsRead = (requirement: Requirement): ReadonlyArray<string> => {
 		},
 	)
 	const scope = requirement.within(params) as (
-		builder: Condition.Builder<unknown, unknown, unknown>,
+		builder: Condition.Builder<Authorization.OpenBot, Authorization.Kind>,
 	) => unknown
-	scope(Condition.builder())
+	scope(
+		Condition.builder(
+			Authorization.OpenBot,
+			requirement.kind as Authorization.Kind,
+		),
+	)
 	return Arr.fromIterable(read)
 }
 

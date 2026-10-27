@@ -1,0 +1,371 @@
+---
+title: Ausführungsdesign
+description:
+  Der gemeinsame Aufbau für gespeicherte Arbeit, Zustand und Ereignisse.
+---
+
+Für Entwickler. Das [Entwicklerhandbuch](/de/docs/developers) führt zu
+API-Arbeit, App-Veröffentlichung und Änderungen am Projekt.
+
+Diese Seite legt das Zieldesign fest. Der Umbau läuft noch. Er ist nicht bereit
+für einen Umzug von Produktionsdaten. Der letzte Abschnitt nennt offene Arbeit.
+
+## Umfang
+
+OpenBot bleibt headless und API first. Bots, Chats, Werkzeuge, Delegation,
+Freigaben, Speicher, Code Mode, Apps, Index, Computer, Channels, Trigger,
+Live-Sitzungen, Organisationen, SSO, Dateien, Vaults, Modelle und Abrechnung
+bleiben erhalten. `core` und `protocol` bleiben einzeln nutzbar.
+
+Nur PostgreSQL und Objektspeicher sind als externe Dienste nötig. OpenBot-Knoten
+nutzen private HTTP-RPC mit Authentifizierung. RPC ruft Code in einem anderen
+Prozess auf. Ein Knoten und mehrere Knoten nutzen dieselbe Engine.
+
+## Module
+
+| Paket            | Aufgabe                                                            |
+| ---------------- | ------------------------------------------------------------------ |
+| `core`           | Modellschritte, Werkzeugschritte, Kontextgröße und Chat-Grunddaten |
+| `domain`         | Produktdaten, typisierte IDs, Zustände, Fehler und reine Regeln    |
+| `api`            | HTTP-Eingaben und Ausgaben, Authentifizierung und Fehlerzuordnung  |
+| `protocol`       | MCP, OAuth, App Cards, Erkennung und Verbindungen                  |
+| `openbot`        | Anwendungsfälle, Workflows, PostgreSQL und externe Adapter         |
+| `client` und CLI | Aufrufe über den öffentlichen Vertrag                              |
+
+Speichermodelle kommen nicht aus HTTP-Modellen. Geschäftslogik liefert
+Domänenfehler. HTTP-Handler machen daraus öffentliche Fehler. Modell-,
+Computer-, Vault- und Speicheradapter bleiben austauschbar. Eine reine Regel
+oder einfache Abfrage braucht keinen Dienst, der nur Aufrufe weitergibt.
+
+Ein Dienst erhält seine Abhängigkeiten beim Bau seines Layers. Einstiegspunkte
+verbinden Layers und halten Scopes. Produktmodule importieren keinen Code aus
+dem Einstiegspunktordner. Ein Modulimport startet keine I/O.
+
+Der Server baut keine Chat-Laufzeit pro Mitglied. Jeder Turn oder jede Kindphase
+hält sein Modell und seine Werkzeuge. Verbindungen dürfen einen Cache nach
+Verbindungs-ID und Version teilen. Dieser Cache besitzt weder den Chat-Zustand
+noch die Ausführung.
+
+## Ausführung
+
+Eine **Ausführung** ist gespeicherte Arbeit mit einer festen ID. Eine
+Geschäftsressource behält ihre eigene ID und verweist auf die Ausführung. Ein
+**Befehlsschlüssel** bezeichnet eine Anfrage samt Eingabe. Ein erneuter Versuch
+nutzt denselben Schlüssel. Eine andere Eingabe mit diesem Schlüssel schlägt
+fehl.
+
+Eine **Generation** zählt den aktuellen Besitzer einer Ausführung. Eine
+Übernahme erhöht sie. Zustandsänderungen prüfen sie unter einer Datenbanksperre.
+Ein alter Besitzer darf ein spätes externes Ergebnis speichern. Er darf den
+Zustand des neuen Besitzers nicht fortsetzen.
+
+Effect `Workflow`, `Activity`, `DurableDeferred`, `DurableClock` und
+`ClusterWorkflowEngine` liefern gespeicherte Schritte, Signale, Timer,
+Nachrichten und Knotenzuweisung. Funktionen melden ihre eigenen Workflows an.
+Die Engine hat keine Bot-, Freigabe- oder Computer-Zweige. Der eigenständige
+Core hat einen Speicher-Host ohne Wiederherstellung nach Prozessende.
+
+Jede Arbeitsphase läuft in einer `Activity`. Ihr Name enthält die gespeicherte
+Phase und Generation. Die Engine speichert nur ein sicheres Phasenergebnis, etwa
+eine Fehler-ID oder einen Verweis auf eine Pause. Eingaben, externe Ergebnisse
+und volle Fehler bleiben in verschlüsselten Datensätzen. Ein neuer Besitzer
+erhält einen neuen Phasennamen und nutzt Ergebnisse aus dem gemeinsamen
+Aufrufprotokoll. Abbruch und andere Signale schließen zuerst den Phasenzugang.
+Dann warten sie auf das Ende des lokalen Fibers und seiner Ressourcen. Eine
+späte Activity-Anfrage kann danach keine Arbeit mehr starten.
+
+Die Zustände heißen `queued`, `running`, `waiting`, `cancelling`,
+`outcome_unknown`, `completed`, `failed`, `cancelled` und `interrupted`. Die
+letzten vier sind Endzustände. `outcome_unknown` wartet auf ein gespeichertes
+Ergebnis oder eine Entscheidung. Abbruch setzt `cancelling`. Das beweist noch
+nicht, dass die externe Aktion gestoppt ist.
+
+Besitz und Quellidentität sind getrennt. Ein Besitzer wartet auf seine
+angehängte Kindarbeit und ihre Nachrichten. Ein abgelöstes Werkzeug darf seinen
+Turn überleben. Kindabschluss und Folgemeldung werden gemeinsam gespeichert. So
+geht zwischen zwei Lesevorgängen keine Arbeit verloren. Jede Abbruchphase hat
+eine eigene Nummer und ein gespeichertes Signal. Ein altes Signal kann keine
+spätere Phase abbrechen.
+
+## Zustand und Aufrufe
+
+Zustand, Ergebnisse, Ereignisse und ausgehende Befehle werden in einer
+Transaktion gespeichert. Eine **Outbox** hält Befehle, bis die Engine sie
+gespeichert hat. Feste IDs machen doppelte Zustellung sicher. Die Transaktion
+führt keine Modell-, Netzwerk- oder anderen externen Aufrufe aus.
+
+Ein Chat lässt nur einen Turn zugleich fortschreiten. Seine Zeilensperre ordnet
+gespeicherte Eingaben. Eingaben mit derselben Identität können den laufenden
+Turn lenken. Eingereihte Eingaben behalten Identität und Platz. Nach dem
+Schließen der Ressourcen werden Turn-Ende und nächste Eingabe gemeinsam
+freigegeben.
+
+Jeder Chat-Prüfpunkt prüft Turn und Generation. Bei einem Fehler nutzt er
+bereits gespeicherte Modell- und Werkzeugergebnisse. Das Modellergebnis wird vor
+lokalen Werkzeugen gespeichert. Werkzeugergebnisse werden vor ihrer
+Veröffentlichung gespeichert. Gespeicherte Werkzeugdefinitionen halten
+Parameter, Routen, App-Quellen und Vault-Verweise fest. Neue Erkennung ändert
+keinen gespeicherten Aufruf. Neue Aufrufe brauchen aktuelle Rechte. Hooks laufen
+an benannten Schritten und vermeiden doppelte Schreibvorgänge bei Wiederholung.
+Plugins dürfen den Lebenszyklus einer Ausführung nicht ändern.
+
+Ein externer Aufruf speichert zuerst seine Absicht, markiert dann den Versand
+und speichert zuletzt das Ergebnis. Sichere Wiederholungen nutzen denselben
+Anbieterschlüssel. Ein Schreibvorgang ohne sichere Wiederholungsregel wartet bei
+verlorenem Ergebnis in `outcome_unknown`. Bekannte Ergebnisse werden
+wiederverwendet. Ein erneuter Modellaufruf hat einen neuen Versuch und ein
+Start-Ereignis. Sein Text wird nicht an den Teiltext des alten Versuchs gehängt.
+
+Das Aufrufprotokoll speichert späte Ergebnisse samt bestätigtem Verbrauch. Nur
+die aktuelle Generation darf sie veröffentlichen oder Geschäftszustand ändern.
+Datenbankfehler werden am nächsten sicheren Schritt wiederholt. Ein bekanntes
+Ergebnis bleibt bis zum erfolgreichen Speichern erhalten; der Anbieter wird
+nicht erneut aufgerufen. Fehlerhafte gespeicherte Daten gelten nicht als
+vorübergehender Datenbankausfall.
+
+Eine Phase schließt Ressourcen, bevor sie endet oder auf eine Entscheidung
+wartet. Ein Fehler beim Schließen behält seine ganze Ursache und eine sichere
+Fehler-ID. Er sperrt neue Sendungen. Unbekannte Schreibvorgänge brauchen weiter
+ein Ergebnis oder eine Stoppentscheidung. Ein geschlossener Beobachter bricht
+die Phase nicht ab.
+
+Chat-Stopp und Löschen sind Ausführungsbefehle. Löschen sperrt neue Arbeit,
+bricht verknüpfte Arbeit ab und wartet auf Freigabe. Eine Live-Sitzung gehört zu
+einem Scope, der vor dem Verbindungsaufbau registriert wird. Der physische
+Besitzer schließt sie und bestätigt die Freigabe. Die Datenbank speichert das
+Ergebnis für jede physische Lease. Geht eine Antwort verloren, liest der
+Aufrufer dieses Ergebnis. Eine fehlgeschlagene Schließung behält dieselbe
+Fehler-ID, auch nach dem Ende des Besitzers. Eine fehlende Route oder ein
+ungesunder Runner beweist keine Freigabe. Verliert der Besitzer seine Lease oder
+kann er sie nicht prüfen, schließt er die Verbindung. Unbekannte interaktive
+Schreibvorgänge und Audio werden nie wiederholt.
+
+Eine App-Verbindung kann Scopes auf mehreren Knoten haben. Jeder Scope hat eine
+eigene Lease. Das Aufräumen wartet auf alle Scopes, auch wenn ihre Route schon
+ersetzt wurde. Das Ende des Aufrufers und das Aufräumen von einem anderen Knoten
+nutzen dasselbe gespeicherte Ergebnis.
+
+App-Anmeldung und Token-Erneuerung speichern mit jedem Ergebnis einen Auftrag
+zum Aufräumen, auch bei einem späten Ergebnis. Der Auftrag gehört der Plattform.
+Der Verlust von Mitgliedsrechten stoppt ihn daher nicht. Beim Speichern des
+Tokens werden die Aufruf-ID, die Zugangsdaten und das Endereignis in einer
+Transaktion geschrieben. Das Aufräumen wartet auf die ursprüngliche Ausführung
+und spätere Arbeit an der Verbindung. Ein gespeichertes Token bleibt im Besitz
+seiner Verbindung. Andere Aufträge bleiben offen, solange eine Verbindung oder
+ein Entwicklertest denselben Aussteller und OAuth-Client nutzt. OAuth-Server
+können verbundene Tokens gemeinsam widerrufen, auch wenn ihre Zeichenfolgen
+verschieden sind. Ein dauerhafter Zeitgeber prüft nach der Freigabe erneut. Die
+Prüfung gilt für alle Besitzer in OpenBot.
+
+Das Senden und Speichern von Tokens nutzt dieselbe Datenbanksperre wie das
+Aufräumen. Eine gespeicherte Widerrufsabsicht hält den Bereich auch bei
+Wiederholungen und einer Übernahme durch einen anderen Knoten. Neue
+Token-Aufrufe warten auf das Ende des Widerrufs. Das Endereignis gibt die
+Verbindung und den Bereich frei. Ein Fehler beim Widerruf nutzt den gemeinsamen
+Zeitgeber für Wiederholungen. Ohne Widerrufs-Endpunkt wird `LocalOnly`
+gespeichert.
+
+## Identität und Zugriff
+
+`ExecutionIdentity` trennt Ressourcenbesitzer, aktuellen Akteur, ursprüngliches
+Token, Bot, Delegation und Quellausführung. Ein Kind behält alle Grenzen seiner
+Quelle. Weitere Aufrufer dürfen Grenzen hinzufügen, aber keine entfernen.
+Channel-Arbeit behält auch den verknüpften Sprecher. Identität kommt nie aus
+einem Textpräfix, dem Turn-Autor oder der Plugin-Reihenfolge.
+
+HTTP, Werkzeuge, Code Mode und wiederhergestellte Arbeit nutzen dieselben
+Anwendungsfälle und Zugriffsregeln. Besitzer und Akteur müssen weiter gültig
+sein. Prüfungen laufen bei Wiederherstellung, vor externem Versand und nach
+Warten auf Modellgrenzen oder Geheimnisse. Eine gespeicherte Freigabe umgeht
+keine Plattform-, Mitglieds- oder Token-Grenze. Listen wenden Ressourcenregeln
+in der Datenbankabfrage an. API-Schlüssel und gleichursprüngliche
+Sitzungs-Cookies nutzen dieselben Anwendungsfälle.
+
+`ServiceIdentity` benennt einen Dienst für die Plattform oder eine Organisation.
+Er hat keine Mitglieds-ID. Er nutzt denselben Ausführungsspeicher, Befehlslog,
+dieselbe Outbox, Ereignisse und Wiederherstellung. Befehlsschlüssel gehören zu
+einem Mitglied oder Dienstbereich. Ein Dienst kann keinen Mitgliedsworkflow
+öffnen. Mitglieder und Token können nicht durch einen Dienstworkflow senden.
+Jeder Dienst prüft seine aktuellen Rechte. Öffentliche Organisationsendpunkte
+können keine Plattformausführungen lesen.
+
+## Funktionsworkflows
+
+| Funktion                                   | Regel                                                                                                                                                                                                                   |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat, Turn, Werkzeuge                      | Chat ordnet Eingaben. Turn besitzt Modellschritte. Hintergrundwerkzeuge haben eigene Ausführungen.                                                                                                                      |
+| Freigabe, Delegation, Pläne, Grenzen       | Entscheidungen und Signale werden gespeichert. Der Quell-Turn kann bei wartender Freigabe fortfahren. Task-Nachrichten werden dedupliziert.                                                                             |
+| Speicher                                   | Lernen und Hilfsaufrufe nutzen das gemeinsame Aufrufprotokoll. Cursor können keinen neueren Fortschritt überschreiben.                                                                                                  |
+| Code Mode                                  | Sandbox, feste Zeit, Zufallsstartwert und Aufrufreihenfolge bleiben erhalten. Wiederholung nutzt gemeinsame Aufrufdaten.                                                                                                |
+| App-Aufrufe, OAuth, Entwicklertests, Index | Lange Arbeit nutzt Workflows. Apps besitzen Verbindungs- und Berechtigungsdaten. Ein Neustart setzt keine fremde Knotenarbeit oder gültige Views zurück.                                                                |
+| Channels, Trigger, Erinnerungen            | Eingaben deduplizieren, Timer speichern, Versand und Wiederholungen erfassen. Bestätigte Ablehnung und unbekanntes Ergebnis haben andere Wiederholungsregeln.                                                           |
+| Computer, Connector, Live                  | Gemeinsames Ressourcenverzeichnis und RPC nutzen. Der physische Besitzer hält die Verbindung. Nur mit Treiberunterstützung wiederherstellen. Kein Audio und keine unbekannten interaktiven Schreibvorgänge wiederholen. |
+| Dateien, Vaults, Modelle                   | Eigene Adapter behalten. Löschen über Speichergrenzen nutzt wiederholbare Arbeit. Geheimnisse erst an der Aufrufgrenze öffnen.                                                                                          |
+| Konten, Organisationen, SSO                | Eigene Geschäftsmodule behalten. Alle Zugänge nutzen gemeinsame Identität und Rechte.                                                                                                                                   |
+
+Task-Zustand hält Zeit-, Schritt- und Kostengrenzen. Wiederherstellung setzt sie
+nicht zurück. Pausen stoppen neue Sendungen und schließen Phasenressourcen. Eine
+Prüfung darf ihre eigene Pause beantworten, aber keine Elternpause umgehen. Zeit
+zählt nur, wenn Task und Eltern laufen dürfen. Nachrichten an geschlossene
+Arbeit ergänzen nur den Verlauf; sie starten keinen neuen Turn.
+
+## Verbrauch, Fehler und Geheimnisse
+
+Jeder Modellaufruf hat eine Abrechnungsidentität. Bestätigter Verbrauch,
+Ergebnis und Ereignisse werden gemeinsam gespeichert. Doppelte Ergebnisse werden
+nicht doppelt berechnet. Schätzungen dienen nur Reservierungen und Ratenlimits.
+Fehlender Verbrauch bleibt unbekannt, mit Schätzung und Aufruf-ID. Er gilt nie
+als erfolgreicher Nullverbrauch. Am Ende gibt ein Aufruf seine Reservierung
+frei. Bei einer Übernahme werden die Reservierungen alter Versuche freigegeben.
+Der Schätzwert bleibt in einem eigenen Feld. Fehlende alte Schätzwerte bleiben
+null. Unbekannter Verbrauch blockiert keine neuen Aufrufe. Später bestätigter
+Verbrauch wird weiterhin nur einmal berechnet. Diese Schätzwerte sind keine
+belegten Obergrenzen für die Endkosten des Anbieters.
+
+Vollständige Fehlerursachen liegen in verschlüsselten Fehlerdatensätzen. HTTP,
+Channels, Eltern-Bots und Workflow-Ergebnisse tragen nur sichere Kategorie und
+Fehler-ID. Wiederverwendete sichere Fehler behalten ihre ursprüngliche ID.
+
+Serverfehler der HTTP-API geben `RequestFailed` mit `category` und `errorId`
+zurück. Der Antwort-Header `openbot-error-id` trägt dieselbe ID. Im Vertrag
+benannte Eingabe-, Zugriffs- und Konfliktfehler behalten Status und Typ.
+API-Schlüssel und Sitzungscookies nutzen dieselbe Fehlergrenze. Die Abbildung
+typisierter Fehler behält die ganze private Ursache, bis diese Grenze sie
+speichert. Sie schreibt die Ursache nicht in normale Logs.
+
+Nach dem Start eines Ereignisstroms sendet ein Serverfehler dieselben
+`RequestFailed`-Felder in einem Fehlerereignis. Auch das Kodieren von
+Ereignissen liegt in dieser Grenze. Schlägt das Speichern oder Kodieren des
+Fehlers fehl, schließt die Verbindung. Der Leser kann ab seinem letzten
+gespeicherten Cursor weiterlesen. Interne Fehler werden nicht als Ereignisdaten
+gesendet.
+
+Ein späterer Fehler beim Freigeben von Ressourcen erhält seine eigene
+verschlüsselte Ursache und Fehler-ID für dieselbe Ausführung. Er ersetzt den
+ersten Fehler nicht und beendet die Ausführung nicht. Die Pause vor einem neuen
+Versuch wächst von 100 Millisekunden auf 5 Sekunden.
+
+Engine-Nachrichten tragen nur Datensatzverweise. Vertrauliche Eingaben,
+Ergebnisse, Identität und Ereignisse liegen in verschlüsselten Domänendaten.
+Vault-Aufrufe speichern Eintrags-IDs und erlaubte Felder, keine Geheimniswerte.
+Ein neuer Eintrag mit altem Namen ersetzt keinen gespeicherten Verweis. Vor
+Versand werden aktuelle Rechte und Felder erneut geprüft.
+
+## Ereignisse lesen
+
+`observe(executionId, afterSequence)` liest ein geordnetes Ereignisprotokoll.
+Jedes Ereignis hat eine Sequenz innerhalb seiner Ausführung. Text nennt auch
+Schritt und Versuch. Kleine Textpakete werden vor der Veröffentlichung
+gespeichert.
+
+PostgreSQL-Benachrichtigungen wecken einen gemeinsamen Leser pro Knoten. Geht
+eine Benachrichtigung verloren, bleibt das Protokoll maßgeblich. Begrenzte
+Puffer begrenzen den Speicherbedarf. Langsame und neu verbundene Leser lesen ab
+ihrem Cursor nach. Endzustände sind erneut lesbar. HTTP, SDKs, Channels und
+Eltern-Bots nutzen denselben Weg. Das Schließen von SSE oder Long Polling
+beendet nur die Beobachtung. Abbruch braucht einen eigenen Befehl.
+
+## Datenumzug
+
+Vor dem Umzug alte Knoten und neue Eingaben stoppen. Datenbank und
+Objektverweise sichern. Neue Drizzle-Migrationen anwenden, dann Daten in Gruppen
+mit gespeichertem Fortschritt umwandeln. Die Basismigration nie ändern.
+Speicher-Layers führen zur Laufzeit keine DDL aus, also SQL zur Änderung der
+Tabellenstruktur.
+
+Ressourcen-IDs, Besitzer, Verlauf, Freigaben, Verbindungen, Geheimnisse und
+offene Arbeit behalten. Alte verschlüsselte Daten brauchen eigene
+Migrationscodecs. Offene Arbeit erhält neue Ausführungsverweise. Unbekannte
+externe Ergebnisse bleiben unbekannt. Nicht wiederherstellbare Arbeit wird mit
+Grund unterbrochen. Ein fehlerhafter Datensatz stoppt den Umzug; er wird nicht
+übersprungen. Eine Entwicklereinladung muss denselben Besitzer wie ihr Nachweis
+haben.
+
+Der importierte Verlauf von Dateien und Index-Anfragen prüft bei jedem Lesen die
+aktuellen Rechte. Eine Index-Anfrage prüft auch den aktuellen Entwicklernachweis
+und den App-Zugriff. Ein entfernter Nachweis gibt keinen Zugriff auf alte
+Ergebnisse. Importierte Einträge starten keine externe Aktion erneut und
+übernehmen nicht die Identität der lesenden Person.
+
+Vor neuen Knoten Anzahl, Verweise, Entschlüsselung und Zustände prüfen. Die
+Umwandlung muss nach einem Stopp fortsetzbar und erneut ausführbar sein.
+Sicherungen nur vor Wiederaufnahme des Verkehrs zurückspielen. Nach neuen
+externen Aktionen vorwärts reparieren, damit Rücksetzen keinen Schreibvorgang
+wiederholt.
+
+## Prüfungen und offene Arbeit
+
+Die [Prüfungen des Ausführungsdesigns](/de/docs/architecture-checks) zeigen
+Fähigkeiten, Quelltests, entfernte Pfade und offene Freigabenachweise.
+
+Die Funktionsbasis sind 581 Tests. Neue Tests prüfen gespeicherte Befehle,
+Generationen, Abbruch, späte Ergebnisse, langsame Leser, Rechteänderungen und
+Verbrauch. Zwei echte Prozesse teilen PostgreSQL. Tests beenden den Besitzer und
+prüfen Wiederherstellung ab gespeicherten Schritten. Mitglieds- und Dienstarbeit
+nutzen denselben Testweg.
+
+Die Mitgliedslaufzeiten sind entfernt: `BackendLayers`, `Backend`,
+`ManagedChats`, `Chats`, `Coordinator` und die alte `LiveSessions`-Map. Damit
+entfallen Referenzzähler, `keepOpen`, `current`, Methodenproxies und der
+Chat-Heartbeat-Scan. Die alte Speicher-Jobwarteschlange und der alte
+Hilfsmodellpfad sind ebenfalls weg. Turn-, Werkzeug-, Freigabe-, Delegations-,
+App-, Code-Mode-, Channel-, Trigger-, Erinnerungs- und Speicherworkflows werden
+über gemeinsame Anwendungs-Layers registriert.
+
+Die alten App-Dienste `Operations` und `Invocations` sowie der Code-Mode-Runner
+mit eigenen Laufzeitrechten sind entfernt. Die App-Suche gibt Beschreibungen
+ohne Aktions-Callbacks zurück. Aufrufe und Programme nutzen nur die gemeinsamen
+Workflows. Der Serverstart setzt keine alten App-Aufrufe zurück, durchsucht
+keine alten Delegationen und schreibt keine Chat-Runner-Heartbeats. Der alte
+PostgreSQL-Operation-Listener, Abbruchmeldungen und der Ablaufscan sind
+entfernt. Der Runner im Speicher von `core` bleibt allein nutzbar. Alte App- und
+Code-Datensätze behalten ihre Migrations-Codecs; sie führen keine Arbeit aus.
+
+Das alte globale Gate, die Werkzeugfreigaben, die Ebene für Arbeitswerkzeuge und
+der Bot-Signalbus sind ebenfalls entfernt. Jede Ausführung erstellt ihr eigenes
+Gate und ihre Freigaben. Ein Erinnerungswerkzeug sendet einen dauerhaften
+Befehl. Anfrage-Workflows schließen jeweils eine fällige Anfrage; es gibt keine
+globale Suche mehr. Die Anfrage, der gespeicherte Werkzeugaufruf und die
+Nachricht werden in einer Transaktion gespeichert. Ein fehlgeschlagener
+Schreibzugriff hinterlässt keine wartende Anfrage ohne ihren Aufruf.
+
+Der alte Dienst für Delegationsgrenzen ist ebenfalls entfernt. Die Prüfung nutzt
+gespeicherten Verbrauch und den Delegations-Workflow. Wenn Verbrauch oder
+Einstellungen nicht lesbar sind, stoppt die Aktion. Sie nutzt keine alten Kosten
+oder Standardzeit. Eine unterbrochene Freigabeprüfung lässt die Aufgabe bis zur
+Wiederaufnahme pausiert.
+
+Entwicklertestläufe und die Vorbereitung einer Anmeldung nutzen den gemeinsamen
+Workflow, gespeicherte Aufrufe und das Ereignislog. Der Befehl speichert den
+ursprünglichen Aufrufer und eine feste Ausführungs-ID. Fortschritt wird nur für
+die aktuelle Generation gespeichert. Die Bereinigung wartet, bis der Lauf seine
+Verbindung schließt. Die alte FiberMap für Läufe und ihre Ergebnis-Callbacks
+sind entfernt.
+
+Prüfungen, Änderungen, manuelle Änderungen und erneute Prüfungen einer
+Verbindung nutzen gemeinsame Ausführungsbefehle. Ein gespeicherter Leseaufruf
+schlägt die Änderung vor. Die letzte Transaktion prüft Aufrufer, Revision und
+Generation. Ihr Prüfpunkt nennt das gespeicherte Ergebnis. Es bleibt auch nach
+dem Entfernen der Verbindung lesbar. Eine ersetzte Freigabe geht in derselben
+Transaktion an die Plattform zur Bereinigung.
+
+Folgende Arbeit blockiert die Freigabe noch:
+
+- Code-Austausch und Bereinigung von Entwicklertests aus den alten Workern und
+  lokalen Abläufen verlagern. Vorbereitung einer Anmeldung, Code-Austausch,
+  Erneuerung, Widerruf, Entfernen, Zurücksetzen und Dateipflege nutzen
+  gemeinsame Ausführungsdatensätze.
+- Vollständige Servertests für jeden physischen Adapter abschließen. Zwei
+  Ressourcenprozesse prüfen Besitzerverlust, langsames Schließen, verlorene
+  Antworten, getrenntes Datenbanknetz und spätes Schließen nach Ersatz. Ohne
+  gespeichertes Schließergebnis bleibt ein Laufzeitrecht unbekannt.
+- Das lokale Hilfsmodelllimit durch gemeinsame Zulassung ersetzen.
+- Vollständige Altdatenumwandlung, Fortschrittsdaten und Startsperre bauen und
+  erproben. Schema-Migrationen allein sind keine Datenumwandlung.
+- Fehler-, Rechte-, Geheimnis- und Migrationstests vervollständigen.
+  Modulabhängigkeiten prüfen und entfernte Koordinationspfade nachweisen.
+- Vollständigen Build, Typprüfung, alle Pakettests, Compose-Prüfungen,
+  Image-Scans, Docs-Build und CI vor Merge und Push bestehen.
+
+Der Umbau ist erst fertig, wenn alle erhaltenen Funktionen dieses Design nutzen
+und die alten Koordinationspfade entfernt sind.

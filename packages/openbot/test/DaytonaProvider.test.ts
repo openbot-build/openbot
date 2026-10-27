@@ -1,8 +1,12 @@
+import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
+import { Records } from "../src/errors/Records.ts"
+import { ComputerCallFailed } from "../src/computers/Computer.ts"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
 	Clock,
+	Cause,
 	DateTime,
 	Effect,
 	Fiber,
@@ -93,6 +97,7 @@ const credentials: DaytonaProvider.Credentials = {
 
 const provider = (client: HttpClient.HttpClient) =>
 	DaytonaProvider.make(credentials).pipe(
+		Effect.provide(ErrorRecordsFixture.layer),
 		Effect.provideService(HttpClient.HttpClient, client),
 	)
 
@@ -119,8 +124,13 @@ const attach = (answer: Answer, desktop = false) =>
 				? json(sandbox("started", desktop))
 				: answer(seen),
 		)
-		const machine = yield* (yield* provider(client)).attach("sb1")
-		return { machine, log, find }
+		const recorded = yield* ErrorRecordsFixture.make
+		const value = yield* DaytonaProvider.make(credentials).pipe(
+			Effect.provideService(HttpClient.HttpClient, client),
+			Effect.provideService(Records, recorded.records),
+		)
+		const machine = yield* value.attach("sb1")
+		return { machine, log, find, failures: recorded.failures }
 	})
 
 /** Answers the session routes of the toolbox: a command that gives `output` and ends with `code`. */
@@ -221,7 +231,7 @@ it.effect("Daytona gives no terminal to a command", () =>
 		const error = yield* Effect.flip(
 			machine.shell.start({ command: "python3", tty: true }),
 		)
-		assert.ok(error._tag === "ComputerCallFailed")
+		assert.ok(Schema.is(ComputerCallFailed)(error))
 		assert.strictEqual(error.retry, false)
 		assert.isFalse(Arr.some(yield* log, pathEndsWith("/process/session")))
 	}),
@@ -290,20 +300,20 @@ it.effect(
 			assert.strictEqual(remove.url.searchParams.get("path"), "/home/src")
 			assert.strictEqual(remove.url.searchParams.get("recursive"), "true")
 			const missing = yield* Effect.flip(machine.shell.read("/nope", "utf8"))
-			assert.strictEqual(missing._tag, "ComputerCallFailed")
+			assert.ok(Schema.is(ComputerCallFailed)(missing))
 			assert.strictEqual(
-				missing._tag === "ComputerCallFailed" && missing.missingPath,
+				Schema.is(ComputerCallFailed)(missing) && missing.missingPath,
 				"/nope",
 			)
 			assert.strictEqual(
-				missing._tag === "ComputerCallFailed" && missing.retry,
+				Schema.is(ComputerCallFailed)(missing) && missing.retry,
 				false,
 			)
 		}),
 )
 
 it.effect(
-	"Daytona stops the sandbox to pause it, and starts it again on the next call",
+	"Daytona pauses the sandbox and starts it only through its resume method",
 	() =>
 		Effect.gen(function* () {
 			const state = yield* Ref.make("started")
@@ -328,11 +338,20 @@ it.effect(
 			const machine = yield* (yield* provider(client)).attach("sb1")
 			yield* machine.pausable!.pause
 			assert.strictEqual(yield* machine.state, "paused")
+			assert.ok(
+				Schema.is(ComputerCallFailed)(
+					yield* machine.shell.list("/").pipe(Effect.flip),
+				),
+			)
 			// OpenBot waits one second between two reads of the sandbox state.
 			const fiber = yield* Effect.forkChild(
 				Effect.scoped(
 					Effect.flatMap(
-						machine.shell.start({ command: "true", tty: false }),
+						machine.pausable!.resume.pipe(
+							Effect.andThen(
+								machine.shell.start({ command: "true", tty: false }),
+							),
+						),
 						collect,
 					),
 				),
@@ -475,9 +494,9 @@ it.effect(
 	"Daytona ends a command with a short message when it cannot read the output",
 	() =>
 		Effect.gen(function* () {
-			const { machine } = yield* attach((seen) =>
+			const { machine, failures } = yield* attach((seen) =>
 				Str.endsWith("/command/cmd1/logs")(toolboxPath(seen))
-					? json({ message: "toolbox down" }, 500)
+					? json({ message: "private-toolbox-down" }, 500)
 					: session(seen, "", 0),
 			)
 			const result = yield* Effect.scoped(
@@ -489,8 +508,11 @@ it.effect(
 			assert.deepStrictEqual(result.exit, {
 				code: null,
 				signal: null,
-				error: "Reading the output failed with HTTP 500: toolbox down",
+				error: "OpenBot could not read the command.",
 			})
+			const saved = yield* failures
+			assert.strictEqual(saved.length, 1)
+			assert.match(Cause.pretty(saved[0]!.cause), /private-toolbox-down/)
 		}),
 )
 
@@ -555,9 +577,9 @@ it.effect(
 					: empty(404),
 			)
 			const link = yield* Effect.flip(machine.ports!.open(3000))
-			assert.strictEqual(link._tag, "ComputerCallFailed")
+			assert.ok(Schema.is(ComputerCallFailed)(link))
 			assert.strictEqual(
-				link._tag === "ComputerCallFailed" && link.message,
+				Schema.is(ComputerCallFailed)(link) && link.message,
 				"Daytona did not give a preview link.",
 			)
 			const { client } = yield* fake((seen) =>
@@ -569,9 +591,9 @@ it.effect(
 			)
 			const other = yield* (yield* provider(client)).attach("sb1")
 			const address = yield* Effect.flip(other.shell.list("/home"))
-			assert.strictEqual(address._tag, "ComputerCallFailed")
+			assert.ok(Schema.is(ComputerCallFailed)(address))
 			assert.strictEqual(
-				address._tag === "ComputerCallFailed" && address.message,
+				Schema.is(ComputerCallFailed)(address) && address.message,
 				"Daytona did not give the toolbox address.",
 			)
 		}),

@@ -1,4 +1,4 @@
-import type { Settings as Api } from "@openbot-build/api"
+import type { Settings as SettingsModel } from "@openbot-build/domain"
 import { DateTime } from "effect"
 import {
 	codeModeOf,
@@ -18,7 +18,7 @@ import {
 /** The API form of the platform settings. Secrets only show whether they are set. */
 export const platform = (
 	snapshot: Snapshot<PlatformDocument>,
-): Api.PlatformSettings => {
+): SettingsModel.PlatformSettings => {
 	const { document } = snapshot
 	return {
 		version: snapshot.version,
@@ -45,7 +45,7 @@ export const platform = (
 	}
 }
 
-const files = (document: FilesDocument): Api.Files => {
+const files = (document: FilesDocument): SettingsModel.Files => {
 	const { storage, ...stored } = document
 	const limits = { ...stored, quotaBytes: quotaOf(document) }
 	if (storage === null) return { ...limits, storage: null }
@@ -61,7 +61,7 @@ const files = (document: FilesDocument): Api.Files => {
 
 export const organization = (
 	snapshot: Snapshot<OrganizationDocument>,
-): Api.OrganizationSettings => ({
+): SettingsModel.OrganizationSettings => ({
 	...snapshot.document,
 	delegationTimeLimitMs: delegationTimeLimitOf(snapshot.document),
 	...operationsOf(snapshot.document),
@@ -72,7 +72,7 @@ export const organization = (
 
 export const member = (
 	snapshot: Snapshot<MemberDocument>,
-): Api.MemberSettings => ({
+): SettingsModel.MemberSettings => ({
 	...snapshot.document,
 	defaultBot: snapshot.document.defaultBot ?? null,
 	version: snapshot.version,

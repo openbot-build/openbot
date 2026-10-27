@@ -1,4 +1,4 @@
-import type { PlatformApi } from "@openbot-build/api"
+import type { Platform as PlatformModel } from "@openbot-build/domain"
 import { Context, type Effect, pipe, Schema, String as Str } from "effect"
 
 export class PlatformAdminsUnavailable extends Schema.TaggedError<
@@ -20,19 +20,19 @@ export class PlatformAdmins extends Context.Service<
 	PlatformAdmins,
 	{
 		readonly list: Effect.Effect<
-			ReadonlyArray<PlatformApi.PlatformAdmin>,
+			ReadonlyArray<PlatformModel.PlatformAdmin>,
 			PlatformAdminsUnavailable
 		>
 		/** Adds an email. Adding an email that is already there changes nothing. */
 		readonly add: (
 			email: string,
-		) => Effect.Effect<PlatformApi.PlatformAdmin, PlatformAdminsUnavailable>
+		) => Effect.Effect<PlatformModel.PlatformAdmin, PlatformAdminsUnavailable>
 		readonly remove: (
 			email: string,
 		) => Effect.Effect<
 			void,
-			| PlatformApi.PlatformAdminNotFound
-			| PlatformApi.LastPlatformAdmin
+			| PlatformModel.PlatformAdminNotFound
+			| PlatformModel.LastPlatformAdmin
 			| PlatformAdminsUnavailable
 		>
 		/**

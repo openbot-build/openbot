@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { Settings as Api } from "@openbot-build/api"
+
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -24,8 +25,6 @@ import * as Server from "./Server.ts"
 import * as OpenBot from "./OpenBot.ts"
 import * as Drivers from "../computers/Drivers.ts"
 import * as VaultReaders from "../vaults/Readers.ts"
-import { IndexNamespace } from "../apps/IndexNamespace.ts"
-import * as IndexJobs from "../apps/IndexWork.ts"
 import { IndexWork } from "../apps/IndexWork.ts"
 import * as DevelopmentModel from "./DevelopmentModel.ts"
 import * as DevelopmentApps from "./DevelopmentApps.ts"
@@ -33,13 +32,12 @@ import * as DevelopmentAuthorization from "./DevelopmentAuthorization.ts"
 import * as DevelopmentScenarios from "./DevelopmentScenarios.ts"
 import * as DevelopmentBusiness from "./DevelopmentBusiness.ts"
 import * as DevelopmentProofs from "./DevelopmentProofs.ts"
-import * as Db from "../database/Database.ts"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
 import * as S3 from "../files/S3.ts"
 import * as OutboundGuard from "../network/OutboundGuard.ts"
 import * as OutboundPolicy from "../network/OutboundPolicy.ts"
-import * as ErrorReporting from "./ErrorReporting.ts"
-import * as Background from "./Background.ts"
+import * as ErrorReporting from "../errors/Reporting.ts"
+import * as Background from "../execution/Background.ts"
 
 const cardUrl = "https://app.development.test/card.json"
 const catalogUrl = "https://app.development.test/.well-known/ai-catalog.json"
@@ -155,7 +153,6 @@ export const layer = (
 			return Server.layerFixed({
 				...settings,
 				builtinModels,
-				defaultModel: DevelopmentModel.selection,
 				routes: Layer.merge(
 					DevelopmentAuthorization.layerRoutes,
 					DevelopmentProofs.layerRoutes,
@@ -174,17 +171,14 @@ export const layer = (
 				startup: Layer.effectDiscard(
 					Effect.gen(function* () {
 						const work = yield* IndexWork
-						yield* IndexJobs.enqueue(
-							yield* Db.make,
-							yield* IndexNamespace,
-							cardUrl,
-							[],
-						)
-						yield* work.runOne(cardUrl)
-					}).pipe(
-						Background.logFailure("The development App was not indexed"),
-						Effect.forkScoped,
-					),
+						const background = yield* Background.make
+						yield* work
+							.request(cardUrl, [])
+							.pipe(
+								background.logFailure("The development App was not indexed"),
+								Effect.forkScoped,
+							)
+					}),
 				),
 				indexNamespace: "development",
 			})
@@ -249,7 +243,7 @@ const createBucket = (storage: Storage) =>
 		yield* S3.createBucket(client, storage, now)
 	}).pipe(
 		Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
-		Background.logFailure("The development bucket was not made"),
+		Background.beforeStorage.logFailure("The development bucket was not made"),
 	)
 
 /**

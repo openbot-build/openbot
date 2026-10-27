@@ -1,7 +1,10 @@
 ---
+next: false
 title: 错误日志
 description: OpenBot 如何记录失败，以及如何把它们发送到你自己的服务。
 ---
+
+面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/docs/admin)开始。
 
 服务器上出现失败时，OpenBot 会写一行级别为 `Error`
 的日志。OpenBot 不会把这些日志发送到其他服务。你可以用 Effect 日志器自己添加这个功能。
@@ -47,7 +50,7 @@ Turn 失败时，客户端只得到一条简短的消息。模型错误，比如
 ## 后台工作
 
 OpenBot 也会在后台做一些工作。比如，它会触发到时间的 Trigger，删除旧文件，暂停空闲的 Computer，为
-[App Index](/zh-cn/docs/app-index)
+[App Index](/zh-cn/docs/developers/app-index)
 检查 App，并监听设置的修改。它还会在委派的工作到达时间限制时暂停它，发送提醒，发送 Channel 的消息，并监听来自它的其他实例的调用。
 
 这项工作的某一次运行失败时，OpenBot 会写一行级别为 `Warn`
@@ -62,38 +65,4 @@ OpenBot 也会在后台做一些工作。比如，它会触发到时间的 Trigg
 
 ## 把错误发送到你自己的服务
 
-当你从自己的代码中运行 OpenBot 时，用 `Logger.layer` 添加一个日志器。使用
-`mergeWithExisting: true`
-来保留其他日志器。在服务器外部提供它，这样它会一直保持打开，直到服务器关闭。
-
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
-import { Effect, Layer, Logger, References } from "effect"
-import { FetchHttpClient } from "effect/http"
-
-const alerts = Logger.layer(
-	[
-		Logger.make((log) => {
-			if (log.logLevel !== "Error" && log.logLevel !== "Fatal") return
-			const annotations = log.fiber.getRef(References.CurrentLogAnnotations)
-			// 只发送你需要的值，比如发给一个聊天机器人。
-			console.log("alert", annotations["source"], annotations["operation"])
-		}),
-	],
-	{ mergeWithExisting: true },
-)
-
-NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(
-			Server.layerLive(settings).pipe(
-				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
-			),
-		)
-	}).pipe(Effect.provide(alerts)),
-)
-```
-
-日志器不能阻塞。要调用一个慢的服务，请把每个事件放进队列，再从后台 fiber 发送。fiber 是 Effect 运行的一种轻量线程。
+此开发任务请参见 [添加错误日志记录器](/zh-cn/docs/developers/logging).

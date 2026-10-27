@@ -1,7 +1,10 @@
-import { Account, Authorization, Identity } from "@openbot-build/api"
+import { Authorization as HttpAuthorization } from "@openbot-build/api"
+import { Authorization } from "@openbot-build/domain"
+
+import { AccountCaller } from "@openbot-build/domain"
 import { Authorizer } from "@nmnmcc/ability"
 import * as AbilityHttpApi from "@nmnmcc/ability/HttpApi"
-import { Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { policyOf } from "./Load.ts"
 
 /**
@@ -9,22 +12,24 @@ import { policyOf } from "./Load.ts"
  * role, a member or a token works at once, on every server.
  */
 const layerAuth = Authorizer.layer(Authorization.Auth, {
-	principal: Identity,
-	policy: (caller) => policyOf(caller, { platform: false }),
-	cache: false,
+	policy: (caller) =>
+		Schema.decodeUnknownEffect(AccountCaller)(caller).pipe(
+			Effect.flatMap((caller) => policyOf(caller, { platform: false })),
+		),
 })
 
 const layerPlatformAuth = Authorizer.layer(Authorization.PlatformAuth, {
-	principal: Account,
-	policy: (caller) => policyOf(caller, { platform: true }),
-	cache: false,
+	policy: (caller) =>
+		Schema.decodeUnknownEffect(AccountCaller)(caller).pipe(
+			Effect.flatMap((caller) => policyOf(caller, { platform: true })),
+		),
 })
 
 /** The authorizers, and the middlewares that check the annotations of each endpoint. */
 export const layer = Layer.mergeAll(
-	AbilityHttpApi.layer(Authorization.Authorize, Authorization.Auth),
+	AbilityHttpApi.layer(HttpAuthorization.Authorize, Authorization.Auth),
 	AbilityHttpApi.layer(
-		Authorization.PlatformAuthorize,
+		HttpAuthorization.PlatformAuthorize,
 		Authorization.PlatformAuth,
 	),
 ).pipe(Layer.provideMerge(Layer.mergeAll(layerAuth, layerPlatformAuth)))

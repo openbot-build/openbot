@@ -1,6 +1,10 @@
+import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
+import { IndexWork } from "../src/apps/IndexWork.ts"
 import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { ConnectionsApi as Api, Identity } from "@openbot-build/api"
+import type { Caller } from "@openbot-build/domain"
+import { Tokens } from "../src/auth/Tokens.ts"
 import { CatalogDiscovery, Store, Document } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -13,7 +17,6 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
 import { SqlClient } from "effect/sql"
 import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
@@ -27,12 +30,19 @@ import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
-import * as Caller from "./Caller.ts"
 import * as Db from "../src/database/Database.ts"
 
 const encryptionKey = Redacted.make("test:" + Str.repeat(32)("11"))
-const alice = { organizationId: "organization", userId: "alice" }
-const bob = { organizationId: "organization", userId: "bob" }
+const alice: Caller = {
+	kind: "member",
+	organizationId: "organization",
+	userId: "alice",
+}
+const bob: Caller = {
+	kind: "member",
+	organizationId: "organization",
+	userId: "bob",
+}
 const asOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, owner = alice) =>
 	Effect.provideService(operation, Identity, owner)
 const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
@@ -49,6 +59,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Database.layer({ databaseUrl: Redacted.make(database.url) }),
 				).pipe(Layer.provide(NodeServices.layer))
 				const app = Connections.layer.pipe(
+					Layer.provide(
+						OrganizationFixture.layerAuthorization.pipe(
+							Layer.provide(Layer.mock(Tokens, {})),
+						),
+					),
+					Layer.provide(IndexCommandsFixture.layer),
 					Layer.provide(publisher.discovery),
 					Layer.provide(CatalogDiscovery.layerRules),
 					Layer.provide(publisher.probe),
@@ -287,10 +303,15 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 			Effect.gen(function* () {
 				const database = yield* Postgres.start
 				const storage = () =>
-					Layer.merge(
-						Secrets.layer(encryptionKey),
-						Database.layer({ databaseUrl: Redacted.make(database.url) }),
-					).pipe(Layer.provide(NodeServices.layer))
+					IndexCommandsFixture.layer.pipe(
+						Layer.provideMerge(
+							Layer.merge(
+								Secrets.layer(encryptionKey),
+								Database.layer({ databaseUrl: Redacted.make(database.url) }),
+							),
+						),
+						Layer.provide(NodeServices.layer),
+					)
 				// Each build has its own database pool.
 				const first = yield* Layer.build(storage())
 				const second = yield* Layer.build(storage())
@@ -330,7 +351,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						return yield* StoredConnections.save(
 							db,
 							secrets,
-							"public",
+							yield* IndexWork,
 							ownerKey(alice),
 							{ app, connection, name: id },
 						).pipe(Effect.result)
@@ -350,61 +371,6 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					),
 					Arr.replicate("LimitReached", 5),
 				)
-			}),
-	)
-
-	it.effect(
-		"ordinary HTTP clients prepare and confirm protected Apps without trusting caller authorization claims",
-		() =>
-			Effect.gen(function* () {
-				const publisher = yield* Fixture.start()
-				const host = yield* BrowserHost.start({
-					publicOrigin: "https://openbot.fixture.test",
-					discovery: publisher.discovery,
-					appProbe: publisher.probe,
-				})
-				const user = yield* host.login("app-user")
-				const address = yield* host.address
-				const call = Caller.withCookie({
-					address,
-					publicOrigin: "https://openbot.fixture.test",
-				})
-				const prepared = yield* call(
-					user.session,
-					"/v1/connection-drafts",
-					"POST",
-					{ input: publisher.origin + "/card?edition=team" },
-				)
-				assert.strictEqual(prepared.status, 201)
-				const draft = yield* HttpClientResponse.schemaBodyJson(
-					Api.ConnectionDraft,
-				)(prepared)
-				const response = yield* call(user.session, "/v1/connections", "POST", {
-					draftId: draft.id,
-					revision: 0,
-					cardUrl: publisher.origin + "/card?edition=team",
-					remoteIndex: 1,
-					name: "Protected account",
-					values: {},
-					confirmed: true,
-					requiresAuthorization: false,
-				})
-				assert.strictEqual(response.status, 201)
-				const connection = yield* HttpClientResponse.schemaBodyJson(
-					Api.Connection,
-				)(response)
-				assert.strictEqual(connection.availability._tag, "PendingAuthorization")
-				assert.strictEqual(
-					(yield* HttpClient.get(address + "/v1/connections")).status,
-					401,
-				)
-				const badOrigin = yield* Caller.withCookie({
-					address,
-					publicOrigin: "https://foreign.test",
-				})(user.session, "/v1/connection-drafts", "POST", {
-					input: publisher.origin + "/card",
-				})
-				assert.strictEqual(badOrigin.status, 403)
 			}),
 	)
 })

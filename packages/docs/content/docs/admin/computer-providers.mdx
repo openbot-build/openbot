@@ -1,0 +1,39 @@
+---
+title: "Computer providers"
+description: "Computer providers"
+---
+
+For the administrator who sets up this service. Use an account with the rights
+named below.
+
+## Add a Computer provider
+
+A **Computer provider** is your account at a service that runs sandboxes.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Sandboxes","credentials":{"kind":"e2b","apiKey":"e2b_..."}}' \
+  https://api.example.com/v1/computer-providers
+```
+
+| Kind      | Fields                              | What it is                                                                                                                                                 |
+| --------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Any service that speaks the E2B API: E2B, PPIO, Alibaba Cloud Bot Sandbox, or your own E2B. Set `apiUrl` and `sandboxDomain` for a service other than E2B. |
+| `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, hosted or your own. `target` is the region, such as `us` or `eu`.                                                                                 |
+
+OpenBot checks the key with the provider before it stores it. The key never
+comes out again. The API only shows its last characters. Send `"shared": true`
+to make a shared provider of the organization.
+
+`GET /v1/computer-providers` lists your providers and the shared ones. `GET`,
+`PATCH` and `DELETE /v1/computer-providers/:providerId` read, change and delete
+one. You cannot delete a provider while Computers use it.
+
+---
+
+A file call returns `404 ComputerPathNotFound` when the path does not exist.
+Other provider failures keep `502 ComputerProviderFailed`. Deleting a provider
+that still has Computers returns `409 ComputerProviderInUse`. Connectors use
+protocol version 3. A failed reply has `reason: "NotFound"` for a missing path
+and `reason: "Failed"` for other failures.

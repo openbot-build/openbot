@@ -8,6 +8,8 @@ import type * as OutboundPolicy from "../network/OutboundPolicy.ts"
  * the same keys, but the keys protect the database, so they cannot live in it.
  */
 export interface Settings {
+	readonly clusterSecret: Redacted.Redacted<string>
+	readonly clusterHost?: string | undefined
 	readonly host: string
 	readonly port: number
 	readonly databaseUrl: Redacted.Redacted<string>

@@ -47,6 +47,8 @@ export default defineConfig({
 						value,
 					]),
 				),
+				// Keep the test source export when the build writes the package exports.
+				"./testing": "./test/Testing.ts",
 			}
 		},
 	},

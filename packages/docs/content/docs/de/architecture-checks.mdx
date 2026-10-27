@@ -1,0 +1,240 @@
+---
+title: Prüfungen des Ausführungsdesigns
+description:
+  Produktumfang, Fehlerfälle und nötige Nachweise für das neue
+  Ausführungsdesign.
+---
+
+Diese Seite ordnet dem [Ausführungsdesign](/de/docs/architecture) Tests im
+Quellcode und Prüfungen vor der Freigabe zu. Der Quellcode wurde am 2026-10-28
+geprüft. Ein hier genannter Test ist **ein Nachweis im Quellcode, kein
+bestandenes Testergebnis**. Halten Sie Version, Befehl, Ergebnis und Protokoll
+jedes Freigabelaufs fest. Befehle und Grenzen der Testdienste stehen unter
+[End-to-End-Prüfungen](/de/docs/developers/testing).
+
+## Die Übersicht lesen
+
+Der festgehaltene Ausgangspunkt der Änderung sind 581 Tests. Eine größere Zahl
+beweist nicht, dass jedes alte Verhalten erhalten bleibt. Tests liegen jetzt in
+den Quellpaketen und in `packages/e2e`. Wenn ein Test verschoben oder entfernt
+wird, halten Sie die alte Prüfung, ihren neuen Ort oder die genehmigte
+Verhaltensänderung fest.
+
+`packages/e2e/scenarios.json` ordnet Benutzeraufgaben genaue Prüfungen zu. Es
+enthält 22 Aufgabengruppen mit normalen Fällen, Grenzfällen und Extremfällen.
+Eine leere Liste macht keine Aussage zur Abdeckung. Diese Seite ergänzt
+Prüfungen der gemeinsamen Ausführung und des Datenumzugs.
+
+Die Tabellen nutzen diese Pfadpräfixe:
+
+- `E/` steht für `packages/e2e/test/`.
+- `S/` steht für `packages/openbot/test/`.
+- Andere Pfade beginnen im Projektstamm.
+
+Ein Test kann eine echte Datenbank mit festen Modellantworten, einen echten
+HTTP-Server mit einem Test-Workflow oder einen vollständigen Server nutzen.
+Diese Testbereiche sind verschieden. Der Neustart eines Dienst-Layers ist kein
+Prozessabsturz. Zwei Dienstobjekte in einem Prozess sind keine zwei
+Serverprozesse.
+
+## Baseline-Nachweis
+
+`packages/e2e/baseline.json` enthält eine Zeile je Testdeklaration der Version
+`2a123ffae6f5aea2cfa02f36975efbacc83f1305`. Es vergleicht 566 Deklarationen in
+142 Dateien mit dem aktuellen Quellcode. Die festgehaltenen 581 Fälle sind eine
+Laufzahl. Schleifen und parametrisierte Tests können aus einer Deklaration
+mehrere Fälle machen. Diese Zahlen dürfen nicht gleichgesetzt werden.
+
+Der Quellstand hat 371 unveränderte Testfunktionen. Weitere 46 Tests behalten
+die Syntax aller direkten Prüfungen. 59 Tests mit gleichem Namen haben geänderte
+Prüfungen; 90 Tests brauchen einen umbenannten oder neuen Ersatzfall. Die
+Zuordnung hält entfernte Prüftexte, aktuelle Testnamen und Hinweise fest.
+Gleiche Syntax beweist weder gleiche gemeinsame Testdienste noch einen
+bestandenen Lauf. Prüfen Sie den Stand nach späteren Codeänderungen erneut.
+
+Einige Änderungen folgen dem genehmigten Design: Der Turn besitzt seine
+Ressourcen. Befehle geben Ausführungsbelege zurück. Interne Ursachen werden
+verschlüsselt. Listen filtern nach Ressourcenrechten. Ein fehlgeschlagener
+Audit-Eintrag rollt die Entscheidung zurück. Das Fortsetzen eines Computers ist
+eine ausdrücklich gespeicherte Aktion. Erinnerungen können ohne Quellbelege
+nicht weiter freigegeben werden. Ein Antrag, der beim Warten auf die
+Entscheidungssperre abläuft, erteilt keine Rechte. Dies sind festgehaltene
+Änderungen, kein identisches altes Verhalten.
+
+`S/MemoryModels.test.ts` prüft die ruhige Antwort bei verbrauchtem Budget ohne
+Modellaufruf, freie Permits, eine verschlüsselte Ursache und einen erfolgreichen
+Aufruf nach Aufheben des Budgets. `S/TokenThrottle.test.ts` prüft den genauen
+Text aus 40 verschiedenen Teilen. `S/ToolCommands.test.ts` erhält beide
+Zeitfälle der Delegation: Ein frühes Signal behält die gespeicherte Frist. Eine
+Übernahme nach der Frist pausiert ohne weitere Wartezeit.
+
+B463 verweist auf die drei Fälle in `S/ExecutionStore.test.ts` für
+verschlüsselte Daten, JSON und Identität. Sie prüfen Speicherfehler, Reparatur
+und einen getrennten fehlenden Datensatz. B202 verweist auf
+`E/chat/ExecutionResources.test.ts`: Ein fehlgeschlagener Werkzeugaufbau
+schließt seinen Scope, speichert eine Fehler-ID und lässt den nächsten Turn
+arbeiten. B241 verweist auf `E/chat/ChatRecovery.test.ts`: Ein beschädigter Chat
+hält einen anderen Chat nicht von Wiederherstellung oder neuer Eingabe ab.
+
+Die Zuordnungen für Apps, Channels, Computer, Live, Code Mode und Vaults prüfen
+gespeicherte Belege, Cleanup-Kindläufe, sichere Fehlerarten und IDs sowie
+Eigentumsrechte. `additionalCurrentChecks` führt die neueren Pairing- und
+Workflow-API-Fälle getrennt von den 566 Baseline-Deklarationen. Pairing wartet
+auf das gespeicherte Löschergebnis. Cookie und Token vergleichen den ganzen
+Datensatz, sobald der Antrag wartet. Jeder zugeordnete Fall verweist auf seinen
+bestandenen lokalen Lauf in `validationRuns`. Diese Läufe haben verschiedene
+Prüfbereiche.
+
+## Produktabdeckung
+
+Jede Zeile nennt erhaltenes Verhalten und konkrete Tests zur Prüfung. Die
+Fehlerprüfungen im nächsten Abschnitt gelten für diese Funktionen.
+
+| Fähigkeit und Anleitung                                                                                         | Tests im Quellcode                                                                                                                                                                                         | Im Quellcode geprüftes Verhalten                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [API-Zugriff](/de/docs/authentication), [Client](/de/docs/client) und [Befehle](/de/docs/developers/quickstart) | `E/api-access/ApiE2E.test.ts`, `E/api-access/Tokens.test.ts`, `packages/client/test/Executions.test.ts`, `E/cli/Commands.test.ts`, `E/cli/Dispatch.test.ts`, `E/cli/Pairing.test.ts`                       | Cookie-Origin, Token-Rechte, gleiche gespeicherte Änderungen, Wiederholung mit Befehlsschlüssel, gebaute Befehle und Computer-Kopplung. Zugriffsprüfungen der Routen beweisen nicht jede gültige Geschäftsaufgabe. |
+| [Bots](/de/docs/bots) und [Freigabe](/de/docs/sharing)                                                          | `E/bot-work/Bots.test.ts`, `E/bot-work/BotSharing.test.ts`                                                                                                                                                 | Private und geteilte Bots, eigene Chats je Mitglied, Einladungen, Eigentum an Erinnerungen und Löschen.                                                                                                            |
+| [Chats](/de/docs/chats)                                                                                         | `E/chat/ChatCommands.test.ts`, `E/chat/ChatQueries.test.ts`, `E/chat/ChatControl.test.ts`, `S/InputCommands.test.ts`, `S/TurnPersistence.test.ts`                                                          | Geordnete Eingabe, Steering, ein zugelassener Turn, Versionskonflikte, gespeicherte Modell-/Werkzeugergebnisse und Stoppen/Löschen nach Ressourcenfreigabe.                                                        |
+| [Werkzeuge](/de/docs/developers/chats) und Hintergrundarbeit                                                    | `E/chat/HostTools.test.ts`, `E/chat/HostToolStorage.test.ts`, `S/ToolCommands.test.ts`                                                                                                                     | Gespeicherte Werkzeugdefinitionen, unabhängige Arbeit, Abbruch und Ergebnisse für den Quell-Chat.                                                                                                                  |
+| [Genehmigung](/de/docs/requests), [Regeln](/de/docs/rules) und Pläne                                            | `E/approve-tool-calls/HostTools.test.ts`, `E/bot-work/Work.test.ts`, `S/RequestCommands.test.ts`                                                                                                           | Ein Turn kann enden, während eine Genehmigung wartet. Entscheidungen, Grants, Audit, Mitteilungen und Planmodus ändern sich in einer Transaktion.                                                                  |
+| [Delegation](/de/docs/delegation) und Grenzen                                                                   | `E/bot-work/Delegation.test.ts`, `E/bot-work/WorkflowApiE2E.test.ts`, `S/ToolCommands.test.ts`, `S/DelegationUsage.test.ts`                                                                                | Unabhängige Kindarbeit, Mitteilungen an den Eltern-Bot, verschachtelter Abbruch, Pausen, Zeit-/Schritt-/Kostengrenzen und privater Aufgabenverlauf.                                                                |
+| [Erinnerungen](/de/docs/memory)                                                                                 | `E/chat-recovery/DevelopmentMemory.test.ts`, `E/bot-work/Bots.test.ts`, `S/MemoryModels.test.ts`, `S/ExecutionPermits.test.ts`, `S/MemoryEvidence.test.ts`                                                 | Lernen und gespeicherte Belege, getrennte Eigentümer, Wiedergabe, geänderte Grenzen, Wartezeitlimit und gemeinsame Datenbankzulassung.                                                                             |
+| [Code Mode](/de/docs/code-mode)                                                                                 | `E/run-code/CodeModeApi.test.ts`, `S/CodeMode.test.ts`, `S/VaultCode.test.ts`, `S/ToolCommands.test.ts`                                                                                                    | Sandbox-Grenzen, feste Zeit und Zufallswerte, Aufrufreihenfolge, gespeicherte Ergebnisse, Geheimnisverweise und Ablehnung alter Ausführer.                                                                         |
+| [Apps](/de/docs/apps) und OAuth                                                                                 | `E/connect-apps/AppAuthorization.test.ts`, `E/connect-apps/AppLifecycleApi.test.ts`, `E/connect-apps/AppConnectionsApi.test.ts`, `S/AuthorizationCommands.test.ts`, `S/ConnectionCommands.test.ts`         | Erkennung, manuelle Zugangsdaten, PKCE, Ausstellerprüfung, Code-Austausch, Erneuerung, Widerruf, Entfernen, Zurücksetzen und aktueller Verbindungseigentümer.                                                      |
+| [Veröffentlichung](/de/docs/developer-tools), [Index](/de/docs/app-index) und App Views                         | `E/publish-apps/DeveloperCenter.test.ts`, `E/connect-apps/IndexWork.test.ts`, `E/connect-apps/AppViews.test.ts`, `S/TestCommands.test.ts`, `S/TestCleanup.test.ts`, `S/ProofCommands.test.ts`              | Nachweise, Berichte, Mitgliedsrechte, Test-OAuth, Bereinigung, Indexlisten, Mitteilungen sowie Ablauf und Zugriff bei Views.                                                                                       |
+| [Channels](/de/docs/channels)                                                                                   | `E/connect-channels/Channels.test.ts`, `E/connect-channels/ChannelAuthority.test.ts`, `E/connect-channels/ChannelRecovery.test.ts`, `S/ChannelCalls.test.ts`, `S/ChannelRemoval.test.ts`                   | Sprecheridentität, Eingabeduplikate, gespeicherte Sendungen, unbekannte Ergebnisse und Entfernen nach Abschluss aller verknüpften Zustellungsversionen.                                                            |
+| [Trigger](/de/docs/triggers) und Erinnerungsnachrichten                                                         | `E/triggers/Triggers.test.ts`, `E/bot-work/Work.test.ts`, `S/Reminders.test.ts`                                                                                                                            | Zeit- und Webhook-Eingaben, erhaltene Token-Identität, dauerhafte Timer, Wiederaufnahme von Erinnerungsnachrichten und Abbruch.                                                                                    |
+| [Computer](/de/docs/computers) und Connectors                                                                   | `E/connect-computers/Computers.test.ts`, `E/connect-computers/Connectors.test.ts`, `E/connect-computers/ComputerQueries.test.ts`, `S/ResourceTransport.test.ts`, `packages/computer/test/Sessions.test.ts` | Kopplung, nach Ressourcenrechten gefilterte Listen, Terminalsitzungen, Aufrufe beim Besitzer, geordnete Ausgabe und unbekannte interaktive Ergebnisse.                                                             |
+| [Live-Sitzungen](/de/docs/live)                                                                                 | `E/live-chat/Live.test.ts`, `S/LiveConnections.test.ts`, `S/OpenAiRealtime.test.ts`, `packages/core/test/LiveDriver.test.ts`                                                                               | Anbieterereignisse, Live-Werkzeuge, Schließen der Verbindung, Abbruch und Verlust einer Live-Verbindung.                                                                                                           |
+| [Dateien](/de/docs/files)                                                                                       | `E/files/Files.test.ts`, `S/FileTasks.test.ts`, `S/S3.test.ts`                                                                                                                                             | Upload, Modellanhänge, Objektverweise, Aufbewahrung, atomare Löschaufgaben und Ablehnung alter Ausführer.                                                                                                          |
+| [Vaults](/de/docs/vaults)                                                                                       | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `S/SecretFiles.test.ts`                                                                                                     | Erlaubte Felder, verschlüsselte Werte, Eigentümer- und Token-Grenzen, fehlende Geheimnisse und Auflösung erst an der Aufrufgrenze.                                                                                 |
+| [Modelle](/de/docs/models)                                                                                      | `E/use-models/Cloudflare.test.ts`, `S/OpenAi.test.ts`, `S/Anthropic.test.ts`, `S/OpenAiCompat.test.ts`, `S/ModelRegistry.test.ts`                                                                          | Anbieterformate, Modellauswahl, Streams, geänderte Einstellungen und der optionale echte Modellaufruf. Dieser Test braucht seine ausdrückliche Umgebungseinstellung.                                               |
+| [Nutzung und Abrechnung](/de/docs/usage)                                                                        | `E/bot-work/Billing.test.ts`, `S/BillingPostgres.test.ts`, `S/BillingUnknown.test.ts`, `S/MeteredModel.test.ts`                                                                                            | Preise, Guthaben, Budgets, gemeinsame Reservierungen, bestätigte Abrechnung, unbekannte Nutzung und späte Belege.                                                                                                  |
+| [Organisationen](/de/docs/organization), [SSO](/de/docs/sso) und [Plattformeinstellungen](/de/docs/platform)    | `E/organizations/Organization.test.ts`, `E/sign-in/Oidc.test.ts`, `E/admin-settings/AdminApiE2E.test.ts`, `E/admin-settings/PlatformApi.test.ts`                                                           | Mitgliedschaft, Einladungen, getrennte Konten, Anmeldung, Geheimnishinweise und Verwaltung mit Cookie oder Token.                                                                                                  |
+| [Rechte](/de/docs/permissions) und [Fehler](/de/docs/error-logs)                                                | `S/TurnAccess.test.ts`, `S/RequestCommands.test.ts`, `S/ExecutionHttp.test.ts`, `S/ErrorRecords.test.ts`, `E/chat/TurnFailures.test.ts`                                                                    | Aktuelle Rechte beim Lesen und Senden, nach Ressourcenrechten gefilterte Listen, sichere öffentliche Fehler und verschlüsselte interne Ursachen.                                                                   |
+| Eigenständige Pakete [core und protocol](/de/docs/packages)                                                     | `packages/core/test/Runtime.test.ts`, `packages/core/test/Persistence.test.ts`, `packages/protocol/test/Sdk.test.ts`, `E/protocol-service/Service.test.ts`                                                 | Modell-/Werkzeugschleifen und Protokollnutzung ohne OpenBot-Server. Die Ausführung im Speicher von core verspricht keine Wiederherstellung nach einem Prozessende.                                                 |
+| [Server](/de/docs/server), [Betrieb](/de/docs/deploy) und Dokumentation                                         | `E/start-server/DevelopmentEntry.test.ts`, `E/read-docs/Docs.test.ts`, `deploy/docker/check.sh`                                                                                                            | Gebaute Startprogramme, lokaler Betrieb, alle Startseitensprachen, drei Handbuchsprachen, erzeugte API-Seiten und lokale Links.                                                                                    |
+
+## Fehler- und Wiederherstellungsabdeckung
+
+Diese Quellcodeprüfungen müssen auf der endgültigen Version laufen. Der genannte
+Fall zeigt, wo die Prüfungen stehen; es geht nicht nur um Dateizahlen.
+
+| ID  | Nötige Regel                                                                                            | Konkreter Nachweis im Quellcode und Testbereich                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F01 | Ein zweiter Knoten übernimmt gespeicherte Arbeit; für Mitglieder und Dienste gilt dieselbe Regel.       | `S/ExecutionCluster.test.ts`: `another process takes over ${kind} work from a saved step`; zwei Betriebssystemprozesse, PostgreSQL, Beenden des Besitzers, Entscheidungen, Abbruch und späte Ergebnisse. `S/TurnCluster.test.ts` prüft ein gespeichertes Modellergebnis. `S/FullServerCluster.test.ts` startet zwei vollständige Server mit festen Modell-/Werkzeugadaptern. Es prüft öffentliche Token-/Cookie-Befehle, Beobachtung, Genehmigung, Abbruch, Besitzerverlust und Datenbankverlust am Chat-Prüfpunkt. Der Kindprozess lädt Serverquellcode, nicht den gebauten Freigabeeinstieg. |
+| F02 | Befehle wirken einmal, alte Generationen können nicht schreiben.                                        | `S/ExecutionStore.test.ts`: `a later owner stops writes from an old generation`. `S/InputCommands.test.ts`: `retries and concurrent input admit one Turn` und `an event failure rolls back input and its execution`.                                                                                                                                                                                                                                                                                                                                                                           |
+| F03 | Aufrufe trennen noch nicht gesendet, verlorenes Ergebnis, sichere Wiederholung und unbekannte Änderung. | `S/ExecutionExternal.test.ts` nutzt zwei Betriebssystemprozesse und einen echten schreibenden HTTP-Endpunkt. Fälle stoppen vor dem Senden oder nach der Antwort, mit und ohne Anbieterschlüssel; der Fall mit spätem Ergebnis stoppt den echten Besitzer mit `SIGSTOP`, beendet seine PostgreSQL-Verbindungen und setzt ihn nach der Übernahme fort. Ein weiterer Fall prüft entzogene Rechte. `S/ExecutionCalls.test.ts` hält bekannte Ergebnisse, während das Speichern erneut versucht wird.                                                                                                |
+| F04 | Leser holen Lücken, fehlende Meldungen, Wiederholungen und Endzustände nach.                            | `S/ExecutionObservation.test.ts`: langsamer Leser über 128 Ereignisse, Beenden eines echten PostgreSQL-Listeners, zwei echte Prozesse mit Cursorn und getrennte Modellversuche nach neuer Verbindung. `S/ExecutionStore.test.ts`: `an observer can read the end again and stop at its cursor`.                                                                                                                                                                                                                                                                                                 |
+| F05 | Wiederaufgenommene Arbeit erhält keine zusätzlichen Rechte.                                             | `S/TurnAccess.test.ts` prüft widerrufene/abgelaufene Tokens, geänderte Channel-Identität und Prüfrechte. `S/RequestCommands.test.ts` prüft aktuelle Grenzen vor Grants. `S/ExecutionAuthority.test.ts` trennt Mitglieds- und Dienstarbeit. `S/ExecutionHttp.test.ts` prüft öffentliche Lesezugriffe und Befehle.                                                                                                                                                                                                                                                                               |
+| F06 | Vollständige Ursachen bleiben privat; Geheimnisse kommen nicht in Engine-Nachrichten.                   | `S/ErrorRecords.test.ts` prüft verschlüsselte Ursachen und den Ausfall der Fehleraufzeichnung. `S/ExecutionCluster.test.ts` und `S/ExecutionExternal.test.ts` lesen Engine-Nachrichten. `E/bot-work/Bots.test.ts` prüft ausgewählten Erinnerungsklartext in gespeicherten Datensätzen.                                                                                                                                                                                                                                                                                                         |
+| F07 | Nur bestätigte Nutzung wird berechnet, genau einmal.                                                    | `S/BillingPostgres.test.ts`: `takeover keeps old estimates and late usage commits with its result`. `S/BillingUnknown.test.ts`: `unknown usage releases platform credits and late receipts charge once`, dazu Nullwerte, fehlende und niedrige Schätzungen. `S/ExecutionCalls.test.ts` prüft Wiedergabe bei unbekannter Nutzung.                                                                                                                                                                                                                                                               |
+| F08 | Freigabe braucht ein gespeichertes physisches Ergebnis; Transportverlust ist kein Erfolg.               | `S/ResourceTransport.test.ts` prüft gespeicherte Schließergebnisse, alle App-Scopes und Connector-Ausgabe. `S/ResourceProcesses.test.ts` nutzt zwei Betriebssystemprozesse, PostgreSQL und einen echten TCP-Gegenpunkt. Es prüft das Beenden des Besitzers, langsames Schließen, verlorene HTTP-Antwort, getrenntes Datenbanknetz und spätes Schließen nach Ersatz. `S/ExecutionCalls.test.ts` prüft Fehler beim Freigeben während Abbruch und Pause. Die Ressourcenprozesse betreiben den echten Transport, nicht die vollständige OpenBot-Anwendung.                                         |
+| F09 | Gemeinsame Zulassung zählt Arbeit über Dienstinstanzen und Übernahme hinweg.                            | `S/ExecutionPermits.test.ts` prüft 32 Scopes auf 16 Ausführungen mit zwei Permit-Diensten, Abbruch in der Warteschlange, alte Generationen, Fristen und Pause/Freigabe. `S/ExecutionPermitProcesses.test.ts` ergänzt zwei Node-Prozesse und 32 gemeinsame Aufgaben mit höchstens zwei Permits. Es prüft einen gestoppten Besitzer mit beendeten Datenbankverbindungen, Übernahme nach der Frist, Freigabe durch den alten Besitzer, Abbruch und Prozessende. Dies sind Permit-Dienstprozesse, keine vollständigen Server.                                                                      |
+| F10 | Löschen lässt keine neue Arbeit zu und endet erst nach den Kindarbeiten.                                | `S/ChannelRemoval.test.ts`: `Channel removal closes admission and waits for every delivery version`; enthalten sind verschiedene Mitglieder, alter Besitz, offene Freigabe und ein unbekanntes Ergebnis. `E/chat/ChatControl.test.ts` prüft gleichzeitiges Löschen eines Chats.                                                                                                                                                                                                                                                                                                                |
+| F11 | OAuth-Bereinigung übersteht entzogene Mitgliedsrechte und widerruft keinen installierten Grant.         | `S/AuthorizationCommands.test.ts` prüft Eigentum an Grant-Ergebnissen und Bereinigung. `S/TestCleanup.test.ts`: `cleanup keeps its owner, private data, and grant reservation across takeover`. `S/ConnectionCommands.test.ts` prüft einen aktuellen Verbindungsschreiber.                                                                                                                                                                                                                                                                                                                     |
+
+Beachten Sie bei den Fehlerprüfungen diese Prüfbereiche:
+
+- **A01 — Vollständiger Server-Failover:** `S/FullServerCluster.test.ts` prüft
+  zwei vollständige Servermontagen. Der gebaute Freigabeeinstieg und die
+  Betriebsprüfungen sind eigene Nachweise. Der Eintrag `full-server-failover` in
+  der E2E-Zuordnung verweist auf diese Quellprozessprüfungen.
+- **A02 — Geschäftsprüfpunkte:** Der vollständige Serverfall trennt
+  PostgreSQL-Verbindungen am Chat-Prüfpunkt. Nach der Erholung prüft er ein
+  gespeichertes Modellergebnis, einen Turn und einen Ereignissatz.
+  `S/InputCommands.test.ts` prüft Rollback und Eingabezulassung.
+  `E/chat/ChatRecovery.test.ts` prüft neue Eingaben nach der Wiederherstellung.
+- **A03 — Physische Besitzer und gemeinsame Grenzen:** Ressourcen- und
+  Permit-Tests nutzen getrennte Dienstprozesse. Sie prüfen Netzverlust,
+  verlorene Schließantworten und späte Freigabe durch den alten Besitzer.
+  Unbekannte interaktive Ergebnisse bleiben unbekannt. Audio wird nicht
+  wiederholt. Eine getrennte Client-Verbindung beweist keinen Anbieter-Stopp.
+- **A04 — Alte Daten:** `S/MigrationRehearsal.test.ts` startet mit dem
+  Baseline-Schema und gespeicherten Datensätzen. Es prüft Umwandlung,
+  Wiederholung, unterbrochene Batches, aktuelle Lesezugriffe und neue
+  Chat-Eingaben. Eine neue Datenbank allein deckt dies nicht ab.
+- **A05 — Versionsnachweise:** Halten Sie Quellversion und Bereich jedes Laufs
+  fest. Zeigen Sie optionale und übersprungene Prüfungen. Vergleichen Sie
+  geänderte und entfernte Baseline-Prüfungen vor einer geänderten Testzahl.
+
+## Alte Pfade und ihr Ersatz
+
+Im Quellbaum sind die folgenden Pfade entfernt. Prüfen Sie im Freigabe-Diff
+sowohl den alten Einstieg als auch seine Aufrufer. Ein Codec nur für den
+Datenumzug ist kein aktiver Runner. Die eigenständige core-Laufzeit bleibt eine
+Bibliotheksfunktion.
+
+| Entfernter Pfad unter `packages/openbot/src/`                                                                                            | Aktuell zu prüfender Pfad                                                                     | Nachweis der einfacheren Regel                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `chats/ChatHost.ts`, `chats/TurnWorkflow.ts`, `execution/RunScope.ts`                         | Keine Chat-Laufzeit je Mitglied, Referenzzählung, `keepOpen`, `current`-Rückrufe oder Methodenproxies. Ein Turn besitzt seinen Scope.                                                           |
+| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `apps/AppCommands.ts`, `apps/AppWorkflow.ts`, `execution/Calls.ts`                            | App-Arbeit nutzt gemeinsame Aufrufabsicht, Versuche, Ergebnisse und Entscheidungen. Erkennung liefert Beschreibungen.                                                                           |
+| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `code/CodeCommands.ts`, `code/CodeWorkflow.ts`, `database/conversion/LegacyV1.ts`             | Sandbox-Wiedergabe nutzt das gemeinsame Aufrufprotokoll. Der alte Lease-Speicher und die Suche nach alten Läufen sind entfernt. Die Datenübernahme hat einen eigenen Codec für alte Datensätze. |
+| `chats/ChatEvents.ts` und die alten Chat-SSE-Schemas                                                                                     | `execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                               | Gespeicherte Ausführungsereignisse ersetzen die lokale Ereigniswarteschlange, den Zähler und die Endmarke. Alle Aufrufer nutzen denselben Ereignisvertrag.                                      |
+| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `execution/Store.ts`, `execution/Observation.ts`, `chats/ToolCommands.ts`                     | Kein alter Operation-Listener, keine Schleife für Abbruchmeldungen, keine Suche nach veralteten Operations. `packages/api/src/OperationsApi.ts` ist ebenfalls entfernt.                         |
+| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `chats/ExecutionFeatures.ts`, `bots/DelegationCommands.ts`, `capabilities/RequestCommands.ts` | Ausführungsbereiche besitzen Gate und Freigaben. Der Delegations-Workflow besitzt Grenzen. Anfragen schließen einzeln bei Fälligkeit.                                                           |
+| FiberMap für Entwicklertestläufe und Laufzurücksetzen beim Start                                                                         | `apps/TestCommands.ts`, `apps/TestWorkflow.ts`, `apps/TestCleanupWorkflow.ts`                 | Gespeicherte Befehle und generationsgeprüfte Ergebnisse besitzen Läufe und Bereinigung. Verbindungscaches besitzen nicht den Testlebenszyklus.                                                  |
+| Warteschlange für Erinnerungshilfsarbeit und lokales Modell-Semaphor                                                                     | `bots/MemoryWorkflow.ts`, `bots/MemoryModels.ts`, `execution/Permits.ts`                      | Der gemeinsame Workflow besitzt die Wiederaufnahme. Datenbank-Permits besitzen die Zulassung.                                                                                                   |
+
+`scripts/effect-rules.ts` prüft `domain-boundary`, `storage-contract-boundary`,
+`standalone-boundary`, `assembly-boundary` und `public-entry`. `pnpm typecheck`
+führt diese Regeln aus. Sie prüfen Importe. Allein finden sie nicht jede zweite
+Ausführungsengine oder Wiederaufnahmeschleife. Prüfen Sie neue Worker, Timer,
+Sperren und RPC-Handler gegen das gemeinsame Design.
+
+## Prüfungen des Datenumzugs
+
+Die [Betriebsanleitung](/de/docs/deploy) nennt die Wartungsreihenfolge und
+Schlüsseleinstellungen. `S/DataUpgrade.test.ts` prüft eine leere Datenbank, den
+Ausschluss zwischen Wartung und laufendem Server, Batch-Rollback und Fortsetzung
+sowie importierten Verlauf ohne neue Außenarbeit. Das sind Grundlagenprüfungen.
+
+`S/MigrationRehearsal.test.ts` startet mit dem alten Schema und alten
+Datensätzen. Zusammen mit den Umwandlungstests der Fachbereiche prüft es
+Folgendes, bevor sich die Startsperre öffnet:
+
+| Gespeicherte Daten                                                                      | Nötige Prüfungen                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat, Turn, wartende Eingabe, Werkzeuge, Genehmigungen, Delegation und Code Mode        | IDs, Verlauf, Reihenfolge, Eigentümer, Grenzen und Entscheidungen erhalten. Offene Arbeit mit Ausführungen verknüpfen. Fehlende Aufruferbelege dürfen keine neuen Rechte schaffen.                              |
+| Apps, OAuth, Entwicklertests, Indexarbeit, Channels, Trigger und Erinnerungsnachrichten | Verbindungs-/Nachweis-IDs, verschlüsselte Grants und Flows, ursprüngliche Aufruferbelege, Timer, offene Meldungen und Sendeergebnisse erhalten. Unbekannte alte Änderungen bleiben unbekannt.                   |
+| Dateien, Vaults, Modelle, Organisationen, Konten, SSO und physische Ressourcen          | Objektverweise, Fremdschlüssel, Eigentümerbezüge, Entschlüsselung und unterstützte Verbindungszustände prüfen. Beschädigte Datensätze nicht still verwerfen.                                                    |
+| Nutzung, Preise, Guthaben und Budgets                                                   | Bestätigte Belastungen und Aufrufidentität erhalten. Schätzungen von unbekannter Nutzung trennen. Eine erneute Umwandlung darf nicht nochmals berechnen.                                                        |
+| Fortschritt und Startsperre                                                             | Mittendrin stoppen und fortsetzen; den ganzen Umzug wiederholen; beschädigte oder falsch verschlüsselte Daten ablehnen; Zahlen und Verweise prüfen; Serverstart bis zum Abschluss aller nötigen Phasen sperren. |
+
+Bewahren Sie Backup und Objektverweisliste für den Probelauf auf. Vor neuer
+Außenarbeit darf das Backup wiederhergestellt werden. Danach muss
+Vorwärtsreparatur geprüft werden, damit ein altes Backup keine Außenänderung
+doppelt auslöst.
+
+## Freigabenachweise
+
+Führen Sie die [Projektprüfungen](/de/docs/developers/testing) auf einer festen
+Version aus. Bauen Sie zuerst fertig; Tests und Kindprozesse laden gebaute
+Dateien.
+
+| Prüfung                     | Einstieg                                                                           | Nötiger Nachweis                                                                                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Build und Typen             | `devenv shell -- pnpm build`; `devenv shell -- pnpm typecheck`                     | Alle Pakete, Testtypen durch Paket-Testskripte und Abhängigkeitsregeln.                                                                   |
+| Pakete und Benutzeraufgaben | `devenv shell -- pnpm -r test`                                                     | Vollständige Testausgabe, übersprungene Fälle und endgültige E2E-Prüfübersicht.                                                           |
+| Fehler und Datenumzug       | F01–F11 und A01–A04 oben                                                           | Prozessgrenzen, Fehlerpunkt, Endzustand, Zahl der Außenwirkungen und gespeicherte Ereignis-/Aufrufbelege.                                 |
+| Images und Compose          | `.github/workflows/ci.yml`, `deploy/docker/check.sh`                               | Docker-Buildprüfungen, Compose-Start-/Migrations-/API-Prüfungen, Image-Layer-Prüfungen und Schwachstellenscan für die gebauten Image-IDs. |
+| Dokumentation               | Build des Docs-Pakets und `E/read-docs/Docs.test.ts`; `.github/workflows/docs.yml` | Englisch, Chinesisch, Deutsch, erzeugte API-Referenz, alle Startseitensprachen und Linkprüfungen.                                         |
+| Merge und Push              | CI der genauen zusammengeführten Version                                           | Nötige Jobs bestehen. Ein lokaler Teiltest oder ein früherer Stand ist kein endgültiger CI-Nachweis.                                      |
+
+Der Baseline-Nachweis verbindet jeden Fall mit seinem aufgezeichneten lokalen
+Lauf. Er umfasst einen vollständigen Build, Typprüfungen und Regeln über 956
+Dateien sowie den normalen OpenBot-Paketlauf mit 131 Dateien und 883 Tests.
+Dieser Paketlauf enthält Activity-Prozessfälle, vollständige
+Server-Clusterprüfungen und die Probe des Datenumzugs.
+
+Der E2E-Nachweis verbindet den gesamten Testlauf mit Prüfungen der betroffenen
+Fälle: 31 betroffene Fälle bestanden in einem Lauf. Der DevelopmentApps-Fall
+bestand in einem getrennten normalen Paketlauf. Diese 32 Fälle überschneiden
+sich mit der Ausgabe des gesamten Laufs. Die Zahlen dürfen daher nicht addiert
+werden. Ein optionaler Live-Cloudflare-Fall wurde übersprungen. Der Nachweis
+hält Befehl, Bereich und Protokoll jedes Laufs fest. Er behauptet keinen
+einzigen vollständigen abschließenden Gesamtlauf.
+
+Beurteilen Sie die Freigabe anhand der CI für den genauen Freigabe-Commit. Dazu
+gehören Images, Compose, Scans und Dokumentation. Lokale Testergebnisse ersetzen
+diese Jobs nicht.

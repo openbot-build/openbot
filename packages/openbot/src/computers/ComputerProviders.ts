@@ -1,5 +1,7 @@
 import { Redacted } from "effect"
-import { type Caller, ComputersApi } from "@openbot-build/api"
+import { Computers as ComputerData } from "@openbot-build/domain"
+
+import { type Caller, type ExecutionIdentity } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -12,7 +14,7 @@ import {
 	Schema,
 } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Check from "../authorization/Check.ts"
 import { computerProviderResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
@@ -20,12 +22,12 @@ import * as Db from "../database/Database.ts"
 import { computerProviders, computers } from "../database/Schema.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 
-type ComputerProvider = ComputersApi.ComputerProvider
-type Credentials = ComputersApi.ComputerProviderCredentials
+type ComputerProvider = ComputerData.ComputerProvider
+type Credentials = ComputerData.ComputerProviderCredentials
 
 /** The opened secret holds JSON that only this file writes, from a checked request. */
 const CredentialsJson = Schema.fromJsonString(
-	ComputersApi.ComputerProviderCredentials,
+	ComputerData.ComputerProviderCredentials,
 )
 const decodeCredentials = Schema.decodeUnknownEffect(CredentialsJson)
 const encodeCredentials = Schema.encodeEffect(CredentialsJson)
@@ -47,8 +49,8 @@ const Plain = Schema.Union([
 ])
 type Plain = typeof Plain.Type
 
-const decodeId = Schema.decodeUnknownEffect(ComputersApi.ComputerProviderId)
-const decodeKind = Schema.decodeUnknownEffect(ComputersApi.ComputerProviderKind)
+const decodeId = Schema.decodeUnknownEffect(ComputerData.ComputerProviderId)
+const decodeKind = Schema.decodeUnknownEffect(ComputerData.ComputerProviderKind)
 
 /** The hints column holds JSON that only this file writes. */
 const HintsJson = Schema.fromJsonString(
@@ -59,12 +61,12 @@ const encodeHints = Schema.encodeEffect(HintsJson)
 type Row = typeof computerProviders.$inferSelect
 
 export type Failure =
-	| ComputersApi.ComputerProviderInUse
-	| ComputersApi.ComputerProviderNotFound
-	| ComputersApi.ComputerConflict
-	| ComputersApi.ComputerInvalid
-	| ComputersApi.ComputerProviderFailed
-	| ComputersApi.ComputersUnavailable
+	| ComputerData.ComputerProviderInUse
+	| ComputerData.ComputerProviderNotFound
+	| ComputerData.ComputerConflict
+	| ComputerData.ComputerInvalid
+	| ComputerData.ComputerProviderFailed
+	| ComputerData.ComputersUnavailable
 	| Check.Errors
 
 const binding = (id: string) => `openbot_computer_providers:${id}:credentials`
@@ -77,7 +79,7 @@ const hintsOf = (credentials: Credentials) => ({
 const viewOf = (
 	credentials: Plain,
 	apiKey: string | null,
-): ComputersApi.ComputerProviderCredentialsView => {
+): ComputerData.ComputerProviderCredentialsView => {
 	const key = { set: true, hint: apiKey }
 	switch (credentials.kind) {
 		case "e2b":
@@ -100,7 +102,7 @@ const viewOf = (
 /** A row with a bad value is a broken store. The log keeps the cause. */
 const fromRow = (
 	row: Row,
-): Effect.Effect<ComputerProvider, ComputersApi.ComputersUnavailable> =>
+): Effect.Effect<ComputerProvider, ComputerData.ComputersUnavailable> =>
 	Effect.gen(function* () {
 		const stored = yield* decodeHints(row.hints)
 		return {
@@ -118,7 +120,7 @@ const fromRow = (
 		} satisfies ComputerProvider
 	}).pipe(
 		Failures.replace("A stored Computer provider has a bad value", () =>
-			ComputersApi.ComputersUnavailable.make({}),
+			ComputerData.ComputersUnavailable.make({}),
 		),
 	)
 
@@ -127,7 +129,7 @@ export class ComputerProviders extends Context.Service<
 	ComputerProviders,
 	{
 		readonly list: (
-			caller: Caller,
+			identity: ExecutionIdentity,
 		) => Effect.Effect<ReadonlyArray<ComputerProvider>, Failure>
 		/** Reads a provider that the caller may read, and also use or change when asked. */
 		readonly get: (
@@ -137,13 +139,13 @@ export class ComputerProviders extends Context.Service<
 		) => Effect.Effect<ComputerProvider, Failure>
 		readonly create: (
 			caller: Caller,
-			input: ComputersApi.CreateComputerProviderRequest,
+			input: ComputerData.CreateComputerProviderRequest,
 			verify: (credentials: Credentials) => Effect.Effect<void, Failure>,
 		) => Effect.Effect<ComputerProvider, Failure>
 		readonly update: (
 			caller: Caller,
 			id: string,
-			input: ComputersApi.UpdateComputerProviderRequest,
+			input: ComputerData.UpdateComputerProviderRequest,
 			verify: (credentials: Credentials) => Effect.Effect<void, Failure>,
 		) => Effect.Effect<ComputerProvider, Failure>
 		/** Fails while Computers still use the provider. */
@@ -157,7 +159,7 @@ export class ComputerProviders extends Context.Service<
 			id: string,
 		) => Effect.Effect<
 			{ readonly credentials: Credentials; readonly version: number },
-			ComputersApi.ComputerProviderNotFound | ComputersApi.ComputersUnavailable
+			ComputerData.ComputerProviderNotFound | ComputerData.ComputersUnavailable
 		>
 	}
 >()("@openbot-build/openbot/computers/ComputerProviders") {}
@@ -166,9 +168,10 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
-	const { check, filter, guard } = yield* Check.make
+	const checks = yield* Check.make
+	const { check, guard } = checks
 	const stored = Failures.replace("The Computer provider store failed", () =>
-		ComputersApi.ComputersUnavailable.make({}),
+		ComputerData.ComputersUnavailable.make({}),
 	)
 	const where = (organizationId: string, id: string) =>
 		and(
@@ -201,7 +204,7 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const found = yield* row(caller.organizationId, id)
 			if (Option.isNone(found))
-				return yield* ComputersApi.ComputerProviderNotFound.make({ id })
+				return yield* ComputerData.ComputerProviderNotFound.make({ id })
 			const provider = yield* fromRow(found.value)
 			yield* guard(
 				caller,
@@ -213,18 +216,19 @@ export const make = Effect.gen(function* () {
 					}),
 				},
 				{
-					hide: () => ComputersApi.ComputerProviderNotFound.make({ id }),
+					hide: () => ComputerData.ComputerProviderNotFound.make({ id }),
 				},
 			)
 			return { provider, row: found.value }
 		})
 	return ComputerProviders.of({
-		list: (caller) =>
+		list: (identity) =>
 			Effect.gen(function* () {
-				const readable = yield* filter(caller, {
+				const { organizationId } = identity.owner
+				const readable = yield* Check.executionFilter(checks, identity, {
 					action: "read",
 					kind: "ComputerProvider",
-					within: ($) => $.eq("organizationId", caller.organizationId),
+					within: ($) => $.eq("organizationId", organizationId),
 				}).pipe(
 					Effect.flatMap((condition) =>
 						toWhere(condition, {
@@ -240,7 +244,7 @@ export const make = Effect.gen(function* () {
 						.from(computerProviders)
 						.where(
 							and(
-								eq(computerProviders.organizationId, caller.organizationId),
+								eq(computerProviders.organizationId, organizationId),
 								readable,
 							),
 						)
@@ -293,14 +297,14 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const { provider } = yield* access(caller, id, "write")
 				if (input.expectedVersion !== provider.version)
-					return yield* ComputersApi.ComputerConflict.make({
+					return yield* ComputerData.ComputerConflict.make({
 						version: provider.version,
 					})
 				if (
 					input.credentials !== undefined &&
 					input.credentials.kind !== provider.kind
 				)
-					return yield* ComputersApi.ComputerInvalid.make({
+					return yield* ComputerData.ComputerInvalid.make({
 						message: "The kind of a Computer provider cannot change.",
 					})
 				if (input.credentials !== undefined) yield* verify(input.credentials)
@@ -328,7 +332,7 @@ export const make = Effect.gen(function* () {
 				)
 				const next = changed[0]
 				if (next === undefined)
-					return yield* ComputersApi.ComputerConflict.make({
+					return yield* ComputerData.ComputerConflict.make({
 						version: provider.version,
 					})
 				return yield* fromRow(next)
@@ -349,7 +353,7 @@ export const make = Effect.gen(function* () {
 						.limit(1),
 				)
 				if (used.length > 0)
-					return yield* ComputersApi.ComputerProviderInUse.make({ id })
+					return yield* ComputerData.ComputerProviderInUse.make({ id })
 				yield* stored(
 					db.delete(computerProviders).where(where(caller.organizationId, id)),
 				)
@@ -358,7 +362,7 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const found = yield* row(organizationId, id)
 				if (Option.isNone(found))
-					return yield* ComputersApi.ComputerProviderNotFound.make({ id })
+					return yield* ComputerData.ComputerProviderNotFound.make({ id })
 				const json = yield* stored(
 					secrets.open(found.value.credentials, binding(id)),
 				)

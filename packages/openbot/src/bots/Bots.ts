@@ -1,5 +1,7 @@
 import type { Config } from "@openbot-build/core"
-import { type Authorization, BotsApi, type Caller } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
+import { type Authorization } from "@openbot-build/domain"
+import { type Caller } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,

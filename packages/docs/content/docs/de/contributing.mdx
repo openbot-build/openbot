@@ -4,6 +4,9 @@ description:
   Richte den Code ein, führe die Prüfungen aus und folge den Projektregeln.
 ---
 
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+API-Anbindung, App-Veröffentlichung und Projektarbeit.
+
 Diese Seite ist für Menschen, die OpenBot selbst ändern. Sie zeigt dir, wie du
 deinen Computer einrichtest, den Server und die Prüfungen startest und dich im
 Code zurechtfindest.
@@ -87,7 +90,7 @@ Wenn du eine Datei in `packages/*/src` änderst, startet devenv OpenBot neu.
 
 Der Entwicklungsserver nutzt ein lokales Testkonto, Test-Models und eine
 Test-App. Kein externer Dienst ist nötig. Wie du dich anmeldest und ein User
-Token erstellst, steht unter [Schnellstart](/de/docs/quickstart).
+Token erstellst, steht unter [Schnellstart](/de/docs/developers/quickstart).
 
 ---
 
@@ -115,7 +118,7 @@ braucht, zum Beispiel einer mit einem echten Server, nutzt `it.live`. Tests von
 OpenBot starten ihren eigenen kurzlebigen PostgreSQL-Server mit den Werkzeugen
 aus devenv. Sie brauchen keine Geheimnisse und keine externen Dienste. GitHub
 Actions führt dieselben Befehle `build`, `typecheck` und `test` aus. Siehe
-[Betrieb](/de/docs/deploy#github-actions).
+[Betrieb](/de/docs/developers/publishing#github-actions).
 
 ---
 
@@ -177,11 +180,27 @@ führe `devenv shell -- pnpm --filter @openbot-build/docs build` aus.
 
 Jeder Push auf `main` veröffentlicht die Seite auf
 [openbot.build](https://openbot.build). Siehe
-[Die Doku-Seite veröffentlichen](/de/docs/deploy#die-doku-seite-veröffentlichen).
+[Die Doku-Seite veröffentlichen](/de/docs/developers/publishing#die-doku-seite-veröffentlichen).
 
 ---
 
 ## Projektregeln
+
+### Für einen Leserkreis schreiben
+
+Das [Benutzerhandbuch](/de/docs/users) erklärt Arbeit mit einem vorhandenen
+Client oder Channel. Nenne Aufgabe, Ergebnis und Hilfe. Installation, API-Felder
+und Quellcode gehören nicht auf Benutzerseiten.
+
+Das [Administrationshandbuch](/de/docs/admin) erklärt Einrichtung und Betrieb.
+Nenne die nötigen Organisationsrechte, Plattformrechte oder den Serverzugriff.
+Client-Verträge, App-Veröffentlichung und Quellcodeänderungen gehören ins
+[Entwicklerhandbuch](/de/docs/developers). Verlinke eine andere Rolle, wenn die
+Aufgabe an sie übergeht.
+
+Halte Code und Felddetails an einer Stelle. Übersetzungen behalten die gleichen
+Abschnitte und verlinken ihre eigene Sprache. Die erzeugte API-Referenz bleibt
+auf Englisch.
 
 ### Basic English
 
@@ -215,14 +234,22 @@ darf nur einen Pfadparameter nennen, den ihr Endpunkt hat. Ein Test in
 
 Der Code für die Autorisierung kommt aus der Bibliothek
 [ability](https://github.com/nmnmcc/ability), dem npm-Paket `@nmnmcc/ability`.
-Seine Version steht fest in `package.json`.
+Version 3.0.0 steht fest in `package.json`. HTTP und Speicherung nutzen
+JSON-Text für Policies. Ein lokaler Patch exportiert die Fehlerklassen direkt in
+den Typdeklarationen. So kann TypeScript die Deklarationen von OpenBot erzeugen.
 
-### Ein aktuelles Modell
+### Änderungen an Aufrufern und Daten
 
-Behalte keine alten Wege für alte Aufrufer, alte Clients oder alte Daten. Wenn
-sich ein Vertrag oder der Speicher ändern muss, ändere ihn direkt. Die einzige
-Ausnahme ist eine kleine Korrektur für einen Fehler in einem externen Paket oder
-Werkzeug.
+Frage zuerst den Nutzer, wenn eine Änderung Arbeit für alte Aufrufer, Clients
+oder gespeicherte Daten braucht. Wähle nicht selbst zwischen einem Bruch und dem
+Behalten des alten Verhaltens.
+
+Ändere nie die Basismigration. Erstelle für jede Änderung am Datenbankschema
+eine neue Migration mit `devenv shell -- drizzle-kit generate --name <change>`.
+Bestehende Datenbanken müssen aktualisiert werden können.
+
+Erkläre eine Umgehung für einen Fehler in einem externen Paket oder Werkzeug mit
+einem Kommentar direkt am Code.
 
 ### Zuerst Effect-Daten
 
@@ -231,6 +258,29 @@ Nutze die unveränderlichen Datentypen von Effect, zum Beispiel `HashMap`,
 sie wirklich brauchst.
 
 ### Effect-Regeln
+
+Diese Prüfung prüft auch Modulgrenzen und Typ-Imports. `domain` darf `core`
+nutzen, aber keine Adapter für HTTP, SQL oder Workflows. `core` und `protocol`
+bleiben frei von Produktpaketen. Ein Modul in `openbot` darf den Ordner `app`
+für den Aufbau nicht importieren. Pakete nutzen einander über öffentliche
+Eingänge.
+
+Geschäftscode und Speicher dürfen keine HTTP-Verträge importieren. Das gilt auch
+für PostgreSQL-Adapter, Einstellungen, Modelle, Konten, Rollen und SSO. Diese
+Module nutzen Werte und Fehler aus der Domäne. Die API nutzt dieselben
+Definitionen und fügt HTTP-Statuscodes hinzu. Nur HTTP-Handler, die Abbildung
+von Antworten und der Aufbau der Anwendung dürfen HTTP-Verträge importieren.
+
+Geschäftscode darf keine HTTP-Antwortabbildungen importieren. Gemeinsame
+Fehlerabbildungen nutzen Domänenfehler. HTTP-Handler fügen die Antwortform
+hinzu. App-Adapter fügen Protokolldaten an ihrer Grenze hinzu.
+
+Server-Arbeit nutzt die gemeinsame Ausführungs-Engine. Die Prüfung verbietet
+lokales `ChatRuntime` sowie `Operations.make` und `Operations.layer` im Server.
+Nur die Ausführungs-Engine, der Ressourcentransport und der Aufbau der Anwendung
+dürfen Effect-Cluster- oder RPC-Module importieren. Domänencode darf keine
+Ausführungs- oder Speicheradapter aus core nutzen. Die Prüfung erkennt auch
+Import-Aliase und Unterpfade von Paketen.
 
 OpenBot ist mit [Effect](https://effect.website) geschrieben. Zwei Prüfungen
 halten den Code im Stil von Effect. `pnpm typecheck` führt beide aus, und GitHub

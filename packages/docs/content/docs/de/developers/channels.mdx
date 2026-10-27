@@ -1,0 +1,252 @@
+---
+title: Channels
+description:
+  Mit einem Bot in Slack, Lark, Telegram oder deinem eigenen Chat-System
+  sprechen.
+---
+
+Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
+erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
+mit dem [Entwicklerhandbuch](/de/docs/developers).
+
+Ein **Channel** ist ein Bot deiner Organisation auf einer Chat-Plattform, zum
+Beispiel eine Slack-App oder ein Telegram-Bot. Personen sprechen mit dem Bot des
+Channel in Direkt-Chats und Gruppen-Chats. OpenBot bleibt headless (ohne
+Oberfläche): Ein Channel ist eine Verbindung zwischen der Plattform und der API,
+keine Benutzeroberfläche.
+
+| Art        | Plattform                                                                               |
+| ---------- | --------------------------------------------------------------------------------------- |
+| `slack`    | Eine Slack-App mit der Events API und Interaktivität.                                   |
+| `lark`     | Eine Lark-App (Feishu) mit Event-Abo und Karten-Callbacks.                              |
+| `telegram` | Ein Telegram-Bot.                                                                       |
+| `custom`   | Jedes andere System, das das [Channel-Protokoll](#eigene-channels) von OpenBot spricht. |
+
+Jede Plattform schickt ihre Events an einen **Webhook**, eine OpenBot-Adresse
+für Ereignisse der Plattform. OpenBot prüft die Signatur jedes Events, antwortet
+sofort und macht die Arbeit später.
+
+---
+
+## Einen Channel hinzufügen
+
+Anbieter-Einstellungen stehen unter
+[Channels einrichten](/de/docs/admin/channels).
+
+Erstelle mit `POST /v1/organization/channels` und einem `commandKey`. HTTP 201
+gibt den gespeicherten Channel zurück. Seine `executionId` nennt die
+Konfigurationsarbeit. Eine Änderung nutzt
+`PATCH /v1/organization/channels/:channelId` mit `commandKey` und
+`expectedVersion` und gibt den Channel zurück. Nutze nach einer verlorenen
+Antwort denselben Schlüssel und Inhalt. Lies die Ausführung für das Ergebnis der
+entfernten Registrierung.
+
+Lösche mit `DELETE /v1/organization/channels/:channelId` und dem JSON-Inhalt
+`{ "commandKey": "remove-channel-1" }`. HTTP 202 gibt einen Ausführungsbeleg.
+Der Channel nimmt keine neue Arbeit an. Das Entfernen wartet auf die Freigabe
+der Ressourcen seiner gespeicherten Arbeit und löscht dann den Channel und seine
+Verknüpfungen. Chats bleiben.
+
+Nach einem Upgrade kann `needsAuthorization: true` gesetzt sein. Daten und
+`enabled` bleiben, aber Eingabe und Zustellung starten nicht. Speichere mit
+aktuellen Rechten eine Änderung oder wechsle das Geheimnis. Das setzt einen
+neuen Aufrufer und löscht die Markierung. Ein alter unbekannter Versand wird
+nicht als dieser neue Aufrufer wiederholt.
+
+## Dein Konto verknüpfen
+
+Der Bot arbeitet nur für Members der Organisation. Wenn eine Person, die nicht
+verknüpft ist, dem Bot schreibt, läuft nichts. Der Bot schickt ihr stattdessen
+einen **Link-Code**. Er schickt den Code dorthin, wo nur diese Person ihn sieht:
+in den Direkt-Chat oder als private Nachricht in einer Gruppe, wenn die
+Plattform das kann. Ein Code gilt 15 Minuten.
+
+Mit `linkPath` schickt der Bot einen Link wie
+`https://api.example.com/link?code=ocl_...`. Dein Client auf diesem Pfad meldet
+die Person an und ruft dann auf:
+
+1. `GET /v1/channel-links/:code`, um zu zeigen, für wen der Code ist.
+2. `POST /v1/channel-links/:code/accept`, um das Konto mit dem Aufrufer zu
+   verknüpfen. Ein Code funktioniert nur einmal.
+
+Die Verknüpfung braucht einen `POST`. So kann niemand ein Konto verknüpfen, nur
+weil er einer Person einen Link schickt. Ohne `linkPath` schickt der Bot nur den
+Code, und die Person nimmt ihn mit denselben Aufrufen an.
+
+`GET /v1/user/channel-identities` listet deine verknüpften Konten auf.
+`DELETE /v1/user/channel-identities/:channelId/:externalUserId` löst eine
+Verknüpfung. Ein Administrator listet die Personen eines Channel mit
+`GET /v1/organization/channels/:channelId/identities` auf und löst eine
+Verknüpfung mit `DELETE` auf `.../identities/:externalUserId`.
+
+---
+
+## Chats eines Channel
+
+Jeder Chat auf der Plattform ist ein dauerhafter Chat mit `kind: "channel"`: ein
+Chat für jeden Direkt-Chat und einer für jeden Gruppen-Chat. Der Chat hat den
+Namen des Chats als `title`. Liste sie als Actor mit
+`GET /v1/chats?kind=channel` auf.
+
+- In einem Direkt-Chat geht jede Nachricht an den Bot.
+- In einem Gruppen-Chat geht nur eine Nachricht an den Bot, die den Bot nennt.
+  Jede Nachricht beginnt mit dem Namen der Person, die sie geschrieben hat. So
+  weiß der Bot, wer spricht.
+- Eine Nachricht einer Person, während der Bot für dieselbe Person arbeitet,
+  geht in den laufenden Turn. Der Bot liest sie bei seinem nächsten Schritt.
+- Eine Nachricht einer anderen Person wartet in der
+  [Inbox](/de/docs/developers/chats#die-inbox) des Chats. Sie läuft als eigener
+  Turn, nachdem der laufende Turn endet.
+- Während ein Turn läuft, zeigt der Bot seinen Text und ändert die Nachricht,
+  während sie wächst. Eine lange Antwort geht in Teilen hinaus.
+- Die Antwort jedes Turns geht in den Chat. Das gilt auch für einen Turn, den
+  eine [Mitteilung](/de/docs/developers/chats#mitteilungen) startet, zum
+  Beispiel das Ergebnis von Arbeit, die der Bot abgegeben hat. So kann der Bot
+  sagen: "Ich sehe es mir an", und das Ergebnis später schreiben.
+- OpenBot verwirft ein Event, das die Plattform ein zweites Mal schickt.
+
+### Jeder Turn arbeitet für seinen Sprecher
+
+Ein Turn arbeitet für die verknüpfte Person. Die gespeicherte Identität hält
+Sprecher, Chat-Eigentümer und den Aufrufer der Channel-Einrichtung getrennt. Ein
+Token dieser Einrichtung behält seine Grenzen nach einem Neustart. Das Core-Feld
+`author` dient zur Gruppierung von Eingaben. Es ist keine User-ID.
+
+- Die [Berechtigungen](/de/docs/permissions) des Sprechers begrenzen den Bot.
+- Werkzeuge und Planschritte in Channel-Arbeit prüfen das Recht zur Channel-Nutzung.
+  Sie geben dem Sprecher keinen direkten Zugriff auf den gespeicherten Chat des
+  Eigentümers. App- und Computer-Aufrufe prüfen weiter die Rechte ihrer Ressourcen.
+- Auch die Grenzen des Channel-Aufrufers gelten. Der Eigentümer muss den Bot
+  weiter nutzen dürfen.
+- [Requests](/de/docs/developers/requests) gehen an den Sprecher.
+- Der Bot nutzt die gespeicherte Identität des Sprechers für Memory.
+
+Vor der Wiederaufnahme und vor einem externen Aufruf prüft OpenBot Member,
+Token, Channel und Kontoverknüpfung erneut. Das Entfernen einer Verknüpfung
+stoppt neue Aktionen für diesen Sprecher. Eine gespeicherte Freigabe hebt diese
+Prüfungen nicht auf.
+
+---
+
+## Freigaben im Chat
+
+Wenn ein Request auf eine Person wartet, schickt der Bot eine Karte mit drei
+Buttons: **Allow once** (einmal erlauben), **Allow in this chat** (in diesem
+Chat erlauben) und **Deny** (ablehnen). **Allow in this chat** erstellt einen
+Grant mit dem Umfang `chat`. Siehe
+[Requests](/de/docs/developers/requests#einen-request-beantworten). Pläne, die
+im [Plan-Modus](/de/docs/developers/chats#plan-modus) auf eine Freigabe warten,
+bekommen dieselbe Karte. Die Karte geht in den Direkt-Chat der Person, wenn sie
+auf diesem Channel ein Konto verknüpft hat. Sonst geht sie in den Chat der
+Arbeit. Das gilt auch für einen Request aus Arbeit, die der Bot abgegeben hat,
+zum Beispiel aus einem Task-Chat für diesen Chat.
+
+Nur die Person, auf die der Request wartet, kann einen Button drücken. Wenn sich
+der Request ändert, zeigt die Karte die Entscheidung.
+
+Bots können mit dem Tool `openbot_channel_send` auch in einen anderen Chat
+desselben Channel schreiben. Jeder Beitrag ist die Fähigkeit `channels.send`.
+Darum entscheidet die
+[Kette der Entscheider](/de/docs/developers/requests#die-kette-der-entscheider)
+darüber.
+
+---
+
+## Ausführung und Wiederaufnahme
+
+Channel-Eingaben, Antworten, Karten und Tool-Nachrichten nutzen das gemeinsame
+Ausführungssystem. Die Webhook-Event-ID verhindert doppelte Eingaben. Jede
+Eingabe hält einen Verweis auf ihren Vorgänger. So bleibt die Reihenfolge eines
+Gesprächs auf allen Knoten gleich. Nachricht und Aufrufer liegen in
+verschlüsselten Produktdaten. Engine-Nachrichten halten nur
+Ausführungsreferenzen.
+
+Antworten und Karten lesen das Ereignisprotokoll der Ausführung. Nach einem
+Neustart lesen sie ab einem Cursor weiter. Es gibt keine zweite Suche nach
+fehlenden Antworten. Jedes Textereignis hat einen Schritt und einen Versuch. Ein
+Modell-Neuversuch verbindet keinen Text aus zwei Versuchen.
+
+Jeder Nachrichtenteil und jede Änderung hat einen gespeicherten Aufrufplan und
+ein Ergebnis. Bekannte Ergebnisse werden wiederverwendet. Hat die Plattform eine
+Nachricht vielleicht angenommen, aber fehlt das gespeicherte Ergebnis, pausiert
+OpenBot die Ausführung. Über Ereignisse und den Entscheidungsendpunkt kannst du
+stoppen oder einen neuen Versuch erlauben. Ein Netzwerkfehler beweist nicht,
+dass nichts gesendet wurde. Gleiche Entscheidungen nutzen denselben
+Befehlsschlüssel.
+
+`openbot_channel_send` gibt `queued` und `executionId` zurück. Der Auftrag wurde
+angenommen. Beobachte die Ausführung für das Sendeergebnis. Das Schließen eines
+Ereignisstroms schließt nur den Beobachter.
+
+---
+
+## Eigene Channels
+
+Ein eigener Channel verbindet jedes andere Chat-System. Erstelle ihn mit
+`credentials`:
+`{ "kind": "custom", "endpoint": "https://chat.example.com/openbot" }`. Erstelle
+dann sein Signatur-Geheimnis mit
+`PUT /v1/organization/channels/:channelId/secret`. Sende `commandKey` und die
+`expectedVersion` des Channel im Body. Die Antwort enthält `secret` und
+`channel`. Ein erneuter Versuch mit demselben Schlüssel gibt das gespeicherte
+Ergebnis zurück. Ein neuer Befehl erzeugt ein neues Geheimnis und stoppt das
+alte.
+
+Beide Richtungen signieren auf dieselbe Weise. Jeder Request hat zwei Header:
+
+- `X-OpenBot-Timestamp`: die Zeit in Sekunden.
+- `X-OpenBot-Signature`: `sha256=` und der hexadezimale HMAC-SHA256 von
+  `timestamp + "." + body` mit dem Geheimnis.
+
+Dein System schickt Events an die `webhookUrl`:
+
+```json
+{
+	"type": "message",
+	"id": "evt_1",
+	"conversation": { "id": "room-1", "kind": "group", "title": "Ops" },
+	"sender": { "id": "u_42", "name": "Ada" },
+	"text": "What broke last night?",
+	"mentioned": true
+}
+```
+
+`id` muss im Channel eindeutig sein. Ein Druck auf einen Button ist
+`{ "type": "action", "id", "conversation", "sender", "value" }`.
+
+OpenBot schickt Nachrichten an den `endpoint`. Ein `send` hat `markdown`,
+optional `buttons`, und `conversation`, `person` oder beides. Mit beidem soll
+nur diese Person sie in diesem Chat sehen. Mit nur `person` geht sie in einen
+Direkt-Chat. Antworte mit `{ "ref": "<message id>" }`, und füge `conversation`
+hinzu, wenn OpenBot keine geschickt hat. Ein `edit` hat `conversation`, `ref`
+und das neue `markdown`. OpenBot ruft nur öffentliche Adressen auf.
+
+---
+
+## Berechtigungen
+
+| Ressource         | Aktion  | Was sie erlaubt                                                                             |
+| ----------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `Channel`         | `read`  | Die Channels der Organisation lesen und die Personen, die mit ihnen verknüpft sind.         |
+| `Channel`         | `write` | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen lösen. |
+| `Channel`         | `use`   | Mit dem Bot eines Channel sprechen und deine Bots dorthin schreiben lassen.                 |
+| `ChannelIdentity` | `read`  | Deine verknüpften Konten lesen.                                                             |
+| `ChannelIdentity` | `write` | Deine Konten verknüpfen und die Verknüpfung lösen.                                          |
+
+Der Pfad eines Channel ist `org / <org> / channel / <id>`. Administratoren
+verwalten sie. Jedes Member darf sie nutzen und seine eigenen Konten verknüpfen.
+Siehe [Berechtigungen](/de/docs/permissions).
+
+---
+
+## Fehler
+
+| Fehler                    | Status | Wann                                                                                                       |
+| ------------------------- | ------ | ---------------------------------------------------------------------------------------------------------- |
+| `ChannelInvalid`          | 400    | Der Bot ist kein gemeinsamer Bot, die Art hat sich geändert, oder die Plattform hat den Webhook abgelehnt. |
+| `ChannelNotFound`         | 404    | Es gibt keinen solchen Channel.                                                                            |
+| `ChannelLinkInvalid`      | 404    | Der Code ist unbekannt, schon benutzt oder zu alt. Frag den Bot noch einmal.                               |
+| `ChannelIdentityNotFound` | 404    | Es gibt kein solches verknüpftes Konto.                                                                    |
+| `ChannelConflict`         | 409    | Der Channel hat sich geändert, seit du ihn gelesen hast.                                                   |
+| `ChannelHookDenied`       | 401    | Die Signatur ist falsch oder zu alt, oder der Channel ist abgeschaltet.                                    |
+| `ChannelsUnavailable`     | 503    | OpenBot erreicht seinen Speicher oder die Plattform gerade nicht.                                          |

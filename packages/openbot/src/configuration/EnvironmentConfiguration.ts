@@ -1,8 +1,16 @@
 import type * as Configuration from "./Configuration.ts"
-import { Config, Result, Schema, SchemaIssue } from "effect"
+import { Config, Option, Result, Schema, SchemaIssue } from "effect"
 import * as OutboundPolicy from "../network/OutboundPolicy.ts"
 
 export const load: Configuration.Load = Config.all({
+	clusterSecret: Config.schema(
+		Schema.Redacted(Schema.String.check(Schema.isMinLength(32))),
+		"OPENBOT_CLUSTER_SECRET",
+	),
+	clusterHost: Config.NonEmptyString("OPENBOT_CLUSTER_HOST").pipe(
+		Config.option,
+		Config.map(Option.getOrUndefined),
+	),
 	host: Config.NonEmptyString("OPENBOT_HOST").pipe(
 		Config.withDefault("127.0.0.1"),
 	),

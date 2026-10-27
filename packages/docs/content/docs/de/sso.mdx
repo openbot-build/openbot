@@ -5,6 +5,10 @@ description:
   deiner Organisation an.
 ---
 
+Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
+Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
+[Administrationshandbuch](/de/docs/admin).
+
 Mit SSO (Single Sign-On, einmalige Anmeldung) melden sich Menschen mit dem
 Kontoanbieter ihrer eigenen Firma an. Eine Organisation kann ihren eigenen
 OpenID-Connect-Anbieter für die E-Mail-Domains hinzufügen, die ihr gehören.
@@ -193,7 +197,7 @@ Platform-Anbieter anmelden.
 
 `POST /auth/sign-in` startet eine Anmeldung im Browser. Es braucht keine
 Zugangsdaten. Es prüft den Header `Origin`, wie jeder Schreibzugriff mit Cookie.
-Siehe [Authentifizierung](/de/docs/authentication#die-origin-regel).
+Siehe [Authentifizierung](/de/docs/developers/authentication#die-origin-regel).
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in \
@@ -217,7 +221,7 @@ Beide Felder sind optional. OpenBot wählt den Anbieter so:
 Schick den Browser zu `url`. Die Antwort setzt auch das Cookie für den
 Anmeldestatus. Better Auth braucht es, um die Anmeldung abzuschließen. Nach der
 Anmeldung geht der Browser zu `returnTo`. Siehe
-[Rückkehrpfade](/de/docs/authentication#rückkehrpfade).
+[Rückkehrpfade](/de/docs/developers/authentication#rückkehrpfade).
 
 ---
 

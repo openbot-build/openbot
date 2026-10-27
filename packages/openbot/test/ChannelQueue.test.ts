@@ -1,216 +1,224 @@
 import { NodeServices } from "@effect/platform-node"
-import { assert, it } from "@effect/vitest"
-import { Chat, Turn } from "@openbot-build/core"
-import { eq } from "drizzle-orm"
-import { Array as Arr, Effect, Layer, Logger, Redacted } from "effect"
+import { assert, layer } from "@effect/vitest"
+import { Authorization, BotId, Execution } from "@openbot-build/domain"
+import { and, asc, eq } from "drizzle-orm"
+import { Array as Arr, Effect, Layer, Redacted, String as Str } from "effect"
 import { ChannelEvent, Target } from "../src/channels/Channel.ts"
 import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
+import * as ChannelInbox from "../src/channels/ChannelInbox.ts"
+import * as Channels from "../src/channels/Channels.ts"
 import * as Db from "../src/database/Database.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import {
-	channelDeliveries,
 	channelInbox,
-	channels,
+	channelDeliveries,
+	executions,
 } from "../src/database/Schema.ts"
+import * as Store from "../src/execution/Store.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 
-const organizationId = "org_1"
-const channelId = "chn_1"
-
-const message = (eventId: string, conversation: string) =>
+const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
+	Layer.provideMerge(
+		Layer.unwrap(
+			Effect.map(PostgresTest.start, (db) =>
+				DatabasePostgres.layer({ databaseUrl: Redacted.make(db.url) }),
+			),
+		),
+	),
+)
+const services = ChannelQueue.layer.pipe(
+	Layer.provideMerge(ChannelInbox.layer),
+	Layer.provideMerge(Layer.merge(Channels.layer, Store.layer)),
+	Layer.provide(
+		Layer.mock(Authorization.Auth, { domain: Authorization.OpenBot }),
+	),
+	Layer.provideMerge(
+		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("12"))),
+	),
+	Layer.provideMerge(database),
+	Layer.provideMerge(NodeServices.layer),
+)
+const caller = {
+	kind: "member",
+	organizationId: "org-channel",
+	userId: "owner",
+} as const
+const namespace = ownerKey(caller)
+const create = Effect.flatMap(Channels.Channels, (channels) =>
+	channels.create({
+		caller,
+		name: "Team",
+		bot: BotId.make("bot-test"),
+		credentials: {
+			kind: "custom",
+			endpoint: "https://channel.example.com",
+			secret: null,
+		},
+		enabled: true,
+		linkPath: null,
+	}),
+)
+const message = (eventId: string) =>
 	ChannelEvent.Message({
 		eventId,
-		conversation: { key: conversation, kind: "direct" },
-		sender: { externalId: "person_1", displayName: "Person" },
-		text: "Hello",
+		conversation: { key: "room", kind: "direct" },
+		sender: { externalId: "person", displayName: "Person" },
+		text: "Private input",
 		mentioned: false,
 	})
 
-/** Keeps the messages of the log lines at level Error. */
-const collectErrors = () => {
-	let lines: ReadonlyArray<unknown> = []
-	const layer = Logger.layer([
-		Logger.make((log) => {
-			if (log.logLevel === "Error") lines = [...lines, log.message]
-		}),
-	])
-	return { layer, lines: () => lines }
-}
-
-// The database is real, so the test uses real time.
-it.live(
-	"a stored row that does not decode ends, and the other rows of the Channel queue still go",
-	() => {
-		const errors = collectErrors()
-		return Effect.gen(function* () {
-			const database = yield* PostgresTest.start
-			yield* Effect.gen(function* () {
-				yield* DatabasePostgres.migrate
+layer(services, {
+	excludeTestServices: true,
+	timeout: "60 seconds",
+})((it) => {
+	it.effect(
+		"Channel input has one sealed execution per event and a saved conversation order",
+		() =>
+			Effect.gen(function* () {
+				const channel = yield* create
 				const queue = yield* ChannelQueue.ChannelQueue
+				const inbox = yield* ChannelInbox.ChannelInbox
 				const db = yield* Db.make
-				yield* db.insert(channels).values({
-					organizationId,
-					id: channelId,
-					kind: "custom",
-					name: "Test",
-					bot: "bot_1",
-					actor: "user_1",
-					enabled: true,
-					credentials: "{}",
-					hints: "{}",
-					version: 1,
-					createdAt: 0,
-					updatedAt: 0,
-				})
-
-				// The inbox: the oldest event of one chat does not decode.
-				yield* db.insert(channelInbox).values([
-					{
-						organizationId,
-						channelId,
-						eventId: "evt_bad",
-						conversationKey: "chat_bad",
-						event: '{"_tag":"Unknown"}',
-						receivedAt: 0,
-						nextAt: 0,
-					},
-					{
-						organizationId,
-						channelId,
-						eventId: "evt_next",
-						conversationKey: "chat_bad",
-						event: '{"_tag":"Unknown"}',
-						receivedAt: 1,
-						nextAt: 0,
-					},
-				])
-				yield* queue.receive(organizationId, channelId, [
-					message("evt_good", "chat_good"),
-				])
-				const first = yield* queue.claimEvents
-				assert.deepStrictEqual(
-					Arr.map(first, (entry) => entry.event.eventId),
-					["evt_good"],
-				)
-				const [bad] = yield* db
-					.select()
-					.from(channelInbox)
-					.where(eq(channelInbox.eventId, "evt_bad"))
-				assert.ok(bad !== undefined && bad.doneAt !== null)
-				// The bad event no longer stops its chat. The next one does not decode either.
-				assert.deepStrictEqual(yield* queue.claimEvents, [])
-				const [next] = yield* db
-					.select()
-					.from(channelInbox)
-					.where(eq(channelInbox.eventId, "evt_next"))
-				assert.ok(next !== undefined && next.doneAt !== null)
-
-				// The outbox: a message with a target that does not decode.
-				yield* db.insert(channelDeliveries).values({
-					id: "dlv_bad",
-					organizationId,
-					channelId,
-					kind: "notice",
-					target: "{}",
-					body: '{"markdown":"Lost"}',
-					state: "pending",
-					nextAt: 0,
-					updatedAt: 0,
-				})
-				yield* queue.notice({
-					organizationId,
-					channelId,
-					target: Target.Conversation({ conversation: "chat_good" }),
-					message: { markdown: "Hi" },
-				})
-				const due = yield* queue.claimDeliveries
-				assert.deepStrictEqual(
-					Arr.map(due, (delivery) => delivery.message.markdown),
-					["Hi"],
-				)
-				const [failed] = yield* db
-					.select()
-					.from(channelDeliveries)
-					.where(eq(channelDeliveries.id, "dlv_bad"))
-				assert.strictEqual(failed?.state, "failed")
-
-				// The check after a restart: a running reply with a target that does not decode.
-				yield* db.insert(channelDeliveries).values({
-					id: "dlv_live_bad",
-					organizationId,
-					channelId,
-					kind: "reply",
-					target: "not json",
-					chat: "chat_1",
-					turn: "turn_1",
-					body: '{"markdown":""}',
-					state: "live",
-					nextAt: 0,
-					updatedAt: 0,
-				})
-				yield* queue.startReply({
-					organizationId,
-					channelId,
-					target: Target.Conversation({ conversation: "chat_good" }),
-					chat: Chat.Id.make("chat_2"),
-					turn: Turn.Id.make("turn_2"),
-					ref: null,
-				})
-				assert.deepStrictEqual(
-					Arr.map(yield* queue.liveReplies, (reply) => reply.chat),
-					["chat_2"],
-				)
-				const [live] = yield* db
-					.select()
-					.from(channelDeliveries)
-					.where(eq(channelDeliveries.id, "dlv_live_bad"))
-				assert.strictEqual(live?.state, "failed")
-
-				// Each bad row is logged once, at level Error.
-				assert.deepStrictEqual(
-					Arr.map(errors.lines(), (line) =>
-						Arr.isArray(line) ? line[0] : line,
-					),
+				yield* Effect.all(
 					[
-						"A stored Channel event does not decode. OpenBot drops it.",
-						"A stored Channel event does not decode. OpenBot drops it.",
-						"A stored Channel message does not decode. OpenBot gives up on it.",
-						"A stored Channel reply does not decode. OpenBot gives up on it.",
+						queue.receive(caller.organizationId, channel.id, [
+							message("first"),
+							message("second"),
+						]),
+						queue.receive(caller.organizationId, channel.id, [
+							message("first"),
+						]),
 					],
+					{ concurrency: 2 },
 				)
-
-				// The queue says when it gives up on an item.
-				const [good] = first
-				assert.ok(good !== undefined)
-				assert.strictEqual(yield* queue.retryEvent(good), false)
-				assert.strictEqual(
-					yield* queue.retryEvent({
-						...good,
-						attempts: ChannelQueue.maxAttempts - 1,
-					}),
-					true,
+				const rows = yield* db
+					.select()
+					.from(channelInbox)
+					.where(eq(channelInbox.channelId, channel.id))
+					.orderBy(asc(channelInbox.position))
+				assert.strictEqual(rows.length, 2)
+				assert.strictEqual(rows[0]?.eventId, "first")
+				assert.strictEqual(rows[1]?.eventId, "second")
+				assert.ok(rows[0]?.executionId != null && rows[1]?.executionId != null)
+				const first = { namespace, id: Execution.Id.make(rows[0].executionId) }
+				const second = { namespace, id: Execution.Id.make(rows[1].executionId) }
+				assert.strictEqual((yield* inbox.load(first)).input.predecessor, null)
+				assert.deepStrictEqual(
+					(yield* inbox.load(second)).input.predecessor,
+					first,
 				)
-				const [delivery] = due
-				assert.ok(delivery !== undefined)
-				assert.strictEqual(
-					yield* queue.retryDelivery(delivery, undefined, false),
-					false,
+				assert.deepStrictEqual(
+					(yield* inbox.load(second)).input.event,
+					message("second"),
 				)
-				assert.strictEqual(
-					yield* queue.retryDelivery(delivery, undefined, true),
-					true,
-				)
-			}).pipe(
-				Effect.provide(
-					ChannelQueue.layer.pipe(
-						Layer.provideMerge(
-							DatabasePostgres.layer({
-								databaseUrl: Redacted.make(database.url),
-							}),
+				const raw = yield* db
+					.select()
+					.from(executions)
+					.where(
+						and(
+							eq(executions.namespace, namespace),
+							eq(executions.id, second.id),
 						),
-					),
-				),
-			)
-		}).pipe(Effect.provide(Layer.merge(errors.layer, NodeServices.layer)))
-	},
-)
+					)
+				assert.ok(!Str.includes("Private input")(raw[0]!.input))
+				assert.strictEqual(rows[1].event, second.id)
+			}),
+	)
+	it.effect(
+		"an old inbox row stops admission until data conversion keeps its order",
+		() =>
+			Effect.gen(function* () {
+				const channel = yield* create
+				const inbox = yield* ChannelInbox.ChannelInbox
+				const db = yield* Db.make
+				yield* db.insert(channelInbox).values({
+					organizationId: caller.organizationId,
+					channelId: channel.id,
+					eventId: "old",
+					conversationKey: "room",
+					event: "broken old input",
+					receivedAt: 0,
+					nextAt: 0,
+				})
+				const result = yield* Effect.result(
+					inbox.receive(caller.organizationId, channel.id, [message("next")]),
+				)
+				assert.strictEqual(result._tag, "Failure")
+				const rows = yield* db
+					.select()
+					.from(channelInbox)
+					.where(eq(channelInbox.channelId, channel.id))
+				assert.strictEqual(rows.length, 1)
+				assert.strictEqual(rows[0]?.event, "broken old input")
+				assert.strictEqual(rows[0]?.doneAt, null)
+			}),
+	)
+	it.effect(
+		"Channel sends use command receipts and cards keep a saved predecessor",
+		() =>
+			Effect.gen(function* () {
+				const channel = yield* create
+				const queue = yield* ChannelQueue.ChannelQueue
+				const store = yield* Store.Store
+				const db = yield* Db.make
+				const receipt = yield* store.submit(
+					namespace,
+					Execution.CommandKey.make("channel-source"),
+					{
+						workflow: "test",
+						resource: { kind: "Turn", id: "turn-test" },
+						identity: { owner: caller, actor: caller },
+						input: {},
+					},
+				)
+				const fence = yield* store.takeOver({
+					namespace,
+					id: receipt.executionId,
+				})
+				const input = {
+					channelId: channel.id,
+					target: Target.Conversation({ conversation: "room" }),
+					message: { markdown: "Private answer" },
+				}
+				const first = yield* queue.notice(fence, "notice", input)
+				assert.deepStrictEqual(
+					yield* queue.notice(fence, "notice", input),
+					first,
+				)
+				const one = yield* queue.putRequest(fence, "card:1", {
+					...input,
+					request: "request-test",
+				})
+				const two = yield* queue.putRequest(fence, "card:2", {
+					...input,
+					request: "request-test",
+					message: { markdown: "Allowed" },
+				})
+				assert.deepStrictEqual(
+					(yield* queue.load({ namespace, id: two.executionId })).input
+						.predecessor,
+					{ namespace, id: one.executionId },
+				)
+				const rows = yield* db
+					.select()
+					.from(channelDeliveries)
+					.where(eq(channelDeliveries.channelId, channel.id))
+				assert.strictEqual(rows.length, 2)
+				assert.ok(
+					Arr.every(rows, (row) => !Str.includes("Private answer")(row.body)),
+				)
+				yield* store.takeOver(fence)
+				const late = yield* Effect.result(queue.notice(fence, "late", input))
+				assert.strictEqual(late._tag, "Failure")
+				assert.strictEqual(
+					(yield* db
+						.select()
+						.from(channelDeliveries)
+						.where(eq(channelDeliveries.channelId, channel.id))).length,
+					2,
+				)
+			}),
+	)
+})

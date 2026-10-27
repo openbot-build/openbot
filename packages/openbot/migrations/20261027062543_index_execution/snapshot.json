@@ -1,0 +1,107 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "789d620a-ddc4-4190-bb0e-fa84b49ad27e",
+	"prevIds": ["1dde1a40-9d24-460a-8765-1436cb182b32"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_app_index_jobs",
+				"execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_app_index_jobs.execution_id",
+				"n|col|public.openbot_app_index_jobs.execution_id",
+				"e|col|public.openbot_app_index_jobs.execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_app_index_jobs", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_index_requests",
+				"execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_developer_index_requests.execution_id",
+				"n|col|public.openbot_developer_index_requests.execution_id",
+				"e|col|public.openbot_developer_index_requests.execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_developer_index_requests", "n|sch|public"]
+		},
+		{
+			"statementType": "recreate_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_developer_index_requests",
+				"openbot_developer_index_requests_generation"
+			],
+			"writes": [
+				"s|idx|public.openbot_developer_index_requests_generation",
+				"n|idx|public.openbot_developer_index_requests_generation",
+				"e|idx|public.openbot_developer_index_requests_generation",
+				"n|rel|public.openbot_developer_index_requests_generation"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_index_requests",
+				"n|sch|public",
+				"n|col|public.openbot_developer_index_requests.namespace",
+				"n|col|public.openbot_developer_index_requests.owner",
+				"n|col|public.openbot_developer_index_requests.card_url",
+				"n|col|public.openbot_developer_index_requests.generation"
+			],
+			"sharedWrites": [
+				"e|uniqueness|public.openbot_developer_index_requests.card_url.generation.namespace.owner"
+			],
+			"sqlHash": "318952ba949d12f0"
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_index_jobs",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_developer_index_requests",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "indexes\u0000[\"public\",\"openbot_developer_index_requests_generation\"]",
+			"set": {
+				"isUnique": false
+			}
+		}
+	]
+}

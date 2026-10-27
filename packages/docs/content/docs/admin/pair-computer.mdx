@@ -1,0 +1,55 @@
+---
+title: "Pair a machine"
+description: "Pair a machine"
+---
+
+For the administrator who sets up this service. Use an account with the rights
+named below.
+
+## Pair your own machine
+
+Install the command line tools, then pair the machine:
+
+```sh
+npm install -g @openbot-build/cli @openbot-build/computer
+openbot computer pair --url https://api.example.com
+```
+
+The command shows a code, such as `KDTW-7Q3M`. It works for 10 minutes. Check
+the machine and approve it:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" -d '{}' \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M/approve
+```
+
+Only a person can approve a machine. `POST /v1/computer-pairings/:code/deny`
+stops the pairing. After you approve it, the command saves its token in
+`~/.config/openbot/computer.json` and ends. Then connect the machine:
+
+```sh
+openbot computer connect
+```
+
+It keeps a connection open to OpenBot, so the machine needs no open port. It
+connects again by itself after a break. `openbot computer status` shows the
+saved address and machine ID.
+
+OpenBot takes only connectors that speak version 3 of the connector protocol. An
+older `openbot-computer` cannot connect, and OpenBot tells it to upgrade.
+Install the new version on the machine and connect again:
+
+```sh
+npm install -g @openbot-build/computer
+openbot computer connect
+```
+
+When the same machine pairs again in the same organization, it keeps its
+Computer and gets a new token. For servers and scripts, create a Computer with
+`"source":{"_tag":"Connector"}`, then make a token with
+`PUT /v1/computers/:computerId/connector-token`. A new token closes the old
+connection.

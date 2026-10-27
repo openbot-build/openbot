@@ -1,0 +1,23 @@
+---
+title: "App Index 设置"
+description: "App Index 设置"
+---
+
+面向平台运维人员。
+
+## 宿主限制
+
+平台管理员可以屏蔽一些 App。每条限制都有一个 `cardUrl`、一个公开的 `reason`
+和一个 HTTPS `appealUrl`。它们位于平台设置的 `appRestrictions` 中。用
+`PATCH /v1/platform/settings` 修改它们。参见
+[Platform](/zh-cn/docs/platform#平台设置)。
+
+被屏蔽的 App：
+
+- 在下次索引检查之前，会在搜索结果中显示 `restriction`；
+- 在那次检查时被排除，之后不再出现在搜索中；
+- 调用详情时返回 403 `IndexRestricted`；
+- 无法连接（403 `AppRestricted`）；
+- 在已有的连接中可用性为 `Restricted`，所以 Bot 无法使用它。
+
+在 [API 参考](/docs/api/operations/tags/app-index/)中查看完整的结构。

@@ -1,0 +1,632 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "22b99ec9-b57f-41cb-8653-6701cca03234",
+	"prevIds": ["1b36fac7-8ca3-4349-9f2c-94e72b8f1ce9"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_failures"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrade_failures",
+				"n|tbl|public.openbot_data_upgrade_failures",
+				"e|tbl|public.openbot_data_upgrade_failures",
+				"n|rel|public.openbot_data_upgrade_failures",
+				"n|type|public.openbot_data_upgrade_failures",
+				"n|rel|public.openbot_data_upgrade_failures_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_records"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrade_records",
+				"n|tbl|public.openbot_data_upgrade_records",
+				"e|tbl|public.openbot_data_upgrade_records",
+				"n|rel|public.openbot_data_upgrade_records",
+				"n|type|public.openbot_data_upgrade_records",
+				"n|rel|public.openbot_data_upgrade_records_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_steps"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrade_steps",
+				"n|tbl|public.openbot_data_upgrade_steps",
+				"e|tbl|public.openbot_data_upgrade_steps",
+				"n|rel|public.openbot_data_upgrade_steps",
+				"n|type|public.openbot_data_upgrade_steps",
+				"n|rel|public.openbot_data_upgrade_steps_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_data_upgrades"],
+			"writes": [
+				"s|tbl|public.openbot_data_upgrades",
+				"n|tbl|public.openbot_data_upgrades",
+				"e|tbl|public.openbot_data_upgrades",
+				"n|rel|public.openbot_data_upgrades",
+				"n|type|public.openbot_data_upgrades",
+				"n|rel|public.openbot_data_upgrades_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_failures"],
+			"writes": [
+				"s|fk|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey",
+				"n|fk|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey",
+				"e|fk|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey",
+				"n|con|public.openbot_data_upgrade_failures.openbot_data_upgrade_failures_21rHCd6gLK50_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_data_upgrade_failures",
+				"n|sch|public",
+				"n|tbl|public.openbot_data_upgrades",
+				"n|sch|public",
+				"n|col|public.openbot_data_upgrade_failures.version",
+				"n|col|public.openbot_data_upgrades.version",
+				"e|uniqueness|public.openbot_data_upgrades.version"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_records"],
+			"writes": [
+				"s|fk|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey",
+				"n|fk|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey",
+				"e|fk|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey",
+				"n|con|public.openbot_data_upgrade_records.openbot_data_upgrade_records_BNsODMFwq7a5_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_data_upgrade_records",
+				"n|sch|public",
+				"n|tbl|public.openbot_data_upgrades",
+				"n|sch|public",
+				"n|col|public.openbot_data_upgrade_records.version",
+				"n|col|public.openbot_data_upgrades.version",
+				"e|uniqueness|public.openbot_data_upgrades.version"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_data_upgrade_steps"],
+			"writes": [
+				"s|fk|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey",
+				"n|fk|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey",
+				"e|fk|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey",
+				"n|con|public.openbot_data_upgrade_steps.openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_data_upgrade_steps",
+				"n|sch|public",
+				"n|tbl|public.openbot_data_upgrades",
+				"n|sch|public",
+				"n|col|public.openbot_data_upgrade_steps.version",
+				"n|col|public.openbot_data_upgrades.version",
+				"e|uniqueness|public.openbot_data_upgrades.version"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_data_upgrade_failures",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_data_upgrade_records",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_data_upgrade_steps",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_data_upgrades",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_failures",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_failures",
+				"name": "version",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_failures",
+				"name": "step",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_failures",
+				"name": "cause",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_failures",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "version",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "collection",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "state",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "body",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "version",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "step",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "cursor",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "rows",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "0",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "complete",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "false",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "version",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "source",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "state",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "counts",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "started_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "checked_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_failures",
+				"name": "openbot_data_upgrade_failures_21rHCd6gLK50_fkey",
+				"nameExplicit": false,
+				"columns": ["version"],
+				"schemaTo": "public",
+				"tableTo": "openbot_data_upgrades",
+				"columnsTo": ["version"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "openbot_data_upgrade_records_BNsODMFwq7a5_fkey",
+				"nameExplicit": false,
+				"columns": ["version"],
+				"schemaTo": "public",
+				"tableTo": "openbot_data_upgrades",
+				"columnsTo": ["version"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "openbot_data_upgrade_steps_lqAdPZ2AiNMO_fkey",
+				"nameExplicit": false,
+				"columns": ["version"],
+				"schemaTo": "public",
+				"tableTo": "openbot_data_upgrades",
+				"columnsTo": ["version"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_records",
+				"name": "openbot_data_upgrade_records_pkey",
+				"columns": ["version", "collection", "key"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_steps",
+				"name": "openbot_data_upgrade_steps_pkey",
+				"columns": ["version", "step"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrade_failures",
+				"name": "openbot_data_upgrade_failures_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_data_upgrades",
+				"name": "openbot_data_upgrades_pkey",
+				"columns": ["version"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

@@ -1,0 +1,200 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "941e891e-5844-4e1f-b11b-ea30a3fe79d2",
+	"prevIds": ["50a92c63-e47f-4123-b666-3f8aac7c4b7d"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_resource_owners"],
+			"writes": [
+				"s|tbl|public.openbot_resource_owners",
+				"n|tbl|public.openbot_resource_owners",
+				"e|tbl|public.openbot_resource_owners",
+				"n|rel|public.openbot_resource_owners",
+				"n|type|public.openbot_resource_owners",
+				"n|rel|public.openbot_resource_owners_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_resource_owners",
+				"openbot_resource_owners_node"
+			],
+			"writes": [
+				"s|idx|public.openbot_resource_owners_node",
+				"n|idx|public.openbot_resource_owners_node",
+				"e|idx|public.openbot_resource_owners_node",
+				"n|rel|public.openbot_resource_owners_node"
+			],
+			"reads": [
+				"n|tbl|public.openbot_resource_owners",
+				"n|sch|public",
+				"n|col|public.openbot_resource_owners.node"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_resource_owners",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "lease",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "node",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "host",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "port",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "openbot_resource_owners_node",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "node",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_resource_owners",
+				"name": "openbot_resource_owners_pkey",
+				"columns": ["namespace", "kind", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

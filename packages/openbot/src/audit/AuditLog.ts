@@ -1,4 +1,5 @@
-import type { Caller, OrganizationApi } from "@openbot-build/api"
+import type { Organizations as OrganizationsModel } from "@openbot-build/domain"
+import type { Caller } from "@openbot-build/domain"
 import { Context, type Effect, Schema } from "effect"
 
 export class AuditUnavailable extends Schema.TaggedError<
@@ -8,7 +9,7 @@ export class AuditUnavailable extends Schema.TaggedError<
 
 export interface Entry {
 	readonly organizationId: string
-	readonly action: OrganizationApi.AuditAction
+	readonly action: OrganizationsModel.AuditAction
 	readonly actor: Caller
 	readonly resource: string
 	readonly details: Schema.JsonObject
@@ -17,7 +18,7 @@ export interface Entry {
 export interface ListOptions {
 	readonly after?: string
 	readonly limit: number
-	readonly action?: OrganizationApi.AuditAction
+	readonly action?: OrganizationsModel.AuditAction
 	readonly actor?: string
 }
 
@@ -31,7 +32,7 @@ export class AuditLog extends Context.Service<
 			options: ListOptions,
 		) => Effect.Effect<
 			{
-				readonly items: ReadonlyArray<OrganizationApi.AuditLogEntry>
+				readonly items: ReadonlyArray<OrganizationsModel.AuditLogEntry>
 				readonly next: string | null
 			},
 			AuditUnavailable

@@ -1,4 +1,5 @@
-import { SsoApi } from "@openbot-build/api"
+import { Sso as SsoModel } from "@openbot-build/domain"
+
 import {
 	Array as Arr,
 	Cause,
@@ -15,7 +16,8 @@ import {
 import { Base64Url } from "effect/encoding"
 import { SqlError } from "effect/sql"
 import { and, asc, eq, isNotNull, ne } from "drizzle-orm"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
+import * as Report from "../errors/Report.ts"
 import { DomainControl } from "../apps/DomainControl.ts"
 import { openbot_auth_account } from "../database/AuthSchema.ts"
 import { organizationDomains, ssoConnections } from "../database/Schema.ts"
@@ -27,7 +29,7 @@ import * as Db from "../database/Database.ts"
 
 const Domains = Schema.fromJsonString(Schema.Array(Schema.String))
 const unavailable = (message: string) =>
-	Failures.replace(message, () => SsoApi.SsoUnavailable.make({}))
+	Failures.replace(message, () => SsoModel.SsoUnavailable.make({}))
 /** The extra data that seals the client secret of a connection to its row. */
 const binding = (id: string) =>
 	"openbot_sso_connections:" + id + ":client_secret"
@@ -45,7 +47,7 @@ const encodeDomains = (domains: ReadonlyArray<string>) =>
 
 const domainView = (
 	row: typeof organizationDomains.$inferSelect,
-): SsoApi.Domain => ({
+): SsoModel.Domain => ({
 	domain: row.domain,
 	recordName: recordName(row.domain),
 	recordValue: row.token,
@@ -58,7 +60,7 @@ const domainView = (
 /** A stored connection whose domains do not decode makes SSO unavailable. The log keeps the reason. */
 const connection = (
 	row: typeof ssoConnections.$inferSelect,
-): Effect.Effect<Connection, SsoApi.SsoUnavailable> =>
+): Effect.Effect<Connection, SsoModel.SsoUnavailable> =>
 	Schema.decodeEffect(Domains)(row.domains).pipe(
 		unavailable("A stored SSO connection has bad domains."),
 		Effect.map((domains) => ({
@@ -82,6 +84,7 @@ export const make = Effect.gen(function* () {
 	const secrets = yield* Secrets
 	const control = yield* DomainControl
 	const settings = yield* Settings
+	const report = yield* Report.make
 	const crypto = yield* Crypto.Crypto
 	// A platform without secure random numbers is broken.
 	const newId = crypto
@@ -95,16 +98,15 @@ export const make = Effect.gen(function* () {
 	 * BetterAuth also reads the connections again every 30 seconds. So a failed
 	 * notice is logged, and the change still succeeds.
 	 */
-	const changed = settings
-		.notify(signInScope)
-		.pipe(
-			Effect.catchTag("SettingsUnavailable", (error) =>
-				Effect.logWarning(
-					"The instances could not learn that the SSO settings changed. They read them again within 30 seconds.",
-					Cause.fail(error),
-				),
+	const changed = settings.notify(signInScope).pipe(
+		Effect.tapCauseIf(Cause.hasFails, (cause) =>
+			report(
+				"The instances could not learn that the SSO settings changed. They read them again within 30 seconds.",
+				cause,
 			),
-		)
+		),
+		Effect.orElseSucceed(() => undefined),
+	)
 	const sealSecret = (id: string, secret: string) =>
 		secrets.seal(secret, binding(id)).pipe(
 			unavailable(
@@ -130,7 +132,7 @@ export const make = Effect.gen(function* () {
 				unavailable("A domain could not be read."),
 				Effect.flatMap(([row]) =>
 					row === undefined
-						? Effect.fail(SsoApi.DomainNotFound.make({ domain }))
+						? Effect.fail(SsoModel.DomainNotFound.make({ domain }))
 						: Effect.succeed(row),
 				),
 			)
@@ -170,7 +172,7 @@ export const make = Effect.gen(function* () {
 				)
 			for (const domain of domains)
 				if (!Arr.some(verified, (row) => row.domain === domain))
-					return yield* SsoApi.SsoConnectionInvalid.make({
+					return yield* SsoModel.SsoConnectionInvalid.make({
 						message: `Verify the domain ${domain} first.`,
 					})
 			const others = Arr.filter(
@@ -179,7 +181,7 @@ export const make = Effect.gen(function* () {
 			)
 			for (const domain of domains)
 				if (Arr.some(others, (other) => other.domains.includes(domain)))
-					return yield* SsoApi.SsoConnectionInvalid.make({
+					return yield* SsoModel.SsoConnectionInvalid.make({
 						message: `Another SSO connection already uses the domain ${domain}.`,
 					})
 		})
@@ -233,12 +235,12 @@ export const make = Effect.gen(function* () {
 						),
 					)
 				if (taken !== undefined)
-					return yield* SsoApi.DomainTaken.make({ domain })
+					return yield* SsoModel.DomainTaken.make({ domain })
 				const tokens = yield* control
 					.tokens(domain)
 					.pipe(unavailable("The TXT records of a domain could not be read."))
 				if (!tokens.includes(row.token))
-					return yield* SsoApi.DomainNotVerified.make({ domain })
+					return yield* SsoModel.DomainNotVerified.make({ domain })
 				const now = yield* Clock.currentTimeMillis
 				// The unique index stops two organizations that verify at the same time.
 				const [updated] = yield* db
@@ -253,17 +255,17 @@ export const make = Effect.gen(function* () {
 								error,
 							): Effect.Effect<
 								never,
-								SsoApi.DomainTaken | SsoApi.SsoUnavailable
+								SsoModel.DomainTaken | SsoModel.SsoUnavailable
 							> =>
 								isUniqueViolation(error)
-									? Effect.fail(SsoApi.DomainTaken.make({ domain }))
+									? Effect.fail(SsoModel.DomainTaken.make({ domain }))
 									: Effect.fail(error).pipe(
 											unavailable("A domain could not be marked as verified."),
 										),
 						),
 					)
 				if (updated === undefined)
-					return yield* SsoApi.DomainNotFound.make({ domain })
+					return yield* SsoModel.DomainNotFound.make({ domain })
 				yield* changed
 				return domainView(updated)
 			}),
@@ -274,7 +276,7 @@ export const make = Effect.gen(function* () {
 					yield* listConnections(organizationId),
 					(connection) => connection.domains.includes(domain),
 				)
-				if (used) return yield* SsoApi.DomainInUse.make({ domain })
+				if (used) return yield* SsoModel.DomainInUse.make({ domain })
 				yield* db
 					.delete(organizationDomains)
 					.where(domainWhere(organizationId, domain))
@@ -337,9 +339,11 @@ export const make = Effect.gen(function* () {
 					.where(where)
 					.pipe(unavailable("An SSO connection could not be read."))
 				if (row === undefined)
-					return yield* SsoApi.SsoConnectionNotFound.make({ connectionId: id })
+					return yield* SsoModel.SsoConnectionNotFound.make({
+						connectionId: id,
+					})
 				if (row.version !== patch.expectedVersion)
-					return yield* SsoApi.SsoConnectionConflict.make({
+					return yield* SsoModel.SsoConnectionConflict.make({
 						version: row.version,
 					})
 				if (patch.domains !== undefined)
@@ -372,7 +376,7 @@ export const make = Effect.gen(function* () {
 					.returning()
 					.pipe(unavailable("An SSO connection could not be changed."))
 				if (updated === undefined)
-					return yield* SsoApi.SsoConnectionConflict.make({
+					return yield* SsoModel.SsoConnectionConflict.make({
 						version: row.version + 1,
 					})
 				yield* changed
@@ -391,7 +395,9 @@ export const make = Effect.gen(function* () {
 					.returning({ id: ssoConnections.id })
 					.pipe(unavailable("An SSO connection could not be deleted."))
 				if (deleted.length === 0)
-					return yield* SsoApi.SsoConnectionNotFound.make({ connectionId: id })
+					return yield* SsoModel.SsoConnectionNotFound.make({
+						connectionId: id,
+					})
 				yield* changed
 			}),
 		all: db

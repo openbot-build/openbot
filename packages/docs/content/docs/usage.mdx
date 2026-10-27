@@ -5,6 +5,10 @@ description:
   with credits.
 ---
 
+For organization administrators. You need the rights named for each task. Only a
+platform admin can change settings under `/v1/platform`. Start with the
+[administrator manual](/docs/admin).
+
 OpenBot records each call to a model. You can see how many tokens each member,
 Bot, and user token used, and what they cost. A token is a small piece of text
 that a model reads or writes. You can also set **budgets** that stop model calls
@@ -25,27 +29,43 @@ pay for the models that the platform shares.
 
 ## What OpenBot records
 
-OpenBot records each model call that gets an answer. Each usage event has a
-`source`:
+OpenBot records a model call before it goes to the provider. Each usage event
+has a `source`:
 
-| `source`     | What made the call                                                               |
-| ------------ | -------------------------------------------------------------------------------- |
-| `turn`       | A model step of a Turn in a [Chat](/docs/chats).                                 |
-| `compaction` | A summary of old messages, so the conversation fits the model.                   |
-| `judge`      | The model that judges [Rules](/docs/rules).                                      |
-| `bot_memory` | The [memory Bot](/docs/memory#the-memory-bot): what it learns, adds and answers. |
-| `other`      | Any other call.                                                                  |
+| `source`     | What made the call                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------- |
+| `turn`       | A model step of a Turn in a [Chat](/docs/developers/chats).                                 |
+| `compaction` | A summary of old messages, so the conversation fits the model.                              |
+| `judge`      | The model that judges [Rules](/docs/developers/rules).                                      |
+| `bot_memory` | The [memory Bot](/docs/developers/memory#the-memory-bot): what it learns, adds and answers. |
+| `other`      | Any other call.                                                                             |
 
 A usage event also has the Chat (`chatId`), the Turn, the Bot, the member and
-the user token, when the call has them. In a [Channel](/docs/channels), the
-member is the person who wrote the message.
+the user token, when the call has them. In a
+[Channel](/docs/developers/channels), the member is the person who wrote the
+message.
 
-Some calls are not recorded:
+Each call has a stable `id`. A durable step also has an `executionId`. Its
+`status` is `pending` while it runs, `confirmed` when the provider gives usage,
+or `unknown` when usage is missing. Unknown token counts and cost are `null`,
+not zero. The same confirmed receipt never charges the call twice.
 
-- A call that fails before the model answers.
-- A stream that stops before its end, for example when you interrupt a Turn. The
-  model may still count these tokens.
-- A step that runs a host action again. It does not call a model.
+Before sending, OpenBot holds an estimate in `reservedMicros`. It uses about
+four text characters per input token and 1,024 output tokens. Other input parts
+get a rough size. The actual cost can be higher. The saved estimate stays in
+`estimatedMicros` after the call ends. This field is `null` when an old record
+no longer has its estimate.
+
+When the call ends, OpenBot releases its hold. Missing usage stays `unknown` and
+does not take credits. A new owner also releases holds from older attempts. A
+late provider receipt records the actual cost once. The summary counts confirmed
+`calls`, `pendingCalls`, and `unknownCalls` apart. A host action with no model
+call has no model usage.
+
+Model billing and token rate errors keep their full cause in a sealed error
+record. Public errors and ordinary logs carry a safe category and an error ID.
+If a confirmed usage write fails, the sealed record also keeps the call ID and
+token counts for repair. It does not turn unknown usage into a zero charge.
 
 ---
 
@@ -93,9 +113,11 @@ A provider can only price the models that it links. Another model gives `400`
 with `ModelProviderInvalid`. The [model catalog](/docs/models#choose-a-model)
 shows the current `price` of each model.
 
-A new price applies to calls that start from now on. Each usage event keeps the
-cost from the time of the call, so old costs never change. OpenBot rounds the
-cost of each call up to a whole micro-USD.
+A new price applies to calls that start from now on. Each reservation reads the
+price from the database and keeps its own copy. A price change on another node,
+or removal of the provider, cannot change the price of that call. The saved
+usage keeps its cost. OpenBot rounds the cost of each call up to a whole
+micro-USD.
 
 A model without a price costs 0. Its calls are still recorded, but they do not
 count toward budgets and do not take credits.
@@ -269,7 +291,8 @@ the `next` value of a page as `after` to get the next page. Each event has
 
 ## Budgets
 
-A budget stops spending at a limit. You can set a budget on four scopes:
+A budget checks model calls against a spending limit. You can set a budget on
+four scopes:
 
 | `scope`        | `scopeId`                                | What counts                                |
 | -------------- | ---------------------------------------- | ------------------------------------------ |
@@ -283,15 +306,22 @@ scope can have one budget for each period.
 
 Each budget also has a `mode`:
 
-- A `hard` budget stops model calls when the spend in the period reaches
-  `limitMicros`. The call fails, so the Turn fails with a model error. The next
-  period starts again from 0.
+- A `hard` budget stops a model call when its estimate does not fit beside
+  confirmed cost for the period and all held amounts. The call fails, so the
+  Turn fails with a model error.
 - A `soft` budget never stops a call. It only shows `exceeded: true`.
 
-A budget counts every priced call, also the calls with the organization's own
-key. OpenBot checks the budgets before each model call, not only at the start of
-a Turn. A long Turn stops at its next model call. So the spend can go over the
-limit by the cost of one call.
+A budget counts every priced call, also calls with the organization's own key.
+Before a call, OpenBot checks confirmed spend and open reservations together.
+All nodes share this check. A call stops when its estimate does not fit. Active
+holds still count after a new day or month starts. Ended calls release their
+holds, also when usage is unknown. Confirmed costs count in the period when the
+receipt is recorded. The final cost can exceed the estimate, so a budget is not
+a promise that the provider's final charge will stay below its limit.
+
+An old unknown call does not block new calls. Its saved estimate remains for
+review. Missing old estimates stay `null`. Only a confirmed provider receipt can
+settle its cost.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -358,8 +388,12 @@ While credits are on:
 - Each call to a model of the platform takes its cost from the balance.
 - When the balance is 0 or less, calls to the models of the platform fail. Calls
   with the organization's own key still work.
-- The balance can go below 0 by the cost of one call, because OpenBot checks the
-  balance before a call and takes the cost after it.
+- OpenBot checks the balance and held amounts before a call. A confirmed receipt
+  takes the actual cost from the balance and releases its hold. A cost above the
+  estimate can take the balance below 0.
+- An ended call with unknown usage releases its hold without taking credits. Its
+  estimate stays in the record. A late confirmed receipt takes its actual cost
+  once, which can take the balance below 0.
 
 Calls with the organization's own key never take credits, also when credits are
 on.
@@ -425,14 +459,16 @@ through at full speed.
 
 A model call takes from every bucket of its scopes:
 
-- **Before the call**, it waits until no bucket is in debt. It does not fail.
-  OpenBot checks the budgets and the credits after this wait.
+- **Before the call**, it takes an input estimate from each shared bucket and
+  waits for its turn. A call without streamed output also takes a rough output
+  estimate. OpenBot checks the budgets and the credits after this wait.
 - **While the model streams**, OpenBot reads the output from the provider into a
   buffer. It sends each piece on only when the buckets have room for it, about
   one token for every four characters. So the output comes at an even speed.
-- **When the call ends**, OpenBot puts the real input and output tokens into the
-  buckets. When this puts a bucket into debt, the next call waits until the
-  bucket fills again.
+- **When the call ends**, confirmed counts replace the estimates. Extra tokens
+  add debt, and unused estimates go back into the buckets. A stop while output
+  waits still uses any counts that the provider has sent. Without confirmed
+  counts, the rate keeps the estimate. This does not charge money.
 
 The platform admin sets the highest rates in the
 [platform settings](/docs/platform#platform-settings). An organization can set
@@ -447,10 +483,11 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-Each instance of OpenBot keeps its own buckets in memory. With more than one
-instance, a scope can use up to the rate on each instance. One Turn runs on one
-instance, but the Turns of one Chat and the work that it gives away can run on
-many instances.
+All instances share the same buckets in PostgreSQL. Taking tokens from all
+scopes is one transaction, and refill uses the database clock. Starting more
+instances does not raise a scope's rate. Stopping a waiting call does not erase
+its shared debt. A database failure stops model admission until the rates can be
+checked again.
 
 ---
 

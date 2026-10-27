@@ -1,230 +1,44 @@
 ---
-title: Memory
-description:
-  Each Bot learns from its work in all its Chats and uses what it learned later.
+title: "Review Bot memory"
+description: "Review Bot memory"
 ---
 
-**Bot memory** is what one [Bot](/docs/bots) learns over all its
-[Chats](/docs/chats). Each Bot has one pool of entries. A **memory Bot** keeps
-the pool. It is a helper that belongs to the Bot: it reads the whole pool,
-learns new entries, and adds what helps to the work of the Bot. It never works
-in a Chat, so no person can read what it reads. This page shows how Bot memory
-learns, who sees what, and how to read and change it with the API.
+Bot memory keeps facts and observations from earlier work. It is separate from
+the message history of a Chat. Learning needs memory to be enabled and a memory
+model to be set by your administrator.
 
-Bot memory is the only memory. A Chat keeps its history, but no separate list of
-facts. Older versions of OpenBot also kept learned memory for each Session. That
-memory is gone.
+Learning has its own durable execution. It waits for the Turn that asked for it.
+A restart keeps that work. The saved execution identity sets who may see each
+fact. Memory text, confessions, and input additions are encrypted in storage.
 
----
+All server instances share the memory model limit for a Bot. A new request
+counts work that is already running, even after the limit changes. Waiting is
+part of the time limit: two minutes for learning and 15 seconds for other memory
+requests. A restart waits for the old request to release its place or reach its
+saved deadline. Closing a request cannot prove that the provider stopped its
+work. Usage stays unknown until the provider confirms it.
 
-## Entries and tags
+## Understand what is kept
 
-Each entry has a layer:
+Facts record what work showed. Observations are conclusions from other entries.
+Pinned entries are things a person asked to keep. An observation can be wrong;
+check it against its sources.
 
-| Layer         | Meaning                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------- |
-| `fact`        | Something that a Chat shows. Its sources are Items.                                                           |
-| `observation` | What the memory Bot concluded from other entries. Its sources are those entries. `confidence` is from 0 to 1. |
-| `pinned`      | What a person told OpenBot to remember.                                                                       |
+## Review and change entries
 
-**Tags** sort the entries. A tag with a colon belongs to OpenBot. The memory Bot
-cannot write these tags, so a model cannot change who sees an entry.
+Use the memory functions of your client to read entries you may see and change
+those you may manage. Correct old facts and remove entries that should no longer
+be kept. Deleting Chat history does not remove these entries.
 
-| Tag                         | Meaning                                                        |
-| --------------------------- | -------------------------------------------------------------- |
-| `from:<userId>`             | A person who said or did what the entry is about.              |
-| `for:person:<userId>`       | This person may see the entry.                                 |
-| `for:channel:<channelId>`   | The people of this [Channel](/docs/channels) group may see it. |
-| `for:bot`                   | Everyone who uses the Bot may see it.                          |
-| `org:<organizationId>`      | Where it happened. Only work in this organization sees it.     |
-| `chat:<id>`, `channel:<id>` | Where it comes from.                                           |
-| `app:<tool>`                | A tool result from an App supports it.                         |
+## Know who can see them
 
-Other tags, like `testing` or `trip-planning`, are **topics**. The memory Bot
-chooses them and keeps them tidy. A topic has lowercase letters, numbers and
-dashes.
+An entry has an audience. Some are for one person, some for a Channel group, and
+some for everyone using the Bot. Group work can use only memory fit for that
+group. Sharing a Bot does not let its owner read private memory about another
+member.
 
----
-
-## Who sees an entry
-
-OpenBot sets the `for:` tags. Nobody sees an entry without one.
-
-- A fact is for the people who saw it happen: the person of the Turn, or the
-  Channel group when the Chat is a group chat.
-- An observation comes from all the people of its sources. But only people who
-  may see every source may see it.
-- The memory Bot shows an entry to more people only when a person clearly
-  agreed, or when its rules allow it. It must give a reason, and the log keeps
-  the change.
-
-Entries are not deleted when they stop being true. The memory Bot marks them
-with `invalidatedAt`, so the history stays.
-
----
-
-## How the Bot learns
-
-The Bot has a tool called `confide`. The Bot knows it only as a place to say how
-its work goes: when it is stuck, unsure, upset or proud, or when it made a
-mistake. The Bot does not know that the tool leads to its memory. So it confides
-because it needs to, not to change what it will remember.
-
-When the Bot confides:
-
-1. The memory Bot answers at once, like a priest who hears a confession. It
-   listens and does not judge. It says that a mistake is part of the work. It
-   asks the Bot to tell the person plainly and to fix what it can. It gives no
-   new tasks. When no model can answer, the Bot gets a fixed calm answer.
-2. When a Turn of the Chat completes and the inbox of the Chat is empty, the
-   memory Bot reads the new Items of the Chat and learns from them.
-
-The words of the Bot only show the memory Bot where to look. They never become
-memory themselves. A tool result from an App never becomes memory by itself. A
-[notice](/docs/chats#notices) from OpenBot is never taken as the words of a
-person. A Bot that never confides learns nothing.
-
-Review Chats have no `confide` tool. When `botMemory` is off in the
-[organization settings](/docs/organization#settings), the Bot still gets an
-answer, but nothing is learned.
-
----
-
-## How the Bot uses memory
-
-When a Turn starts, the memory Bot reads the input of the person. It skips
-notices, because they are not the words of a person. When entries help, it
-writes the input again with them. It may change the words, but it must keep all
-that the person says and asks. It may only use entries that the readers of the
-answer may see, and OpenBot checks this. In a Channel group, those are only
-entries for the group or for everyone.
-
-The model sees the new input. The history of the Chat keeps the words of the
-person. The Bot does not know that the changes come from memory. It sees them as
-its own experience. Requests and their reviews see only what the Bot asks, never
-the changes.
-
-When `botMemory` is off, the input does not change.
-
----
-
-## The memory Bot
-
-The memory Bot uses `botMemoryModel` from the organization settings. It has no
-default. When it is `null`, the memory Bot gives the fixed calm answer, and it
-adds and learns nothing. For a [shared Bot](/docs/sharing), the model and the
-cost come from the organization of the Chat.
-
-Read and change the settings of the memory Bot with `GET` and
-`PATCH /v1/bots/:botId/memory/bot`. You need `write` on a Bot that is not
-linked:
-
-```json
-{
-	"expected": 0,
-	"instructions": "Decisions of the team may be shared with the team.",
-	"concurrency": 2,
-	"budget": { "period": "month", "limitMicros": 5000000 }
-}
-```
-
-| Field          | Meaning                                                                                                        |
-| -------------- | -------------------------------------------------------------------------------------------------------------- |
-| `instructions` | Rules about privacy and sharing, in plain language. The memory Bot follows them.                               |
-| `concurrency`  | The most tasks that it runs at the same time on one server. `null` removes the limit.                          |
-| `budget`       | The most money that it may spend in a day or a month, in micro-USD, over all organizations. `null` removes it. |
-
-Without a limit, there is none. When the budget is spent, the Bot gets the fixed
-calm answer, the input stays as it is, and learning waits until the next period.
-
-The answer to `confide` and the new input wait at most 15 seconds. This time
-also counts the wait for a free task when all `concurrency` tasks are busy.
-After that, the Bot gets the fixed calm answer, and the input stays as it is.
-One step of learning may take at most 2 minutes. When it takes longer, the
-memory Bot tries again when a later Turn of the Chat completes.
-
----
-
-## Read and change it
-
-`GET /v1/bots/:botId/memory` shows the entries that are for you, in your
-organization. Add `tags` with a list separated by commas to see only entries
-with all of them. You need `read` on the Bot. Nobody can read the memory about
-another person, not even with `write` on the Bot.
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  "https://api.example.com/v1/bots/$BOT/memory?tags=testing"
-```
-
-```json
-{
-	"entries": [
-		{
-			"id": "mem_4f2a…",
-			"layer": "fact",
-			"content": "Run the tests before you report that work is done.",
-			"tags": [
-				"from:u_123",
-				"for:person:u_123",
-				"org:o_1",
-				"chat:chat_c81d…",
-				"testing"
-			],
-			"sources": [{ "chat": "chat_c81d…", "item": "i-12" }],
-			"status": "active",
-			"createdAt": 1792486800000,
-			"updatedAt": 1792486800000
-		}
-	],
-	"version": 4
-}
-```
-
-Change it with `POST /v1/bots/:botId/memory`:
-
-- `Remember` with `content` and optional `tags` adds a pinned entry. Only you
-  see it.
-- `Forget` with `id` takes back your part. When you are the only person behind
-  the entry, it becomes `retracted`. Otherwise you stop counting as one of its
-  people, and the entry is no longer for you. It stays for the others. An id
-  that is not for you returns `409`.
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"command":{"_tag":"Forget","id":"mem_4f2a…"}}' \
-  https://api.example.com/v1/bots/$BOT/memory
-```
-
-`GET /v1/bots/:botId/memory/log` lists the changes of entries that you may see:
-`version`, the time, what made the change (`memory_bot` or `person`), and the
-ids. Changes from older versions of OpenBot can also say `promotion`.
-
-To remove memory without reading it, send one tag of OpenBot to
-`POST /v1/bots/:botId/memory/purge`: a `from:`, `chat:`, `org:` or `channel:`
-tag. Observations that came from those entries have the same tag, so they go
-too. You need `write` on a Bot that is not linked. The answer is only the number
-of removed entries.
-
-When you [delete the history of a Chat](/docs/chats#delete-the-history), the
-memory that the Bot learned from it stays. Purge `chat:<id>` to remove it too.
-
-When you upgrade from a version whose Bot memory had no tags, OpenBot removes
-the old memory for each person, and each Bot starts with an empty pool.
-
----
-
-## Confessions and additions
-
-Two routes show what happened in one of your Chats:
-
-- `GET /v1/chats/:chatId/confessions` lists what the Bot confided, and the
-  answers. Read [Show confessions](/docs/client#show-confessions) before you
-  show them to people.
-- `GET /v1/chats/:chatId/enrichments` lists how the memory Bot wrote the input
-  of each Turn again: the new `text`, the words of the person in `original`, and
-  the entries that it used. Older records have no `original`.
-
-Both need `read` on the Chat, so only the person who owns the Chat can read
-them.
+You may read a conclusion only if you may read every source that supports it.
+Taking part in one source is not enough. Old memory whose source access cannot
+be checked stays hidden until it is rebuilt from checked sources. Ask your
+administrator if learning is unavailable; ask your client provider if memory
+controls are missing.

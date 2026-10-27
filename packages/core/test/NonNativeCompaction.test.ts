@@ -19,6 +19,7 @@ import {
 	Item,
 	Model,
 	SummaryCompaction,
+	TurnRunner,
 	Provider,
 } from "@openbot-build/core"
 import { ChatTest } from "./ChatTest.ts"
@@ -479,3 +480,61 @@ for (const scenario of [
 		},
 	)
 }
+
+it.effect(
+	"the Turn runner gives summary work to its host before saving the window",
+	() =>
+		Effect.gen(function* () {
+			const { runtimeStore, chat } = yield* ChatTest()
+			yield* populate(runtimeStore, chat)
+			const runner = yield* TurnRunner.make({
+				store: runtimeStore,
+				bot: {
+					modelCatalog: Effect.succeed([
+						Config.Model.make({
+							...catalog,
+							compaction: Config.Compaction.NonNative({
+								keepRecentMessages: 1,
+							}),
+						}),
+					]),
+					compaction: {
+						count: () => Effect.succeed(10),
+						compact: () => Effect.die("This model uses a summary."),
+					},
+				},
+				summarize: (selection, input) =>
+					Effect.gen(function* () {
+						assert.equal(selection.model, modelId)
+						const saved = yield* runtimeStore.read(chat).pipe(Effect.orDie)
+						assert.deepEqual(
+							saved.state.conversation.context.prompt,
+							conversation,
+						)
+						const prepared = yield* SummaryCompaction.prepare(input)
+						assert.equal(prepared._tag, "Summary")
+						if (prepared._tag === "Unchanged") return prepared.window
+						return yield* prepared.complete(
+							"The host saved this summary.",
+							"stop",
+						)
+					}),
+			})
+			const result = yield* runner.compact({ chat, targetTokens: 50, request })
+			assert.deepEqual(
+				result.view.state.conversation.context.prompt.content.slice(1),
+				conversation.content.slice(-1),
+			)
+			assert.include(
+				yield* json(result.view.state.conversation.context.prompt),
+				"The host saved this summary.",
+			)
+		}).pipe(
+			Effect.provide(
+				LanguageModelTest({
+					generateText: () => Effect.die("The host owns summary model calls."),
+					streamText: () => Stream.die("No model step runs in this test."),
+				}),
+			),
+		),
+)

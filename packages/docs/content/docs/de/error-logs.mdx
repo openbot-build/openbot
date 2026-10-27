@@ -1,9 +1,14 @@
 ---
+next: false
 title: Fehler-Logs
 description:
   Wie OpenBot Fehler protokolliert und wie du sie an deinen eigenen Dienst
   schickst.
 ---
+
+Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
+brauchst je nach Aufgabe Serverzugriff oder Plattformrechte. Beginne mit dem
+[Administrationshandbuch](/de/docs/admin).
 
 OpenBot schreibt eine Log-Zeile mit der Stufe `Error`, wenn auf dem Server etwas
 fehlschlägt. OpenBot schickt diese Logs nicht an andere Dienste. Das kannst du
@@ -58,7 +63,7 @@ Fehler-Log.
 
 OpenBot erledigt auch Arbeit im Hintergrund. Zum Beispiel löst es fällige
 Trigger aus, löscht alte Dateien, pausiert ungenutzte Computer, prüft Apps für
-den [App Index](/de/docs/app-index) und hört auf Änderungen an den
+den [App Index](/de/docs/developers/app-index) und hört auf Änderungen an den
 Einstellungen. Es pausiert auch delegierte Arbeit an ihrem Zeitlimit, schickt
 Erinnerungen, schickt die Nachrichten von Channels und hört auf Aufrufe von
 seinen anderen Instanzen.
@@ -78,41 +83,5 @@ als Fehler protokolliert.
 
 ## Fehler an deinen eigenen Dienst schicken
 
-Wenn du OpenBot aus deinem eigenen Code startest, füge mit `Logger.layer` einen
-Logger hinzu. Nutze `mergeWithExisting: true`, damit die anderen Logger bleiben.
-Stelle ihn außerhalb des Servers bereit. So bleibt er offen, bis der Server
-geschlossen ist.
-
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
-import { Effect, Layer, Logger, References } from "effect"
-import { FetchHttpClient } from "effect/http"
-
-const alerts = Logger.layer(
-	[
-		Logger.make((log) => {
-			if (log.logLevel !== "Error" && log.logLevel !== "Fatal") return
-			const annotations = log.fiber.getRef(References.CurrentLogAnnotations)
-			// Schicke nur die Werte, die du brauchst, zum Beispiel an einen Chat-Bot.
-			console.log("alert", annotations["source"], annotations["operation"])
-		}),
-	],
-	{ mergeWithExisting: true },
-)
-
-NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(
-			Server.layerLive(settings).pipe(
-				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
-			),
-		)
-	}).pipe(Effect.provide(alerts)),
-)
-```
-
-Ein Logger darf nicht blockieren. Wenn du einen langsamen Dienst aufrufen
-willst, lege jedes Ereignis in eine Warteschlange. Schicke es dann von einer
-Fiber im Hintergrund. Eine Fiber ist ein leichter Thread, den Effect ausführt.
+Für diese Entwicklungsaufgabe siehe
+[Einen Fehler-Logger ergänzen](/de/docs/developers/logging).

@@ -1,6 +1,6 @@
-import { Effect, Match, Schema, Stream } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { Prompt } from "effect/ai"
-import { Bot, Plugin } from "@openbot-build/core"
+import { Plugin } from "@openbot-build/core"
 
 export interface Options {
 	/** Maximum number of model requests, including the first request. */
@@ -23,42 +23,23 @@ export class ModelStepLimitExceeded extends Schema.TaggedError<
 	history: Prompt.Prompt,
 }) {}
 
-/** Limits each execution on its own, through the ReAct middleware chain. */
+/** Checks the saved step count before each model step. */
 export const make = ({
 	maxSteps,
 }: Options): Plugin.Plugin<{}, InvalidMaxSteps | ModelStepLimitExceeded> => {
 	const valid = Number.isSafeInteger(maxSteps) && maxSteps >= 1
-	const middleware: Plugin.Middleware<
-		{},
-		InvalidMaxSteps | ModelStepLimitExceeded
-	> = (next, options) =>
-		Stream.unwrap(
-			Effect.gen(function* () {
-				if (!valid) return yield* InvalidMaxSteps.make({ maxSteps })
-
-				const context = yield* Bot.Context
-				return next(options).pipe(
-					Stream.tap((event) =>
-						Match.value(event).pipe(
-							Match.tag("ModelStepStarted", () =>
-								Effect.gen(function* () {
-									const step = yield* context.step
-									if (step > maxSteps) {
-										const history = yield* context.history
-										return yield* ModelStepLimitExceeded.make({
-											maxSteps,
-											history,
-										})
-									}
-								}),
-							),
-							Match.orElse(() => Effect.void),
-						),
-					),
-				)
-			}),
-		)
 	return Plugin.make({
 		id: Plugin.Id.make("@openbot-build/openbot/turn-limiter"),
-	})(() => Effect.succeed(middleware))
+	})<{}, InvalidMaxSteps | ModelStepLimitExceeded>(() =>
+		Effect.succeed({
+			tools: {},
+			handlers: Context.empty(),
+			beforeStep: ({ step, history, kind }) => {
+				if (!valid) return Effect.fail(InvalidMaxSteps.make({ maxSteps }))
+				return kind === "model" && step > maxSteps
+					? Effect.fail(ModelStepLimitExceeded.make({ maxSteps, history }))
+					: Effect.succeed(true)
+			},
+		}),
+	)
 }

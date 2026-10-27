@@ -1,0 +1,166 @@
+---
+title: Code Mode
+description: Der Bot schreibt ein kurzes Programm, das Tools von Apps aufruft.
+---
+
+Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
+erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
+mit dem [Entwicklerhandbuch](/de/docs/developers).
+
+Im **Code Mode** schreibt der Bot ein kurzes JavaScript-Programm, statt die
+Tools einer App einzeln aufzurufen. Das Programm ruft die Tools auf, arbeitet
+mit ihren Ergebnissen und gibt nur das zurück, was der Bot braucht. Das spart
+Tokens, denn große Ergebnisse bleiben im Programm und kommen nicht in den
+Kontext des Modells. Das Programm kann auch viele Tools auf einmal aufrufen.
+
+Code Mode gibt dem Bot keine neuen Rechte. Jeder Aufruf einer App in einem
+Programm geht durch dieselbe
+[Prüfung der Fähigkeiten](/de/docs/developers/requests) wie ein normaler Aufruf
+eines App-Tools. Jeder Aufruf ist auch eine normale
+[App operation](/de/docs/developers/apps#app-operations).
+
+| Wort     | Bedeutung                                                                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Programm | Der JavaScript-Code, den der Bot schreibt. Er ist der Rumpf einer async-Funktion.                                        |
+| Binding  | Eine Fähigkeit einer App, die ein Programm aufrufen kann, zum Beispiel `apps.work_calendar.list_events`.                 |
+| Sandbox  | Ein geschlossener Ort, an dem das Programm läuft. Er hat kein Netzwerk, keine Dateien, keine Timer und kein Node.js.     |
+| Code run | Ein Programm und die Liste aller seiner Aufrufe. Lies ihn mit `GET /v1/code-runs/:id`.                                   |
+| Replay   | Ein neuer Lauf desselben Programms nach einer Entscheidung. Aufrufe, die schon liefen, geben ihr gespeichertes Ergebnis. |
+
+---
+
+## Code Mode einschalten
+
+Siehe [Code Mode einrichten](/de/docs/admin/code-mode).
+
+## So nutzt der Bot ihn
+
+Der Bot bekommt zwei weitere Tools. Sie stehen neben den normalen Tools der Apps
+und ersetzen sie nicht.
+
+| Tool               | Was es tut                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `openbot_code_api` | Zeigt die TypeScript-Deklarationen der Bindings. Der Bot kann sie nach Wörtern oder nach Connection suchen. |
+| `openbot_run_code` | Führt ein Programm aus und gibt sein Ergebnis, seine Log-Zeilen und eine Liste seiner Aufrufe zurück.       |
+
+Jedes Binding hat zwei Teile: die Connection und die Fähigkeit. Eine Connection
+mit dem Namen "Work calendar" und dem Tool `list-events` wird zu
+`apps.work_calendar.list_events`. `apps.call("work_calendar.list_events", args)`
+tut dasselbe. Auch Ressourcen und Prompts werden zu Bindings zum Lesen. Ein
+Programm kann so aussehen:
+
+```js
+const [today, tomorrow] = await Promise.all([
+	apps.work_calendar.list_events({ day: "2026-10-23" }),
+	apps.work_calendar.list_events({ day: "2026-10-24" }),
+])
+const busy = [today, tomorrow].flatMap(
+	(result) => result.structuredContent.events,
+)
+console.log("events", busy.length)
+return busy.filter((event) => event.attendees > 10).map((event) => event.title)
+```
+
+Ein Aufruf eines Tools gibt dem Programm das Ergebnis, das die App geschickt
+hat. Wenn ein Aufruf nicht klappt, bekommt das Programm einen `Error`:
+
+| Name des Fehlers   | Warum                                                                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | Ein Entscheider hat den Aufruf nicht erlaubt.                                                                                      |
+| `AppCallFailed`    | Der Aufruf der App ist fehlgeschlagen. `details.reason` sagt, warum.                                                               |
+| `AppInputRequired` | Die App braucht mehr Eingaben. Beantworte die App operation in `details.operationId` außerhalb des Codes.                          |
+| `VaultDenied`      | Der Aufruf hat eine [Vault](/de/docs/developers/vaults)-Referenz, die der Bot hier nicht nutzen darf. OpenBot hat nichts gesendet. |
+
+Das Programm kann diese Fehler abfangen und weitermachen.
+
+---
+
+## Wenn ein Aufruf eine Entscheidung braucht
+
+Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das
+schreibt. Dann hält das Programm bei diesem Aufruf an. Der Turn wartet nicht:
+Der Werkzeugaufruf des Programms bekommt sofort ein wartendes Ergebnis, und der
+Bot macht weiter. Der [Request](/de/docs/developers/requests) hat den Aufruf der
+App in `app` und das Programm in `code`:
+
+```json
+{
+	"capability": { "action": "apps.call", "target": "conn-7/send_email" },
+	"toolCallId": "call-9",
+	"app": {
+		"id": "…",
+		"callId": "call-9:1",
+		"arguments": { "to": "team@example.com" }
+	},
+	"code": { "run": "8f1c…", "index": 1, "code": "const notes = await …" }
+}
+```
+
+Nach der Entscheidung führt OpenBot das Programm im Hintergrund noch einmal von
+oben aus. Jeder Aufruf, der schon lief, gibt sein gespeichertes Ergebnis.
+OpenBot schickt ihn nicht noch einmal an die App. Dann läuft das Programm nach
+dem Aufruf weiter, der gewartet hat. Wenn es endet, kommt sein Ergebnis als
+[Mitteilung](/de/docs/developers/chats#mitteilungen) in den Chat zurück, und der
+Bot macht damit weiter.
+
+Das klappt nur, wenn das Programm jedes Mal dieselben Aufrufe in derselben
+Reihenfolge macht. Darum sieht das Programm in `Date.now()` eine feste Zeit, und
+`Math.random()` gibt in jedem Lauf dieselben Zahlen. Wenn ein Programm andere
+Aufrufe macht als vorher, stoppt OpenBot es mit `ReplayMismatch`. Das kann
+passieren, wenn sich eine Connection geändert hat, während das Programm gewartet
+hat. Nichts wird aus Versehen geschickt.
+
+---
+
+## Geheimnisse nutzen
+
+Ein Programm kann Geheimnisse aus einem [Vault](/de/docs/developers/vaults)
+nutzen, ohne sie zu sehen. Der Bot bekommt `vault` neben `apps`.
+`vault.github.token` ist eine Referenz wie `⟦vault:github/token⟧`, nicht das
+Geheimnis. OpenBot setzt das Geheimnis erst ein, wenn es einen App-Tool-Aufruf
+sendet, den der Eintrag erlaubt. Ein Aufruf mit einer Referenz braucht immer
+eine Entscheidung. Das App-Ergebnis kommt mit `⟦hidden:github/token⟧` an der
+Stelle des Geheimnisses zurück.
+
+---
+
+## Code runs lesen
+
+`GET /v1/chats/:chatId/code-runs` listet die Programme eines Chats.
+`GET /v1/code-runs/:id` liest eines. Beide prüfen die aktuellen Leserechte des
+Quell-Chats. API-Schlüssel und Sitzungscookies nutzen dieselbe Prüfung.
+
+Ein Code run hat die Geschäfts-ID `id` und eine `executionId`. `status` ist der
+gemeinsame Ausführungsstatus. Beobachten oder stoppen Sie ihn über die
+Ausführungs-API. `result` hält die gespeicherte Ausgabe. Ein Fehler gibt nur die
+sichere Art und Fehler-ID zurück. Die ganze Ursache bleibt auf dem Server
+verschlüsselt.
+
+`calls` zeigt Aufrufe in der Reihenfolge des Programms. Jeder Eintrag hat
+`index`, `binding`, `app` und `rejection`. `app` ist die App-Ausführung mit
+Geschäfts-ID, Ausführungs-ID und gespeichertem Ergebnis. Vor deren Start ist
+`app` null. Bei einer Ablehnung vor dem Start enthält `rejection` einen sicheren
+Namen und Text.
+
+Code, Argumente und Ergebnisse bleiben in der Datenbank verschlüsselt. Bei einer
+Freigabeanfrage lässt das gemeinsame Entscheidungsprotokoll den Turn
+weitergehen. Das Programm hat seine eigene Ausführung und sendet am Ende eine
+Meldung.
+
+Nach einem Upgrade behalten alte Programme ihre IDs, gespeicherten Ergebnisse
+und Verweise auf App-Aufrufe. Sie bleiben über dieselbe API für den Verlauf
+lesbar. Fehlen der frühere Aufrufer oder ein gespeicherter Schritt, endet das
+Programm als unterbrochen. Ein Schreibzugriff ohne bekanntes Ergebnis bleibt
+unbekannt. Das Lesen startet alte Programme nicht erneut.
+
+### Gründe für Fehler
+
+| `reason`         | Bedeutung                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `Error`          | Das Programm hat einen Fehler geworfen und ihn nicht abgefangen.                    |
+| `Timeout`        | Das Programm hat seine ganze Zeit verbraucht.                                       |
+| `Memory`         | Das Programm hat seinen ganzen Speicher verbraucht.                                 |
+| `OutputTooLarge` | Das Programm hat mehr Daten zurückgegeben, als `outputBytes` erlaubt.               |
+| `ReplayMismatch` | Das Programm hat andere Aufrufe gemacht als beim letzten Lauf.                      |
+| `Cancelled`      | Das Programm wurde gestoppt.                                                        |
+| `Unavailable`    | OpenBot konnte das Programm nicht ausführen oder speichern, oder Code Mode ist aus. |

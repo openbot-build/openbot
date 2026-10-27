@@ -1,4 +1,11 @@
-import { Authorization, type Caller, Identity } from "@openbot-build/api"
+import { Authorization } from "@openbot-build/domain"
+import type { Config } from "@openbot-build/core"
+import {
+	type Caller,
+	type ExecutionIdentity,
+	Identity,
+	executionCallers,
+} from "@openbot-build/domain"
 import { type Authorizer, Condition, type Policy } from "@nmnmcc/ability"
 import { Effect } from "effect"
 
@@ -85,3 +92,47 @@ export const matches = (condition: Condition.Any, value: object) =>
 	// OpenBot policies have no predicates, so the condition runs at once. The
 	// `Opaque` marker only stops a condition from becoming JSON.
 	Condition.evaluateSync(condition as Condition.Condition, { value })
+
+/** An execution uses the intersection of all of its callers' current rights. */
+export const execution = (
+	checks: Checks,
+	identity: ExecutionIdentity,
+	target: Authorizer.Target<OpenBot>,
+) =>
+	Effect.forEach(
+		executionCallers(identity),
+		(caller) => checks.check(caller, target),
+		{
+			discard: true,
+		},
+	)
+
+/** Lists use the same rights as actions, before rows leave the store. */
+export const executionFilter = (
+	checks: Checks,
+	identity: ExecutionIdentity,
+	target: Policy.KindTarget<OpenBot>,
+) =>
+	Effect.forEach(executionCallers(identity), (caller) =>
+		checks.filter(caller, target),
+	).pipe(Effect.map(Condition.andAll))
+
+/** A model call must fit the rights of all callers and the resource owner. */
+export const model = (
+	checks: Checks,
+	identity: ExecutionIdentity,
+	selection: Config.Selection,
+) =>
+	Effect.gen(function* () {
+		const target = {
+			action: "use" as const,
+			resource: Authorization.Model.make({
+				organizationId: identity.owner.organizationId,
+				provider: selection.provider,
+				id: selection.model,
+			}),
+		}
+		yield* execution(checks, identity, target)
+		if (identity.actor.userId !== identity.owner.userId)
+			yield* checks.check({ kind: "member", ...identity.owner }, target)
+	})

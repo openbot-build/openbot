@@ -1,231 +1,40 @@
 ---
-title: App Index
-description: Search the public list of Apps without signing in.
+title: "Find an App"
+description: "Find an App"
 ---
 
-The **App Index** is a public list of Apps. Anyone can search it. You do not
-need to sign in or send a user token. The Index only holds public App
-descriptions. It never holds accounts, settings, sign-ins, or results.
+The App Index is a public list of Apps. You can search it without signing in.
+Your client may use the OpenBot index or another index service.
 
-The Bot uses the same Index through the `openbot_search_apps` and
-`openbot_app_details` tools. See [Apps](/docs/apps#apps-in-turns).
+## Search and inspect
 
----
+Search by the work you want to do or the App name. Read the description,
+publisher, and source address. Results can be incomplete when an outside index
+cannot be reached. Try again later if an expected source is missing.
 
-## Sources
+## Connect a result
 
-An Index can read from more than one source. List them:
+Choose the App you intend to use and follow [Connect and use Apps](/docs/apps).
+An index result is not a connection or a grant of access. You still review the
+service and sign in when needed.
 
-```sh
-curl https://api.example.com/v1/app-index/sources
-```
+## When an App is absent
 
-```json
-[
-	{
-		"id": "openbot",
-		"name": "OpenBot Index",
-		"url": "https://api.example.com/v1/app-index/apps",
-		"simulated": false
-	}
-]
-```
+The publisher may not have asked for indexing, may have withdrawn it, or the
+host may restrict it. A private manual connection does not appear in the public
+index. Ask the App provider for its address or your administrator about local
+availability.
 
-The `openbot` source is the Index of this OpenBot server. A deployment owner can
-add the Index of other OpenBot servers in code. OpenBot reads them without user
-credentials. In development mode the source name is `OpenBot Development Index`,
-and `simulated` is `true`.
+## Saved public checks
 
----
+A public check has one shared execution. PostgreSQL keeps each result. A saved
+timer starts the next check, and a command can ask for an earlier check. Several
+requests may share one pending check. A server restart keeps its saved progress.
 
-## Search
+A temporary network failure keeps the last confirmed entry and schedules another
+check. A confirmed withdrawal, `noindex`, or robots denial removes the entry.
+Private App connections stay in place. A platform restriction still blocks use.
 
-```sh
-curl "https://api.example.com/v1/app-index/apps?query=calendar&limit=10"
-```
-
-| Parameter | Description                                                                                                                                                |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `query`   | Up to 200 characters. It matches the App name and title, the description, or the publisher host name. Case does not matter. Leave it out to list all Apps. |
-| `source`  | Search only one source, by its `id`.                                                                                                                       |
-| `limit`   | A number from 1 to 50. The default is 20.                                                                                                                  |
-| `cursor`  | The `nextCursor` value from the page before.                                                                                                               |
-
-The answer is a page:
-
-```json
-{
-	"apps": [
-		{
-			"entry": {
-				"cardUrl": "https://apps.example.com/mcp/server-card",
-				"card": {
-					"name": "com.example/calendar",
-					"title": "Calendar",
-					"description": "...",
-					"remotes": []
-				},
-				"evidence": [
-					{
-						"publisherUrl": "https://apps.example.com",
-						"catalogUrl": "https://apps.example.com/.well-known/ai-catalog.json",
-						"cardUrl": "https://apps.example.com/mcp/server-card",
-						"association": "CardOrigin"
-					}
-				],
-				"checkedAt": 1792454400000,
-				"validators": { "etag": "\"v1\"" }
-			},
-			"sources": [
-				{
-					"id": "openbot",
-					"name": "OpenBot Index",
-					"url": "https://api.example.com/v1/app-index/apps",
-					"simulated": false
-				}
-			],
-			"matches": ["name"],
-			"check": { "_tag": "Indexed", "attemptedAt": 1792454400000 }
-		}
-	],
-	"nextCursor": null,
-	"issues": []
-}
-```
-
-- `entry.card` is the full public Server Card, with icons and usage examples.
-- `entry.evidence` shows where the publisher lists this Card.
-- `matches` says which fields matched your query.
-- `check` is the last index check. See
-  [How Apps get indexed](#how-apps-get-indexed).
-- `restriction` appears when the deployment blocks the App. See
-  [Host restrictions](#host-restrictions).
-
-Results are sorted by Card name, then by Card URL. When the same App is in more
-than one source, it appears once, with all its `sources`.
-
-### Paging
-
-When `nextCursor` is not `null`, there are more results. Send the same `query`
-and `source` again with `cursor` set to that value.
-
-If the search or its sources change between pages, you get 400
-`IndexInputInvalid`. Start again from the first page.
-
-### Partial results
-
-When one source fails, you still get results from the others. The `issues` list
-names each failed source and gives a `message`. Show these issues to the user,
-so they know the list may not be complete.
-
-When every source fails, you get 503 `IndexUnavailable` with the `issues`.
-
----
-
-## App details
-
-Read one App by its Card URL:
-
-```sh
-curl "https://api.example.com/v1/app-index/app?cardUrl=https%3A%2F%2Fapps.example.com%2Fmcp%2Fserver-card"
-```
-
-The answer has the same shape as one item in `apps`. You can add `source` to
-read from one source only.
-
-| Status | Error               | Meaning                                    |
-| ------ | ------------------- | ------------------------------------------ |
-| 400    | `IndexInputInvalid` | The input is not valid.                    |
-| 403    | `IndexRestricted`   | The deployment blocks this App.            |
-| 404    | `IndexNotFound`     | The App or the source is not in the Index. |
-| 503    | `IndexUnavailable`  | No source could be read.                   |
-
----
-
-## How Apps get indexed
-
-Nobody needs to register an App. An App joins the Index after a user connects
-it:
-
-1. A user saves a connection to the App. Manual connections are not indexed.
-2. OpenBot puts the Card URL in a queue. The connection does not wait for this.
-   It works even when the Index is down.
-3. A background worker reads the Card again with no user data and no
-   credentials. It checks that:
-   - the Card is public and valid, and has an endpoint that supports the
-     protocol;
-   - `robots.txt` allows the `OpenBot` user bot;
-   - the Card has no `noindex` rule;
-   - a publisher Catalog lists the same Card URL.
-4. If all checks pass, OpenBot saves the public entry.
-
-The publisher Catalog can be at the Card's own origin under
-`/.well-known/ai-catalog.json`, in an `ai-catalog` link on the Card response, or
-on the page named in the Card's `websiteUrl`. A copy of the Card in someone
-else's Catalog is not enough.
-
-OpenBot checks each App again about every hour. After a failed or unsure check,
-it tries again after about one minute.
-
-| `check._tag`  | Meaning                                                                             |
-| ------------- | ----------------------------------------------------------------------------------- |
-| `Pending`     | Waiting for the first check.                                                        |
-| `Indexed`     | The App is in the Index.                                                            |
-| `Excluded`    | The App is not allowed in the Index. It does not show in search. `reason` says why. |
-| `Withdrawn`   | The App was in the Index and is now removed.                                        |
-| `Unconfirmed` | A needed check did not finish. An existing entry stays.                             |
-| `Failed`      | The check could not run.                                                            |
-
-Publishers can also ask for a check from the
-[developer tools](/docs/developer-tools#ask-for-indexing).
-
----
-
-A check has four minutes to finish. OpenBot writes its result only while the
-worker still owns the job. A late result from an old worker cannot replace the
-current entry. Reading the source list returns `503 SettingsUnavailable` when
-OpenBot cannot read the platform settings.
-
-## Publisher withdrawal and noindex
-
-A publisher controls whether their App is in the Index:
-
-- **`noindex`.** Send `X-Robots-Tag: noindex` on the Card response. You can also
-  send `X-Robots-Tag: OpenBot: noindex` to target only this crawler. At the next
-  check, OpenBot removes the entry, or never adds it.
-- **Remove the Card from your Catalog.** At the next check, OpenBot withdraws
-  the entry.
-- **`robots.txt`.** Block the `OpenBot` user bot. At the next check, OpenBot
-  excludes the App, and it no longer shows in search.
-
-If your Catalog cannot be reached, that is not a withdrawal. The check is
-`Unconfirmed`, and the entry stays.
-
-Removing an Index entry never removes anyone's connection. Users can still use
-an App that is not in the Index.
-
-<Callout type="info">
-	`noindex` only controls the public Index. It does not protect your App. Use
-	real sign-in to protect private data.
-</Callout>
-
----
-
-## Host restrictions
-
-A platform admin can block some Apps. Each restriction has a `cardUrl`, a public
-`reason`, and an HTTPS `appealUrl`. They live in `appRestrictions` in the
-platform settings. Change them with `PATCH /v1/platform/settings`. See
-[Platform](/docs/platform#platform-settings).
-
-A blocked App:
-
-- shows a `restriction` in search results until the next index check;
-- is excluded at that check, and then no longer shows in search;
-- returns 403 `IndexRestricted` from the details call;
-- cannot be connected (403 `AppRestricted`);
-- has the availability `Restricted` in existing connections, so the Bot cannot
-  use it.
-
-See the full shapes in the
-[API reference](/docs/api/operations/tags/app-index/).
+The data move keeps old entries, check results, and the next check time. It puts
+each old Index job under the shared platform execution. An unfinished public
+read may run again after startup. The data move itself sends no network request.

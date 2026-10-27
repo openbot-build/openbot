@@ -134,6 +134,8 @@ export const make = (
 	options: Options,
 ): Effect.Effect<Driver, never, Scope.Scope> =>
 	Effect.gen(function* () {
+		const restored = yield* Ref.make(false)
+		const restoredCalls = yield* Ref.make(HashMap.empty<string, string>())
 		const configured = yield* Ref.make(Option.none<string>())
 		const answered = yield* Ref.make(HashSet.empty<string>())
 		const expected = yield* Ref.make(HashMap.empty<string, number>())
@@ -166,7 +168,54 @@ export const make = (
 					yield* options.send(Live.Input.Configure({ config }))
 					yield* Ref.set(configured, Option.some(key))
 				}
-				for (const message of trailing(request.prompt)) {
+				const pending = trailing(request.prompt)
+				if (!(yield* Ref.get(restored))) {
+					let history: ReadonlyArray<Live.HistoryMessage> = []
+					let callIndex = 0
+					for (const message of Arr.take(
+						request.prompt.content,
+						request.prompt.content.length - pending.length,
+					)) {
+						if (message.role === "system") continue
+						for (const part of message.content) {
+							if (
+								part.type === "text" &&
+								(message.role === "user" || message.role === "assistant")
+							)
+								history = Arr.append(history, {
+									role: message.role,
+									text: part.text,
+								})
+							if (part.type === "tool-call") {
+								// Stored steps can reuse a provider ID. Each restored occurrence needs its own wire ID.
+								const callId = `openbot_history_call_${callIndex++}`
+								yield* Ref.update(restoredCalls, HashMap.set(part.id, callId))
+								yield* Ref.update(answered, HashSet.remove(part.id))
+								history = Arr.append(history, {
+									role: "assistant",
+									callId,
+									name: part.name,
+									arguments: yield* encodeJson(part.params).pipe(Effect.orDie),
+								})
+							}
+							if (part.type === "tool-result") {
+								history = Arr.append(history, {
+									role: "tool",
+									callId: Option.getOrElse(
+										HashMap.get(yield* Ref.get(restoredCalls), part.id),
+										() => part.id,
+									),
+									output: yield* outputOf(part),
+								})
+								yield* Ref.update(answered, HashSet.add(part.id))
+							}
+						}
+					}
+					if (history.length > 0)
+						yield* options.send(Live.Input.History({ messages: history }))
+					yield* Ref.set(restored, true)
+				}
+				for (const message of pending) {
 					if (message.role === "user") {
 						const text = textOf(message)
 						if (text.length > 0 && !(yield* takeExpected(text)))
@@ -178,7 +227,10 @@ export const make = (
 							if (HashSet.has(yield* Ref.get(answered), part.id)) continue
 							yield* options.send(
 								Live.Input.ToolResult({
-									callId: part.id,
+									callId: Option.getOrElse(
+										HashMap.get(yield* Ref.get(restoredCalls), part.id),
+										() => part.id,
+									),
 									output: yield* outputOf(part),
 								}),
 							)
@@ -223,6 +275,8 @@ export const make = (
 					),
 				ToolCall: ({ callId, name, arguments: text }) =>
 					Ref.update(answer, (state) => ({ ...state, calls: true })).pipe(
+						Effect.andThen(Ref.update(answered, HashSet.remove(callId))),
+						Effect.andThen(Ref.update(restoredCalls, HashMap.remove(callId))),
 						Effect.as([
 							Response.makePart("tool-call", {
 								id: callId,

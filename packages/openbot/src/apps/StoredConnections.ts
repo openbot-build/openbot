@@ -1,8 +1,11 @@
+import * as Models from "./ConnectionModels.ts"
+import type { IndexWork } from "./IndexWork.ts"
 import {
-	ConnectionsApi as Api,
+	AppConnections,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-} from "@openbot-build/api"
+} from "@openbot-build/domain"
+
 import { Store } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -13,16 +16,11 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { and, eq, sql } from "drizzle-orm"
-import {
-	appConnections,
-	appDrafts,
-	appIndexJobs,
-	appRecords,
-} from "../database/Schema.ts"
+import { and, eq, sql, type SQL } from "drizzle-orm"
+import { appConnections, appDrafts, appRecords } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 
 /** An owner key is the JSON of `[organization id, user id]`. */
 const OwnerJson = Schema.fromJsonString(
@@ -36,12 +34,14 @@ const LockJson = Schema.fromJsonString(
 
 /** The App connections of each owner, with their App records and drafts, kept in Postgres. */
 export type Error =
-	ExperienceNotFound | ExperienceStorageUnavailable | Api.ConnectionConflict
+	| ExperienceNotFound
+	| ExperienceStorageUnavailable
+	| AppConnections.ConnectionConflict
 export const StoredConnection = Schema.Struct({
 	connection: Store.UserConnection,
-	name: Api.ConnectionName,
+	name: AppConnections.ConnectionName,
 	revision: Schema.Natural,
-	verification: Schema.NullOr(Api.Availability),
+	verification: Schema.NullOr(AppConnections.Availability),
 })
 export type StoredConnection = typeof StoredConnection.Type
 export interface SaveRequest {
@@ -92,13 +92,13 @@ const connectionCodec = Schema.fromJsonString(
 	Schema.toCodecJson(StoredConnection),
 )
 export const appCodec = Schema.fromJsonString(Store.AppRecord)
-export const draftCodec = Schema.fromJsonString(Api.ConnectionDraft)
+export const draftCodec = Schema.fromJsonString(Models.Draft)
 
 type Database = Db.Database
 type Sealer = typeof Secrets.Service
 
 /** Open the sealed body of a connection row. */
-export const open = (
+export const openRecord = (
 	secrets: Sealer,
 	owner: string,
 	id: string,
@@ -106,10 +106,17 @@ export const open = (
 ) =>
 	secrets
 		.open(body, JSON.stringify(["connection", owner, id]))
-		.pipe(
-			Effect.flatMap(Schema.decodeEffect(connectionCodec)),
-			unavailable("Could not open a stored App connection."),
-		)
+		.pipe(Effect.flatMap(Schema.decodeEffect(connectionCodec)))
+export const open = (
+	secrets: Sealer,
+	owner: string,
+	id: string,
+	body: string,
+) =>
+	openRecord(secrets, owner, id, body).pipe(
+		unavailable("Could not open a stored App connection."),
+	)
+
 const seal = (
 	secrets: Sealer,
 	owner: string,
@@ -127,11 +134,16 @@ export const connectionWhere = (owner: string, id: string) =>
 export const draftWhere = (owner: string, id: string) =>
 	and(eq(appDrafts.owner, owner), eq(appDrafts.id, id))
 
-export const list = (db: Database, secrets: Sealer, owner: string) =>
+export const list = (
+	db: Database,
+	secrets: Sealer,
+	owner: string,
+	where?: SQL,
+) =>
 	db
 		.select()
 		.from(appConnections)
-		.where(eq(appConnections.owner, owner))
+		.where(and(eq(appConnections.owner, owner), where))
 		.orderBy(appConnections.name, appConnections.id)
 		.pipe(
 			unavailable("Could not list App connections."),
@@ -205,7 +217,7 @@ export const updateApp = (db: Database, owner: string, app: Store.AppRecord) =>
 export const save = (
 	db: Database,
 	secrets: Sealer,
-	namespace: string,
+	index: typeof IndexWork.Service,
 	owner: string,
 	input: SaveRequest,
 ): Effect.Effect<StoredConnection, Error> =>
@@ -241,12 +253,12 @@ export const save = (
 					if (row === undefined) return yield* ExperienceNotFound.make({ id })
 					const draft = yield* Schema.decodeEffect(draftCodec)(row.body)
 					if (draft.revision !== input.draftRevision)
-						return yield* Api.ConnectionConflict.make({
+						return yield* AppConnections.ConnectionConflict.make({
 							reason: "RevisionChanged",
 							message: "The draft changed. Refresh it before confirming.",
 						})
 					if (draft.expiresAt <= (yield* Clock.currentTimeMillis))
-						return yield* Api.ConnectionConflict.make({
+						return yield* AppConnections.ConnectionConflict.make({
 							reason: "DraftExpired",
 							message: "This draft expired. Discover the App again.",
 						})
@@ -255,7 +267,7 @@ export const save = (
 					(yield* tx.$count(appConnections, eq(appConnections.owner, owner))) >=
 					30
 				)
-					return yield* Api.ConnectionConflict.make({
+					return yield* AppConnections.ConnectionConflict.make({
 						reason: "LimitReached",
 						message:
 							"You can save up to 30 connections. Remove one before adding another.",
@@ -281,14 +293,9 @@ export const save = (
 				if (
 					!Arr.some(input.app.sources, (source) => source.role === "manual")
 				) {
-					yield* tx
-						.insert(appIndexJobs)
-						.values({
-							namespace,
-							cardUrl: input.connection.cardUrl,
-							nextCheckAt: 0,
-						})
-						.onConflictDoNothing()
+					yield* index
+						.request(input.connection.cardUrl, input.app.sources)
+						.pipe(unavailable("Could not add the Public Index check."))
 				}
 				return stored
 			}),
@@ -324,9 +331,15 @@ export const update = (
 					.where(connectionWhere(owner, id))
 					.for("update"))[0]
 				if (row === undefined) return yield* ExperienceNotFound.make({ id })
+				if (row.executionId !== null)
+					return yield* AppConnections.ConnectionConflict.make({
+						reason: "RevisionChanged",
+						message:
+							"This connection has work in progress. Wait for it to end.",
+					})
 				const previous = yield* open(secrets, owner, id, row.body)
 				if (revision !== undefined && previous.revision !== revision)
-					return yield* Api.ConnectionConflict.make({
+					return yield* AppConnections.ConnectionConflict.make({
 						reason: "RevisionChanged",
 						message: "This connection changed. Refresh it before updating.",
 					})
@@ -360,11 +373,7 @@ export const update = (
 			),
 		)
 
-export const saveDraft = (
-	db: Database,
-	owner: string,
-	draft: Api.ConnectionDraft,
-) =>
+export const saveDraft = (db: Database, owner: string, draft: Models.Draft) =>
 	Schema.encodeEffect(draftCodec)(draft).pipe(
 		Effect.flatMap((body) =>
 			db.insert(appDrafts).values({ owner, id: draft.id, body }),

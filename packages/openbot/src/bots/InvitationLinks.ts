@@ -1,4 +1,5 @@
-import { BotsApi } from "@openbot-build/api"
+import { BotSharing as BotsApi } from "@openbot-build/domain"
+
 import { Crypto, Effect, String as Str } from "effect"
 import { Base64Url, Hex } from "effect/encoding"
 import type { LinkSecret } from "../organization/Organization.ts"

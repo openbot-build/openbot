@@ -1,8 +1,13 @@
 ---
+next: false
 title: Error logs
 description:
   How OpenBot logs failures, and how to send them to your own service.
 ---
+
+For platform operators. These tasks affect the whole deployment. Have server
+access or platform admin rights as the task requires. Start with the
+[administrator manual](/docs/admin).
 
 OpenBot writes a log line at level `Error` when something fails on the server.
 OpenBot does not send these logs to other services. You can add this yourself
@@ -53,9 +58,9 @@ as the error log.
 
 OpenBot also does work in the background. For example, it fires the Triggers
 that are due, deletes old files, pauses idle Computers, checks Apps for the
-[App Index](/docs/app-index), and listens for changes to the settings. It also
-pauses delegated work at its time limit, sends reminders, sends the messages of
-Channels, and listens for calls from its other instances.
+[App Index](/docs/developers/app-index), and listens for changes to the
+settings. It also pauses delegated work at its time limit, sends reminders,
+sends the messages of Channels, and listens for calls from its other instances.
 
 When one run of this work fails, OpenBot writes a log line at level `Warn` with
 the cause. Then it runs the work again at the next time. The work does not stop.
@@ -71,39 +76,4 @@ failure.
 
 ## Send errors to your own service
 
-When you run OpenBot from your own code, add a logger with `Logger.layer`. Use
-`mergeWithExisting: true` to keep the other loggers. Provide it outside the
-server, so that it stays open until the server has closed.
-
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
-import { Effect, Layer, Logger, References } from "effect"
-import { FetchHttpClient } from "effect/http"
-
-const alerts = Logger.layer(
-	[
-		Logger.make((log) => {
-			if (log.logLevel !== "Error" && log.logLevel !== "Fatal") return
-			const annotations = log.fiber.getRef(References.CurrentLogAnnotations)
-			// Send only the values that you need, for example to a chat bot.
-			console.log("alert", annotations["source"], annotations["operation"])
-		}),
-	],
-	{ mergeWithExisting: true },
-)
-
-NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(
-			Server.layerLive(settings).pipe(
-				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
-			),
-		)
-	}).pipe(Effect.provide(alerts)),
-)
-```
-
-A logger must not block. To call a slow service, put each event in a queue and
-send it from a background fiber. A fiber is a light thread that Effect runs.
+For this development task, see [Add an error logger](/docs/developers/logging).

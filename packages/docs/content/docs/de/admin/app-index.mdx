@@ -1,0 +1,28 @@
+---
+title: "App-Index-Einstellungen"
+description: "App-Index-Einstellungen"
+---
+
+Für den Plattformbetrieb.
+
+## Sperren durch den Host
+
+Ein Admin der Platform kann manche Apps sperren. Jede Sperre hat eine `cardUrl`,
+einen öffentlichen `reason` und eine HTTPS-`appealUrl` für einen Einspruch. Sie
+stehen in `appRestrictions` in den Einstellungen der Platform. Ändere sie mit
+`PATCH /v1/platform/settings`. Siehe
+[Platform](/de/docs/platform#einstellungen-der-platform).
+
+Eine gesperrte App:
+
+- zeigt eine `restriction` in den Suchergebnissen, bis zur nächsten Prüfung für
+  den Index;
+- wird bei dieser Prüfung ausgeschlossen und erscheint danach nicht mehr in der
+  Suche;
+- gibt beim Aufruf der Details 403 `IndexRestricted` zurück;
+- kann nicht verbunden werden (403 `AppRestricted`);
+- hat in bestehenden Connections die Verfügbarkeit `Restricted`, darum kann der
+  Bot sie nicht nutzen.
+
+Die vollständigen Formen findest du in der
+[API-Referenz](/docs/api/operations/tags/app-index/).

@@ -6,7 +6,7 @@ import type * as Configuration from "../configuration/Configuration.ts"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
 import * as SecretFiles from "../configuration/SecretFiles.ts"
 import * as OutboundGuard from "../network/OutboundGuard.ts"
-import * as ErrorReporting from "./ErrorReporting.ts"
+import * as ErrorReporting from "../errors/Reporting.ts"
 
 /**
  * The platform services that a server of `server` and `main` can use: the Node
@@ -55,6 +55,8 @@ export const main = <ROut, E>(
 						[
 							"Run the OpenBot HTTP server.",
 							"It takes its settings from these environment variables:",
+							"  OPENBOT_CLUSTER_SECRET  The shared secret for private RPC. Needed.",
+							"  OPENBOT_CLUSTER_HOST    The address that other nodes can reach.",
 							"  OPENBOT_DATABASE_URL    The address of the Postgres database. Needed.",
 							"  OPENBOT_SECRET_KEYS     The keys that keep stored secrets safe. Needed.",
 							"  OPENBOT_HOST            The address to listen on. The default is 127.0.0.1.",

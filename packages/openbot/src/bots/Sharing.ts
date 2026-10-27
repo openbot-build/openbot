@@ -1,4 +1,4 @@
-import type { BotsApi } from "@openbot-build/api"
+import type { Bots as BotsApi } from "@openbot-build/domain"
 
 /**
  * Only a lasting top Bot of its own organization can be shared: one that a member or

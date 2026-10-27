@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_usage_events" ADD COLUMN "reservation_known" boolean DEFAULT false NOT NULL;

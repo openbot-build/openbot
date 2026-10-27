@@ -1,8 +1,12 @@
-import { AppIndexApi, DeveloperApi } from "@openbot-build/api"
+import {
+	AppIndex,
+	Execution,
+	ServiceId,
+	type ServiceIdentity,
+} from "@openbot-build/domain"
 import { Discovery, Index, Indexing } from "@openbot-build/protocol"
 import {
 	Array as Arr,
-	Cause,
 	Clock,
 	Context,
 	Crypto,
@@ -10,57 +14,62 @@ import {
 	Layer,
 	Match,
 	Option,
-	Result,
-	Schedule,
 	Schema,
 } from "effect"
-import { and, asc, eq, lte } from "drizzle-orm"
-import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
-import type { SqlError } from "effect/sql"
-import * as Background from "../app/Background.ts"
-import { appIndexJobs, appIndexResults } from "../database/Schema.ts"
+import { Hex } from "effect/encoding"
+import { SqlClient } from "effect/sql"
+import { and, eq } from "drizzle-orm"
+import {
+	appIndexEntries,
+	appIndexJobs,
+	appIndexResults,
+} from "../database/Schema.ts"
+import * as Db from "../database/Database.ts"
+import {
+	Store,
+	commandActor,
+	storage,
+	transactionFailures,
+	type Key,
+	type Fence,
+} from "../execution/Store.ts"
 import { Governance } from "./Governance.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import { CheckJson } from "./IndexStore.ts"
-import * as Db from "../database/Database.ts"
 
+export const workflowName = "openbot.index-watch"
+export const serviceId = ServiceId.make("public-index")
+export const identity: ServiceIdentity = {
+	owner: { kind: "platform" },
+	actor: { kind: "service", serviceId },
+}
+export const nextSignal = (generation: string) => `next:${generation}`
 export interface Options {
 	readonly intervalMs?: number
 	readonly retryMs?: number
 }
-/** Fill in the default wait times once, when the Layer is built. */
-const settings = (options: Options) => ({
-	intervalMs: options.intervalMs ?? 3600000,
-	retryMs: options.retryMs ?? 60000,
-})
-export const Job = Schema.Struct({
-	cardUrl: Schema.String,
-	generation: Schema.String,
-	status: DeveloperApi.IndexJobStatus,
-	check: Schema.NullOr(AppIndexApi.Check),
-	requestedAt: Schema.Finite,
-})
-export type Job = typeof Job.Type
-/** A job that one worker holds for a short lease. */
-interface Claim {
-	readonly cardUrl: string
-	readonly token: string
-	readonly generation: string
-	readonly sources: ReadonlyArray<Discovery.Source>
-}
-export class IndexWork extends Context.Service<
-	IndexWork,
-	{
-		readonly runOne: (
-			cardUrl?: string,
-		) => Effect.Effect<boolean, Index.IndexError>
-	}
->()("@openbot-build/openbot/apps/IndexWork") {}
-
+export const Job = AppIndex.Job
+export type Job = AppIndex.Job
 const sourcesCodec = Schema.fromJsonString(Schema.Array(Discovery.Source))
-const toJob = (
-	row: typeof appIndexJobs.$inferSelect,
-): Effect.Effect<Job, Schema.SchemaError> =>
+const entryCodec = Schema.fromJsonString(Index.Entry)
+const Reference = Schema.Struct({
+	indexNamespace: Schema.String,
+	cardUrl: Schema.String,
+})
+export const CheckInput = Schema.Struct({
+	cardUrl: Schema.String,
+	sources: Schema.Array(Discovery.Source),
+	previous: Schema.NullOr(Index.Entry),
+})
+export type CheckInput = typeof CheckInput.Type
+export const CheckResult = Schema.TaggedUnion({
+	Checked: { result: Indexing.SyncResult },
+	Failed: { failure: Execution.Failure },
+})
+export type CheckResult = typeof CheckResult.Type
+const jobWhere = (namespace: string, cardUrl: string) =>
+	and(eq(appIndexJobs.namespace, namespace), eq(appIndexJobs.cardUrl, cardUrl))
+const toJob = (row: typeof appIndexJobs.$inferSelect) =>
 	Effect.gen(function* () {
 		const completed = row.generation === row.completedGeneration
 		return {
@@ -69,421 +78,373 @@ const toJob = (
 			requestedAt: row.requestedAt,
 			status: completed
 				? "Completed"
-				: row.claim === null
+				: row.startedAt === 0
 					? "Waiting"
 					: "Verifying",
 			check:
 				completed && row.check !== null
 					? yield* Schema.decodeEffect(CheckJson)(row.check)
 					: null,
-		}
+		} satisfies Job
 	})
 
-const jobWhere = (namespace: string, cardUrl: string) =>
-	and(eq(appIndexJobs.namespace, namespace), eq(appIndexJobs.cardUrl, cardUrl))
-
-/**
- * A database failure, or a stored row that does not decode. The error keeps
- * the failure as its cause, and the callers log it. An `IndexError` stays as
- * it is.
- */
-const unavailable = <A, R>(
-	self: Effect.Effect<
-		A,
-		| Index.IndexError
-		| EffectDrizzleQueryError
-		| SqlError.SqlError
-		| Schema.SchemaError,
-		R
-	>,
-): Effect.Effect<A, Index.IndexError, R> =>
-	self.pipe(
-		Effect.catchTag(
-			["EffectDrizzleQueryError", "SqlError", "SchemaError"],
-			(cause) =>
-				Effect.fail(
-					Index.IndexError.make({
-						reason: "Unavailable",
-						operation: "Public Index work storage",
-						cause,
-					}),
-				),
-		),
-	)
-
-/**
- * Ask for a new check of an App. A job that waits already keeps its
- * generation and gets the new sources.
- */
-export const enqueue = (
-	db: Db.Database,
-	namespace: string,
-	cardUrl: string,
-	sources: ReadonlyArray<Discovery.Source>,
-): Effect.Effect<Job, Index.IndexError, Crypto.Crypto> =>
-	db
-		.transaction((tx) =>
-			Effect.gen(function* () {
-				const crypto = yield* Crypto.Crypto
-				yield* tx
-					.insert(appIndexJobs)
-					.values({ namespace, cardUrl, nextCheckAt: 0 })
-					.onConflictDoNothing()
-				const row = (yield* tx
-					.select()
-					.from(appIndexJobs)
-					.where(jobWhere(namespace, cardUrl))
-					.for("update"))[0]
-				if (row === undefined)
-					return yield* Index.IndexError.make({
-						reason: "Unavailable",
-						operation: "Public Index work storage",
-					})
-				const previousSources = yield* Schema.decodeEffect(sourcesCodec)(
-					row.sources,
-				)
-				const combined = Arr.dedupeWith(
-					[...previousSources, ...sources],
-					(a, b) => a.role === b.role && a.url === b.url,
-				)
-				const encoded = yield* Schema.encodeEffect(sourcesCodec)(combined)
-				const pending =
-					row.generation !== "" && row.generation !== row.completedGeneration
-				const next = pending
-					? { ...row, sources: encoded }
-					: {
-							...row,
-							generation: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
-							sources: encoded,
-							requestedAt: yield* Clock.currentTimeMillis,
-							startedAt: 0,
-							nextCheckAt: 0,
-						}
-				yield* tx
-					.update(appIndexJobs)
-					.set(next)
-					.where(jobWhere(namespace, cardUrl))
-				return yield* toJob(next)
-			}),
-		)
-		.pipe(unavailable)
-
-/** Read the job of an App, or the saved result of one of its generations. */
-export const job = (
-	db: Db.Database,
-	namespace: string,
-	cardUrl: string,
-	generation?: string,
-): Effect.Effect<Option.Option<Job>, Index.IndexError> =>
+/** The Index owns checks and results. The shared engine owns all scheduling. */
+const make = (options: Options) =>
 	Effect.gen(function* () {
-		const row = (yield* db
-			.select()
-			.from(appIndexJobs)
-			.where(jobWhere(namespace, cardUrl)))[0]
-		if (
-			generation !== undefined &&
-			(row === undefined || row.generation !== generation)
-		) {
-			const result = (yield* db
-				.select()
-				.from(appIndexResults)
-				.where(
-					and(
-						eq(appIndexResults.namespace, namespace),
-						eq(appIndexResults.cardUrl, cardUrl),
-						eq(appIndexResults.generation, generation),
-					),
-				))[0]
-			if (result === undefined) return Option.none()
-			return Option.some<Job>({
-				cardUrl,
-				generation,
-				status: "Completed",
-				requestedAt: result.finishedAt,
-				check: yield* Schema.decodeEffect(CheckJson)(result.check),
-			})
+		const db = yield* Db.make
+		const sql = yield* SqlClient.SqlClient
+		const store = yield* Store
+		const namespace = yield* IndexNamespace
+		const inspection = yield* Indexing.PublicationInspection
+		const governance = yield* Governance
+		const crypto = yield* Crypto.Crypto
+		const executionNamespace = `index:${namespace}`
+		const where = (cardUrl: string) => jobWhere(namespace, cardUrl)
+		const row = (cardUrl: string, lock = false) => {
+			const query = db.select().from(appIndexJobs).where(where(cardUrl))
+			return (lock ? query.for("update") : query).pipe(Effect.map(Arr.head))
 		}
-		return row === undefined ? Option.none() : Option.some(yield* toJob(row))
-	}).pipe(unavailable)
-
-export const layer = (options: Options = {}) =>
-	Layer.effect(
-		IndexWork,
-		Effect.gen(function* () {
-			const db = yield* Db.make
-			const namespace = yield* IndexNamespace
-			const inspection = yield* Indexing.PublicationInspection
-			const index = yield* Index.IndexStore
-			const governance = yield* Governance
-			const crypto = yield* Crypto.Crypto
-			const uuid = crypto.randomUUIDv4().pipe(Effect.orDie)
-			const { intervalMs, retryMs } = settings(options)
-			const where = (cardUrl: string) => jobWhere(namespace, cardUrl)
-			/** Take the next due job that no other worker holds. */
-			const claim = (cardUrl?: string) =>
+		const load = Effect.fn("IndexWork.load")(function* (
+			key: Key,
+			lock = false,
+		) {
+			const saved = yield* store.loadService(key, serviceId)
+			const ref = yield* Schema.decodeUnknownEffect(Reference)(saved.input)
+			if (
+				key.namespace !== executionNamespace ||
+				ref.indexNamespace !== namespace ||
+				saved.identity.owner.kind !== "platform"
+			)
+				return yield* Execution.Forbidden.make({})
+			const found = yield* row(ref.cardUrl, lock)
+			if (Option.isNone(found) || found.value.executionId !== key.id)
+				return yield* Execution.NotFound.make({ id: key.id })
+			return { saved, row: found.value }
+		}, transactionFailures)
+		const authorize = (key: Key) =>
+			load(key).pipe(Effect.asVoid, Effect.catchTag("SchemaError", Effect.die))
+		const request = Effect.fn("IndexWork.request")(function* (
+			cardUrl: string,
+			sources: ReadonlyArray<Discovery.Source>,
+		) {
+			return yield* sql.withTransaction(
 				Effect.gen(function* () {
+					yield* db
+						.insert(appIndexJobs)
+						.values({ namespace, cardUrl, nextCheckAt: 0 })
+						.onConflictDoNothing()
+					const found = yield* row(cardUrl, true)
+					if (Option.isNone(found))
+						return yield* Effect.die("The Index row is missing after insert.")
+					const current = found.value
+					const combined = Arr.dedupeWith(
+						[
+							...(yield* Schema.decodeEffect(sourcesCodec)(current.sources)),
+							...sources,
+						],
+						(a, b) => a.role === b.role && a.url === b.url,
+					)
+					let executionId =
+						current.executionId === null
+							? null
+							: Execution.Id.make(current.executionId)
+					if (
+						executionId !== null &&
+						Execution.isTerminal(
+							(yield* store.get({
+								namespace: executionNamespace,
+								id: executionId,
+							})).status,
+						)
+					)
+						executionId = null
+					const pending =
+						executionId !== null &&
+						current.generation !== "" &&
+						current.generation !== current.completedGeneration
+					const generation = pending
+						? current.generation
+						: yield* crypto.randomUUIDv4()
+					if (executionId === null) {
+						const resourceId = Hex.encode(
+							yield* crypto.digest(
+								"SHA-256",
+								new TextEncoder().encode(cardUrl),
+							),
+						)
+						executionId = (yield* store.submit(
+							executionNamespace,
+							Execution.CommandKey.make(`watch:${generation}`),
+							{
+								workflow: workflowName,
+								identity,
+								resource: { kind: "IndexWatch", id: resourceId },
+								input: { indexNamespace: namespace, cardUrl },
+							},
+						)).executionId
+					}
+					const next = {
+						...current,
+						executionId,
+						generation,
+						sources: yield* Schema.encodeEffect(sourcesCodec)(combined),
+						requestedAt: pending
+							? current.requestedAt
+							: yield* Clock.currentTimeMillis,
+						startedAt: pending ? current.startedAt : 0,
+						nextCheckAt: 0,
+					}
+					yield* db.update(appIndexJobs).set(next).where(where(cardUrl))
+					if (!pending && current.executionId === executionId)
+						yield* store.notify(
+							{ namespace: executionNamespace, id: executionId },
+							Execution.CommandKey.make(`check:${generation}`),
+							commandActor(identity),
+							nextSignal(current.completedGeneration ?? ""),
+						)
+					return {
+						job: yield* toJob(next),
+						execution: { namespace: executionNamespace, id: executionId },
+					}
+				}),
+			)
+		}, transactionFailures)
+		const job = Effect.fn("IndexWork.job")(function* (
+			cardUrl: string,
+			generation?: string,
+		) {
+			const found = yield* row(cardUrl)
+			if (
+				generation !== undefined &&
+				(Option.isNone(found) || found.value.generation !== generation)
+			) {
+				const result = Arr.head(
+					yield* db
+						.select()
+						.from(appIndexResults)
+						.where(
+							and(
+								eq(appIndexResults.namespace, namespace),
+								eq(appIndexResults.cardUrl, cardUrl),
+								eq(appIndexResults.generation, generation),
+							),
+						),
+				)
+				if (Option.isNone(result)) return Option.none<Job>()
+				return Option.some<Job>({
+					cardUrl,
+					generation,
+					requestedAt: result.value.finishedAt,
+					status: "Completed",
+					check: yield* Schema.decodeEffect(CheckJson)(result.value.check),
+				})
+			}
+			return Option.isNone(found)
+				? Option.none<Job>()
+				: Option.some(yield* toJob(found.value))
+		}, transactionFailures)
+		const begin = Effect.fn("IndexWork.begin")(function* (fence: Fence) {
+			return yield* sql.withTransaction(
+				Effect.gen(function* () {
+					// Commands and commits take the App row before the execution row.
+					const current = yield* load(fence, true)
 					const now = yield* Clock.currentTimeMillis
-					const token = yield* uuid
-					return yield* db.transaction((tx) =>
+					const pending =
+						current.row.generation !== "" &&
+						current.row.generation !== current.row.completedGeneration
+					const generation = pending
+						? current.row.generation
+						: yield* crypto.randomUUIDv4()
+					return yield* store.commit(
+						fence,
+						current.saved.record.status === "waiting"
+							? { status: "running" }
+							: {},
 						Effect.gen(function* () {
-							const row = (yield* tx
-								.select()
-								.from(appIndexJobs)
-								.where(
-									and(
-										eq(appIndexJobs.namespace, namespace),
-										lte(appIndexJobs.nextCheckAt, now),
-										lte(appIndexJobs.leaseUntil, now),
-										cardUrl === undefined
-											? undefined
-											: eq(appIndexJobs.cardUrl, cardUrl),
-									),
-								)
-								.orderBy(
-									asc(appIndexJobs.nextCheckAt),
-									asc(appIndexJobs.cardUrl),
-								)
-								.limit(1)
-								.for("update", { skipLocked: true }))[0]
-							if (row === undefined) return Option.none<Claim>()
-							const generation =
-								row.generation === "" ||
-								row.generation === row.completedGeneration
-									? yield* uuid
-									: row.generation
-							yield* tx
-								.update(appIndexJobs)
-								.set({
-									generation,
-									claim: token,
-									leaseUntil: now + 300000,
-									startedAt: now,
-									requestedAt:
-										generation === row.generation ? row.requestedAt : now,
-								})
-								.where(where(row.cardUrl))
-							return Option.some<Claim>({
-								cardUrl: row.cardUrl,
-								token,
+							const next = {
+								...current.row,
 								generation,
-								sources: yield* Schema.decodeEffect(sourcesCodec)(row.sources),
-							})
-						}),
-					)
-				}).pipe(unavailable)
-			const finish = (
-				claim: Claim,
-				check: AppIndexApi.Check,
-				nextCheckAt: number,
-				write: Effect.Effect<void, Index.IndexError>,
-			) =>
-				db
-					.transaction((tx) =>
-						Effect.gen(function* () {
-							const encoded = yield* Schema.encodeEffect(CheckJson)(check)
-							const [finished] = yield* tx
-								.update(appIndexJobs)
-								.set({
-									check: encoded,
-									completedGeneration: claim.generation,
-									nextCheckAt,
-									leaseUntil: 0,
-									claim: null,
-								})
-								.where(
-									and(
-										where(claim.cardUrl),
-										eq(appIndexJobs.claim, claim.token),
-									),
-								)
-								.returning({ generation: appIndexJobs.generation })
-							if (finished === undefined)
-								return yield* Effect.logWarning(
-									"The Public Index claim ended before the check finished. Another worker has the job now, so OpenBot drops this result.",
-								).pipe(
-									Effect.annotateLogs({
-										cardUrl: claim.cardUrl,
-										generation: claim.generation,
-									}),
-								)
-							yield* write
-							yield* tx
-								.insert(appIndexResults)
-								.values({
-									namespace,
-									cardUrl: claim.cardUrl,
-									generation: finished.generation,
-									check: encoded,
-									finishedAt: yield* Clock.currentTimeMillis,
-								})
-								.onConflictDoNothing()
-						}),
-					)
-					.pipe(Effect.asVoid, unavailable)
-			/** Releasing the claim is best effort. The lease ends by itself if this fails. */
-			const release = (claim: Claim) =>
-				db
-					.update(appIndexJobs)
-					.set({ leaseUntil: 0, claim: null })
-					.where(and(where(claim.cardUrl), eq(appIndexJobs.claim, claim.token)))
-					.pipe(
-						Effect.asVoid,
-						Effect.catch((error) =>
-							Effect.logWarning(
-								"Public Index claim release failed",
-								Cause.fail(error),
-							).pipe(
-								Effect.annotateLogs({
-									source: "apps",
-									operation: "index-release",
-								}),
-							),
-						),
-					)
-			const verify = (claim: Claim) =>
-				Effect.gen(function* () {
-					const sync = Effect.gen(function* () {
-						const restriction = governance.find(claim.cardUrl)
-						if (Option.isSome(restriction))
-							return {
-								result: {
-									_tag: "Excluded",
-									cardUrl: claim.cardUrl,
-									reason: restriction.value.reason,
-								} satisfies Indexing.SyncResult,
-								write: Effect.void,
+								requestedAt: pending ? current.row.requestedAt : now,
+								startedAt:
+									pending && current.row.startedAt > 0
+										? current.row.startedAt
+										: now,
 							}
-						const previous = yield* index.get(claim.cardUrl)
-						const inspected = yield* inspection.inspect(
-							Indexing.Input.make({
-								cardUrl: claim.cardUrl,
-								sources: claim.sources,
-							}),
-							previous,
-						)
-						return Match.value(inspected).pipe(
-							Match.tagsExhaustive({
-								Eligible: ({ entry }) => ({
-									result: {
-										_tag: "Indexed",
-										entry,
-									} satisfies Indexing.SyncResult,
-									write: Effect.asVoid(index.upsert(entry)),
-								}),
-								Excluded: ({ cardUrl, reason, withdraw }) =>
-									withdraw && Option.isSome(previous)
-										? {
-												result: {
-													_tag: "Withdrawn",
-													cardUrl,
-													reason,
-												} satisfies Indexing.SyncResult,
-												write: index.withdraw(cardUrl),
-											}
-										: {
-												result: {
-													_tag: "Excluded",
-													cardUrl,
-													reason,
-												} satisfies Indexing.SyncResult,
-												write: Effect.void,
-											},
-								Unconfirmed: (result) => ({ result, write: Effect.void }),
-							}),
-						)
-					})
-					const outcome = yield* sync.pipe(
-						Effect.timeout("4 minutes"),
-						// The saved check has a fixed text, so the log keeps the reason.
-						Effect.tapCauseIf(Cause.hasFails, (cause) =>
-							Effect.logWarning(
-								"Public Index verification could not complete",
-								cause,
-							).pipe(
-								Effect.annotateLogs({
-									cardUrl: claim.cardUrl,
-									generation: claim.generation,
-								}),
-							),
-						),
-						Effect.result,
+							yield* db
+								.update(appIndexJobs)
+								.set(next)
+								.where(where(next.cardUrl))
+							const previous = Arr.head(
+								yield* db
+									.select()
+									.from(appIndexEntries)
+									.where(
+										and(
+											eq(appIndexEntries.namespace, namespace),
+											eq(appIndexEntries.cardUrl, next.cardUrl),
+										),
+									),
+							)
+							return {
+								generation,
+								input: {
+									cardUrl: next.cardUrl,
+									sources: yield* Schema.decodeEffect(sourcesCodec)(
+										next.sources,
+									),
+									previous: Option.isNone(previous)
+										? null
+										: yield* Schema.decodeEffect(entryCodec)(
+												previous.value.body,
+											),
+								} satisfies CheckInput,
+							}
+						}),
 					)
+				}),
+			)
+		}, transactionFailures)
+		const restriction = (cardUrl: string) =>
+			governance.find(cardUrl).pipe(storage)
+		const inspect = Effect.fn("IndexWork.inspect")(function* (
+			input: CheckInput,
+			restriction: Option.Option<AppIndex.Restriction>,
+		) {
+			if (Option.isSome(restriction))
+				return {
+					_tag: "Excluded",
+					cardUrl: input.cardUrl,
+					reason: restriction.value.reason,
+				} satisfies Indexing.SyncResult
+			const entry = Option.fromNullishOr(input.previous)
+			const inspected = yield* inspection.inspect(
+				Indexing.Input.make(input),
+				entry,
+			)
+			return Match.value(inspected).pipe(
+				Match.tagsExhaustive({
+					Eligible: ({ entry }) =>
+						({ _tag: "Indexed", entry }) satisfies Indexing.SyncResult,
+					Excluded: ({ cardUrl, reason, withdraw }) =>
+						({
+							_tag: withdraw && Option.isSome(entry) ? "Withdrawn" : "Excluded",
+							cardUrl,
+							reason,
+						}) satisfies Indexing.SyncResult,
+					Unconfirmed: (result) => result,
+				}),
+			)
+		}, transactionFailures)
+		const complete = Effect.fn("IndexWork.complete")(function* (
+			fence: Fence,
+			generation: string,
+			outcome: CheckResult,
+		) {
+			return yield* sql.withTransaction(
+				Effect.gen(function* () {
+					const current = yield* load(fence, true)
+					if (
+						current.saved.generation !== fence.generation ||
+						current.row.generation !== generation
+					)
+						return yield* Execution.Conflict.make({ id: fence.id })
+					if (current.row.completedGeneration === generation) return
 					const attemptedAt = yield* Clock.currentTimeMillis
-					const check: AppIndexApi.Check = Match.value(outcome).pipe(
-						Match.tag(
-							"Failure",
-							() =>
-								({
+					const check: AppIndex.Check =
+						outcome._tag === "Failed"
+							? {
 									_tag: "Failed",
 									attemptedAt,
 									reason: "Public verification could not complete.",
-								}) as const,
-						),
-						Match.tag("Success", ({ success }) =>
-							Match.value(success.result).pipe(
-								Match.tagsExhaustive({
-									Indexed: () => ({ _tag: "Indexed", attemptedAt }) as const,
-									Excluded: ({ reason }) =>
-										({ _tag: "Excluded", attemptedAt, reason }) as const,
-									Withdrawn: ({ reason }) =>
-										({ _tag: "Withdrawn", attemptedAt, reason }) as const,
-									Unconfirmed: ({ reason }) =>
-										({ _tag: "Unconfirmed", attemptedAt, reason }) as const,
-								}),
-							),
-						),
-						Match.exhaustive,
-					)
-					const delay = Match.value(check).pipe(
-						Match.tag("Failed", "Unconfirmed", () => retryMs),
-						Match.orElse(() => intervalMs),
-					)
-					yield* finish(
-						claim,
-						check,
-						attemptedAt + delay,
-						Result.isSuccess(outcome) ? outcome.success.write : Effect.void,
-					)
-					return true
-				})
-			return IndexWork.of({
-				runOne: Effect.fn("IndexWork.runOne")(function* (cardUrl) {
-					// A claim and its release step are one step. An interruption can
-					// stop only the check, and then the release step still runs.
-					return yield* Effect.uninterruptibleMask((restore) =>
-						claim(cardUrl).pipe(
-							Effect.flatMap(
-								Option.match({
-									onNone: () => Effect.succeed(false),
-									onSome: (held) =>
-										restore(verify(held)).pipe(
-											Effect.onError(() => release(held)),
-										),
-								}),
-							),
-						),
+								}
+							: Match.value(outcome.result).pipe(
+									Match.tagsExhaustive({
+										Indexed: () => ({ _tag: "Indexed", attemptedAt }) as const,
+										Excluded: ({ reason }) =>
+											({ _tag: "Excluded", attemptedAt, reason }) as const,
+										Withdrawn: ({ reason }) =>
+											({ _tag: "Withdrawn", attemptedAt, reason }) as const,
+										Unconfirmed: ({ reason }) =>
+											({ _tag: "Unconfirmed", attemptedAt, reason }) as const,
+									}),
+								)
+					const encoded = yield* Schema.encodeEffect(CheckJson)(check)
+					const delay =
+						check._tag === "Failed" || check._tag === "Unconfirmed"
+							? (options.retryMs ?? 60000)
+							: (options.intervalMs ?? 3600000)
+					yield* store.commit(
+						fence,
+						{
+							events: [
+								{
+									_tag: "Result",
+									resource: { kind: "IndexCheck", id: generation },
+								},
+							],
+						},
+						Effect.gen(function* () {
+							if (outcome._tag === "Checked") {
+								if (outcome.result._tag === "Indexed") {
+									const entry = outcome.result.entry
+									const body = yield* Schema.encodeEffect(entryCodec)(entry)
+									yield* db
+										.insert(appIndexEntries)
+										.values({ namespace, cardUrl: entry.cardUrl, body })
+										.onConflictDoUpdate({
+											target: [
+												appIndexEntries.namespace,
+												appIndexEntries.cardUrl,
+											],
+											set: { body },
+										})
+								} else if (outcome.result._tag === "Withdrawn")
+									yield* db
+										.delete(appIndexEntries)
+										.where(
+											and(
+												eq(appIndexEntries.namespace, namespace),
+												eq(appIndexEntries.cardUrl, current.row.cardUrl),
+											),
+										)
+							}
+							yield* db
+								.insert(appIndexResults)
+								.values({
+									namespace,
+									cardUrl: current.row.cardUrl,
+									generation,
+									check: encoded,
+									finishedAt: attemptedAt,
+								})
+								.onConflictDoNothing()
+							yield* db
+								.update(appIndexJobs)
+								.set({
+									check: encoded,
+									completedGeneration: generation,
+									nextCheckAt: attemptedAt + delay,
+								})
+								.where(where(current.row.cardUrl))
+						}),
 					)
 				}),
-			})
-		}),
-	)
-
-/**
- * Each OpenBot process runs one scoped worker. When a process stops before it
- * can release a claim, the claim comes back when its lease ends.
- */
-export const layerWorker = (options: Options = {}) =>
-	Layer.effectDiscard(
-		Effect.gen(function* () {
-			const work = yield* IndexWork
-			const { retryMs } = settings(options)
-			// Check due jobs one after another until no job is due.
-			const drain = work
-				.runOne()
-				.pipe(Effect.repeat({ while: (processed) => processed }), Effect.asVoid)
-			yield* Background.repeat(drain, {
-				schedule: Schedule.spaced(retryMs),
-				message: "Public Index verification failed",
-			}).pipe(Effect.annotateLogs({ source: "apps", operation: "index-sync" }))
-		}),
-	)
+			)
+		}, transactionFailures)
+		return {
+			request,
+			job,
+			load,
+			authorize,
+			begin,
+			restriction,
+			inspect,
+			complete,
+		}
+	})
+export class IndexWork extends Context.Service<
+	IndexWork,
+	Effect.Success<ReturnType<typeof make>>
+>()("@openbot-build/openbot/apps/IndexWork") {}
+export const layer = (options: Options = {}) =>
+	Layer.effect(IndexWork, make(options))

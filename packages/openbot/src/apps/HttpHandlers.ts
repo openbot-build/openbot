@@ -1,4 +1,5 @@
 import { OpenBotApi } from "@openbot-build/api"
+
 import { HttpApiBuilder } from "effect/http-api"
 import { discover } from "./Discovery.ts"
 

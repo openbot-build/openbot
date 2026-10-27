@@ -1,6 +1,7 @@
+import { Redacted } from "effect"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API for the AES cipher of Lark events.
 import { createDecipheriv } from "node:crypto"
-import type { ChannelsApi } from "@openbot-build/api"
+import type { Channels as ChannelsApi } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -28,9 +29,9 @@ import { recentSeconds, sameSecret } from "../Text.ts"
 export interface Secrets {
 	readonly domain: ChannelsApi.LarkDomain
 	readonly appId: string
-	readonly appSecret: string
-	readonly verificationToken: string
-	readonly encryptKey: string
+	readonly appSecret: Redacted.Redacted<string>
+	readonly verificationToken: Redacted.Redacted<string>
+	readonly encryptKey: Redacted.Redacted<string>
 }
 
 const origins: Record<ChannelsApi.LarkDomain, string> = {
@@ -91,14 +92,17 @@ const read = (
 		const encrypted = text(outer, "encrypt")
 		if (encrypted === undefined)
 			return yield* ChannelDenied.make({ reason: "the event is not encrypted" })
-		const key = yield* sha256(crypto, secrets.encryptKey)
+		const key = yield* sha256(crypto, Redacted.value(secrets.encryptKey))
 		const body = parse(Option.getOrElse(decrypt(key, encrypted), () => ""))
 		if (body === undefined)
 			return yield* ChannelDenied.make({ reason: "the event does not decrypt" })
 		// The check of the request URL has the token, but no signature.
 		if (text(body, "type") === "url_verification") {
 			const token = text(body, "token")
-			if (token === undefined || !sameSecret(token, secrets.verificationToken))
+			if (
+				token === undefined ||
+				!sameSecret(token, Redacted.value(secrets.verificationToken))
+			)
 				return yield* ChannelDenied.make({ reason: "wrong verification token" })
 			return { events: [], reply: { challenge: text(body, "challenge") } }
 		}
@@ -114,14 +118,17 @@ const read = (
 		const expected = Hex.encode(
 			yield* sha256(
 				crypto,
-				timestamp + nonce + secrets.encryptKey + request.body,
+				timestamp + nonce + Redacted.value(secrets.encryptKey) + request.body,
 			),
 		)
 		if (!sameSecret(signature, expected))
 			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		const header = field(body, "header")
 		const token = text(header, "token")
-		if (token === undefined || !sameSecret(token, secrets.verificationToken))
+		if (
+			token === undefined ||
+			!sameSecret(token, Redacted.value(secrets.verificationToken))
+		)
 			return yield* ChannelDenied.make({ reason: "wrong verification token" })
 		const eventId = text(header, "event_id") ?? ""
 		const event = field(body, "event")
@@ -190,7 +197,8 @@ export const make = (
 		// The tenant token lasts about two hours. One token serves every message until then.
 		// Concurrent callers wait for one request of a new token, and do not each send one.
 		const cached = yield* SynchronizedRef.make<
-			{ readonly token: string; readonly until: number } | undefined
+			| { readonly token: Redacted.Redacted<string>; readonly until: number }
+			| undefined
 		>(undefined)
 		const token = SynchronizedRef.modifyEffect(cached, (current) =>
 			Effect.gen(function* () {
@@ -203,7 +211,7 @@ export const make = (
 					).pipe(
 						HttpClientRequest.bodyJsonUnsafe({
 							app_id: secrets.appId,
-							app_secret: secrets.appSecret,
+							app_secret: Redacted.value(secrets.appSecret),
 						}),
 					),
 				)
@@ -215,9 +223,9 @@ export const make = (
 						`Lark did not give a tenant token: ${text(reply.json, "msg") ?? reply.status}`,
 					)
 				return [
-					value,
+					Redacted.make(value),
 					{
-						token: value,
+						token: Redacted.make(value),
 						until:
 							now + ((Predicate.isNumber(expire) ? expire : 3600) - 300) * 1000,
 					},
@@ -248,12 +256,16 @@ export const make = (
 			idType: "chat_id" | "open_id",
 			receiver: string,
 			message: OutboundMessage,
+			key: string,
 		) =>
 			request(
 				HttpClientRequest.post(origin + "/open-apis/im/v1/messages").pipe(
 					HttpClientRequest.setUrlParam("receive_id_type", idType),
 					HttpClientRequest.bodyJsonUnsafe({
 						receive_id: receiver,
+						// The key is stable across attempts. The platform deduplicates for one hour.
+						// https://open.feishu.cn/document/server-docs/im-v1/message/create
+						uuid: key,
 						msg_type: "interactive",
 						content: JSON.stringify(card(message)),
 					}),
@@ -269,10 +281,10 @@ export const make = (
 			kind: "lark",
 			features: { edit: true, maxLength: 20_000, private: false },
 			receive: (input) => read(secrets, crypto, input),
-			send: (target, message) =>
+			send: (target, message, key) =>
 				target._tag === "Conversation"
-					? create("chat_id", target.conversation, message)
-					: create("open_id", target.person, message),
+					? create("chat_id", target.conversation, message, key)
+					: create("open_id", target.person, message, key),
 			edit: (ref, message) =>
 				request(
 					HttpClientRequest.patch(

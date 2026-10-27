@@ -1,14 +1,5 @@
-import type { ChannelsApi } from "@openbot-build/api"
-import {
-	Cause,
-	Context,
-	Crypto,
-	Duration,
-	Effect,
-	Layer,
-	RcMap,
-	Scope,
-} from "effect"
+import type { Channels as ChannelsApi } from "@openbot-build/domain"
+import { Context, Crypto, Data, Effect, Layer, RcMap, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { AppNetwork } from "../apps/AppHost.ts"
 import type { Channel } from "./Channel.ts"
@@ -24,12 +15,12 @@ export class ChannelRegistry extends Context.Service<
 	ChannelRegistry,
 	{
 		/**
-		 * Borrows the integration of a stored Channel version. The integration works until
+		 * Borrows the current Channel connection. The integration works until
 		 * the scope closes.
 		 */
 		readonly get: (
 			organizationId: string,
-			channel: { readonly id: string; readonly version: number },
+			id: string,
 		) => Effect.Effect<
 			Channel,
 			ChannelsApi.ChannelsUnavailable | ChannelsApi.ChannelNotFound,
@@ -79,32 +70,34 @@ export const make = Effect.gen(function* () {
 				)
 		}
 	}
-	// One integration for each Channel version, shared by everyone who uses it. An
-	// integration closes some time after its last user is done, so a change of the
-	// Channel never closes an integration that is still in use, and the integration of
-	// a deleted Channel goes away too. RcMap compares the keys by value.
-	type Key = readonly [organizationId: string, id: string, version: number]
-	const integrations: RcMap.RcMap<
-		Key,
-		Channel,
-		ChannelsApi.ChannelsUnavailable | ChannelsApi.ChannelNotFound
-	> = yield* RcMap.make({
-		lookup: (key: Key) =>
-			channels.credentials(key[0], key[1]).pipe(
-				Effect.flatMap((credentials) => build(key[1], credentials)),
-				// A failed build is not kept, so the next use builds again.
-				Effect.onError((cause) =>
-					Cause.hasInterruptsOnly(cause)
-						? Effect.void
-						: RcMap.invalidate(integrations, key),
-				),
-			),
-		idleTimeToLive: Duration.minutes(10),
+	// Read credentials and their version together. A later update must not put new
+	// credentials under an old cache key. Data gives these keys value equality.
+	type Key = {
+		readonly organizationId: string
+		readonly id: string
+		readonly version: number
+		readonly credentials: Credentials
+	}
+	const integrations = yield* RcMap.make({
+		lookup: (key: Key) => build(key.id, key.credentials),
+		// Active scopes may share a connection. The last scope closes it at once.
+		idleTimeToLive: 0,
 	})
 	return ChannelRegistry.of({
 		build,
-		get: (organizationId, target) =>
-			RcMap.get(integrations, [organizationId, target.id, target.version]),
+		get: (organizationId, id) =>
+			Effect.gen(function* () {
+				const current = yield* channels.credentials(organizationId, id)
+				return yield* RcMap.get(
+					integrations,
+					new Data.Class({
+						organizationId,
+						id,
+						version: current.version,
+						credentials: new Data.Class<Credentials>(current.credentials),
+					}),
+				)
+			}),
 	})
 })
 export const layer = Layer.effect(ChannelRegistry, make)
