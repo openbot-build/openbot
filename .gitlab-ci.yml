@@ -1,9 +1,11 @@
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+    - if:
+        '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE ==
+        "push"'
       when: never
-    - if: '$CI_COMMIT_BRANCH || $CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_BRANCH || $CI_COMMIT_TAG"
 
 stages: [check, build]
 
@@ -11,6 +13,9 @@ stages: [check, build]
   image: ghcr.io/cachix/devenv/devenv:v2.4.0
   tags: [docker, privileged, arm64]
   variables:
+    # Keep native TypeScript builds within the runner memory budget.
+    GOMEMLIMIT: 1GiB
+    GOGC: "50"
     GIT_CONFIG_COUNT: "1"
     GIT_CONFIG_KEY_0: safe.directory
     GIT_CONFIG_VALUE_0: $CI_PROJECT_DIR
@@ -28,9 +33,9 @@ stages: [check, build]
       paths: [.cache/pnpm/]
   before_script:
     - >-
-      devenv --profile ci shell -- bash -euo pipefail -c '
-      test "$(node --version)" = v26.12.1;
-      nix copy --to "file://$CI_PROJECT_DIR/.cache/nix?compression=zstd" "$DEVENV_PROFILE";
+      devenv --profile ci shell -- bash -euo pipefail -c ' test "$(node
+      --version)" = v26.12.1; nix copy --to
+      "file://$CI_PROJECT_DIR/.cache/nix?compression=zstd" "$DEVENV_PROFILE";
       pnpm install --frozen-lockfile --store-dir .cache/pnpm'
   interruptible: true
 
@@ -38,15 +43,20 @@ check:
   extends: .devenv
   stage: check
   script:
-    - devenv --profile ci shell -- pnpm build
-    - devenv --profile ci shell -- pnpm typecheck
-    - devenv --profile ci shell -- pnpm -r test
+    - devenv --profile ci shell -- pnpm -r --workspace-concurrency=1 build
+    - >-
+      devenv --profile ci shell -- bash -euo pipefail -c 'pnpm -r
+      --workspace-concurrency=1 exec tsc -p tsconfig.json --noEmit; pnpm exec
+      tsc -p scripts/tsconfig.json --noEmit; pnpm rules'
+    - devenv --profile ci shell -- pnpm -r --workspace-concurrency=1 test
     - devenv --profile ci shell -- node --test deploy/docker/*.test.mjs
 
 platform-image:
   extends: .devenv
   stage: build
   needs: [check]
+  interruptible: false
+  resource_group: openbot-release
   services:
     - name: docker:29-dind
       alias: docker

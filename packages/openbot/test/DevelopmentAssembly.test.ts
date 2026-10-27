@@ -1,39 +1,53 @@
-import { memberOf } from "./Caller.ts"
-// @effect-diagnostics strictEffectProvide:off
-import * as AgentFixture from "./AgentFixture.ts"
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, expectTypeOf, it, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
-import { Session, Config, Model } from "@openbot-build/core"
+import { Chat, Config, Item, Model, Turn } from "@openbot-build/core"
 import * as Client from "@openbot-build/client"
 import { Discovery } from "@openbot-build/protocol"
 import {
-	SessionView,
+	ChatSummary,
+	ChatView,
 	AppDiscoveryFailed,
 	AppDiscoveryResult,
 	AuthApi,
+	RequestsApi,
 } from "@openbot-build/api"
 import {
+	Array as Arr,
 	Context,
-	Data,
 	Effect,
+	Exit,
 	HashMap,
 	Layer,
-	ManagedRuntime,
 	Option,
+	Record as Rec,
 	Redacted,
+	Ref,
 	Result,
+	Schedule,
 	Schema,
+	Scope,
 	Stream,
 } from "effect"
-import { FetchHttpClient, HttpServer } from "effect/http"
-import * as Sessions from "../src/sessions/Sessions.ts"
-import * as Backend from "../dist/app/Backend.js"
+import {
+	FetchHttpClient,
+	HttpClient,
+	HttpClientRequest,
+	HttpServer,
+} from "effect/http"
+import type * as Chats from "../src/chats/Chats.ts"
+import { authorOf } from "../src/chats/ChatHost.ts"
+// tsdown removes declarations of private modules. Use the source service key in this test.
+import * as Backend from "../src/app/Backend.ts"
 import * as Development from "../dist/Development.js"
 import * as Server from "../dist/app/Server.js"
+import { HostTools, OpenBot } from "@openbot-build/openbot"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
 import * as DatabasePostgres from "../dist/database/DatabasePostgres.js"
+import * as Caller from "./Caller.ts"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as DefaultBot from "./DefaultBot.ts"
+import { browser, signIn } from "./DevelopmentLogin.ts"
+import { bot, message, model, settled } from "./Messages.ts"
 
 const settings = (databaseUrl: string) => ({
 	host: "127.0.0.1",
@@ -49,560 +63,559 @@ const settings = (databaseUrl: string) => ({
 		secret: Redacted.make("DevelopmentAssemblySecretMustRemainStable123456"),
 	},
 })
-const wait = (
-	sessions: typeof Sessions.Sessions.Service,
-	id: Session.Id,
-	processedMemory = false,
-) => {
+/** Files, programs and an HTTP client for the tests. */
+const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
+/** A page of the Items of a Chat, as the API gives it. */
+const ItemPage = Schema.Struct({
+	items: Schema.Array(Item.Record),
+	next: Schema.NullOr(Item.Seq),
+})
+/** Gives a value as JSON text. */
+const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+/** Runs the migrations with a database pool of their own, which closes at the end. */
+const migrate = (options: ReturnType<typeof settings>) =>
+	DatabasePostgres.migrate.pipe(Effect.provide(DatabasePostgres.layer(options)))
+/** Starts a server in the current scope, and gives its services and its address. */
+const launch = <ROut, E, R>(
+	server: Layer.Layer<ROut | HttpServer.HttpServer, E, R>,
+) =>
+	Effect.map(Layer.build(server), (services) => ({
+		services,
+		address: HttpServer.formatAddress(
+			Context.get(services, HttpServer.HttpServer).address,
+		),
+	}))
+/**
+ * Runs a read again, 25 milliseconds apart, until `done` holds for its value.
+ * It tries again at most 200 times, and then gives the last value.
+ */
+const poll = <A, E, R>(
+	read: Effect.Effect<A, E, R>,
+	done: (value: A) => boolean,
+) =>
+	Effect.repeat(read, {
+		until: done,
+		times: 200,
+		schedule: Schedule.spaced("25 millis"),
+	})
+/** Waits until no Turn runs in a Chat and no input waits in its inbox. */
+const wait = (chats: typeof Chats.Chats.Service, id: Chat.Id) => {
 	const next = (
-		view: SessionView,
+		view: ChatView,
 		remaining: number,
-	): Effect.Effect<SessionView, Sessions.ServiceError> =>
+	): Effect.Effect<ChatView, Chats.ServiceError> =>
 		Effect.gen(function* () {
-			const memory = processedMemory ? yield* sessions.memory(id) : undefined
 			if (
 				view.activity !== "active" &&
-				(memory === undefined ||
-					view.state.value.conversation.history.every((entry) =>
-						memory.processed.includes(entry.id),
-					))
+				view.status !== "Running" &&
+				view.inbox === 0
 			)
-				return processedMemory ? yield* sessions.get(id) : view
-			assert.ok(remaining > 0, "The Session reached the expected state")
-			const updated = yield* sessions.wait(
+				return view
+			assert.ok(remaining > 0, "The Chat came to rest")
+			const updated = yield* chats.wait(
 				id,
-				view.session.revision,
+				view.chat.revision,
 				1000,
 				view.activity,
 			)
 			return yield* next(updated, remaining - 1)
 		})
-	return sessions.get(id).pipe(Effect.flatMap((view) => next(view, 20)))
+	return chats.get(id).pipe(Effect.flatMap((view) => next(view, 20)))
 }
-
-test(
-	"development assembly streams through the API and restores processed memory after restart",
-	{ timeout: 30000 },
-	async () => {
-		const database = await PostgresTest.start()
-		const options = settings(database.url)
-		const server = () => ManagedRuntime.make(Development.layer(options))
-		let runtime: ReturnType<typeof server> | undefined
-		try {
-			await using migration = ManagedRuntime.make(
-				DatabasePostgres.layer(options).pipe(Layer.provide(NodeServices.layer)),
-			)
-			await migration.runPromise(DatabasePostgres.migrate)
-			runtime = server()
-			let address = await runtime.runPromise(
-				Effect.map(HttpServer.HttpServer, (server) =>
-					HttpServer.formatAddress(server.address),
-				),
-			)
-			const login = await fetch(address + "/auth/development/sign-in", {
-				method: "POST",
-				headers: {
-					origin: options.auth.publicOrigin,
-					"content-type": "application/json",
-				},
-				body: "{}",
-			})
-			assert.equal(login.status, 200)
-			const cookie = login.headers
-				.getSetCookie()
-				.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
-				.split(";")[0]!
-			const headers = {
-				cookie,
-				origin: options.auth.publicOrigin,
-				"content-type": "application/json",
-			}
-			const created = await fetch(address + "/v1/sessions", {
-				method: "POST",
-				headers,
-				body: JSON.stringify({}),
-			})
-			assert.equal(created.status, 201)
-			const work = Schema.decodeUnknownSync(SessionView)(await created.json())
-			assert.deepEqual(work.session.settings.model, DevelopmentModel.selection)
-			const path = `/v1/sessions/${work.session.id}`
-			const response = await fetch(address + path + "/turns", {
-				method: "POST",
-				headers,
-				body: JSON.stringify({
-					input: "Persist this development conversation",
-					expected: work.session.revision,
-					stream: true,
-				}),
-			})
-			assert.equal(response.status, 200)
-			const events = await response.text()
-			assert.match(events, /response.output_text.delta/)
-			assert.match(
-				events,
-				/Development response: Persist this development conversation/,
-			)
-			assert.match(events, /response.completed/)
-			let saved = Schema.decodeUnknownSync(SessionView)(
-				await (await fetch(address + path, { headers })).json(),
-			)
-			assert.equal(Session.status(saved.session)._tag, "Completed")
-			const backend = await runtime.runPromise(Backend.Backend)
-			const session = Schema.decodeUnknownSync(AuthApi.SessionInfo)(
-				await (
-					await fetch(address + "/auth/session", { headers: { cookie } })
-				).json(),
-			)
-			const sessions = await runtime.runPromise(
-				backend.forCaller({ kind: "member", ...memberOf(session) }),
-			)
-			saved = await runtime.runPromise(wait(sessions, work.session.id, true))
-			const memory = await runtime.runPromise(sessions.memory(work.session.id))
-			assert.deepEqual(memory.entries, {})
-			assert.deepEqual(
-				memory.processed,
-				saved.state.value.conversation.history.map((entry) => entry.id),
-			)
-			assert.ok(memory.processed.length >= 2)
-			await runtime.dispose()
-			runtime = server()
-			address = await runtime.runPromise(
-				Effect.map(HttpServer.HttpServer, (server) =>
-					HttpServer.formatAddress(server.address),
-				),
-			)
-			const restored = Schema.decodeUnknownSync(SessionView)(
-				await (await fetch(address + path, { headers })).json(),
-			)
-			assert.deepEqual(restored, saved)
-			const continuation = await fetch(address + path + "/turns", {
-				method: "POST",
-				headers,
-				body: JSON.stringify({
-					input: "Continue once",
-					stream: true,
-					expected: restored.session.revision,
-				}),
-			})
-			assert.match(
-				await continuation.text(),
-				/Development response: Continue once/,
-			)
-			let continued = Schema.decodeUnknownSync(SessionView)(
-				await (await fetch(address + path, { headers })).json(),
-			)
-			assert.equal(
-				continued.state.value.conversation.history.length,
-				saved.state.value.conversation.history.length + 2,
-			)
-			const restartedSessions = await runtime.runPromise(
-				Effect.flatMap(Backend.Backend, (backend) =>
-					backend.forCaller({ kind: "member", ...memberOf(session) }),
-				),
-			)
-			continued = await runtime.runPromise(
-				wait(restartedSessions, work.session.id, true),
-			)
-			await runtime.runPromise(
-				restartedSessions.selectModel(work.session.id, {
-					expected: continued.session.revision,
-					selection: Config.Selection.make({
-						provider: DevelopmentModel.provider,
-						model: Model.Id.make("mock-slow"),
-					}),
-				}),
-			)
-			const partial = await runtime.runPromise(
-				Effect.scoped(
-					Effect.flatMap(
-						restartedSessions.sendStream(work.session.id, {
-							expected: (
-								await runtime.runPromise(restartedSessions.get(work.session.id))
-							).session.revision,
-							input: "Interrupt this slow response",
-						}),
-						(stream) =>
-							stream.pipe(
-								Stream.filter(
-									(event) => event.event === "response.output_text.delta",
-								),
-								Stream.take(1),
-								Stream.runCollect,
-							),
-					),
-				),
-			)
-			assert.equal(partial.length, 1)
-			const interruptStartedAt = performance.now()
-			await runtime.runPromise(
-				restartedSessions.interrupt(
-					work.session.id,
-					Session.currentTurn(
-						(await runtime.runPromise(restartedSessions.get(work.session.id)))
-							.session,
-					)!.id,
-				),
-			)
-			const interrupted = await runtime.runPromise(
-				wait(restartedSessions, work.session.id),
-			)
-			assert.ok(performance.now() - interruptStartedAt < 3000)
-			assert.equal(Session.status(interrupted.session)._tag, "Interrupted")
-			assert.equal(interrupted.response?.status, "cancelled")
-			await runtime.runPromise(
-				restartedSessions.selectModel(work.session.id, {
-					expected: interrupted.session.revision,
-					selection: Config.Selection.make({
-						provider: DevelopmentModel.provider,
-						model: Model.Id.make("mock-failure"),
-					}),
-				}),
-			)
-			const failedEvents = await runtime.runPromise(
-				Effect.scoped(
-					Effect.flatMap(
-						restartedSessions.sendStream(work.session.id, {
-							expected: (
-								await runtime.runPromise(restartedSessions.get(work.session.id))
-							).session.revision,
-							input: "Save this failed input",
-						}),
-						Stream.runCollect,
-					),
-				),
-			)
-			assert.ok(
-				failedEvents.some(
-					(event) => event.event === "response.output_text.delta",
-				),
-			)
-			assert.ok(failedEvents.some((event) => event.event === "response.failed"))
-			const failed = await runtime.runPromise(
-				wait(restartedSessions, work.session.id),
-			)
-			assert.equal(Session.status(failed.session)._tag, "Failed")
-			assert.equal(failed.response?.status, "failed")
-			assert.match(
-				JSON.stringify(failed.state.value.conversation.history),
-				/Save this failed input/,
-			)
-			await runtime.runPromise(
-				restartedSessions.selectModel(work.session.id, {
-					expected: failed.session.revision,
-					selection: DevelopmentModel.selection,
-				}),
-			)
-			await runtime.runPromise(
-				Effect.scoped(
-					Effect.flatMap(
-						restartedSessions.sendStream(work.session.id, {
-							expected: (
-								await runtime.runPromise(restartedSessions.get(work.session.id))
-							).session.revision,
-							input: "Recover after failure",
-						}),
-						Stream.runDrain,
-					),
-				),
-			)
-			assert.equal(
-				(await runtime.runPromise(wait(restartedSessions, work.session.id)))
-					.response?.status,
-				"completed",
-			)
-		} finally {
-			await runtime?.dispose()
-			await database.close()
-		}
-	},
-)
-
-test(
-	"server assembly keeps extra per-Session handlers and approvals",
-	{ timeout: 30000 },
-	async () => {
-		const database = await PostgresTest.start()
-		const options = settings(database.url)
-		let calls = HashMap.empty<Session.Id, number>()
-		const layer = Layer.unwrap(
-			Effect.gen(function* () {
-				const { builtinModels, sessions } = yield* DevelopmentModel.make
-				return Server.layerFixed({
-					...options,
-					builtinModels,
-					sessions: {
-						...sessions,
-						layerExecution: (ref) =>
-							DevelopmentModel.toolkit.toLayer({
-								DevelopmentConfirmation: ({ description }) =>
-									Effect.sync(() => {
-										calls = HashMap.set(
-											calls,
-											ref.id,
-											HashMap.get(calls, ref.id).pipe(
-												Option.getOrElse(() => 0),
-											) + 1,
-										)
-										return { confirmed: `${ref.id}: ${description}` }
-									}),
-							}),
-					},
-				}).pipe(Layer.provide(DevelopmentModel.layerTools))
-			}),
-		)
-		const runtime = ManagedRuntime.make(layer)
-		try {
-			await using migration = ManagedRuntime.make(
-				DatabasePostgres.layer(options).pipe(Layer.provide(NodeServices.layer)),
-			)
-			await migration.runPromise(DatabasePostgres.migrate)
-			const sessions = await runtime.runPromise(
-				Effect.flatMap(Backend.Backend, (backend) =>
-					backend.get("extra-tools"),
-				),
-			)
-			const create = () =>
-				runtime.runPromise(
-					Effect.gen(function* () {
-						const view = yield* sessions.create(AgentFixture.direct())
-						return yield* sessions.selectModel(view.session.id, {
-							expected: view.session.revision,
-							selection: Config.Selection.make({
-								provider: DevelopmentModel.provider,
-								model: Model.Id.make("mock-tool"),
-							}),
-						})
-					}),
-				)
-			const first = await create()
-			const second = await create()
-			await runtime.runPromise(
-				Effect.forEach(
-					[first, second],
-					(view) =>
-						sessions.send(view.session.id, {
-							expected: view.session.revision,
-							input: "Confirm independently",
-						}),
-					{ concurrency: "unbounded" },
-				),
-			)
-			const waiting = await runtime.runPromise(
-				Effect.forEach([first, second], (view) =>
-					wait(sessions, view.session.id),
-				),
-			)
-			assert.ok(
-				waiting.every(
-					(view) => Session.status(view.session)._tag === "Waiting",
-				),
-			)
-			assert.equal(HashMap.size(calls), 0)
-			const approve = async (view: SessionView, approved: boolean) => {
-				const pending = await runtime.runPromise(
-					sessions.waits(view.session.id),
-				)
-				assert.equal(pending.length, 1)
-				await runtime.runPromise(
-					sessions.resolveCall(
-						view.session.id,
-						pending[0]!.approvalId,
-						approved
-							? Session.Outcome.Approved()
-							: Session.Outcome.Denied({ reason: "rejected" }),
-					),
-				)
-				return runtime.runPromise(wait(sessions, view.session.id))
-			}
-			const approved = await approve(waiting[0]!, true)
-			const denied = await approve(waiting[1]!, false)
-			assert.equal(
-				HashMap.get(calls, first.session.id).pipe(Option.getOrElse(() => 0)),
-				1,
-			)
-			assert.equal(HashMap.has(calls, second.session.id), false)
-			assert.match(
-				JSON.stringify(approved.response),
-				new RegExp(first.session.id + ": Confirm independently"),
-			)
-			assert.match(
-				JSON.stringify(denied.response),
-				/rejected.*execution-denied/,
-			)
-			assert.deepEqual(
-				await runtime.runPromise(sessions.waits(first.session.id)),
-				[],
-			)
-			assert.equal(HashMap.size(calls), 1)
-		} finally {
-			await runtime.dispose()
-			await database.close()
-		}
-	},
-)
-
-test("discovery injection keeps construction failures and required services", () => {
-	class DiscoveryConfiguration extends Context.Service<
-		DiscoveryConfiguration,
-		{ readonly enabled: boolean }
-	>()(
-		"@openbot-build/openbot/test/DevelopmentAssembly.test/DiscoveryConfiguration",
-	) {}
-	class DiscoveryStartupFailed extends Data.TaggedError(
-		"DiscoveryStartupFailed",
-	)<{}> {}
-	const injected = Layer.effect(
-		Discovery.Discovery,
+/** A fetch that sends each request with a Cookie, from an origin. */
+const fetchWith = (cookie: string, origin: string) =>
+	Layer.effect(
+		FetchHttpClient.Fetch,
 		Effect.gen(function* () {
-			yield* DiscoveryConfiguration
-			return yield* new DiscoveryStartupFailed()
+			const fetch = yield* FetchHttpClient.Fetch
+			return (input, init) =>
+				fetch(input, {
+					...init,
+					headers: {
+						...Rec.fromEntries(new Headers(init?.headers)),
+						cookie,
+						origin,
+					},
+				})
 		}),
 	)
-	const server = Server.layerFixed({
-		...settings("postgresql://unused"),
-		discovery: injected,
-	})
-	const serverDependency: DiscoveryConfiguration extends Layer.Services<
-		typeof server
-	>
-		? true
-		: false = true
-	const serverFailure: DiscoveryStartupFailed extends Layer.Error<typeof server>
-		? true
-		: false = true
-	assert.deepEqual([serverDependency, serverFailure], [true, true])
-})
 
-test(
-	"development HTTP discovery uses fixed local data with standard authentication",
-	{ timeout: 30000 },
-	async () => {
-		const database = await PostgresTest.start()
-		const options = settings(database.url)
-		const runtime = ManagedRuntime.make(Development.layer(options))
-		try {
-			await using migration = ManagedRuntime.make(
-				DatabasePostgres.layer(options).pipe(Layer.provide(NodeServices.layer)),
+it.effect(
+	"discovery injection keeps construction failures and required services",
+	() =>
+		Effect.sync(() => {
+			class DiscoveryConfiguration extends Context.Service<
+				DiscoveryConfiguration,
+				{ readonly enabled: boolean }
+			>()(
+				"@openbot-build/openbot/test/DevelopmentAssembly.test/DiscoveryConfiguration",
+			) {}
+			class DiscoveryStartupFailed extends Schema.TaggedError<
+				DiscoveryStartupFailed,
+				{ readonly brand: unique symbol }
+			>()("DiscoveryStartupFailed", {}) {}
+			const injected = Layer.effect(
+				Discovery.Discovery,
+				Effect.gen(function* () {
+					yield* DiscoveryConfiguration
+					return yield* DiscoveryStartupFailed.make({})
+				}),
 			)
-			await migration.runPromise(DatabasePostgres.migrate)
-			const address = await runtime.runPromise(
-				Effect.map(HttpServer.HttpServer, (server) =>
-					HttpServer.formatAddress(server.address),
-				),
+			const server = Server.layerFixed(settings("postgresql://unused")).pipe(
+				Layer.provide(injected),
 			)
-			const login = await fetch(address + "/auth/development/sign-in", {
-				method: "POST",
-				headers: {
-					origin: options.auth.publicOrigin,
-					"content-type": "application/json",
-				},
-				body: "{}",
-			})
-			assert.equal(login.status, 200)
-			const cookie = login.headers
-				.getSetCookie()
-				.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
-				.split(";")[0]!
-			await using client = ManagedRuntime.make(
-				Client.layer({ baseUrl: address }).pipe(
-					Layer.provide(
-						Layer.succeed(FetchHttpClient.Fetch, (input, init) =>
-							fetch(input, {
-								...init,
-								headers: {
-									...Object.fromEntries(new Headers(init?.headers)),
-									cookie,
-									origin: options.auth.publicOrigin,
-								},
-							}),
+			expectTypeOf<DiscoveryConfiguration>().toExtend<
+				Layer.Services<typeof server>
+			>()
+			expectTypeOf<DiscoveryStartupFailed>().toExtend<
+				Layer.Error<typeof server>
+			>()
+		}),
+)
+
+// The tests use a real PostgreSQL server and a real HTTP server, so they run in real time.
+layer(platform, { excludeTestServices: true })((it) => {
+	it.effect(
+		"development assembly streams through the API and keeps the Chat after a restart",
+		() =>
+			Effect.gen(function* () {
+				const database = yield* PostgresTest.start
+				const options = settings(database.url)
+				const publicOrigin = options.auth.publicOrigin
+				yield* migrate(options)
+				// The first server has a scope of its own, so the test can stop it before the restart.
+				const firstScope = yield* Scope.fork(yield* Effect.scope)
+				const first = yield* Scope.provide(
+					launch(Development.layer(options)),
+					firstScope,
+				)
+				const { credential, send } = yield* signIn(first.address, publicOrigin)
+				const defaultBot = yield* DefaultBot.ensure(send)
+				const response = yield* send(
+					`/v1/bots/${defaultBot}/messages`,
+					"POST",
+					{
+						input: "Persist this development conversation",
+						stream: true,
+					},
+				)
+				assert.strictEqual(response.status, 200)
+				const events = yield* response.text
+				assert.match(events, /response.output_text.delta/)
+				assert.match(
+					events,
+					/Development response: Persist this development conversation/,
+				)
+				assert.match(events, /response.completed/)
+				const [summary] = yield* Effect.flatMap(
+					send(`/v1/chats?bot=${defaultBot}`, "GET"),
+					Caller.json(Schema.Array(ChatSummary)),
+				)
+				assert.ok(summary !== undefined)
+				const id = summary.chat.id
+				const path = `/v1/chats/${id}`
+				// The development platform gives each new Chat a simulated model.
+				assert.deepStrictEqual(
+					summary.chat.settings.model,
+					DevelopmentModel.selection,
+				)
+				const account = yield* Effect.flatMap(
+					send("/auth/session", "GET"),
+					Caller.json(AuthApi.SessionInfo),
+				)
+				const author = authorOf(account.userId)
+				const member = {
+					kind: "member" as const,
+					...(yield* Caller.memberOf(account)),
+				}
+				const chats = yield* Context.get(
+					first.services,
+					Backend.Backend,
+				).forCaller(member)
+				const saved = yield* wait(chats, id)
+				assert.strictEqual(saved.status, "Completed")
+				const savedItems = yield* Effect.flatMap(
+					send(path + "/items", "GET"),
+					Caller.json(ItemPage),
+				)
+				assert.ok(savedItems.items.length >= 2)
+				yield* Scope.close(firstScope, Exit.void)
+				const restarted = yield* launch(Development.layer(options))
+				const restartedSend = browser(
+					restarted.address,
+					publicOrigin,
+					credential,
+				)
+				const restored = yield* Effect.flatMap(
+					restartedSend(path, "GET"),
+					Caller.json(ChatView),
+				)
+				assert.deepStrictEqual(restored, saved)
+				assert.deepStrictEqual(
+					yield* Effect.flatMap(
+						restartedSend(path + "/items", "GET"),
+						Caller.json(ItemPage),
+					),
+					savedItems,
+				)
+				const continuation = yield* restartedSend(path + "/messages", "POST", {
+					input: "Continue once",
+					stream: true,
+				})
+				assert.match(
+					yield* continuation.text,
+					/Development response: Continue once/,
+				)
+				const restartedChats = yield* Context.get(
+					restarted.services,
+					Backend.Backend,
+				).forCaller(member)
+				const continued = yield* wait(restartedChats, id)
+				assert.strictEqual(
+					(yield* restartedChats.items(id, {})).items.length,
+					savedItems.items.length + 2,
+				)
+				const select = (current: ChatView, name: string) =>
+					restartedChats.update(id, {
+						expected: current.chat.revision,
+						model: Config.Selection.make({
+							provider: DevelopmentModel.provider,
+							model: Model.Id.make(name),
+						}),
+					})
+				/** Sends a message and reads the live events of the Turn that it starts. */
+				const live = <A>(
+					input: string,
+					read: (
+						events: Stream.Stream<{ readonly event: string }>,
+					) => Effect.Effect<A>,
+				) =>
+					Effect.scoped(
+						Effect.gen(function* () {
+							const result = yield* restartedChats.deliverStream(id, {
+								input,
+								author,
+							})
+							assert.strictEqual(result.receipt.delivery, "started")
+							assert.ok(Option.isSome(result.events))
+							return yield* read(result.events.value)
+						}),
+					)
+				yield* select(continued, "mock-slow")
+				const partial = yield* live("Interrupt this slow response", (stream) =>
+					stream.pipe(
+						Stream.filter(
+							(event) => event.event === "response.output_text.delta",
+						),
+						Stream.take(1),
+						Stream.runCollect,
+					),
+				)
+				assert.strictEqual(partial.length, 1)
+				yield* restartedChats.interrupt(id)
+				const interrupted = yield* wait(restartedChats, id)
+				assert.strictEqual(interrupted.status, "Interrupted")
+				assert.strictEqual(interrupted.response?.status, "cancelled")
+				yield* select(interrupted, "mock-failure")
+				const failedEvents = yield* live(
+					"Save this failed input",
+					Stream.runCollect,
+				)
+				assert.ok(
+					Arr.some(
+						failedEvents,
+						(event) => event.event === "response.output_text.delta",
+					),
+				)
+				assert.ok(
+					Arr.some(failedEvents, (event) => event.event === "response.failed"),
+				)
+				const failed = yield* wait(restartedChats, id)
+				assert.strictEqual(failed.status, "Failed")
+				assert.strictEqual(failed.response?.status, "failed")
+				assert.match(
+					yield* toJson((yield* restartedChats.items(id, {})).items),
+					/Save this failed input/,
+				)
+				yield* restartedChats.update(id, {
+					expected: failed.chat.revision,
+					model: DevelopmentModel.selection,
+				})
+				yield* live("Recover after failure", Stream.runDrain)
+				assert.strictEqual(
+					(yield* wait(restartedChats, id)).response?.status,
+					"completed",
+				)
+			}),
+		{ timeout: 30000 },
+	)
+
+	it.effect(
+		"server assembly keeps extra per-Chat handlers and approvals",
+		() =>
+			Effect.gen(function* () {
+				const database = yield* PostgresTest.start
+				const options = settings(database.url)
+				const calls = yield* Ref.make(HashMap.empty<Chat.Id, number>())
+				const assembly = Layer.unwrap(
+					Effect.gen(function* () {
+						const { builtinModels } = yield* DevelopmentModel.make
+						return Server.layerFixed({
+							...options,
+							builtinModels,
+							defaultModel: DevelopmentModel.selection,
+						}).pipe(
+							Layer.provide(
+								Layer.merge(
+									OpenBot.layerOutside,
+									// Each Chat gets its own handlers of the tool of the host.
+									HostTools.layer({
+										toolkit: DevelopmentModel.toolkit,
+										handlers: (chat) =>
+											DevelopmentModel.toolkit.toLayer({
+												DevelopmentConfirmation: ({ description }) =>
+													Ref.update(calls, (current) =>
+														HashMap.set(
+															current,
+															chat,
+															Option.getOrElse(
+																HashMap.get(current, chat),
+																() => 0,
+															) + 1,
+														),
+													).pipe(
+														Effect.as({ confirmed: `${chat}: ${description}` }),
+													),
+											}),
+									}),
+								),
+							),
+							Layer.provideMerge(OpenBot.layerShared(options)),
+						)
+					}),
+				)
+				yield* migrate(options)
+				const { address } = yield* launch(assembly)
+				const { send } = yield* signIn(address, options.auth.publicOrigin)
+				// Two Bots with the tool model, so each one has its own Chat.
+				const talk = (name: string) =>
+					Effect.flatMap(bot(send, { name, model: model("mock-tool") }), (id) =>
+						message(send, id, "Confirm independently"),
+					)
+				const [first, second] = yield* Effect.all(
+					[talk("First"), talk("Second")],
+					{ concurrency: "unbounded" },
+				)
+				assert.ok(first !== undefined && second !== undefined)
+				assert.notStrictEqual(first.chat, second.chat)
+				const pendingOf = (chat: string) =>
+					poll(
+						Effect.map(
+							Effect.flatMap(
+								send("/v1/requests?status=pending", "GET"),
+								Caller.json(Schema.Array(RequestsApi.CapabilityRequest)),
+							),
+							(pending) => Arr.filter(pending, (entry) => entry.chat === chat),
+						),
+						Arr.isReadonlyArrayNonEmpty,
+					)
+				const [firstRequests, secondRequests] = yield* Effect.all(
+					[pendingOf(first.chat), pendingOf(second.chat)],
+					{ concurrency: "unbounded" },
+				)
+				assert.strictEqual(firstRequests.length, 1)
+				assert.strictEqual(secondRequests.length, 1)
+				for (const entry of [...firstRequests, ...secondRequests])
+					assert.deepStrictEqual(
+						[entry.capability.action, entry.capability.target],
+						["tools.call", "DevelopmentConfirmation"],
+					)
+				const [firstRequest] = firstRequests
+				const [secondRequest] = secondRequests
+				assert.ok(firstRequest !== undefined && secondRequest !== undefined)
+				// The Turns do not wait for the decisions, and no call runs before one.
+				const turnStatus = (receipt: typeof first) =>
+					Effect.map(
+						Effect.flatMap(
+							send(`/v1/chats/${receipt.chat}/turns/${receipt.turn}`, "GET"),
+							Caller.json(Schema.Struct({ turn: Turn.Record })),
+						),
+						(view) => view.turn.status._tag,
+					)
+				yield* Effect.all(
+					[settled(send, first.chat), settled(send, second.chat)],
+					{ concurrency: "unbounded" },
+				)
+				const firstTurns = yield* Effect.all([
+					turnStatus(first),
+					turnStatus(second),
+				])
+				assert.strictEqual(HashMap.size(yield* Ref.get(calls)), 0)
+				const decide = Effect.fn("DevelopmentAssembly.decide")(function* (
+					entry: RequestsApi.CapabilityRequest,
+					decision: "allow" | "deny",
+				) {
+					const response = yield* send("/v1/requests/" + entry.id, "POST", {
+						expected: entry.revision,
+						decision,
+						...(decision === "deny" ? { reason: "rejected" } : {}),
+					})
+					assert.strictEqual(response.status, 200)
+				})
+				yield* decide(firstRequest, "allow")
+				yield* decide(secondRequest, "deny")
+				const itemsOf = (chat: string) =>
+					Effect.map(
+						Effect.flatMap(
+							send(`/v1/chats/${chat}/items?limit=100`, "GET"),
+							Caller.json(ItemPage),
+						),
+						(page) => page.items,
+					)
+				const noticeOf = (chat: string, ref: string) =>
+					poll(
+						Effect.map(itemsOf(chat), (items) =>
+							Arr.findFirst(
+								items,
+								(item) =>
+									item.origin?.notice?.kind === "request" &&
+									item.origin.notice.ref === ref,
+							),
+						),
+						Option.isSome,
+					)
+				// The allowed call runs once, with the handlers of its own Chat.
+				assert.ok(Option.isSome(yield* noticeOf(first.chat, firstRequest.id)))
+				yield* poll(Ref.get(calls), HashMap.has(Chat.Id.make(first.chat)))
+				const approved = yield* settled(send, first.chat)
+				assert.strictEqual(
+					Option.getOrElse(
+						HashMap.get(yield* Ref.get(calls), Chat.Id.make(first.chat)),
+						() => 0,
+					),
+					1,
+				)
+				assert.match(
+					yield* toJson(yield* itemsOf(first.chat)),
+					new RegExp(first.chat + ": Confirm independently"),
+				)
+				// The denial comes back as a notice, and the call never runs.
+				const denial = yield* noticeOf(second.chat, secondRequest.id)
+				assert.ok(Option.isSome(denial))
+				assert.match(yield* toJson(denial.value.content), /rejected/)
+				yield* settled(send, second.chat)
+				const finalCalls = yield* Ref.get(calls)
+				assert.strictEqual(
+					HashMap.has(finalCalls, Chat.Id.make(second.chat)),
+					false,
+				)
+				assert.strictEqual(HashMap.size(finalCalls), 1)
+				// A pending result lets the first Turns end well. After the allowed call,
+				// the model answers with its result and asks for nothing more.
+				assert.deepStrictEqual(firstTurns, ["Completed", "Completed"])
+				assert.match(
+					yield* toJson(approved.response),
+					new RegExp(
+						"Development confirmation result: " +
+							first.chat +
+							": Confirm independently",
+					),
+				)
+				assert.strictEqual(approved.open.requests, 0)
+			}),
+		{ timeout: 60000 },
+	)
+
+	it.effect(
+		"development HTTP discovery uses fixed local data with standard authentication",
+		() =>
+			Effect.gen(function* () {
+				const database = yield* PostgresTest.start
+				const options = settings(database.url)
+				const publicOrigin = options.auth.publicOrigin
+				yield* migrate(options)
+				const { address } = yield* launch(Development.layer(options))
+				const { cookie } = yield* signIn(address, publicOrigin)
+				const { api } = Context.get(
+					yield* Layer.build(
+						Client.layer({ baseUrl: address }).pipe(
+							Layer.provide(fetchWith(cookie, publicOrigin)),
 						),
 					),
-				),
-			)
-			const discover = (input: string) =>
-				Client.Client.use((client) =>
-					client.api.apps.discoverApp({ payload: { input } }),
+					Client.Client,
 				)
-			for (const input of [
-				"app.development.test",
-				"https://app.development.test/card.json",
-			]) {
-				const result = await client.runPromise(discover(input))
-				assert.ok(result._tag === "Single")
-				assert.equal(
-					result.candidate.cardUrl,
+				const discover = (input: string) =>
+					api.apps.discoverApp({ payload: { input } })
+				for (const input of [
+					"app.development.test",
 					"https://app.development.test/card.json",
+				]) {
+					const result = yield* discover(input)
+					assert.ok(result._tag === "Single")
+					assert.strictEqual(
+						result.candidate.cardUrl,
+						"https://app.development.test/card.json",
+					)
+					assert.strictEqual(
+						result.candidate.card.name,
+						"app.development.test/simulated-app",
+					)
+					assert.strictEqual(result.candidate.sources[0]?.originalInput, input)
+					assert.strictEqual(
+						result.candidate.endpoints[0]?.remote.url,
+						"https://app.development.test/mcp",
+					)
+				}
+				const failures: ReadonlyArray<readonly [string, string]> = [
+					["unknown.development.test", "NoDeclaration"],
+					["https://publisher.example/card.json", "NoDeclaration"],
+					["http://app.development.test/card.json", "InvalidInput"],
+					[
+						"https://name:secret@app.development.test/card.json",
+						"InvalidInput",
+					],
+					["not a link", "InvalidInput"],
+				]
+				for (const [input, reason] of failures) {
+					const result = yield* Effect.result(discover(input))
+					assert.ok(Result.isFailure(result))
+					assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
+					assert.strictEqual(result.failure.reason, reason)
+				}
+				const valid = yield* toJson({ input: "app.development.test" })
+				const request = (headers: Record<string, string>, body = valid) =>
+					HttpClient.execute(
+						HttpClientRequest.post(address + "/v1/apps/discover", {
+							headers,
+						}).pipe(HttpClientRequest.bodyText(body, "application/json")),
+					)
+				for (const [headers, status] of [
+					[{}, 401],
+					[{ cookie }, 403],
+					[{ cookie, origin: "https://foreign.development.test" }, 403],
+					[
+						{
+							cookie: "__Host-openbot-session=invalid",
+							origin: publicOrigin,
+						},
+						401,
+					],
+				] satisfies ReadonlyArray<readonly [Record<string, string>, number]>) {
+					const response = yield* request(headers)
+					assert.strictEqual(response.status, status)
+					yield* response.text
+				}
+				const session = yield* request({ cookie, origin: publicOrigin })
+				assert.strictEqual(session.status, 200)
+				assert.strictEqual(
+					(yield* Caller.json(Schema.toCodecJson(AppDiscoveryResult))(session))
+						._tag,
+					"Single",
 				)
-				assert.equal(
-					result.candidate.card.name,
-					"app.development.test/simulated-app",
-				)
-				assert.equal(result.candidate.sources[0]?.originalInput, input)
-				assert.equal(
-					result.candidate.endpoints[0]?.remote.url,
-					"https://app.development.test/mcp",
-				)
-			}
-			const failures: ReadonlyArray<readonly [string, string]> = [
-				["unknown.development.test", "NoDeclaration"],
-				["https://publisher.example/card.json", "NoDeclaration"],
-				["http://app.development.test/card.json", "InvalidInput"],
-				["https://name:secret@app.development.test/card.json", "InvalidInput"],
-				["not a link", "InvalidInput"],
-			]
-			for (const [input, reason] of failures) {
-				const result = await client.runPromise(
-					discover(input).pipe(Effect.result),
-				)
-				assert.ok(Result.isFailure(result))
-				assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
-				assert.equal(result.failure.reason, reason)
-			}
-			const request = (
-				headers: Record<string, string>,
-				body = JSON.stringify({ input: "app.development.test" }),
-			) =>
-				fetch(address + "/v1/apps/discover", {
-					method: "POST",
-					headers: { "content-type": "application/json", ...headers },
-					body,
-				})
-			for (const [headers, status] of [
-				[{}, 401],
-				[{ cookie }, 403],
-				[{ cookie, origin: "https://foreign.development.test" }, 403],
-				[
-					{
-						cookie: "__Host-openbot-session=invalid",
-						origin: options.auth.publicOrigin,
-					},
-					401,
-				],
-			] satisfies ReadonlyArray<readonly [Record<string, string>, number]>) {
-				const response = await request(headers)
-				assert.equal(response.status, status)
-				await response.text()
-			}
-			const session = await request({
-				cookie,
-				origin: options.auth.publicOrigin,
-			})
-			assert.equal(session.status, 200)
-			assert.equal(
-				Schema.decodeUnknownSync(Schema.toCodecJson(AppDiscoveryResult))(
-					await session.json(),
-				)._tag,
-				"Single",
-			)
-			const malformed = await request(
-				{ cookie, origin: options.auth.publicOrigin },
-				"{",
-			)
-			assert.equal(malformed.status, 400)
-			await malformed.text()
-		} finally {
-			await runtime.dispose()
-			await database.close()
-		}
-	},
-)
+				const malformed = yield* request({ cookie, origin: publicOrigin }, "{")
+				assert.strictEqual(malformed.status, 400)
+				yield* malformed.text
+			}),
+		{ timeout: 30000 },
+	)
+})

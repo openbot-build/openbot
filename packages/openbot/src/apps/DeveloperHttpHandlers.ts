@@ -1,11 +1,7 @@
-import {
-	AuthApi,
-	DeveloperApi as Api,
-	Identity,
-	OpenBotApi,
-} from "@openbot-build/api"
-import { Effect, Layer, Option, Redacted } from "effect"
+import { DeveloperApi as Api, Identity, OpenBotApi } from "@openbot-build/api"
+import { Effect, Layer, Option } from "effect"
 import * as HttpMiddleware from "../auth/HttpMiddleware.ts"
+import { Settings } from "../settings/Settings.ts"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { AppInspections } from "./AppInspections.ts"
@@ -26,30 +22,17 @@ export const layerPublic = HttpApiBuilder.group(
 			const inspections = yield* AppInspections
 			const tests = yield* DeveloperTests
 			const auth = yield* Auth
+			const settings = yield* Settings
 			return handlers
 				.handleRaw("authorizationCallback", () =>
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
-						const owner = yield* Option.match(
-							Option.fromNullishOr(
-								request.cookies[auth.sessionCookie ?? AuthApi.SessionCookie],
+						const owner = yield* HttpMiddleware.optionalSession(auth, settings).pipe(
+							Effect.map(Option.map(ownersOf)),
+							// The Auth service logs the cause of each failure.
+							Effect.catchTag("AuthUnavailable", () =>
+								Effect.fail(Api.DeveloperUnavailable.make({})),
 							),
-							{
-								onNone: () => Effect.succeedNone,
-								onSome: (cookie) =>
-									auth.resolveSession(Redacted.make(cookie)).pipe(
-										Effect.tap(({ setCookies }) =>
-											HttpMiddleware.setSessionCookies(setCookies),
-										),
-										Effect.map((value) => Option.some(ownersOf(value))),
-										// A rejected session is the same as no session: the caller must log in.
-										Effect.catchTag(
-											"CredentialRejected",
-											() => Effect.succeedNone,
-										),
-										Effect.mapError(() => Api.DeveloperUnavailable.make({})),
-									),
-							},
 						)
 						const receipt = yield* tests.receive(request.url, owner)
 						const target =

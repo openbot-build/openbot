@@ -1,16 +1,19 @@
-// These are plain query functions that take the database first. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import {
 	ConnectionsApi as Api,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 } from "@openbot-build/api"
 import { Store } from "@openbot-build/protocol"
-import { Clock, Effect, Equal, HashSet, Match, Schema } from "effect"
-import * as OwnedWrites from "../execution/OwnedWrites.ts"
-
+import {
+	Array as Arr,
+	Clock,
+	Effect,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import { and, eq, sql } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import {
 	appConnections,
 	appDrafts,
@@ -18,6 +21,18 @@ import {
 	appRecords,
 } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
+
+/** An owner key is the JSON of `[organization id, user id]`. */
+const OwnerJson = Schema.fromJsonString(
+	Schema.Tuple([Schema.String, Schema.String]),
+)
+// @effect-diagnostics-next-line schemaSync:off -- Two strings always encode to JSON, so this can not throw, and many callers need the key as a plain string.
+const encodeOwner = Schema.encodeSync(OwnerJson)
+const LockJson = Schema.fromJsonString(
+	Schema.Tuple([Schema.Literal("app-connections"), Schema.String]),
+)
 
 /** The App connections of each owner, with their App records and drafts, kept in Postgres. */
 export type Error =
@@ -29,6 +44,24 @@ export const StoredConnection = Schema.Struct({
 	verification: Schema.NullOr(Api.Availability),
 })
 export type StoredConnection = typeof StoredConnection.Type
+const sameConnection = Schema.toEquivalence(Store.UserConnection)
+const sameStoredConnection = Schema.toEquivalence(StoredConnection)
+
+/** A new token for the same grant does not change the public connection. */
+export const isCredentialRotation = (
+	previous: Store.UserConnection,
+	next: Store.UserConnection,
+) =>
+	previous.authorization._tag === "Authorized" &&
+	next.authorization._tag === "Authorized" &&
+	previous.authorization.credentialRef !== next.authorization.credentialRef &&
+	sameConnection(previous, {
+		...next,
+		authorization: {
+			...next.authorization,
+			credentialRef: previous.authorization.credentialRef,
+		},
+	})
 export interface SaveRequest {
 	readonly app: Store.AppRecord
 	readonly connection: Store.UserConnection
@@ -38,13 +71,15 @@ export interface SaveRequest {
 export const ownerKey = (owner: {
 	readonly organizationId: string
 	readonly userId: string
-}) => JSON.stringify([owner.organizationId, owner.userId])
+}) => encodeOwner([owner.organizationId, owner.userId])
 
 /** The organization of an owner key. */
-export const organizationOf = (owner: string): string => {
-	const parsed: unknown = JSON.parse(owner)
-	return Array.isArray(parsed) && typeof parsed[0] === "string" ? parsed[0] : ""
-}
+const decodeOwner = Schema.decodeUnknownOption(OwnerJson)
+export const organizationOf = (owner: string): string =>
+	Option.match(decodeOwner(owner), {
+		onNone: () => "",
+		onSome: ([organizationId]) => organizationId,
+	})
 
 /** The owner keys of a signed-in account: one for each active membership. */
 export const ownersOf = (session: {
@@ -54,70 +89,32 @@ export const ownersOf = (session: {
 		readonly status: string
 	}>
 }) =>
-	session.memberships
-		.filter((membership) => membership.status === "active")
-		.map((membership) =>
+	pipe(
+		session.memberships,
+		Arr.filter((membership) => membership.status === "active"),
+		Arr.map((membership) =>
 			ownerKey({
 				organizationId: membership.organizationId,
 				userId: session.userId,
 			}),
-		)
-
-export const unavailable = () => ExperienceStorageUnavailable.make({})
-/** Keep the errors that callers handle. Every other storage failure becomes one error. */
-export const failure = (error: unknown) =>
-	error instanceof ExperienceNotFound || error instanceof Api.ConnectionConflict
-		? error
-		: unavailable()
-const sameConnection = Schema.toEquivalence(Store.UserConnection)
-/** Credential rotation does not change the operation the user approved. */
-const credentialRotation = (
-	previous: StoredConnection,
-	next: StoredConnection,
-) =>
-	previous.name === next.name &&
-	Match.value(previous.connection.authorization).pipe(
-		Match.tag("Authorized", (before) =>
-			Match.value(next.connection.authorization).pipe(
-				Match.tag(
-					"Authorized",
-					(after) =>
-						before.credentialRef !== after.credentialRef &&
-						Equal.equals(
-							HashSet.fromIterable(before.scopes),
-							HashSet.fromIterable(after.scopes),
-						) &&
-						sameConnection(
-							{
-								...previous.connection,
-								authorization: {
-									...before,
-									credentialRef: after.credentialRef,
-									scopes: after.scopes,
-								},
-							},
-							next.connection,
-						),
-				),
-				Match.orElse(() => false),
-			),
 		),
-		Match.orElse(() => false),
 	)
 
+/**
+ * Log a storage failure that the caller can not act on, and replace it with
+ * one error. The error goes to the client, so it does not hold the failure.
+ */
+const unavailable = (message: string) =>
+	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
 const connectionCodec = Schema.fromJsonString(
 	Schema.toCodecJson(StoredConnection),
 )
 export const appCodec = Schema.fromJsonString(Store.AppRecord)
 export const draftCodec = Schema.fromJsonString(Api.ConnectionDraft)
-const conflict = (reason: Api.ConnectionConflict["reason"], message: string) =>
-	Api.ConnectionConflict.make({ reason, message })
 
-type Database = EffectPgDatabase
+type Database = Db.Database
 type Sealer = typeof Secrets.Service
 
-const binding = (owner: string, id: string) =>
-	JSON.stringify(["connection", owner, id])
 /** Open the sealed body of a connection row. */
 export const open = (
 	secrets: Sealer,
@@ -126,10 +123,10 @@ export const open = (
 	body: string,
 ) =>
 	secrets
-		.open(body, binding(owner, id))
+		.open(body, JSON.stringify(["connection", owner, id]))
 		.pipe(
 			Effect.flatMap(Schema.decodeEffect(connectionCodec)),
-			Effect.mapError(unavailable),
+			unavailable("Could not open a stored App connection."),
 		)
 const seal = (
 	secrets: Sealer,
@@ -138,13 +135,13 @@ const seal = (
 	value: StoredConnection,
 ) =>
 	Schema.encodeEffect(connectionCodec)(value).pipe(
-		Effect.flatMap((body) => secrets.seal(body, binding(owner, id))),
-		Effect.mapError(unavailable),
+		Effect.flatMap((body) =>
+			secrets.seal(body, JSON.stringify(["connection", owner, id])),
+		),
+		unavailable("Could not seal an App connection."),
 	)
 export const connectionWhere = (owner: string, id: string) =>
 	and(eq(appConnections.owner, owner), eq(appConnections.id, id))
-const appWhere = (owner: string, cardUrl: string) =>
-	and(eq(appRecords.owner, owner), eq(appRecords.cardUrl, cardUrl))
 export const draftWhere = (owner: string, id: string) =>
 	and(eq(appDrafts.owner, owner), eq(appDrafts.id, id))
 
@@ -155,11 +152,27 @@ export const list = (db: Database, secrets: Sealer, owner: string) =>
 		.where(eq(appConnections.owner, owner))
 		.orderBy(appConnections.name, appConnections.id)
 		.pipe(
+			unavailable("Could not list App connections."),
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, owner, row.id, row.body)),
 			),
-			Effect.mapError(unavailable),
 		)
+
+export const find = Effect.fn("Apps.findStoredConnection")(function* (
+	db: Database,
+	secrets: Sealer,
+	owner: string,
+	id: string,
+) {
+	const rows = yield* db
+		.select()
+		.from(appConnections)
+		.where(connectionWhere(owner, id))
+		.pipe(unavailable("Could not read an App connection."))
+	return yield* Effect.transposeOption(
+		Option.map(Arr.head(rows), (row) => open(secrets, owner, id, row.body)),
+	)
+})
 
 export const get = Effect.fn("Apps.getStoredConnection")(function* (
 	db: Database,
@@ -167,13 +180,9 @@ export const get = Effect.fn("Apps.getStoredConnection")(function* (
 	owner: string,
 	id: string,
 ) {
-	const row = (yield* db
-		.select()
-		.from(appConnections)
-		.where(connectionWhere(owner, id))
-		.pipe(Effect.mapError(unavailable)))[0]
-	if (row === undefined) return yield* ExperienceNotFound.make({ id })
-	return yield* open(secrets, owner, id, row.body)
+	return yield* Effect.fromOption(yield* find(db, secrets, owner, id), () =>
+		ExperienceNotFound.make({ id }),
+	)
 })
 
 export const getApp = Effect.fn("Apps.getApp")(function* (
@@ -184,22 +193,26 @@ export const getApp = Effect.fn("Apps.getApp")(function* (
 	const row = (yield* db
 		.select()
 		.from(appRecords)
-		.where(appWhere(owner, cardUrl))
-		.pipe(Effect.mapError(unavailable)))[0]
+		.where(and(eq(appRecords.owner, owner), eq(appRecords.cardUrl, cardUrl)))
+		.pipe(unavailable("Could not read an App record.")))[0]
 	if (row === undefined) return yield* ExperienceNotFound.make({ id: cardUrl })
 	return yield* Schema.decodeEffect(appCodec)(row.body).pipe(
-		Effect.mapError(unavailable),
+		unavailable("Could not decode a stored App record."),
 	)
 })
 
 export const updateApp = (db: Database, owner: string, app: Store.AppRecord) =>
 	Schema.encodeEffect(appCodec)(app).pipe(
 		Effect.flatMap((body) =>
-			db.update(appRecords).set({ body }).where(appWhere(owner, app.cardUrl)),
+			db
+				.update(appRecords)
+				.set({ body })
+				.where(
+					and(eq(appRecords.owner, owner), eq(appRecords.cardUrl, app.cardUrl)),
+				),
 		),
 		Effect.asVoid,
-		(effect) => OwnedWrites.write(owner, effect),
-		Effect.mapError(unavailable),
+		unavailable("Could not update an App record."),
 	)
 
 /**
@@ -217,15 +230,21 @@ export const save = (
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
+				const lock = yield* Schema.encodeEffect(LockJson)([
+					"app-connections",
+					owner,
+				]).pipe(Effect.orDie)
 				yield* tx.execute(
-					sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["app-connections", owner])}, 0))`,
+					sql`SELECT pg_advisory_xact_lock(hashtextextended(${lock}, 0))`,
 				)
 				const id = input.connection.connectionId
 				if (
 					input.connection.owner !== owner ||
 					input.app.cardUrl !== input.connection.cardUrl
 				)
-					return yield* unavailable()
+					return yield* Effect.die(
+						"An App connection save named another owner or another App card.",
+					)
 				const existing = (yield* tx
 					.select()
 					.from(appConnections)
@@ -240,27 +259,28 @@ export const save = (
 					if (row === undefined) return yield* ExperienceNotFound.make({ id })
 					const draft = yield* Schema.decodeEffect(draftCodec)(row.body)
 					if (draft.revision !== input.draftRevision)
-						return yield* conflict(
-							"RevisionChanged",
-							"The draft changed. Refresh it before confirming.",
-						)
+						return yield* Api.ConnectionConflict.make({
+							reason: "RevisionChanged",
+							message: "The draft changed. Refresh it before confirming.",
+						})
 					if (draft.expiresAt <= (yield* Clock.currentTimeMillis))
-						return yield* conflict(
-							"DraftExpired",
-							"This draft expired. Discover the App again.",
-						)
+						return yield* Api.ConnectionConflict.make({
+							reason: "DraftExpired",
+							message: "This draft expired. Discover the App again.",
+						})
 				}
 				if (
 					(yield* tx.$count(appConnections, eq(appConnections.owner, owner))) >=
 					30
 				)
-					return yield* conflict(
-						"LimitReached",
-						"You can save up to 30 connections. Remove one before adding another.",
-					)
+					return yield* Api.ConnectionConflict.make({
+						reason: "LimitReached",
+						message:
+							"You can save up to 30 connections. Remove one before adding another.",
+					})
 				const stored: StoredConnection = {
 					connection: input.connection,
-					name: input.name.trim(),
+					name: Str.trim(input.name),
 					revision: 0,
 					verification: null,
 				}
@@ -276,7 +296,9 @@ export const save = (
 				yield* tx
 					.insert(appConnections)
 					.values({ owner, id, name: stored.name, revision: 0, body })
-				if (!input.app.sources.some((source) => source.role === "manual")) {
+				if (
+					!Arr.some(input.app.sources, (source) => source.role === "manual")
+				) {
 					yield* tx
 						.insert(appIndexJobs)
 						.values({
@@ -290,8 +312,13 @@ export const save = (
 			}),
 		)
 		.pipe(
-			(effect) => OwnedWrites.write(owner, effect),
-			Effect.mapError(failure),
+			Effect.catchTag(
+				["EffectDrizzleQueryError", "SqlError", "SchemaError"],
+				(error) =>
+					Effect.fail(error).pipe(
+						unavailable("Could not save an App connection."),
+					),
+			),
 		)
 
 /**
@@ -305,7 +332,6 @@ export const update = (
 	id: string,
 	change: (stored: StoredConnection) => StoredConnection,
 	revision?: number,
-	intent?: "credential-renewal",
 ): Effect.Effect<StoredConnection, Error> =>
 	db
 		.transaction((tx) =>
@@ -318,28 +344,29 @@ export const update = (
 				if (row === undefined) return yield* ExperienceNotFound.make({ id })
 				const previous = yield* open(secrets, owner, id, row.body)
 				if (revision !== undefined && previous.revision !== revision)
-					return yield* conflict(
-						"RevisionChanged",
-						"This connection changed. Refresh it before updating.",
-					)
-				const next = yield* Schema.decodeEffect(StoredConnection)(
-					change(previous),
-				)
-				const updated = {
+					return yield* Api.ConnectionConflict.make({
+						reason: "RevisionChanged",
+						message: "This connection changed. Refresh it before updating.",
+					})
+				const next = change(previous)
+				const rotation =
+					isCredentialRotation(previous.connection, next.connection) &&
+					sameStoredConnection(previous, {
+						...next,
+						connection: previous.connection,
+					})
+				const updated = yield* Schema.decodeEffect(StoredConnection)({
 					...next,
-					revision:
-						previous.revision +
-						(intent === "credential-renewal" &&
-						credentialRotation(previous, next)
-							? 0
-							: 1),
-				}
+					revision: previous.revision + (rotation ? 0 : 1),
+				})
 				if (
 					updated.connection.owner !== owner ||
 					updated.connection.connectionId !== id ||
 					updated.connection.cardUrl !== previous.connection.cardUrl
 				)
-					return yield* unavailable()
+					return yield* Effect.die(
+						"An App connection change moved the connection to another owner, id or App card.",
+					)
 				const body = yield* seal(secrets, owner, id, updated)
 				yield* tx
 					.update(appConnections)
@@ -349,8 +376,13 @@ export const update = (
 			}),
 		)
 		.pipe(
-			(effect) => OwnedWrites.write(owner, effect),
-			Effect.mapError(failure),
+			Effect.catchTag(
+				["EffectDrizzleQueryError", "SqlError", "SchemaError"],
+				(error) =>
+					Effect.fail(error).pipe(
+						unavailable("Could not update an App connection."),
+					),
+			),
 		)
 
 export const saveDraft = (
@@ -363,6 +395,5 @@ export const saveDraft = (
 			db.insert(appDrafts).values({ owner, id: draft.id, body }),
 		),
 		Effect.as(draft),
-		(effect) => OwnedWrites.write(owner, effect),
-		Effect.mapError(unavailable),
+		unavailable("Could not save an App connection draft."),
 	)

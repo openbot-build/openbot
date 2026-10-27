@@ -7,7 +7,6 @@ import { OpenApi } from "effect/http-api"
 // The title and a short description for each API group, in reading order.
 // The sidebar uses this order. A group with a description gets its own page.
 const groups = [
-	["login", "Browser login", "Start and complete browser login, and sign out."],
 	["account", "Account", "Read the signed-in user and their organizations."],
 	["signIn", "Sign-in", "Start a browser sign-in."],
 	[
@@ -28,22 +27,111 @@ const groups = [
 	],
 	["sso", "SSO", "Verify email domains and add SSO connections."],
 	[
+		"usage",
+		"Usage",
+		"Read the model usage, its cost, and the credits of the organization.",
+	],
+	[
+		"budgets",
+		"Budgets",
+		"Set spending limits for the organization, members, Bots, and user tokens.",
+	],
+	[
 		"platform",
 		"Platform",
 		"Manage the whole platform. Only platform admins can use it.",
 	],
 	[
-		"agents",
-		"Agents",
-		"Make and manage Agents, their memory, Rules, and Grants.",
+		"bots",
+		"Bots",
+		"Make, manage, and share Bots, with their memory, Rules, Grants, members, and invitations.",
 	],
-	["sessions", "Sessions", "Give work to an Agent in Sessions and Turns."],
+	[
+		"chats",
+		"Chats",
+		"Talk to a Bot. Each Bot has one Chat with each person, and the Bot always answers at once.",
+	],
+	[
+		"live",
+		"Live",
+		"Talk with a Bot in real time, with sound, over one WebSocket.",
+	],
+	[
+		"files",
+		"Files",
+		"Upload files, such as pictures and PDFs, and give them to a Bot in a message.",
+	],
+	[
+		"delegations",
+		"Delegations",
+		"Read or stop the work that a Bot gave to another Bot or to itself.",
+	],
+	[
+		"botInvitations",
+		"Bot invitations",
+		"Accept an invitation to use a Bot in your own organization.",
+	],
+	[
+		"triggers",
+		"Triggers",
+		"Give a task to a Bot with a prompt, on a schedule or from a webhook.",
+	],
+	[
+		"triggerHooks",
+		"Trigger webhooks",
+		"Fire a trigger from another system with its webhook secret.",
+	],
+	[
+		"channels",
+		"Channels",
+		"Manage the bots of the organization in Slack, Lark, Telegram and other chat systems.",
+	],
+	[
+		"channelLinks",
+		"Channel links",
+		"Link your own accounts on the platforms of Channels.",
+	],
+	[
+		"channelHooks",
+		"Channel webhooks",
+		"Take the events of chat platforms. The signature of the platform is the only credential.",
+	],
+	[
+		"computerProviders",
+		"Computer providers",
+		"Add your accounts at services that run Computers, such as E2B and Daytona.",
+	],
+	[
+		"computers",
+		"Computers",
+		"Make and use machines where Bots run commands, change files and use a desktop.",
+	],
+	[
+		"computerHooks",
+		"Computer connectors",
+		"Pair your own machine and keep it connected. The token is the only credential.",
+	],
+	[
+		"secretProviders",
+		"Secret providers",
+		"Add your accounts at password managers and secrets services, such as 1Password, Bitwarden and HashiCorp Vault.",
+	],
+	[
+		"vaults",
+		"Vaults",
+		"Collect secrets from many providers, and let Bots use them in Code Mode without seeing them.",
+	],
+	[
+		"memberSettings",
+		"Your settings",
+		"Read and change your own settings, such as how your plans are approved.",
+	],
 	[
 		"requests",
 		"Requests",
-		"Answer the requests of your Agents for new capabilities.",
+		"Answer the requests of your Bots for new capabilities.",
 	],
-	["apps", "App discovery", "Find Apps that the Agent can use."],
+	["apps", "App discovery", "Find Apps that the Bot can use."],
 	["connections", "Connections", "Connect an account to an App."],
 	["appAuthorization", "App authorization", "Let an App act for you."],
 	[
@@ -52,15 +140,25 @@ const groups = [
 		"Pages that an App sends you back to after authorization.",
 	],
 	[
+		"operations",
+		"Background tool calls",
+		"Read and stop the tool calls of a Chat that run in the background.",
+	],
+	[
 		"appOperations",
 		"App operations",
 		"Run App operations and read their results.",
+	],
+	[
+		"codeRuns",
+		"Code runs",
+		"Read the Code Mode programs of a Chat and their App calls.",
 	],
 	["appViews", "App views", "Read the views that Apps show."],
 	[
 		"appExperience",
 		"App transfer and reset",
-		"Export, import, and reset what the Agent learned about Apps.",
+		"Export, import, and reset what the Bot learned about Apps.",
 	],
 	["appIndex", "App Index", "Search the public index of Apps."],
 	["developer", "Developer tools", "Test and watch the Apps that you publish."],

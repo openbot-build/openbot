@@ -1,0 +1,295 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "538ed444-16cb-4465-99ed-559811dd8bff",
+	"prevIds": ["d4da6a93-091b-4588-80b3-70fe6e125d2b"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_invitations"],
+			"writes": [
+				"s|tbl|public.openbot_invitations",
+				"n|tbl|public.openbot_invitations",
+				"e|tbl|public.openbot_invitations",
+				"n|rel|public.openbot_invitations",
+				"n|type|public.openbot_invitations",
+				"n|rel|public.openbot_invitations_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_invitations",
+				"openbot_invitations_organization"
+			],
+			"writes": [
+				"s|idx|public.openbot_invitations_organization",
+				"n|idx|public.openbot_invitations_organization",
+				"e|idx|public.openbot_invitations_organization",
+				"n|rel|public.openbot_invitations_organization"
+			],
+			"reads": [
+				"n|tbl|public.openbot_invitations",
+				"n|sch|public",
+				"n|col|public.openbot_invitations.organization_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_invitations",
+				"openbot_invitations_email"
+			],
+			"writes": [
+				"s|idx|public.openbot_invitations_email",
+				"n|idx|public.openbot_invitations_email",
+				"e|idx|public.openbot_invitations_email",
+				"n|rel|public.openbot_invitations_email"
+			],
+			"reads": [
+				"n|tbl|public.openbot_invitations",
+				"n|sch|public",
+				"n|col|public.openbot_invitations.email"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_invitations"],
+			"writes": [
+				"s|fk|public.openbot_invitations.openbot_invitations_gAkSdzmBM60d_fkey",
+				"n|fk|public.openbot_invitations.openbot_invitations_gAkSdzmBM60d_fkey",
+				"e|fk|public.openbot_invitations.openbot_invitations_gAkSdzmBM60d_fkey",
+				"n|con|public.openbot_invitations.openbot_invitations_gAkSdzmBM60d_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_invitations",
+				"n|sch|public",
+				"n|tbl|public.openbot_organizations",
+				"n|sch|public",
+				"n|col|public.openbot_invitations.organization_id",
+				"n|col|public.openbot_organizations.id",
+				"e|uniqueness|public.openbot_organizations.id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_invitations",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "email",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "roles",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "status",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "invited_by",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "expires_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "openbot_invitations_organization",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "openbot_invitations_email",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "email",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "openbot_invitations_gAkSdzmBM60d_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_organizations",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "openbot_invitations_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

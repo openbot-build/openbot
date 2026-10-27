@@ -5,18 +5,24 @@ import {
 	type JSONRPCMessage,
 } from "@modelcontextprotocol/client"
 import {
+	Array as Arr,
 	Effect,
 	Exit,
+	FiberSet,
+	pipe,
 	Predicate,
-	Record as RecordUtils,
+	Record as Rec,
 	Scope,
 	Stream,
+	String as Str,
 } from "effect"
 import { HttpClientRequest } from "effect/http"
 import * as Network from "./Network.ts"
 
 /** In this HTTP revision, aborting the response stream signals cancellation. */
 export class HttpTransport extends StreamableHTTPClientTransport {
+	/** Modern HTTP cancels by closing the stream; legacy also needs its notice. */
+	public modern = true
 	public override send(
 		message: JSONRPCMessage,
 		options?: Parameters<StreamableHTTPClientTransport["send"]>[1],
@@ -24,6 +30,7 @@ export class HttpTransport extends StreamableHTTPClientTransport {
 		// When SDK 2.3.1 tears down listen, it also sends the transport-independent notification.
 		// Its request AbortController has already closed the real HTTP stream.
 		if (
+			this.modern &&
 			Predicate.hasProperty(message, "method") &&
 			message.method === "notifications/cancelled" &&
 			!Predicate.hasProperty(message, "id")
@@ -35,21 +42,44 @@ export class HttpTransport extends StreamableHTTPClientTransport {
 
 /** The reply body holds decoded bytes, so it must not report the compressed encoding or length. */
 const decodedHeaders = (headers: Readonly<Record<string, string>>) =>
-	RecordUtils.remove(
-		RecordUtils.remove(headers, "content-encoding"),
-		"content-length",
+	Rec.remove(Rec.remove(headers, "content-encoding"), "content-length")
+
+/** The type and subtype of a Content-Type value, without its parameters. */
+const mediaType = (headers: Readonly<Record<string, string>>) =>
+	pipe(
+		headers["content-type"] ?? "",
+		Str.split(";"),
+		Arr.headNonEmpty,
+		Str.trim,
+		Str.toLowerCase,
 	)
+
+/** Normal tool results with images or resources fit in this many bytes. */
+const defaultMaxMessageBytes = 16 * 1024 * 1024
 
 /** Promise conversion happens only in callbacks that the external SDK calls. */
 export const fetch = Effect.fn("Sdk.fetch")(function* (
-	options: { readonly documents?: boolean } = {},
+	options: {
+		readonly documents?: boolean
+		/**
+		 * The largest JSON body, or the largest single SSE (server-sent events)
+		 * event, that the SDK may read from one response.
+		 */
+		readonly maxMessageBytes?: number
+	} = {},
 ) {
+	const maxMessageBytes = options.maxMessageBytes ?? defaultMaxMessageBytes
 	const network = yield* Network.Network
 	const ownerScope = yield* Effect.scope
-	const context = yield* Effect.context<Scope.Scope>()
-	// A failed Effect rejects the Promise, which is how a fetch callback reports an error.
-	const run = Effect.runPromiseWith(context)
-	const fork = Effect.runForkWith(context)
+	const ownerSignal = yield* Effect.abortSignal
+	const callbacks = yield* FiberSet.make()
+	// The owner stops pending SDK calls when it closes.
+	const start = yield* FiberSet.runtimePromise(callbacks)<never>()
+	// Effect 4.0.6 adds runtime fibers after they start. Yield first so a
+	// callback cannot close the owner before its fiber belongs to the set.
+	const run = <A, E>(effect: Effect.Effect<A, E>, options: Effect.RunOptions) =>
+		start(Effect.andThen(Effect.yieldNow, effect), options)
+	const fork = yield* FiberSet.runtime(callbacks)<never>()
 	const callback: FetchLike = (input, init) => {
 		const request = new Request(input, init)
 		return run(
@@ -65,7 +95,7 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 				)
 				return yield* Effect.gen(function* () {
 					if (!["GET", "HEAD", "POST", "DELETE"].includes(request.method))
-						return yield* new Network.NetworkError({
+						return yield* Network.NetworkError.make({
 							reason: "Transport",
 							message: "Unsupported SDK HTTP method",
 						})
@@ -79,15 +109,16 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 									: HttpClientRequest.post(request.url)
 					outgoing = HttpClientRequest.setHeaders(
 						outgoing,
-						Object.fromEntries(request.headers),
+						Rec.fromEntries(request.headers),
 					)
 					if (request.body !== null) {
 						const bytes = yield* Effect.tryPromise({
 							try: () => request.arrayBuffer(),
-							catch: () =>
-								new Network.NetworkError({
+							catch: (cause) =>
+								Network.NetworkError.make({
 									reason: "Transport",
 									message: "Could not read SDK request body",
+									cause,
 								}),
 						})
 						outgoing = HttpClientRequest.bodyUint8Array(
@@ -99,7 +130,7 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 					if (options.documents === true && request.method === "GET") {
 						const reply = yield* network.readDocument({
 							url: request.url,
-							headers: Object.fromEntries(request.headers),
+							headers: Rec.fromEntries(request.headers),
 						})
 						yield* Scope.close(scope, Exit.void)
 						return new Response(
@@ -133,8 +164,19 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 							headers,
 						})
 					}
-					const body = yield* Stream.toReadableStreamEffect(
-						reply.body.pipe(Stream.ensuring(Scope.close(scope, Exit.void))),
+					// The SDK reads a whole JSON body, and each whole SSE event, into memory.
+					const context = yield* Effect.context<never>()
+					const body = Stream.toReadableStreamWith(
+						reply.body.pipe(
+							mediaType(reply.headers) === "text/event-stream"
+								? HttpNetwork.eventLimit(maxMessageBytes)
+								: HttpNetwork.limit(maxMessageBytes),
+							Stream.ensuring(Scope.close(scope, Exit.void)),
+						),
+						context,
+						// A normal body end closes its request scope. Only the owner or
+						// the caller stops the stream, so body failures keep their cause.
+						{ signal: AbortSignal.any([ownerSignal, request.signal]) },
 					)
 					return new Response(body, {
 						status: reply.status,
@@ -149,7 +191,7 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 										duration: 10_000,
 										orElse: () =>
 											Effect.fail(
-												new Network.NetworkError({
+												Network.NetworkError.make({
 													reason: "Timeout",
 													message: "OAuth response timed out",
 												}),

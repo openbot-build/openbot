@@ -1,59 +1,22 @@
 {
 	"repository": "https://github.com/openbot-build/openbot",
-	"commit": "14935861ca8cc4db8baccee88c4bc8b6a628c5f6",
+	"commit": "2a123ffae6f5aea2cfa02f36975efbacc83f1305",
 	"license": "AGPL-3.0-only",
-	"licenseGitBlob": "be3f7b28e564e7dd05eaf59d64adba1a4065ac0e",
 	"derivativeRepository": "https://gitlab.kai.com/KAI/Kay/OpenBot",
-	"scope": "Generic platform extensions. Kay UI and business policy stay in a separate repository.",
-	"upstreamReview": {
-		"observedHead": "14935861ca8cc4db8baccee88c4bc8b6a628c5f6",
-		"decision": "Adopt native Agent owner chains, Session Agents, nullable Session titles, direct Drizzle storage and typed Developer tables. Preserve account fencing, exact call decisions and credential renewal in the native write paths. Keep Kay compatibility and old data conversion in its API and controlled migration job."
-	},
 	"localExtensions": [
-		{
-			"name": "Identity provider scopes",
-			"configuration": "platform.identityProvider.scopes",
-			"default": ["openid", "profile", "email"],
-			"source": "packages/openbot/src/auth/BetterAuth.ts",
-			"behavior": "The native OAuth SDK uses the configured scopes. Settings patches and repeated setup keep the saved scopes when the field is omitted."
-		},
-		{
-			"name": "Optional member signup",
-			"configuration": "platform.memberSignupOrganizationId",
-			"default": null,
-			"source": "packages/openbot/src/organization/OrganizationPostgres.ts",
-			"behavior": "Authenticated accounts may join the explicitly configured organization as ordinary members only while an active Super Administrator exists. Suspended and removed accounts stay denied. Account IDs remain distinct."
-		}
+		"Independent conversation Chats and immutable branches",
+		"Per-Chat and per-Turn memory read and write policy",
+		"Configurable OIDC scopes, callback and existing browser cookie names",
+		"Current organization permissions from the native policy checks",
+		"Standard remote MCP negotiation with the existing SDK",
+		"OAuth client registration, secret storage and renewal with the existing SDK",
+		"One token renewal for concurrent calls without changing the same grant revision",
+		"Manual connection identities in operations and secret-free import and export",
+		"App views for approved results and read-only copied history",
+		"Explicit, opt-in member signup with removal records",
+		"Fresh workspace setup with stable OIDC identities and secret-file configuration",
+		"Pinned native image and AGPL source publication through GitLab CI"
 	],
-	"selectedFixes": [
-		{
-			"repository": "https://gitlab.kai.com/KAI/e",
-			"from": "bceaffbca61d9f220b4fd5b657b78934435affab",
-			"through": "d492a00154aff992fd461f99a83d4eea5b0babdc",
-			"commits": [
-				{
-					"commit": "bdf3dab7225f1ce094883be4142c7b1f04371d5d",
-					"subject": "fix(approvals): bind approvals to their originating Turn"
-				},
-				{
-					"commit": "f5c44c99a91889f9b4ffec1dbaad933ea59ac247",
-					"subject": "fix(approvals): distinguish repeated tool call occurrences"
-				},
-				{
-					"commit": "8e27fea093f32056fb596f5bee6826d2095f8396",
-					"subject": "fix(approvals): isolate reused call IDs within a Turn"
-				},
-				{
-					"commit": "9e7dcae2401e2752d9cc01512ff40a16e6f5a074",
-					"subject": "fix(memory): restore unique receipts from earlier calls"
-				}
-			],
-			"adaptations": [
-				"Map e Memory state to OpenBot Timeline and conversation state.",
-				"Keep OpenBot organization ownership and plugin memory stores.",
-				"Preserve per-occurrence approvals and durable App operation identity."
-			],
-			"dependencyPatch": "patches/effect@4.0.5.patch"
-		}
-	]
+	"deployment": "Fresh, isolated databases only. Import stable identities and runtime settings with openbot-provision. Stop prior executors before activation. Native upgrades need an execution drain and fencing boundary that is not part of this branch.",
+	"reviewedInternalMain": "9ef5cb6f349b0c6c4cc0f1791c8f299b81882be6"
 }

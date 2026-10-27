@@ -1,4 +1,4 @@
-import { Option, HashMap, Effect, Layer, Ref } from "effect"
+import { Option, HashMap, Effect, Layer, Ref, Result } from "effect"
 import {
 	StoreError,
 	ConnectionKey,
@@ -25,25 +25,32 @@ const found = <A>(
 	value: Option.Option<A>,
 	operation: string,
 ): Effect.Effect<A, StoreError> =>
-	Effect.fromOption(
-		value,
-		() => new StoreError({ reason: "Missing", operation }),
+	Effect.fromOption(value, () =>
+		StoreError.make({ reason: "Missing", operation }),
 	)
+
+interface State {
+	readonly apps: HashMap.HashMap<string, AppRecord>
+	readonly connections: HashMap.HashMap<string, UserConnection>
+}
+
+/** The new connection of an update, or the reason why the store kept the old one. */
+type Updated = Result.Result<UserConnection, StoreError>
 
 /** Storage inside this process only. save writes the App record and owned user connection in one atomic step. */
 export const layer = Layer.effect(
 	AppStore,
 	Effect.gen(function* () {
-		const state = yield* Ref.make({
-			apps: HashMap.empty<string, AppRecord>(),
-			connections: HashMap.empty<string, UserConnection>(),
+		const state = yield* Ref.make<State>({
+			apps: HashMap.empty(),
+			connections: HashMap.empty(),
 		})
 		return AppStore.of({
 			save: Effect.fn("AppStore.save")(function* (input) {
 				const app = yield* AppRecord.decode(input.app)
 				const connection = yield* UserConnection.decode(input.connection)
 				if (app.cardUrl !== connection.cardUrl)
-					return yield* new StoreError({
+					return yield* StoreError.make({
 						reason: "Invalid",
 						operation: "save",
 					})
@@ -65,7 +72,7 @@ export const layer = Layer.effect(
 					] as const
 				})
 				if (!saved)
-					return yield* new StoreError({
+					return yield* StoreError.make({
 						reason: "AlreadyExists",
 						operation: "save",
 					})
@@ -81,31 +88,38 @@ export const layer = Layer.effect(
 			}),
 			update: Effect.fn("AppStore.update")(function* (input) {
 				const id = keyOf(input.key)
-				const updated = yield* Ref.modify(state, (old) =>
-					HashMap.get(old.connections, id).pipe(
-						Option.map((previous) => ({
-							previous,
-							current: input.change(previous),
-						})),
-						Option.filter(
-							({ previous, current }) =>
-								keyOf(current) === keyOf(previous) &&
-								current.cardUrl === previous.cardUrl,
-						),
-						Option.match({
-							onNone: () => [Option.none<UserConnection>(), old] as const,
-							onSome: ({ current }) =>
-								[
-									Option.some(current),
-									{
-										...old,
-										connections: HashMap.set(old.connections, id, current),
-									},
-								] as const,
-						}),
-					),
+				const result = yield* Ref.modify(
+					state,
+					(old): readonly [Updated, State] => {
+						const previous = HashMap.get(old.connections, id)
+						if (Option.isNone(previous))
+							return [
+								Result.fail(
+									StoreError.make({ reason: "Missing", operation: "update" }),
+								),
+								old,
+							] as const
+						const current = input.change(previous.value)
+						if (
+							keyOf(current) !== keyOf(previous.value) ||
+							current.cardUrl !== previous.value.cardUrl
+						)
+							return [
+								Result.fail(
+									StoreError.make({ reason: "Invalid", operation: "update" }),
+								),
+								old,
+							] as const
+						return [
+							Result.succeed(current),
+							{
+								...old,
+								connections: HashMap.set(old.connections, id, current),
+							},
+						] as const
+					},
 				)
-				return yield* found(updated, "update")
+				return yield* Effect.fromResult(result)
 			}),
 			updateApp: Effect.fn("AppStore.updateApp")(function* (app) {
 				yield* Ref.update(state, (old) => ({

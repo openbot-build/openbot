@@ -1,0 +1,9 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"composite": false,
+		"allowImportingTsExtensions": true,
+		"tsBuildInfoFile": "../.cache/scripts.tsbuildinfo"
+	},
+	"include": ["*.ts"]
+}

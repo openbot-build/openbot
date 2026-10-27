@@ -1,9 +1,9 @@
+import { CatalogDiscovery } from "@openbot-build/protocol"
 import { ConnectionsApi as Api } from "@openbot-build/api"
-import { App, Client, Discovery, Document, Ui } from "@openbot-build/protocol"
+import { App, Client, Discovery, Store, Ui } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Context,
-	Data,
 	Effect,
 	HashSet,
 	Layer,
@@ -13,17 +13,20 @@ import {
 import { AppHost } from "./AppHost.ts"
 import { Governance } from "./Governance.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import type {
 	Error as StorageError,
 	StoredConnection,
 } from "./StoredConnections.ts"
+import * as Db from "../database/Database.ts"
 
-export class Unavailable extends Data.TaggedError(
-	"AppCapabilitiesUnavailable",
-)<{ readonly reason: "Disabled" | "NeedsRevalidation" }> {}
+export class Unavailable extends Schema.TaggedError<
+	Unavailable,
+	{ readonly brand: unique symbol }
+>()("AppCapabilitiesUnavailable", {
+	reason: Schema.Literals(["Disabled", "NeedsRevalidation"]),
+}) {}
 export type Error =
 	| Client.Error
 	| StorageError
@@ -60,6 +63,12 @@ export class Capabilities extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/Capabilities") {}
 
+/**
+ * The most capability pages that `pages` reads.
+ * The SDK list helpers stop at 64 pages, but `singlePage` goes around them, so `pages` keeps the same limit.
+ */
+const maxPages = 64
+
 export const pages = <A>(
 	read: (cursor?: string) => Effect.Effect<
 		{
@@ -72,6 +81,7 @@ export const pages = <A>(
 	const from = (
 		cursor: string | undefined,
 		seen: HashSet.HashSet<string>,
+		count: number,
 	): Effect.Effect<ReadonlyArray<A>, Client.Error> =>
 		read(cursor).pipe(
 			Effect.flatMap((page) => {
@@ -79,18 +89,82 @@ export const pages = <A>(
 				if (next === undefined) return Effect.succeed(page.values)
 				if (HashSet.has(seen, next))
 					return Effect.fail(
-						new Client.ClientError({
+						Client.ClientError.make({
 							reason: "Protocol",
 							issue: "The App repeated a capability cursor.",
 						}),
 					)
-				return from(next, HashSet.add(seen, next)).pipe(
+				if (count >= maxPages)
+					return Effect.fail(
+						Client.ClientError.make({
+							reason: "Protocol",
+							issue: "The App sent too many capability pages.",
+						}),
+					)
+				return from(next, HashSet.add(seen, next), count + 1).pipe(
 					Effect.map((rest) => Arr.appendAll(page.values, rest)),
 				)
 			}),
 		)
-	return from(undefined, HashSet.empty())
+	return from(undefined, HashSet.empty(), 1)
 }
+/**
+ * How OpenBot reads each capability list of an App: one page at a time, as
+ * the host. Resource templates have no flag of their own, so they use the
+ * `resources` flag.
+ */
+export const capabilityLists = (client: Client.Client) => {
+	const advertised = client.discovery.capabilities
+	return {
+		tools: {
+			advertised: advertised.tools !== undefined,
+			page: (cursor?: string) =>
+				client
+					.listTools({
+						...(cursor === undefined ? {} : { cursor }),
+						source: "host",
+						singlePage: true,
+					})
+					.pipe(
+						Effect.map((page) => ({
+							values: page.tools,
+							nextCursor: page.nextCursor,
+						})),
+					),
+		},
+		resources: {
+			advertised: advertised.resources !== undefined,
+			page: (cursor?: string) =>
+				client.listResources(cursor, "host", { singlePage: true }).pipe(
+					Effect.map((page) => ({
+						values: page.resources,
+						nextCursor: page.nextCursor,
+					})),
+				),
+		},
+		resourceTemplates: {
+			advertised: advertised.resources !== undefined,
+			page: (cursor?: string) =>
+				client.listResourceTemplates(cursor, "host", { singlePage: true }).pipe(
+					Effect.map((page) => ({
+						values: page.resourceTemplates,
+						nextCursor: page.nextCursor,
+					})),
+				),
+		},
+		prompts: {
+			advertised: advertised.prompts !== undefined,
+			page: (cursor?: string) =>
+				client.listPrompts(cursor, "host", { singlePage: true }).pipe(
+					Effect.map((page) => ({
+						values: page.prompts,
+						nextCursor: page.nextCursor,
+					})),
+				),
+		},
+	}
+}
+
 export const make: Effect.Effect<
 	typeof Capabilities.Service,
 	never,
@@ -102,12 +176,12 @@ export const make: Effect.Effect<
 	| App.ConnectionScopes
 > = Effect.gen(function* () {
 	const factory = yield* AppHost
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const governance = yield* Governance
 	const discovery = yield* Discovery.Discovery
 	const scopes = yield* App.ConnectionScopes
-	const sameRemote = Schema.toEquivalence(Schema.UndefinedOr(Document.Remote))
+	const sameRemote = CatalogDiscovery.sameConnection
 	return Capabilities.of({
 		open: Effect.fn("Apps.openCapabilities")(function* (input) {
 			const stored = yield* StoredConnections.get(
@@ -118,7 +192,7 @@ export const make: Effect.Effect<
 			)
 			yield* governance.check(stored.connection.cardUrl)
 			if (stored.connection.state !== "Enabled")
-				return yield* new Unavailable({
+				return yield* Unavailable.make({
 					reason:
 						stored.connection.state === "NeedsRevalidation"
 							? "NeedsRevalidation"
@@ -129,7 +203,7 @@ export const make: Effect.Effect<
 				input.owner,
 				stored.connection.cardUrl,
 			)
-			if (!previous.sources.some((source) => source.role === "manual")) {
+			if (!Arr.some(previous.sources, (source) => source.role === "manual")) {
 				const declared = yield* discovery.refreshCard(stored.connection.cardUrl)
 				if (
 					!sameRemote(
@@ -150,80 +224,46 @@ export const make: Effect.Effect<
 						stored.revision,
 					)
 					yield* scopes.close(input)
-					yield* StoredConnections.updateApp(db, input.owner, {
+					yield* StoredConnections.updateApp(
+						db,
+						input.owner,
+						Store.AppRecord.make({
+							cardUrl: declared.cardUrl,
+							card: declared.card,
+							sources: declared.sources,
+						}),
+					)
+					return yield* Unavailable.make({ reason: "NeedsRevalidation" })
+				}
+				yield* StoredConnections.updateApp(
+					db,
+					input.owner,
+					Store.AppRecord.make({
 						cardUrl: declared.cardUrl,
 						card: declared.card,
 						sources: declared.sources,
-					})
-					return yield* new Unavailable({ reason: "NeedsRevalidation" })
-				}
-				yield* StoredConnections.updateApp(db, input.owner, {
-					cardUrl: declared.cardUrl,
-					card: declared.card,
-					sources: declared.sources,
-				})
+					}),
+				)
 			}
 			const client = yield* factory.bind(input.owner, input.policy).open({
 				key: input,
 				clientInfo: { name: "OpenBot", version: "1.0.0" },
 				capabilities: { ...Ui.clientCapabilities, elicitation: { form: {} } },
 			})
-			const advertised = client.capabilities
+			const lists = capabilityLists(client)
 			return {
 				stored,
 				client,
-				tools:
-					advertised.tools === undefined
-						? []
-						: yield* pages((cursor) =>
-								client
-									.listTools({
-										...(cursor === undefined ? {} : { cursor }),
-										source: "host",
-										singlePage: true,
-									})
-									.pipe(
-										Effect.map((page) => ({
-											values: page.tools,
-											nextCursor: page.nextCursor,
-										})),
-									),
-							),
-				resources:
-					advertised.resources === undefined
-						? []
-						: yield* pages((cursor) =>
-								client.listResources(cursor, "host", { singlePage: true }).pipe(
-									Effect.map((page) => ({
-										values: page.resources,
-										nextCursor: page.nextCursor,
-									})),
-								),
-							),
-				resourceTemplates:
-					advertised.resources === undefined
-						? []
-						: yield* pages((cursor) =>
-								client
-									.listResourceTemplates(cursor, "host", { singlePage: true })
-									.pipe(
-										Effect.map((page) => ({
-											values: page.resourceTemplates,
-											nextCursor: page.nextCursor,
-										})),
-									),
-							),
-				prompts:
-					advertised.prompts === undefined
-						? []
-						: yield* pages((cursor) =>
-								client.listPrompts(cursor, "host", { singlePage: true }).pipe(
-									Effect.map((page) => ({
-										values: page.prompts,
-										nextCursor: page.nextCursor,
-									})),
-								),
-							),
+				tools: lists.tools.advertised ? yield* pages(lists.tools.page) : [],
+				resources: lists.resources.advertised
+					? yield* pages(lists.resources.page)
+					: [],
+				resourceTemplates: lists.resourceTemplates.advertised
+					? yield* pages(lists.resourceTemplates.page)
+					: [],
+				prompts: lists.prompts.advertised
+					? yield* pages(lists.prompts.page)
+					: [],
 			}
 		}),
 	})

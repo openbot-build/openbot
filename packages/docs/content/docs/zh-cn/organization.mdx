@@ -1,0 +1,431 @@
+---
+title: 组织
+description: 组织、成员、设置、角色和审计日志。
+---
+
+本页说明多人如何共用 OpenBot。组织（Organization）是一群人，他们共享 Bots、模型和设置。一个平台有很多组织。用户和组织是两种不同的东西。用户可以创建组织，也可以只为自己创建一个，并且可以是多个组织的成员。
+
+当前组织的路由都在 `/v1/organization` 下。它们接受用户令牌或 session
+cookie。使用 cookie 时，如果你属于多个组织，请发送 `OpenBot-Organization`
+请求头。见 [身份验证](/zh-cn/docs/authentication#选择组织)。
+
+---
+
+## 谁可以加入
+
+每次账户登录时，OpenBot 都会检查它属于哪里。在每个带 session
+cookie 的请求上，它也会检查。
+
+| 方式         | 得到的角色            | 需要的条件                                                             |
+| ------------ | --------------------- | ---------------------------------------------------------------------- |
+| 邀请         | 邀请中的角色          | 管理员邀请了账户已验证的邮箱，并且账户接受了。见 [邀请](#邀请)。       |
+| 已验证的域名 | 组织的 `defaultRoles` | 组织验证了邮箱的域名，`joinByDomain` 为 `true`，并且提供方验证了邮箱。 |
+| SSO 连接     | 组织的 `defaultRoles` | 账户通过该组织的 SSO 连接登录。                                        |
+| 新组织       | `super_administrator` | 账户调用 `POST /v1/organizations`。见 [创建组织](#创建组织)。          |
+
+OpenBot 不会为新账户创建组织。没有任何组织的账户，访问组织路由时会得到 `403` 和
+`MembershipRequired`。它仍然可以创建组织和回答邀请。
+
+旧版本的 OpenBot 会为每个新账户创建一个名为 "Personal" 的组织。这些组织会保留。它们是普通组织，所以你可以改名、邀请别人或离开它们。验证域名见
+[SSO 和域名](/zh-cn/docs/sso)，`organizationCreation` 见
+[Platform](/zh-cn/docs/platform#组织创建)。
+
+---
+
+## 你的组织
+
+`GET /v1/organizations` 列出你作为成员所在的组织。用户令牌只能看到它自己的组织。
+
+```sh
+curl -b cookies.txt https://api.example.com/v1/organizations
+```
+
+```json
+{
+	"items": [
+		{
+			"id": "org_8f3a",
+			"name": "Example",
+			"status": "active",
+			"createdAt": "2026-10-21T09:00:00.000Z"
+		}
+	]
+}
+```
+
+`status` 是 `active` 或
+`suspended`。平台管理员可以暂停一个组织。暂停后，没有人能使用它，它的令牌也会失效。见
+[Platform](/zh-cn/docs/platform#组织)。
+
+### 创建组织
+
+`POST /v1/organizations` 创建一个组织。你会成为它的 Super
+Administrator（超级管理员）。
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Research"}' \
+  https://api.example.com/v1/organizations
+```
+
+当平台设置中的 `organizationCreation` 为 `platform_admins`
+时，只有平台管理员能这样做。其他调用者会得到 `403` 和
+`OrganizationCreationDisabled`。
+
+### 离开组织
+
+`DELETE /v1/organizations/:organizationId/membership`
+让你离开一个组织。你在这个组织中的令牌会立即失效。
+
+```sh
+curl -X DELETE -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/organizations/org_8f3a/membership
+```
+
+- 最后一个活跃的 Super Administrator 不能离开。OpenBot 返回 `409` 和
+  `LastSuperAdministrator`。请先把这个角色给别人。
+- 用户令牌只能离开它自己的组织。
+- 如果你的邮箱域名仍然已验证，并且 `joinByDomain` 开着，你下次登录时会再次加入。
+
+---
+
+## 读取和修改组织
+
+`GET /v1/organization` 读取当前组织。它返回和上面相同的对象。
+`PATCH /v1/organization` 修改组织的 `name`。它需要 `Organization` 上的 `write`。
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Example Inc."}' \
+  https://api.example.com/v1/organization
+```
+
+---
+
+## 设置
+
+每个组织都有自己的设置。设置保存在数据库中，所以每个 OpenBot 实例使用相同的值。
+`GET /v1/organization/settings` 读取设置。它需要 `Organization` 上的 `read`。
+
+```json
+{
+	"version": 2,
+	"rulesModel": {
+		"_tag": "Config.Selection",
+		"provider": "prov_4c1e...",
+		"model": "gpt-4.1-mini"
+	},
+	"botMemoryModel": null,
+	"botMemory": true,
+	"requestTimeoutMs": 86400000,
+	"delegationTimeLimitMs": 3600000,
+	"toolForegroundBudgetMs": 30000,
+	"toolMaxDurationMs": 3600000,
+	"maxBackgroundOperations": 8,
+	"planApproval": {
+		"approver": "chain",
+		"timeoutMs": 86400000,
+		"onTimeout": "stay"
+	},
+	"appReadRules": [],
+	"defaultRoles": ["member"],
+	"joinByDomain": true,
+	"tokenRate": {
+		"organization": null,
+		"member": null,
+		"bot": null,
+		"token": null
+	},
+	"updatedAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+| 字段                      | 默认值                            | 作用                                                                                                                                                    |
+| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`              | `null`                            | 用来判断 [Rules](/zh-cn/docs/rules) 的模型。它可以是语言模型，也可以是决策模型。`null` 表示没有模型判断它们。见 [Models](/zh-cn/docs/models#选择模型)。 |
+| `botMemoryModel`          | `null`                            | 用来学习 [Bot memory](/zh-cn/docs/memory) 的模型。`null` 表示 Bot 什么都不学。                                                                          |
+| `botMemory`               | `true`                            | 让记忆 Bot 从 Chat 中学习，并补充 Turn 的输入。                                                                                                         |
+| `requestTimeoutMs`        | 24 小时                           | 一个 [request](/zh-cn/docs/requests) 等待回答的时间，超时后 OpenBot 会拒绝它。范围是 1 秒到 7 天。                                                      |
+| `delegationTimeLimitMs`   | 1 小时                            | 没有自己时间限制的[工作](/zh-cn/docs/delegation#限制)使用的时间限制，例如触发器的工作。范围是 1 分钟到 30 天。                                          |
+| `toolForegroundBudgetMs`  | 30 秒                             | 工具调用在自己的 Turn 里运行多久后进入[后台](/zh-cn/docs/chats#后台工作)。范围是 0 到 10 分钟。0 会让每个调用都进入后台。                               |
+| `toolMaxDurationMs`       | 1 小时                            | 后台工具调用的最长时间。超过后调用会停止并失败。范围是 1 秒到 24 小时。                                                                                 |
+| `maxBackgroundOperations` | 8                                 | 一个 Chat 同时最多能运行多少个后台工具调用。范围是 0 到 100。                                                                                           |
+| `planApproval`            | 问上一级决策者，24 小时后仍是计划 | 当成员、Bot 和 Chat 都没有设置时，计划如何被批准。见 [计划模式](/zh-cn/docs/chats#计划模式)。                                                           |
+| `appReadRules`            | `[]`                              | 只读取数据的 App 工具：`{ cardUrl, tool }`。见 [Requests](/zh-cn/docs/requests)。                                                                       |
+| `defaultRoles`            | `["member"]`                      | 新成员的角色。                                                                                                                                          |
+| `joinByDomain`            | `true`                            | 拥有组织已验证域名下已验证邮箱的人，在登录时加入组织。                                                                                                  |
+| `tokenRate`               | 不限制                            | 每个范围的 token 速率。平台设置了更低的速率时，较低的速率生效。见 [token 速率](/zh-cn/docs/usage#token-速率)。                                          |
+
+`PATCH /v1/organization/settings` 修改设置。它需要 `Organization` 上的
+`write`。请求体需要 `expectedVersion`，也就是你读到的
+`version`。只添加你想修改的字段。
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":2,"requestTimeoutMs":3600000,"joinByDomain":false}' \
+  https://api.example.com/v1/organization/settings
+```
+
+- 如果在你读取之后有人修改了设置，OpenBot 返回 `409` 和
+  `SettingsConflict`，以及当前的 `version`。请重新读取，然后再试一次。
+- 不存在的角色会返回 `400` 和 `SettingsInvalid`。
+- 只有 Super Administrator 能把 `super_administrator` 放进 `defaultRoles`。
+
+每个实例都会立即使用修改后的值。见
+[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。
+
+---
+
+## 成员
+
+`GET /v1/organization/members` 分页列出成员。它需要 `Member` 上的 `read`。使用
+`limit`（1 到 100，默认 50），并用上一页的 `next` 值作为 `after`。
+
+```json
+{
+	"items": [
+		{
+			"userId": "u_123",
+			"email": "ada@example.com",
+			"name": "Ada",
+			"status": "active",
+			"roles": ["super_administrator"],
+			"policy": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
+			"joinedAt": "2026-10-21T09:00:00.000Z"
+		}
+	],
+	"next": null
+}
+```
+
+`GET /v1/organization/members/:userId` 读取一个成员。
+
+### 修改成员
+
+`PATCH /v1/organization/members/:userId` 修改 `status`、`roles` 或
+`policy`。它需要 `Member` 上的 `write`。
+
+- `status` 是 `active` 或
+  `suspended`。被暂停的成员不能使用这个组织，他们在这个组织的令牌会立即失效。
+- `roles` 是角色 ID 的列表：包括内置角色和自定义角色。见
+  [权限](/zh-cn/docs/permissions#角色)。
+- `policy` 是成员的一个额外策略，在角色之外另外生效。其中的拒绝规则胜过角色。见
+  [权限](/zh-cn/docs/permissions#策略)。
+
+```sh
+curl -X PATCH -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"roles":["administrator"]}' \
+  https://api.example.com/v1/organization/members/u_456
+```
+
+路径中的角色 ID 必须符合角色 ID Schema。更新成员时，如果指定的角色不存在，会返回
+`404 RoleNotFound`。
+
+### 移除成员
+
+`DELETE /v1/organization/members/:userId` 移除成员，并撤销他们的令牌。它需要
+`Member` 上的 `write`。如果他们的邮箱域名仍然是已验证的，并且 `joinByDomain`
+是开启的，或者他们通过 SSO 连接登录，那么他们下次登录时会再次加入。要让他们无法进入，请暂停他们。
+
+### Super Administrator 的规则
+
+- 只有 Super Administrator 能修改或移除 Super
+  Administrator，或者把这个角色给别人。
+- 只有 Super Administrator 能给成员带允许规则的策略，或者把
+  `super_administrator`
+  放进默认角色。其他管理员只能给出带拒绝规则的策略。所以，没有人能给出比自己更多的权限。
+- 组织至少保留一个活跃的 Super Administrator。破坏这一点的修改会返回 `409` 和
+  `LastSuperAdministrator`。
+
+---
+
+## 邀请
+
+管理员按邮箱邀请一个人。这个人用这个邮箱登录，然后接受或拒绝。OpenBot 不会发送邮件，请你自己告诉这个人。
+
+`POST /v1/organization/invitations` 创建邀请。它需要 `Member` 上的 `write`。
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"grace@example.com","roles":["member"]}' \
+  https://api.example.com/v1/organization/invitations
+```
+
+```json
+{
+	"id": "inv_51c2",
+	"organizationId": "org_8f3a",
+	"organizationName": "Example",
+	"email": "grace@example.com",
+	"roles": ["member"],
+	"status": "pending",
+	"invitedBy": "u_123",
+	"createdAt": "2026-10-23T09:00:00.000Z",
+	"expiresAt": "2026-10-30T09:00:00.000Z"
+}
+```
+
+- 不填 `roles` 时，这个人得到组织的
+  `defaultRoles`。每个角色都必须存在，否则 OpenBot 返回 `404` 和
+  `RoleNotFound`。
+- 只有 Super Administrator 能用 `super_administrator` 角色邀请别人。
+- 邀请的有效期是 7 天。之后它的 `status` 是 `expired`。
+- 在一个组织中，一个邮箱只能有一个待处理的邀请。如果已经有一个，或者已有成员使用这个邮箱，OpenBot 返回
+  `400` 和 `InvitationInvalid`。
+
+你也可以邀请别人使用一个 Bot。见 [分享 Bots](/zh-cn/docs/sharing)。
+
+`GET /v1/organization/invitations` 按从新到旧列出邀请。它需要 `Member` 上的
+`read`。加上 `?status=pending`
+只看未处理的邀请。`DELETE /v1/organization/invitations/:invitationId`
+收回一个待处理的邀请。它需要 `Member` 上的 `write`。
+
+### 回答邀请
+
+这些路由给被邀请的人使用。它们不需要成员资格。
+
+- `GET /v1/invitations` 列出发给你已验证邮箱的待处理邀请。使用 Bot 的邀请带有
+  `bot`，没有 `roles`。用 `POST /v1/bot-invitations/accept` 接受它。见
+  [分享 Bots](/zh-cn/docs/sharing#接受邀请)。
+- `POST /v1/invitations/:invitationId/accept`
+  让你成为成员，并得到邀请中的角色。它返回这个组织。
+- `POST /v1/invitations/:invitationId/decline` 拒绝邀请。
+
+回答邀请时，请使用 session
+cookie，不要用用户令牌。你的邮箱必须已验证，并且和邀请的邮箱相同。发给其他邮箱的邀请会返回
+`404` 和 `InvitationNotFound`。
+
+```sh
+curl -X POST -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/invitations/inv_51c2/accept
+```
+
+---
+
+## 审计日志
+
+审计日志记录重要的修改。任何操作都不能修改或删除日志条目。
+`GET /v1/organization/audit_logs` 列出条目，最新的排在前面。它需要 `AuditLog`
+上的 `read`。
+
+| 查询参数 | 作用                                 |
+| -------- | ------------------------------------ |
+| `limit`  | 1 到 100。默认值是 50。              |
+| `after`  | 上一页的 `next` 值。                 |
+| `action` | 只返回这个动作的条目。               |
+| `actor`  | 只返回这个用户 ID 的成员产生的条目。 |
+
+```json
+{
+	"items": [
+		{
+			"id": "42",
+			"createdAt": "2026-10-21T09:05:00.000Z",
+			"action": "member.updated",
+			"actor": {
+				"kind": "member",
+				"userId": "u_123",
+				"organizationId": "org_8f3a"
+			},
+			"resource": "openbot.org.org_8f3a.user.u_456",
+			"details": {
+				"before": { "status": "active", "roles": ["member"], "policyRules": 0 },
+				"after": {
+					"status": "active",
+					"roles": ["administrator"],
+					"policyRules": 0
+				}
+			}
+		}
+	],
+	"next": "42"
+}
+```
+
+| 动作                     | 何时出现                                             |
+| ------------------------ | ---------------------------------------------------- |
+| `member.joined`          | 一个账户加入组织。                                   |
+| `member.updated`         | 一个成员得到新的状态、角色或策略。                   |
+| `member.removed`         | 一个成员被移除。                                     |
+| `member.left`            | 一个成员离开了组织。                                 |
+| `invitation.created`     | 一个成员邀请了一个邮箱。                             |
+| `invitation.revoked`     | 一个成员收回了一个邀请。                             |
+| `invitation.accepted`    | 被邀请的人接受了邀请。                               |
+| `invitation.declined`    | 被邀请的人拒绝了邀请。                               |
+| `organization.created`   | 有人创建了一个组织。                                 |
+| `organization.updated`   | 组织得到了新名称。                                   |
+| `settings.updated`       | 组织设置发生变化。                                   |
+| `role.created`           | 一个成员创建了自定义角色。                           |
+| `role.updated`           | 一个成员修改了自定义角色。                           |
+| `role.deleted`           | 一个成员删除了自定义角色。                           |
+| `model.created`          | 一个成员添加了模型。                                 |
+| `model.updated`          | 一个成员修改了模型。                                 |
+| `model.deleted`          | 一个成员移除了模型。                                 |
+| `model_provider.created` | 一个成员添加了模型提供方。                           |
+| `model_provider.updated` | 一个成员修改了模型提供方。                           |
+| `model_provider.deleted` | 一个成员移除了模型提供方。                           |
+| `domain.added`           | 一个成员添加了邮箱域名。                             |
+| `domain.verified`        | 一个邮箱域名通过了验证。                             |
+| `domain.removed`         | 一个成员移除了邮箱域名。                             |
+| `sso_connection.created` | 一个成员添加了 SSO 连接。                            |
+| `sso_connection.updated` | 一个成员修改了 SSO 连接。                            |
+| `sso_connection.deleted` | 一个成员移除了 SSO 连接。                            |
+| `token.created`          | 一个成员创建了用户令牌。                             |
+| `token.revoked`          | 一个成员撤销了用户令牌。                             |
+| `bot.created`            | 一个成员创建了 Bot。                                 |
+| `bot.updated`            | 一个成员修改了 Bot。                                 |
+| `bot.memory.updated`     | 一个成员修改了 Bot memory。                          |
+| `bot.memory.purged`      | 一个成员按 Tag 删除了 Bot memory。                   |
+| `bot.memory_bot.updated` | 一个成员修改了记忆 Bot。                             |
+| `delegation.started`     | 一个 Bot 把工作交给一个 Bot。                        |
+| `delegation.completed`   | 委派的工作结束。                                     |
+| `capability.decided`     | 一个人回答了一个 request。                           |
+| `request.resolved`       | 一个 request 关闭。`details.chain` 列出相关的 Bots。 |
+| `grant.created`          | 一个成员创建了 Grant（授权）。                       |
+| `grant.revoked`          | 一个成员撤销了 Grant。                               |
+| `rule.created`           | 一个成员添加了 Rule。                                |
+| `rule.updated`           | 一个成员修改了 Rule。                                |
+
+---
+
+## 错误
+
+`InvitationNotFound` 返回 `404`。请求指定邀请 ID 时，错误包含
+`invitationId`。Bot 链接的 secret 找不到邀请时，错误中没有这个字段。
+
+| 状态码 | 错误                             | 何时出现                                                          |
+| ------ | -------------------------------- | ----------------------------------------------------------------- |
+| `400`  | `InvitationInvalid`              | 现在不能创建或回答这个邀请，例如它已经过期。                      |
+| `404`  | `InvitationNotFound`             | 没有发给你的、使用这个 ID 的邀请。                                |
+| `404`  | `RoleNotFound`                   | 邀请中有一个不存在的角色。                                        |
+| `403`  | `Forbidden`                      | 调用者的策略不允许这样做。见 [权限](/zh-cn/docs/permissions)。    |
+| `400`  | `OrganizationRequired`           | 使用 cookie 的请求没有 `OpenBot-Organization`，而你属于多个组织。 |
+| `400`  | `SettingsInvalid`                | 设置中的某个值无效，例如角色不存在。                              |
+| `403`  | `MembershipRequired`             | 你不是这个组织的活跃成员。                                        |
+| `403`  | `OrganizationCreationDisabled`   | 在这个平台上，只有平台管理员能创建组织。                          |
+| `404`  | `MemberNotFound`                 | 没有成员使用这个用户 ID。                                         |
+| `409`  | `SettingsConflict`               | 在你读取之后，有人修改了设置。                                    |
+| `409`  | `LastSuperAdministrator`         | 这个修改会导致没有活跃的 Super Administrator。                    |
+| `503`  | `OrganizationStorageUnavailable` | OpenBot 无法连接到它的数据库。                                    |
+
+## 注册加入已有组织
+
+平台设置中的 `memberSignupOrganizationId` 默认是
+`null`。设置明确的组织 ID 后，新账号可以以 `member`
+身份加入该组织。账号必须通过平台主 OIDC 提供方登录，且邮箱已经验证；账号不能有已有成员关系或移除记录。此设置不会按邮箱合并账号，也不会改变 SSO 或已验证域名规则选定的组织。
+
+目标组织必须处于活动状态，并有活动的超级管理员。检查与写入使用同一成员变更锁。注册只授予
+`member`，不授予直接策略。受管理的部署还应将 `organizationCreation` 设为
+`platform_admins`。
+
+已暂停的成员关系保持暂停。移除成员时会保留内部移除记录，后续注册或域名准入不能恢复访问。明确发出的邀请仍可经过正常检查重新授予访问。

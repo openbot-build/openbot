@@ -1,20 +1,20 @@
+import type { AuthApi } from "@openbot-build/api"
 import { Context, type Effect, type Option, type Redacted } from "effect"
-import type {
-	AuthUnavailable,
-	CredentialRejected,
-	SessionInfo,
-} from "./Model.js"
+import type { AuthUnavailable, CredentialRejected } from "./Model.ts"
 
+/**
+ * Sign-in with Better Auth. Each call uses the sign-in configuration of the
+ * current platform settings, so a change to them works on the next call.
+ */
 export class Auth extends Context.Service<
 	Auth,
 	{
 		/** The Better Auth Web handler. OpenBot mounts it at `/auth/*`. */
-		readonly sessionCookie?: string
-		readonly handler: (request: Request) => Promise<Response>
+		readonly handle: (request: Request) => Effect.Effect<Response>
 		/** The provider for a sign-in: the SSO connection of the email domain, or the platform provider. */
 		readonly signInProvider: (
 			email: string | undefined,
-		) => Option.Option<string>
+		) => Effect.Effect<Option.Option<string>, AuthUnavailable>
 		/** The address of the provider, and the cookie that keeps the sign-in state. */
 		readonly startSignIn: (input: {
 			readonly providerId: string
@@ -27,7 +27,9 @@ export class Auth extends Context.Service<
 			credential: Redacted.Redacted<string>,
 			options?: { readonly refresh: boolean },
 		) => Effect.Effect<
-			SessionInfo & { readonly setCookies: ReadonlyArray<string> },
+			typeof AuthApi.SessionInfo.Type & {
+				readonly setCookies: ReadonlyArray<string>
+			},
 			CredentialRejected | AuthUnavailable
 		>
 	}

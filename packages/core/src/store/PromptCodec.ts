@@ -4,63 +4,80 @@ import {
 	Schema,
 	SchemaTransformation,
 	Predicate,
-	Array as ArrayUtils,
+	pipe,
+	Array as Arr,
+	Record as Rec,
 } from "effect"
 import { Prompt } from "effect/ai"
 
 const FileData = Schema.TaggedUnion({
 	String: { value: Schema.String },
 	Bytes: { value: Schema.Array(Schema.Int) },
-	Url: { value: Schema.String },
+	Url: { value: Schema.URLFromString },
 })
 
 /** Optional schema properties are left out at the JSON boundary. Array positions stay the same. */
 export const omitOptional = (value: unknown): unknown => {
-	if (ArrayUtils.isArray(value)) return value.map(omitOptional)
+	if (Arr.isArray(value)) return Arr.map(value, omitOptional)
 	if (
-		Predicate.isObjectOrArray(value) &&
+		Predicate.isObject(value) &&
 		Object.getPrototypeOf(value) === Object.prototype
 	)
-		return Object.fromEntries(
-			Object.entries(value)
-				.filter(([, field]) => field !== undefined)
-				.map(([key, field]) => [key, omitOptional(field)]),
+		return Rec.fromEntries(
+			pipe(
+				Rec.toEntries(value),
+				Arr.filter(([, field]) => field !== undefined),
+				Arr.map(([key, field]) => [key, omitOptional(field)] as const),
+			),
 		)
 	return value
 }
 
+/**
+ * Since effect 4.0.6, the Prompt schema encodes bytes as `{ _tag: "Uint8Array", base64 }`
+ * and URLs as `{ _tag: "URL", href }`. The stored format stays `String`, `Bytes` or `Url`.
+ */
+const encodeFileData = (
+	data: Prompt.FilePartEncoded["data"],
+): Effect.Effect<typeof FileData.Encoded, Schema.SchemaError> =>
+	Predicate.isString(data)
+		? Effect.succeed({ _tag: "String", value: data })
+		: data instanceof URL
+			? Effect.succeed({ _tag: "Url", value: data.href })
+			: data instanceof Uint8Array
+				? Effect.succeed({ _tag: "Bytes", value: Array.from(data) })
+				: data._tag === "URL"
+					? Effect.succeed({ _tag: "Url", value: data.href })
+					: Schema.decodeEffect(Schema.Uint8ArrayFromBase64)(data.base64).pipe(
+							Effect.map((bytes) => ({
+								_tag: "Bytes",
+								value: Array.from(bytes),
+							})),
+						)
+
 const encodePrompt = (prompt: Prompt.Prompt) =>
-	Schema.encodeEffect(Prompt.Prompt)(prompt).pipe(
-		Effect.map((encoded) => ({
-			...encoded,
-			content: encoded.content.map((message) =>
-				Predicate.isString(message.content)
-					? message
-					: {
-							...message,
-							content: message.content.map((part) =>
-								Match.value(part).pipe(
-									Match.when({ type: "file" }, (part) => ({
-										...part,
-										data: Predicate.isString(part.data)
-											? { _tag: "String" as const, value: part.data }
-											: part.data instanceof URL
-												? { _tag: "Url" as const, value: part.data.href }
-												: {
-														_tag: "Bytes" as const,
-														value: Array.from(part.data),
-													},
-									})),
-									Match.orElse((part) => part),
-								),
-							),
-						},
-			),
-		})),
-		Effect.flatMap((value) =>
-			Schema.decodeUnknownEffect(Schema.Json)(omitOptional(value)),
-		),
-	)
+	Effect.gen(function* () {
+		const encoded = yield* Schema.encodeEffect(Prompt.Prompt)(prompt)
+		const content = yield* Effect.forEach(encoded.content, (message) =>
+			Effect.gen(function* () {
+				if (Predicate.isString(message.content)) return message
+				const parts: ReadonlyArray<(typeof message.content)[number]> =
+					message.content
+				return {
+					...message,
+					content: yield* Effect.forEach(parts, (part) =>
+						Effect.gen(function* () {
+							if (part.type !== "file") return part
+							return { ...part, data: yield* encodeFileData(part.data) }
+						}),
+					),
+				}
+			}),
+		)
+		return yield* Schema.decodeUnknownEffect(Schema.Json)(
+			omitOptional({ ...encoded, content }),
+		)
+	})
 
 /** Media data has explicit tags, so a URL and a base64 string can always be told apart. */
 export const PromptJson = Schema.Json.pipe(
@@ -91,7 +108,7 @@ export const PromptJson = Schema.Json.pipe(
 													...part,
 													data: Match.value(data).pipe(
 														Match.tag("String", (data) => data.value),
-														Match.tag("Url", (data) => new URL(data.value)),
+														Match.tag("Url", (data) => data.value),
 														Match.orElse((data) => Uint8Array.from(data.value)),
 													),
 												}

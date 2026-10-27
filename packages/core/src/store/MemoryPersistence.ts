@@ -1,132 +1,182 @@
-import { Chunk, Option, HashMap, Effect, Equal, SynchronizedRef } from "effect"
-import type * as Session from "../session/Session.ts"
-import * as Timeline from "../timeline/Timeline.ts"
-import type * as SessionStore from "./SessionStore.ts"
-import { validateDelta } from "./DeltaValidation.ts"
+import {
+	Array as Arr,
+	Chunk,
+	Effect,
+	HashMap,
+	Option,
+	SynchronizedRef,
+} from "effect"
+import type { Schema } from "effect"
+import type * as Chat from "../chat/Chat.ts"
+import type * as ChatStore from "./ChatStore.ts"
 import { error } from "./StoreErrors.ts"
 
-/** Rows whose ID is in the map, in the order of the IDs. Missing IDs are left out. */
-const pick = <K, V>(rows: HashMap.HashMap<K, V>, ids: ReadonlyArray<K>) =>
-	ids.flatMap((id) => Option.toArray(HashMap.get(rows, id)))
+interface Stored {
+	readonly ref: Schema.Json
+	readonly state: Schema.Json
+	readonly revision: number
+	readonly items: Chunk.Chunk<ChatStore.StoredItem>
+	readonly turns: Chunk.Chunk<{
+		readonly id: string
+		readonly value: Schema.Json
+	}>
+}
 
-export const make: Effect.Effect<SessionStore.Persistence> = Effect.gen(
+const range = (
+	items: Chunk.Chunk<ChatStore.StoredItem>,
+	query: ChatStore.ItemQuery,
+) => {
+	const selected = Arr.filter(
+		Chunk.toReadonlyArray(items),
+		(item) =>
+			(query.turn === undefined || item.turn === query.turn) &&
+			(query.after === undefined || item.seq > query.after) &&
+			(query.before === undefined || item.seq < query.before),
+	)
+	const ordered = query.order === "desc" ? Arr.reverse(selected) : selected
+	return query.limit === undefined ? ordered : Arr.take(ordered, query.limit)
+}
+
+const empty: Pick<Stored, "state" | "items" | "turns"> = {
+	state: null,
+	items: Chunk.empty(),
+	turns: Chunk.empty(),
+}
+
+/** Adds a Turn record, or replaces the record with the same ID. */
+const upsert = (
+	turns: Stored["turns"],
+	turn: ChatStore.Delta["turn"],
+): Stored["turns"] =>
+	turn === undefined
+		? turns
+		: Chunk.some(turns, (entry) => entry.id === turn.id)
+			? Chunk.map(turns, (entry) => (entry.id === turn.id ? turn : entry))
+			: Chunk.append(turns, turn)
+
+/** Keeps Chats in memory. It is for tests and for programs that do not need a database. */
+export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 	function* () {
 		const state = yield* SynchronizedRef.make({
-			refs: HashMap.empty<Session.Id, Session.Ref>(),
-			order: Chunk.empty<Session.Id>(),
-			versions: HashMap.empty<Timeline.VersionId, SessionStore.Snapshot>(),
-			messages: HashMap.empty<string, SessionStore.Content>(),
+			chats: HashMap.empty<string, Stored>(),
+			order: Chunk.empty<string>(),
 		})
-		const storage: SessionStore.Persistence = {
-			getRef: (id) =>
-				SynchronizedRef.get(state).pipe(
-					Effect.map((s) => HashMap.get(s.refs, id)),
+		const find = (chat: Chat.Id) =>
+			SynchronizedRef.get(state).pipe(
+				Effect.map((s) => HashMap.get(s.chats, chat)),
+			)
+		const storage: ChatStore.Persistence = {
+			get: (chat) =>
+				find(chat).pipe(
+					Effect.map(
+						Option.map((stored) => ({ ref: stored.ref, state: stored.state })),
+					),
 				),
-			listRefs: (input) =>
-				SynchronizedRef.get(state).pipe(
-					Effect.map((s) =>
-						pick(s.refs, Chunk.toReadonlyArray(s.order)).filter(
-							(ref) =>
-								input?.archived === undefined ||
-								ref.metadata.archived === input.archived,
+			list: SynchronizedRef.get(state).pipe(
+				Effect.map((s) =>
+					Arr.flatMap(Chunk.toReadonlyArray(s.order), (id) =>
+						Option.toArray(
+							Option.map(HashMap.get(s.chats, id), (stored) => stored.ref),
 						),
 					),
 				),
-			headers: (ids) =>
-				SynchronizedRef.get(state).pipe(
-					Effect.map((s) =>
-						pick(s.versions, ids).map((v) => ({
-							id: v.id,
-							schemaVersion: v.schemaVersion,
-							parents: v.parents,
-						})),
-					),
-				),
-			snapshot: (id) =>
-				SynchronizedRef.get(state).pipe(
-					Effect.map((s) => HashMap.get(s.versions, id)),
-				),
-			contentHeaders: (ids) =>
-				SynchronizedRef.get(state).pipe(
-					Effect.map((s) =>
-						pick(s.messages, ids).map((message) => ({
-							id: message.id,
-							message: message.message,
-						})),
-					),
-				),
-			contents: (ids) =>
-				SynchronizedRef.get(state).pipe(
-					Effect.map((s) => pick(s.messages, ids)),
-				),
-			save: (input) =>
-				Effect.gen(function* () {
-					const delta = yield* validateDelta(storage, input)
-					yield* SynchronizedRef.updateEffect(state, (s) =>
-						Effect.gen(function* () {
-							if (
-								!Equal.equals(
-									Option.getOrNull(HashMap.get(s.refs, input.session.id)),
-									input.expected,
-								)
-							)
-								return yield* error("reference-conflict", {
-									message: "The full expected reference is stale",
-								})
-							// validateDelta rejects duplicate IDs, so each row only needs a check against stored rows.
-							const version = delta.versions.find((v) =>
-								Option.exists(
-									HashMap.get(s.versions, v.id),
-									(prior) => !Equal.equals(prior, v),
-								),
-							)
-							if (version !== undefined)
-								return yield* error("version-conflict", {
-									message: "Immutable version conflict",
-									version: version.id,
-								})
-							if (
-								delta.messages.some((m) =>
-									Option.exists(
-										HashMap.get(s.messages, m.id),
-										(prior) => !Equal.equals(prior, m),
-									),
-								)
-							)
-								return yield* error("message-conflict", {
-									message: "Immutable message content conflict",
-								})
-							return {
-								refs: HashMap.set(s.refs, delta.session.id, delta.session),
-								versions: delta.versions.reduce(
-									(versions, v) => HashMap.set(versions, v.id, v),
-									s.versions,
-								),
-								messages: delta.messages.reduce(
-									(messages, m) => HashMap.set(messages, m.id, m),
-									s.messages,
-								),
-								order: HashMap.has(s.refs, delta.session.id)
-									? s.order
-									: Chunk.append(s.order, delta.session.id),
-							}
+			),
+			items: (chat, query) =>
+				find(chat).pipe(
+					Effect.map(
+						Option.match({
+							onNone: () => [],
+							onSome: (stored) =>
+								Arr.map(range(stored.items, query), (item) => item.value),
 						}),
-					)
-				}),
-			remove: (ref) =>
+					),
+				),
+			turns: (chat, query) =>
+				find(chat).pipe(
+					Effect.map(
+						Option.match({
+							onNone: () => [],
+							onSome: (stored) => {
+								const turns = Chunk.toReadonlyArray(stored.turns)
+								const start =
+									query.after === undefined
+										? 0
+										: Option.match(
+												Arr.findFirstIndex(
+													turns,
+													(turn) => turn.id === query.after,
+												),
+												{ onNone: () => 0, onSome: (index) => index + 1 },
+											)
+								const selected = Arr.drop(turns, start)
+								return Arr.map(
+									query.limit === undefined
+										? selected
+										: Arr.take(selected, query.limit),
+									(turn) => turn.value,
+								)
+							},
+						}),
+					),
+				),
+			turn: (chat, turn) =>
+				find(chat).pipe(
+					Effect.map((stored) =>
+						Option.flatMap(stored, (stored) =>
+							Option.map(
+								Arr.findFirst(stored.turns, (entry) => entry.id === turn),
+								(entry) => entry.value,
+							),
+						),
+					),
+				),
+			save: (delta) =>
 				SynchronizedRef.updateEffect(state, (s) =>
-					Option.match(HashMap.get(s.refs, ref.id), {
-						onNone: () => Effect.succeed(s),
-						onSome: (current) =>
-							Equal.equals(current, ref)
-								? Effect.succeed({ ...s, refs: HashMap.remove(s.refs, ref.id) })
-								: Effect.fail(
-										error("reference-conflict", {
-											message: "The full expected reference is stale",
-										}),
-									),
+					Effect.gen(function* () {
+						if (
+							delta.source !== undefined &&
+							Option.getOrUndefined(HashMap.get(s.chats, delta.source.chat))
+								?.revision !== delta.source.revision
+						)
+							return yield* error("reference-conflict", {
+								message: "The source Chat changed",
+							})
+						const current = HashMap.get(s.chats, delta.chat)
+						const revision = Option.match(current, {
+							onNone: () => null,
+							onSome: (stored) => stored.revision,
+						})
+						if (revision !== delta.expected)
+							return yield* error("reference-conflict", {
+								message: "The Chat revision is out of date",
+							})
+						const before = Option.getOrElse(current, () => empty)
+						const stored: Stored = {
+							ref: delta.ref,
+							state: delta.state ?? before.state,
+							revision: delta.revision,
+							items: Chunk.appendAll(
+								before.items,
+								Chunk.fromIterable(delta.items),
+							),
+							turns: upsert(
+								Arr.reduce(delta.turns ?? [], before.turns, upsert),
+								delta.turn,
+							),
+						}
+						return {
+							chats: HashMap.set(s.chats, delta.chat, stored),
+							order: Option.isNone(current)
+								? Chunk.append(s.order, delta.chat)
+								: s.order,
+						}
 					}),
 				),
+			remove: (chat) =>
+				SynchronizedRef.update(state, (s) => ({
+					chats: HashMap.remove(s.chats, chat),
+					order: Chunk.filter(s.order, (id) => id !== chat),
+				})),
 		}
 		return storage
 	},

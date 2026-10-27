@@ -9,6 +9,7 @@ export const openbot_auth_user = pgTable("openbot_auth_user", {
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	updatedAt: timestamp("updated_at")
 		.defaultNow()
+		// @effect-diagnostics-next-line globalDate:off -- Drizzle calls $onUpdate outside Effect, and a timestamp column needs a Date back.
 		.$onUpdate(() => /* @__PURE__ */ new Date())
 		.notNull(),
 })
@@ -21,6 +22,7 @@ export const openbot_auth_session = pgTable(
 		token: text("token").notNull().unique(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
+			// @effect-diagnostics-next-line globalDate:off -- Drizzle calls $onUpdate outside Effect, and a timestamp column needs a Date back.
 			.$onUpdate(() => /* @__PURE__ */ new Date())
 			.notNull(),
 		ipAddress: text("ip_address"),
@@ -50,6 +52,7 @@ export const openbot_auth_account = pgTable(
 		password: text("password"),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
+			// @effect-diagnostics-next-line globalDate:off -- Drizzle calls $onUpdate outside Effect, and a timestamp column needs a Date back.
 			.$onUpdate(() => /* @__PURE__ */ new Date())
 			.notNull(),
 	},
@@ -66,6 +69,7 @@ export const openbot_auth_verification = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()
+			// @effect-diagnostics-next-line globalDate:off -- Drizzle calls $onUpdate outside Effect, and a timestamp column needs a Date back.
 			.$onUpdate(() => /* @__PURE__ */ new Date())
 			.notNull(),
 	},

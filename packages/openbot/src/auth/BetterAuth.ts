@@ -1,8 +1,4 @@
-import { createHmac } from "node:crypto"
-import { Settings as SettingsApi } from "@openbot-build/api"
-import { Barrier } from "./Barrier.ts"
-import * as PrivateSession from "./PrivateSession.ts"
-import * as BrowserRoutes from "./BrowserRoutes.ts"
+import { AuthApi } from "@openbot-build/api"
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import { betterAuth } from "better-auth/minimal"
 import { APIError } from "better-auth/api"
@@ -12,19 +8,30 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
 import { decodeJwt } from "jose"
 import {
+	Array as Arr,
+	Cause,
+	Duration,
 	Effect,
-	Exit,
+	Equal,
+	FiberSet,
 	Layer,
-	Match,
+	type LogLevel,
 	Option,
-	Redacted,
 	Predicate,
+	RcMap,
+	Redacted,
+	Ref,
+	Schema,
+	Schedule,
 	Stream,
 } from "effect"
+import { HttpServerResponse } from "effect/http"
 import * as tables from "../database/AuthSchema.ts"
 import { Auth } from "./Auth.ts"
 import { Organization } from "../organization/Organization.ts"
 import { PlatformAdmins } from "../platform/PlatformAdmins.ts"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as Platform from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 import {
 	type Connection as SsoConnection,
@@ -32,38 +39,68 @@ import {
 	Sso,
 } from "../sso/Sso.ts"
 import { developmentLogin } from "./DevelopmentLogin.ts"
-import { type ResolvedConfiguration } from "./Configuration.ts"
+import { ResolvedConfiguration } from "./Configuration.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import * as Background from "../app/Background.ts"
+import * as BrowserRoutes from "./BrowserRoutes.ts"
 
-/** SDK rejections go to the typed error channel. Programming errors stay defects. */
+/** The Effect log level of each Better Auth log level. */
+const logLevels = {
+	debug: "Debug",
+	info: "Info",
+	warn: "Warn",
+	error: "Error",
+} as const satisfies Record<string, LogLevel.Severity>
+
+/**
+ * SDK rejections and database errors go to the typed error channel. Other
+ * errors are programming errors, so they are defects. The log keeps each
+ * rejection, because the typed error does not. `tryPromise` keeps the
+ * rejection as the `cause` of its `UnknownError`.
+ */
 const attempt = <A, E>(
 	run: (signal: AbortSignal) => Promise<A>,
 	onApiError: (error: APIError) => E,
 ): Effect.Effect<A, E | AuthUnavailable> =>
-	Effect.flatten(
-		Effect.promise((signal) =>
-			run(signal).then(
-				(value) => Exit.succeed(value),
-				(cause: unknown): Exit.Exit<never, E | AuthUnavailable> =>
-					cause instanceof APIError
-						? Exit.fail(onApiError(cause))
-						: cause instanceof DrizzleQueryError ||
-							  (Predicate.isError(cause) &&
-									Predicate.hasProperty(cause, "code"))
-							? Exit.fail(AuthUnavailable.make({ dependency: "storage" }))
-							: Exit.die(cause),
-			),
+	Effect.tryPromise((signal) => run(signal)).pipe(
+		Effect.catch(({ cause }): Effect.Effect<never, E | AuthUnavailable> =>
+			cause instanceof APIError
+				? Effect.andThen(
+						Effect.logWarning("Better Auth refused a call.", cause),
+						Effect.fail(onApiError(cause)),
+					)
+				: cause instanceof DrizzleQueryError ||
+					  (Predicate.isError(cause) && Predicate.hasProperty(cause, "code"))
+					? Effect.andThen(
+							Effect.logWarning(
+								"Better Auth could not use its database.",
+								cause,
+							),
+							Effect.fail(AuthUnavailable.make({ dependency: "storage" })),
+						)
+					: Effect.die(cause),
 		),
 	)
+
+/** Logs the failure of a service that sign-in needs, and gives the error of the Auth service. */
+const unavailable =
+	(dependency: AuthUnavailable["dependency"]) => (error: unknown) =>
+		Effect.andThen(
+			Effect.logWarning(
+				"Sign-in could not use a service that it needs.",
+				error,
+			),
+			Effect.fail(AuthUnavailable.make({ dependency })),
+		)
 
 /** One OpenID Connect provider for Better Auth: the platform provider, or the SSO connection of an organization. */
 interface OidcProvider {
 	readonly providerId: string
-	readonly redirectUri?: string
-	readonly scopes?: ReadonlyArray<string>
 	readonly issuer: string
 	readonly clientId: string
 	readonly clientSecret: Redacted.Redacted<string> | undefined
+	readonly redirectUri?: string
+	readonly scopes?: ReadonlyArray<string>
 }
 
 const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
@@ -77,7 +114,7 @@ const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
 	redirectURI:
 		provider.redirectUri ??
 		publicOrigin + "/auth/callback/" + provider.providerId,
-	scopes: [...(provider.scopes ?? SettingsApi.defaultOidcScopes)],
+	scopes: [...(provider.scopes ?? ["openid", "profile", "email"])],
 	pkce: true,
 	requireIdTokenVerification: true,
 	accountSubject: ({
@@ -101,14 +138,31 @@ const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
 	disableProviderLogout: true,
 })
 
+export interface Options {
+	readonly databaseUrl: Redacted.Redacted<string>
+	/** Use the local test account instead of a sign-in provider. */
+	readonly development: boolean
+}
+
+/**
+ * How long a Better Auth instance stays open after its last call. A change of
+ * the sign-in settings makes a new instance, and the old one closes this long
+ * after the calls that still use it end.
+ */
+const idleTimeToLive = Duration.minutes(5)
+
+/**
+ * Sign-in with Better Auth, for the sign-in settings of the platform: the
+ * public origin, the sign-in secret and the platform provider. Each call reads
+ * the current platform settings and borrows the Better Auth instance of these
+ * settings for the time of the call. Equal settings share one instance.
+ */
 export const layer = (
-	config: ResolvedConfiguration & {
-		readonly databaseUrl: Redacted.Redacted<string>
-	},
+	options: Options,
 ): Layer.Layer<
 	Auth,
-	AuthUnavailable,
-	Organization | PlatformAdmins | Sso | Settings
+	never,
+	Organization | PlatformAdmins | Sso | Settings | Secrets
 > =>
 	Layer.effect(
 		Auth,
@@ -118,11 +172,33 @@ export const layer = (
 			const admins = yield* PlatformAdmins
 			const sso = yield* Sso
 			const settings = yield* Settings
+			const secrets = yield* Secrets
+			const context = yield* Effect.context<never>()
+			const callbacks = yield* FiberSet.make()
+			const run = yield* FiberSet.runtime(callbacks)<never>()
+			// Every instance uses this pool, so a new instance opens no new connections.
 			const pool = yield* Effect.acquireRelease(
-				Effect.sync(
-					() =>
-						new Pool({ connectionString: Redacted.value(config.databaseUrl) }),
-				),
+				Effect.sync(() => {
+					const pool = new Pool({
+						connectionString: Redacted.value(options.databaseUrl),
+					})
+					// pg emits "error" on the pool when an idle connection fails. With no
+					// listener, Node throws it and the process stops. pg has already
+					// removed the broken connection, so a log is enough.
+					pool.on("error", (error) => {
+						run(
+							// Effect 4.0.6 registers runtime fibers after they start. Yield before logging.
+							Effect.andThen(
+								Effect.yieldNow,
+								Effect.logWarning(
+									"An idle connection of the auth database pool failed",
+									error,
+								),
+							),
+						)
+					})
+					return pool
+				}),
 				// Closing the pool is best-effort cleanup. Log a failure, but do not fail shutdown.
 				(pool) =>
 					Effect.tryPromise(() => pool.end()).pipe(
@@ -138,42 +214,59 @@ export const layer = (
 			})
 
 			/** The platform provider and every SSO connection, with open secrets. */
-			const loadProviders = Effect.gen(function* () {
-				const connections = yield* sso.all
-				const providers: Array<OidcProvider> =
-					config.mode === "oidc"
-						? [
-								{
-									providerId: config.providerId,
-									redirectUri: config.redirectUri,
-									scopes: config.scopes,
-									issuer: config.issuer,
-									clientId: config.clientId,
-									clientSecret: config.clientSecret,
-								},
-							]
-						: []
-				for (const connection of connections) {
-					const secret = yield* sso.openSecret(connection)
-					providers.push({
-						providerId: connection.id,
-						issuer: connection.issuer,
-						clientId: connection.clientId,
-						clientSecret: Option.getOrUndefined(secret),
-					})
-				}
-				return { connections, providers }
-			}).pipe(
-				Effect.mapError(() => AuthUnavailable.make({ dependency: "storage" })),
-			)
+			const loadProviders = (config: ResolvedConfiguration) =>
+				Effect.gen(function* () {
+					const connections = yield* sso.all
+					const connectionProviders = yield* Effect.forEach(
+						connections,
+						(connection) =>
+							Effect.map(
+								sso.openSecret(connection),
+								(secret): OidcProvider => ({
+									providerId: connection.id,
+									issuer: connection.issuer,
+									clientId: connection.clientId,
+									clientSecret: Option.getOrUndefined(secret),
+								}),
+							),
+					)
+					const providers: ReadonlyArray<OidcProvider> =
+						config.mode === "oidc"
+							? [
+									{
+										providerId: config.providerId,
+										issuer: config.issuer,
+										clientId: config.clientId,
+										clientSecret: config.clientSecret,
+										redirectUri: config.redirectUri,
+										scopes: config.scopes,
+									},
+									...connectionProviders,
+								]
+							: connectionProviders
+					return { connections, providers }
+				}).pipe(Effect.catch(unavailable("storage")))
 
-			const make = (providers: ReadonlyArray<OidcProvider>) =>
+			const make = (
+				config: ResolvedConfiguration,
+				providers: ReadonlyArray<OidcProvider>,
+			) =>
 				betterAuth({
 					baseURL: config.publicOrigin,
 					basePath: "/auth",
 					secret: Redacted.value(config.secret),
 					database,
 					trustedOrigins: [config.publicOrigin],
+					// Better Auth writes its own logs, such as route errors, through this
+					// function. Send them to the Effect logger.
+					logger: {
+						log: (level, message, ...args) =>
+							Effect.runSyncWith(context)(
+								Effect.logWithLevel(logLevels[level])(message, ...args).pipe(
+									Effect.annotateLogs({ source: "better-auth" }),
+								),
+							),
+					},
 					user: { modelName: "openbot_auth_user" },
 					session: {
 						modelName: "openbot_auth_session",
@@ -187,6 +280,9 @@ export const layer = (
 					},
 					verification: { modelName: "openbot_auth_verification" },
 					advanced: {
+						// better-auth turns its Origin check off when NODE_ENV is "test" or
+						// TEST is set. Keep the check on, whatever the environment says.
+						disableOriginCheck: false,
 						// Explicit __Host names replace the __Secure prefix that the SDK adds itself.
 						useSecureCookies: false,
 						defaultCookieAttributes: {
@@ -206,7 +302,7 @@ export const layer = (
 							? []
 							: [
 									genericOAuth({
-										config: providers.map((provider) =>
+										config: Arr.map(providers, (provider) =>
 											oidcConfig(provider, config.publicOrigin),
 										),
 									}),
@@ -214,57 +310,137 @@ export const layer = (
 					],
 				})
 			type Sdk = ReturnType<typeof make>
+			/** The SDK of one instance, for the SSO connections that it knows. */
 			interface Current {
-				readonly key: string
+				/** The ID and version of each SSO connection. A change means that the SDK must change. */
+				readonly versions: ReadonlyArray<readonly [string, number]>
 				readonly sdk: Sdk
 				readonly connections: ReadonlyArray<SsoConnection>
 			}
-			const build = Effect.gen(function* () {
-				const loaded = yield* loadProviders
-				const sdk = make(loaded.providers)
-				yield* attempt(
-					() => sdk.$context,
-					() => AuthUnavailable.make({ dependency: "provider" }),
-				)
-				return {
-					key: JSON.stringify(
-						loaded.connections.map((connection) => [
-							connection.id,
-							connection.version,
-						]),
-					),
-					sdk,
-					connections: loaded.connections,
-				} satisfies Current
-			})
+			const build = (config: ResolvedConfiguration) =>
+				Effect.gen(function* () {
+					const loaded = yield* loadProviders(config)
+					const sdk = make(config, loaded.providers)
+					yield* attempt(
+						() => sdk.$context,
+						() => AuthUnavailable.make({ dependency: "provider" }),
+					)
+					return {
+						versions: Arr.map(
+							loaded.connections,
+							(connection) => [connection.id, connection.version] as const,
+						),
+						sdk,
+						connections: loaded.connections,
+					} satisfies Current
+				})
+
 			/**
-			 * The Web handler of Better Auth is a plain function, so it reads the
-			 * current SDK from a variable. A new SSO connection replaces the SDK.
+			 * Makes the Better Auth instance of one set of sign-in settings. It lives
+			 * in its own scope, which the map closes when nobody used it for a while.
 			 */
-			let current: Current = yield* build
-			const reload = build.pipe(
-				Effect.tap((next) =>
-					Effect.sync(() => {
-						if (next.key !== current.key) current = next
-					}),
-				),
-				Effect.catchCause((cause) =>
-					Effect.logWarning(
-						"OpenBot could not load the SSO connections. It keeps the current ones.",
-						cause,
+			const instance = Effect.fn("BetterAuth.instance")(function* (
+				key: Platform.SignInSettings,
+			) {
+				const config = yield* Platform.authConfiguration(secrets, {
+					settings: key,
+					development: options.development,
+				}).pipe(
+					Effect.catch(unavailable("settings")),
+					Effect.flatMap((configuration) =>
+						Schema.decodeEffect(ResolvedConfiguration)(configuration).pipe(
+							Effect.catch(unavailable("settings")),
+						),
 					),
-				),
-			)
-			// A missed notice must not keep old connections for ever, so also check from time to time.
-			yield* Stream.merge(
-				Stream.filter(settings.changes, (scope) => scope.kind === "signIn"),
-				Stream.tick("30 seconds"),
-			).pipe(
-				Stream.runForEach(() => reload),
-				Effect.forkScoped,
+				)
+				/** A new SSO connection replaces the SDK of this instance. */
+				const current = yield* Ref.make(yield* build(config))
+				const reload = build(config).pipe(
+					Effect.flatMap((next) =>
+						Ref.update(current, (previous) =>
+							Equal.equals(next.versions, previous.versions) ? previous : next,
+						),
+					),
+					Background.logFailure(
+						"OpenBot could not load the SSO connections. It keeps the current ones.",
+					),
+				)
+				// A missed notice must not keep old connections for ever, so also check from time to time.
+				yield* Background.repeat(
+					reload.pipe(Effect.delay("30 seconds"), Effect.setContext(context)),
+					{
+						schedule: Schedule.forever,
+						message: "OpenBot could not load the SSO connections.",
+					},
+				)
+				yield* Stream.filter(
+					settings.changes,
+					(scope) => scope.kind === "signIn",
+				).pipe(
+					Stream.runForEach(() => reload),
+					// The loop lives as long as the instance, so it must not keep the
+					// context of the call that made the instance, such as its request
+					// id. `setContext` takes the place of that context, and
+					// `provideContext` would only add to it.
+					Effect.setContext(context),
+					Effect.forkScoped,
+				)
+				return { config, current }
+			})
+			type Instance = Effect.Success<ReturnType<typeof instance>>
+			const instances: RcMap.RcMap<
+				Platform.SignInSettings,
+				Instance,
+				AuthUnavailable
+			> = yield* RcMap.make({
+				lookup: (key: Platform.SignInSettings) =>
+					instance(key).pipe(
+						// A failed build must not stay in the map, so the next call builds again.
+						Effect.onError((cause) =>
+							Cause.hasInterruptsOnly(cause)
+								? Effect.void
+								: RcMap.invalidate(instances, key),
+						),
+					),
+				idleTimeToLive,
+			})
+
+			/** Borrows the instance of the current platform settings until the scope closes. */
+			const borrow = Effect.gen(function* () {
+				const platform = yield* settings.platform.pipe(
+					Effect.catch(unavailable("settings")),
+				)
+				if (Option.isNone(platform))
+					return yield* AuthUnavailable.make({ dependency: "settings" })
+				return yield* RcMap.get(
+					instances,
+					Platform.signInKey(platform.value.document),
+				)
+			})
+			/** Runs `use` with the current instance and the SDK that it has now. */
+			const withCurrent = <A, E>(
+				use: (instance: Instance, current: Current) => Effect.Effect<A, E>,
+			) =>
+				Effect.scoped(
+					Effect.flatMap(borrow, (instance) =>
+						Effect.flatMap(Ref.get(instance.current), (current) =>
+							use(instance, current),
+						),
+					),
+				)
+
+			// The `/auth/*` routes answer like the API when sign-in cannot work now.
+			const unavailableResponse = yield* HttpServerResponse.schemaJson(
+				AuthApi.AuthenticationUnavailable,
+			)(AuthApi.AuthenticationUnavailable.make({}), { status: 503 }).pipe(
+				// The schema encodes a constant value, so a failure here is a defect.
+				Effect.orDie,
 			)
 
-			const headers = (credential: Redacted.Redacted<string>) =>
+			const headers = (
+				config: ResolvedConfiguration,
+				credential: Redacted.Redacted<string>,
+			) =>
 				new Headers({
 					cookie:
 						config.sessionCookie +
@@ -272,195 +448,90 @@ export const layer = (
 						encodeURIComponent(Redacted.value(credential)),
 					origin: config.publicOrigin,
 				})
-			const rejected = () => CredentialRejected.make({ kind: "session" })
 			/**
 			 * An SSO connection may only sign in people with an email in its own domains.
 			 * When a connection enforces SSO, people with an email in its domains may not
 			 * use another provider. Accounts are never linked, so each user has one provider.
 			 */
-			const checkProvider = (user: {
-				readonly id: string
-				readonly email: string
-			}) =>
+			const checkProvider = (
+				connections: ReadonlyArray<SsoConnection>,
+				user: {
+					readonly id: string
+					readonly email: string
+				},
+			) =>
 				Effect.gen(function* () {
 					const provider = yield* sso
 						.providerOf(user.id)
-						.pipe(
-							Effect.mapError(() =>
-								AuthUnavailable.make({ dependency: "storage" }),
-							),
-						)
-					const byEmail = connectionFor({
-						connections: current.connections,
-						email: user.email,
-					})
+						.pipe(Effect.catch(unavailable("storage")))
+					const byEmail = connectionFor({ connections, email: user.email })
 					const used = Option.flatMap(provider, (id) =>
-						Option.fromNullishOr(
-							current.connections.find((connection) => connection.id === id),
-						),
+						Arr.findFirst(connections, (connection) => connection.id === id),
 					)
 					if (Option.isSome(used)) {
-						if (byEmail?.id !== used.value.id) return yield* rejected()
-						return Option.some(used.value.organizationId)
+						if (
+							!Option.exists(
+								byEmail,
+								(connection) => connection.id === used.value.id,
+							)
+						)
+							return yield* CredentialRejected.make({ kind: "session" })
+						return {
+							organization: Option.some(used.value.organizationId),
+							provider,
+						}
 					}
-					if (byEmail?.enforce === true) return yield* rejected()
-					return Option.none<string>()
+					if (Option.exists(byEmail, (connection) => connection.enforce))
+						return yield* CredentialRejected.make({ kind: "session" })
+					return { organization: Option.none<string>(), provider }
 				})
 
-			const barrier = yield* Effect.serviceOption(Barrier)
-			if (Option.isSome(barrier))
-				yield* barrier.value.register({
-					secret: config.secret,
-					readSession: (headers) =>
-						Effect.tryPromise({
-							try: async () => {
-								const result = await PrivateSession.read({
-									headers,
-									context: await current.sdk.$context,
-									returnHeaders: true,
-								})
-								return {
-									...result.response,
-									setCookies: result.headers.getSetCookie(),
-								}
-							},
-							catch: () => AuthUnavailable.make({ dependency: "storage" }),
-						}),
-					revocationStatus: (input) =>
-						Effect.tryPromise({
-							try: async () => {
-								const adapter = (await current.sdk.$context).internalAdapter
-								const matching = (
-									sessions: Awaited<ReturnType<typeof adapter.listSessions>>,
-								) =>
-									sessions.filter(
-										(session) =>
-											createHmac("sha256", Redacted.value(input.key))
-												.update(session.token)
-												.digest("hex") === input.credentialDigest,
-									)
-								const sessions = matching(
-									await adapter.listSessions(input.accountId),
-								)
-								if (input.retry)
-									for (const session of sessions)
-										await adapter.deleteSession(session.token)
-								return (
-									matching(await adapter.listSessions(input.accountId))
-										.length === 0
-								)
-							},
-							catch: () => AuthUnavailable.make({ dependency: "storage" }),
-						}),
-					revokeSession: (input) =>
-						Effect.tryPromise({
-							try: async () => {
-								const result = await PrivateSession.revoke({
-									...input,
-									key: Redacted.value(input.key),
-								})({
-									headers: input.headers,
-									context: await current.sdk.$context,
-									returnHeaders: true,
-								})
-								return result.headers.getSetCookie()
-							},
-							catch: () => AuthUnavailable.make({ dependency: "storage" }),
-						}),
-					profile: {
-						...Match.value(config).pipe(
-							Match.discriminatorsExhaustive("mode")({
-								oidc: (value) => ({
-									issuer: value.issuer,
-									clientId: value.clientId,
-									providerId: value.providerId,
-									redirectUri: value.redirectUri,
-								}),
-								none: (value) => ({
-									issuer: "none",
-									clientId: "none",
-									providerId: "none",
-									redirectUri: value.publicOrigin + "/auth/callback",
-								}),
-								development: (value) => ({
-									issuer: "development",
-									clientId: "development",
-									providerId: "development",
-									redirectUri: value.publicOrigin + "/auth/callback",
-								}),
-							}),
+			return Auth.of({
+				handle: (request) =>
+					withCurrent((instance, current) =>
+						BrowserRoutes.handler(instance.config, {
+							handler: (request) => current.sdk.handler(request),
+							signIn: (returnTo) =>
+								instance.config.mode === "oidc"
+									? current.sdk.api.signInSocial({
+											body: {
+												provider: instance.config.providerId,
+												callbackURL: instance.config.publicOrigin + returnTo,
+											},
+											headers: new Headers({
+												origin: instance.config.publicOrigin,
+											}),
+											request: new Request(
+												instance.config.publicOrigin + "/auth/login",
+											),
+											asResponse: true,
+										})
+									: Promise.resolve(new Response(null, { status: 503 })),
+							signOut: (headers) =>
+								current.sdk.api.signOut({ headers, asResponse: true }),
+						})(request),
+					).pipe(
+						Effect.catchTag("AuthUnavailable", () =>
+							Effect.sync(() => HttpServerResponse.toWeb(unavailableResponse)),
 						),
-						publicOrigin: config.publicOrigin,
-						sessionCookie: config.sessionCookie,
-						loginCookie: config.loginCookie,
-						basePath: "/auth",
-						sdkVersion: "1.7.8",
-					},
-				})
-			const service = Auth.of({
-				sessionCookie: config.sessionCookie,
-				handler: BrowserRoutes.handler(
-					{
-						publicOrigin: config.publicOrigin,
-						...(config.mode === "oidc"
-							? {
-									providerId: config.providerId,
-									callbackPath: config.callbackPath,
-								}
-							: {}),
-					},
-					{
-						handler: (request) => current.sdk.handler(request),
-						signIn: async (target, headers) => {
-							try {
-								if (config.mode === "oidc")
-									return await current.sdk.api.signInSocial({
-										body: {
-											provider: config.providerId,
-											callbackURL: config.publicOrigin + target,
-										},
-										headers,
-										request: new Request(config.publicOrigin + "/auth/login"),
-										asResponse: true,
-									})
-								if (config.mode !== "development")
-									return new Response(null, { status: 503 })
-								const response = await current.sdk.api.signInDevelopment({
-									headers,
-									asResponse: true,
-								})
-								const result = new Headers(response.headers)
-								result.set("location", config.publicOrigin + target)
-								return new Response(null, {
-									status: response.status,
-									headers: result,
-								})
-							} catch (error) {
-								if (
-									error instanceof APIError ||
-									error instanceof DrizzleQueryError
-								)
-									return new Response(null, { status: 503 })
-								throw error
-							}
-						},
-						signOut: (headers) =>
-							current.sdk.api.signOut({ headers, asResponse: true }),
-					},
-				),
+					),
 				startSignIn: (input) =>
-					attempt(
-						() =>
-							current.sdk.api.signInSocial({
-								body: {
-									provider: input.providerId,
-									callbackURL: input.returnTo ?? "/",
-									disableRedirect: true,
-								},
-								headers: new Headers({ origin: config.publicOrigin }),
-								returnHeaders: true,
-							}),
-						() => AuthUnavailable.make({ dependency: "provider" }),
+					withCurrent((instance, current) =>
+						attempt(
+							() =>
+								current.sdk.api.signInSocial({
+									body: {
+										provider: input.providerId,
+										callbackURL: input.returnTo ?? "/",
+										disableRedirect: true,
+									},
+									headers: new Headers({
+										origin: instance.config.publicOrigin,
+									}),
+									returnHeaders: true,
+								}),
+							() => AuthUnavailable.make({ dependency: "provider" }),
+						),
 					).pipe(
 						Effect.flatMap(({ response, headers }) =>
 							response.url === undefined
@@ -472,98 +543,79 @@ export const layer = (
 						),
 					),
 				signInProvider: (email) =>
-					Option.match(
-						Option.flatMap(Option.fromNullishOr(email), (email) =>
-							Option.fromNullishOr(
-								connectionFor({ connections: current.connections, email }),
+					withCurrent((instance, current) =>
+						Effect.succeed(
+							Option.match(
+								Option.flatMap(Option.fromNullishOr(email), (email) =>
+									connectionFor({ connections: current.connections, email }),
+								),
+								{
+									onSome: (connection) => Option.some(connection.id),
+									onNone: () =>
+										instance.config.mode === "oidc"
+											? Option.some(instance.config.providerId)
+											: Option.none(),
+								},
 							),
 						),
-						{
-							onSome: (connection) => Option.some(connection.id),
-							onNone: () =>
-								config.mode === "oidc"
-									? Option.some(config.providerId)
-									: Option.none(),
-						},
 					),
 				resolveSession: (credential, options) =>
-					attempt(
-						() =>
-							current.sdk.api.getSession({
-								headers: headers(credential),
-								query: { disableRefresh: options?.refresh === false },
-								returnHeaders: true,
-							}),
-						() => AuthUnavailable.make({ dependency: "storage" }),
-					).pipe(
-						Effect.flatMap(({ response: result, headers }) =>
-							Effect.gen(function* () {
-								if (result === null) return yield* rejected()
-								const ssoOrganization = yield* checkProvider(result.user)
-								const account = {
-									id: result.user.id,
-									email: result.user.email,
-									name: result.user.name,
-									emailVerified: result.user.emailVerified,
-								}
-								const memberships = yield* organization.admit(
-									account,
-									Option.match(ssoOrganization, {
-										onNone: () => undefined,
-										onSome: (only) => ({ only }),
-									}),
-								)
-								const platformAdmin = yield* admins.check(account)
-								return {
-									userId: result.user.id,
-									profile: {
-										name: result.user.name,
+					withCurrent((instance, current) =>
+						attempt(
+							() =>
+								current.sdk.api.getSession({
+									headers: headers(instance.config, credential),
+									query: { disableRefresh: options?.refresh === false },
+									returnHeaders: true,
+								}),
+							() => AuthUnavailable.make({ dependency: "storage" }),
+						).pipe(
+							Effect.flatMap(({ response: result, headers }) =>
+								Effect.gen(function* () {
+									if (result === null)
+										return yield* CredentialRejected.make({ kind: "session" })
+									const signIn = yield* checkProvider(
+										current.connections,
+										result.user,
+									)
+									const account = {
+										id: result.user.id,
 										email: result.user.email,
+										name: result.user.name,
 										emailVerified: result.user.emailVerified,
-									},
-									memberships,
-									platformAdmin,
-									expiresAt: result.session.expiresAt.toISOString(),
-									setCookies: headers.getSetCookie(),
-								}
-							}).pipe(
-								Effect.catchTags({
-									OrganizationUnavailable: () =>
-										Effect.fail(
-											AuthUnavailable.make({ dependency: "storage" }),
-										),
-									PlatformAdminsUnavailable: () =>
-										Effect.fail(
-											AuthUnavailable.make({ dependency: "storage" }),
-										),
-								}),
-							),
-						),
-					),
-			})
-			if (Option.isNone(barrier)) return service
-			const fence = barrier.value
-			const runWeb = Effect.runPromiseWith(yield* Effect.context<never>())
-			return Auth.of({
-				...service,
-				startSignIn: (input) => fence.wrap(service.startSignIn(input)),
-				resolveSession: (...args) =>
-					fence.wrap(service.resolveSession(...args)),
-				// The Web handler is a Promise boundary; hold the auth lease until the SDK settles.
-				handler: (request) =>
-					runWeb(
-						fence
-							.wrap(
-								Effect.tryPromise({
-									try: () => service.handler(request),
-									catch: () => AuthUnavailable.make({ dependency: "storage" }),
-								}),
-							)
-							.pipe(
-								Effect.catchTag("AuthUnavailable", () =>
-									Effect.succeed(new Response(null, { status: 503 })),
+									}
+									const memberships = yield* organization.admit(
+										account,
+										signIn.organization,
+										{
+											platformSignIn:
+												instance.config.mode === "oidc" &&
+												Option.isNone(signIn.organization) &&
+												Option.getOrUndefined(signIn.provider) ===
+													instance.config.providerId,
+										},
+									)
+									const platformAdmin = yield* admins.check(account)
+									return {
+										userId: result.user.id,
+										profile: {
+											name: result.user.name,
+											email: result.user.email,
+											emailVerified: result.user.emailVerified,
+										},
+										memberships,
+										platformAdmin,
+										expiresAt: result.session.expiresAt.toISOString(),
+										setCookies: headers.getSetCookie(),
+									}
+								}).pipe(
+									Effect.catchTags({
+										OrganizationUnavailable: unavailable("storage"),
+										PlatformAdminsUnavailable: unavailable("storage"),
+									}),
 								),
 							),
+						),
 					),
 			})
 		}),

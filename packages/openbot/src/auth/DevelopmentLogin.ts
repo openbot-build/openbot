@@ -10,6 +10,7 @@ export const developmentLogin = () =>
 			signInDevelopment: createAuthEndpoint(
 				"/development/sign-in",
 				{ method: "POST" },
+				// @effect-diagnostics-next-line asyncFunction:off -- Better Auth calls this endpoint handler and needs a Promise back.
 				async (ctx) => {
 					const existing = await ctx.context.internalAdapter.findUserByEmail(
 						"developer@localhost.test",

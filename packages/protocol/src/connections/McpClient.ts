@@ -1,23 +1,27 @@
 import {
 	HashSet,
 	Array as Arr,
+	Cause,
 	Clock,
 	Effect,
 	Equal,
 	Exit,
+	FiberSet,
 	Layer,
-	Queue,
+	PubSub,
 	Redacted,
 	Ref,
 	Scope,
 	Stream,
 	Match,
+	Option,
 	Predicate,
-	Record,
+	Record as Rec,
 	Schema,
-	Struct,
+	String as Str,
+	pipe,
 } from "effect"
-import { dual } from "effect/Function"
+import { dual, type LazyArg } from "effect/Function"
 import * as AppConnections from "./AppConnections.ts"
 import * as Sdk from "../network/Sdk.ts"
 import * as Mcp from "@modelcontextprotocol/client"
@@ -53,6 +57,20 @@ const closeQuietly = (name: string, close: () => Promise<void>) =>
 		),
 	)
 
+/**
+ * Fails with a `ClientError` in place of the failure of `self`.
+ * `ClientError` has no field for the cause, so this logs the failure first.
+ */
+const replace =
+	(message: string, error: LazyArg<ClientError>) =>
+	<A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, ClientError, R> =>
+		self.pipe(
+			Effect.tapError((failure) =>
+				Effect.logWarning(message, Cause.fail(failure)),
+			),
+			Effect.mapError(error),
+		)
+
 export const layerPolicy = (
 	check: (invocation: Invocation) => Effect.Effect<void, PermissionDenied>,
 ) => Layer.succeed(InvocationPolicy, { check })
@@ -73,6 +91,23 @@ const reservedMeta = HashSet.fromIterable([
 	Mcp.SERVER_INFO_META_KEY,
 ])
 
+/** The SDK keeps the cache of each connection apart by this JSON text. */
+const CachePartition = Schema.fromJsonString(
+	Schema.Tuple([Schema.String, Schema.String, Schema.String]),
+)
+
+/** An OAuth scope value is a list of names with spaces between them. */
+const scopeList = (scope: string | undefined): ReadonlyArray<string> =>
+	scope === undefined
+		? []
+		: pipe(scope, Str.split(/\s+/), Arr.filter(Str.isNonEmpty))
+
+/**
+ * The most list pages that the client reads in one walk.
+ * The SDK 2.3.1 list helpers stop at 64 pages, but `singlePage` goes around them, so the client keeps the same limit.
+ */
+const maxPages = 64
+
 /** The next request of an MRTR operation: the saved server state and the host answers. */
 interface Next {
 	readonly requestState?: string | undefined
@@ -81,26 +116,34 @@ interface Next {
 
 /**
  * Check a value with a Standard Schema from the SDK.
- * The schema is built inside the Promise, because the SDK can throw while it builds a JSON Schema validator.
+ * The schema is built inside `Effect.tryPromise`, because the SDK can throw while it builds a JSON Schema validator.
+ * `validate` gives back a result or a Promise, so `Promise.resolve` makes both a Promise.
+ * `ClientError` has no field for the cause, so this logs the thrown error or the schema issues first.
  */
-const decodeStandard = <A>(
+export const decodeStandard = <A>(
 	schema: () => Mcp.StandardSchemaV1<unknown, A>,
 	value: unknown,
-	error: () => ClientError,
+	error: (cause: unknown) => ClientError,
 ) =>
-	Effect.tryPromise({
-		try: async () => schema()["~standard"].validate(value),
-		catch: error,
-	}).pipe(
+	Effect.tryPromise(() =>
+		Promise.resolve(schema()["~standard"].validate(value)),
+	).pipe(
 		Effect.flatMap((result) =>
 			result.issues === undefined
 				? Effect.succeed(result.value)
-				: Effect.fail(error()),
+				: Effect.fail(result.issues),
+		),
+		Effect.catch((cause) =>
+			Effect.logWarning(
+				"An MCP value does not match its schema",
+				Cause.fail(cause),
+			).pipe(Effect.andThen(Effect.fail(error(cause)))),
 		),
 	)
 
-const invalidInput = () =>
-	new ClientError({
+/** Saved MRTR input that does not fit its operation. */
+const inputMismatch = () =>
+	ClientError.make({
 		reason: "Schema",
 		issue: "The input response does not match this operation.",
 	})
@@ -113,19 +156,19 @@ const decodeInputs = (
 		const parsed = yield* decodeStandard(
 			() => Mcp.withInputRequired(Mcp.specTypeSchemas.CallToolResult),
 			continuation.request,
-			invalidInput,
-		).pipe(Effect.filterOrFail(Mcp.isInputRequiredResult, invalidInput))
+			inputMismatch,
+		).pipe(Effect.filterOrFail(Mcp.isInputRequiredResult, inputMismatch))
 		const requests = parsed.inputRequests ?? {}
-		if (Object.keys(responses).some((id) => requests[id] === undefined))
-			return yield* invalidInput()
+		if (Rec.some(responses, (_, id) => requests[id] === undefined))
+			return yield* inputMismatch()
 		const decoded: Mcp.InputResponses = yield* Effect.all(
-			Record.map(requests, (request, id) =>
+			Rec.map(requests, (request, id) =>
 				Match.value(request).pipe(
 					Match.when({ method: "elicitation/create" }, (request) =>
 						decodeStandard(
 							() => Mcp.specTypeSchemas.ElicitResult,
 							responses[id],
-							invalidInput,
+							inputMismatch,
 						).pipe(
 							Effect.tap((result) => {
 								const params = request.params
@@ -138,7 +181,7 @@ const decodeInputs = (
 													params.requestedSchema as Mcp.JsonSchemaType,
 												),
 											result.content,
-											invalidInput,
+											inputMismatch,
 										)
 									: Effect.void
 							}),
@@ -148,14 +191,14 @@ const decodeInputs = (
 						decodeStandard(
 							() => Mcp.specTypeSchemas.CreateMessageResult,
 							responses[id],
-							invalidInput,
+							inputMismatch,
 						),
 					),
 					Match.when({ method: "roots/list" }, () =>
 						decodeStandard(
 							() => Mcp.specTypeSchemas.ListRootsResult,
 							responses[id],
-							invalidInput,
+							inputMismatch,
 						),
 					),
 					Match.exhaustive,
@@ -183,8 +226,10 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	readonly capabilities?: Mcp.ClientCapabilities
 	readonly inputs?: InputHandler
 	readonly eagerLists?: boolean
-	/** OpenBot publication stays pinned; privately configured MCP endpoints negotiate normally. */
-	readonly protocol?: "openbot" | "standard"
+	/** Refresh this expired credential before sending. Never retries a tool call. */
+	readonly refreshAuthorization?: (
+		reference: string,
+	) => Effect.Effect<void, Error>
 }) {
 	const store = yield* Store.AppStore
 	const credentials = yield* Store.CredentialStore
@@ -192,11 +237,13 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	const active = yield* App.ConnectionScopes
 	const network = yield* Network.Network
 	const initial = yield* AppConnections.usable(options.key)
+	const app = yield* store.getApp(initial.cardUrl)
+	const manual = Arr.some(app.sources, (source) => source.role === "manual")
 	if (
 		network.identity.scope === "user" &&
 		network.identity.owner !== initial.owner
 	)
-		return yield* new PermissionDenied({
+		return yield* PermissionDenied.make({
 			action: "connect",
 			target: initial.endpoint,
 		})
@@ -204,28 +251,37 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	return yield* Effect.gen(function* () {
 		yield* active.register({ key: options.key, scope })
 		const closed = yield* Ref.make(false)
-		const guard = Effect.fn("Client.currentConnection")(function* () {
+		const guard: (allowRefresh?: boolean) => Effect.Effect<
+			{
+				readonly connection: Store.UserConnection
+				readonly token: Option.Option<Redacted.Redacted<string>>
+			},
+			Error
+		> = Effect.fn("Client.currentConnection")(function* (allowRefresh = true) {
 			if (yield* Ref.get(closed))
-				return yield* new ClientError({
+				return yield* ClientError.make({
 					reason: "Closed",
 					issue: "Connection Scope is closed",
 				})
 			const connection = yield* store.get(options.key)
 			if (connection.state !== "Enabled")
-				return yield* new App.AppError({
+				return yield* App.AppError.make({
 					reason: "Unavailable",
 				})
 			if (
 				connection.endpoint !== initial.endpoint ||
 				connection.cardUrl !== initial.cardUrl
 			)
-				return yield* new ClientError({
+				return yield* ClientError.make({
 					reason: "ConnectionChanged",
 					issue: "Open a client after explicit revalidation",
 				})
 			return yield* Match.value(connection.authorization).pipe(
 				Match.tag("Unprotected", () =>
-					Effect.succeed({ connection, token: undefined }),
+					Effect.succeed({
+						connection,
+						token: Option.none<Redacted.Redacted<string>>(),
+					}),
 				),
 				Match.tag("Authorized", (auth) =>
 					Effect.gen(function* () {
@@ -234,7 +290,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							auth.binding.connectionId !== connection.connectionId ||
 							auth.binding.resource !== connection.endpoint
 						)
-							return yield* new ClientError({
+							return yield* ClientError.make({
 								reason: "ConnectionChanged",
 								issue: "Credential binding no longer matches this connection",
 							})
@@ -246,33 +302,47 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						if (
 							credential.expiresAt !== undefined &&
 							credential.expiresAt <= now
-						)
-							return yield* new AuthorizationRequired({
+						) {
+							if (allowRefresh && options.refreshAuthorization !== undefined) {
+								yield* options.refreshAuthorization(auth.credentialRef)
+								return yield* guard(false)
+							}
+							return yield* AuthorizationRequired.make({
 								reason: "Expired",
 								scopes: credential.scopes,
 							})
+						}
 						return {
 							connection,
-							token: Redacted.value(credential.accessToken),
+							token: Option.some(credential.accessToken),
 						}
 					}),
 				),
 				Match.tag("ScopeRequired", (auth) =>
 					Effect.fail(
-						new AuthorizationRequired({
+						AuthorizationRequired.make({
 							reason: "InsufficientScope",
 							scopes: auth.scopes,
 						}),
 					),
 				),
-				Match.orElse((auth) =>
+				Match.tag("PendingAuthorization", (auth) =>
 					Effect.fail(
-						new AuthorizationRequired({
+						AuthorizationRequired.make({
 							reason: "Pending",
-							scopes: Predicate.hasProperty(auth, "scopes") ? auth.scopes : [],
+							scopes: auth.scopes,
 						}),
 					),
 				),
+				Match.tag("AuthorizationFailed", () =>
+					Effect.fail(
+						AuthorizationRequired.make({
+							reason: "Pending",
+							scopes: [],
+						}),
+					),
+				),
+				Match.exhaustive,
 			)
 		})
 		yield* guard()
@@ -283,12 +353,25 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			yield* policy.check({ ...invocation, connection })
 			return connection
 		})
-		// The SDK auth provider is a Promise callback. When the guard fails, the
-		// Promise rejects with the typed error, the SDK stops the request, and
-		// `mapError` below gets the same typed error back.
-		const run = Effect.runPromiseWith(yield* Effect.context<never>())
+		// The SDK auth provider and notification handlers are Promise callbacks.
+		// When the guard fails, the Promise rejects with the typed error, the SDK
+		// stops the request, and `mapError` below gets the same typed error back.
+		const callbacks = yield* FiberSet.make().pipe(Scope.provide(scope))
+		const start = yield* FiberSet.runtimePromise(callbacks)<never>()
+		// Effect 4.0.6 adds runtime fibers after they start. Yield first so a
+		// callback cannot close the owner before its fiber belongs to the set.
+		const run = <A, E>(effect: Effect.Effect<A, E>) =>
+			start(Effect.andThen(Effect.yieldNow, effect))
+		// Refresh in the caller's preflight, not in this SDK-owned callback.
+		// A narrower grant closes this client's scope, which owns the callback.
 		const token = () =>
-			run(guard().pipe(Effect.map((current) => current.token)))
+			run(
+				guard(false).pipe(
+					Effect.map((current) =>
+						Option.getOrUndefined(Option.map(current.token, Redacted.value)),
+					),
+				),
+			)
 		const transportFetch = yield* Sdk.fetch().pipe(
 			Effect.provideService(Scope.Scope, scope),
 		)
@@ -299,196 +382,181 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					readonly error?: string
 			  }
 			| undefined
+		// @effect-diagnostics-next-line asyncFunction:off -- The SDK transport needs a fetch function that returns a Promise.
 		const fetch: Mcp.FetchLike = async (input, init) => {
 			const response = await transportFetch(input, init)
 			if (response.status === 401 || response.status === 403)
 				challenge = Mcp.extractWWWAuthenticateParams(response)
 			return response
 		}
-		const queue = yield* Queue.make<Mcp.Notification>()
-		let dirty = HashSet.empty<string>()
-		const declaredCapabilities = {
+		// A host may never read the notifications, so the PubSub keeps only the newest 256.
+		// Each reader of `notifications` gets every notification that comes after it joins.
+		const notices = yield* PubSub.sliding<Mcp.Notification>(256)
+		const capabilities = {
 			...options.capabilities,
 			...options.inputs?.capabilities,
 		}
-		// Probe conservatively until the actual wire revision is known.
-		let capabilities: Mcp.ClientCapabilities =
-			options.protocol === "standard"
-				? Struct.omit(declaredCapabilities, [
-						"elicitation",
-						"sampling",
-						"roots",
-					])
-				: declaredCapabilities
-		const makeClient = () =>
-			new Mcp.Client(options.clientInfo, {
-				versionNegotiation: {
-					mode:
-						options.protocol === "standard"
-							? "auto"
-							: { pin: Document.protocolVersion },
-					probe: { maxRetries: 0 },
-				},
-				inputRequired: { autoFulfill: false },
-				enforceStrictCapabilities: true,
-				capabilities,
-				cachePartition: JSON.stringify([
-					initial.owner,
-					initial.connectionId,
-					initial.endpoint,
-				]),
-			})
-		let sdk = makeClient()
-		const notify = async (notification: Mcp.Notification) => {
-			Queue.offerUnsafe(queue, notification)
-		}
-		const registerNotifications = () => {
-			sdk.fallbackNotificationHandler = notify
-			sdk.setNotificationHandler(
-				"notifications/tools/list_changed",
-				async (notification) => {
-					dirty = HashSet.add(dirty, "tools")
-					await notify(notification)
-				},
-			)
-			sdk.setNotificationHandler(
-				"notifications/resources/list_changed",
-				async (notification) => {
-					dirty = HashSet.add(dirty, "resources")
-					dirty = HashSet.add(dirty, "templates")
-					await notify(notification)
-				},
-			)
-			sdk.setNotificationHandler(
-				"notifications/prompts/list_changed",
-				async (notification) => {
-					dirty = HashSet.add(dirty, "prompts")
-					await notify(notification)
-				},
-			)
-		}
-		registerNotifications()
-		const HttpTransport =
-			options.protocol === "standard"
-				? Mcp.StreamableHTTPClientTransport
-				: Sdk.HttpTransport
-		const makeTransport = (modern = false) =>
-			new (modern ? Sdk.HttpTransport : HttpTransport)(
-				new URL(initial.endpoint),
-				{
-					fetch,
-					authProvider: { token },
-					requestInit: {
-						headers: Redacted.value(initial.headers),
-						redirect: "manual",
-					},
-					redirectPolicy: "same-origin",
-					onInsufficientScope: "throw",
-					maxStepUpRetries: 0,
-					reconnectionOptions: {
-						maxRetries: 0,
-						maxReconnectionDelay: 0,
-						initialReconnectionDelay: 0,
-						reconnectionDelayGrowFactor: 1,
-					},
-				},
-			)
-		let transport = makeTransport()
+		const cachePartition = yield* Schema.encodeEffect(CachePartition)([
+			initial.owner,
+			initial.connectionId,
+			initial.endpoint,
+		]).pipe(Effect.orDie)
+		const sdk = new Mcp.Client(options.clientInfo, {
+			versionNegotiation: {
+				mode: manual ? "auto" : { pin: Document.protocolVersion },
+				probe: { maxRetries: 0 },
+			},
+			inputRequired: { autoFulfill: false },
+			enforceStrictCapabilities: true,
+			capabilities,
+			cachePartition,
+		})
+		// In SDK 2.3.1 the client clears its list cache on each list_changed notification
+		// before it calls this handler, so the handler only passes the notification on.
+		sdk.fallbackNotificationHandler = (notification) =>
+			run(PubSub.publish(notices, notification).pipe(Effect.asVoid))
+		const transport = new Sdk.HttpTransport(new URL(initial.endpoint), {
+			fetch,
+			authProvider: { token },
+			requestInit: {
+				headers: Redacted.value(initial.headers),
+				redirect: "manual",
+			},
+			redirectPolicy: "same-origin",
+			onInsufficientScope: "throw",
+			maxStepUpRetries: 0,
+			reconnectionOptions: {
+				maxRetries: 0,
+				maxReconnectionDelay: 0,
+				initialReconnectionDelay: 0,
+				reconnectionDelayGrowFactor: 1,
+			},
+		})
 		yield* Scope.addFinalizer(
 			scope,
 			Effect.gen(function* () {
 				yield* Ref.set(closed, true)
 				yield* closeQuietly("client", () => sdk.close())
 				yield* closeQuietly("transport", () => transport.close())
-				yield* Queue.shutdown(queue)
+				yield* PubSub.shutdown(notices)
 			}),
 		)
-		const mapError = (error: unknown): Error => {
-			if (
-				error instanceof ClientError ||
-				error instanceof AuthorizationRequired ||
-				error instanceof Store.StoreError ||
-				error instanceof App.AppError
+		// `ClientError` has no field for the cause, so this logs the failure first.
+		const logged = (error: unknown, replacement: ClientError) =>
+			Effect.logWarning("The MCP request failed", Cause.fail(error)).pipe(
+				Effect.andThen(Effect.fail(replacement)),
 			)
-				return error
+		const mapError = (error: unknown): Effect.Effect<never, Error> => {
+			if (
+				Schema.is(ClientError)(error) ||
+				Schema.is(AuthorizationRequired)(error) ||
+				Schema.is(Store.StoreError)(error) ||
+				Schema.is(App.AppError)(error)
+			)
+				return Effect.fail(error)
 			if (error instanceof Mcp.UnauthorizedError)
-				return new AuthorizationRequired({
-					reason: challenge?.error === "invalid_token" ? "Expired" : "Pending",
-					scopes: challenge?.scope?.split(/\s+/).filter(Boolean) ?? [],
-					resourceMetadataUrl: challenge?.resourceMetadataUrl?.href,
-				})
+				return Effect.fail(
+					AuthorizationRequired.make({
+						reason:
+							challenge?.error === "invalid_token" ? "Expired" : "Pending",
+						scopes: scopeList(challenge?.scope),
+						resourceMetadataUrl: challenge?.resourceMetadataUrl?.href,
+					}),
+				)
 			if (error instanceof Mcp.InsufficientScopeError)
-				return new AuthorizationRequired({
-					reason: "InsufficientScope",
-					scopes: error.requiredScope?.split(/\s+/).filter(Boolean) ?? [],
-					resourceMetadataUrl: error.resourceMetadataUrl?.href,
-				})
+				return Effect.fail(
+					AuthorizationRequired.make({
+						reason: "InsufficientScope",
+						scopes: scopeList(error.requiredScope),
+						resourceMetadataUrl: error.resourceMetadataUrl?.href,
+					}),
+				)
 			if (error instanceof Mcp.ProtocolError)
-				return new ClientError({
-					reason: "Protocol",
-					issue: error.message,
-				})
+				return Effect.fail(
+					ClientError.make({
+						reason: "Protocol",
+						issue: error.message,
+					}),
+				)
+			// The messages of a NetworkError are fixed texts of this package.
+			if (Schema.is(Network.NetworkError)(error))
+				return logged(
+					error,
+					ClientError.make({
+						reason: "Network",
+						issue: error.message,
+					}),
+				)
+			// The message of an SdkError can hold the raw body of the server,
+			// so `issue` keeps only the code, and the log keeps the full error.
 			if (
 				error instanceof Mcp.SdkError &&
 				error.code !== Mcp.SdkErrorCode.RequestTimeout
 			)
-				return new ClientError({
-					reason:
-						error.code === Mcp.SdkErrorCode.InvalidResult
-							? "Schema"
-							: "Protocol",
-					issue: error.code,
-				})
-			return new ClientError({
-				reason: "Network",
-				issue: "MCP request did not return a valid response",
-			})
-		}
-		const invoke = <A>(request: (signal: AbortSignal) => Promise<A>) =>
-			Effect.tryPromise({ try: request, catch: mapError })
-		yield* invoke((signal) => sdk.connect(transport, { signal }))
-		const discovery = sdk.getDiscoverResult()
-		if (options.protocol === "standard" && discovery !== undefined) {
-			// Reuse this live discovery only within the same owner and authorization context.
-			// The SDK fixes capabilities at connect time; a modern client can now expose MRTR.
-			yield* invoke(() => sdk.close())
-			capabilities = declaredCapabilities
-			sdk = makeClient()
-			registerNotifications()
-			transport = makeTransport(true)
-			yield* invoke((signal) =>
-				sdk.connect(transport, {
-					signal,
-					prior: { kind: "modern", discover: discovery },
+				return logged(
+					error,
+					ClientError.make({
+						reason:
+							error.code === Mcp.SdkErrorCode.InvalidResult
+								? "Schema"
+								: "Protocol",
+						issue: error.code,
+					}),
+				)
+			return logged(
+				error,
+				ClientError.make({
+					reason: "Network",
+					issue: "MCP request did not return a valid response",
 				}),
 			)
 		}
-		if (options.protocol !== "standard" && discovery === undefined)
-			return yield* new ClientError({
-				reason: "Protocol",
-				issue: "Missing real-time server discovery",
-			})
-		const serverCapabilities = sdk.getServerCapabilities()
+		const invoke = <A>(request: (signal: AbortSignal) => Promise<A>) =>
+			Effect.tryPromise(request).pipe(
+				Effect.catch((error) => mapError(error.cause)),
+			)
+		yield* invoke((signal) => sdk.connect(transport, { signal }))
 		const protocolVersion = sdk.getNegotiatedProtocolVersion()
-		if (serverCapabilities === undefined || protocolVersion === undefined)
-			return yield* new ClientError({
+		const advertised = sdk.getServerCapabilities()
+		if (protocolVersion === undefined || advertised === undefined)
+			return yield* ClientError.make({
 				reason: "Protocol",
-				issue: "Missing negotiated MCP server capabilities",
+				issue: "Missing server handshake",
 			})
-		const requireCapability = (name: "tools" | "resources" | "prompts") =>
-			sdk.getServerCapabilities()?.[name] === undefined
-				? Effect.fail(
-						new ClientError({
-							reason: "UnsupportedCapability",
-							issue: `Server does not advertise ${name}`,
-						}),
-					)
-				: Effect.void
+		transport.modern = sdk.getProtocolEra() === "modern"
+		// A manual legacy service has initialize data, not a publisher card.
+		// Keep that live data in the same shape for capability readers.
+		const discovery: Mcp.DiscoverResult = sdk.getDiscoverResult() ?? {
+			resultType: "complete",
+			supportedVersions: [protocolVersion],
+			capabilities: advertised,
+			...(sdk.getServerVersion() === undefined
+				? {}
+				: {
+						_meta: { [Mcp.SERVER_INFO_META_KEY]: sdk.getServerVersion() },
+					}),
+		}
+		// In SDK 2.3.1, `sdk.close()` calls `_resetConnectionState`, and that clears the server
+		// capabilities. So the check for a closed client must come first.
+		const requireCapability = Effect.fn("Client.requireCapability")(function* (
+			name: "tools" | "resources" | "prompts",
+		) {
+			if (yield* Ref.get(closed))
+				return yield* ClientError.make({
+					reason: "Closed",
+					issue: "Connection Scope is closed",
+				})
+			if (sdk.getServerCapabilities()?.[name] === undefined)
+				return yield* ClientError.make({
+					reason: "UnsupportedCapability",
+					issue: `Server does not advertise ${name}`,
+				})
+		})
 		const validateMeta = (meta: Mcp.RequestMetaObject | undefined) =>
 			meta !== undefined &&
-			Object.keys(meta).some((key) => HashSet.has(reservedMeta, key))
+			Arr.some(Rec.keys(meta), (key) => HashSet.has(reservedMeta, key))
 				? Effect.fail(
-						new ClientError({
+						ClientError.make({
 							reason: "Schema",
 							issue: "Reserved MCP identity metadata cannot be overridden",
 						}),
@@ -502,16 +570,22 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				() => Mcp.fromJsonSchema(schema as Mcp.JsonSchemaType),
 				value,
 				() =>
-					new ClientError({
+					ClientError.make({
 						reason: "Schema",
 						issue: "Value does not match the service JSON Schema",
 					}),
 			)
 		const invalidResult = () =>
-			new ClientError({
+			ClientError.make({
 				reason: "Schema",
 				issue: "Invalid standard result",
 			})
+		const requestOptions = (call: CallOptions, signal: AbortSignal) => ({
+			signal,
+			...Rec.filter({ timeout: call.timeoutMs }, Predicate.isNotUndefined),
+			...Rec.filter({ onprogress: call.onprogress }, Predicate.isNotUndefined),
+			allowInputRequired: true,
+		})
 		// The SDK 2.3.1 list helpers join all pages and drop the cursors.
 		// With `singlePage` we send the raw request, so callers keep each cursor and can find repeated ones.
 		const lists = {
@@ -548,20 +622,18 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										},
 								{
 									signal,
-									cacheMode:
-										input.refresh === true || HashSet.has(dirty, "tools")
-											? "refresh"
-											: "use",
+									cacheMode: input.refresh === true ? "refresh" : "use",
 								},
 							),
 				)
-				dirty = HashSet.remove(dirty, "tools")
 				const source = input.source
 				return source === undefined
 					? result
 					: {
 							...result,
-							tools: result.tools.filter((tool) => visibility(tool, source)),
+							tools: Arr.filter(result.tools, (tool) =>
+								visibility(tool, source),
+							),
 						}
 			}),
 			resources: Effect.fn("Client.listResources")(function* (
@@ -587,10 +659,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							)
 						: sdk.listResources(cursor === undefined ? undefined : { cursor }, {
 								signal,
-								cacheMode: HashSet.has(dirty, "resources") ? "refresh" : "use",
 							}),
 				)
-				dirty = HashSet.remove(dirty, "resources")
 				return result
 			}),
 			templates: Effect.fn("Client.listResourceTemplates")(function* (
@@ -616,15 +686,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							)
 						: sdk.listResourceTemplates(
 								cursor === undefined ? undefined : { cursor },
-								{
-									signal,
-									cacheMode: HashSet.has(dirty, "templates")
-										? "refresh"
-										: "use",
-								},
+								{ signal },
 							),
 				)
-				dirty = HashSet.remove(dirty, "templates")
 				return result
 			}),
 			prompts: Effect.fn("Client.listPrompts")(function* (
@@ -650,10 +714,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							)
 						: sdk.listPrompts(cursor === undefined ? undefined : { cursor }, {
 								signal,
-								cacheMode: HashSet.has(dirty, "prompts") ? "refresh" : "use",
 							}),
 				)
-				dirty = HashSet.remove(dirty, "prompts")
 				return result
 			}),
 		}
@@ -669,6 +731,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			const next = (
 				cursor: string | undefined,
 				seen: HashSet.HashSet<string>,
+				pages: number,
 				items: ReadonlyArray<A>,
 			): Effect.Effect<ReadonlyArray<A>, Error> =>
 				read(cursor).pipe(
@@ -677,19 +740,27 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						if (page.nextCursor === undefined) return Effect.succeed(all)
 						if (HashSet.has(seen, page.nextCursor))
 							return Effect.fail(
-								new ClientError({
+								ClientError.make({
 									reason: "Protocol",
 									issue: "The service repeated a capability cursor",
+								}),
+							)
+						if (pages >= maxPages)
+							return Effect.fail(
+								ClientError.make({
+									reason: "Protocol",
+									issue: "The service sent too many pages",
 								}),
 							)
 						return next(
 							page.nextCursor,
 							HashSet.add(seen, page.nextCursor),
+							pages + 1,
 							all,
 						)
 					}),
 				)
-			return next(undefined, HashSet.empty(), [])
+			return next(undefined, HashSet.empty(), 1, [])
 		}
 		const allTools = (source: CallOptions["source"] = "host") =>
 			allPages((cursor) =>
@@ -714,19 +785,22 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			const respond = Effect.fn("Client.respond")(function* (
 				responses: Mcp.InputResponses,
 			) {
+				// Effect 4.0.6 `Record.keys` cannot infer the key type of a record
+				// with an index signature, so the type arguments are given here.
 				if (
 					!Equal.equals(
-						HashSet.fromIterable(Object.keys(responses)),
-						HashSet.fromIterable(Object.keys(requests)),
+						HashSet.fromIterable(Rec.keys<string, unknown>(responses)),
+						HashSet.fromIterable(Rec.keys<string, unknown>(requests)),
 					)
 				)
-					return yield* new ClientError({
+					return yield* ClientError.make({
 						reason: "Schema",
 						issue:
 							"Input responses must match the request IDs of this operation",
 					})
 				if (
-					Object.values(requests).some(
+					Arr.some(
+						Rec.values(requests),
 						(request) =>
 							(request.method === "sampling/createMessage" &&
 								capabilities.sampling === undefined) ||
@@ -736,7 +810,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 								capabilities.roots === undefined),
 					)
 				)
-					return yield* new ClientError({
+					return yield* ClientError.make({
 						reason: "InputUnavailable",
 						issue: "Host did not declare this input capability",
 					})
@@ -749,13 +823,13 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			const handle =
 				inputs === undefined
 					? Effect.fail(
-							new ClientError({
+							ClientError.make({
 								reason: "InputUnavailable",
 								issue: "Host input handler is not installed",
 							}),
 						)
 					: Effect.all(
-							Record.map(requests, (request) => inputs.handle(request)),
+							Rec.map(requests, (request) => inputs.handle(request)),
 						).pipe(Effect.flatMap(respond))
 			return {
 				_tag: "InputRequired",
@@ -790,81 +864,87 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				arguments: params.arguments,
 				source: call.source,
 			})
-			const tool = (yield* allTools()).find((tool) => tool.name === params.name)
-			if (tool === undefined || !visibility(tool, call.source))
-				return yield* new PermissionDenied({
+			const visible = pipe(
+				Arr.findFirst(yield* allTools(), (tool) => tool.name === params.name),
+				Option.filter((tool) => visibility(tool, call.source)),
+			)
+			if (Option.isNone(visible))
+				return yield* PermissionDenied.make({
 					action: "tools/call",
 					target: params.name,
 				})
+			const tool = visible.value
 			yield* validateDynamic(tool.inputSchema, params.arguments ?? {})
 			// Manual MRTR must reach the host before the final structured output is checked.
 			// The SDK still handles parameter headers with the real input schema.
 			const { outputSchema, ...requestTool } = tool
+			// `OutcomeUnknown` keeps only a fixed cause name, so this logs the full error first.
+			const unknownOutcome = (
+				error: ClientError,
+				cause: OutcomeUnknown["cause"],
+			) =>
+				Effect.logWarning(
+					"The MCP tool call has an unknown outcome",
+					Cause.fail(error),
+				).pipe(
+					Effect.annotateLogs({ tool: params.name }),
+					Effect.andThen(
+						Effect.fail(
+							OutcomeUnknown.make({
+								key: options.key,
+								target: params.name,
+								cause,
+							}),
+						),
+					),
+				)
 			const raw = yield* invoke((signal) =>
 				sdk.callTool(
 					{ ...params, ...next },
-					{
-						signal,
-						...Record.filter(
-							{ timeout: call.timeoutMs },
-							Predicate.isNotUndefined,
-						),
-						...Record.filter(
-							{ onprogress: call.onprogress },
-							Predicate.isNotUndefined,
-						),
-						allowInputRequired: true,
-						toolDefinition: requestTool,
-					},
+					{ ...requestOptions(call, signal), toolDefinition: requestTool },
 				),
 			).pipe(
 				Effect.catchIf(
 					(error): error is ClientError =>
-						error instanceof ClientError &&
+						Schema.is(ClientError)(error) &&
 						["Network", "Protocol", "Closed"].includes(error.reason) &&
 						call.readOnly !== true,
 					(error) =>
-						Effect.fail(
-							new OutcomeUnknown({
-								key: options.key,
-								target: params.name,
-								cause:
-									error.reason === "Network"
-										? "Network"
-										: error.reason === "Closed"
-											? "Closed"
-											: "Protocol",
-							}),
+						unknownOutcome(
+							error,
+							error.reason === "Network"
+								? "Network"
+								: error.reason === "Closed"
+									? "Closed"
+									: "Protocol",
 						),
 				),
 			)
 			// A bad result of a call that may write leaves the remote outcome unknown.
-			const writeOutcome = (error: ClientError) =>
+			const writeOutcome = (
+				error: ClientError,
+			): Effect.Effect<never, ClientError | OutcomeUnknown> =>
 				call.readOnly === true
-					? error
-					: new OutcomeUnknown({
-							key: options.key,
-							target: params.name,
-							cause: "Schema",
-						})
+					? Effect.fail(error)
+					: unknownOutcome(error, "Schema")
 			const decoded = yield* decodeStandard(
 				() => Mcp.withInputRequired(Mcp.specTypeSchemas.CallToolResult),
 				raw,
 				() =>
-					new ClientError({
+					ClientError.make({
 						reason: "Schema",
 						issue: "Invalid standard tool result",
 					}),
-			).pipe(Effect.mapError(writeOutcome))
+			).pipe(Effect.catch(writeOutcome))
 			if (Mcp.isInputRequiredResult(decoded))
 				return inputRequired(decoded, (next) => callTool(params, call, next))
 			if (decoded.isError === true)
-				return yield* new ToolFailure({
+				return yield* ToolFailure.make({
 					result: decoded,
 				})
 			if (outputSchema !== undefined)
 				yield* validateDynamic(outputSchema, decoded.structuredContent).pipe(
-					Effect.mapError(writeOutcome),
+					Effect.catch(writeOutcome),
 				)
 			return { _tag: "Completed", result: decoded } as const
 		})
@@ -889,18 +969,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				const raw = yield* invoke((signal) =>
 					sdk.readResource(
 						{ ...params, ...next },
-						{
-							signal,
-							...Record.filter(
-								{ timeout: call.timeoutMs },
-								Predicate.isNotUndefined,
-							),
-							...Record.filter(
-								{ onprogress: call.onprogress },
-								Predicate.isNotUndefined,
-							),
-							allowInputRequired: true,
-						},
+						requestOptions(call, signal),
 					),
 				)
 				const result = yield* decodeStandard(
@@ -939,18 +1008,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						},
 					},
 					Mcp.withInputRequired(Mcp.specTypeSchemas.GetPromptResult),
-					{
-						signal,
-						...Record.filter(
-							{ timeout: call.timeoutMs },
-							Predicate.isNotUndefined,
-						),
-						...Record.filter(
-							{ onprogress: call.onprogress },
-							Predicate.isNotUndefined,
-						),
-						allowInputRequired: true,
-					},
+					requestOptions(call, signal),
 				),
 			)
 			return finish(result, (next) => getPrompt(params, call, next))
@@ -973,7 +1031,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										arguments: Schema.optionalKey(Schema.JsonObject),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(invalidInput),
+									replace("The saved tool call is not valid", inputMismatch),
 									Effect.flatMap((params) => callTool(params, call, next)),
 								),
 							),
@@ -987,17 +1045,23 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										}),
 									]),
 								)(continuation.params).pipe(
-									Effect.mapError(invalidInput),
+									replace(
+										"The saved resource read is not valid",
+										inputMismatch,
+									),
 									Effect.flatMap((params) =>
 										"uri" in params
 											? Effect.succeed(params.uri)
-											: Effect.try({
-													try: () =>
-														new Mcp.UriTemplate(params.uriTemplate).expand(
-															params.values,
-														),
-													catch: invalidInput,
-												}),
+											: Effect.try(() =>
+													new Mcp.UriTemplate(params.uriTemplate).expand(
+														params.values,
+													),
+												).pipe(
+													replace(
+														"Could not expand the saved resource template",
+														inputMismatch,
+													),
+												),
 									),
 									Effect.flatMap((uri) => readResource({ uri }, call, next)),
 								),
@@ -1011,7 +1075,10 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(invalidInput),
+									replace(
+										"The saved prompt request is not valid",
+										inputMismatch,
+									),
 									Effect.flatMap((params) => getPrompt(params, call, next)),
 								),
 							),
@@ -1021,11 +1088,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				},
 			),
 			key: options.key,
-			discovery,
-			capabilities: serverCapabilities,
 			protocolVersion,
-			serverInfo: sdk.getServerVersion(),
-			notifications: Stream.fromQueue(queue),
+			discovery,
+			notifications: Stream.fromPubSub(notices),
 			listTools: lists.tools,
 			modelTools: allTools("model"),
 			listResources: lists.resources,
@@ -1035,28 +1100,32 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			readResource,
 			getPrompt,
 			readTemplate: Effect.fn("Client.readTemplate")(function* (input) {
-				const template = (yield* allPages((cursor) =>
-					lists.templates(cursor, "host", { singlePage: true }).pipe(
-						Effect.map((page) => ({
-							items: page.resourceTemplates,
-							nextCursor: page.nextCursor,
-						})),
+				const template = Arr.findFirst(
+					yield* allPages((cursor) =>
+						lists.templates(cursor, "host", { singlePage: true }).pipe(
+							Effect.map((page) => ({
+								items: page.resourceTemplates,
+								nextCursor: page.nextCursor,
+							})),
+						),
 					),
-				)).find((template) => template.uriTemplate === input.template)
-				if (template === undefined)
-					return yield* new ClientError({
+					(template) => template.uriTemplate === input.template,
+				)
+				if (Option.isNone(template))
+					return yield* ClientError.make({
 						reason: "Schema",
 						issue: "Unknown resource template",
 					})
-				const uri = yield* Effect.try({
-					try: () =>
-						new Mcp.UriTemplate(template.uriTemplate).expand(input.values),
-					catch: () =>
-						new ClientError({
+				const uri = yield* Effect.try(() =>
+					new Mcp.UriTemplate(template.value.uriTemplate).expand(input.values),
+				).pipe(
+					replace("Could not expand the resource template", () =>
+						ClientError.make({
 							reason: "Schema",
 							issue: "Invalid resource template arguments",
 						}),
-				})
+					),
+				)
 				return yield* readResource({ uri }, { source: input.source })
 			}),
 			listen: Effect.fn("Client.listen")(function* (filter) {
@@ -1077,20 +1146,20 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				)
 				return {
 					honoredFilter: subscription.honoredFilter,
-					closed: Effect.tryPromise({
-						try: () => subscription.closed,
-						catch: () =>
-							new ClientError({
+					closed: Effect.tryPromise(() => subscription.closed).pipe(
+						replace("The MCP subscription failed", () =>
+							ClientError.make({
 								reason: "Protocol",
 								issue: "Subscription failed",
 							}),
-					}),
+						),
+					),
 					close: invoke(() => subscription.close()),
 				}
 			}),
 			close: Scope.close(scope, Exit.void),
 		}
-		// Read only the lists advertised by the real negotiated handshake.
+		// Read only the lists advertised by the live discovery response.
 		if (options.eagerLists !== false) {
 			if (sdk.getServerCapabilities()?.tools !== undefined) yield* lists.tools()
 			if (sdk.getServerCapabilities()?.resources !== undefined) {

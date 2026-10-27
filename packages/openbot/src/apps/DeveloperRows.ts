@@ -1,13 +1,8 @@
-// These are plain query functions that take the database first. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import type { PgClient } from "@effect/sql-pg"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { Discovery } from "@openbot-build/protocol"
 import { and, eq } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
-import { Array as Arr, Context, Effect, Option, Schema, Scope } from "effect"
-import * as Fence from "../execution/ExecutionFence.ts"
-import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import { Array as Arr, Effect, Option, Schema } from "effect"
 import {
 	developerApps,
 	developerNotices,
@@ -16,76 +11,64 @@ import {
 	developerTestFlows,
 	developerTests,
 } from "../database/Schema.ts"
+import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 /**
  * The Developer Center tables in Postgres: the codecs between rows and API
  * values, and the queries that more than one Developer module uses.
  * Every table has a `namespace` column, so the development host keeps its own rows.
  */
-export type Database = EffectPgDatabase
+export type Database = Db.Database
 
-export const unavailable = () => Api.DeveloperUnavailable.make({})
-/** Every storage failure becomes one error. */
+/** Every storage failure becomes one error. The log keeps the storage failure. */
 export const stored = <A, E, R>(
 	effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, Api.DeveloperUnavailable, R> =>
-	effect.pipe(Effect.mapError(unavailable))
+	effect.pipe(
+		Failures.replace("A Developer Center query failed.", () =>
+			Api.DeveloperUnavailable.make({}),
+		),
+	)
 /**
  * Run the effect in one database transaction. Drizzle queries on the `db` of
- * `makeWithDefaults()` join this transaction. A nested call becomes a savepoint.
+ * `Db.make` join this transaction. A nested call becomes a savepoint.
  */
-const TransactionScope = Context.Reference<Scope.Scope | undefined>(
-	"platform/developer/TransactionScope",
-	{ defaultValue: () => undefined },
-)
-
-/** Hold every affected account lease until the outer SQL transaction settles. */
-export const write = <A, E, R>(
-	owner: string | null,
-	effect: Effect.Effect<A, E, R>,
-) => {
-	if (owner === null) return stored(effect).pipe(Effect.uninterruptible)
-	const operation = Effect.gen(function* () {
-		const current = yield* Fence.CurrentExecution
-		const id = OwnedWrites.accountId(owner)
-		return yield* current?.accountId === id
-			? Fence.guardScoped(id, "write", effect)
-			: Fence.admitScoped(id, effect)
-	})
-	return Effect.flatMap(TransactionScope, (scope) =>
-		scope === undefined
-			? Effect.scoped(operation)
-			: Effect.provideService(operation, Scope.Scope, scope),
-	).pipe(Effect.uninterruptible, Effect.mapError(unavailable))
-}
-
 export const transaction =
 	(sql: PgClient.PgClient) =>
 	<A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		Effect.flatMap(TransactionScope, (existing) => {
-			const operation = sql.withTransaction(effect).pipe(
-				Effect.catchTag("SqlError", () => Effect.fail(unavailable())),
-				Effect.uninterruptible,
-			)
-			if (existing !== undefined) return operation
-			return Effect.scoped(
-				Effect.flatMap(Scope.Scope, (scope) =>
-					operation.pipe(Effect.provideService(TransactionScope, scope)),
+		sql
+			.withTransaction(effect)
+			.pipe(
+				Effect.catchTag("SqlError", (error) =>
+					Effect.fail(error).pipe(
+						Failures.replace("A Developer Center transaction failed.", () =>
+							Api.DeveloperUnavailable.make({}),
+						),
+					),
 				),
 			)
-		})
 
 /** A column that holds a value as JSON text. */
 export const Json = <S extends Schema.Top>(schema: S) =>
 	Schema.fromJsonString(Schema.toCodecJson(schema))
-const decodeRow =
+/** Read a stored value. A value that does not match the schema means the storage is broken. */
+export const decodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(row: unknown) =>
-		Schema.decodeUnknownEffect(schema)(row).pipe(Effect.mapError(unavailable))
-const encodeRow =
+		Schema.decodeUnknownEffect(schema)(row).pipe(
+			Failures.replace("A stored Developer Center value is not valid.", () =>
+				Api.DeveloperUnavailable.make({}),
+			),
+		)
+export const encodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(value: S["Type"]) =>
-		Schema.encodeEffect(schema)(value).pipe(Effect.mapError(unavailable))
+		Schema.encodeEffect(schema)(value).pipe(
+			Failures.replace("A Developer Center value could not be stored.", () =>
+				Api.DeveloperUnavailable.make({}),
+			),
+		)
 
 /** The account of an owner key, which is `[organizationId, userId]` as JSON. */
 export const identityOf = (owner: string) =>
@@ -120,25 +103,6 @@ export const decodeProof = (row: typeof developerProofs.$inferSelect) =>
 		})),
 	)
 export const encodeProof = encodeRow(ProofRow)
-export const getProof = Effect.fn("DeveloperRows.getProof")(function* (
-	db: Database,
-	namespace: string,
-	id: string,
-) {
-	const row = (yield* stored(
-		db
-			.select()
-			.from(developerProofs)
-			.where(
-				and(
-					eq(developerProofs.namespace, namespace),
-					eq(developerProofs.id, id),
-				),
-			),
-	))[0]
-	if (row === undefined) return yield* Api.DeveloperNotFound.make({})
-	return yield* decodeProof(row)
-})
 
 const AppRow = Schema.Struct({
 	cardUrl: Schema.String,
@@ -151,11 +115,6 @@ const AppRow = Schema.Struct({
 })
 /** An App that a proof covers, with the state of its monitor check. */
 export type AppRecord = typeof AppRow.Type
-const appWhere = (namespace: string, cardUrl: string) =>
-	and(
-		eq(developerApps.namespace, namespace),
-		eq(developerApps.cardUrl, cardUrl),
-	)
 export const decodeApp = decodeRow(AppRow)
 /** Read an App. With `lock`, keep the row locked until the transaction ends. */
 export const findApp = (
@@ -167,7 +126,12 @@ export const findApp = (
 	const query = db
 		.select()
 		.from(developerApps)
-		.where(appWhere(namespace, cardUrl))
+		.where(
+			and(
+				eq(developerApps.namespace, namespace),
+				eq(developerApps.cardUrl, cardUrl),
+			),
+		)
 	return stored(lock ? query.for("update") : query).pipe(
 		Effect.flatMap((rows) =>
 			Effect.transposeOption(Option.map(Arr.head(rows), decodeApp)),
@@ -194,8 +158,7 @@ export const putApp = Effect.fn("DeveloperRows.putApp")(function* (
 	app: AppRecord,
 ) {
 	const row = { namespace, ...(yield* encodeRow(AppRow)(app)) }
-	yield* write(
-		null,
+	yield* stored(
 		db
 			.insert(developerApps)
 			.values(row)
@@ -219,8 +182,7 @@ export const postNotice = Effect.fn("DeveloperRows.postNotice")(function* (
 	notice: Api.Notice,
 ) {
 	const row = yield* encodeRow(NoticeRow)(notice)
-	yield* write(
-		owner,
+	yield* stored(
 		db
 			.insert(developerNotices)
 			.values({ namespace, owner, ...row })
@@ -282,19 +244,15 @@ export const putTest = Effect.fn("DeveloperRows.putTest")(function* (
 		cleanup: record.value.cleanup,
 		expiresAt: record.value.expiresAt,
 	}
-	const written = yield* write(
-		record.owner,
+	yield* stored(
 		db
 			.insert(developerTests)
 			.values({ namespace, id: record.value.id, ...row })
 			.onConflictDoUpdate({
 				target: [developerTests.namespace, developerTests.id],
 				set: row,
-				setWhere: eq(developerTests.owner, record.owner),
-			})
-			.returning({ id: developerTests.id }),
+			}),
 	)
-	if (written.length !== 1) return yield* unavailable()
 })
 
 const FlowRow = Schema.Struct({
@@ -311,11 +269,6 @@ const FlowRow = Schema.Struct({
  */
 export type FlowRecord = typeof FlowRow.Type
 export const decodeFlow = decodeRow(FlowRow)
-const flowWhere = (namespace: string, flowId: string) =>
-	and(
-		eq(developerTestFlows.namespace, namespace),
-		eq(developerTestFlows.flowId, flowId),
-	)
 /** Read a flow. With `lock`, keep the row locked until the transaction ends. */
 export const getFlow = Effect.fn("DeveloperRows.getFlow")(function* (
 	db: Database,
@@ -326,7 +279,12 @@ export const getFlow = Effect.fn("DeveloperRows.getFlow")(function* (
 	const query = db
 		.select()
 		.from(developerTestFlows)
-		.where(flowWhere(namespace, flowId))
+		.where(
+			and(
+				eq(developerTestFlows.namespace, namespace),
+				eq(developerTestFlows.flowId, flowId),
+			),
+		)
 	const row = (yield* stored(lock ? query.for("update") : query))[0]
 	if (row === undefined) return yield* Api.DeveloperNotFound.make({})
 	return yield* decodeFlow(row)
@@ -342,19 +300,15 @@ export const putFlow = Effect.fn("DeveloperRows.putFlow")(function* (
 		status: record.value.status,
 		expiresAt: record.value.expiresAt,
 	}
-	const written = yield* write(
-		record.owner,
+	yield* stored(
 		db
 			.insert(developerTestFlows)
 			.values({ namespace, flowId: record.value.flowId, ...row })
 			.onConflictDoUpdate({
 				target: [developerTestFlows.namespace, developerTestFlows.flowId],
 				set: row,
-				setWhere: eq(developerTestFlows.owner, record.owner),
-			})
-			.returning({ id: developerTestFlows.flowId }),
+			}),
 	)
-	if (written.length !== 1) return yield* unavailable()
 })
 
 /** The owner of a report that the monitor saved. */
@@ -376,8 +330,7 @@ export const saveReport = Effect.fn("DeveloperRows.saveReport")(function* (
 	value: Api.SavedReport,
 ) {
 	const report = yield* encodeRow(Json(Api.InspectionReport))(value.report)
-	yield* write(
-		owner,
+	yield* stored(
 		db.insert(developerReports).values({
 			namespace,
 			id: value.id,

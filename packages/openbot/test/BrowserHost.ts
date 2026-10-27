@@ -1,101 +1,191 @@
-import { mock } from "node:test"
 import { AuthApi } from "@openbot-build/api"
-import { NodeServices } from "@effect/platform-node"
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { Auth, Server, DatabasePostgres } from "@openbot-build/openbot"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
-	Option,
-	Match,
+	Auth,
+	DatabasePostgres,
+	HostTools,
+	OpenBot,
+	Server,
+} from "../src/index.ts"
+import {
+	Array as Arr,
+	Console,
+	Context,
 	Effect,
+	Exit,
+	HashMap,
+	HashSet,
 	Layer,
-	ManagedRuntime,
+	Option,
+	pipe,
 	Redacted,
+	Ref,
 	Schema,
+	Scope,
 	Stream,
+	String as Str,
+	SynchronizedRef,
 } from "effect"
-import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
-import { FetchHttpClient, HttpServer } from "effect/http"
+import { LanguageModel, type Prompt, Response, Tool, Toolkit } from "effect/ai"
+import {
+	Cookies,
+	FetchHttpClient,
+	Headers,
+	HttpClient,
+	HttpClientRequest,
+	HttpClientResponse,
+	HttpServer,
+} from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
+import * as Caller from "./Caller.ts"
+import * as DefaultBot from "./DefaultBot.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import type { Discovery, Network } from "@openbot-build/protocol"
-import type { AppIndexApi } from "@openbot-build/api"
-import type { Probe } from "../src/apps/Probe.ts"
-import type { AppNetwork } from "../src/apps/AppHost.ts"
-import type { DomainControl } from "../src/apps/DomainControl.ts"
+import type { AppIndexApi, Settings as SettingsApi } from "@openbot-build/api"
+import * as Probe from "../src/apps/Probe.ts"
+import * as AppHost from "../src/apps/AppHost.ts"
+import * as DomainControl from "../src/apps/DomainControl.ts"
+import * as AppDiscovery from "../src/apps/Discovery.ts"
+import * as OutboundPolicy from "../src/network/OutboundPolicy.ts"
 import { organizationDomains } from "../src/database/Schema.ts"
 import { Settings } from "../src/settings/Settings.ts"
+import type { PlatformDocument } from "../src/settings/Documents.ts"
+import * as Db from "../src/database/Database.ts"
+import * as Drivers from "../src/computers/Drivers.ts"
+import type { LiveBackends } from "../src/models/LiveBackends.ts"
+import * as VaultReaders from "../src/vaults/Readers.ts"
 
-/** A disposable OpenBot host with real PostgreSQL and signed OIDC test identities. */
-export async function start(options: {
-	readonly execution?: {
-		readonly origin: string
-		readonly token: Redacted.Redacted<string>
-		readonly backend: "e" | "openbot"
-	}
+/** How a test host starts. */
+export interface Options {
 	readonly publicOrigin: string
 	readonly port?: number
 	readonly model?: typeof LanguageModel.LanguageModel.Service
-	readonly modelFetch?: typeof fetch
-	readonly nativeModels?: true
 	readonly discovery?: Layer.Layer<Discovery.Discovery>
-	readonly appProbe?: Layer.Layer<Probe>
-	readonly appNetwork?: Layer.Layer<AppNetwork>
+	readonly appProbe?: Layer.Layer<Probe.Probe>
+	readonly appNetwork?: Layer.Layer<AppHost.AppNetwork>
 	readonly indexPublicNetwork?: Layer.Layer<Network.PublicNetwork>
 	readonly appReadRules?: ReadonlyArray<{
 		readonly cardUrl: string
 		readonly tool: string
 	}>
 	readonly appRestrictions?: ReadonlyArray<AppIndexApi.Restriction>
-	readonly authCompatibility?: {
-		readonly sessionCookie?: string
-		readonly loginCookie?: string
-		readonly providerId?: string
-		readonly callbackPath?: string
-		readonly scopes?: ReadonlyArray<string>
-	}
+	/** Turns Code Mode on for the platform, with these limits. */
+	readonly codeMode?: SettingsApi.CodeMode
 	/**
 	 * Test accounts have verified emails at example.com. By default the
 	 * organization of the first account verifies that domain, so every later
 	 * account joins it. Set false to give each account its own organization.
 	 */
 	readonly sharedDomain?: boolean
-	/** Select a known organization when a test account has more than one. */
-	readonly organizationId?: string
-	readonly domainControl?: Layer.Layer<DomainControl>
+	readonly domainControl?: Layer.Layer<DomainControl.DomainControl>
 	/** People with these emails are platform admins. */
 	readonly platformAdmins?: ReadonlyArray<string>
+	/**
+	 * The platform has no fixture model, as in production: no built-in model
+	 * and no default model. Then each Chat or its Bot must name a stored model.
+	 * Without it, every organization can use the fixture model, and each new
+	 * Chat gets it.
+	 */
+	readonly registryModels?: boolean
 	readonly indexWork?: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
 	}
-	/** Organization settings for the Agents of each new organization. */
-	readonly agents?: {
+	/** How often the trigger worker looks for schedules that are due. */
+	readonly triggerIntervalMs?: number
+	/** How often the Channel worker looks for new events and messages. */
+	readonly channelIntervalMs?: number
+	/** How often the file garbage collector runs. */
+	readonly fileIntervalMs?: number
+	/**
+	 * Answers the HTTP calls of the server to other places, such as Slack.
+	 * Without it, such a call fails.
+	 */
+	readonly platformFetch?: (
+		request: globalThis.Request,
+	) => Effect.Effect<globalThis.Response>
+	/** The drivers of the Computer providers. */
+	readonly computerDrivers?: Layer.Layer<Drivers.Drivers>
+	/** The Live backends. */
+	readonly liveBackends?: Layer.Layer<LiveBackends>
+	readonly vaultReaders?: Layer.Layer<VaultReaders.Readers>
+	/** Organization settings for the Bots of each new organization. */
+	readonly bots?: {
 		readonly memory?: boolean
 		readonly requestTimeoutMs?: number
 	}
-}) {
-	const database = await PostgresTest.start()
-	const issuer = "https://id.example.com"
-	const pair = await generateKeyPair("EdDSA", { extractable: true })
-	const publicKey = await exportJWK(pair.publicKey)
-	const codeSchema = Schema.Struct({
-		subject: Schema.String,
-		nonce: Schema.String,
-	})
-	const json = (value: unknown) =>
-		new globalThis.Response(JSON.stringify(value), {
-			headers: { "content-type": "application/json" },
-		})
-	const providerFetch: typeof fetch = async (input, init) => {
-		const url = new URL(input instanceof Request ? input.url : String(input))
-		if (url.origin !== issuer) {
-			if (options.modelFetch !== undefined)
-				return options.modelFetch(input, init)
-			throw new Error("Unexpected fixture provider origin")
-		}
+}
+
+/** The server called the test identity provider at a place that it does not know. */
+export class UnexpectedProviderCall extends Schema.TaggedError<
+	UnexpectedProviderCall,
+	{ readonly brand: unique symbol }
+>()("UnexpectedProviderCall", { url: Schema.String }) {
+	override get message() {
+		return "Unexpected fixture provider origin: " + this.url
+	}
+}
+
+/** A test account could not sign in, or could not get an organization. */
+export class LoginFailed extends Schema.TaggedError<
+	LoginFailed,
+	{ readonly brand: unique symbol }
+>()("LoginFailed", { subject: Schema.String, message: Schema.String }) {}
+
+/** The services that `start` needs: the Node services and the fetch HTTP client. */
+export const layerPlatform = Layer.merge(
+	NodeServices.layer,
+	FetchHttpClient.layer,
+)
+
+const issuer = "https://id.example.com"
+
+/** The code that the test identity provider gives back, as JSON text. */
+const Code = Schema.fromJsonString(
+	Schema.Struct({ subject: Schema.String, nonce: Schema.String }),
+)
+
+const SignInStart = Schema.Struct({ url: Schema.String })
+
+/** Whether a fetch call goes to the test identity provider. */
+const isIssuer = (input: string | URL | globalThis.Request) =>
+	new URL(input instanceof globalThis.Request ? input.url : String(input))
+		.origin === issuer
+
+const isUser = (message: Prompt.Message): message is Prompt.UserMessage =>
+	message.role === "user"
+
+const usage = {
+	inputTokens: { total: 12, uncached: 12, cacheRead: 0, cacheWrite: 0 },
+	outputTokens: { total: 6, text: 6, reasoning: 0 },
+}
+
+/**
+ * Starts a disposable OpenBot host with a real PostgreSQL and signed OIDC test
+ * identities. Everything stops when the scope closes. Give it `layerPlatform`,
+ * and run the test with `it.live`, because the host uses real time.
+ */
+export const start = Effect.fn("BrowserHost.start")(function* (
+	options: Options,
+) {
+	const client = yield* HttpClient.HttpClient
+	const context = yield* Effect.context<never>()
+	const database = yield* PostgresTest.start
+	const pair = yield* Effect.promise(() =>
+		generateKeyPair("EdDSA", { extractable: true }),
+	)
+	const publicKey = yield* Effect.promise(() => exportJWK(pair.publicKey))
+
+	/** Answers the calls of the server to the test identity provider. */
+	const provider = Effect.fn("BrowserHost.provider")(function* (
+		request: globalThis.Request,
+	) {
+		if (!isIssuer(request.url))
+			return yield* UnexpectedProviderCall.make({ url: request.url })
+		const url = new URL(request.url)
 		if (url.pathname === "/.well-known/openid-configuration")
-			return json({
+			return globalThis.Response.json({
 				issuer,
 				authorization_endpoint: issuer + "/authorize",
 				token_endpoint: issuer + "/token",
@@ -106,15 +196,16 @@ export async function start(options: {
 				id_token_signing_alg_values_supported: ["EdDSA"],
 			})
 		if (url.pathname === "/jwks")
-			return json({
+			return globalThis.Response.json({
 				keys: [{ ...publicKey, kid: "browser-test", alg: "EdDSA", use: "sig" }],
 			})
 		if (url.pathname === "/userinfo") {
-			const subject =
-				new Headers(init?.headers)
-					.get("authorization")
-					?.replace("Bearer access-", "") ?? ""
-			return json({
+			const subject = pipe(
+				Option.fromNullishOr(request.headers.get("authorization")),
+				Option.map(Str.replace("Bearer access-", "")),
+				Option.getOrElse(() => ""),
+			)
+			return globalThis.Response.json({
 				sub: subject,
 				name: "Browser User",
 				email: subject + "@example.com",
@@ -122,132 +213,179 @@ export async function start(options: {
 			})
 		}
 		const form = new URLSearchParams(
-			await new globalThis.Response(init?.body).text(),
+			yield* Effect.promise(() => request.text()),
 		)
-		const code = Schema.decodeUnknownSync(Schema.fromJsonString(codeSchema))(
-			form.get("code"),
+		const code = yield* Schema.decodeUnknownEffect(Code)(form.get("code"))
+		const token = yield* Effect.promise(() =>
+			new SignJWT({ nonce: code.nonce })
+				.setProtectedHeader({ alg: "EdDSA", kid: "browser-test" })
+				.setIssuer(issuer)
+				.setAudience("browser-fixture")
+				.setSubject(code.subject)
+				.setExpirationTime("1 hour")
+				.sign(pair.privateKey),
 		)
-		const token = await new SignJWT({ nonce: code.nonce })
-			.setProtectedHeader({ alg: "EdDSA", kid: "browser-test" })
-			.setIssuer(issuer)
-			.setAudience("browser-fixture")
-			.setSubject(code.subject)
-			.setExpirationTime("1 hour")
-			.sign(pair.privateKey)
-		return json({
+		return globalThis.Response.json({
 			access_token: "access-" + code.subject,
 			id_token: token,
 			token_type: "Bearer",
 			scope: "openid profile email",
 		})
-	}
-	const actualFetch = globalThis.fetch
-	const providerNetwork = mock.method(
-		globalThis,
-		"fetch",
-		(input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-			const url = new URL(input instanceof Request ? input.url : String(input))
-			return url.origin === issuer
-				? providerFetch(input, init)
-				: actualFetch(input, init)
-		},
+	})
+	/** Gives an Effect handler the shape of `fetch`, for code outside of Effect. */
+	const toFetch =
+		<E>(
+			handle: (
+				request: globalThis.Request,
+			) => Effect.Effect<globalThis.Response, E>,
+		): typeof fetch =>
+		(input, init) =>
+			Effect.runPromiseWith(context)(
+				handle(new globalThis.Request(input, init)),
+			)
+	const providerFetch = toFetch(provider)
+	// This file also runs alone as a script, outside of Vitest. better-auth
+	// calls the global fetch, so the host changes it by hand and puts the real
+	// one back when the scope closes.
+	yield* Effect.acquireRelease(
+		Effect.sync(() => {
+			const actual = globalThis.fetch
+			globalThis.fetch = (input, init) => {
+				if (isIssuer(input)) return providerFetch(input, init)
+				// @effect-diagnostics-next-line globalFetch:off -- better-auth calls the global fetch, so every other call must still reach the real network.
+				return actual(input, init)
+			}
+			return actual
+		}),
+		(actual) =>
+			Effect.sync(() => {
+				globalThis.fetch = actual
+			}),
 	)
+
 	const confirm = Tool.make("ConfirmChange", {
 		description: "Apply the proposed change after approval",
 		parameters: Schema.Struct({ description: Schema.String }),
 		success: Schema.Struct({ applied: Schema.String }),
 		needsApproval: true,
 	})
-	const toolkit = Toolkit.make(confirm)
-	let toolCalls = 0
+	// A small store of named values, so a test can change state with a tool and check it.
+	// A key in `locked` cannot change, unless the call sets `force`.
+	const values = yield* Ref.make(HashMap.empty<string, string>())
+	const locked = yield* Ref.make(HashSet.empty<string>())
+	const setValue = Tool.make("SetValue", {
+		description: "Set a named value",
+		parameters: Schema.Struct({
+			key: Schema.String,
+			value: Schema.String,
+			force: Schema.optionalKey(Schema.Boolean),
+		}),
+		success: Schema.Struct({ key: Schema.String, value: Schema.String }),
+		failure: Schema.Struct({ error: Schema.String }),
+		failureMode: "return",
+	})
+	const getValue = Tool.make("GetValue", {
+		description: "Read a named value",
+		parameters: Schema.Struct({ key: Schema.String }),
+		success: Schema.Struct({ value: Schema.NullOr(Schema.String) }),
+	})
+	const toolkit = Toolkit.make(confirm, setValue, getValue)
+	const toolCalls = yield* Ref.make(0)
 	const handlers = toolkit.toLayer({
 		ConfirmChange: ({ description }) =>
-			Effect.sync(() => {
-				toolCalls++
-				return { applied: description }
+			Ref.update(toolCalls, (count) => count + 1).pipe(
+				Effect.as({ applied: description }),
+			),
+		SetValue: ({ key, value, force }) =>
+			Effect.gen(function* () {
+				if (HashSet.has(yield* Ref.get(locked), key) && force !== true)
+					return yield* Effect.fail({
+						error: "The value " + key + " is locked.",
+					})
+				yield* Ref.update(values, HashMap.set(key, value))
+				return { key, value }
+			}),
+		GetValue: ({ key }) =>
+			Effect.map(Ref.get(values), (current) => ({
+				value: Option.getOrNull(HashMap.get(current, key)),
+			})),
+	})
+	const consolidations = yield* Ref.make(0)
+	const model = yield* LanguageModel.make({
+		generateText: () =>
+			Ref.update(consolidations, (count) => count + 1).pipe(
+				Effect.as([Response.makePart("text", { text: '{"changes":[]}' })]),
+			),
+		streamText: ({ prompt }) =>
+			Stream.suspend((): Stream.Stream<Response.StreamPartEncoded> => {
+				const found = Arr.findLastIndex(prompt.content, isUser)
+				const lastUser = Option.getOrElse(found, () => -1)
+				const input = pipe(
+					found,
+					Option.flatMap((index) => Arr.get(prompt.content, index)),
+					Option.filter(isUser),
+					Option.map((message) =>
+						pipe(
+							message.content,
+							Arr.filter((part) => part.type === "text"),
+							Arr.map((part) => part.text),
+							Arr.join(""),
+						),
+					),
+					Option.getOrElse(() => ""),
+				)
+				const answered = Arr.some(
+					Arr.drop(prompt.content, lastUser + 1),
+					(message) =>
+						message.role === "tool" &&
+						Arr.some(message.content, (part) => part.type === "tool-result"),
+				)
+				if (Str.includes("approval")(Str.toLowerCase(input)) && !answered)
+					return Stream.make(
+						Response.makePart("tool-call", {
+							id: "fixture-call-" + lastUser,
+							name: "ConfirmChange",
+							params: { description: "Write the requested result" },
+							providerExecuted: false,
+						}),
+						Response.makePart("finish", { reason: "tool-calls", usage }),
+					)
+				const chunks = Stream.fromIterable([
+					"## A useful result\n\n",
+					"Working through your request. ",
+					"Progress stays with your Chat.\n\n",
+					"- Evidence is recorded.\n- You can keep building from here.",
+				]).pipe(
+					Stream.mapEffect((text) =>
+						Effect.sleep(
+							Str.includes("slow")(input) ? "2 seconds" : "100 millis",
+						).pipe(
+							Effect.as(
+								Response.makePart("text-delta", { id: "text", delta: text }),
+							),
+						),
+					),
+				)
+				return Stream.make(
+					Response.makePart("text-start", { id: "text" }),
+				).pipe(
+					Stream.concat(chunks),
+					Stream.concat(
+						Stream.make(
+							Response.makePart("text-end", { id: "text" }),
+							Response.makePart("finish", { reason: "stop", usage }),
+						),
+					),
+				)
 			}),
 	})
-	const usage = {
-		inputTokens: { total: 12, uncached: 12, cacheRead: 0, cacheWrite: 0 },
-		outputTokens: { total: 6, text: 6, reasoning: 0 },
-	}
-	let consolidations = 0
-	const model = await Effect.runPromise(
-		LanguageModel.make({
-			generateText: () =>
-				Effect.sync(() => {
-					consolidations++
-					return [Response.makePart("text", { text: '{"changes":[]}' })]
-				}),
-			streamText: ({ prompt }) =>
-				Stream.suspend((): Stream.Stream<Response.StreamPartEncoded> => {
-					const lastUser = prompt.content.findLastIndex(
-						(message) => message.role === "user",
-					)
-					const message = prompt.content[lastUser]
-					const input = Match.value(message).pipe(
-						Match.when({ role: "user" }, (message) =>
-							message.content
-								.filter((part) => part.type === "text")
-								.map((part) => part.text)
-								.join(""),
-						),
-						Match.orElse(() => "" as const),
-					)
-					const answered = prompt.content
-						.slice(lastUser + 1)
-						.some(
-							(message) =>
-								message.role === "tool" &&
-								message.content.some((part) => part.type === "tool-result"),
-						)
-					if (input.toLowerCase().includes("approval") && !answered)
-						return Stream.make(
-							Response.makePart("tool-call", {
-								id: "fixture-call-" + lastUser,
-								name: "ConfirmChange",
-								params: { description: "Write the requested result" },
-								providerExecuted: false,
-							}),
-							Response.makePart("finish", { reason: "tool-calls", usage }),
-						)
-					const chunks = Stream.fromIterable([
-						"## A useful result\n\n",
-						"Working through your request. ",
-						"Progress stays with your Session.\n\n",
-						"- Evidence is recorded.\n- You can keep building from this Version.",
-					]).pipe(
-						Stream.mapEffect((text) =>
-							Effect.sleep(
-								input.includes("slow") ? "2 seconds" : "100 millis",
-							).pipe(
-								Effect.as(
-									Response.makePart("text-delta", { id: "text", delta: text }),
-								),
-							),
-						),
-					)
-					return Stream.make(
-						Response.makePart("text-start", { id: "text" }),
-					).pipe(
-						Stream.concat(chunks),
-						Stream.concat(
-							Stream.make(
-								Response.makePart("text-end", { id: "text" }),
-								Response.makePart("finish", { reason: "stop", usage }),
-							),
-						),
-					)
-				}),
-		}),
-	)
-	const provider = Provider.Id.make("fixture")
+	const provider_ = Provider.Id.make("fixture")
 	const modelId = Model.Id.make("fixture-model")
 	const catalog = {
-		providers: [{ id: provider, name: "Test provider" }],
+		providers: [{ id: provider_, name: "Test provider" }],
 		models: [
 			Config.Model.make({
-				provider,
+				provider: provider_,
 				id: modelId,
 				name: "Fixture model",
 				description: "A model with fixed answers for browser integration tests",
@@ -259,28 +397,21 @@ export async function start(options: {
 		],
 	}
 	const configuration = {
-		...(options.execution === undefined
-			? {}
-			: { execution: options.execution }),
 		...(options.platformAdmins === undefined
 			? {}
 			: { platformAdmins: options.platformAdmins }),
-		...(options.domainControl === undefined
-			? {}
-			: { domainControl: options.domainControl }),
-		...(options.appNetwork === undefined
-			? {}
-			: { appNetwork: options.appNetwork }),
-		...(options.indexPublicNetwork === undefined
-			? {}
-			: { indexPublicNetwork: options.indexPublicNetwork }),
 		...(options.indexWork === undefined
 			? {}
 			: { indexWork: options.indexWork }),
-		...(options.discovery === undefined
+		...(options.triggerIntervalMs === undefined
 			? {}
-			: { discovery: options.discovery }),
-		...(options.appProbe === undefined ? {} : { appProbe: options.appProbe }),
+			: { triggers: { interval: options.triggerIntervalMs } }),
+		...(options.channelIntervalMs === undefined
+			? {}
+			: { channels: { interval: options.channelIntervalMs } }),
+		...(options.fileIntervalMs === undefined
+			? {}
+			: { files: { interval: options.fileIntervalMs } }),
 		host: "127.0.0.1",
 		port: options.port ?? 0,
 		databaseUrl: Redacted.make(database.url),
@@ -289,7 +420,6 @@ export async function start(options: {
 				"1111111111111111111111111111111111111111111111111111111111111111",
 		),
 		auth: {
-			...options.authCompatibility,
 			publicOrigin: options.publicOrigin,
 			issuer,
 			clientId: "browser-fixture",
@@ -298,161 +428,261 @@ export async function start(options: {
 				"IntegrationSecretForBetterAuthMustStayStable123456",
 			),
 		},
-		sessions: {
-			runtime: { toolkit },
-			layerExecution: () => handlers,
-			...(options.nativeModels === true
-				? {}
-				: {
-						modelCatalog: Effect.succeed(catalog),
-						defaults: Effect.succeed({
-							model: Config.Selection.make({ provider, model: modelId }),
-						}),
-						resolveModel: () => Effect.succeed(options.model ?? model),
+		// Every organization can use the fixture model, and each new Chat gets it.
+		...(options.registryModels === true
+			? {}
+			: {
+					builtinModels: {
+						...catalog,
+						resolve: () => Effect.succeed(options.model ?? model),
+					},
+					defaultModel: Config.Selection.make({
+						provider: provider_,
+						model: modelId,
 					}),
-		},
+				}),
 	}
-	const migration = ManagedRuntime.make(
-		DatabasePostgres.layer(configuration).pipe(
-			Layer.provide(NodeServices.layer),
+	// The migration has its own database pool. It closes after the migration.
+	yield* DatabasePostgres.migrate.pipe(
+		Effect.provide(
+			DatabasePostgres.layer(configuration).pipe(
+				Layer.provide(NodeServices.layer),
+			),
 		),
 	)
-	try {
-		await migration.runPromise(DatabasePostgres.migrate)
-		const makeRuntime = () =>
-			ManagedRuntime.make(
-				Server.layerFixed(configuration).pipe(
-					Layer.provide(
-						Layer.mergeAll(
-							handlers,
-							Layer.succeed(FetchHttpClient.Fetch, providerFetch),
-							Layer.succeed(LanguageModel.LanguageModel, model),
-						),
-					),
-				),
-			)
-		let runtime = makeRuntime()
-		let address = await runtime.runPromise(
-			Effect.map(HttpServer.HttpServer, (server) =>
-				HttpServer.formatAddress(server.address),
+	const platformFetch = options.platformFetch
+	/** The services from outside of OpenBot: the fakes of the test, or the real ones. */
+	const outside = Layer.mergeAll(
+		options.computerDrivers ?? Drivers.layer,
+		options.liveBackends ?? OpenBot.layerLiveBackends,
+		options.vaultReaders ?? VaultReaders.layer,
+		options.appProbe ?? Probe.layer,
+		options.appNetwork ?? AppHost.layerNetwork,
+		options.domainControl ?? DomainControl.layer,
+		options.indexPublicNetwork ?? OutboundPolicy.layerPublicNetwork,
+		options.discovery ?? AppDiscovery.layerPublic,
+	)
+	const serverLayer = Server.layerFixed(configuration).pipe(
+		Layer.provide(
+			Layer.merge(
+				outside,
+				HostTools.layer({ toolkit, handlers: () => handlers }),
 			),
+		),
+		Layer.provideMerge(OpenBot.layerShared(configuration)),
+		// The HTTP calls of the server go to the test identity provider or to `platformFetch`.
+		Layer.provide(FetchHttpClient.layer),
+		Layer.provide(
+			Layer.succeed(
+				FetchHttpClient.Fetch,
+				toFetch((request) =>
+					!isIssuer(request.url) && platformFetch !== undefined
+						? platformFetch(request)
+						: provider(request),
+				),
+			),
+		),
+	)
+	const scope = yield* Effect.scope
+	/**
+	 * Starts the server in its own scope, so that a restart can stop it alone.
+	 * A new memo map builds every layer again, as in a new process.
+	 */
+	const launch = Effect.gen(function* () {
+		const serverScope = yield* Scope.fork(scope)
+		const services = yield* Layer.buildWithMemoMap(
+			serverLayer,
+			yield* Layer.makeMemoMap,
+			serverScope,
 		)
-		if (options.appRestrictions !== undefined) {
-			const restrictions = options.appRestrictions
-			await runtime.runPromise(
-				Effect.gen(function* () {
-					const settings = yield* Settings
-					const current = yield* settings.platform
-					if (Option.isNone(current)) return
-					yield* settings.updatePlatform(current.value.version, (document) =>
-						Effect.succeed({ ...document, appRestrictions: restrictions }),
-					)
-				}),
-			)
+		return {
+			scope: serverScope,
+			services,
+			address: HttpServer.formatAddress(
+				Context.get(services, HttpServer.HttpServer).address,
+			),
 		}
-		/** Organizations that already have the test settings. */
-		const prepared = new Set<string>()
-		/** Give a new organization the test settings, and the shared domain. */
-		const prepare = (organizationId: string) =>
-			runtime.runPromise(
-				Effect.gen(function* () {
-					if (prepared.has(organizationId)) return
-					prepared.add(organizationId)
-					const settings = yield* Settings
-					const current = yield* settings.organization(organizationId)
-					yield* settings.updateOrganization(
-						organizationId,
-						current.version,
-						(document) =>
-							Effect.succeed({
-								...document,
-								...(options.appReadRules === undefined
-									? {}
-									: { appReadRules: options.appReadRules }),
-								...(options.agents?.memory === undefined
-									? {}
-									: { agentMemory: options.agents.memory }),
-								...(options.agents?.requestTimeoutMs === undefined
-									? {}
-									: { requestTimeoutMs: options.agents.requestTimeoutMs }),
-							}),
-					)
-					if (options.sharedDomain === false || prepared.size > 1) return
-					const db = yield* makeWithDefaults()
-					yield* db.insert(organizationDomains).values({
-						organizationId,
-						domain: "example.com",
-						token: "openbot-verification=test",
-						verifiedAt: 0,
-						createdAt: 0,
-					})
-				}),
-			)
-		const login = async (subject: string, returnTo?: string) => {
-			const start = await fetch(address + "/auth/sign-in/social", {
-				method: "POST",
-				headers: {
-					"content-type": "application/json",
-					origin: options.publicOrigin,
-				},
-				body: JSON.stringify({
-					provider: options.authCompatibility?.providerId ?? "oidc",
+	})
+	const server = yield* SynchronizedRef.make(yield* launch)
+	/** Runs an Effect with the services of the running server. */
+	const run = <A, E>(
+		effect: Effect.Effect<A, E, Layer.Success<typeof serverLayer>>,
+	) =>
+		Effect.flatMap(SynchronizedRef.get(server), (current) =>
+			Effect.provideContext(effect, current.services),
+		)
+	const address = Effect.map(
+		SynchronizedRef.get(server),
+		(current) => current.address,
+	)
+	/** Changes the platform settings, when the platform has them. */
+	const updatePlatform = (
+		change: (document: PlatformDocument) => PlatformDocument,
+	) =>
+		run(
+			Effect.gen(function* () {
+				const settings = yield* Settings
+				const current = yield* settings.platform
+				if (Option.isNone(current)) return
+				yield* settings.updatePlatform(current.value.version, (document) =>
+					Effect.succeed(change(document)),
+				)
+			}),
+		)
+	if (options.appRestrictions !== undefined) {
+		const restrictions = options.appRestrictions
+		yield* updatePlatform((document) => ({
+			...document,
+			appRestrictions: restrictions,
+		}))
+	}
+	if (options.codeMode !== undefined) {
+		const codeMode = options.codeMode
+		yield* updatePlatform((document) => ({ ...document, codeMode }))
+	}
+	/** Organizations that already have the test settings. */
+	const prepared = yield* Ref.make(HashSet.empty<string>())
+	/** Give a new organization the test settings, and the shared domain. */
+	const prepare = (organizationId: string) =>
+		run(
+			Effect.gen(function* () {
+				const before = yield* Ref.getAndUpdate(
+					prepared,
+					HashSet.add(organizationId),
+				)
+				if (HashSet.has(before, organizationId)) return
+				const settings = yield* Settings
+				const current = yield* settings.organization(organizationId)
+				yield* settings.updateOrganization(
+					organizationId,
+					current.version,
+					(document) =>
+						Effect.succeed({
+							...document,
+							...(options.appReadRules === undefined
+								? {}
+								: { appReadRules: options.appReadRules }),
+							...(options.bots?.memory === undefined
+								? {}
+								: { botMemory: options.bots.memory }),
+							...(options.bots?.requestTimeoutMs === undefined
+								? {}
+								: { requestTimeoutMs: options.bots.requestTimeoutMs }),
+						}),
+				)
+				if (options.sharedDomain === false || HashSet.size(before) > 0) return
+				const db = yield* Db.make
+				yield* db.insert(organizationDomains).values({
+					organizationId,
+					domain: "example.com",
+					token: "openbot-verification=test",
+					verifiedAt: 0,
+					createdAt: 0,
+				})
+			}),
+		)
+	/** Calls the server as a signed-in browser. */
+	const withCookie = Effect.map(address, (current) =>
+		Caller.withCookie({
+			address: current,
+			publicOrigin: options.publicOrigin,
+		}),
+	)
+	/** Makes an organization for a new account through the API. */
+	const makeOrganization = Effect.fn("BrowserHost.makeOrganization")(function* (
+		session: Redacted.Redacted<string>,
+		subject: string,
+	) {
+		const call = yield* withCookie
+		const created = yield* call(session, "/v1/organizations", "POST", {
+			name: subject,
+		})
+		if (created.status < 200 || created.status >= 300)
+			return yield* LoginFailed.make({
+				subject,
+				message:
+					"The test account cannot make an organization: " +
+					created.status +
+					" " +
+					(yield* created.text),
+			})
+	})
+	/**
+	 * Signs in a test account through the OIDC flow of the server. A new
+	 * account makes its own organization, unless `organization` is false.
+	 */
+	const login = Effect.fn("BrowserHost.login")(
+		function* (
+			subject: string,
+			returnTo?: string,
+			loginOptions: { readonly organization?: boolean } = {},
+		) {
+			const current = yield* address
+			const started = yield* HttpClientRequest.post(
+				current + "/auth/sign-in/social",
+				{ headers: { origin: options.publicOrigin } },
+			).pipe(
+				HttpClientRequest.bodyJson({
+					provider: "oidc",
 					callbackURL: options.publicOrigin + (returnTo ?? "/"),
 					disableRedirect: true,
 				}),
-			})
+				Effect.flatMap(client.execute),
+			)
 			const authorization = new URL(
-				((await start.json()) as { readonly url: string }).url,
+				(yield* HttpClientResponse.schemaBodyJson(SignInStart)(started)).url,
 			)
-			const browser = start.headers
-				.getSetCookie()
-				.map((cookie) => cookie.split(";")[0])
-				.join("; ")
-			const code = JSON.stringify({
+			const code = yield* Schema.encodeEffect(Code)({
 				subject,
-				nonce: authorization.searchParams.get("nonce"),
+				nonce: authorization.searchParams.get("nonce") ?? "",
 			})
-			const callback = await fetch(
-				address +
-					(options.authCompatibility?.callbackPath ?? "/auth/callback/oidc") +
-					"?" +
-					new URLSearchParams({
-						state: authorization.searchParams.get("state") ?? "",
-						iss: issuer,
-						code,
+			const callback = yield* client
+				.execute(
+					HttpClientRequest.get(
+						current +
+							"/auth/callback/oidc?" +
+							new URLSearchParams({
+								state: authorization.searchParams.get("state") ?? "",
+								iss: issuer,
+								code,
+							}),
+						{
+							headers: { cookie: Cookies.toCookieHeader(started.cookies) },
+						},
+					),
+				)
+				.pipe(
+					Effect.provideService(FetchHttpClient.RequestInit, {
+						redirect: "manual",
 					}),
-				{ headers: { cookie: browser }, redirect: "manual" },
-			)
-			const cookie =
-				callback.headers
-					.getSetCookie()
-					.find((value) =>
-						value.startsWith(
-							(options.authCompatibility?.sessionCookie ??
-								AuthApi.SessionCookie) + "=",
-						),
-					)
-					?.split(";")[0] ?? ""
+				)
 			const session = Redacted.make(
-				decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1)),
+				Option.getOrElse(
+					Cookies.getValue(callback.cookies, AuthApi.SessionCookie),
+					() => "",
+				),
 			)
-			const info = await runtime.runPromise(
+			const resolve = run(
 				Effect.flatMap(Auth.Auth, (auth) => auth.resolveSession(session)),
 			)
-			const active = info.memberships.filter(
-				(entry) => entry.status === "active",
+			const first = yield* resolve
+			// A new account has no organization. Like a person, it makes one for itself.
+			const needsOrganization =
+				Arr.isReadonlyArrayEmpty(first.memberships) &&
+				loginOptions.organization !== false
+			if (needsOrganization) yield* makeOrganization(session, subject)
+			const info = needsOrganization ? yield* resolve : first
+			const organizationId = pipe(
+				Arr.head(info.memberships),
+				Option.map((membership) => membership.organizationId),
+				Option.getOrElse(() => ""),
 			)
-			const organizationId =
-				options.organizationId === undefined
-					? active.length === 1
-						? active[0]?.organizationId
-						: undefined
-					: active.find(
-							(entry) => entry.organizationId === options.organizationId,
-						)?.organizationId
-			if (organizationId === undefined)
-				throw new Error("The test account has no organization")
-			await prepare(organizationId)
+			if (organizationId === "" && loginOptions.organization !== false)
+				return yield* LoginFailed.make({
+					subject,
+					message: "The test account has no organization",
+				})
+			if (organizationId !== "") yield* prepare(organizationId)
 			return {
 				session,
 				identity: {
@@ -461,54 +691,51 @@ export async function start(options: {
 					organizationId,
 				},
 				memberships: info.memberships,
-				returnLocation: callback.headers.get("location"),
+				returnLocation: Headers.get(callback.headers, "location"),
 			}
-		}
-		return {
-			databaseUrl: database.url,
-			get runtime() {
-				return runtime
-			},
-			get address() {
-				return address
-			},
-			restart: async () => {
-				await runtime.dispose()
-				runtime = makeRuntime()
-				address = await runtime.runPromise(
-					Effect.map(HttpServer.HttpServer, (server) =>
-						HttpServer.formatAddress(server.address),
-					),
-				)
-			},
-			login,
-			toolCalls: () => toolCalls,
-			consolidations: () => consolidations,
-			close: async () => {
-				await runtime.dispose()
-				providerNetwork.mock.restore()
-				await migration.dispose()
-				await database.close()
-			},
-		}
-	} catch (error) {
-		providerNetwork.mock.restore()
-		await migration.dispose()
-		await database.close()
-		throw error
-	}
-}
-if (import.meta.main) {
-	const host = await start({
-		publicOrigin: "https://localhost:5173",
-		port: 3000,
-	})
-	process.stdout.write(
-		"Browser test OpenBot is ready on http://127.0.0.1:3000\n",
+		},
+		Effect.provideService(HttpClient.HttpClient, client),
 	)
-	const close = () => {
-		void host.close().then(() => process.exit(0))
+	/** Sets up a default Bot for the person, when they have none. */
+	const defaultBot = (session: Redacted.Redacted<string>) =>
+		Effect.flatMap(withCookie, (call) =>
+			DefaultBot.ensure((path, method, payload) =>
+				call(session, path, method, payload),
+			),
+		).pipe(Effect.provideService(HttpClient.HttpClient, client))
+	return {
+		/** The URL of the test database. */
+		databaseUrl: database.url,
+		/** The address of the running server, such as http://127.0.0.1:4000. A restart changes it. */
+		address,
+		run,
+		/** Stops the server and starts a new one on the same database. */
+		restart: SynchronizedRef.updateEffect(server, (current) =>
+			Scope.close(current.scope, Exit.void).pipe(Effect.andThen(launch)),
+		),
+		login,
+		defaultBot,
+		/** How many times the ConfirmChange tool ran. */
+		toolCalls: Ref.get(toolCalls),
+		/** The named values of the SetValue and GetValue tools. */
+		values,
+		/** The names of values that only a forced SetValue call can change. */
+		locked,
+		/** How many times the fixture model gave a whole text answer. */
+		consolidations: Ref.get(consolidations),
 	}
-	process.once("SIGINT", close)
-	process.once("SIGTERM", close)
+})
+
+/** A started test host. */
+export type Host = Effect.Success<ReturnType<typeof start>>
+
+// Run alone, the file starts a host on port 3000 and keeps it until the process stops.
+if (import.meta.main) {
+	const host = Layer.effectDiscard(
+		Effect.andThen(
+			start({ publicOrigin: "https://localhost:5173", port: 3000 }),
+			Console.log("Browser test OpenBot is ready on http://127.0.0.1:3000"),
+		),
+	)
+	NodeRuntime.runMain(Layer.launch(host.pipe(Layer.provide(layerPlatform))))
 }

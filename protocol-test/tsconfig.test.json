@@ -6,5 +6,5 @@
 		"incremental": false,
 		"allowImportingTsExtensions": true
 	},
-	"include": ["test", "src"]
+	"include": ["test", "src", "vitest.config.ts"]
 }

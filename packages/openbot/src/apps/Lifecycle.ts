@@ -1,10 +1,20 @@
 import {
 	ConnectionsApi as Api,
+	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 	Identity,
 } from "@openbot-build/api"
-import { App, Client, Discovery } from "@openbot-build/protocol"
 import {
+	App,
+	Authorization,
+	Client,
+	Discovery,
+	Network,
+	Store,
+} from "@openbot-build/protocol"
+import {
+	Array as Arr,
+	Cause,
 	Clock,
 	Context,
 	Effect,
@@ -12,10 +22,12 @@ import {
 	Match,
 	Option,
 	Redacted,
-	Record,
+	Record as Rec,
 	Schema,
+	String as Str,
 } from "effect"
 import * as ManualConnection from "./ManualConnection.ts"
+import * as DiscoveryService from "./Discovery.ts"
 import { AppHost } from "./AppHost.ts"
 import { Connections, type Error as ConnectionError } from "./Connections.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
@@ -23,10 +35,12 @@ import { Capabilities } from "./Capabilities.ts"
 import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey } from "./StoredConnections.ts"
+import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
+import { jsonObject } from "./AppResults.ts"
 
 export type Error = ConnectionError | Api.ConnectionCleanupPending
 /** Private lifecycle operations need the identity of the current request. @effect-expect-leaking Identity */
@@ -60,41 +74,85 @@ const metadataPolicy = Client.InvocationPolicy.of({
 		Schema.is(Client.ListAction)(invocation.action)
 			? Effect.void
 			: Effect.fail(
-					new Client.PermissionDenied({
+					Client.PermissionDenied.make({
 						action: invocation.action,
 						target: invocation.target,
 					}),
 				),
 })
-const conflict = () =>
-	Api.ConnectionConflict.make({
-		reason: "RevisionChanged",
-		message: "This connection changed. Refresh it before continuing.",
-	})
-const configuration = () =>
+const invalidConfiguration = () =>
 	Api.ConnectionConfigurationInvalid.make({
 		keys: [],
 		message:
 			"Review the current App declaration and configuration before continuing.",
 	})
-const hostFailure = (error: { readonly _tag: string }): Error =>
-	Match.value(error).pipe(
-		Match.when(Match.instanceOf(App.CleanupPending), (pending) =>
-			Api.ConnectionCleanupPending.make({
-				connectionId: pending.key.connectionId,
-				stage: pending.stage,
-				message:
-					"This connection is stopped. Retry cleanup to finish removing it.",
-			}),
-		),
-		Match.when({ _tag: "AppError" }, configuration),
-		Match.when({ _tag: "DiscoveryError" }, configuration),
-		Match.orElse(() => ExperienceStorageUnavailable.make({})),
-	)
-const json = (value: unknown) =>
-	Schema.decodeEffect(Schema.fromJsonString(Schema.JsonObject))(
-		JSON.stringify(value),
-	)
+/** The failures of the App host steps that remove and revalidate a connection. */
+type HostFailure =
+	| App.CleanupPending
+	| App.AppError
+	| Store.StoreError
+	| Discovery.Error
+	| Authorization.AuthorizationError
+	| Network.NetworkError
+	| Api.ConnectionConfigurationInvalid
+/**
+ * Gives each failure of an App host step its meaning for the caller. A
+ * declaration or configuration that does not pass is invalid, and a removed
+ * connection is not found. Only the other failures become
+ * `ExperienceStorageUnavailable`. This logs every failure that it replaces.
+ */
+export const hostFailure =
+	(connectionId: string) =>
+	(error: HostFailure): Effect.Effect<never, Error> =>
+		Match.value(error).pipe(
+			Match.tag("CleanupPending", (pending) =>
+				Effect.fail(
+					Api.ConnectionCleanupPending.make({
+						connectionId: Api.ConnectionId.make(pending.key.connectionId),
+						stage: pending.stage,
+						message:
+							"This connection is stopped. Retry cleanup to finish removing it.",
+					}),
+				),
+			),
+			Match.tag("ConnectionConfigurationInvalid", (invalid) =>
+				Effect.fail(invalid),
+			),
+			Match.tag("StoreError", (store) =>
+				store.reason === "Missing"
+					? Effect.fail(ExperienceNotFound.make({ id: connectionId }))
+					: Effect.fail(store).pipe(
+							Failures.replace(
+								"OpenBot could not finish an App connection step.",
+								() => ExperienceStorageUnavailable.make({}),
+							),
+						),
+			),
+			Match.tag(
+				"AppError",
+				"DiscoveryError",
+				"InvalidDocument",
+				"IncompatibleCard",
+				"InvalidLink",
+				"SchemaError",
+				(failure) =>
+					Effect.fail(failure).pipe(
+						Failures.replace(
+							"The App declaration or configuration did not pass an App connection step.",
+							invalidConfiguration,
+						),
+					),
+			),
+			Match.tag("NetworkError", "AuthorizationError", (failure) =>
+				Effect.fail(failure).pipe(
+					Failures.replace(
+						"OpenBot could not finish an App connection step.",
+						() => ExperienceStorageUnavailable.make({}),
+					),
+				),
+			),
+			Match.exhaustive,
+		)
 
 export const make: Effect.Effect<
 	typeof Lifecycle.Service,
@@ -113,7 +171,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const capabilities = yield* Capabilities
 	const connections = yield* Connections
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const factory = yield* AppHost
 	const locks = yield* ConnectionLocks
@@ -125,7 +183,7 @@ export const make: Effect.Effect<
 	const key = (id: string) =>
 		Effect.map(Identity, (identity) => ({
 			owner: ownerKey(identity),
-			connectionId: id,
+			connectionId: Api.ConnectionId.make(id),
 		}))
 	return Lifecycle.of({
 		verify: Effect.fn("Apps.verifyConnection")(function* (id) {
@@ -145,13 +203,13 @@ export const make: Effect.Effect<
 					})
 					return {
 						protocolVersion: opened.client.protocolVersion,
-						tools: yield* Effect.forEach(opened.tools, json),
-						resources: yield* Effect.forEach(opened.resources, json),
+						tools: yield* Effect.forEach(opened.tools, jsonObject),
+						resources: yield* Effect.forEach(opened.resources, jsonObject),
 						resourceTemplates: yield* Effect.forEach(
 							opened.resourceTemplates,
-							json,
+							jsonObject,
 						),
-						prompts: yield* Effect.forEach(opened.prompts, json),
+						prompts: yield* Effect.forEach(opened.prompts, jsonObject),
 					}
 				}),
 			).pipe(Effect.result)
@@ -239,6 +297,13 @@ export const make: Effect.Effect<
 									}) as const,
 							),
 						)
+						// A needed authorization is expected. Any other failure is saved
+						// with a fixed text, so the log keeps the reason.
+						if (verification._tag === "ConnectionFailed")
+							yield* Effect.logWarning(
+								"OpenBot could not check an App connection.",
+								Cause.fail(failure),
+							).pipe(Effect.annotateLogs({ connectionId: id }))
 						yield* StoredConnections.update(
 							db,
 							secrets,
@@ -266,18 +331,27 @@ export const make: Effect.Effect<
 				.refreshAuthorization(owned)
 				.pipe(
 					Effect.asVoid,
-					Effect.catch(() =>
-						StoredConnections.update(
-							db,
-							secrets,
-							owned.owner,
-							id,
-							(row) => ({
-								...row,
-								verification: { _tag: "AuthorizationExpired" },
-							}),
-							stored.revision,
-						).pipe(Effect.asVoid),
+					Effect.catch((error) =>
+						Effect.logWarning(
+							"OpenBot could not refresh an App authorization. It saves the authorization as expired.",
+							Cause.fail(error),
+						).pipe(
+							Effect.annotateLogs({ connectionId: id }),
+							Effect.andThen(
+								StoredConnections.update(
+									db,
+									secrets,
+									owned.owner,
+									id,
+									(row) => ({
+										...row,
+										verification: { _tag: "AuthorizationExpired" },
+									}),
+									stored.revision,
+								),
+							),
+							Effect.asVoid,
+						),
 					),
 				)
 			return yield* connections.getConnection(id)
@@ -300,27 +374,41 @@ export const make: Effect.Effect<
 							stored.connection.cardUrl,
 						)
 						if (
-							!app.sources.some((source) => source.role === "manual") ||
+							!Arr.some(app.sources, (source) => source.role === "manual") ||
 							stored.revision !== valid.revision
 						)
-							return yield* conflict()
+							return yield* Api.ConnectionConflict.make({
+								reason: "RevisionChanged",
+								message:
+									"This connection changed. Refresh it before continuing.",
+							})
 						if (stored.connection.state === "CleanupPending")
-							return yield* configuration()
+							return yield* Api.ConnectionConfigurationInvalid.make({
+								keys: [],
+								message:
+									"Review the current App declaration and configuration before continuing.",
+							})
 						yield* governance.check(valid.url)
 						const oldHeaders = Redacted.value(stored.connection.headers)
 						const headers = yield* Effect.forEach(
-							Record.toEntries(valid.headers),
+							Rec.toEntries(valid.headers),
 							([name, value]) => {
 								const next = value ?? oldHeaders[name]
 								return next === undefined
-									? Effect.fail(configuration())
+									? Effect.fail(
+											Api.ConnectionConfigurationInvalid.make({
+												keys: [`header:${name}`],
+												message:
+													"Give a value for this header. It has no saved value.",
+											}),
+										)
 									: Effect.succeed([name, next] as const)
 							},
-						).pipe(Effect.map(Record.fromEntries))
+						).pipe(Effect.map(Rec.fromEntries))
 						const configured = yield* ManualConnection.configure(owned.owner)({
 							...valid,
 							headers,
-							id,
+							id: Api.ConnectionId.make(id),
 						})
 						const protection = yield* probe.check(configured)
 						yield* scopes.close(owned)
@@ -331,7 +419,7 @@ export const make: Effect.Effect<
 							id,
 							(row) => ({
 								...row,
-								name: valid.name.trim(),
+								name: Str.trim(valid.name),
 								verification: null,
 								connection: {
 									...configured.connection,
@@ -366,7 +454,7 @@ export const make: Effect.Effect<
 					)
 					if (stored.connection.state === "CleanupPending")
 						return yield* Api.ConnectionCleanupPending.make({
-							connectionId: id,
+							connectionId: Api.ConnectionId.make(id),
 							stage: "Connection",
 							message: "Finish cleanup before changing this connection.",
 						})
@@ -380,7 +468,7 @@ export const make: Effect.Effect<
 						id,
 						(row) => ({
 							...row,
-							name: valid.name.trim(),
+							name: Str.trim(valid.name),
 							verification: needsReview ? { _tag: "NeedsRevalidation" } : null,
 							connection: {
 								...row.connection,
@@ -404,7 +492,7 @@ export const make: Effect.Effect<
 			yield* factory
 				.bind(owned.owner, metadataPolicy)
 				.remove(owned)
-				.pipe(Effect.mapError(hostFailure))
+				.pipe(Effect.catch(hostFailure(id)))
 		}),
 		revalidate: Effect.fn("Apps.revalidateConnection")(function* (id, input) {
 			const owned = yield* key(id)
@@ -417,26 +505,40 @@ export const make: Effect.Effect<
 						owned.owner,
 						id,
 					)
-					if (stored.revision !== input.revision) return yield* conflict()
+					if (stored.revision !== input.revision)
+						return yield* Api.ConnectionConflict.make({
+							reason: "RevisionChanged",
+							message: "This connection changed. Refresh it before continuing.",
+						})
 					yield* governance.check(stored.connection.cardUrl)
 					const draft = yield* connections.getConnectionDraft(input.draftId)
-					const candidate = Match.value(draft.discovery).pipe(
-						Match.tag("Single", ({ candidate }) => candidate),
-						Match.tag("Multiple", ({ candidates }) =>
-							candidates.find(
-								(value) => value.cardUrl === stored.connection.cardUrl,
+					const candidate = yield* Arr.findFirst(
+						Match.value(draft.discovery).pipe(
+							Match.tag("Single", ({ candidate }) => [candidate]),
+							Match.tag("Multiple", ({ candidates }) => candidates),
+							Match.exhaustive,
+						),
+						(value) => value.cardUrl === stored.connection.cardUrl,
+					).pipe(
+						Effect.fromOption(() =>
+							Api.ConnectionConfigurationInvalid.make({
+								keys: [],
+								message:
+									"Review the current App declaration and configuration before continuing.",
+							}),
+						),
+					)
+					const current = yield* discovery.refreshCard(candidate.cardUrl).pipe(
+						Effect.tapErrorTag("SchemaError", (error) =>
+							Effect.logWarning(
+								"OpenBot could not read the App card.",
+								Cause.fail(error),
 							),
 						),
-						Match.exhaustive,
+						Effect.mapError((error) =>
+							DiscoveryService.failure(candidate.cardUrl, error),
+						),
 					)
-					if (
-						candidate === undefined ||
-						candidate.cardUrl !== stored.connection.cardUrl
-					)
-						return yield* configuration()
-					const current = yield* discovery
-						.refreshCard(candidate.cardUrl)
-						.pipe(Effect.mapError(configuration))
 					if (
 						rules.compare({ previous: candidate, current })._tag ===
 						"NeedsRevalidation"
@@ -452,13 +554,28 @@ export const make: Effect.Effect<
 							index: input.remoteIndex,
 							values: input.values,
 						})
-						.pipe(Effect.mapError(configuration))
+						.pipe(
+							// The values come from the caller, so each failure here is a bad input.
+							Effect.catchTag(["DiscoveryError", "SchemaError"], (error) =>
+								Effect.fail(
+									Api.ConnectionConfigurationInvalid.make({
+										keys: DiscoveryService.configurationKeys(
+											error,
+											current,
+											input.remoteIndex,
+										),
+										message:
+											"Complete the required configuration for the selected endpoint.",
+									}),
+								),
+							),
+						)
 					const protection = yield* probe.check({
-						app: {
+						app: Store.AppRecord.make({
 							cardUrl: current.cardUrl,
 							card: current.card,
 							sources: current.sources,
-						},
+						}),
 						connection: {
 							...stored.connection,
 							state: "Enabled",
@@ -487,7 +604,7 @@ export const make: Effect.Effect<
 												: attested.resource.authorization_servers[0]
 											: "",
 									),
-									Effect.mapError(hostFailure),
+									Effect.catch(hostFailure(id)),
 								)
 							: ""
 					const authorization = protection.requiresAuthorization
@@ -502,7 +619,7 @@ export const make: Effect.Effect<
 							authorization,
 							confirmed: true,
 						})
-						.pipe(Effect.mapError(hostFailure))
+						.pipe(Effect.catch(hostFailure(id)))
 					return yield* connections.getConnection(id)
 				}),
 			)

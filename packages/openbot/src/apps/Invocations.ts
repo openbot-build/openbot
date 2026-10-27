@@ -1,14 +1,22 @@
-import * as OwnedWrites from "../execution/OwnedWrites.ts"
-import * as InstanceWork from "../execution/InstanceWork.ts"
-import { createHash } from "node:crypto"
 import {
 	AppExecution,
+	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	SessionConflict,
+	ChatConflict,
 } from "@openbot-build/api"
-import { Context, Effect, Layer, Match, Option, Schema } from "effect"
+import {
+	Cause,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Match,
+	Option,
+	Schema,
+} from "effect"
+import { Hex } from "effect/encoding"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { and, eq, inArray } from "drizzle-orm"
 import { appInvocations } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
@@ -16,12 +24,13 @@ import * as StoredConnections from "./StoredConnections.ts"
 import { organizationOf } from "./StoredConnections.ts"
 import * as StoredInvocations from "./StoredInvocations.ts"
 import type { Error } from "./StoredInvocations.ts"
+import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 export interface Position {
 	readonly owner: string
-	readonly session: AppExecution.Invocation["session"]
+	readonly chat: AppExecution.Invocation["chat"]
 	readonly turn: AppExecution.Invocation["turn"]
-	readonly callOccurrence?: number
 }
 export interface Proposal extends Position {
 	readonly callId: string
@@ -44,7 +53,6 @@ export class Invocations extends Context.Service<
 			input: Position,
 			callId: string,
 			approved: boolean,
-			grantReads?: boolean,
 		) => Effect.Effect<void, Error>
 		readonly resume: (
 			owner: string,
@@ -61,17 +69,24 @@ export class Invocations extends Context.Service<
 export const make: Effect.Effect<
 	typeof Invocations.Service,
 	ExperienceStorageUnavailable,
-	PgClient.PgClient | Secrets | ActionPolicy
+	PgClient.PgClient | Secrets | ActionPolicy | Crypto.Crypto
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const policy = yield* ActionPolicy
+	const crypto = yield* Crypto.Crypto
 	// An operation that was sending when the host stopped may or may not have reached the App.
-	yield* InstanceWork.wrap(StoredInvocations.recover(db)).pipe(
-		Effect.mapError(StoredInvocations.unavailable),
-	)
+	yield* db
+		.update(appInvocations)
+		.set({ status: "OutcomeUnknown" })
+		.where(eq(appInvocations.status, "Sending"))
+		.pipe(
+			Failures.replace("App operation status reset failed", () =>
+				ExperienceStorageUnavailable.make({}),
+			),
+		)
 	const conflict = () =>
-		SessionConflict.make({
+		ChatConflict.make({
 			message:
 				"This App operation changed or was already submitted. Review its recorded result.",
 		})
@@ -85,17 +100,16 @@ export const make: Effect.Effect<
 				.values({
 					owner,
 					id: value.id,
-					session: value.session,
+					chat: value.chat,
 					status: value.status,
 					body,
 				})
 				.onConflictDoNothing()
 			const saved = yield* get(owner, value.id)
 			if (
-				saved.session !== value.session ||
+				saved.chat !== value.chat ||
 				saved.turn !== value.turn ||
 				saved.callId !== value.callId ||
-				(saved.callOccurrence ?? 0) !== (value.callOccurrence ?? 0) ||
 				saved.toolName !== value.toolName ||
 				!Schema.toEquivalence(AppExecution.Source)(
 					saved.source,
@@ -109,30 +123,79 @@ export const make: Effect.Effect<
 				return yield* conflict()
 			return saved
 		}).pipe(
-			(effect) => OwnedWrites.write(owner, effect),
-			Effect.mapError(StoredInvocations.failure),
+			Effect.catchTag(
+				["EffectDrizzleQueryError", "SchemaError", "SecretStorageError"],
+				(error) =>
+					Effect.fail(error).pipe(
+						StoredInvocations.unavailable("Could not save an App operation."),
+					),
+			),
 		)
+	/** Change an operation under a row lock when its status is one of `expected`. */
 	const change = (
 		owner: string,
 		id: string,
 		expected: ReadonlyArray<AppExecution.Invocation["status"]>,
 		update: (value: AppExecution.Invocation) => AppExecution.Invocation,
 		round?: number,
-	) => StoredInvocations.change(db, secrets, owner, id, expected, update, round)
-	const id = (input: Position, callId: string) =>
-		createHash("sha256")
-			.update(
-				JSON.stringify([
-					input.owner,
-					input.session,
-					input.turn,
-					callId,
-					...(input.callOccurrence !== undefined && input.callOccurrence > 0
-						? [input.callOccurrence]
-						: []),
-				]),
+	): Effect.Effect<AppExecution.Invocation, Error> =>
+		db
+			.transaction((tx) =>
+				Effect.gen(function* () {
+					const row = (yield* tx
+						.select()
+						.from(appInvocations)
+						.where(StoredInvocations.where(owner, id))
+						.for("update"))[0]
+					if (row === undefined)
+						return yield* ExperienceNotFound.make({ id: "App operation" })
+					const current = yield* StoredInvocations.open(secrets, row)
+					if (
+						!expected.includes(current.status) ||
+						(round !== undefined && current.round !== round)
+					)
+						return yield* conflict()
+					const value = update(current)
+					const body = yield* StoredInvocations.seal(secrets, owner, value)
+					const changed = yield* tx
+						.update(appInvocations)
+						.set({ status: value.status, body })
+						.where(
+							and(
+								StoredInvocations.where(owner, id),
+								inArray(appInvocations.status, [...expected]),
+							),
+						)
+						.returning({ id: appInvocations.id })
+					if (changed.length !== 1) return yield* conflict()
+					return value
+				}),
 			)
-			.digest("hex")
+			.pipe(
+				Effect.catchTag(
+					[
+						"EffectDrizzleQueryError",
+						"SqlError",
+						"SchemaError",
+						"SecretStorageError",
+					],
+					(error) =>
+						Effect.fail(error).pipe(
+							StoredInvocations.unavailable(
+								"Could not change an App operation.",
+							),
+						),
+				),
+			)
+	const id = (input: Position, callId: string) =>
+		crypto
+			.digest(
+				"SHA-256",
+				new TextEncoder().encode(
+					JSON.stringify([input.owner, input.chat, input.turn, callId]),
+				),
+			)
+			.pipe(Effect.map(Hex.encode), Effect.orDie)
 	const valid = (owner: string, value: AppExecution.Invocation) =>
 		Effect.gen(function* () {
 			const connection = yield* StoredConnections.get(
@@ -141,17 +204,19 @@ export const make: Effect.Effect<
 				owner,
 				value.source.connectionId,
 			).pipe(
-				Effect.mapError(() =>
-					SessionConflict.make({
-						message: "The App connection is no longer available.",
-					}),
+				Effect.catchTag("ExperienceNotFound", () =>
+					Effect.fail(
+						ChatConflict.make({
+							message: "The App connection is no longer available.",
+						}),
+					),
 				),
 			)
 			if (
 				connection.revision !== value.source.revision ||
 				connection.connection.state !== "Enabled"
 			)
-				return yield* SessionConflict.make({
+				return yield* ChatConflict.make({
 					message:
 						"The App connection changed. Review the current operation before continuing.",
 				})
@@ -162,35 +227,17 @@ export const make: Effect.Effect<
 				organizationId: organizationOf(input.owner),
 				source: input.source,
 			})
-			const prior = readOnly
-				? yield* StoredInvocations.list(db, secrets, input.owner, input.session)
-				: []
-			// Only a completed, explicitly granted read covers another read from the
-			// same connection version. Tool annotations never grant write access.
-			const covered =
-				input.source.kind !== "tool" ||
-				prior.some(
-					(value) =>
-						value.grantReads &&
-						value.readOnly &&
-						value.status === "Completed" &&
-						value.source.connectionId === input.source.connectionId &&
-						value.source.revision === input.source.revision &&
-						value.source.name === input.source.name,
-				)
+			// Only tool calls need a decision. Reading resources and prompts does not.
+			const covered = input.source.kind !== "tool"
 			return yield* put(input.owner, {
-				id: id(input, input.callId),
-				session: input.session,
+				id: AppExecution.AppOperationId.make(yield* id(input, input.callId)),
+				chat: input.chat,
 				turn: input.turn,
 				callId: input.callId,
-				...(input.callOccurrence !== undefined && input.callOccurrence > 0
-					? { callOccurrence: input.callOccurrence }
-					: {}),
 				toolName: input.toolName,
 				source: input.source,
 				arguments: input.arguments,
 				readOnly,
-				grantReads: false,
 				round: 0,
 				status: covered ? "Approved" : "PendingApproval",
 				result: null,
@@ -204,101 +251,107 @@ export const make: Effect.Effect<
 	) =>
 		Effect.gen(function* () {
 			yield* valid(owner, value)
-			yield* change(
+			const sending = change(
 				owner,
 				value.id,
 				expected,
 				(current) => ({ ...current, status: "Sending" }),
 				value.round,
 			)
-			return yield* operation.pipe(
-				Effect.flatMap((result) => {
-					const recorded = { ...result, operationId: value.id }
-					const status = Match.value(result).pipe(
-						Match.tag("Completed", () => "Completed" as const),
-						Match.tag("InputRequired", () => "InputRequired" as const),
-						Match.tag("Failed", (result) =>
-							result.reason === "OutcomeUnknown"
-								? ("OutcomeUnknown" as const)
-								: ("Failed" as const),
+			const record = (result: AppExecution.Result) => {
+				const recorded = { ...result, operationId: value.id }
+				const status = Match.value(result).pipe(
+					Match.tag("Completed", () => "Completed" as const),
+					Match.tag("InputRequired", () => "InputRequired" as const),
+					Match.tag("Failed", (result) =>
+						result.reason === "OutcomeUnknown"
+							? ("OutcomeUnknown" as const)
+							: ("Failed" as const),
+					),
+					Match.exhaustive,
+				)
+				return change(owner, value.id, ["Sending"], (value) => ({
+					...value,
+					status,
+					result: recorded,
+					round: status === "InputRequired" ? value.round + 1 : value.round,
+				})).pipe(
+					Effect.as(recorded),
+					Effect.catch((error) =>
+						Effect.logWarning(
+							"OpenBot could not save the result of an App operation",
+							Cause.fail(error),
+						).pipe(
+							Effect.as({
+								_tag: "Failed",
+								operationId: value.id,
+								source: value.source,
+								reason: "OutcomeUnknown",
+								message:
+									"The App returned a response, but it could not be saved. Check the recorded operation before taking another action.",
+								result: Match.value(recorded).pipe(
+									Match.tag("Completed", ({ result }) => result),
+									Match.orElse(() => null),
+								),
+							} as const),
 						),
-						Match.exhaustive,
-					)
-					return change(owner, value.id, ["Sending"], (value) => ({
-						...value,
-						status,
-						result: recorded,
-						round: status === "InputRequired" ? value.round + 1 : value.round,
-					})).pipe(
-						Effect.as(recorded),
-						Effect.orElseSucceed(
-							() =>
-								({
-									_tag: "Failed",
-									operationId: value.id,
-									source: value.source,
-									reason: "OutcomeUnknown",
-									message:
-										"The App returned a response, but it could not be saved. Check the recorded operation before taking another action.",
-									result: Match.value(recorded).pipe(
-										Match.tag("Completed", ({ result }) => result),
-										Match.orElse(() => null),
-									),
-								}) as const,
-						),
-					)
-				}),
-				Effect.ensuring(
-					change(owner, value.id, ["Sending"], (current) => ({
-						...current,
-						status: value.readOnly ? "Failed" : "OutcomeUnknown",
-						result: value.readOnly
-							? {
-									_tag: "Failed",
-									source: value.source,
-									operationId: value.id,
-									reason: "Interrupted",
-									message: "This read did not finish.",
-								}
-							: null,
-					})).pipe(
-						// After a normal finish the status is no longer "Sending", so this
-						// change fails with a conflict. That is expected and safe to skip.
-						Effect.catchTag("SessionConflict", () => Effect.void),
-						Effect.catch((error) =>
-							Effect.logWarning("App operation status could not be closed", {
-								source: "apps",
-								operation: value.id,
-								error: error._tag,
-							}),
+					),
+				)
+			}
+			const close = change(owner, value.id, ["Sending"], (current) => ({
+				...current,
+				status: value.readOnly ? "Failed" : "OutcomeUnknown",
+				result: value.readOnly
+					? {
+							_tag: "Failed",
+							source: value.source,
+							operationId: value.id,
+							reason: "Interrupted",
+							message: "This read did not finish.",
+						}
+					: null,
+			})).pipe(
+				// After a normal finish the status is no longer "Sending", so this
+				// change fails with a conflict. That is expected and safe to skip.
+				Effect.catchTag("ChatConflict", () => Effect.void),
+				Effect.catch((error) =>
+					Effect.logWarning(
+						"App operation status could not be closed",
+						Cause.fail(error),
+					),
+				),
+			)
+			// The "Sending" mark, its close step and the saved result are one step.
+			// An interruption can stop only the App call, and then the close step
+			// still runs. Without this, an interruption right after the mark can
+			// leave the operation "Sending", and a result that the App gave can be
+			// lost.
+			return yield* Effect.uninterruptibleMask((restore) =>
+				sending.pipe(
+					Effect.andThen(
+						restore(operation).pipe(
+							Effect.flatMap(record),
+							Effect.ensuring(close),
 						),
 					),
 				),
 			)
-		})
+		}).pipe(Effect.annotateLogs({ source: "apps", operation: value.id }))
 	return Invocations.of({
 		propose,
 		pending: (input, callId) =>
-			get(input.owner, id(input, callId)).pipe(
+			id(input, callId).pipe(
+				Effect.flatMap((operationId) => get(input.owner, operationId)),
 				Effect.asSome,
 				Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 			),
-		approve: (input, callId, approved, grantReads = false) =>
+		approve: (input, callId, approved) =>
 			Effect.gen(function* () {
-				const value = yield* get(input.owner, id(input, callId))
+				const value = yield* get(input.owner, yield* id(input, callId))
 				yield* valid(input.owner, value)
-				if (value.status === (approved ? "Approved" : "Rejected")) return
-				const allowReads =
-					approved && grantReads && value.readOnly
-						? yield* policy.isRead({
-								organizationId: organizationOf(input.owner),
-								source: value.source,
-							})
-						: false
 				yield* change(input.owner, value.id, ["PendingApproval"], (value) => ({
 					...value,
 					status: approved ? "Approved" : "Rejected",
-					grantReads: allowReads,
 				}))
 			}),
 		resume: (owner, id, operation) =>
@@ -310,38 +363,7 @@ export const make: Effect.Effect<
 		execute: (input, operation) =>
 			propose(input).pipe(
 				Effect.flatMap((value) =>
-					Match.value(value.status).pipe(
-						Match.when("Approved", () =>
-							submit(input.owner, value, ["Approved"], operation),
-						),
-						Match.whenOr("Sending", "OutcomeUnknown", () =>
-							Effect.succeed({
-								_tag: "Failed",
-								operationId: value.id,
-								source: value.source,
-								reason: "OutcomeUnknown",
-								message:
-									"This operation may have reached the App. Check its actual state; do not submit it again.",
-							} satisfies AppExecution.Result),
-						),
-						Match.whenOr("Completed", "Failed", "InputRequired", () =>
-							value.result === null
-								? Effect.fail(
-										SessionConflict.make({
-											message:
-												"This operation has no recorded result. Review its state before continuing.",
-										}),
-									)
-								: Effect.succeed(value.result),
-						),
-						Match.orElse(() =>
-							Effect.fail(
-								SessionConflict.make({
-									message: "This App operation has not been approved.",
-								}),
-							),
-						),
-					),
+					submit(input.owner, value, ["Approved"], operation),
 				),
 			),
 	})

@@ -17,6 +17,12 @@
 			"path": "./packages/client"
 		},
 		{
+			"path": "./packages/cli"
+		},
+		{
+			"path": "./packages/computer"
+		},
+		{
 			"path": "./protocol-test"
 		}
 	]

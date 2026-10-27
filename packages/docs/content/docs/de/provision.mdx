@@ -1,0 +1,148 @@
+---
+title: Leere Plattform einrichten
+description: Eine Organisation mit Nutzern ohne alte Arbeitsdaten einrichten.
+---
+
+`openbot provision` richtet eine neue, leere Datenbank vor dem Serverstart ein.
+Bestehende Nutzer-IDs und OpenID-Connect-Subjects bleiben erhalten. Chats,
+Erinnerungen, Dateien, Tokens und Browsersitzungen werden nicht übernommen.
+Nutzer melden sich erneut beim selben Identitätsanbieter an. Führe zuerst die
+Datenbankmigrationen aus demselben Image aus. Siehe
+[Bereitstellung](/de/docs/deploy).
+
+## Eingabe
+
+Verwende eine private JSON-Datei mit Dateimodus `0600` oder strenger, höchstens
+2 MiB groß. Gib Geheimnisse nicht als Befehlsargumente an. Ersetze alle
+Beispielwerte durch die genauen Quellwerte. Jede importierte E-Mail muss bereits
+bestätigt sein. `ownerUserId` ist der einzige Super-Administrator und
+Plattformadministrator. Andere Nutzer werden normale Mitglieder. Der Issuer
+steht unter `platform.identityProvider`; alle Kontoverknüpfungen müssen diese
+Provider-ID verwenden. Konten werden nie anhand ihrer E-Mail zusammengeführt.
+
+```json
+{
+	"version": 1,
+	"platform": {
+		"publicOrigin": "https://api.example.com",
+		"browserAuth": {
+			"sessionCookie": "__Host-workspace_session",
+			"loginCookie": "__Host-workspace_login",
+			"sessionTtlMs": 86400000
+		},
+		"identityProvider": {
+			"providerId": "company",
+			"issuer": "https://id.example.com",
+			"clientId": "workspace",
+			"clientSecret": "REPLACE_WITH_THE_EXISTING_CLIENT_SECRET",
+			"callbackPath": "/auth/callback",
+			"scopes": ["openid", "profile", "email", "offline_access"]
+		},
+		"authSecret": "REPLACE_WITH_THE_EXISTING_AUTH_SECRET",
+		"fileStorage": {
+			"endpoint": "http://storage:9000",
+			"publicEndpoint": null,
+			"region": "us-east-1",
+			"bucket": "workspace-files",
+			"accessKeyId": "workspace",
+			"secretAccessKey": "REPLACE_WITH_THE_STORAGE_SECRET",
+			"forcePathStyle": true
+		}
+	},
+	"organization": {
+		"name": "Example",
+		"ownerUserId": "existing-user-id",
+		"allowNewAccounts": false
+	},
+	"users": [
+		{
+			"id": "existing-user-id",
+			"name": "Alice",
+			"email": "alice@example.com",
+			"emailVerified": true,
+			"accounts": [
+				{
+					"id": "existing-account-id",
+					"providerId": "company",
+					"subject": "existing-oidc-subject"
+				}
+			]
+		}
+	],
+	"bot": {
+		"name": "Assistant",
+		"role": "Personal assistant",
+		"instructions": "Help the person with their work."
+	},
+	"models": [
+		{
+			"id": "language-model",
+			"name": "Language model",
+			"reasoningEfforts": [],
+			"serviceTiers": []
+		}
+	],
+	"providers": [
+		{
+			"kind": "openai-compat",
+			"name": "Company",
+			"endpoint": "https://models.example.com/v1",
+			"apiKey": "REPLACE_WITH_THE_MODEL_KEY",
+			"models": [
+				{
+					"model": "language-model",
+					"modelOwner": "platform"
+				}
+			]
+		}
+	],
+	"defaultModel": {
+		"providerName": "Company",
+		"modelId": "language-model"
+	}
+}
+```
+
+`models` und `providers` verwenden die nativen Felder zum Erstellen von Modellen
+und Anbietern. Sie stehen nur der neuen Organisation zur Verfügung. Das gewählte
+Sprachmodell dient dem persönlichen Bot, Regeln und Bot-Erinnerungen. Jeder
+Nutzer erhält einen privaten Bot und eine Standardeinstellung mit
+Versionsprüfung. Es werden keine Chats erstellt, Modelle oder Werkzeuge
+aufgerufen oder Erinnerungen gelernt.
+
+Erstelle den S3-Bucket vorher. Der Befehl speichert die
+Dateispeicher-Einstellungen, erstellt aber keinen Bucket und prüft keine
+Zugangsdaten. Private Eingaben und alte Schlüssel gehören nicht ins
+Quellcode-Repository. Sichere die Daten vor dem Wechsel der Anmeldung.
+
+## Ausführen
+
+Setze `OPENBOT_DATABASE_URL` und `OPENBOT_SECRET_KEYS` oder nutze die
+bestehenden Geheimnisdateien. Stoppe alle Prozesse, die im Ziel arbeiten. Führe
+nicht zuerst `setup` aus: Dieser Befehl richtet das gesamte leere Ziel in einer
+Transaktion ein.
+
+```sh
+openbot provision --input /run/private/provision.json
+```
+
+Im Quellpaket ist auch `node dist/Provision.js` verfügbar. Im Docker-Image
+lautet der Pfad `/app/dist/app/Provision.mjs`. Binde die private Datei nur
+lesbar ein und erlaube dem Image-Nutzer den Lesezugriff. Bei Erfolg erscheinen
+nur Ergebnis und Organisations-, Nutzer-, Bot- und Anbieter-IDs. Nutze die
+zurückgegebene Organisations-ID im Produkt-Gateway.
+
+## Wiederholen oder stoppen
+
+Eine Datenbanksperre verhindert doppelte Objekte durch parallele Aufrufe. Fehler
+rollen die Transaktion zurück. Ein Beleg speichert Prüfsummen der Eingabe und
+der Zieldaten. Ein identischer erneuter Aufruf liefert dieselben IDs ohne
+Schreibzugriff. Geänderte Eingaben oder Zielzeilen werden abgewiesen. Sobald der
+Server Arbeit annimmt, dienen die normalen APIs zur Verwaltung; dieser Befehl
+ist kein Aktualisierungswerkzeug.
+
+Ein nicht leeres Ziel ohne eigenen Beleg wird abgewiesen. Der Befehl löscht
+keine alten Daten, importiert keine alten OAuth-Tokens und gibt bei Fehlern
+keine Geheimnisse aus. Eine erfolgreiche Einrichtung bestätigt noch keine
+Anmeldung, Modell- oder S3-Verbindung. Prüfe diese über das öffentliche Gateway,
+bevor Nutzer Zugriff erhalten.

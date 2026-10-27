@@ -1,4 +1,5 @@
-import { Context, Redacted, Schema } from "effect"
+import { SettingsUnavailable } from "./SettingsErrors.ts"
+import { Context, Redacted, Schema, String as Str } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -6,8 +7,9 @@ import {
 	HttpApiSchema,
 	HttpApiSecurity,
 } from "effect/http-api"
+import { Email } from "./Email.ts"
 import { Account, Identity } from "./Identity.ts"
-import { RoleId } from "./Permissions.ts"
+import { RoleId } from "./Roles.ts"
 
 export const SessionCookie = "__Host-openbot-session"
 /** Better Auth keeps the sign-in state in this cookie during an OpenID Connect round trip. */
@@ -20,46 +22,60 @@ export const AuthBasePath = "/auth"
  */
 export const ReturnTo = Schema.String.check(
 	Schema.isMaxLength(4096),
-	Schema.makeFilter((value) => {
-		if (
-			!value.startsWith("/") ||
-			value.startsWith("//") ||
-			/[\\\r\n]/.test(value)
-		)
-			return false
-		const url = URL.parse(value, "https://return.invalid")
-		return (
-			url !== null &&
-			url.origin === "https://return.invalid" &&
-			!/^\/(?:auth|v1|development)(?:\/|$)/.test(url.pathname)
-		)
-	}),
+	Schema.makeFilter(
+		(value) => {
+			if (
+				!Str.startsWith("/")(value) ||
+				Str.startsWith("//")(value) ||
+				/[\\\r\n]/.test(value)
+			)
+				return false
+			const url = URL.parse(value, "https://return.invalid")
+			return (
+				url !== null &&
+				url.origin === "https://return.invalid" &&
+				!/^\/(?:auth|v1|development)(?:\/|$)/.test(url.pathname)
+			)
+		},
+		{
+			message:
+				"Expected a path on this origin that starts with one /, has no \\ or line break, and is not under /auth, /v1 or /development",
+		},
+	),
 )
-export class AuthenticationRequired extends Schema.TaggedError<AuthenticationRequired>()(
-	"AuthenticationRequired",
-	{},
-) {}
-export class AuthenticationUnavailable extends Schema.TaggedError<AuthenticationUnavailable>()(
-	"AuthenticationUnavailable",
-	{},
-) {}
-export class ForbiddenOrigin extends Schema.TaggedError<ForbiddenOrigin>()(
-	"ForbiddenOrigin",
-	{},
-) {}
+export class AuthenticationRequired extends Schema.TaggedError<
+	AuthenticationRequired,
+	{ readonly brand: unique symbol }
+>()("AuthenticationRequired", {}) {}
+export class AuthenticationUnavailable extends Schema.TaggedError<
+	AuthenticationUnavailable,
+	{ readonly brand: unique symbol }
+>()("AuthenticationUnavailable", {}) {}
+export class ForbiddenOrigin extends Schema.TaggedError<
+	ForbiddenOrigin,
+	{ readonly brand: unique symbol }
+>()("ForbiddenOrigin", {}) {}
 /** The account signed in, but it is not an active member of the organization. */
-export class MembershipRequired extends Schema.TaggedError<MembershipRequired>()(
-	"MembershipRequired",
-	{},
-) {}
+export class MembershipRequired extends Schema.TaggedError<
+	MembershipRequired,
+	{ readonly brand: unique symbol }
+>()("MembershipRequired", {}) {}
 /**
  * A request with the session cookie must say which organization it acts in,
  * because the account is a member of more than one.
  */
-export class OrganizationRequired extends Schema.TaggedError<OrganizationRequired>()(
-	"OrganizationRequired",
-	{},
-) {}
+export class OrganizationRequired extends Schema.TaggedError<
+	OrganizationRequired,
+	{ readonly brand: unique symbol }
+>()("OrganizationRequired", {}) {}
+/** The caller sent more requests in this minute than the platform allows. */
+export class RateLimited extends Schema.TaggedError<
+	RateLimited,
+	{ readonly brand: unique symbol }
+>()("RateLimited", {
+	/** Wait this many seconds before the next request. */
+	retryAfterSeconds: Schema.Int,
+}) {}
 /** The organization that a request with the session cookie acts in. Tokens belong to one organization, so they ignore it. */
 export const OrganizationHeader = "openbot-organization"
 export const AuthErrors = [
@@ -101,10 +117,10 @@ export class AuthSession extends Context.Service<
  * Both schemes read their credential from the current request.
  * @effect-expect-leaking HttpServerRequest | ParsedSearchParams | RouteContext
  */
-export class AgentAuth extends HttpApiMiddleware.Service<
-	AgentAuth,
+export class BotAuth extends HttpApiMiddleware.Service<
+	BotAuth,
 	{ readonly requires: never; readonly provides: Identity }
->()("@openbot-build/api/AuthApi/AgentAuth", {
+>()("@openbot-build/api/AuthApi/BotAuth", {
 	requiredForClient: true,
 	security: {
 		token: HttpApiSecurity.bearer,
@@ -114,12 +130,13 @@ export class AgentAuth extends HttpApiMiddleware.Service<
 		...AuthErrors,
 		ForbiddenOrigin.pipe(HttpApiSchema.status(403)),
 		OrganizationRequired.pipe(HttpApiSchema.status(400)),
+		RateLimited.pipe(HttpApiSchema.status(429)),
 	],
 }) {}
 /**
  * Finds the account of a request that does not act in one organization,
  * such as creating an organization or using `/v1/platform`.
- * It accepts the same credentials as `AgentAuth`.
+ * It accepts the same credentials as `BotAuth`.
  * @effect-expect-leaking HttpServerRequest | ParsedSearchParams | RouteContext
  */
 export class AccountAuth extends HttpApiMiddleware.Service<
@@ -145,37 +162,19 @@ export class SessionAuth extends HttpApiMiddleware.Service<
 }) {}
 export class OriginCheck extends HttpApiMiddleware.Service<OriginCheck>()(
 	"@openbot-build/api/AuthApi/OriginCheck",
-	{ error: ForbiddenOrigin.pipe(HttpApiSchema.status(403)) },
+	{
+		error: [
+			ForbiddenOrigin.pipe(HttpApiSchema.status(403)),
+			SettingsUnavailable.pipe(HttpApiSchema.status(503)),
+		],
+	},
 ) {}
 export class NoStore extends HttpApiMiddleware.Service<NoStore>()(
 	"@openbot-build/api/AuthApi/NoStore",
 ) {}
-/** Stable browser entry points for same-origin clients and reverse proxies. */
-export const LoginApi = HttpApiGroup.make("login")
-	.add(
-		HttpApiEndpoint.get("login", "/auth/login", {
-			query: { returnTo: Schema.optionalKey(ReturnTo) },
-			success: HttpApiSchema.Empty(303),
-			error: AuthErrors,
-		}),
-		HttpApiEndpoint.get("callback", "/auth/callback", {
-			success: HttpApiSchema.Empty(303),
-			error: AuthErrors,
-		}),
-		HttpApiEndpoint.post("logout", "/auth/logout", {
-			success: HttpApiSchema.NoContent,
-			error: AuthErrors,
-		}).middleware(OriginCheck),
-	)
-	.middleware(NoStore)
 export const AccountApi = HttpApiGroup.make("account")
 	.add(
-		HttpApiEndpoint.get("session", "/auth/session", {
-			query: {
-				refresh: Schema.optionalKey(Schema.Literals(["true", "false"])),
-			},
-			success: SessionInfo,
-		}),
+		HttpApiEndpoint.get("session", "/auth/session", { success: SessionInfo }),
 	)
 	.middleware(SessionAuth)
 	.middleware(NoStore)
@@ -185,12 +184,7 @@ export const SignInRequest = Schema.Struct({
 	 * The email of the person. OpenBot uses its domain to find the SSO connection
 	 * of an organization. Leave it out to use the sign-in provider of the platform.
 	 */
-	email: Schema.optionalKey(
-		Schema.String.check(
-			Schema.isMaxLength(320),
-			Schema.isPattern(/^[^@\s]+@[^@\s]+$/),
-		),
-	),
+	email: Schema.optionalKey(Email),
 	returnTo: Schema.optionalKey(ReturnTo),
 })
 export type SignInRequest = typeof SignInRequest.Type
@@ -199,10 +193,10 @@ export const SignInStart = Schema.Struct({
 	url: Schema.String,
 })
 /** The organization of this email domain needs its SSO connection, and that connection does not work now. */
-export class SignInUnavailable extends Schema.TaggedError<SignInUnavailable>()(
-	"SignInUnavailable",
-	{},
-) {}
+export class SignInUnavailable extends Schema.TaggedError<
+	SignInUnavailable,
+	{ readonly brand: unique symbol }
+>()("SignInUnavailable", {}) {}
 /** Start a browser sign-in. It needs no credential. */
 export const SignInApi = HttpApiGroup.make("signIn")
 	.add(

@@ -3,17 +3,22 @@ set -euo pipefail
 : "${CI_COMMIT_SHA:?CI commit is required}"
 [[ "$CI_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]
 [[ "$(git rev-parse HEAD)" == "$CI_COMMIT_SHA" ]]
+# The image and corresponding source must describe exactly the same checkout.
+[[ -z "$(git status --porcelain --untracked-files=normal)" ]]
+hadolint deploy/docker/Dockerfile
 docker run --privileged --rm tonistiigi/binfmt --install amd64
 mkdir -p .devenv/release
 image="openbot-platform:$CI_COMMIT_SHA"
 TAG="$CI_COMMIT_SHA" REVISION="$CI_COMMIT_SHA" RELEASE_TAG="" REGISTRY="" \
-  docker buildx bake -f deploy/docker/docker-bake.hcl openbot --load
+  docker buildx bake -f deploy/docker/docker-bake.hcl openbot protocol-test --load
 docker tag "openbot:$CI_COMMIT_SHA" "$image"
 [[ "$(docker image inspect "$image" --format '{{.Architecture}}')" == amd64 ]]
 [[ "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" == "$CI_COMMIT_SHA" ]]
 docker run --rm --platform linux/amd64 --entrypoint node "$image" \
   --eval 'if (process.versions.node !== "26.12.1") throw new Error("Unexpected Node.js runtime")'
-bash deploy/docker/smoke-platform.sh "$image"
+# Use the native production bundle and Compose checks; DevelopmentMain is not shipped.
+OPENBOT_RELEASE="$CI_COMMIT_SHA" COMPOSE_PROJECT_NAME="openbot-ci-${CI_JOB_ID:-local}" \
+  bash deploy/docker/check.sh
 docker save "$image" | gzip > .devenv/release/platform.tar.gz
 git archive --format=tar --prefix="openbot-$CI_COMMIT_SHA/" "$CI_COMMIT_SHA" | gzip -n > .devenv/release/source.tar.gz
 cp LICENSE upstream.json .devenv/release/

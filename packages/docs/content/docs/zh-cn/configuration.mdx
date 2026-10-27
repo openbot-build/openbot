@@ -1,0 +1,318 @@
+---
+title: 配置
+description: 每个 OpenBot 实例从环境中读取什么，以及其他所有设置存放在哪里。
+---
+
+OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenBot 服务器进程。同一个部署的所有实例使用同一个数据库。本页列出每个实例在启动时读取的少数几个值。它也说明其他所有设置存放在哪里。
+
+---
+
+## 规则
+
+设置分为两种：
+
+- **实例设置**属于一个实例。没有其他实例需要同样的值。它们来自环境变量或
+  `/run/secrets` 中的文件。
+- **共享设置**在每个实例上都必须相同。它们存放在 PostgreSQL 中。你通过 API 修改它们，每个实例都会立刻使用修改后的值。
+
+只有一个例外：`OPENBOT_SECRET_KEYS`。每个实例都需要同样的密钥。但这些密钥用来加密数据库中的机密，所以它们不能存放在数据库中。每个实例从自己的环境中读取它们。
+
+如果某个必需的值缺失或有误，OpenBot 不会启动。它会在日志中写一条配置错误。
+
+---
+
+## 实例设置
+
+这是服务器读取的环境变量的完整列表。
+
+| 变量                     | 必需 | 默认值      | 含义                                           |
+| ------------------------ | ---- | ----------- | ---------------------------------------------- |
+| `OPENBOT_HOST`           | 否   | `127.0.0.1` | 服务器监听的网络地址。                         |
+| `OPENBOT_PORT`           | 否   | `3000`      | 服务器监听的端口。                             |
+| `OPENBOT_DATABASE_URL`   | 是   |             | 一个 PostgreSQL 连接 URL。                     |
+| `OPENBOT_SECRET_KEYS`    | 是   |             | 用来加密数据库中机密的密钥。见下文。           |
+| `OPENBOT_OUTBOUND_ALLOW` | 否   |             | OpenBot 可以连接的私有主机和 IP 范围。见下文。 |
+
+Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和
+`OPENBOT_PORT=3000`，这样服务器可以接收来自容器外部的流量。
+
+### 数据库
+
+`OPENBOT_DATABASE_URL`
+的形式是：`postgres://openbot:secret@db.example.com:5432/openbot`。服务器、迁移程序和设置程序都会读取它。
+
+服务器启动时，会检查所有表是否都存在。如果不存在，它就会停止。请先运行迁移程序。参见[部署](/zh-cn/docs/deploy)。
+
+### TLS
+
+OpenBot 只提供普通 HTTP，它自己没有 HTTPS。要提供 HTTPS，请在它前面放一个反向代理，例如 Caddy 或 nginx。代理持有证书，并把流量转发给 OpenBot。参见[部署](/zh-cn/docs/deploy#tls-和反向代理)。
+
+### 出站连接
+
+OpenBot 会连接别人给它的地址，例如模型提供方的端点、SSO 签发方、自定义 Channel 和 App。攻击者可能借此访问你自己的网络。这种攻击叫做服务端请求伪造（SSRF）。
+
+所以 OpenBot 只连接公网地址。它会阻止下面这些目标：
+
+- 回环地址，例如 `127.0.0.1`、`::1` 和 `localhost`，
+- 私有网络，例如 `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16` 和 `fc00::/7`，
+- 链路本地地址和云元数据服务，例如 `169.254.169.254`，
+- 其他特殊范围，例如共享、测试、组播和保留的范围。
+
+OpenBot 在 DNS 查询之后，检查每个新连接的真实地址。它也会检查每一次重定向。指向私有地址的主机名同样会被阻止。
+
+要有意开放一个私有目标，请把它写进
+`OPENBOT_OUTBOUND_ALLOW`。条目之间用逗号分隔。每个条目是下面的一种：
+
+| 条目         | 示例                           | 开放的内容                                             |
+| ------------ | ------------------------------ | ------------------------------------------------------ |
+| 一个 IP 地址 | `127.0.0.1`、`::1`             | 只有这一个地址。                                       |
+| 一个 IP 范围 | `10.20.0.0/16`、`fd00::/8`     | 范围中的每个地址，不论主机名是什么。                   |
+| 一个主机名   | `localhost`、`ollama.internal` | 只有这个确切的名字，不论它指向哪个地址。不含其他名字。 |
+
+不支持通配符，也不支持端口。如果某个条目写错了，OpenBot 不会启动。
+
+```sh
+# 同一台机器上的模型服务器，以及一个内部网络。
+OPENBOT_OUTBOUND_ALLOW=localhost,10.20.0.0/16
+```
+
+<Callout type="warning">
+	这个列表会为每个出站连接开放目标，也包括成员添加的 App。只列出你需要的主机。
+	永远不要列出云元数据地址。给每个实例设置相同的列表。
+</Callout>
+
+当 OpenBot 阻止一个连接时，错误和日志会写出主机和 `OPENBOT_OUTBOUND_ALLOW`。
+
+---
+
+## 机密密钥
+
+OpenBot 在数据库中保存一些机密。它用 `OPENBOT_SECRET_KEYS`
+中的密钥加密它们。这些机密是：
+
+- App 连接的私密数据，比如 App 凭据、私密设置和登录状态；
+- [模型提供方](/zh-cn/docs/models)的 API 密钥；
+- [SSO 连接](/zh-cn/docs/sso)的客户端密钥；
+- 平台的登录密钥，它用来签名登录 cookie；
+- 平台 OpenID Connect 提供方的客户端密钥。
+
+`OPENBOT_SECRET_KEYS` 是一个用逗号分隔的密钥列表：
+
+```sh
+OPENBOT_SECRET_KEYS=k2:<64 hexadecimal characters>,k1:<64 hexadecimal characters>
+```
+
+- 每一项的形式是 `<id>:<key>`。
+- 密钥正好是 64 个十六进制字符（32 字节）。
+- ID 是 1 到 32 个字符。可以使用小写字母、数字、`_` 和 `-`。
+- **第一个**密钥用来加密新的机密。
+- 列表中的**每一个**密钥都可以解密。OpenBot 在每个机密旁边保存密钥 ID，所以它知道该用哪个密钥。
+
+生成一个密钥（只需一次）：
+
+```sh
+echo "k1:$(openssl rand -hex 32)"
+```
+
+给每个实例同样的列表。把密钥和数据库备份放在一起保管。如果你丢失了密钥，OpenBot 就无法读取数据库中的机密。
+
+### 更换密钥
+
+你可以添加新密钥，而不会丢失旧的机密：
+
+1. 生成一个新密钥，比如 `k2`。
+2. 把它放在列表的第一位，旧密钥放在它后面：`k2:<new>,k1:<old>`。
+3. 把新列表交给每个实例，然后重新启动它们。
+
+OpenBot 现在用 `k2` 封存新的机密。`k1`
+封存的机密仍然可以打开。只要数据库中还有旧密钥封存的机密，就要把旧密钥留在列表中。
+
+<Callout type="warn">
+	不要把 `OPENBOT_SECRET_KEYS`
+	放进源代码管理。任何拿到密钥和一份数据库副本的人，都能读取所有保存的机密。
+</Callout>
+
+---
+
+## 以文件形式提供机密
+
+当某个环境变量没有设置时，OpenBot 会改为读取文件
+`/run/secrets/<NAME>`。比如，它从 `/run/secrets/OPENBOT_SECRET_KEYS` 读取
+`OPENBOT_SECRET_KEYS`。Docker 和 Compose 会把机密放在这个文件夹中。
+
+- 环境变量总是优先，即使文件存在也是如此。
+- OpenBot 会去掉文件开头和结尾的空格与换行。
+- 空文件视为未设置。缺少文件或文件夹也视为未设置。
+
+这对本页的每个变量都有效。它对机密最有用，因为环境变量会显示在 `docker inspect`
+中，而文件不会。
+
+---
+
+## 首次设置
+
+新数据库中没有共享设置。在大家使用 OpenBot 之前，你要运行一次设置程序。它会写入第一份平台设置和第一批平台管理员。
+
+在此之前，服务器可以启动，但除 `/health` 之外的每个路由都会返回
+`503`，响应体如下：
+
+```json
+{ "_tag": "SetupRequired" }
+```
+
+日志也会提示你运行设置。所有参数参见
+[Platform](/zh-cn/docs/platform#设置)，命令参见[部署](/zh-cn/docs/deploy)。
+
+---
+
+## 其他所有设置存放在哪里
+
+其他所有设置都是保存在数据库中的共享设置。大部分设置在两份文档中：
+
+- **平台设置**，位于 `/v1/platform/settings`。只有平台管理员能修改。参见
+  [Platform](/zh-cn/docs/platform)。
+- **组织设置**，位于
+  `/v1/organization/settings`。每个组织都有自己的一份。参见[组织](/zh-cn/docs/organization#设置)。
+
+旧版本的 OpenBot 会读取更多环境变量。OpenBot 现在忽略它们。下表显示每个值的去处：
+
+| 旧变量                          | 新位置                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `OPENBOT_PUBLIC_ORIGIN`         | 平台设置中的 `publicOrigin`。设置程序用 `--public-origin` 写入它。                               |
+| `OPENBOT_OIDC_ISSUER`           | 平台设置中的 `identityProvider.issuer`。设置程序用 `--oidc-issuer` 写入它。                      |
+| `OPENBOT_OIDC_CLIENT_ID`        | 平台设置中的 `identityProvider.clientId`。设置程序用 `--oidc-client-id` 写入它。                 |
+| `OPENBOT_OIDC_CLIENT_SECRET`    | 平台设置中的 `identityProvider.clientSecret`，已加密。设置程序用 `--oidc-client-secret` 写入它。 |
+| `BETTER_AUTH_SECRET`            | 登录密钥。设置程序随机生成一个，并加密保存。你永远不需要设置它。                                 |
+| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`。                                                                          |
+| `OPENBOT_OWNER_EMAILS`          | 平台管理员。设置程序用 `--admin-email` 添加他们。用 `/v1/platform/admins` 修改。                 |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | 每个组织的已验证域名，配合其设置中的 `joinByDomain`。参见 [SSO](/zh-cn/docs/sso#已验证的域名)。  |
+| `OPENBOT_MODEL_ENDPOINT`        | 组织或平台的模型提供方。参见 [Model](/zh-cn/docs/models)。                                       |
+| `OPENBOT_MODEL_API_KEY`         | 模型提供方，已加密。                                                                             |
+| `OPENBOT_MODEL_ID`              | 由模型提供方关联的模型，以及每个 Bot 的 `model`。                                                |
+| `OPENBOT_DEV_MODE`              | 由开发入口决定。参见[开发](#开发)。                                                              |
+
+有些值以前是代码中的选项。现在它们也成了设置：
+
+| 旧选项                                       | 新位置                                          |
+| -------------------------------------------- | ----------------------------------------------- |
+| `appRestrictions`                            | 平台设置中的 `appRestrictions`。                |
+| `appReadRules`                               | 组织设置中的 `appReadRules`。                   |
+| `bots.helperModel`                           | 组织设置中的 `rulesModel` 和 `botMemoryModel`。 |
+| `bots.requestTimeout`                        | 组织设置中的 `requestTimeoutMs`。               |
+| `bots.memory`                                | 组织设置中的 `botMemory`。                      |
+| `sessions.memory.defaults`                   | 没有了。每个 Session 学到的记忆已经去掉。       |
+| `allowedEmailDomains`、`defaultRoles`（API） | 已验证域名，以及组织设置中的 `defaultRoles`。   |
+
+### 修改如何到达每个实例
+
+每个实例都把设置保存在缓存中，缓存是内存中一份短期的副本。修改的过程如下：
+
+1. API 把新设置写入数据库。
+2. 它在 `openbot_settings` 频道上发送一条 PostgreSQL `NOTIFY` 消息。
+3. 每个实例都监听这个频道。它会立刻读取新设置。
+
+每个缓存条目也会在 30 秒后过期。所以，错过消息的实例也会很快得到修改。缓存不会保留失败的读取。所以，数据库短暂出错后，下一个请求会重新读取设置。
+
+用于监听的连接断开时，实例可能会错过消息。所以它会忘掉缓存中的全部设置，并在一秒后重新监听。
+
+修改
+`publicOrigin`、平台身份提供方或登录密钥，会改变登录的工作方式。每个实例在使用这些值时才读取它们，所以下一个请求就会使用新值。登录会为新值建立新的配置，旧配置在最后一个请求结束几分钟后关闭。没有任何东西会重新启动：正在运行的请求和 Turn 会继续。
+
+---
+
+## 生产环境 Compose
+
+Compose 文件 `deploy/docker/compose.production.yaml` 读取下面这些变量。只有
+`OPENBOT_DATABASE_URL`、`OPENBOT_SECRET_KEYS` 和 `OPENBOT_OUTBOUND_ALLOW`
+会传给 OpenBot。
+
+| 变量                            | 必需 | 默认值                        | 含义                                                      |
+| ------------------------------- | ---- | ----------------------------- | --------------------------------------------------------- |
+| `POSTGRES_PASSWORD`             | 是   |                               | PostgreSQL 用户 `openbot` 的密码。请使用 URL 安全的字符。 |
+| `OPENBOT_DATABASE_URL`          | 是   |                               | 模板会根据 `POSTGRES_PASSWORD` 填写它。                   |
+| `OPENBOT_SECRET_KEYS`           | 是   |                               | 机密密钥。参见[机密密钥](#机密密钥)。                     |
+| `OPENBOT_OUTBOUND_ALLOW`        | 否   |                               | 要开放的私有目标。参见[出站连接](#出站连接)。             |
+| `OPENBOT_RELEASE`               | 是   |                               | 要运行的镜像标签。                                        |
+| `OPENBOT_PUBLISHED_PORT`        | 否   | `8080`                        | 反向代理在 `127.0.0.1` 上找到 OpenBot 的端口。            |
+| `PROTOCOL_TEST_PUBLIC_ORIGIN`   | 是   |                               | 协议测试服务的公开 HTTPS 源。                             |
+| `PROTOCOL_TEST_ALLOWED_ORIGINS` | 否   | `PROTOCOL_TEST_PUBLIC_ORIGIN` | 协议测试服务接受的浏览器源。                              |
+
+Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/secrets`
+中文件的形式交给 OpenBot。它把 `OPENBOT_OUTBOUND_ALLOW`
+作为环境变量交给 OpenBot。`openbot`
+服务没有其他环境变量。参见[部署](/zh-cn/docs/deploy#用-compose-运行)。完整的模板在
+`deploy/docker/production.env.example` 中。
+
+---
+
+## 开发
+
+`devenv shell -- pnpm dev:setup` 会根据 `.env.development.example` 生成文件
+`.env.development`。它会在 `OPENBOT_SECRET_KEYS` 中填入一个名为 `dev`
+的新随机密钥。
+
+| 变量                        | 默认值    | 含义                                      |
+| --------------------------- | --------- | ----------------------------------------- |
+| `OPENBOT_SECRET_KEYS`       |           | `dev:<random key>`。由 `dev:setup` 填写。 |
+| `OPENBOT_DEV_DATABASE_NAME` | `openbot` | 开发数据库的名称。                        |
+
+<Callout type="info">
+	如果你的 `.env.development` 来自旧版本，请删除它，然后再次运行 `devenv shell
+	-- pnpm dev:setup`。你也可以重置开发数据库。请看
+	[参与贡献](/zh-cn/docs/contributing#启动开发服务器)。
+</Callout>
+
+然后 devenv 会为你设置这些值。devenv 会自己选择每个端口：它从基础端口开始，取下一个空闲的端口。它只把带端口的值交给 OpenBot 进程，不交给
+`devenv shell`。
+
+| 变量                        | 值                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| `OPENBOT_DEV_PUBLIC_ORIGIN` | `http://localhost`                                                                            |
+| `OPENBOT_HOST`              | `127.0.0.1`                                                                                   |
+| `OPENBOT_PORT`              | 从 `3000` 开始的一个空闲端口                                                                  |
+| `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:<port>/openbot`，端口是从 `5433` 开始的空闲端口 |
+| `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:<port>`，端口是从 `9000` 开始的空闲端口                                     |
+| `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                                                     |
+
+devenv 的代理在 `http://localhost`
+的 80 端口上提供 OpenBot。开发不需要 HTTPS。即使没有 HTTPS，浏览器和 curl 也会在
+`localhost` 上保留安全的登录 cookie。
+
+代理监听 80 端口。如果有其他程序在用它，请在 shell 中给代理别的端口，例如
+`DEVENV_PROXY_LISTEN=127.0.0.1:8080`。然后在 `.env.development` 中设置
+`OPENBOT_DEV_PUBLIC_ORIGIN=http://localhost:8080`。端口大于 1023 时，代理不需要
+`sudo`。
+
+只有开发入口会读取
+`OPENBOT_DEV_PUBLIC_ORIGIN`。它不需要设置步骤。每次启动时，它会自己为这个源写入平台设置。它会把本地账号
+`developer@localhost.test`
+设为平台管理员，并打开本地测试登录。参见[身份验证](/zh-cn/docs/authentication#开发账户)。
+
+生产程序永远不会使用本地测试账号。没有任何开关可以打开它。
+
+开发服务器同样会阻止私有目标。要使用你机器上的模型服务器（例如 Ollama），请在
+`.env.development` 中设置
+`OPENBOT_OUTBOUND_ALLOW=localhost`。参见[出站连接](#出站连接)。
+
+devenv 还会为[文件](/zh-cn/docs/files)启动
+[RustFS](https://rustfs.com)，一个小的对象存储。它在 Docker 中运行，它的数据在 Docker 卷
+`openbot-dev-rustfs` 中。每次启动时，开发入口会创建 bucket
+`openbot`，并把存储写入平台设置。RustFS 在 `127.0.0.1`
+上，这是一个私有地址。所以开发入口会为自己打开这一个主机。你不需要把它加入
+`OPENBOT_OUTBOUND_ALLOW`。
+
+要使用另一个数据库，请在 `.env.development` 中设置
+`OPENBOT_DATABASE_URL`。参见[参与贡献](/zh-cn/docs/contributing)。
+
+---
+
+## 示例
+
+这是一个实例的完整生产环境文件：
+
+```sh
+OPENBOT_DATABASE_URL=postgres://openbot:secret@db.example.com:5432/openbot
+OPENBOT_SECRET_KEYS=k1:<output of openssl rand -hex 32>
+```
+
+其他所有设置都来自设置程序和 API。

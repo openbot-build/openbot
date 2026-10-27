@@ -1,35 +1,20 @@
-import { createHash } from "node:crypto"
 import {
-	type AgentsApi,
+	Authorization,
+	type BotsApi,
 	type Caller,
-	type Permissions,
+	type ComputersApi,
 } from "@openbot-build/api"
-import { Option } from "effect"
+import type { Authorizer } from "@nmnmcc/ability"
+import { Crypto, Effect, Schema, String as Str } from "effect"
+import { Hex } from "effect/encoding"
 import {
-	agentKey,
-	agentPlace,
-	resourceKey,
+	botResource,
+	computerProviderResource,
+	computerResource,
 	rootOf,
-} from "../authorization/Policy.ts"
+} from "../authorization/Resources.ts"
 
-export type Capability = AgentsApi.Capability
-
-/**
- * True when a stored capability covers a request.
- * The target `*` covers every target. Stored arguments must match exactly, and no arguments match any.
- */
-export const covers = ({
-	stored,
-	request,
-}: {
-	readonly stored: Capability
-	readonly request: Capability
-}) =>
-	stored.action === request.action &&
-	(stored.target === "*" || stored.target === request.target) &&
-	(stored.arguments === undefined ||
-		JSON.stringify(stored.arguments) ===
-			JSON.stringify(request.arguments ?? {}))
+export type Capability = BotsApi.Capability
 
 /** A short and stable text that names a capability, for logs, prompts and cache keys. */
 export const describe = (capability: Capability) =>
@@ -40,66 +25,119 @@ export const describe = (capability: Capability) =>
 		? ""
 		: " " + JSON.stringify(capability.arguments))
 
-export const hash = (value: unknown) =>
-	createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40)
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+
+/** A short and stable SHA-256 text of a JSON value, for IDs and cache keys. */
+export const hash = (crypto: Crypto.Crypto, value: unknown) =>
+	Effect.gen(function* () {
+		const text = yield* encodeJson(value)
+		const digest = yield* crypto.digest(
+			"SHA-256",
+			new TextEncoder().encode(text),
+		)
+		return Str.slice(0, 40)(Hex.encode(digest))
+	}).pipe(
+		// The value is JSON data and SHA-256 is always there, so a failure here is a defect.
+		Effect.orDie,
+	)
 
 /**
- * The member permission that a capability needs, and its resource key.
- * An Agent never does more than the member it works for, so this check comes first.
+ * The act of the member that a capability needs. A Bot never does more than
+ * the member it works for, so this check comes first.
  */
-export const permission = (input: {
+export const memberTarget = (input: {
 	readonly caller: Caller
 	readonly capability: Capability
-	readonly session: string
-	/** The target Agent, for actions on an Agent. */
-	readonly agent?: AgentsApi.Agent
-	/** The Agent that tries the action. The Agents it makes go below its owner tree. */
-	readonly self: AgentsApi.Agent
-}): {
-	readonly permission: Permissions.PermissionGroupId
-	readonly key: string
-} => {
-	const subject = {
-		organizationId: input.caller.organizationId,
-		userId: input.caller.userId,
-	}
-	const onAgent = (permission: Permissions.PermissionGroupId) => ({
-		permission,
-		key:
-			input.agent === undefined
-				? resourceKey({ subject, kind: "agent", id: Option.none() })
-				: agentKey({ ...input.agent, organizationId: subject.organizationId }),
-	})
+	readonly chat: string
+	/** The target Bot, for actions on a Bot. */
+	readonly bot?: BotsApi.Bot
+	/** The Bot that tries the action. The Bots it makes go below its owner tree. */
+	readonly self: BotsApi.Bot
+	/**
+	 * The owner of the target Computer, or of the Computer provider for `computers.create`.
+	 * Without it, OpenBot uses the member as the owner, so a shared target is denied.
+	 */
+	readonly computerOwner?: ComputersApi.ComputerOwner
+}): Authorizer.Target<Authorization.OpenBot> => {
+	const organizationId = input.caller.organizationId
+	const userId = input.caller.userId
+	const personal: ComputersApi.ComputerOwner = { _tag: "Member", userId }
 	switch (input.capability.action) {
 		case "apps.call":
 			return {
-				permission: "apps.use",
-				key: resourceKey({ subject, kind: "apps", id: Option.none() }),
-			}
-		case "agents.spawn":
-			return {
-				permission: "agents.write",
-				key:
-					resourceKey({ subject, kind: "user", id: Option.none() }) + ".agent",
-			}
-		case "agents.create":
-		case "agents.promote":
-			return {
-				permission: "agents.write",
-				key: agentPlace({
-					organizationId: subject.organizationId,
-					root: rootOf(input.self.owner),
+				action: "use",
+				resource: Authorization.App.make({
+					organizationId,
+					ownerUserId: userId,
 				}),
 			}
-		case "agents.delegate":
-			return onAgent("agents.delegate")
+		case "bots.create":
+			return {
+				action: "write",
+				kind: "Bot",
+				within: ($) =>
+					$.and(
+						$.eq("organizationId", organizationId),
+						$.eq("ownerUserId", rootOf(input.self.owner)),
+					),
+			}
+		case "bots.delegate":
+			return input.bot === undefined
+				? {
+						action: "delegate",
+						kind: "Bot",
+						within: ($) =>
+							$.and(
+								$.eq("organizationId", organizationId),
+								$.eq("ownerUserId", null),
+							),
+					}
+				: {
+						action: "delegate",
+						resource: botResource({ ...input.bot, organizationId }),
+					}
+		// Carrying out a plan, or going on after a limit, is work in the Chat, like a tool call.
+		case "plans.run":
+		case "delegations.continue":
 		case "tools.call":
 			return {
-				permission: "responses.run",
-				key: resourceKey({
-					subject,
-					kind: "session",
-					id: Option.some(input.session),
+				action: "run",
+				resource: Authorization.Chat.make({
+					organizationId,
+					ownerUserId: userId,
+					id: input.chat,
+				}),
+			}
+		// A Bot makes a Computer with an account at a provider, for its member.
+		case "computers.create":
+			return {
+				action: "use",
+				resource: computerProviderResource({
+					organizationId,
+					id: input.capability.target,
+					owner: input.computerOwner ?? personal,
+				}),
+			}
+		// The Bot can only get or use a Computer that its member can use.
+		case "computers.acquire":
+		case "computers.expose":
+		case "computers.delete":
+			return {
+				action:
+					input.capability.action === "computers.delete" ? "write" : "use",
+				resource: computerResource({
+					organizationId,
+					id: input.capability.target,
+					owner: input.computerOwner ?? personal,
+				}),
+			}
+		// Posting to a Channel needs the same act as talking in it.
+		case "channels.send":
+			return {
+				action: "use",
+				resource: Authorization.Channel.make({
+					organizationId,
+					id: input.capability.target,
 				}),
 			}
 	}

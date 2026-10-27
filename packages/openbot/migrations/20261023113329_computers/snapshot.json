@@ -1,0 +1,1759 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "9e37fe8d-3fe3-4230-8f99-2baf10012954",
+	"prevIds": ["10d9c7a5-ecf0-4a6a-9d75-1a61b67255b2"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_computer_access"],
+			"writes": [
+				"s|tbl|public.openbot_computer_access",
+				"n|tbl|public.openbot_computer_access",
+				"e|tbl|public.openbot_computer_access",
+				"n|rel|public.openbot_computer_access",
+				"n|type|public.openbot_computer_access",
+				"n|rel|public.openbot_computer_access_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_computer_calls"],
+			"writes": [
+				"s|tbl|public.openbot_computer_calls",
+				"n|tbl|public.openbot_computer_calls",
+				"e|tbl|public.openbot_computer_calls",
+				"n|rel|public.openbot_computer_calls",
+				"n|type|public.openbot_computer_calls",
+				"n|rel|public.openbot_computer_calls_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_computer_pairings"],
+			"writes": [
+				"s|tbl|public.openbot_computer_pairings",
+				"n|tbl|public.openbot_computer_pairings",
+				"e|tbl|public.openbot_computer_pairings",
+				"n|rel|public.openbot_computer_pairings",
+				"n|type|public.openbot_computer_pairings",
+				"n|rel|public.openbot_computer_pairings_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_computer_providers"],
+			"writes": [
+				"s|tbl|public.openbot_computer_providers",
+				"n|tbl|public.openbot_computer_providers",
+				"e|tbl|public.openbot_computer_providers",
+				"n|rel|public.openbot_computer_providers",
+				"n|type|public.openbot_computer_providers",
+				"n|rel|public.openbot_computer_providers_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_computer_usage"],
+			"writes": [
+				"s|tbl|public.openbot_computer_usage",
+				"n|tbl|public.openbot_computer_usage",
+				"e|tbl|public.openbot_computer_usage",
+				"n|rel|public.openbot_computer_usage",
+				"n|type|public.openbot_computer_usage",
+				"n|rel|public.openbot_computer_usage_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_computers"],
+			"writes": [
+				"s|tbl|public.openbot_computers",
+				"n|tbl|public.openbot_computers",
+				"e|tbl|public.openbot_computers",
+				"n|rel|public.openbot_computers",
+				"n|type|public.openbot_computers",
+				"n|rel|public.openbot_computers_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_access",
+				"openbot_computer_access_agent"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_access_agent",
+				"n|idx|public.openbot_computer_access_agent",
+				"e|idx|public.openbot_computer_access_agent",
+				"n|rel|public.openbot_computer_access_agent"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_access",
+				"n|sch|public",
+				"n|col|public.openbot_computer_access.organization_id",
+				"n|col|public.openbot_computer_access.agent"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_calls",
+				"openbot_computer_calls_created"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_calls_created",
+				"n|idx|public.openbot_computer_calls_created",
+				"e|idx|public.openbot_computer_calls_created",
+				"n|rel|public.openbot_computer_calls_created"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_calls",
+				"n|sch|public",
+				"n|col|public.openbot_computer_calls.created_at"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_pairings",
+				"openbot_computer_pairings_code"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_pairings_code",
+				"n|idx|public.openbot_computer_pairings_code",
+				"e|idx|public.openbot_computer_pairings_code",
+				"n|rel|public.openbot_computer_pairings_code"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_pairings",
+				"n|sch|public",
+				"n|col|public.openbot_computer_pairings.code_hash"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_pairings",
+				"openbot_computer_pairings_expires"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_pairings_expires",
+				"n|idx|public.openbot_computer_pairings_expires",
+				"e|idx|public.openbot_computer_pairings_expires",
+				"n|rel|public.openbot_computer_pairings_expires"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_pairings",
+				"n|sch|public",
+				"n|col|public.openbot_computer_pairings.expires_at"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_providers",
+				"openbot_computer_providers_owner"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_providers_owner",
+				"n|idx|public.openbot_computer_providers_owner",
+				"e|idx|public.openbot_computer_providers_owner",
+				"n|rel|public.openbot_computer_providers_owner"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_providers",
+				"n|sch|public",
+				"n|col|public.openbot_computer_providers.organization_id",
+				"n|col|public.openbot_computer_providers.owner_user_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_usage",
+				"openbot_computer_usage_computer"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_usage_computer",
+				"n|idx|public.openbot_computer_usage_computer",
+				"e|idx|public.openbot_computer_usage_computer",
+				"n|rel|public.openbot_computer_usage_computer"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_usage",
+				"n|sch|public",
+				"n|col|public.openbot_computer_usage.organization_id",
+				"n|col|public.openbot_computer_usage.computer_id",
+				"n|col|public.openbot_computer_usage.started_at"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_usage",
+				"openbot_computer_usage_open"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_usage_open",
+				"n|idx|public.openbot_computer_usage_open",
+				"e|idx|public.openbot_computer_usage_open",
+				"n|rel|public.openbot_computer_usage_open"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_usage",
+				"n|sch|public",
+				"n|col|public.openbot_computer_usage.computer_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computers",
+				"openbot_computers_id"
+			],
+			"writes": [
+				"s|idx|public.openbot_computers_id",
+				"n|idx|public.openbot_computers_id",
+				"e|idx|public.openbot_computers_id",
+				"n|rel|public.openbot_computers_id"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computers",
+				"n|sch|public",
+				"n|col|public.openbot_computers.id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computers",
+				"openbot_computers_token"
+			],
+			"writes": [
+				"s|idx|public.openbot_computers_token",
+				"n|idx|public.openbot_computers_token",
+				"e|idx|public.openbot_computers_token",
+				"n|rel|public.openbot_computers_token"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computers",
+				"n|sch|public",
+				"n|col|public.openbot_computers.token_hash"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computers",
+				"openbot_computers_machine"
+			],
+			"writes": [
+				"s|idx|public.openbot_computers_machine",
+				"n|idx|public.openbot_computers_machine",
+				"e|idx|public.openbot_computers_machine",
+				"n|rel|public.openbot_computers_machine"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computers",
+				"n|sch|public",
+				"n|col|public.openbot_computers.organization_id",
+				"n|col|public.openbot_computers.machine_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computers",
+				"openbot_computers_owner"
+			],
+			"writes": [
+				"s|idx|public.openbot_computers_owner",
+				"n|idx|public.openbot_computers_owner",
+				"e|idx|public.openbot_computers_owner",
+				"n|rel|public.openbot_computers_owner"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computers",
+				"n|sch|public",
+				"n|col|public.openbot_computers.organization_id",
+				"n|col|public.openbot_computers.owner_user_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_computer_access"],
+			"writes": [
+				"s|fk|public.openbot_computer_access.openbot_computer_access_i8oLhYtyGuBv_fkey",
+				"n|fk|public.openbot_computer_access.openbot_computer_access_i8oLhYtyGuBv_fkey",
+				"e|fk|public.openbot_computer_access.openbot_computer_access_i8oLhYtyGuBv_fkey",
+				"n|con|public.openbot_computer_access.openbot_computer_access_i8oLhYtyGuBv_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computer_access",
+				"n|sch|public",
+				"n|tbl|public.openbot_computers",
+				"n|sch|public",
+				"n|col|public.openbot_computer_access.organization_id",
+				"n|col|public.openbot_computer_access.computer_id",
+				"n|col|public.openbot_computers.organization_id",
+				"n|col|public.openbot_computers.id",
+				"e|uniqueness|public.openbot_computers.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_computers"],
+			"writes": [
+				"s|fk|public.openbot_computers.openbot_computers_5gU39IGJDtHv_fkey",
+				"n|fk|public.openbot_computers.openbot_computers_5gU39IGJDtHv_fkey",
+				"e|fk|public.openbot_computers.openbot_computers_5gU39IGJDtHv_fkey",
+				"n|con|public.openbot_computers.openbot_computers_5gU39IGJDtHv_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_computers",
+				"n|sch|public",
+				"n|tbl|public.openbot_computer_providers",
+				"n|sch|public",
+				"n|col|public.openbot_computers.organization_id",
+				"n|col|public.openbot_computers.provider_id",
+				"n|col|public.openbot_computer_providers.organization_id",
+				"n|col|public.openbot_computer_providers.id",
+				"e|uniqueness|public.openbot_computer_providers.id.organization_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_computer_access",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_computer_calls",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_computer_pairings",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_computer_providers",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_computer_usage",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_computers",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "computer_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "agent",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "granted_by",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "granted_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_calls",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_calls",
+				"name": "computer_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_calls",
+				"name": "call",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_calls",
+				"name": "reply",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_calls",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "code_hash",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "secret_hash",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "machine_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "hostname",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "os",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "arch",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "desktop",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "version",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "status",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "computer_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "token",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "expires_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "owner_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "credentials",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "hints",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "id",
+				"type": "bigserial",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "computer_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "owner_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "started_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "ended_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "owner_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "source",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "template",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "ref",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "machine_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "token_hash",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "state",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "features",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "pause_after",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "created_by",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "last_active_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "openbot_computer_access_agent",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "agent",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_calls",
+				"name": "openbot_computer_calls_created",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "created_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "openbot_computer_pairings_code",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "code_hash",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "openbot_computer_pairings_expires",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "expires_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "openbot_computer_providers_owner",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "owner_user_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "openbot_computer_usage_computer",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "computer_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "started_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "openbot_computer_usage_open",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "computer_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": "\"ended_at\" IS NULL",
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "openbot_computers_id",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "openbot_computers_token",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "token_hash",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "openbot_computers_machine",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "machine_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "openbot_computers_owner",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "owner_user_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "openbot_computer_access_i8oLhYtyGuBv_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "computer_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_computers",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "openbot_computers_5gU39IGJDtHv_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "provider_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_computer_providers",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_access",
+				"name": "openbot_computer_access_pkey",
+				"columns": ["computer_id", "agent"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_providers",
+				"name": "openbot_computer_providers_pkey",
+				"columns": ["organization_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computers",
+				"name": "openbot_computers_pkey",
+				"columns": ["organization_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_calls",
+				"name": "openbot_computer_calls_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_pairings",
+				"name": "openbot_computer_pairings_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_computer_usage",
+				"name": "openbot_computer_usage_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

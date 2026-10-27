@@ -1,26 +1,32 @@
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import * as Store from "./Store.ts"
 
-export class AuthorizationError extends Data.TaggedError("AuthorizationError")<{
-	readonly reason:
-		| "Metadata"
-		| "CimdUnsupported"
-		| "ClientRegistrationUnsupported"
-		| "ClientRegistrationFailed"
-		| "ClientMetadata"
-		| "CallbackMismatch"
-		| "FlowExpired"
-		| "AlreadyConsumed"
-		| "GrantRejected"
-		| "RefreshUnavailable"
-		| "RefreshFailed"
-		| "ScopeRequired"
-		| "Crypto"
-		| "RevocationFailed"
-	readonly issue: string
-}> {}
+export class AuthorizationError extends Schema.TaggedError<
+	AuthorizationError,
+	{ readonly brand: unique symbol }
+>()("AuthorizationError", {
+	reason: Schema.Literals([
+		"Metadata",
+		"CimdUnsupported",
+		"ClientMetadata",
+		"CallbackMismatch",
+		"FlowExpired",
+		"AlreadyConsumed",
+		"GrantRejected",
+		"RefreshUnavailable",
+		"RefreshFailed",
+		"ScopeRequired",
+		"Crypto",
+		"RevocationFailed",
+	]),
+	issue: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
-export class ClientMetadata extends Schema.Opaque<ClientMetadata>()(
+export class ClientMetadata extends Schema.Opaque<
+	ClientMetadata,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			client_id: Schema.NonEmptyString,
@@ -35,17 +41,19 @@ export class ClientMetadata extends Schema.Opaque<ClientMetadata>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ClientMetadata)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "ClientMetadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "ClientMetadata",
+					issue: error.message,
+				}),
 			),
 		)
 }
 
-export class ResourceMetadata extends Schema.Opaque<ResourceMetadata>()(
+export class ResourceMetadata extends Schema.Opaque<
+	ResourceMetadata,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			resource: Schema.NonEmptyString,
@@ -58,27 +66,26 @@ export class ResourceMetadata extends Schema.Opaque<ResourceMetadata>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ResourceMetadata)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "Metadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "Metadata",
+					issue: error.message,
+				}),
 			),
 		)
 }
 
-export class ServerMetadata extends Schema.Opaque<ServerMetadata>()(
+export class ServerMetadata extends Schema.Opaque<
+	ServerMetadata,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.StructWithRest(
 		Schema.Struct({
 			issuer: Schema.NonEmptyString,
 			authorization_endpoint: Schema.NonEmptyString,
 			token_endpoint: Schema.NonEmptyString,
+			registration_endpoint: Schema.optional(Schema.NonEmptyString),
 			revocation_endpoint: Schema.optional(Schema.String),
-			registration_endpoint: Schema.optional(Schema.String),
-			revocation_endpoint_auth_methods_supported: Schema.optional(
-				Schema.Array(Schema.String),
-			),
 			client_id_metadata_document_supported: Schema.optional(Schema.Boolean),
 			authorization_response_iss_parameter_supported: Schema.optional(
 				Schema.Boolean,
@@ -94,27 +101,29 @@ export class ServerMetadata extends Schema.Opaque<ServerMetadata>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ServerMetadata)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "Metadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "Metadata",
+					issue: error.message,
+				}),
 			),
 		)
 }
 
-export const ScopeSelection = Schema.Literals(["Explicit", "ProviderDefault"])
-
-export class Flow extends Schema.Opaque<Flow>()(
+export class Flow extends Schema.Opaque<
+	Flow,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		flowId: Schema.String,
 		binding: Store.CredentialBinding,
 		clientId: Schema.String,
-		clientAuthentication: Schema.optional(Store.OAuthClientAuthentication),
+		clientSecret: Schema.optional(Schema.Redacted(Schema.NonEmptyString)),
+		clientAuthMethod: Schema.optional(
+			Schema.Literals(["none", "client_secret_basic", "client_secret_post"]),
+		),
 		redirectUri: Schema.String,
 		scopes: Schema.Array(Schema.String),
-		scopeSelection: Schema.optional(ScopeSelection),
 		verifier: Schema.Redacted(Schema.String),
 		expiresAt: Schema.Finite,
 		metadata: ServerMetadata,
@@ -123,12 +132,12 @@ export class Flow extends Schema.Opaque<Flow>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Flow)(value).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "CallbackMismatch",
-						issue: "Invalid saved authorization flow",
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "CallbackMismatch",
+					issue: "Invalid saved authorization flow",
+					cause: error,
+				}),
 			),
 		)
 }

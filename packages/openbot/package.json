@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"license": "AGPL-3.0-only",
 	"type": "module",
-	"description": "Headless, API-first Agent host for OpenBot",
+	"description": "Headless, API-first Bot host for OpenBot",
 	"sideEffects": false,
 	"files": [
 		"dist",
@@ -12,40 +12,50 @@
 		"migrations"
 	],
 	"bin": {
-		"openbot": "./dist/Main.js",
+		"openbot-server": "./dist/Main.js",
 		"openbot-migrate": "./dist/Migrate.js",
-		"openbot-setup": "./dist/Setup.js"
+		"openbot-setup": "./dist/Setup.js",
+		"openbot-provision": "./dist/Provision.js"
 	},
 	"exports": {
 		".": "./dist/index.js",
-		"./StorageMigration": "./dist/database/Migrations.js"
+		"./StorageMigration": "./dist/database/Migrations.js",
+		"./Development": "./dist/Development.js"
 	},
 	"scripts": {
 		"build": "tsdown",
 		"start": "node dist/Main.js",
 		"start:development": "node dist/DevelopmentMain.js",
-		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run",
 		"migrate": "node dist/Migrate.js",
-		"setup": "node dist/Setup.js"
+		"setup": "node dist/Setup.js",
+		"provision": "node dist/Provision.js"
 	},
 	"dependencies": {
 		"@better-auth/drizzle-adapter": "1.7.8",
-		"@effect/ai-anthropic": "4.0.5",
-		"@effect/ai-openai": "4.0.5",
-		"@effect/ai-openai-compat": "4.0.5",
-		"@effect/platform-node": "4.0.5",
-		"@effect/sql-pg": "4.0.5",
-		"@openbot-build/core": "workspace:*",
+		"@effect/ai-anthropic": "4.0.6",
+		"@effect/ai-openai": "4.0.6",
+		"@effect/ai-openai-compat": "4.0.6",
+		"@effect/ai-typesafe": "4.0.6",
+		"@effect/platform-node": "4.0.6",
+		"@effect/sql-pg": "4.0.6",
+		"@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0",
+		"@nmnmcc/ability": "1.0.1",
 		"@openbot-build/api": "workspace:*",
+		"@openbot-build/core": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
 		"better-auth": "1.7.8",
-		"drizzle-orm": "1.0.0-rc.5-5935859",
-		"effect": "4.0.5",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.0.6",
 		"jose": "6.2.12",
-		"pg": "8.23.1"
+		"pg": "8.23.1",
+		"quickjs-emscripten-core": "0.32.0",
+		"undici": "8.12.3"
 	},
 	"devDependencies": {
+		"@effect/vitest": "4.0.6",
 		"@openbot-build/client": "workspace:*",
-		"@types/pg": "8.23.1"
+		"@types/pg": "8.23.1",
+		"vitest": "5.0.5"
 	}
 }

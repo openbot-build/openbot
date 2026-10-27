@@ -1,0 +1,300 @@
+---
+title: Mitwirken
+description:
+  Richte den Code ein, führe die Prüfungen aus und folge den Projektregeln.
+---
+
+Diese Seite ist für Menschen, die OpenBot selbst ändern. Sie zeigt dir, wie du
+deinen Computer einrichtest, den Server und die Prüfungen startest und dich im
+Code zurechtfindest.
+
+---
+
+## Einrichten
+
+Du brauchst [devenv](https://devenv.sh). devenv gibt dir genau die Werkzeuge für
+das Projekt: Node.js, pnpm, PostgreSQL und mehr. Du brauchst auch
+[Docker](https://docs.docker.com/get-docker/). Die Datenbank und der
+Objektspeicher für die Entwicklung laufen in Docker, und mit Docker baust und
+prüfst du die Images. devenv gibt dir die Befehlszeilen-Werkzeuge von Docker.
+Dein Computer braucht nur einen laufenden Docker-Dienst. Siehe
+[Betrieb](/de/docs/deploy#die-images-bauen). Führe jeden Befehl über
+`devenv shell -- <command>` aus. So nutzt du immer diese Werkzeuge.
+
+<Steps>
+<Step>
+
+### Den Code holen
+
+```sh
+git clone <repository-url> openbot
+cd openbot
+```
+
+</Step>
+<Step>
+
+### Lokale Einstellungen erstellen
+
+```sh
+devenv shell -- pnpm dev:setup
+```
+
+`dev:setup` erstellt `.env.development` mit einem neuen, zufälligen geheimen
+Schlüssel in `OPENBOT_SECRET_KEYS`. Wenn deine `.env.development` aus einer
+älteren Version stammt, lösche sie und führe `dev:setup` noch einmal aus. Du
+kannst auch die Entwicklungs-Datenbank zurücksetzen. Siehe
+[Konfiguration](/de/docs/configuration#entwicklung).
+
+</Step>
+<Step>
+
+### Den Entwicklungsserver starten
+
+```sh
+devenv shell -- pnpm dev
+```
+
+`pnpm dev` führt `devenv up` aus. Das macht diese Schritte:
+
+1. Es startet PostgreSQL 18 auf `127.0.0.1`, mit dem Benutzer `openbot_dev`. Es
+   läuft in Docker, mit demselben Image wie die Compose-Datei für die
+   Produktion. Seine Daten liegen im Docker-Volume `openbot-dev-postgres`. Um
+   die Datenbank zurückzusetzen, stoppe `pnpm dev` und führe
+   `docker volume rm openbot-dev-postgres` aus.
+2. Es startet [RustFS](https://rustfs.com), den Objektspeicher für Dateien, auf
+   `127.0.0.1`. Es läuft auch in Docker. Seine Daten liegen im Docker-Volume
+   `openbot-dev-rustfs`. Um die gespeicherten Dateien zu löschen, stoppe
+   `pnpm dev` und führe `docker volume rm openbot-dev-rustfs` aus.
+3. Es installiert die Pakete mit `pnpm install --frozen-lockfile`.
+4. Es baut OpenBot und die Pakete, die OpenBot braucht.
+5. Es führt die Datenbank-Migrationen aus.
+6. Es startet den Entwicklungsserver unter `http://localhost`. Der Server
+   schreibt die Plattform-Einstellungen für diesen Origin selbst. Darum gibt es
+   keinen Einrichtungsschritt.
+
+devenv wählt für jeden Dienst einen freien Port. Es beginnt bei einem
+Basis-Port: `5433` für PostgreSQL, `9000` für RustFS und `3000` für OpenBot. Es
+zeigt die Ports in seiner Prozessliste. Der Proxy von devenv gibt OpenBot die
+feste Adresse `http://localhost` auf Port 80, egal welchen Port OpenBot bekommt.
+Unter Linux fragt der Proxy beim ersten Mal mit `sudo` nach deinem Passwort,
+damit er auf Port 80 lauschen kann.
+
+Wenn du eine Datei in `packages/*/src` änderst, startet devenv OpenBot neu.
+
+</Step>
+</Steps>
+
+Der Entwicklungsserver nutzt ein lokales Testkonto, Test-Models und eine
+Test-App. Kein externer Dienst ist nötig. Wie du dich anmeldest und ein User
+Token erstellst, steht unter [Schnellstart](/de/docs/quickstart).
+
+---
+
+## Prüfungen
+
+| Befehl                                                   | Was er tut                                                                        |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `devenv shell -- pnpm install`                           | Installiert alle Pakete.                                                          |
+| `devenv shell -- pnpm build`                             | Baut jedes Paket mit tsdown.                                                      |
+| `devenv shell -- pnpm typecheck`                         | Prüft die Typen jedes Pakets und die Effect-Regeln.                               |
+| `devenv shell -- pnpm rules`                             | Prüft nur die Effect-Regeln von `scripts/effect-rules.ts`.                        |
+| `devenv shell -- pnpm -r test`                           | Führt die Tests jedes Pakets aus.                                                 |
+| `devenv shell -- pnpm test`                              | Führt die Tests aller Pakete in einem Vitest-Lauf aus, ohne Build und Typprüfung. |
+| `devenv shell -- pnpm --filter @openbot-build/core test` | Führt die Tests eines Pakets aus.                                                 |
+| `devenv shell -- treefmt`                                | Formatiert den Code mit Prettier und nixfmt.                                      |
+
+Führe `pnpm build` vor `pnpm typecheck` aus. Pakete importieren einander aus
+ihren gebauten Dateien.
+
+Tests nutzen [Vitest](https://vitest.dev) mit
+[`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest). Ein Test, der
+einen Effect ausführt, nutzt `it.effect`. Er gibt dem Test eine Test-Uhr: Die
+Zeit läuft nur weiter, wenn der Test sie weiterstellt. Ein Test, der echte Zeit
+braucht, zum Beispiel einer mit einem echten Server, nutzt `it.live`. Tests von
+OpenBot starten ihren eigenen kurzlebigen PostgreSQL-Server mit den Werkzeugen
+aus devenv. Sie brauchen keine Geheimnisse und keine externen Dienste. GitHub
+Actions führt dieselben Befehle `build`, `typecheck` und `test` aus. Siehe
+[Betrieb](/de/docs/deploy#github-actions).
+
+---
+
+## Aufbau des Repositorys
+
+| Pfad                       | Was er enthält                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/`                | Die Pakete des Workspaces. Siehe [Pakete](/de/docs/packages).                                                    |
+| `packages/docs/`           | Diese Doku-Seite.                                                                                                |
+| `packages/template/`       | Ein Startpunkt für ein neues Paket. Er gehört nicht zum Workspace.                                               |
+| `protocol-test/`           | Der öffentliche Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).                  |
+| `deploy/`                  | Dateien, um OpenBot in Betrieb zu nehmen. Jedes Ziel hat einen eigenen Ordner. Siehe [Betrieb](/de/docs/deploy). |
+| `deploy/docker/`           | Das Dockerfile, die Bake-Datei, Compose-Dateien, die Vorlage für die Produktivumgebung und die Image-Prüfungen.  |
+| `.env.development.example` | Die Vorlage für `.env.development`.                                                                              |
+| `patches/`                 | Korrekturen für genaue Versionen externer Pakete.                                                                |
+| `references/`              | Quellcode anderer Open-Source-Projekte, als Git-Submodule. Nur zum Lesen.                                        |
+| `devenv.nix`               | Die Entwicklungswerkzeuge, Einstellungen und Prozesse.                                                           |
+
+Der Ordner `references/` gehört nicht zum Build. Um diesen Code zu lesen, hole
+ihn mit `git submodule update --init`.
+
+Für ein neues Paket kopierst du `packages/template/` nach `packages/<name>/`.
+Ändere dann seinen Namen, seinen Einstiegspunkt und seine Abhängigkeiten.
+
+---
+
+## Die Doku-Seite
+
+Die Doku-Seite ist eine [Astro](https://astro.build)-Seite, gebaut mit
+[Starlight](https://starlight.astro.build). Der Build erzeugt nur statische
+Dateien. Starte sie mit:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/docs dev
+```
+
+Öffne dann `http://localhost:4321`.
+
+| Pfad in `packages/docs/`    | Was es ist                                                                          |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `content/docs/*.mdx`        | Die Seiten. Der Dateiname ist die URL: `deploy.mdx` ist `/docs/deploy`.             |
+| `content/docs/<locale>/`    | Die Übersetzungen: `zh-cn` für vereinfachtes Chinesisch und `de` für Deutsch.       |
+| `astro.config.ts`           | Die Einstellungen der Seite und die Reihenfolge der Seiten in der Seitenleiste.     |
+| `src/components/`           | Die Komponenten, die Seiten ohne Import nutzen können: `Callout`, `Steps` und mehr. |
+| `src/landing/`              | Die Startseite. `messages/` enthält ihren Text, mit einer Datei für jede Sprache.   |
+| `src/i18n.ts`               | Die Sprachen der Doku und der Startseite.                                           |
+| `src/pages/openapi.json.ts` | Liefert `openapi.json` unter `/openapi.json` aus, damit man es herunterladen kann.  |
+| `scripts/api.ts`            | Erzeugt `openapi.json` aus dem API-Vertrag.                                         |
+
+Die API-Referenz unter `/docs/api` entsteht aus `openapi.json`, mit dem Plugin
+[starlight-openapi](https://github.com/HiDeoo/starlight-openapi). Schreibe sie
+nicht von Hand. Das Skript läuft vor jedem `dev` und `build`. Wenn du den
+API-Vertrag in `@openbot-build/api` änderst, ändert sich auch die Referenz. Wenn
+du dem Vertrag eine Gruppe hinzufügst, gib ihr in `scripts/api.ts` einen Titel
+und eine Beschreibung. Bis du das tust, bricht das Skript mit einem Fehler ab.
+Der Build erzeugt auch `/llms.txt` und `/llms-full.txt`. Sie enthalten die Doku
+als reinen Text für KI-Werkzeuge. Um zu prüfen, dass jede Seite gebaut wird,
+führe `devenv shell -- pnpm --filter @openbot-build/docs build` aus.
+
+Jeder Push auf `main` veröffentlicht die Seite auf
+[openbot.build](https://openbot.build). Siehe
+[Die Doku-Seite veröffentlichen](/de/docs/deploy#die-doku-seite-veröffentlichen).
+
+---
+
+## Projektregeln
+
+### Basic English
+
+Schreibe allen Text in
+[Basic English](https://en.wikipedia.org/wiki/Basic_English) (Grundenglisch).
+Das gilt für Doku, Code-Kommentare, Fehlermeldungen, Logs, Prompts und
+Test-Texte. Nutze, wo es geht, die 850 Wörter von Basic English und dazu die
+Fachwörter, die du brauchst. Nutze kurze Sätze. Erkläre jeden Fachbegriff, wenn
+du ihn zum ersten Mal nutzt.
+
+Englisch ist die Quelle für allen Text. Die Doku gibt es auch auf vereinfachtem
+Chinesisch und auf Deutsch. Die Startseite gibt es in noch viel mehr Sprachen.
+Wenn du eine englische Seite änderst, ändere ihre Übersetzungen in derselben
+Änderung. Eine Übersetzung behält dieselben Überschriften in derselben
+Reihenfolge. Ihre Links führen zu Seiten in ihrer eigenen Sprache, zum Beispiel
+`/de/docs/deploy`. Wenn du Text auf der Startseite änderst, ändere ihn in jeder
+Datei in `src/landing/messages/`. Die API-Referenz gibt es nur auf Englisch.
+
+### Headless
+
+OpenBot hat keine Benutzeroberfläche. Füge dem Repository keine Seiten,
+Frontends oder Client-Apps hinzu. Die Doku-Seite ist die einzige Ausnahme. Jede
+neue Funktion beginnt als Operation im Vertrag `@openbot-build/api`. Danach
+behandelt der Server sie. Jede Operation muss mit einem User Token und mit dem
+Anmelde-Cookie funktionieren. Sie muss auch sagen, welche Aktion auf welcher
+Ressource sie braucht, mit einer Annotation `Required` oder `GroupRequired`. Die
+Helfer `own`, `organization`, `channel` und `channels` in
+`packages/api/src/Authorization.ts` erstellen die Annotationen. Eine Anforderung
+darf nur einen Pfadparameter nennen, den ihr Endpunkt hat. Ein Test in
+`packages/api` prüft das. Siehe [Berechtigungen](/de/docs/permissions).
+
+Der Code für die Autorisierung kommt aus der Bibliothek
+[ability](https://github.com/nmnmcc/ability), dem npm-Paket `@nmnmcc/ability`.
+Seine Version steht fest in `package.json`.
+
+### Ein aktuelles Modell
+
+Behalte keine alten Wege für alte Aufrufer, alte Clients oder alte Daten. Wenn
+sich ein Vertrag oder der Speicher ändern muss, ändere ihn direkt. Die einzige
+Ausnahme ist eine kleine Korrektur für einen Fehler in einem externen Paket oder
+Werkzeug.
+
+### Zuerst Effect-Daten
+
+Nutze die unveränderlichen Datentypen von Effect, zum Beispiel `HashMap`,
+`Chunk` und `Option`. Nutze die veränderlichen Typen von JavaScript nur, wenn du
+sie wirklich brauchst.
+
+### Effect-Regeln
+
+OpenBot ist mit [Effect](https://effect.website) geschrieben. Zwei Prüfungen
+halten den Code im Stil von Effect. `pnpm typecheck` führt beide aus, und GitHub
+Actions führt `pnpm typecheck` bei jeder Änderung aus.
+
+Die erste Prüfung ist der Effect Language Service. Er ist ein Plugin des
+TypeScript-Compilers und in `tsconfig.base.json` eingerichtet. Seine Regeln sind
+Fehler, also hält `tsc` bei ihnen an. Unter anderem verlangen sie:
+
+- die Module `Array`, `String` und `Record` von Effect statt der nativen
+  Methoden, importiert als `Arr`, `Str` und `Rec`;
+- `Clock` und `DateTime` für Zeit, die Dienste `Random` und `Crypto` für
+  Zufallswerte und IDs und `Config` für Umgebungsvariablen;
+- `HttpClient` statt `fetch` und die Dienste `FileSystem`, `Path` und
+  `ChildProcess` statt der Node.js-Module;
+- Effect Schema für JSON und für Daten von außen, dekodiert über Effect und
+  nicht mit den `*Sync`-Funktionen;
+- `Schema.TaggedError` für Fehler und eine Brand an jeder Schema-Klasse;
+- `Effect.gen` und `Effect.fn` statt `async`-Funktionen und `new Promise`;
+- `it.effect`, `it.live` und `it.layer` aus `@effect/vitest` in Tests.
+
+Drei Regeln sind aus. `apiStabilityLeak` und `unstableApiUsage` sind aus, weil
+der API-Vertrag auf `effect/http-api` aufbaut, das Effect als instabil markiert.
+`missingPipeableSignature` ist aus, weil eine pipe-fähige Form jeder
+exportierten Funktion einer Bibliothek hilft, nicht einer Anwendung.
+
+Die zweite Prüfung ist `scripts/effect-rules.ts`. Sie liest jede
+TypeScript-Datei und prüft die Regeln, die der Language Service nicht sieht:
+
+| Regel              | Was sie verhindert                                                                                                                                                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blind-error-map`  | `Effect.mapError(() => ...)`, `Effect.orElseFail(() => ...)` und `catch: () => ...`, die die Ursache eines Fehlers verwerfen. Ein Handler, der mit seinem Namen übergeben wird, zählt auch, wenn dieselbe Datei ihn als Funktion ohne Parameter deklariert. |
+| `throw`            | `throw`. Scheitere mit einem typisierten Fehler, nutze `Effect.die` für eine verletzte Regel des Codes oder `assert.fail` in einem Test.                                                                                                                    |
+| `run-outside-main` | `Effect.runPromise` und die anderen `run`-Funktionen außerhalb eines Einstiegspunkts (einer `*Main.ts`-Datei). Das gilt auch für `runForkWith`; ein Callback von außen nutzt eine `FiberSet`-Runtime mit Scope.                                             |
+| `fork-daemon`      | `Effect.forkDetach`. Forke eine Fiber in einem Scope oder halte sie in einem `FiberSet` oder `FiberMap`.                                                                                                                                                    |
+| `promise-then`     | Promise-Ketten mit `.then`. Mach aus dem Promise einen Effect.                                                                                                                                                                                              |
+| `directive-reason` | Eine Regel-Direktive ohne Grund.                                                                                                                                                                                                                            |
+
+Manche Stellen müssen nativ bleiben, weil eine API von außen es verlangt oder
+weil Effect keine API dafür hat. Beispiele sind ein Drizzle-Callback, der ein
+`Date` zurückgeben muss, ein Promise-Callback eines SDK und HMAC-Signaturen.
+Dann schalte die Regel für eine Zeile aus und gib den Grund nach `--` an:
+
+```ts
+// @effect-diagnostics-next-line globalDate:off -- Drizzle calls this outside Effect and needs a Date.
+// @effect-rules-next-line throw -- The SDK reads a thrown error as a failed call.
+```
+
+Eine Direktive ist nie ein Weg, Arbeit zu sparen. Tests sind Einstiegspunkte,
+daher ist `strictEffectProvide` in `test/`-Ordnern aus.
+
+### Kleine, echte Änderungen
+
+Baue, was echten Nutzen bringt. Halte jede Änderung fokussiert und teste die
+Teile, die wirklich kaputtgehen können.
+
+Die vollständigen Regeln für Mitwirkende stehen in `AGENTS.md` im Hauptordner
+des Repositorys.
+
+---
+
+## Lizenz
+
+OpenBot nutzt die GNU Affero General Public License, nur Version 3
+(`AGPL-3.0-only`). Der vollständige Text steht in der Datei `LICENSE` im
+Hauptordner des Repositorys. Wenn du eine Änderung einreichst, stimmst du zu,
+dass sie dieselbe Lizenz nutzt.

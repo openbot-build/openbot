@@ -1,3 +1,4 @@
+import { sameConnection } from "../discovery/CatalogDiscovery.ts"
 import {
 	Option,
 	HashMap,
@@ -16,7 +17,6 @@ import * as OAuthAuthorization from "./OAuthAuthorization.ts"
 
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Store from "./Store.ts"
-import * as Document from "../Document.ts"
 import {
 	AppError,
 	CleanupPending,
@@ -24,21 +24,22 @@ import {
 	type RevalidationOptions,
 } from "./App.ts"
 
-const keyOf = (key: Store.ConnectionKey) =>
-	JSON.stringify([key.owner, key.connectionId])
-
 export const layerConnectionScopes = Layer.effect(
 	ConnectionScopes,
 	Effect.gen(function* () {
 		const state = yield* Ref.make(
-			HashMap.empty<string, HashSet.HashSet<Scope.Closeable>>(),
+			HashMap.empty<
+				readonly [string, string],
+				HashSet.HashSet<Scope.Closeable>
+			>(),
 		)
 		return ConnectionScopes.of({
+			// The scope and its clean-up go in together, so an interruption cannot leave a scope in the map.
 			register: Effect.fn("ConnectionScopes.register")(function* ({
 				key,
 				scope,
 			}) {
-				const id = keyOf(key)
+				const id = [key.owner, key.connectionId] as const
 				yield* Ref.update(
 					state,
 					HashMap.modifyAt(id, (scopes) =>
@@ -64,9 +65,9 @@ export const layerConnectionScopes = Layer.effect(
 						),
 					),
 				)
-			}),
+			}, Effect.uninterruptible),
 			close: Effect.fn("ConnectionScopes.close")(function* (key) {
-				const id = keyOf(key)
+				const id = [key.owner, key.connectionId] as const
 				const scopes = yield* Ref.modify(
 					state,
 					(old) => [HashMap.get(old, id), HashMap.remove(old, id)] as const,
@@ -90,7 +91,7 @@ export const add = Effect.fn("App.add")(function* (options: {
 	readonly requiresAuthorization: boolean
 }) {
 	if (!options.confirmed)
-		return yield* new AppError({
+		return yield* AppError.make({
 			reason: "ConfirmationRequired",
 		})
 	const discovery = yield* Discovery.Discovery
@@ -100,7 +101,7 @@ export const add = Effect.fn("App.add")(function* (options: {
 		rules.compare({ previous: options.candidate, current })._tag ===
 		"NeedsRevalidation"
 	)
-		return yield* new AppError({ reason: "CandidateChanged" })
+		return yield* AppError.make({ reason: "CandidateChanged" })
 	const configured = yield* rules.configureEndpoint({
 		candidate: current,
 		index: options.remoteIndex,
@@ -108,12 +109,12 @@ export const add = Effect.fn("App.add")(function* (options: {
 	})
 	const store = yield* Store.AppStore
 	const connection = yield* store.save({
-		app: {
+		app: Store.AppRecord.make({
 			cardUrl: current.cardUrl,
 			card: current.card,
 			sources: current.sources,
-		},
-		connection: {
+		}),
+		connection: Store.UserConnection.make({
 			...options.key,
 			cardUrl: current.cardUrl,
 			endpoint: configured.url,
@@ -128,7 +129,7 @@ export const add = Effect.fn("App.add")(function* (options: {
 						scopes: [],
 					}
 				: { _tag: "Unprotected" },
-		},
+		}),
 	})
 	return {
 		connection,
@@ -148,7 +149,7 @@ export const usable = Effect.fn("App.usable")(function* (
 ) {
 	const connection = yield* current(key)
 	if (connection.state !== "Enabled")
-		return yield* new AppError({ reason: "Unavailable" })
+		return yield* AppError.make({ reason: "Unavailable" })
 	return connection
 })
 
@@ -174,7 +175,7 @@ export const remove = Effect.fn("App.remove")(function* (
 			.pipe(
 				Effect.andThen(
 					Effect.fail(
-						new CleanupPending({
+						CleanupPending.make({
 							key,
 							stage,
 						}),
@@ -197,28 +198,6 @@ export const remove = Effect.fn("App.remove")(function* (
 	return { _tag: "Removed", key } as const
 })
 
-/** The parts of a remote that change what a connection talks to. */
-const remoteDescription = (card: Document.ServerCard, index: number) =>
-	Option.fromNullishOr(card.remotes?.[index]).pipe(
-		Option.map((remote) => ({
-			type: remote.type,
-			url: remote.url,
-			versions: remote.supportedProtocolVersions,
-			variables: remote.variables,
-			headers: remote.headers,
-		})),
-	)
-const sameDescription = Option.makeEquivalence(
-	Schema.toEquivalence(
-		Schema.Struct({
-			type: Schema.String,
-			url: Schema.String,
-			versions: Schema.optional(Schema.Array(Schema.String)),
-			variables: Schema.optional(Schema.Record(Schema.String, Document.Input)),
-			headers: Schema.optional(Schema.Array(Document.HeaderInput)),
-		}),
-	),
-)
 const sameConfiguration = Schema.toEquivalence(
 	Schema.Record(Schema.String, Schema.String),
 )
@@ -229,9 +208,9 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 	const store = yield* Store.AppStore
 	const connection = yield* store.get(options.key)
 	if (connection.state === "Disabled" || connection.state === "CleanupPending")
-		return yield* new AppError({ reason: "Unavailable" })
+		return yield* AppError.make({ reason: "Unavailable" })
 	if (connection.cardUrl !== options.candidate.cardUrl)
-		return yield* new AppError({ reason: "CandidateChanged" })
+		return yield* AppError.make({ reason: "CandidateChanged" })
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
 	const candidate = yield* discovery.refreshCard(connection.cardUrl)
@@ -260,9 +239,9 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 			}),
 		) ||
 		remoteIndex !== connection.remoteIndex ||
-		!sameDescription(
-			remoteDescription(service.card, connection.remoteIndex),
-			remoteDescription(candidate.card, remoteIndex),
+		!sameConnection(
+			service.card.remotes?.[connection.remoteIndex],
+			candidate.card.remotes?.[remoteIndex],
 		) ||
 		!sameConfiguration(values, Redacted.value(connection.configuration)) ||
 		Match.value(auth).pipe(
@@ -281,11 +260,13 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 			Match.orElse(() => true),
 		)
 	if (!sensitive) {
-		yield* store.updateApp({
-			cardUrl: candidate.cardUrl,
-			card: candidate.card,
-			sources: candidate.sources,
-		})
+		yield* store.updateApp(
+			Store.AppRecord.make({
+				cardUrl: candidate.cardUrl,
+				card: candidate.card,
+				sources: candidate.sources,
+			}),
+		)
 		return {
 			_tag: "DescriptionUpdated",
 			connection,
@@ -301,11 +282,13 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 	})
 	const active = yield* ConnectionScopes
 	yield* active.close(options.key)
-	yield* store.updateApp({
-		cardUrl: candidate.cardUrl,
-		card: candidate.card,
-		sources: candidate.sources,
-	})
+	yield* store.updateApp(
+		Store.AppRecord.make({
+			cardUrl: candidate.cardUrl,
+			card: candidate.card,
+			sources: candidate.sources,
+		}),
+	)
 	if (!options.confirmed)
 		return {
 			_tag: "NeedsRevalidation",
@@ -316,7 +299,7 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 		rules.compare({ previous: options.candidate, current: candidate })._tag ===
 		"NeedsRevalidation"
 	)
-		return yield* new AppError({ reason: "CandidateChanged" })
+		return yield* AppError.make({ reason: "CandidateChanged" })
 	const configured = yield* Effect.fromResult(endpoint)
 	const credentials = yield* Store.CredentialStore
 	yield* credentials.deleteConnection(options.key)
@@ -344,6 +327,6 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 				: old,
 	})
 	if (updated.state !== "Enabled" || updated.endpoint !== configured.url)
-		return yield* new AppError({ reason: "Unavailable" })
+		return yield* AppError.make({ reason: "Unavailable" })
 	return { _tag: "Revalidated", connection: updated, candidate } as const
 })

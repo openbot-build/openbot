@@ -1,12 +1,19 @@
-import { Context, Data, Effect, Option, Schema } from "effect"
+import { Context, Effect, Option, Schema } from "effect"
 import * as Document from "../Document.ts"
 
-export class IndexError extends Data.TaggedError("IndexError")<{
-	readonly reason: "Invalid" | "Unavailable"
-	readonly operation: string
-}> {}
+export class IndexError extends Schema.TaggedError<
+	IndexError,
+	{ readonly brand: unique symbol }
+>()("IndexError", {
+	reason: Schema.Literals(["Invalid", "Unavailable"]),
+	operation: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
-export class Evidence extends Schema.Opaque<Evidence>()(
+export class Evidence extends Schema.Opaque<
+	Evidence,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		publisherUrl: Document.Link,
 		catalogUrl: Document.Link,
@@ -16,17 +23,20 @@ export class Evidence extends Schema.Opaque<Evidence>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Evidence)(value).pipe(
-			Effect.mapError(
-				() =>
-					new IndexError({
-						reason: "Invalid",
-						operation: "Evidence.decode",
-					}),
+			Effect.mapError((cause) =>
+				IndexError.make({
+					reason: "Invalid",
+					operation: "Evidence.decode",
+					cause,
+				}),
 			),
 		)
 }
 
-export class Entry extends Schema.Opaque<Entry>()(
+export class Entry extends Schema.Opaque<
+	Entry,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		cardUrl: Document.Link,
 		card: Document.ServerCard,
@@ -40,12 +50,12 @@ export class Entry extends Schema.Opaque<Entry>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Entry)(value).pipe(
-			Effect.mapError(
-				() =>
-					new IndexError({
-						reason: "Invalid",
-						operation: "Entry.decode",
-					}),
+			Effect.mapError((cause) =>
+				IndexError.make({
+					reason: "Invalid",
+					operation: "Entry.decode",
+					cause,
+				}),
 			),
 		)
 }

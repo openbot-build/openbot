@@ -2,7 +2,14 @@ import { dual } from "effect/Function"
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic"
 import { Provider as CoreProvider, Model } from "@openbot-build/core"
 import { AiError } from "effect/ai"
-import { Effect, Layer, Schema, Context, Predicate, Record } from "effect"
+import {
+	Effect,
+	Layer,
+	Schema,
+	Context,
+	Predicate,
+	Record as Rec,
+} from "effect"
 
 export type Defaults = Omit<
 	typeof AnthropicLanguageModel.Config.Service,
@@ -16,13 +23,6 @@ export type Provider = CoreProvider.Provider<
 	AnthropicClient.AnthropicClient
 >
 
-const invalid = (description: string) =>
-	AiError.AiError.make({
-		module: "AnthropicProvider",
-		method: "model",
-		reason: AiError.InvalidRequestError.make({ description }),
-	})
-
 // The SDK types own these sets. Each object must name every SDK value and
 // no other value, so the schemas below stay equal to the SDK types.
 const efforts: {
@@ -33,10 +33,18 @@ const efforts: {
 const serviceTiers: {
 	readonly [Key in NonNullable<Defaults["service_tier"]>]: true
 } = { auto: true, standard_only: true }
-const Effort = Schema.Literals(Record.keys(efforts))
-const ServiceTier = Schema.Literals(Record.keys(serviceTiers))
+const Effort = Schema.Literals(Rec.keys(efforts))
+const ServiceTier = Schema.Literals(Rec.keys(serviceTiers))
 
-export const make = (defaults: Defaults = {}): Provider =>
+/** `upstreamModel` is the model name that the API gets. The default is the selected model ID. */
+export interface Options {
+	readonly upstreamModel?: string
+}
+
+export const make = ({
+	upstreamModel,
+	...defaults
+}: Defaults & Options = {}): Provider =>
 	new CoreProvider.Provider({
 		id: CoreProvider.Id.make("anthropic"),
 		model: (selection) =>
@@ -58,17 +66,27 @@ export const make = (defaults: Defaults = {}): Provider =>
 					...(effort === undefined
 						? {}
 						: { output_config: { ...defaults.output_config, effort } }),
-					...Record.filter({ service_tier: tier }, Predicate.isNotUndefined),
+					...Rec.filter({ service_tier: tier }, Predicate.isNotUndefined),
 				}
 				return Model.make({
 					provider: selection.provider,
 					model: selection.model,
 					layer: AnthropicLanguageModel.layer({
-						model: selection.model,
+						model: upstreamModel ?? selection.model,
 						config,
 					}),
 				})
-			}).pipe(Effect.mapError((error) => invalid(String(error)))),
+			}).pipe(
+				Effect.mapError((error) =>
+					AiError.AiError.make({
+						module: "AnthropicProvider",
+						method: "model",
+						reason: AiError.InvalidRequestError.make({
+							description: String(error),
+						}),
+					}),
+				),
+			),
 	})
 
 export const layer: {

@@ -3,7 +3,7 @@ import { Array as Arr, Effect, Schema, type JsonSchema } from "effect"
 import { Tool } from "effect/ai"
 import { Connections } from "../../apps/Connections.ts"
 import type { Entry } from "./AppPlugin.ts"
-import type { PublicIndex } from "../../apps/Index.ts"
+import type { Error as IndexError, PublicIndex } from "../../apps/Index.ts"
 
 /** The names of the assistance tools. A name gets a suffix when another tool already uses it. */
 export const names = {
@@ -40,12 +40,49 @@ export const entries = (input: {
 		}
 	}
 
-	const failure = (reason: string): AppExecution.Assistance => ({
+	const unavailable =
+		"App discovery or access information is unavailable. Existing connections that work do not depend on the Index."
+	const failure = (
+		reason: string,
+		message: string = unavailable,
+	): AppExecution.Assistance => ({
 		_tag: "AppAssistanceFailed",
 		reason,
-		message:
-			"App discovery or access information is unavailable. Existing connections that work do not depend on the Index.",
+		message,
 	})
+	/**
+	 * A wrong input, an App that is not in the Index or a restricted App gives
+	 * its own message, so the model can act on it. Only an Index that does not
+	 * answer is unavailable.
+	 */
+	const indexFailure = (
+		self: Effect.Effect<
+			AppExecution.Assistance,
+			Schema.SchemaError | IndexError
+		>,
+	) =>
+		self.pipe(
+			Effect.catchTags({
+				SchemaError: (error) =>
+					Effect.succeed(failure(error._tag, error.message)),
+				IndexInputInvalid: (error) =>
+					Effect.succeed(failure(error._tag, error.message)),
+				IndexNotFound: (error) =>
+					Effect.succeed(failure(error._tag, error.message)),
+				IndexRestricted: (error) =>
+					Effect.succeed(
+						failure(
+							error._tag,
+							"This App is restricted: " + error.restriction.reason,
+						),
+					),
+				IndexUnavailable: (error) =>
+					Effect.logWarning(
+						"The App Index is not available for App assistance.",
+						error.issues,
+					).pipe(Effect.as(failure(error._tag))),
+			}),
+		)
 	return [
 		entry(
 			names.search,
@@ -75,7 +112,7 @@ export const entries = (input: {
 						_tag: "AppCandidates",
 						page,
 					})),
-					Effect.orElseSucceed((error) => failure(error._tag)),
+					indexFailure,
 				),
 		),
 		entry(
@@ -101,19 +138,19 @@ export const entries = (input: {
 						_tag: "AppDetails",
 						app,
 					})),
-					Effect.orElseSucceed((error) => failure(error._tag)),
+					indexFailure,
 				),
 		),
 		entry(
 			names.access,
-			"Check this user's App account labels and what setup or authorization they need. Ask the user to choose an account when more than one could do the task. After adding or authorizing, the user must explicitly continue in the original Session.",
+			"Check this user's App account labels and what setup or authorization they need. Ask the user to choose an account when more than one could do the task. After adding or authorizing, the user must say in the same Chat that the work can go on.",
 			{ type: "object", properties: {}, additionalProperties: false },
 			() =>
 				input.connections.listConnections.pipe(
 					Effect.provideService(Identity, input.identity),
 					Effect.map((connections): AppExecution.Assistance => ({
 						_tag: "AppAccess",
-						connections: connections.map((connection) => ({
+						connections: Arr.map(connections, (connection) => ({
 							id: connection.id,
 							name: connection.name,
 							cardUrl: connection.cardUrl,

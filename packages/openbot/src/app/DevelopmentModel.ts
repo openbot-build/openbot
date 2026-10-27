@@ -1,14 +1,18 @@
-import { Item, Config, Model, Provider } from "@openbot-build/core"
+import { Config, Model, Provider } from "@openbot-build/core"
 import { AppExecution } from "@openbot-build/api"
-import * as Memory from "../plugins/memory/Memory.ts"
 import {
+	Array as Arr,
 	Context,
 	Effect,
 	Layer,
 	Match,
-	Record as EffectRecord,
+	Option,
+	Predicate,
+	Record as Rec,
 	Schema,
 	Stream,
+	String as Str,
+	pipe,
 } from "effect"
 import {
 	AiError,
@@ -19,6 +23,7 @@ import {
 	Toolkit,
 } from "effect/ai"
 import * as Assistance from "../plugins/apps/Assistance.ts"
+import * as HostTools from "../chats/HostTools.ts"
 
 /** Each development scenario and what it does. The scenario ids come from these keys. */
 const descriptions = {
@@ -32,32 +37,40 @@ const descriptions = {
 		"A typed model failure on purpose, after some streamed output.",
 } as const satisfies Readonly<Record<string, string>>
 
-export const Scenario = Schema.Literals(EffectRecord.keys(descriptions))
+export const Scenario = Schema.Literals(Rec.keys(descriptions))
 export type Scenario = typeof Scenario.Type
 
 export const provider = Provider.Id.make("development")
+const defaultScenario: Scenario = "mock-text"
+/**
+ * The model of a new Chat on a development platform when its Bot names none.
+ * A development platform is a simulation, so it gives each new Chat a
+ * simulated model. A real platform has no such default.
+ */
 export const selection = Config.Selection.make({
 	provider,
-	model: Model.Id.make("mock-text" satisfies Scenario),
+	model: Model.Id.make(defaultScenario),
 })
 
-/** The first model is the default of a new Session. */
-export const catalog = Effect.succeed({
+/** The simulated models of a development platform. */
+const catalog = {
 	providers: [{ id: provider, name: "Development scenarios (simulated)" }],
-	models: [
-		selection.model,
-		...Scenario.literals.filter((scenario) => scenario !== selection.model),
-	].map((scenario) =>
-		Config.Model.make({
-			provider,
-			id: Model.Id.make(scenario),
-			name: `${scenario} (simulated)`,
-			description: descriptions[scenario as Scenario],
-			reasoningEfforts: [],
-			serviceTiers: [],
-		}),
+	models: pipe(
+		Scenario.literals,
+		Arr.filter((scenario) => scenario !== defaultScenario),
+		Arr.prepend(defaultScenario),
+		Arr.map((scenario) =>
+			Config.Model.make({
+				provider,
+				id: Model.Id.make(scenario),
+				name: `${scenario} (simulated)`,
+				description: descriptions[scenario],
+				reasoningEfforts: [],
+				serviceTiers: [],
+			}),
+		),
 	),
-})
+}
 
 const Confirmation = Schema.Struct({ confirmed: Schema.NonEmptyString })
 export const confirmation = Tool.make("DevelopmentConfirmation", {
@@ -72,18 +85,21 @@ export const layerTools = toolkit.toLayer({
 	DevelopmentConfirmation: ({ description }) =>
 		Effect.succeed({ confirmed: description }),
 })
-
-const ExtractionRequest = Schema.Struct({
-	state: Memory.State,
-	history: Schema.Array(Item.Record),
+/** Every Turn of a development platform can call the development tool. */
+export const layerHostTools = HostTools.layer({
+	toolkit,
+	handlers: () => layerTools,
 })
+
 const invalidRequest = (description: string) =>
 	AiError.make({
 		module: "DevelopmentModel",
 		method: "generateText",
 		reason: AiError.InvalidRequestError.make({ description }),
 	})
-const failedScenario = () =>
+
+/** It is a function, so each failure gets a new error with its own stack. */
+const scenarioFailure = () =>
 	AiError.make({
 		module: "DevelopmentModel",
 		method: "generateText",
@@ -95,30 +111,28 @@ const failedScenario = () =>
 const currentInput = Effect.fn("DevelopmentModel.currentInput")(function* (
 	prompt: Prompt.Prompt,
 ) {
-	const index = prompt.content.findLastIndex(
-		(message) => message.role === "user",
+	const { message, index } = yield* Effect.fromOption(
+		Arr.findLast(prompt.content, (message, index) =>
+			message.role === "user" ? Option.some({ message, index }) : Option.none(),
+		),
+		() => invalidRequest("Development scenarios require a user message"),
 	)
-	const text = yield* Match.value(prompt.content[index]).pipe(
-		Match.when({ role: "user" }, (message) =>
-			message.content.some((part) => part.type !== "text")
-				? Effect.fail(
-						invalidRequest("Development scenarios require text input"),
-					)
-				: Effect.succeed(
-						message.content
-							.filter((part) => part.type === "text")
-							.map((part) => part.text)
-							.join(""),
-					),
-		),
-		Match.orElse(() =>
-			Effect.fail(
-				invalidRequest("Development scenarios require a user message"),
-			),
-		),
+	if (Arr.some(message.content, (part) => part.type !== "text"))
+		return yield* invalidRequest("Development scenarios require text input")
+	const text = pipe(
+		message.content,
+		Arr.filter((part) => part.type === "text"),
+		Arr.map((part) => part.text),
+		Arr.join(""),
 	)
 	return { text, index }
 })
+
+/** Tool results in a prompt are JSON values, so a failure to encode one is a defect. */
+const encodeJson = (value: unknown) =>
+	Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(value).pipe(
+		Effect.orDie,
+	)
 
 const usage = {
 	inputTokens: { total: 10, uncached: 10, cacheRead: 0, cacheWrite: 0 },
@@ -140,63 +154,67 @@ const textParts = (scenario: Scenario, text: string): Array<GeneratedPart> => [
 	finish(scenario),
 ]
 
+/** The development models answer no structured requests. They check the input first. */
 const structured = Effect.fn("DevelopmentModel.structured")(function* (
 	objectName: string,
 	prompt: Prompt.Prompt,
 ) {
-	const { text } = yield* currentInput(prompt)
-	return yield* Match.value(objectName).pipe(
-		Match.when("memory_changes", () =>
-			Schema.decodeEffect(Schema.fromJsonString(ExtractionRequest))(text).pipe(
-				Effect.andThen(Schema.decodeEffect(Memory.Extraction)({ changes: [] })),
-			),
-		),
-		Match.orElse(() =>
-			Effect.fail(
-				invalidRequest(
-					`Unsupported structured development request: ${objectName}`,
-				),
-			),
-		),
-		Effect.catchTag("SchemaError", () =>
-			Effect.fail(invalidRequest(`Invalid input or result for ${objectName}`)),
-		),
-		Effect.map((value) => JSON.stringify(value)),
+	yield* currentInput(prompt)
+	return yield* invalidRequest(
+		`Unsupported structured development request: ${objectName}`,
 	)
 })
+
+/**
+ * The last result of a tool whose name `name` accepts. It looks only after the
+ * user message at `index`, so a result of an earlier step does not count.
+ */
+const lastToolResult = (
+	prompt: Prompt.Prompt,
+	index: number,
+	name: Predicate.Predicate<string>,
+) =>
+	pipe(
+		prompt.content,
+		Arr.drop(index + 1),
+		Arr.flatMap((message) => (message.role === "tool" ? message.content : [])),
+		Arr.findLast(
+			(part): part is Prompt.ToolResultPart =>
+				part.type === "tool-result" && name(part.name),
+		),
+	)
 
 const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 	options: LanguageModel.ProviderOptions,
 ) {
 	const { text, index } = yield* currentInput(options.prompt)
 	const id = `development-confirmation-${index}`
-	const result = options.prompt.content
-		.slice(index + 1)
-		.flatMap((message) =>
-			Match.value(message).pipe(
-				Match.when({ role: "tool" }, (message) =>
-					message.content.filter(
-						(part) =>
-							part.type === "tool-result" &&
-							part.name === confirmation.name &&
-							part.id === id,
-					),
-				),
-				Match.orElse(() => []),
-			),
-		)
-		.findLast((part) => part.type === "tool-result")
-	if (result !== undefined) {
+	// The result of the call of this step, or of a call that a decider allowed later.
+	const found = lastToolResult(
+		options.prompt,
+		index,
+		(name) => name === confirmation.name,
+	)
+	if (Option.isSome(found)) {
+		const result = found.value
+		// A call that waits for a decision has a pending result. Its answer comes later.
+		if (Predicate.hasProperty(result.result, "pending"))
+			return textParts(
+				"mock-tool",
+				"Development confirmation waits for a decision.",
+			)
 		if (result.isFailure)
 			return textParts(
 				"mock-tool",
-				`Development confirmation was rejected: ${JSON.stringify(result.result)}`,
+				`Development confirmation was rejected: ${yield* encodeJson(result.result)}`,
 			)
 		const value = yield* Schema.decodeUnknownEffect(Confirmation)(
 			result.result,
 		).pipe(
-			Effect.mapError(() =>
-				invalidRequest("The development tool returned an invalid confirmation"),
+			Effect.mapError((error) =>
+				invalidRequest(
+					`The development tool returned an invalid confirmation: ${error.message}`,
+				),
 			),
 		)
 		return textParts(
@@ -204,7 +222,7 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 			`Development confirmation result: ${value.confirmed}`,
 		)
 	}
-	if (!options.tools.some((tool) => tool.name === confirmation.name))
+	if (!Arr.some(options.tools, (tool) => tool.name === confirmation.name))
 		return yield* invalidRequest(
 			"The DevelopmentConfirmation tool is unavailable",
 		)
@@ -213,7 +231,7 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 			id,
 			name: confirmation.name,
 			params: {
-				description: text.trim() || "Confirm the development scenario",
+				description: Str.trim(text) || "Confirm the development scenario",
 			},
 			providerExecuted: false,
 		}),
@@ -225,26 +243,25 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 	options: LanguageModel.ProviderOptions,
 ) {
 	const { index, text } = yield* currentInput(options.prompt)
-	const result = options.prompt.content
-		.slice(index + 1)
-		.flatMap((message) =>
-			Match.value(message).pipe(
-				Match.when({ role: "tool" }, (message) =>
-					message.content.filter(
-						(part) =>
-							part.type === "tool-result" && part.name.startsWith("openbot_"),
-					),
-				),
-				Match.orElse(() => []),
-			),
-		)
-		.findLast((part) => part.type === "tool-result")
-	if (result !== undefined) {
+	const found = lastToolResult(
+		options.prompt,
+		index,
+		Str.startsWith("openbot_"),
+	)
+	if (Option.isSome(found)) {
+		const result = found.value
+		if (Predicate.hasProperty(result.result, "pending"))
+			return textParts(
+				"mock-app",
+				"The simulated App call waits for a decision.",
+			)
 		const value = yield* Schema.decodeUnknownEffect(AppExecution.ToolResult)(
 			result.result,
 		).pipe(
-			Effect.mapError(() =>
-				invalidRequest("The simulated App result does not match its contract"),
+			Effect.mapError((error) =>
+				invalidRequest(
+					`The simulated App result does not match its contract: ${error.message}`,
+				),
 			),
 		)
 		return textParts(
@@ -271,25 +288,31 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 				Match.tag(
 					"AppAccess",
 					() =>
-						"Choose which App account should do this task, or finish its configuration and authorization in My Apps. Then explicitly continue this Session.",
+						"Choose which App account should do this task, or finish its configuration and authorization in My Apps. Then say in this Chat that the work can go on.",
 				),
 				Match.tag("AppAssistanceFailed", ({ message }) => message),
 				Match.exhaustive,
 			),
 		)
 	}
-	const choices = options.tools.filter(
-		(tool) => tool.description?.includes(" / read_document.") === true,
+	const choices = Arr.filter(options.tools, (tool) =>
+		Option.exists(
+			Option.fromUndefinedOr(tool.description),
+			Str.includes(" / read_document."),
+		),
 	)
-	const selected = choices.filter((tool) => {
-		const account = tool.description?.split(" / ")[1]
-		return (
-			account !== undefined &&
-			text
-				.toLocaleLowerCase("en-US")
-				.includes(account.toLocaleLowerCase("en-US"))
-		)
-	})
+	const lowerText = Str.toLocaleLowerCase("en-US")(text)
+	const selected = Arr.filter(choices, (tool) =>
+		pipe(
+			Option.fromUndefinedOr(tool.description),
+			Option.flatMap((description) =>
+				Arr.get(Str.split(description, " / "), 1),
+			),
+			Option.exists((account) =>
+				Str.includes(Str.toLocaleLowerCase("en-US")(account))(lowerText),
+			),
+		),
+	)
 	const tool =
 		selected.length === 1
 			? selected[0]
@@ -297,22 +320,23 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 				? choices[0]
 				: undefined
 	if (tool === undefined) {
-		const assistance = options.tools.find(
+		const assistance = Arr.findFirst(
+			options.tools,
 			(candidate) =>
 				candidate.name ===
 				(choices.length === 0
 					? Assistance.names.search
 					: Assistance.names.access),
 		)
-		if (assistance === undefined)
+		if (Option.isNone(assistance))
 			return textParts(
 				"mock-app",
-				"App discovery is unavailable in this host. Add an App by address and explicitly continue this Session.",
+				"App discovery is unavailable in this host. Add an App by address and say in this Chat that the work can go on.",
 			)
 		return [
 			Response.makePart("tool-call", {
 				id: "development-app-assistance-" + index,
-				name: assistance.name,
+				name: assistance.value.name,
 				params: choices.length === 0 ? { query: "document" } : {},
 				providerExecuted: false,
 			}),
@@ -342,7 +366,7 @@ const generate = Effect.fn("DevelopmentModel.generate")(function* (
 		),
 		Match.when({ type: "text" }, () =>
 			Match.value(scenario).pipe(
-				Match.when("mock-failure", () => Effect.fail(failedScenario())),
+				Match.when("mock-failure", () => Effect.fail(scenarioFailure())),
 				Match.when("mock-tool", () => toolParts(options)),
 				Match.when("mock-app", () => appParts(options)),
 				Match.whenOr("mock-text", "mock-slow", (scenario) =>
@@ -364,15 +388,18 @@ const streamAnswer = (scenario: Scenario, text: string) => {
 		Response.makePart("text-delta", { id: "answer", delta: text })
 	const body = Match.value(scenario).pipe(
 		Match.when("mock-slow", () =>
-			Stream.succeed(delta(text.slice(0, 12))).pipe(
+			Stream.succeed(delta(Str.slice(0, 12)(text))).pipe(
 				Stream.concat(
 					Stream.fromEffect(
-						Effect.as(Effect.sleep("5 seconds"), delta(text.slice(12, 24))),
+						Effect.as(
+							Effect.sleep("5 seconds"),
+							delta(Str.slice(12, 24)(text)),
+						),
 					),
 				),
 				Stream.concat(
 					Stream.fromEffect(
-						Effect.as(Effect.sleep("5 seconds"), delta(text.slice(24))),
+						Effect.as(Effect.sleep("5 seconds"), delta(Str.slice(24)(text))),
 					),
 				),
 			),
@@ -416,7 +443,7 @@ export const layer = (scenario: Scenario): Model.Model =>
 									id: "answer",
 									delta: "Development failure: partial output.",
 								}),
-							).pipe(Stream.concat(Stream.fail(failedScenario()))),
+							).pipe(Stream.concat(Stream.fail(scenarioFailure()))),
 						),
 						Match.orElse(() =>
 							Stream.unwrap(
@@ -444,53 +471,43 @@ export const layer = (scenario: Scenario): Model.Model =>
 /** Build one immutable directory for each application. No scenario has a response cursor. */
 export const make = Effect.gen(function* () {
 	const models = yield* Effect.all(
-		EffectRecord.map(descriptions, (_, scenario) =>
+		Rec.map(descriptions, (_, scenario) =>
 			Effect.map(Layer.build(layer(scenario)), (context) =>
 				Context.get(context, LanguageModel.LanguageModel),
 			),
 		),
 	)
-	const resolve = (requested: Config.Selection | undefined) =>
+	const resolve = (requested: Config.Selection) =>
 		Effect.gen(function* () {
-			const current = requested ?? selection
-			if (current.provider !== provider)
-				return yield* new Config.ModelConfigurationError({
+			if (requested.provider !== provider)
+				return yield* Config.ModelConfigurationError.make({
 					reason: "provider-not-found",
 					message: "The development provider is unavailable",
 				})
 			if (
-				current.reasoningEffort !== undefined ||
-				current.serviceTier !== undefined
+				requested.reasoningEffort !== undefined ||
+				requested.serviceTier !== undefined
 			)
-				return yield* new Config.ModelConfigurationError({
+				return yield* Config.ModelConfigurationError.make({
 					reason: "unsupported-option",
 					message:
 						"Development scenarios do not support reasoning effort or service tiers",
 				})
 			const scenario = yield* Schema.decodeUnknownEffect(Scenario)(
-				current.model,
+				requested.model,
 			).pipe(
-				Effect.mapError(
-					() =>
-						new Config.ModelConfigurationError({
-							reason: "model-not-found",
-							message: "The development scenario is unavailable",
-						}),
+				// A model name that is not a scenario is the only way to fail here.
+				Effect.mapError((error) =>
+					Config.ModelConfigurationError.make({
+						reason: "model-not-found",
+						message: `The development scenario is unavailable: ${error.message}`,
+					}),
 				),
 			)
 			return models[scenario]
 		})
-	const { providers, models: list } = yield* catalog
 	return {
 		/** Every organization of a development platform can use the simulated models. */
-		builtinModels: {
-			providers,
-			models: list,
-			resolve: (selection: Config.Selection) => resolve(selection),
-		},
-		sessions: {
-			runtime: { toolkit },
-			layerExecution: () => layerTools,
-		},
+		builtinModels: { ...catalog, resolve },
 	}
 })

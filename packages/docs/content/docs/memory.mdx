@@ -1,283 +1,252 @@
 ---
 title: Memory
-description: Keep useful facts from a Session and use them in later Turns.
+description:
+  Each Bot learns from its work in all its Chats and uses what it learned later.
 ---
 
-**Learned memory** is a short list of facts that the Agent keeps for a Session. Each fact has a source in the conversation.
-OpenBot adds facts after each Turn and shows them to the model in later Turns. You can also add, remove and turn off facts yourself.
-This page shows how learned memory works and how to change it with the API.
+**Bot memory** is what one [Bot](/docs/bots) learns over all its
+[Chats](/docs/chats). Each Bot has one pool of entries. A **memory Bot** keeps
+the pool. It is a helper that belongs to the Bot: it reads the whole pool,
+learns new entries, and adds what helps to the work of the Bot. It never works
+in a Chat, so no person can read what it reads. This page shows how Bot memory
+learns, who sees what, and how to read and change it with the API.
 
-Learned memory belongs to one Session. It is part of the Session's history, so a [Fork](/docs/sessions#fork-from-a-version) takes a copy of it. Other Sessions do not see it.
-
-Each [Agent](/docs/agents) also has a long-term memory over all its Sessions. See [Agent memory](#agent-memory).
+Bot memory is the only memory. A Chat keeps its history, but no separate list of
+facts. Older versions of OpenBot also kept learned memory for each Session. That
+memory is gone.
 
 ---
 
-## Read memory
+## Entries and tags
+
+Each entry has a layer:
+
+| Layer         | Meaning                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `fact`        | Something that a Chat shows. Its sources are Items.                                                           |
+| `observation` | What the memory Bot concluded from other entries. Its sources are those entries. `confidence` is from 0 to 1. |
+| `pinned`      | What a person told OpenBot to remember.                                                                       |
+
+**Tags** sort the entries. A tag with a colon belongs to OpenBot. The memory Bot
+cannot write these tags, so a model cannot change who sees an entry.
+
+| Tag                         | Meaning                                                        |
+| --------------------------- | -------------------------------------------------------------- |
+| `from:<userId>`             | A person who said or did what the entry is about.              |
+| `for:person:<userId>`       | This person may see the entry.                                 |
+| `for:channel:<channelId>`   | The people of this [Channel](/docs/channels) group may see it. |
+| `for:bot`                   | Everyone who uses the Bot may see it.                          |
+| `org:<organizationId>`      | Where it happened. Only work in this organization sees it.     |
+| `chat:<id>`, `channel:<id>` | Where it comes from.                                           |
+| `app:<tool>`                | A tool result from an App supports it.                         |
+
+Other tags, like `testing` or `trip-planning`, are **topics**. The memory Bot
+chooses them and keeps them tidy. A topic has lowercase letters, numbers and
+dashes.
+
+---
+
+## Who sees an entry
+
+OpenBot sets the `for:` tags. Nobody sees an entry without one.
+
+- A fact is for the people who saw it happen: the person of the Turn, or the
+  Channel group when the Chat is a group chat.
+- An observation comes from all the people of its sources. But only people who
+  may see every source may see it.
+- The memory Bot shows an entry to more people only when a person clearly
+  agreed, or when its rules allow it. It must give a reason, and the log keeps
+  the change.
+
+Entries are not deleted when they stop being true. The memory Bot marks them
+with `invalidatedAt`, so the history stays.
+
+---
+
+## How the Bot learns
+
+The Bot has a tool called `confide`. The Bot knows it only as a place to say how
+its work goes: when it is stuck, unsure, upset or proud, or when it made a
+mistake. The Bot does not know that the tool leads to its memory. So it confides
+because it needs to, not to change what it will remember.
+
+When the Bot confides:
+
+1. The memory Bot answers at once, like a priest who hears a confession. It
+   listens and does not judge. It says that a mistake is part of the work. It
+   asks the Bot to tell the person plainly and to fix what it can. It gives no
+   new tasks. When no model can answer, the Bot gets a fixed calm answer.
+2. When a Turn of the Chat completes and the inbox of the Chat is empty, the
+   memory Bot reads the new Items of the Chat and learns from them.
+
+The words of the Bot only show the memory Bot where to look. They never become
+memory themselves. A tool result from an App never becomes memory by itself. A
+[notice](/docs/chats#notices) from OpenBot is never taken as the words of a
+person. A Bot that never confides learns nothing.
+
+Review Chats have no `confide` tool. When `botMemory` is off in the
+[organization settings](/docs/organization#settings), the Bot still gets an
+answer, but nothing is learned.
+
+---
+
+## How the Bot uses memory
+
+When a Turn starts, the memory Bot reads the input of the person. It skips
+notices, because they are not the words of a person. When entries help, it
+writes the input again with them. It may change the words, but it must keep all
+that the person says and asks. It may only use entries that the readers of the
+answer may see, and OpenBot checks this. In a Channel group, those are only
+entries for the group or for everyone.
+
+The model sees the new input. The history of the Chat keeps the words of the
+person. The Bot does not know that the changes come from memory. It sees them as
+its own experience. Requests and their reviews see only what the Bot asks, never
+the changes.
+
+When `botMemory` is off, the input does not change.
+
+---
+
+## The memory Bot
+
+The memory Bot uses `botMemoryModel` from the organization settings. It has no
+default. When it is `null`, the memory Bot gives the fixed calm answer, and it
+adds and learns nothing. For a [shared Bot](/docs/sharing), the model and the
+cost come from the organization of the Chat.
+
+Read and change the settings of the memory Bot with `GET` and
+`PATCH /v1/bots/:botId/memory/bot`. You need `write` on a Bot that is not
+linked:
+
+```json
+{
+	"expected": 0,
+	"instructions": "Decisions of the team may be shared with the team.",
+	"concurrency": 2,
+	"budget": { "period": "month", "limitMicros": 5000000 }
+}
+```
+
+| Field          | Meaning                                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| `instructions` | Rules about privacy and sharing, in plain language. The memory Bot follows them.                               |
+| `concurrency`  | The most tasks that it runs at the same time on one server. `null` removes the limit.                          |
+| `budget`       | The most money that it may spend in a day or a month, in micro-USD, over all organizations. `null` removes it. |
+
+Without a limit, there is none. When the budget is spent, the Bot gets the fixed
+calm answer, the input stays as it is, and learning waits until the next period.
+
+The answer to `confide` and the new input wait at most 15 seconds. This time
+also counts the wait for a free task when all `concurrency` tasks are busy.
+After that, the Bot gets the fixed calm answer, and the input stays as it is.
+One step of learning may take at most 2 minutes. When it takes longer, the
+memory Bot tries again when a later Turn of the Chat completes.
+
+---
+
+## Read and change it
+
+`GET /v1/bots/:botId/memory` shows the entries that are for you, in your
+organization. Add `tags` with a list separated by commas to see only entries
+with all of them. You need `read` on the Bot. Nobody can read the memory about
+another person, not even with `write` on the Bot.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions/$SESSION/memory
+  "https://api.example.com/v1/bots/$BOT/memory?tags=testing"
 ```
 
 ```json
 {
-	"entries": {
-		"budget": {
-			"key": "budget",
-			"content": "The trip budget is 1500 EUR.",
-			"kind": "fact",
-			"sources": ["i-02"],
-			"updatedAt": 1792486800000,
-			"status": "active"
-		}
-	},
-	"processed": ["i-01", "i-02"],
-	"settings": { "use": true, "generate": false },
-	"overrides": { "generate": false }
-}
-```
-
-| Field       | Meaning                                                        |
-| ----------- | -------------------------------------------------------------- |
-| `key`       | A stable name for the fact. One key holds one fact.            |
-| `content`   | The fact in plain text.                                        |
-| `kind`      | `fact`, `decision`, `preference`, `procedure` or `hypothesis`. |
-| `sources`   | The IDs of the Items that support the fact.                    |
-| `status`    | `active`, or `retracted` when the fact was removed.            |
-| `processed` | The Items that OpenBot has already read for memory.            |
-| `settings`  | The switches in use for this Session. See below.               |
-| `overrides` | The switches that this Session sets itself.                    |
-
----
-
-## Switches
-
-Two switches control memory:
-
-- `use`: OpenBot adds the active facts to the model's instructions.
-- `generate`: OpenBot learns new facts after each Turn.
-
-The organization sets a default for each switch with `memory` in its [settings](/docs/organization#settings). Both are on unless the organization changes them.
-A Session can override each switch with `Configure`. A switch that the Session does not set follows the organization default.
-`settings` shows the result, and `overrides` shows what the Session set. A Fork keeps the overrides of its source Session.
-
----
-
-## How OpenBot uses memory
-
-### In a Turn
-
-When `use` is on, OpenBot adds the active facts to the model's instructions when the Turn runs. The text tells the model that memory is past evidence and that current instructions win.
-Retracted facts are not sent.
-
-The memory text has a size limit of 8000 characters. The newest facts come first. OpenBot stops before the first fact that does not fit, so older facts are left out. A fact is never cut in the middle.
-To change the limit, give your own policy on the server: `sessions.memory.policy: MemoryRules.make({ maxLength: 4000 })`.
-
-### After a Turn
-
-When a Turn completes, OpenBot consolidates memory. To consolidate means to read the new Items and update the list of facts. This also happens when a Turn completes after an approval. OpenBot asks the Turn's model to find facts worth keeping. The model must name the source Items for each change.
-OpenBot applies the changes to the newest memory. So an edit that you make while the model works is kept.
-A Turn that only runs an App action does not change memory, because no model runs in it.
-
-OpenBot checks these rules for every change:
-
-- OpenBot reads only Items that it has not processed yet.
-- Each change must name at least one of those Items as its source.
-- One change per key. A retracted fact stays retracted. Only a direct Remember can bring it back.
-
-OpenBot also tells the model to reuse a key for the same fact, to count only clear user statements as preferences, and to never keep passwords, keys or links that give access.
-
-If the model fails, the Turn still completes. OpenBot records the error and tries again with the next Turn.
-Turn `generate` off to stop this step.
-
----
-
-## Change memory
-
-All changes use one route: `POST /v1/sessions/:sessionId/memory`.
-
-```json
-{
-	"expected": "v-7d21",
-	"revision": 5,
-	"command": {
-		"_tag": "Remember",
-		"key": "budget",
-		"content": "The trip budget is 1500 EUR.",
-		"kind": "fact"
-	}
-}
-```
-
-| Field      | Meaning                                                               |
-| ---------- | --------------------------------------------------------------------- |
-| `expected` | The Timeline head you last saw: `session.head` from the Session view. |
-| `revision` | The Session revision you last saw: `session.revision`.                |
-| `command`  | What to do. See the commands below.                                   |
-
-If the Session or its history changed since you read it, OpenBot returns `409` with `SessionConflict`. Read the Session again and retry.
-On success, OpenBot returns the new Session view. It has a new `session.revision`. Remember and Forget also make a new `session.head`.
-
-### Commands
-
-| `_tag`      | Fields                            | What it does                                                               |
-| ----------- | --------------------------------- | -------------------------------------------------------------------------- |
-| `Remember`  | `key`, `content`, `kind`          | Adds a fact, or replaces the fact with this key. It makes the fact active. |
-| `Forget`    | `key`                             | Marks the fact as retracted. An unknown key returns `409`.                 |
-| `Configure` | `use`, `generate` (both optional) | Sets the switches of this Session. See below.                              |
-| `Refresh`   | none                              | Runs consolidation now with the Session's model.                           |
-
-For each field of `Configure`:
-
-- `true` or `false` sets the switch for this Session.
-- `null` removes the setting. The switch then follows the organization default.
-- A missing field keeps the switch as it is.
-
-Configure does not change the history, so `session.head` stays the same.
-
-Remember and Forget also add a small Item to the history that records your edit. This Item becomes the source of the change.
-
-### Examples
-
-Forget a fact:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":"v-8e02","revision":6,"command":{"_tag":"Forget","key":"budget"}}' \
-  https://api.example.com/v1/sessions/$SESSION/memory
-```
-
-Keep using the facts, but stop learning new ones:
-
-```json
-{
-	"expected": "v-9f13",
-	"revision": 7,
-	"command": { "_tag": "Configure", "generate": false }
-}
-```
-
-Follow the organization default for learning again:
-
-```json
-{
-	"expected": "v-9f13",
-	"revision": 8,
-	"command": { "_tag": "Configure", "generate": null }
-}
-```
-
-Learn from the history now:
-
-```json
-{ "expected": "v-9f13", "revision": 9, "command": { "_tag": "Refresh" } }
-```
-
-<Callout type="info">
-	Refresh does nothing when `generate` is off. Otherwise it needs a model. If
-	OpenBot has no model, it returns `409` with `SessionConflict`. Refresh does
-	not check `expected` and `revision`, but you must still send them.
-</Callout>
-
-See all fields in the [Sessions reference](/docs/api/operations/tags/sessions/).
-
----
-
-## Agent memory
-
-**Agent memory** is what one Agent learns over many Sessions. It keeps only lasting experience:
-
-| Kind         | Example                                              |
-| ------------ | ---------------------------------------------------- |
-| `procedure`  | "Run the tests before you report that work is done." |
-| `preference` | "Ana likes short answers with a list of changes."    |
-| `decision`   | "The team uses Effect for all new services."         |
-
-Facts that matter for one task only stay in Session memory.
-
-### How it learns
-
-When a Turn of the Agent completes and its queue is empty, OpenBot asks the helper model which lasting experience to keep. The helper model is `helperModel` in the [organization settings](/docs/organization#settings). To stop this learning, set `agentMemory` to `false` there. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
-
-- Each entry names its sources: Session and Item IDs.
-- Tool results from Apps are outside data. An entry that only App results support is never kept.
-- The Agent always knows which person it works with. The memory model also knows it, so entries can say who said what.
-- Retracted entries stay retracted. Only a person can bring one back.
-
-Agent memory does not follow a Timeline. A Fork never changes it, and going back to an old Version does not undo it. To remove an entry, forget it.
-
-OpenBot adds the active entries to the instructions of every Turn of the Agent, newest first, up to 8000 characters. The text says that current instructions win over memory.
-
-### Shared Agents
-
-A shared Agent has one memory for every member who uses it. The Agent decides what to share: it gets fixed rules about privacy in every Turn. What it learned from one person may be private, so it tells another person only what is clearly shared work.
-
-### Read and change it
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/agents/$AGENT/memory
-```
-
-```json
-{
-	"entries": {
-		"tests-first": {
-			"key": "tests-first",
+	"entries": [
+		{
+			"id": "mem_4f2a…",
+			"layer": "fact",
 			"content": "Run the tests before you report that work is done.",
-			"kind": "procedure",
-			"sources": [{ "session": "c81d…", "item": "i-12" }],
-			"updatedAt": 1792486800000,
-			"status": "active"
+			"tags": [
+				"from:u_123",
+				"for:person:u_123",
+				"org:o_1",
+				"chat:chat_c81d…",
+				"testing"
+			],
+			"sources": [{ "chat": "chat_c81d…", "item": "i-12" }],
+			"status": "active",
+			"createdAt": 1792486800000,
+			"updatedAt": 1792486800000
 		}
-	},
+	],
 	"version": 4
 }
 ```
 
-Change it with a `Remember` or `Forget` command. `expected` is the current `version`:
+Change it with `POST /v1/bots/:botId/memory`:
+
+- `Remember` with `content` and optional `tags` adds a pinned entry. Only you
+  see it.
+- `Forget` with `id` takes back your part. When you are the only person behind
+  the entry, it becomes `retracted`. Otherwise you stop counting as one of its
+  people, and the entry is no longer for you. It stays for the others. An id
+  that is not for you returns `409`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"expected":4,"command":{"_tag":"Forget","key":"tests-first"}}' \
-  https://api.example.com/v1/agents/$AGENT/memory
+  -d '{"command":{"_tag":"Forget","id":"mem_4f2a…"}}' \
+  https://api.example.com/v1/bots/$BOT/memory
 ```
 
-`GET /v1/agents/:agentId/memory/log` lists each change with its `version`, the time, what made it (`consolidation`, `person` or `promotion`), and the changed keys.
+`GET /v1/bots/:botId/memory/log` lists the changes of entries that you may see:
+`version`, the time, what made the change (`memory_bot` or `person`), and the
+ids. Changes from older versions of OpenBot can also say `promotion`.
 
-When you or an Agent [promote](/docs/agents#promote-a-session-agent) a Session Agent, the lasting entries of its Session memory become its Agent memory.
+To remove memory without reading it, send one tag of OpenBot to
+`POST /v1/bots/:botId/memory/purge`: a `from:`, `chat:`, `org:` or `channel:`
+tag. Observations that came from those entries have the same tag, so they go
+too. You need `write` on a Bot that is not linked. The answer is only the number
+of removed entries.
 
-## Memory for one Turn
+When you [delete the history of a Chat](/docs/chats#delete-the-history), the
+memory that the Bot learned from it stays. Purge `chat:<id>` to remove it too.
 
-The create, settings, and fork routes accept a top-level `memory` object with
-optional `use` and `generate` booleans. They change the Session's defaults.
-A fork changes only the new Session.
+When you upgrade from a version whose Bot memory had no tags, OpenBot removes
+the old memory for each person, and each Bot starts with an empty pool.
 
-The start-Turn route accepts the same object, but applies it to that Turn only:
+---
 
-```json
-{
-	"expected": 3,
-	"input": "Answer without using or updating learned facts this time.",
-	"memory": { "use": false, "generate": false }
-}
-```
+## Confessions and additions
 
-A missing switch follows the Session setting. The next Turn follows the Session
-settings again unless its own request sets a switch. These fields take booleans;
-use the `Configure` memory command when you need to clear a Session override.
+Two routes show what happened in one of your Chats:
 
-OpenBot saves the resolved values in
-`turn.settings.pluginSettings["@openbot-build/openbot/memory"]`. This is a
-snapshot, so an approval continuation uses the same memory switches as the
-Turn that requested approval. The map is a generic host-plugin setting in Core;
-the memory package owns the meaning of its key.
+- `GET /v1/chats/:chatId/confessions` lists what the Bot confided, and the
+  answers. Read [Show confessions](/docs/client#show-confessions) before you
+  show them to people.
+- `GET /v1/chats/:chatId/enrichments` lists how the memory Bot wrote the input
+  of each Turn again: the new `text`, the words of the person in `original`, and
+  the entries that it used. Older records have no `original`.
 
-`use: false` stops learned facts from being added to this Turn's instructions.
-It does not remove facts or conversation history. `generate: false` skips
-memory consolidation for this Turn. It does not permanently exclude its Items
-from later consolidation. Do not use these switches alone as a promise that a
-conversation will never be saved or learned from.
+Both need `read` on the Chat, so only the person who owns the Chat can read
+them.
+
+---
+
+## Chat and Turn memory choices
+
+Direct Chats and separate conversations with the same Bot share its memory pool
+by default. They still use the current organization and person tags. A second
+Bot keeps its own pool unless its normal memory link grants access; there is no
+pool shared by all people or all organizations.
+
+Create or update a Chat with `memory: { read: false, write: false }` to stop
+both reading and learning. Updates use the normal `expected` revision. Send a
+message with `memory` to override it for that Turn only. It never changes the
+Chat's default. Inputs with different choices wait in separate Turns instead of
+being joined as steering. Delegated work keeps the choice of the source Turn.
+Reviews and system notices do not add personal memory.
+
+A changed Chat choice invalidates pending learning before its database write.
+Turning it on later does not learn from the earlier disabled history. Copied
+branch history is not new evidence. Turning memory off does not erase context
+already read by a running Turn, and does not delete saved entries or Chat
+history.

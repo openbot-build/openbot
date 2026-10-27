@@ -583,3 +583,31 @@
 		transition: none;
 	}
 }
+
+/* Languages */
+
+.landing .language-list {
+	flex-basis: 100%;
+	font-size: 0.9375rem;
+}
+
+.landing .language-list ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.landing .language-list a {
+	color: var(--muted-foreground);
+	text-decoration: none;
+}
+
+.landing .language-list a:hover,
+.landing .language-list a[aria-current="page"] {
+	color: var(--foreground);
+	text-decoration: underline;
+	text-underline-offset: 5px;
+}

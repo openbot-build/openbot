@@ -9,19 +9,14 @@ import {
 	type Scope,
 } from "effect"
 import { type Prompt, type Toolkit, type Tool } from "effect/ai"
-import {
-	Context,
-	type Event,
-	type Options as AgentOptions,
-} from "../agent/Agent.ts"
-import type * as Timeline from "../timeline/Timeline.ts"
-import type * as Session from "../session/Session.ts"
-import type * as SessionStore from "../store/SessionStore.ts"
+import { Context, type Event, type Options as BotOptions } from "../bot/Bot.ts"
+import type * as Chat from "../chat/Chat.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
 
 export const Id = Schema.String.check(
 	Schema.makeFilter(
 		(id) =>
-			(id !== "session" && id !== "conversation") ||
+			(id !== "chat" && id !== "conversation") ||
 			"Core namespaces are reserved",
 	),
 ).pipe(Schema.brand("@openbot-build/core/PluginId"))
@@ -32,9 +27,13 @@ export interface Definition<I extends Id = Id> {
 	readonly id: I
 }
 
-/** Persistent plugin data with an explicit owner and its current Codec. */
+/**
+ * Persistent plugin data with an explicit owner and its current Codec.
+ * `record` data is kept on the small record of the Chat, which every read loads.
+ * `state` data is kept with the conversation.
+ */
 export interface StateDeclaration {
-	readonly scope: "session" | "timeline"
+	readonly scope: "record" | "state"
 	readonly schema: Schema.ConstraintCodec<
 		unknown,
 		Schema.Json,
@@ -49,33 +48,29 @@ export interface StoreDefinition<
 	readonly schema: S
 }
 
-/** Typed view at the current branch head. Missing plugin data is explicit. */
+/** Typed view of the current Chat. Missing plugin data is explicit. */
 export interface StoreState<A> {
-	readonly at: Session.Position
+	readonly at: Chat.Position
 	readonly value: Option.Option<A>
 }
 
-/** The host binds these operations to one Plugin.Id and the current Session branch. */
+/** The host binds these operations to one Plugin.Id and the current Chat. */
 /** Store operations keep host failures and dependencies, as well as commit failures. */
 export type StoreEffect<A, E, R> = Effect.Effect<
 	A,
-	| Session.SessionNotFound
-	| Timeline.VersionError
-	| Session.SessionError
-	| SessionStore.SessionStoreError
-	| E,
+	Chat.ChatNotFound | Chat.ChatError | ChatStore.ChatStoreError | E,
 	R
 >
 
-/** Safe operations, like those of SynchronizedRef, on this plugin's optional value. */
+/** Operations on this plugin's optional value. An update may run again after a write conflict, so it must have no outside effects. */
 export interface StoreOperations<A, E = never, R = never> {
 	readonly get: StoreEffect<Option.Option<A>, E, R>
 	readonly snapshot: StoreEffect<StoreState<A>, E, R>
-	/** Replaces the value only if the version that snapshot returned still matches. */
+	/** Replaces the value only if the revision that snapshot returned still matches. */
 	readonly setAt: (input: {
-		readonly base: Session.Position
+		readonly base: Chat.Position
 		readonly value: Option.Option<A>
-	}) => StoreEffect<Session.Ref, E, R>
+	}) => StoreEffect<Chat.Ref, E, R>
 	readonly set: (value: Option.Option<A>) => StoreEffect<void, E, R>
 	readonly getAndSet: (
 		value: Option.Option<A>,
@@ -192,7 +187,7 @@ export interface Stored<
 	E,
 	R,
 	Declaration extends StateDeclaration,
-	StoreE = Session.SessionError,
+	StoreE = Chat.ChatError,
 	StoreR = Context,
 	I extends Id = Id,
 	BuildE = never,
@@ -214,7 +209,7 @@ export interface Factory {
 	readonly make: <
 		const I extends Id,
 		const Declaration extends StateDeclaration,
-		StoreE = Session.SessionError,
+		StoreE = Chat.ChatError,
 		StoreR = Context,
 	>(input: {
 		readonly id: I
@@ -296,18 +291,27 @@ export interface StateComposition {
 	>
 }
 
-export class StoreConflict extends Data.TaggedError("Plugin.StoreConflict")<{
-	readonly id: Id
-}> {}
+export class StoreConflict extends Schema.TaggedError<
+	StoreConflict,
+	{ readonly brand: unique symbol }
+>()("Plugin.StoreConflict", { id: Id }) {}
 
 /** Parameters that each plugin maps before the final toolkit resolves its handlers. */
 export interface Options<
 	TK extends Toolkit.Any = Toolkit.Any,
 	E = never,
 	R = never,
-> extends Omit<AgentOptions<Record<string, Tool.Any>>, "toolkit"> {
+> extends Omit<BotOptions<Record<string, Tool.Any>>, "toolkit"> {
 	readonly toolkit: Effect.Effect<TK, E, R>
 	readonly instructions: Prompt.Prompt
+	/**
+	 * Changes the conversation that the model sees in each step. The stored history does not change.
+	 * It must keep the number of messages. Otherwise the runtime uses the conversation as it is.
+	 * A plugin that sets it must call the incoming function first, so that all changes add up.
+	 */
+	readonly transformPrompt?: (
+		prompt: Prompt.Prompt,
+	) => Effect.Effect<Prompt.Prompt>
 }
 
 /** Continues with the mapped toolkit and keeps its construction errors and services. */
@@ -402,7 +406,7 @@ export function make<I extends Id>(input: {
 export function make<
 	I extends Id,
 	D extends StateDeclaration,
-	StoreE = Session.SessionError,
+	StoreE = Chat.ChatError,
 	StoreR = Context,
 >(input: {
 	readonly id: I
@@ -421,7 +425,7 @@ export function make<
 export function make<
 	I extends Id,
 	D extends StateDeclaration,
-	StoreE = Session.SessionError,
+	StoreE = Chat.ChatError,
 	StoreR = Context,
 >(input: { readonly id: I; readonly store?: D | undefined }) {
 	return <
@@ -431,7 +435,7 @@ export function make<
 		BuildE = never,
 		BuildR = never,
 	>(
-		construct: (ctx: {
+		construct: (ctx?: {
 			readonly store: StoreService<D, StoreE, StoreR, I>
 		}) => Effect.Effect<Body<Tools, E, R>, BuildE, BuildR | Scope.Scope>,
 	) => {
@@ -445,9 +449,12 @@ export function make<
 				>(`@openbot-build/core/PluginStore/${input.id}`),
 				{ definition },
 			)
-			const plugin = makeMiddleware(input.id, () => construct({ store }))
-			return { ...plugin, store, stores: { [input.id]: definition } }
+			// A spread would lose the methods of Plugin, such as `pipe`.
+			return Object.assign(
+				makeMiddleware(input.id, () => construct({ store })),
+				{ store, stores: { [input.id]: definition } },
+			)
 		}
-		return makeMiddleware(input.id, () => construct(undefined!))
+		return makeMiddleware(input.id, () => construct())
 	}
 }

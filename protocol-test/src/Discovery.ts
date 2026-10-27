@@ -1,4 +1,11 @@
-import { Effect, Layer } from "effect"
+import {
+	Array as Arr,
+	Duration,
+	Effect,
+	Layer,
+	pipe,
+	String as Str,
+} from "effect"
 import {
 	HttpRouter,
 	HttpServerResponse,
@@ -6,23 +13,27 @@ import {
 } from "effect/http"
 import { Document } from "@openbot-build/protocol"
 import {
+	anonymous,
 	card,
 	cardUrl,
 	catalog,
+	catalogUrl,
+	etag,
+	lifetimes,
+	modified,
 	scenarios,
 	version,
 	type Settings,
 } from "./Scenarios.ts"
 import { escape, html, introduction, page } from "./Pages.ts"
+import * as Temporary from "./Temporary.ts"
 
-const modified = "Sun, 18 Oct 2026 00:00:00 GMT"
 const document = (
 	request: HttpServerRequest.HttpServerRequest,
 	value: unknown,
 	contentType: string,
 	extra: Readonly<Record<string, string>> = {},
 ) => {
-	const etag = '"protocol-test-' + version + '"'
 	const headers = {
 		"content-type": contentType,
 		etag,
@@ -31,18 +42,18 @@ const document = (
 		...extra,
 	}
 	const match = request.headers["if-none-match"]
-	if (
-		match
-			?.split(",")
-			.some(
-				(part) =>
-					part.trim() === "*" || part.trim().replace(/^W\//, "") === etag,
-			) === true ||
-		(match === undefined &&
-			Date.parse(request.headers["if-modified-since"] ?? "") >=
-				Date.parse(modified))
-	)
-		return HttpServerResponse.empty({ status: 304, headers })
+	const fresh =
+		match === undefined
+			? Date.parse(request.headers["if-modified-since"] ?? "") >=
+				Date.parse(modified)
+			: pipe(
+					Str.split(match, ","),
+					Arr.map(Str.trim),
+					Arr.some(
+						(tag) => tag === "*" || Str.replace(/^W\//, "")(tag) === etag,
+					),
+				)
+	if (fresh) return HttpServerResponse.empty({ status: 304, headers })
 	return HttpServerResponse.jsonUnsafe(value, { headers })
 }
 
@@ -57,7 +68,6 @@ const fixtureIds = [
 	"unavailable",
 ]
 export const layer = ({ origin, guideMarkdown }: Settings) => {
-	const anonymous = scenarios[0]!
 	const fixtureCard = (id: string) => ({
 		...card(origin)(anonymous),
 		name: "openbot.protocol-test/" + id,
@@ -74,11 +84,26 @@ export const layer = ({ origin, guideMarkdown }: Settings) => {
 				}
 			: {}),
 	})
+	const rows = pipe(
+		scenarios,
+		Arr.map(
+			(scenario) =>
+				`<tr><td><a href="/apps/${scenario.id}">${escape(scenario.title)}</a></td><td>${escape(scenario.description)}</td></tr>`,
+		),
+		Arr.join(""),
+	)
+	const fixtureLinks = pipe(
+		fixtureIds,
+		Arr.map(
+			(id) => `<li><a href="/fixtures/${id}/server-card.json">${id}</a></li>`,
+		),
+		Arr.join(""),
+	)
 	const rootCatalog = {
 		...catalog(origin)(),
 		entries: [
 			...catalog(origin)().entries,
-			...["noindex", "robots-denied"].map((id) => ({
+			...Arr.map(["noindex", "robots-denied"], (id) => ({
 				identifier: "openbot.protocol-test/" + id,
 				type: Document.cardMediaType,
 				url: origin + `/fixtures/${id}/server-card.json`,
@@ -113,19 +138,19 @@ export const layer = ({ origin, guideMarkdown }: Settings) => {
 						state: {
 							synthetic: true,
 							persistent: false,
-							workspaceTtlSeconds: 1800,
-							tokenTtlSeconds: 300,
-							refreshTtlSeconds: 3600,
-							capacity: 2048,
+							workspaceTtlSeconds: Duration.toSeconds(lifetimes.workspace),
+							tokenTtlSeconds: Duration.toSeconds(lifetimes.access),
+							refreshTtlSeconds: Duration.toSeconds(lifetimes.refresh),
+							capacity: Temporary.capacity,
 						},
-						scenarios: scenarios.map((scenario) => ({
+						scenarios: Arr.map(scenarios, (scenario) => ({
 							...scenario,
 							introduction: origin + `/apps/${scenario.id}`,
 							card: cardUrl(origin)(scenario),
-							catalog: origin + "/apps/" + scenario.id + "/catalog.json",
+							catalog: catalogUrl(origin)(scenario),
 							mcp: origin + "/mcp/" + scenario.id,
 						})),
-						fixtures: fixtureIds.map((id) => ({
+						fixtures: Arr.map(fixtureIds, (id) => ({
 							id,
 							card: origin + `/fixtures/${id}/server-card.json`,
 						})),
@@ -174,7 +199,7 @@ export const layer = ({ origin, guideMarkdown }: Settings) => {
 			Effect.succeed(
 				html(
 					page("OpenBot App Protocol Test Service")(
-						`<main><h1>OpenBot App Protocol Test Service</h1><p>Public test Apps for discovery, credentials, OAuth, MCP and MCP Apps.</p><p>Use only made-up data. Temporary workspaces expire after 30 minutes. A restart clears all state.</p><p><a href="/.well-known/ai-catalog.json">AI Catalog</a> · <a href="/scenarios.json">Machine-readable scenarios</a> · <a href="/guide">Test guide</a></p><table><thead><tr><th>Scenario</th><th>Purpose</th></tr></thead><tbody>${scenarios.map((scenario) => `<tr><td><a href="/apps/${scenario.id}">${escape(scenario.title)}</a></td><td>${escape(scenario.description)}</td></tr>`).join("")}</tbody></table><h2>Discovery failures and indexing</h2><ul>${fixtureIds.map((id) => `<li><a href="/fixtures/${id}/server-card.json">${id}</a></li>`).join("")}</ul></main>`,
+						`<main><h1>OpenBot App Protocol Test Service</h1><p>Public test Apps for discovery, credentials, OAuth, MCP and MCP Apps.</p><p>Use only made-up data. Temporary workspaces expire after 30 minutes. A restart clears all state.</p><p><a href="/.well-known/ai-catalog.json">AI Catalog</a> · <a href="/scenarios.json">Machine-readable scenarios</a> · <a href="/guide">Test guide</a></p><table><thead><tr><th>Scenario</th><th>Purpose</th></tr></thead><tbody>${rows}</tbody></table><h2>Discovery failures and indexing</h2><ul>${fixtureLinks}</ul></main>`,
 						'<link rel="ai-catalog" type="application/ai-catalog+json" href="/.well-known/ai-catalog.json">',
 					),
 				)({
@@ -184,20 +209,20 @@ export const layer = ({ origin, guideMarkdown }: Settings) => {
 				}),
 			),
 		),
-		...scenarios.map((scenario) =>
+		...Arr.map(scenarios, (scenario) =>
 			HttpRouter.add(
 				"GET",
 				`/apps/${scenario.id}`,
 				Effect.succeed(
 					html(introduction(origin)(scenario))({
 						headers: {
-							link: `<${origin}/apps/${scenario.id}/catalog.json>; rel="ai-catalog"; type="${Document.catalogMediaType}"`,
+							link: `<${catalogUrl(origin)(scenario)}>; rel="ai-catalog"; type="${Document.catalogMediaType}"`,
 						},
 					}),
 				),
 			),
 		),
-		...fixtureIds.map((id) =>
+		...Arr.map(fixtureIds, (id) =>
 			HttpRouter.add("GET", `/fixtures/${id}/server-card.json`, (request) => {
 				if (id === "withdrawn")
 					return Effect.succeed(HttpServerResponse.empty({ status: 410 }))

@@ -1,13 +1,21 @@
-import { randomUUID } from "node:crypto"
 import { Authorization, Store } from "@openbot-build/protocol"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { Clock, Context, Effect, Layer, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Schema,
+} from "effect"
 import { developerTestFlows, developerTests } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
 const PrivateState = Schema.Struct({
 	connection: Schema.NullOr(Store.UserConnection),
@@ -32,23 +40,25 @@ export class DeveloperTestStores extends Context.Service<
 export const make: Effect.Effect<
 	typeof DeveloperTestStores.Service,
 	never,
-	PgClient.PgClient | Secrets
+	PgClient.PgClient | Secrets | Crypto.Crypto
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const secrets = yield* Secrets
+	const crypto = yield* Crypto.Crypto
 	const codec = Schema.fromJsonString(Schema.toCodecJson(PrivateState))
 	const flowCodec = Schema.fromJsonString(
 		Schema.toCodecJson(Authorization.Flow),
 	)
-	const error = () =>
-		new Store.StoreError({
+	const unavailable = (cause: unknown) =>
+		Store.StoreError.make({
 			reason: "Unavailable",
 			operation: "Developer test storage",
+			cause,
 		})
 	const missing = () =>
-		new Store.StoreError({
+		Store.StoreError.make({
 			reason: "Missing",
 			operation: "Owned developer test",
 		})
@@ -63,7 +73,10 @@ export const make: Effect.Effect<
 			/** Read the test. With `lock`, keep its row locked until the transaction ends. */
 			const ownedTest = (lock: boolean) =>
 				Rows.getTest(db, namespace, id, lock).pipe(
-					Effect.mapError(missing),
+					Effect.catchTags({
+						DeveloperNotFound: () => missing(),
+						DeveloperUnavailable: unavailable,
+					}),
 					Effect.flatMap((record) =>
 						record.owner === owner
 							? Effect.succeed(record.value)
@@ -80,7 +93,7 @@ export const make: Effect.Effect<
 					.select({ privateState: developerTests.privateState })
 					.from(developerTests)
 					.where(testWhere)
-					.pipe(Effect.mapError(error)))[0]
+					.pipe(Effect.mapError(unavailable)))[0]
 				if (row === undefined) return yield* missing()
 				if (row.privateState === null)
 					return { connection: null, credentials: [] } satisfies PrivateState
@@ -88,7 +101,7 @@ export const make: Effect.Effect<
 					.open(row.privateState, binding)
 					.pipe(
 						Effect.flatMap(Schema.decodeEffect(codec)),
-						Effect.mapError(error),
+						Effect.mapError(unavailable),
 					)
 			})
 			const setPrivateState = (privateState: string | null) =>
@@ -96,15 +109,11 @@ export const make: Effect.Effect<
 					.update(developerTests)
 					.set({ privateState })
 					.where(testWhere)
-					.pipe(
-						(effect) => Rows.write(owner, effect),
-						Effect.asVoid,
-						Effect.mapError(error),
-					)
+					.pipe(Effect.asVoid, Effect.mapError(unavailable))
 			const write = (value: PrivateState) =>
 				Schema.encodeEffect(codec)(value).pipe(
 					Effect.flatMap((body) => secrets.seal(body, binding)),
-					Effect.mapError(error),
+					Effect.mapError(unavailable),
 					Effect.flatMap(setPrivateState),
 				)
 			/** Run the change while the test row is locked. */
@@ -120,7 +129,10 @@ export const make: Effect.Effect<
 			const flow = (flowId: string) =>
 				Effect.gen(function* () {
 					const record = yield* Rows.getFlow(db, namespace, flowId).pipe(
-						Effect.mapError(missing),
+						Effect.catchTags({
+							DeveloperNotFound: () => missing(),
+							DeveloperUnavailable: unavailable,
+						}),
 					)
 					if (record.owner !== owner || record.testId !== id)
 						return yield* missing()
@@ -162,10 +174,10 @@ export const make: Effect.Effect<
 								yield* write({ ...(yield* read), connection })
 								return connection
 							}),
-						).pipe(Effect.mapError(error)),
+						).pipe(Effect.catchTag("DeveloperUnavailable", unavailable)),
 					updateApp: () =>
 						Effect.fail(
-							new Store.StoreError({
+							Store.StoreError.make({
 								reason: "Invalid",
 								operation: "Immutable developer test target",
 							}),
@@ -184,7 +196,9 @@ export const make: Effect.Effect<
 									credential.binding.resource !== connection.endpoint
 								)
 									return yield* missing()
-								const reference = yield* Effect.sync(randomUUID)
+								const reference = yield* crypto
+									.randomUUIDv4()
+									.pipe(Effect.orDie)
 								const current = yield* read
 								yield* write({
 									...current,
@@ -195,11 +209,12 @@ export const make: Effect.Effect<
 								})
 								return reference
 							}),
-						).pipe(Effect.mapError(error)),
+						).pipe(Effect.catchTag("DeveloperUnavailable", unavailable)),
 					get: (input) =>
 						Effect.gen(function* () {
 							const current = yield* read
-							const found = current.credentials.find(
+							const found = Arr.findFirst(
+								current.credentials,
 								(value) =>
 									value.reference === input.reference &&
 									Schema.toEquivalence(Store.CredentialBinding)(
@@ -207,8 +222,8 @@ export const make: Effect.Effect<
 										input.binding,
 									),
 							)
-							if (found === undefined) return yield* missing()
-							return found.credential
+							if (Option.isNone(found)) return yield* missing()
+							return found.value.credential
 						}),
 					deleteConnection: (key) =>
 						keyChecked(key).pipe(
@@ -233,7 +248,7 @@ export const make: Effect.Effect<
 								Effect.flatMap((body) =>
 									secrets.seal(body, binding + ":flow:" + value.flowId),
 								),
-								Effect.mapError(error),
+								Effect.mapError(unavailable),
 							)
 							yield* Rows.putFlow(db, namespace, {
 								owner,
@@ -250,7 +265,7 @@ export const make: Effect.Effect<
 									expiresAt,
 									authorizationUrl: "",
 								},
-							}).pipe(Effect.mapError(error))
+							}).pipe(Effect.mapError(unavailable))
 						}),
 					get: (input) =>
 						Effect.gen(function* () {
@@ -261,7 +276,7 @@ export const make: Effect.Effect<
 								.open(record.body, binding + ":flow:" + input.flowId)
 								.pipe(
 									Effect.flatMap(Schema.decodeEffect(flowCodec)),
-									Effect.mapError(error),
+									Effect.mapError(unavailable),
 								)
 						}),
 					consume: (input) =>
@@ -270,12 +285,12 @@ export const make: Effect.Effect<
 								yield* keyChecked(input.key)
 								const record = yield* flow(input.flowId)
 								if (record.consumed)
-									return yield* new Authorization.AuthorizationError({
+									return yield* Authorization.AuthorizationError.make({
 										reason: "AlreadyConsumed",
 										issue: "This test authorization was already used.",
 									})
 								if (record.value.expiresAt <= (yield* Clock.currentTimeMillis))
-									return yield* new Authorization.AuthorizationError({
+									return yield* Authorization.AuthorizationError.make({
 										reason: "FlowExpired",
 										issue: "This test authorization expired.",
 									})
@@ -283,9 +298,9 @@ export const make: Effect.Effect<
 									...record,
 									consumed: true,
 									value: { ...record.value, status: "Exchanging" },
-								}).pipe(Effect.mapError(error))
+								}).pipe(Effect.mapError(unavailable))
 							}),
-						).pipe(Effect.catchTag("DeveloperUnavailable", error)),
+						).pipe(Effect.catchTag("DeveloperUnavailable", unavailable)),
 				}),
 				clear: Effect.gen(function* () {
 					yield* setPrivateState(null)
@@ -298,7 +313,7 @@ export const make: Effect.Effect<
 								eq(developerTestFlows.owner, owner),
 							),
 						)
-						.pipe((effect) => Rows.write(owner, effect), Effect.mapError(error))
+						.pipe(Effect.mapError(unavailable))
 				}),
 			}
 		},

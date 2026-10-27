@@ -2,9 +2,11 @@ import { DeveloperApi, DeveloperPublicApi } from "./DeveloperApi.ts"
 import { AppExperienceApi } from "./AppExperienceApi.ts"
 import { ConnectionsApi } from "./ConnectionsApi.ts"
 import { HttpApi, OpenApi } from "effect/http-api"
-import { SessionsApi } from "./SessionsApi.ts"
+import { ChatsApi } from "./ChatsApi.ts"
+import { LiveApi } from "./LiveApi.ts"
+import { DelegationsApi } from "./DelegationsApi.ts"
 import { HealthApi } from "./HealthApi.ts"
-import { AccountApi, LoginApi, AgentAuth, SignInApi } from "./AuthApi.ts"
+import { AccountApi, BotAuth, SignInApi } from "./AuthApi.ts"
 import { UserTokensApi } from "./UserTokensApi.ts"
 import { OrganizationApi, OrganizationsApi } from "./OrganizationApi.ts"
 import { ModelProvidersApi } from "./ModelProvidersApi.ts"
@@ -16,16 +18,29 @@ import {
 	AppAuthorizationApi,
 	AppAuthorizationPublicApi,
 } from "./AppAuthorizationApi.ts"
-import { AgentsApi } from "./AgentsApi.ts"
+import { BotInvitationsApi, BotsApi } from "./BotsApi.ts"
 import { RequestsApi } from "./RequestsApi.ts"
+import { MemberSettingsApi } from "./MemberSettingsApi.ts"
+import { TriggerHooksApi, TriggersApi } from "./TriggersApi.ts"
+import { FilesApi } from "./FilesApi.ts"
+import { ChannelHooksApi, ChannelLinksApi, ChannelsApi } from "./ChannelsApi.ts"
+import {
+	ComputerHooksApi,
+	ComputerProvidersApi,
+	ComputersApi,
+} from "./ComputersApi.ts"
+import { SecretProvidersApi, VaultsApi } from "./VaultsApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
+import { OperationsApi } from "./OperationsApi.ts"
+import { CodeRunsApi } from "./CodeRunsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
-import { Authorize, GroupRequired, requires } from "./Permissions.ts"
+import { BudgetsApi, UsageApi } from "./BillingApi.ts"
+import { Authorize, GroupRequired, organization, own } from "./Authorization.ts"
 
-const connection = (permission: Parameters<typeof requires>[0]) => [
-	requires(permission).on("connection", "connectionId"),
+const connection = (action: "read" | "write") => [
+	own(action, "Connection", "connectionId"),
 ]
-const apps = [requires("apps.use").on("apps")]
+const apps = [own("use", "App")]
 
 /**
  * The shared contract for server handlers, typed clients and generated documentation.
@@ -35,77 +50,97 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 	.add(
 		DeveloperPublicApi,
 		DeveloperApi.annotate(GroupRequired, {
-			read: [requires("apps.publish").on("apps")],
-			write: [requires("apps.publish").on("apps")],
+			read: [own("publish", "App")],
+			write: [own("publish", "App")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AppIndexApi,
 		AppAuthorizationPublicApi,
 		AppAuthorizationApi.annotate(GroupRequired, {
-			read: connection("connections.read"),
-			write: connection("connections.write"),
+			read: connection("read"),
+			write: connection("write"),
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AppsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
-			.middleware(AgentAuth),
-		SessionsApi,
-		AgentsApi,
+			.middleware(BotAuth),
+		ChatsApi,
+		OperationsApi,
+		LiveApi,
+		FilesApi,
+		DelegationsApi,
+		BotsApi,
+		BotInvitationsApi,
 		RequestsApi,
+		MemberSettingsApi,
+		TriggersApi,
+		TriggerHooksApi,
+		ChannelsApi,
+		ChannelLinksApi,
+		ChannelHooksApi,
+		ComputerProvidersApi,
+		ComputersApi,
+		ComputerHooksApi,
+		SecretProvidersApi,
+		VaultsApi,
+		UsageApi,
+		BudgetsApi,
 		AppOperationsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
+		CodeRunsApi.annotate(GroupRequired, { read: apps, write: apps })
+			.middleware(Authorize)
+			.middleware(BotAuth),
 		AppViewsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AppExperienceApi.annotate(GroupRequired, {
-			read: connection("connections.read"),
-			write: connection("connections.write"),
+			read: [own("read", "Connection")],
+			write: [own("write", "Connection")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		ConnectionsApi.annotate(GroupRequired, {
-			read: connection("connections.read"),
-			write: connection("connections.write"),
+			read: connection("read"),
+			write: connection("write"),
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AccountApi,
-		LoginApi,
 		SignInApi,
 		OrganizationsApi,
 		PlatformApi,
 		UserTokensApi.annotate(GroupRequired, {
-			read: [requires("tokens.read").on("user")],
-			write: [requires("tokens.write").on("user")],
+			read: [own("read", "Token")],
+			write: [own("write", "Token")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		OrganizationApi.annotate(GroupRequired, {
-			read: [requires("organization.read").on("organization")],
-			write: [requires("organization.write").on("organization")],
+			read: [organization("read", "Organization")],
+			write: [organization("write", "Organization")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		ModelProvidersApi.annotate(GroupRequired, {
-			read: [requires("model_providers.read").on("organization")],
-			write: [requires("model_providers.write").on("organization")],
+			read: [organization("read", "ModelProvider")],
+			write: [organization("write", "ModelProvider")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		SsoApi.annotate(GroupRequired, {
-			read: [requires("sso.read").on("organization")],
-			write: [requires("sso.write").on("organization")],
+			read: [organization("read", "Sso")],
+			write: [organization("write", "Sso")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 	)
 	.add(HealthApi)
 	.annotate(OpenApi.Title, "OpenBot API")
 	.annotate(OpenApi.Version, "0.1.0")
 	.annotate(
 		OpenApi.Description,
-		"Headless REST API for OpenBot. To authenticate, send `Authorization: Bearer <user token>`. Create tokens at /v1/user/tokens. Every call needs a permission from a role or policy. Browser clients on the same origin can use the session Cookie instead. Then every write must send the exact public Origin.",
+		"Headless REST API for OpenBot. To authenticate, send `Authorization: Bearer <user token>`. Create tokens at /v1/user/tokens. Every call needs a permission from a role or policy. Browser clients on the same origin can use the sign-in session Cookie instead. Then every write must send the exact public Origin.",
 	) {}

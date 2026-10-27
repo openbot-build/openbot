@@ -1,409 +1,554 @@
-// @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, layer } from "@effect/vitest"
 import {
 	AppViewsApi as Api,
-	AuthApi,
-	SessionView,
 	AppExecution,
+	AppExperienceApi,
+	ChatView,
+	ConnectionsApi,
+	RequestsApi,
 } from "@openbot-build/api"
-import { Effect, Layer, Redacted, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Layer,
+	Option,
+	Schedule,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
 import { LanguageModel, Response } from "effect/ai"
+import type { HttpMethod } from "effect/http"
 import * as Network from "@openbot-build/protocol/NodeHttpServer"
 import { AppNetwork } from "../src/apps/AppHost.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import * as Caller from "./Caller.ts"
+import { send, settled, type Send } from "./Messages.ts"
 const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 1, text: 1, reasoning: 0 },
 }
-test("App views bind to the real history and account, accept each exact host action once, keep confirmed state and survive view closure", async () => {
-	const publisher = await Fixture.start({ capabilities: true })
-	const model = await Effect.runPromise(
-		LanguageModel.make({
-			generateText: () =>
-				Effect.succeed([Response.makePart("text", { text: '{"changes":[]}' })]),
-			streamText: ({ prompt, tools }) => {
-				const last = prompt.content.findLastIndex((m) => m.role === "user")
-				const finished = prompt.content
-					.slice(last + 1)
-					.some(
-						(m) =>
-							m.role === "tool" &&
-							m.content.some((p) => p.type === "tool-result"),
-					)
-				const tool = tools.find((tool) =>
-					tool.description?.includes(" / read_document."),
-				)
-				return finished || tool === undefined
-					? Stream.make(Response.makePart("finish", { reason: "stop", usage }))
-					: Stream.make(
-							Response.makePart("tool-call", {
-								id: "document-call",
-								name: tool.name,
-								params: { id: "alpha" },
-								providerExecuted: false,
-							}),
-							Response.makePart("finish", { reason: "tool-calls", usage }),
-						)
-			},
-		}),
-	)
-	const publicOrigin = "https://openbot.fixture.test"
-	const host = await BrowserHost.start({
-		publicOrigin,
-		model,
-		discovery: publisher.discovery,
-		appProbe: publisher.probe,
-		appNetwork: Layer.succeed(AppNetwork, {
-			layer: (owner, origins) =>
-				Network.layerUserNetwork({
-					owner,
-					allowedOrigins: origins,
-					ca: publisher.ca,
-					allowAddress: (ip) => ip === "127.0.0.1",
-				}),
-		}),
-	})
-	try {
-		const alice = await host.login("views-alice"),
-			bob = await host.login("views-bob")
-		const headers = (cookie = alice.session) => ({
-			cookie:
-				AuthApi.SessionCookie +
-				"=" +
-				encodeURIComponent(Redacted.value(cookie)),
-			origin: publicOrigin,
-			"content-type": "application/json",
-		})
-		const request = (
-			path: string,
-			method = "GET",
-			body?: unknown,
-			cookie = alice.session,
-		) =>
-			fetch(host.address + path, {
-				method,
-				headers: headers(cookie),
-				...(body === undefined ? {} : { body: JSON.stringify(body) }),
-			})
-		const post = (path: string, body: unknown) => request(path, "POST", body)
-		const draft = await (
-			await post("/v1/connection-drafts", { input: publisher.origin + "/card" })
-		).json()
-		const added = await post("/v1/connections", {
-			draftId: draft.id,
-			revision: draft.revision,
-			cardUrl: publisher.origin + "/card",
-			remoteIndex: 0,
-			values: { "header:X-Account": "Work", "header:X-Secret": "secret-work" },
-			name: "Work documents",
-			confirmed: true,
-		})
-		assert.equal(added.status, 201, await added.clone().text())
-		const created = Schema.decodeUnknownSync(SessionView)(
-			await (await post("/v1/sessions", {})).json(),
-		)
-		const id = created.session.id
-		const get = async () =>
-			Schema.decodeUnknownSync(SessionView)(
-				await (await request("/v1/sessions/" + id)).json(),
-			)
-		const wait = async () => {
-			let current = await get()
-			for (let n = 0; n < 40 && current.activity === "active"; n++)
-				current = Schema.decodeUnknownSync(SessionView)(
-					await (
-						await request(
-							"/v1/sessions/" +
-								id +
-								"/wait?" +
-								new URLSearchParams({
-									after: String(current.session.revision),
-									afterActivity: current.activity,
-									timeoutMs: "500",
-								}),
-						)
-					).json(),
-				)
-			return current
-		}
-		/** Answers the one pending request of the Session, then waits until the Turn goes on. */
-		const approve = async (accepted = true) => {
-			let pending: ReadonlyArray<{
-				readonly id: string
-				readonly revision: number
-				readonly session: string
-			}> = []
-			for (let tries = 0; tries < 200 && pending.length === 0; tries++) {
-				pending = (
-					(await (
-						await request("/v1/requests?status=pending")
-					).json()) as typeof pending
-				).filter((entry) => entry.session === id)
-				if (pending.length === 0)
-					await new Promise((resolve) => setTimeout(resolve, 25))
-			}
-			assert.equal(pending.length, 1)
-			const response = await post("/v1/requests/" + pending[0]!.id, {
-				expected: pending[0]!.revision,
-				decision: accepted ? "allow" : "deny",
-			})
-			assert.equal(response.status, 200, await response.clone().text())
-			for (let tries = 0; tries < 200; tries++) {
-				const view = await wait()
-				if (view.session.turns.at(-1)?.status._tag !== "Waiting") return view
-				await new Promise((resolve) => setTimeout(resolve, 25))
-			}
-			return wait()
-		}
-		assert.equal(
-			(
-				await post("/v1/sessions/" + id + "/turns", {
-					expected: created.session.revision,
-					input: "Read the document",
-				})
-			).status,
-			202,
-		)
-		await wait()
-		const completed = await approve()
-		const all = Schema.decodeUnknownSync(Schema.Array(AppExecution.Invocation))(
-			await (await request("/v1/sessions/" + id + "/app-operations")).json(),
-		)
-		const original = all[0]!
-		const item = completed.state.value.conversation.history.find((item) =>
-			item.content.content.some(
-				(m) =>
-					m.role === "tool" &&
-					m.content.some(
-						(p) => p.type === "tool-result" && p.id === original.callId,
-					),
-			),
-		)!
-		const opening = { sessionId: id, itemId: item.id }
-		const openResponse = await post(
-			"/v1/app-operations/" + original.id + "/view",
-			opening,
-		)
-		assert.equal(openResponse.status, 200, await openResponse.clone().text())
-		const view = Schema.decodeUnknownSync(Api.Opened)(await openResponse.json())
-		assert.equal(view.resource.mimeType, "text/html;profile=mcp-app")
-		assert.equal(JSON.stringify(view).includes("secret-work"), false)
-		assert.equal(
-			(await request("/v1/app-views/" + view.id, "GET", undefined, bob.session))
-				.status,
-			404,
-		)
-		assert.equal(
-			(
-				await post("/v1/app-operations/" + original.id + "/view", {
-					...opening,
-					itemId: "arbitrary",
-				})
-			).status,
-			404,
-		)
-		const context = {
-			content: [{ type: "text", text: "Confirmed selection alpha" }],
-		}
-		const saved = await request(
-			"/v1/app-views/" + view.id + "/context",
-			"PUT",
-			{ revision: 0, context },
-		)
-		assert.equal(saved.status, 200, await saved.clone().text())
-		assert.equal(
-			(
-				await request("/v1/app-views/" + view.id + "/context", "PUT", {
-					revision: 0,
-					context,
-				})
-			).status,
-			409,
-		)
 
-		const historicalResponse = await post(
-			"/v1/app-operations/" + original.id + "/view",
-			{ ...opening, version: completed.state.version.id },
-		)
-		assert.equal(
-			historicalResponse.status,
-			200,
-			await historicalResponse.clone().text(),
-		)
-		const historical = Schema.decodeUnknownSync(Api.Opened)(
-			await historicalResponse.json(),
-		)
-		assert.equal(historical.readOnly, true)
-		assert.equal(
-			(
-				await post("/v1/app-views/" + historical.id + "/actions", {
-					kind: "tool",
-					requestId: "historical-denied",
-					name: "write_board",
-					arguments: { id: "alpha", text: "Forbidden" },
+/** No new Turn ran in a Chat in time. */
+class NoNewTurn extends Schema.TaggedError<
+	NoNewTurn,
+	{ readonly brand: unique symbol }
+>()("NoNewTurn", { chat: Schema.String }) {
+	override get message() {
+		return "No new Turn ran in the Chat " + this.chat
+	}
+}
+
+/** One page of the Items of a Chat, with only the fields that the test reads. */
+const ItemsPage = Schema.Struct({
+	items: Schema.Array(
+		Schema.Struct({
+			id: Schema.String,
+			content: Schema.Struct({
+				content: Schema.Array(
+					Schema.Struct({ role: Schema.String, content: Schema.Unknown }),
+				),
+			}),
+		}),
+	),
+	next: Schema.NullOr(Schema.Finite),
+})
+
+/**
+ * Reads the JSON body of an answer with a schema, and fails unless the status
+ * is 2xx. The server writes the JSON form of each schema, where a missing
+ * optional value is null.
+ */
+const json = <S extends Schema.Constraint>(schema: S) =>
+	Caller.json(Schema.toCodecJson(schema))
+
+const isToolResult = Schema.is(
+	Schema.Struct({
+		type: Schema.Literal("tool-result"),
+		id: Schema.String,
+		result: Schema.Unknown,
+	}),
+)
+
+/** The query of one page of Items, before the given Item position. */
+const itemsQuery = (before?: number) =>
+	new URLSearchParams({
+		limit: "100",
+		...(before === undefined ? {} : { before: String(before) }),
+	}).toString()
+
+layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+	it.effect(
+		"App views bind to the real history and account, accept each exact host action once, keep confirmed state and survive view closure",
+		() =>
+			Effect.gen(function* () {
+				const publisher = yield* Fixture.start({ capabilities: true })
+				const model = yield* LanguageModel.make({
+					generateText: () =>
+						Effect.succeed([
+							Response.makePart("text", { text: '{"changes":[]}' }),
+						]),
+					streamText: ({ prompt, tools }) => {
+						const last = Arr.findLastIndex(
+							prompt.content,
+							(m) => m.role === "user",
+						)
+						const input = Option.flatMap(last, (index) =>
+							Arr.get(prompt.content, index),
+						)
+						// A message from OpenBot, such as a decision, asks for no new App call.
+						const notice = Option.exists(
+							input,
+							(m) =>
+								m.role === "user" &&
+								Arr.some(
+									m.content,
+									(p) =>
+										p.type === "text" && Str.startsWith("[OpenBot]")(p.text),
+								),
+						)
+						const finished =
+							notice ||
+							Arr.some(
+								Arr.drop(prompt.content, Option.getOrElse(last, () => -1) + 1),
+								(m) =>
+									m.role === "tool" &&
+									Arr.some(m.content, (p) => p.type === "tool-result"),
+							)
+						const tool = Arr.findFirst(
+							tools,
+							(tool) =>
+								tool.description !== undefined &&
+								Str.includes(" / read_document.")(tool.description),
+						)
+						return finished || Option.isNone(tool)
+							? Stream.make(
+									Response.makePart("finish", { reason: "stop", usage }),
+								)
+							: Stream.make(
+									Response.makePart("tool-call", {
+										id: "document-call",
+										name: tool.value.name,
+										params: { id: "alpha" },
+										providerExecuted: false,
+									}),
+									Response.makePart("finish", { reason: "tool-calls", usage }),
+								)
+					},
 				})
-			).status,
-			409,
-		)
-		const action = {
-			kind: "tool",
-			requestId: "write-one",
-			name: "write_board",
-			arguments: { id: "alpha", text: "Reviewed document" },
-		}
-		const accepted = await post("/v1/app-views/" + view.id + "/actions", action)
-		assert.equal(accepted.status, 202, await accepted.clone().text())
-		const ticket = await accepted.json()
-		const duplicate = await post(
-			"/v1/app-views/" + view.id + "/actions",
-			action,
-		)
-		assert.equal(duplicate.status, 202, await duplicate.clone().text())
-		assert.deepEqual(await duplicate.json(), ticket)
-		assert.equal(
-			(
-				await post("/v1/app-views/" + view.id + "/actions", {
-					...action,
-					arguments: { id: "different", text: "No" },
+				const publicOrigin = "https://openbot.fixture.test"
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					model,
+					discovery: publisher.discovery,
+					appProbe: publisher.probe,
+					appNetwork: Layer.succeed(AppNetwork, {
+						layer: (owner, origins) =>
+							Network.layerUserNetwork({
+								owner,
+								allowedOrigins: origins,
+								ca: publisher.ca,
+								allowAddress: (ip) => ip === "127.0.0.1",
+							}),
+					}),
 				})
-			).status,
-			409,
-		)
-		await wait()
-		assert.equal(publisher.writes().length, 0)
-		assert.equal(
-			(await request("/v1/app-views/" + view.id, "DELETE")).status,
-			200,
-		)
-		await approve()
-		assert.deepEqual(publisher.writes(), [
-			{ account: "Work", text: "Reviewed document" },
-		])
-		assert.equal(
-			(
-				await post("/v1/app-views/" + view.id + "/actions", {
-					...action,
-					requestId: "closed",
-				})
-			).status,
-			404,
-		)
-		const restoredResponse = await post(
-			"/v1/app-operations/" + original.id + "/view",
-			opening,
-		)
-		const restored = Schema.decodeUnknownSync(Api.Opened)(
-			await restoredResponse.json(),
-		)
-		assert.deepEqual(restored.interaction, { revision: 1, context })
-		assert.equal(publisher.writes().length, 1)
-		const appOnly = await post("/v1/app-views/" + restored.id + "/actions", {
-			kind: "tool",
-			requestId: "app-only",
-			name: "hidden_action",
-			arguments: { id: "alpha" },
-		})
-		assert.equal(appOnly.status, 202, await appOnly.clone().text())
-		await wait()
-		await approve(false)
-		assert.equal(publisher.businessCalls(), 2)
-		const record = await (
-			await request("/v1/sessions/" + id + "/app-operations")
-		).json()
-		assert.equal(
-			record.some(
-				(r: { source: { name: string }; status: string }) =>
-					r.source.name === "hidden_action" && r.status === "Rejected",
-			),
-			true,
-		)
-		await host.restart()
-		assert.equal((await request("/v1/app-views/" + restored.id)).status, 404)
-		const durable = await (
-			await post("/v1/app-operations/" + original.id + "/view", opening)
-		).json()
-		assert.deepEqual(durable.interaction, { revision: 1, context })
-		assert.equal(publisher.writes().length, 1)
-		const exportedResponse = await request("/v1/app-experience/export")
-		assert.equal(
-			exportedResponse.status,
-			200,
-			await exportedResponse.clone().text(),
-		)
-		const exported = await exportedResponse.json()
-		assert.deepEqual(exported, {
-			format: "openbot-apps-v1",
-			apps: [
-				{
-					name: "Work documents",
+				const alice = yield* host.login("views-alice")
+				const bob = yield* host.login("views-bob")
+				const bot = yield* host.defaultBot(alice.session)
+				yield* host.defaultBot(bob.session)
+				/** Calls the server as a signed-in browser. A restart changes the address. */
+				const request = (
+					path: string,
+					method: HttpMethod.HttpMethod = "GET",
+					body?: unknown,
+					cookie = alice.session,
+				) =>
+					Effect.flatMap(host.address, (address) =>
+						Caller.withCookie({ address, publicOrigin })(
+							cookie,
+							path,
+							method,
+							body,
+						),
+					)
+				const post = (path: string, body: unknown) =>
+					request(path, "POST", body)
+				const draft = yield* Effect.flatMap(
+					post("/v1/connection-drafts", {
+						input: publisher.origin + "/card",
+					}),
+					json(ConnectionsApi.ConnectionDraft),
+				)
+				const added = yield* post("/v1/connections", {
+					draftId: draft.id,
+					revision: draft.revision,
 					cardUrl: publisher.origin + "/card",
 					remoteIndex: 0,
-				},
-			],
-		})
-		const importedResponse = await request(
-			"/v1/app-experience/import",
-			"POST",
-			exported,
-			bob.session,
-		)
-		assert.equal(
-			importedResponse.status,
-			200,
-			await importedResponse.clone().text(),
-		)
-		const imported = await importedResponse.json()
-		assert.equal(imported.entries[0].draft.discovery._tag, "Single")
-		assert.deepEqual(
-			await (
-				await request("/v1/connections", "GET", undefined, bob.session)
-			).json(),
-			[],
-		)
-		const bobDraft = imported.entries[0].draft
-		const bobConnection = await request(
-			"/v1/connections",
-			"POST",
-			{
-				draftId: bobDraft.id,
-				revision: bobDraft.revision,
-				cardUrl: publisher.origin + "/card",
-				remoteIndex: 0,
-				values: { "header:X-Account": "Bob", "header:X-Secret": "secret-bob" },
-				name: "Bob documents",
-				confirmed: true,
-			},
-			bob.session,
-		)
-		assert.equal(bobConnection.status, 201, await bobConnection.clone().text())
-		const resetResponse = await post("/v1/app-experience/reset", {})
-		assert.equal(resetResponse.status, 200, await resetResponse.clone().text())
-		const reset = await resetResponse.json()
-		assert.equal(reset.removed.length, 1)
-		assert.deepEqual(reset.pending, [])
-		assert.deepEqual(await (await request("/v1/connections")).json(), [])
-		assert.equal(
-			(
-				await (
-					await request("/v1/connections", "GET", undefined, bob.session)
-				).json()
-			).length,
-			1,
-		)
-		assert.equal(
-			(await get()).state.value.conversation.history.length > 0,
-			true,
-		)
-		assert.equal(
-			(await (await request("/v1/sessions/" + id + "/app-operations")).json())
-				.length > 0,
-			true,
-		)
-		assert.equal(publisher.writes().length, 1)
-	} finally {
-		await host.close()
-		await publisher.close()
-	}
+					values: {
+						"header:X-Account": "Work",
+						"header:X-Secret": "secret-work",
+					},
+					name: "Work documents",
+					confirmed: true,
+				})
+				assert.strictEqual(added.status, 201, yield* added.text)
+				const asAlice: Send = (path, method, payload) =>
+					request(path, method, payload)
+				const conversation = yield* Effect.flatMap(
+					post("/v1/chats", { botId: bot, requestId: "app-views-source" }),
+					Caller.json(ChatView, 201),
+				)
+				const id = conversation.chat.id
+				yield* send(asAlice, id, "Read the document")
+				const wait = settled(asAlice, id)
+				/** Waits until a Turn after `turn` has run, and the Chat is at rest. */
+				const after = (turn: string | undefined) => {
+					const isNew = (view: ChatView) =>
+						view.turn !== null && view.turn.id !== turn
+					return wait.pipe(
+						Effect.repeat({
+							until: isNew,
+							schedule: Schedule.spaced("25 millis"),
+							times: 199,
+						}),
+						Effect.filterOrFail(isNew, () => NoNewTurn.make({ chat: id })),
+					)
+				}
+				/** All Items of the Chat. */
+				const items = Stream.runCollect(
+					Stream.paginate(itemsQuery(), (query) =>
+						Effect.map(
+							Effect.flatMap(
+								request("/v1/chats/" + id + "/items?" + query),
+								json(ItemsPage),
+							),
+							(page) =>
+								[
+									page.items,
+									Option.map(Option.fromNullishOr(page.next), itemsQuery),
+								] as const,
+						),
+					),
+				)
+				/**
+				 * Answers the one pending request of the Chat. The decision comes back to the
+				 * Chat as a message, so this waits until the next Turn has run.
+				 */
+				const approve = (accepted = true) =>
+					Effect.gen(function* () {
+						const pending = yield* Effect.flatMap(
+							request("/v1/requests?status=pending"),
+							json(Schema.Array(RequestsApi.CapabilityRequest)),
+						).pipe(
+							Effect.map(Arr.filter((entry) => entry.chat === id)),
+							Effect.repeat({
+								until: Arr.isReadonlyArrayNonEmpty,
+								schedule: Schedule.spaced("25 millis"),
+								times: 199,
+							}),
+						)
+						assert.strictEqual(pending.length, 1)
+						const entry = yield* Effect.fromOption(Arr.head(pending))
+						const before = (yield* wait).turn?.id
+						const response = yield* post("/v1/requests/" + entry.id, {
+							expected: entry.revision,
+							decision: accepted ? "allow" : "deny",
+						})
+						assert.strictEqual(response.status, 200, yield* response.text)
+						return yield* after(before)
+					})
+				const operations = Effect.flatMap(
+					request("/v1/chats/" + id + "/app-operations"),
+					json(Schema.Array(AppExecution.Invocation)),
+				)
+				yield* wait
+				yield* approve()
+				const original = yield* Effect.fromOption(Arr.head(yield* operations))
+				const item = yield* Effect.fromOption(
+					Arr.findFirst(yield* items, (item) =>
+						Arr.some(
+							item.content.content,
+							(m) =>
+								m.role === "tool" &&
+								Arr.isArray(m.content) &&
+								Arr.some(
+									m.content,
+									(p) =>
+										isToolResult(p) &&
+										p.id !== original.callId &&
+										Schema.is(AppExecution.Result)(p.result) &&
+										p.result._tag === "Completed" &&
+										p.result.operationId === original.id,
+								),
+						),
+					),
+				)
+				const opening = { chatId: id, itemId: item.id }
+				const openResponse = yield* post(
+					"/v1/app-operations/" + original.id + "/view",
+					opening,
+				)
+				const openBody = yield* openResponse.text
+				assert.strictEqual(openResponse.status, 200, openBody)
+				const view = yield* json(Api.Opened)(openResponse)
+				assert.strictEqual(view.resource.mimeType, "text/html;profile=mcp-app")
+				assert.strictEqual(Str.includes("secret-work")(openBody), false)
+				assert.strictEqual(view.readOnly, false)
+				assert.notStrictEqual(view.turn, original.turn)
+				const branch = yield* Effect.flatMap(
+					post("/v1/chats/" + id + "/forks", {
+						expected: (yield* wait).chat.revision,
+						requestId: "app-views-fork",
+						reason: "fork",
+					}),
+					Caller.json(ChatView, 201),
+				)
+				const historyView = yield* Effect.flatMap(
+					post("/v1/app-operations/" + original.id + "/view", {
+						chatId: branch.chat.id,
+						itemId: item.id,
+					}),
+					json(Api.Opened),
+				)
+				assert.strictEqual(historyView.readOnly, true)
+				assert.strictEqual(
+					(yield* request(
+						"/v1/app-views/" + historyView.id + "/context",
+						"PUT",
+						{
+							revision: 0,
+							context: { text: "Do not mutate copied history" },
+						},
+					)).status,
+					409,
+				)
+				assert.strictEqual(
+					(yield* post("/v1/app-views/" + historyView.id + "/actions", {
+						kind: "tool",
+						requestId: "history-action",
+						name: "write_board",
+						arguments: { id: "alpha", text: "No" },
+					})).status,
+					409,
+				)
+				assert.strictEqual(
+					(yield* post("/v1/app-views/" + historyView.id + "/messages", {
+						content: {
+							content: [{ type: "text", text: "Do not run copied history" }],
+						},
+					})).status,
+					409,
+				)
+				const unrelated = yield* Effect.flatMap(
+					post("/v1/chats", { botId: bot, requestId: "app-views-unrelated" }),
+					Caller.json(ChatView, 201),
+				)
+				assert.strictEqual(
+					(yield* post("/v1/app-operations/" + original.id + "/view", {
+						chatId: unrelated.chat.id,
+						itemId: item.id,
+					})).status,
+					404,
+				)
+				assert.strictEqual((yield* publisher.writes).length, 0)
+
+				assert.strictEqual(
+					(yield* request(
+						"/v1/app-views/" + view.id,
+						"GET",
+						undefined,
+						bob.session,
+					)).status,
+					404,
+				)
+				assert.strictEqual(
+					(yield* post("/v1/app-operations/" + original.id + "/view", {
+						...opening,
+						itemId: "arbitrary",
+					})).status,
+					404,
+				)
+				const context = {
+					content: [{ type: "text", text: "Confirmed selection alpha" }],
+				}
+				const saved = yield* request(
+					"/v1/app-views/" + view.id + "/context",
+					"PUT",
+					{ revision: 0, context },
+				)
+				assert.strictEqual(saved.status, 200, yield* saved.text)
+				assert.strictEqual(
+					(yield* request("/v1/app-views/" + view.id + "/context", "PUT", {
+						revision: 0,
+						context,
+					})).status,
+					409,
+				)
+
+				const action = {
+					kind: "tool",
+					requestId: "write-one",
+					name: "write_board",
+					arguments: { id: "alpha", text: "Reviewed document" },
+				}
+				const accepted = yield* post(
+					"/v1/app-views/" + view.id + "/actions",
+					action,
+				)
+				assert.strictEqual(accepted.status, 202, yield* accepted.text)
+				const ticket = yield* accepted.json
+				const duplicate = yield* post(
+					"/v1/app-views/" + view.id + "/actions",
+					action,
+				)
+				assert.strictEqual(duplicate.status, 202, yield* duplicate.text)
+				assert.deepStrictEqual(yield* duplicate.json, ticket)
+				assert.strictEqual(
+					(yield* post("/v1/app-views/" + view.id + "/actions", {
+						...action,
+						arguments: { id: "different", text: "No" },
+					})).status,
+					409,
+				)
+				yield* wait
+				assert.strictEqual((yield* publisher.writes).length, 0)
+				assert.strictEqual(
+					(yield* request("/v1/app-views/" + view.id, "DELETE")).status,
+					200,
+				)
+				yield* approve()
+				assert.deepStrictEqual(yield* publisher.writes, [
+					{ account: "Work", text: "Reviewed document" },
+				])
+				assert.strictEqual(
+					(yield* post("/v1/app-views/" + view.id + "/actions", {
+						...action,
+						requestId: "closed",
+					})).status,
+					404,
+				)
+				const restored = yield* Effect.flatMap(
+					post("/v1/app-operations/" + original.id + "/view", opening),
+					json(Api.Opened),
+				)
+				assert.deepStrictEqual(restored.interaction, { revision: 1, context })
+				assert.strictEqual((yield* publisher.writes).length, 1)
+				const appOnly = yield* post(
+					"/v1/app-views/" + restored.id + "/actions",
+					{
+						kind: "tool",
+						requestId: "app-only",
+						name: "hidden_action",
+						arguments: { id: "alpha" },
+					},
+				)
+				assert.strictEqual(appOnly.status, 202, yield* appOnly.text)
+				yield* wait
+				yield* approve(false)
+				assert.strictEqual(yield* publisher.businessCalls, 2)
+				assert.strictEqual(
+					Arr.some(
+						yield* operations,
+						(r) => r.source.name === "hidden_action" && r.status === "Rejected",
+					),
+					true,
+				)
+				yield* host.restart
+				// A view keeps no state in the process, so it stays open after a restart.
+				const reopened = yield* request("/v1/app-views/" + restored.id)
+				assert.strictEqual(reopened.status, 200, yield* reopened.text)
+				const durable = yield* Effect.flatMap(
+					post("/v1/app-operations/" + original.id + "/view", opening),
+					json(Api.Opened),
+				)
+				assert.deepStrictEqual(durable.interaction, { revision: 1, context })
+				assert.strictEqual((yield* publisher.writes).length, 1)
+				const exportedResponse = yield* request("/v1/app-experience/export")
+				assert.strictEqual(
+					exportedResponse.status,
+					200,
+					yield* exportedResponse.text,
+				)
+				const exported = yield* exportedResponse.json
+				assert.deepStrictEqual(exported, {
+					format: "openbot-apps-v1",
+					apps: [
+						{
+							name: "Work documents",
+							cardUrl: publisher.origin + "/card",
+							remoteIndex: 0,
+						},
+					],
+				})
+				const importedResponse = yield* request(
+					"/v1/app-experience/import",
+					"POST",
+					exported,
+					bob.session,
+				)
+				assert.strictEqual(
+					importedResponse.status,
+					200,
+					yield* importedResponse.text,
+				)
+				const imported = yield* json(AppExperienceApi.Imported)(
+					importedResponse,
+				)
+				const bobDraft = yield* Effect.fromOption(
+					Option.flatMapNullishOr(
+						Arr.head(imported.entries),
+						(entry) => entry.draft,
+					),
+				)
+				assert.strictEqual(bobDraft.discovery._tag, "Single")
+				assert.deepStrictEqual(
+					yield* Effect.flatMap(
+						request("/v1/connections", "GET", undefined, bob.session),
+						(response) => response.json,
+					),
+					[],
+				)
+				const bobConnection = yield* request(
+					"/v1/connections",
+					"POST",
+					{
+						draftId: bobDraft.id,
+						revision: bobDraft.revision,
+						cardUrl: publisher.origin + "/card",
+						remoteIndex: 0,
+						values: {
+							"header:X-Account": "Bob",
+							"header:X-Secret": "secret-bob",
+						},
+						name: "Bob documents",
+						confirmed: true,
+					},
+					bob.session,
+				)
+				assert.strictEqual(bobConnection.status, 201, yield* bobConnection.text)
+				const resetResponse = yield* post("/v1/app-experience/reset", {})
+				assert.strictEqual(resetResponse.status, 200, yield* resetResponse.text)
+				const reset = yield* json(AppExperienceApi.Reset)(resetResponse)
+				assert.strictEqual(reset.removed.length, 1)
+				assert.deepStrictEqual(reset.pending, [])
+				assert.deepStrictEqual(
+					yield* Effect.flatMap(
+						request("/v1/connections"),
+						(response) => response.json,
+					),
+					[],
+				)
+				assert.strictEqual(
+					(yield* Effect.flatMap(
+						request("/v1/connections", "GET", undefined, bob.session),
+						json(Schema.Array(ConnectionsApi.Connection)),
+					)).length,
+					1,
+				)
+				assert.strictEqual((yield* items).length > 0, true)
+				assert.strictEqual((yield* operations).length > 0, true)
+				assert.strictEqual((yield* publisher.writes).length, 1)
+			}),
+	)
 })

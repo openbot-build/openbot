@@ -4,27 +4,36 @@
 	"private": true,
 	"packageManager": "pnpm@9.15.9",
 	"type": "module",
-	"pnpm": {
-		"patchedDependencies": {
-			"drizzle-orm@1.0.0-rc.5-5935859": "patches/drizzle-orm@1.0.0-rc.5-5935859.patch",
-			"effect@4.0.5": "patches/effect@4.0.5.patch"
-		}
-	},
 	"devDependencies": {
-		"@effect/tsgo": "0.48.1",
-		"@types/node": "26.6.0",
+		"@openbot-build/cli": "workspace:*",
+		"@openbot-build/openbot": "workspace:*",
+		"@effect/platform-node": "4.0.6",
+		"@effect/tsgo": "0.56.0",
+		"@types/node": "26.6.5",
 		"acorn": "8.19.0",
-		"drizzle-kit": "1.0.0-rc.5-5935859",
+		"drizzle-kit": "1.0.0-rc.5",
+		"effect": "4.0.6",
 		"tsdown": "0.23.1",
-		"typescript": "7"
+		"typescript": "7",
+		"vitest": "5.0.5"
 	},
 	"scripts": {
 		"dev": "devenv up",
 		"dev:setup": "dev-setup",
-		"typecheck": "pnpm -r exec tsc -p tsconfig.json --noEmit",
+		"typecheck": "pnpm -r exec tsc -p tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit && pnpm rules",
+		"rules": "node --disable-warning=ExperimentalWarning scripts/effect-rules.ts",
 		"prepare": "effect-tsgo patch --typescript --no-oxlint",
 		"build": "pnpm -r build",
 		"images": "docker buildx bake -f deploy/docker/docker-bake.hcl --load",
-		"images:check": "bash deploy/docker/check.sh"
+		"images:check": "bash deploy/docker/check.sh",
+		"test": "vitest run"
+	},
+	"pnpm": {
+		"patchedDependencies": {
+			"effect@4.0.6": "patches/effect@4.0.6.patch",
+			"@effect/ai-anthropic@4.0.6": "patches/@effect__ai-anthropic@4.0.6.patch",
+			"@effect/ai-openai@4.0.6": "patches/@effect__ai-openai@4.0.6.patch",
+			"@effect/ai-openai-compat@4.0.6": "patches/@effect__ai-openai-compat@4.0.6.patch"
+		}
 	}
 }

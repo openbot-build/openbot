@@ -1,28 +1,34 @@
-// These are plain query functions that take the database first. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import { AppIndexApi } from "@openbot-build/api"
 import { Index } from "@openbot-build/protocol"
 import { Effect, HashMap, Layer, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
-import {
-	makeWithDefaults,
-	type EffectPgDatabase,
-} from "drizzle-orm/effect-postgres"
 import { appIndexEntries, appIndexJobs } from "../database/Schema.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
+const EntryJson = Schema.fromJsonString(Index.Entry)
+/** The JSON text of the last check of a job, in `app_index_jobs.check` and `app_index_results.check`. */
+export const CheckJson = Schema.fromJsonString(AppIndexApi.Check)
 /** The public Index entries in Postgres. It holds only entries that were checked independently. */
-const unavailable = () =>
-	new Index.IndexError({
+export const decode = Schema.decodeUnknownEffect(EntryJson)
+/** The entry has its type already, so it always encodes. */
+const encode = (entry: Index.Entry) =>
+	Schema.encodeEffect(EntryJson)(entry).pipe(Effect.orDie)
+
+/**
+ * A database failure, or a stored row that does not decode. The error keeps
+ * the failure as its cause, and the callers log it.
+ */
+const unavailable = Effect.mapError((cause: unknown) =>
+	Index.IndexError.make({
 		reason: "Unavailable",
 		operation: "Public Index storage",
-	})
-export const decode = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(Index.Entry),
+		cause,
+	}),
 )
 
 /** The last check of each App in the namespace. An App that was never checked is pending. */
-export const checks = (db: EffectPgDatabase, namespace: string) =>
+export const checks = (db: Db.Database, namespace: string) =>
 	db
 		.select()
 		.from(appIndexJobs)
@@ -38,13 +44,13 @@ export const checks = (db: EffectPgDatabase, namespace: string) =>
 				),
 			),
 			Effect.map(HashMap.fromIterable),
-			Effect.mapError(unavailable),
+			unavailable,
 		)
 
 export const layer = Layer.effect(
 	Index.IndexStore,
 	Effect.gen(function* () {
-		const db = yield* makeWithDefaults()
+		const db = yield* Db.make
 		const namespace = yield* IndexNamespace
 		const where = (cardUrl: string) =>
 			and(
@@ -63,26 +69,27 @@ export const layer = Layer.effect(
 								? Effect.succeedNone
 								: decode(rows[0].body).pipe(Effect.asSome),
 						),
-						Effect.mapError(unavailable),
+						unavailable,
 					),
 			upsert: (entry) =>
-				db
-					.insert(appIndexEntries)
-					.values({
-						namespace,
-						cardUrl: entry.cardUrl,
-						body: JSON.stringify(entry),
-					})
-					.onConflictDoUpdate({
-						target: [appIndexEntries.namespace, appIndexEntries.cardUrl],
-						set: { body: JSON.stringify(entry) },
-					})
-					.pipe(Effect.as(entry), Effect.mapError(unavailable)),
+				encode(entry).pipe(
+					Effect.flatMap((body) =>
+						db
+							.insert(appIndexEntries)
+							.values({ namespace, cardUrl: entry.cardUrl, body })
+							.onConflictDoUpdate({
+								target: [appIndexEntries.namespace, appIndexEntries.cardUrl],
+								set: { body },
+							}),
+					),
+					Effect.as(entry),
+					unavailable,
+				),
 			withdraw: (cardUrl) =>
 				db
 					.delete(appIndexEntries)
 					.where(where(cardUrl))
-					.pipe(Effect.asVoid, Effect.mapError(unavailable)),
+					.pipe(Effect.asVoid, unavailable),
 		})
 	}),
 )

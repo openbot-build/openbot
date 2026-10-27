@@ -6,46 +6,75 @@ import { HttpApiBuilder, HttpApiScalar } from "effect/http-api"
 import * as AppViewHandlers from "../apps/ViewHttpHandlers.ts"
 import * as AppHandlers from "../apps/HttpHandlers.ts"
 import * as AppOperationHandlers from "../apps/OperationHttpHandlers.ts"
+import * as CodeRunHandlers from "../code/HttpHandlers.ts"
 import * as IndexHandlers from "../apps/IndexHttpHandlers.ts"
 import * as AppAuthorizationHandlers from "../apps/AuthorizationHttpHandlers.ts"
 import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
-import * as SessionHandlers from "../sessions/SessionHandlers.ts"
-import * as AgentHandlers from "../agents/HttpHandlers.ts"
+import * as ChatHandlers from "../chats/ChatHandlers.ts"
+import * as OperationHandlers from "../operations/HttpHandlers.ts"
+import * as LiveHandlers from "../chats/live/LiveHandlers.ts"
+import * as DelegationHandlers from "../bots/DelegationHandlers.ts"
+import * as BotHandlers from "../bots/HttpHandlers.ts"
 import * as RequestHandlers from "../capabilities/HttpHandlers.ts"
 import * as OrganizationHandlers from "../organization/HttpHandlers.ts"
 import * as ModelProviderHandlers from "../models/HttpHandlers.ts"
 import * as PlatformHandlers from "../platform/HttpHandlers.ts"
 import * as SsoHandlers from "../sso/HttpHandlers.ts"
+import * as SettingsHandlers from "../settings/HttpHandlers.ts"
+import * as TriggerHandlers from "../triggers/HttpHandlers.ts"
+import * as FileHandlers from "../files/HttpHandlers.ts"
+import * as ChannelHandlers from "../channels/HttpHandlers.ts"
+import * as ComputerHandlers from "../computers/HttpHandlers.ts"
+import * as VaultHandlers from "../vaults/HttpHandlers.ts"
+import * as BillingHandlers from "../billing/HttpHandlers.ts"
 
 const cloudHealth = HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
 	handlers
 		.handle("getService", () => Effect.succeed(service))
 		.handle("getHealth", () => Effect.succeed({ status: "ok" })),
 )
-export const layerPlatform = (publicOrigin: string) =>
-	Layer.mergeAll(
-		HttpApiBuilder.layer(OpenBotApi, { openapiPath: service.openapi }).pipe(
-			Layer.provide(
-				Layer.mergeAll(
-					cloudHealth,
-					DeveloperHandlers.layerPublic,
-					DeveloperHandlers.layer,
-					AppHandlers.layer,
-					AppOperationHandlers.layer,
-					AppViewHandlers.layer,
-					AppExperienceHandlers.layer,
-					IndexHandlers.layer,
-					AppAuthorizationHandlers.layer(publicOrigin),
-					ConnectionHandlers.layer,
-					SessionHandlers.layerPlatform,
-					AgentHandlers.layer,
-					RequestHandlers.layer,
-					OrganizationHandlers.layer,
-					ModelProviderHandlers.layer,
-					PlatformHandlers.layer,
-					SsoHandlers.layer({ publicOrigin }),
-				),
+/** The OpenBot API and its documentation page. */
+export const layerPlatform = Layer.mergeAll(
+	HttpApiBuilder.layer(OpenBotApi, { openapiPath: service.openapi }).pipe(
+		Layer.provide(
+			Layer.mergeAll(
+				cloudHealth,
+				DeveloperHandlers.layerPublic,
+				DeveloperHandlers.layer,
+				AppHandlers.layer,
+				AppOperationHandlers.layer,
+				CodeRunHandlers.layer,
+				AppViewHandlers.layer,
+				AppExperienceHandlers.layer,
+				IndexHandlers.layer,
+				AppAuthorizationHandlers.layer,
+				ConnectionHandlers.layer,
+				ChatHandlers.layerPlatform,
+				OperationHandlers.layer,
+				LiveHandlers.layer,
+				DelegationHandlers.layerPlatform,
+				BotHandlers.layer,
+				BotHandlers.layerInvitations,
+				RequestHandlers.layer,
+				SettingsHandlers.layerMember,
+				TriggerHandlers.layer,
+				FileHandlers.layer,
+				TriggerHandlers.layerHooks,
+				ChannelHandlers.layer,
+				ChannelHandlers.layerLinks,
+				ChannelHandlers.layerHooks,
+				ComputerHandlers.layerProviders,
+				ComputerHandlers.layer,
+				ComputerHandlers.layerHooks,
+				VaultHandlers.layerProviders,
+				VaultHandlers.layer,
+				BillingHandlers.layer,
+				OrganizationHandlers.layer,
+				ModelProviderHandlers.layer,
+				PlatformHandlers.layer,
+				SsoHandlers.layer,
 			),
 		),
-		HttpApiScalar.layer(OpenBotApi, { path: service.documentation }),
-	)
+	),
+	HttpApiScalar.layer(OpenBotApi, { path: service.documentation }),
+)

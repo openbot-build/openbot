@@ -13,6 +13,8 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { DomainControl } from "../apps/DomainControl.ts"
 import { scopeKey } from "../apps/DeveloperAccess.ts"
 import { Auth } from "../auth/Auth.ts"
+import * as Platform from "../settings/Platform.ts"
+import { Settings } from "../settings/Settings.ts"
 
 export class Proofs extends Context.Service<
 	Proofs,
@@ -55,48 +57,53 @@ export const layerDomainControl = Layer.effect(
 	),
 )
 /** Publishing a fixture is a normal authenticated write from the same origin. */
-export const layerRoutes = (publicOrigin: string) =>
-	Layer.unwrap(
-		Effect.gen(function* () {
-			const auth = yield* Auth
-			const proofs = yield* Proofs
-			return HttpRouter.add(
-				"POST",
-				"/development/apps/proofs",
-				Effect.gen(function* () {
-					const request = yield* HttpServerRequest.HttpServerRequest
-					if (request.headers["origin"] !== publicOrigin)
-						return HttpServerResponse.empty({ status: 403 })
-					const cookie = request.cookies[AuthApi.SessionCookie]
-					if (cookie === undefined)
-						return HttpServerResponse.empty({ status: 401 })
-					yield* auth.resolveSession(Redacted.make(cookie))
-					const value = yield* request.text.pipe(
-						Effect.flatMap(
-							Schema.decodeEffect(
-								Schema.fromJsonString(
-									Schema.Struct({
-										scope: Api.ManagementScope,
-										tokens: Schema.Array(Schema.String),
-									}),
-								),
+export const layerRoutes = Layer.unwrap(
+	Effect.gen(function* () {
+		const auth = yield* Auth
+		const proofs = yield* Proofs
+		const settings = yield* Settings
+		return HttpRouter.add(
+			"POST",
+			"/development/apps/proofs",
+			Effect.gen(function* () {
+				const request = yield* HttpServerRequest.HttpServerRequest
+				const publicOrigin = yield* Platform.publicOrigin(settings)
+				if (request.headers["origin"] !== publicOrigin)
+					return HttpServerResponse.empty({ status: 403 })
+				const cookie = request.cookies[AuthApi.SessionCookie]
+				if (cookie === undefined)
+					return HttpServerResponse.empty({ status: 401 })
+				yield* auth.resolveSession(Redacted.make(cookie))
+				const value = yield* request.text.pipe(
+					Effect.flatMap(
+						Schema.decodeEffect(
+							Schema.fromJsonString(
+								Schema.Struct({
+									scope: Api.ManagementScope,
+									tokens: Schema.Array(Schema.String),
+								}),
 							),
 						),
-					)
-					yield* proofs.publish(value.scope, value.tokens)
-					return HttpServerResponse.empty({ status: 204 })
-				}).pipe(
-					Effect.catchTags({
-						CredentialRejected: () =>
-							Effect.succeed(HttpServerResponse.empty({ status: 401 })),
-						AuthUnavailable: () =>
-							Effect.succeed(HttpServerResponse.empty({ status: 503 })),
-						SchemaError: () =>
-							Effect.succeed(HttpServerResponse.empty({ status: 400 })),
-						HttpServerError: () =>
-							Effect.succeed(HttpServerResponse.empty({ status: 400 })),
-					}),
-				),
-			)
-		}),
-	)
+					),
+				)
+				yield* proofs.publish(value.scope, value.tokens)
+				return HttpServerResponse.empty({ status: 204 })
+			}).pipe(
+				Effect.catchTags({
+					CredentialRejected: () =>
+						Effect.succeed(HttpServerResponse.empty({ status: 401 })),
+					AuthUnavailable: () =>
+						Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+					SettingsUnavailable: () =>
+						Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+					SetupRequired: () =>
+						Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+					SchemaError: () =>
+						Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+					HttpServerError: () =>
+						Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+				}),
+			),
+		)
+	}),
+)

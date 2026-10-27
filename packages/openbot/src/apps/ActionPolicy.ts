@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect"
+import { Array as Arr, Context, Effect, Layer } from "effect"
 import type { AppExecution } from "@openbot-build/api"
 import { Settings } from "../settings/Settings.ts"
 
@@ -26,7 +26,8 @@ export const layer = Layer.effect(
 					? Effect.succeed(true)
 					: settings.organization(organizationId).pipe(
 							Effect.map((current) =>
-								current.document.appReadRules.some(
+								Arr.some(
+									current.document.appReadRules,
 									(rule) =>
 										rule.cardUrl === source.cardUrl &&
 										rule.tool === source.name,

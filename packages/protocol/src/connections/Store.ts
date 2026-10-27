@@ -1,31 +1,36 @@
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Document from "../Document.ts"
 
-export class StoreError extends Data.TaggedError("StoreError")<{
-	readonly reason: "Missing" | "AlreadyExists" | "Invalid" | "Unavailable"
-	readonly operation: string
-}> {}
+export class StoreError extends Schema.TaggedError<
+	StoreError,
+	{ readonly brand: unique symbol }
+>()("StoreError", {
+	reason: Schema.Literals([
+		"Missing",
+		"AlreadyExists",
+		"Invalid",
+		"Unavailable",
+	]),
+	operation: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
-export class ConnectionKey extends Schema.Opaque<ConnectionKey>()(
-	Schema.Struct({
-		owner: Schema.NonEmptyString,
-		connectionId: Schema.NonEmptyString,
-	}),
-) {
-	public static decode = (value: unknown) =>
-		Schema.decodeUnknownEffect(ConnectionKey)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "ConnectionKey.decode",
-					}),
-			),
-		)
-}
+/**
+ * A key is any value with an owner and a connection ID.
+ * Connections and credential bindings are also keys, so this schema is a plain struct and not a class with a brand.
+ */
+export const ConnectionKey = Schema.Struct({
+	owner: Schema.NonEmptyString,
+	connectionId: Schema.NonEmptyString,
+})
 
-export class CredentialBinding extends Schema.Opaque<CredentialBinding>()(
+export type ConnectionKey = typeof ConnectionKey.Type
+
+export class CredentialBinding extends Schema.Opaque<
+	CredentialBinding,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		owner: Schema.NonEmptyString,
 		connectionId: Schema.NonEmptyString,
@@ -35,46 +40,41 @@ export class CredentialBinding extends Schema.Opaque<CredentialBinding>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(CredentialBinding)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "CredentialBinding.decode",
-					}),
+			Effect.mapError((cause) =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "CredentialBinding.decode",
+					cause,
+				}),
 			),
 		)
 }
 
-/** Persisted with the grant; secrets never leave the encrypted credential store. */
-export const OAuthClientAuthentication = Schema.Union([
-	Schema.Struct({ method: Schema.Literal("none") }),
-	Schema.Struct({
-		method: Schema.Literals(["client_secret_basic", "client_secret_post"]),
-		secret: Schema.Redacted(Schema.NonEmptyString),
-		expiresAt: Schema.optional(Schema.Finite),
-	}),
-])
-export type OAuthClientAuthentication = typeof OAuthClientAuthentication.Type
-
-export class Credential extends Schema.Opaque<Credential>()(
+export class Credential extends Schema.Opaque<
+	Credential,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		binding: CredentialBinding,
 		clientId: Schema.optional(Schema.String),
-		clientAuthentication: Schema.optional(OAuthClientAuthentication),
 		accessToken: Schema.Redacted(Schema.NonEmptyString),
 		refreshToken: Schema.optional(Schema.Redacted(Schema.NonEmptyString)),
+		clientSecret: Schema.optional(Schema.Redacted(Schema.NonEmptyString)),
+		clientAuthMethod: Schema.optional(
+			Schema.Literals(["none", "client_secret_basic", "client_secret_post"]),
+		),
 		expiresAt: Schema.optional(Schema.Finite),
 		scopes: Schema.Array(Schema.String),
 	}),
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Credential)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "Credential.decode",
-					}),
+			Effect.mapError((cause) =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "Credential.decode",
+					cause,
+				}),
 			),
 		)
 }
@@ -100,7 +100,10 @@ export const AuthorizationState = Schema.TaggedUnion({
 
 export type AuthorizationState = typeof AuthorizationState.Type
 
-export class AppRecord extends Schema.Opaque<AppRecord>()(
+export class AppRecord extends Schema.Opaque<
+	AppRecord,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		cardUrl: Schema.String,
 		card: Document.ServerCard,
@@ -109,17 +112,20 @@ export class AppRecord extends Schema.Opaque<AppRecord>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(AppRecord)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "AppRecord.decode",
-					}),
+			Effect.mapError((cause) =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "AppRecord.decode",
+					cause,
+				}),
 			),
 		)
 }
 
-export class UserConnection extends Schema.Opaque<UserConnection>()(
+export class UserConnection extends Schema.Opaque<
+	UserConnection,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		owner: Schema.NonEmptyString,
 		connectionId: Schema.NonEmptyString,
@@ -139,12 +145,12 @@ export class UserConnection extends Schema.Opaque<UserConnection>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(UserConnection)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "UserConnection.decode",
-					}),
+			Effect.mapError((cause) =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "UserConnection.decode",
+					cause,
+				}),
 			),
 		)
 }

@@ -1,5 +1,5 @@
 import { AuthApi } from "@openbot-build/api"
-import { Schema } from "effect"
+import { Array as Arr, Effect, Schema } from "effect"
 
 interface BrowserAuth {
 	readonly handler: (request: Request) => Promise<Response>
@@ -8,8 +8,6 @@ interface BrowserAuth {
 }
 
 /** Stable browser routes. Cookies and OAuth state remain owned by Better Auth. */
-// This factory accepts deployment settings before the browser adapter.
-// @effect-diagnostics-next-line missingPipeableSignature:off
 export const handler =
 	(
 		config: {
@@ -18,8 +16,8 @@ export const handler =
 			readonly callbackPath?: string
 		},
 		auth: BrowserAuth,
-	): BrowserAuth["handler"] =>
-	async (request) => {
+	) =>
+	(request: Request) => Effect.gen(function* () {
 		const url = new URL(request.url)
 		if (url.pathname === "/auth/login" && request.method === "GET") {
 			const target = url.searchParams.get("returnTo") ?? "/"
@@ -28,7 +26,7 @@ export const handler =
 				!Schema.is(AuthApi.ReturnTo)(target)
 			)
 				return new Response(null, { status: 400 })
-			const response = await auth.signIn(target, request.headers)
+			const response = yield* Effect.promise(() => auth.signIn(target, request.headers))
 			if (!response.ok || !response.headers.has("location"))
 				return new Response(null, { status: 503 })
 			return new Response(null, { status: 303, headers: response.headers })
@@ -41,7 +39,7 @@ export const handler =
 		) {
 			if (
 				config.providerId === undefined ||
-				[...url.searchParams.keys()].some(
+				Arr.some([...url.searchParams.keys()],
 					(key) => url.searchParams.getAll(key).length !== 1,
 				)
 			)
@@ -49,12 +47,12 @@ export const handler =
 			const callback = new URL(config.publicOrigin)
 			callback.pathname = "/auth/callback/" + config.providerId
 			callback.search = url.search
-			const response = await auth.handler(
+			const response = yield* Effect.promise(() => auth.handler(
 				new Request(callback, {
 					headers: request.headers,
 					signal: request.signal,
 				}),
-			)
+			))
 			const location = response.headers.get("location")
 			const error =
 				location === null
@@ -77,11 +75,11 @@ export const handler =
 		if (url.pathname === "/auth/logout" && request.method === "POST") {
 			if (request.headers.get("origin") !== config.publicOrigin)
 				return new Response(null, { status: 403 })
-			const response = await auth.signOut(request.headers)
+			const response = yield* Effect.promise(() => auth.signOut(request.headers))
 			return new Response(null, {
 				status: response.ok ? 204 : 503,
 				headers: response.headers,
 			})
 		}
-		return auth.handler(request)
-	}
+		return yield* Effect.promise(() => auth.handler(request))
+	})

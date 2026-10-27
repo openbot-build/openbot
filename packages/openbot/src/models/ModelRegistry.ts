@@ -1,26 +1,42 @@
 import {
 	Config,
+	type Live,
 	Model as CoreModel,
 	Provider as CoreProvider,
 } from "@openbot-build/core"
-import type { ModelProvidersApi } from "@openbot-build/api"
+import type { BillingApi, ModelProvidersApi } from "@openbot-build/api"
 import {
+	Array as Arr,
+	Cause,
 	Context,
+	Data,
+	Duration,
 	Effect,
-	Exit,
+	Equal,
+	Hash,
 	HashMap,
 	Layer,
 	Option,
-	Scope,
-	SynchronizedRef,
+	pipe,
+	RcMap,
+	type Redacted,
+	String as Str,
 } from "effect"
-import { LanguageModel } from "effect/ai"
-import type { HttpClient } from "effect/http"
+import { DecisionModel, LanguageModel } from "effect/ai"
+import { HttpClient } from "effect/http"
+import * as Failures from "../app/Failures.ts"
 import * as AnthropicProvider from "../providers/anthropic/AnthropicProvider.ts"
 import * as OpenAiCompatProvider from "../providers/openai-compat/OpenAiCompatProvider.ts"
 import * as OpenAiProvider from "../providers/openai/OpenAiProvider.ts"
+import * as TypeSafeProvider from "../providers/typesafe/TypeSafeProvider.ts"
+import { Billing } from "../billing/Billing.ts"
+import { meter } from "../billing/MeteredModel.ts"
+import { TokenThrottle } from "../billing/TokenThrottle.ts"
 import { Settings } from "../settings/Settings.ts"
-import { ModelProviders, type Stored } from "./ModelProviders.ts"
+import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
+import { type Effective, effective, Models, modelKey } from "./Models.ts"
+import * as ToolImages from "../providers/ToolImages.ts"
+import * as LiveBackends from "./LiveBackends.ts"
 
 /**
  * Models that the program itself gives, such as the simulated model of the
@@ -42,130 +58,381 @@ export interface Catalog {
 	readonly models: ReadonlyArray<Config.Model>
 }
 
-/** The models that each organization can use now, built from the stored providers. */
+/** A model of either type, for a use that can take both. */
+export type AnyModel = Data.TaggedEnum<{
+	Language: { readonly model: LanguageModel.LanguageModel }
+	Decision: { readonly model: DecisionModel.DecisionModel }
+}>
+export const AnyModel = Data.taggedEnum<AnyModel>()
+
+/** A Live model, and how to meter the model calls of its Turns. */
+export interface ResolvedLive {
+	readonly model: Live.LiveModel
+	readonly meter: (
+		model: LanguageModel.LanguageModel,
+	) => LanguageModel.LanguageModel
+}
+
+/** The models that each organization can use now, built from the stored providers, links and models. */
 export class ModelRegistry extends Context.Service<
 	ModelRegistry,
 	{
 		readonly catalog: (
 			organizationId: string,
 		) => Effect.Effect<Catalog, Config.ModelConfigurationError>
-		/** The API form of the catalog, with the default model. */
+		/** The API form of the catalog. */
 		readonly view: (
 			organizationId: string,
 		) => Effect.Effect<
 			ModelProvidersApi.ModelCatalog,
 			Config.ModelConfigurationError
 		>
-		/** The default model of a new Session in the organization. */
-		readonly defaultSelection: (
-			organizationId: string,
-		) => Effect.Effect<
-			Option.Option<Config.Selection>,
-			Config.ModelConfigurationError
-		>
-		/** Leave out the selection for the default model of the organization. */
 		readonly resolve: (
 			organizationId: string,
-			selection: Config.Selection | undefined,
+			selection: Config.Selection,
 		) => Effect.Effect<
 			LanguageModel.LanguageModel,
 			Config.ModelConfigurationError
 		>
-		/** The helper model of the organization, or its default model. */
-		readonly helper: (
+		/**
+		 * The model that judges Rules. It can be a language model or a decision
+		 * model. It fails when the organization has none.
+		 */
+		readonly rulesModel: (
+			organizationId: string,
+		) => Effect.Effect<AnyModel, Config.ModelConfigurationError>
+		/** The model that learns Bot memory. It fails when the organization has none. */
+		readonly botMemoryModel: (
 			organizationId: string,
 		) => Effect.Effect<
 			LanguageModel.LanguageModel,
+			Config.ModelConfigurationError
+		>
+		/**
+		 * The Live models that the organization can use now, for live Chats. A model is
+		 * in the list only when a Live backend serves the kind of its provider.
+		 */
+		readonly liveCatalog: (
+			organizationId: string,
+		) => Effect.Effect<Catalog, Config.ModelConfigurationError>
+		/** The Live model that a selection names. It fails when it is not a usable Live model. */
+		readonly resolveLive: (
+			organizationId: string,
+			selection: Config.Selection,
+		) => Effect.Effect<ResolvedLive, Config.ModelConfigurationError>
+		/**
+		 * The decision model that a selection names. It fails when no provider of
+		 * the organization offers it, or when it is not a `decision` model.
+		 */
+		readonly decision: (
+			organizationId: string,
+			selection: Config.Selection,
+		) => Effect.Effect<
+			DecisionModel.DecisionModel,
 			Config.ModelConfigurationError
 		>
 	}
 >()("@openbot-build/openbot/models/ModelRegistry") {}
 
-const unavailable = (message: string) =>
-	new Config.ModelConfigurationError({ reason: "unavailable", message })
+/** One model that one provider offers, with the values of the link applied. */
+interface Offer {
+	readonly provider: Stored
+	readonly model: Effective
+}
 
-const catalogModel = (
-	provider: Stored,
-	entry: ModelProvidersApi.ModelEntry,
-): Config.Model =>
+const catalogModel = ({ provider, model }: Offer): Config.Model =>
 	Config.Model.make({
 		provider: CoreProvider.Id.make(provider.id),
-		id: CoreModel.Id.make(entry.id),
-		name: entry.name,
-		reasoningEfforts: entry.reasoningEfforts,
-		serviceTiers: entry.serviceTiers,
-		...(entry.contextWindow === undefined
+		id: CoreModel.Id.make(model.id),
+		name: model.name,
+		reasoningEfforts: model.reasoningEfforts,
+		serviceTiers: model.serviceTiers,
+		...(model.contextWindow === null
 			? {}
-			: { maxContextWindow: entry.contextWindow }),
-		...(entry.maxOutputTokens === undefined
+			: { maxContextWindow: model.contextWindow }),
+		...(model.maxOutputTokens === null
 			? {}
-			: { maxOutputTokensLimit: entry.maxOutputTokens }),
+			: { maxOutputTokensLimit: model.maxOutputTokens }),
 	})
+
+type ApiKey = Redacted.Redacted<string>
+
+/** The client options of a provider: its key, and its address without a trailing slash. */
+const clientOptions = (provider: Stored, apiKey: ApiKey) => ({
+	apiKey,
+	...(provider.endpoint === null
+		? {}
+		: { apiUrl: pipe(provider.endpoint, Str.replace(/\/$/, "")) }),
+})
+
+/** The decision model Layer of one provider kind, with its client. */
+const decisionLayer = (
+	provider: Stored,
+	apiKey: ApiKey,
+	upstreamModel: string,
+) => {
+	switch (provider.kind) {
+		case "typesafe":
+			return Effect.succeed(
+				TypeSafeProvider.layer({
+					...clientOptions(provider, apiKey),
+					upstreamModel,
+				}),
+			)
+		case "openai-compat":
+			return Effect.fail(
+				Config.ModelConfigurationError.make({
+					reason: "unsupported-option",
+					message:
+						"OpenBot cannot ask a decision model through an openai-compat provider yet. Use a typesafe provider.",
+				}),
+			)
+		case "openai":
+		case "anthropic":
+			return Effect.fail(
+				Config.ModelConfigurationError.make({
+					reason: "unsupported-option",
+					message: `A ${provider.kind} provider serves only language models.`,
+				}),
+			)
+	}
+}
 
 /** The model Layer of one provider kind, with its client. */
 const modelLayer = (
 	provider: Stored,
-	apiKey: Parameters<typeof OpenAiProvider.layerClient>[0]["apiKey"],
+	apiKey: ApiKey,
 	selection: Config.Selection,
+	upstreamModel: string,
 ) =>
 	Effect.gen(function* () {
-		const apiUrl =
-			provider.endpoint === null
-				? undefined
-				: provider.endpoint.replace(/\/$/, "")
-		const client = { apiKey, ...(apiUrl === undefined ? {} : { apiUrl }) }
+		const client = clientOptions(provider, apiKey)
 		switch (provider.kind) {
 			case "openai": {
-				const model = yield* OpenAiProvider.make().model(selection)
-				return model.pipe(Layer.provide(OpenAiProvider.layerClient(client)))
+				const model = yield* OpenAiProvider.make({ upstreamModel }).model(
+					selection,
+				)
+				return model.pipe(
+					Layer.provide(
+						OpenAiProvider.layerClient({
+							...client,
+							transformClient: ToolImages.transformClient("openai"),
+						}),
+					),
+				)
 			}
 			case "anthropic": {
-				const model = yield* AnthropicProvider.make().model(selection)
-				return model.pipe(Layer.provide(AnthropicProvider.layerClient(client)))
+				const model = yield* AnthropicProvider.make({ upstreamModel }).model(
+					selection,
+				)
+				return model.pipe(
+					Layer.provide(
+						AnthropicProvider.layerClient({
+							...client,
+							transformClient: ToolImages.transformClient("anthropic"),
+						}),
+					),
+				)
 			}
 			case "openai-compat": {
-				const model = yield* OpenAiCompatProvider.make().model(selection)
+				const model = yield* OpenAiCompatProvider.make({ upstreamModel }).model(
+					selection,
+				)
 				return model.pipe(
 					Layer.provide(OpenAiCompatProvider.layerClient(client)),
 				)
 			}
+			case "typesafe":
+				return yield* Config.ModelConfigurationError.make({
+					reason: "unsupported-option",
+					message: "A typesafe provider serves only decision models.",
+				})
 		}
 	})
 
-interface Built {
-	readonly version: number
-	readonly scope: Scope.Closeable
-	readonly model: LanguageModel.LanguageModel
+/**
+ * The key of one built model. Two keys with the same `values` are the same
+ * key. The values start with the ID and the version of the provider, so a
+ * changed provider gets a new entry. `input` is what the build needs.
+ */
+class Key<Input> implements Equal.Equal {
+	readonly provider: Stored
+	readonly input: Input
+	readonly values: ReadonlyArray<string | number | null>
+	constructor(
+		provider: Stored,
+		input: Input,
+		values: ReadonlyArray<string | null>,
+	) {
+		this.provider = provider
+		this.input = input
+		this.values = [provider.id, provider.version, ...values]
+	}
+	[Equal.symbol](that: Equal.Equal): boolean {
+		return that instanceof Key && Equal.equals(this.values, that.values)
+	}
+	[Hash.symbol](): number {
+		return Hash.hash(this.values)
+	}
+}
+
+/** What the build of a language model needs. */
+interface LanguageInput {
+	readonly selection: Config.Selection
+	readonly upstream: string
 }
 
 export const make = (options: { readonly builtin?: Builtin } = {}) =>
 	Effect.gen(function* () {
 		const providers = yield* ModelProviders
+		const models = yield* Models
 		const settings = yield* Settings
-		const scope = yield* Scope.Scope
-		const services = yield* Effect.context<HttpClient.HttpClient>()
+		// The provider layers are built later, for each model, with this client.
+		const httpClient = yield* HttpClient.HttpClient
 		const builtin = options.builtin
+		const keyUnavailable = Failures.replace(
+			"The key of a model provider could not be opened",
+			() =>
+				Config.ModelConfigurationError.make({
+					reason: "unavailable",
+					message: "OpenBot cannot open the provider key right now.",
+				}),
+		)
+		const billing = yield* Billing
+		const throttle = yield* TokenThrottle
+		const liveBackends = yield* LiveBackends.LiveBackends
+		const metered =
+			(call: {
+				readonly organizationId: string
+				readonly providerId: string
+				readonly providerOwner: "platform" | "organization"
+				readonly modelId: string
+			}) =>
+			(model: LanguageModel.LanguageModel) =>
+				meter(model, call, { billing, throttle })
 		/**
-		 * One built model for each provider, model and option. A change to the
-		 * provider gives it a new version, so the next call builds it again and
-		 * closes the old one.
+		 * The built models of one type. A key builds its model on first use, and
+		 * the model closes after ten minutes without a call. The build of one key
+		 * does not wait for other keys. A failed build is not kept, so the next
+		 * call builds again. A call borrows the model only for the look-up. That
+		 * is safe, because the provider layers hold no scoped resources, and each
+		 * model call looks the model up again.
 		 */
-		const built = yield* SynchronizedRef.make(HashMap.empty<string, Built>())
+		const builtModels = <Input, I, A, E>(
+			tag: Context.Key<I, A>,
+			layerOf: (
+				key: Key<Input>,
+				apiKey: ApiKey,
+			) => Effect.Effect<
+				Layer.Layer<I, E, HttpClient.HttpClient>,
+				Config.ModelConfigurationError
+			>,
+		) =>
+			Effect.gen(function* () {
+				const map: RcMap.RcMap<
+					Key<Input>,
+					A,
+					Config.ModelConfigurationError
+				> = yield* RcMap.make({
+					lookup: (key: Key<Input>) =>
+						Effect.gen(function* () {
+							const apiKey = yield* providers
+								.openKey(key.provider)
+								.pipe(keyUnavailable)
+							const layer = yield* layerOf(key, apiKey)
+							const context = yield* Layer.build(layer).pipe(
+								Effect.provideService(HttpClient.HttpClient, httpClient),
+								Failures.replace("A model could not start", () =>
+									Config.ModelConfigurationError.make({
+										reason: "unavailable",
+										message: "OpenBot cannot start the model right now.",
+									}),
+								),
+							)
+							return Context.get(context, tag)
+						}).pipe(
+							Effect.onError((cause) =>
+								Cause.hasInterruptsOnly(cause)
+									? Effect.void
+									: RcMap.invalidate(map, key),
+							),
+						),
+					idleTimeToLive: Duration.minutes(10),
+				})
+				return (key: Key<Input>) => Effect.scoped(RcMap.get(map, key))
+			})
 
+		/** One built language model for each version of a provider, model and option. */
+		const languageModels = yield* builtModels(
+			LanguageModel.LanguageModel,
+			(key: Key<LanguageInput>, apiKey) =>
+				modelLayer(
+					key.provider,
+					apiKey,
+					key.input.selection,
+					key.input.upstream,
+				).pipe(
+					// The provider cannot make this model, for example for a bad option.
+					Effect.catchTag("AiError", (error) =>
+						Effect.fail(
+							Config.ModelConfigurationError.make({
+								reason: "unsupported-option",
+								message: error.message,
+							}),
+						),
+					),
+				),
+		)
+		/** One built decision model for each version of a provider and upstream model. */
+		const decisionModels = yield* builtModels(
+			DecisionModel.DecisionModel,
+			(key: Key<string>, apiKey) =>
+				decisionLayer(key.provider, apiKey, key.input),
+		)
+
+		/** The usable providers, and each model that they offer to the organization. */
 		const stored = (organizationId: string) =>
-			providers
-				.available(organizationId)
-				.pipe(
-					Effect.mapError(() =>
-						unavailable("OpenBot cannot read the model providers right now."),
+			Effect.gen(function* () {
+				const list = yield* providers.available(organizationId)
+				const usable = HashMap.fromIterable(
+					Arr.map(
+						yield* models.available(organizationId),
+						(model) => [modelKey(model), model] as const,
 					),
 				)
+				const offers = Arr.flatMap(list, (provider) =>
+					Arr.flatMap(provider.models, (link) =>
+						pipe(
+							HashMap.get(
+								usable,
+								modelKey({
+									owner: linkedOwner({ provider, link }),
+									id: link.model,
+								}),
+							),
+							Option.map((model): Offer => ({
+								provider,
+								model: effective({ model, link }),
+							})),
+							Arr.fromOption,
+						),
+					),
+				)
+				return { providers: list, offers }
+			}).pipe(
+				Failures.replace("The model providers could not be read", () =>
+					Config.ModelConfigurationError.make({
+						reason: "unavailable",
+						message: "OpenBot cannot read the model providers right now.",
+					}),
+				),
+			)
 
 		const catalog = (organizationId: string) =>
-			Effect.map(stored(organizationId), (list) => ({
+			Effect.map(stored(organizationId), (current) => ({
 				providers: [
 					...(builtin?.providers ?? []),
-					...list.map((provider): Config.Provider => ({
+					...Arr.map(current.providers, (provider): Config.Provider => ({
 						id: CoreProvider.Id.make(provider.id),
 						name: provider.name,
 						...(provider.endpoint === null
@@ -175,187 +442,339 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				],
 				models: [
 					...(builtin?.models ?? []),
-					...list.flatMap((provider) =>
-						provider.models.map((entry) => catalogModel(provider, entry)),
+					...pipe(
+						current.offers,
+						Arr.filter((offer) => offer.model.type === "language"),
+						Arr.map(catalogModel),
 					),
 				],
 			}))
 
-		const defaultSelection = (organizationId: string) =>
-			Effect.gen(function* () {
-				const current = yield* settings
-					.organization(organizationId)
-					.pipe(
-						Effect.mapError(() =>
-							unavailable("OpenBot cannot read the settings right now."),
-						),
-					)
-				if (current.document.defaultModel !== null)
-					return Option.some(current.document.defaultModel)
-				const first = (yield* catalog(organizationId)).models[0]
-				return Option.map(Option.fromNullishOr(first), (model) =>
-					Config.Selection.make({ provider: model.provider, model: model.id }),
-				)
-			})
+		const organizationSettings = (organizationId: string) =>
+			settings.organization(organizationId).pipe(
+				Failures.replace(
+					"The settings of an organization could not be read",
+					() =>
+						Config.ModelConfigurationError.make({
+							reason: "unavailable",
+							message: "OpenBot cannot read the settings right now.",
+						}),
+				),
+			)
 
-		const build = (provider: Stored, selection: Config.Selection) =>
-			Effect.gen(function* () {
-				const key = JSON.stringify([
-					provider.id,
+		const build = (
+			{ provider, model: offered }: Offer,
+			selection: Config.Selection,
+		) =>
+			languageModels(
+				new Key(provider, { selection, upstream: offered.upstream }, [
 					selection.model,
+					offered.upstream,
 					selection.reasoningEffort ?? null,
 					selection.serviceTier ?? null,
-				])
-				return yield* SynchronizedRef.modifyEffect(built, (map) =>
-					Effect.gen(function* () {
-						const existing = HashMap.get(map, key)
-						if (
-							Option.isSome(existing) &&
-							existing.value.version === provider.version
-						)
-							return [existing.value.model, map] as const
-						if (Option.isSome(existing))
-							yield* Scope.close(existing.value.scope, Exit.void)
-						const apiKey = yield* providers
-							.openKey(provider)
-							.pipe(
-								Effect.mapError(() =>
-									unavailable(
-										"OpenBot cannot open the provider key right now.",
-									),
-								),
-							)
-						const layer = yield* modelLayer(provider, apiKey, selection).pipe(
-							Effect.mapError(
-								(error) =>
-									new Config.ModelConfigurationError({
-										reason: "unsupported-option",
-										message: String(error),
-									}),
-							),
-						)
-						const entryScope = yield* Scope.fork(scope)
-						const context = yield* Layer.buildWithScope(layer, entryScope).pipe(
-							Effect.provideContext(services),
-							Effect.mapError(() =>
-								unavailable("OpenBot cannot start the model right now."),
-							),
-						)
-						const model = Context.get(context, LanguageModel.LanguageModel)
-						return [
-							model,
-							HashMap.set(map, key, {
-								version: provider.version,
-								scope: entryScope,
-								model,
-							}),
-						] as const
-					}),
+				]),
+			)
+
+		const decision = (organizationId: string, selection: Config.Selection) =>
+			Effect.gen(function* () {
+				const found = Arr.findFirst(
+					(yield* stored(organizationId)).offers,
+					(offer) =>
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
+				)
+				if (Option.isNone(found))
+					return yield* Config.ModelConfigurationError.make({
+						reason: "model-not-found",
+						message: "No provider of the organization offers this model.",
+					})
+				const offer = found.value
+				if (offer.model.type !== "decision")
+					return yield* Config.ModelConfigurationError.make({
+						reason: "model-not-found",
+						message: "This is a language model, not a decision model.",
+					})
+				return yield* decisionModels(
+					new Key(offer.provider, offer.model.upstream, [offer.model.upstream]),
 				)
 			})
 
-		const resolve = (
-			organizationId: string,
-			requested: Config.Selection | undefined,
-		) =>
+		const resolve = (organizationId: string, selection: Config.Selection) =>
 			Effect.gen(function* () {
-				const selection =
-					requested ??
-					Option.getOrUndefined(yield* defaultSelection(organizationId))
-				if (selection === undefined)
-					return yield* unavailable("The organization has no model.")
 				if (
 					builtin !== undefined &&
-					builtin.providers.some(
+					Arr.some(
+						builtin.providers,
 						(provider) => provider.id === selection.provider,
 					)
 				)
-					return yield* builtin.resolve(selection)
-				const provider = (yield* stored(organizationId)).find(
-					(provider) => provider.id === selection.provider,
+					return yield* builtin.resolve(selection).pipe(
+						Effect.map(
+							metered({
+								organizationId,
+								providerId: selection.provider,
+								providerOwner: "platform",
+								modelId: selection.model,
+							}),
+						),
+					)
+				const current = yield* stored(organizationId)
+				if (
+					!Arr.some(
+						current.providers,
+						(provider) => provider.id === selection.provider,
+					)
 				)
-				if (provider === undefined)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "provider-not-found",
 						message: "The organization cannot use this model provider.",
 					})
-				const entry = provider.models.find(
-					(model) => model.id === selection.model,
+				const found = Arr.findFirst(
+					current.offers,
+					(offer) =>
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
 				)
-				if (entry === undefined)
-					return yield* new Config.ModelConfigurationError({
+				if (Option.isNone(found))
+					return yield* Config.ModelConfigurationError.make({
 						reason: "model-not-found",
 						message: "The model provider does not offer this model.",
 					})
+				const offer = found.value
+				if (offer.model.type !== "language")
+					return yield* Config.ModelConfigurationError.make({
+						reason: "model-not-found",
+						message: `This is a ${offer.model.type} model. It cannot write text.`,
+					})
 				if (
 					(selection.reasoningEffort !== undefined &&
-						!entry.reasoningEfforts.includes(selection.reasoningEffort)) ||
+						!offer.model.reasoningEfforts.includes(
+							selection.reasoningEffort,
+						)) ||
 					(selection.serviceTier !== undefined &&
-						!entry.serviceTiers.includes(selection.serviceTier))
+						!offer.model.serviceTiers.includes(selection.serviceTier))
 				)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "unsupported-option",
 						message:
 							"The model does not offer this reasoning effort or service tier.",
 					})
-				return yield* build(provider, selection)
+				// The built model is shared by every organization, so each call wraps it again.
+				return metered({
+					organizationId,
+					providerId: offer.provider.id,
+					providerOwner: offer.provider.owner.kind,
+					modelId: offer.model.id,
+				})(yield* build(offer, selection))
+			})
+
+		/** Live offers that a Live backend serves. */
+		const isLive = (offer: Offer) =>
+			offer.model.type === "live" &&
+			Option.isSome(liveBackends.get(offer.provider.kind))
+
+		const liveCatalog = (organizationId: string) =>
+			Effect.map(stored(organizationId), (current) => {
+				const offers = Arr.filter(current.offers, isLive)
+				return {
+					providers: pipe(
+						current.providers,
+						Arr.filter((provider) =>
+							Arr.some(offers, (offer) => offer.provider.id === provider.id),
+						),
+						Arr.map((provider): Config.Provider => ({
+							id: CoreProvider.Id.make(provider.id),
+							name: provider.name,
+							...(provider.endpoint === null
+								? {}
+								: { endpoint: provider.endpoint }),
+						})),
+					),
+					models: Arr.map(offers, catalogModel),
+				}
+			})
+
+		const resolveLive = (organizationId: string, selection: Config.Selection) =>
+			Effect.gen(function* () {
+				const found = Arr.findFirst(
+					(yield* stored(organizationId)).offers,
+					(offer) =>
+						offer.model.type === "live" &&
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
+				)
+				if (Option.isNone(found))
+					return yield* Config.ModelConfigurationError.make({
+						reason: "model-not-found",
+						message: "The organization has no Live model with this name.",
+					})
+				const offer = found.value
+				const backend = liveBackends.get(offer.provider.kind)
+				if (Option.isNone(backend))
+					return yield* Config.ModelConfigurationError.make({
+						reason: "unsupported-option",
+						message: `OpenBot has no Live backend for ${offer.provider.kind} providers.`,
+					})
+				const apiKey = yield* providers
+					.openKey(offer.provider)
+					.pipe(keyUnavailable)
+				const model = yield* backend.value
+					.make({
+						provider: offer.provider,
+						apiKey,
+						upstreamModel: offer.model.upstream,
+						providerId: CoreProvider.Id.make(offer.provider.id),
+						modelId: CoreModel.Id.make(offer.model.id),
+					})
+					.pipe(
+						// Only a model that the backend does not support is a bad option.
+						// Any other failure, such as of the provider, says that it is not
+						// there now.
+						Effect.mapError((error) =>
+							Config.ModelConfigurationError.make({
+								reason:
+									error.reason === "unsupported"
+										? "unsupported-option"
+										: "unavailable",
+								message: error.message,
+							}),
+						),
+					)
+				return {
+					model,
+					meter: metered({
+						organizationId,
+						providerId: offer.provider.id,
+						providerOwner: offer.provider.owner.kind,
+						modelId: offer.model.id,
+					}),
+				}
+			})
+
+		/** The selection that one setting of the organization names. */
+		const setting = (
+			organizationId: string,
+			name: "rulesModel" | "botMemoryModel",
+		) =>
+			Effect.gen(function* () {
+				const selection = (yield* organizationSettings(organizationId))
+					.document[name]
+				if (selection === null)
+					return yield* Config.ModelConfigurationError.make({
+						reason: "missing",
+						message: `The organization has no ${name}.`,
+					})
+				return selection
+			})
+
+		/** The model that a selection names, as the type that its offer has. */
+		const resolveAny = (organizationId: string, selection: Config.Selection) =>
+			Effect.gen(function* () {
+				const offer = Arr.findFirst(
+					(yield* stored(organizationId)).offers,
+					(offer) =>
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
+				)
+				return Option.exists(offer, (offer) => offer.model.type === "decision")
+					? AnyModel.Decision({
+							model: yield* decision(organizationId, selection),
+						})
+					: AnyModel.Language({
+							model: yield* resolve(organizationId, selection),
+						})
 			})
 
 		return ModelRegistry.of({
 			catalog,
-			defaultSelection,
 			view: (organizationId) =>
 				Effect.gen(function* () {
-					const list = yield* stored(organizationId)
-					const current = yield* catalog(organizationId)
+					const current = yield* stored(organizationId)
+					// The catalog is still useful without its prices.
+					const prices = yield* billing
+						.currentPrices(
+							Arr.map(current.providers, (provider) => provider.id),
+						)
+						.pipe(
+							Effect.catch((error) =>
+								Effect.logWarning(
+									"The prices of the models could not be read",
+									error,
+								).pipe(
+									Effect.as(
+										HashMap.empty<
+											readonly [providerId: string, modelId: string],
+											BillingApi.ModelPrice
+										>(),
+									),
+								),
+							),
+						)
 					return {
 						providers: [
-							...(builtin?.providers ?? []).map((provider) => ({
-								id: provider.id,
+							...Arr.map(builtin?.providers ?? [], (provider) => ({
+								id: CoreProvider.Id.make(provider.id),
 								owner: "platform" as const,
 								kind: "openai-compat" as const,
 								name: provider.name,
 							})),
-							...list.map((provider) => ({
-								id: provider.id,
+							...Arr.map(current.providers, (provider) => ({
+								id: CoreProvider.Id.make(provider.id),
 								owner: provider.owner.kind,
 								kind: provider.kind,
 								name: provider.name,
 							})),
 						],
-						models: current.models.map((model) => ({
-							provider: model.provider,
-							id: model.id,
-							name: model.name,
-							reasoningEfforts: model.reasoningEfforts,
-							serviceTiers: model.serviceTiers,
-							...(model.maxContextWindow === undefined
-								? {}
-								: { contextWindow: model.maxContextWindow }),
-							...(model.maxOutputTokensLimit === undefined
-								? {}
-								: { maxOutputTokens: model.maxOutputTokensLimit }),
-						})),
-						defaultModel: Option.getOrNull(
-							yield* defaultSelection(organizationId),
-						),
+						models: [
+							...Arr.map(builtin?.models ?? [], (model) => ({
+								provider: CoreProvider.Id.make(model.provider),
+								id: CoreModel.Id.make(model.id),
+								owner: "platform" as const,
+								type: "language" as const,
+								name: model.name,
+								reasoningEfforts: model.reasoningEfforts,
+								serviceTiers: model.serviceTiers,
+								...(model.maxContextWindow === undefined
+									? {}
+									: { contextWindow: model.maxContextWindow }),
+								...(model.maxOutputTokensLimit === undefined
+									? {}
+									: { maxOutputTokens: model.maxOutputTokensLimit }),
+							})),
+							...Arr.map(current.offers, ({ provider, model }) => ({
+								provider: CoreProvider.Id.make(provider.id),
+								id: CoreModel.Id.make(model.id),
+								owner: model.owner,
+								type: model.type,
+								name: model.name,
+								reasoningEfforts: model.reasoningEfforts,
+								serviceTiers: model.serviceTiers,
+								...(model.contextWindow === null
+									? {}
+									: { contextWindow: model.contextWindow }),
+								...(model.maxOutputTokens === null
+									? {}
+									: { maxOutputTokens: model.maxOutputTokens }),
+								...Option.match(HashMap.get(prices, [provider.id, model.id]), {
+									onNone: () => ({}),
+									onSome: (price) => ({ price }),
+								}),
+							})),
+						],
 					}
 				}),
 			resolve,
-			helper: (organizationId) =>
-				Effect.gen(function* () {
-					const current = yield* settings
-						.organization(organizationId)
-						.pipe(
-							Effect.mapError(() =>
-								unavailable("OpenBot cannot read the settings right now."),
-							),
-						)
-					return yield* resolve(
-						organizationId,
-						current.document.helperModel ?? undefined,
-					)
-				}),
+			liveCatalog,
+			resolveLive,
+			decision,
+			rulesModel: (organizationId) =>
+				setting(organizationId, "rulesModel").pipe(
+					Effect.flatMap((selection) => resolveAny(organizationId, selection)),
+				),
+			botMemoryModel: (organizationId) =>
+				setting(organizationId, "botMemoryModel").pipe(
+					Effect.flatMap((selection) => resolve(organizationId, selection)),
+				),
 		})
 	})
 

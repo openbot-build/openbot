@@ -11,15 +11,17 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
+	Crypto,
 	Effect,
 	Layer,
 	Match,
 	Option,
 	Redacted,
+	Record as Rec,
 	Schema,
+	String as Str,
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as DiscoveryService from "./Discovery.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Governance } from "./Governance.ts"
@@ -29,6 +31,8 @@ import { appDrafts } from "../database/Schema.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey, type StoredConnection } from "./StoredConnections.ts"
+import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 export type Error =
 	| ExperienceInputInvalid
@@ -74,9 +78,11 @@ export const make: Effect.Effect<
 	| Discovery.Rules
 	| Probe
 	| Governance
+	| Crypto.Crypto
 > = Effect.gen(function* () {
 	const governance = yield* Governance
-	const db = yield* makeWithDefaults()
+	const crypto = yield* Crypto.Crypto
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const namespace = yield* IndexNamespace
 	const discovery = yield* Discovery.Discovery
@@ -132,7 +138,7 @@ export const make: Effect.Effect<
 		)
 
 		return {
-			id: connection.connectionId,
+			id: Api.ConnectionId.make(connection.connectionId),
 			name: stored.name,
 			cardUrl: app.cardUrl,
 			card: app.card,
@@ -161,11 +167,21 @@ export const make: Effect.Effect<
 			.select()
 			.from(appDrafts)
 			.where(StoredConnections.draftWhere(yield* owner, id))
-			.pipe(Effect.mapError(StoredConnections.unavailable)))[0]
+			.pipe(
+				Failures.replace(
+					"OpenBot could not read an App connection draft.",
+					() => ExperienceStorageUnavailable.make({}),
+				),
+			))[0]
 		if (row === undefined) return yield* ExperienceNotFound.make({ id })
 		const draft = yield* Schema.decodeEffect(StoredConnections.draftCodec)(
 			row.body,
-		).pipe(Effect.mapError(StoredConnections.unavailable))
+		).pipe(
+			Failures.replace(
+				"OpenBot could not decode a stored App connection draft.",
+				() => ExperienceStorageUnavailable.make({}),
+			),
+		)
 		if (draft.expiresAt <= (yield* Clock.currentTimeMillis))
 			return yield* Api.ConnectionConflict.make({
 				reason: "DraftExpired",
@@ -173,6 +189,35 @@ export const make: Effect.Effect<
 			})
 		return draft
 	})
+	const createManualConnection = Effect.fn("Apps.createManualConnection")(
+		function* (input: Api.ManualConnectionRequest, draftRevision?: number) {
+			const key = yield* owner
+			const existing = yield* StoredConnections.find(db, secrets, key, input.id)
+			if (Option.isSome(existing)) return yield* project(key, existing.value)
+			yield* governance.check(input.url)
+			const configured = yield* ManualConnection.configure(key)(input)
+			const protection = yield* probe.check(configured)
+			const connection = {
+				...configured.connection,
+				authorization: protection.requiresAuthorization
+					? {
+							_tag: "PendingAuthorization" as const,
+							resource: input.url,
+							scopes: protection.scopes,
+						}
+					: { _tag: "Unprotected" as const },
+			}
+			return yield* project(
+				key,
+				yield* StoredConnections.save(db, secrets, namespace, key, {
+					app: configured.app,
+					connection,
+					name: input.name,
+					...(draftRevision === undefined ? {} : { draftRevision }),
+				}),
+			)
+		},
+	)
 	return Connections.of({
 		getConnection,
 		listConnections: Effect.gen(function* () {
@@ -187,61 +232,24 @@ export const make: Effect.Effect<
 				Effect.provideService(Discovery.Discovery, discovery),
 			)
 			return yield* StoredConnections.saveDraft(db, yield* owner, {
-				id: yield* Effect.sync(() => crypto.randomUUID()),
+				// A platform without secure random numbers is broken.
+				id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
 				revision: 0,
 				input,
 				discovery: result,
 				expiresAt: (yield* Clock.currentTimeMillis) + 24 * 60 * 60 * 1000,
 			})
 		}),
-		createManualConnection: Effect.fn("Apps.createManualConnection")(
-			function* (input) {
-				const key = yield* owner
-				const existing = yield* StoredConnections.get(
-					db,
-					secrets,
-					key,
-					input.id,
-				).pipe(
-					Effect.asSome,
-					Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
-				)
-				if (Option.isSome(existing)) return yield* project(key, existing.value)
-				yield* governance.check(input.url)
-				const configured = yield* ManualConnection.configure(key)(input)
-				const protection = yield* probe.check(configured)
-				const connection = {
-					...configured.connection,
-					authorization: protection.requiresAuthorization
-						? {
-								_tag: "PendingAuthorization" as const,
-								resource: input.url,
-								scopes: protection.scopes,
-							}
-						: { _tag: "Unprotected" as const },
-				}
-				return yield* project(
-					key,
-					yield* StoredConnections.save(db, secrets, namespace, key, {
-						app: configured.app,
-						connection,
-						name: input.name,
-					}),
-				)
-			},
-		),
+		createManualConnection,
 		getConnectionDraft: getDraft,
 		createConnection: Effect.fn("Apps.confirmConnection")(function* (input) {
 			const key = yield* owner
 			yield* governance.check(input.cardUrl)
-			const existing = yield* StoredConnections.get(
+			const existing = yield* StoredConnections.find(
 				db,
 				secrets,
 				key,
 				input.draftId,
-			).pipe(
-				Effect.asSome,
-				Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 			)
 			if (Option.isSome(existing)) return yield* project(key, existing.value)
 			const draft = yield* getDraft(input.draftId)
@@ -250,23 +258,71 @@ export const make: Effect.Effect<
 					reason: "RevisionChanged",
 					message: "This draft changed. Refresh it before confirming.",
 				})
+			if (draft.manual !== undefined) {
+				if (
+					input.cardUrl !== "urn:openbot:manual:" + draft.id ||
+					input.remoteIndex !== 0
+				)
+					return yield* ExperienceNotFound.make({ id: input.cardUrl })
+				const required = Arr.map(
+					draft.manual.headers,
+					(name) => "header:" + name,
+				)
+				const missing = Arr.filter(required, (name) =>
+					Str.isEmpty(Str.trim(input.values[name] ?? "")),
+				)
+				if (missing.length > 0)
+					return yield* Api.ConnectionConfigurationInvalid.make({
+						keys: missing,
+						message:
+							"Fill in the required headers before adding this connection.",
+					})
+				const headers = Rec.fromEntries(
+					Arr.map(draft.manual.headers, (name) => [
+						name,
+						input.values["header:" + name] ?? "",
+					]),
+				)
+				const configuration = yield* Schema.decodeEffect(
+					Api.ManualConfiguration,
+				)({
+					name: input.name,
+					url: draft.manual.url,
+					transport: draft.manual.transport,
+					headers,
+				}).pipe(
+					Effect.catchTag("SchemaError", () =>
+						Effect.fail(
+							Api.ConnectionConfigurationInvalid.make({
+								keys: required,
+								message: "The manual connection headers are not valid.",
+							}),
+						),
+					),
+				)
+				return yield* createManualConnection(
+					{ id: Api.ConnectionId.make(draft.id), ...configuration },
+					input.revision,
+				)
+			}
 			const candidates = Match.value(draft.discovery).pipe(
 				Match.tag("Single", ({ candidate }) => [candidate]),
 				Match.tag("Multiple", ({ candidates }) => candidates),
 				Match.exhaustive,
 			)
-			const previous = candidates.find(
+			const found = Arr.findFirst(
+				candidates,
 				(candidate) => candidate.cardUrl === input.cardUrl,
 			)
-			if (previous === undefined)
+			if (Option.isNone(found))
 				return yield* ExperienceNotFound.make({ id: input.cardUrl })
+			const previous = found.value
 			const current = yield* discovery.refreshCard(previous.cardUrl).pipe(
-				Effect.mapError(() =>
-					Api.ConnectionConfigurationInvalid.make({
-						message:
-							"The App declaration could not be refreshed. Discover it again before confirming.",
-						keys: [],
-					}),
+				Effect.tapErrorTag("SchemaError", (error) =>
+					Effect.logWarning("The App declaration is not valid", error),
+				),
+				Effect.mapError((error) =>
+					DiscoveryService.failure(previous.cardUrl, error),
 				),
 			)
 			if (rules.compare({ previous, current })._tag === "NeedsRevalidation")
@@ -282,23 +338,27 @@ export const make: Effect.Effect<
 					values: input.values,
 				})
 				.pipe(
-					Effect.mapError(() =>
-						Api.ConnectionConfigurationInvalid.make({
-							message:
-								"Complete the required configuration for the selected endpoint.",
-							keys:
-								current.endpoints
-									.find((endpoint) => endpoint.index === input.remoteIndex)
-									?.requirements.map((field) => field.key) ?? [],
-						}),
+					// The values come from the caller, so each failure here is a bad input.
+					Effect.catchTag(["DiscoveryError", "SchemaError"], (error) =>
+						Effect.fail(
+							Api.ConnectionConfigurationInvalid.make({
+								message:
+									"Complete the required configuration for the selected endpoint.",
+								keys: DiscoveryService.configurationKeys(
+									error,
+									current,
+									input.remoteIndex,
+								),
+							}),
+						),
 					),
 				)
-			const app = {
+			const app = Store.AppRecord.make({
 				cardUrl: current.cardUrl,
 				card: current.card,
 				sources: current.sources,
-			}
-			const provisional: Store.UserConnection = {
+			})
+			const provisional = Store.UserConnection.make({
 				owner: key,
 				connectionId: input.draftId,
 				cardUrl: current.cardUrl,
@@ -308,7 +368,7 @@ export const make: Effect.Effect<
 				headers: Redacted.make(configured.headers),
 				state: "Enabled",
 				authorization: { _tag: "Unprotected" },
-			}
+			})
 			const protection = yield* probe.check({ app, connection: provisional })
 			const connection: Store.UserConnection = {
 				...provisional,

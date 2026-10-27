@@ -1,6 +1,8 @@
+import { SettingsUnavailable } from "./SettingsErrors.ts"
 import { Document, Index } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
+import { Limit } from "./Page.ts"
 
 export const Source = Schema.Struct({
 	id: Schema.NonEmptyString,
@@ -52,28 +54,26 @@ export const Query = Schema.Struct({
 	query: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(200))),
 	source: Schema.optionalKey(Schema.NonEmptyString),
 	cursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(8192))),
-	limit: Schema.optionalKey(
-		Schema.String.check(Schema.isPattern(/^(?:[1-9]|[1-4][0-9]|50)$/)),
-	),
+	limit: Schema.optionalKey(Limit(50)),
 })
 export type Query = typeof Query.Type
 
-export class IndexInputInvalid extends Schema.TaggedError<IndexInputInvalid>()(
-	"IndexInputInvalid",
-	{ message: Schema.String },
-) {}
-export class IndexUnavailable extends Schema.TaggedError<IndexUnavailable>()(
-	"IndexUnavailable",
-	{ issues: Schema.Array(SourceIssue) },
-) {}
-export class IndexNotFound extends Schema.TaggedError<IndexNotFound>()(
-	"IndexNotFound",
-	{ message: Schema.String },
-) {}
-export class IndexRestricted extends Schema.TaggedError<IndexRestricted>()(
-	"IndexRestricted",
-	{ restriction: Restriction },
-) {}
+export class IndexInputInvalid extends Schema.TaggedError<
+	IndexInputInvalid,
+	{ readonly brand: unique symbol }
+>()("IndexInputInvalid", { message: Schema.String }) {}
+export class IndexUnavailable extends Schema.TaggedError<
+	IndexUnavailable,
+	{ readonly brand: unique symbol }
+>()("IndexUnavailable", { issues: Schema.Array(SourceIssue) }) {}
+export class IndexNotFound extends Schema.TaggedError<
+	IndexNotFound,
+	{ readonly brand: unique symbol }
+>()("IndexNotFound", { message: Schema.String }) {}
+export class IndexRestricted extends Schema.TaggedError<
+	IndexRestricted,
+	{ readonly brand: unique symbol }
+>()("IndexRestricted", { restriction: Restriction }) {}
 
 const errors = [
 	IndexRestricted.pipe(HttpApiSchema.status(403)),
@@ -86,6 +86,7 @@ const errors = [
 export const AppIndexApi = HttpApiGroup.make("appIndex").add(
 	HttpApiEndpoint.get("listSources", "/v1/app-index/sources", {
 		success: Schema.Array(Source),
+		error: SettingsUnavailable.pipe(HttpApiSchema.status(503)),
 	}),
 	HttpApiEndpoint.get("searchApps", "/v1/app-index/apps", {
 		query: Query.fields,

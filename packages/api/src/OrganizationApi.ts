@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Array as Arr, Record as Rec, Schema } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -6,18 +6,24 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { Caller } from "./Identity.ts"
-import { AccountAuth, NoStore } from "./AuthApi.ts"
 import {
-	CreateRoleRequest,
-	PermissionErrors,
-	PermissionGroup,
-	Policies,
+	InvitationId,
+	InvitationInvalid,
+	InvitationNotFound,
+	InvitationStatus,
+} from "./Invitation.ts"
+import { AccountAuth, NoStore } from "./AuthApi.ts"
+import { Email } from "./Email.ts"
+import { Limit } from "./Page.ts"
+import {
+	AuthorizationErrors,
+	PolicyInput,
+	PolicySchema,
 	Required,
-	requires,
-	Role,
-	RoleId,
-	UpdateRoleRequest,
-} from "./Permissions.ts"
+	ResourceInfo,
+	organization,
+} from "./Authorization.ts"
+import { CreateRoleRequest, Role, RoleId, UpdateRoleRequest } from "./Roles.ts"
 import {
 	OrganizationSettings,
 	SettingsErrors,
@@ -49,6 +55,17 @@ export const CreateOrganizationRequest = Schema.Struct({
 })
 export type CreateOrganizationRequest = typeof CreateOrganizationRequest.Type
 
+/** The actions allowed for the caller on the current organization. */
+export const OrganizationCapabilities = Schema.Struct({
+	resources: Schema.Array(
+		Schema.Struct({
+			kind: Schema.String,
+			actions: Schema.Array(Schema.String),
+		}),
+	),
+})
+export type OrganizationCapabilities = typeof OrganizationCapabilities.Type
+
 export const MemberStatus = Schema.Literals(["active", "suspended"])
 export const Member = Schema.Struct({
 	userId: Schema.String,
@@ -56,37 +73,108 @@ export const Member = Schema.Struct({
 	name: Schema.NullOr(Schema.String),
 	status: MemberStatus,
 	roles: Roles,
-	/** Extra policies for this member, on top of the policies of the roles. */
-	policies: Policies,
+	/** An extra policy for this member, on top of the policies of the roles. */
+	policy: PolicySchema,
 	joinedAt: Schema.String,
 })
 export type Member = typeof Member.Type
 export const UpdateMemberRequest = Schema.Struct({
 	status: Schema.optionalKey(MemberStatus),
 	roles: Schema.optionalKey(Roles),
-	policies: Schema.optionalKey(Policies),
+	policy: Schema.optionalKey(PolicyInput),
 })
 export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
+
+export { InvitationId, InvitationInvalid, InvitationNotFound, InvitationStatus }
+/**
+ * An invitation to join an organization, or to use one shared Bot of it.
+ * The person with this verified email can accept it.
+ */
+export const Invitation = Schema.Struct({
+	id: InvitationId,
+	organizationId: Schema.String,
+	organizationName: Schema.String,
+	email: Schema.String,
+	/** The roles that the person gets when they accept. An invitation to a Bot has none. */
+	roles: Schema.Array(RoleId),
+	status: InvitationStatus,
+	/** The user ID of the person who made the invitation. */
+	invitedBy: Schema.String,
+	createdAt: Schema.String,
+	expiresAt: Schema.String,
+	/**
+	 * Only for an invitation to use one Bot. Accept it with
+	 * `POST /v1/bot-invitations/accept`. `roles` is empty then.
+	 */
+	bot: Schema.optionalKey(
+		Schema.Struct({ id: Schema.String, name: Schema.String }),
+	),
+})
+export type Invitation = typeof Invitation.Type
+export const CreateInvitationRequest = Schema.Struct({
+	email: Email,
+	/** Without it, the person gets the default roles of the organization. */
+	roles: Schema.optionalKey(Roles),
+})
+export type CreateInvitationRequest = typeof CreateInvitationRequest.Type
 
 /**
  * The audit actions of each resource. Each action id joins the resource and
  * the action with a dot, such as `token.created`.
  */
 const auditActionTree = {
-	member: ["joined", "updated", "removed"],
+	member: ["joined", "updated", "removed", "left"],
+	invitation: ["created", "revoked", "accepted", "declined"],
+	bot_member: ["joined", "removed"],
 	organization: ["created", "updated"],
 	settings: ["updated"],
 	role: ["created", "updated", "deleted"],
+	model: ["created", "updated", "deleted"],
 	model_provider: ["created", "updated", "deleted"],
 	domain: ["added", "verified", "removed"],
 	sso_connection: ["created", "updated", "deleted"],
 	token: ["created", "revoked"],
-	agent: ["created", "updated", "promoted", "memory.updated"],
+	bot: [
+		"created",
+		"updated",
+		"promoted",
+		"memory.updated",
+		"memory.purged",
+		"memory_bot.updated",
+	],
 	delegation: ["started", "completed"],
 	capability: ["decided"],
 	request: ["resolved"],
 	grant: ["created", "revoked"],
 	rule: ["created", "updated"],
+	trigger: ["created", "updated", "deleted", "hook_changed", "fired"],
+	channel: ["created", "updated", "deleted", "secret_changed"],
+	channel_identity: ["linked", "unlinked"],
+	computer_provider: ["created", "updated", "deleted"],
+	computer: [
+		"created",
+		"updated",
+		"deleted",
+		"paired",
+		"token_changed",
+		"granted",
+		"revoked",
+		"port_opened",
+	],
+	secret_provider: ["created", "updated", "deleted"],
+	vault: [
+		"created",
+		"updated",
+		"deleted",
+		"item.created",
+		"item.updated",
+		"item.deleted",
+		"granted",
+		"revoked",
+	],
+	model_price: ["set"],
+	budget: ["created", "updated", "deleted"],
+	credits: ["updated", "granted"],
 } as const satisfies Record<string, ReadonlyArray<string>>
 type AuditActionTree = typeof auditActionTree
 /** The audit actions of one resource, such as `token.created`. */
@@ -94,12 +182,8 @@ export type AuditActionOf<Resource extends keyof AuditActionTree> =
 	`${Resource}.${AuditActionTree[Resource][number]}`
 
 export const AuditAction = Schema.Literals(
-	Object.entries(auditActionTree).flatMap(([resource, actions]) =>
-		actions.map(
-			// `Object.entries` gives plain strings. The type above gives the same ids.
-			(action) =>
-				`${resource}.${action}` as AuditActionOf<keyof AuditActionTree>,
-		),
+	Arr.flatMap(Rec.toEntries(auditActionTree), ([resource, actions]) =>
+		Arr.map(actions, (action) => `${resource}.${action}` as const),
 	),
 )
 export type AuditAction = typeof AuditAction.Type
@@ -113,71 +197,82 @@ export const AuditLogEntry = Schema.Struct({
 })
 export type AuditLogEntry = typeof AuditLogEntry.Type
 
-const Limit = Schema.FiniteFromString.check(
-	Schema.isBetween({ minimum: 1, maximum: 100 }),
-)
-
-export class MemberNotFound extends Schema.TaggedError<MemberNotFound>()(
-	"MemberNotFound",
-	{ userId: Schema.String },
-) {}
+export class MemberNotFound extends Schema.TaggedError<
+	MemberNotFound,
+	{ readonly brand: unique symbol }
+>()("MemberNotFound", { userId: Schema.String }) {}
 /** An organization must keep at least one active Super Administrator. */
-export class LastSuperAdministrator extends Schema.TaggedError<LastSuperAdministrator>()(
-	"LastSuperAdministrator",
-	{},
-) {}
-export class PolicyInvalid extends Schema.TaggedError<PolicyInvalid>()(
-	"PolicyInvalid",
-	{ message: Schema.String },
-) {}
-export class RoleNotFound extends Schema.TaggedError<RoleNotFound>()(
-	"RoleNotFound",
-	{ roleId: Schema.String },
-) {}
+export class LastSuperAdministrator extends Schema.TaggedError<
+	LastSuperAdministrator,
+	{ readonly brand: unique symbol }
+>()("LastSuperAdministrator", {}) {}
+export class RoleNotFound extends Schema.TaggedError<
+	RoleNotFound,
+	{ readonly brand: unique symbol }
+>()("RoleNotFound", { roleId: RoleId }) {}
 /** Members or the settings still use the role. Give them another role first. */
-export class RoleInUse extends Schema.TaggedError<RoleInUse>()("RoleInUse", {
-	roleId: Schema.String,
+export class RoleInUse extends Schema.TaggedError<
+	RoleInUse,
+	{ readonly brand: unique symbol }
+>()("RoleInUse", {
+	roleId: RoleId,
 }) {}
 /** Built-in roles cannot change. */
-export class RoleReadOnly extends Schema.TaggedError<RoleReadOnly>()(
-	"RoleReadOnly",
-	{ roleId: Schema.String },
-) {}
+export class RoleReadOnly extends Schema.TaggedError<
+	RoleReadOnly,
+	{ readonly brand: unique symbol }
+>()("RoleReadOnly", { roleId: RoleId }) {}
 /** Only platform admins can create organizations on this platform. */
-export class OrganizationCreationDisabled extends Schema.TaggedError<OrganizationCreationDisabled>()(
-	"OrganizationCreationDisabled",
-	{},
-) {}
-export class OrganizationStorageUnavailable extends Schema.TaggedError<OrganizationStorageUnavailable>()(
-	"OrganizationStorageUnavailable",
-	{},
-) {}
+export class OrganizationCreationDisabled extends Schema.TaggedError<
+	OrganizationCreationDisabled,
+	{ readonly brand: unique symbol }
+>()("OrganizationCreationDisabled", {}) {}
+export class OrganizationStorageUnavailable extends Schema.TaggedError<
+	OrganizationStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("OrganizationStorageUnavailable", {}) {}
 const errors = [
 	OrganizationStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 /** Changing a member can also need Super Administrator rights, so these endpoints can deny on their own. */
 const memberErrors = [
 	...errors,
-	...PermissionErrors,
+	...AuthorizationErrors,
 	MemberNotFound.pipe(HttpApiSchema.status(404)),
 	LastSuperAdministrator.pipe(HttpApiSchema.status(409)),
-	PolicyInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
 
-const readMembers = [requires("members.read").on("organization")]
-const writeMembers = [requires("members.write").on("organization")]
-const writeRoles = [requires("roles.write").on("organization")]
+/** Inviting with a role can also need Super Administrator rights, so these endpoints can deny on their own. */
+const invitationErrors = [
+	...errors,
+	...AuthorizationErrors,
+	InvitationNotFound.pipe(HttpApiSchema.status(404)),
+	InvitationInvalid.pipe(HttpApiSchema.status(400)),
+	RoleNotFound.pipe(HttpApiSchema.status(404)),
+] as const
+
+const readMembers = [organization("read", "Member")]
+const writeMembers = [organization("write", "Member")]
+const writeRoles = [organization("write", "Role")]
 /** A role cannot give more than the person who writes it has, so these endpoints can deny on their own. */
 const roleErrors = [
 	...errors,
-	...PermissionErrors,
+	...AuthorizationErrors,
 	RoleNotFound.pipe(HttpApiSchema.status(404)),
 	RoleInUse.pipe(HttpApiSchema.status(409)),
 	RoleReadOnly.pipe(HttpApiSchema.status(409)),
-	PolicyInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
 
-export const OrganizationApi = HttpApiGroup.make("organization").add(
+export class OrganizationApi extends HttpApiGroup.make("organization").add(
+	HttpApiEndpoint.get("getCapabilities", "/v1/organization/capabilities", {
+		success: OrganizationCapabilities,
+		error: [...errors, ...AuthorizationErrors],
+	})
+		.annotate(Required, [])
+		.annotate(
+			OpenApi.Description,
+			"Lists the allowed actions on Organization, Member, Role, ModelProvider, Sso, AuditLog, Usage and Budget in the current organization. Uses the current member, token and platform policies. Any signed-in member can read their own result. The result helps clients show controls; each call still checks its own permissions. It does not describe rights on individual Chats, Bots or other owned resources.",
+		),
 	HttpApiEndpoint.get("getOrganization", "/v1/organization", {
 		success: Organization,
 		error: errors,
@@ -185,12 +280,12 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.patch("updateOrganization", "/v1/organization", {
 		payload: UpdateOrganizationRequest,
 		success: Organization,
-		error: [...errors, ...PermissionErrors],
+		error: [...errors, ...AuthorizationErrors],
 	}),
 	HttpApiEndpoint.get("listMembers", "/v1/organization/members", {
 		query: {
 			after: Schema.optionalKey(Schema.String),
-			limit: Schema.optionalKey(Limit),
+			limit: Schema.optionalKey(Limit(100)),
 		},
 		success: Schema.Struct({
 			items: Schema.Array(Member),
@@ -207,12 +302,12 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 		params: { userId: Schema.String },
 		payload: UpdateMemberRequest,
 		success: Member,
-		error: memberErrors,
+		error: [...memberErrors, RoleNotFound.pipe(HttpApiSchema.status(404))],
 	})
 		.annotate(Required, writeMembers)
 		.annotate(
 			OpenApi.Description,
-			"Changes the status, roles or extra policies of a member. A suspended member cannot sign in, and their tokens stop working.",
+			"Changes the status, roles or extra policy of a member. A suspended member cannot sign in, and their tokens stop working.",
 		),
 	HttpApiEndpoint.delete("removeMember", "/v1/organization/members/:userId", {
 		params: { userId: Schema.String },
@@ -224,11 +319,41 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 			OpenApi.Description,
 			"Removes a member and revokes their tokens. If their email domain is still allowed, they join again the next time they sign in. Suspend them to keep them out.",
 		),
-	HttpApiEndpoint.get(
-		"listPermissionGroups",
-		"/v1/organization/permission_groups",
-		{ success: Schema.Array(PermissionGroup), error: errors },
-	),
+	HttpApiEndpoint.get("listInvitations", "/v1/organization/invitations", {
+		query: { status: Schema.optionalKey(InvitationStatus) },
+		success: Schema.Struct({ items: Schema.Array(Invitation) }),
+		error: invitationErrors,
+	})
+		.annotate(Required, readMembers)
+		.annotate(
+			OpenApi.Description,
+			"Lists the invitations of the organization, newest first.",
+		),
+	HttpApiEndpoint.post("createInvitation", "/v1/organization/invitations", {
+		payload: CreateInvitationRequest,
+		success: Invitation.pipe(HttpApiSchema.status(201)),
+		error: invitationErrors,
+	})
+		.annotate(Required, writeMembers)
+		.annotate(
+			OpenApi.Description,
+			"Invites a person by email. They accept with `POST /v1/invitations/:invitationId/accept` after they sign in with that verified email. An invitation lasts 7 days.",
+		),
+	HttpApiEndpoint.delete(
+		"revokeInvitation",
+		"/v1/organization/invitations/:invitationId",
+		{
+			params: { invitationId: InvitationId },
+			success: HttpApiSchema.NoContent,
+			error: invitationErrors,
+		},
+	)
+		.annotate(Required, writeMembers)
+		.annotate(OpenApi.Description, "Takes back a pending invitation."),
+	HttpApiEndpoint.get("listResources", "/v1/organization/resources", {
+		success: Schema.Array(ResourceInfo),
+		error: errors,
+	}),
 	HttpApiEndpoint.get("getSettings", "/v1/organization/settings", {
 		success: OrganizationSettings,
 		error: [...errors, ...SettingsErrors],
@@ -236,7 +361,7 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.patch("updateSettings", "/v1/organization/settings", {
 		payload: UpdateOrganizationSettingsRequest,
 		success: OrganizationSettings,
-		error: [...errors, ...SettingsErrors, ...PermissionErrors],
+		error: [...errors, ...SettingsErrors, ...AuthorizationErrors],
 	}).annotate(
 		OpenApi.Description,
 		"Changes the settings. Send the `version` that you read as `expectedVersion`. If someone changed the settings since then, the change fails with SettingsConflict. Every instance uses the new settings right away.",
@@ -249,7 +374,7 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 		"Lists the built-in roles and the custom roles of the organization.",
 	),
 	HttpApiEndpoint.get("getRole", "/v1/organization/roles/:roleId", {
-		params: { roleId: Schema.String },
+		params: { roleId: RoleId },
 		success: Role,
 		error: roleErrors,
 	}),
@@ -261,10 +386,10 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 		.annotate(Required, writeRoles)
 		.annotate(
 			OpenApi.Description,
-			"Creates a custom role. Its policies cannot allow anything that you cannot do yourself.",
+			"Creates a custom role. Its policy cannot allow anything that you cannot do yourself.",
 		),
 	HttpApiEndpoint.patch("updateRole", "/v1/organization/roles/:roleId", {
-		params: { roleId: Schema.String },
+		params: { roleId: RoleId },
 		payload: UpdateRoleRequest,
 		success: Role,
 		error: roleErrors,
@@ -272,10 +397,10 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 		.annotate(Required, writeRoles)
 		.annotate(
 			OpenApi.Description,
-			"Changes a custom role. Every member with the role gets the new policies at once.",
+			"Changes a custom role. Every member with the role gets the new policy at once.",
 		),
 	HttpApiEndpoint.delete("deleteRole", "/v1/organization/roles/:roleId", {
-		params: { roleId: Schema.String },
+		params: { roleId: RoleId },
 		success: HttpApiSchema.NoContent,
 		error: roleErrors,
 	})
@@ -287,7 +412,7 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.get("listAuditLogs", "/v1/organization/audit_logs", {
 		query: {
 			after: Schema.optionalKey(Schema.String),
-			limit: Schema.optionalKey(Limit),
+			limit: Schema.optionalKey(Limit(100)),
 			action: Schema.optionalKey(AuditAction),
 			actor: Schema.optionalKey(Schema.String),
 		},
@@ -297,15 +422,15 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 		}),
 		error: errors,
 	})
-		.annotate(Required, [requires("audit_logs.read").on("organization")])
+		.annotate(Required, [organization("read", "AuditLog")])
 		.annotate(
 			OpenApi.Description,
 			"Lists audit log entries, newest first. `actor` filters by user ID.",
 		),
-)
+) {}
 
 /** The organizations of the caller. Any signed-in account can use these endpoints. */
-export const OrganizationsApi = HttpApiGroup.make("organizations")
+export class OrganizationsApi extends HttpApiGroup.make("organizations")
 	.add(
 		HttpApiEndpoint.get("listOrganizations", "/v1/organizations", {
 			success: Schema.Struct({ items: Schema.Array(Organization) }),
@@ -325,6 +450,53 @@ export const OrganizationsApi = HttpApiGroup.make("organizations")
 			OpenApi.Description,
 			"Creates an organization. You become its Super Administrator. The platform settings say who can do this.",
 		),
+		HttpApiEndpoint.delete(
+			"leaveOrganization",
+			"/v1/organizations/:organizationId/membership",
+			{
+				params: { organizationId: Schema.String },
+				success: HttpApiSchema.NoContent,
+				error: [
+					...errors,
+					MemberNotFound.pipe(HttpApiSchema.status(404)),
+					LastSuperAdministrator.pipe(HttpApiSchema.status(409)),
+				],
+			},
+		).annotate(
+			OpenApi.Description,
+			"Leaves an organization. Your tokens in it stop working. The last active Super Administrator cannot leave. A user token can only leave its own organization.",
+		),
+		HttpApiEndpoint.get("listMyInvitations", "/v1/invitations", {
+			success: Schema.Struct({ items: Schema.Array(Invitation) }),
+			error: invitationErrors,
+		}).annotate(
+			OpenApi.Description,
+			"Lists the pending invitations for your verified email.",
+		),
+		HttpApiEndpoint.post(
+			"acceptInvitation",
+			"/v1/invitations/:invitationId/accept",
+			{
+				params: { invitationId: InvitationId },
+				success: Organization,
+				error: invitationErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Joins the organization of the invitation. You need the session cookie, and your verified email must be the email of the invitation. An invitation to use a Bot needs `POST /v1/bot-invitations/accept` instead.",
+		),
+		HttpApiEndpoint.post(
+			"declineInvitation",
+			"/v1/invitations/:invitationId/decline",
+			{
+				params: { invitationId: InvitationId },
+				success: Invitation,
+				error: invitationErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Says no to an invitation. You need the session cookie and the email of the invitation.",
+		),
 	)
 	.middleware(AccountAuth)
-	.middleware(NoStore)
+	.middleware(NoStore) {}

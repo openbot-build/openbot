@@ -1,12 +1,23 @@
-import * as Verification from "./DeveloperVerification.ts"
-import { randomBytes, randomUUID } from "node:crypto"
 import { isIP } from "node:net"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { Discovery, Document, Network, Robots } from "@openbot-build/protocol"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq, gt, inArray, ne } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { Clock, Context, Effect, Layer, Match, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Match,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
+import { Base64Url } from "effect/encoding"
 import {
 	developerApps,
 	developerClaims,
@@ -18,6 +29,8 @@ import * as Rows from "./DeveloperRows.ts"
 import type { ProofRecord } from "./DeveloperRows.ts"
 import { DomainControl } from "./DomainControl.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 export const scopeKey = (scope: Api.ManagementScope): string =>
 	Match.value(scope).pipe(
@@ -33,7 +46,7 @@ const usableStatus = [
 ] as const satisfies ReadonlyArray<Api.Proof["status"]>
 const usable = (proof: Api.Proof, now: number) =>
 	proof.validUntil > now &&
-	usableStatus.some((status) => status === proof.status)
+	Arr.some(usableStatus, (status) => status === proof.status)
 export const normalizeScope = (
 	scope: Api.ManagementScope,
 ): Effect.Effect<Api.ManagementScope, Api.DeveloperInputInvalid> =>
@@ -42,18 +55,22 @@ export const normalizeScope = (
 			AppCard: (value) =>
 				Schema.decodeEffect(Document.Link)(value.cardUrl).pipe(
 					Effect.map((cardUrl) => ({ _tag: "AppCard" as const, cardUrl })),
-					Effect.mapError(() =>
-						Api.DeveloperInputInvalid.make({
-							message: "Enter an exact HTTPS Card URL without credentials.",
-						}),
+					Effect.catchTag("SchemaError", () =>
+						Effect.fail(
+							Api.DeveloperInputInvalid.make({
+								message: "Enter an exact HTTPS Card URL without credentials.",
+							}),
+						),
 					),
 				),
 			PublisherHostname: (value) =>
 				Effect.gen(function* () {
-					const hostname = value.hostname
-						.trim()
-						.toLowerCase()
-						.replace(/\.$/, "")
+					const hostname = pipe(
+						value.hostname,
+						Str.trim,
+						Str.toLowerCase,
+						Str.replace(/\.$/, ""),
+					)
 					if (
 						!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(
 							hostname,
@@ -121,6 +138,20 @@ export class DeveloperAccess extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/DeveloperAccess") {}
 
+const Marker = Schema.fromJsonString(
+	Schema.Struct({
+		_meta: Schema.optionalKey(
+			Schema.Struct({
+				"openbot/developer-verification": Schema.optionalKey(
+					Schema.Struct({
+						version: Schema.Literal(1),
+						tokens: Schema.Array(Schema.String),
+					}),
+				),
+			}),
+		),
+	}),
+)
 export const make: Effect.Effect<
 	typeof DeveloperAccess.Service,
 	never,
@@ -129,16 +160,17 @@ export const make: Effect.Effect<
 	| Network.PublicNetwork
 	| Robots.Robots
 	| AppInspections
+	| Crypto.Crypto
 > = Effect.gen(function* () {
-	const verification = yield* Verification.Options
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const domains = yield* DomainControl
 	const network = yield* Network.PublicNetwork
 	const robots = yield* Robots.Robots
 	const inspections = yield* AppInspections
-	const notFound = () => Api.DeveloperNotFound.make({})
+	const crypto = yield* Crypto.Crypto
+	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
 	const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
 	const proofWhere = (id: string) =>
 		and(eq(developerProofs.namespace, namespace), eq(developerProofs.id, id))
@@ -151,16 +183,14 @@ export const make: Effect.Effect<
 	) {
 		const query = db.select().from(developerProofs).where(proofWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
-		if (row === undefined) return yield* notFound()
+		if (row === undefined) return yield* Api.DeveloperNotFound.make({})
 		return yield* Rows.decodeProof(row)
 	})
 	const writeProof = Effect.fn("DeveloperAccess.writeProof")(function* (
 		value: Api.Proof,
 	) {
-		const { owner } = yield* readProof(value.id)
 		const { id: _, ...row } = yield* Rows.encodeProof(value)
-		yield* Rows.write(
-			owner,
+		yield* Rows.stored(
 			db
 				.update(developerProofs)
 				.set({ ...row, scopeKey: scopeKey(value.scope) })
@@ -190,7 +220,7 @@ export const make: Effect.Effect<
 			)
 			if (usable(proof.value, now) && member.length > 0)
 				return yield* Api.DeveloperForbidden.make({})
-			return yield* notFound()
+			return yield* Api.DeveloperNotFound.make({})
 		}
 		return proof
 	})
@@ -201,16 +231,12 @@ export const make: Effect.Effect<
 	) {
 		const query = db.select().from(developerClaims).where(claimWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
-		if (row === undefined || row.owner !== owner) return yield* notFound()
+		if (row === undefined || row.owner !== owner)
+			return yield* Api.DeveloperNotFound.make({})
 		return yield* Rows.decodeClaim(row)
 	})
-	const setClaimStatus = (
-		owner: string,
-		id: string,
-		status: Api.Challenge["status"],
-	) =>
-		Rows.write(
-			owner,
+	const setClaimStatus = (id: string, status: Api.Challenge["status"]) =>
+		Rows.stored(
 			db.update(developerClaims).set({ status }).where(claimWhere(id)),
 		)
 	const evidence = (scope: Api.ManagementScope, token: string) =>
@@ -252,13 +278,24 @@ export const make: Effect.Effect<
 							return false
 						if (card.status === 404 || card.status === 410) return false
 						if (card.status !== 200) return yield* conflict("CardUnconfirmed")
-						return yield* Verification.hasToken({
-							text: card.text,
-							token,
-							settings: verification,
-						})
+						const marker = yield* Schema.decodeEffect(Marker)(card.text)
+						return (
+							marker._meta?.["openbot/developer-verification"]?.tokens.includes(
+								token,
+							) ?? false
+						)
 					}),
 			}),
+			// A conflict tells the developer what to fix. Any other failure means
+			// that the check could not run, and the callers do not keep its cause.
+			Effect.tapError((failure) =>
+				failure._tag === "DeveloperConflict"
+					? Effect.void
+					: Effect.logWarning(
+							"Could not read the ownership evidence.",
+							Cause.fail(failure),
+						),
+			),
 			Effect.result,
 		)
 	/** The grants of the owner: the usable proofs they hold, and the usable proofs they are a member of. */
@@ -310,9 +347,7 @@ export const make: Effect.Effect<
 		const membered = yield* Effect.forEach(shared, (row) =>
 			Effect.gen(function* () {
 				const { value } = yield* Rows.decodeProof(row.proof)
-				const role = yield* Schema.decodeUnknownEffect(Api.MemberRole)(
-					row.role,
-				).pipe(Effect.mapError(Rows.unavailable))
+				const role = yield* Rows.decodeRow(Api.MemberRole)(row.role)
 				return {
 					proofId: value.id,
 					memberId: row.memberId,
@@ -329,7 +364,8 @@ export const make: Effect.Effect<
 				AppCard: (value) => value.cardUrl === candidate.cardUrl,
 				PublisherHostname: (value) =>
 					new URL(candidate.cardUrl).hostname === value.hostname &&
-					candidate.sources.some(
+					Arr.some(
+						candidate.sources,
 						(source) =>
 							source.role === "catalog" &&
 							URL.canParse(source.url) &&
@@ -343,11 +379,11 @@ export const make: Effect.Effect<
 		write: boolean = false,
 	) {
 		const app = yield* Rows.getApp(db, namespace, cardUrl)
-		const all = (yield* grants(owner)).filter((grant) =>
+		const all = Arr.filter(yield* grants(owner), (grant) =>
 			covers(grant.scope, app.candidate),
 		)
-		if (all.length === 0) return yield* notFound()
-		if (write && all.every((grant) => grant.role === "viewer"))
+		if (all.length === 0) return yield* Api.DeveloperNotFound.make({})
+		if (write && Arr.every(all, (grant) => grant.role === "viewer"))
 			return yield* Api.DeveloperForbidden.make({})
 		return all
 	})
@@ -372,34 +408,36 @@ export const make: Effect.Effect<
 					observed.cardUrl,
 					true,
 				)
-				const sources = [
-					...observed.sources,
-					...Option.match(previous, {
+				const combined = Arr.appendAll(
+					observed.sources,
+					Option.match(previous, {
 						onNone: () => [],
 						onSome: (value) => value.candidate.sources,
 					}),
-				].filter(
-					(source, index, values) =>
-						values.findIndex(
-							(value) => value.role === source.role && value.url === source.url,
-						) === index,
+				)
+				const sources = Arr.dedupeWith(
+					combined,
+					(a, b) => a.role === b.role && a.url === b.url,
 				)
 				const candidate = yield* Discovery.Candidate.decode({
 					...observed,
 					sources,
-				}).pipe(Effect.mapError(Rows.unavailable))
+				}).pipe(
+					Failures.replace("Could not join the sources of an App.", () =>
+						Api.DeveloperUnavailable.make({}),
+					),
+				)
 				if (!covers(scope, candidate)) return true
 				if (Option.isSome(previous)) {
 					yield* Rows.putApp(db, namespace, { ...previous.value, candidate })
 					return true
 				}
 				const now = yield* Clock.currentTimeMillis
-				const encoded = yield* Schema.encodeEffect(
-					Rows.Json(Discovery.Candidate),
-				)(candidate).pipe(Effect.mapError(Rows.unavailable))
+				const encoded = yield* Rows.encodeRow(Rows.Json(Discovery.Candidate))(
+					candidate,
+				)
 				// Another request may add the same App first. Then read it again and merge.
-				const inserted = yield* Rows.write(
-					null,
+				const inserted = yield* Rows.stored(
 					db
 						.insert(developerApps)
 						.values({
@@ -431,10 +469,12 @@ export const make: Effect.Effect<
 				const evidence = Match.value(app.eligibility).pipe(
 					Match.tagsExhaustive({
 						Eligible: (result) =>
-							result.entry.evidence.map((item) => ({
-								role: "catalog" as const,
-								url: item.catalogUrl,
-							})),
+							Arr.map(result.entry.evidence, (item) =>
+								Discovery.Source.make({
+									role: "catalog",
+									url: item.catalogUrl,
+								}),
+							),
 						Excluded: () => [],
 						Unconfirmed: () => [],
 					}),
@@ -506,9 +546,10 @@ export const make: Effect.Effect<
 					.from(developerApps)
 					.where(eq(developerApps.namespace, namespace)),
 			)
-			const apps = (yield* Effect.forEach(rows, Rows.decodeApp)).flatMap(
+			const apps = Arr.flatMap(
+				yield* Effect.forEach(rows, Rows.decodeApp),
 				(app) => {
-					const applicable = access.filter((grant) =>
+					const applicable = Arr.filter(access, (grant) =>
 						covers(grant.scope, app.candidate),
 					)
 					return applicable.length === 0
@@ -546,18 +587,17 @@ export const make: Effect.Effect<
 			const scope = yield* normalizeScope(value)
 			const now = yield* Clock.currentTimeMillis
 			const challenge: Api.Challenge = {
-				id: yield* Effect.sync(randomUUID),
+				id: yield* newId,
 				scope,
 				token:
 					"openbot-verification=" +
-					(yield* Effect.sync(() => randomBytes(32).toString("base64url"))),
+					Base64Url.encode(yield* crypto.randomBytes(32).pipe(Effect.orDie)),
 				createdAt: now,
 				expiresAt: now + 86400000,
 				status: "Pending",
 			}
 			const row = yield* Rows.encodeClaim(challenge)
-			yield* Rows.write(
-				owner,
+			yield* Rows.stored(
 				db
 					.insert(developerClaims)
 					.values({ namespace, owner, scopeKey: scopeKey(scope), ...row }),
@@ -570,7 +610,7 @@ export const make: Effect.Effect<
 					const value = yield* claim(owner, id, true)
 					if (value.status === "Confirmed")
 						return yield* conflict("ClaimAlreadyConfirmed")
-					yield* setClaimStatus(owner, id, "Revoked")
+					yield* setClaimStatus(id, "Revoked")
 					return { ...value, status: "Revoked" } satisfies Api.Challenge
 				}),
 			),
@@ -588,7 +628,12 @@ export const make: Effect.Effect<
 					if (current.expiresAt <= now) return yield* conflict("ClaimExpired")
 					yield* Match.value(checked).pipe(
 						Match.tagsExhaustive({
-							Failure: () => Effect.fail(conflict("VerificationUnavailable")),
+							Failure: ({ failure }) =>
+								Effect.fail(
+									failure._tag === "DeveloperConflict"
+										? failure
+										: conflict("VerificationUnavailable"),
+								),
 							Success: ({ success }) =>
 								success ? Effect.void : Effect.fail(conflict("ProofMismatch")),
 						}),
@@ -604,8 +649,7 @@ export const make: Effect.Effect<
 						reason: null,
 					}
 					const row = yield* Rows.encodeProof(proof)
-					yield* Rows.write(
-						owner,
+					yield* Rows.stored(
 						db.insert(developerProofs).values({
 							namespace,
 							owner,
@@ -614,7 +658,7 @@ export const make: Effect.Effect<
 							...row,
 						}),
 					)
-					yield* setClaimStatus(owner, id, "Confirmed")
+					yield* setClaimStatus(id, "Confirmed")
 					return proof
 				}),
 			)
@@ -647,7 +691,7 @@ export const make: Effect.Effect<
 					)
 					for (const member of members) {
 						yield* Rows.postNotice(db, namespace, member.owner, {
-							id: yield* Effect.sync(randomUUID),
+							id: yield* newId,
 							cardUrl: null,
 							kind: "AccessChanged",
 							issue: null,
@@ -663,9 +707,3 @@ export const make: Effect.Effect<
 	})
 })
 export const layer = Layer.effect(DeveloperAccess, make)
-
-export const layerWithVerification = (settings: Verification.Settings) =>
-	Layer.effect(
-		DeveloperAccess,
-		make.pipe(Effect.provideService(Verification.Options, settings)),
-	)

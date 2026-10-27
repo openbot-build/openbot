@@ -1,11 +1,19 @@
 export { Health, HealthApi, Service, service } from "./HealthApi.ts"
 export { OpenBotApi } from "./OpenBotApi.ts"
 export { Account, AccountCaller, Caller, Identity } from "./Identity.ts"
-export * as AgentsApi from "./AgentsApi.ts"
+export * as BotsApi from "./BotsApi.ts"
 export { Name } from "./Name.ts"
-export * as Memory from "./Memory.ts"
-export * as AgentMemory from "./AgentMemory.ts"
+export * as BotMemory from "./BotMemory.ts"
 export * as RequestsApi from "./RequestsApi.ts"
+export * as PlanApproval from "./PlanApproval.ts"
+export * as TriggersApi from "./TriggersApi.ts"
+export * as FilesApi from "./FilesApi.ts"
+export * as ChannelsApi from "./ChannelsApi.ts"
+export * as ComputersApi from "./ComputersApi.ts"
+export * as LiveApi from "./LiveApi.ts"
+export * as VaultsApi from "./VaultsApi.ts"
+export * as BillingApi from "./BillingApi.ts"
+export { MemberSettingsApi } from "./MemberSettingsApi.ts"
 export * as AuthApi from "./AuthApi.ts"
 export * as UserTokensApi from "./UserTokensApi.ts"
 export * as OrganizationApi from "./OrganizationApi.ts"
@@ -13,13 +21,17 @@ export * as Settings from "./Settings.ts"
 export * as PlatformApi from "./PlatformApi.ts"
 export * as ModelProvidersApi from "./ModelProvidersApi.ts"
 export * as SsoApi from "./SsoApi.ts"
-export * as Permissions from "./Permissions.ts"
+export * as Authorization from "./Authorization.ts"
+export * as Roles from "./Roles.ts"
 export {
+	Auth,
 	Authorize,
-	AuthorizationUnavailable,
-	PermissionDenied,
-} from "./Permissions.ts"
-export { PlatformAuthorize } from "./PlatformApi.ts"
+	Forbidden,
+	PlatformAuth,
+	PlatformAuthorize,
+	PolicyUnavailable,
+} from "./Authorization.ts"
+export type { OpenBotDomain, OpenBotPolicy } from "./Authorization.ts"
 export {
 	SettingsConflict,
 	SettingsInvalid,
@@ -28,7 +40,7 @@ export {
 } from "./Settings.ts"
 export {
 	AccountAuth,
-	AgentAuth,
+	BotAuth,
 	NoStore,
 	OriginCheck,
 	OrganizationRequired,
@@ -38,38 +50,46 @@ export {
 	AuthenticationRequired,
 	AuthenticationUnavailable,
 	MembershipRequired,
+	RateLimited,
 } from "./AuthApi.ts"
 export {
-	SessionsApi,
-	SessionModels,
-	SelectSessionModelRequest,
-	SessionModelInvalid,
-	SessionView,
-	SessionSummary,
-	SessionKind,
-	SessionParent,
-	CreateSessionRequest,
-	StartTurnRequest,
-	SessionResponse,
+	ChatsApi,
+	ChatModels,
+	ChatModelInvalid,
+	ChatView,
+	ChatSummary,
+	ChatInfo,
+	ChatKind,
+	ChatBranch,
+	ChatMemory,
+	defaultChatMemory,
+	CreateConversationRequest,
+	ForkChatRequest,
+	ChatParent,
+	ChatStatus,
+	ChatActivity,
+	OpenWork,
+	MessageInput,
+	SendMessageRequest,
+	MessageReceipt,
+	ChatResponse,
 	ResponseStatus,
-	SessionActivity,
-	SessionResponseEvent,
-	SessionResponseEventType,
-	SessionResponseSseEvent,
-	SessionNotFound,
-	SessionBusy,
-	SessionExecutionUnavailable,
-	SessionConflict,
-	SessionInvalidRecord,
-	SessionStorageUnavailable,
-	UpdateSessionRequest,
-	ForkSessionRequest,
-	RestoreSessionRequest,
-	UpdateMemoryRequest,
-	MemoryCommand,
-	MemoryOverrides,
-	SessionMemory,
-} from "./SessionsApi.ts"
+	ChatResponseEvent,
+	ChatResponseEventType,
+	ChatResponseSseEvent,
+	ChatNotFound,
+	ChatExecutionUnavailable,
+	ChatConflict,
+	ChatStorageUnavailable,
+	UpdateChatRequest,
+	InterruptChatRequest,
+	todoProblem,
+	Todo,
+	TodoStatus,
+	ChatTodos,
+	UpdateTodosRequest,
+} from "./ChatsApi.ts"
+export * as DelegationsApi from "./DelegationsApi.ts"
 
 export {
 	AppsApi,
@@ -83,6 +103,8 @@ export * as AppIndexApi from "./AppIndexApi.ts"
 export * as AppAuthorizationApi from "./AppAuthorizationApi.ts"
 export * as AppExecution from "./AppExecution.ts"
 export { AppOperationsApi } from "./AppOperationsApi.ts"
+export { OperationsApi, OperationNotFound } from "./OperationsApi.ts"
+export * as CodeRunsApi from "./CodeRunsApi.ts"
 export * as AppViewsApi from "./AppViewsApi.ts"
 export {
 	ExperienceInputInvalid,
@@ -94,5 +116,3 @@ export * as AppExperienceApi from "./AppExperienceApi.ts"
 
 export * as DeveloperApi from "./DeveloperApi.ts"
 export type { Failure as DeveloperFailure } from "./DeveloperApi.ts"
-
-export * as ExecutionApi from "./ExecutionApi.ts"

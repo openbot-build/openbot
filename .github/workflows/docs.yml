@@ -38,7 +38,8 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
       - name: Install dependencies
-        run: devenv shell -- pnpm install --frozen-lockfile --store-dir .cache/pnpm
+        run:
+          devenv shell -- pnpm install --frozen-lockfile --store-dir .cache/pnpm
       # The three dots also build the workspace packages that the docs use.
       - name: Build
         run: devenv shell -- pnpm --filter "@openbot-build/docs..." build

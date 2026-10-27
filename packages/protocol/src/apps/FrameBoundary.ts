@@ -19,6 +19,8 @@ export class FrameTransport implements Transport {
 	public onerror?: (error: Error) => void
 	public onmessage?: Transport["onmessage"]
 	private closed = false
+	private readonly peer: Window
+	private readonly origin: string
 	private readonly listener = (event: MessageEvent) => {
 		if (
 			this.closed ||
@@ -33,22 +35,34 @@ export class FrameTransport implements Transport {
 			onSome: (message) => this.onmessage?.(message),
 		})
 	}
-	public constructor(
-		private readonly peer: Window,
-		private readonly origin: string,
-	) {}
-	public async start(): Promise<void> {
+	public constructor(peer: Window, origin: string) {
+		this.peer = peer
+		this.origin = origin
+	}
+	// The SDK Transport interface needs a Promise from each of these methods.
+	public start(): Promise<void> {
 		window.addEventListener("message", this.listener)
+		return Promise.resolve()
 	}
-	public async send(message: JSONRPCMessage): Promise<void> {
+	public send(message: JSONRPCMessage): Promise<void> {
 		// The SDK Transport contract reports a failed send as a rejected Promise.
-		if (this.closed) throw new Error("Apps transport closed")
-		this.peer.postMessage(message, this.origin)
+		if (this.closed) return Promise.reject(new Error("Apps transport closed"))
+		try {
+			this.peer.postMessage(message, this.origin)
+		} catch (error) {
+			return Promise.reject(error)
+		}
+		return Promise.resolve()
 	}
-	public async close(): Promise<void> {
-		if (this.closed) return
+	public close(): Promise<void> {
+		if (this.closed) return Promise.resolve()
 		this.closed = true
 		window.removeEventListener("message", this.listener)
-		this.onclose?.()
+		try {
+			this.onclose?.()
+		} catch (error) {
+			return Promise.reject(error)
+		}
+		return Promise.resolve()
 	}
 }

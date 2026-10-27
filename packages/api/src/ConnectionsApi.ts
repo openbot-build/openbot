@@ -1,22 +1,35 @@
+import { ConnectionId } from "./ConnectionId.ts"
+export { ConnectionId } from "./ConnectionId.ts"
 import { App, Discovery, Document } from "@openbot-build/protocol"
-import { Schema } from "effect"
+import { Schema, String as Str } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { AppDiscoveryFailed, AppDiscoveryResult } from "./AppsApi.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { Restriction } from "./AppIndexApi.ts"
+import { Required, own } from "./Authorization.ts"
 
 export const ConnectionName = Schema.String.check(
 	Schema.isMaxLength(80),
 	Schema.makeFilter(
-		(value) => value.trim().length > 0 || "Enter a connection name.",
+		(value) => Str.isNonEmpty(Str.trim(value)) || "Enter a connection name.",
 	),
 )
 export const Values = Schema.Record(Schema.String, Schema.String)
+/** An address and required header names. It contains no credential values. */
+export const ManualTransfer = Schema.Struct({
+	url: Document.Link,
+	transport: Schema.Literal("streamable-http"),
+	headers: Schema.Array(
+		Schema.String.check(Schema.isPattern(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/)),
+	).check(Schema.isMaxLength(100)),
+})
+export type ManualTransfer = typeof ManualTransfer.Type
 export const ConnectionDraft = Schema.Struct({
 	id: Schema.NonEmptyString,
 	revision: Schema.Natural,
 	input: Schema.NonEmptyString,
 	discovery: AppDiscoveryResult,
+	manual: Schema.optionalKey(ManualTransfer),
 	expiresAt: Schema.Finite,
 	imported: Schema.optionalKey(
 		Schema.Struct({ name: ConnectionName, remoteIndex: Schema.Natural }),
@@ -46,7 +59,7 @@ export const ManualConfiguration = Schema.Struct({
 })
 export type ManualConfiguration = typeof ManualConfiguration.Type
 export const ManualConnectionRequest = Schema.Struct({
-	id: Schema.String.check(Schema.isUUID()),
+	id: ConnectionId.check(Schema.isUUID()),
 	...ManualConfiguration.fields,
 })
 export type ManualConnectionRequest = typeof ManualConnectionRequest.Type
@@ -57,19 +70,14 @@ export const ManualConnectionUpdate = Schema.Struct({
 })
 export type ManualConnectionUpdate = typeof ManualConnectionUpdate.Type
 const ManualIdentity = Schema.String.check(
-	Schema.isPattern(
-		/^urn:openbot:manual:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i,
-	),
+	Schema.isPattern(/^urn:openbot:manual:[0-9a-f-]{36}$/i),
 )
-/** Owner-scoped provenance, not evidence of public K publication. */
-export const OwnedConnectionIdentity = Schema.Union([
-	Document.Link,
-	ManualIdentity,
-])
+/** A publisher card address or a private manual connection identity. */
+export const AppIdentity = Schema.Union([Document.Link, ManualIdentity])
 export const Connection = Schema.Struct({
-	id: Schema.NonEmptyString,
+	id: ConnectionId,
 	name: ConnectionName,
-	cardUrl: OwnedConnectionIdentity,
+	cardUrl: AppIdentity,
 	card: Document.ServerCard,
 	endpoint: Schema.String,
 	remoteIndex: Schema.Natural,
@@ -83,7 +91,7 @@ export type Connection = typeof Connection.Type
 export const ConnectionRequest = Schema.Struct({
 	draftId: Schema.NonEmptyString,
 	revision: Schema.Natural,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	remoteIndex: Schema.Natural,
 	name: ConnectionName,
 	values: Values,
@@ -119,38 +127,38 @@ export const RevalidationRequest = Schema.Struct({
 })
 export type RevalidationRequest = typeof RevalidationRequest.Type
 
-export class ConnectionConflict extends Schema.TaggedError<ConnectionConflict>()(
-	"ConnectionConflict",
-	{
-		reason: Schema.Literals([
-			"CandidateChanged",
-			"RevisionChanged",
-			"DraftExpired",
-			"AlreadyAdded",
-			"LimitReached",
-		]),
-		message: Schema.String,
-	},
-) {}
-export class ConnectionConfigurationInvalid extends Schema.TaggedError<ConnectionConfigurationInvalid>()(
-	"ConnectionConfigurationInvalid",
-	{
-		message: Schema.String,
-		keys: Schema.Array(Schema.String),
-	},
-) {}
-export class AppRestricted extends Schema.TaggedError<AppRestricted>()(
-	"AppRestricted",
-	{ restriction: Restriction },
-) {}
-export class ConnectionCleanupPending extends Schema.TaggedError<ConnectionCleanupPending>()(
-	"ConnectionCleanupPending",
-	{
-		connectionId: Schema.String,
-		stage: App.CleanupStage,
-		message: Schema.String,
-	},
-) {}
+export class ConnectionConflict extends Schema.TaggedError<
+	ConnectionConflict,
+	{ readonly brand: unique symbol }
+>()("ConnectionConflict", {
+	reason: Schema.Literals([
+		"CandidateChanged",
+		"RevisionChanged",
+		"DraftExpired",
+		"AlreadyAdded",
+		"LimitReached",
+	]),
+	message: Schema.String,
+}) {}
+export class ConnectionConfigurationInvalid extends Schema.TaggedError<
+	ConnectionConfigurationInvalid,
+	{ readonly brand: unique symbol }
+>()("ConnectionConfigurationInvalid", {
+	message: Schema.String,
+	keys: Schema.Array(Schema.String),
+}) {}
+export class AppRestricted extends Schema.TaggedError<
+	AppRestricted,
+	{ readonly brand: unique symbol }
+>()("AppRestricted", { restriction: Restriction }) {}
+export class ConnectionCleanupPending extends Schema.TaggedError<
+	ConnectionCleanupPending,
+	{ readonly brand: unique symbol }
+>()("ConnectionCleanupPending", {
+	connectionId: ConnectionId,
+	stage: App.CleanupStage,
+	message: Schema.String,
+}) {}
 export const Errors = [
 	ConnectionCleanupPending.pipe(HttpApiSchema.status(409)),
 	AppRestricted.pipe(HttpApiSchema.status(403)),
@@ -159,17 +167,18 @@ export const Errors = [
 	ConnectionConflict.pipe(HttpApiSchema.status(409)),
 	ConnectionConfigurationInvalid.pipe(HttpApiSchema.status(422)),
 ] as const
-export const ConnectionsApi = HttpApiGroup.make("connections").add(
+export const connectionParams = { connectionId: ConnectionId }
+export class ConnectionsApi extends HttpApiGroup.make("connections").add(
 	HttpApiEndpoint.post("createManualConnection", "/v1/connections/manual", {
 		payload: ManualConnectionRequest,
 		success: Connection.pipe(HttpApiSchema.status(201)),
 		error: Errors,
-	}),
+	}).annotate(Required, [own("write", "Connection")]),
 	HttpApiEndpoint.put(
 		"updateManualConnection",
 		"/v1/connections/:connectionId/manual",
 		{
-			params: { connectionId: Schema.NonEmptyString },
+			params: connectionParams,
 			payload: ManualConnectionUpdate,
 			success: Connection,
 			error: Errors,
@@ -179,7 +188,7 @@ export const ConnectionsApi = HttpApiGroup.make("connections").add(
 		"verifyConnection",
 		"/v1/connections/:connectionId/verify",
 		{
-			params: { connectionId: Schema.NonEmptyString },
+			params: connectionParams,
 			success: Verification,
 			error: Errors,
 		},
@@ -188,7 +197,7 @@ export const ConnectionsApi = HttpApiGroup.make("connections").add(
 		"refreshConnectionAuthorization",
 		"/v1/connections/:connectionId/refresh",
 		{
-			params: { connectionId: Schema.NonEmptyString },
+			params: connectionParams,
 			success: Connection,
 			error: Errors,
 		},
@@ -197,7 +206,7 @@ export const ConnectionsApi = HttpApiGroup.make("connections").add(
 		"revalidateConnection",
 		"/v1/connections/:connectionId/revalidate",
 		{
-			params: { connectionId: Schema.NonEmptyString },
+			params: connectionParams,
 			payload: RevalidationRequest,
 			success: Connection,
 			error: Errors,
@@ -206,36 +215,36 @@ export const ConnectionsApi = HttpApiGroup.make("connections").add(
 	HttpApiEndpoint.get("listConnections", "/v1/connections", {
 		success: Schema.Array(Connection),
 		error: Errors,
-	}),
+	}).annotate(Required, [own("read", "Connection")]),
 	HttpApiEndpoint.post("prepareConnection", "/v1/connection-drafts", {
 		payload: Schema.Struct({ input: Schema.NonEmptyString }),
 		success: ConnectionDraft.pipe(HttpApiSchema.status(201)),
 		error: Errors,
-	}),
+	}).annotate(Required, [own("write", "Connection")]),
 	HttpApiEndpoint.get("getConnectionDraft", "/v1/connection-drafts/:draftId", {
 		params: { draftId: Schema.NonEmptyString },
 		success: ConnectionDraft,
 		error: Errors,
-	}),
+	}).annotate(Required, [own("read", "Connection")]),
 	HttpApiEndpoint.post("createConnection", "/v1/connections", {
 		payload: ConnectionRequest,
 		success: Connection.pipe(HttpApiSchema.status(201)),
 		error: Errors,
-	}),
+	}).annotate(Required, [own("write", "Connection")]),
 	HttpApiEndpoint.get("getConnection", "/v1/connections/:connectionId", {
-		params: { connectionId: Schema.NonEmptyString },
+		params: connectionParams,
 		success: Connection,
 		error: Errors,
 	}),
 	HttpApiEndpoint.put("updateConnection", "/v1/connections/:connectionId", {
-		params: { connectionId: Schema.NonEmptyString },
+		params: connectionParams,
 		payload: ConnectionUpdate,
 		success: Connection,
 		error: Errors,
 	}),
 	HttpApiEndpoint.delete("deleteConnection", "/v1/connections/:connectionId", {
-		params: { connectionId: Schema.NonEmptyString },
+		params: connectionParams,
 		success: HttpApiSchema.NoContent,
 		error: Errors,
 	}),
-)
+) {}

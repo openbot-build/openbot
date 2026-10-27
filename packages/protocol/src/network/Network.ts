@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Schema, Scope, Stream } from "effect"
+import { Context, Effect, Schema, Scope, Stream } from "effect"
 import { type HttpClientRequest } from "effect/http"
 
 export const publicProductToken = "OpenBot"
@@ -13,10 +13,15 @@ export const NetworkErrorReason = Schema.Literals([
 ])
 export type NetworkErrorReason = typeof NetworkErrorReason.Type
 
-export class NetworkError extends Data.TaggedError("NetworkError")<{
-	readonly reason: NetworkErrorReason
-	readonly message: string
-}> {}
+export class NetworkError extends Schema.TaggedError<
+	NetworkError,
+	{ readonly brand: unique symbol }
+>()("NetworkError", {
+	reason: NetworkErrorReason,
+	/** A short text that may reach clients. Put the details in `cause`. */
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
 export interface Reply {
 	readonly url: string

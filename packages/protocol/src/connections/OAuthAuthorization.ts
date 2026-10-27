@@ -1,22 +1,27 @@
 import {
+	Array as Arr,
 	Option,
 	HashMap,
 	Clock,
 	Crypto,
 	Effect,
+	Equal,
+	HashSet,
 	Layer,
 	Redacted,
 	Ref,
 	Schema,
 	Match,
 	Predicate,
-	Record,
+	Record as Rec,
+	String as Str,
+	pipe,
 } from "effect"
 import * as Sdk from "../network/Sdk.ts"
 import * as AppConnections from "./AppConnections.ts"
 import * as Mcp from "@modelcontextprotocol/client"
 
-import { Base64Url } from "effect/encoding"
+import { Base64, Base64Url } from "effect/encoding"
 import { HttpClientRequest, HttpRouter, HttpServerResponse } from "effect/http"
 import * as Document from "../Document.ts"
 import * as Network from "../network/Network.ts"
@@ -29,14 +34,7 @@ import {
 	ServerMetadata,
 	Flow,
 	FlowStore,
-	ScopeSelection,
 } from "./Authorization.ts"
-
-const alreadyConsumed = () =>
-	new AuthorizationError({
-		reason: "AlreadyConsumed",
-		issue: "Callback has already been consumed",
-	})
 
 export const layerMemoryFlows = Layer.effect(
 	FlowStore,
@@ -56,12 +54,12 @@ export const layerMemoryFlows = Layer.effect(
 		return FlowStore.of({
 			save: Effect.fn("FlowStore.save")(function* (input) {
 				const flow = yield* Flow.decode(input).pipe(
-					Effect.mapError(
-						() =>
-							new Store.StoreError({
-								reason: "Invalid",
-								operation: "FlowStore.save",
-							}),
+					Effect.mapError((error) =>
+						Store.StoreError.make({
+							reason: "Invalid",
+							operation: "FlowStore.save",
+							cause: error,
+						}),
 					),
 				)
 				const saved = yield* Ref.modify(state, (old) =>
@@ -76,7 +74,7 @@ export const layerMemoryFlows = Layer.effect(
 							] as const),
 				)
 				if (!saved)
-					return yield* new Store.StoreError({
+					return yield* Store.StoreError.make({
 						reason: "AlreadyExists",
 						operation: "FlowStore.save",
 					})
@@ -87,14 +85,19 @@ export const layerMemoryFlows = Layer.effect(
 					Option.match({
 						onNone: () =>
 							Effect.fail(
-								new AuthorizationError({
+								AuthorizationError.make({
 									reason: "CallbackMismatch",
 									issue: "Flow does not belong to this connection",
 								}),
 							),
 						onSome: (stored) =>
 							stored.consumed
-								? Effect.fail(alreadyConsumed())
+								? Effect.fail(
+										AuthorizationError.make({
+											reason: "AlreadyConsumed",
+											issue: "Callback has already been consumed",
+										}),
+									)
 								: Effect.succeed(stored.flow),
 					}),
 				)
@@ -118,7 +121,11 @@ export const layerMemoryFlows = Layer.effect(
 						}),
 					),
 				)
-				if (!claimed) return yield* alreadyConsumed()
+				if (!claimed)
+					return yield* AuthorizationError.make({
+						reason: "AlreadyConsumed",
+						issue: "Callback has already been consumed",
+					})
 			}),
 		})
 	}),
@@ -126,17 +133,17 @@ export const layerMemoryFlows = Layer.effect(
 
 const https = (url: string) =>
 	Schema.decodeEffect(Document.Link)(url).pipe(
-		Effect.mapError(
-			() =>
-				new AuthorizationError({
-					reason: "Metadata",
-					issue: "Expected an absolute HTTPS URL without credentials",
-				}),
+		Effect.mapError((error) =>
+			AuthorizationError.make({
+				reason: "Metadata",
+				issue: "Expected an absolute HTTPS URL without credentials",
+				cause: error,
+			}),
 		),
 		Effect.filterOrFail(
 			() => new URL(url).hash === "",
 			() =>
-				new AuthorizationError({
+				AuthorizationError.make({
 					reason: "Metadata",
 					issue: "OAuth URL must not contain a fragment",
 				}),
@@ -148,16 +155,17 @@ const clientIdUrl = (clientId: string) =>
 		Effect.andThen(
 			Effect.try({
 				try: () => Mcp.validateClientMetadataUrl(clientId),
-				catch: () =>
-					new AuthorizationError({
+				catch: (error) =>
+					AuthorizationError.make({
 						reason: "ClientMetadata",
 						issue: "client_id must be a HTTPS metadata document URL",
+						cause: error,
 					}),
 			}),
 		),
 	)
 
-const sdkMetadata = (metadata: ServerMetadata) =>
+const sdkMetadata = (metadata: typeof ServerMetadata.Encoded) =>
 	metadata as Mcp.AuthorizationServerMetadata
 
 export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
@@ -173,19 +181,18 @@ export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
 			headers: { accept: "application/json" },
 		})
 		if (response.status !== 200)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "ClientMetadata",
 				issue: "Client metadata document is unavailable",
 			})
 		const metadata = yield* Schema.decodeEffect(
 			Schema.fromJsonString(ClientMetadata),
 		)(response.text).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "ClientMetadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "ClientMetadata",
+					issue: error.message,
+				}),
 			),
 		)
 		if (
@@ -194,7 +201,7 @@ export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
 			!metadata.grant_types.includes("authorization_code") ||
 			!metadata.response_types.includes("code")
 		)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "ClientMetadata",
 				issue:
 					"client_id and registered redirect must match exactly and support the code grant",
@@ -213,7 +220,7 @@ export const layerClientMetadata = (input: ClientMetadata) =>
 			for (const redirect of metadata.redirect_uris) yield* https(redirect)
 			return HttpRouter.add(
 				"GET",
-				`/${new URL(metadata.client_id).pathname.slice(1)}`,
+				`/${pipe(new URL(metadata.client_id).pathname, Str.slice(1))}`,
 				(request) =>
 					Effect.succeed(
 						new URL(request.originalUrl, metadata.client_id).search ===
@@ -248,22 +255,25 @@ export const discoverResource = Effect.fn("Authorization.discoverResource")(
 							options.resource,
 							{
 								protocolVersion: Document.protocolVersion,
-								...Record.filter(
+								...Rec.filter(
 									{ resourceMetadataUrl: options.resourceMetadataUrl },
 									Predicate.isNotUndefined,
 								),
 							},
 							fetch,
 						),
-					catch: () =>
-						new AuthorizationError({
-							reason: "Metadata",
-							issue: "Protected Resource Metadata discovery failed",
-						}),
+					catch: (error) =>
+						Schema.is(Network.NetworkError)(error)
+							? error
+							: AuthorizationError.make({
+									reason: "Metadata",
+									issue: "Protected Resource Metadata discovery failed",
+									cause: error,
+								}),
 				})
 				const resource = yield* ResourceMetadata.decode(prm)
 				if (resource.resource !== options.resource)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
 						reason: "Metadata",
 						issue: "Protected resource metadata does not match the connection.",
 					})
@@ -283,7 +293,7 @@ export const discover = Effect.fn("Authorization.discover")(
 		// discoverResource checks the resource URLs and the resource match.
 		const resource = yield* discoverResource(options)
 		if (!resource.authorization_servers.includes(options.issuer))
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "Metadata",
 				issue: "Resource or trusted issuer does not match the connection",
 			})
@@ -293,6 +303,7 @@ export const discover = Effect.fn("Authorization.discover")(
 					documents: true,
 				})
 				let metadataDocument: unknown
+				// @effect-diagnostics-next-line asyncFunction:off -- The SDK discovery needs a fetch function that returns a Promise.
 				const fetchMetadata: Mcp.FetchLike = async (input, init) => {
 					const response = await fetch(input, init)
 					if (response.ok) metadataDocument = await response.clone().json()
@@ -304,28 +315,49 @@ export const discover = Effect.fn("Authorization.discover")(
 							fetchFn: fetchMetadata,
 							protocolVersion: Document.protocolVersion,
 						}),
-					catch: () =>
-						new AuthorizationError({
-							reason: "Metadata",
-							issue:
-								"Authorization server discovery failed or issuer did not match",
-						}),
+					catch: (error) =>
+						Schema.is(Network.NetworkError)(error)
+							? error
+							: AuthorizationError.make({
+									reason: "Metadata",
+									issue:
+										"Authorization server discovery failed or issuer did not match",
+									cause: error,
+								}),
 				})
 				// SDK 2.3.1 checks OIDC but removes OAuth extension fields such as revocation_endpoint.
 				// Keep the bounded source document only after the SDK has checked its issuer.
 				const metadata = yield* ServerMetadata.decode(metadataDocument)
 				if (metadata.issuer !== options.issuer)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
 						reason: "Metadata",
 						issue: "Issuer must match exactly",
 					})
 				if (
-					!metadata.code_challenge_methods_supported.includes("S256") ||
-					!metadata.response_types_supported.includes("code")
+					metadata.client_id_metadata_document_supported !== true &&
+					metadata.registration_endpoint === undefined
 				)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
+						reason: "CimdUnsupported",
+						issue:
+							"Authorization server supports neither client metadata documents nor dynamic registration",
+					})
+				if (
+					!metadata.code_challenge_methods_supported.includes("S256") ||
+					!metadata.response_types_supported.includes("code") ||
+					(metadata.token_endpoint_auth_methods_supported !== undefined &&
+						!Arr.some(
+							metadata.token_endpoint_auth_methods_supported,
+							(method) =>
+								["none", "client_secret_basic", "client_secret_post"].includes(
+									method,
+								),
+						))
+				)
+					return yield* AuthorizationError.make({
 						reason: "Metadata",
-						issue: "Authorization server must support the code grant and S256",
+						issue:
+							"Authorization server must support code, S256 and a supported client authentication method",
 					})
 				yield* https(metadata.authorization_endpoint)
 				yield* https(metadata.token_endpoint)
@@ -339,171 +371,112 @@ export const discover = Effect.fn("Authorization.discover")(
 	},
 )
 
-const authenticateClient =
-	(
-		clientId: string,
-		authentication: Store.OAuthClientAuthentication | undefined,
-	): Mcp.AddClientAuthentication =>
-	(headers, params) => {
-		Match.value(authentication ?? { method: "none" as const }).pipe(
-			Match.when({ method: "none" }, () => params.set("client_id", clientId)),
-			Match.when({ method: "client_secret_post" }, ({ secret }) => {
-				params.set("client_id", clientId)
-				params.set("client_secret", Redacted.value(secret))
-			}),
-			Match.when({ method: "client_secret_basic" }, ({ secret }) => {
-				const encode = (value: string) =>
-					new URLSearchParams({ value }).toString().slice(6)
-				headers.set(
-					"authorization",
-					`Basic ${btoa(`${encode(clientId)}:${encode(Redacted.value(secret))}`)}`,
-				)
-			}),
-			Match.exhaustive,
-		)
-	}
+type RegisteredClient = Pick<
+	Flow,
+	"clientId" | "clientSecret" | "clientAuthMethod"
+>
 
-const validateClientAuthentication = Effect.fn(
-	"Authorization.validateClientAuthentication",
-)(function* (
-	metadata: ServerMetadata,
-	authentication?: Store.OAuthClientAuthentication,
-	supported:
-		| ReadonlyArray<string>
-		| undefined = metadata.token_endpoint_auth_methods_supported,
-) {
-	const method = authentication?.method ?? "none"
-	if (supported !== undefined && !supported.includes(method))
-		return yield* new AuthorizationError({
-			reason: "ClientRegistrationUnsupported",
-			issue:
-				"The registered client authentication method is no longer supported",
-		})
+const register = Effect.fn("Authorization.register")(function* (input: {
+	readonly metadata: ServerMetadata
+	readonly client: ClientMetadata
+	readonly redirectUri: string
+	readonly scopes: ReadonlyArray<string>
+}) {
+	const methods = input.metadata.token_endpoint_auth_methods_supported ?? [
+		"none",
+	]
 	if (
-		authentication !== undefined &&
-		"expiresAt" in authentication &&
-		authentication.expiresAt !== undefined &&
-		authentication.expiresAt <= (yield* Clock.currentTimeMillis)
+		input.metadata.client_id_metadata_document_supported === true &&
+		methods.includes("none")
 	)
-		return yield* new AuthorizationError({
-			reason: "ClientRegistrationFailed",
+		return {
+			clientId: input.client.client_id,
+			clientAuthMethod: "none",
+		} satisfies RegisteredClient
+	if (input.metadata.registration_endpoint === undefined)
+		return yield* AuthorizationError.make({
+			reason: "CimdUnsupported",
 			issue:
-				"The registered client credentials expired; start a new authorization",
+				"The issuer cannot register a client with a supported authentication method",
 		})
+	const method = Option.getOrUndefined(
+		Arr.findFirst(
+			["none", "client_secret_basic", "client_secret_post"],
+			(value) => methods.includes(value),
+		),
+	)
+	if (method === undefined)
+		return yield* AuthorizationError.make({
+			reason: "ClientMetadata",
+			issue: "No supported registration authentication method is available",
+		})
+	const registered = yield* Effect.scoped(
+		Effect.gen(function* () {
+			const fetch = yield* Sdk.fetch({ documents: true })
+			// @effect-rules-next-line blind-error-map -- Registration errors may contain client secrets and must not retain a raw cause.
+			return yield* Effect.tryPromise({
+				try: () =>
+					Mcp.registerClient(input.metadata.issuer, {
+						metadata: sdkMetadata(input.metadata),
+						clientMetadata: {
+							...(input.client.client_name === undefined
+								? {}
+								: { client_name: input.client.client_name }),
+							redirect_uris: [input.redirectUri],
+							token_endpoint_auth_method: method,
+							grant_types: [...input.client.grant_types],
+							response_types: [...input.client.response_types],
+						},
+						scope: Arr.join(input.scopes, " "),
+						fetchFn: fetch,
+					}),
+				catch: () =>
+					AuthorizationError.make({
+						reason: "ClientMetadata",
+						issue:
+							"Dynamic client registration was not confirmed. Check the issuer before starting another authorization",
+					}),
+			})
+		}),
+	)
+	const authMethod =
+		registered.token_endpoint_auth_method ??
+		(registered.client_secret === undefined ? "none" : "client_secret_basic")
+	if (
+		!registered.redirect_uris.includes(input.redirectUri) ||
+		(authMethod !== "none" &&
+			authMethod !== "client_secret_basic" &&
+			authMethod !== "client_secret_post") ||
+		!methods.includes(authMethod) ||
+		registered.grant_types?.includes("authorization_code") === false ||
+		registered.response_types?.includes("code") === false ||
+		(authMethod !== "none" &&
+			(registered.client_secret === undefined ||
+				registered.client_secret === ""))
+	)
+		return yield* AuthorizationError.make({
+			reason: "ClientMetadata",
+			issue:
+				"The registered client changed its redirect or requires unsupported credentials",
+		})
+	return {
+		clientId: registered.client_id,
+		clientAuthMethod: authMethod,
+		...(registered.client_secret === undefined
+			? {}
+			: { clientSecret: Redacted.make(registered.client_secret) }),
+	} satisfies RegisteredClient
 })
 
-const registerClient = Effect.fn("Authorization.registerClient")(
-	function* (options: {
-		readonly metadata: ServerMetadata
-		readonly client: ClientMetadata
-		readonly redirectUri: string
-		readonly scopes: ReadonlyArray<string>
-		readonly clientRegistration?: "cimd" | "dynamic"
-	}) {
-		const { metadata } = options
-		if (metadata.client_id_metadata_document_supported === true) {
-			yield* validateClientAuthentication(metadata)
-			return {
-				clientId: options.client.client_id,
-				clientAuthentication: { method: "none" as const },
-			}
-		}
-		if (options.clientRegistration !== "dynamic")
-			return yield* new AuthorizationError({
-				reason: "CimdUnsupported",
-				issue: "K publication requires Client ID Metadata Document support",
-			})
-		if (metadata.registration_endpoint === undefined)
-			return yield* new AuthorizationError({
-				reason: "ClientRegistrationUnsupported",
-				issue: "The provider requires a pre-registered OAuth client",
-			})
-		const supported = metadata.token_endpoint_auth_methods_supported ?? [
-			"client_secret_basic",
-		]
-		const method = ["none", "client_secret_basic", "client_secret_post"].find(
-			(method) => supported.includes(method),
-		)
-		if (method === undefined)
-			return yield* new AuthorizationError({
-				reason: "ClientRegistrationUnsupported",
-				issue:
-					"The provider does not support an available client authentication method",
-			})
-		const registered = yield* Effect.scoped(
-			Effect.gen(function* () {
-				const fetch = yield* Sdk.fetch({ documents: true })
-				return yield* Effect.tryPromise({
-					try: () =>
-						Mcp.registerClient(metadata.issuer, {
-							metadata: sdkMetadata(metadata),
-							clientMetadata: {
-								...(options.client.client_name === undefined
-									? {}
-									: { client_name: options.client.client_name }),
-								redirect_uris: [options.redirectUri],
-								grant_types: [...options.client.grant_types],
-								response_types: ["code"],
-								token_endpoint_auth_method: method,
-							},
-							...(options.scopes.length === 0
-								? {}
-								: { scope: options.scopes.join(" ") }),
-							fetchFn: fetch,
-						}),
-					catch: () =>
-						new AuthorizationError({
-							reason: "ClientRegistrationFailed",
-							issue: "The provider did not accept client registration",
-						}),
-				})
-			}),
-		)
-		const registeredMethod =
-			registered.token_endpoint_auth_method ?? "client_secret_basic"
-		if (
-			registered.client_id.length === 0 ||
-			registeredMethod !== method ||
-			registered.redirect_uris.length !== 1 ||
-			registered.redirect_uris[0] !== options.redirectUri ||
-			registered.grant_types?.includes("authorization_code") !== true ||
-			registered.response_types?.includes("code") !== true ||
-			(options.scopes.length > 0 &&
-				registered.scope !== undefined &&
-				registered.scope
-					.split(/\s+/)
-					.filter(Boolean)
-					.some((scope) => !options.scopes.includes(scope)))
-		)
-			return yield* new AuthorizationError({
-				reason: "ClientRegistrationFailed",
-				issue:
-					"The provider changed the registered redirect, grants, scopes or authentication method",
-			})
-		const clientAuthentication = yield* Schema.decodeUnknownEffect(
-			Store.OAuthClientAuthentication,
-		)({
-			method,
-			...(registered.client_secret === undefined
-				? {}
-				: { secret: Redacted.make(registered.client_secret) }),
-			...(registered.client_secret_expires_at === undefined ||
-			registered.client_secret_expires_at === 0
-				? {}
-				: { expiresAt: registered.client_secret_expires_at * 1000 }),
-		}).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "ClientRegistrationFailed",
-						issue: "The provider returned invalid client credentials",
-					}),
-			),
-		)
-		yield* validateClientAuthentication(metadata, clientAuthentication)
-		return { clientId: registered.client_id, clientAuthentication }
-	},
-)
+const clientInformation = (client: RegisteredClient) => ({
+	client_id: client.clientId,
+	...(client.clientSecret === undefined
+		? {}
+		: { client_secret: Redacted.value(client.clientSecret) }),
+	...(client.clientAuthMethod === undefined
+		? {}
+		: { token_endpoint_auth_method: client.clientAuthMethod }),
+})
 
 export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	readonly key: Store.ConnectionKey
@@ -513,17 +486,17 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	readonly scopes: ReadonlyArray<string>
 	readonly resourceMetadataUrl?: string
 	readonly expiresInMs?: number
-	readonly clientRegistration?: "cimd" | "dynamic"
 }) {
 	const connection = yield* AppConnections.usable(options.key)
 	if (
-		options.scopes.some(
+		Arr.some(
+			options.scopes,
 			(scope) => !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
 		) ||
 		(options.expiresInMs !== undefined &&
 			(!Number.isFinite(options.expiresInMs) || options.expiresInMs <= 0))
 	)
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "Metadata",
 			issue: "Invalid scopes or flow lifetime",
 		})
@@ -531,61 +504,37 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	const { metadata } = yield* discover({
 		resource: connection.endpoint,
 		issuer: options.issuer,
-		...Record.filter(
+		...Rec.filter(
 			{ resourceMetadataUrl: options.resourceMetadataUrl },
 			Predicate.isNotUndefined,
 		),
 	})
-	const registration = yield* registerClient({
+	const registered = yield* register({
 		metadata,
 		client,
 		redirectUri: options.redirectUri,
 		scopes: options.scopes,
-		...(options.clientRegistration === undefined
-			? {}
-			: { clientRegistration: options.clientRegistration }),
 	})
 	const crypto = yield* Crypto.Crypto
+	// A platform without secure random bytes or SHA-256 is a defect, not a failure a caller can act on.
 	const flowId = Base64Url.encode(
-		yield* crypto.randomBytes(32).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "Crypto",
-						issue: "Could not generate authorization state",
-					}),
-			),
-		),
+		yield* crypto.randomBytes(32).pipe(Effect.orDie),
 	)
 	const verifier = Base64Url.encode(
-		yield* crypto.randomBytes(32).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "Crypto",
-						issue: "Could not generate PKCE verifier",
-					}),
-			),
-		),
+		yield* crypto.randomBytes(32).pipe(Effect.orDie),
 	)
 	const challenge = Base64Url.encode(
-		yield* crypto.digest("SHA-256", new TextEncoder().encode(verifier)).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "Crypto",
-						issue: "Could not generate PKCE challenge",
-					}),
-			),
-		),
+		yield* crypto
+			.digest("SHA-256", new TextEncoder().encode(verifier))
+			.pipe(Effect.orDie),
 	)
 	const url = new URL(metadata.authorization_endpoint)
-	for (const [name, value] of Object.entries({
+	for (const [name, value] of Rec.toEntries({
 		response_type: "code",
-		client_id: registration.clientId,
+		client_id: registered.clientId,
 		redirect_uri: options.redirectUri,
 		resource: connection.endpoint,
-		...(options.scopes.length === 0 ? {} : { scope: options.scopes.join(" ") }),
+		scope: Arr.join(options.scopes, " "),
 		state: flowId,
 		code_challenge: challenge,
 		code_challenge_method: "S256",
@@ -593,25 +542,25 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 		url.searchParams.set(name, value)
 	const now = yield* Clock.currentTimeMillis
 	const store = yield* FlowStore
-	yield* store.save({
-		flowId,
-		binding: {
-			...options.key,
-			resource: connection.endpoint,
-			issuer: metadata.issuer,
-		},
-		...registration,
-		redirectUri: options.redirectUri,
-		scopes: options.scopes,
-		scopeSelection:
-			options.scopes.length === 0 ? "ProviderDefault" : "Explicit",
-		verifier: Redacted.make(verifier),
-		expiresAt: now + (options.expiresInMs ?? 600000),
-		metadata,
-		...(options.resourceMetadataUrl === undefined
-			? {}
-			: { resourceMetadataUrl: options.resourceMetadataUrl }),
-	})
+	yield* store.save(
+		Flow.make({
+			flowId,
+			binding: {
+				...options.key,
+				resource: connection.endpoint,
+				issuer: metadata.issuer,
+			},
+			...registered,
+			redirectUri: options.redirectUri,
+			scopes: options.scopes,
+			verifier: Redacted.make(verifier),
+			expiresAt: now + (options.expiresInMs ?? 600000),
+			metadata,
+			...(options.resourceMetadataUrl === undefined
+				? {}
+				: { resourceMetadataUrl: options.resourceMetadataUrl }),
+		}),
+	)
 	return {
 		_tag: "PendingAuthorization" as const,
 		flowId,
@@ -623,30 +572,37 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	}
 })
 
+const sameScopes = (
+	left: ReadonlyArray<string>,
+	right: ReadonlyArray<string>,
+) => Equal.equals(HashSet.fromIterable(left), HashSet.fromIterable(right))
+
 const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 	readonly binding: Store.CredentialBinding
 	readonly clientId: string
-	readonly clientAuthentication?: Store.OAuthClientAuthentication
+	readonly clientSecret?: Redacted.Redacted<string>
+	readonly clientAuthMethod?:
+		"none" | "client_secret_basic" | "client_secret_post"
 	readonly scopes: ReadonlyArray<string>
 	readonly tokens: Mcp.OAuthTokens
-	readonly scopeSelection?: typeof ScopeSelection.Type
 	readonly resourceMetadataUrl?: string
+	/**
+	 * True when live clients must connect again, for example after a new grant.
+	 * A grant with other scopes than `scopes` always closes them.
+	 */
+	readonly reconnect: boolean
 }) {
-	if (options.tokens.token_type.toLowerCase() !== "bearer")
-		return yield* new AuthorizationError({
+	if (Str.toLowerCase(options.tokens.token_type) !== "bearer")
+		return yield* AuthorizationError.make({
 			reason: "GrantRejected",
 			issue: "Expected bearer resource credentials",
 		})
 	const scopes =
-		options.tokens.scope?.split(/\s+/).filter(Boolean) ?? options.scopes
-	// Only a new consent flow with an omitted scope parameter can establish the provider's default grant.
-	// Refreshes and saved flows without this marker remain bounded by their explicit grant.
-	if (
-		(options.scopeSelection !== "ProviderDefault" ||
-			options.scopes.length !== 0) &&
-		scopes.some((scope) => !options.scopes.includes(scope))
-	)
-		return yield* new AuthorizationError({
+		options.tokens.scope === undefined
+			? options.scopes
+			: pipe(options.tokens.scope, Str.split(/\s+/), Arr.filter(Str.isNonEmpty))
+	if (Arr.some(scopes, (scope) => !options.scopes.includes(scope)))
+		return yield* AuthorizationError.make({
 			reason: "ScopeRequired",
 			issue: "Token response grants more than was requested",
 		})
@@ -658,11 +614,12 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 		connection.state !== "Enabled" ||
 		connection.endpoint !== options.binding.resource
 	)
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "CallbackMismatch",
 			issue: "Connection was disabled or changed",
 		})
-	const reference = yield* credentials.put({
+	// The tokens come from the authorization server, so check them like other outside data.
+	const credential = yield* Store.Credential.decode({
 		binding: options.binding,
 		accessToken: Redacted.make(options.tokens.access_token),
 		...(options.tokens.refresh_token === undefined
@@ -677,10 +634,14 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 				}),
 		scopes,
 		clientId: options.clientId,
-		...(options.clientAuthentication === undefined
+		...(options.clientSecret === undefined
 			? {}
-			: { clientAuthentication: options.clientAuthentication }),
+			: { clientSecret: options.clientSecret }),
+		...(options.clientAuthMethod === undefined
+			? {}
+			: { clientAuthMethod: options.clientAuthMethod }),
 	})
+	const reference = yield* credentials.put(credential)
 	const current = yield* apps.update({
 		key: options.binding,
 		change: (old) =>
@@ -715,15 +676,19 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 		Match.orElse(() =>
 			Effect.gen(function* () {
 				yield* credentials.deleteConnection(options.binding)
-				return yield* new AuthorizationError({
+				return yield* AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Connection was disabled during authorization",
 				})
 			}),
 		),
 	)
-	const active = yield* App.ConnectionScopes
-	yield* active.close(options.binding)
+	// Live clients read the credential again for each request, so a refresh of the
+	// same grant does not need to close them and cut off their running calls.
+	if (options.reconnect || !sameScopes(scopes, options.scopes)) {
+		const active = yield* App.ConnectionScopes
+		yield* active.close(options.binding)
+	}
 	return current
 })
 
@@ -738,22 +703,23 @@ export const complete = Effect.fn("Authorization.complete")(
 		const flow = yield* store.get(options)
 		const connection = yield* AppConnections.usable(options.key)
 		if (connection.endpoint !== flow.binding.resource)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "CallbackMismatch",
 				issue: "Authorization resource changed",
 			})
 		const now = yield* Clock.currentTimeMillis
 		if (now >= flow.expiresAt)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "FlowExpired",
 				issue: "Authorization callback expired",
 			})
 		const callback = yield* Effect.try({
 			try: () => new URL(options.callbackUrl),
-			catch: () =>
-				new AuthorizationError({
+			catch: (error) =>
+				AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Invalid callback URL",
+					cause: error,
 				}),
 		})
 		const redirect = new URL(flow.redirectUri)
@@ -763,7 +729,8 @@ export const complete = Effect.fn("Authorization.complete")(
 			callback.hash !== "" ||
 			callback.username !== "" ||
 			callback.password !== "" ||
-			[...redirect.searchParams].some(
+			Arr.some(
+				Arr.fromIterable(redirect.searchParams),
 				([key, value]) => callback.searchParams.get(key) !== value,
 			) ||
 			callback.searchParams.getAll("state").length !== 1 ||
@@ -772,13 +739,13 @@ export const complete = Effect.fn("Authorization.complete")(
 			callback.searchParams.has("error") ||
 			callback.searchParams.getAll("iss").length > 1
 		)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "CallbackMismatch",
 				issue: "Callback redirect or flow state did not match",
 			})
 		const code = callback.searchParams.get("code")
 		if (code === null || code === "")
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "CallbackMismatch",
 				issue: "Callback did not contain a code",
 			})
@@ -792,18 +759,14 @@ export const complete = Effect.fn("Authorization.complete")(
 						flow.metadata.authorization_response_iss_parameter_supported ===
 						true,
 				}),
-			catch: () =>
-				new AuthorizationError({
+			catch: (error) =>
+				AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Authorization callback issuer did not match",
+					cause: error,
 				}),
 		})
-		yield* validateClientAuthentication(
-			flow.metadata,
-			flow.clientAuthentication,
-		)
-		yield* store.consume(options)
-		const tokens = yield* Effect.scoped(
+		const exchange = Effect.scoped(
 			Effect.gen(function* () {
 				const fetch = yield* Sdk.fetch({
 					documents: true,
@@ -812,132 +775,149 @@ export const complete = Effect.fn("Authorization.complete")(
 					try: () =>
 						Mcp.exchangeAuthorization(flow.binding.issuer, {
 							metadata: sdkMetadata(flow.metadata),
-							clientInformation: {
-								client_id: flow.clientId,
-							},
-							addClientAuthentication: authenticateClient(
-								flow.clientId,
-								flow.clientAuthentication,
-							),
+							clientInformation: clientInformation(flow),
 							authorizationCode: code,
-							...Record.filter({ iss }, Predicate.isNotUndefined),
+							...Rec.filter({ iss }, Predicate.isNotUndefined),
 							codeVerifier: Redacted.value(flow.verifier),
 							redirectUri: flow.redirectUri,
 							resource: flow.binding.resource,
 							fetchFn: fetch,
 						}),
-					catch: () =>
-						new AuthorizationError({
-							reason: "GrantRejected",
-							issue: "Authorization code exchange failed",
-						}),
+					catch: (error) =>
+						Schema.is(Network.NetworkError)(error)
+							? error
+							: AuthorizationError.make({
+									reason: "GrantRejected",
+									issue: "Authorization code exchange failed",
+									cause: error,
+								}),
 				})
 			}),
 		)
-		return yield* saveTokens({
-			binding: flow.binding,
-			clientId: flow.clientId,
-			...(flow.clientAuthentication === undefined
-				? {}
-				: { clientAuthentication: flow.clientAuthentication }),
-			scopes: flow.scopes,
-			...(flow.scopeSelection === undefined
-				? {}
-				: { scopeSelection: flow.scopeSelection }),
-			...(flow.resourceMetadataUrl === undefined
-				? {}
-				: { resourceMetadataUrl: flow.resourceMetadataUrl }),
-			tokens,
-		})
-	},
-)
-
-export const refresh = Effect.fn("Authorization.refresh")(
-	function* (key: Store.ConnectionKey) {
-		const connection = yield* AppConnections.usable(key)
-		const auth = yield* Match.value(connection.authorization).pipe(
-			Match.tag("Authorized", (auth) => Effect.succeed(auth)),
-			Match.orElse(() =>
-				Effect.fail(
-					new AuthorizationError({
-						reason: "RefreshUnavailable",
-						issue: "Connection has no bound authorization",
+		// The claim uses up the flow, and the server uses up the code. If the request
+		// stops after the claim, the flow or the issued tokens are lost, so nothing
+		// can interrupt these steps. Each request of the exchange has a time limit.
+		return yield* Effect.uninterruptible(
+			store.consume(options).pipe(
+				Effect.andThen(exchange),
+				Effect.flatMap((tokens) =>
+					saveTokens({
+						binding: flow.binding,
+						clientId: flow.clientId,
+						...(flow.clientSecret === undefined
+							? {}
+							: { clientSecret: flow.clientSecret }),
+						...(flow.clientAuthMethod === undefined
+							? {}
+							: { clientAuthMethod: flow.clientAuthMethod }),
+						scopes: flow.scopes,
+						...(flow.resourceMetadataUrl === undefined
+							? {}
+							: { resourceMetadataUrl: flow.resourceMetadataUrl }),
+						tokens,
+						// A new grant can be for another account or other scopes.
+						reconnect: true,
 					}),
 				),
 			),
 		)
-		if (
-			connection.endpoint !== auth.binding.resource ||
-			key.owner !== auth.binding.owner ||
-			key.connectionId !== auth.binding.connectionId
-		)
-			return yield* new AuthorizationError({
-				reason: "RefreshUnavailable",
-				issue: "Authorization binding no longer matches the connection",
-			})
-		const credentials = yield* Store.CredentialStore
-		const credential = yield* credentials.get({
-			binding: auth.binding,
-			reference: auth.credentialRef,
-		})
-		const { clientId, clientAuthentication, refreshToken } = credential
-		if (refreshToken === undefined || clientId === undefined)
-			return yield* new AuthorizationError({
-				reason: "RefreshUnavailable",
-				issue: "Connection has no usable refresh grant",
-			})
-		const { metadata } = yield* discover({
-			resource: connection.endpoint,
-			issuer: auth.binding.issuer,
-			...(auth.resourceMetadataUrl === undefined
-				? {}
-				: { resourceMetadataUrl: auth.resourceMetadataUrl }),
-		})
-		yield* validateClientAuthentication(metadata, clientAuthentication)
-		const tokens = yield* Effect.scoped(
-			Effect.gen(function* () {
-				const fetch = yield* Sdk.fetch({ documents: true })
-				return yield* Effect.tryPromise({
-					try: () =>
-						Mcp.refreshAuthorization(auth.binding.issuer, {
-							metadata: sdkMetadata(metadata),
-							clientInformation: {
-								client_id: clientId,
-							},
-							addClientAuthentication: authenticateClient(
-								clientId,
-								clientAuthentication,
-							),
-							refreshToken: Redacted.value(refreshToken),
-							resource: connection.endpoint,
-							fetchFn: fetch,
-						}),
-					catch: () =>
-						new AuthorizationError({
-							reason: "RefreshFailed",
-							issue: "Refresh grant was rejected",
-						}),
-				})
-			}),
-		)
-		return yield* saveTokens({
-			binding: auth.binding,
-			clientId,
-			...(clientAuthentication === undefined ? {} : { clientAuthentication }),
-			scopes: credential.scopes,
-			...(auth.resourceMetadataUrl === undefined
-				? {}
-				: { resourceMetadataUrl: auth.resourceMetadataUrl }),
-			tokens: {
-				...tokens,
-				refresh_token: tokens.refresh_token ?? Redacted.value(refreshToken),
-			},
-		})
 	},
-	Effect.tapError(() =>
-		Effect.logWarning(JSON.stringify({ event: "oauth_refresh_failed" })),
-	),
 )
+
+export const refresh = Effect.fn("Authorization.refresh")(function* (
+	key: Store.ConnectionKey,
+) {
+	const connection = yield* AppConnections.usable(key)
+	const auth = yield* Match.value(connection.authorization).pipe(
+		Match.tag("Authorized", (auth) => Effect.succeed(auth)),
+		Match.orElse(() =>
+			Effect.fail(
+				AuthorizationError.make({
+					reason: "RefreshUnavailable",
+					issue: "Connection has no bound authorization",
+				}),
+			),
+		),
+	)
+	if (
+		connection.endpoint !== auth.binding.resource ||
+		key.owner !== auth.binding.owner ||
+		key.connectionId !== auth.binding.connectionId
+	)
+		return yield* AuthorizationError.make({
+			reason: "RefreshUnavailable",
+			issue: "Authorization binding no longer matches the connection",
+		})
+	const credentials = yield* Store.CredentialStore
+	const credential = yield* credentials.get({
+		binding: auth.binding,
+		reference: auth.credentialRef,
+	})
+	const { clientId, refreshToken } = credential
+	if (refreshToken === undefined || clientId === undefined)
+		return yield* AuthorizationError.make({
+			reason: "RefreshUnavailable",
+			issue: "Connection has no usable refresh grant",
+		})
+	const { metadata } = yield* discover({
+		resource: connection.endpoint,
+		issuer: auth.binding.issuer,
+		...(auth.resourceMetadataUrl === undefined
+			? {}
+			: { resourceMetadataUrl: auth.resourceMetadataUrl }),
+	})
+	const exchange = Effect.scoped(
+		Effect.gen(function* () {
+			const fetch = yield* Sdk.fetch({ documents: true })
+			return yield* Effect.tryPromise({
+				try: () =>
+					Mcp.refreshAuthorization(auth.binding.issuer, {
+						metadata: sdkMetadata(metadata),
+						clientInformation: clientInformation({ ...credential, clientId }),
+						refreshToken: Redacted.value(refreshToken),
+						resource: connection.endpoint,
+						fetchFn: fetch,
+					}),
+				catch: (error) =>
+					Schema.is(Network.NetworkError)(error)
+						? error
+						: AuthorizationError.make({
+								reason: "RefreshFailed",
+								issue: "Refresh grant was rejected",
+								cause: error,
+							}),
+			})
+		}),
+	)
+	// The server can rotate the refresh token, and then the old one stops working
+	// when the server answers. If the request stops before the save, only the dead
+	// token stays, so nothing can interrupt these steps. Each request has a time limit.
+	return yield* Effect.uninterruptible(
+		exchange.pipe(
+			Effect.flatMap((tokens) =>
+				saveTokens({
+					binding: auth.binding,
+					clientId,
+					...(credential.clientSecret === undefined
+						? {}
+						: { clientSecret: credential.clientSecret }),
+					...(credential.clientAuthMethod === undefined
+						? {}
+						: { clientAuthMethod: credential.clientAuthMethod }),
+					scopes: credential.scopes,
+					...(auth.resourceMetadataUrl === undefined
+						? {}
+						: { resourceMetadataUrl: auth.resourceMetadataUrl }),
+					tokens: {
+						...tokens,
+						refresh_token: tokens.refresh_token ?? Redacted.value(refreshToken),
+					},
+					reconnect: false,
+				}),
+			),
+		),
+	)
+})
 
 export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 	key: Store.ConnectionKey,
@@ -966,64 +946,43 @@ export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 				const network = yield* Network.Network
 				yield* Effect.scoped(
 					Effect.gen(function* () {
-						const current = credential.clientAuthentication ?? {
-							method: "none" as const,
-						}
-						const methods =
-							metadata.revocation_endpoint_auth_methods_supported ??
-							("secret" in current ? ["client_secret_basic"] : ["none"])
-						const authentication = yield* Match.value(current).pipe(
-							Match.when({ method: "none" }, (authentication) =>
-								Effect.succeed(authentication),
-							),
-							Match.orElse((authentication) => {
-								const method = (
-									[
-										authentication.method,
-										"client_secret_basic",
-										"client_secret_post",
-									] as const
-								).find((method) => methods.includes(method))
-								return method === undefined
-									? Effect.fail(
-											new AuthorizationError({
-												reason: "RevocationFailed",
-												issue:
-													"The revocation endpoint does not accept the registered client credentials",
-											}),
-										)
-									: Effect.succeed({ ...authentication, method })
+						const method = credential.clientAuthMethod ?? "none"
+						let request = HttpClientRequest.post(endpoint).pipe(
+							HttpClientRequest.bodyUrlParams({
+								token: Redacted.value(
+									credential.refreshToken ?? credential.accessToken,
+								),
+								token_type_hint:
+									credential.refreshToken === undefined
+										? "access_token"
+										: "refresh_token",
+								client_id: clientId,
+								...(method === "client_secret_post" &&
+								credential.clientSecret !== undefined
+									? { client_secret: Redacted.value(credential.clientSecret) }
+									: {}),
 							}),
 						)
-						yield* validateClientAuthentication(
-							metadata,
-							authentication,
-							methods,
-						)
-						const headers = new Headers()
-						const params = new URLSearchParams({
-							token: Redacted.value(
-								credential.refreshToken ?? credential.accessToken,
-							),
-							token_type_hint:
-								credential.refreshToken === undefined
-									? "access_token"
-									: "refresh_token",
-						})
-						authenticateClient(clientId, authentication)(
-							headers,
-							params,
-							endpoint,
-							sdkMetadata(metadata),
-						)
-						const response = yield* network.execute(
-							HttpClientRequest.post(endpoint).pipe(
-								HttpClientRequest.setHeaders(Object.fromEntries(headers)),
-								HttpClientRequest.bodyUrlParams(params),
-							),
-						)
+						if (
+							method === "client_secret_basic" &&
+							credential.clientSecret !== undefined
+						) {
+							const encode = (value: string) =>
+								Str.slice(6)(new URLSearchParams({ value }).toString())
+							const encoded = Base64.encode(
+								new TextEncoder().encode(
+									`${encode(clientId)}:${encode(Redacted.value(credential.clientSecret))}`,
+								),
+							)
+							request = HttpClientRequest.setHeader(
+								request,
+								"authorization",
+								`Basic ${encoded}`,
+							)
+						}
+						const response = yield* network.execute(request)
 						if (response.status !== 200)
-							return yield* new AuthorizationError({
+							return yield* AuthorizationError.make({
 								reason: "RevocationFailed",
 								issue: "Authorization server did not confirm revocation",
 							})
@@ -1033,7 +992,7 @@ export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 						duration: 10_000,
 						orElse: () =>
 							Effect.fail(
-								new AuthorizationError({
+								AuthorizationError.make({
 									reason: "RevocationFailed",
 									issue: "Authorization revocation timed out",
 								}),

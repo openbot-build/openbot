@@ -14,11 +14,22 @@ export type Provider = CoreProvider.Provider<
 	OpenAiClient.OpenAiClient
 >
 
-export const make = (defaults: Defaults = {}): Provider =>
+/** `upstreamModel` is the model name that the API gets. The default is the selected model ID. */
+export interface Options {
+	readonly upstreamModel?: string
+}
+
+export const make = ({
+	upstreamModel,
+	...defaults
+}: Defaults & Options = {}): Provider =>
 	new CoreProvider.Provider({
 		id: CoreProvider.Id.make("openai"),
 		model: (selection) =>
-			Request.config(defaults)(selection).pipe(
+			Request.config({
+				...defaults,
+				...(upstreamModel === undefined ? {} : { upstreamModel }),
+			})(selection).pipe(
 				Effect.map((config) =>
 					Model.make({
 						provider: selection.provider,
@@ -28,7 +39,7 @@ export const make = (defaults: Defaults = {}): Provider =>
 							Request.client(selection).pipe(
 								Effect.flatMap((client) =>
 									OpenAiLanguageModel.make({
-										model: selection.model,
+										model: upstreamModel ?? selection.model,
 										config,
 									}).pipe(
 										Effect.provideService(OpenAiClient.OpenAiClient, client),

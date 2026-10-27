@@ -1,12 +1,20 @@
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { PgClient } from "@effect/sql-pg"
 import { and, desc, eq, lt, or } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { Clock, Context, Effect, Layer } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Effect,
+	Layer,
+	Option,
+	pipe,
+} from "effect"
 import { developerNotices, developerSubscriptions } from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
 const pageSize = 50
 export class DeveloperNotifications extends Context.Service<
@@ -34,7 +42,7 @@ export const make: Effect.Effect<
 	never,
 	PgClient.PgClient | DeveloperAccess
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
@@ -127,8 +135,7 @@ export const make: Effect.Effect<
 						return yield* Api.DeveloperNotFound.make({})
 					if (notice.readAt !== null) return notice
 					const readAt = yield* Clock.currentTimeMillis
-					yield* Rows.write(
-						owner,
+					yield* Rows.stored(
 						db
 							.update(developerNotices)
 							.set({ readAt })
@@ -151,17 +158,18 @@ export const make: Effect.Effect<
 							),
 						),
 				)
-				return overview.apps.map((app) => ({
+				return Arr.map(overview.apps, (app) => ({
 					cardUrl: app.cardUrl,
-					enabled:
-						saved.find((row) => row.cardUrl === app.cardUrl)?.enabled ?? true,
+					enabled: pipe(
+						Arr.findFirst(saved, (row) => row.cardUrl === app.cardUrl),
+						Option.match({ onNone: () => true, onSome: (row) => row.enabled }),
+					),
 				}))
 			}),
 		subscribe: (owner, value) =>
 			Effect.gen(function* () {
 				yield* access.authorize(owner, value.cardUrl)
-				yield* Rows.write(
-					owner,
+				yield* Rows.stored(
 					db
 						.insert(developerSubscriptions)
 						.values({ namespace, owner, ...value })

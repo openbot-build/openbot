@@ -1,0 +1,442 @@
+---
+title: Pakete
+description: Die Pakete im Workspace und wofür jedes da ist.
+---
+
+OpenBot ist ein pnpm-Workspace. Jedes Paket hat eine Aufgabe. `openbot` setzt
+die Teile zum Server zusammen. Die anderen Bibliotheken kannst du auch einzeln
+nutzen.
+
+Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutzen
+`effect@4.0.5`. Sie sind noch nicht auf npm. Nutze sie aus dem Workspace mit
+`"workspace:*"`.
+
+---
+
+## Überblick
+
+| Paket           | Wofür es da ist                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------ |
+| `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/docs/server).        |
+| `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                   |
+| `client`        | Der TypeScript-Client. Siehe [Client](/de/docs/client).                                                |
+| `core`          | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                        |
+| `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                      |
+| `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).       |
+| `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                              |
+| `computer`      | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/docs/computers). |
+| `docs`          | Diese Doku-Seite.                                                                                      |
+
+Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen
+`LanguageModel`-Layer an, zum Beispiel von einem
+[Model Provider](#model-providers) in `openbot`.
+
+---
+
+## core
+
+`@openbot-build/core` führt Bots aus. Es hat diese Hauptteile:
+
+| Modul                                        | Was es tut                                                                                                             |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `Bot`                                        | Eine Bot-Definition: Werkzeuge, Plugins, Provider, Compaction und Approvals. Eine Definition kann vielen Chats dienen. |
+| `ChatRuntime`                                | Führt Turns aus: `deliver`, `execute`, `stream`, `interrupt`, `drain`, `wait` und mehr.                                |
+| `ChatStore`, `ChatStoreRepository`, `Store`  | Speichern Chats: einen kleinen Eintrag für jeden Chat und ein Log von Items, das nur wächst.                           |
+| `ChatStoreMemory`                            | Ein Speicher, der alles im Arbeitsspeicher hält, für Tests und Skripte.                                                |
+| `Chat`, `Item`, `Turn`, `ChatState`          | Die Datentypen. `Chat` hat auch den Dienst `Approvals`.                                                                |
+| `ContextCompaction`, `SummaryCompaction`     | Machen einen langen Verlauf kürzer, damit er zum Model passt.                                                          |
+| `Plugin`, `PluginComposition`, `PluginState` | Plugins erstellen und kombinieren und ihnen gespeicherten Zustand geben.                                               |
+| `Skill`, `SkillMap`                          | Skills beschreiben und eine Liste davon führen.                                                                        |
+
+Ein **Chat** ist ein Gespräch ohne Ende. Jede Eingabe geht in seine **Inbox**
+(seinen Eingang). Sie startet einen **Turn** (Durchgang), oder sie lenkt den
+laufenden Turn. Ein Turn kann viele Model-Schritte und Werkzeug-Aufrufe haben.
+Ein Turn wartet nie: Er läuft, und dann endet er. Der Speicher hält die Items
+eines Chats in einem Log, das nur wächst. So bleibt ein langer Chat billig zu
+speichern.
+
+```ts
+import { ChatRuntime, ChatStoreMemory, Store } from "@openbot-build/core"
+import { Effect } from "effect"
+import { Toolkit } from "effect/ai"
+
+const program = Effect.scoped(
+	Effect.gen(function* () {
+		const definition = yield* Store.define({
+			stores: {},
+			schemaVersion: "chat/1",
+		})
+		const store = yield* ChatStoreMemory.make(definition)
+		const runtime = yield* ChatRuntime.make({
+			store,
+			bot: { toolkit: Toolkit.empty },
+		})
+		const view = yield* store.create({})
+		return yield* runtime.execute({
+			chat: view.chat.id,
+			input: "Explain closures",
+		})
+	}),
+)
+```
+
+Gib die Model- und Werkzeug-Dienste beim Bau an `ChatRuntime.make`. Seine
+Methoden behalten diese Dienste, auch für spätere Turns aus der Inbox. Gib
+optionale Funktionen als `bot.approvals`, `bot.compaction` und `operations` an.
+Ein Dienst im Kontext des Aufrufers schaltet keine Funktion ein. `drain` gibt
+`Option<Delivery>` zurück, mit `None`, wenn keine Eingabe starten kann.
+`ConfigurationOperations.contextLimits` gibt `Option<Config.ContextLimits>`
+zurück. `Live.check` gibt einen Effect zurück, der bei einer nicht unterstützten
+Fähigkeit mit `LiveError` fehlschlägt.
+
+Ohne `expectedRevision` versucht `store.modifyEffect` einen Schreibkonflikt bis
+zu fünfmal erneut. Jeder Versuch liest den aktuellen Chat und führt die Änderung
+erneut aus. Sie darf deshalb keine Wirkung außerhalb des Stores haben. Mit einer
+festen `expectedRevision` schlägt ein Konflikt ohne neuen Versuch fehl.
+
+Die Methoden von `Operation.Store` melden Speicherfehler als
+`Operation.StoreError`. `get` und `finish` geben `Option<Record>` zurück. `None`
+heißt, dass kein Eintrag passt oder kein neues Ende vorliegt. `Operations.make`
+nimmt einen Effect mit Scope als `whileRunning`. Er hält die Mittel des Hosts
+während der Arbeit, beim Speichern des Endes und bei der Mitteilung. Schlägt der
+erste Schreibvorgang fehl, bleibt der Aufruf in seinem Turn. Schlägt das
+Speichern des Endes fehl, bekommt der Chat trotzdem seine Mitteilung. Der Fehler
+kommt ins Log.
+
+`execute` startet einen Turn, wartet, bis er endet, und gibt den Chat zurück.
+`stream` liefert Ereignisse, während der Turn läuft. Beide schlagen fehl, wenn
+im Chat schon ein Turn läuft.
+
+`deliver` gibt einem Chat eine Eingabe in einem Schritt, nach den Regeln der
+[Inbox](/de/docs/chats#die-inbox). Es startet einen Turn, wenn der Chat frei
+ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author` hat, und
+wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued` zurück.
+Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten Turn.
+
+Jeder Turn läuft in einer eigenen Fiber, und diese Fiber gehört der Runtime.
+Eine Fiber ist ein leichter Thread von Effect. Wenn der Scope der Runtime
+schließt, halten alle laufenden Turns an und enden als `Interrupted`. Das gilt
+auch für einen Turn, den ein Aufrufer mit `stream` oder `execute` liest.
+Eingaben, die in der Inbox warten, bleiben dort, und eine neue Runtime startet
+sie mit `drain`. Wenn ein Aufrufer von `stream` früh aufhört zu lesen, hält auch
+sein Turn an.
+
+`events` liefert die Ereignisse eines Chats. Mit `after` liefert es zuerst die
+letzten Ereignisse nach dieser Revision, damit ein neuer Abonnent aufholen kann.
+Die Runtime behält dafür die letzten 64 Ereignisse. Ein langsamer Abonnent lässt
+den Speicher nicht wachsen: Wenn 1024 Ereignisse auf ihn warten, verdrängt jedes
+neue Ereignis das älteste. So kann ein solcher Abonnent Ereignisse verpassen,
+aber er bekommt immer die neuesten.
+
+### Approvals
+
+Ein Werkzeug mit `needsApproval` fragt vor jedem Aufruf. Die Runtime fragt dann
+den Dienst `Approvals`. Gib ihn als `approvals` in der Bot-Definition an. Er
+beantwortet jeden Aufruf mit einer von drei Entscheidungen:
+
+- `Chat.Decision.Allow()` führt den Aufruf jetzt aus.
+- `Chat.Decision.Deny({ reason })` führt den Aufruf nicht aus. Das Model sieht
+  den Grund.
+- `Chat.Decision.Pending({ result })` führt den Aufruf jetzt nicht aus. Das
+  Model bekommt sofort `result`, und der Turn geht weiter.
+
+Ohne den Dienst wartet jeder solche Aufruf auf eine Entscheidung (pending). So
+wartet ein Turn nie.
+
+Wenn ein Entscheider einen wartenden Aufruf später erlaubt, gib den Aufruf mit
+`deliver` und `approved` zurück. Die ID des Aufrufs muss neu sein. Der Turn, der
+die Eingabe liest, führt den Aufruf aus und fragt nicht noch einmal. Markiere
+Eingaben von deinem Programm mit `notice`, damit das Model weiß, dass sie nicht
+von einer Person kommen:
+
+```ts
+import { Chat } from "@openbot-build/core"
+
+const runtime =
+	yield *
+	ChatRuntime.make({
+		store,
+		bot: {
+			toolkit,
+			approvals: {
+				decide: (request) =>
+					Effect.succeed(
+						Chat.Decision.Pending({ result: { pending: request.approvalId } }),
+					),
+			},
+		},
+	})
+
+yield *
+	runtime.deliver({
+		chat: view.chat.id,
+		input: "[Host] A person allowed the email.",
+		notice: { kind: "request", ref: "req-1" },
+		approved: {
+			id: "approved-1",
+			name: "SendEmail",
+			params: { to: "team@example.com" },
+		},
+	})
+```
+
+### Plugins
+
+Ein Plugin legt sich um die Model-Schleife. `Plugin.make` erstellt eines. Sein
+Konstruktor läuft einmal. Die Middleware, die er zurückgibt, legt sich um den
+Ereignis-Stream jedes Turns:
+
+```ts
+import { Plugin } from "@openbot-build/core"
+import { Effect, Stream } from "effect"
+
+const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
+	Effect.succeed((next, options) =>
+		next(options).pipe(
+			Stream.tap((event) =>
+				event._tag === "ModelStepStarted"
+					? Effect.log("A model step started")
+					: Effect.void,
+			),
+		),
+	),
+)
+```
+
+`PluginComposition.merge(a, b)` kombiniert zwei Plugins. `a` läuft außen um `b`.
+Ein Plugin kann auch eigene Daten im Eintrag des Chats oder in seinem Zustand
+speichern. Gib `plugin.stores` an `Store.define` und nutze dann
+`PluginState.make`.
+
+### Skills
+
+`Skill.Descriptor` beschreibt einen Skill. `SkillMap.Catalog` ist eine Liste von
+Skills. Wenn zwei Listen dieselbe Skill-ID haben, gewinnt die spätere. Dein
+Programm findet, lädt und führt die Skills aus.
+
+---
+
+## Plugins in openbot
+
+`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt
+seine Plugins, zum Beispiel die Plugins für Bot, App und Arbeit, in jedem Turn.
+Das Arbeits-Plugin gibt dem Bot seine Todo-Liste, seine Erinnerungen und den
+Plan-Modus. Die Plugins für das Turn-Limit kannst du auch mit deiner eigenen
+`ChatRuntime` nutzen.
+
+`Auth.handle(request)` gibt einen Effect mit der Antwort zurück. `Chats.wait`
+nimmt ein `Duration.Input` als Zeitgrenze, etwa `"30 seconds"`. Die HTTP-Route
+nimmt weiter eine Zahl von Millisekunden als `timeoutMs`.
+
+### Memory
+
+`BotMemory` enthält die Typen und Hilfsfunktionen für
+[Bot Memory](/de/docs/memory). Der Server nutzt sie für den Memory-Bot und die
+Memory-API. Die Schemas der Memory-API liegen in `api`, als `BotMemory`.
+
+`BotMemory.apply` nimmt ein Array `ids` mit einer neuen ID je Operation in
+derselben Reihenfolge. `BotMemory.edit` nimmt eine neue ID als String `id`. Der
+Aufrufer erzeugt diese IDs vor dem Aufruf der reinen Hilfsfunktionen.
+
+### Turn-Limits
+
+Drei Plugins setzen jedem Turn eine Grenze. Du kannst eines davon nutzen oder
+sie mit `PluginComposition.merge` verbinden. Jedes Plugin zählt nur seinen
+eigenen Turn.
+
+#### Model-Schritte
+
+`TurnLimiter` hält einen Turn nach einer festen Zahl von Model-Schritten an. Die
+erste Model-Anfrage zählt als ein Schritt.
+
+```ts
+import { TurnLimiter } from "@openbot-build/openbot"
+
+const runtime =
+	yield *
+	ChatRuntime.make({
+		store,
+		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
+	})
+```
+
+Er schlägt mit einem von zwei Fehlern fehl:
+
+| Fehler                   | Wann                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `InvalidMaxSteps`        | `maxSteps` ist keine positive ganze Zahl.                                                           |
+| `ModelStepLimitExceeded` | Der Turn braucht nach der Grenze noch einen Model-Schritt. Der Fehler hat `maxSteps` und `history`. |
+
+#### Tokens
+
+`TokenLimiter` hält einen Turn an, wenn er eine feste Zahl von Tokens verbraucht
+hat. Ein Token ist ein kleines Stück Text, das das Model liest oder schreibt.
+Das Plugin zählt die Eingabe- und Ausgabe-Tokens jedes Model-Schritts zusammen.
+Ein Model-Schritt, der schon begonnen hat, darf fertig laufen. Der nächste
+Model-Schritt schlägt fehl, wenn die Summe `maxTokens` erreicht.
+
+```ts
+import { TokenLimiter } from "@openbot-build/openbot"
+
+const plugin = TokenLimiter.make({ maxTokens: 100_000 })
+```
+
+| Fehler               | Wann                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `InvalidMaxTokens`   | `maxTokens` ist keine positive ganze Zahl.                                                                         |
+| `TokenLimitExceeded` | Der Turn braucht nach der Grenze noch einen Model-Schritt. Der Fehler hat `maxTokens`, `usedTokens` und `history`. |
+
+#### Zeit
+
+`TimeLimiter` hält einen Turn nach einer festen Zeit an. `maxDuration` ist eine
+Zahl von Millisekunden oder ein Text wie `"5 minutes"`. Wenn die Zeit um ist,
+hält das Plugin den Turn sofort an. Es hält auch einen Model-Schritt oder einen
+Tool-Aufruf mitten im Lauf an.
+
+```ts
+import { TimeLimiter } from "@openbot-build/openbot"
+
+const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
+```
+
+| Fehler               | Wann                                                                              |
+| -------------------- | --------------------------------------------------------------------------------- |
+| `InvalidMaxDuration` | `maxDuration` ist keine positive, endliche Zeit.                                  |
+| `TimeLimitExceeded`  | Der Turn läuft länger als die Grenze. Der Fehler hat `maxDuration` und `history`. |
+
+---
+
+## Model Providers
+
+`@openbot-build/openbot` hat drei Model Providers. Jeder macht aus einer
+Model-Auswahl einen `LanguageModel`-Layer. Du gibst den API-Schlüssel an. Wie
+OpenBot sie nutzt, steht unter [Models](/de/docs/models).
+
+### OpenAiCompatProvider
+
+```ts
+import { Config, Model, Provider } from "@openbot-build/core"
+import { OpenAiCompatProvider } from "@openbot-build/openbot"
+import { Effect, Layer, Redacted } from "effect"
+import { LanguageModel } from "effect/ai"
+import { FetchHttpClient } from "effect/http"
+
+const selection = Config.Selection.make({
+	provider: Provider.Id.make("openai-compat"),
+	model: Model.Id.make("gpt-4.1"),
+})
+const model = Layer.unwrap(
+	OpenAiCompatProvider.make({ max_output_tokens: 1024 }).model(selection),
+).pipe(
+	Layer.provide(
+		OpenAiCompatProvider.layerClient({
+			apiKey: Redacted.make(process.env.OPENAI_API_KEY ?? ""),
+			apiUrl: "https://api.openai.com/v1",
+		}),
+	),
+	Layer.provide(FetchHttpClient.layer),
+)
+
+const program = LanguageModel.generateText({ prompt: "Hello" }).pipe(
+	Effect.provide(model),
+)
+```
+
+Lass `apiUrl` weg, um `https://api.openai.com/v1` zu nutzen. `reasoningEffort`
+und `serviceTier` einer Auswahl ersetzen `reasoning_effort` und `service_tier`
+in den Standardwerten.
+
+### OpenAiProvider
+
+Dasselbe Muster, mit `OpenAiProvider` und der Provider-ID `openai`. Er nutzt die
+Responses API. Er hat auch `ResponsesCompaction.layer()`. Das macht lange
+Verläufe kürzer, mit der eingebauten Compaction der Responses API.
+
+```ts
+import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
+
+const services = Layer.merge(
+	Layer.unwrap(OpenAiProvider.make().model(selection)),
+	ResponsesCompaction.layer(),
+).pipe(
+	Layer.provide(OpenAiProvider.layerClient({ apiKey })),
+	Layer.provide(FetchHttpClient.layer),
+)
+```
+
+Hole den Compaction-Dienst aus diesem Layer und gib ihn an den Bot:
+
+```ts
+import { ContextCompaction } from "@openbot-build/core"
+
+const runtime = Effect.gen(function* () {
+	const compaction = yield* ContextCompaction.ContextCompaction
+	return yield* ChatRuntime.make({ store, bot: { compaction } })
+}).pipe(Effect.provide(services))
+```
+
+### AnthropicProvider
+
+Dasselbe Muster, mit `AnthropicProvider` und der Provider-ID `anthropic`. Er
+nutzt die Messages API.
+
+```ts
+import { AnthropicProvider } from "@openbot-build/openbot"
+
+const provider = AnthropicProvider.make({ max_tokens: 1024 })
+```
+
+`reasoningEffort` kann `low`, `medium` oder `high` sein. `serviceTier` kann
+`auto` oder `standard_only` sein. Andere Werte schlagen fehl, bevor eine Anfrage
+gesendet wird.
+
+---
+
+## protocol
+
+`@openbot-build/protocol` setzt das OpenBot App Protocol um. Herausgeber nutzen
+es, um eine App ins Web zu bringen. Hosts nutzen es, um Apps zu finden, sich mit
+ihnen zu verbinden und sie aufzurufen.
+
+```ts
+import { Document, McpPublisher } from "@openbot-build/protocol"
+import { Effect, Schema } from "effect"
+import { McpServer, Tool, Toolkit } from "effect/ai"
+
+const tools = Toolkit.make(
+	Tool.make("Hello", {
+		parameters: Schema.Struct({ name: Schema.String }),
+		success: Schema.Struct({ greeting: Schema.String }),
+	}),
+)
+const handlers = tools.toLayer({
+	Hello: ({ name }) => Effect.succeed({ greeting: `Hello, ${name}` }),
+})
+const origin = "https://apps.example.com"
+
+const publisher = McpPublisher.layer({
+	publication: {
+		card: {
+			$schema: Document.cardSchemaUrl,
+			name: "com.example/hello",
+			version: "1.0.0",
+			description: "Say hello",
+			remotes: [
+				{
+					type: "streamable-http",
+					url: origin + "/mcp",
+					supportedProtocolVersions: [Document.protocolVersion],
+				},
+			],
+		},
+		cardUrl: origin + "/mcp/server-card",
+		catalogUrl: origin + "/.well-known/ai-catalog.json",
+		mcpUrl: origin + "/mcp",
+		allowedOrigins: ["https://host.example.com"],
+	},
+	register: McpServer.registerToolkit(tools).pipe(Effect.provide(handlers)),
+})
+```
+
+Stelle `publisher` mit `HttpRouter.serve` und einem HTTP-Server-Layer bereit.
+Die vollständige Anleitung findest du unter [Protokoll](/de/docs/protocol).

@@ -1,6 +1,8 @@
-import { AgentAuth } from "./AuthApi.ts"
-import { Authorize, Decision, GroupRequired, requires } from "./Permissions.ts"
-import { Session, Turn } from "@openbot-build/core"
+import { CapabilityRequestId } from "./CapabilityRequestId.ts"
+export { CapabilityRequestId } from "./CapabilityRequestId.ts"
+import { BotAuth } from "./AuthApi.ts"
+import { Authorize, Decision, GroupRequired, own } from "./Authorization.ts"
+import { Chat, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -9,14 +11,9 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import {
-	AgentErrors,
-	AgentId,
-	Capability,
-	Decider,
-	GrantScope,
-} from "./AgentsApi.ts"
+import { BotErrors, BotId, Capability, Decider, GrantScope } from "./BotsApi.ts"
 import * as AppExecution from "./AppExecution.ts"
+import { RequestCode } from "./CodeRunsApi.ts"
 
 /** Only a `pending` request waits for a decision. */
 export const RequestStatus = Schema.Literals([
@@ -29,34 +26,38 @@ export const RequestStatus = Schema.Literals([
 export type RequestStatus = typeof RequestStatus.Type
 
 /**
- * An Agent tried to use a capability that no Grant or Rule covers.
- * The request waits for the decider above the Agent: its owning Agent, then the Main Agent,
- * then the person.
+ * A Bot tried to use a capability that no Grant or Rule covers.
+ * The request waits for the decider above the Bot: its owning Bot, then the Bot above
+ * that, up to the top Bot of the tree. Then it waits for the person.
+ * The Bot does not wait. Its tool call gets a pending result, and the answer comes
+ * back to its Chat as a message later. When the call is allowed, it runs then.
  */
+
 export const CapabilityRequest = Schema.Struct({
-	id: Schema.String,
-	agent: AgentId,
+	id: CapabilityRequestId,
+	bot: BotId,
 	capability: Capability,
-	/** Why the Agent wants it. This is data from the Agent, not an instruction. */
+	/** Why the Bot wants it. This is data from the Bot, not an instruction. */
 	reason: Schema.String,
 	approver: Schema.TaggedUnion({
 		Person: { userId: Schema.String },
-		Agent: { agent: AgentId },
+		Bot: { bot: BotId },
 	}),
-	/** The owner chain of the requesting Agent, from the top: each Agent decides for the one after it. */
-	chain: Schema.Array(AgentId),
-	session: Session.Id,
+	/** The owner chain of the requesting Bot, from the top: each Bot decides for the one after it. */
+	chain: Schema.Array(BotId),
+	chat: Chat.Id,
 	turn: Turn.Id,
 	toolCallId: Schema.String,
-	callOccurrence: Schema.Natural,
 	app: Schema.optionalKey(AppExecution.Invocation),
+	/** The program that made the call, when the call came from Code Mode. */
+	code: Schema.optionalKey(RequestCode),
 	/**
-	 * Agents that agreed with the request but could not allow it themselves, from the bottom.
+	 * Bots that agreed with the request but could not allow it themselves, from the bottom.
 	 * When a decider above them allows it, each one passes it on with its own scope.
 	 */
 	endorsements: Schema.Array(
 		Schema.Struct({
-			agent: AgentId,
+			bot: BotId,
 			scope: GrantScope,
 			reason: Schema.optionalKey(Schema.String),
 		}),
@@ -66,10 +67,8 @@ export const CapabilityRequest = Schema.Struct({
 		Schema.Struct({
 			by: Decider,
 			scope: Schema.optionalKey(GrantScope),
-			/** Reuse this App read decision in this Session after the call completes. */
-			grantReads: Schema.optionalKey(Schema.Boolean),
 			reason: Schema.optionalKey(Schema.String),
-			/** A question for the Agent. It comes with a denial, and the Agent can try again. */
+			/** A question for the Bot. It comes with a denial, and the Bot can try again. */
 			question: Schema.optionalKey(Schema.String),
 			at: Schema.Finite,
 		}),
@@ -77,38 +76,34 @@ export const CapabilityRequest = Schema.Struct({
 	revision: Schema.Natural,
 	createdAt: Schema.Finite,
 	expiresAt: Schema.Finite,
+	/** What happens when nobody answers in time. Without it, the request is denied. */
+	onExpire: Schema.optionalKey(Decision),
 })
 export type CapabilityRequest = typeof CapabilityRequest.Type
 
 export const ResolveRequest = Schema.Struct({
 	expected: Schema.Natural,
-	/** Check the current waiting call and Session revision in the decision transaction. */
-	expectedSessionRevision: Schema.optionalKey(Schema.Natural),
-	/** The displayed Session: this request or one of its own waiting ancestors. */
-	expectedSessionId: Schema.optionalKey(Session.Id),
-	/** Keep read access to this App in this Session. This never grants write access. */
-	grantReads: Schema.optionalKey(Schema.Boolean),
 	decision: Decision,
 	/** How long an allow lasts. A deny with a scope is kept as a deny Grant. */
 	scope: Schema.optionalKey(GrantScope),
 	reason: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2000))),
-	/** Keep this decision as a Rule in plain language for the Agent. */
+	/** Keep this decision as a Rule in plain language for the Bot. */
 	rule: Schema.optionalKey(
 		Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4000)),
 	),
 })
 export type ResolveRequest = typeof ResolveRequest.Type
 
-export class RequestNotFound extends Schema.TaggedError<RequestNotFound>()(
-	"RequestNotFound",
-	{ request: Schema.String },
-) {}
-export class RequestConflict extends Schema.TaggedError<RequestConflict>()(
-	"RequestConflict",
-	{ message: Schema.String },
-) {}
+export class RequestNotFound extends Schema.TaggedError<
+	RequestNotFound,
+	{ readonly brand: unique symbol }
+>()("RequestNotFound", { request: CapabilityRequestId }) {}
+export class RequestConflict extends Schema.TaggedError<
+	RequestConflict,
+	{ readonly brand: unique symbol }
+>()("RequestConflict", { message: Schema.String }) {}
 export const RequestErrors = [
-	...AgentErrors,
+	...BotErrors,
 	RequestNotFound.pipe(HttpApiSchema.status(404)),
 	RequestConflict.pipe(HttpApiSchema.status(409)),
 ] as const
@@ -126,24 +121,24 @@ export class RequestsApi extends HttpApiGroup.make("requests")
 			"Lists the requests that wait for the caller, or that the caller answered.",
 		),
 		HttpApiEndpoint.get("getRequest", "/v1/requests/:requestId", {
-			params: { requestId: Schema.String },
+			params: { requestId: CapabilityRequestId },
 			success: CapabilityRequest,
 			error: RequestErrors,
 		}),
 		HttpApiEndpoint.post("resolveRequest", "/v1/requests/:requestId", {
-			params: { requestId: Schema.String },
+			params: { requestId: CapabilityRequestId },
 			payload: ResolveRequest,
 			success: CapabilityRequest,
 			error: RequestErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Allows or denies a request. The waiting work goes on at once.",
+			"Allows or denies a request. The Chat of the Bot gets the answer as a message at once. An allowed call runs then.",
 		),
 	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
 	.annotate(GroupRequired, {
-		read: [requires("requests.resolve").on("request")],
-		write: [requires("requests.resolve").on("request")],
+		read: [own("resolve", "Request")],
+		write: [own("resolve", "Request")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}

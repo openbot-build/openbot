@@ -3,33 +3,33 @@ import { Discovery, Indexing } from "@openbot-build/protocol"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Check, Restriction } from "./AppIndexApi.ts"
 
-export class DeveloperInputInvalid extends Schema.TaggedError<DeveloperInputInvalid>()(
-	"DeveloperInputInvalid",
-	{
-		message: Schema.String,
-		keys: Schema.optionalKey(Schema.Array(Schema.String)),
-	},
-) {}
-export class DeveloperNotFound extends Schema.TaggedError<DeveloperNotFound>()(
-	"DeveloperNotFound",
-	{},
-) {}
-export class DeveloperForbidden extends Schema.TaggedError<DeveloperForbidden>()(
-	"DeveloperForbidden",
-	{},
-) {}
-export class DeveloperConflict extends Schema.TaggedError<DeveloperConflict>()(
-	"DeveloperConflict",
-	{ reason: Schema.String },
-) {}
-export class DeveloperUnavailable extends Schema.TaggedError<DeveloperUnavailable>()(
-	"DeveloperUnavailable",
-	{},
-) {}
-export class DeveloperRestricted extends Schema.TaggedError<DeveloperRestricted>()(
-	"DeveloperRestricted",
-	{ restriction: Restriction },
-) {}
+export class DeveloperInputInvalid extends Schema.TaggedError<
+	DeveloperInputInvalid,
+	{ readonly brand: unique symbol }
+>()("DeveloperInputInvalid", {
+	message: Schema.String,
+	keys: Schema.optionalKey(Schema.Array(Schema.String)),
+}) {}
+export class DeveloperNotFound extends Schema.TaggedError<
+	DeveloperNotFound,
+	{ readonly brand: unique symbol }
+>()("DeveloperNotFound", {}) {}
+export class DeveloperForbidden extends Schema.TaggedError<
+	DeveloperForbidden,
+	{ readonly brand: unique symbol }
+>()("DeveloperForbidden", {}) {}
+export class DeveloperConflict extends Schema.TaggedError<
+	DeveloperConflict,
+	{ readonly brand: unique symbol }
+>()("DeveloperConflict", { reason: Schema.String }) {}
+export class DeveloperUnavailable extends Schema.TaggedError<
+	DeveloperUnavailable,
+	{ readonly brand: unique symbol }
+>()("DeveloperUnavailable", {}) {}
+export class DeveloperRestricted extends Schema.TaggedError<
+	DeveloperRestricted,
+	{ readonly brand: unique symbol }
+>()("DeveloperRestricted", { restriction: Restriction }) {}
 export const Errors = [
 	DeveloperRestricted.pipe(HttpApiSchema.status(403)),
 	DeveloperInputInvalid.pipe(HttpApiSchema.status(400)),
@@ -264,7 +264,7 @@ export type Notice = typeof Notice.Type
 const Id = { id: Schema.String }
 const Card = { cardUrl: Schema.String }
 const Page = { before: Schema.optionalKey(Schema.String) }
-export const DeveloperApi = HttpApiGroup.make("developer")
+export class DeveloperApi extends HttpApiGroup.make("developer")
 	.add(
 		HttpApiEndpoint.get("personalReports", "/v1/developer/personal-reports", {
 			query: { before: Schema.optionalKey(Schema.String) },
@@ -547,7 +547,7 @@ export const DeveloperApi = HttpApiGroup.make("developer")
 			success: Schema.Void,
 			error: Errors,
 		}),
-	)
+	) {}
 export const DeveloperPublicApi = HttpApiGroup.make("developerPublic").add(
 	HttpApiEndpoint.get(
 		"authorizationCallback",

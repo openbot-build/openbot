@@ -1,29 +1,37 @@
-// These are plain query functions that take the database first. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import {
 	AppViewsApi as Api,
+	AppExecution,
+	ConnectionsApi,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	SessionConflict,
+	ChatConflict,
 } from "@openbot-build/api"
-import { Item, Session, Turn } from "@openbot-build/core"
+import { Chat, Item, Turn } from "@openbot-build/core"
 import { and, eq, like } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
-import { Array as Arr, Effect, Option, Schema } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Option,
+	pipe,
+	Schema,
+	String as Str,
+} from "effect"
 import { appSecrets } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
+import * as Failures from "../app/Failures.ts"
 
 /** The open App views, their actions and their confirmed interaction state, kept sealed in Postgres. */
 export type Error =
-	ExperienceNotFound | ExperienceStorageUnavailable | SessionConflict
+	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
 export const View = Schema.Struct({
-	id: Schema.String,
-	operationId: Schema.String,
+	id: Api.AppViewId,
+	operationId: AppExecution.AppOperationId,
 	readOnly: Schema.Boolean,
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	item: Item.Id,
-	connectionId: Schema.String,
+	connectionId: ConnectionsApi.ConnectionId,
 	revision: Schema.Natural,
 	expiresAt: Schema.Finite,
 })
@@ -37,23 +45,18 @@ export const Action = Schema.Struct({
 })
 export type Action = typeof Action.Type
 
-export const unavailable = () => ExperienceStorageUnavailable.make({})
-export const conflict = () =>
-	SessionConflict.make({
-		message:
-			"The App view or confirmed interaction changed. Read its current state before continuing.",
-	})
-export const missing = () => ExperienceNotFound.make({ id: "App view" })
-/** Keep the errors that callers handle. Every other storage failure becomes one error. */
-export const failure = (value: unknown) =>
-	value instanceof ExperienceNotFound || value instanceof SessionConflict
-		? value
-		: unavailable()
+/**
+ * Log a storage failure that the caller can not act on, and replace it with
+ * one error. The error goes to the client, so it does not hold the failure.
+ */
+const unavailable = (message: string) =>
+	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
 export const initial: Api.Interaction = { revision: 0, context: null }
-export const interactionKey = (session: string, operationId: string) =>
-	JSON.stringify([session, operationId])
+export const interactionKey = (chat: string, operationId: string) =>
+	JSON.stringify([chat, operationId])
 export const actionKey = (viewId: string, requestId: string) =>
 	JSON.stringify([viewId, requestId])
+const ChatJson = Schema.fromJsonString(Schema.Tuple([Schema.String]))
 type Sealer = typeof Secrets.Service
 
 export const where = (owner: string, kind: string, id: string) =>
@@ -62,8 +65,6 @@ export const where = (owner: string, kind: string, id: string) =>
 		eq(appSecrets.kind, kind),
 		eq(appSecrets.id, id),
 	)
-const binding = (owner: string, kind: string, id: string) =>
-	JSON.stringify([kind, owner, id])
 export const seal = <S extends Schema.Top>(
 	secrets: Sealer,
 	schema: S,
@@ -74,26 +75,30 @@ export const seal = <S extends Schema.Top>(
 ) =>
 	Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(
 		value,
-	).pipe(Effect.flatMap((body) => secrets.seal(body, binding(owner, kind, id))))
+	).pipe(
+		Effect.flatMap((body) =>
+			secrets.seal(body, JSON.stringify([kind, owner, id])),
+		),
+	)
 export const open = <S extends Schema.Top>(
 	secrets: Sealer,
 	schema: S,
 	row: typeof appSecrets.$inferSelect,
 ) =>
 	secrets
-		.open(row.body, binding(row.owner, row.kind, row.id))
+		.open(row.body, JSON.stringify([row.kind, row.owner, row.id]))
 		.pipe(
 			Effect.flatMap(
 				Schema.decodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema))),
 			),
 		)
 
-/** The confirmed interaction context of each App operation in a Session. */
+/** The confirmed interaction context of each App operation in a Chat. */
 export const contexts = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
-	session: string,
+	chat: string,
 ): Effect.Effect<
 	ReadonlyArray<{
 		readonly operationId: string
@@ -102,11 +107,11 @@ export const contexts = (
 	Error
 > =>
 	Effect.gen(function* () {
+		const start = yield* Schema.encodeEffect(ChatJson)([chat]).pipe(
+			Effect.orDie,
+		)
 		const prefix =
-			(JSON.stringify([session]).slice(0, -1) + ",").replace(
-				/[\\%_]/g,
-				"\\$&",
-			) + "%"
+			pipe(Str.slice(0, -1)(start) + ",", Str.replace(/[\\%_]/g, "\\$&")) + "%"
 		const rows = yield* db
 			.select()
 			.from(appSecrets)
@@ -119,14 +124,24 @@ export const contexts = (
 			)
 		const values = yield* Effect.forEach(rows, (row) =>
 			Effect.gen(function* () {
-				const [boundSession, operationId] = yield* Schema.decodeEffect(
+				const [boundChat, operationId] = yield* Schema.decodeEffect(
 					Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
 				)(row.id)
 				const state = yield* open(secrets, Api.Interaction, row)
-				return boundSession === session && state.context !== null
+				return boundChat === chat && state.context !== null
 					? Option.some({ operationId, context: state.context })
 					: Option.none()
 			}),
 		)
 		return Arr.getSomes(values)
-	}).pipe(Effect.mapError(failure))
+	}).pipe(
+		Effect.catchTag(
+			["EffectDrizzleQueryError", "SchemaError", "SecretStorageError"],
+			(error) =>
+				Effect.fail(error).pipe(
+					unavailable(
+						"Could not read the confirmed App interactions of a Chat.",
+					),
+				),
+		),
+	)

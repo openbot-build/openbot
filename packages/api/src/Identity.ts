@@ -1,3 +1,4 @@
+import { TokenId } from "./TokenId.ts"
 import { Context, Schema } from "effect"
 
 /**
@@ -8,7 +9,7 @@ export const Caller = Schema.Struct({
 	kind: Schema.Literals(["member", "user_token"]),
 	userId: Schema.String,
 	organizationId: Schema.String,
-	tokenId: Schema.optionalKey(Schema.String),
+	tokenId: Schema.optionalKey(TokenId),
 })
 export type Caller = typeof Caller.Type
 export class Identity extends Context.Service<Identity, Caller>()(
@@ -20,7 +21,7 @@ export const AccountCaller = Schema.Struct({
 	kind: Schema.Literals(["member", "user_token"]),
 	userId: Schema.String,
 	/** A user token belongs to one organization, so it also has this. */
-	tokenId: Schema.optionalKey(Schema.String),
+	tokenId: Schema.optionalKey(TokenId),
 	organizationId: Schema.optionalKey(Schema.String),
 })
 export type AccountCaller = typeof AccountCaller.Type

@@ -1,440 +1,1027 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
-import { Effect, Layer, ManagedRuntime, Option, Redacted, Result } from "effect"
+import { assert, layer } from "@effect/vitest"
+import {
+	Array as Arr,
+	Context,
+	Deferred,
+	Effect,
+	Fiber,
+	Layer,
+	Option,
+	Order,
+	Predicate,
+	Redacted,
+	Result,
+	Schedule,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
+import { LanguageModel, Response } from "effect/ai"
+import {
+	HttpClient,
+	HttpClientRequest,
+	HttpClientResponse,
+	HttpServer,
+} from "effect/http"
 import { NodeServices } from "@effect/platform-node"
 import * as BrowserHost from "./BrowserHost.ts"
-import { withCookie, withToken } from "./Caller.ts"
+import * as Caller from "./Caller.ts"
+import { bot, type Send } from "./Messages.ts"
+import * as Policies from "./Policies.ts"
+import {
+	AuthApi,
+	Authorization,
+	ModelProvidersApi,
+	Settings as SettingsApi,
+	UserTokensApi,
+} from "@openbot-build/api"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as Setup from "../src/platform/Setup.ts"
 import * as PlatformAdminsPostgres from "../src/platform/PlatformAdminsPostgres.ts"
 import { Settings } from "../src/settings/Settings.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import { OpenBot } from "@openbot-build/openbot"
+import { OpenBot, Server } from "../src/index.ts"
 
 const publicOrigin = "https://api.example.com"
-const models = [
-	{ id: "small", name: "Small", reasoningEfforts: [], serviceTiers: [] },
-]
 
-test(
-	"Only platform admins change the platform, and the ceiling denies in every organization",
-	{ timeout: 60000 },
-	async () => {
-		const host = await BrowserHost.start({
-			publicOrigin,
-			sharedDomain: false,
-			platformAdmins: ["root@example.com"],
-		})
-		try {
-			const account = withCookie({ address: host.address, publicOrigin })
-			const root = await host.login("root")
-			const alice = await host.login("alice")
+const Failure = Schema.Struct({ _tag: Schema.String })
 
-			// Alice is the Super Administrator of her own organization, but not a platform admin.
-			assert.equal(
-				(await account(alice.session, "/v1/platform/settings")).status,
-				403,
-			)
-			let settings = await (
-				await account(root.session, "/v1/platform/settings")
-			).json()
-			assert.equal(settings.publicOrigin, publicOrigin)
-			assert.equal(settings.organizationCreation, "anyone")
+/**
+ * Reads the JSON body of an answer in the wire shape of a schema. It checks
+ * the status, or that the status is 2xx when none is given.
+ */
+const decode = <S extends Schema.Constraint>(schema: S, status?: number) =>
+	Caller.json(Schema.toEncoded(schema), status)
 
-			// Scope changes use the same admin-only version check as all platform settings.
-			const identityProvider = {
-				issuer: "https://id.example.com",
-				clientId: "browser-fixture",
-				clientSecret: "fixture-secret",
-				scopes: ["openid", "profile", "email", "offline_access"],
-			}
-			assert.equal(
-				(
-					await account(alice.session, "/v1/platform/settings", "PATCH", {
-						expectedVersion: settings.version,
+/** Calls the API and reads the answer with `decode`. */
+const json = <S extends Schema.Constraint, E, R>(
+	schema: S,
+	call: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
+	status?: number,
+) => Effect.flatMap(call, decode(schema, status))
+
+/** Reads the tag of an error answer. */
+const tagOf = (response: HttpClientResponse.HttpClientResponse) =>
+	Effect.map(
+		HttpClientResponse.schemaBodyJson(Failure)(response),
+		(failure) => failure._tag,
+	)
+
+// The host and the database are real, so the tests use real time.
+layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+	it.effect(
+		"OIDC scope changes need platform access and a current version, and preserve hidden secrets",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					sharedDomain: false,
+					platformAdmins: ["root@example.com"],
+				})
+				const account = Caller.withCookie({
+					address: yield* host.address,
+					publicOrigin,
+				})
+				const root = yield* host.login("root")
+				const alice = yield* host.login("alice")
+				const initial = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings"),
+				)
+				const identityProvider = {
+					issuer: "https://id.example.com",
+					clientId: "browser-fixture",
+					clientSecret: "fixture-secret",
+					scopes: ["openid", "profile", "email", "offline_access"],
+				}
+				assert.strictEqual(
+					(yield* account(alice.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: initial.version,
 						identityProvider,
-					})
-				).status,
-				403,
-			)
-			const changedScopes = await account(
-				root.session,
-				"/v1/platform/settings",
-				"PATCH",
-				{
-					expectedVersion: settings.version,
-					identityProvider,
-				},
-			)
-			assert.equal(changedScopes.status, 200)
-			settings = await changedScopes.json()
-			assert.deepEqual(
-				settings.identityProvider.scopes,
-				identityProvider.scopes,
-			)
-			assert.equal(JSON.stringify(settings).includes("fixture-secret"), false)
-			const {
-				scopes: _,
-				clientSecret: __,
-				...providerWithoutScopes
-			} = identityProvider
-			const preservedScopes = await account(
-				root.session,
-				"/v1/platform/settings",
-				"PATCH",
-				{
-					expectedVersion: settings.version,
-					identityProvider: providerWithoutScopes,
-				},
-			)
-			assert.equal(preservedScopes.status, 200)
-			const previous = settings
-			settings = await preservedScopes.json()
-			assert.deepEqual(settings.identityProvider, previous.identityProvider)
-			assert.equal(
-				(
-					await account(root.session, "/v1/platform/settings", "PATCH", {
-						expectedVersion: previous.version,
+					})).status,
+					403,
+				)
+				const response = yield* account(
+					root.session,
+					"/v1/platform/settings",
+					"PATCH",
+					{ expectedVersion: initial.version, identityProvider },
+				)
+				const changed = yield* decode(
+					SettingsApi.PlatformSettings,
+					200,
+				)(response)
+				assert.deepStrictEqual(
+					changed.identityProvider?.scopes,
+					identityProvider.scopes,
+				)
+				assert.strictEqual(
+					Str.includes("fixture-secret")(yield* response.text),
+					false,
+				)
+				const providerWithoutScopes = {
+					issuer: identityProvider.issuer,
+					clientId: identityProvider.clientId,
+				}
+				const preserved = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: changed.version,
+						identityProvider: providerWithoutScopes,
+					}),
+					200,
+				)
+				assert.deepStrictEqual(
+					preserved.identityProvider,
+					changed.identityProvider,
+				)
+				assert.strictEqual(
+					(yield* account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: initial.version,
 						identityProvider,
-					})
-				).status,
-				409,
-			)
-			assert.equal(
-				(
-					await account(root.session, "/v1/platform/settings", "PATCH", {
-						expectedVersion: settings.version,
+					})).status,
+					409,
+				)
+				assert.strictEqual(
+					(yield* account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: preserved.version,
 						identityProvider: { ...providerWithoutScopes, scopes: ["email"] },
-					})
-				).status,
-				400,
-			)
-			const readBack = await (
-				await account(root.session, "/v1/platform/settings")
-			).json()
-			assert.deepEqual(readBack, settings)
+					})).status,
+					400,
+				)
+				const readBack = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings"),
+				)
+				assert.deepStrictEqual(readBack, preserved)
+			}),
+		{ timeout: 60000 },
+	)
 
-			// A deny in the ceiling wins over every allow of an organization.
-			assert.equal((await account(alice.session, "/v1/sessions")).status, 200)
-			const ceiling = await account(
-				root.session,
-				"/v1/platform/settings",
-				"PATCH",
-				{
-					expectedVersion: settings.version,
-					policyCeiling: [
-						{
-							effect: "deny",
-							permissionGroups: ["sessions.read"],
-							resources: ["openbot.org.{org}"],
-						},
-					],
-				},
-			)
-			assert.equal(ceiling.status, 200, await ceiling.clone().text())
-			const updated = await ceiling.json()
-			assert.equal((await account(alice.session, "/v1/sessions")).status, 403)
+	it.effect(
+		"Only platform admins change the platform, and the ceiling denies in every organization",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					sharedDomain: false,
+					platformAdmins: ["root@example.com"],
+				})
+				const account = Caller.withCookie({
+					address: yield* host.address,
+					publicOrigin,
+				})
+				const root = yield* host.login("root")
+				const alice = yield* host.login("alice")
 
-			// Without self-service, a new account gets no organization.
-			assert.equal(
-				(
-					await account(root.session, "/v1/platform/settings", "PATCH", {
+				// Alice is the Super Administrator of her own organization, but not a platform admin.
+				assert.strictEqual(
+					(yield* account(alice.session, "/v1/platform/settings")).status,
+					403,
+				)
+				const settings = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings"),
+				)
+				assert.strictEqual(settings.publicOrigin, publicOrigin)
+				assert.strictEqual(settings.organizationCreation, "anyone")
+
+				// A deny in the ceiling wins over every allow of an organization.
+				assert.strictEqual(
+					(yield* account(alice.session, "/v1/chats")).status,
+					200,
+				)
+				const updated = yield* json(
+					SettingsApi.PlatformSettings,
+					account(root.session, "/v1/platform/settings", "PATCH", {
+						expectedVersion: settings.version,
+						ceiling: yield* Policies.json(function* (_) {
+							yield* _.deny("read", Authorization.Chat, Policies.inOrganization)
+						}),
+					}),
+					200,
+				)
+				assert.strictEqual(
+					(yield* account(alice.session, "/v1/chats")).status,
+					403,
+				)
+
+				// Without self-service, a new account gets no organization.
+				assert.strictEqual(
+					(yield* account(root.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: updated.version,
 						organizationCreation: "platform_admins",
-						policyCeiling: [],
-					})
-				).status,
-				200,
-			)
-			const dan = await host.login("dan").catch(() => undefined)
-			assert.equal(dan, undefined)
-			const created = await account(
-				alice.session,
-				"/v1/organizations",
-				"POST",
-				{
-					name: "Second",
-				},
-			)
-			assert.equal(created.status, 403)
-			assert.equal((await created.json())._tag, "OrganizationCreationDisabled")
-
-			// A platform admin can suspend an organization. Its members lose access.
-			const suspended = await account(
-				root.session,
-				"/v1/platform/organizations/" + alice.identity.organizationId,
-				"PATCH",
-				{ status: "suspended" },
-			)
-			assert.equal(suspended.status, 200)
-			assert.equal(
-				(await account(alice.session, "/v1/organization")).status,
-				403,
-			)
-
-			// The platform keeps one admin at least.
-			const last = await account(
-				root.session,
-				"/v1/platform/admins/root%40example.com",
-				"DELETE",
-			)
-			assert.equal((await last.json())._tag, "LastPlatformAdmin")
-		} finally {
-			await host.close()
-		}
-	},
-)
-
-test(
-	"Organizations bring their own keys and see only the shared providers that they may use",
-	{ timeout: 60000 },
-	async () => {
-		const host = await BrowserHost.start({
-			publicOrigin,
-			sharedDomain: false,
-			platformAdmins: ["root@example.com"],
-		})
-		try {
-			const account = withCookie({ address: host.address, publicOrigin })
-			const root = await host.login("root")
-			const alice = await host.login("alice")
-			const bob = await host.login("bob")
-
-			const own = await account(
-				alice.session,
-				"/v1/organization/model_providers",
-				"POST",
-				{
-					kind: "openai-compat",
-					name: "Alice keys",
-					endpoint: "https://models.example.com/v1",
-					apiKey: "sk-alice-0123456789",
-					models,
-				},
-			)
-			assert.equal(own.status, 200, await own.clone().text())
-			const provider = await own.json()
-			assert.deepEqual(provider.apiKey, { set: true, hint: "…6789" })
-			assert.equal(JSON.stringify(provider).includes("sk-alice"), false)
-			const stale = await account(
-				alice.session,
-				"/v1/organization/model_providers/" + provider.id,
-				"PATCH",
-				{ expectedVersion: provider.version + 1, name: "Changed" },
-			)
-			assert.equal((await stale.json())._tag, "ModelProviderConflict")
-			const missingEndpoint = await account(
-				alice.session,
-				"/v1/organization/model_providers",
-				"POST",
-				{ kind: "openai-compat", name: "No address", apiKey: "sk-x", models },
-			)
-			assert.equal((await missingEndpoint.json())._tag, "ModelProviderInvalid")
-
-			const shared = await account(
-				root.session,
-				"/v1/platform/model_providers",
-				"POST",
-				{
-					kind: "anthropic",
-					name: "Shared",
-					apiKey: "sk-platform-0123456789",
-					models,
-					availability: {
-						_tag: "Selected",
-						organizations: [alice.identity.organizationId],
+						ceiling: yield* Policies.json(function* () {}),
+					})).status,
+					200,
+				)
+				const dan = yield* host.login("dan", undefined, {
+					organization: false,
+				})
+				assert.ok(Arr.isReadonlyArrayEmpty(dan.memberships))
+				const refused = yield* account(
+					dan.session,
+					"/v1/organizations",
+					"POST",
+					{
+						name: "Dan",
 					},
-				},
-			)
-			assert.equal(shared.status, 200, await shared.clone().text())
-			const sharedProvider = await shared.json()
+				)
+				assert.strictEqual(refused.status, 403)
+				assert.strictEqual(
+					yield* tagOf(refused),
+					"OrganizationCreationDisabled",
+				)
+				const created = yield* account(
+					alice.session,
+					"/v1/organizations",
+					"POST",
+					{
+						name: "Second",
+					},
+				)
+				assert.strictEqual(created.status, 403)
+				assert.strictEqual(
+					yield* tagOf(created),
+					"OrganizationCreationDisabled",
+				)
 
-			const aliceModels = await (
-				await account(alice.session, "/v1/organization/models")
-			).json()
-			assert.deepEqual(
-				aliceModels.providers.map((value: { id: string }) => value.id).sort(),
-				[provider.id, sharedProvider.id].sort(),
-			)
-			assert.deepEqual(aliceModels.defaultModel, {
-				_tag: "Config.Selection",
-				provider: aliceModels.models[0].provider,
-				model: "small",
-			})
-			const bobModels = await (
-				await account(bob.session, "/v1/organization/models")
-			).json()
-			assert.deepEqual(bobModels.providers, [])
-			assert.equal(bobModels.defaultModel, null)
+				// A platform admin can suspend an organization. Its members lose access.
+				const suspended = yield* account(
+					root.session,
+					"/v1/platform/organizations/" + alice.identity.organizationId,
+					"PATCH",
+					{ status: "suspended" },
+				)
+				assert.strictEqual(suspended.status, 200)
+				assert.strictEqual(
+					(yield* account(alice.session, "/v1/organization")).status,
+					403,
+				)
 
-			// A provider cannot go while the default model names it.
-			const settings = await (
-				await account(alice.session, "/v1/organization/settings")
-			).json()
-			await account(alice.session, "/v1/organization/settings", "PATCH", {
-				expectedVersion: settings.version,
-				defaultModel: {
-					_tag: "Config.Selection",
-					provider: provider.id,
-					model: "small",
-				},
-			})
-			const inUse = await account(
-				alice.session,
-				"/v1/organization/model_providers/" + provider.id,
-				"DELETE",
-			)
-			assert.equal((await inUse.json())._tag, "ModelProviderInUse")
-
-			// A token works on the platform only when its own policies say so.
-			const plain = await (
-				await account(root.session, "/v1/user/tokens", "POST", {
-					name: "plain",
-				})
-			).json()
-			const keyed = withToken(host.address)
-			assert.equal(
-				(await keyed(plain.secret, "/v1/platform/settings")).status,
-				403,
-			)
-			const platformToken = await (
-				await account(root.session, "/v1/user/tokens", "POST", {
-					name: "platform",
-					policies: [
-						{
-							effect: "allow",
-							permissionGroups: ["platform.read"],
-							resources: ["openbot.platform"],
-						},
-					],
-				})
-			).json()
-			assert.equal(
-				(await keyed(platformToken.secret, "/v1/platform/settings")).status,
-				200,
-			)
-			assert.equal(
-				(
-					await keyed(platformToken.secret, "/v1/platform/settings", "PATCH", {
-						expectedVersion: 0,
-					})
-				).status,
-				403,
-			)
-		} finally {
-			await host.close()
-		}
-	},
-)
-
-test("every instance sees a settings change at once, and setup runs only once", async () => {
-	const database = await PostgresTest.start()
-	const options = {
-		databaseUrl: Redacted.make(database.url),
-		secretKeys: Redacted.make("test:" + "11".repeat(32)),
-	}
-	const migration = ManagedRuntime.make(
-		DatabasePostgres.layer(options).pipe(Layer.provide(NodeServices.layer)),
+				// The platform keeps one admin at least.
+				const last = yield* account(
+					root.session,
+					"/v1/platform/admins/root%40example.com",
+					"DELETE",
+				)
+				assert.strictEqual(yield* tagOf(last), "LastPlatformAdmin")
+			}),
+		{ timeout: 60000 },
 	)
-	const instance = () =>
-		ManagedRuntime.make(
-			PlatformAdminsPostgres.layer.pipe(
-				Layer.provideMerge(OpenBot.layerShared(options)),
-				Layer.provide(NodeServices.layer),
-			),
-		)
-	try {
-		await migration.runPromise(DatabasePostgres.migrate)
-		const first = instance()
-		const second = instance()
-		try {
-			const setup = (publicOrigin: string, force = false) =>
-				first.runPromise(
+
+	it.effect(
+		"Organizations bring their own keys and see only the shared providers and models that they may use",
+		() =>
+			Effect.gen(function* () {
+				// The catalogs hold only the stored models, so the platform has no fixture model.
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					sharedDomain: false,
+					platformAdmins: ["root@example.com"],
+					registryModels: true,
+				})
+				const address = yield* host.address
+				const account = Caller.withCookie({ address, publicOrigin })
+				const root = yield* host.login("root")
+				const alice = yield* host.login("alice")
+				const bob = yield* host.login("bob")
+
+				// A model is its own thing. A provider links it and can change its values.
+				const small = yield* json(
+					ModelProvidersApi.Model,
+					account(alice.session, "/v1/organization/models", "POST", {
+						id: "small",
+						name: "Small",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+					200,
+				)
+				assert.strictEqual(small.availability, null)
+				const twice = yield* account(
+					alice.session,
+					"/v1/organization/models",
+					"POST",
+					{
+						id: "small",
+						name: "Again",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					},
+				)
+				assert.strictEqual(yield* tagOf(twice), "ModelConflict")
+				const own = yield* account(
+					alice.session,
+					"/v1/organization/model_providers",
+					"POST",
+					{
+						kind: "openai-compat",
+						name: "Alice keys",
+						endpoint: "https://models.example.com/v1",
+						apiKey: "sk-alice-0123456789",
+						models: [
+							{
+								model: "small",
+								modelOwner: "organization",
+								upstream: "small-2026",
+								contextWindow: 1000,
+							},
+						],
+					},
+				)
+				const provider = yield* decode(
+					ModelProvidersApi.ModelProvider,
+					200,
+				)(own)
+				assert.deepStrictEqual(provider.apiKey, { set: true, hint: "…6789" })
+				assert.strictEqual(Str.includes("sk-alice")(yield* own.text), false)
+				assert.deepStrictEqual(provider.models, [
+					{
+						model: "small",
+						modelOwner: "organization",
+						upstream: "small-2026",
+						contextWindow: 1000,
+					},
+				])
+				const stale = yield* account(
+					alice.session,
+					"/v1/organization/model_providers/" + provider.id,
+					"PATCH",
+					{ expectedVersion: provider.version + 1, name: "Changed" },
+				)
+				assert.strictEqual(yield* tagOf(stale), "ModelProviderConflict")
+				const missingEndpoint = yield* account(
+					alice.session,
+					"/v1/organization/model_providers",
+					"POST",
+					{
+						kind: "openai-compat",
+						name: "No address",
+						apiKey: "sk-x",
+						models: [],
+					},
+				)
+				assert.strictEqual(
+					yield* tagOf(missingEndpoint),
+					"ModelProviderInvalid",
+				)
+
+				const large = yield* account(
+					root.session,
+					"/v1/platform/models",
+					"POST",
+					{
+						id: "large",
+						name: "Large",
+						reasoningEfforts: ["low", "high"],
+						serviceTiers: [],
+						availability: {
+							_tag: "Selected",
+							organizations: [alice.identity.organizationId],
+						},
+					},
+				)
+				assert.strictEqual(large.status, 200, yield* large.text)
+				const sharedProvider = yield* json(
+					ModelProvidersApi.ModelProvider,
+					account(root.session, "/v1/platform/model_providers", "POST", {
+						kind: "anthropic",
+						name: "Shared",
+						apiKey: "sk-platform-0123456789",
+						models: [{ model: "large", modelOwner: "platform" }],
+						availability: {
+							_tag: "Selected",
+							organizations: [alice.identity.organizationId],
+						},
+					}),
+					200,
+				)
+				// The platform links only its own models.
+				const foreign = yield* account(
+					root.session,
+					"/v1/platform/model_providers",
+					"POST",
+					{
+						kind: "anthropic",
+						name: "Foreign",
+						apiKey: "sk-platform-0123456789",
+						models: [{ model: "small", modelOwner: "organization" }],
+						availability: { _tag: "All" },
+					},
+				)
+				assert.strictEqual(yield* tagOf(foreign), "ModelProviderInvalid")
+				// Bob may not use the shared model, so his provider cannot link it.
+				const bobLink = yield* account(
+					bob.session,
+					"/v1/organization/model_providers",
+					"POST",
+					{
+						kind: "anthropic",
+						name: "Bob keys",
+						apiKey: "sk-bob-0123456789",
+						models: [{ model: "large", modelOwner: "platform" }],
+					},
+				)
+				assert.strictEqual(yield* tagOf(bobLink), "ModelNotFound")
+				// Alice may use it, so her own key can serve it too.
+				const linked = yield* account(
+					alice.session,
+					"/v1/organization/model_providers/" + provider.id,
+					"PATCH",
+					{
+						expectedVersion: provider.version,
+						models: [
+							...provider.models,
+							{
+								model: "large",
+								modelOwner: "platform",
+								reasoningEfforts: ["low"],
+							},
+						],
+					},
+				)
+				assert.strictEqual(linked.status, 200, yield* linked.text)
+
+				const aliceCatalog = yield* account(
+					alice.session,
+					"/v1/organization/model_catalog",
+				)
+				const aliceModels = yield* decode(ModelProvidersApi.ModelCatalog)(
+					aliceCatalog,
+				)
+				assert.deepStrictEqual(
+					Arr.sort(
+						Arr.map(aliceModels.providers, (value) => value.id),
+						Order.String,
+					),
+					Arr.sort([provider.id, sharedProvider.id], Order.String),
+				)
+				assert.deepStrictEqual(
+					Arr.map(aliceModels.models, (value) => [
+						value.provider,
+						value.id,
+						value.reasoningEfforts,
+						value.contextWindow,
+					]),
+					[
+						[provider.id, "small", [], 1000],
+						[provider.id, "large", ["low"], undefined],
+						[sharedProvider.id, "large", ["low", "high"], undefined],
+					],
+				)
+				// There is no default model. Each use names its own model.
+				assert.strictEqual(
+					Predicate.hasProperty(yield* aliceCatalog.json, "defaultModel"),
+					false,
+				)
+				const bobModels = yield* json(
+					ModelProvidersApi.ModelCatalog,
+					account(bob.session, "/v1/organization/model_catalog"),
+				)
+				assert.deepStrictEqual(bobModels.providers, [])
+
+				// A model cannot go while a provider of its owner links it.
+				const linkedModel = yield* account(
+					alice.session,
+					"/v1/organization/models/small",
+					"DELETE",
+				)
+				assert.strictEqual(yield* tagOf(linkedModel), "ModelInUse")
+				const sharedInUse = yield* account(
+					root.session,
+					"/v1/platform/models/large",
+					"DELETE",
+				)
+				assert.strictEqual(yield* tagOf(sharedInUse), "ModelInUse")
+				// When the platform removes a shared model, the links of organizations go with it.
+				yield* account(
+					root.session,
+					"/v1/platform/model_providers/" + sharedProvider.id,
+					"PATCH",
+					{ expectedVersion: sharedProvider.version, models: [] },
+				)
+				const removed = yield* account(
+					root.session,
+					"/v1/platform/models/large",
+					"DELETE",
+				)
+				assert.strictEqual(removed.status, 204, yield* removed.text)
+				const after = yield* json(
+					ModelProvidersApi.ModelProvider,
+					account(
+						alice.session,
+						"/v1/organization/model_providers/" + provider.id,
+					),
+				)
+				assert.deepStrictEqual(
+					Arr.map(after.models, (value) => value.model),
+					["small"],
+				)
+				assert.strictEqual(after.version, provider.version + 2)
+
+				// A provider cannot go while the Rules model names it.
+				const settings = yield* json(
+					SettingsApi.OrganizationSettings,
+					account(alice.session, "/v1/organization/settings"),
+				)
+				yield* account(alice.session, "/v1/organization/settings", "PATCH", {
+					expectedVersion: settings.version,
+					rulesModel: {
+						_tag: "Config.Selection",
+						provider: provider.id,
+						model: "small",
+					},
+				})
+				const inUse = yield* account(
+					alice.session,
+					"/v1/organization/model_providers/" + provider.id,
+					"DELETE",
+				)
+				assert.strictEqual(yield* tagOf(inUse), "ModelProviderInUse")
+
+				// A token works on the platform only when its own policy says so.
+				const plain = yield* json(
+					UserTokensApi.CreatedToken,
+					account(root.session, "/v1/user/tokens", "POST", {
+						name: "plain",
+					}),
+				)
+				const keyed = Caller.withToken(address)
+				assert.strictEqual(
+					(yield* keyed(plain.secret, "/v1/platform/settings")).status,
+					403,
+				)
+				const platformToken = yield* json(
+					UserTokensApi.CreatedToken,
+					account(root.session, "/v1/user/tokens", "POST", {
+						name: "platform",
+						policy: yield* Policies.json(function* (_) {
+							yield* _.allow("read", Authorization.Platform)
+						}),
+					}),
+				)
+				assert.strictEqual(
+					(yield* keyed(platformToken.secret, "/v1/platform/settings")).status,
+					200,
+				)
+				assert.strictEqual(
+					(yield* keyed(
+						platformToken.secret,
+						"/v1/platform/settings",
+						"PATCH",
+						{
+							expectedVersion: 0,
+						},
+					)).status,
+					403,
+				)
+			}),
+		{ timeout: 60000 },
+	)
+
+	it.effect(
+		"An organization links decision models to a decision provider",
+		() =>
+			Effect.gen(function* () {
+				// The catalogs hold only the stored models, so the platform has no fixture model.
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					sharedDomain: false,
+					platformAdmins: ["root@example.com"],
+					registryModels: true,
+				})
+				const account = Caller.withCookie({
+					address: yield* host.address,
+					publicOrigin,
+				})
+				const alice = yield* host.login("alice")
+				const create = (body: object) =>
+					account(alice.session, "/v1/organization/models", "POST", body)
+				const provider = (body: object) =>
+					account(alice.session, "/v1/organization/model_providers", "POST", {
+						apiKey: "sk-test-0123456789",
+						...body,
+					})
+
+				// A model is a language model unless it says otherwise.
+				const chat = yield* json(
+					ModelProvidersApi.Model,
+					create({
+						id: "chat",
+						name: "Chat",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				)
+				assert.strictEqual(chat.type, "language")
+				const jev = yield* json(
+					ModelProvidersApi.Model,
+					create({
+						id: "jev-latest",
+						type: "decision",
+						name: "Jev",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+					200,
+				)
+				assert.strictEqual(jev.type, "decision")
+
+				// A typesafe provider needs an address, and it links only decision models.
+				const noAddress = yield* provider({
+					kind: "typesafe",
+					name: "TypeSafe",
+					models: [],
+				})
+				assert.strictEqual(yield* tagOf(noAddress), "ModelProviderInvalid")
+				const wrongModel = yield* provider({
+					kind: "typesafe",
+					name: "TypeSafe",
+					endpoint: "https://decisions.example.com/v1",
+					models: [{ model: "chat", modelOwner: "organization" }],
+				})
+				assert.strictEqual(yield* tagOf(wrongModel), "ModelProviderInvalid")
+				const openai = yield* provider({
+					kind: "openai",
+					name: "OpenAI",
+					models: [{ model: "jev-latest", modelOwner: "organization" }],
+				})
+				assert.strictEqual(yield* tagOf(openai), "ModelProviderInvalid")
+				const decisions = yield* json(
+					ModelProvidersApi.ModelProvider,
+					provider({
+						kind: "typesafe",
+						name: "TypeSafe",
+						endpoint: "https://decisions.example.com/v1",
+						models: [{ model: "jev-latest", modelOwner: "organization" }],
+					}),
+					200,
+				)
+				// A gateway can link both types.
+				const both = yield* json(
+					ModelProvidersApi.ModelProvider,
+					provider({
+						kind: "openai-compat",
+						name: "Gateway",
+						endpoint: "https://gateway.example.com/v1",
+						models: [
+							{ model: "chat", modelOwner: "organization" },
+							{ model: "jev-latest", modelOwner: "organization" },
+						],
+					}),
+					200,
+				)
+
+				// The catalog shows the type of each model.
+				const catalog = yield* json(
+					ModelProvidersApi.ModelCatalog,
+					account(alice.session, "/v1/organization/model_catalog"),
+				)
+				assert.deepStrictEqual(
+					Arr.map(catalog.models, (model) => [
+						model.provider,
+						model.id,
+						model.type,
+					]),
+					[
+						[decisions.id, "jev-latest", "decision"],
+						[both.id, "chat", "language"],
+						[both.id, "jev-latest", "decision"],
+					],
+				)
+
+				// The Bot memory setting takes only language models. The Rules setting takes both types.
+				const selection = (providerId: string, model: string) => ({
+					_tag: "Config.Selection" as const,
+					provider: providerId,
+					model,
+				})
+				const update = (changes: object) =>
+					Effect.gen(function* () {
+						const current = yield* json(
+							SettingsApi.OrganizationSettings,
+							account(alice.session, "/v1/organization/settings"),
+						)
+						return yield* account(
+							alice.session,
+							"/v1/organization/settings",
+							"PATCH",
+							{ expectedVersion: current.version, ...changes },
+						)
+					})
+				const refused = yield* update({
+					botMemoryModel: selection(decisions.id, "jev-latest"),
+				})
+				assert.strictEqual(refused.status, 400)
+				assert.strictEqual(yield* tagOf(refused), "SettingsInvalid")
+				for (const rulesModel of [
+					selection(decisions.id, "jev-latest"),
+					selection(both.id, "chat"),
+				]) {
+					const saved = yield* json(
+						SettingsApi.OrganizationSettings,
+						update({ rulesModel }),
+						200,
+					)
+					assert.deepStrictEqual(saved.rulesModel, rulesModel)
+				}
+			}),
+		{ timeout: 60000 },
+	)
+
+	it.effect(
+		"before setup every route except /health answers SetupRequired, and setup works at once on the same server",
+		() =>
+			Effect.gen(function* () {
+				const database = yield* PostgresTest.start
+				const options = {
+					databaseUrl: Redacted.make(database.url),
+					secretKeys: Redacted.make("test:" + Str.repeat(32)("11")),
+				}
+				// The migration has its own database pool. It closes after the migration.
+				yield* DatabasePostgres.migrate.pipe(
+					Effect.provide(
+						DatabasePostgres.layer(options).pipe(
+							Layer.provide(NodeServices.layer),
+						),
+					),
+				)
+				const server = yield* Layer.build(
+					Server.layerLive({ ...options, host: "127.0.0.1", port: 0 }),
+				)
+				const address = HttpServer.formatAddress(
+					Context.get(server, HttpServer.HttpServer).address,
+				)
+				assert.strictEqual(
+					(yield* HttpClient.get(address + "/health")).status,
+					200,
+				)
+				for (const path of [
+					"/v1/apps/client-metadata",
+					"/auth/session",
+					"/not-a-route",
+					// This request target is not a valid URL path, so it is not /health.
+					"//",
+				]) {
+					const waiting = yield* HttpClient.get(address + path)
+					assert.strictEqual(waiting.status, 503)
+					assert.strictEqual(yield* tagOf(waiting), "SetupRequired")
+				}
+
+				// Setup writes the settings. The same server uses them at once.
+				yield* Setup.run({
+					publicOrigin,
+					identityProvider: Option.none(),
+					adminEmails: ["root@example.com"],
+					force: false,
+					authSecret: Option.none(),
+					fileStorage: Option.none(),
+				}).pipe(Effect.provideContext(server))
+				const metadata = yield* Effect.flatMap(
+					HttpClient.get(address + "/v1/apps/client-metadata"),
+					Caller.json(Schema.Struct({ client_id: Schema.String })),
+				)
+				assert.strictEqual(
+					metadata.client_id,
+					publicOrigin + "/v1/apps/client-metadata",
+				)
+				assert.strictEqual(
+					(yield* HttpClient.get(address + "/auth/session")).status,
+					401,
+				)
+			}),
+		{ timeout: 60000 },
+	)
+
+	it.effect(
+		"a change of the public origin works at once, and stops no running request or Turn",
+		() =>
+			Effect.gen(function* () {
+				const nextOrigin = "https://next.example.com"
+				// The model waits in the middle of a Turn until the test lets it go on.
+				const started = yield* Deferred.make<void>()
+				const release = yield* Deferred.make<void>()
+				const usage = { inputTokens: { total: 1 }, outputTokens: { total: 1 } }
+				const model = yield* LanguageModel.make({
+					generateText: () =>
+						Effect.succeed([
+							Response.makePart("text", { text: '{"changes":[]}' }),
+						]),
+					streamText: () =>
+						Stream.unwrap(
+							Effect.gen(function* () {
+								yield* Deferred.succeed(started, undefined)
+								yield* Deferred.await(release)
+								return Stream.make(
+									Response.makePart("text-start", { id: "text" }),
+									Response.makePart("text-delta", {
+										id: "text",
+										delta: "Done after the change",
+									}),
+									Response.makePart("text-end", { id: "text" }),
+									Response.makePart("finish", { reason: "stop", usage }),
+								)
+							}),
+						),
+				})
+				const host = yield* BrowserHost.start({
+					publicOrigin,
+					platformAdmins: ["root@example.com"],
+					model,
+				})
+				const address = yield* host.address
+				const root = yield* host.login("root")
+				const asRootBefore: Send = (path, method, payload) =>
+					Caller.withCookie({ address, publicOrigin })(
+						root.session,
+						path,
+						method,
+						payload,
+					)
+				const asRootAfter: Send = (path, method, payload) =>
+					Caller.withCookie({ address, publicOrigin: nextOrigin })(
+						root.session,
+						path,
+						method,
+						payload,
+					)
+				/** Starts a sign-in from a page on this origin, and gives the answer. */
+				const signIn = (origin: string) =>
+					HttpClientRequest.post(address + "/auth/sign-in", {
+						headers: { origin },
+					}).pipe(
+						HttpClientRequest.bodyJson({}),
+						Effect.flatMap(HttpClient.execute),
+					)
+				/** The address that the sign-in provider sends the browser back to. */
+				const redirectOf = (origin: string) =>
+					Effect.map(
+						Effect.flatMap(signIn(origin), Caller.json(AuthApi.SignInStart)),
+						(started) => new URL(started.url).searchParams.get("redirect_uri"),
+					)
+				assert.strictEqual(
+					yield* redirectOf(publicOrigin),
+					publicOrigin + "/auth/callback/oidc",
+				)
+
+				// A streamed message runs a Turn. It waits in the model during the change.
+				const slow = yield* bot(asRootBefore, { name: "Slow" })
+				const streamed = yield* asRootBefore(
+					"/v1/bots/" + slow + "/messages",
+					"POST",
+					{ input: "Wait for the change", stream: true },
+				).pipe(
+					Effect.flatMap((response) =>
+						Effect.map(response.text, (text) => ({
+							status: response.status,
+							text,
+						})),
+					),
+					Effect.forkChild,
+				)
+				yield* Deferred.await(started)
+
+				const current = yield* json(
+					SettingsApi.PlatformSettings,
+					asRootBefore("/v1/platform/settings", "GET"),
+				)
+				const changed = yield* json(
+					SettingsApi.PlatformSettings,
+					asRootBefore("/v1/platform/settings", "PATCH", {
+						expectedVersion: current.version,
+						publicOrigin: nextOrigin,
+					}),
+					200,
+				)
+				assert.strictEqual(changed.publicOrigin, nextOrigin)
+
+				// Sign-in uses the new origin at once, with no restart.
+				assert.strictEqual(
+					yield* redirectOf(nextOrigin),
+					nextOrigin + "/auth/callback/oidc",
+				)
+				const refused = yield* signIn(publicOrigin)
+				assert.strictEqual(refused.status, 403)
+				assert.strictEqual(yield* tagOf(refused), "ForbiddenOrigin")
+				// Writes from the browser must come from the new origin now.
+				const settings = yield* json(
+					SettingsApi.OrganizationSettings,
+					asRootAfter("/v1/organization/settings", "GET"),
+				)
+				const write = (send: Send) =>
+					send("/v1/organization/settings", "PATCH", {
+						expectedVersion: settings.version,
+						botMemory: settings.botMemory,
+					})
+				const oldWrite = yield* write(asRootBefore)
+				assert.strictEqual(oldWrite.status, 403)
+				assert.strictEqual(yield* tagOf(oldWrite), "ForbiddenOrigin")
+				assert.strictEqual((yield* write(asRootAfter)).status, 200)
+				// The addresses that OpenBot gives out use the new origin too.
+				const metadata = yield* Effect.flatMap(
+					HttpClient.get(address + "/v1/apps/client-metadata"),
+					Caller.json(Schema.Struct({ client_id: Schema.String })),
+				)
+				assert.strictEqual(
+					metadata.client_id,
+					nextOrigin + "/v1/apps/client-metadata",
+				)
+				// The session from before the change still works.
+				assert.strictEqual(
+					(yield* asRootAfter("/auth/session", "GET")).status,
+					200,
+				)
+
+				// The Turn and its stream go on, and end as normal.
+				yield* Deferred.succeed(release, undefined)
+				const result = yield* Fiber.join(streamed)
+				assert.strictEqual(result.status, 200)
+				assert.ok(Str.includes("response.completed")(result.text))
+				assert.ok(Str.includes("Done after the change")(result.text))
+			}),
+		{ timeout: 60000 },
+	)
+
+	it.effect(
+		"every instance sees a settings change at once, and setup runs only once",
+		() =>
+			Effect.gen(function* () {
+				const database = yield* PostgresTest.start
+				const options = {
+					databaseUrl: Redacted.make(database.url),
+					secretKeys: Redacted.make("test:" + Str.repeat(32)("11")),
+				}
+				// The migration has its own database pool. It closes after the migration.
+				yield* DatabasePostgres.migrate.pipe(
+					Effect.provide(
+						DatabasePostgres.layer(options).pipe(
+							Layer.provide(NodeServices.layer),
+						),
+					),
+				)
+				/**
+				 * Starts one OpenBot instance on the shared database. A new memo map
+				 * builds every layer again, as in a new process.
+				 */
+				const instance = Effect.gen(function* () {
+					return yield* Layer.buildWithMemoMap(
+						PlatformAdminsPostgres.layer.pipe(
+							Layer.provideMerge(OpenBot.layerShared(options)),
+							// Setup makes a new sign-in secret with the Crypto service.
+							Layer.provideMerge(NodeServices.layer),
+						),
+						yield* Layer.makeMemoMap,
+						yield* Effect.scope,
+					)
+				})
+				const first = yield* instance
+				const second = yield* instance
+				const setup = (origin: string, force = false) =>
 					Setup.run({
-						publicOrigin,
+						publicOrigin: origin,
 						identityProvider: Option.none(),
 						adminEmails: ["root@example.com"],
 						force,
-					}).pipe(Effect.result),
-				)
-			assert.equal((await setup(publicOrigin))._tag, "Success")
-			const again = await setup(publicOrigin)
-			assert.ok(Result.isSuccess(again))
-			assert.equal(again.success, "unchanged")
-			assert.equal((await setup("https://other.example.com"))._tag, "Failure")
+						authSecret: Option.none(),
+						fileStorage: Option.none(),
+					}).pipe(Effect.result, Effect.provideContext(first))
+				const created = yield* setup(publicOrigin)
+				assert.ok(Result.isSuccess(created))
+				assert.strictEqual(created.success, "created")
+				const again = yield* setup(publicOrigin)
+				assert.ok(Result.isSuccess(again))
+				assert.strictEqual(again.success, "unchanged")
+				const refused = yield* setup("https://other.example.com")
+				assert.ok(Result.isFailure(refused))
+				assert.strictEqual(refused.failure._tag, "SetupAlreadyDone")
 
-			const provider = {
-				issuer: "https://id.example.com",
-				clientId: "setup-test",
-				clientSecret: Option.none<string>(),
-			}
-			const configureProvider = (
-				scopes?: ReadonlyArray<string>,
-				force = false,
-			) =>
-				first.runPromise(
-					Setup.run({
-						publicOrigin,
-						identityProvider: Option.some({
-							...provider,
-							...(scopes === undefined ? {} : { scopes }),
-						}),
-						adminEmails: ["root@example.com"],
-						force,
-					}).pipe(Effect.result),
-				)
-			const scopes = ["openid", "profile", "email", "offline_access"]
-			assert.equal((await configureProvider(scopes, true))._tag, "Success")
-			const sameProvider = await configureProvider()
-			assert.ok(Result.isSuccess(sameProvider))
-			assert.equal(sameProvider.success, "unchanged")
-			const platform = await first.runPromise(
-				Effect.flatMap(Settings, (settings) => settings.platform),
-			)
-			assert.ok(Option.isSome(platform))
-			assert.deepEqual(platform.value.document.identityProvider?.scopes, scopes)
-			assert.equal(
-				(await configureProvider(["openid", "profile", "email"]))._tag,
-				"Failure",
-			)
-
-			// The second instance reads the defaults and keeps them in its cache.
-			const read = () =>
-				second.runPromise(
-					Effect.flatMap(Settings, (settings) =>
-						settings.organization("org_shared"),
-					),
-				)
-			assert.equal((await read()).document.agentMemory, true)
-			await first.runPromise(
-				Effect.flatMap(Settings, (settings) =>
+				// The second instance reads the defaults and keeps them in its cache.
+				const read = Effect.flatMap(Settings, (settings) =>
+					settings.organization("org_shared"),
+				).pipe(Effect.provideContext(second))
+				assert.strictEqual((yield* read).document.botMemory, true)
+				yield* Effect.flatMap(Settings, (settings) =>
 					settings.updateOrganization("org_shared", 0, (document) =>
-						Effect.succeed({ ...document, agentMemory: false }),
+						Effect.succeed({ ...document, botMemory: false }),
 					),
-				),
-			)
-			// The notice reaches the second instance long before its cache expires.
-			let seen = await read()
-			for (let attempt = 0; seen.version === 0 && attempt < 100; attempt++) {
-				await new Promise((resolve) => setTimeout(resolve, 20))
-				seen = await read()
-			}
-			assert.equal(seen.version, 1)
-			assert.equal(seen.document.agentMemory, false)
-			const conflict = await second.runPromise(
-				Effect.flatMap(Settings, (settings) =>
+				).pipe(Effect.provideContext(first))
+				// The notice reaches the second instance long before its cache expires.
+				const seen = yield* read.pipe(
+					Effect.repeat({
+						until: (value) => value.version !== 0,
+						schedule: Schedule.spaced("20 millis"),
+						times: 100,
+					}),
+				)
+				assert.strictEqual(seen.version, 1)
+				assert.strictEqual(seen.document.botMemory, false)
+				const conflict = yield* Effect.flatMap(Settings, (settings) =>
 					settings.updateOrganization("org_shared", 0, (document) =>
 						Effect.succeed(document),
 					),
-				).pipe(Effect.flip),
-			)
-			assert.equal(conflict._tag, "SettingsConflict")
-		} finally {
-			await first.dispose()
-			await second.dispose()
-		}
-	} finally {
-		await migration.dispose()
-		await database.close()
-	}
+				).pipe(Effect.flip, Effect.provideContext(second))
+				assert.strictEqual(conflict._tag, "SettingsConflict")
+			}),
+	)
 })

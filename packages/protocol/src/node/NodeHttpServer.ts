@@ -1,18 +1,20 @@
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Effect,
 	Exit,
 	Layer,
 	Option,
+	pipe,
 	Schema,
 	Scope,
 	Stream,
 	Match,
 	Predicate,
-	Record as RecordUtils,
+	Record as Rec,
+	String as Str,
 } from "effect"
 import * as HttpNetwork from "../network/HttpNetwork.ts"
-import { type PublicOptions, type UserOptions } from "./Node.ts"
+import { type PublicOptions, type Resolver, type UserOptions } from "./Node.ts"
 import { NodeHttpClient, NodeStream } from "@effect/platform-node"
 
 import { HttpClient, HttpClientRequest } from "effect/http"
@@ -23,31 +25,38 @@ import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib"
 import * as Document from "../Document.ts"
 import * as Network from "../network/Network.ts"
 
-const blocked = [
-	"0.0.0.0/8",
-	"10.0.0.0/8",
-	"100.64.0.0/10",
-	"127.0.0.0/8",
-	"169.254.0.0/16",
-	"168.63.129.16/32",
-	"172.16.0.0/12",
-	"192.0.0.0/24",
-	"192.0.2.0/24",
-	"192.168.0.0/16",
-	"198.18.0.0/15",
-	"198.51.100.0/24",
-	"203.0.113.0/24",
-	"224.0.0.0/4",
-	"240.0.0.0/4",
-	"2001:db8::/32",
-	"2001::/32",
-	"2002::/16",
-].map(IpNetwork.fromStringUnsafe)
+const blocked = Arr.map(
+	[
+		"0.0.0.0/8",
+		"10.0.0.0/8",
+		"100.64.0.0/10",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"168.63.129.16/32",
+		"172.16.0.0/12",
+		"192.0.0.0/24",
+		"192.0.2.0/24",
+		"192.88.99.0/24",
+		"192.168.0.0/16",
+		"198.18.0.0/15",
+		"198.51.100.0/24",
+		"203.0.113.0/24",
+		"224.0.0.0/4",
+		"240.0.0.0/4",
+		"2001:db8::/32",
+		"2001::/32",
+		"2002::/16",
+	],
+	IpNetwork.fromStringUnsafe,
+)
 const globalV6 = IpNetwork.fromStringUnsafe("2000::/3")
+
+/** URLs put an IPv6 address in square brackets. */
+const withoutBrackets = Str.replace(/^\[|\]$/g, "")
 
 /** Also rejects mapped IPv4, local IPv6, transition ranges and metadata addresses. */
 export const isPublicAddress = (input: string): boolean => {
-	const parsed = NetAddress.ipFromString(input.replace(/^\[|\]$/g, ""))
+	const parsed = NetAddress.ipFromString(withoutBrackets(input))
 	return Match.value(parsed).pipe(
 		Match.tagsExhaustive({
 			Failure: () => false,
@@ -58,11 +67,19 @@ export const isPublicAddress = (input: string): boolean => {
 					!IpNetwork.contains(globalV6, address)
 				)
 					return false
-				return !blocked.some((network) => IpNetwork.contains(network, address))
+				return !Arr.some(blocked, (network) =>
+					IpNetwork.contains(network, address),
+				)
 			},
 		}),
 	)
 }
+
+/** A redirect to another origin keeps only these request headers. */
+const crossOriginHeaders = (headers: Readonly<Record<string, string>>) =>
+	Rec.filter(headers, (_, name) =>
+		["accept", "accept-encoding", "user-agent"].includes(Str.toLowerCase(name)),
+	)
 
 /** The rules that differ between the public network and a user network. */
 interface Guard {
@@ -72,13 +89,17 @@ interface Guard {
 	readonly allowedOrigins: Option.Option<ReadonlyArray<string>>
 }
 
-const layerNetwork = (options: PublicOptions, guard: Guard) => {
-	const allow = guard.allowAddress
-	const resolver = options.lookup ?? lookup
-	const maxRedirects = options.maxRedirects ?? 5
-	const maxBytes = options.maxBytes ?? 1024 * 1024
-	const timeoutMs = options.timeoutMs ?? 10_000
-	const guardedLookup: LookupFunction = (hostname, requested, callback) => {
+/**
+ * Builds a socket lookup that resolves every address of a host and fails
+ * when one of them is not allowed. Use it on every new connection, so the
+ * checked address is the one that the socket really uses.
+ */
+export const guardedLookup =
+	(
+		allow: (address: string, hostname: string) => boolean,
+		resolver: Resolver = lookup,
+	): LookupFunction =>
+	(hostname, requested, callback) => {
 		resolver(
 			hostname,
 			{
@@ -93,11 +114,11 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 					return
 				}
 				if (
-					!EffectArray.isReadonlyArrayNonEmpty(addresses) ||
-					addresses.some((a) => !allow(a.address, hostname))
+					!Arr.isReadonlyArrayNonEmpty(addresses) ||
+					!Arr.every(addresses, (a) => allow(a.address, hostname))
 				) {
 					callback(
-						new Network.NetworkError({
+						Network.NetworkError.make({
 							reason: "BlockedTarget",
 							message: "DNS resolved to a forbidden connection address",
 						}),
@@ -110,16 +131,23 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 					callback(null, addresses)
 					return
 				}
-				const first = EffectArray.headNonEmpty(addresses)
+				const first = Arr.headNonEmpty(addresses)
 				callback(null, first.address, first.family)
 			},
 		)
 	}
+
+const layerNetwork = (options: PublicOptions, guard: Guard) => {
+	const allow = guard.allowAddress
+	const maxRedirects = options.maxRedirects ?? 5
+	const maxBytes = options.maxBytes ?? 1024 * 1024
+	const timeoutMs = options.timeoutMs ?? 10_000
+	const socketLookup = guardedLookup(allow, options.lookup)
 	const layerClient = NodeHttpClient.layerNodeHttpNoAgent.pipe(
 		Layer.provide(
 			NodeHttpClient.layerAgentOptions({
-				lookup: guardedLookup,
-				...RecordUtils.filter({ ca: options.ca }, Predicate.isNotUndefined),
+				lookup: socketLookup,
+				...Rec.filter({ ca: options.ca }, Predicate.isNotUndefined),
 				// Resolve DNS for every new connection, so checked addresses stay bound to that socket.
 				keepAlive: false,
 			}),
@@ -140,18 +168,18 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 						(origins) => !origins.includes(url.origin),
 					)
 				) {
-					return yield* new Network.NetworkError({
+					return yield* Network.NetworkError.make({
 						reason: "BlockedTarget",
 						message: "Origin is not permitted in this user network",
 					})
 				}
-				const host = url.hostname.replace(/^\[|\]$/g, "")
+				const host = withoutBrackets(url.hostname)
 				yield* Match.value(NetAddress.ipFromString(host)).pipe(
 					Match.tag("Success", () =>
 						allow(host, host)
 							? Effect.void
 							: Effect.fail(
-									new Network.NetworkError({
+									Network.NetworkError.make({
 										reason: "BlockedTarget",
 										message: "IP literal is a forbidden connection address",
 									}),
@@ -188,11 +216,12 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 							.pipe(
 								Scope.provide(hopScope),
 								Effect.mapError((e) =>
-									e.reason.cause instanceof Network.NetworkError
+									Schema.is(Network.NetworkError)(e.reason.cause)
 										? e.reason.cause
-										: new Network.NetworkError({
+										: Network.NetworkError.make({
 												reason: "Transport",
 												message: e.reason._tag,
+												cause: e,
 											}),
 								),
 							)
@@ -204,26 +233,23 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 						) {
 							yield* Scope.close(hopScope, Exit.void)
 							if (hop >= maxRedirects)
-								return yield* new Network.NetworkError({
+								return yield* Network.NetworkError.make({
 									reason: "Redirect",
 									message: "Redirect limit exceeded",
 								})
-							const target = yield* Effect.try({
-								try: () => new URL(location, url).href,
-								catch: () =>
-									new Network.NetworkError({
-										reason: "Redirect",
-										message: "Invalid redirect target",
-									}),
-							})
-							const checked = yield* check(target)
+							if (!URL.canParse(location, url))
+								return yield* Network.NetworkError.make({
+									reason: "Redirect",
+									message: "Invalid redirect target",
+								})
+							const checked = yield* check(new URL(location, url).href)
 							if (
 								request.method !== "GET" &&
 								request.method !== "HEAD" &&
 								([301, 302, 303].includes(response.status) ||
 									new URL(checked).origin !== new URL(url).origin)
 							) {
-								return yield* new Network.NetworkError({
+								return yield* Network.NetworkError.make({
 									reason: "Redirect",
 									message:
 										"Redirect would change a business request target or method",
@@ -232,13 +258,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 							const headers =
 								new URL(checked).origin === new URL(url).origin
 									? request.headers
-									: Object.fromEntries(
-											Object.entries(request.headers).filter(([name]) =>
-												["accept", "accept-encoding", "user-agent"].includes(
-													name.toLowerCase(),
-												),
-											),
-										)
+									: crossOriginHeaders(request.headers)
 							let next = HttpClientRequest.setHeaders(
 								HttpClientRequest.setUrl(request, checked),
 								headers,
@@ -251,20 +271,22 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 							return yield* follow(next, hop + 1)
 						}
 						let body = response.stream.pipe(
-							Stream.mapError(
-								(e) =>
-									new Network.NetworkError({
-										reason: "Transport",
-										message: e.reason._tag,
-									}),
+							Stream.mapError((e) =>
+								Network.NetworkError.make({
+									reason: "Transport",
+									message: e.reason._tag,
+									cause: e,
+								}),
 							),
 						)
-						const encoding = response.headers["content-encoding"]
-							?.toLowerCase()
-							.trim()
-						if (encoding !== undefined && encoding !== "identity") {
+						const encoding = pipe(
+							response.headers["content-encoding"] ?? "identity",
+							Str.toLowerCase,
+							Str.trim,
+						)
+						if (encoding !== "identity") {
 							if (!["gzip", "deflate", "br"].includes(encoding))
-								return yield* new Network.NetworkError({
+								return yield* Network.NetworkError.make({
 									reason: "Encoding",
 									message: "Unsupported content encoding",
 								})
@@ -276,10 +298,11 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 											: encoding === "br"
 												? createBrotliDecompress()
 												: createInflate(),
-									onError: () =>
-										new Network.NetworkError({
+									onError: (cause) =>
+										Network.NetworkError.make({
 											reason: "Encoding",
 											message: "Could not decode the HTTP body",
+											cause,
 										}),
 								}),
 							)
@@ -324,7 +347,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 					duration: timeoutMs,
 					orElse: () =>
 						Effect.fail(
-							new Network.NetworkError({
+							Network.NetworkError.make({
 								reason: "Timeout",
 								message: "Document fetch timed out",
 							}),
@@ -349,7 +372,7 @@ export const layerUserNetwork = (options: UserOptions) =>
 export const layerPublicNetwork = (options: PublicOptions = {}) => {
 	const network = layerNetwork(options, {
 		identity: { scope: "public", owner: "anonymous" },
-		allowAddress: isPublicAddress,
+		allowAddress: options.allowAddress ?? isPublicAddress,
 		allowedOrigins: Option.none(),
 	})
 	const anonymous = Layer.effect(
@@ -363,7 +386,7 @@ export const layerPublicNetwork = (options: PublicOptions = {}) => {
 						headers: {
 							"user-agent": `${Network.publicProductToken}/0.1 public catalog crawler`,
 							accept: `${Document.cardMediaType}, ${Document.catalogMediaType}, text/html, text/plain`,
-							...RecordUtils.filter(
+							...Rec.filter(
 								{
 									"if-none-match": input.validators?.etag,
 									"if-modified-since": input.validators?.lastModified,
@@ -371,7 +394,7 @@ export const layerPublicNetwork = (options: PublicOptions = {}) => {
 								Predicate.isNotUndefined,
 							),
 						},
-						...RecordUtils.filter(
+						...Rec.filter(
 							{ followRedirects: input.followRedirects },
 							Predicate.isNotUndefined,
 						),

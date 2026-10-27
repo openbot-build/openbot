@@ -1,4 +1,7 @@
-import { Schema } from "effect"
+import { TokenId } from "./TokenId.ts"
+export { TokenId } from "./TokenId.ts"
+import { SecretOutput } from "./Secret.ts"
+import { Schema, String as Str } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -7,7 +10,7 @@ import {
 } from "effect/http-api"
 import { NoStore } from "./AuthApi.ts"
 import { Caller } from "./Identity.ts"
-import { Policies, Required } from "./Permissions.ts"
+import { PolicyInput, PolicySchema, Required } from "./Authorization.ts"
 
 /** Every user token starts with this marker, so leaked tokens are easy to spot. */
 export const SecretPrefix = "obut_"
@@ -15,19 +18,22 @@ export const SecretPrefix = "obut_"
 export const MaxTokens = 25
 
 export const TokenName = Schema.String.check(
-	Schema.makeFilter(
-		(value) =>
-			(value.trim().length >= 1 && value.trim().length <= 80) ||
-			"Use a token name between 1 and 80 characters.",
-	),
+	Schema.makeFilter((value) => {
+		const length = Str.trim(value).length
+		return (
+			(length >= 1 && length <= 80) ||
+			"Use a token name between 1 and 80 characters."
+		)
+	}),
 )
+
 export const Token = Schema.Struct({
-	id: Schema.String,
+	id: TokenId,
 	name: Schema.String,
 	/** The first characters of the secret. They help people spot a token without showing it. */
 	prefix: Schema.String,
 	/** A token can never do more than its member can do at the time of the request. */
-	policies: Policies,
+	policy: PolicySchema,
 	createdAt: Schema.String,
 	expiresAt: Schema.NullOr(Schema.String),
 	lastUsedAt: Schema.NullOr(Schema.String),
@@ -40,13 +46,13 @@ export const CreateTokenRequest = Schema.Struct({
 		Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 365 })),
 	),
 	/** Leave this out to allow everything that the member can do, except managing tokens. */
-	policies: Schema.optionalKey(Policies.check(Schema.isMinLength(1))),
+	policy: Schema.optionalKey(PolicyInput),
 })
 export type CreateTokenRequest = typeof CreateTokenRequest.Type
 export const CreatedToken = Schema.Struct({
 	token: Token,
 	/** Returned only once. OpenBot stores a hash of it. */
-	secret: Schema.String,
+	secret: SecretOutput,
 })
 export type CreatedToken = typeof CreatedToken.Type
 export const TokenVerification = Schema.Struct({
@@ -56,22 +62,18 @@ export const TokenVerification = Schema.Struct({
 })
 export type TokenVerification = typeof TokenVerification.Type
 
-export class TokenNotFound extends Schema.TaggedError<TokenNotFound>()(
-	"TokenNotFound",
-	{},
-) {}
-export class TokenLimitReached extends Schema.TaggedError<TokenLimitReached>()(
-	"TokenLimitReached",
-	{ limit: Schema.Int },
-) {}
-export class TokenPolicyInvalid extends Schema.TaggedError<TokenPolicyInvalid>()(
-	"TokenPolicyInvalid",
-	{ message: Schema.String },
-) {}
-export class TokenStorageUnavailable extends Schema.TaggedError<TokenStorageUnavailable>()(
-	"TokenStorageUnavailable",
-	{},
-) {}
+export class TokenNotFound extends Schema.TaggedError<
+	TokenNotFound,
+	{ readonly brand: unique symbol }
+>()("TokenNotFound", {}) {}
+export class TokenLimitReached extends Schema.TaggedError<
+	TokenLimitReached,
+	{ readonly brand: unique symbol }
+>()("TokenLimitReached", { limit: Schema.Int }) {}
+export class TokenStorageUnavailable extends Schema.TaggedError<
+	TokenStorageUnavailable,
+	{ readonly brand: unique symbol }
+>()("TokenStorageUnavailable", {}) {}
 const errors = [
 	TokenStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
@@ -87,17 +89,13 @@ export const UserTokensApi = HttpApiGroup.make("userTokens")
 		HttpApiEndpoint.post("createToken", UserTokensPath, {
 			payload: CreateTokenRequest,
 			success: CreatedToken.pipe(HttpApiSchema.status(201)),
-			error: [
-				...errors,
-				TokenLimitReached.pipe(HttpApiSchema.status(409)),
-				TokenPolicyInvalid.pipe(HttpApiSchema.status(400)),
-			],
+			error: [...errors, TokenLimitReached.pipe(HttpApiSchema.status(409))],
 		}),
 		HttpApiEndpoint.delete(
 			"revokeToken",
 			`${UserTokensPath}/:tokenId` as const,
 			{
-				params: { tokenId: Schema.String },
+				params: { tokenId: TokenId },
 				success: HttpApiSchema.NoContent,
 				error: [...errors, TokenNotFound.pipe(HttpApiSchema.status(404))],
 			},
@@ -109,7 +107,7 @@ export const UserTokensApi = HttpApiGroup.make("userTokens")
 			.annotate(Required, [])
 			.annotate(
 				OpenApi.Description,
-				"Shows who the caller is and, for a token, its policies. Every caller can use it.",
+				"Shows who the caller is and, for a token, its policy. Every caller can use it.",
 			),
 	)
 	.middleware(NoStore)

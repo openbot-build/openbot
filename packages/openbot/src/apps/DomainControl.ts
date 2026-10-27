@@ -1,10 +1,10 @@
-import { resolveTxt } from "node:dns/promises"
-import { Context, Effect, Layer, Schema } from "effect"
+import { getServers, Resolver } from "node:dns/promises"
+import { Array as Arr, Context, Effect, Layer, Schema } from "effect"
 
-export class DomainControlUnavailable extends Schema.TaggedError<DomainControlUnavailable>()(
-	"DomainControlUnavailable",
-	{},
-) {}
+export class DomainControlUnavailable extends Schema.TaggedError<
+	DomainControlUnavailable,
+	{ readonly brand: unique symbol }
+>()("DomainControlUnavailable", { cause: Schema.optional(Schema.Defect()) }) {}
 export class DomainControl extends Context.Service<
 	DomainControl,
 	{
@@ -14,44 +14,38 @@ export class DomainControl extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/DomainControl") {}
 
-export const layerWithLabels = ({
-	aliases = [],
-	lookup = (hostname) => resolveTxt(hostname),
-}: {
-	readonly aliases?: ReadonlyArray<string> | undefined
-	readonly lookup?: typeof resolveTxt
-} = {}) => {
-	const labels = [...new Set(["_openbot-verification", ...aliases])]
-	if (
-		labels.some(
-			(label) => !/^_[a-z0-9](?:[a-z0-9-]{0,60}[a-z0-9])?$/.test(label),
-		)
-	)
-		throw new Error(
-			"Developer verification DNS labels must be single underscore-prefixed labels.",
-		)
-	return Layer.succeed(DomainControl, {
-		tokens: (hostname) =>
-			Effect.forEach(labels, (label) =>
-				Effect.tryPromise({
-					try: () => lookup(label + "." + hostname),
-					catch: (error) =>
-						Schema.is(
-							Schema.Struct({
-								code: Schema.Literals(["ENOTFOUND", "ENODATA"]),
-							}),
-						)(error)
-							? ("MissingRecords" as const)
-							: ("Unavailable" as const),
-				}).pipe(
-					Effect.map((records) => records.map((parts) => parts.join(""))),
-					Effect.catch((error) =>
-						error === "MissingRecords"
-							? Effect.succeed([])
-							: Effect.fail(DomainControlUnavailable.make({})),
-					),
+/** The resolver errors that say the domain has no such TXT records. */
+const missingRecords = Schema.is(
+	Schema.Struct({ code: Schema.Literals(["ENOTFOUND", "ENODATA"]) }),
+)
+
+export const layer = Layer.succeed(
+	DomainControl,
+	DomainControl.of({
+		tokens: Effect.fn("DomainControl.tokens")(function* (hostname) {
+			const records = yield* Effect.tryPromise({
+				try: (signal) => {
+					// Each call has its own resolver, because `cancel` stops every query of a resolver.
+					const resolver = new Resolver()
+					// A new Resolver does not take the servers that `setServers` gave the default resolver.
+					resolver.setServers(getServers())
+					signal.addEventListener("abort", () => resolver.cancel(), {
+						once: true,
+					})
+					return resolver.resolveTxt("_openbot-verification." + hostname)
+				},
+				catch: (cause) => DomainControlUnavailable.make({ cause }),
+			}).pipe(
+				Effect.catchIf(
+					(error) => missingRecords(error.cause),
+					() => Effect.succeed([]),
 				),
-			).pipe(Effect.map((results) => results.flat())),
-	})
-}
-export const layer = layerWithLabels()
+				Effect.timeout("10 seconds"),
+				Effect.catchTag("TimeoutError", (cause) =>
+					Effect.fail(DomainControlUnavailable.make({ cause })),
+				),
+			)
+			return Arr.map(records, (parts) => Arr.join(parts, ""))
+		}),
+	}),
+)

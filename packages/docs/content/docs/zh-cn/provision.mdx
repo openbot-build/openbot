@@ -1,0 +1,125 @@
+---
+title: 初始化空平台
+description: 建立组织与用户，不导入旧业务数据。
+---
+
+`openbot provision`
+在服务器启动前初始化一个全新的空数据库，保留输入的用户 ID 和 OpenID Connect
+subject。它不复制 Chat、记忆、文件、Token 或浏览器会话。用户通过原身份提供方重新登录。先用同一镜像执行数据库迁移，参见[部署](/zh-cn/docs/deploy)。
+
+## 输入
+
+使用权限为 `0600` 或更严格的私有 JSON 文件，大小不超过 2
+MiB。不要把密钥放进命令参数。输入格式如下；示例值须替换为实际源值。导入邮箱必须已验证。`ownerUserId`
+是唯一的组织超级管理员和平台管理员，其他用户是普通成员。issuer 来自
+`platform.identityProvider`，所有账号关联必须使用该 provider
+ID。不会按邮箱合并账号。
+
+```json
+{
+	"version": 1,
+	"platform": {
+		"publicOrigin": "https://api.example.com",
+		"browserAuth": {
+			"sessionCookie": "__Host-workspace_session",
+			"loginCookie": "__Host-workspace_login",
+			"sessionTtlMs": 86400000
+		},
+		"identityProvider": {
+			"providerId": "company",
+			"issuer": "https://id.example.com",
+			"clientId": "workspace",
+			"clientSecret": "REPLACE_WITH_THE_EXISTING_CLIENT_SECRET",
+			"callbackPath": "/auth/callback",
+			"scopes": ["openid", "profile", "email", "offline_access"]
+		},
+		"authSecret": "REPLACE_WITH_THE_EXISTING_AUTH_SECRET",
+		"fileStorage": {
+			"endpoint": "http://storage:9000",
+			"publicEndpoint": null,
+			"region": "us-east-1",
+			"bucket": "workspace-files",
+			"accessKeyId": "workspace",
+			"secretAccessKey": "REPLACE_WITH_THE_STORAGE_SECRET",
+			"forcePathStyle": true
+		}
+	},
+	"organization": {
+		"name": "Example",
+		"ownerUserId": "existing-user-id",
+		"allowNewAccounts": false
+	},
+	"users": [
+		{
+			"id": "existing-user-id",
+			"name": "Alice",
+			"email": "alice@example.com",
+			"emailVerified": true,
+			"accounts": [
+				{
+					"id": "existing-account-id",
+					"providerId": "company",
+					"subject": "existing-oidc-subject"
+				}
+			]
+		}
+	],
+	"bot": {
+		"name": "Assistant",
+		"role": "Personal assistant",
+		"instructions": "Help the person with their work."
+	},
+	"models": [
+		{
+			"id": "language-model",
+			"name": "Language model",
+			"reasoningEfforts": [],
+			"serviceTiers": []
+		}
+	],
+	"providers": [
+		{
+			"kind": "openai-compat",
+			"name": "Company",
+			"endpoint": "https://models.example.com/v1",
+			"apiKey": "REPLACE_WITH_THE_MODEL_KEY",
+			"models": [
+				{
+					"model": "language-model",
+					"modelOwner": "platform"
+				}
+			]
+		}
+	],
+	"defaultModel": {
+		"providerName": "Company",
+		"modelId": "language-model"
+	}
+}
+```
+
+`models` 和 `providers`
+使用原生模型与提供方创建字段，仅对新组织开放。默认语言模型用于个人 Bot、规则和 Bot 记忆。每人创建一个私有 Bot，通过版本校验保存默认 Bot。初始化不创建 Chat，不调用模型或工具，也不学习记忆。
+
+先建立 S3
+bucket。本程序只设置文件存储，不创建 bucket，也不验证其凭据。私有输入文件和旧加密密钥不要进入源码仓库。更换认证权威前先备份。
+
+## 运行
+
+设置 `OPENBOT_DATABASE_URL` 和
+`OPENBOT_SECRET_KEYS`，或使用现有密钥文件。停止所有使用目标库的执行进程。不要先运行
+`setup`：本命令在一个事务内完成整个空目标的初始化。
+
+```sh
+openbot provision --input /run/private/provision.json
+```
+
+源码包也可用 `node dist/Provision.js`；Docker 镜像入口为
+`/app/dist/app/Provision.mjs`。把私有文件只读挂载，并确保镜像用户可读。成功只输出结果以及组织、用户、Bot 和提供方 ID。网关使用返回的组织 ID。
+
+## 重跑或停止
+
+数据库锁阻止并发运行创建重复对象。失败会回滚事务。成功后保存输入摘要和目标数据摘要；输入与目标完全一致时，重跑返回原 ID，不再写入。输入或任何目标行改变都会被拒绝。服务开始接收业务后，通过正常 API 管理，不用本命令更新。
+
+没有本命令收据的非空目标会被拒绝。程序不会删除旧数据，不导入旧 OAuth
+Token，失败时不打印密钥。初始化成功不等于登录、模型或 S3 验证通过；开放服务前，需经过公网网关分别验证。

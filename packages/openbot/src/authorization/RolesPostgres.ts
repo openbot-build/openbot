@@ -1,30 +1,50 @@
-import { protect } from "../auth/Barrier.ts"
-import { OrganizationApi, Permissions } from "@openbot-build/api"
-import { Clock, Effect, Layer, Option, Schema } from "effect"
+import {
+	Authorization,
+	OrganizationApi,
+	Roles as RolesApi,
+} from "@openbot-build/api"
+import {
+	Array as Arr,
+	Clock,
+	Crypto,
+	Effect,
+	Layer,
+	Option,
+	Schema,
+	String as Str,
+} from "effect"
 import { and, asc, eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { randomUUID } from "node:crypto"
 import { roles } from "../database/Schema.ts"
 import { builtin, Roles, RolesUnavailable } from "./Roles.ts"
+import * as Db from "../database/Database.ts"
 
-const PolicyList = Schema.fromJsonString(Permissions.Policies)
-const decodePolicies = Schema.decodeUnknownSync(PolicyList)
+const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
+/** The policy column holds JSON that only this file writes, from a checked policy. */
+const encodePolicy = (policy: typeof PolicyJson.Type) =>
+	Schema.encodeEffect(PolicyJson)(policy).pipe(Effect.orDie)
+const unavailable = (cause: unknown) => RolesUnavailable.make({ cause })
 
-const view = (row: typeof roles.$inferSelect): Permissions.Role => ({
-	id: row.id,
-	name: row.name,
-	description: row.description,
-	builtin: false,
-	policies: decodePolicies(row.policies),
-})
+const view = (
+	row: typeof roles.$inferSelect,
+): Effect.Effect<RolesApi.Role, RolesUnavailable> =>
+	Schema.decodeEffect(PolicyJson)(row.policy).pipe(
+		Effect.mapError(unavailable),
+		Effect.map((policy) => ({
+			id: RolesApi.CustomRoleId.make(row.id),
+			name: row.name,
+			description: row.description,
+			builtin: false,
+			policy,
+		})),
+	)
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
-	const unavailable = () => RolesUnavailable.make({})
+	const db = yield* Db.make
+	const crypto = yield* Crypto.Crypto
 	const where = (organizationId: string, roleId: string) =>
 		and(eq(roles.organizationId, organizationId), eq(roles.id, roleId))
 	const readOnly = (roleId: string) =>
-		Permissions.isBuiltinRole(roleId)
+		RolesApi.isBuiltinRole(roleId)
 			? Effect.fail(OrganizationApi.RoleReadOnly.make({ roleId }))
 			: Effect.void
 
@@ -35,42 +55,41 @@ export const make = Effect.gen(function* () {
 			.where(eq(roles.organizationId, organizationId))
 			.orderBy(asc(roles.createdAt))
 			.pipe(
-				Effect.map((rows) => rows.map(view)),
 				Effect.mapError(unavailable),
+				Effect.flatMap((rows) => Effect.forEach(rows, view)),
 			)
 
-	const service = Roles.of({
+	return Roles.of({
 		list: (organizationId) =>
 			Effect.map(custom(organizationId), (custom) => [...builtin, ...custom]),
 		get: (organizationId, roleId) =>
-			Permissions.isBuiltinRole(roleId)
-				? Effect.succeed(
-						Option.fromNullishOr(builtin.find((role) => role.id === roleId)),
-					)
+			RolesApi.isBuiltinRole(roleId)
+				? Effect.succeed(Arr.findFirst(builtin, (role) => role.id === roleId))
 				: db
 						.select()
 						.from(roles)
 						.where(where(organizationId, roleId))
 						.pipe(
-							Effect.map((rows) =>
-								Option.map(Option.fromNullishOr(rows[0]), view),
-							),
 							Effect.mapError(unavailable),
+							Effect.flatMap((rows) =>
+								Effect.transposeOption(Option.map(Arr.head(rows), view)),
+							),
 						),
 		create: (organizationId, input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
+				const uuid = yield* Effect.orDie(crypto.randomUUIDv4())
 				const row = {
 					organizationId,
-					id: "role_" + randomUUID().replaceAll("-", ""),
-					name: input.name.trim(),
+					id: "role_" + Str.replaceAll("-", "")(uuid),
+					name: Str.trim(input.name),
 					description: input.description,
-					policies: JSON.stringify(input.policies),
+					policy: yield* encodePolicy(input.policy),
 					createdAt: now,
 					updatedAt: now,
 				}
 				yield* db.insert(roles).values(row).pipe(Effect.mapError(unavailable))
-				return view(row)
+				return yield* view(row)
 			}),
 		update: (organizationId, roleId, patch) =>
 			Effect.gen(function* () {
@@ -79,21 +98,23 @@ export const make = Effect.gen(function* () {
 				const [row] = yield* db
 					.update(roles)
 					.set({
-						...(patch.name === undefined ? {} : { name: patch.name.trim() }),
+						...(patch.name === undefined ? {} : { name: Str.trim(patch.name) }),
 						...(patch.description === undefined
 							? {}
 							: { description: patch.description }),
-						...(patch.policies === undefined
+						...(patch.policy === undefined
 							? {}
-							: { policies: JSON.stringify(patch.policies) }),
+							: { policy: yield* encodePolicy(patch.policy) }),
 						updatedAt: now,
 					})
 					.where(where(organizationId, roleId))
 					.returning()
 					.pipe(Effect.mapError(unavailable))
 				if (row === undefined)
-					return yield* OrganizationApi.RoleNotFound.make({ roleId })
-				return view(row)
+					return yield* OrganizationApi.RoleNotFound.make({
+						roleId,
+					})
+				return yield* view(row)
 			}),
 		delete: (organizationId, roleId) =>
 			Effect.gen(function* () {
@@ -104,23 +125,10 @@ export const make = Effect.gen(function* () {
 					.returning({ id: roles.id })
 					.pipe(Effect.mapError(unavailable))
 				if (deleted.length === 0)
-					return yield* OrganizationApi.RoleNotFound.make({ roleId })
+					return yield* OrganizationApi.RoleNotFound.make({
+						roleId,
+					})
 			}),
-	})
-	return Roles.of({
-		...service,
-		create: (...args) =>
-			protect(service.create(...args)).pipe(
-				Effect.catchTag("AuthUnavailable", () => unavailable()),
-			),
-		update: (...args) =>
-			protect(service.update(...args)).pipe(
-				Effect.catchTag("AuthUnavailable", () => unavailable()),
-			),
-		delete: (...args) =>
-			protect(service.delete(...args)).pipe(
-				Effect.catchTag("AuthUnavailable", () => unavailable()),
-			),
 	})
 })
 

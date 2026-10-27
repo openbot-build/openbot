@@ -1,0 +1,112 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "5f8ca2f8-2a3e-47c9-ba47-b8c71cd0d8a3",
+	"prevIds": ["db3ce737-240d-43da-a01e-b1afcd397a38"],
+	"footprints": [
+		{
+			"statementType": "drop_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_workflow_runs",
+				"openbot_workflow_runs_waiting"
+			],
+			"writes": [
+				"s|idx|public.openbot_workflow_runs_waiting",
+				"n|idx|public.openbot_workflow_runs_waiting",
+				"e|idx|public.openbot_workflow_runs_waiting",
+				"n|rel|public.openbot_workflow_runs_waiting"
+			],
+			"reads": [
+				"e|tbl|public.openbot_workflow_runs",
+				"n|sch|public",
+				"e|col|public.openbot_workflow_runs.waiting_session"
+			],
+			"sharedWrites": []
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_recordings",
+				"step"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_recordings.step",
+				"n|col|public.openbot_workflow_recordings.step",
+				"e|col|public.openbot_workflow_recordings.step"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_recordings", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_runs",
+				"waiting_session"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_runs.waiting_session",
+				"n|col|public.openbot_workflow_runs.waiting_session",
+				"e|col|public.openbot_workflow_runs.waiting_session"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_runs", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_runs",
+				"waiting_turn"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_runs.waiting_turn",
+				"n|col|public.openbot_workflow_runs.waiting_turn",
+				"e|col|public.openbot_workflow_runs.waiting_turn"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_runs", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_runs",
+				"waiting_token"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_runs.waiting_token",
+				"n|col|public.openbot_workflow_runs.waiting_token",
+				"e|col|public.openbot_workflow_runs.waiting_token"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_runs", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_recordings\",\"step\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"waiting_session\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"waiting_turn\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"waiting_token\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflow_runs_waiting\"]"
+		}
+	]
+}

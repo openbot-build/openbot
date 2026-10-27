@@ -1,21 +1,25 @@
-// Each test owns the Layers that it provides at the point where it runs.
-// @effect-diagnostics strictEffectProvide:off
-
 import {
-	Array as EffectArray,
+	Array as Arr,
 	Match,
 	Context,
+	Deferred,
 	Effect,
 	Fiber,
 	Layer,
 	Schema,
 	Stream,
+	String as Str,
 	Predicate,
 } from "effect"
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 
-import { LanguageModel, Prompt, Tool, Toolkit } from "effect/ai"
+import {
+	LanguageModel,
+	Model as AiModel,
+	Prompt,
+	Tool,
+	Toolkit,
+} from "effect/ai"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { OpenAiClient, OpenAiConfig } from "@effect/ai-openai"
 import { Config, ContextWindow, Model, Provider } from "@openbot-build/core"
@@ -70,60 +74,78 @@ const response = {
 	created_at: 1,
 	output,
 }
-
-test("generation, counting and compaction share encoded input, and the full native output stays for the next request", async () => {
-	let requests: ReadonlyArray<{ path: string; body: Schema.JsonObject }> = []
-	let toolCalls = 0
-	const HttpClientTest = Layer.succeed(
-		HttpClient.HttpClient,
-		HttpClient.make((request, url) =>
-			Effect.sync(() => {
-				assert.equal(request.body._tag, "Uint8Array")
-				const body = JSON.parse(
-					new TextDecoder().decode(
-						Match.value(request.body).pipe(
-							Match.tag("Uint8Array", (body) => body.body),
-							Match.orElse(() => new Uint8Array()),
-						),
-					),
-				) as Schema.JsonObject
-				requests = EffectArray.append(requests, { path: url.pathname, body })
-				if (body["stream"] === true) {
-					assert.equal(request.headers["x-sdk-transform"], "preserved")
-					const events = [
-						{ type: "response.created", response: { ...response, output: [] } },
-						{
-							type: "response.completed",
-							response: { ...response, output: [] },
-						},
-					]
-					return HttpClientResponse.fromWeb(
-						request,
-						new globalThis.Response(
-							events
-								.map((event) => `data: ${JSON.stringify(event)}\n\n`)
-								.join(""),
-							{ headers: { "content-type": "text/event-stream" } },
-						),
-					)
-				}
-				const payload = url.pathname.endsWith("input_tokens")
-					? { input_tokens: 21, object: "response.input_tokens" }
-					: url.pathname.endsWith("compact")
-						? { object: "response.compaction", output: nativeItems }
-						: response
-				return HttpClientResponse.fromWeb(
-					request,
-					new globalThis.Response(JSON.stringify(payload), {
-						headers: { "content-type": "application/json" },
-					}),
-				)
-			}),
+const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+const RequestBody = Schema.fromJsonString(Schema.JsonObject)
+/** The events as the text of a server-sent event stream. */
+const eventStream = (events: ReadonlyArray<unknown>) =>
+	Effect.map(
+		Effect.forEach(events, (event) =>
+			Effect.map(toJson(event), (data) => `data: ${data}\n\n`),
 		),
+		Arr.join(""),
 	)
-	await Effect.runPromise(
-		Effect.scoped(
-			Effect.gen(function* () {
+
+it.effect(
+	"generation, counting and compaction share encoded input, and the full native output stays for the next request",
+	() =>
+		Effect.gen(function* () {
+			let requests: ReadonlyArray<{ path: string; body: Schema.JsonObject }> =
+				[]
+			let toolCalls = 0
+			const HttpClientTest = Layer.succeed(
+				HttpClient.HttpClient,
+				HttpClient.make((request, url) =>
+					Effect.gen(function* () {
+						assert.strictEqual(request.body._tag, "Uint8Array")
+						const body = yield* Schema.decodeEffect(RequestBody)(
+							new TextDecoder().decode(
+								Match.value(request.body).pipe(
+									Match.tag("Uint8Array", (body) => body.body),
+									Match.orElse(() => new Uint8Array()),
+								),
+							),
+						)
+						requests = Arr.append(requests, {
+							path: url.pathname,
+							body,
+						})
+						if (body["stream"] === true) {
+							assert.strictEqual(
+								request.headers["x-sdk-transform"],
+								"preserved",
+							)
+							const events = yield* eventStream([
+								{
+									type: "response.created",
+									response: { ...response, output: [] },
+								},
+								{
+									type: "response.completed",
+									response: { ...response, output: [] },
+								},
+							])
+							return HttpClientResponse.fromWeb(
+								request,
+								new globalThis.Response(events, {
+									headers: { "content-type": "text/event-stream" },
+								}),
+							)
+						}
+						const payload = Str.endsWith("input_tokens")(url.pathname)
+							? { input_tokens: 21, object: "response.input_tokens" }
+							: Str.endsWith("compact")(url.pathname)
+								? { object: "response.compaction", output: nativeItems }
+								: response
+						return HttpClientResponse.fromWeb(
+							request,
+							new globalThis.Response(yield* toJson(payload), {
+								headers: { "content-type": "application/json" },
+							}),
+						)
+					}).pipe(Effect.orDie),
+				),
+			)
+			yield* Effect.gen(function* () {
 				const defaults = {
 					instructions: "Use the shared request instructions.",
 				}
@@ -148,7 +170,7 @@ test("generation, counting and compaction share encoded input, and the full nati
 						{ role: "system", content: "You are helpful." },
 					]),
 					request = { selection, window, instructions, toolkit: tools }
-				assert.equal(yield* compaction.count(request), 21)
+				assert.strictEqual(yield* compaction.count(request), 21)
 				const compacted = yield* compaction.compact(request)
 				const result = yield* LanguageModel.generateText({
 					prompt: Prompt.concat(instructions, window.prompt),
@@ -157,19 +179,40 @@ test("generation, counting and compaction share encoded input, and the full nati
 					Effect.provide(model),
 					Effect.provideService(ContextWindow.CurrentWindow, window),
 				)
-				assert.equal(result.text, "answer")
-				assert.deepEqual(requests[0]!.body["input"], requests[1]!.body["input"])
-				assert.deepEqual(requests[0]!.body["input"], requests[2]!.body["input"])
-				assert.deepEqual(requests[0]!.body["tools"], requests[2]!.body["tools"])
-				assert.equal(requests[0]!.body["instructions"], defaults.instructions)
-				assert.equal(requests[1]!.body["instructions"], defaults.instructions)
-				assert.equal(requests[2]!.body["instructions"], defaults.instructions)
-				assert.equal(Predicate.hasProperty(requests[1]!.body, "tools"), false)
-				assert.equal(compacted._tag, "Native")
+				assert.strictEqual(result.text, "answer")
+				assert.deepStrictEqual(
+					requests[0]!.body["input"],
+					requests[1]!.body["input"],
+				)
+				assert.deepStrictEqual(
+					requests[0]!.body["input"],
+					requests[2]!.body["input"],
+				)
+				assert.deepStrictEqual(
+					requests[0]!.body["tools"],
+					requests[2]!.body["tools"],
+				)
+				assert.strictEqual(
+					requests[0]!.body["instructions"],
+					defaults.instructions,
+				)
+				assert.strictEqual(
+					requests[1]!.body["instructions"],
+					defaults.instructions,
+				)
+				assert.strictEqual(
+					requests[2]!.body["instructions"],
+					defaults.instructions,
+				)
+				assert.strictEqual(
+					Predicate.hasProperty(requests[1]!.body, "tools"),
+					false,
+				)
+				assert.strictEqual(compacted._tag, "Native")
 				return yield* Match.value(compacted).pipe(
 					Match.tag("Native", (compacted) =>
 						Effect.gen(function* () {
-							assert.deepEqual(compacted.items, nativeItems)
+							assert.deepStrictEqual(compacted.items, nativeItems)
 							const continued = ContextWindow.append(compacted, "continue")
 							yield* compaction.count({ ...request, window: continued })
 							yield* LanguageModel.generateText({
@@ -182,8 +225,11 @@ test("generation, counting and compaction share encoded input, and the full nati
 							const input = requests.at(-1)!.body[
 								"input"
 							] as ReadonlyArray<Schema.Json>
-							assert.deepEqual(input.slice(0, nativeItems.length), nativeItems)
-							assert.deepEqual(requests.at(-2)!.body["input"], input)
+							assert.deepStrictEqual(
+								input.slice(0, nativeItems.length),
+								nativeItems,
+							)
+							assert.deepStrictEqual(requests.at(-2)!.body["input"], input)
 							yield* LanguageModel.streamText({
 								prompt: Prompt.concat(instructions, continued.prompt),
 								toolkit: tools,
@@ -201,13 +247,13 @@ test("generation, counting and compaction share encoded input, and the full nati
 								Effect.provide(model),
 								Effect.provideService(ContextWindow.CurrentWindow, continued),
 							)
-							assert.deepEqual(requests.at(-1)!.body["input"], input)
-							assert.deepEqual(
+							assert.deepStrictEqual(requests.at(-1)!.body["input"], input)
+							assert.deepStrictEqual(
 								requests.at(-1)!.body["tools"],
 								requests.at(-2)!.body["tools"],
 							)
-							assert.deepEqual(
-								requests.map(({ path }) => path),
+							assert.deepStrictEqual(
+								Arr.map(requests, ({ path }) => path),
 								[
 									"/v1/responses/input_tokens",
 									"/v1/responses/compact",
@@ -217,112 +263,104 @@ test("generation, counting and compaction share encoded input, and the full nati
 									"/v1/responses",
 								],
 							)
-							assert.equal(toolCalls, 0)
+							assert.strictEqual(toolCalls, 0)
 						}),
 					),
-					Match.orElse(() =>
-						Effect.gen(function* () {
-							throw new Error("Expected native compaction")
-						}),
-					),
+					Match.orElse(() => assert.fail("Expected native compaction")),
 				)
-			}),
-		).pipe(
-			Effect.provide(
-				Layer.merge(
-					OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
-						Layer.provide(HttpClientTest),
-					),
-					tools.toLayer({
-						echo: ({ text }) =>
-							Effect.sync(() => {
-								toolCalls++
-								return text
-							}),
-					}),
-				),
-			),
-		),
-	)
-})
-
-test("native SDK streaming runs a tool and keeps cancellation", async () => {
-	let toolCalls = 0,
-		requests = 0,
-		cancelled = false
-	const HttpClientTest = Layer.succeed(
-		HttpClient.HttpClient,
-		HttpClient.make((request) => {
-			requests++
-			if (requests === 2)
-				return Effect.never.pipe(
-					Effect.onInterrupt(() =>
-						Effect.sync(() => {
-							cancelled = true
+			}).pipe(
+				Effect.provide(
+					Layer.merge(
+						OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
+							Layer.provide(HttpClientTest),
+						),
+						tools.toLayer({
+							echo: ({ text }) =>
+								Effect.sync(() => {
+									toolCalls++
+									return text
+								}),
 						}),
 					),
-				)
-			const events = [
-				{ type: "response.created", response: { ...response, output: [] } },
-				{
-					type: "response.output_item.added",
-					output_index: 0,
-					item: {
-						type: "function_call",
-						id: "call_item",
-						call_id: "call_1",
-						name: "echo",
-						arguments: "",
-					},
-				},
-				{
-					type: "response.function_call_arguments.delta",
-					item_id: "call_item",
-					output_index: 0,
-					delta: '{"text":"hello"}',
-				},
-				{
-					type: "response.function_call_arguments.done",
-					item_id: "call_item",
-					output_index: 0,
-					arguments: '{"text":"hello"}',
-					name: "echo",
-				},
-				{ type: "response.completed", response: { ...response, output: [] } },
-			]
-			const text = events
-				.map((event) => `data: ${JSON.stringify(event)}\n\n`)
-				.join("")
-			return Effect.succeed(
-				HttpClientResponse.fromWeb(
-					request,
-					new globalThis.Response(text, {
-						headers: { "content-type": "text/event-stream" },
-					}),
 				),
 			)
 		}),
-	)
-	await Effect.runPromise(
-		Effect.scoped(
-			Effect.gen(function* () {
-				const model = yield* OpenAiProvider.make().model(selection)
-				const events = yield* LanguageModel.streamText({
-					prompt: "echo",
-					toolkit: tools,
-				}).pipe(Stream.runCollect, Effect.provide(model))
-				assert.ok(events.some((part) => part.type === "tool-result"))
-				assert.equal(toolCalls, 1)
-				const fiber = yield* LanguageModel.streamText({ prompt: "wait" }).pipe(
-					Stream.runDrain,
-					Effect.provide(model),
-					Effect.forkChild,
+)
+
+it.effect("native SDK streaming runs a tool and keeps cancellation", () =>
+	Effect.gen(function* () {
+		let toolCalls = 0,
+			requests = 0,
+			cancelled = false
+		const text = yield* eventStream([
+			{ type: "response.created", response: { ...response, output: [] } },
+			{
+				type: "response.output_item.added",
+				output_index: 0,
+				item: {
+					type: "function_call",
+					id: "call_item",
+					call_id: "call_1",
+					name: "echo",
+					arguments: "",
+				},
+			},
+			{
+				type: "response.function_call_arguments.delta",
+				item_id: "call_item",
+				output_index: 0,
+				delta: '{"text":"hello"}',
+			},
+			{
+				type: "response.function_call_arguments.done",
+				item_id: "call_item",
+				output_index: 0,
+				arguments: '{"text":"hello"}',
+				name: "echo",
+			},
+			{ type: "response.completed", response: { ...response, output: [] } },
+		])
+		const started = yield* Deferred.make<void>()
+		const HttpClientTest = Layer.succeed(
+			HttpClient.HttpClient,
+			HttpClient.make((request) => {
+				requests++
+				if (requests === 2)
+					return Deferred.succeed(started, undefined).pipe(
+						Effect.andThen(Effect.never),
+						Effect.onInterrupt(() =>
+							Effect.sync(() => {
+								cancelled = true
+							}),
+						),
+					)
+				return Effect.succeed(
+					HttpClientResponse.fromWeb(
+						request,
+						new globalThis.Response(text, {
+							headers: { "content-type": "text/event-stream" },
+						}),
+					),
 				)
-				yield* Effect.yieldNow
-				yield* Fiber.interrupt(fiber)
-				assert.equal(cancelled, true)
 			}),
-		).pipe(
+		)
+		yield* Effect.gen(function* () {
+			const model = yield* OpenAiProvider.make().model(selection)
+			const events = yield* LanguageModel.streamText({
+				prompt: "echo",
+				toolkit: tools,
+			}).pipe(Stream.runCollect, Effect.provide(model))
+			assert.ok(Arr.some(events, (part) => part.type === "tool-result"))
+			assert.strictEqual(toolCalls, 1)
+			const fiber = yield* LanguageModel.streamText({ prompt: "wait" }).pipe(
+				Stream.runDrain,
+				Effect.provide(model),
+				Effect.forkChild,
+			)
+			yield* Deferred.await(started)
+			yield* Fiber.interrupt(fiber)
+			assert.strictEqual(cancelled, true)
+		}).pipe(
 			Effect.provide(
 				Layer.merge(
 					OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
@@ -337,34 +375,35 @@ test("native SDK streaming runs a tool and keeps cancellation", async () => {
 					}),
 				),
 			),
-		),
-	)
-})
-
-test("count and compaction report HTTP and response-schema failures and do not retry", async () => {
-	for (const scenario of [
-		{ status: 400, payload: { error: "bad request" } },
-		{ status: 200, payload: { input_tokens: -1, output: "invalid" } },
-	]) {
-		let calls = 0
-		const HttpClientTest = Layer.succeed(
-			HttpClient.HttpClient,
-			HttpClient.make((request) =>
-				Effect.sync(() => {
-					calls++
-					return HttpClientResponse.fromWeb(
-						request,
-						new globalThis.Response(JSON.stringify(scenario.payload), {
-							status: scenario.status,
-							headers: { "content-type": "application/json" },
-						}),
-					)
-				}),
-			),
 		)
-		await Effect.runPromise(
-			Effect.scoped(
-				Effect.gen(function* () {
+	}),
+)
+
+it.effect(
+	"count and compaction report HTTP and response-schema failures and do not retry",
+	() =>
+		Effect.gen(function* () {
+			for (const scenario of [
+				{ status: 400, payload: { error: "bad request" } },
+				{ status: 200, payload: { input_tokens: -1, output: "invalid" } },
+			]) {
+				let calls = 0
+				const HttpClientTest = Layer.succeed(
+					HttpClient.HttpClient,
+					HttpClient.make((request) =>
+						Effect.gen(function* () {
+							calls++
+							return HttpClientResponse.fromWeb(
+								request,
+								new globalThis.Response(yield* toJson(scenario.payload), {
+									status: scenario.status,
+									headers: { "content-type": "application/json" },
+								}),
+							)
+						}).pipe(Effect.orDie),
+					),
+				)
+				yield* Effect.gen(function* () {
 					const service = yield* ResponsesCompaction.make()
 					const request = {
 						selection,
@@ -374,223 +413,275 @@ test("count and compaction report HTTP and response-schema failures and do not r
 					}
 					const countError = yield* service.count(request).pipe(Effect.flip)
 					const compactError = yield* service.compact(request).pipe(Effect.flip)
-					assert.equal(countError.reason, "request-failed")
-					assert.equal(compactError.reason, "request-failed")
-					assert.equal(calls, 2)
+					assert.strictEqual(countError.reason, "request-failed")
+					assert.strictEqual(compactError.reason, "request-failed")
+					// The body of an error answer says why OpenAI refused the request.
+					for (const error of [countError, compactError])
+						assert.strictEqual(
+							Str.includes("bad request")(error.message),
+							scenario.status === 400,
+						)
+					assert.strictEqual(calls, 2)
+				}).pipe(
+					Effect.provide(
+						OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
+							Layer.provide(HttpClientTest),
+						),
+					),
+				)
+			}
+		}),
+)
+
+it.effect(
+	"counting keeps transformed tool schemas and restricted tool choice without handlers",
+	() =>
+		Effect.gen(function* () {
+			const toolkit = Toolkit.make(
+				tools.tools.echo,
+				Tool.make("convert", {
+					description: "Convert a numeric string",
+					parameters: Schema.Struct({ value: Schema.FiniteFromString }),
+					success: Schema.Finite,
 				}),
-			).pipe(
+			)
+			let bodies: ReadonlyArray<Schema.JsonObject> = []
+			const HttpClientTest = Layer.succeed(
+				HttpClient.HttpClient,
+				HttpClient.make((request, url) =>
+					Effect.gen(function* () {
+						assert.strictEqual(request.body._tag, "Uint8Array")
+						return yield* Match.value(request.body).pipe(
+							Match.tag("Uint8Array", (body) =>
+								Effect.gen(function* () {
+									bodies = Arr.append(
+										bodies,
+										yield* Schema.decodeEffect(RequestBody)(
+											new TextDecoder().decode(body.body),
+										),
+									)
+									const payload = Str.endsWith("input_tokens")(url.pathname)
+										? { input_tokens: 21 }
+										: Str.endsWith("compact")(url.pathname)
+											? { output: nativeItems }
+											: response
+									return HttpClientResponse.fromWeb(
+										request,
+										new globalThis.Response(yield* toJson(payload), {
+											headers: { "content-type": "application/json" },
+										}),
+									)
+								}),
+							),
+							Match.orElse(() => assert.fail("Expected a JSON request")),
+						)
+					}).pipe(Effect.orDie),
+				),
+			)
+			yield* Effect.gen(function* () {
+				const service = yield* ResponsesCompaction.make()
+				const model = yield* OpenAiProvider.make().model(selection)
+				const request = {
+					selection,
+					window: ContextWindow.fromPrompt(Prompt.make("Convert 42")),
+					instructions: Prompt.empty,
+					toolkit,
+					toolChoice: { mode: "required", oneOf: ["convert"] } as const,
+				}
+				// Count and compact do not need the tool handler Layer.
+				yield* service.count(request)
+				yield* service.compact(request)
+				yield* LanguageModel.generateText({
+					prompt: request.window.prompt,
+					toolkit,
+					toolChoice: request.toolChoice,
+				}).pipe(
+					Effect.provide(
+						Layer.merge(
+							model,
+							toolkit.toLayer({
+								echo: ({ text }) => Effect.succeed(text),
+								convert: () =>
+									Effect.die("Request encoding must not run a tool"),
+							}),
+						),
+					),
+				)
+				assert.strictEqual(bodies.length, 3)
+				assert.deepStrictEqual(bodies[0]!["input"], bodies[1]!["input"])
+				assert.deepStrictEqual(bodies[0]!["input"], bodies[2]!["input"])
+				assert.deepStrictEqual(bodies[0]!["tools"], bodies[2]!["tools"])
+				assert.deepStrictEqual(
+					bodies[0]!["tool_choice"],
+					bodies[2]!["tool_choice"],
+				)
+				assert.strictEqual(Predicate.hasProperty(bodies[1]!, "tools"), false)
+				const definitions = yield* Schema.decodeUnknownEffect(
+					Schema.Array(Schema.JsonObject),
+				)(bodies[0]!["tools"])
+				assert.deepStrictEqual(
+					Arr.map(definitions, (tool) => tool["name"]),
+					["convert"],
+				)
+			}).pipe(
 				Effect.provide(
 					OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
 						Layer.provide(HttpClientTest),
 					),
 				),
-			),
-		)
-	}
-})
-
-test("counting keeps transformed tool schemas and restricted tool choice without handlers", async () => {
-	const toolkit = Toolkit.make(
-		tools.tools.echo,
-		Tool.make("convert", {
-			description: "Convert a numeric string",
-			parameters: Schema.Struct({ value: Schema.FiniteFromString }),
-			success: Schema.Finite,
+			)
 		}),
-	)
-	let bodies: ReadonlyArray<Schema.JsonObject> = []
-	const HttpClientTest = Layer.succeed(
-		HttpClient.HttpClient,
-		HttpClient.make((request, url) =>
-			Effect.gen(function* () {
-				assert.equal(request.body._tag, "Uint8Array")
-				return yield* Match.value(request.body).pipe(
-					Match.tag("Uint8Array", (body) =>
-						Effect.gen(function* () {
-							bodies = EffectArray.append(
-								bodies,
-								yield* Schema.decodeEffect(
-									Schema.fromJsonString(Schema.JsonObject),
-								)(new TextDecoder().decode(body.body)),
-							)
-							const payload = url.pathname.endsWith("input_tokens")
-								? { input_tokens: 21 }
-								: url.pathname.endsWith("compact")
-									? { output: nativeItems }
-									: response
-							return HttpClientResponse.fromWeb(
-								request,
-								new globalThis.Response(JSON.stringify(payload), {
-									headers: { "content-type": "application/json" },
-								}),
-							)
-						}),
-					),
-					Match.orElse(() =>
-						Effect.gen(function* () {
-							throw new Error("Expected a JSON request")
-						}),
-					),
-				)
-			}).pipe(Effect.orDie),
-		),
-	)
-	await Effect.runPromise(
+)
+
+it.effect(
+	"window mismatches and SDK encoding failures fail before the request is sent",
+	() =>
 		Effect.gen(function* () {
-			const service = yield* ResponsesCompaction.make()
-			const model = yield* OpenAiProvider.make().model(selection)
-			const request = {
-				selection,
-				window: ContextWindow.fromPrompt(Prompt.make("Convert 42")),
-				instructions: Prompt.empty,
-				toolkit,
-				toolChoice: { mode: "required", oneOf: ["convert"] } as const,
-			}
-			// Count and compact do not need the tool handler Layer.
-			yield* service.count(request)
-			yield* service.compact(request)
-			yield* LanguageModel.generateText({
-				prompt: request.window.prompt,
-				toolkit,
-				toolChoice: request.toolChoice,
+			let calls = 0
+			const HttpClientTest = Layer.succeed(
+				HttpClient.HttpClient,
+				HttpClient.make(() => {
+					calls++
+					return Effect.die("Invalid requests must not be sent")
+				}),
+			)
+			const windows: ReadonlyArray<ContextWindow.Window> = [
+				{
+					_tag: "Native",
+					provider: Provider.Id.make("other"),
+					model: selection.model,
+					items: nativeItems,
+					prompt: Prompt.empty,
+				},
+				{
+					_tag: "Native",
+					provider: selection.provider,
+					model: Model.Id.make("other"),
+					items: nativeItems,
+					prompt: Prompt.empty,
+				},
+				ContextWindow.fromPrompt(
+					Prompt.make([
+						{
+							role: "user",
+							content: [
+								Prompt.filePart({
+									mediaType: "application/zip",
+									data: new Uint8Array([1]),
+								}),
+							],
+						},
+					]),
+				),
+			]
+			yield* Effect.gen(function* () {
+				const service = yield* ResponsesCompaction.make()
+				const model = yield* OpenAiProvider.make().model(selection)
+				for (const window of windows) {
+					const request = {
+						selection,
+						window,
+						instructions: Prompt.empty,
+						toolkit: Toolkit.empty,
+					}
+					const countError = yield* service.count(request).pipe(Effect.flip)
+					const compactError = yield* service.compact(request).pipe(Effect.flip)
+					assert.strictEqual(countError.reason, "request-failed")
+					assert.strictEqual(compactError.reason, "request-failed")
+					const generatedError = yield* LanguageModel.generateText({
+						prompt: window.prompt,
+					}).pipe(
+						Effect.provide(model),
+						Effect.provideService(ContextWindow.CurrentWindow, window),
+						Effect.flip,
+					)
+					const streamedError = yield* LanguageModel.streamText({
+						prompt: window.prompt,
+					}).pipe(
+						Stream.runDrain,
+						Effect.provide(model),
+						Effect.provideService(ContextWindow.CurrentWindow, window),
+						Effect.flip,
+					)
+					assert.strictEqual(generatedError.reason._tag, "InvalidRequestError")
+					assert.strictEqual(streamedError.reason._tag, "InvalidRequestError")
+				}
+				assert.strictEqual(calls, 0)
 			}).pipe(
 				Effect.provide(
-					Layer.merge(
-						model,
-						toolkit.toLayer({
-							echo: ({ text }) => Effect.succeed(text),
-							convert: () => Effect.die("Request encoding must not run a tool"),
-						}),
+					OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
+						Layer.provide(HttpClientTest),
 					),
 				),
 			)
-			assert.equal(bodies.length, 3)
-			assert.deepEqual(bodies[0]!["input"], bodies[1]!["input"])
-			assert.deepEqual(bodies[0]!["input"], bodies[2]!["input"])
-			assert.deepEqual(bodies[0]!["tools"], bodies[2]!["tools"])
-			assert.deepEqual(bodies[0]!["tool_choice"], bodies[2]!["tool_choice"])
-			assert.equal(Predicate.hasProperty(bodies[1]!, "tools"), false)
-			const definitions = yield* Schema.decodeUnknownEffect(
-				Schema.Array(Schema.JsonObject),
-			)(bodies[0]!["tools"])
-			assert.deepEqual(
-				definitions.map((tool) => tool["name"]),
-				["convert"],
-			)
-		}).pipe(
-			Effect.provide(
-				OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
-					Layer.provide(HttpClientTest),
-				),
-			),
-		),
-	)
-})
-
-test("window mismatches and SDK encoding failures fail before the request is sent", async () => {
-	let calls = 0
-	const HttpClientTest = Layer.succeed(
-		HttpClient.HttpClient,
-		HttpClient.make(() => {
-			calls++
-			return Effect.die("Invalid requests must not be sent")
 		}),
-	)
-	const windows: ReadonlyArray<ContextWindow.Window> = [
-		{
-			_tag: "Native",
-			provider: Provider.Id.make("other"),
-			model: selection.model,
-			items: nativeItems,
-			prompt: Prompt.empty,
-		},
-		{
-			_tag: "Native",
-			provider: selection.provider,
-			model: Model.Id.make("other"),
-			items: nativeItems,
-			prompt: Prompt.empty,
-		},
-		ContextWindow.fromPrompt(
-			Prompt.make([
-				{
-					role: "user",
-					content: [
-						Prompt.filePart({
-							mediaType: "application/zip",
-							data: new Uint8Array([1]),
-						}),
-					],
-				},
-			]),
-		),
-	]
-	await Effect.runPromise(
-		Effect.gen(function* () {
-			const service = yield* ResponsesCompaction.make()
-			const model = yield* OpenAiProvider.make().model(selection)
-			for (const window of windows) {
-				const request = {
-					selection,
-					window,
-					instructions: Prompt.empty,
-					toolkit: Toolkit.empty,
-				}
-				const countError = yield* service.count(request).pipe(Effect.flip)
-				const compactError = yield* service.compact(request).pipe(Effect.flip)
-				assert.equal(countError.reason, "request-failed")
-				assert.equal(compactError.reason, "request-failed")
-				const generatedError = yield* LanguageModel.generateText({
-					prompt: window.prompt,
-				}).pipe(
-					Effect.provide(model),
-					Effect.provideService(ContextWindow.CurrentWindow, window),
-					Effect.flip,
-				)
-				const streamedError = yield* LanguageModel.streamText({
-					prompt: window.prompt,
-				}).pipe(
-					Stream.runDrain,
-					Effect.provide(model),
-					Effect.provideService(ContextWindow.CurrentWindow, window),
-					Effect.flip,
-				)
-				assert.equal(generatedError.reason._tag, "InvalidRequestError")
-				assert.equal(streamedError.reason._tag, "InvalidRequestError")
-			}
-			assert.equal(calls, 0)
-		}).pipe(
-			Effect.provide(
-				OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
-					Layer.provide(HttpClientTest),
-				),
-			),
-		),
-	)
-})
+)
 
-test("provider Layers keep service identity with direct and pipeable optional defaults", async () => {
-	class ProviderTest extends Context.Service<
-		ProviderTest,
-		OpenAiProvider.Provider
-	>()("@openbot-build/openbot/test/OpenAi.test/ProviderTest") {}
-	const defaults: OpenAiProvider.Defaults = { temperature: 0.25 }
-	const layers: ReadonlyArray<Layer.Layer<ProviderTest>> = [
-		OpenAiProvider.layer(ProviderTest),
-		OpenAiProvider.layer(ProviderTest, undefined),
-		OpenAiProvider.layer(ProviderTest, defaults),
-		ProviderTest.pipe(OpenAiProvider.layer()),
-		ProviderTest.pipe(OpenAiProvider.layer(undefined)),
-		ProviderTest.pipe(OpenAiProvider.layer(defaults)),
-	]
-	for (const layer of layers) {
-		const provider = await Effect.runPromise(
-			ProviderTest.pipe(Effect.provide(layer)),
-		)
-		assert.equal(provider.id, "openai")
-		assert.equal(
-			(await Effect.runPromise(provider.model(selection))).provider,
-			selection.provider,
-		)
-	}
-})
+it.effect(
+	"provider Layers keep service identity with direct and pipeable optional defaults",
+	() =>
+		Effect.gen(function* () {
+			class ProviderTest extends Context.Service<
+				ProviderTest,
+				OpenAiProvider.Provider
+			>()("@openbot-build/openbot/test/OpenAi.test/ProviderTest") {}
+			const defaults: OpenAiProvider.Defaults = { temperature: 0.25 }
+			const layers: ReadonlyArray<Layer.Layer<ProviderTest>> = [
+				OpenAiProvider.layer(ProviderTest),
+				OpenAiProvider.layer(ProviderTest, undefined),
+				OpenAiProvider.layer(ProviderTest, defaults),
+				ProviderTest.pipe(OpenAiProvider.layer()),
+				ProviderTest.pipe(OpenAiProvider.layer(undefined)),
+				ProviderTest.pipe(OpenAiProvider.layer(defaults)),
+			]
+			for (const layer of layers) {
+				const provider = yield* ProviderTest.pipe(Effect.provide(layer))
+				assert.strictEqual(provider.id, "openai")
+				assert.strictEqual(
+					(yield* provider.model(selection)).provider,
+					selection.provider,
+				)
+			}
+		}),
+)
+
+it.effect(
+	"the API gets the upstream model name, and the model keeps the selected ID",
+	() =>
+		Effect.gen(function* () {
+			let sent: Schema.JsonObject = {}
+			const HttpClientTest = Layer.succeed(
+				HttpClient.HttpClient,
+				HttpClient.make((request) =>
+					Effect.gen(function* () {
+						if (request.body._tag === "Uint8Array")
+							sent = yield* Schema.decodeEffect(RequestBody)(
+								new TextDecoder().decode(request.body.body),
+							).pipe(Effect.orDie)
+						return HttpClientResponse.fromWeb(
+							request,
+							new globalThis.Response("Gateway unavailable", { status: 503 }),
+						)
+					}),
+				),
+			)
+			const name = yield* Effect.gen(function* () {
+				const model = yield* OpenAiProvider.make({
+					upstreamModel: "upstream-name",
+				}).model(selection)
+				yield* LanguageModel.generateText({ prompt: "Hello." }).pipe(
+					Effect.provide(model),
+					Effect.exit,
+				)
+				return yield* AiModel.ModelName.pipe(Effect.provide(model))
+			}).pipe(
+				Effect.provide(
+					OpenAiClient.layer({ apiUrl: "https://openai.test/v1" }).pipe(
+						Layer.provide(HttpClientTest),
+					),
+				),
+			)
+			assert.strictEqual(sent["model"], "upstream-name")
+			assert.strictEqual(name, selection.model)
+		}),
+)

@@ -1,4 +1,4 @@
-import { Match, Schema } from "effect"
+import { Array as Arr, Duration, Match, Schema } from "effect"
 import { Document } from "@openbot-build/protocol"
 
 export const OAuthMode = Schema.Literals([
@@ -26,14 +26,17 @@ export const Scenario = Schema.Struct({
 })
 export type Scenario = typeof Scenario.Type
 
+/** The fixture cards copy this card, and the redirect fixture points to it. */
+export const anonymous: Scenario = {
+	id: "anonymous",
+	title: "Protocol Test · Anonymous",
+	description:
+		"Test MCP tools, resources, prompts and Apps without credentials.",
+	authentication: { kind: "anonymous" },
+}
+
 export const scenarios: ReadonlyArray<Scenario> = [
-	{
-		id: "anonymous",
-		title: "Protocol Test · Anonymous",
-		description:
-			"Test MCP tools, resources, prompts and Apps without credentials.",
-		authentication: { kind: "anonymous" },
-	},
+	anonymous,
 	{
 		id: "api-key",
 		title: "Protocol Test · API Key",
@@ -65,7 +68,7 @@ export const scenarios: ReadonlyArray<Scenario> = [
 			value: "Basic cHJvdG9jb2wtdGVzdDpwcm90b2NvbC10ZXN0LXBhc3N3b3Jk",
 		},
 	},
-	...OAuthMode.literals.map((mode): Scenario => ({
+	...Arr.map(OAuthMode.literals, (mode): Scenario => ({
 		id: "oauth-" + mode,
 		title: "Protocol Test · OAuth " + mode,
 		description: "Test OAuth bound to one resource, using " + mode + ".",
@@ -73,122 +76,139 @@ export const scenarios: ReadonlyArray<Scenario> = [
 	})),
 ]
 
-export const scopes = ["test:read", "test:write"]
+/** How long the test state lives. scenarios.json gives these times to clients. */
+export const lifetimes = {
+	workspace: Duration.minutes(30),
+	access: Duration.minutes(5),
+	refresh: Duration.hours(1),
+	client: Duration.days(1),
+} as const
+
+export const readScope = "test:read"
+export const writeScope = "test:write"
+export const scopes = [readScope, writeScope] as const
 export const version = "0.1.0"
+/** The validators of every discovery document. They change with `version`. */
+export const etag = '"protocol-test-' + version + '"'
+export const modified = "Sun, 18 Oct 2026 00:00:00 GMT"
 export const resource = (origin: string) => (scenario: Scenario) =>
 	origin + "/mcp/" + scenario.id
 export const issuer = (origin: string) => (mode: OAuthMode) =>
 	origin + "/oauth/" + mode
 export const cardUrl = (origin: string) => (scenario: Scenario) =>
 	origin + "/apps/" + scenario.id + "/server-card.json"
+export const catalogUrl = (origin: string) => (scenario: Scenario) =>
+	origin + "/apps/" + scenario.id + "/catalog.json"
 
 export const card =
 	(origin: string) =>
-	(scenario: Scenario): Document.ServerCard => ({
-		$schema: Document.cardSchemaUrl,
-		name: "openbot.protocol-test/" + scenario.id,
-		title: scenario.title,
-		version,
-		description: scenario.description,
-		websiteUrl: origin + "/apps/" + scenario.id,
-		icons: [
-			{
-				src: origin + "/assets/icon.svg",
-				mimeType: "image/svg+xml",
-				sizes: ["128x128"],
-			},
-		],
-		remotes: [
-			{
-				type: "streamable-http",
-				url: resource(origin)(scenario),
-				supportedProtocolVersions: [Document.protocolVersion],
-				...Match.value(scenario.authentication).pipe(
-					Match.when({ kind: "header" }, (auth) => ({
-						headers: [
-							{
-								name: auth.name,
-								description:
-									"Public test credential. See the scenario instructions.",
-								isRequired: true,
-								isSecret: true,
-							},
-						],
-					})),
-					Match.orElse(() => ({})),
-				),
-			},
-			...Match.value(scenario.id).pipe(
-				Match.when("api-key", (): ReadonlyArray<Document.Remote> => [
-					{
-						type: "streamable-http",
-						url: "{serviceOrigin}/mcp/api-key",
-						supportedProtocolVersions: [Document.protocolVersion],
-						variables: {
-							serviceOrigin: {
-								description: "Published service origin.",
-								format: "string",
-								default: origin,
-								choices: [origin],
-								isRequired: true,
-							},
-						},
-						headers: [
-							{
-								name: "X-API-Key",
-								value: "{apiKey}",
-								variables: {
-									apiKey: {
-										description: "Public test key: protocol-test-api-key.",
-										format: "string",
-										isRequired: true,
-										isSecret: true,
-									},
+	(scenario: Scenario): Document.ServerCard =>
+		Document.ServerCard.make({
+			$schema: Document.cardSchemaUrl,
+			name: "openbot.protocol-test/" + scenario.id,
+			title: scenario.title,
+			version,
+			description: scenario.description,
+			websiteUrl: origin + "/apps/" + scenario.id,
+			icons: [
+				{
+					src: origin + "/assets/icon.svg",
+					mimeType: "image/svg+xml",
+					sizes: ["128x128"],
+				},
+			],
+			remotes: [
+				{
+					type: "streamable-http",
+					url: resource(origin)(scenario),
+					supportedProtocolVersions: [Document.protocolVersion],
+					...Match.value(scenario.authentication).pipe(
+						Match.when({ kind: "header" }, (auth) => ({
+							headers: [
+								{
+									name: auth.name,
+									description:
+										"Public test credential. See the scenario instructions.",
+									isRequired: true,
+									isSecret: true,
+								},
+							],
+						})),
+						Match.orElse(() => ({})),
+					),
+				},
+				...Match.value(scenario.id).pipe(
+					Match.when("api-key", (): ReadonlyArray<Document.Remote> => [
+						Document.Remote.make({
+							type: "streamable-http",
+							url: "{serviceOrigin}/mcp/api-key",
+							supportedProtocolVersions: [Document.protocolVersion],
+							variables: {
+								serviceOrigin: {
+									description: "Published service origin.",
+									format: "string",
+									default: origin,
+									choices: [origin],
+									isRequired: true,
 								},
 							},
-						],
-					},
-				]),
-				Match.orElse(() => []),
-			),
-		],
-		_meta: {
-			[Document.presentationKey]: {
-				version: "1",
-				examples: [
-					{
-						id: "echo",
-						title: "Check a connection",
-						prompt:
-							"Use the Protocol Test App to echo a short message and check the result.",
-					},
-					{
-						id: "workspace",
-						title: "Try a temporary workspace",
-						prompt:
-							"Create a test note in a new Protocol Test workspace. Then show it in the interactive view.",
-					},
-				],
+							headers: [
+								{
+									name: "X-API-Key",
+									value: "{apiKey}",
+									variables: {
+										apiKey: {
+											description: "Public test key: protocol-test-api-key.",
+											format: "string",
+											isRequired: true,
+											isSecret: true,
+										},
+									},
+								},
+							],
+						}),
+					]),
+					Match.orElse(() => []),
+				),
+			],
+			_meta: {
+				[Document.presentationKey]: {
+					version: "1",
+					examples: [
+						{
+							id: "echo",
+							title: "Check a connection",
+							prompt:
+								"Use the Protocol Test App to echo a short message and check the result.",
+						},
+						{
+							id: "workspace",
+							title: "Try a temporary workspace",
+							prompt:
+								"Create a test note in a new Protocol Test workspace. Then show it in the interactive view.",
+						},
+					],
+				},
 			},
-		},
-	})
+		})
 
 export const catalog =
 	(origin: string) =>
-	(selected = scenarios): Document.Catalog => ({
-		specVersion: "1.0",
-		host: {
-			displayName: "OpenBot App Protocol Test Service",
-			identifier: origin,
-		},
-		entries: selected.map((scenario) => ({
-			identifier: "openbot.protocol-test/" + scenario.id,
-			type: Document.cardMediaType,
-			url: cardUrl(origin)(scenario),
-			displayName: scenario.title,
-			description: scenario.description,
-		})),
-	})
+	(selected = scenarios): Document.Catalog =>
+		Document.Catalog.make({
+			specVersion: "1.0",
+			host: {
+				displayName: "OpenBot App Protocol Test Service",
+				identifier: origin,
+			},
+			entries: Arr.map(selected, (scenario) => ({
+				identifier: "openbot.protocol-test/" + scenario.id,
+				type: Document.cardMediaType,
+				url: cardUrl(origin)(scenario),
+				displayName: scenario.title,
+				description: scenario.description,
+			})),
+		})
 
 const HttpsOrigin = Schema.String.check(
 	Schema.makeFilter(

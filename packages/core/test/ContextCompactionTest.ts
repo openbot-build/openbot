@@ -1,6 +1,11 @@
-import { Array as EffectArray, Match, Effect } from "effect"
+import { Array as Arr, Effect, Match, Ref } from "effect"
 import { ContextCompaction, ContextWindow } from "@openbot-build/core"
 import { Prompt } from "effect/ai"
+
+/**
+ * A fake ContextCompaction service. It keeps every count request, and it counts
+ * each run of a compact Effect, so a test can see a repeat.
+ */
 export const ContextCompactionTest = (
 	options: {
 		before?: number
@@ -12,49 +17,49 @@ export const ContextCompactionTest = (
 			ContextCompaction.ContextCompactionError
 		>
 	} = {},
-) => {
-	let requests: ReadonlyArray<ContextCompaction.Request> = []
-	let compactions = 0
-	const service: typeof ContextCompaction.ContextCompaction.Service = {
-		count: (request) =>
-			Effect.sync(() => {
-				requests = EffectArray.append(requests, request)
-				return Match.value(request.window).pipe(
-					Match.tag("Native", () => options.after ?? 10),
-					Match.orElse(() => options.before ?? 90),
-				)
-			}),
-		compact: (request) => {
-			compactions++
-			return (
-				options.compact?.(request) ??
-				Effect.succeed({
-					_tag: "Native",
-					provider: request.selection.provider,
-					model: request.selection.model,
-					items: [
-						{
-							type: "message",
-							content: [{ type: "output_text", text: "retained" }],
-						},
-						{
-							type: "compaction",
-							encrypted_content: "encrypted",
-							opaque: { v: 1 },
-						},
-					],
-					prompt: Prompt.empty,
-				})
-			)
-		},
-	}
-	return {
-		service,
-		get requests() {
-			return requests
-		},
-		get compactions() {
-			return compactions
-		},
-	}
-}
+) =>
+	Effect.gen(function* () {
+		const requests = yield* Ref.make<ReadonlyArray<ContextCompaction.Request>>(
+			[],
+		)
+		const compactions = yield* Ref.make(0)
+		const service: typeof ContextCompaction.ContextCompaction.Service = {
+			count: (request) =>
+				Ref.update(requests, Arr.append(request)).pipe(
+					Effect.as(
+						Match.value(request.window).pipe(
+							Match.tag("Native", () => options.after ?? 10),
+							Match.orElse(() => options.before ?? 90),
+						),
+					),
+				),
+			compact: (request) =>
+				Ref.update(compactions, (n) => n + 1).pipe(
+					Effect.andThen(
+						options.compact?.(request) ??
+							Effect.succeed<ContextWindow.Window>({
+								_tag: "Native",
+								provider: request.selection.provider,
+								model: request.selection.model,
+								items: [
+									{
+										type: "message",
+										content: [{ type: "output_text", text: "retained" }],
+									},
+									{
+										type: "compaction",
+										encrypted_content: "encrypted",
+										opaque: { v: 1 },
+									},
+								],
+								prompt: Prompt.empty,
+							}),
+					),
+				),
+		}
+		return {
+			service,
+			requests: Ref.get(requests),
+			compactions: Ref.get(compactions),
+		}
+	})

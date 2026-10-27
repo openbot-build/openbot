@@ -1,13 +1,20 @@
 import { Settings as Api } from "@openbot-build/api"
 import { DateTime } from "effect"
-import type {
-	OrganizationDocument,
-	PlatformDocument,
-	Snapshot,
+import {
+	browserAuthOf,
+	codeModeOf,
+	filesOf,
+	quotaOf,
+	rateLimitOf,
+	tokenRateOf,
+	delegationTimeLimitOf,
+	operationsOf,
+	type FilesDocument,
+	type MemberDocument,
+	type OrganizationDocument,
+	type PlatformDocument,
+	type Snapshot,
 } from "./Documents.ts"
-import { browserAuthDefaults } from "./Documents.ts"
-
-const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 
 /** The API form of the platform settings. Secrets only show whether they are set. */
 export const platform = (
@@ -15,13 +22,9 @@ export const platform = (
 ): Api.PlatformSettings => {
 	const { document } = snapshot
 	return {
-		version: snapshot.version,
-		browserAuth: document.browserAuth ?? browserAuthDefaults,
 		memberSignupOrganizationId: document.memberSignupOrganizationId ?? null,
-		developerVerification: document.developerVerification ?? {
-			metadataKeys: [],
-			dnsLabels: [],
-		},
+		browserAuth: browserAuthOf(document),
+		version: snapshot.version,
 		publicOrigin: document.publicOrigin,
 		identityProvider:
 			document.identityProvider === null
@@ -39,9 +42,27 @@ export const platform = (
 						},
 					},
 		organizationCreation: document.organizationCreation,
-		policyCeiling: document.policyCeiling,
+		ceiling: document.ceiling,
 		appRestrictions: document.appRestrictions,
-		updatedAt: iso(snapshot.updatedAt),
+		codeMode: codeModeOf(document),
+		rateLimit: rateLimitOf(document),
+		tokenRate: tokenRateOf(document),
+		files: files(filesOf(document)),
+		updatedAt: DateTime.formatIso(DateTime.makeUnsafe(snapshot.updatedAt)),
+	}
+}
+
+const files = (document: FilesDocument): Api.Files => {
+	const { storage, ...stored } = document
+	const limits = { ...stored, quotaBytes: quotaOf(document) }
+	if (storage === null) return { ...limits, storage: null }
+	const { secretAccessKey, secretAccessKeyHint, ...fields } = storage
+	return {
+		...limits,
+		storage: {
+			...fields,
+			secretAccessKey: { set: true, hint: secretAccessKeyHint },
+		},
 	}
 }
 
@@ -49,6 +70,18 @@ export const organization = (
 	snapshot: Snapshot<OrganizationDocument>,
 ): Api.OrganizationSettings => ({
 	...snapshot.document,
+	delegationTimeLimitMs: delegationTimeLimitOf(snapshot.document),
+	...operationsOf(snapshot.document),
+	tokenRate: tokenRateOf(snapshot.document),
 	version: snapshot.version,
-	updatedAt: iso(snapshot.updatedAt),
+	updatedAt: DateTime.formatIso(DateTime.makeUnsafe(snapshot.updatedAt)),
+})
+
+export const member = (
+	snapshot: Snapshot<MemberDocument>,
+): Api.MemberSettings => ({
+	...snapshot.document,
+	defaultBot: snapshot.document.defaultBot ?? null,
+	version: snapshot.version,
+	updatedAt: DateTime.formatIso(DateTime.makeUnsafe(snapshot.updatedAt)),
 })

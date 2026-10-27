@@ -1,13 +1,19 @@
 import { Schema } from "effect"
-import { Session, Turn } from "@openbot-build/core"
+import { Chat, Turn } from "@openbot-build/core"
 import * as Index from "./AppIndexApi.ts"
-import { Availability, OwnedConnectionIdentity } from "./ConnectionsApi.ts"
+import { AppIdentity, Availability, ConnectionId } from "./ConnectionsApi.ts"
+
+export const AppOperationId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+).pipe(Schema.brand("@openbot-build/api/AppOperationId"))
+export type AppOperationId = typeof AppOperationId.Type
 
 /** Safe source details for one live capability. It never contains configured secrets. */
 export const Source = Schema.Struct({
-	connectionId: Schema.String,
+	connectionId: ConnectionId,
 	connectionName: Schema.String,
-	cardUrl: OwnedConnectionIdentity,
+	cardUrl: AppIdentity,
 	appName: Schema.String,
 	remoteIndex: Schema.Natural,
 	revision: Schema.Natural,
@@ -20,12 +26,12 @@ export const Result = Schema.TaggedUnion({
 	Completed: {
 		source: Source,
 		result: Schema.Json,
-		operationId: Schema.optionalKey(Schema.String),
+		operationId: Schema.optionalKey(AppOperationId),
 	},
 	InputRequired: {
 		source: Source,
 		request: Schema.Json,
-		operationId: Schema.optionalKey(Schema.String),
+		operationId: Schema.optionalKey(AppOperationId),
 	},
 	Failed: {
 		source: Source,
@@ -33,7 +39,7 @@ export const Result = Schema.TaggedUnion({
 		cause: Schema.optionalKey(Schema.String),
 		message: Schema.String,
 		result: Schema.optionalKey(Schema.Json),
-		operationId: Schema.optionalKey(Schema.String),
+		operationId: Schema.optionalKey(AppOperationId),
 	},
 })
 export type Result = typeof Result.Type
@@ -50,17 +56,14 @@ export const InvocationStatus = Schema.Literals([
 ])
 export type InvocationStatus = typeof InvocationStatus.Type
 export const Invocation = Schema.Struct({
-	id: Schema.String,
-	session: Session.Id,
+	id: AppOperationId,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	callId: Schema.String,
-	callOccurrence: Schema.optionalKey(Schema.Natural),
 	toolName: Schema.String,
 	source: Source,
 	arguments: Schema.JsonObject,
 	readOnly: Schema.Boolean,
-	/** Reuse this completed read decision for this App in this Session. */
-	grantReads: Schema.Boolean,
 	round: Schema.Natural,
 	status: InvocationStatus,
 	result: Schema.NullOr(Result),
@@ -68,9 +71,9 @@ export const Invocation = Schema.Struct({
 export type Invocation = typeof Invocation.Type
 
 export const AccessConnection = Schema.Struct({
-	id: Schema.String,
+	id: ConnectionId,
 	name: Schema.String,
-	cardUrl: OwnedConnectionIdentity,
+	cardUrl: AppIdentity,
 	revision: Schema.Natural,
 	enabled: Schema.Boolean,
 	availability: Availability,

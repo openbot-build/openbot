@@ -1,5 +1,3 @@
-import * as AccountNetwork from "../execution/AccountNetwork.ts"
-import * as HostApp from "./HostApp.ts"
 import {
 	App,
 	AppConnections,
@@ -13,8 +11,10 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { OutboundPolicy } from "../network/OutboundPolicy.ts"
 import {
-	Clock,
+	Array as Arr,
+	Cause,
 	Context,
 	Crypto,
 	Effect,
@@ -24,16 +24,17 @@ import {
 	Schema,
 	Scope,
 } from "effect"
-import { ProtocolStores } from "./ProtocolStores.ts"
+import { ProtocolStores, toStoreError } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { appRecords } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { Governance } from "./Governance.ts"
 import type { AppAuthorizationApi, ConnectionsApi } from "@openbot-build/api"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
+import * as Failures from "../app/Failures.ts"
+import * as HostApp from "./HostApp.ts"
+import { Probe } from "./Probe.ts"
+import * as Db from "../database/Database.ts"
 
 type AuthorizationError =
 	| Authorization.AuthorizationError
@@ -49,7 +50,18 @@ export type Protection =
 			readonly scopes: ReadonlyArray<string>
 			readonly resourceMetadataUrl?: string
 	  }
-export type BoundApp = HostApp.Service & {
+export type BoundApp = Omit<HostApp.Service, "add"> & {
+	/** A restricted App and a configuration that the App does not accept keep their own errors. */
+	readonly add: (
+		input: HostApp.AddRequest,
+	) => Effect.Effect<
+		HostApp.Added,
+		| App.AppError
+		| Store.StoreError
+		| Discovery.Error
+		| ConnectionsApi.AppRestricted
+		| ConnectionsApi.ConnectionConfigurationInvalid
+	>
 	readonly inspectAuthorization: (
 		key: Store.ConnectionKey,
 	) => Effect.Effect<
@@ -66,8 +78,6 @@ export type BoundApp = HostApp.Service & {
 		AuthorizationError | App.CleanupPending
 	>
 }
-import { Probe } from "./Probe.ts"
-
 export class AppNetwork extends Context.Service<
 	AppNetwork,
 	{
@@ -77,14 +87,20 @@ export class AppNetwork extends Context.Service<
 		) => Layer.Layer<Network.Network>
 	}
 >()("@openbot-build/openbot/apps/AppHost/AppNetwork") {}
-export const layerNetwork = Layer.succeed(AppNetwork, {
-	layer: (owner, origins) =>
-		NodeHttpServer.layerUserNetwork({
-			owner,
-			allowedOrigins: origins,
-			allowAddress: NodeHttpServer.isPublicAddress,
-		}),
-})
+export const layerNetwork = Layer.effect(
+	AppNetwork,
+	Effect.gen(function* () {
+		const policy = yield* OutboundPolicy
+		return {
+			layer: (owner: string, origins: ReadonlyArray<string>) =>
+				NodeHttpServer.layerUserNetwork({
+					owner,
+					allowedOrigins: origins,
+					allowAddress: policy.allowAddress,
+				}),
+		}
+	}),
+)
 
 /** Build a closed App service for the current owner and invocation policy. */
 export class AppHost extends Context.Service<
@@ -115,16 +131,12 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const governance = yield* Governance
 	const persistent = yield* ProtocolStores
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
 	const active = yield* App.ConnectionScopes
-	const configuredNetwork = yield* AppNetwork
-	const network = {
-		layer: (owner: string, origins: ReadonlyArray<string>) =>
-			AccountNetwork.layer(owner, configuredNetwork.layer(owner, origins)),
-	}
+	const network = yield* AppNetwork
 	const crypto = yield* Crypto.Crypto
 	const probe = yield* Probe
 	const locks = yield* ConnectionLocks
@@ -141,12 +153,13 @@ export const make: Effect.Effect<
 				Context.add(Client.InvocationPolicy, {
 					check: (invocation) =>
 						governance.check(invocation.connection.cardUrl).pipe(
-							Effect.mapError(
-								() =>
-									new Client.PermissionDenied({
+							Effect.catchTag("AppRestricted", () =>
+								Effect.fail(
+									Client.PermissionDenied.make({
 										action: invocation.action,
 										target: invocation.target,
 									}),
+								),
 							),
 							Effect.andThen(policy.check(invocation)),
 						),
@@ -157,7 +170,7 @@ export const make: Effect.Effect<
 				key.owner === owner
 					? Effect.void
 					: Effect.fail(
-							new Store.StoreError({
+							Store.StoreError.make({
 								reason: "Missing",
 								operation: "Owned App connection",
 							}),
@@ -178,9 +191,10 @@ export const make: Effect.Effect<
 					const links = yield* Schema.decodeEffect(Schema.Array(Document.Link))(
 						[connection.endpoint, ...additional],
 					).pipe(
-						Effect.mapError(
+						Failures.replace(
+							"OpenBot could not read the network targets of an App connection.",
 							() =>
-								new Store.StoreError({
+								Store.StoreError.make({
 									reason: "Invalid",
 									operation: "App network targets",
 								}),
@@ -189,16 +203,17 @@ export const make: Effect.Effect<
 					const context = yield* Layer.buildWithScope(
 						network.layer(
 							owner,
-							links.map((url) => new URL(url).origin),
+							Arr.map(links, (url) => new URL(url).origin),
 						),
 						scope,
 					)
 					return yield* program.pipe(Effect.provideContext(context))
 				})
-			const appError = () =>
-				new HostApp.AppError({
+			const appError = (cause: unknown) =>
+				HostApp.AppError.make({
 					reason: "storage-failed",
 					message: "The account's App connections could not be read.",
+					cause,
 				})
 			const withAuthorizationNetwork = <A, E, R>(
 				key: Store.ConnectionKey,
@@ -227,6 +242,9 @@ export const make: Effect.Effect<
 								Effect.map(({ metadata }) => [
 									metadata.issuer,
 									metadata.token_endpoint,
+									...(typeof metadata["registration_endpoint"] === "string"
+										? [metadata["registration_endpoint"]]
+										: []),
 									...(metadata.revocation_endpoint === undefined
 										? []
 										: [metadata.revocation_endpoint]),
@@ -237,6 +255,38 @@ export const make: Effect.Effect<
 					)
 					return yield* withNetwork(key, extra, program)
 				})
+
+			/** The credential reference avoids rotating the same refresh token twice. */
+			const refreshBeforeSend = (key: Store.ConnectionKey, reference: string) =>
+				Effect.scoped(
+					locks.withConnection(
+						key,
+						Effect.gen(function* () {
+							const current = yield* stores.apps.get(key)
+							if (current.authorization._tag !== "Authorized")
+								return yield* Client.AuthorizationRequired.make({
+									reason: "Pending",
+									scopes: [],
+								})
+							if (current.authorization.credentialRef !== reference) return
+							yield* withAuthorizationNetwork(
+								key,
+								OAuthAuthorization.refresh(key).pipe(
+									Effect.provideContext(services),
+								),
+							)
+						}),
+					),
+				).pipe(
+					Failures.replace(
+						"OpenBot could not refresh an expired App token before sending",
+						() =>
+							Client.AuthorizationRequired.make({
+								reason: "Expired",
+								scopes: [],
+							}),
+					),
+				)
 
 			const pending = (
 				key: Store.ConnectionKey,
@@ -253,15 +303,21 @@ export const make: Effect.Effect<
 						verification: { _tag: "CleanupPending", stage },
 					}),
 				).pipe(
-					Effect.mapError(
-						() =>
-							new Store.StoreError({
-								reason: "Unavailable",
-								operation: "Record App cleanup progress",
-							}),
-					),
-					Effect.andThen(Effect.fail(new App.CleanupPending({ key, stage }))),
+					Effect.mapError(toStoreError("Record App cleanup progress")),
+					Effect.andThen(Effect.fail(App.CleanupPending.make({ key, stage }))),
 				)
+			/** The member can retry the cleanup. The log keeps the reason for the failure. */
+			const pendingAfter =
+				(
+					message: string,
+					key: Store.ConnectionKey,
+					stage: App.CleanupPending["stage"],
+				) =>
+				(error: unknown) =>
+					Effect.logWarning(message, Cause.fail(error)).pipe(
+						Effect.annotateLogs({ connectionId: key.connectionId }),
+						Effect.andThen(pending(key, stage)),
+					)
 			const revoke = (key: Store.ConnectionKey) =>
 				Effect.scoped(
 					Effect.gen(function* () {
@@ -276,50 +332,47 @@ export const make: Effect.Effect<
 							OAuthAuthorization.revoke(key).pipe(
 								Effect.provideContext(services),
 							),
-						).pipe(Effect.catch(() => pending(key, "Credentials")))
+						).pipe(
+							Effect.catch(
+								pendingAfter(
+									"OpenBot could not revoke the App credentials.",
+									key,
+									"Credentials",
+								),
+							),
+						)
 						yield* stores
 							.clearFlows(key.connectionId)
-							.pipe(Effect.catch(() => pending(key, "Credentials")))
+							.pipe(
+								Effect.catch(
+									pendingAfter(
+										"OpenBot could not clear the App authorization flows.",
+										key,
+										"Credentials",
+									),
+								),
+							)
 						return result
 					}),
 				)
 			const host: BoundApp = {
 				discover: discovery.resolve,
-				list: db
-					.select()
-					.from(appRecords)
-					.where(eq(appRecords.owner, owner))
-					.pipe(
-						Effect.flatMap((rows) =>
-							Effect.forEach(rows, (row) =>
-								Schema.decodeEffect(StoredConnections.appCodec)(row.body),
-							),
-						),
-						Effect.mapError(appError),
-					),
-				get: stores.apps.getApp,
 				listConnections: StoredConnections.list(db, secrets, owner).pipe(
-					Effect.map((rows) => rows.map((row) => row.connection)),
+					Effect.map(Arr.map((row) => row.connection)),
 					Effect.mapError(appError),
 				),
 				getConnection: stores.apps.get,
 				add: Effect.fn("AppHost.add")(function* (input) {
 					yield* keyChecked(input.key)
-					yield* governance
-						.check(input.candidate.cardUrl)
-						.pipe(
-							Effect.mapError(
-								() => new App.AppError({ reason: "Unavailable" }),
-							),
-						)
+					yield* governance.check(input.candidate.cardUrl)
 					if (!input.confirmed)
-						return yield* new App.AppError({ reason: "ConfirmationRequired" })
+						return yield* App.AppError.make({ reason: "ConfirmationRequired" })
 					const current = yield* discovery.refreshCard(input.candidate.cardUrl)
 					yield* Match.value(
 						rules.compare({ previous: input.candidate, current }),
 					).pipe(
 						Match.tag("NeedsRevalidation", () =>
-							Effect.fail(new App.AppError({ reason: "CandidateChanged" })),
+							Effect.fail(App.AppError.make({ reason: "CandidateChanged" })),
 						),
 						Match.orElse(() => Effect.void),
 					)
@@ -328,7 +381,7 @@ export const make: Effect.Effect<
 						index: input.remoteIndex,
 						values: input.values,
 					})
-					const connection: Store.UserConnection = {
+					const connection = Store.UserConnection.make({
 						...input.key,
 						cardUrl: current.cardUrl,
 						endpoint: configured.url,
@@ -337,21 +390,15 @@ export const make: Effect.Effect<
 						headers: Redacted.make(configured.headers),
 						state: "Enabled",
 						authorization: { _tag: "Unprotected" },
-					}
-					const protection = yield* probe
-						.check({
-							app: {
-								cardUrl: current.cardUrl,
-								card: current.card,
-								sources: current.sources,
-							},
-							connection,
-						})
-						.pipe(
-							Effect.mapError(
-								() => new App.AppError({ reason: "Unavailable" }),
-							),
-						)
+					})
+					const protection = yield* probe.check({
+						app: Store.AppRecord.make({
+							cardUrl: current.cardUrl,
+							card: current.card,
+							sources: current.sources,
+						}),
+						connection,
+					})
 					return yield* AppConnections.add({
 						...input,
 						candidate: current,
@@ -362,8 +409,7 @@ export const make: Effect.Effect<
 					Effect.scoped(
 						Effect.gen(function* () {
 							const connection = yield* stores.apps.get(input.key)
-							const app = yield* stores.apps.getApp(connection.cardUrl)
-							const origins = [
+							const urls = [
 								input.issuer,
 								input.clientId,
 								...(input.resourceMetadataUrl === undefined
@@ -372,7 +418,7 @@ export const make: Effect.Effect<
 							]
 							const { metadata } = yield* withNetwork(
 								input.key,
-								origins,
+								urls,
 								OAuthAuthorization.discover({
 									resource: connection.endpoint,
 									issuer: input.issuer,
@@ -384,19 +430,14 @@ export const make: Effect.Effect<
 							return yield* withNetwork(
 								input.key,
 								[
-									...origins,
-									...(metadata.registration_endpoint === undefined
-										? []
-										: [metadata.registration_endpoint]),
+									...urls,
+									...(typeof metadata["registration_endpoint"] === "string"
+										? [metadata["registration_endpoint"]]
+										: []),
 								],
-								OAuthAuthorization.begin({
-									...input,
-									clientRegistration: app.sources.some(
-										(source) => source.role === "manual",
-									)
-										? "dynamic"
-										: "cimd",
-								}).pipe(Effect.provideContext(services)),
+								OAuthAuthorization.begin(input).pipe(
+									Effect.provideContext(services),
+								),
 							)
 						}),
 					),
@@ -416,70 +457,15 @@ export const make: Effect.Effect<
 				open: (input) =>
 					Effect.gen(function* () {
 						const connection = yield* stores.apps.get(input.key)
-						const app = yield* stores.apps.getApp(connection.cardUrl)
 						yield* governance.check(connection.cardUrl).pipe(
-							Effect.mapError(
-								() =>
-									new Client.PermissionDenied({
+							Effect.catchTag("AppRestricted", () =>
+								Effect.fail(
+									Client.PermissionDenied.make({
 										action: "connect",
 										target: connection.cardUrl,
 									}),
+								),
 							),
-						)
-						yield* locks.withConnection(
-							input.key,
-							Effect.gen(function* () {
-								const current = yield* stores.apps.get(input.key)
-								if (current.state !== "Enabled") return
-								yield* Match.value(current.authorization).pipe(
-									Match.tag("Authorized", (auth) =>
-										Effect.gen(function* () {
-											const credential = yield* stores.credentials.get({
-												binding: auth.binding,
-												reference: auth.credentialRef,
-											})
-											if (
-												credential.expiresAt !== undefined &&
-												credential.expiresAt <= (yield* Clock.currentTimeMillis)
-											)
-												yield* host.refreshAuthorization(input.key).pipe(
-													Effect.catchTags({
-														AuthorizationError: (error) =>
-															Effect.fail(
-																new Client.AuthorizationRequired({
-																	reason: Match.value(error.reason).pipe(
-																		Match.when(
-																			"ScopeRequired",
-																			() => "InsufficientScope" as const,
-																		),
-																		Match.orElse(() => "Expired" as const),
-																	),
-																	scopes: credential.scopes,
-																}),
-															),
-														NetworkError: () =>
-															Effect.fail(
-																new Client.ClientError({
-																	reason: "Network",
-																	issue:
-																		"App authorization renewal is temporarily unavailable.",
-																}),
-															),
-														SchemaError: () =>
-															Effect.fail(
-																new Client.ClientError({
-																	reason: "Protocol",
-																	issue:
-																		"The App authorization response is invalid.",
-																}),
-															),
-													}),
-												)
-										}),
-									),
-									Match.orElse(() => Effect.void),
-								)
-							}),
 						)
 						return yield* withNetwork(
 							input.key,
@@ -487,50 +473,25 @@ export const make: Effect.Effect<
 							McpClient.open({
 								...input,
 								eagerLists: false,
-								protocol: app.sources.some((source) => source.role === "manual")
-									? "standard"
-									: "openbot",
+								refreshAuthorization: (reference) =>
+									refreshBeforeSend(input.key, reference),
 							}).pipe(Effect.provideContext(services)),
 						)
 					}),
-				setEnabled: ({ key, enabled }) =>
-					keyChecked(key).pipe(
-						Effect.andThen(
-							StoredConnections.update(
-								db,
-								secrets,
-								owner,
-								key.connectionId,
-								(stored) => ({
-									...stored,
-									verification: null,
-									connection: {
-										...stored.connection,
-										state: enabled
-											? stored.connection.state === "Disabled"
-												? "Enabled"
-												: stored.connection.state
-											: "Disabled",
-									},
-								}),
-							),
-						),
-						Effect.tap(() => active.close(key)),
-						Effect.map((row) => row.connection),
-						Effect.mapError(
-							() =>
-								new Store.StoreError({
-									reason: "Unavailable",
-									operation: "Update owned App state",
-								}),
-						),
-					),
 				remove: (key) =>
 					Effect.gen(function* () {
 						yield* revoke(key)
 						yield* stores.apps
 							.delete(key)
-							.pipe(Effect.catch(() => pending(key, "Connection")))
+							.pipe(
+								Effect.catch(
+									pendingAfter(
+										"OpenBot could not delete the App connection.",
+										key,
+										"Connection",
+									),
+								),
+							)
 						return { _tag: "Removed", key } as const
 					}),
 				revalidate: (input) =>
@@ -592,22 +553,15 @@ export const make: Effect.Effect<
 							)
 						}),
 					),
-				// Finish credential rotation before honoring cancellation of its caller.
 				refreshAuthorization: (key) =>
 					Effect.scoped(
 						withAuthorizationNetwork(
 							key,
 							OAuthAuthorization.refresh(key).pipe(
-								Effect.provideContext(
-									Context.add(
-										services,
-										Store.AppStore,
-										persistent.bind(owner, "credential-renewal").apps,
-									),
-								),
+								Effect.provideContext(services),
 							),
 						),
-					).pipe(Effect.uninterruptible),
+					),
 				revokeAuthorization: revoke,
 			}
 			return {
@@ -617,8 +571,6 @@ export const make: Effect.Effect<
 				revokeAuthorization: (key) =>
 					locks.withConnection(key, host.revokeAuthorization(key)),
 				remove: (key) => locks.withConnection(key, host.remove(key)),
-				setEnabled: (input) =>
-					locks.withConnection(input.key, host.setEnabled(input)),
 			}
 		},
 	})

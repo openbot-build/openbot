@@ -1,21 +1,29 @@
-import { Context, Data, Effect, Option, Schema } from "effect"
+import { Context, Effect, Option, Schema } from "effect"
 import * as Index from "./Index.ts"
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Document from "../Document.ts"
 
-export class IndexingError extends Data.TaggedError("IndexingError")<{
-	readonly reason:
-		| "InvalidInput"
-		| "RobotsDenied"
-		| "RobotsUnavailable"
-		| "Unavailable"
-		| "InvalidDocument"
-		| "Redirect"
-	readonly url: string
-	readonly issue: string
-}> {}
+export class IndexingError extends Schema.TaggedError<
+	IndexingError,
+	{ readonly brand: unique symbol }
+>()("IndexingError", {
+	reason: Schema.Literals([
+		"InvalidInput",
+		"RobotsDenied",
+		"RobotsUnavailable",
+		"Unavailable",
+		"InvalidDocument",
+		"Redirect",
+	]),
+	url: Schema.String,
+	issue: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
-export class Input extends Schema.Opaque<Input>()(
+export class Input extends Schema.Opaque<
+	Input,
+	{ readonly brand: unique symbol }
+>()(
 	Schema.Struct({
 		cardUrl: Document.Link,
 		sources: Schema.optional(Schema.Array(Discovery.Source)),
@@ -25,13 +33,13 @@ export class Input extends Schema.Opaque<Input>()(
 		Schema.decodeUnknownEffect(Input)(value, {
 			onExcessProperty: "error",
 		}).pipe(
-			Effect.mapError(
-				() =>
-					new IndexingError({
-						reason: "InvalidInput",
-						url: "",
-						issue: "Expected only a public Card URL and public source hints",
-					}),
+			Effect.mapError((cause) =>
+				IndexingError.make({
+					reason: "InvalidInput",
+					url: "",
+					issue: "Expected only a public Card URL and public source hints",
+					cause,
+				}),
 			),
 		)
 }

@@ -1,4 +1,3 @@
-import assert from "node:assert/strict"
 import {
 	CatalogDiscovery,
 	MemoryStore,
@@ -12,83 +11,81 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { test } from "node:test"
+import { NodeServices } from "@effect/platform-node"
+import { assert, it } from "@effect/vitest"
 import {
-	ManagedRuntime,
+	Deferred,
 	Effect,
 	Fiber,
 	Layer,
 	Redacted,
+	Ref,
 	Schema,
 	Scope,
+	Stream,
 	Match,
 	Option,
 } from "effect"
+import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import * as Mcp from "@modelcontextprotocol/client"
-import { startHttps } from "./Fixture.ts"
+import { serveHttps } from "./Fixture.ts"
 
-// Build the runtime to test real HTTP cancellation and lifecycle storage failures.
+// Build the services to test real HTTP cancellation and lifecycle storage
+// failures. The tests use it.live, because they talk to a real HTTPS server.
 
-const Request = Schema.Struct({
-	id: Schema.optional(Schema.Union([Schema.String, Schema.Finite])),
-	method: Schema.String,
-	params: Schema.optional(Schema.JsonObject),
-})
-const service = async () => {
-	let card: Document.ServerCard
-	let started!: () => void
-	const hanging = new Promise<void>((resolve) => {
-		started = resolve
-	})
-	let closed!: () => void
-	const released = new Promise<void>((resolve) => {
-		closed = resolve
-	})
-	let reads = 0
-	const fixture = await startHttps((req, res) => {
-		if (req.url === "/card") {
-			res.writeHead(200, {
-				"content-type": Document.cardMediaType,
-			})
-			res.end(JSON.stringify(card))
-			return
-		}
-		let body = ""
-		req.setEncoding("utf8")
-		req.on("data", (part: string) => {
-			body += part
-		})
-		req.on("end", () => {
-			reads++
-			const request = Schema.decodeSync(Schema.fromJsonString(Request))(body)
-			const reply = (value: object) => {
-				res.writeHead(200, {
-					"content-type": "application/json",
+const RpcRequest = Schema.fromJsonString(
+	Schema.Struct({
+		id: Schema.optional(Schema.Union([Schema.String, Schema.Finite])),
+		method: Schema.String,
+		params: Schema.optional(Schema.JsonObject),
+	}),
+)
+
+/**
+ * Starts a separate HTTPS service with one tool. A call of the tool stays open
+ * until the client goes away. The service stops when the scope closes.
+ */
+const service = Effect.gen(function* () {
+	const reads = yield* Ref.make(0)
+	/** Completes when a tool call runs and its response is open. */
+	const started = yield* Deferred.make<void>()
+	/** Completes when the response of the tool call closes. */
+	const closed = yield* Deferred.make<void>()
+	// The handler reads `card` only for requests, so only after it has a value.
+	const fixture = yield* serveHttps(
+		Effect.gen(function* () {
+			const request = yield* HttpServerRequest.HttpServerRequest
+			if (request.url === "/card")
+				return yield* HttpServerResponse.json(yield* Ref.get(card), {
+					contentType: Document.cardMediaType,
 				})
-				res.end(
-					JSON.stringify({
-						jsonrpc: "2.0",
-						id: request.id,
-						result: {
-							resultType: "complete",
-							...value,
-							_meta: {
-								[Mcp.SERVER_INFO_META_KEY]: {
-									name: "lifecycle-service",
-									version: "1.0.0",
-								},
+			yield* Ref.update(reads, (count) => count + 1)
+			const rpc = yield* Effect.flatMap(
+				request.text,
+				Schema.decodeEffect(RpcRequest),
+			)
+			const reply = (value: object) =>
+				HttpServerResponse.json({
+					jsonrpc: "2.0",
+					id: rpc.id,
+					result: {
+						resultType: "complete",
+						...value,
+						_meta: {
+							[Mcp.SERVER_INFO_META_KEY]: {
+								name: "lifecycle-service",
+								version: "1.0.0",
 							},
 						},
-					}),
-				)
-			}
-			if (request.method === "server/discover")
-				reply({
+					},
+				})
+			if (rpc.method === "server/discover")
+				return yield* reply({
 					supportedVersions: [Document.protocolVersion],
 					capabilities: { tools: {} },
 				})
-			else if (request.method === "tools/list")
-				reply({
+			if (rpc.method === "tools/list")
+				return yield* reply({
 					tools: [
 						{
 							name: "Hang",
@@ -103,32 +100,37 @@ const service = async () => {
 					ttlMs: 0,
 					cacheScope: "private",
 				})
-			else if (request.method === "tools/call") {
-				res.writeHead(200, {
-					"content-type": "text/event-stream",
-				})
-				res.write(": alive\n\n")
-				res.on("close", closed)
-				started()
-			} else {
-				res.writeHead(400)
-				res.end()
-			}
-		})
-	})
-	card = {
-		$schema: Document.cardSchemaUrl,
-		name: "example.test/lifecycle",
-		version: "1.0.0",
-		description: "Before",
-		remotes: [
-			{
-				type: "streamable-http",
-				url: fixture.ipOrigin + "/mcp",
-				supportedProtocolVersions: [Document.protocolVersion],
-			},
-		],
-	}
+			if (rpc.method === "tools/call")
+				return HttpServerResponse.stream(
+					Stream.make(": alive\n\n").pipe(
+						Stream.encodeText,
+						Stream.concat(
+							Stream.fromEffectDrain(Deferred.succeed(started, undefined)),
+						),
+						Stream.concat(Stream.never),
+						Stream.ensuring(Deferred.succeed(closed, undefined)),
+					),
+					{ contentType: "text/event-stream" },
+				)
+			return HttpServerResponse.empty({ status: 400 })
+		}),
+	)
+	const card: Ref.Ref<Document.ServerCard> = yield* Ref.make(
+		Document.ServerCard.make({
+			$schema: Document.cardSchemaUrl,
+			name: "example.test/lifecycle",
+			version: "1.0.0",
+			description: "Before",
+			remotes: [
+				{
+					type: "streamable-http",
+					url: fixture.ipOrigin + "/mcp",
+					supportedProtocolVersions: [Document.protocolVersion],
+					variables: { mode: { default: "read", description: "Old text" } },
+				},
+			],
+		}),
+	)
 	const network = NodeHttpServer.layerUserNetwork({
 		owner: "alice",
 		allowedOrigins: [fixture.ipOrigin],
@@ -145,7 +147,7 @@ const service = async () => {
 		McpClient.layerPolicy(() => Effect.void),
 	)
 	const key = { owner: "alice", connectionId: "notes" }
-	const connection: Store.UserConnection = {
+	const connection = Store.UserConnection.make({
 		...key,
 		cardUrl: fixture.ipOrigin + "/card",
 		endpoint: fixture.ipOrigin + "/mcp",
@@ -154,39 +156,37 @@ const service = async () => {
 		headers: Redacted.make({}),
 		state: "Enabled",
 		authorization: { _tag: "Unprotected" },
-	}
+	})
 	return {
 		...fixture,
 		layers,
 		key,
 		connection,
-		get card() {
-			return card
-		},
-		setCard: (value: Document.ServerCard) => {
-			card = value
-		},
-		hanging,
-		released,
-		reads: () => reads,
+		/** The Card that the service gives now. */
+		card: Ref.get(card),
+		setCard: (value: Document.ServerCard) => Ref.set(card, value),
+		/** Waits until a tool call runs. */
+		hanging: Deferred.await(started),
+		/** Waits until the response of the tool call closes. */
+		released: Deferred.await(closed),
+		/** The number of MCP requests that the service got. */
+		reads: Ref.get(reads),
 	}
-}
-test("remove stops new calls and real running I/O, keeps other owners and public entries, and resumes failed cleanup", async () => {
-	const fixture = await service()
-	try {
-		await using runtime1 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime1.runPromise(
-			Effect.scoped(
+})
+it.live(
+	"remove stops new calls and real running I/O, keeps other owners and public entries, and resumes failed cleanup",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* service
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const store = yield* Store.AppStore
 					yield* store.save({
-						app: {
+						app: Store.AppRecord.make({
 							cardUrl: fixture.connection.cardUrl,
-							card: fixture.card,
+							card: yield* fixture.card,
 							sources: [],
-						},
+						}),
 						connection: fixture.connection,
 					})
 					const bob = {
@@ -194,28 +194,30 @@ test("remove stops new calls and real running I/O, keeps other owners and public
 						owner: "bob",
 					}
 					yield* store.save({
-						app: {
+						app: Store.AppRecord.make({
 							cardUrl: fixture.connection.cardUrl,
-							card: fixture.card,
+							card: yield* fixture.card,
 							sources: [],
-						},
+						}),
 						connection: bob,
 					})
 					const index = yield* Index.IndexStore
-					yield* index.upsert({
-						cardUrl: fixture.connection.cardUrl,
-						card: fixture.card,
-						checkedAt: 0,
-						validators: {},
-						evidence: [
-							{
-								publisherUrl: fixture.ipOrigin,
-								catalogUrl: fixture.ipOrigin + "/catalog",
-								cardUrl: fixture.connection.cardUrl,
-								association: "CardOrigin",
-							},
-						],
-					})
+					yield* index.upsert(
+						Index.Entry.make({
+							cardUrl: fixture.connection.cardUrl,
+							card: yield* fixture.card,
+							checkedAt: 0,
+							validators: {},
+							evidence: [
+								{
+									publisherUrl: fixture.ipOrigin,
+									catalogUrl: fixture.ipOrigin + "/catalog",
+									cardUrl: fixture.connection.cardUrl,
+									association: "CardOrigin",
+								},
+							],
+						}),
+					)
 					const client = yield* McpClient.open({
 						key: fixture.key,
 						clientInfo: {
@@ -232,13 +234,13 @@ test("remove stops new calls and real running I/O, keeps other owners and public
 							},
 						),
 					)
-					yield* Effect.promise(() => fixture.hanging)
+					yield* fixture.hanging
 					const credentials = yield* Store.CredentialStore
 					const failCleanup = Store.CredentialStore.of({
 						...credentials,
 						deleteConnection: () =>
 							Effect.fail(
-								new Store.StoreError({
+								Store.StoreError.make({
 									reason: "Unavailable",
 									operation: "deleteConnection",
 								}),
@@ -249,22 +251,25 @@ test("remove stops new calls and real running I/O, keeps other owners and public
 							Effect.provideService(Store.CredentialStore, failCleanup),
 						),
 					)
-					assert.equal(failed._tag, "Failure")
+					assert.strictEqual(failed._tag, "Failure")
 					Match.value(failed).pipe(
 						Match.tag("Failure", (failed) => {
-							assert.equal(failed.failure._tag, "CleanupPending")
+							assert.strictEqual(failed.failure._tag, "CleanupPending")
 						}),
 						Match.orElse(() => undefined),
 					)
-					assert.equal((yield* store.get(fixture.key)).state, "CleanupPending")
-					yield* Effect.promise(() => fixture.released)
+					assert.strictEqual(
+						(yield* store.get(fixture.key)).state,
+						"CleanupPending",
+					)
+					yield* fixture.released
 					yield* Fiber.await(request)
-					const before = fixture.reads()
-					assert.equal(
+					const before = yield* fixture.reads
+					assert.strictEqual(
 						(yield* Effect.result(AppConnections.usable(fixture.key)))._tag,
 						"Failure",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							client.callTool(
 								{
@@ -277,55 +282,58 @@ test("remove stops new calls and real running I/O, keeps other owners and public
 						))._tag,
 						"Failure",
 					)
-					assert.equal(fixture.reads(), before)
-					assert.equal((yield* store.get(bob)).state, "Enabled")
-					assert.equal(
+					assert.strictEqual(yield* fixture.reads, before)
+					assert.strictEqual((yield* store.get(bob)).state, "Enabled")
+					assert.strictEqual(
 						(yield* index.get(fixture.connection.cardUrl))._tag,
 						"Some",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.remove(fixture.key))._tag,
 						"Removed",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(store.get(fixture.key)))._tag,
 						"Failure",
 					)
-					assert.equal((yield* store.get(bob)).state, "Enabled")
+					assert.strictEqual((yield* store.get(bob)).state, "Enabled")
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
-test("description updates keep authorization, but endpoint, issuer and scope changes pause it until explicit confirmation", async () => {
-	const fixture = await service()
-	try {
-		await using runtime2 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime2.runPromise(
-			Effect.scoped(
+			).pipe(
+				Effect.provide(
+					fixture.layers.pipe(
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			)
+		}).pipe(Effect.provide(NodeServices.layer)),
+)
+it.live(
+	"description updates keep authorization, but endpoint, issuer and scope changes pause it until explicit confirmation",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* service
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const store = yield* Store.AppStore
 					const credentials = yield* Store.CredentialStore
-					const binding = {
+					const binding = Store.CredentialBinding.make({
 						...fixture.key,
 						resource: fixture.connection.endpoint,
 						issuer: fixture.ipOrigin,
-					}
-					const reference = yield* credentials.put({
-						binding,
-						accessToken: Redacted.make("old-token"),
-						scopes: ["notes"],
 					})
+					const reference = yield* credentials.put(
+						Store.Credential.make({
+							binding,
+							accessToken: Redacted.make("old-token"),
+							scopes: ["notes"],
+						}),
+					)
 					yield* store.save({
-						app: {
+						app: Store.AppRecord.make({
 							cardUrl: fixture.connection.cardUrl,
-							card: fixture.card,
+							card: yield* fixture.card,
 							sources: [],
-						},
+						}),
 						connection: {
 							...fixture.connection,
 							authorization: {
@@ -336,15 +344,26 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							},
 						},
 					})
-					fixture.setCard({
-						...fixture.card,
+					yield* fixture.setCard({
+						...(yield* fixture.card),
 						description: "After",
+						remotes: [
+							{
+								...(yield* fixture.card).remotes![0]!,
+								variables: {
+									mode: Document.Input.make({
+										default: "read",
+										description: "New text",
+									}),
+								},
+							},
+						],
 					})
 					const discovery = yield* Discovery.Discovery
 					let candidate = yield* discovery.refreshCard(
 						fixture.connection.cardUrl,
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate({
 							key: fixture.key,
 							candidate,
@@ -356,7 +375,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						}))._tag,
 						"DescriptionUpdated",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).authorization._tag,
 						"Authorized",
 					)
@@ -374,18 +393,20 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						key: fixture.key,
 						scope,
 					})
-					fixture.setCard({
-						...fixture.card,
-						remotes: [
-							{
-								type: "streamable-http",
-								url: fixture.ipOrigin + "/new-mcp",
-								supportedProtocolVersions: [Document.protocolVersion],
-							},
-						],
-					})
+					yield* fixture.setCard(
+						Document.ServerCard.make({
+							...(yield* fixture.card),
+							remotes: [
+								{
+									type: "streamable-http",
+									url: fixture.ipOrigin + "/new-mcp",
+									supportedProtocolVersions: [Document.protocolVersion],
+								},
+							],
+						}),
+					)
 					candidate = yield* discovery.refreshCard(fixture.connection.cardUrl)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate({
 							key: fixture.key,
 							candidate,
@@ -397,13 +418,13 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						}))._tag,
 						"NeedsRevalidation",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).state,
 						"NeedsRevalidation",
 					)
-					assert.equal(finalized, true)
-					const before = fixture.reads()
-					assert.equal(
+					assert.strictEqual(finalized, true)
+					const before = yield* fixture.reads
+					assert.strictEqual(
 						(yield* Effect.result(
 							McpClient.open({
 								key: fixture.key,
@@ -415,7 +436,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						))._tag,
 						"Failure",
 					)
-					assert.equal(fixture.reads(), before)
+					assert.strictEqual(yield* fixture.reads, before)
 					const confirmed = yield* AppConnections.revalidate({
 						key: fixture.key,
 						candidate,
@@ -425,12 +446,12 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							scopes: ["notes", "write"],
 						}),
 					})
-					assert.equal(confirmed._tag, "Revalidated")
-					assert.equal(
+					assert.strictEqual(confirmed._tag, "Revalidated")
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).authorization._tag,
 						"PendingAuthorization",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							credentials.get({
 								binding,
@@ -439,7 +460,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						))._tag,
 						"Failure",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							McpClient.open({
 								key: fixture.key,
@@ -451,7 +472,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						))._tag,
 						"Failure",
 					)
-					assert.equal(fixture.reads(), before)
+					assert.strictEqual(yield* fixture.reads, before)
 					// Changing only the issuer or scopes also pauses a currently authorized connection.
 					for (const change of [
 						{
@@ -468,22 +489,24 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							connectionId: change.scopes.length === 1 ? "issuer" : "scopes",
 						}
 						const endpoint = fixture.ipOrigin + "/new-mcp"
-						const bound = {
+						const bound = Store.CredentialBinding.make({
 							...key,
 							resource: endpoint,
 							issuer: fixture.ipOrigin,
-						}
-						const credentialRef = yield* credentials.put({
-							binding: bound,
-							accessToken: Redacted.make("separate-old-token"),
-							scopes: ["notes"],
 						})
+						const credentialRef = yield* credentials.put(
+							Store.Credential.make({
+								binding: bound,
+								accessToken: Redacted.make("separate-old-token"),
+								scopes: ["notes"],
+							}),
+						)
 						yield* store.save({
-							app: {
+							app: Store.AppRecord.make({
 								cardUrl: fixture.connection.cardUrl,
-								card: fixture.card,
+								card: yield* fixture.card,
 								sources: [],
-							},
+							}),
 							connection: {
 								...fixture.connection,
 								...key,
@@ -496,7 +519,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 								},
 							},
 						})
-						assert.equal(
+						assert.strictEqual(
 							(yield* AppConnections.revalidate({
 								key,
 								candidate,
@@ -505,8 +528,11 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							}))._tag,
 							"NeedsRevalidation",
 						)
-						assert.equal((yield* store.get(key)).state, "NeedsRevalidation")
-						assert.equal(
+						assert.strictEqual(
+							(yield* store.get(key)).state,
+							"NeedsRevalidation",
+						)
+						assert.strictEqual(
 							(yield* Effect.result(
 								McpClient.open({
 									key,
@@ -518,60 +544,64 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							))._tag,
 							"Failure",
 						)
-						assert.equal(fixture.reads(), before)
+						assert.strictEqual(yield* fixture.reads, before)
 					}
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(
+				Effect.provide(
+					fixture.layers.pipe(
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			)
+		}).pipe(Effect.provide(NodeServices.layer)),
+)
 
-test("revalidation ignores the key order of configuration and variables, and the order and duplicates of scopes", async () => {
-	const fixture = await service()
-	try {
-		const original = {
-			...fixture.card,
-			remotes: [
-				{
-					...fixture.card.remotes![0]!,
-					variables: {
-						account: { default: "one" },
-						mode: { default: "read" },
+it.live(
+	"revalidation ignores the key order of configuration and variables, and the order and duplicates of scopes",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* service
+			const card = yield* fixture.card
+			const original = {
+				...card,
+				remotes: [
+					{
+						...card.remotes![0]!,
+						variables: {
+							account: { default: "one" },
+							mode: { default: "read" },
+						},
+						headers: [
+							{ name: "X-Account", value: "one" },
+							{ name: "X-Mode", value: "read" },
+						],
 					},
-					headers: [
-						{ name: "X-Account", value: "one" },
-						{ name: "X-Mode", value: "read" },
-					],
-				},
-			],
-		}
-		fixture.setCard(original)
-		await using runtime = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime.runPromise(
-			Effect.scoped(
+				],
+			}
+			yield* fixture.setCard(Document.ServerCard.make(original))
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const store = yield* Store.AppStore
-					const binding = {
+					const binding = Store.CredentialBinding.make({
 						...fixture.key,
 						resource: fixture.connection.endpoint,
 						issuer: fixture.ipOrigin,
-					}
-					const credentials = yield* Store.CredentialStore
-					const credentialRef = yield* credentials.put({
-						binding,
-						accessToken: Redacted.make("token"),
-						scopes: ["notes", "write"],
 					})
+					const credentials = yield* Store.CredentialStore
+					const credentialRef = yield* credentials.put(
+						Store.Credential.make({
+							binding,
+							accessToken: Redacted.make("token"),
+							scopes: ["notes", "write"],
+						}),
+					)
 					yield* store.save({
-						app: {
+						app: Store.AppRecord.make({
 							cardUrl: fixture.connection.cardUrl,
 							card: original,
 							sources: [],
-						},
+						}),
 						connection: {
 							...fixture.connection,
 							configuration: Redacted.make({ account: "one", mode: "read" }),
@@ -587,18 +617,20 @@ test("revalidation ignores the key order of configuration and variables, and the
 							},
 						},
 					})
-					fixture.setCard({
-						...original,
-						remotes: [
-							{
-								...original.remotes[0]!,
-								variables: {
-									mode: { default: "read" },
-									account: { default: "one" },
+					yield* fixture.setCard(
+						Document.ServerCard.make({
+							...original,
+							remotes: [
+								{
+									...original.remotes[0]!,
+									variables: {
+										mode: { default: "read" },
+										account: { default: "one" },
+									},
 								},
-							},
-						],
-					})
+							],
+						}),
+					)
 					const discovery = yield* Discovery.Discovery
 					const candidate = yield* discovery.refreshCard(
 						fixture.connection.cardUrl,
@@ -613,15 +645,15 @@ test("revalidation ignores the key order of configuration and variables, and the
 							scopes: ["write", "notes", "write"],
 						}),
 					}
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate(options))._tag,
 						"DescriptionUpdated",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).authorization._tag,
 						"Authorized",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate({
 							...options,
 							values: { mode: "write", account: "one" },
@@ -629,9 +661,12 @@ test("revalidation ignores the key order of configuration and variables, and the
 						"NeedsRevalidation",
 					)
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(
+				Effect.provide(
+					fixture.layers.pipe(
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			)
+		}).pipe(Effect.provide(NodeServices.layer)),
+)

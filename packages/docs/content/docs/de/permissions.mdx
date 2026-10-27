@@ -1,0 +1,430 @@
+---
+title: Berechtigungen
+description: Ressourcen, Aktionen, Policies und Roles.
+---
+
+Diese Seite zeigt, wie OpenBot entscheidet, ob ein Aufrufer etwas tun darf.
+Jeder Aufruf an `/v1` nennt, was er braucht: eine Aktion auf einer Ressource.
+OpenBot prüft sie, bevor der Aufruf läuft.
+
+OpenBot nutzt für diese Arbeit die Bibliothek
+[ability](https://github.com/nmnmcc/ability). Das Modell hat vier Teile:
+
+| Teil      | Was es ist                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Ressource | Eine Art von Ding, auf das man wirkt, zum Beispiel ein Chat oder ein Bot. Jede hat eine Liste von Aktionen und einen Pfad. |
+| Regel     | Sagt `Allow` (erlauben) oder `Deny` (verbieten) für einige Aktionen auf einigen Ressourcen, wenn ihre Bedingung wahr ist.  |
+| Policy    | Ein Baum aus Regeln. Sie gibt eine Antwort für eine Anfrage: erlauben, verbieten oder keine Antwort.                       |
+| Role      | Eine benannte Policy, zum Beispiel Member oder Administrator. Organisationen können eigene hinzufügen.                     |
+
+Ein Member bekommt die Policies seiner Roles und dazu seine eigene
+Member-Policy. Ein User-Token hat auch seine eigene Policy, und beide müssen den
+Aufruf erlauben. Die Platform kann für jede Organisation eine Obergrenze mit
+Deny-Regeln hinzufügen. Siehe
+[Die Reihenfolge der Prüfungen](#die-reihenfolge-der-prüfungen).
+
+Mit `GET /v1/organization/capabilities` lesen Sie Ihre aktuellen Rechte. Das
+Ergebnis ist `{ resources: [{ kind, actions }] }` für `Organization`, `Member`,
+`Role`, `ModelProvider`, `Sso`, `AuditLog`, `Usage` und `Budget`. Eine leere
+Aktionsliste bedeutet, dass keine Aktion erlaubt ist. Jedes aktive Mitglied darf
+dies lesen, auch ohne `Organization.read`. Rollen, Mitgliedsrichtlinie,
+Token-Richtlinie und Plattformgrenze werden bei jedem Aufruf geprüft. Clients
+können damit Bedienelemente anzeigen. Jeder spätere Aufruf prüft seine Rechte
+weiterhin selbst. Das Ergebnis beschreibt keine Rechte an einzelnen Chats,
+Bots, Channels oder anderen Ressourcen mit einem Eigentümer.
+
+---
+
+## Ressourcen und Aktionen
+
+Liste sie mit `GET /v1/organization/resources` auf. Jeder Eintrag hat die Art,
+die Aktionen, die Felder und den Pfad einer Ressource.
+
+| Ressource          | Aktion     | Was sie erlaubt                                                                                                     |
+| ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------- |
+| `Chat`             | `read`     | Chats lesen, mit ihrem Verlauf und der Arbeit, die sie abgegeben haben.                                             |
+| `Chat`             | `write`    | Chats ändern, unterbrechen und löschen und die Arbeit abbrechen, die sie abgegeben haben.                           |
+| `Chat`             | `run`      | Bots Nachrichten schicken, damit sie in einem Chat arbeiten.                                                        |
+| `File`             | `read`     | Deine [Dateien](/de/docs/files) und ihre Bytes lesen.                                                               |
+| `File`             | `write`    | Deine Dateien hochladen und löschen.                                                                                |
+| `Request`          | `resolve`  | Die Requests deiner Bots für neue Fähigkeiten beantworten.                                                          |
+| `Bot`              | `read`     | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                                               |
+| `Bot`              | `write`    | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                                |
+| `Bot`              | `delegate` | Einem Bot Arbeit geben, von einem Client oder von einem anderen Bot aus.                                            |
+| `Bot`              | `share`    | Personen einladen, einen [Bot zu nutzen](/de/docs/sharing), und seine Bot-Mitglieder verwalten.                     |
+| `Trigger`          | `read`     | [Trigger](/de/docs/triggers) lesen: ihre Zeitpläne und Webhooks.                                                    |
+| `Trigger`          | `write`    | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen.                                       |
+| `Channel`          | `read`     | Die [Channels](/de/docs/channels) der Organisation lesen und die Personen, die mit ihnen verknüpft sind.            |
+| `Channel`          | `write`    | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen von Personen lösen.            |
+| `Channel`          | `use`      | Mit dem Bot eines Channel sprechen und deine Bots dorthin schreiben lassen.                                         |
+| `ChannelIdentity`  | `read`     | Deine verknüpften Konten auf den Plattformen von Channels lesen.                                                    |
+| `ChannelIdentity`  | `write`    | Deine Konten auf den Plattformen von Channels verknüpfen und die Verknüpfung lösen.                                 |
+| `Computer`         | `read`     | [Computer](/de/docs/computers) lesen, die Bots, die sie nutzen dürfen, und ihre Nutzung.                            |
+| `Computer`         | `write`    | Computer erstellen, ändern und löschen, Maschinen koppeln und Connector-Tokens erstellen.                           |
+| `Computer`         | `use`      | Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen, und deine Bots sie nutzen lassen.           |
+| `ComputerProvider` | `read`     | Die Konten bei Computer-Providern lesen.                                                                            |
+| `ComputerProvider` | `write`    | Konten bei Computer-Providern und ihre Schlüssel hinzufügen, ändern und löschen.                                    |
+| `ComputerProvider` | `use`      | Computer mit einem Konto bei einem Computer-Provider erstellen.                                                     |
+| `Vault`            | `read`     | [Vaults](/de/docs/vaults), ihre Einträge und die Bots lesen, die sie nutzen dürfen. Geheimnisse werden nie gezeigt. |
+| `Vault`            | `write`    | Vaults und ihre Einträge hinzufügen, ändern und löschen, und ihre Werte setzen.                                     |
+| `Vault`            | `use`      | Deine Bots Vaults in Code Mode nutzen lassen.                                                                       |
+| `SecretProvider`   | `read`     | Die Konten bei [Secret-Providern](/de/docs/vaults#einen-secret-provider-hinzufügen) lesen.                          |
+| `SecretProvider`   | `write`    | Konten bei Secret-Providern und ihre Tokens hinzufügen, ändern und löschen.                                         |
+| `SecretProvider`   | `use`      | Vault-Einträge ihre Geheimnisse aus einem Konto bei einem Secret-Provider lesen lassen.                             |
+| `Connection`       | `read`     | App-Verbindungen und App-Konten lesen.                                                                              |
+| `Connection`       | `write`    | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                                   |
+| `App`              | `use`      | Apps finden und App-Operationen und App-Ansichten nutzen.                                                           |
+| `App`              | `publish`  | Die Entwicklerwerkzeuge für Apps nutzen, die du veröffentlichst.                                                    |
+| `Model`            | `use`      | Ein Model für einen Chat wählen und es im Model-Katalog sehen.                                                      |
+| `Token`            | `read`     | API-Tokens auflisten.                                                                                               |
+| `Token`            | `write`    | API-Tokens erstellen und widerrufen.                                                                                |
+| `Organization`     | `read`     | Die Organisation und ihre Einstellungen lesen.                                                                      |
+| `Organization`     | `write`    | Die Organisation und ihre Einstellungen ändern.                                                                     |
+| `Member`           | `read`     | Members auflisten, mit ihren Roles und Policies.                                                                    |
+| `Member`           | `write`    | Roles, Policies und Status von Members ändern und Members entfernen.                                                |
+| `Role`             | `write`    | Die eigenen Roles der Organisation erstellen, ändern und löschen.                                                   |
+| `ModelProvider`    | `read`     | Die Models und Model Providers der Organisation lesen. Schlüssel werden nie gezeigt.                                |
+| `ModelProvider`    | `write`    | Die Models, Model Providers und Schlüssel der Organisation hinzufügen, ändern und entfernen.                        |
+| `Sso`              | `read`     | Die E-Mail-Domains und SSO-Verbindungen lesen.                                                                      |
+| `Sso`              | `write`    | E-Mail-Domains hinzufügen und bestätigen, und SSO-Verbindungen ändern.                                              |
+| `AuditLog`         | `read`     | Das Audit-Log lesen.                                                                                                |
+| `Usage`            | `read`     | Die [Nutzung der Models](/de/docs/usage) und ihre Kosten lesen, und die Credits der Organisation.                   |
+| `Budget`           | `read`     | Die [Budgets](/de/docs/usage#budgets) lesen und wie viel davon ausgegeben ist.                                      |
+| `Budget`           | `write`    | Budgets erstellen, ändern und löschen.                                                                              |
+| `Platform`         | `read`     | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers lesen.                |
+| `Platform`         | `write`    | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers ändern.               |
+
+`Platform` ist nur für Platform-Admins. Siehe [Die Platform](#die-platform).
+
+Die [API-Referenz](/docs/api) listet die Routen auf. Der Vertrag in
+`@openbot-build/api` sagt, welche Aktion jede Route braucht.
+
+---
+
+## Pfade
+
+Ein Pfad stellt jede Ressource in einen Baum. Eine Regel kann einen Teil des
+Baums abdecken.
+
+| Ressource                                                                               | Pfad                                           |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `Chat`, `File`, `Request`, `Connection`                                                 | `org / <org> / user / <user> / <kind> / <id>`  |
+| `Bot`, `Trigger`, `Computer`, `ComputerProvider`, `Vault`, `SecretProvider`             | `org / <org> / user / <owner> / <kind> / <id>` |
+| `App`, `Token`, `ChannelIdentity`                                                       | `org / <org> / user / <user> / <kind>`         |
+| `Channel`                                                                               | `org / <org> / channel / <id>`                 |
+| `Model`                                                                                 | `org / <org> / model / <provider> / <id>`      |
+| `Organization`, `Member`, `Role`, `ModelProvider`, `Sso`, `AuditLog`, `Usage`, `Budget` | `org / <org>`                                  |
+| `Platform`                                                                              | `platform`                                     |
+
+Der Teil für die Art ist die Art in kleinen Buchstaben, mit `_` zwischen den
+Wörtern, zum Beispiel `computer_provider`. `App` nutzt `apps`.
+
+Ein gemeinsamer Bot, Trigger, Computer oder Computer-Provider hat keinen
+Besitzer. Sein Feld `ownerUserId` ist `null`. Ein Bot, der einem anderen Bot
+gehört, hat den Besitzer an der Spitze seines Besitzer-Baums. Wenn ein Bot einen
+Bot erstellt, braucht das Member, für das er arbeitet, `write` auf Bots dieses
+Besitzers.
+
+---
+
+## Policies
+
+Eine Policy ist JSON. Diese Policy lässt den Aufrufer seine eigenen Chats lesen
+und ändern:
+
+```json
+{
+	"_tag": "Rules",
+	"algorithm": "denyOverrides",
+	"rules": [
+		{
+			"_tag": "Allow",
+			"actions": ["read", "write"],
+			"resources": ["Chat"],
+			"when": {
+				"_tag": "Under",
+				"prefix": [
+					{ "_tag": "Literal", "value": "org" },
+					{ "_tag": "Principal", "path": "organizationId" },
+					{ "_tag": "Literal", "value": "user" },
+					{ "_tag": "Principal", "path": "userId" }
+				]
+			}
+		}
+	]
+}
+```
+
+OpenBot prüft jede Policy, wenn es sie liest. Eine Art, eine Aktion oder ein
+Feld, das es nicht gibt, ergibt `400`. Eine Policy in einer Anfrage darf
+höchstens 100 Regeln haben und höchstens 8 Ebenen tief sein.
+
+### Regeln
+
+Eine Regel hat diese Felder:
+
+| Feld        | Was es ist                                                                  |
+| ----------- | --------------------------------------------------------------------------- |
+| `_tag`      | `Allow` oder `Deny`.                                                        |
+| `actions`   | Die Aktionen. `*` ist jede Aktion.                                          |
+| `resources` | Die Arten, zum Beispiel `Chat`. `*` ist jede Art.                           |
+| `when`      | Optional. Die Bedingung. Ohne sie gilt die Regel für jeden Wert der Arten.  |
+| `reason`    | Optional. Ein Grund. Ein Fehler `Forbidden` von einer Deny-Regel zeigt ihn. |
+
+Eine Liste von Regeln hat einen `algorithm`. Er entscheidet, welche Regel die
+Antwort gibt, wenn mehr als eine Regel passt:
+
+| Algorithmus       | Gewinner                                        |
+| ----------------- | ----------------------------------------------- |
+| `denyOverrides`   | Eine Deny-Regel gewinnt gegen jede Allow-Regel. |
+| `permitOverrides` | Eine Allow-Regel gewinnt gegen jede Deny-Regel. |
+| `firstApplicable` | Die erste Regel, die passt.                     |
+| `lastApplicable`  | Die letzte Regel, die passt.                    |
+
+Eine Policy kann auch Policies zusammensetzen:
+
+| Knoten                              | Antwort                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| `{"_tag":"All","policies"}`         | Jede Policy muss erlauben. Ein Verbot reicht, um zu verbieten.           |
+| `{"_tag":"Any","policies"}`         | Eine Erlaubnis reicht.                                                   |
+| `{"_tag":"FirstOf","policies"}`     | Die erste Policy, die erlaubt oder verbietet.                            |
+| `{"_tag":"Ceiling","cap","policy"}` | Ein Verbot von `cap` gewinnt immer. Eine Erlaubnis von `cap` tut nichts. |
+
+### Bedingungen
+
+Eine Bedingung prüft die Felder und den Pfad einer Ressource:
+
+| Knoten                                    | Wahr, wenn                                                                               |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `{"_tag":"Compare","op","field","value"}` | Das Feld passt im Vergleich zum Wert. `op` ist `eq`, `ne`, `lt`, `lte`, `gt` oder `gte`. |
+| `{"_tag":"In","field","values"}`          | Das Feld gleich einem der Werte ist.                                                     |
+| `{"_tag":"Exists","field"}`               | Das Feld nicht `null` ist.                                                               |
+| `{"_tag":"Under","prefix"}`               | Der Pfad der Ressource mit dem Präfix beginnt.                                           |
+| `{"_tag":"And"/"Or","conditions"}`        | Logik.                                                                                   |
+| `{"_tag":"Not","condition"}`              | Logik.                                                                                   |
+| `{"_tag":"True"}`, `{"_tag":"False"}`     | Immer, oder nie.                                                                         |
+
+Ein Wert ist `{"_tag":"Literal","value":...}` oder ein Feld des Aufrufers:
+`{"_tag":"Principal","path":"userId"}` oder `"organizationId"`. Ein Feld des
+Aufrufers ohne Wert passt nie, auch nicht mit `ne`.
+
+Diese Bedingungen brauchst du am häufigsten:
+
+| Bedingung                                             | Deckt ab                                     |
+| ----------------------------------------------------- | -------------------------------------------- |
+| `Under` mit `org`, der `organizationId` des Aufrufers | Alles in der Organisation.                   |
+| `Under` mit `org`, `organizationId`, `user`, `userId` | Alles des Aufrufers.                         |
+| `Compare` `eq` auf `ownerUserId` mit `null`           | Die gemeinsamen Bots, Trigger oder Computer. |
+| `Compare` `eq` auf `id`                               | Eine Ressource.                              |
+
+Jede Policy eines Members gilt nur in der Organisation des Members. Eine Regel,
+die eine andere Organisation nennt, gibt nichts.
+
+### Models begrenzen
+
+`use` auf `Model` gilt für die Models, die ein Member für einen Chat wählen
+darf. `GET /v1/organization/model_catalog` zeigt nur diese Models. Diese Regel
+hindert ein Member daran, einen [Model Provider](/de/docs/models) zu nutzen:
+
+```json
+{
+	"_tag": "Deny",
+	"actions": ["use"],
+	"resources": ["Model"],
+	"when": {
+		"_tag": "Compare",
+		"op": "eq",
+		"field": "provider",
+		"value": { "_tag": "Literal", "value": "prov_4c1e..." }
+	}
+}
+```
+
+### Die Reihenfolge der Prüfungen
+
+OpenBot prüft drei Policies:
+
+1. Die **Obergrenze** der Platform. Sie hat nur Deny-Regeln, und diese gelten in
+   jeder Organisation. Siehe
+   [Platform](/de/docs/platform#obergrenze-für-policies).
+2. Die **Member-Policy**: die Policies der Roles des Members und dazu seine
+   eigene Member-Policy. Eine Deny-Regel in einer von ihnen gewinnt.
+3. Die **Token-Policy**, wenn der Aufrufer ein User-Token nutzt.
+
+Ein Verbot an irgendeiner Stelle heißt nein. Die Member-Policy, und die
+Token-Policy, wenn es eine gibt, müssen den Aufruf außerdem erlauben. Ohne
+Antwort ist die Antwort nein.
+
+OpenBot liest diese Policies bei jeder Prüfung neu. Eine Änderung an einer Role,
+einem Member oder einem Token gilt also sofort.
+
+Eine Liste, zum Beispiel `GET /v1/triggers`, enthält nur die Ressourcen, die der
+Aufrufer lesen darf. OpenBot macht aus der Policy eine Bedingung für die Liste,
+bei den meisten Listen direkt in der Abfrage an die Datenbank. Eine Deny-Regel
+auf einer Ressource versteckt sie also auch in der Liste.
+
+Einige Listen verstecken Ressourcen nicht auf diese Weise: `GET /v1/chats`,
+`GET /v1/files`, `GET /v1/connections` und `GET /v1/organization/channels`. Sie
+brauchen die Aktion auf jeder Ressource ihrer Art, die der Aufrufer erreicht:
+auf allen eigenen Chats, Dateien oder App-Verbindungen, oder auf allen Channels
+der Organisation. Ein Aufruf, der eine neue solche Ressource erstellt, braucht
+genauso `write` auf allen. Eine Deny-Regel auf einem Chat, einer Datei, einer
+App-Verbindung oder einem Channel lässt diese Aufrufe also mit `403`
+fehlschlagen.
+
+### Tokens tun nie mehr als ihr Member
+
+Ein User-Token muss seine eigene Policy und die Policy seines Members bestehen.
+Ein Token kann also weniger tun als sein Member, aber nie mehr. Wenn ein
+Administrator dem Member eine Role wegnimmt, verliert auch jedes Token dieses
+Members sie.
+
+Ein Token, das ohne `policy` erstellt wurde, bekommt diese Policy. Sie erlaubt
+alles, was sein Member tun darf, außer Aktionen auf Tokens und auf der Platform:
+
+```json
+{
+	"_tag": "Rules",
+	"algorithm": "denyOverrides",
+	"rules": [
+		{
+			"_tag": "Allow",
+			"actions": ["*"],
+			"resources": ["Chat", "File", "Request", "...", "Budget"]
+		}
+	]
+}
+```
+
+Dieses Beispiel erstellt ein Token, das nur deine Chats lesen kann:
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Dashboard","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read"],"resources":["Chat"]}]}}' \
+  https://api.example.com/v1/user/tokens
+```
+
+Die Regel hat keine Bedingung, aber die Policy des Members begrenzt das Token
+trotzdem auf das, was du lesen darfst.
+
+---
+
+## Roles
+
+Liste sie mit `GET /v1/organization/roles` auf. Die Liste enthält die
+eingebauten Roles und die eigenen Roles der Organisation. Jede Role hat
+`builtin: true` oder `builtin: false` und ihre `policy`.
+
+### Eingebaute Roles
+
+Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung
+ergibt `409` mit `RoleReadOnly`.
+
+| Role                      | Was sie kann                                                                                                                                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                                                                         |
+| `administrator`           | Die Organisation, ihre Members, ihre gemeinsamen Bots, ihre gemeinsamen Trigger, ihre gemeinsamen Computer und ihre Channels verwalten und das Audit-Log lesen. Nur mit den eigenen Chats und Verbindungen arbeiten. |
+| `administrator_read_only` | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen und die gemeinsamen Bots, Trigger, Computer und Channels lesen. Nur mit den eigenen Chats und Verbindungen arbeiten.                |
+| `member`                  | Mit den eigenen Bots, Chats, Triggern, Computern, Verbindungen und Tokens arbeiten, die gemeinsamen Bots, Trigger, Computer, Channels und Models der Organisation nutzen und ihre Einstellungen lesen.               |
+| `auditor`                 | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen. Sonst nichts.                                                                                                                      |
+
+Einige eingebaute Roles wirken auch auf Roles, Model Providers, SSO, Channels,
+Nutzung und Budgets:
+
+| Role                      | Zusätzliche Ressourcen für Funktionen der Organisation                           |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| `super_administrator`     | Jede Aktion auf jeder Ressource, außer `Platform`.                               |
+| `administrator`           | Jede Aktion auf `Role`, `ModelProvider`, `Sso`, `Channel`, `Usage` und `Budget`. |
+| `administrator_read_only` | `read` auf `ModelProvider`, `Sso`, `Channel`, `Usage` und `Budget`.              |
+| `auditor`                 | `read` auf `Usage` und `Budget`.                                                 |
+
+Um einem Member weniger zu geben als eine Role, gib dem Member eine Policy mit
+Deny-Regeln. Dieses Beispiel hindert ein Member daran, Arbeit auszuführen. Es
+kann seine Chats aber weiter lesen:
+
+```sh
+curl -X PATCH -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Deny","actions":["run"],"resources":["Chat"]}]}}' \
+  https://api.example.com/v1/organization/members/u_456
+```
+
+### Eigene Roles
+
+Eine Organisation kann eigene Roles hinzufügen. Eine eigene Role hat einen
+Namen, eine Beschreibung und eine Policy. Ihre ID beginnt mit `role_`. Eigene
+Roles erstellen, ändern und löschen braucht `write` auf `Role`.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","resolve"],"resources":["Chat","Request"],"when":{"_tag":"Under","prefix":[{"_tag":"Literal","value":"org"},{"_tag":"Principal","path":"organizationId"},{"_tag":"Literal","value":"user"},{"_tag":"Principal","path":"userId"}]}}]}}' \
+  https://api.example.com/v1/organization/roles
+```
+
+| Route                                   | Was sie tut                |
+| --------------------------------------- | -------------------------- |
+| `POST /v1/organization/roles`           | Erstellt eine eigene Role. |
+| `GET /v1/organization/roles/:roleId`    | Liest eine Role.           |
+| `PATCH /v1/organization/roles/:roleId`  | Ändert eine eigene Role.   |
+| `DELETE /v1/organization/roles/:roleId` | Löscht eine eigene Role.   |
+
+- Die Allow-Regeln einer Role können nichts geben, was du selbst nicht tun
+  kannst. OpenBot prüft jede Allow-Regel mit dir als Aufrufer. Du musst ihre
+  Aktionen auf jedem Wert tun können, den die Regel in der Organisation erlaubt.
+  Die Antwort ist genau: Sie prüft die Felder und den Pfad der Ressource. Eine
+  Regel, die keinen Wert erlaubt, gibt nichts, also ist sie in Ordnung. Sonst
+  antwortet OpenBot mit `403` und `Forbidden`.
+- Eine Änderung gilt sofort für jedes Member mit dieser Role.
+- Du kannst eine Role nicht löschen, solange ein Member oder die `defaultRoles`
+  der Organisation sie nutzen. OpenBot antwortet dann mit `409` und `RoleInUse`.
+
+Gib einem Member eine eigene Role mit `PATCH /v1/organization/members/:userId`.
+Siehe [Organisation](/de/docs/organization#ein-member-ändern).
+
+---
+
+## Die Platform
+
+Die Aktionen auf `Platform` sind für Platform-Admins. Ihr Pfad ist `platform`.
+Keine Regel über eine Organisation deckt sie also ab.
+
+- Keine Role in einer Organisation gibt sie, nicht einmal `super_administrator`.
+- Die Obergrenze gilt nicht für sie. Eine Obergrenze sperrt die Platform-Admins
+  also nie aus.
+- Ein User-Token eines Platform-Admins bekommt sie nur, wenn seine eigene Policy
+  sie erlaubt.
+
+Ein Beispiel-Token findest du unter
+[Platform](/de/docs/platform#die-api-der-platform-aufrufen).
+
+---
+
+## Fehler
+
+| Status | Fehler              | Wann                                                                                 |
+| ------ | ------------------- | ------------------------------------------------------------------------------------ |
+| `400`  | Schema-Fehler       | Eine Policy nennt eine Art, eine Aktion oder ein Feld, das es nicht gibt.            |
+| `403`  | `Forbidden`         | Keine Regel erlaubt den Aufruf, oder eine Regel verbietet ihn. Siehe den Body unten. |
+| `404`  | `RoleNotFound`      | Die Organisation hat keine Role mit dieser ID.                                       |
+| `409`  | `RoleReadOnly`      | Du wolltest eine eingebaute Role ändern oder löschen.                                |
+| `409`  | `RoleInUse`         | Ein Member oder die Standard-Roles nutzen die Role noch.                             |
+| `503`  | `PolicyUnavailable` | OpenBot kann die Roles und Policies des Aufrufers gerade nicht lesen.                |
+
+Der Body von `Forbidden` nennt die Aktion und die Art. Er hat den `reason` einer
+Deny-Regel, wenn eine die Antwort gegeben hat:
+
+```json
+{
+	"_tag": "Forbidden",
+	"action": "write",
+	"kind": "Chat"
+}
+```
+
+Du erreichst nur deine eigenen Chats und Verbindungen. Ein Chat eines anderen
+Members antwortet mit `404`, als ob es ihn nicht gäbe. Ein Bot, Trigger oder
+Computer, den du nicht lesen darfst, antwortet genauso mit `404`.

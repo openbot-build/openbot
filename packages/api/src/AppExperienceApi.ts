@@ -1,12 +1,18 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
-import { Document } from "@openbot-build/protocol"
-import { ConnectionName, ConnectionDraft } from "./ConnectionsApi.ts"
+import {
+	AppIdentity,
+	ManualTransfer,
+	ConnectionName,
+	ConnectionDraft,
+	ConnectionId,
+} from "./ConnectionsApi.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 export const Entry = Schema.Struct({
 	name: ConnectionName,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	remoteIndex: Schema.Natural,
+	manual: Schema.optionalKey(ManualTransfer),
 })
 export const Transfer = Schema.Struct({
 	format: Schema.Literal("openbot-apps-v1"),
@@ -23,10 +29,10 @@ export const Imported = Schema.Struct({
 	),
 })
 export const Reset = Schema.Struct({
-	removed: Schema.Array(Schema.String),
+	removed: Schema.Array(ConnectionId),
 	pending: Schema.Array(
 		Schema.Struct({
-			id: Schema.String,
+			id: ConnectionId,
 			name: Schema.String,
 			stage: Schema.String,
 		}),

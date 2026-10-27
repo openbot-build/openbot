@@ -1,15 +1,31 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
-import { Context, Effect, Layer, Redacted, Schema } from "effect"
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API for AES-GCM ciphers.
+import { createCipheriv, createDecipheriv } from "node:crypto"
+import {
+	Array as Arr,
+	Context,
+	Crypto,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	pipe,
+	Redacted,
+	Schema,
+	String as Str,
+} from "effect"
 
-export class SecretStorageError extends Schema.TaggedError<SecretStorageError>()(
-	"SecretStorageError",
-	{},
-) {}
+export class SecretStorageError extends Schema.TaggedError<
+	SecretStorageError,
+	{ readonly brand: unique symbol }
+>()("SecretStorageError", {
+	cause: Schema.optional(Schema.Defect()),
+	message: Schema.optional(Schema.String),
+}) {}
 /** `OPENBOT_SECRET_KEYS` is missing or has the wrong form. */
-export class SecretKeysInvalid extends Schema.TaggedError<SecretKeysInvalid>()(
-	"SecretKeysInvalid",
-	{ message: Schema.String },
-) {}
+export class SecretKeysInvalid extends Schema.TaggedError<
+	SecretKeysInvalid,
+	{ readonly brand: unique symbol }
+>()("SecretKeysInvalid", { message: Schema.String }) {}
 
 /**
  * Encrypts the secrets that OpenBot keeps in the database, such as App secrets,
@@ -31,8 +47,18 @@ export class Secrets extends Context.Service<
 	}
 >()("@openbot-build/openbot/secrets/Secrets") {}
 
-const KeyId = /^[a-z0-9_-]{1,32}$/
-const KeyHex = /^[a-fA-F0-9]{64}$/
+/** The ID of one key, such as `k2`. */
+const KeyId = Schema.String.check(Schema.isPattern(/^[a-z0-9_-]{1,32}$/))
+const isKeyId = Schema.is(KeyId)
+
+/** One entry of the key list: `<id>:<64 hexadecimal characters>`. */
+const decodeEntry = Schema.decodeUnknownOption(
+	Schema.TemplateLiteralParser([
+		KeyId,
+		":",
+		Schema.String.check(Schema.isPattern(/^[a-fA-F0-9]{64}$/)),
+	]),
+)
 
 /**
  * Reads a key list like `k2:<hex>,k1:<hex>`. Each key is 32 bytes as 64 hexadecimal characters.
@@ -42,81 +68,112 @@ export const parseKeys = (
 	value: string,
 ): Effect.Effect<
 	{
-		readonly current: string
-		readonly keys: ReadonlyMap<string, Buffer>
+		readonly current: { readonly id: string; readonly key: Buffer }
+		readonly keys: HashMap.HashMap<string, Buffer>
 	},
 	SecretKeysInvalid
 > =>
 	Effect.gen(function* () {
-		const keys = new Map<string, Buffer>()
-		const entries = value
-			.split(",")
-			.map((entry) => entry.trim())
-			.filter((entry) => entry !== "")
-		for (const entry of entries) {
-			const [id, hex, ...rest] = entry.split(":")
-			if (
-				id === undefined ||
-				hex === undefined ||
-				rest.length > 0 ||
-				!KeyId.test(id) ||
-				!KeyHex.test(hex)
-			)
-				return yield* SecretKeysInvalid.make({
-					message:
-						"Each entry of OPENBOT_SECRET_KEYS must be <id>:<64 hexadecimal characters>.",
-				})
-			if (keys.has(id))
-				return yield* SecretKeysInvalid.make({
-					message: `The key ID ${id} appears twice in OPENBOT_SECRET_KEYS.`,
-				})
-			keys.set(id, Buffer.from(hex, "hex"))
-		}
-		const current = entries[0]?.split(":")[0]
-		if (current === undefined)
-			return yield* SecretKeysInvalid.make({
-				message: "OPENBOT_SECRET_KEYS must name at least one key.",
-			})
+		const entries = pipe(
+			Str.split(value, ","),
+			Arr.map(Str.trim),
+			Arr.filter(Str.isNonEmpty),
+		)
+		const decoded = yield* Effect.forEach(entries, (entry) =>
+			Option.match(decodeEntry(entry), {
+				onNone: () =>
+					Effect.fail(
+						SecretKeysInvalid.make({
+							message:
+								"Each entry of OPENBOT_SECRET_KEYS must be <id>:<64 hexadecimal characters>.",
+						}),
+					),
+				onSome: ([id, , hex]) =>
+					Effect.succeed({ id, key: Buffer.from(hex, "hex") }),
+			}),
+		)
+		const keys = yield* Effect.reduce(
+			decoded,
+			() => HashMap.empty<string, Buffer>(),
+			(keys, { id, key }) =>
+				HashMap.has(keys, id)
+					? Effect.fail(
+							SecretKeysInvalid.make({
+								message: `The key ID ${id} appears twice in OPENBOT_SECRET_KEYS.`,
+							}),
+						)
+					: Effect.succeed(HashMap.set(keys, id, key)),
+		)
+		// A HashMap has no order, so the first key comes from the list.
+		const current = yield* Arr.match(decoded, {
+			onEmpty: () =>
+				Effect.fail(
+					SecretKeysInvalid.make({
+						message: "OPENBOT_SECRET_KEYS must name at least one key.",
+					}),
+				),
+			onNonEmpty: (all) => Effect.succeed(Arr.headNonEmpty(all)),
+		})
 		return { current, keys }
 	})
 
 /** A sealed value is `<key id>.<base64 of nonce, tag and cipher text>`. */
 export const make = (secret: Redacted.Redacted<string>) =>
-	Effect.map(parseKeys(Redacted.value(secret)), ({ current, keys }) =>
-		Secrets.of({
+	Effect.gen(function* () {
+		const crypto = yield* Crypto.Crypto
+		const { current, keys } = yield* parseKeys(Redacted.value(secret))
+		return Secrets.of({
 			seal: (value, binding) =>
-				Effect.try({
+				crypto.randomBytes(12).pipe(
+					Effect.orDie,
+					Effect.flatMap((nonce) =>
+						Effect.try({
+							try: () => {
+								const cipher = createCipheriv("aes-256-gcm", current.key, nonce)
+								cipher.setAAD(Buffer.from(binding))
+								const body = Buffer.concat([
+									cipher.update(value, "utf8"),
+									cipher.final(),
+								])
+								return (
+									current.id +
+									"." +
+									Buffer.concat([nonce, cipher.getAuthTag(), body]).toString(
+										"base64",
+									)
+								)
+							},
+							catch: (cause) => SecretStorageError.make({ cause }),
+						}),
+					),
+				),
+			open: (value, binding) => {
+				const dot = Str.indexOf(".")(value)
+				if (Option.isNone(dot))
+					return Effect.fail(
+						SecretStorageError.make({
+							message: "The sealed value has no key ID.",
+						}),
+					)
+				const id = Str.slice(0, dot.value)(value)
+				const key = HashMap.get(keys, id)
+				// The message names the ID only when it has the form of a key ID, so
+				// text from a value that was never sealed does not go to the log.
+				if (Option.isNone(key))
+					return Effect.fail(
+						SecretStorageError.make({
+							message: isKeyId(id)
+								? `The key ID ${id} of a stored secret is not in OPENBOT_SECRET_KEYS.`
+								: "The sealed value has no valid key ID.",
+						}),
+					)
+				const body = Str.slice(dot.value + 1)(value)
+				return Effect.try({
 					try: () => {
-						// `parseKeys` checked that the current key exists.
-						const key = keys.get(current)!
-						const nonce = randomBytes(12)
-						const cipher = createCipheriv("aes-256-gcm", key, nonce)
-						cipher.setAAD(Buffer.from(binding))
-						const body = Buffer.concat([
-							cipher.update(value, "utf8"),
-							cipher.final(),
-						])
-						return (
-							current +
-							"." +
-							Buffer.concat([nonce, cipher.getAuthTag(), body]).toString(
-								"base64",
-							)
-						)
-					},
-					catch: () => SecretStorageError.make({}),
-				}),
-			open: (value, binding) =>
-				Effect.try({
-					try: () => {
-						const dot = value.indexOf(".")
-						const key = keys.get(value.slice(0, dot))
-						if (dot < 0 || key === undefined)
-							throw new Error("The key of this secret is not configured")
-						const bytes = Buffer.from(value.slice(dot + 1), "base64")
+						const bytes = Buffer.from(body, "base64")
 						const cipher = createDecipheriv(
 							"aes-256-gcm",
-							key,
+							key.value,
 							bytes.subarray(0, 12),
 						)
 						cipher.setAAD(Buffer.from(binding))
@@ -126,10 +183,11 @@ export const make = (secret: Redacted.Redacted<string>) =>
 							cipher.final(),
 						]).toString("utf8")
 					},
-					catch: () => SecretStorageError.make({}),
-				}),
-		}),
-	)
+					catch: (cause) => SecretStorageError.make({ cause }),
+				})
+			},
+		})
+	})
 
 /** The keys come from the instance configuration. They never leave this Layer. */
 export const layer = (secret: Redacted.Redacted<string>) =>
@@ -137,4 +195,4 @@ export const layer = (secret: Redacted.Redacted<string>) =>
 
 /** The last characters of a secret, so people can tell keys apart without seeing them. */
 export const hint = (value: string) =>
-	value.length < 12 ? null : "…" + value.slice(-4)
+	value.length < 12 ? null : "…" + Str.slice(-4)(value)

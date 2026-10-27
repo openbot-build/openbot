@@ -7,7 +7,7 @@ import {
 } from "effect/http-api"
 import {
 	AccountAuth,
-	AgentAuth,
+	BotAuth,
 	AuthApi,
 	OpenBotApi,
 	SessionAuth,
@@ -41,7 +41,7 @@ export const make = (options: {
 	typeof Client.Service,
 	never,
 	| HttpClient.HttpClient
-	| HttpApiMiddleware.ForClient<AgentAuth>
+	| HttpApiMiddleware.ForClient<BotAuth>
 	| HttpApiMiddleware.ForClient<AccountAuth>
 	| HttpApiMiddleware.ForClient<SessionAuth>
 > =>
@@ -63,9 +63,7 @@ export const layer = (options: {
 	readonly organization?: string
 	readonly onUnauthorized?: () => void
 }): Layer.Layer<Client> => {
-	const token = Option.map(Option.fromNullishOr(options.token), (token) =>
-		Redacted.isRedacted(token) ? Redacted.value(token) : token,
-	)
+	const token = Option.fromNullishOr(options.token)
 	const reportUnauthorized = (response: { readonly status: number }) =>
 		Effect.sync(() => {
 			if (response.status === 401) options.onUnauthorized?.()
@@ -80,7 +78,7 @@ export const layer = (options: {
 						}),
 					),
 				),
-				HttpApiMiddleware.layerClient(AgentAuth, ({ request, next }) =>
+				HttpApiMiddleware.layerClient(BotAuth, ({ request, next }) =>
 					next(
 						Option.match(token, {
 							onNone: () =>

@@ -1,6 +1,3 @@
-import * as InstanceWork from "../execution/InstanceWork.ts"
-import type * as DeveloperVerification from "../apps/DeveloperVerification.ts"
-import * as AuthBarrier from "../auth/Barrier.ts"
 import * as DeveloperLayers from "../apps/DeveloperLayers.ts"
 import * as AppExperience from "../apps/Experience.ts"
 import * as Views from "../apps/Views.ts"
@@ -9,6 +6,7 @@ import * as Connections from "../apps/Connections.ts"
 import * as Lifecycle from "../apps/Lifecycle.ts"
 import * as ConnectionLocks from "../apps/ConnectionLocks.ts"
 import * as Capabilities from "../apps/Capabilities.ts"
+import * as AppDiscovery from "../apps/Discovery.ts"
 import * as AppPlugin from "../plugins/apps/AppPlugin.ts"
 import * as Invocations from "../apps/Invocations.ts"
 import * as Operations from "../apps/Operations.ts"
@@ -22,96 +20,146 @@ import * as ProtocolStores from "../apps/ProtocolStores.ts"
 import {
 	CatalogDiscovery,
 	AppConnections,
+	type Discovery,
 	PublicIndexing,
 	RobotsPolicy,
 	type Network,
 } from "@openbot-build/protocol"
-import * as ProtocolNodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import * as OutboundPolicy from "../network/OutboundPolicy.ts"
 import * as IndexWork from "../apps/IndexWork.ts"
 import * as Governance from "../apps/Governance.ts"
 import * as IndexStore from "../apps/IndexStore.ts"
 import { IndexNamespace } from "../apps/IndexNamespace.ts"
-import { ResolvedConfiguration } from "../auth/Configuration.js"
 import * as BackendLayers from "./BackendLayers.ts"
-import * as AgentLayers from "../agents/AgentLayers.ts"
-import * as Coordinator from "../agents/Coordinator.ts"
+import * as BotLayers from "../bots/BotLayers.ts"
+import * as Coordinator from "../bots/Coordinator.ts"
+import * as CodeRuns from "../code/CodeRuns.ts"
+import * as Sandbox from "../code/Sandbox.ts"
+import * as Triggers from "../triggers/Triggers.ts"
+import * as TriggerWorker from "../triggers/Worker.ts"
+import * as Channels from "../channels/Channels.ts"
+import * as ChannelQueue from "../channels/ChannelQueue.ts"
+import * as ChannelRegistry from "../channels/ChannelRegistry.ts"
+import * as ChannelWorker from "../channels/ChannelWorker.ts"
+import * as ChannelPlugin from "../plugins/channels/ChannelPlugin.ts"
+import * as ComputerProviders from "../computers/ComputerProviders.ts"
+import * as Computers from "../computers/Computers.ts"
+import * as Connectors from "../computers/connector/Connectors.ts"
+import * as ComputerSessions from "../computers/Sessions.ts"
+import * as StoredOperations from "../operations/StoredOperations.ts"
+import * as Drivers from "../computers/Drivers.ts"
+import * as Pairings from "../computers/Pairings.ts"
+import * as ComputerWorker from "../computers/Worker.ts"
+import * as Files from "../files/Files.ts"
+import * as FileWorker from "../files/Worker.ts"
+import * as ComputerPlugin from "../plugins/computers/ComputerPlugin.ts"
+import * as VaultReaders from "../vaults/Readers.ts"
+import * as SecretProviders from "../vaults/SecretProviders.ts"
+import * as Vaults from "../vaults/Vaults.ts"
 import * as Judge from "../capabilities/Judge.ts"
-import * as Sessions from "../sessions/Sessions.ts"
-import { Config } from "@openbot-build/core"
-import * as Backend from "./Backend.ts"
-import type { PgClient } from "@effect/sql-pg"
-import { NodeServices, NodeCrypto } from "@effect/platform-node"
-import {
-	Effect,
-	Layer,
-	Option,
-	type Redacted,
-	Schema,
-	SchemaIssue,
-} from "effect"
-import { type Tool } from "effect/ai"
-import { FetchHttpClient } from "effect/http"
+import * as HostTools from "../chats/HostTools.ts"
+import * as ChatFeatures from "../chats/ChatFeatures.ts"
+import type { Config } from "@openbot-build/core"
+import { NodeSocket } from "@effect/platform-node"
+import { Effect, Layer, type Redacted } from "effect"
+import type { HttpClient } from "effect/http"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
 import * as BetterAuth from "../auth/BetterAuth.ts"
 import * as TokensPostgres from "../auth/TokensPostgres.ts"
 import * as AuditLogPostgres from "../audit/AuditLogPostgres.ts"
 import * as OrganizationPostgres from "../organization/OrganizationPostgres.ts"
 import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
+import * as AuthorizationLayer from "../authorization/Layer.ts"
 import * as RolesPostgres from "../authorization/RolesPostgres.ts"
 import * as ModelRegistry from "../models/ModelRegistry.ts"
+import * as LiveBackends from "../models/LiveBackends.ts"
+import * as LiveSessions from "../chats/live/LiveSessions.ts"
+import * as OpenAiRealtime from "../providers/openai/OpenAiRealtime.ts"
+import * as BillingPostgres from "../billing/BillingPostgres.ts"
+import * as RateLimit from "../billing/RateLimit.ts"
+import * as TokenThrottle from "../billing/TokenThrottle.ts"
 import * as ModelProvidersPostgres from "../models/ModelProvidersPostgres.ts"
+import * as ModelsPostgres from "../models/ModelsPostgres.ts"
 import * as SsoPostgres from "../sso/SsoPostgres.ts"
 import * as DomainControl from "../apps/DomainControl.ts"
-import { Settings } from "../settings/Settings.ts"
-import { AuthConfigurationError, type Configuration } from "../auth/Model.js"
 
-import * as ExecutionFence from "../execution/ExecutionFence.ts"
-
-export interface Options<
-	Tools extends Record<string, Tool.Any> = {},
-	E = never,
-	R = never,
-	BuildE = never,
-	BuildR = never,
-> {
-	readonly execution?: ExecutionFence.Options | undefined
+/** The settings of OpenBot. They are plain values. */
+export interface Options {
 	readonly databaseUrl: Redacted.Redacted<string>
-	readonly indexNamespace?: "public" | "development"
-	readonly indexPublicNetwork?: Layer.Layer<Network.PublicNetwork>
-	readonly indexWork?: IndexWork.Options
-	readonly developerVerification?: DeveloperVerification.Settings | undefined
-	readonly domainControl?: Layer.Layer<DomainControl.DomainControl>
-	readonly appProbe?: Layer.Layer<AppProbe.Probe>
-	readonly appNetwork?: Layer.Layer<AppHost.AppNetwork>
-	readonly auth: Configuration
-	readonly indexSources?: ReadonlyArray<AppIndex.SourceProvider>
-	readonly sessions?: Omit<
-		Sessions.Options<Tools, E, R, BuildE, BuildR>,
-		"namespace"
-	>
 	/**
-	 * Models that the program gives itself, such as the simulated model of
-	 * development. Every organization can use them. All other models come from
-	 * the model providers that the API stores.
+	 * Use the local test account instead of a sign-in provider. The public
+	 * origin and the sign-in secret still come from the platform settings.
+	 */
+	readonly development?: boolean
+	readonly indexNamespace?: "public" | "development"
+	readonly indexWork?: IndexWork.Options
+	readonly indexSources?: ReadonlyArray<AppIndex.SourceProvider>
+	/**
+	 * Models that the program gives itself, such as the simulated models of
+	 * development or of a test. Every organization can use them. All other
+	 * models come from the model providers that the API stores.
 	 */
 	readonly builtinModels?: ModelRegistry.Builtin
+	/**
+	 * The model of a new Chat when its Bot names none. It is one of
+	 * `builtinModels`. Only a simulated platform sets it, such as development
+	 * or a test. On a real platform, each Bot names its model.
+	 */
+	readonly defaultModel?: Config.Selection
+	readonly triggers?: TriggerWorker.Options
+	readonly channels?: ChannelWorker.Options
+	readonly computers?: ComputerWorker.Options
+	readonly files?: FileWorker.Options
 }
 
 /**
- * The services that live as long as the instance, outside of each app:
- * the database pool, the secret keys and the shared settings.
- * A new app after a change to the platform settings uses the same ones.
+ * The services from outside of OpenBot that `layer` needs: the drivers of the
+ * Computer providers, the Live backends, the readers of the password
+ * managers, the network and the check of Apps, the DNS check of domains, the
+ * public network of the App Index, and the discovery of Apps. `layerOutside`
+ * gives the real ones. A test gives fakes.
+ */
+export type Outside =
+	| Drivers.Drivers
+	| LiveBackends.LiveBackends
+	| VaultReaders.Readers
+	| AppProbe.Probe
+	| AppHost.AppNetwork
+	| DomainControl.DomainControl
+	| Network.PublicNetwork
+	| Discovery.Discovery
+
+/** The Live backends of a real server. The `ws` package can send the key in a header. */
+export const layerLiveBackends = Layer.unwrap(
+	Effect.map(OpenAiRealtime.backend, (openai) => LiveBackends.layer([openai])),
+).pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
+
+/**
+ * The real services from outside of OpenBot. They use the network of the
+ * process, with the address rule of the outbound guard.
+ */
+export const layerOutside: Layer.Layer<Outside, never, HttpClient.HttpClient> =
+	Layer.mergeAll(
+		Drivers.layer,
+		layerLiveBackends,
+		VaultReaders.layer,
+		AppProbe.layer,
+		AppHost.layerNetwork,
+		DomainControl.layer,
+		OutboundPolicy.layerPublicNetwork,
+		AppDiscovery.layerPublic,
+	)
+
+/**
+ * The services that every part of OpenBot shares: the database pool, the
+ * secret keys and the shared settings.
  */
 export const layerShared = (options: {
 	readonly databaseUrl: Redacted.Redacted<string>
 	readonly secretKeys: Redacted.Redacted<string>
-	readonly execution?: ExecutionFence.Options | undefined
 }) =>
 	SettingsPostgres.layer.pipe(
 		Layer.provideMerge(Secrets.layer(options.secretKeys)),
-		Layer.provideMerge(ExecutionFence.layer(options.execution)),
-		Layer.provideMerge(AuthBarrier.layer(options.execution)),
-		Layer.provideMerge(InstanceWork.layer),
 		Layer.provideMerge(
 			Layer.effectDiscard(DatabasePostgres.check).pipe(
 				Layer.provideMerge(DatabasePostgres.layer(options)),
@@ -119,226 +167,204 @@ export const layerShared = (options: {
 		),
 	)
 
-/** The app of one platform configuration, with a separate stored runtime for each member. */
-export const layer = <
-	Tools extends Record<string, Tool.Any> = {},
-	E = never,
-	R = never,
-	BuildE = never,
-	BuildR = never,
->(
-	options: Options<Tools, E, R, BuildE, BuildR>,
-) => {
-	/**
-	 * Each member gets the models and memory switches of their organization.
-	 * A host that gives its own `resolveModel`, such as a test, keeps it.
-	 */
-	const sessions: Layer.Layer<
-		Backend.Backend,
-		never,
-		| PgClient.PgClient
-		| Sessions.ExecutionServices<Tools, R>
-		| BuildR
-		| ModelRegistry.ModelRegistry
-		| Settings
-	> = Layer.unwrap(
-		Effect.gen(function* () {
-			const registry = yield* ModelRegistry.ModelRegistry
-			const settings = yield* Settings
-			const organization = (
-				organizationId: string,
-			): Sessions.OrganizationOptions => ({
-				modelCatalog: registry
-					.catalog(organizationId)
-					.pipe(Effect.orElseSucceed(() => ({ providers: [], models: [] }))),
-				defaults: registry.defaultSelection(organizationId).pipe(
-					Effect.map(
-						Option.match({
-							onNone: () => ({}),
-							onSome: (model) => ({ model }),
-						}),
-					),
-					Effect.orElseSucceed(() => ({})),
-				),
-				resolveModel: (selection) =>
-					registry.resolve(organizationId, selection),
-				memoryDefaults: settings.organization(organizationId).pipe(
-					Effect.map((current) => current.document.memory),
-					Effect.orElseSucceed(() => ({})),
-				),
+/** Each helper model comes from its own setting of the organization. */
+const layerHelperModel = Layer.effect(
+	Judge.HelperModel,
+	Effect.map(ModelRegistry.ModelRegistry, (registry) => {
+		const unavailable = (error: Config.ModelConfigurationError) =>
+			Judge.HelperModelUnavailable.make({
+				message: error.message,
+				cause: error,
 			})
-			// A runtime without an owner has no organization. It can use only the built-in models.
-			const builtin = options.builtinModels
-			const first = builtin?.models[0]
-			const fallback =
-				builtin === undefined || first === undefined
-					? {}
-					: {
-							modelCatalog: Effect.succeed({
-								providers: builtin.providers,
-								models: builtin.models,
-							}),
-							defaults: Effect.succeed({
-								model: Config.Selection.make({
-									provider: first.provider,
-									model: first.id,
-								}),
-							}),
-							resolveModel: (selection: Config.Selection | undefined) =>
-								builtin.resolve(
-									selection ??
-										Config.Selection.make({
-											provider: first.provider,
-											model: first.id,
-										}),
-								),
-						}
-			return BackendLayers.layer(
-				options.sessions?.resolveModel === undefined
-					? { ...fallback, ...options.sessions, organization }
-					: options.sessions,
-			)
-		}),
-	)
+		return Judge.HelperModel.of({
+			rules: (organizationId) =>
+				Effect.mapError(registry.rulesModel(organizationId), unavailable),
+			botMemory: (organizationId) =>
+				Effect.mapError(registry.botMemoryModel(organizationId), unavailable),
+		})
+	}),
+)
 
-	// The helper model comes from the settings of the organization, or from the model of the host.
-	const helper = Layer.effect(
-		Judge.HelperModel,
-		Effect.gen(function* () {
-			const registry = yield* ModelRegistry.ModelRegistry
-			const resolve = options.sessions?.resolveModel
-			return Judge.HelperModel.of({
-				model: (organizationId) =>
-					Effect.mapError(
-						resolve === undefined
-							? registry.helper(organizationId)
-							: resolve(undefined),
-						(error) =>
-							new Judge.HelperModelUnavailable({ message: error.message }),
-					),
-			})
-		}),
-	)
-	const agents = AgentLayers.layer({ helper })
-
-	const indexNamespace = options.indexNamespace ?? "public"
-	const apps = Layer.mergeAll(
-		Lifecycle.layer,
-		Authorizations.layer(options.auth.publicOrigin),
-		AppPlugin.layer,
-		Operations.layer,
+/**
+ * The Chat runtime of each member, with every plugin of a Turn. The runtimes
+ * share one listener for the notices of their background Operations.
+ */
+const layerChats = (options: Options) =>
+	BackendLayers.layer(
+		options.defaultModel === undefined
+			? {}
+			: { defaultModel: options.defaultModel },
 	).pipe(
-		Layer.provideMerge(Invocations.layer),
-		Layer.provideMerge(Connections.layer),
-		Layer.provideMerge(Capabilities.layer),
-		Layer.provideMerge(AppHost.layer),
-		Layer.provide(CatalogDiscovery.layerRules),
-		Layer.provide(options.appProbe ?? AppProbe.layer),
-		Layer.provideMerge(AppConnections.layerConnectionScopes),
-		Layer.provideMerge(ConnectionLocks.layer),
-		Layer.provide(options.appNetwork ?? AppHost.layerNetwork),
-		Layer.provide(NodeCrypto.layer),
-		Layer.provideMerge(ProtocolStores.layer),
-		Layer.provideMerge(ActionPolicy.layer),
+		Layer.provide(
+			Layer.merge(ChatFeatures.layer, StoredOperations.layerChannel),
+		),
 	)
 
-	const developer = Layer.unwrap(
-		Effect.gen(function* () {
-			const settings = yield* Settings
-			const platform = yield* settings.platform
-			return DeveloperLayers.layer({
-				verification:
-					options.developerVerification ??
-					(Option.isSome(platform)
-						? platform.value.document.developerVerification
-						: undefined),
-				publicOrigin: options.auth.publicOrigin,
-				...(options.appNetwork === undefined
-					? {}
-					: { appNetwork: options.appNetwork }),
-				...(options.domainControl === undefined
-					? {}
-					: { domainControl: options.domainControl }),
-				...(options.indexPublicNetwork === undefined
-					? {}
-					: { publicNetwork: options.indexPublicNetwork }),
-			})
-		}),
-	)
+/**
+ * Apps: their connections, calls, authorizations and Operations, the Code
+ * Mode runs, and the App plugin of each Turn.
+ */
+const layerApps = Layer.mergeAll(
+	Lifecycle.layer,
+	Authorizations.layer,
+	AppPlugin.layer,
+	Operations.layer,
+).pipe(
+	Layer.provideMerge(CodeRuns.layer),
+	Layer.provide(Sandbox.layer),
+	Layer.provideMerge(Invocations.layer),
+	Layer.provideMerge(Connections.layer),
+	Layer.provideMerge(Capabilities.layer),
+	Layer.provideMerge(AppHost.layer),
+	Layer.provide(CatalogDiscovery.layerRules),
+	Layer.provide(AppConnections.layerConnectionScopes),
+	Layer.provideMerge(ConnectionLocks.layer),
+	Layer.provide(Layer.merge(ProtocolStores.layer, ActionPolicy.layer)),
+)
 
-	const indexing = PublicIndexing.layer.pipe(
+/**
+ * Channels and the Channel plugin of each Turn. A custom Channel calls an
+ * address that an administrator chose, so it uses the network of Apps.
+ */
+const layerChannels = ChannelPlugin.layer.pipe(
+	Layer.provideMerge(ChannelRegistry.layer),
+	Layer.provideMerge(ChannelQueue.layer),
+	Layer.provideMerge(Channels.layer),
+)
+
+/** Computers, their providers, pairings and command sessions, and the Computer plugin of each Turn. */
+const layerComputers = ComputerPlugin.layer.pipe(
+	Layer.provideMerge(ComputerSessions.layer),
+	Layer.provideMerge(Pairings.layer),
+	Layer.provideMerge(Computers.layer),
+	Layer.provideMerge(Connectors.layer),
+	Layer.provideMerge(ComputerProviders.layer),
+)
+
+/** Vaults and the secret providers that they read. */
+const layerVaults = Vaults.layer.pipe(Layer.provideMerge(SecretProviders.layer))
+
+/** The Bot services. The helper models come from the model registry. */
+const layerBots = BotLayers.layer.pipe(Layer.provide(layerHelperModel))
+
+/** The App Index, the work that reads App Catalogs into it, and its store. */
+const layerIndex = (options: Options) => {
+	const indexing = PublicIndexing.layerInspection.pipe(
 		Layer.provide(CatalogDiscovery.layerRules),
 		Layer.provide(RobotsPolicy.layer),
-		Layer.provide(
-			options.indexPublicNetwork ?? ProtocolNodeHttpServer.layerPublicNetwork(),
-		),
-		Layer.provide(IndexStore.layer),
 	)
-	const indexWork = IndexWork.layerWorker(options.indexWork).pipe(
+	const work = IndexWork.layerWorker(options.indexWork).pipe(
 		Layer.provideMerge(
 			IndexWork.layer(options.indexWork).pipe(Layer.provide(indexing)),
 		),
 	)
-	const index = Layer.merge(
+	return Layer.merge(
 		AppIndex.layer({
-			publicOrigin: options.auth.publicOrigin,
-			simulated: indexNamespace === "development",
+			simulated: options.indexNamespace === "development",
 			...(options.indexSources === undefined
 				? {}
 				: { providers: options.indexSources }),
 		}),
-		indexWork,
+		work,
 	).pipe(Layer.provideMerge(IndexStore.layer))
+}
 
-	const base = Layer.merge(
-		sessions,
-		Layer.unwrap(
-			Effect.map(
-				Schema.decodeEffect(ResolvedConfiguration)(options.auth).pipe(
-					Effect.mapError((error) =>
-						AuthConfigurationError.make({
-							field: SchemaIssue.makeFormatterStandardSchemaV1()(
-								error.issue,
-							).issues.some((issue) => issue.path?.[0] === "publicOrigin")
-								? "publicOrigin"
-								: "configuration",
-						}),
-					),
-				),
-				(config) =>
-					BetterAuth.layer({ ...config, databaseUrl: options.databaseUrl }),
-			),
+/**
+ * Members, organizations, tokens, roles, platform admins, single sign-on, the
+ * audit log, and the checks of permissions.
+ */
+const layerAccounts = AuthorizationLayer.layer.pipe(
+	Layer.provideMerge(
+		Layer.mergeAll(
+			TokensPostgres.layer,
+			OrganizationPostgres.layer,
+			PlatformAdminsPostgres.layer,
+			RolesPostgres.layer,
+			SsoPostgres.layer,
 		),
+	),
+	Layer.provideMerge(AuditLogPostgres.layer),
+)
+
+/**
+ * The models: the stored providers and models, the model registry, and the
+ * Live sessions of this process. The registry meters each model call, so the
+ * spending services come before it.
+ */
+const layerModels = (options: Options) =>
+	Layer.merge(
+		ModelRegistry.layer(
+			options.builtinModels === undefined
+				? {}
+				: { builtin: options.builtinModels },
+		),
+		LiveSessions.layer,
 	).pipe(
-		Layer.provideMerge(apps),
-		Layer.provideMerge(agents),
-		Layer.provideMerge(index),
-		Layer.provideMerge(Governance.layer),
-		Layer.provideMerge(TokensPostgres.layer),
-		Layer.provideMerge(OrganizationPostgres.layer),
-		Layer.provideMerge(PlatformAdminsPostgres.layer),
-		Layer.provideMerge(RolesPostgres.layer),
 		Layer.provideMerge(
-			ModelRegistry.layer(
-				options.builtinModels === undefined
-					? {}
-					: { builtin: options.builtinModels },
-			),
+			Layer.merge(ModelProvidersPostgres.layer, ModelsPostgres.layer),
 		),
-		Layer.provideMerge(ModelProvidersPostgres.layer),
-		Layer.provideMerge(
-			SsoPostgres.layer.pipe(
-				Layer.provide(options.domainControl ?? DomainControl.layer),
-			),
-		),
-		Layer.provideMerge(AuditLogPostgres.layer),
-		Layer.provideMerge(Layer.succeed(IndexNamespace, indexNamespace)),
-		Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 	)
-	return Layer.mergeAll(
+
+/** Spending: the bills, the rate limits and the token limits. */
+const layerSpending = Layer.mergeAll(
+	BillingPostgres.layer,
+	RateLimit.layer,
+	TokenThrottle.layer,
+)
+
+/**
+ * The services of OpenBot, with a separate stored runtime for each member. It
+ * is built once for the life of the process. Values from the platform
+ * settings, such as the public origin, are read each time they are used, so a
+ * change to them needs no new build.
+ *
+ * It needs the shared services (`layerShared`), the services from outside of
+ * OpenBot (`Outside`), the tools of the host (`HostTools`), and the platform
+ * services, such as `NodeServices.layer` and `FetchHttpClient.layer`. The
+ * services of a layer below are open to each layer above it.
+ */
+export const layer = (options: Options) =>
+	Layer.mergeAll(
 		Views.layer,
 		AppExperience.layer,
-		developer,
+		DeveloperLayers.layer,
 		Coordinator.layer,
-	).pipe(Layer.provideMerge(base))
-}
+		TriggerWorker.layer(options.triggers),
+		ComputerWorker.layer(options.computers),
+		FileWorker.layer(options.files),
+		ChannelWorker.layer(options.channels),
+	).pipe(
+		Layer.provideMerge(
+			Layer.merge(
+				layerChats(options),
+				BetterAuth.layer({
+					databaseUrl: options.databaseUrl,
+					development: options.development === true,
+				}),
+			),
+		),
+		Layer.provideMerge(layerApps),
+		Layer.provideMerge(Triggers.layer),
+		Layer.provideMerge(
+			Layer.mergeAll(layerChannels, layerComputers, layerVaults),
+		),
+		Layer.provideMerge(layerBots),
+		Layer.provideMerge(layerIndex(options)),
+		Layer.provideMerge(Governance.layer),
+		Layer.provideMerge(layerAccounts),
+		Layer.provideMerge(layerModels(options)),
+		Layer.provideMerge(
+			Layer.mergeAll(
+				layerSpending,
+				Files.layer,
+				Layer.succeed(IndexNamespace, options.indexNamespace ?? "public"),
+			),
+		),
+	)
+
+/**
+ * OpenBot with the real services from outside, and no tools of the host. It
+ * still needs the shared services and the platform services.
+ */
+export const layerLive = (options: Options) =>
+	layer(options).pipe(Layer.provide(Layer.merge(layerOutside, HostTools.none)))

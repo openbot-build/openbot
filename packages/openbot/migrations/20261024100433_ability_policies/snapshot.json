@@ -1,0 +1,65 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "ede22441-ec83-4a1e-8923-6e6bcdac0b5b",
+	"prevIds": ["e46268ef-341b-49ed-83dc-542b0aac9d99"],
+	"footprints": [
+		{
+			"statementType": "rename_column",
+			"statementTarget": ["column", "public", "openbot_members", "policies"],
+			"writes": [
+				"s|col|public.openbot_members.policies",
+				"n|col|public.openbot_members.policies",
+				"s|col|public.openbot_members.policy",
+				"n|col|public.openbot_members.policy"
+			],
+			"reads": ["n|tbl|public.openbot_members", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": ["column", "public", "openbot_roles", "policies"],
+			"writes": [
+				"s|col|public.openbot_roles.policies",
+				"n|col|public.openbot_roles.policies",
+				"s|col|public.openbot_roles.policy",
+				"n|col|public.openbot_roles.policy"
+			],
+			"reads": ["n|tbl|public.openbot_roles", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": ["column", "public", "openbot_tokens", "policies"],
+			"writes": [
+				"s|col|public.openbot_tokens.policies",
+				"n|col|public.openbot_tokens.policies",
+				"s|col|public.openbot_tokens.policy",
+				"n|col|public.openbot_tokens.policy"
+			],
+			"reads": ["n|tbl|public.openbot_tokens", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_members\",\"policies\"]",
+			"set": {
+				"name": "policy"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_roles\",\"policies\"]",
+			"set": {
+				"name": "policy"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_tokens\",\"policies\"]",
+			"set": {
+				"name": "policy"
+			}
+		}
+	]
+}

@@ -1,5 +1,3 @@
-import * as AccountNetwork from "../execution/AccountNetwork.ts"
-// @effect-diagnostics strictEffectProvide:off
 import { ConnectionsApi as Api } from "@openbot-build/api"
 import {
 	AppConnections,
@@ -9,6 +7,8 @@ import {
 	Network,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { OutboundPolicy } from "../network/OutboundPolicy.ts"
+import * as Failures from "../app/Failures.ts"
 import { Context, Effect, Layer } from "effect"
 
 export class Probe extends Context.Service<
@@ -42,11 +42,6 @@ export const layerWithNetwork = (
 					yield* McpClient.open({
 						key: input.connection,
 						clientInfo: { name: "OpenBot", version: "0.1.0" },
-						protocol: input.app.sources.some(
-							(source) => source.role === "manual",
-						)
-							? "standard"
-							: "openbot",
 					})
 					return { requiresAuthorization: false } as const
 				}),
@@ -60,19 +55,17 @@ export const layerWithNetwork = (
 							: { resourceMetadataUrl: error.resourceMetadataUrl }),
 					} as const),
 				),
+				// @effect-diagnostics-next-line strictEffectProvide:off -- Each check builds its own short-lived store and network for one handshake.
 				Effect.provide(
 					Layer.mergeAll(
 						MemoryStore.layer,
 						MemoryStore.layerCredentials,
 						AppConnections.layerConnectionScopes,
 						McpClient.layerPolicy(() => Effect.void),
-						AccountNetwork.layer(
-							input.connection.owner,
-							network(input.connection),
-						),
+						network(input.connection),
 					),
 				),
-				Effect.mapError(() =>
+				Failures.replace("App connection check failed", () =>
 					Api.ConnectionConfigurationInvalid.make({
 						message:
 							"The App connection could not be checked. Check its address and required configuration, then try again.",
@@ -81,10 +74,15 @@ export const layerWithNetwork = (
 				),
 			),
 	})
-export const layer = layerWithNetwork((connection) =>
-	NodeHttpServer.layerUserNetwork({
-		owner: connection.owner,
-		allowedOrigins: [new URL(connection.endpoint).origin],
-		allowAddress: NodeHttpServer.isPublicAddress,
+export const layer = Layer.unwrap(
+	Effect.gen(function* () {
+		const policy = yield* OutboundPolicy
+		return layerWithNetwork((connection) =>
+			NodeHttpServer.layerUserNetwork({
+				owner: connection.owner,
+				allowedOrigins: [new URL(connection.endpoint).origin],
+				allowAddress: policy.allowAddress,
+			}),
+		)
 	}),
 )

@@ -1,12 +1,14 @@
-import { Context, Effect, Layer, Option } from "effect"
+import { Array as Arr, Effect, Option } from "effect"
 import { dual } from "effect/Function"
 
 import * as Config from "./Config.ts"
 
 /** Works out the total capacity, usable input and compaction threshold from the catalog. */
-export const contextLimits = (model: Config.Model): Config.ContextLimits => {
+export const contextLimits = (
+	model: Config.Model,
+): Option.Option<Config.ContextLimits> => {
 	const configured = model.contextWindow ?? model.maxContextWindow
-	if (configured === undefined) return {}
+	if (configured === undefined) return Option.none()
 	const contextWindow = Math.min(
 		configured,
 		model.maxContextWindow ?? configured,
@@ -18,7 +20,7 @@ export const contextLimits = (model: Config.Model): Config.ContextLimits => {
 		contextWindow - (model.maxOutputTokens ?? 0),
 		model.maxInputTokens ?? Infinity,
 	)
-	return {
+	return Option.some({
 		contextWindow,
 		inputTokens,
 		autoCompactTokens: Math.min(
@@ -26,7 +28,7 @@ export const contextLimits = (model: Config.Model): Config.ContextLimits => {
 			inputTokens,
 			model.autoCompactTokenLimit ?? Infinity,
 		),
-	}
+	})
 }
 
 /** The providers and models that a selection can use. */
@@ -59,26 +61,33 @@ export const selectionProblem: {
 		selection: Config.Selection,
 	): Option.Option<SelectionProblem> => {
 		if (
-			!catalog.providers.some((provider) => provider.id === selection.provider)
+			!Arr.some(
+				catalog.providers,
+				(provider) => provider.id === selection.provider,
+			)
 		)
 			return Option.some({
 				reason: "provider-not-found",
 				message: "The provider does not exist",
 			})
-		const model = catalog.models.find(
+		const model = Arr.findFirst(
+			catalog.models,
 			(model) =>
 				model.provider === selection.provider && model.id === selection.model,
 		)
-		if (model === undefined)
+		if (Option.isNone(model))
 			return Option.some({
 				reason: "model-not-found",
 				message: "The model does not exist",
 			})
 		if (
 			(selection.reasoningEffort !== undefined &&
-				!model.reasoningEfforts.includes(selection.reasoningEffort)) ||
+				!Arr.contains(
+					model.value.reasoningEfforts,
+					selection.reasoningEffort,
+				)) ||
 			(selection.serviceTier !== undefined &&
-				!model.serviceTiers.includes(selection.serviceTier))
+				!Arr.contains(model.value.serviceTiers, selection.serviceTier))
 		)
 			return Option.some({
 				reason: "unsupported-option",
@@ -91,34 +100,42 @@ export const selectionProblem: {
 export const modelConfiguration = <P>(
 	input: Config.ModelConfigurationOptions<P>,
 ): Config.RuntimeModelConfiguration => ({
-	get: input.store.read(input.session).pipe(
+	get: input.store.read(input.chat).pipe(
 		Effect.flatMap((view) =>
-			view.session.settings.model === undefined
+			view.chat.settings.model === undefined
 				? Effect.fail(
-						new Config.ModelConfigurationError({
-							reason: "unavailable",
-							message: "No model is selected for the current session",
+						Config.ModelConfigurationError.make({
+							reason: "missing",
+							message: "No model is selected for the current Chat",
 						}),
 					)
-				: Effect.succeed(view.session.settings.model),
+				: Effect.succeed(view.chat.settings.model),
 		),
 	),
 	select: (selection) =>
 		Effect.gen(function* () {
 			const problem = selectionProblem(input, selection)
 			if (Option.isSome(problem))
-				return yield* new Config.ModelConfigurationError(problem.value)
-			const before = yield* input.store.read(input.session)
-			yield* input.store.updateSettings({
-				expected: before.session,
-				settings: { ...before.session.settings, model: selection },
+				return yield* Config.ModelConfigurationError.make(problem.value)
+			yield* input.store.modifyEffect({
+				chat: input.chat,
+				update: (current) =>
+					Effect.succeed([
+						undefined,
+						Option.some({
+							chat: {
+								settings: { ...current.chat.settings, model: selection },
+							},
+						}),
+					] as const),
 			})
 			return selection
 		}),
 	listProviders: Effect.succeed(input.providers),
 	listModels: (provider) =>
 		Effect.succeed(
-			input.models.filter(
+			Arr.filter(
+				input.models,
 				(model) => provider === undefined || model.provider === provider,
 			),
 		),
@@ -128,64 +145,19 @@ export const executionMode = <P>(
 	input: Config.ExecutionModeOptions<P>,
 ): Config.RuntimeExecutionMode => ({
 	get: input.store
-		.read(input.session)
-		.pipe(Effect.map((view) => view.session.settings.mode)),
+		.read(input.chat)
+		.pipe(Effect.map((view) => view.chat.settings.mode)),
 	set: (mode) =>
 		input.store
 			.modifyEffect({
-				session: input.session,
+				chat: input.chat,
 				update: (current) =>
 					Effect.succeed([
 						mode,
 						Option.some({
-							session: { settings: { ...current.session.settings, mode } },
+							chat: { settings: { ...current.chat.settings, mode } },
 						}),
 					] as const),
 			})
 			.pipe(Effect.map(({ result }) => result)),
 })
-
-export const layerModelConfiguration: {
-	<P>(
-		input: Config.ModelConfigurationOptions<P>,
-	): <I>(
-		tag: Context.Service<I, Config.RuntimeModelConfiguration>,
-	) => Layer.Layer<I>
-	<I, P>(
-		tag: Context.Service<I, Config.RuntimeModelConfiguration>,
-		input: Config.ModelConfigurationOptions<P>,
-	): Layer.Layer<I>
-} = dual(
-	2,
-	<I, P>(
-		tag: Context.Service<I, Config.RuntimeModelConfiguration>,
-		input: Config.ModelConfigurationOptions<P>,
-	) => Layer.succeed(tag, modelConfiguration(input)),
-)
-
-export const layerExecutionMode = <P>(
-	input: Config.ExecutionModeOptions<P>,
-) => {
-	const operations = executionMode(input)
-	return Layer.succeed(Config.ExecutionMode, {
-		get: operations.get.pipe(
-			Effect.mapError(
-				(error) =>
-					new Config.ExecutionModeError({
-						reason: "session-not-found",
-						message: error.toString(),
-					}),
-			),
-		),
-		set: (mode) =>
-			operations.set(mode).pipe(
-				Effect.mapError(
-					(error) =>
-						new Config.ExecutionModeError({
-							reason: "unavailable",
-							message: error.toString(),
-						}),
-				),
-			),
-	})
-}

@@ -2,8 +2,10 @@
 # check=error=true
 
 # Build stages make only JavaScript, so they run on the build machine's own platform.
-FROM --platform=$BUILDPLATFORM node:26.12.1-trixie-slim@sha256:1653c74b30c27b26f68c2d21279be12139d2ba723e3a682c425ec4bfb6070422 AS workspace
+FROM --platform=$BUILDPLATFORM node:26.12.1-trixie-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS workspace
 RUN npm install --global pnpm@9.15.9
+# Limit the native TypeScript compiler in build stages; runtime starts from its own base.
+ENV GOMEMLIMIT=1GiB GOGC=50
 WORKDIR /workspace
 # This layer changes only when the lockfile changes, so the registry cache keeps the downloaded packages.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -14,19 +16,19 @@ RUN pnpm install --offline --frozen-lockfile
 
 FROM workspace AS build-openbot
 # OpenBot runs as one bundled file, so the image needs no node_modules.
-RUN pnpm --filter-prod @openbot-build/openbot^... build \
+RUN pnpm --workspace-concurrency=1 --filter-prod @openbot-build/openbot^... build \
     && pnpm --filter @openbot-build/openbot exec tsdown --config ../../deploy/docker/tsdown.config.ts
 
 FROM workspace AS build-protocol-test
-RUN pnpm --filter @openbot-build/protocol-test... build \
+RUN pnpm --workspace-concurrency=1 --filter @openbot-build/protocol-test... build \
     && pnpm --filter @openbot-build/protocol-test deploy --prod /deployment
 
 # The Node.js binary for the target platform, at the same version as development.
-FROM node:26.12.1-trixie-slim@sha256:1653c74b30c27b26f68c2d21279be12139d2ba723e3a682c425ec4bfb6070422 AS node
+FROM node:26.12.1-trixie-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS node
 
 # Distroless has no shell and no package manager. Its user is "nonroot" (65532).
 # The cc image has the C and C++ libraries that Node.js needs, except libatomic.
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:b7e81cb1af38d9345680e68bcf564d388f96304e25222030fc8c051faf8565b3 AS runtime
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:3ee00291cf386ec52a552e6a858d555debd74776eb4bfa53fa3df2cd6677515e AS runtime
 COPY --link --from=node /usr/lib/*-linux-gnu/libatomic.so.1* /usr/lib/
 COPY --link --from=node /usr/local/bin/node /usr/local/bin/node
 ENV NODE_ENV=production

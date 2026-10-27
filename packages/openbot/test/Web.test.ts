@@ -1,213 +1,237 @@
-import { Effect, Match, Redacted, Schema, Stream } from "effect"
-import assert from "node:assert/strict"
-import { test } from "node:test"
 import {
-	SessionMemory,
-	SessionView,
-	SessionResponseEvent,
+	Array as Arr,
+	Effect,
+	Match,
+	Option,
+	pipe,
+	Redacted,
+	Ref,
+	Schedule,
+	Schema,
+	Stream,
+	String as Str,
+} from "effect"
+import { assert, it } from "@effect/vitest"
+import {
+	ChatResponse,
+	ChatResponseEvent,
+	ChatSummary,
+	ChatView,
 	RequestsApi,
-	AgentsApi,
+	Settings,
 } from "@openbot-build/api"
-import { AiError, LanguageModel, Response } from "effect/ai"
-import { Timeline, Session } from "@openbot-build/core"
+import { Item, Turn } from "@openbot-build/core"
+import { AiError, LanguageModel, type Prompt, Response } from "effect/ai"
+import { HttpClient } from "effect/http"
 import * as BrowserHost from "./BrowserHost.ts"
+import * as Caller from "./Caller.ts"
+import { bot, message, settled, view, type Send } from "./Messages.ts"
 
-test(
-	"public Sessions, Turns, approvals, historical Fork and detached SSE share one execution",
-	{ timeout: 60000 },
-	async () => {
-		const host = await BrowserHost.start({
-			publicOrigin: "https://web.example.com",
-		})
-		try {
-			const alice = await host.login("alice"),
-				bob = await host.login("bob")
-			const request = (
-				credential: Redacted.Redacted<string>,
-				path: string,
-				method = "GET",
-				payload?: unknown,
-			) =>
-				fetch(host.address + path, {
-					method,
-					headers: {
-						cookie:
-							"__Host-openbot-session=" +
-							encodeURIComponent(Redacted.value(credential)),
-						origin: "https://web.example.com",
-						...(payload === undefined
-							? {}
-							: { "content-type": "application/json" }),
-					},
-					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+/** Gives a value as JSON text. */
+const jsonText = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
+
+/** Reads the JSON text of one live event. */
+const decodeEvent = Schema.decodeEffect(
+	Schema.fromJsonString(ChatResponseEvent),
+)
+
+const isUser = (message: Prompt.Message): message is Prompt.UserMessage =>
+	message.role === "user"
+
+/** The text parts of a message of the person, as one text. */
+const textOf = (message: Prompt.UserMessage) =>
+	pipe(
+		message.content,
+		Arr.filter((part) => part.type === "text"),
+		Arr.map((part) => part.text),
+		Arr.join(""),
+	)
+
+// The host runs real servers, so these tests need real time.
+it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+	it.effect(
+		"public Chats, Turns, approvals and detached SSE share one execution",
+		() =>
+			Effect.gen(function* () {
+				const host = yield* BrowserHost.start({
+					publicOrigin: "https://web.example.com",
 				})
-			const decode = Schema.decodeUnknownSync(SessionView)
-			const get = async (path: string) =>
-				decode(await (await request(alice.session, path)).json())
-			const created = await request(alice.session, "/v1/sessions", "POST", {
-				title: "A workflow",
-			})
-			assert.equal(created.status, 201)
-			const initial = decode(await created.json()),
-				path = "/v1/sessions/" + initial.session.id
-			assert.equal(
-				(
-					await request(alice.session, "/v1/sessions", "POST", {
-						settings: { mode: "invalid" },
-					})
-				).status,
-				400,
-			)
-			const versions = Schema.decodeUnknownSync(Schema.Array(Timeline.Version))(
-				await (await request(alice.session, path + "/versions")).json(),
-			)
-			assert.deepEqual(versions, [initial.state.version])
-			for (const suffix of ["", "/versions", "/delegations", "/turns"])
-				assert.equal((await request(bob.session, path + suffix)).status, 404)
-			assert.equal(
-				(
-					await fetch(host.address + path, {
+				const alice = yield* host.login("alice"),
+					bob = yield* host.login("bob")
+				const aliceBot = yield* host.defaultBot(alice.session)
+				yield* host.defaultBot(bob.session)
+				const address = yield* host.address
+				const request = Caller.withCookie({
+					address,
+					publicOrigin: "https://web.example.com",
+				})
+				const asAlice: Send = (path, method, payload) =>
+					request(alice.session, path, method, payload)
+				// Bots learn memory only with the Bot memory model of the organization.
+				const settings = yield* Effect.flatMap(
+					request(alice.session, "/v1/organization/settings"),
+					Caller.json(Settings.OrganizationSettings),
+				)
+				const configured = yield* request(
+					alice.session,
+					"/v1/organization/settings",
+					"PATCH",
+					{
+						expectedVersion: settings.version,
+						botMemoryModel: {
+							_tag: "Config.Selection",
+							provider: "fixture",
+							model: "fixture-model",
+						},
+					},
+				)
+				assert.strictEqual(configured.status, 200, yield* configured.text)
+				// The first message to a Bot makes the direct Chat of the member with it.
+				const first = yield* message(asAlice, aliceBot, "Say hello")
+				assert.strictEqual(first.delivery, "started")
+				const chat = first.chat,
+					path = "/v1/chats/" + chat
+				const initial = yield* settled(asAlice, chat)
+				assert.strictEqual(initial.chat.bot, aliceBot)
+				assert.strictEqual(initial.chat.kind, "direct")
+				assert.strictEqual(initial.chat.parent, null)
+				assert.strictEqual(initial.status, "Completed")
+				assert.strictEqual(initial.response?.id, first.turn)
+				assert.deepStrictEqual(
+					Arr.map(
+						yield* Effect.flatMap(
+							request(alice.session, "/v1/chats?bot=" + aliceBot),
+							Caller.json(Schema.Array(ChatSummary)),
+						),
+						(summary) => summary.chat.id,
+					),
+					[chat],
+				)
+				assert.strictEqual(
+					(yield* request(alice.session, path, "PATCH", {
+						expected: initial.chat.revision,
+						mode: "invalid",
+					})).status,
+					400,
+				)
+				for (const suffix of ["", "/items", "/delegations", "/turns"])
+					assert.strictEqual(
+						(yield* request(bob.session, path + suffix)).status,
+						404,
+					)
+				assert.strictEqual(
+					(yield* HttpClient.get(address + path, {
 						headers: {
 							cookie: "__Host-openbot-session=" + Redacted.value(alice.session),
 						},
-					})
-				).status,
-				200,
-			)
-			const wait = async (target = path): Promise<SessionView> => {
-				let view = await get(target)
-				for (let tries = 0; tries < 200 && view.activity === "active"; tries++)
-					view = decode(
-						await (
-							await request(
-								alice.session,
-								target +
-									"/wait?after=" +
-									view.session.revision +
-									"&afterActivity=" +
-									view.activity +
-									"&timeoutMs=100",
-							)
-						).json(),
-					)
-				assert.notEqual(view.activity, "active")
-				return view
-			}
-			assert.equal(
-				(
-					await request(alice.session, path + "/turns", "POST", {
-						expected: initial.session.revision,
-						input: "request approval",
-					})
-				).status,
-				202,
-			)
-			const waiting = await wait()
-			assert.equal(Session.status(waiting.session)._tag, "Waiting")
-			const requests = async (
-				credential = alice.session,
-			): Promise<ReadonlyArray<RequestsApi.CapabilityRequest>> =>
-				Schema.decodeUnknownSync(Schema.Array(RequestsApi.CapabilityRequest))(
-					await (
-						await request(credential, "/v1/requests?status=pending")
-					).json(),
+					})).status,
+					200,
 				)
-			// The request appears when OpenBot has seen that the Turn waits.
-			const nextRequest = async () => {
-				for (let tries = 0; tries < 200; tries++) {
-					const list = await requests()
-					if (list.length > 0) return list
-					await new Promise((resolve) => setTimeout(resolve, 25))
-				}
-				return requests()
-			}
-			/** Waits until the Turn no longer waits for a decision. */
-			const settled = async () => {
-				for (let tries = 0; tries < 200; tries++) {
-					const view = await wait()
-					if (Session.status(view.session)._tag !== "Waiting") return view
-					await new Promise((resolve) => setTimeout(resolve, 25))
-				}
-				return wait()
-			}
-			const pending = await nextRequest()
-			assert.equal(pending.length, 1)
-			assert.equal(pending[0]!.capability.action, "tools.call")
-			assert.equal(pending[0]!.session, initial.session.id)
-			assert.deepEqual(await requests(bob.session), [])
-			const decide = "/v1/requests/" + pending[0]!.id
-			assert.equal(
-				(
-					await request(alice.session, decide, "POST", {
+				// The routes of versioned Sessions are gone.
+				for (const [suffix, method] of [
+					["/versions", "GET"],
+					["/history", "GET"],
+					["/memory", "GET"],
+					["/fork", "POST"],
+				] as const)
+					assert.strictEqual(
+						(yield* request(
+							alice.session,
+							path + suffix,
+							method,
+							method === "POST" ? {} : undefined,
+						)).status,
+						404,
+					)
+				const requests = (credential = alice.session) =>
+					Effect.flatMap(
+						request(credential, "/v1/requests?status=pending"),
+						Caller.json(Schema.Array(RequestsApi.CapabilityRequest)),
+					)
+				const nextRequest = requests().pipe(
+					Effect.repeat({
+						until: Arr.isReadonlyArrayNonEmpty,
+						schedule: Schedule.spaced("25 millis"),
+						times: 200,
+					}),
+				)
+				/** The notice in the Chat about a request, when it has come. */
+				const noticeOf = (ref: string) =>
+					Effect.flatMap(
+						request(alice.session, path + "/items?limit=100"),
+						Caller.json(Schema.Struct({ items: Schema.Array(Item.Record) })),
+					).pipe(
+						Effect.map((page) =>
+							Arr.findFirst(
+								page.items,
+								(item) =>
+									item.origin?.notice?.kind === "request" &&
+									item.origin.notice.ref === ref,
+							),
+						),
+						Effect.repeat({
+							until: Option.isSome,
+							schedule: Schedule.spaced("25 millis"),
+							times: 199,
+						}),
+					)
+				// A call that needs approval gets a pending result at once, so the Turn does not wait.
+				const asked = yield* message(asAlice, aliceBot, "request approval")
+				assert.strictEqual(asked.chat, chat)
+				assert.strictEqual(asked.delivery, "started")
+				const pending = yield* nextRequest
+				const waiting = yield* settled(asAlice, chat)
+				assert.strictEqual(waiting.status, "Completed")
+				assert.strictEqual(waiting.response?.id, asked.turn)
+				assert.strictEqual(waiting.open.requests, 1)
+				assert.strictEqual(pending.length, 1)
+				assert.strictEqual(pending[0]!.capability.action, "tools.call")
+				assert.strictEqual(pending[0]!.chat, chat)
+				assert.strictEqual(yield* host.toolCalls, 0)
+				assert.deepStrictEqual(yield* requests(bob.session), [])
+				const decide = "/v1/requests/" + pending[0]!.id
+				assert.strictEqual(
+					(yield* request(alice.session, decide, "POST", {
 						expected: pending[0]!.revision + 1,
 						decision: "allow",
-					})
-				).status,
-				409,
-			)
-			assert.equal(
-				(
-					await request(bob.session, decide, "POST", {
+					})).status,
+					409,
+				)
+				assert.strictEqual(
+					(yield* request(bob.session, decide, "POST", {
 						expected: pending[0]!.revision,
 						decision: "allow",
-					})
-				).status,
-				404,
-			)
-			assert.equal(
-				(
-					await request(alice.session, path + "/fork", "POST", {
-						version: waiting.session.head,
-					})
-				).status,
-				400,
-			)
-			const fork = decode(
-				await (await request(alice.session, path + "/fork", "POST", {})).json(),
-			)
-			assert.equal(fork.session.head, initial.session.head)
-			assert.deepEqual(fork.session.turns, [])
-			assert.equal(fork.agent, initial.agent)
-			assert.equal(fork.kind, "direct")
-			assert.equal(fork.parent, null)
-			assert.deepEqual(fork.session.pending, [])
-			assert.equal(
-				(
-					await request(alice.session, decide, "POST", {
+					})).status,
+					404,
+				)
+				assert.strictEqual(
+					(yield* request(alice.session, decide, "POST", {
 						expected: pending[0]!.revision,
 						decision: "deny",
 						reason: "Not now",
-					})
-				).status,
-				200,
-			)
-			const denied = await settled()
-			assert.notEqual(Session.status(denied.session)._tag, "Waiting")
-			assert.equal(host.toolCalls(), 0)
-			assert.equal(
-				(
-					await request(alice.session, decide, "POST", {
+					})).status,
+					200,
+				)
+				// The denial comes back to the Chat as a notice, and the call does not run.
+				const denial = yield* noticeOf(pending[0]!.id)
+				assert.ok(Option.isSome(denial))
+				assert.match(yield* jsonText(denial.value.content), /Not now/)
+				const denied = yield* settled(asAlice, chat)
+				assert.strictEqual(denied.open.requests, 0)
+				assert.strictEqual(yield* host.toolCalls, 0)
+				assert.strictEqual(
+					(yield* request(alice.session, decide, "POST", {
 						expected: pending[0]!.revision + 1,
 						decision: "allow",
-					})
-				).status,
-				409,
-			)
-			assert.equal(
-				(
-					await request(alice.session, path + "/turns", "POST", {
-						expected: denied.session.revision,
-						input: "another approval",
-					})
-				).status,
-				202,
-			)
-			await wait()
-			const second = await nextRequest()
-			assert.equal(second.length, 1)
-			assert.equal(
-				(
-					await request(
+					})).status,
+					409,
+				)
+				const again = yield* message(asAlice, aliceBot, "another approval")
+				assert.strictEqual(again.chat, chat)
+				const second = yield* nextRequest
+				assert.strictEqual(second.length, 1)
+				assert.strictEqual(
+					(yield* request(
 						alice.session,
 						"/v1/requests/" + second[0]!.id,
 						"POST",
@@ -215,383 +239,326 @@ test(
 							expected: second[0]!.revision,
 							decision: "allow",
 						},
-					)
-				).status,
-				200,
-			)
-			const completed = await settled()
-			assert.equal(host.toolCalls(), 1)
-			const control =
-				path + "/turns/" + Session.currentTurn(completed.session)!.id
-			assert.equal(
-				(await request(alice.session, control + "/interrupt", "POST", {}))
-					.status,
-				409,
-			)
-			assert.equal(
-				(
-					await request(alice.session, control + "/steer", "POST", {
-						input: "late",
-					})
-				).status,
-				409,
-			)
-			const turns: {
-				items: ReadonlyArray<{ id: string }>
-				next: string | null
-			} = await (await request(alice.session, path + "/turns?limit=1")).json()
-			assert.equal(turns.items.length, 1)
-			assert.ok(turns.next !== null)
-			assert.equal(
-				(await request(alice.session, path + "/turns/" + turns.items[0]!.id))
-					.status,
-				200,
-			)
-			assert.equal(
-				(
-					await request(
+					)).status,
+					200,
+				)
+				// The allowed call runs once, in a new step of the Chat.
+				assert.ok(Option.isSome(yield* noticeOf(second[0]!.id)))
+				yield* host.toolCalls.pipe(
+					Effect.repeat({
+						until: (count) => count >= 1,
+						schedule: Schedule.spaced("25 millis"),
+						times: 199,
+					}),
+				)
+				const completed = yield* settled(asAlice, chat)
+				assert.strictEqual(yield* host.toolCalls, 1)
+				assert.strictEqual(completed.open.requests, 0)
+				assert.strictEqual(completed.response?.status, "completed")
+				// Interrupting a Chat that runs no Turn changes nothing.
+				const interrupted = yield* request(
+					alice.session,
+					path + "/interrupt",
+					"POST",
+					{},
+				)
+				assert.strictEqual(interrupted.status, 200)
+				const unchanged = yield* Caller.json(ChatView)(interrupted)
+				assert.strictEqual(unchanged.chat.revision, completed.chat.revision)
+				assert.strictEqual(unchanged.status, completed.status)
+				const turns = yield* Effect.flatMap(
+					request(alice.session, path + "/turns?limit=1"),
+					Caller.json(
+						Schema.Struct({
+							items: Schema.Array(Turn.Record),
+							next: Schema.NullOr(Turn.Id),
+						}),
+					),
+				)
+				assert.strictEqual(turns.items.length, 1)
+				assert.ok(turns.next !== null)
+				assert.strictEqual(
+					(yield* request(alice.session, path + "/turns/" + turns.items[0]!.id))
+						.status,
+					200,
+				)
+				assert.strictEqual(
+					(yield* request(
 						alice.session,
 						path + "/turns/" + turns.items[0]!.id + "/items?limit=1",
-					)
-				).status,
-				200,
-			)
-			const planned = decode(
-				await (
-					await request(alice.session, path + "/mode", "PUT", {
-						expected: completed.session.revision,
+					)).status,
+					200,
+				)
+				const planned = yield* Effect.flatMap(
+					request(alice.session, path, "PATCH", {
+						expected: completed.chat.revision,
 						mode: "plan",
-					})
-				).json(),
-			)
-			assert.equal(planned.session.head, completed.session.head)
-			assert.equal(planned.session.settings.mode, "plan")
-			assert.equal(
-				(
-					await request(alice.session, path + "/mode", "PUT", {
-						expected: completed.session.revision,
-						mode: "default",
-					})
-				).status,
-				409,
-			)
-			const historical = Schema.decodeUnknownSync(Timeline.State({}))(
-				await (
-					await request(
-						alice.session,
-						path + "/history?version=" + initial.session.head,
-					)
-				).json(),
-			)
-			assert.equal(historical.value.conversation.history.length, 0)
-			assert.equal((await get(path)).session.head, planned.session.head)
-			const memoryOf = async () =>
-				Schema.decodeUnknownSync(SessionMemory)(
-					await (await request(alice.session, path + "/memory")).json(),
+					}),
+					Caller.json(ChatView),
 				)
-			const configure = async (
-				view: typeof planned,
-				command: { use?: boolean | null; generate?: boolean | null },
-			) =>
-				decode(
-					await (
-						await request(alice.session, path + "/memory", "POST", {
-							expected: view.session.head,
-							revision: view.session.revision,
-							command: { _tag: "Configure", ...command },
-						})
-					).json(),
+				assert.strictEqual(planned.chat.settings.mode, "plan")
+				assert.ok(planned.chat.revision > completed.chat.revision)
+				assert.strictEqual(
+					(yield* request(alice.session, path, "PATCH", {
+						expected: completed.chat.revision,
+						mode: "build",
+					})).status,
+					409,
 				)
-			assert.deepEqual((await memoryOf()).settings, {
-				use: true,
-				generate: true,
-			})
-			const generationOff = await configure(planned, { generate: false })
-			assert.equal(generationOff.session.head, planned.session.head)
-			assert.ok(generationOff.session.revision > planned.session.revision)
-			assert.deepEqual((await memoryOf()).overrides, { generate: false })
-			assert.deepEqual((await memoryOf()).settings, {
-				use: true,
-				generate: false,
-			})
-			const beforeConsolidations = host.consolidations()
-			const controller = new AbortController()
-			const streaming = await fetch(host.address + path + "/turns", {
-				method: "POST",
-				signal: controller.signal,
-				headers: {
-					cookie:
-						"__Host-openbot-session=" +
-						encodeURIComponent(Redacted.value(alice.session)),
-					origin: "https://web.example.com",
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({
-					expected: generationOff.session.revision,
-					input: "slow output",
-					overrides: { mode: "default" },
-					stream: true,
-				}),
-			})
-			assert.equal(streaming.status, 200)
-			const reader = streaming.body!.getReader()
-			let body = ""
-			while (!body.includes("response.output_text.delta")) {
-				const chunk = await reader.read()
-				if (chunk.done) break
-				body += new TextDecoder().decode(chunk.value)
-			}
-			assert.match(body, /response.output_text.delta/)
-			controller.abort()
-			const final = await wait()
-			assert.equal(final.response?.status, "completed")
-			assert.equal(final.session.turns.at(-1)!.settings.mode, "default")
-			assert.equal(final.session.settings.mode, "plan")
-			assert.equal(host.consolidations(), beforeConsolidations)
-			assert.match(final.response.output[0]!.content[0]!.text, /Progress stays/)
-			const configuredFork = decode(
-				await (await request(alice.session, path + "/fork", "POST", {})).json(),
-			)
-			assert.deepEqual(
-				Schema.decodeUnknownSync(SessionMemory)(
-					await (
-						await request(
-							alice.session,
-							"/v1/sessions/" + configuredFork.session.id + "/memory",
-						)
-					).json(),
-				).overrides,
-				{ generate: false },
-			)
-			const generationDefault = await configure(final, { generate: null })
-			assert.deepEqual((await memoryOf()).overrides, {})
-			assert.equal(
-				(
-					await request(alice.session, path + "/turns", "POST", {
-						expected: generationDefault.session.revision,
-						input: "one explicit extraction",
-					})
-				).status,
-				202,
-			)
-			await wait()
-			// One model call learns Session memory. One more learns Agent memory after the Turn.
-			for (
-				let tries = 0;
-				tries < 200 && host.consolidations() < beforeConsolidations + 2;
-				tries++
-			)
-				await new Promise((resolve) => setTimeout(resolve, 25))
-			assert.equal(host.consolidations(), beforeConsolidations + 2)
-			const old = await (
-				await request(alice.session, path + "/turns/" + completed.response!.id)
-			).json()
-			assert.equal(old.response.id, completed.response!.id)
-			assert.equal(old.response.version, completed.response!.version)
-			// Sessions without an Agent belong to the Main Agent of the member.
-			const agents = Schema.decodeUnknownSync(Schema.Array(AgentsApi.Agent))(
-				await (await request(alice.session, "/v1/agents")).json(),
-			)
-			assert.equal(agents[0]?.kind, "main")
-			assert.equal(agents[0]?.id, initial.agent)
-			assert.equal(
-				(await request(alice.session, path + "/merge", "POST", {})).status,
-				404,
-			)
-		} finally {
-			await host.close()
-		}
-	},
-)
+				assert.strictEqual(
+					(yield* view(asAlice, chat)).chat.settings.mode,
+					"plan",
+				)
+				// The Items of the Chat come newest first, one page at a time.
+				const Page = Schema.Struct({
+					items: Schema.Array(Item.Record),
+					next: Schema.NullOr(Item.Seq),
+				})
+				const newest = yield* Effect.flatMap(
+					request(alice.session, path + "/items?limit=2"),
+					Caller.json(Page),
+				)
+				assert.strictEqual(newest.items.length, 2)
+				assert.strictEqual(newest.items[0]!.seq, newest.items[1]!.seq + 1)
+				assert.strictEqual(newest.next, newest.items[1]!.seq)
+				const older = yield* Effect.flatMap(
+					request(alice.session, path + "/items?limit=2&before=" + newest.next),
+					Caller.json(Page),
+				)
+				assert.strictEqual(older.items[0]!.seq, newest.items[1]!.seq - 1)
+				const beforeConsolidations = yield* host.consolidations
+				const streaming = yield* request(
+					alice.session,
+					path + "/messages",
+					"POST",
+					{ input: "slow output", stream: true },
+				)
+				assert.strictEqual(streaming.status, 200)
+				// The client reads until the first text delta. Then it closes the connection.
+				const body = yield* streaming.stream.pipe(
+					Stream.decodeText(),
+					Stream.scan(
+						() => "",
+						(body, chunk: string) => body + chunk,
+					),
+					Stream.takeUntil(Str.includes("response.output_text.delta")),
+					Stream.runLast,
+					Effect.map(Option.getOrElse(() => "")),
+				)
+				assert.match(body, /response.output_text.delta/)
+				// The Turn goes on after the client goes away.
+				const final = yield* settled(asAlice, chat)
+				assert.strictEqual(final.response?.status, "completed")
+				assert.strictEqual(final.turn?.settings.mode, "plan")
+				assert.strictEqual(final.chat.settings.mode, "plan")
+				assert.match(
+					final.response!.output[0]!.content[0]!.text,
+					/Progress stays/,
+				)
+				// No other model call ran. Bot memory learns only after the Bot confides,
+				// and the empty pool gives the memory Bot nothing to add to the input.
+				yield* Effect.sleep("100 millis")
+				assert.strictEqual(yield* host.consolidations, beforeConsolidations)
+				const old = yield* Effect.flatMap(
+					request(alice.session, path + "/turns/" + completed.response!.id),
+					Caller.json(Schema.Struct({ response: ChatResponse })),
+				)
+				assert.deepStrictEqual(old.response, completed.response)
+			}),
+		{ timeout: 60000 },
+	)
 
-test(
-	"native SSE keeps Unicode, empty outputs, exact identities and one saved terminal result",
-	{ timeout: 30000 },
-	async () => {
-		let calls = 0
-		const usage = { inputTokens: { total: 1 }, outputTokens: { total: 1 } }
-		const model = await Effect.runPromise(
-			LanguageModel.make({
-				generateText: () =>
-					Effect.succeed([
-						Response.makePart("text", { text: '{"changes":[]}' }),
-					]),
-				streamText: ({ prompt }) => {
-					calls++
-					const user = prompt.content.findLast(
-						(message) => message.role === "user",
-					)
-					const input = Match.value(user).pipe(
-						Match.when({ role: "user" }, (message) =>
-							message.content
-								.filter((part) => part.type === "text")
-								.map((part) => part.text)
-								.join(""),
-						),
-						Match.orElse(() => ""),
-					)
-					const finish = (reason: Response.FinishReason) =>
-						Response.makePart("finish", { reason, usage })
-					const text = Stream.make(
-						Response.makePart("text-start", { id: "text" }),
-						Response.makePart("text-delta", {
-							id: "text",
-							delta: "héllo 🌍\n",
-						}),
-						Response.makePart("text-delta", { id: "text", delta: "é" }),
-						Response.makePart("text-end", { id: "text" }),
-					)
-					return Match.value(input).pipe(
-						Match.when("empty", () => Stream.make(finish("stop"))),
-						Match.when("model-error", () =>
-							text.pipe(
-								Stream.concat(
-									Stream.fail(
-										AiError.make({
-											module: "Fixture",
-											method: "stream",
-											reason: AiError.InvalidRequestError.make({
-												description: "typed fixture failure",
+	it.effect(
+		"native SSE keeps Unicode, empty outputs, exact identities and one saved terminal result",
+		() =>
+			Effect.gen(function* () {
+				const calls = yield* Ref.make(0)
+				const usage = { inputTokens: { total: 1 }, outputTokens: { total: 1 } }
+				const model = yield* LanguageModel.make({
+					generateText: () =>
+						Effect.succeed([
+							Response.makePart("text", { text: '{"changes":[]}' }),
+						]),
+					streamText: ({ prompt }) => {
+						const input = pipe(
+							Arr.findLast(prompt.content, isUser),
+							Option.map(textOf),
+							Option.getOrElse(() => ""),
+						)
+						const finish = (reason: Response.FinishReason) =>
+							Response.makePart("finish", { reason, usage })
+						const text = Stream.make(
+							Response.makePart("text-start", { id: "text" }),
+							Response.makePart("text-delta", {
+								id: "text",
+								delta: "héllo 🌍\n",
+							}),
+							Response.makePart("text-delta", { id: "text", delta: "é" }),
+							Response.makePart("text-end", { id: "text" }),
+						)
+						const answer = Match.value(input).pipe(
+							Match.when("empty", () => Stream.make(finish("stop"))),
+							Match.when("model-error", () =>
+								text.pipe(
+									Stream.concat(
+										Stream.fail(
+											AiError.make({
+												module: "Fixture",
+												method: "stream",
+												reason: AiError.InvalidRequestError.make({
+													description: "typed fixture failure",
+												}),
 											}),
-										}),
-									),
-								),
-							),
-						),
-						Match.when("defect", () =>
-							text.pipe(Stream.concat(Stream.die(new Error("fixture defect")))),
-						),
-						Match.orElse(() =>
-							text.pipe(
-								Stream.concat(
-									Stream.make(
-										finish(
-											input === "length"
-												? "length"
-												: input === "content-filter"
-													? "content-filter"
-													: "stop",
 										),
 									),
 								),
 							),
+							Match.when("defect", () =>
+								text.pipe(
+									Stream.concat(Stream.die(new Error("fixture defect"))),
+								),
+							),
+							Match.orElse(() =>
+								text.pipe(
+									Stream.concat(
+										Stream.make(
+											finish(
+												input === "length"
+													? "length"
+													: input === "content-filter"
+														? "content-filter"
+														: "stop",
+											),
+										),
+									),
+								),
+							),
+						)
+						return Stream.unwrap(
+							Effect.as(
+								Ref.update(calls, (count) => count + 1),
+								answer,
+							),
+						)
+					},
+				})
+				const host = yield* BrowserHost.start({
+					publicOrigin: "https://sse.example.com",
+					model,
+				})
+				const account = yield* host.login("stream-observer")
+				const call = Caller.withCookie({
+					address: yield* host.address,
+					publicOrigin: "https://sse.example.com",
+				})
+				const request: Send = (path, method, payload) =>
+					call(account.session, path, method, payload)
+				for (const input of [
+					"empty",
+					"unicode",
+					"length",
+					"content-filter",
+					"model-error",
+					"defect",
+				]) {
+					// Each input goes to a new Bot, so it starts a new direct Chat.
+					const observed = yield* bot(request, { name: "Observer " + input })
+					const stream = yield* request(
+						"/v1/bots/" + observed + "/messages",
+						"POST",
+						{ input, stream: true },
+					)
+					assert.strictEqual(stream.status, 200)
+					const events = yield* Effect.forEach(
+						pipe(
+							Str.split(yield* stream.text, /\r?\n\r?\n/),
+							Arr.flatMap((block) =>
+								Option.toArray(
+									Arr.findFirst(
+										Str.split(block, /\r?\n/),
+										Str.startsWith("data:"),
+									),
+								),
+							),
+						),
+						(data) => decodeEvent(Str.trim(Str.slice(5)(data))),
+					)
+					assert.deepStrictEqual(
+						Arr.map(events, (event) => event.sequence_number),
+						Arr.map(events, (_, index) => index),
+					)
+					const terminal = Arr.filter(events, (event) =>
+						Arr.contains(
+							[
+								"response.completed",
+								"response.incomplete",
+								"response.failed",
+								"response.cancelled",
+							],
+							event.type,
 						),
 					)
-				},
-			}),
-		)
-		const host = await BrowserHost.start({
-			publicOrigin: "https://sse.example.com",
-			model,
-		})
-		try {
-			const account = await host.login("stream-observer")
-			const request = (path: string, payload?: unknown) =>
-				fetch(host.address + path, {
-					method: payload === undefined ? "GET" : "POST",
-					headers: {
-						cookie:
-							"__Host-openbot-session=" +
-							encodeURIComponent(Redacted.value(account.session)),
-						origin: "https://sse.example.com",
-						"content-type": "application/json",
-					},
-					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-				})
-			for (const input of [
-				"empty",
-				"unicode",
-				"length",
-				"content-filter",
-				"model-error",
-				"defect",
-			]) {
-				const created = Schema.decodeUnknownSync(SessionView)(
-					await (await request("/v1/sessions", {})).json(),
-				)
-				const path = "/v1/sessions/" + created.session.id
-				const stream = await request(path + "/turns", {
-					input,
-					expected: created.session.revision,
-					stream: true,
-				})
-				assert.equal(stream.status, 200)
-				const events = (await stream.text())
-					.split(/\r?\n\r?\n/)
-					.flatMap((block) => {
-						const data = block
-							.split(/\r?\n/)
-							.find((line) => line.startsWith("data:"))
-						return data === undefined
-							? []
-							: [
-									Schema.decodeSync(
-										Schema.fromJsonString(SessionResponseEvent),
-									)(data.slice(5).trim()),
-								]
-					})
-				assert.deepEqual(
-					events.map((event) => event.sequence_number),
-					events.map((_, index) => index),
-				)
-				const terminal = events.filter((event) =>
-					[
-						"response.completed",
-						"response.incomplete",
-						"response.failed",
-						"response.cancelled",
-					].includes(event.type),
-				)
-				assert.equal(terminal.length, 1)
-				const end = terminal[0]!
-				assert.ok("response" in end)
-				const view = Schema.decodeUnknownSync(SessionView)(
-					await (await request(path)).json(),
-				)
-				assert.deepEqual(end.response, view.response)
-				assert.ok(
-					events.every(
-						(event) =>
-							event.session === view.session.id &&
-							event.turn === view.response!.id,
-					),
-				)
-				const deltas = events.filter(
-					(event) => event.type === "response.output_text.delta",
-				)
-				assert.ok(
-					deltas.every(
-						(event) =>
-							event.step === 1 &&
-							event.item_id === view.response!.output[0]!.id,
-					),
-				)
-				if (input === "empty") {
-					assert.equal(end.response.output[0]!.content[0]!.text, "")
+					assert.strictEqual(terminal.length, 1)
+					const [end] = terminal
+					assert.ok(end !== undefined && "response" in end)
+					const [summary] = yield* Effect.flatMap(
+						request("/v1/chats?bot=" + observed, "GET"),
+						Caller.json(Schema.Array(ChatSummary)),
+					)
+					assert.ok(summary !== undefined)
+					const current = yield* view(request, summary.chat.id)
+					assert.deepStrictEqual(end.response, current.response)
 					assert.ok(
-						events.some((event) => event.type === "response.output_item.done"),
+						Arr.every(
+							events,
+							(event) =>
+								event.chat === current.chat.id &&
+								event.turn === current.response!.id,
+						),
 					)
-				} else {
-					assert.equal(end.response.output[0]!.content[0]!.text, "héllo 🌍\né")
+					const deltas = Arr.filter(
+						events,
+						(event) => event.type === "response.output_text.delta",
+					)
+					assert.ok(
+						Arr.every(
+							deltas,
+							(event) =>
+								event.step === 1 &&
+								event.item_id === current.response!.output[0]!.id,
+						),
+					)
+					if (input === "empty") {
+						assert.strictEqual(end.response.output[0]!.content[0]!.text, "")
+						assert.ok(
+							Arr.some(
+								events,
+								(event) => event.type === "response.output_item.done",
+							),
+						)
+					} else {
+						assert.strictEqual(
+							end.response.output[0]!.content[0]!.text,
+							"héllo 🌍\né",
+						)
+					}
+					if (input === "model-error" || input === "defect") {
+						assert.strictEqual(end.response.status, "failed")
+						assert.strictEqual(
+							end.response.error?.code,
+							input === "defect" ? "internal_error" : "model_error",
+						)
+					} else {
+						assert.strictEqual(
+							end.response.status,
+							Arr.contains(["length", "content-filter"], input)
+								? "incomplete"
+								: "completed",
+						)
+					}
 				}
-				if (input === "model-error" || input === "defect") {
-					assert.equal(end.response.status, "failed")
-					assert.equal(
-						end.response.error?.code,
-						input === "defect" ? "internal_error" : "model_error",
-					)
-				} else {
-					assert.equal(
-						end.response.status,
-						["length", "content-filter"].includes(input)
-							? "incomplete"
-							: "completed",
-					)
-				}
-			}
-			assert.equal(calls, 6)
-		} finally {
-			await host.close()
-		}
-	},
-)
+				assert.strictEqual(yield* Ref.get(calls), 6)
+			}),
+		{ timeout: 30000 },
+	)
+})

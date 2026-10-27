@@ -1,0 +1,30 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "c1cd7d4d-0ce2-4b26-9e98-8f25d13273c7",
+	"prevIds": ["263ed85e-219e-41f2-a71a-e408bbce6dfa"],
+	"footprints": [
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_providers",
+				"models"
+			],
+			"writes": [
+				"s|col|public.openbot_model_providers.models",
+				"n|col|public.openbot_model_providers.models",
+				"e|col|public.openbot_model_providers.models"
+			],
+			"reads": ["n|tbl|public.openbot_model_providers", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_providers\",\"models\"]"
+		}
+	]
+}

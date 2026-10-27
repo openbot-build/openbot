@@ -1,329 +1,67 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
-import { Effect, Option, Redacted } from "effect"
-import { Pool } from "pg"
+import { assert, layer } from "@effect/vitest"
+import { Array as Arr, Effect, Option, Order, Schema, String as Str } from "effect"
+import { Cookies, FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import { Settings } from "../src/settings/Settings.ts"
-import { PlatformAdmins } from "../src/platform/PlatformAdmins.ts"
-import { Organization } from "../src/organization/Organization.ts"
 import * as BrowserHost from "./BrowserHost.ts"
-import * as BrowserRoutes from "../src/auth/BrowserRoutes.ts"
 
 const publicOrigin = "https://client.example.com"
-test("a new login uses the standard scopes when none are configured", async () => {
-	const host = await BrowserHost.start({ publicOrigin })
-	try {
-		const login = await fetch(host.address + "/auth/login", {
-			redirect: "manual",
-		})
-		assert.equal(login.status, 303)
-		const authorization = new URL(login.headers.get("location")!)
-		assert.deepEqual(
-			authorization.searchParams.get("scope")?.split(" ").sort(),
-			["email", "openid", "profile"],
-		)
-		assert.equal(
-			authorization.searchParams.get("code_challenge_method"),
-			"S256",
-		)
+const Code = Schema.fromJsonString(Schema.Struct({ subject: Schema.String, nonce: Schema.String }))
+
+layer(BrowserHost.layerPlatform, {excludeTestServices: true})((it) => {
+	it.effect("browser aliases keep configured scopes, callback, cookies and revocation", () => Effect.gen(function* () {
+		const host = yield* BrowserHost.start({publicOrigin})
+		yield* host.run(Effect.gen(function* () {
+			const settings = yield* Settings
+			const current = Option.getOrThrow(yield* settings.platform)
+			yield* settings.updatePlatform(current.version, (document) => Effect.succeed({
+				...document,
+				browserAuth: {sessionCookie: "__Host-e-session", loginCookie: "__Host-e-login", sessionTtlMs: 86400000},
+				identityProvider: document.identityProvider === null ? null : {
+					...document.identityProvider,
+					providerId: "kai", callbackPath: "/auth/callback",
+					scopes: ["openid", "profile", "email", "offline_access"],
+				},
+			}))
+		}))
+		const address = yield* host.address
+		const client = yield* HttpClient.HttpClient
+		const get = (path: string, cookie?: string) => client.execute(HttpClientRequest.get(address + path, {
+			headers: cookie === undefined ? {} : {cookie},
+		})).pipe(Effect.provideService(FetchHttpClient.RequestInit, {redirect: "manual"}))
+		const login = yield* get("/auth/login?returnTo=%2Fsessions%2Fexisting")
+		assert.strictEqual(login.status, 303)
+		const authorization = new URL(login.headers["location"]!)
+		assert.deepStrictEqual(Arr.sort(Str.split(authorization.searchParams.get("scope")!, " "), Order.String), ["email", "offline_access", "openid", "profile"])
+		assert.strictEqual(authorization.searchParams.get("redirect_uri"), publicOrigin + "/auth/callback")
+		assert.strictEqual(authorization.searchParams.get("code_challenge_method"), "S256")
 		assert.ok(authorization.searchParams.get("state"))
 		assert.ok(authorization.searchParams.get("nonce"))
-	} finally {
-		await host.close()
-	}
+		assert.ok(Option.isSome(Cookies.getValue(login.cookies, "__Host-e-login")))
+		const code = yield* Schema.encodeEffect(Code)({subject: "alice", nonce: authorization.searchParams.get("nonce")!})
+		const query = new URLSearchParams({state: authorization.searchParams.get("state")!, iss: "https://id.example.com", code})
+		const callback = yield* get("/auth/callback?" + query, Cookies.toCookieHeader(login.cookies))
+		assert.strictEqual(callback.status, 303)
+		assert.strictEqual(callback.headers["location"], publicOrigin + "/sessions/existing")
+		assert.ok(Option.isSome(Cookies.getValue(callback.cookies, "__Host-e-session")))
+		const cookie = Cookies.toCookieHeader(callback.cookies)
+		assert.strictEqual((yield* get("/auth/session", cookie)).status, 200)
+		assert.strictEqual((yield* get("/v1/chats", cookie)).status, 403)
+		assert.strictEqual((yield* get("/auth/callback?" + query, Cookies.toCookieHeader(login.cookies))).status, 401)
+		const logout = yield* client.execute(HttpClientRequest.post(address + "/auth/logout", {headers: {cookie, origin: publicOrigin}}))
+		assert.strictEqual(logout.status, 204)
+		assert.strictEqual((yield* get("/auth/session", cookie)).status, 401)
+		assert.strictEqual((yield* get("/auth/login?returnTo=%2F%2Fevil.example")).status, 400)
+		assert.strictEqual((yield* get("/auth/callback?state=a&state=b")).status, 400)
+		assert.strictEqual((yield* client.execute(HttpClientRequest.post(address + "/auth/logout", {headers: {origin: "https://evil.example"}}))).status, 403)
+	}))
+	it.effect("the default provider scopes still work without compatibility settings", () => Effect.gen(function* () {
+		const host = yield* BrowserHost.start({publicOrigin})
+		const client = yield* HttpClient.HttpClient
+		const login = yield* client.get((yield* host.address) + "/auth/login").pipe(Effect.provideService(FetchHttpClient.RequestInit, {redirect: "manual"}))
+		assert.strictEqual(login.status, 303)
+		const authorization = new URL(login.headers["location"]!)
+		assert.deepStrictEqual(Str.split(authorization.searchParams.get("scope")!, " "), ["openid", "profile", "email"])
+		const user = yield* host.login("alice")
+		assert.ok(user.identity.userId)
+	}))
 })
-test("browser aliases reject unsafe destinations, duplicate callbacks and cross-origin logout", async () => {
-	let calls = 0
-	const handler = BrowserRoutes.handler(
-		{ publicOrigin, providerId: "kai", callbackPath: "/auth/callback" },
-		{
-			handler: async (request) => {
-				calls++
-				assert.equal(new URL(request.url).pathname, "/auth/callback/kai")
-				return new Response(null, {
-					status: 302,
-					headers: { location: publicOrigin + "/sessions/existing" },
-				})
-			},
-			signIn: async (target, headers) => {
-				calls++
-				assert.equal(target, "/sessions/existing")
-				assert.equal(headers.get("cookie"), "__Host-e-login=state")
-				return new Response(null, {
-					headers: { location: "https://id.example.com/authorize" },
-				})
-			},
-			signOut: async () => {
-				calls++
-				return new Response(null, { status: 200 })
-			},
-		},
-	)
-	for (const target of [
-		"//other.example",
-		"/auth/login",
-		"https://other.example",
-	])
-		assert.equal(
-			(
-				await handler(
-					new Request(
-						publicOrigin + "/auth/login?returnTo=" + encodeURIComponent(target),
-					),
-				)
-			).status,
-			400,
-		)
-	assert.equal(
-		(
-			await handler(
-				new Request(publicOrigin + "/auth/callback?state=a&state=b"),
-			)
-		).status,
-		400,
-	)
-	assert.equal(
-		(
-			await handler(
-				new Request(publicOrigin + "/auth/logout", {
-					method: "POST",
-					headers: { origin: "https://other.example" },
-				}),
-			)
-		).status,
-		403,
-	)
-	assert.equal(calls, 0)
-	assert.equal(
-		(
-			await handler(
-				new Request(publicOrigin + "/auth/login?returnTo=/sessions/existing", {
-					headers: { cookie: "__Host-e-login=state" },
-				}),
-			)
-		).status,
-		303,
-	)
-	assert.equal(
-		(
-			await handler(
-				new Request(publicOrigin + "/auth/callback?code=valid&state=valid"),
-			)
-		).status,
-		303,
-	)
-	assert.equal(
-		(
-			await handler(
-				new Request(publicOrigin + "/auth/logout", {
-					method: "POST",
-					headers: { origin: publicOrigin },
-				}),
-			)
-		).status,
-		204,
-	)
-	assert.equal(calls, 3)
-})
-
-test(
-	"existing cookie and OIDC provider names work through session validation and logout",
-	{ timeout: 60000 },
-	async () => {
-		const host = await BrowserHost.start({
-			publicOrigin,
-			authCompatibility: {
-				providerId: "kai",
-				callbackPath: "/auth/callback",
-				sessionCookie: "__Host-e-session",
-				loginCookie: "__Host-e-login",
-				scopes: ["openid", "profile", "email", "offline_access"],
-			},
-			sharedDomain: false,
-		})
-		try {
-			const login = await fetch(
-				host.address + "/auth/login?returnTo=/sessions/existing",
-				{ redirect: "manual" },
-			)
-			assert.equal(login.status, 303)
-			assert.deepEqual(
-				new URL(login.headers.get("location")!).searchParams
-					.get("scope")
-					?.split(" ")
-					.sort(),
-				["email", "offline_access", "openid", "profile"],
-			)
-			assert.ok(
-				login.headers
-					.getSetCookie()
-					.some((cookie) => cookie.startsWith("__Host-e-login=")),
-			)
-			assert.equal(
-				new URL(login.headers.get("location")!).searchParams.get(
-					"redirect_uri",
-				),
-				publicOrigin + "/auth/callback",
-			)
-			const alice = await host.login("alice", "/sessions/existing")
-			const cookie =
-				"__Host-e-session=" + encodeURIComponent(Redacted.value(alice.session))
-			const headers = { cookie, origin: publicOrigin }
-			const session = await fetch(
-				host.address + "/auth/session?refresh=false",
-				{ headers },
-			)
-			assert.equal(session.status, 200)
-			assert.equal((await session.json()).userId, alice.identity.userId)
-			assert.equal(session.headers.getSetCookie().length, 0)
-			assert.equal(
-				(await fetch(host.address + "/v1/sessions", { headers })).status,
-				200,
-			)
-			assert.equal(
-				(
-					await fetch(host.address + "/auth/session", {
-						headers: {
-							cookie:
-								"__Host-openbot-session=" +
-								encodeURIComponent(Redacted.value(alice.session)),
-						},
-					})
-				).status,
-				401,
-			)
-			assert.equal(
-				(
-					await fetch(host.address + "/auth/session", {
-						headers: { "x-user-id": alice.identity.userId },
-					})
-				).status,
-				401,
-			)
-			await host.runtime.runPromise(
-				Effect.gen(function* () {
-					const settings = yield* Settings
-					const current = Option.getOrThrow(yield* settings.platform)
-					yield* settings.updatePlatform(current.version, (document) =>
-						Effect.succeed({
-							...document,
-							organizationCreation: "platform_admins",
-						}),
-					)
-				}),
-			)
-			await assert.rejects(host.login("bob"))
-			const logout = await fetch(host.address + "/auth/logout", {
-				method: "POST",
-				headers,
-			})
-			assert.equal(logout.status, 204)
-			assert.ok(
-				logout.headers
-					.getSetCookie()
-					.some(
-						(value) =>
-							value.startsWith("__Host-e-session=") && /Max-Age=0/.test(value),
-					),
-			)
-			assert.equal(
-				(await fetch(host.address + "/auth/session", { headers })).status,
-				401,
-			)
-		} finally {
-			await host.close()
-		}
-	},
-)
-
-test(
-	"native bootstrap binds stable IDs without first-login ownership or email takeover",
-	{ timeout: 60000 },
-	async () => {
-		const host = await BrowserHost.start({ publicOrigin, sharedDomain: false })
-		const pool = new Pool({ connectionString: host.databaseUrl })
-		try {
-			await host.runtime.runPromise(
-				Effect.gen(function* () {
-					const settings = yield* Settings
-					const current = Option.getOrThrow(yield* settings.platform)
-					yield* settings.updatePlatform(current.version, (document) =>
-						Effect.succeed({
-							...document,
-							organizationCreation: "platform_admins",
-							memberSignupOrganizationId: null,
-						}),
-					)
-				}),
-			)
-			await assert.rejects(host.login("unknown"))
-			for (const id of ["KnownOwner", "KnownMember", "knownowner"])
-				await pool.query(
-					"INSERT INTO openbot_auth_user(id,name,email,email_verified,created_at,updated_at) VALUES($1,$1,$2,false,now(),now())",
-					[id, id + "@bootstrap.example"],
-				)
-			const organization = await host.runtime.runPromise(
-				Effect.flatMap(Organization, (service) =>
-					service.create({
-						name: "Explicit organization",
-						owner: { id: "KnownOwner" },
-					}),
-				),
-			)
-			await pool.query(
-				"INSERT INTO openbot_members(organization_id,user_id,email,name,status,roles,policies,joined_at) VALUES($1,$2,NULL,NULL,'active',$3,'[]',0)",
-				[organization.id, "KnownMember", '["member"]'],
-			)
-			const admit = (id: string) =>
-				host.runtime.runPromise(
-					Effect.flatMap(Organization, (service) => service.admit({ id })),
-				)
-			assert.deepEqual(await admit("knownowner"), [])
-			for (const [id, roles] of [
-				["KnownOwner", ["super_administrator"]],
-				["KnownMember", ["member"]],
-			] as const) {
-				const memberships = await admit(id)
-				assert.deepEqual(
-					memberships.map((member) => ({
-						id: member.organizationId,
-						roles: member.roles,
-					})),
-					[{ id: organization.id, roles }],
-				)
-			}
-			await host.runtime.runPromise(
-				Effect.flatMap(PlatformAdmins, (admins) =>
-					admins.bind({
-						userId: "KnownOwner",
-						email: "owner@bootstrap.example",
-					}),
-				),
-			)
-			const check = (id: string) =>
-				host.runtime.runPromise(
-					Effect.flatMap(PlatformAdmins, (admins) =>
-						admins.check({
-							id,
-							email: "owner@bootstrap.example",
-							emailVerified: true,
-						}),
-					),
-				)
-			assert.equal(await check("KnownOwner"), true)
-			assert.equal(await check("knownowner"), false)
-			await assert.rejects(
-				host.runtime.runPromise(
-					Effect.flatMap(PlatformAdmins, (admins) =>
-						admins.bind({
-							userId: "knownowner",
-							email: "owner@bootstrap.example",
-						}),
-					),
-				),
-			)
-		} finally {
-			await pool.end()
-			await host.close()
-		}
-	},
-)

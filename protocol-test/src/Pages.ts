@@ -1,5 +1,5 @@
 import { HttpServerResponse } from "effect/http"
-import { Match } from "effect"
+import { Array as Arr, Match, pipe, String as Str } from "effect"
 import type { Consent } from "./Authorization.ts"
 import { cardUrl, type Scenario } from "./Scenarios.ts"
 
@@ -7,12 +7,14 @@ import { cardUrl, type Scenario } from "./Scenarios.ts"
 export const originPlaceholder = "__PROTOCOL_TEST_PUBLIC_ORIGIN__"
 
 export const escape = (value: string) =>
-	value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#39;")
+	pipe(
+		value,
+		Str.replaceAll("&", "&amp;"),
+		Str.replaceAll("<", "&lt;"),
+		Str.replaceAll(">", "&gt;"),
+		Str.replaceAll('"', "&quot;"),
+		Str.replaceAll("'", "&#39;"),
+	)
 export const page =
 	(title: string) =>
 	(body: string, head = "") =>
@@ -44,7 +46,7 @@ export const introduction = (origin: string) => (scenario: Scenario) =>
 
 export const consentPage = (consent: Consent) =>
 	page("Authorize test access")(
-		`<main><h1>Authorize test access</h1><p><strong>${escape(consent.clientName)}</strong> requests access to <code>${escape(consent.resource)}</code>.</p><p>Scopes: ${escape(consent.scopes.join(", "))}. These public accounts hold made-up, temporary data.</p><form method="post" action="/consent"><input type="hidden" name="request" value="${escape(consent.id)}"><fieldset><legend>Test account</legend><label><input type="radio" name="account" value="alice" checked> Alice</label><label><input type="radio" name="account" value="bob"> Bob</label></fieldset><button type="submit" name="decision" value="allow">Allow test access</button><button type="submit" name="decision" value="deny">Deny access</button></form></main>`,
+		`<main><h1>Authorize test access</h1><p><strong>${escape(consent.clientName)}</strong> requests access to <code>${escape(consent.resource)}</code>.</p><p>Scopes: ${escape(Arr.join(consent.scopes, ", "))}. These public accounts hold made-up, temporary data.</p><form method="post" action="/consent"><input type="hidden" name="request" value="${escape(consent.id)}"><fieldset><legend>Test account</legend><label><input type="radio" name="account" value="alice" checked> Alice</label><label><input type="radio" name="account" value="bob"> Bob</label></fieldset><button type="submit" name="decision" value="allow">Allow test access</button><button type="submit" name="decision" value="deny">Deny access</button></form></main>`,
 	)
 
 export const html =

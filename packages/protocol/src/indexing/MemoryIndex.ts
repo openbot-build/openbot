@@ -8,12 +8,12 @@ export const layer = Layer.effect(
 		const state = yield* Ref.make(HashMap.empty<string, Entry>())
 		const identity = (cardUrl: string) =>
 			Schema.decodeEffect(Document.Link)(cardUrl).pipe(
-				Effect.mapError(
-					() =>
-						new IndexError({
-							reason: "Invalid",
-							operation: "Card URL",
-						}),
+				Effect.mapError((cause) =>
+					IndexError.make({
+						reason: "Invalid",
+						operation: "Card URL",
+						cause,
+					}),
 				),
 			)
 		return IndexStore.of({
@@ -27,10 +27,10 @@ export const layer = Layer.effect(
 				),
 			upsert: (entry) =>
 				Entry.decode(entry).pipe(
-					Effect.flatMap((value) =>
+					Effect.tap((value) =>
 						Ref.update(state, (entries) =>
 							HashMap.set(entries, value.cardUrl, value),
-						).pipe(Effect.as(value)),
+						),
 					),
 				),
 			withdraw: (cardUrl) =>

@@ -1,5 +1,5 @@
-import { Data } from "effect"
-import type { Effect, Schema, Scope } from "effect"
+import { Schema } from "effect"
+import type { Effect, Scope } from "effect"
 import type {
 	Authorization,
 	Client,
@@ -9,10 +9,18 @@ import type {
 	Store,
 } from "@openbot-build/protocol"
 
-export class AppError extends Data.TaggedError("AppError")<{
-	readonly reason: "unavailable" | "storage-failed" | "configuration-failed"
-	readonly message: string
-}> {}
+export class AppError extends Schema.TaggedError<
+	AppError,
+	{ readonly brand: unique symbol }
+>()("AppError", {
+	reason: Schema.Literals([
+		"unavailable",
+		"storage-failed",
+		"configuration-failed",
+	]),
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 
 export interface AddRequest {
 	readonly key: Store.ConnectionKey
@@ -52,7 +60,11 @@ export interface CompleteAuthorizationRequest {
 	readonly flowId: string
 	readonly callbackUrl: string
 }
-export type ClientInfo = NonNullable<Client.Client["serverInfo"]>
+export type ClientInfo = NonNullable<
+	NonNullable<
+		Client.Client["discovery"]["_meta"]
+	>["io.modelcontextprotocol/serverInfo"]
+>
 
 export interface OpenRequest {
 	readonly key: Store.ConnectionKey
@@ -86,10 +98,6 @@ export interface Service {
 	readonly discover: (
 		input: string,
 	) => Effect.Effect<Discovery.Result, Discovery.Error>
-	readonly list: Effect.Effect<ReadonlyArray<Store.AppRecord>, AppError>
-	readonly get: (
-		cardUrl: string,
-	) => Effect.Effect<Store.AppRecord, Store.StoreError>
 	readonly add: (
 		input: AddRequest,
 	) => Effect.Effect<
@@ -117,15 +125,14 @@ export interface Service {
 		input: CompleteAuthorizationRequest,
 	) => Effect.Effect<
 		Store.UserConnection,
-		Authorization.AuthorizationError | ProtocolApp.AppError | Store.StoreError
+		| Authorization.AuthorizationError
+		| Network.NetworkError
+		| ProtocolApp.AppError
+		| Store.StoreError
 	>
 	readonly open: (
 		input: OpenRequest,
 	) => Effect.Effect<Client.Client, Client.Error, Scope.Scope>
-	readonly setEnabled: (input: {
-		readonly key: Store.ConnectionKey
-		readonly enabled: boolean
-	}) => Effect.Effect<Store.UserConnection, AppError | Store.StoreError>
 	readonly remove: (
 		key: Store.ConnectionKey,
 	) => Effect.Effect<Removed, ProtocolApp.CleanupPending | Store.StoreError>

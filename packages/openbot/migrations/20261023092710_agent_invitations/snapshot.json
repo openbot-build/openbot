@@ -1,0 +1,293 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "c85591dd-62c8-4258-9a7c-ed61aefcca12",
+	"prevIds": ["35e62060-0d9a-4686-82a1-1f87e56a99fd"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": ["column", "public", "openbot_invitations", "target"],
+			"writes": [
+				"s|col|public.openbot_invitations.target",
+				"n|col|public.openbot_invitations.target",
+				"e|col|public.openbot_invitations.target"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_invitations",
+				"agent_id"
+			],
+			"writes": [
+				"s|col|public.openbot_invitations.agent_id",
+				"n|col|public.openbot_invitations.agent_id",
+				"e|col|public.openbot_invitations.agent_id"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_invitations",
+				"agent_name"
+			],
+			"writes": [
+				"s|col|public.openbot_invitations.agent_name",
+				"n|col|public.openbot_invitations.agent_name",
+				"e|col|public.openbot_invitations.agent_name"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": ["column", "public", "openbot_invitations", "prefix"],
+			"writes": [
+				"s|col|public.openbot_invitations.prefix",
+				"n|col|public.openbot_invitations.prefix",
+				"e|col|public.openbot_invitations.prefix"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_invitations",
+				"secret_hash"
+			],
+			"writes": [
+				"s|col|public.openbot_invitations.secret_hash",
+				"n|col|public.openbot_invitations.secret_hash",
+				"e|col|public.openbot_invitations.secret_hash"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": ["column", "public", "openbot_invitations", "secret"],
+			"writes": [
+				"s|col|public.openbot_invitations.secret",
+				"n|col|public.openbot_invitations.secret",
+				"e|col|public.openbot_invitations.secret"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": ["column", "public", "openbot_invitations", "path"],
+			"writes": [
+				"s|col|public.openbot_invitations.path",
+				"n|col|public.openbot_invitations.path",
+				"e|col|public.openbot_invitations.path"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": ["column", "public", "openbot_invitations", "email"],
+			"writes": ["s|colprop|public.openbot_invitations.email.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_invitations",
+				"n|sch|public",
+				"n|col|public.openbot_invitations.email"
+			],
+			"sqlHash": "20f6f0b6538294a1"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_invitations",
+				"expires_at"
+			],
+			"writes": ["s|colprop|public.openbot_invitations.expires_at.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_invitations",
+				"n|sch|public",
+				"n|col|public.openbot_invitations.expires_at"
+			],
+			"sqlHash": "2fbf95fb2f10a640"
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_invitations",
+				"openbot_invitations_secret"
+			],
+			"writes": [
+				"s|idx|public.openbot_invitations_secret",
+				"n|idx|public.openbot_invitations_secret",
+				"e|idx|public.openbot_invitations_secret",
+				"n|rel|public.openbot_invitations_secret"
+			],
+			"reads": [
+				"n|tbl|public.openbot_invitations",
+				"n|sch|public",
+				"n|col|public.openbot_invitations.secret_hash"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "target",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "'organization'",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "agent_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "agent_name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "prefix",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "secret_hash",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "secret",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "path",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_invitations",
+				"name": "openbot_invitations_secret",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "secret_hash",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_invitations\",\"email\"]",
+			"set": {
+				"notNull": false
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_invitations\",\"expires_at\"]",
+			"set": {
+				"notNull": false
+			}
+		}
+	]
+}

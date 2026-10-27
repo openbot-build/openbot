@@ -1,0 +1,264 @@
+---
+title: 参与贡献
+description: 准备代码，运行检查，并遵守项目规则。
+---
+
+本页写给修改 OpenBot 本身的人。它介绍如何准备你的电脑，如何运行服务器和检查，以及如何在代码中找到方向。
+
+---
+
+## 准备环境
+
+你需要
+[devenv](https://devenv.sh)。devenv 为项目提供确切版本的工具：Node.js、pnpm、PostgreSQL 等。你还需要
+[Docker](https://docs.docker.com/get-docker/)。开发数据库和开发用的对象存储在 Docker 中运行，构建和检查镜像也要用 Docker。devenv 提供 Docker 命令行工具，你的电脑只需要一个正在运行的 Docker 服务。请看[部署](/zh-cn/docs/deploy#构建镜像)。每条命令都通过
+`devenv shell -- <command>` 运行，这样你用的总是这些工具。
+
+<Steps>
+<Step>
+
+### 获取代码
+
+```sh
+git clone <repository-url> openbot
+cd openbot
+```
+
+</Step>
+<Step>
+
+### 创建本地设置
+
+```sh
+devenv shell -- pnpm dev:setup
+```
+
+`dev:setup` 创建 `.env.development`，并在 `OPENBOT_SECRET_KEYS`
+中放入一个新的随机密钥。如果你的 `.env.development`
+来自旧版本，请删除它，然后再次运行
+`dev:setup`。你也可以重置开发数据库。请看[配置](/zh-cn/docs/configuration#开发)。
+
+</Step>
+<Step>
+
+### 启动开发服务器
+
+```sh
+devenv shell -- pnpm dev
+```
+
+`pnpm dev` 运行 `devenv up`。它执行以下步骤：
+
+1. 在 `127.0.0.1` 上启动 PostgreSQL 18，用户为
+   `openbot_dev`。它在 Docker 中运行，使用和生产 Compose 文件相同的镜像。它的数据存放在 Docker 卷
+   `openbot-dev-postgres` 中。要重置数据库，先停止 `pnpm dev`，再运行
+   `docker volume rm openbot-dev-postgres`。
+2. 在 `127.0.0.1` 上启动
+   [RustFS](https://rustfs.com)，即文件的对象存储。它同样在 Docker 中运行。它的数据存放在 Docker 卷
+   `openbot-dev-rustfs` 中。要删除存储的文件，先停止 `pnpm dev`，再运行
+   `docker volume rm openbot-dev-rustfs`。
+3. 用 `pnpm install --frozen-lockfile` 安装包。
+4. 构建 OpenBot 及其需要的包。
+5. 运行数据库迁移。
+6. 在 `http://localhost`
+   启动开发服务器。服务器会自己为这个源写入平台设置，所以不需要设置步骤。
+
+devenv 会为每个服务选择一个空闲端口。它从基础端口开始：PostgreSQL 是
+`5433`，RustFS 是 `9000`，OpenBot 是
+`3000`。它会在进程列表中显示这些端口。不管 OpenBot 得到哪个端口，devenv 的代理都在 80 端口上给它一个固定的地址
+`http://localhost`。在 Linux 上，代理第一次会用 `sudo`
+要求你输入密码，这样它才能监听 80 端口。
+
+当你修改 `packages/*/src` 中的文件时，devenv 会重新启动 OpenBot。
+
+</Step>
+</Steps>
+
+开发服务器使用本地测试账户、测试模型和一个测试 App。不需要任何外部服务。如何登录并创建用户令牌，请看[快速开始](/zh-cn/docs/quickstart)。
+
+---
+
+## 检查
+
+| 命令                                                     | 作用                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------ |
+| `devenv shell -- pnpm install`                           | 安装所有包。                                                 |
+| `devenv shell -- pnpm build`                             | 用 tsdown 构建每个包。                                       |
+| `devenv shell -- pnpm typecheck`                         | 检查每个包的类型和 Effect 规则。                             |
+| `devenv shell -- pnpm rules`                             | 只检查 `scripts/effect-rules.ts` 中的 Effect 规则。          |
+| `devenv shell -- pnpm -r test`                           | 运行每个包的测试。                                           |
+| `devenv shell -- pnpm test`                              | 在一次 Vitest 运行中运行所有包的测试，不构建，也不检查类型。 |
+| `devenv shell -- pnpm --filter @openbot-build/core test` | 运行一个包的测试。                                           |
+| `devenv shell -- treefmt`                                | 用 Prettier 和 nixfmt 格式化代码。                           |
+
+先运行 `pnpm build`，再运行 `pnpm typecheck`。包之间通过构建出的文件互相导入。
+
+测试使用 [Vitest](https://vitest.dev) 和
+[`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest)。运行 Effect 的测试使用
+`it.effect`。它给测试一个测试时钟：只有测试推动时，时间才会前进。需要真实时间的测试，例如带有真实服务器的测试，使用
+`it.live`。OpenBot 的测试会用 devenv 中的工具启动自己的临时 PostgreSQL 服务器。它们不需要密钥，也不需要外部服务。GitHub
+Actions 运行同样的 `build`、`typecheck` 和 `test`
+命令。请看[部署](/zh-cn/docs/deploy#github-actions)。
+
+---
+
+## 仓库结构
+
+| 路径                       | 内容                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `packages/`                | 工作区中的包。请看[包](/zh-cn/docs/packages)。                                |
+| `packages/docs/`           | 本文档网站。                                                                  |
+| `packages/template/`       | 新包的起点。它不属于工作区。                                                  |
+| `protocol-test/`           | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。      |
+| `deploy/`                  | 部署 OpenBot 的文件。每个目标有自己的文件夹。请看[部署](/zh-cn/docs/deploy)。 |
+| `deploy/docker/`           | Dockerfile、Bake 文件、Compose 文件、生产环境模板和镜像检查。                 |
+| `.env.development.example` | `.env.development` 的模板。                                                   |
+| `patches/`                 | 针对外部包特定版本的修复。                                                    |
+| `references/`              | 其他开源项目的源代码，以 Git 子模块的形式存在。只供阅读。                     |
+| `devenv.nix`               | 开发工具、设置和进程。                                                        |
+
+`references/` 文件夹不参与构建。要阅读其中的代码，请用
+`git submodule update --init` 获取它。
+
+要新建一个包，请把 `packages/template/` 复制到
+`packages/<name>/`。然后修改它的名称、入口和依赖。
+
+---
+
+## 文档网站
+
+文档网站是一个用 [Starlight](https://starlight.astro.build) 构建的
+[Astro](https://astro.build) 网站。构建只生成静态文件。用以下命令启动它：
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/docs dev
+```
+
+然后打开 `http://localhost:4321`。
+
+| `packages/docs/` 中的路径   | 是什么                                                   |
+| --------------------------- | -------------------------------------------------------- |
+| `content/docs/*.mdx`        | 页面。文件名就是 URL：`deploy.mdx` 对应 `/docs/deploy`。 |
+| `content/docs/<locale>/`    | 翻译：`zh-cn` 是简体中文，`de` 是德语。                  |
+| `astro.config.ts`           | 网站设置，以及页面在侧边栏中的顺序。                     |
+| `src/components/`           | 页面不用导入就能使用的组件：`Callout`、`Steps` 等。      |
+| `src/landing/`              | 首页。`messages/` 存放它的文字，每种语言一个文件。       |
+| `src/i18n.ts`               | 文档和首页支持的语言。                                   |
+| `src/pages/openapi.json.ts` | 在 `/openapi.json` 提供 `openapi.json`，方便大家下载。   |
+| `scripts/api.ts`            | 根据 API 契约生成 `openapi.json`。                       |
+
+`/docs/api` 上的 API 参考由
+[starlight-openapi](https://github.com/HiDeoo/starlight-openapi) 插件根据
+`openapi.json` 生成。不要手写它。这个脚本在每次 `dev` 和 `build`
+之前运行。当你修改 `@openbot-build/api`
+中的 API 契约时，参考也会随之改变。当你在契约中添加一个分组时，请在
+`scripts/api.ts`
+中为它写一个标题和描述。在你写好之前，脚本会报错停止。构建还会生成 `/llms.txt`
+和
+`/llms-full.txt`，以纯文本形式为 AI 工具提供文档。要检查每个页面都能构建，请运行
+`devenv shell -- pnpm --filter @openbot-build/docs build`。
+
+每次推送到 `main`，都会把网站发布到
+[openbot.build](https://openbot.build)。请看[发布文档网站](/zh-cn/docs/deploy#发布文档网站)。
+
+---
+
+## 项目规则
+
+### Basic English
+
+所有文字都用
+[Basic English](https://en.wikipedia.org/wiki/Basic_English)（基本英语）书写。这包括文档、代码注释、错误消息、日志、提示词和测试文字。尽量使用 Basic
+English 的 850 个词，再加上需要的技术词。使用短句。每个技术词第一次出现时，都要解释它。
+
+英文是所有文字的源头。文档还有简体中文和德语版本，首页还有更多语言的版本。修改英文页面时，请在同一次改动中修改它的翻译。翻译要保留相同的标题，顺序也相同，并且它的链接要指向同一语言的页面，例如
+`/de/docs/deploy`。修改首页的文字时，请修改 `src/landing/messages/`
+中的每个文件。API 参考只有英文版。
+
+### 无界面
+
+OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应用。文档网站是唯一的例外。每个新功能都从
+`@openbot-build/api`
+契约中的一个操作开始。然后由服务器处理它。每个操作都必须既能用用户令牌，也能用登录 cookie。它还必须用
+`Required` 或 `GroupRequired`
+注解说明自己需要对哪个资源的哪个操作。`packages/api/src/Authorization.ts`
+中的辅助函数 `own`、`organization`、`channel` 和 `channels`
+用来生成这些注解。一个要求只能使用它的端点有的路径参数。`packages/api`
+中的一个测试会检查这一点。请看[权限](/zh-cn/docs/permissions)。
+
+授权代码来自 [ability](https://github.com/nmnmcc/ability) 库，也就是 npm 包
+`@nmnmcc/ability`。它的版本固定在 `package.json` 中。
+
+### 只有一个当前模型
+
+不要为旧的调用方、旧的客户端或旧的数据保留旧路径。当契约或存储必须改变时，就直接改。唯一的例外是为外部包或工具的 bug 做的小修复。
+
+### 优先使用 Effect 数据
+
+使用 Effect 的不可变数据类型，例如 `HashMap`、`Chunk` 和
+`Option`。只有真正需要时，才使用 JavaScript 的可变类型。
+
+### Effect 规则
+
+OpenBot 用 [Effect](https://effect.website)
+编写。有两项检查让代码保持 Effect 的写法。`pnpm typecheck`
+会运行这两项检查，GitHub Actions 会对每个改动运行 `pnpm typecheck`。
+
+第一项检查是 Effect 语言服务。它是 TypeScript 编译器的插件，配置在
+`tsconfig.base.json` 中。它的规则都是错误，所以 `tsc`
+会在这些地方停下。这些规则要求的内容包括：
+
+- 用 Effect 的 `Array`、`String` 和 `Record` 模块代替原生方法，导入名分别是
+  `Arr`、`Str` 和 `Rec`；
+- 时间用 `Clock` 和 `DateTime`，随机值和 ID 用 `Random` 和 `Crypto`
+  服务，环境变量用 `Config`；
+- 用 `HttpClient` 代替 `fetch`，用 `FileSystem`、`Path` 和 `ChildProcess`
+  服务代替 Node.js 模块；
+- JSON 和外部数据用 Effect Schema，通过 Effect 解码，不用 `*Sync` 函数；
+- 错误用 `Schema.TaggedError`，每个 Schema 类都带 brand；
+- 用 `Effect.gen` 和 `Effect.fn` 代替 `async` 函数和 `new Promise`；
+- 测试中用 `@effect/vitest` 的 `it.effect`、`it.live` 和 `it.layer`。
+
+有三条规则是关闭的。`apiStabilityLeak` 和 `unstableApiUsage`
+关闭，是因为 API 契约建立在 `effect/http-api` 上，而 Effect 把它标为不稳定。
+`missingPipeableSignature`
+关闭，是因为给每个导出函数加上可管道的形式只对库有用，对应用没有用。
+
+第二项检查是
+`scripts/effect-rules.ts`。它读取每个 TypeScript 文件，检查语言服务看不到的规则：
+
+| 规则               | 它禁止什么                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `blind-error-map`  | `Effect.mapError(() => ...)`、`Effect.orElseFail(() => ...)` 和 `catch: () => ...`，它们会丢掉失败的原因。按名字传入的处理函数也算在内，只要同一文件把它声明为没有参数的函数。 |
+| `throw`            | `throw`。用有类型的错误失败；代码自身的规则被破坏时用 `Effect.die`；测试中用 `assert.fail`。                                                                                   |
+| `run-outside-main` | 在程序入口（`*Main.ts` 文件）之外使用 `Effect.runPromise` 和其他 `run` 函数，包括 `runForkWith`。外部回调应使用受作用域管理的 `FiberSet` runtime。                             |
+| `fork-daemon`      | `Effect.forkDetach`。应在 scope 中 fork fiber，或把它放进 `FiberSet` 或 `FiberMap`。                                                                                           |
+| `promise-then`     | 用 `.then` 串联 Promise。应把 Promise 转成 Effect。                                                                                                                            |
+| `directive-reason` | 没有写原因的规则指令。                                                                                                                                                         |
+
+有些代码必须保持原生写法，因为外部 API 要求这样，或者 Effect 没有对应的 API。例如必须返回
+`Date`
+的 Drizzle 回调、SDK 的 Promise 回调，以及 HMAC 签名。这时只对一行关闭规则，并在
+`--` 后写明原因：
+
+```ts
+// @effect-diagnostics-next-line globalDate:off -- Drizzle calls this outside Effect and needs a Date.
+// @effect-rules-next-line throw -- The SDK reads a thrown error as a failed call.
+```
+
+指令绝不是省事的办法。测试是程序入口，所以 `test/` 文件夹中关闭了
+`strictEffectProvide`。
+
+### 小而真实的改动
+
+只构建能带来真正价值的东西。让每次改动保持专注，并测试那些真的可能出错的部分。
+
+给贡献者的完整规则在仓库根目录的 `AGENTS.md` 中。
+
+---
+
+## 许可证
+
+OpenBot 使用 GNU
+Affero 通用公共许可证第 3 版，且仅限该版本（`AGPL-3.0-only`）。全文在仓库根目录的
+`LICENSE` 文件中。当你提交改动时，即表示你同意它使用相同的许可证。

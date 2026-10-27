@@ -1,4 +1,14 @@
-import { Context, Effect, HashMap, Layer, Option, Ref, Schema } from "effect"
+import {
+	Context,
+	Crypto,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	Ref,
+	Schema,
+	SchemaIssue,
+} from "effect"
 
 export const readTool = {
 	name: "read_document",
@@ -45,8 +55,12 @@ export class Business extends Context.Service<
 export const layer = Layer.effect(
 	Business,
 	Effect.gen(function* () {
+		const crypto = yield* Crypto.Crypto
 		const calls = yield* Ref.make(HashMap.empty<string, number>())
-		const documents = yield* Ref.make(HashMap.empty<string, string>())
+		// HashMap compares the [owner, id] keys by value.
+		const documents = yield* Ref.make(
+			HashMap.empty<readonly [owner: string, id: string], string>(),
+		)
 		const inputs = yield* Ref.make(
 			HashMap.empty<string, { readonly owner: string; readonly id: string }>(),
 		)
@@ -66,7 +80,7 @@ export const layer = Layer.effect(
 						Schema.Struct({ id: Schema.String, text: Schema.String }),
 					)(input)
 					yield* Ref.update(documents, (values) =>
-						HashMap.set(values, JSON.stringify([owner, id]), text),
+						HashMap.set(values, [owner, id] as const, text),
 					)
 					const count = yield* countExecution(owner)
 					return {
@@ -85,7 +99,8 @@ export const layer = Layer.effect(
 					)(input)
 					if (continuation !== undefined) {
 						if (continuation.requestState === undefined) {
-							const state = yield* Effect.sync(() => crypto.randomUUID())
+							// A platform without secure random numbers is broken, so this failure is a defect.
+							const state = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
 							yield* Ref.update(inputs, (values) =>
 								HashMap.set(values, state, { owner, id }),
 							)
@@ -122,7 +137,15 @@ export const layer = Layer.effect(
 								(pending) => pending.owner === owner && pending.id === id,
 							)
 						)
-							return yield* Schema.decodeUnknownEffect(Schema.Never)(null)
+							return yield* new Schema.SchemaError(
+								new SchemaIssue.InvalidValue(
+									{
+										message:
+											"The request state is unknown, or it is for another request.",
+									},
+									state,
+								),
+							)
 						const accepted = Schema.decodeUnknownOption(
 							Schema.Struct({
 								consent: Schema.Struct({
@@ -148,10 +171,7 @@ export const layer = Layer.effect(
 						structuredContent: {
 							id,
 							text: Option.getOrElse(
-								HashMap.get(
-									yield* Ref.get(documents),
-									JSON.stringify([owner, id]),
-								),
+								HashMap.get(yield* Ref.get(documents), [owner, id] as const),
 								() => "Simulated document content for " + id,
 							),
 							handlerExecutions: count,

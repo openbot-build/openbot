@@ -1,26 +1,33 @@
-import { Barrier } from "../auth/Barrier.ts"
 import { Caller, OrganizationApi } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
-import { Option, Clock, DateTime, Effect, Layer, Schema } from "effect"
+import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { and, desc, eq, lt } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { auditLogs } from "../database/Schema.ts"
 import { AuditLog, AuditUnavailable } from "./AuditLog.ts"
+import * as Db from "../database/Database.ts"
 
-const decodeActor = Schema.decodeUnknownSync(Schema.fromJsonString(Caller))
-const decodeDetails = Schema.decodeUnknownSync(
-	Schema.fromJsonString(Schema.JsonObject),
+const ActorJson = Schema.fromJsonString(Caller)
+const DetailsJson = Schema.fromJsonString(Schema.JsonObject)
+const decodeActor = Schema.decodeUnknownEffect(ActorJson)
+const decodeDetails = Schema.decodeUnknownEffect(DetailsJson)
+/** Only this file writes these columns, from typed values, so a failed encode is a defect. */
+const encodeActor = (actor: Caller) =>
+	Schema.encodeEffect(ActorJson)(actor).pipe(Effect.orDie)
+const encodeDetails = (details: Schema.JsonObject) =>
+	Schema.encodeEffect(DetailsJson)(details).pipe(Effect.orDie)
+/** The cursor of a page is the sequence of its last entry. Another cursor starts at the first page. */
+const decodeSequence = Schema.decodeUnknownOption(
+	Schema.FiniteFromString.pipe(Schema.decodeTo(Schema.Int)),
 )
-const decodeAction = Schema.decodeUnknownSync(OrganizationApi.AuditAction)
+const decodeAction = Schema.decodeUnknownEffect(OrganizationApi.AuditAction)
 
 export const make: Effect.Effect<
 	typeof AuditLog.Service,
 	never,
 	PgClient.PgClient
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
-	const unavailable = () => AuditUnavailable.make({})
-	const service = AuditLog.of({
+	const db = yield* Db.make
+	return AuditLog.of({
 		record: (entry) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
@@ -29,23 +36,25 @@ export const make: Effect.Effect<
 					createdAt: now,
 					action: entry.action,
 					actorUserId: entry.actor.userId,
-					actor: JSON.stringify(entry.actor),
+					actor: yield* encodeActor(entry.actor),
 					resource: entry.resource,
-					details: JSON.stringify(entry.details),
+					details: yield* encodeDetails(entry.details),
 				})
-			}).pipe(Effect.mapError(unavailable)),
+			}).pipe(Effect.mapError((cause) => AuditUnavailable.make({ cause }))),
 		list: (organizationId, options) =>
 			Effect.gen(function* () {
 				const after =
-					options.after === undefined ? Number.NaN : Number(options.after)
+					options.after === undefined
+						? Option.none()
+						: decodeSequence(options.after)
 				const rows = yield* db
 					.select()
 					.from(auditLogs)
 					.where(
 						and(
 							eq(auditLogs.organizationId, organizationId),
-							Number.isSafeInteger(after)
-								? lt(auditLogs.sequence, after)
+							Option.isSome(after)
+								? lt(auditLogs.sequence, after.value)
 								: undefined,
 							options.action === undefined
 								? undefined
@@ -59,31 +68,26 @@ export const make: Effect.Effect<
 					.limit(options.limit + 1)
 				const page = rows.slice(0, options.limit)
 				return {
-					items: page.map((row) => ({
-						id: String(row.sequence),
-						createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
-						action: decodeAction(row.action),
-						actor: decodeActor(row.actor),
-						resource: row.resource,
-						details: decodeDetails(row.details),
-					})),
+					items: yield* Effect.forEach(page, (row) =>
+						Effect.gen(function* () {
+							return {
+								id: String(row.sequence),
+								createdAt: DateTime.formatIso(
+									DateTime.makeUnsafe(row.createdAt),
+								),
+								action: yield* decodeAction(row.action),
+								actor: yield* decodeActor(row.actor),
+								resource: row.resource,
+								details: yield* decodeDetails(row.details),
+							}
+						}),
+					),
 					next:
 						rows.length > options.limit
 							? String(page[page.length - 1]?.sequence)
 							: null,
 				}
-			}).pipe(Effect.mapError(unavailable)),
-	})
-	return AuditLog.of({
-		...service,
-		record: (...args) =>
-			Effect.flatMap(Effect.serviceOption(Barrier), (barrier) =>
-				Option.isSome(barrier)
-					? barrier.value
-							.wrap(service.record(...args))
-							.pipe(Effect.catchTag("AuthUnavailable", () => unavailable()))
-					: service.record(...args),
-			),
+			}).pipe(Effect.mapError((cause) => AuditUnavailable.make({ cause }))),
 	})
 })
 export const layer = Layer.effect(AuditLog, make)

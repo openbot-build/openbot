@@ -4,6 +4,7 @@ import { defineConfig } from "astro/config"
 import autoImport from "astro-auto-import"
 import starlightLlmsTxt from "starlight-llms-txt"
 import starlightOpenAPI, { openAPISidebarGroups } from "starlight-openapi"
+import { docsLocales } from "./src/i18n.ts"
 
 // Docs pages use these components without an import line.
 const components = ["Callout", "Card", "Cards", "Step", "Steps", "Tab", "Tabs"]
@@ -17,7 +18,15 @@ export default defineConfig({
 		}),
 		starlight({
 			title: "OpenBot",
-			description: "A headless, API-first Agent platform.",
+			description: "A headless, API-first Bot platform.",
+			// English pages are at the root. Translations are in a folder with the
+			// name of the locale. See `src/i18n.ts`.
+			defaultLocale: "root",
+			locales: docsLocales,
+			// Starlight adds its Markdown features, such as the links next to
+			// headings, only to pages in `src/content/docs`. Our pages are in
+			// `content/docs`, so we name that folder here.
+			markdown: { processedDirs: ["./content/docs"] },
 			social: [
 				{
 					icon: "github",
@@ -40,39 +49,58 @@ export default defineConfig({
 				starlightLlmsTxt({ projectName: "OpenBot" }),
 			],
 			sidebar: [
-				{ label: "Intro", link: "/docs/" },
-				{ label: "Quick start", link: "/docs/quickstart/" },
+				{
+					slug: "docs",
+					label: "Intro",
+					translations: { "zh-CN": "简介", de: "Einführung" },
+				},
+				{
+					slug: "docs/quickstart",
+					label: "Quick start",
+					translations: { "zh-CN": "快速开始", de: "Schnellstart" },
+				},
 				{
 					label: "Usage",
+					translations: { "zh-CN": "使用", de: "Nutzung" },
 					items: [
 						"docs/authentication",
 						"docs/sso",
 						"docs/organization",
 						"docs/permissions",
-						"docs/agents",
-						"docs/sessions",
+						"docs/bots",
+						"docs/sharing",
+						"docs/chats",
+						"docs/live",
+						"docs/files",
 						"docs/delegation",
+						"docs/triggers",
+						"docs/channels",
+						"docs/computers",
 						"docs/requests",
 						"docs/rules",
 						"docs/memory",
 						"docs/apps",
+						"docs/code-mode",
+						"docs/vaults",
 						"docs/app-index",
 						"docs/developer-tools",
 					],
 				},
 				{
 					label: "Configure",
+					translations: { "zh-CN": "配置", de: "Konfiguration" },
 					items: [
 						"docs/configuration",
 						"docs/platform",
 						"docs/models",
+						"docs/usage",
 						"docs/error-logs",
 						"docs/deploy",
-						"docs/internal-fork",
 					],
 				},
 				{
 					label: "Develop",
+					translations: { "zh-CN": "开发", de: "Entwicklung" },
 					items: [
 						"docs/client",
 						"docs/server",
@@ -82,7 +110,11 @@ export default defineConfig({
 						"docs/contributing",
 					],
 				},
-				{ label: "Reference", items: openAPISidebarGroups },
+				{
+					label: "Reference",
+					translations: { "zh-CN": "参考", de: "Referenz" },
+					items: openAPISidebarGroups,
+				},
 			],
 		}),
 		// Starlight adds MDX on its own, but only after astro-auto-import has

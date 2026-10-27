@@ -16,9 +16,7 @@ export class Tokens extends Context.Service<
 			input: UserTokensApi.CreateTokenRequest,
 		) => Effect.Effect<
 			UserTokensApi.CreatedToken,
-			| UserTokensApi.TokenLimitReached
-			| UserTokensApi.TokenPolicyInvalid
-			| UserTokensApi.TokenStorageUnavailable
+			UserTokensApi.TokenLimitReached | UserTokensApi.TokenStorageUnavailable
 		>
 		readonly list: (
 			owner: Owner,

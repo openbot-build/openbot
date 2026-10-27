@@ -1,9 +1,4 @@
-import {
-	CurrentSessionOwner,
-	ExecutionFence,
-	RequestEpoch,
-} from "../execution/ExecutionFence.ts"
-import * as InstanceWork from "../execution/InstanceWork.ts"
+import { Settings as SettingsApi } from "@openbot-build/api"
 import {
 	Account,
 	type AccountCaller,
@@ -11,7 +6,15 @@ import {
 	type Caller,
 	Identity,
 } from "@openbot-build/api"
-import { Effect, Layer, Match, Option, Redacted } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Layer,
+	Match,
+	Option,
+	Redacted,
+	String as Str,
+} from "effect"
 import {
 	Cookies,
 	HttpEffect,
@@ -20,9 +23,35 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import { Tokens } from "./Tokens.ts"
-import { Auth } from "./Auth.js"
+import { Auth } from "./Auth.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import * as Failures from "../app/Failures.ts"
 import { Organization } from "../organization/Organization.ts"
+import { RateLimiter } from "../billing/RateLimit.ts"
+import * as Platform from "../settings/Platform.ts"
+import { Settings } from "../settings/Settings.ts"
+import { browserAuthDefaults, browserAuthOf } from "../settings/Documents.ts"
+
+/** Read the cookie name from the same settings as the sign-in SDK. */
+const sessionCookie = (settings: typeof Settings.Service) =>
+	Effect.gen(function* () {
+		const request = yield* HttpServerRequest.HttpServerRequest
+		const platform = yield* settings.platform.pipe(Failures.replace(
+			"OpenBot could not read the session cookie settings",
+			() => AuthUnavailable.make({dependency: "settings"}),
+		))
+		const config = Option.match(platform, {
+			onNone: () => browserAuthDefaults,
+			onSome: ({document}) => browserAuthOf(document),
+		})
+		return Option.map(Option.fromNullishOr(request.cookies[config.sessionCookie]), Redacted.make)
+	})
+
+const requireSessionCookie = (settings: typeof Settings.Service) =>
+	sessionCookie(settings).pipe(Effect.flatMap(Option.match({
+		onNone: () => Effect.fail(CredentialRejected.make({kind: "session"})),
+		onSome: Effect.succeed,
+	})))
 
 /** The public error for a credential that failed to resolve. */
 const publicError = (error: AuthUnavailable | CredentialRejected) =>
@@ -46,15 +75,42 @@ export const setSessionCookies = (setCookies: ReadonlyArray<string>) =>
 		),
 	)
 
-export const layerOrigin = (config: { readonly publicOrigin: string }) =>
-	Layer.succeed(AuthApi.OriginCheck, (httpEffect) =>
-		Effect.gen(function* () {
-			const request = yield* HttpServerRequest.HttpServerRequest
-			if (request.headers["origin"] !== config.publicOrigin)
-				return yield* AuthApi.ForbiddenOrigin.make({})
-			return yield* httpEffect
-		}),
-	)
+/**
+ * The session of the session cookie, if the request has one. A rejected cookie
+ * counts as no cookie, so the caller must log in first.
+ */
+export const optionalSession = (auth: typeof Auth.Service, settings: typeof Settings.Service) =>
+	Effect.gen(function* () {
+		return yield* Effect.transposeOption(
+			Option.map(
+				yield* sessionCookie(settings),
+				(cookie) =>
+					auth
+						.resolveSession(cookie)
+						.pipe(
+							Effect.tap(({ setCookies }) => setSessionCookies(setCookies)),
+						),
+			),
+		).pipe(Effect.catchTag("CredentialRejected", () => Effect.succeedNone))
+	})
+
+/** A request must come from the current public origin of the platform. */
+export const layerOrigin = Layer.effect(
+	AuthApi.OriginCheck,
+	Effect.gen(function* () {
+		const settings = yield* Settings
+		return (httpEffect) =>
+			Effect.gen(function* () {
+				const request = yield* HttpServerRequest.HttpServerRequest
+				const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
+					SettingsApi.SettingsUnavailable.make({}),
+				)
+				if (request.headers["origin"] !== publicOrigin)
+					return yield* AuthApi.ForbiddenOrigin.make({})
+				return yield* httpEffect
+			})
+	}),
+)
 
 export const layerNoStore = Layer.succeed(AuthApi.NoStore, (httpEffect) =>
 	httpEffect.pipe(
@@ -70,68 +126,99 @@ export const layerSessionAuth = Layer.effect(
 	AuthApi.SessionAuth,
 	Effect.gen(function* () {
 		const auth = yield* Auth
+		const settings = yield* Settings
 		return {
 			session: (httpEffect) =>
-				Effect.gen(function* () {
-					const request = yield* HttpServerRequest.HttpServerRequest
-					const credential = Redacted.make(
-						request.cookies[auth.sessionCookie ?? AuthApi.SessionCookie] ?? "",
-					)
-					const { setCookies, ...session } = yield* auth
-						.resolveSession(credential)
-						.pipe(Effect.mapError(publicError))
-					yield* setSessionCookies(setCookies)
-					return yield* Effect.provideService(httpEffect, AuthApi.AuthSession, {
-						session,
-						credential,
-					})
-				}),
+				requireSessionCookie(settings).pipe(
+					Effect.mapError(publicError),
+					Effect.flatMap((credential) => auth.resolveSession(credential).pipe(
+					Effect.mapError(publicError),
+					Effect.flatMap(({ setCookies, ...session }) =>
+						Effect.andThen(
+							setSessionCookies(setCookies),
+							Effect.provideService(httpEffect, AuthApi.AuthSession, {
+								session,
+								credential,
+							}),
+						),
+					),
+					)),
+				),
 		}
 	}),
 )
 
 /**
  * The organization of a request with the session cookie. The
- * `OpenBot-Organization` header picks one. Without it, the only active
- * organization of the account is the answer.
+ * `OpenBot-Organization` header, or the `organization` query of a WebSocket,
+ * picks one. Without them, the only active organization of the account is the
+ * answer.
  */
 const chooseOrganization = (
 	session: { readonly memberships: ReadonlyArray<AuthApi.Membership> },
-	header: string | undefined,
+	named: Option.Option<string>,
 ) => {
-	const active = session.memberships.filter(
+	const active = Arr.filter(
+		session.memberships,
 		(membership) => membership.status === "active",
 	)
-	if (header !== undefined)
-		return active.some((membership) => membership.organizationId === header)
-			? Effect.succeed(header)
-			: Effect.fail(AuthApi.MembershipRequired.make({}))
-	const [only, ...rest] = active
-	if (only === undefined)
-		return Effect.fail(AuthApi.MembershipRequired.make({}))
-	return rest.length === 0
-		? Effect.succeed(only.organizationId)
-		: Effect.fail(AuthApi.OrganizationRequired.make({}))
+	return Option.match(named, {
+		onSome: (organizationId) =>
+			Arr.some(
+				active,
+				(membership) => membership.organizationId === organizationId,
+			)
+				? Effect.succeed(organizationId)
+				: Effect.fail(AuthApi.MembershipRequired.make({})),
+		onNone: () =>
+			Arr.match(active, {
+				onEmpty: () => Effect.fail(AuthApi.MembershipRequired.make({})),
+				onNonEmpty: (all) =>
+					all.length === 1
+						? Effect.succeed(all[0].organizationId)
+						: Effect.fail(AuthApi.OrganizationRequired.make({})),
+			}),
+	})
 }
 
-/** Resolve the session cookie. A write from the browser must come from the public origin. */
+const isWebSocket = (request: HttpServerRequest.HttpServerRequest) =>
+	Option.exists(
+		Option.fromNullishOr(request.headers["upgrade"]),
+		(upgrade) => Str.toLowerCase(upgrade) === "websocket",
+	)
+
+/**
+ * A browser cannot send headers with a WebSocket. So a WebSocket may name its
+ * organization in the `organization` query field. Other requests use the header.
+ */
+const organizationQuery = (
+	request: HttpServerRequest.HttpServerRequest,
+): Option.Option<string> =>
+	isWebSocket(request)
+		? Option.flatMap(HttpServerRequest.toURL(request), (url) =>
+				Option.fromNullOr(url.searchParams.get("organization")),
+			)
+		: Option.none()
+
+/**
+ * Resolve the session cookie. A write from the browser must come from the public origin.
+ * So must a WebSocket, because a page on another site can open one with the cookie.
+ */
 const resolveCookie = (
 	auth: typeof Auth.Service,
-	config: { readonly publicOrigin: string },
-	_credential: Parameters<typeof auth.resolveSession>[0],
+	settings: typeof Settings.Service,
 ) =>
 	Effect.gen(function* () {
 		const request = yield* HttpServerRequest.HttpServerRequest
+		const credential = yield* requireSessionCookie(settings).pipe(Effect.mapError(publicError))
+		const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
+			AuthApi.AuthenticationUnavailable.make({}),
+		)
 		const forbiddenOrigin =
-			HttpMethod.hasBody(request.method) &&
-			request.headers["origin"] !== config.publicOrigin
+			(HttpMethod.hasBody(request.method) || isWebSocket(request)) &&
+			request.headers["origin"] !== publicOrigin
 		const session = yield* auth
-			.resolveSession(
-				Redacted.make(
-					request.cookies[auth.sessionCookie ?? AuthApi.SessionCookie] ?? "",
-				),
-				{ refresh: !forbiddenOrigin },
-			)
+			.resolveSession(credential, { refresh: !forbiddenOrigin })
 			.pipe(Effect.mapError(publicError))
 		if (forbiddenOrigin) return yield* AuthApi.ForbiddenOrigin.make({})
 		yield* setSessionCookies(session.setCookies)
@@ -147,7 +234,10 @@ const activeToken = (
 	tokens.authenticate(credential).pipe(
 		Effect.flatMap((caller) =>
 			organization.activeMember(caller.organizationId, caller.userId).pipe(
-				Effect.mapError(() => AuthUnavailable.make({ dependency: "storage" })),
+				Failures.replace(
+					"OpenBot could not read the membership of a token",
+					() => AuthUnavailable.make({ dependency: "storage" }),
+				),
 				Effect.flatMap((member) =>
 					Option.isSome(member)
 						? Effect.succeed(caller)
@@ -162,113 +252,81 @@ const activeToken = (
  * Find the caller of one credential before the organization's ordinary business handlers run.
  * Browsers do not send tokens on their own, so tokens need no Origin check.
  */
-/** A read keeps its routing epoch because it may lazily create a Main Agent. */
-const operation = <A, E, R>(caller: Caller, effect: Effect.Effect<A, E, R>) =>
-	InstanceWork.wrap(
-		Effect.gen(function* () {
-			const request = yield* HttpServerRequest.HttpServerRequest
-			const fence = yield* Effect.serviceOption(ExecutionFence)
-			const rawEpoch = request.headers["x-kay-epoch"]
-			const epoch =
-				rawEpoch === undefined
-					? undefined
-					: {
-							accountId: caller.userId,
-							epoch: /^[0-9]+$/.test(rawEpoch) ? Number(rawEpoch) : Number.NaN,
-						}
-			const owned = Effect.provideService(effect, CurrentSessionOwner, {
-				namespace: JSON.stringify([caller.organizationId, caller.userId]),
-				accountId: caller.userId,
-			})
-			if (HttpMethod.hasBody(request.method) && Option.isSome(fence))
-				return yield* fence.value.admit(caller.userId, owned).pipe(
-					Effect.provideService(RequestEpoch, epoch),
-					Effect.catchTag("FenceUnavailable", () =>
-						AuthApi.AuthenticationUnavailable.make({}),
+export const layerBotAuth = Layer.effect(
+	AuthApi.BotAuth,
+	Effect.gen(function* () {
+		const auth = yield* Auth
+		const settings = yield* Settings
+		const tokens = yield* Tokens
+		const organization = yield* Organization
+		const limiter = yield* RateLimiter
+		return {
+			token: (httpEffect, { credential }) =>
+				activeToken(tokens, organization, credential).pipe(
+					Effect.tap(limiter.hit),
+					Effect.flatMap((caller) =>
+						Effect.provideService(httpEffect, Identity, caller),
 					),
-				)
-			return yield* owned.pipe(Effect.provideService(RequestEpoch, epoch))
-		}),
-	).pipe(
-		Effect.catchTag("InstancePaused", () =>
-			AuthApi.AuthenticationUnavailable.make({}),
-		),
-	)
-
-export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
-	Layer.effect(
-		AuthApi.AgentAuth,
-		Effect.gen(function* () {
-			const auth = yield* Auth
-			const tokens = yield* Tokens
-			const organization = yield* Organization
-			return {
-				token: (httpEffect, { credential }) =>
-					activeToken(tokens, organization, credential).pipe(
-						Effect.flatMap((caller) =>
-							operation(
-								caller,
-								Effect.provideService(httpEffect, Identity, caller),
+				),
+			session: (httpEffect) =>
+				Effect.gen(function* () {
+					const { request, session } = yield* resolveCookie(
+						auth,
+						settings,
+					)
+					const organizationId = yield* chooseOrganization(
+						session,
+						Option.orElse(
+							Option.fromUndefinedOr(
+								request.headers[AuthApi.OrganizationHeader],
 							),
+							() => organizationQuery(request),
 						),
-					),
-				session: (httpEffect, { credential }) =>
-					Effect.gen(function* () {
-						const { request, session } = yield* resolveCookie(
-							auth,
-							config,
-							credential,
-						)
-						const organizationId = yield* chooseOrganization(
-							session,
-							request.headers[AuthApi.OrganizationHeader],
-						)
-						const caller: Caller = {
-							kind: "member",
-							userId: session.userId,
-							organizationId,
-						}
-						return yield* operation(
-							caller,
-							Effect.provideService(httpEffect, Identity, caller),
-						)
-					}),
-			}
-		}),
-	)
+					)
+					const caller: Caller = {
+						kind: "member",
+						userId: session.userId,
+						organizationId,
+					}
+					yield* limiter.hit(caller)
+					return yield* Effect.provideService(httpEffect, Identity, caller)
+				}),
+		}
+	}),
+)
 
 /** Find the account of a request that does not act in one organization. */
-export const layerAccountAuth = (config: { readonly publicOrigin: string }) =>
-	Layer.effect(
-		AuthApi.AccountAuth,
-		Effect.gen(function* () {
-			const auth = yield* Auth
-			const tokens = yield* Tokens
-			const organization = yield* Organization
-			return {
-				token: (httpEffect, { credential }) =>
-					activeToken(tokens, organization, credential).pipe(
-						Effect.flatMap((caller) => {
-							const account: AccountCaller = {
-								kind: "user_token",
-								userId: caller.userId,
-								organizationId: caller.organizationId,
-								...(caller.tokenId === undefined
-									? {}
-									: { tokenId: caller.tokenId }),
-							}
-							return Effect.provideService(httpEffect, Account, account)
-						}),
-					),
-				session: (httpEffect, { credential }) =>
-					Effect.gen(function* () {
-						const { session } = yield* resolveCookie(auth, config, credential)
+export const layerAccountAuth = Layer.effect(
+	AuthApi.AccountAuth,
+	Effect.gen(function* () {
+		const auth = yield* Auth
+		const settings = yield* Settings
+		const tokens = yield* Tokens
+		const organization = yield* Organization
+		return {
+			token: (httpEffect, { credential }) =>
+				activeToken(tokens, organization, credential).pipe(
+					Effect.flatMap((caller) => {
 						const account: AccountCaller = {
-							kind: "member",
-							userId: session.userId,
+							kind: "user_token",
+							userId: caller.userId,
+							organizationId: caller.organizationId,
+							...(caller.tokenId === undefined
+								? {}
+								: { tokenId: caller.tokenId }),
 						}
-						return yield* Effect.provideService(httpEffect, Account, account)
+						return Effect.provideService(httpEffect, Account, account)
 					}),
-			}
-		}),
-	)
+				),
+			session: (httpEffect) =>
+				Effect.gen(function* () {
+					const { session } = yield* resolveCookie(auth, settings)
+					const account: AccountCaller = {
+						kind: "member",
+						userId: session.userId,
+					}
+					return yield* Effect.provideService(httpEffect, Account, account)
+				}),
+		}
+	}),
+)

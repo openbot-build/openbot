@@ -1,0 +1,680 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "5fda1713-e85a-4a54-b02a-a7438c34a200",
+	"prevIds": ["5f8ca2f8-2a3e-47c9-ba47-b8c71cd0d8a3"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_workflow_revisions"],
+			"writes": [
+				"s|tbl|public.openbot_workflow_revisions",
+				"n|tbl|public.openbot_workflow_revisions",
+				"e|tbl|public.openbot_workflow_revisions",
+				"n|rel|public.openbot_workflow_revisions",
+				"n|type|public.openbot_workflow_revisions",
+				"n|rel|public.openbot_workflow_revisions_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_workflow_waits"],
+			"writes": [
+				"s|tbl|public.openbot_workflow_waits",
+				"n|tbl|public.openbot_workflow_waits",
+				"e|tbl|public.openbot_workflow_waits",
+				"n|rel|public.openbot_workflow_waits",
+				"n|type|public.openbot_workflow_waits",
+				"n|rel|public.openbot_workflow_waits_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_recordings",
+				"node"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_recordings.node",
+				"n|col|public.openbot_workflow_recordings.node",
+				"e|col|public.openbot_workflow_recordings.node"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_recordings", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_runs",
+				"parent_run"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_runs.parent_run",
+				"n|col|public.openbot_workflow_runs.parent_run",
+				"e|col|public.openbot_workflow_runs.parent_run"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_runs", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_runs",
+				"parent_node"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_runs.parent_node",
+				"n|col|public.openbot_workflow_runs.parent_node",
+				"e|col|public.openbot_workflow_runs.parent_node"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_runs", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_runs",
+				"parent_key"
+			],
+			"writes": [
+				"s|col|public.openbot_workflow_runs.parent_key",
+				"n|col|public.openbot_workflow_runs.parent_key",
+				"e|col|public.openbot_workflow_runs.parent_key"
+			],
+			"reads": ["n|tbl|public.openbot_workflow_runs", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": ["column", "public", "openbot_workflows", "origin"],
+			"writes": [
+				"s|col|public.openbot_workflows.origin",
+				"n|col|public.openbot_workflows.origin",
+				"e|col|public.openbot_workflows.origin"
+			],
+			"reads": ["n|tbl|public.openbot_workflows", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflows",
+				"passed_revision"
+			],
+			"writes": [
+				"s|col|public.openbot_workflows.passed_revision",
+				"n|col|public.openbot_workflows.passed_revision",
+				"e|col|public.openbot_workflows.passed_revision"
+			],
+			"reads": ["n|tbl|public.openbot_workflows", "n|sch|public"]
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_workflow_runs",
+				"workflow_id"
+			],
+			"writes": ["s|colprop|public.openbot_workflow_runs.workflow_id.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_workflow_runs",
+				"n|sch|public",
+				"n|col|public.openbot_workflow_runs.workflow_id"
+			],
+			"sqlHash": "9e2cacd752e68e8d"
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_workflow_runs",
+				"openbot_workflow_runs_parent_run"
+			],
+			"writes": [
+				"s|idx|public.openbot_workflow_runs_parent_run",
+				"n|idx|public.openbot_workflow_runs_parent_run",
+				"e|idx|public.openbot_workflow_runs_parent_run",
+				"n|rel|public.openbot_workflow_runs_parent_run"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_runs",
+				"n|sch|public",
+				"n|col|public.openbot_workflow_runs.organization_id",
+				"n|col|public.openbot_workflow_runs.parent_run",
+				"n|col|public.openbot_workflow_runs.parent_key"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_workflow_waits",
+				"openbot_workflow_waits_turn"
+			],
+			"writes": [
+				"s|idx|public.openbot_workflow_waits_turn",
+				"n|idx|public.openbot_workflow_waits_turn",
+				"e|idx|public.openbot_workflow_waits_turn",
+				"n|rel|public.openbot_workflow_waits_turn"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_waits",
+				"n|sch|public",
+				"n|col|public.openbot_workflow_waits.session",
+				"n|col|public.openbot_workflow_waits.turn"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_workflow_revisions"],
+			"writes": [
+				"s|fk|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey",
+				"n|fk|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey",
+				"e|fk|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey",
+				"n|con|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_revisions",
+				"n|sch|public",
+				"n|tbl|public.openbot_workflows",
+				"n|sch|public",
+				"n|col|public.openbot_workflow_revisions.organization_id",
+				"n|col|public.openbot_workflow_revisions.workflow_id",
+				"n|col|public.openbot_workflows.organization_id",
+				"n|col|public.openbot_workflows.id",
+				"e|uniqueness|public.openbot_workflows.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_workflow_runs"],
+			"writes": [
+				"s|fk|public.openbot_workflow_runs.openbot_workflow_runs_d3FodOtfmHmq_fkey",
+				"n|fk|public.openbot_workflow_runs.openbot_workflow_runs_d3FodOtfmHmq_fkey",
+				"e|fk|public.openbot_workflow_runs.openbot_workflow_runs_d3FodOtfmHmq_fkey",
+				"n|con|public.openbot_workflow_runs.openbot_workflow_runs_d3FodOtfmHmq_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_runs",
+				"n|sch|public",
+				"n|tbl|public.openbot_workflow_runs",
+				"n|sch|public",
+				"n|col|public.openbot_workflow_runs.organization_id",
+				"n|col|public.openbot_workflow_runs.parent_run",
+				"n|col|public.openbot_workflow_runs.organization_id",
+				"n|col|public.openbot_workflow_runs.id",
+				"e|uniqueness|public.openbot_workflow_runs.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_workflow_waits"],
+			"writes": [
+				"s|fk|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey",
+				"n|fk|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey",
+				"e|fk|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey",
+				"n|con|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_waits",
+				"n|sch|public",
+				"n|tbl|public.openbot_workflow_runs",
+				"n|sch|public",
+				"n|col|public.openbot_workflow_waits.organization_id",
+				"n|col|public.openbot_workflow_waits.run_id",
+				"n|col|public.openbot_workflow_runs.organization_id",
+				"n|col|public.openbot_workflow_runs.id",
+				"e|uniqueness|public.openbot_workflow_runs.id.organization_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_workflow_revisions",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_workflow_waits",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_recordings",
+				"name": "node",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_revisions",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_revisions",
+				"name": "workflow_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_revisions",
+				"name": "revision",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_revisions",
+				"name": "definition",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_revisions",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_runs",
+				"name": "parent_run",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_runs",
+				"name": "parent_node",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_runs",
+				"name": "parent_key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "run_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "task",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "session",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "turn",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "token",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflows",
+				"name": "origin",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflows",
+				"name": "passed_revision",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_runs",
+				"name": "openbot_workflow_runs_parent_run",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "parent_run",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "parent_key",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "openbot_workflow_waits_turn",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "session",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "turn",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_revisions",
+				"name": "openbot_workflow_revisions_BkHC5J7yCb0p_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "workflow_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_workflows",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_runs",
+				"name": "openbot_workflow_runs_d3FodOtfmHmq_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "parent_run"],
+				"schemaTo": "public",
+				"tableTo": "openbot_workflow_runs",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "openbot_workflow_waits_5YTRkblv18YZ_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "run_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_workflow_runs",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_revisions",
+				"name": "openbot_workflow_revisions_pkey",
+				"columns": ["organization_id", "workflow_id", "revision"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_workflow_waits",
+				"name": "openbot_workflow_waits_pkey",
+				"columns": ["organization_id", "run_id", "task"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"workflow_id\"]",
+			"set": {
+				"notNull": true
+			}
+		}
+	]
+}

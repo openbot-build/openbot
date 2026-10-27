@@ -1,14 +1,21 @@
-import { type OrganizationApi, Permissions } from "@openbot-build/api"
-import { Context, type Effect, type Option, Schema } from "effect"
+import {
+	Authorization,
+	type OrganizationApi,
+	type Roles as RolesApi,
+} from "@openbot-build/api"
+import { Array as Arr, Context, type Effect, type Option, Schema } from "effect"
 
-export class RolesUnavailable extends Schema.TaggedError<RolesUnavailable>()(
-	"RolesUnavailable",
-	{},
-) {}
+/** OpenBot cannot read or write the roles now. */
+export class RolesUnavailable extends Schema.TaggedError<
+	RolesUnavailable,
+	{ readonly brand: unique symbol }
+>()("RolesUnavailable", { cause: Schema.Defect() }) {}
 
 /** The built-in roles in their API form. */
-export const builtin: ReadonlyArray<Permissions.Role> =
-	Permissions.builtinRoles.map((role) => ({ ...role, builtin: true }))
+export const builtin: ReadonlyArray<RolesApi.Role> = Arr.map(
+	Authorization.builtinRoles,
+	(role) => ({ ...role, builtin: true }),
+)
 
 /** The built-in roles of every organization, and its custom roles. */
 export class Roles extends Context.Service<
@@ -16,21 +23,21 @@ export class Roles extends Context.Service<
 	{
 		readonly list: (
 			organizationId: string,
-		) => Effect.Effect<ReadonlyArray<Permissions.Role>, RolesUnavailable>
+		) => Effect.Effect<ReadonlyArray<RolesApi.Role>, RolesUnavailable>
 		readonly get: (
 			organizationId: string,
-			roleId: string,
-		) => Effect.Effect<Option.Option<Permissions.Role>, RolesUnavailable>
+			roleId: RolesApi.RoleId,
+		) => Effect.Effect<Option.Option<RolesApi.Role>, RolesUnavailable>
 		readonly create: (
 			organizationId: string,
-			input: Permissions.CreateRoleRequest,
-		) => Effect.Effect<Permissions.Role, RolesUnavailable>
+			input: RolesApi.CreateRoleRequest,
+		) => Effect.Effect<RolesApi.Role, RolesUnavailable>
 		readonly update: (
 			organizationId: string,
-			roleId: string,
-			patch: Permissions.UpdateRoleRequest,
+			roleId: RolesApi.RoleId,
+			patch: RolesApi.UpdateRoleRequest,
 		) => Effect.Effect<
-			Permissions.Role,
+			RolesApi.Role,
 			| OrganizationApi.RoleNotFound
 			| OrganizationApi.RoleReadOnly
 			| RolesUnavailable
@@ -38,7 +45,7 @@ export class Roles extends Context.Service<
 		/** The caller checks that nothing uses the role first. */
 		readonly delete: (
 			organizationId: string,
-			roleId: string,
+			roleId: RolesApi.RoleId,
 		) => Effect.Effect<
 			void,
 			| OrganizationApi.RoleNotFound
