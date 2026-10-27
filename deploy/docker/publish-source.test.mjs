@@ -43,7 +43,7 @@ test("source packages are commit-pinned, verified after upload and never replace
 		assert.equal(uploads, 1)
 		await assert.rejects(
 			publishSource({ ...input, commit: "latest" }),
-			/protected CI identity/,
+			/CI commit and job token/,
 		)
 	} finally {
 		await rm(directory, { recursive: true, force: true })
