@@ -1,75 +1,19 @@
 import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
-import { Chat, Turn } from "@openbot-build/core"
 import * as Index from "./AppIndexApi.ts"
 import { Availability, ConnectionId } from "./ConnectionsApi.ts"
 
-export const AppOperationId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/AppOperationId"))
-export type AppOperationId = typeof AppOperationId.Type
-
-/** Safe source details for one live capability. It never contains configured secrets. */
-export const Source = Schema.Struct({
-	connectionId: ConnectionId,
-	connectionName: Schema.String,
-	cardUrl: Document.Link,
-	appName: Schema.String,
-	remoteIndex: Schema.Natural,
-	revision: Schema.Natural,
-	kind: Schema.Literals(["tool", "resource", "template", "prompt"]),
-	name: Schema.String,
-	definition: Schema.optionalKey(Schema.Json),
-})
-export type Source = typeof Source.Type
-export const Result = Schema.TaggedUnion({
-	Completed: {
-		source: Source,
-		result: Schema.Json,
-		operationId: Schema.optionalKey(AppOperationId),
-	},
-	InputRequired: {
-		source: Source,
-		request: Schema.Json,
-		operationId: Schema.optionalKey(AppOperationId),
-	},
-	Failed: {
-		source: Source,
-		reason: Schema.String,
-		cause: Schema.optionalKey(Schema.String),
-		message: Schema.String,
-		result: Schema.optionalKey(Schema.Json),
-		operationId: Schema.optionalKey(AppOperationId),
-	},
-})
-export type Result = typeof Result.Type
-
-export const InvocationStatus = Schema.Literals([
-	"PendingApproval",
-	"Approved",
-	"Rejected",
-	"Sending",
-	"InputRequired",
-	"Completed",
-	"Failed",
-	"OutcomeUnknown",
-])
-export type InvocationStatus = typeof InvocationStatus.Type
-export const Invocation = Schema.Struct({
-	id: AppOperationId,
-	chat: Chat.Id,
-	turn: Turn.Id,
-	callId: Schema.String,
-	toolName: Schema.String,
-	source: Source,
-	arguments: Schema.JsonObject,
-	readOnly: Schema.Boolean,
-	round: Schema.Natural,
-	status: InvocationStatus,
-	result: Schema.NullOr(Result),
-})
-export type Invocation = typeof Invocation.Type
+// tsdown drops star exports from the built API namespace. List the names here.
+export {
+	AppOperationId,
+	Outcome,
+	Source,
+	Result,
+	InvocationStatus,
+	Invocation,
+	ExecutionView,
+} from "@openbot-build/domain/AppCalls"
+import { Result } from "@openbot-build/domain/AppCalls"
 
 export const AccessConnection = Schema.Struct({
 	id: ConnectionId,

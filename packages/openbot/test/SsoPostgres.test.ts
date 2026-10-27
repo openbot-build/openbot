@@ -18,6 +18,7 @@ import { Settings } from "../src/settings/Settings.ts"
 import { Sso } from "../src/sso/Sso.ts"
 import * as SsoPostgres from "../src/sso/SsoPostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as ErrorRecords from "../src/errors/Records.ts"
 
 const organizationId = "org_sso_notice"
 const domain = "example.com"
@@ -40,6 +41,7 @@ it.live(
 			const records = yield* Ref.make<ReadonlyArray<string>>([])
 			const services = yield* Layer.build(
 				SsoPostgres.layer.pipe(
+					Layer.provide(ErrorRecords.layer),
 					Layer.provide(noNotice),
 					Layer.provide(
 						Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),

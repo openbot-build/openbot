@@ -1,4 +1,4 @@
-import type { ComputersApi } from "@openbot-build/api"
+import type { Computers as ComputerData } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Deferred,
@@ -14,7 +14,7 @@ import {
 } from "effect"
 import { Base64 } from "effect/encoding"
 import { type HttpClient, HttpClientRequest } from "effect/http"
-import * as Background from "../../app/Background.ts"
+import * as Background from "../../execution/Background.ts"
 import {
 	ComputerCallFailed,
 	type RunRequest,
@@ -162,7 +162,7 @@ export const write = (
 	)
 }
 
-const entry = (value: unknown): ComputersApi.FileEntry => {
+const entry = (value: unknown): ComputerData.FileEntry => {
 	const type = string(value, "type")
 	const modified = string(value, "modifiedTime")
 	const parsed = modified === undefined ? Number.NaN : Date.parse(modified)
@@ -372,6 +372,7 @@ export const run = (
 	client: HttpClient.HttpClient,
 	connection: Connection,
 	request: RunRequest,
+	background: Background.Work,
 ) =>
 	Effect.gen(function* () {
 		const state = yield* Ref.make(startOutput)
@@ -404,7 +405,7 @@ export const run = (
 				process: { pid: output.pid },
 				signal: "SIGNAL_SIGKILL",
 			}).pipe(
-				Background.logFailure(
+				background.logFailure(
 					"OpenBot could not stop an E2B command after its timeout",
 				),
 			)
@@ -421,7 +422,7 @@ export const run = (
 	})
 
 /** The signals that envd sends itself. The other signals go through `kill`. */
-const envdSignals: Partial<Record<ComputersApi.SessionSignal, string>> = {
+const envdSignals: Partial<Record<ComputerData.SessionSignal, string>> = {
 	SIGKILL: "SIGNAL_SIGKILL",
 	SIGTERM: "SIGNAL_SIGTERM",
 }
@@ -443,6 +444,7 @@ export const start = (
 	client: HttpClient.HttpClient,
 	connection: Connection,
 	request: StartRequest,
+	background: Background.Work,
 ): Effect.Effect<Process, ComputerCallFailed | SandboxAway, Scope.Scope> =>
 	Effect.gen(function* () {
 		const sink = yield* ProcessSink.make
@@ -531,7 +533,7 @@ export const start = (
 				},
 			),
 			Stream.runForEach((each) => onEvent(each.flags, each.message)),
-			Background.logFailure("The E2B process stream failed"),
+			background.logFailure("The E2B process stream failed"),
 			Effect.annotateLogs({ sandbox: connection.sandboxId }),
 			Effect.ensuring(
 				Deferred.fail(
@@ -582,7 +584,7 @@ export const start = (
 						: { stdin: Base64.encode(bytes) },
 				}),
 			)
-		const signal = (name: ComputersApi.SessionSignal) =>
+		const signal = (name: ComputerData.SessionSignal) =>
 			withPid((value) => {
 				const own = envdSignals[name]
 				const bare = Str.slice(3)(name)
@@ -591,10 +593,15 @@ export const start = (
 							process: { pid: value },
 							signal: own,
 						})
-					: run(client, connection, {
-							command: `kill -s ${bare} -- -${value} 2>/dev/null || kill -s ${bare} ${value}`,
-							timeout: 10,
-						})
+					: run(
+							client,
+							connection,
+							{
+								command: `kill -s ${bare} -- -${value} 2>/dev/null || kill -s ${bare} ${value}`,
+								timeout: 10,
+							},
+							background,
+						)
 			}).pipe(Effect.asVoid)
 		// A finalizer cannot be stopped, so the kill has its own time limit.
 		yield* Effect.addFinalizer(() =>
@@ -603,7 +610,7 @@ export const start = (
 					? Effect.void
 					: signal("SIGKILL").pipe(
 							Effect.timeout("10 seconds"),
-							Background.logFailure("OpenBot could not stop an E2B process"),
+							background.logFailure("OpenBot could not stop an E2B process"),
 							Effect.annotateLogs({ sandbox: connection.sandboxId }),
 						),
 			),

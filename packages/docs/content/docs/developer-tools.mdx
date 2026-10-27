@@ -3,13 +3,16 @@ title: Developer tools
 description: Check, test and manage the Apps you publish.
 ---
 
+For developers. Start with the [developer manual](/docs/developers) to choose
+API work, App publishing, or project changes.
+
 These tools are for people who publish Apps. You can check your App, prove that
 you control it, share access with your team, run private tests, ask for
 indexing, and get notices when something breaks.
 
 Only the inspection call is public. All other calls need a user token or the
 session cookie, and `publish` on `App`. See
-[Authentication](/docs/authentication).
+[Authentication](/docs/developers/authentication).
 
 ---
 
@@ -33,7 +36,7 @@ curl -X POST https://api.example.com/v1/developer/inspect \
 | `stages` | Each check step: `Input`, `Discovery`, `CardRead`, `CardSchema`, `Compatibility`, `PublisherAssociation` and `Eligibility`. Each is `Passed`, `Failed`, `Unconfirmed` or `NotChecked`. |
 
 An `Eligible` result does not mean the App is in the Index yet. See
-[App Index](/docs/app-index#how-apps-get-indexed).
+[App Index](/docs/developers/app-index#how-apps-get-indexed).
 
 ---
 
@@ -101,13 +104,22 @@ must allow the `OpenBot` user bot.
 
 ```sh
 curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
-  -H "Authorization: Bearer $OPENBOT_TOKEN"
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"proof-check-1"}'
 ```
 
-On success you get a **proof**. You become the `administrator` for that scope.
-On failure you get 409 `DeveloperConflict`. Its `reason` can be `ProofMismatch`,
-`ClaimExpired`, `VerificationUnavailable`, `RobotsDenied`, `RobotsUnconfirmed`
-or `CardUnconfirmed`.
+The API returns 202 with an `executionId`. Reuse the same `commandKey` if a
+reply is lost. Read `/v1/executions/:executionId` or subscribe to its events. On
+completion, read `GET /v1/developer/proofs/<claim id>` for the **proof**. You
+become the `administrator` for that scope. A failed check has a safe error
+category and an `errorId`; its full cause stays in an encrypted error record. A
+missing token or an expired claim gives a `conflict` result. A failed network
+read gives an `external` result. Closing the event stream does not stop a check.
+Use the execution cancel endpoint to stop it.
+
+The SDK has `Proofs.verifyClaim(id)` and `Proofs.verifyProof(id)`. Each returns
+a command with a stable key and a `send` effect. Reuse that command to retry.
 
 </Step>
 </Steps>
@@ -120,8 +132,9 @@ again every day:
   it ends. OpenBot tries again after about one minute.
 - A `Suspended` proof gives no access.
 
-To check now, call `POST /v1/developer/proofs/:id/verify`. To give up a proof,
-call `POST /v1/developer/proofs/:id/relinquish`. To cancel a claim, call
+To check now, call `POST /v1/developer/proofs/:id/verify` with a new
+`commandKey`. It also returns an execution receipt. To give up a proof, call
+`POST /v1/developer/proofs/:id/relinquish`. To cancel a claim, call
 `POST /v1/developer/claims/:id/revoke`.
 
 `GET /v1/developer` returns your Apps, your proofs, and your access `grants`.
@@ -182,9 +195,20 @@ test ends after one hour.
 2. If the endpoint needs settings, send them:
    `PUT /v1/developer/tests/:id/configuration` with an object of keys and
    values. The keys are the same as for
-   [connections](/docs/apps#review-and-create-the-connection).
-3. Run it: `POST /v1/developer/tests/:id/run`. Read the result with
-   `GET /v1/developer/tests/:id`.
+   [connections](/docs/developers/apps#review-and-create-the-connection).
+3. Run it: `POST /v1/developer/tests/:id/run` with
+   `{ "commandKey": "test-run-1" }`. It returns `202` and an execution receipt.
+   Read the test with `GET /v1/developer/tests/:id` and follow the saved events
+   with `GET /v1/executions/:executionId/observe`.
+
+Keep the same command key when a reply is lost. A new key starts a new run after
+the last run ends. The test keeps its last `executionId`. The SDK helper
+`DeveloperTests.run(id)` makes a command whose `send` method reuses its key.
+Closing the event stream does not stop the test. Cancel through the execution
+API, or use test cleanup to stop the run and then remove its private data.
+Cleanup waits for the run to release its connection. A later server start does
+not change an active workflow run. Saved call results are reused after node
+loss; an unfinished read can run again.
 
 Each run has `stages`: `configuration`, `negotiation`, `tools`, `resources`,
 `resourceTemplates` and `prompts`. Each stage is `Passed`, `Failed`,
@@ -196,16 +220,50 @@ Each run has `stages`: `configuration`, `negotiation`, `tools`, `resources`,
 When the App needs an account, the test status becomes `AwaitingAuthorization`.
 
 1. Start the sign-in: `POST /v1/developer/tests/:id/authorization` with
-   `{ "scopes": [] }`. Add `issuer` if the App has more than one provider.
+   `{ "scopes": [], "commandKey": "test-sign-in-1" }`. Add `issuer` if the App
+   has more than one provider. The reply is `202` with an execution receipt.
+   Follow its events, then read the test for `authorization.authorizationUrl`.
+   `PreparingAuthorization` means that this work has not ended. The link and
+   sealed flow become visible in one commit. Reuse the key after a lost reply.
+   The SDK helper `DeveloperTests.authorize(id, { scopes: [] })` keeps this key.
 2. Open `authorization.authorizationUrl` in your browser and sign in.
 3. The provider sends you to `/auth/developer/apps/callback`. OpenBot then sends
    you to `/?developerTest=<testId>`.
-4. Finish: `POST /v1/developer/tests/:id/authorization/complete`. Then run the
-   test again.
+4. Finish: `POST /v1/developer/tests/:id/authorization/complete` with a new
+   `commandKey`. It returns a `202` execution receipt. Retry a lost reply with
+   the same key. `DeveloperTests.completeAuthorization` in the SDK keeps this
+   key. Wait for the execution to end, then read the test and run it again.
 
-When you are done, call `POST /v1/developer/tests/:id/cleanup`. OpenBot revokes
-the test sign-in where the provider allows it, and deletes the stored tokens.
-You can also `cancel` a running test, or `DELETE` it.
+The exchange keeps the caller that started sign-in as an access limit. It checks
+that caller and the caller that submits completion before using a saved result.
+Codes and tokens stay in sealed records. A stopped or lost request does not stop
+a submitted exchange. An exchange with no known result waits for a decision
+through the execution API; OpenBot does not send the code again on its own. A
+grant that cannot be installed gets platform cleanup.
+
+When you are done, call `POST /v1/developer/tests/:id/cleanup` with a
+`commandKey`. The `cancel` endpoint uses the same body. Both return `202` with
+an execution receipt. `DELETE /v1/developer/tests/:id?commandKey=...` also
+returns a receipt. Keep the key when you retry a request. The SDK has
+`DeveloperTests.cleanup`, `cancel`, and `remove` helpers.
+
+The test's `cleanupExecutionId` names the service that owns expiry and cleanup.
+Observe it through the execution API. A test stays `Cancelling` while its work
+or token cleanup is still active. An exchange with an unknown result must be
+resolved through its own execution before cleanup can end. OpenBot then revokes
+the test sign-in where the provider allows it. It clears private data and marks
+cleanup complete in one transaction. A delete command removes the test in that
+transaction. Closing an observer does not stop cleanup.
+
+Cleanup keeps every saved token in sealed work records before it removes the
+local sign-in. Shared grant cleanup owns remote calls and retries. Private test
+data stays until that work ends. `cleanupRemote` is `Complete` only after the
+provider confirms revocation. It is `LocalOnly` if the provider has no way to
+revoke the grant.
+
+The same service owns the saved expiry timer. It also checks that the test still
+has App access once a minute. It can clean up after access is removed. A server
+restart does not reset tests or their authorization flows.
 
 ---
 
@@ -222,15 +280,23 @@ You do not have to wait for a user to connect your App. Ask OpenBot to check it:
 curl -X POST https://api.example.com/v1/developer/indexing \
   -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
+  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card", "commandKey": "index-check-1" }'
 ```
 
-OpenBot inspects the App first. If it is not eligible, you get 409 with the
-`reason`. If the deployment blocks the App, you get 403 `DeveloperRestricted`.
+OpenBot accepts the command after it checks your current rights and the App's
+restriction. A blocked App gives 403 `DeveloperRestricted`. The public check
+runs in the background and saves its result.
 
-The request `status` goes from `Accepted` to `Waiting`, `Verifying` and
-`Completed`. When it is done, `check` has the result. List requests with
+Keep `commandKey` when you retry after a lost reply. The same key returns the
+same request. Each request has an `executionId`. Read or observe it through
+`/v1/executions/:executionId`. Cancel through the execution cancel endpoint.
+Cancelling your request does not stop the shared public check.
+
+The request's `status` describes the shared check: `Waiting`, `Verifying`, then
+`Completed`. Its `check` holds the result. The execution record gives the state
+of your request, including cancellation and failure. List requests with
 `GET /v1/developer/indexing`, or read one with `GET /v1/developer/indexing/:id`.
+A completed request keeps its result across later checks and server restarts.
 
 ---
 
@@ -238,6 +304,12 @@ The request `status` goes from `Accepted` to `Waiting`, `Verifying` and
 
 OpenBot checks the Apps you manage about every hour. It sends you a notice when
 something changes.
+
+Regular App and proof checks use the shared execution engine. The next check
+time and each result stay in PostgreSQL. A new server continues from that
+record. A proof change and its access notices commit in one transaction. An
+older check cannot replace a newer proof state. Replaying a saved App check does
+not send the same issue notice again.
 
 | Kind            | When                                              |
 | --------------- | ------------------------------------------------- |
@@ -254,3 +326,10 @@ List your settings with `GET /v1/developer/subscriptions`.
 
 See the full shapes in the
 [API reference](/docs/api/operations/tags/developer-tools/).
+
+The data move keeps existing claims, proofs, members, invitations, Apps,
+reports, and notice settings. App and proof checks keep their saved next check
+times. A relinquished proof starts no new check. Old index requests keep their
+IDs and get a history execution. A saved result stays complete. A request
+without a saved result is interrupted because its original caller is missing.
+The platform can still finish the separate public check.

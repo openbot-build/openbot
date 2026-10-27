@@ -13,7 +13,7 @@ import { Redacted } from "effect"
  *
  * `make(credentials)` needs an `HttpClient` and gives a `Provider`. It does no I/O.
  */
-import type { ComputersApi } from "@openbot-build/api"
+import type { Computers as ComputerData } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -29,7 +29,8 @@ import {
 } from "effect"
 import { Base64, Hex } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
-import * as Background from "../../app/Background.ts"
+import * as Background from "../../execution/Background.ts"
+import * as Report from "../../errors/Report.ts"
 import {
 	ComputerCallFailed,
 	ComputerGone,
@@ -58,7 +59,7 @@ import {
 } from "../Http.ts"
 
 export type Credentials = Extract<
-	ComputersApi.ComputerProviderCredentials,
+	ComputerData.ComputerProviderCredentials,
 	{ readonly kind: "daytona" }
 >
 
@@ -107,7 +108,7 @@ const gone = (id: string) =>
 
 const withoutEndSlash = Str.replace(/\/$/, "")
 
-const entry = (value: unknown): ComputersApi.FileEntry => {
+const entry = (value: unknown): ComputerData.FileEntry => {
 	const modified = string(value, "modTime") ?? string(value, "modifiedAt")
 	const parsed = modified === undefined ? Number.NaN : Date.parse(modified)
 	return {
@@ -125,6 +126,8 @@ const entry = (value: unknown): ComputersApi.FileEntry => {
 
 export const make = (credentials: Credentials) =>
 	Effect.gen(function* () {
+		const background = yield* Background.make
+		const report = yield* Report.make
 		const client = yield* HttpClient.HttpClient
 		const api = `${credentials.apiUrl ?? defaultApiUrl}/api`
 		const auth = {
@@ -242,11 +245,10 @@ export const make = (credentials: Credentials) =>
 					startTimeoutMs,
 				).pipe(Effect.flatMap(expect("Starting the Daytona sandbox")))
 
-				/**
-				 * Makes sure that the sandbox runs, and gives its toolbox address. It starts a
-				 * stopped or archived sandbox and waits while Daytona starts it.
-				 */
-				const ensure: Effect.Effect<string, ComputerCallFailed | ComputerGone> =
+				/** Only the explicit resume method may start a stopped sandbox. */
+				const connect = (
+					resume: boolean,
+				): Effect.Effect<string, ComputerCallFailed | ComputerGone> =>
 					Effect.gen(function* () {
 						const now = yield* Clock.currentTimeMillis
 						const known = yield* Ref.get(running)
@@ -270,6 +272,12 @@ export const make = (credentials: Credentials) =>
 								string(current.value, "state") ?? "",
 							)
 							if (state === "paused" && settled && !started) {
+								if (!resume)
+									return yield* ComputerCallFailed.make({
+										message:
+											"The Daytona sandbox needs a resume through its Computer execution.",
+										retry: true,
+									})
 								yield* start
 								started = true
 							}
@@ -280,6 +288,8 @@ export const make = (credentials: Credentials) =>
 							retry: true,
 						})
 					})
+
+				const ensure = connect(false)
 
 				const toolbox = (
 					build: (base: string) => HttpClientRequest.HttpClientRequest,
@@ -330,7 +340,7 @@ export const make = (credentials: Credentials) =>
 								10_000,
 							).pipe(
 								Effect.flatMap(expect("Closing the command session")),
-								Background.logFailure(
+								background.logFailure(
 									"OpenBot could not close a Daytona command session",
 								),
 							),
@@ -418,7 +428,7 @@ export const make = (credentials: Credentials) =>
 								Effect.andThen(
 									Cause.hasInterruptsOnly(cause)
 										? Effect.void
-										: Effect.logWarning(
+										: report(
 												"OpenBot could not read a Daytona command",
 												cause,
 											).pipe(
@@ -430,10 +440,7 @@ export const make = (credentials: Credentials) =>
 									sink.end({
 										code: null,
 										signal: null,
-										error: Option.match(Cause.findErrorOption(cause), {
-											onNone: () => "OpenBot could not read the command.",
-											onSome: (error) => error.message,
-										}),
+										error: "OpenBot could not read the command.",
 									}),
 								),
 							),
@@ -478,7 +485,7 @@ export const make = (credentials: Credentials) =>
 
 				const shell = {
 					start: startCommand,
-					read: (path: string, encoding: ComputersApi.FileEncoding) =>
+					read: (path: string, encoding: ComputerData.FileEncoding) =>
 						toolbox(
 							(base) =>
 								HttpClientRequest.get(query(base, "/files/download", { path })),
@@ -488,7 +495,7 @@ export const make = (credentials: Credentials) =>
 						).pipe(
 							Effect.map((reply) => fileContent(path, encoding, reply.body)),
 						),
-					write: (file: ComputersApi.FileContent) =>
+					write: (file: ComputerData.FileContent) =>
 						Effect.gen(function* () {
 							const bytes = yield* fileBytes(file)
 							const form = new FormData()
@@ -571,7 +578,7 @@ export const make = (credentials: Credentials) =>
 						what,
 					)
 
-				const action = (step: ComputersApi.DesktopAction) => {
+				const action = (step: ComputerData.DesktopAction) => {
 					switch (step._tag) {
 						case "Click":
 							return post(
@@ -678,9 +685,9 @@ export const make = (credentials: Credentials) =>
 										mediaType: "image/png",
 										data,
 										...size,
-									} satisfies ComputersApi.Screenshot
+									} satisfies ComputerData.Screenshot
 								}),
-								act: (actions: ReadonlyArray<ComputersApi.DesktopAction>) =>
+								act: (actions: ReadonlyArray<ComputerData.DesktopAction>) =>
 									Effect.gen(function* () {
 										yield* desktopReady
 										for (const step of actions) yield* action(step)
@@ -692,7 +699,7 @@ export const make = (credentials: Credentials) =>
 									return {
 										url: `${url}/vnc.html?${new URLSearchParams({ autoconnect: "true", resize: "scale" })}`,
 										expiresAt: now + streamSeconds * 1000,
-									} satisfies ComputersApi.DesktopStream
+									} satisfies ComputerData.DesktopStream
 								}),
 							}
 						: undefined
@@ -723,7 +730,7 @@ export const make = (credentials: Credentials) =>
 					shell,
 					pausable: {
 						pause: Effect.tap(stop, () => Ref.set(running, Option.none())),
-						resume: Effect.asVoid(ensure),
+						resume: Effect.asVoid(connect(true)),
 					},
 					...(desktop === undefined ? {} : { desktop }),
 					ports: {

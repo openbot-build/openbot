@@ -1,15 +1,10 @@
 import { Redacted } from "effect"
-import {
-	Account,
-	BotsApi,
-	type Caller,
-	Identity,
-	OrganizationApi,
-	OpenBotApi,
-} from "@openbot-build/api"
+import { OrganizationApi, OpenBotApi } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
+import { Account, type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { botKey } from "../audit/Resources.ts"
 import { Grants } from "../capabilities/Grants.ts"

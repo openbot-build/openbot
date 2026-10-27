@@ -31,7 +31,7 @@ export class ConnectionScopes extends Context.Service<
 		readonly register: (input: {
 			readonly key: Store.ConnectionKey
 			readonly scope: Scope.Closeable
-		}) => Effect.Effect<void>
+		}) => Effect.Effect<{ readonly close: Effect.Effect<void> }>
 		readonly close: (key: Store.ConnectionKey) => Effect.Effect<void>
 	}
 >()("@openbot-build/protocol/connections/App/ConnectionScopes") {}

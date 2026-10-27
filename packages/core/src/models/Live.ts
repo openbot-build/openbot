@@ -99,11 +99,16 @@ export interface Config {
 	readonly providerOptions?: Readonly<Record<string, unknown>>
 }
 
-/** A message from the history of a Chat. Only text goes to a Live model. */
-export interface HistoryMessage {
-	readonly role: "user" | "assistant"
-	readonly text: string
-}
+/** Saved text and tool records. Restoring these records never runs a tool or replays sound. */
+export type HistoryMessage =
+	| { readonly role: "user" | "assistant"; readonly text: string }
+	| {
+			readonly role: "assistant"
+			readonly callId: string
+			readonly name: string
+			readonly arguments: string
+	  }
+	| { readonly role: "tool"; readonly callId: string; readonly output: string }
 
 export type Input = Data.TaggedEnum<{
 	/** A part of the sound of the person, in the input format of the config. */
@@ -122,48 +127,54 @@ export type Input = Data.TaggedEnum<{
 	/** The person heard the answer `itemId` only up to `audioEndMs`. */
 	Truncate: { readonly itemId: string; readonly audioEndMs: number }
 	ToolResult: { readonly callId: string; readonly output: string }
-	/** Messages from before this connection, given once after connecting. */
+	/** Earlier records, given once before the first response. Insert before any current sound input. */
 	History: { readonly messages: ReadonlyArray<HistoryMessage> }
 }>
 export const Input = Data.taggedEnum<Input>()
 
-/** Token counts of one answer. Sound and text are counted apart. */
+/** Token counts of one answer. A count is undefined when the provider did not give it. */
 export interface Usage {
 	readonly input: {
-		readonly text: number
-		readonly audio: number
-		readonly image: number
-		readonly cached: number
+		readonly total: number | undefined
+		readonly text: number | undefined
+		readonly audio: number | undefined
+		readonly image: number | undefined
+		/** Cached tokens are part of the total, not extra input tokens. */
+		readonly cached: number | undefined
 	}
-	readonly output: { readonly text: number; readonly audio: number }
+	readonly output: {
+		readonly total: number | undefined
+		readonly text: number | undefined
+		readonly audio: number | undefined
+	}
 }
 
 export const emptyUsage: Usage = {
-	input: { text: 0, audio: 0, image: 0, cached: 0 },
-	output: { text: 0, audio: 0 },
+	input: { total: 0, text: 0, audio: 0, image: 0, cached: 0 },
+	output: { total: 0, text: 0, audio: 0 },
 }
 
 /**
  * The usage in the form that effect/ai and billing read today. Sound tokens go into the
  * totals. A later change can give sound its own price from the counts in `Usage`.
  */
-export const toResponseUsage = (usage: Usage) => {
-	const input =
-		usage.input.text +
-		usage.input.audio +
-		usage.input.image +
-		usage.input.cached
-	const output = usage.output.text + usage.output.audio
-	return Response.Usage.make({
+export const toResponseUsage = (usage: Usage) =>
+	Response.Usage.make({
 		inputTokens: {
-			total: input,
-			uncached: input - usage.input.cached,
+			total: usage.input.total,
+			uncached:
+				usage.input.total === undefined || usage.input.cached === undefined
+					? undefined
+					: usage.input.total - usage.input.cached,
 			cacheRead: usage.input.cached,
 			cacheWrite: undefined,
 		},
-		outputTokens: { total: output, text: output, reasoning: undefined },
+		outputTokens: {
+			total: usage.output.total,
+			text: usage.output.total,
+			reasoning: undefined,
+		},
 	})
-}
 
 export type ResponseStatus = "completed" | "cancelled" | "incomplete" | "failed"
 

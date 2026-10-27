@@ -3,6 +3,9 @@ title: Contributing
 description: Set up the code, run the checks, and follow the project rules.
 ---
 
+For developers. Start with the [developer manual](/docs/developers) to choose
+API work, App publishing, or project changes.
+
 This page is for people who change OpenBot itself. It shows how to set up your
 computer, run the server and the checks, and find your way in the code.
 
@@ -81,7 +84,7 @@ When you change a file in `packages/*/src`, devenv starts OpenBot again.
 
 The development server uses a local test account, test models, and a test App.
 No outside service is needed. To sign in and make a user token, see
-[Quick start](/docs/quickstart).
+[Quick start](/docs/developers/quickstart).
 
 ---
 
@@ -108,7 +111,7 @@ when the test moves it. A test that needs real time, for example one with a real
 server, uses `it.live`. OpenBot tests start their own short-lived PostgreSQL
 server with the tools from devenv. They need no secrets and no outside services.
 GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See
-[Deploy](/docs/deploy#github-actions).
+[Deploy](/docs/developers/publishing#github-actions).
 
 ---
 
@@ -170,11 +173,27 @@ tools. To check that every page builds, run
 
 Each push to `main` publishes the site to
 [openbot.build](https://openbot.build). See
-[Publish the docs site](/docs/deploy#publish-the-docs-site).
+[Publish the docs site](/docs/developers/publishing#publish-the-docs-site).
 
 ---
 
 ## Project rules
+
+### Write for one reader
+
+Use the [user manual](/docs/users) for work through an existing client or
+Channel. Explain the task, result, and how to get help. Keep installation, API
+fields, and source code out of user pages.
+
+Use the [administrator manual](/docs/admin) for setup and service work. State
+whether a task needs organization rights, platform rights, or server access. Put
+client contracts, App publishing, and source changes in the
+[developer manual](/docs/developers). Link to another role when a task must pass
+to that role.
+
+Keep code and field details in one place. Each translation must keep the same
+sections and link to its own language. The generated API reference stays in
+English.
 
 ### Basic English
 
@@ -205,13 +224,22 @@ requirement may only name a path parameter that its endpoint has. A test in
 
 The authorization code comes from the
 [ability](https://github.com/nmnmcc/ability) library, the npm package
-`@nmnmcc/ability`. Its version is fixed in `package.json`.
+`@nmnmcc/ability`. Version 3.0.0 is fixed in `package.json`. Policies use JSON
+text at HTTP and storage boundaries. A local patch makes the error classes
+public in its type declarations, so TypeScript can emit OpenBot declarations.
 
-### One current model
+### Changes to callers and data
 
-Do not keep old paths for old callers, old clients, or old data. When a contract
-or the storage must change, change it directly. The only exception is a small
-fix for a bug in an outside package or tool.
+Ask the user first when a change needs work for old callers, clients, or stored
+data. Do not choose between a breaking change and keeping old behavior on your
+own.
+
+Never change the baseline migration. For each database schema change, add a new
+migration with `devenv shell -- drizzle-kit generate --name <change>`. Existing
+databases must be able to upgrade.
+
+When you work around a bug in an outside package or tool, explain that bug in a
+comment next to the code.
 
 ### Effect data first
 
@@ -219,6 +247,26 @@ Use the immutable data types of Effect, such as `HashMap`, `Chunk`, and
 `Option`. Use the mutable types of JavaScript only when you really need them.
 
 ### Effect rules
+
+The same check also tests module boundaries, including type imports. `domain`
+may use `core`, but not HTTP, SQL, or workflow adapters. `core` and `protocol`
+stay free of product packages. A feature in `openbot` must not import the `app`
+assembly folder. Packages use each other through public entries.
+
+Business code and storage cannot import HTTP contracts. This includes PostgreSQL
+adapters, settings, models, accounts, roles, and SSO. These modules use domain
+values and errors. The API uses the same domain definitions and adds HTTP status
+codes. Only HTTP handlers, response mappers, and application assembly may import
+HTTP contracts. App adapters add protocol data at their boundary.
+
+Business code cannot import HTTP response mappers. Shared error mapping uses
+domain errors. HTTP handlers add the response shape.
+
+Server work uses the common execution engine. The checks reject local
+`ChatRuntime` use and `Operations.make` or `Operations.layer` in server code.
+Only the execution engine, resource transport, and application assembly may
+import Effect cluster or RPC modules. Domain code cannot use core execution or
+store adapters. These checks also follow import aliases and package subpaths.
 
 OpenBot is written with [Effect](https://effect.website). Two checks keep the
 code in the Effect style. `pnpm typecheck` runs both, and GitHub Actions runs

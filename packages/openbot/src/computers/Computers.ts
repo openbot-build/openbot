@@ -1,8 +1,12 @@
-import { BotsApi, type Caller, ComputersApi } from "@openbot-build/api"
+import { Lifecycle } from "./Lifecycle.ts"
+import * as Activity from "./Activity.ts"
+import { Directory } from "../resources/Directory.ts"
+import { Computers as ComputerData, Execution } from "@openbot-build/domain"
+import { Bots as BotsApi } from "@openbot-build/domain"
+import { type Caller, type ExecutionIdentity } from "@openbot-build/domain"
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import {
 	Array as Arr,
-	Cause,
 	Clock,
 	Context,
 	Crypto,
@@ -13,44 +17,49 @@ import {
 	Schema,
 	Schedule,
 } from "effect"
+import { SqlClient } from "effect/sql"
 import { Base64, Base64Url, Hex } from "effect/encoding"
-import * as Background from "../app/Background.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Background from "../execution/Background.ts"
+import * as Failures from "../errors/Failures.ts"
 import { Bots } from "../bots/Bots.ts"
 import * as Check from "../authorization/Check.ts"
-import { computerResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
 import * as Db from "../database/Database.ts"
 import { computerAccess, computers, computerUsage } from "../database/Schema.ts"
-import { type ComputerError, Machine, type Pausable } from "./Computer.ts"
+import {
+	ComputerCallFailed,
+	ComputerGone,
+	type ComputerError,
+	Machine,
+} from "./Computer.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
 import * as ConnectorMachine from "./connector/ConnectorMachine.ts"
 import { Connectors } from "./connector/Connectors.ts"
 import { Drivers } from "./Drivers.ts"
-import * as Http from "./Http.ts"
+import * as Access from "./Access.ts"
 
-const decodeId = Schema.decodeUnknownEffect(ComputersApi.ComputerId)
-const decodeSource = Schema.decodeUnknownEffect(ComputersApi.ComputerSource)
+const decodeId = Schema.decodeUnknownEffect(ComputerData.ComputerId)
+const decodeSource = Schema.decodeUnknownEffect(ComputerData.ComputerSource)
 const decodeBot = Schema.decodeUnknownEffect(BotsApi.BotId)
 /** The state column holds one of the states of the API. */
-const decodeState = Schema.decodeUnknownEffect(ComputersApi.ComputerState)
+const decodeState = Schema.decodeUnknownEffect(ComputerData.ComputerState)
 
 /** The features column holds JSON that only this file writes. */
-const FeaturesJson = Schema.fromJsonString(ComputersApi.ComputerFeatures)
+const FeaturesJson = Schema.fromJsonString(ComputerData.ComputerFeatures)
 const decodeFeatures = Schema.decodeUnknownEffect(FeaturesJson)
 /** The features are values of the API type, so they always encode. */
-const encodeFeatures = (features: ComputersApi.ComputerFeatures) =>
+const encodeFeatures = (features: ComputerData.ComputerFeatures) =>
 	Schema.encodeEffect(FeaturesJson)(features).pipe(Effect.orDie)
 
 /** A stored value that does not decode means a broken store. The log keeps the cause. */
 const fromStore = <A>(decoded: Effect.Effect<A, Schema.SchemaError>) =>
 	decoded.pipe(
 		Failures.replace("A stored Computer has a bad value", () =>
-			ComputersApi.ComputersUnavailable.make({}),
+			ComputerData.ComputersUnavailable.make({}),
 		),
 	)
 
-type Computer = ComputersApi.Computer
+type Computer = ComputerData.Computer
 type Row = typeof computers.$inferSelect
 
 const encoder = new TextEncoder()
@@ -69,16 +78,16 @@ export const newToken = (crypto: Crypto.Crypto) =>
 	)
 
 export type Failure =
-	| ComputersApi.ComputerProviderInUse
-	| ComputersApi.ComputerPathNotFound
-	| ComputersApi.ComputerNotFound
-	| ComputersApi.ComputerProviderNotFound
-	| ComputersApi.ComputerConflict
-	| ComputersApi.ComputerInvalid
-	| ComputersApi.ComputerUnsupported
-	| ComputersApi.ComputerNotReady
-	| ComputersApi.ComputerProviderFailed
-	| ComputersApi.ComputersUnavailable
+	| ComputerData.ComputerProviderInUse
+	| ComputerData.ComputerPathNotFound
+	| ComputerData.ComputerNotFound
+	| ComputerData.ComputerProviderNotFound
+	| ComputerData.ComputerConflict
+	| ComputerData.ComputerInvalid
+	| ComputerData.ComputerUnsupported
+	| ComputerData.ComputerNotReady
+	| ComputerData.ComputerProviderFailed
+	| ComputerData.ComputersUnavailable
 	| Check.Errors
 
 /** A Computer is idle this long before OpenBot pauses it, unless it says otherwise. */
@@ -90,14 +99,9 @@ export const defaultPauseAfter = 10 * 60
  */
 const activeInterval = Duration.seconds(30)
 
-/** True when a Computer had no work for its `pauseAfter` seconds. */
-const idle = (current: Row, now: number) =>
-	current.pauseAfter !== null &&
-	now - (current.lastActiveAt ?? current.updatedAt) >= current.pauseAfter * 1000
-
 const fromRow = (
 	row: Row,
-): Effect.Effect<Computer, ComputersApi.ComputersUnavailable> =>
+): Effect.Effect<Computer, ComputerData.ComputersUnavailable> =>
 	fromStore(
 		Effect.gen(function* () {
 			return {
@@ -134,23 +138,23 @@ const fromRow = (
 /** Maps an error of a driver or a connector to an error of the API. */
 const fromDriver = (error: ComputerError) =>
 	error._tag === "ComputerGone"
-		? ComputersApi.ComputerNotReady.make({ state: "offline" })
+		? ComputerData.ComputerNotReady.make({ state: "offline" })
 		: error.missingPath !== undefined
-			? ComputersApi.ComputerPathNotFound.make({ path: error.missingPath })
-			: ComputersApi.ComputerProviderFailed.make({ message: error.message })
+			? ComputerData.ComputerPathNotFound.make({ path: error.missingPath })
+			: ComputerData.ComputerProviderFailed.make({ message: error.message })
 
 /**
  * Checks a file before a driver or a connector gets it. Bad base64 is a bad
  * input of the caller, not a failure of the provider.
  */
 export const checkFile = (
-	file: ComputersApi.FileContent,
-): Effect.Effect<void, ComputersApi.ComputerInvalid> =>
+	file: ComputerData.FileContent,
+): Effect.Effect<void, ComputerData.ComputerInvalid> =>
 	file.encoding === "base64"
 		? Base64.decode(file.content).pipe(
 				Effect.fromResult,
 				Effect.mapError((error) =>
-					ComputersApi.ComputerInvalid.make({
+					ComputerData.ComputerInvalid.make({
 						message: `The file content is not valid base64: ${error.message}`,
 					}),
 				),
@@ -167,7 +171,7 @@ export class Computers extends Context.Service<
 	{
 		/** The Computers that the caller can read. With `bot`, only those that Bot may use. */
 		readonly list: (
-			caller: Caller,
+			identity: ExecutionIdentity,
 			bot?: BotsApi.BotId,
 		) => Effect.Effect<ReadonlyArray<Computer>, Failure>
 		readonly get: (
@@ -181,13 +185,13 @@ export class Computers extends Context.Service<
 		 */
 		readonly create: (
 			caller: Caller,
-			input: ComputersApi.CreateComputerRequest,
+			input: ComputerData.CreateComputerRequest,
 			bot?: BotsApi.BotId,
 		) => Effect.Effect<Computer, Failure>
 		readonly update: (
 			caller: Caller,
 			id: string,
-			input: ComputersApi.UpdateComputerRequest,
+			input: ComputerData.UpdateComputerRequest,
 		) => Effect.Effect<Computer, Failure>
 		/**
 		 * Deletes a Computer, its sandbox, and every right to use it. When OpenBot
@@ -211,16 +215,16 @@ export class Computers extends Context.Service<
 		 * command of the machine keeps it active while the command runs.
 		 */
 		readonly machine: (
-			caller: Caller,
+			identity: ExecutionIdentity,
 			id: string,
 		) => Effect.Effect<
 			{ readonly computer: Computer; readonly machine: Machine },
 			Failure
 		>
 		/** Maps an error of the machine to an error of the API. */
-		readonly work: <A>(
-			effect: Effect.Effect<A, ComputerError>,
-		) => Effect.Effect<A, Failure>
+		readonly work: <A, E>(
+			effect: Effect.Effect<A, E>,
+		) => Effect.Effect<A, Failure | Exclude<E, Extract<E, ComputerError>>>
 		readonly setConnectorToken: (
 			caller: Caller,
 			id: string,
@@ -230,14 +234,14 @@ export class Computers extends Context.Service<
 			token: string,
 		) => Effect.Effect<
 			Option.Option<{ readonly organizationId: string; readonly id: string }>,
-			ComputersApi.ComputersUnavailable
+			ComputerData.ComputersUnavailable
 		>
 		/** Marks a connector Computer as connected or not. */
 		readonly connected: (
 			organizationId: string,
 			id: string,
-			hello: Option.Option<ComputersApi.ConnectorHello>,
-		) => Effect.Effect<void>
+			hello: Option.Option<ComputerData.ConnectorHello>,
+		) => Effect.Effect<void, ComputerData.ComputersUnavailable>
 		/**
 		 * Makes or finds the connector Computer of a machine that a person approved.
 		 * The same machine in the same organization keeps its Computer.
@@ -257,13 +261,13 @@ export class Computers extends Context.Service<
 		readonly bots: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<ReadonlyArray<ComputersApi.ComputerAccess>, Failure>
+		) => Effect.Effect<ReadonlyArray<ComputerData.ComputerAccess>, Failure>
 		/** Gives a Bot the right to use a Computer. The caller decides for the Bot. */
 		readonly grant: (
 			caller: Caller,
 			id: string,
 			bot: BotsApi.BotId,
-		) => Effect.Effect<ComputersApi.ComputerAccess, Failure>
+		) => Effect.Effect<ComputerData.ComputerAccess, Failure>
 		readonly revoke: (
 			caller: Caller,
 			id: string,
@@ -274,7 +278,7 @@ export class Computers extends Context.Service<
 			organizationId: string,
 			bot: BotsApi.BotId,
 			id: string,
-		) => Effect.Effect<void, ComputersApi.ComputersUnavailable>
+		) => Effect.Effect<void, ComputerData.ComputersUnavailable>
 		/** Gives a Bot the right after its request was approved. It checks no permission. */
 		readonly grantApproved: (
 			organizationId: string,
@@ -282,57 +286,95 @@ export class Computers extends Context.Service<
 			bot: BotsApi.BotId,
 			grantedBy: string,
 		) => Effect.Effect<
-			ComputersApi.ComputerAccess,
-			ComputersApi.ComputersUnavailable
+			ComputerData.ComputerAccess,
+			ComputerData.ComputersUnavailable
 		>
 		/** True when the Bot has the right to use the Computer and is not archived. */
 		readonly holds: (
 			organizationId: string,
 			bot: BotsApi.BotId,
 			id: string,
-		) => Effect.Effect<boolean, ComputersApi.ComputersUnavailable>
-		/** The Computers of a Bot that it may use. */
-		readonly heldBy: (
-			organizationId: string,
-			bot: BotsApi.BotId,
-		) => Effect.Effect<
-			ReadonlyArray<Computer>,
-			ComputersApi.ComputersUnavailable
-		>
+		) => Effect.Effect<boolean, ComputerData.ComputersUnavailable>
 		readonly usage: (
 			caller: Caller,
 			id: string,
-		) => Effect.Effect<ReadonlyArray<ComputersApi.ComputerUsage>, Failure>
-		/** Pauses the Computers that had no work for longer than their `pauseAfter`. */
-		readonly pauseIdle: Effect.Effect<void>
-		/** Removes the rights of archived Bots. */
-		readonly forgetArchived: Effect.Effect<void>
+		) => Effect.Effect<ReadonlyArray<ComputerData.ComputerUsage>, Failure>
 	}
 >()("@openbot-build/openbot/computers/Computers") {}
 
 export const make = Effect.gen(function* () {
+	const background = yield* Background.make
 	const db = yield* Db.make
+	const sql = yield* SqlClient.SqlClient
 	const providers = yield* ComputerProviders
 	const drivers = yield* Drivers
 	const connectors = yield* Connectors
 	const botsService = yield* Bots
 	const crypto = yield* Crypto.Crypto
-	const { check, filter, guard } = yield* Check.make
+	const checks = yield* Check.make
+	const { check } = checks
+	const rights = yield* Access.make
+	const directory = yield* Directory
+	const lifecycle = yield* Lifecycle
+	const activity = yield* Activity.make
+	const pendingView = (row: Row) =>
+		Effect.gen(function* () {
+			const pending = yield* stored(activity.active(row.organizationId, row.id))
+			return {
+				...(yield* fromRow(row)),
+				...(Option.isSome(pending)
+					? { executionId: Execution.Id.make(pending.value.id) }
+					: {}),
+			}
+		})
 	const newId = crypto.randomBytes(16).pipe(
 		Effect.map((bytes) => "cmp_" + Hex.encode(bytes)),
 		Effect.orDie,
 	)
 	const stored = Failures.replace("The Computer store failed", () =>
-		ComputersApi.ComputersUnavailable.make({}),
+		ComputerData.ComputersUnavailable.make({}),
 	)
-	const botOf = (organizationId: string, id: string) =>
-		botsService
-			.find(organizationId, id)
-			.pipe(
-				Failures.replace("OpenBot could not read a Bot", () =>
-					ComputersApi.ComputersUnavailable.make({}),
+	const view = (row: Row) =>
+		Effect.gen(function* () {
+			if (row.source === "connector" && row.state === "running") {
+				const address = yield* stored(
+					directory.find({
+						namespace: row.organizationId,
+						kind: "computer-connector",
+						id: row.id,
+					}),
+				)
+				if (Option.isNone(address))
+					return yield* pendingView({ ...row, state: "offline" })
+			}
+			return yield* pendingView(row)
+		})
+	const views = (organizationId: string, rows: ReadonlyArray<Row>) =>
+		Effect.gen(function* () {
+			if (
+				!Arr.some(
+					rows,
+					(row) => row.source === "connector" && row.state === "running",
+				)
+			)
+				return yield* Effect.forEach(rows, pendingView)
+			const live = yield* stored(
+				directory.list({
+					namespace: organizationId,
+					kind: "computer-connector",
+				}),
+			)
+			return yield* Effect.forEach(rows, (row) =>
+				pendingView(
+					row.source === "connector" &&
+						row.state === "running" &&
+						!Arr.some(live, (address) => address.id === row.id)
+						? { ...row, state: "offline" }
+						: row,
 				),
 			)
+		})
+
 	const where = (organizationId: string, id: string) =>
 		and(eq(computers.organizationId, organizationId), eq(computers.id, id))
 	const row = (organizationId: string, id: string) =>
@@ -344,40 +386,65 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const found = yield* row(organizationId, id)
 			if (Option.isNone(found))
-				return yield* ComputersApi.ComputerNotFound.make({ id })
-			return yield* fromRow(found.value)
+				return yield* ComputerData.ComputerNotFound.make({ id })
+			return yield* view(found.value)
 		})
 	/** Marks a Computer as active now, so the worker does not pause it. */
 	const markActive = (organizationId: string, id: string) =>
-		Effect.flatMap(Clock.currentTimeMillis, (now) =>
-			stored(
-				db
-					.update(computers)
-					.set({ lastActiveAt: now })
-					.where(where(organizationId, id)),
-			),
+		activity
+			.mark(organizationId, id)
+			.pipe(
+				Effect.catchTag("ExecutionStorageError", (error) =>
+					stored(Effect.fail(error)),
+				),
+			)
+	const runCommand = (
+		identity: ExecutionIdentity,
+		action: Parameters<Lifecycle["Service"]["execute"]>[1],
+	) =>
+		lifecycle.execute(identity, action).pipe(
+			Effect.catchTags({
+				ExecutionStorageError: (error) => stored(Effect.fail(error)),
+				ExecutionForbidden: () =>
+					Effect.fail(
+						ComputerData.ComputerInvalid.make({
+							message: "This Computer action is not allowed.",
+						}),
+					),
+				ExecutionNotFound: () =>
+					Effect.fail(
+						ComputerData.ComputerInvalid.make({
+							message: "The Computer action could not be found.",
+						}),
+					),
+				ExecutionConflict: (error) =>
+					Effect.fail(
+						ComputerData.ComputerConflict.make({
+							version: 0,
+							executionId: error.id,
+						}),
+					),
+				ExecutionKeyConflict: () =>
+					Effect.fail(
+						ComputerData.ComputerInvalid.make({
+							message: "The command key has another input.",
+						}),
+					),
+				SchemaError: (error) => stored(Effect.fail(error)),
+			}),
 		)
-	/** A caller who cannot read a Computer does not learn that it exists. */
+
+	/** Decode only after the shared query has checked access. */
 	const access = (caller: Caller, id: string, need: Need) =>
 		Effect.gen(function* () {
-			const found = yield* row(caller.organizationId, id)
-			if (Option.isNone(found))
-				return yield* ComputersApi.ComputerNotFound.make({ id })
-			const computer = yield* fromRow(found.value)
-			yield* guard(
-				caller,
-				{
-					action: need,
-					resource: computerResource({
-						...computer,
-						organizationId: caller.organizationId,
-					}),
-				},
-				{
-					hide: () => ComputersApi.ComputerNotFound.make({ id }),
-				},
-			)
-			return { computer, row: found.value }
+			const row = yield* rights
+				.get(caller, id, need)
+				.pipe(
+					Effect.catchTag("ComputerStorageError", (error) =>
+						stored(Effect.fail(error)),
+					),
+				)
+			return { row, computer: yield* view(row) }
 		})
 
 	/**
@@ -389,7 +456,7 @@ export const make = Effect.gen(function* () {
 	const setState = (
 		organizationId: string,
 		id: string,
-		state: ComputersApi.ComputerState,
+		state: ComputerData.ComputerState,
 	) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
@@ -432,64 +499,48 @@ export const make = Effect.gen(function* () {
 			)
 		})
 
-	/**
-	 * Maps an error of the machine to an error of the API. The log keeps an inside
-	 * cause. For a Computer that is gone, the API says only "offline", so the log
-	 * keeps the reason, such as which sandbox the provider does not have.
-	 */
-	const work = <A>(effect: Effect.Effect<A, ComputerError>) =>
+	/** Maps machine errors and keeps their private cause for the outside boundary. */
+	const work = <A, E>(effect: Effect.Effect<A, E>) =>
 		effect.pipe(
-			Effect.tapError((error) =>
-				error._tag === "ComputerGone"
-					? Effect.logInfo("A Computer is gone", Cause.fail(error))
-					: Http.logCause(error),
-			),
-			Effect.mapError(fromDriver),
-		)
-
-	/**
-	 * Resumes the machine at the provider, and stores the Computer as running.
-	 * A stop can come after the provider started the sandbox, so then the store
-	 * says running too. The worker pauses the sandbox again when it stays idle.
-	 */
-	const resumeStored = (
-		organizationId: string,
-		id: string,
-		pausable: Pausable,
-	) =>
-		Effect.uninterruptibleMask((restore) =>
-			restore(work(pausable.resume)).pipe(
-				Effect.onInterrupt(() =>
-					setState(organizationId, id, "running").pipe(
-						Background.logFailure(
-							"OpenBot could not store a Computer that it resumed",
+			Effect.catchIf(
+				(error): error is Extract<E, ComputerError> =>
+					Schema.is(ComputerCallFailed)(error) ||
+					Schema.is(ComputerGone)(error),
+				(error) =>
+					Effect.fail(error).pipe(
+						Failures.replace("A Computer provider call failed", () =>
+							fromDriver(error),
 						),
 					),
-				),
-				Effect.andThen(setState(organizationId, id, "running")),
 			),
 		)
 
-	/** The machine behind a stored Computer. */
-	const machineOf = (current: Row) =>
+	/** Provider loading is also used by the idle worker. It never opens a connector. */
+	const providerMachine = (current: Row) =>
 		Effect.gen(function* () {
-			if (current.source === "connector") {
-				const features = yield* fromStore(decodeFeatures(current.features))
-				return ConnectorMachine.make({
-					computerId: current.id,
-					desktop: features.desktop,
-					connectors,
-					online: current.state === "running",
-				})
-			}
 			if (current.providerId === null || current.ref === null)
-				return yield* ComputersApi.ComputerNotReady.make({ state: "failed" })
+				return yield* ComputerData.ComputerNotReady.make({ state: "failed" })
 			const { credentials } = yield* providers.credentials(
 				current.organizationId,
 				current.providerId,
 			)
 			const provider = yield* drivers.make(credentials)
 			return yield* work(provider.attach(current.ref))
+		})
+
+	const machineOf = (current: Row, identity: ExecutionIdentity) =>
+		Effect.gen(function* () {
+			if (current.source === "connector") {
+				const features = yield* fromStore(decodeFeatures(current.features))
+				return ConnectorMachine.make({
+					identity,
+					computerId: current.id,
+					desktop: features.desktop,
+					connectors,
+					online: current.state === "running",
+				})
+			}
+			return yield* providerMachine(current)
 		})
 
 	/**
@@ -508,7 +559,7 @@ export const make = Effect.gen(function* () {
 					Effect.tap(machine.shell.start(request), (process) =>
 						Effect.scoped(
 							Effect.gen(function* () {
-								yield* Background.repeat(
+								yield* background.repeat(
 									markActive(organizationId, id).pipe(
 										Effect.delay(activeInterval),
 									),
@@ -568,7 +619,7 @@ export const make = Effect.gen(function* () {
 				bot,
 				grantedBy: saved.value.grantedBy,
 				grantedAt: saved.value.grantedAt,
-			} satisfies ComputersApi.ComputerAccess
+			} satisfies ComputerData.ComputerAccess
 		})
 
 	const mayCreate = (caller: Caller, shared: boolean) =>
@@ -583,12 +634,13 @@ export const make = Effect.gen(function* () {
 		})
 
 	const service: Computers["Service"] = {
-		list: (caller, bot) =>
+		list: (identity, bot) =>
 			Effect.gen(function* () {
-				const readable = yield* filter(caller, {
+				const { organizationId } = identity.owner
+				const readable = yield* Check.executionFilter(checks, identity, {
 					action: "read",
 					kind: "Computer",
-					within: ($) => $.eq("organizationId", caller.organizationId),
+					within: ($) => $.eq("organizationId", organizationId),
 				}).pipe(
 					Effect.flatMap((condition) =>
 						toWhere(condition, {
@@ -608,10 +660,7 @@ export const make = Effect.gen(function* () {
 										.from(computerAccess)
 										.where(
 											and(
-												eq(
-													computerAccess.organizationId,
-													caller.organizationId,
-												),
+												eq(computerAccess.organizationId, organizationId),
 												eq(computerAccess.bot, bot),
 											),
 										),
@@ -625,144 +674,38 @@ export const make = Effect.gen(function* () {
 						.from(computers)
 						.where(
 							and(
-								eq(computers.organizationId, caller.organizationId),
+								eq(computers.organizationId, organizationId),
 								readable,
 								held === undefined ? undefined : inArray(computers.id, held),
 							),
 						)
 						.orderBy(computers.createdAt),
 				)
-				return yield* Effect.forEach(rows, fromRow)
+				return yield* views(organizationId, rows)
 			}),
 		get: (caller, id, need = "read") =>
 			Effect.map(access(caller, id, need), (found) => found.computer),
 		create: (caller, input, bot) =>
-			Effect.gen(function* () {
-				const shared = input.shared === true
-				yield* mayCreate(caller, shared)
-				const now = yield* Clock.currentTimeMillis
-				const id = yield* newId
-				const base = {
-					organizationId: caller.organizationId,
-					id,
-					ownerUserId: shared ? null : caller.userId,
-					name: input.name,
-					pauseAfter:
-						input.pauseAfter === undefined
-							? defaultPauseAfter
-							: input.pauseAfter,
-					createdBy: bot ?? caller.userId,
-					version: 0,
-					createdAt: now,
-					updatedAt: now,
-					lastActiveAt: null,
-				}
-				if (input.source._tag === "Connector") {
-					yield* insert({
-						...base,
-						source: "connector",
-						state: "offline",
-						features: yield* encodeFeatures({
-							pause: false,
-							desktop: false,
-							ports: false,
-						}),
-						pauseAfter: null,
-					})
-				} else {
-					const provider = yield* providers.get(
-						caller,
-						input.source.provider,
-						"use",
-					)
-					const { credentials } = yield* providers.credentials(
-						caller.organizationId,
-						provider.id,
-					)
-					const driver = yield* drivers.make(credentials)
-					const desktop = input.desktop === true
-					const template = input.source.template
-					const features = yield* encodeFeatures({
-						pause: true,
-						desktop,
-						ports: true,
-					})
-					// The provider bills a sandbox from the moment it exists, and only the
-					// stored ref can reach it later. So these steps run without a stop: when
-					// the provider made the sandbox, OpenBot stores it, or deletes it again.
-					// The row is stored as running in the same step, with its usage record
-					// and the right of the Bot, so a stop after it leaves nothing half done.
-					// The create call has its own time limit.
-					yield* work(
-						driver.create({
-							...(template === null ? {} : { template }),
-							desktop,
-							labels: {
-								openbot_computer: id,
-								openbot_organization: caller.organizationId,
-							},
-						}),
-					).pipe(
-						Effect.flatMap((created) =>
-							stored(
-								db.transaction((tx) =>
-									Effect.gen(function* () {
-										const started = yield* Clock.currentTimeMillis
-										yield* tx.insert(computers).values({
-											...base,
-											source: "provider",
-											providerId: provider.id,
-											template,
-											ref: created.ref,
-											state: "running",
-											features,
-											updatedAt: started,
-											lastActiveAt: started,
-										})
-										yield* tx.insert(computerUsage).values({
-											organizationId: caller.organizationId,
-											computerId: id,
-											ownerUserId: base.ownerUserId,
-											startedAt: started,
-										})
-										if (bot !== undefined)
-											yield* tx.insert(computerAccess).values({
-												organizationId: caller.organizationId,
-												computerId: id,
-												bot,
-												grantedBy: caller.userId,
-												grantedAt: started,
-											})
-									}),
-								),
-							).pipe(
-								Effect.onError(() =>
-									driver.attach(created.ref).pipe(
-										Effect.flatMap((machine) => machine.destroy),
-										Background.logFailure(
-											"OpenBot could not delete a sandbox that it did not store",
-											{ level: "Error" },
-										),
-										Effect.annotateLogs({ sandbox: created.ref }),
-									),
-								),
-							),
-						),
-						Effect.uninterruptible,
-						Effect.annotateLogs({
-							computer: id,
-							organization: caller.organizationId,
-							provider: provider.id,
-						}),
-					)
-				}
-				return yield* reread(caller.organizationId, id)
-			}),
+			runCommand(
+				{
+					owner: caller,
+					actor: caller,
+					...(bot === undefined ? {} : { botId: bot }),
+				},
+				{ _tag: "Create", request: input },
+			).pipe(Effect.flatMap((id) => reread(caller.organizationId, id))),
 		update: (caller, id, input) =>
 			Effect.gen(function* () {
 				const { computer } = yield* access(caller, id, "write")
+				yield* activity
+					.ready(caller.organizationId, id)
+					.pipe(
+						Effect.catchTag("EffectDrizzleQueryError", (error) =>
+							stored(Effect.fail(error)),
+						),
+					)
 				if (input.expectedVersion !== computer.version)
-					return yield* ComputersApi.ComputerConflict.make({
+					return yield* ComputerData.ComputerConflict.make({
 						version: computer.version,
 					})
 				if (
@@ -770,7 +713,7 @@ export const make = Effect.gen(function* () {
 					input.pauseAfter !== undefined &&
 					input.pauseAfter !== null
 				)
-					return yield* ComputersApi.ComputerInvalid.make({
+					return yield* ComputerData.ComputerInvalid.make({
 						message: "A connected machine cannot pause.",
 					})
 				const now = yield* Clock.currentTimeMillis
@@ -795,62 +738,55 @@ export const make = Effect.gen(function* () {
 				)
 				const next = changed[0]
 				if (next === undefined)
-					return yield* ComputersApi.ComputerConflict.make({
+					return yield* ComputerData.ComputerConflict.make({
 						version: computer.version,
 					})
 				return yield* fromRow(next)
-			}),
+			}).pipe(
+				sql.withTransaction,
+				Effect.catchTag("SqlError", (error) => stored(Effect.fail(error))),
+			),
 		remove: (caller, id) =>
-			Effect.gen(function* () {
-				const { row: current } = yield* access(caller, id, "write")
-				// A Computer with no sandbox, or one that the provider lost, has nothing to
-				// delete there. Any other failure, such as a provider that OpenBot cannot
-				// reach, stops the delete. Else the sandbox would stay at the provider,
-				// and no Computer would point to it.
-				const machine = yield* machineOf(current).pipe(
-					Effect.asSome,
-					Effect.catchTag("ComputerNotReady", () => Effect.succeedNone),
-				)
-				if (Option.isSome(machine)) yield* work(machine.value.destroy)
-				yield* setState(caller.organizationId, id, "offline")
-				yield* stored(
-					db.delete(computers).where(where(caller.organizationId, id)),
-				)
-			}),
+			runCommand({ owner: caller, actor: caller }, { _tag: "Remove", id }).pipe(
+				Effect.asVoid,
+			),
 		pause: (caller, id) =>
-			Effect.gen(function* () {
-				const { row: current } = yield* access(caller, id, "use")
-				const machine = yield* machineOf(current)
-				if (machine.pausable === undefined)
-					return yield* ComputersApi.ComputerUnsupported.make({
-						feature: "pause",
-					})
-				if (current.state === "running") {
-					yield* work(machine.pausable.pause)
-					yield* setState(caller.organizationId, id, "paused")
-				}
-				return yield* reread(caller.organizationId, id)
-			}),
+			runCommand({ owner: caller, actor: caller }, { _tag: "Pause", id }).pipe(
+				Effect.flatMap(() => reread(caller.organizationId, id)),
+			),
 		resume: (caller, id) =>
+			runCommand({ owner: caller, actor: caller }, { _tag: "Resume", id }).pipe(
+				Effect.flatMap(() => reread(caller.organizationId, id)),
+			),
+		machine: (identity, id) =>
 			Effect.gen(function* () {
-				const { row: current } = yield* access(caller, id, "use")
-				const machine = yield* machineOf(current)
-				if (current.state === "paused" && machine.pausable !== undefined) {
-					yield* resumeStored(caller.organizationId, id, machine.pausable)
-				}
-				return yield* reread(caller.organizationId, id)
-			}),
-		machine: (caller, id) =>
-			Effect.gen(function* () {
+				const caller = identity.actor
+				yield* rights.execution(identity, id, "use").pipe(
+					Effect.catchTags({
+						ComputerStorageError: (error) => stored(Effect.fail(error)),
+						ExecutionForbidden: () =>
+							Effect.fail(ComputerData.ComputerNotFound.make({ id })),
+					}),
+				)
 				const { row: current } = yield* access(caller, id, "use")
 				if (current.state === "failed" || current.state === "offline")
-					return yield* ComputersApi.ComputerNotReady.make({
+					return yield* ComputerData.ComputerNotReady.make({
 						state: current.state,
 					})
-				const machine = yield* machineOf(current)
-				if (current.state === "paused" && machine.pausable !== undefined) {
-					yield* resumeStored(caller.organizationId, id, machine.pausable)
-				} else yield* markActive(caller.organizationId, id)
+				yield* markActive(caller.organizationId, id)
+				let machine = yield* machineOf(current, identity)
+				if (
+					current.source === "provider" &&
+					(current.state === "paused" ||
+						(yield* work(machine.state)) === "paused")
+				) {
+					yield* runCommand(identity, { _tag: "Resume", id })
+					const latest = yield* row(caller.organizationId, id)
+					if (Option.isNone(latest))
+						return yield* ComputerData.ComputerNotFound.make({ id })
+					machine = yield* machineOf(latest.value, identity)
+				}
+				yield* markActive(caller.organizationId, id)
 				const computer = yield* reread(caller.organizationId, id)
 				return {
 					computer,
@@ -862,7 +798,7 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const { computer } = yield* access(caller, id, "write")
 				if (computer.source._tag !== "Connector")
-					return yield* ComputersApi.ComputerInvalid.make({
+					return yield* ComputerData.ComputerInvalid.make({
 						message: "Only a connector Computer has a token.",
 					})
 				const token = yield* newToken(crypto)
@@ -874,7 +810,7 @@ export const make = Effect.gen(function* () {
 						.where(where(caller.organizationId, id)),
 				)
 				// The old connection used the old token, so it must go.
-				yield* connectors.close(id)
+				yield* connectors.close(caller.organizationId, id)
 				return token
 			}),
 		byToken: (token) =>
@@ -914,7 +850,7 @@ export const make = Effect.gen(function* () {
 					id,
 					Option.isSome(hello) ? "running" : "offline",
 				)
-			}).pipe(Effect.ignore),
+			}),
 		pair: (caller, input) =>
 			Effect.gen(function* () {
 				const token = yield* newToken(crypto)
@@ -939,7 +875,7 @@ export const make = Effect.gen(function* () {
 							.set({ tokenHash })
 							.where(where(caller.organizationId, existing.id)),
 					)
-					yield* connectors.close(existing.id)
+					yield* connectors.close(caller.organizationId, existing.id)
 					return { computer: yield* fromRow(existing), token }
 				}
 				yield* mayCreate(caller, input.shared)
@@ -1000,21 +936,21 @@ export const make = Effect.gen(function* () {
 				const target = yield* botsService.access(caller, bot, "write").pipe(
 					Effect.catchTags({
 						BotNotFound: () =>
-							ComputersApi.ComputerInvalid.make({
+							ComputerData.ComputerInvalid.make({
 								message: "The Bot does not exist.",
 							}),
 						BotStorageUnavailable: () =>
-							Effect.fail(ComputersApi.ComputersUnavailable.make({})),
+							Effect.fail(ComputerData.ComputersUnavailable.make({})),
 						BotConflict: () =>
-							ComputersApi.ComputerInvalid.make({
+							ComputerData.ComputerInvalid.make({
 								message: "The Bot changed. Try again.",
 							}),
 						BotInvalid: (error) =>
-							ComputersApi.ComputerInvalid.make({ message: error.message }),
+							ComputerData.ComputerInvalid.make({ message: error.message }),
 					}),
 				)
 				if (target.archived)
-					return yield* ComputersApi.ComputerInvalid.make({
+					return yield* ComputerData.ComputerInvalid.make({
 						message: "An archived Bot cannot use a Computer.",
 					})
 				return yield* grantRow(caller.organizationId, id, bot, caller.userId)
@@ -1048,46 +984,7 @@ export const make = Effect.gen(function* () {
 			).pipe(Effect.asVoid),
 		grantApproved: grantRow,
 		holds: (organizationId, bot, id) =>
-			Effect.gen(function* () {
-				const rows = yield* stored(
-					db
-						.select({ bot: computerAccess.bot })
-						.from(computerAccess)
-						.where(
-							and(
-								eq(computerAccess.organizationId, organizationId),
-								eq(computerAccess.computerId, id),
-								eq(computerAccess.bot, bot),
-							),
-						),
-				)
-				if (rows.length === 0) return false
-				const found = yield* botOf(organizationId, bot)
-				return Option.isSome(found) && !found.value.archived
-			}),
-		heldBy: (organizationId, bot) =>
-			Effect.gen(function* () {
-				const rows = yield* stored(
-					db
-						.select({ computer: computers })
-						.from(computerAccess)
-						.innerJoin(
-							computers,
-							and(
-								eq(computers.organizationId, computerAccess.organizationId),
-								eq(computers.id, computerAccess.computerId),
-							),
-						)
-						.where(
-							and(
-								eq(computerAccess.organizationId, organizationId),
-								eq(computerAccess.bot, bot),
-							),
-						)
-						.orderBy(computers.createdAt),
-				)
-				return yield* Effect.forEach(rows, (entry) => fromRow(entry.computer))
-			}),
+			stored(rights.holds(organizationId, bot, id)),
 		usage: (caller, id) =>
 			Effect.gen(function* () {
 				const { computer } = yield* access(caller, id, "read")
@@ -1114,63 +1011,6 @@ export const make = Effect.gen(function* () {
 					),
 				}))
 			}),
-		pauseIdle: Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			const running = yield* stored(
-				db
-					.select()
-					.from(computers)
-					.where(
-						and(
-							eq(computers.state, "running"),
-							eq(computers.source, "provider"),
-						),
-					),
-			)
-			for (const current of running) {
-				if (!idle(current, now)) continue
-				yield* Effect.gen(function* () {
-					// The pauses of earlier Computers take time, so the first read can be old.
-					const fresh = yield* row(current.organizationId, current.id)
-					if (Option.isNone(fresh) || fresh.value.state !== "running") return
-					if (!idle(fresh.value, yield* Clock.currentTimeMillis)) return
-					const machine = yield* machineOf(fresh.value)
-					if (machine.pausable === undefined) return
-					yield* work(machine.pausable.pause)
-					yield* setState(current.organizationId, current.id, "paused")
-				}).pipe(
-					Background.logFailure("OpenBot could not pause an idle Computer"),
-					Effect.annotateLogs({
-						computer: current.id,
-						organization: current.organizationId,
-					}),
-				)
-			}
-		}).pipe(Effect.ignore),
-		forgetArchived: Effect.gen(function* () {
-			const rows = yield* stored(
-				db
-					.selectDistinct({
-						organizationId: computerAccess.organizationId,
-						bot: computerAccess.bot,
-					})
-					.from(computerAccess),
-			)
-			for (const entry of rows) {
-				const found = yield* botOf(entry.organizationId, entry.bot)
-				if (Option.isSome(found) && !found.value.archived) continue
-				yield* stored(
-					db
-						.delete(computerAccess)
-						.where(
-							and(
-								eq(computerAccess.organizationId, entry.organizationId),
-								eq(computerAccess.bot, entry.bot),
-							),
-						),
-				)
-			}
-		}).pipe(Effect.ignore),
 	}
 	return Computers.of(service)
 })

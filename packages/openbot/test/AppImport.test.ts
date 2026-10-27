@@ -9,7 +9,6 @@ import { Discovery } from "@openbot-build/protocol"
 import { Effect, Layer } from "effect"
 import { Connections } from "../src/apps/Connections.ts"
 import * as Experience from "../src/apps/Experience.ts"
-import { Lifecycle } from "../src/apps/Lifecycle.ts"
 
 const alice = {
 	kind: "member" as const,
@@ -38,7 +37,6 @@ const importWith = (
 						Layer.succeed(Connections, {
 							prepareConnection,
 						} as Connections["Service"]),
-						Layer.succeed(Lifecycle, {} as Lifecycle["Service"]),
 						// Building the Drizzle database does not use the client.
 						Layer.succeed(PgClient.PgClient, {} as PgClient.PgClient),
 						NodeCrypto.layer,

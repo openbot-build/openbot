@@ -1,0 +1,22 @@
+---
+title: "Live-Models"
+description: "Live-Models"
+---
+
+Für den Plattformbetrieb.
+
+## Ein Live-Model hinzufügen
+
+Ein Live-Model ist ein Model mit dem Typ `live`. Füge es hinzu und verknüpfe es
+mit einem Anbieter, der ein Live-Backend hat. Heute haben nur `openai`-Anbieter
+eines: die OpenAI Realtime API. Siehe [Models](/de/docs/models).
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": "gpt-realtime", "type": "live", "name": "GPT Realtime", "reasoningEfforts": [], "serviceTiers": [] }' \
+  https://api.example.com/v1/organization/models
+```
+
+Verknüpfe dann `gpt-realtime` mit einem `openai`-Anbieter. Ein Live-Model führt
+nie Text-Turns aus, und ein Text-Chat kann es nicht wählen.

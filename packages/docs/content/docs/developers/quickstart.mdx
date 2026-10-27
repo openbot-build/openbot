@@ -1,0 +1,181 @@
+---
+title: Quick start
+description: Run OpenBot on your computer and make your first call.
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+This page starts OpenBot on your computer with a test account and test models.
+You do not need an identity provider or a model key.
+
+---
+
+## Prerequisites
+
+You need:
+
+1. [devenv](https://devenv.sh) 2.3 or newer. It gives you the right Node.js,
+   pnpm, PostgreSQL tools, and Docker command line tools.
+2. A running [Docker](https://docs.docker.com/get-docker/) service. The
+   development database and object storage run in Docker.
+3. A copy of the code:
+
+```sh
+git clone https://github.com/openbot-build/openbot.git
+cd openbot
+```
+
+Run every command from the top folder of the code, inside `devenv shell --`.
+
+---
+
+## Start OpenBot
+
+<Steps>
+
+<Step>
+
+### Make the local settings
+
+```sh
+devenv shell -- pnpm dev:setup
+```
+
+This command makes `.env.development` with a new secret key. If you have an
+`.env.development` from an older version, delete it first.
+
+</Step>
+
+<Step>
+
+### Start the server
+
+```sh
+devenv shell -- pnpm dev
+```
+
+This starts PostgreSQL and RustFS in Docker, builds OpenBot, updates the
+database, and starts OpenBot at `http://localhost`. On Linux, devenv asks for
+your password with `sudo` the first time. Its proxy needs it to listen on
+port 80. The development server sets up the platform by itself, so you do not
+run the setup program. The first start can take a few minutes. Press **Ctrl+C**
+to stop. Your data stays in the database.
+
+</Step>
+
+<Step>
+
+### Sign in
+
+```sh
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+In development, this signs you in to the local test account
+`developer@localhost.test` at once. The sign-in cookie goes to `cookies.txt`.
+This account is a platform admin. It has no organization yet.
+
+</Step>
+
+<Step>
+
+### Make an organization
+
+Bots, Chats and tokens belong to an [organization](/docs/organization). Make one
+for yourself:
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: http://localhost' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"My lab"}' \
+  http://localhost/v1/organizations
+```
+
+You are the Super Administrator of this organization.
+
+</Step>
+
+<Step>
+
+### Make a user token
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: http://localhost' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"local"}' \
+  http://localhost/v1/user/tokens
+```
+
+The token belongs to your new organization. The answer has a `secret` that
+starts with `obut_`. You see it only once, so keep it:
+
+```sh
+export OPENBOT_TOKEN=obut_...
+```
+
+</Step>
+
+<Step>
+
+### Make a Bot
+
+You give work to a [Bot](/docs/developers/bots). A new account has no Bots, so
+make one:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences.","model":{"_tag":"Config.Selection","provider":"development","model":"mock-text"}}' \
+  http://localhost/v1/bots
+```
+
+Take `id` from the answer. To use this Bot when you name no Bot, make it your
+[default Bot](/docs/developers/bots#your-default-bot).
+
+</Step>
+
+<Step>
+
+### Talk to your Bot
+
+Send your Bot a message:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"Hello"}' \
+  http://localhost/v1/bots/<botId>/messages
+```
+
+OpenBot makes your Chat with the Bot, and the message starts a Turn. The Turn
+runs in the background and you get `202` at once, with `delivery: "started"`.
+Add `"stream": true` to get the answer as a live stream. To read the answer
+later, take `chat` from the answer and call `GET /v1/chats/<chatId>`.
+
+</Step>
+
+</Steps>
+
+The test model `mock-text` answers with `Development response:` and your input.
+See [Models](/docs/models) for the other test models.
+
+---
+
+## Next steps
+
+- Read how [Chats](/docs/developers/chats) and Turns work.
+- Use a real identity provider:
+  [Authentication](/docs/developers/authentication) and
+  [Platform](/docs/platform).
+- Add a real model: [Models](/docs/models).
+- Run OpenBot on a server: [Deploy](/docs/deploy).
+
+This example selects the development test model. Production Bots need a model
+made available by their administrator.

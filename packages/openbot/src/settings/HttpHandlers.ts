@@ -1,7 +1,9 @@
-import { Identity, OpenBotApi, Settings as Api } from "@openbot-build/api"
+import { OpenBotApi, Settings as Api } from "@openbot-build/api"
+
+import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as DefaultBot from "../bots/DefaultBot.ts"
 import { Settings } from "./Settings.ts"
 import * as Views from "./Views.ts"

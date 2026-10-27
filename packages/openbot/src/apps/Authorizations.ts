@@ -1,21 +1,19 @@
-import { Settings as SettingsApi } from "@openbot-build/api"
+import { AuthorizationCommands, actorBinding } from "./AuthorizationCommands.ts"
 import {
-	AppAuthorizationApi as Api,
-	ConnectionsApi,
+	Settings as SettingsApi,
+	AppAuthorizations as Api,
+	AppConnections as ConnectionsApi,
+	AppIndex,
+	ConnectionId,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
+	Caller,
+	Execution,
 	Identity,
-} from "@openbot-build/api"
-import {
-	App,
-	Authorization,
-	Client,
-	Network,
-	Store,
-} from "@openbot-build/protocol"
+} from "@openbot-build/domain"
+import { App, Authorization, Network, Store } from "@openbot-build/protocol"
 import {
 	Array as Arr,
-	Cause,
 	Clock,
 	Context,
 	Effect,
@@ -25,31 +23,27 @@ import {
 	Record as Rec,
 	Schema,
 } from "effect"
-import { AppHost } from "./AppHost.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import {
-	appAuthorizations,
-	appConnections,
-	appSecrets,
-} from "../database/Schema.ts"
+import { appAuthorizations, appConnections } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import { ProtocolStores } from "./ProtocolStores.ts"
-import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey } from "./StoredConnections.ts"
-import { Governance } from "./Governance.ts"
 import * as ClientMetadata from "./ClientMetadata.ts"
-import { ConnectionLocks } from "./ConnectionLocks.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Platform from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 
+type CommandError = Effect.Error<
+	ReturnType<(typeof AuthorizationCommands.Service)["start"]>
+>
 export type Error =
+	| CommandError
 	| ExperienceNotFound
 	| ExperienceStorageUnavailable
 	| ConnectionsApi.ConnectionConflict
-	| ConnectionsApi.AppRestricted
+	| AppIndex.AppRestricted
 	| Api.AppAuthorizationFailed
 	| Api.AppAuthorizationUnavailable
 	| ConnectionsApi.ConnectionCleanupPending
@@ -60,14 +54,6 @@ export interface Receipt {
 }
 /** A flow in these states can still go on. */
 const openStatus: ReadonlyArray<Api.State["status"]> = ["Waiting", "Received"]
-/**
- * A flow is in `Processing` while one instance completes it. The instance
- * claims the flow before it expires, and each later step has a time limit. So
- * a flow that is still in `Processing` this long after it expired has lost its
- * instance, and nothing can finish it.
- */
-const abandonedAfterMillis = 60_000
-
 /** Private operations read the current request identity. @effect-expect-leaking Identity */
 export class Authorizations extends Context.Service<
 	Authorizations,
@@ -79,13 +65,20 @@ export class Authorizations extends Context.Service<
 		>
 		readonly begin: (
 			id: string,
-			input: Api.Request,
-		) => Effect.Effect<Api.Started, Error, Identity>
+			input: Api.Begin & { readonly commandKey: Execution.CommandKey },
+		) => Effect.Effect<Execution.Receipt, Error, Identity>
 		readonly get: (id: string) => Effect.Effect<Api.State, Error, Identity>
-		readonly complete: (id: string) => Effect.Effect<Api.State, Error, Identity>
+		readonly complete: (
+			id: string,
+			key: Execution.CommandKey,
+		) => Effect.Effect<Execution.Receipt, Error, Identity>
+		readonly action: (
+			id: Execution.Id,
+		) => Effect.Effect<Api.Action, Error, Identity>
 		readonly revoke: (
 			id: string,
-		) => Effect.Effect<Api.Revocation, Error, Identity>
+			key: Execution.CommandKey,
+		) => Effect.Effect<Execution.Receipt, Error, Identity>
 		readonly receive: (
 			url: string,
 			/** The owners that the signed-in account can act as: one for each active membership. */
@@ -122,9 +115,8 @@ export const authorizationFailure = (reason: string) =>
 /**
  * Turns the failure of an App authorization step into a public error. The
  * caller can act on some failures, so they keep their meaning. The others
- * become a general error, and this logs them first with their cause. An
- * authorization failure keeps its reason, but the public error has no place
- * for its issue and cause, so this logs them too.
+ * become a general error. Its full cause stays private until the outside
+ * boundary saves it. An authorization failure keeps its public reason.
  */
 const sdkFailure = (
 	error:
@@ -141,39 +133,27 @@ const sdkFailure = (
 			Failures.replace("An App authorization step failed.", () => replacement),
 		)
 	return Match.value(error).pipe(
-		Match.tag("AuthorizationError", (error) => {
-			// A failure with a cause, such as a network error, and a bad client
-			// metadata or crypto step are problems of OpenBot or the issuer. The
-			// other reasons, such as an expired flow, are normal outcomes.
-			const log =
-				error.cause === undefined &&
-				error.reason !== "ClientMetadata" &&
-				error.reason !== "Crypto"
-					? Effect.logInfo
-					: Effect.logWarning
-			return log(
-				"An App authorization step did not complete.",
-				Cause.fail(error),
-			).pipe(
-				Effect.annotateLogs({ reason: error.reason, issue: error.issue }),
-				Effect.andThen(Effect.fail(authorizationFailure(error.reason))),
-			)
-		}),
+		Match.tag("AuthorizationError", (error) =>
+			replace(authorizationFailure(error.reason)),
+		),
 		Match.tag("NetworkError", () =>
 			replace(Api.AppAuthorizationUnavailable.make({})),
 		),
 		Match.tag("SchemaError", () => replace(authorizationFailure("Metadata"))),
 		Match.tag("StoreError", (error) =>
-			error.operation === "AuthorizationRevisionChanged"
-				? Effect.fail(
-						ConnectionsApi.ConnectionConflict.make({
-							reason: "RevisionChanged",
-							message: "This connection changed. Review it before authorizing.",
-						}),
-					)
-				: error.reason === "Missing"
-					? Effect.fail(ExperienceNotFound.make({ id: "App authorization" }))
-					: replace(ExperienceStorageUnavailable.make({})),
+			error.operation === "AuthorizationDenied"
+				? Effect.fail(Execution.Forbidden.make({}))
+				: error.operation === "AuthorizationRevisionChanged"
+					? Effect.fail(
+							ConnectionsApi.ConnectionConflict.make({
+								reason: "RevisionChanged",
+								message:
+									"This connection changed. Review it before authorizing.",
+							}),
+						)
+					: error.reason === "Missing"
+						? Effect.fail(ExperienceNotFound.make({ id: "App authorization" }))
+						: replace(ExperienceStorageUnavailable.make({})),
 		),
 		Match.tag("AppError", () =>
 			replace(authorizationFailure("ConnectionUnavailable")),
@@ -181,9 +161,7 @@ const sdkFailure = (
 		Match.tag("CleanupPending", (error) =>
 			Effect.fail(
 				ConnectionsApi.ConnectionCleanupPending.make({
-					connectionId: ConnectionsApi.ConnectionId.make(
-						error.key.connectionId,
-					),
+					connectionId: ConnectionId.make(error.key.connectionId),
 					stage: error.stage,
 					message:
 						"This connection is stopped. Retry cleanup to finish removing its account access.",
@@ -196,25 +174,15 @@ const sdkFailure = (
 		Match.exhaustive,
 	)
 }
-const policy = Client.InvocationPolicy.of({
-	check: (invocation) =>
-		Effect.fail(
-			Client.PermissionDenied.make({
-				action: invocation.action,
-				target: invocation.target,
-			}),
-		),
-})
-
 /** An authorization flow as it is kept in the database. */
 const FlowRecord = Schema.Struct({
 	state: Api.State,
 	owner: Schema.NonEmptyString,
 	revision: Schema.Natural,
+	actor: Schema.NullOr(Caller),
 	callback: Schema.NullOr(Schema.String),
 })
 const ScopesJson = Schema.fromJsonString(Schema.Array(Schema.String))
-const flowCodec = Schema.fromJsonString(Schema.toCodecJson(Authorization.Flow))
 /** A sealed secret opens only with the same binding: its kind, its owner, and its id. */
 const SecretBinding = Schema.fromJsonString(
 	Schema.Tuple([Schema.String, Schema.String, Schema.String]),
@@ -226,18 +194,14 @@ const secretBinding = (kind: string, owner: string, id: string) =>
 export const make: Effect.Effect<
 	typeof Authorizations.Service,
 	never,
-	| AppHost
 	| PgClient.PgClient
 	| Secrets
 	| ProtocolStores
-	| Governance
-	| ConnectionLocks
+	| AuthorizationCommands
 	| Settings
 > = Effect.gen(function* () {
-	const factory = yield* AppHost
 	const protocols = yield* ProtocolStores
-	const governance = yield* Governance
-	const locks = yield* ConnectionLocks
+	const commands = yield* AuthorizationCommands
 	const settings = yield* Settings
 	const db = yield* Db.make
 	const secrets = yield* Secrets
@@ -261,9 +225,20 @@ export const make: Effect.Effect<
 		return yield* Schema.decodeUnknownEffect(FlowRecord)({
 			owner: row.owner,
 			revision: row.revision,
+			actor:
+				row.actor === null
+					? null
+					: yield* secrets
+							.open(row.actor, actorBinding(row.owner, row.id))
+							.pipe(
+								Effect.flatMap(
+									Schema.decodeEffect(Schema.fromJsonString(Caller)),
+								),
+							),
 			callback,
 			state: {
 				flowId: row.id,
+				executionId: row.executionId,
 				connectionId: row.connectionId,
 				returnTo: row.returnTo,
 				expiresAt: row.expiresAt,
@@ -293,80 +268,6 @@ export const make: Effect.Effect<
 			),
 		)
 	})
-	const beginFlow = (
-		flow: Authorization.Flow,
-		input: {
-			readonly revision: number
-			readonly returnTo: string
-			readonly resource: string
-		},
-	) =>
-		db
-			.transaction((tx) =>
-				Effect.gen(function* () {
-					const connection = (yield* tx
-						.select({ revision: appConnections.revision })
-						.from(appConnections)
-						.where(
-							StoredConnections.connectionWhere(
-								flow.binding.owner,
-								flow.binding.connectionId,
-							),
-						)
-						.for("update"))[0]
-					if (connection === undefined)
-						return yield* ExperienceNotFound.make({
-							id: flow.binding.connectionId,
-						})
-					if (connection.revision !== input.revision)
-						return yield* ConnectionsApi.ConnectionConflict.make({
-							reason: "RevisionChanged",
-							message: "This connection changed. Review it before authorizing.",
-						})
-					const encoded = yield* Schema.encodeEffect(flowCodec)(flow)
-					const body = yield* secrets.seal(
-						encoded,
-						yield* secretBinding("flow", flow.binding.owner, flow.flowId),
-					)
-					yield* tx.insert(appSecrets).values({
-						owner: flow.binding.owner,
-						kind: "flow",
-						id: flow.flowId,
-						connectionId: flow.binding.connectionId,
-						body,
-					})
-					const scopes = yield* Schema.encodeEffect(ScopesJson)(flow.scopes)
-					yield* tx.insert(appAuthorizations).values({
-						id: flow.flowId,
-						owner: flow.binding.owner,
-						connectionId: flow.binding.connectionId,
-						revision: input.revision,
-						expiresAt: flow.expiresAt,
-						returnTo: input.returnTo,
-						status: "Waiting",
-						issuer: flow.binding.issuer,
-						resource: input.resource,
-						scopes,
-					})
-				}),
-			)
-			.pipe(
-				Effect.catchTag(
-					[
-						"EffectDrizzleQueryError",
-						"SqlError",
-						"SchemaError",
-						"SecretStorageError",
-					],
-					(error) =>
-						Effect.fail(error).pipe(
-							Failures.replace(
-								"OpenBot could not save an App authorization.",
-								() => ExperienceStorageUnavailable.make({}),
-							),
-						),
-				),
-			)
 	const receiveFlow = Effect.fn("AppAuthorizations.receive")(function* (
 		id: string,
 		input: {
@@ -405,86 +306,6 @@ export const make: Effect.Effect<
 			)
 		if (rows.length === 0) return yield* authorizationFailure("AlreadyConsumed")
 	})
-	const claimFlow = (owner: string, id: string) =>
-		db
-			.transaction((tx) =>
-				Effect.gen(function* () {
-					const row = (yield* tx
-						.select()
-						.from(appAuthorizations)
-						.where(
-							and(
-								eq(appAuthorizations.id, id),
-								eq(appAuthorizations.owner, owner),
-							),
-						)
-						.for("update"))[0]
-					if (row === undefined) return yield* ExperienceNotFound.make({ id })
-					if (row.status !== "Received")
-						return yield* authorizationFailure("AlreadyConsumed")
-					if (row.expiresAt <= (yield* Clock.currentTimeMillis))
-						return yield* authorizationFailure("FlowExpired")
-					const connection = (yield* tx
-						.select({ revision: appConnections.revision })
-						.from(appConnections)
-						.where(StoredConnections.connectionWhere(owner, row.connectionId))
-						.for("update"))[0]
-					if (connection === undefined || connection.revision !== row.revision)
-						return yield* ConnectionsApi.ConnectionConflict.make({
-							reason: "RevisionChanged",
-							message: "This connection changed. Review it before authorizing.",
-						})
-					yield* tx
-						.update(appAuthorizations)
-						.set({ status: "Processing" })
-						.where(eq(appAuthorizations.id, id))
-					return yield* decodeFlow({ ...row, status: "Processing" })
-				}),
-			)
-			.pipe(
-				Effect.catchTag(
-					[
-						"EffectDrizzleQueryError",
-						"SqlError",
-						"SchemaError",
-						"SecretStorageError",
-					],
-					(error) =>
-						Effect.fail(error).pipe(
-							Failures.replace(
-								"OpenBot could not claim an App authorization.",
-								() => ExperienceStorageUnavailable.make({}),
-							),
-						),
-				),
-			)
-	const finishFlow = (
-		owner: string,
-		id: string,
-		status: "Succeeded" | "Failed",
-		reason: string | null,
-	) =>
-		db
-			.update(appAuthorizations)
-			.set({ status, reason, callback: null })
-			.where(
-				and(
-					eq(appAuthorizations.owner, owner),
-					eq(appAuthorizations.id, id),
-					eq(appAuthorizations.status, "Processing"),
-				),
-			)
-			.returning({ id: appAuthorizations.id })
-			.pipe(
-				Failures.replace("OpenBot could not finish an App authorization.", () =>
-					ExperienceStorageUnavailable.make({}),
-				),
-				Effect.flatMap((rows) =>
-					rows.length === 1
-						? Effect.void
-						: Effect.fail(authorizationFailure("AlreadyConsumed")),
-				),
-			)
 	const owned = Effect.fn("AppAuthorizations.owned")(function* (
 		owner: string,
 		id: string,
@@ -504,78 +325,7 @@ export const make: Effect.Effect<
 			record.state.expiresAt <= now
 		)
 			return yield* authorizationFailure("FlowExpired")
-		// This does not change the row. If its instance is still alive after all,
-		// its late finish still records the real end.
-		if (
-			record.state.status === "Processing" &&
-			record.state.expiresAt + abandonedAfterMillis <= now
-		) {
-			const interrupted: Api.State = {
-				...record.state,
-				status: "Failed",
-				reason: "Interrupted",
-			}
-			return interrupted
-		}
 		return record.state
-	})
-	const completeUnlocked = Effect.fn("AppAuthorizations.complete")(function* (
-		owner: string,
-		id: string,
-	) {
-		const pending = yield* owned(owner, id)
-		const connection = yield* StoredConnections.get(
-			db,
-			secrets,
-			owner,
-			pending.state.connectionId,
-		)
-		yield* governance.check(connection.connection.cardUrl)
-		// A claimed flow is in Processing until it ends. If the request stops in
-		// the middle, the flow must still end, so nothing can interrupt these
-		// steps. Each step has a time limit, so this region does not run for long.
-		yield* Effect.uninterruptible(
-			Effect.gen(function* () {
-				const record = yield* claimFlow(owner, id)
-				const result = yield* Effect.result(
-					record.callback === null
-						? Effect.fail(authorizationFailure("CallbackMismatch"))
-						: factory
-								.bind(owner, policy)
-								.completeAuthorization({
-									key: { owner, connectionId: record.state.connectionId },
-									flowId: id,
-									callbackUrl: record.callback,
-								})
-								.pipe(Effect.catch(sdkFailure)),
-				)
-				yield* Match.value(result).pipe(
-					Match.tag("Success", () => finishFlow(owner, id, "Succeeded", null)),
-					Match.tag("Failure", ({ failure }) =>
-						finishFlow(
-							owner,
-							id,
-							"Failed",
-							failure._tag === "AppAuthorizationFailed"
-								? failure.reason
-								: "Unavailable",
-						).pipe(Effect.andThen(Effect.fail(failure))),
-					),
-					Match.exhaustive,
-				)
-			}),
-		)
-		return yield* read(owner, id)
-	})
-	const complete = Effect.fn("AppAuthorizations.completeLocked")(function* (
-		owner: string,
-		id: string,
-	) {
-		const pending = yield* owned(owner, id)
-		return yield* locks.withConnection(
-			{ owner, connectionId: pending.state.connectionId },
-			completeUnlocked(owner, id),
-		)
 	})
 	return Authorizations.of({
 		metadata: Effect.flatMap(
@@ -584,124 +334,32 @@ export const make: Effect.Effect<
 			),
 			ClientMetadata.metadata,
 		),
-		begin: Effect.fn("AppAuthorizations.begin")(function* (id, input) {
-			const owner = ownerKey(yield* Identity)
-			const stored = yield* StoredConnections.get(db, secrets, owner, id)
-			if (stored.revision !== input.revision)
-				return yield* ConnectionsApi.ConnectionConflict.make({
-					reason: "RevisionChanged",
-					message: "This connection changed. Refresh it before authorizing.",
-				})
-			yield* governance.check(stored.connection.cardUrl)
-			const app = factory.bind(owner, policy)
-			const protection = yield* app
-				.inspectAuthorization({ owner, connectionId: id })
-				.pipe(Effect.catch(sdkFailure))
-			return yield* Match.value(protection).pipe(
-				Match.when({ requiresAuthorization: false }, () =>
-					Effect.succeed({ _tag: "AuthorizationNotRequired" } as const),
+		begin: (id, { commandKey, ...input }) =>
+			Effect.flatMap(Identity, (actor) =>
+				commands.start(
+					actor,
+					{ kind: "Begin", connectionId: id, input },
+					commandKey,
 				),
-				Match.when({ requiresAuthorization: true }, (protection) =>
-					Effect.gen(function* () {
-						const issuers = protection.resource.authorization_servers
-						const scopes = Arr.dedupe(
-							input.scopes.length === 0
-								? protection.scopes.length === 0
-									? (protection.resource.scopes_supported ?? [])
-									: protection.scopes
-								: input.scopes,
-						)
-						if (issuers.length > 1 && input.issuer === undefined)
-							return {
-								_tag: "IssuerSelectionRequired",
-								issuers,
-								scopes,
-							} as const
-						const issuer = input.issuer ?? issuers[0]
-						if (!issuers.includes(issuer))
-							return yield* authorizationFailure("Metadata")
-						const record = yield* StoredConnections.getApp(
-							db,
-							owner,
-							stored.connection.cardUrl,
-						)
-						const resource =
-							record.card.remotes?.[stored.connection.remoteIndex]?.url ?? ""
-						const defaults = protocols.bind(owner).flows
-						const flowStore: typeof Authorization.FlowStore.Service = {
-							...defaults,
-							save: (flow) =>
-								beginFlow(flow, {
-									revision: stored.revision,
-									returnTo: input.returnTo ?? "/",
-									resource,
-								}).pipe(
-									Effect.mapError((error) =>
-										Match.value(error).pipe(
-											Match.tagsExhaustive({
-												ConnectionConflict: () =>
-													Store.StoreError.make({
-														reason: "Invalid",
-														operation: "AuthorizationRevisionChanged",
-														cause: error,
-													}),
-												ExperienceNotFound: () =>
-													Store.StoreError.make({
-														reason: "Missing",
-														operation: "Save App authorization",
-														cause: error,
-													}),
-												ExperienceStorageUnavailable: () =>
-													Store.StoreError.make({
-														reason: "Unavailable",
-														operation: "Save App authorization",
-														cause: error,
-													}),
-											}),
-										),
-									),
-								),
-						}
-						const metadata = yield* Effect.flatMap(
-							publicOrigin,
-							ClientMetadata.metadata,
-						)
-						const pending = yield* factory
-							.bind(owner, policy, flowStore)
-							.beginAuthorization({
-								key: { owner, connectionId: id },
-								issuer,
-								clientId: metadata.client_id,
-								redirectUri: metadata.redirect_uris[0],
-								scopes,
-								...(protection.resourceMetadataUrl === undefined
-									? {}
-									: { resourceMetadataUrl: protection.resourceMetadataUrl }),
-							})
-							.pipe(Effect.catch(sdkFailure))
-						return {
-							_tag: "AuthorizationStarted",
-							flowId: pending.flowId,
-							authorizationUrl: pending.authorizationUrl,
-							issuer: pending.issuer,
-							scopes: pending.scopes,
-						} as const
-					}),
-				),
-				Match.exhaustive,
-			)
-		}),
+			),
 		get: (id) =>
-			Effect.flatMap(Identity, (identity) => read(ownerKey(identity), id)),
-		complete: (id) =>
-			Effect.flatMap(Identity, (identity) => complete(ownerKey(identity), id)),
-		revoke: Effect.fn("AppAuthorizations.revoke")(function* (id) {
-			const owner = ownerKey(yield* Identity)
-			return yield* factory
-				.bind(owner, policy)
-				.revokeAuthorization({ owner, connectionId: id })
-				.pipe(Effect.catch(sdkFailure))
-		}),
+			Effect.gen(function* () {
+				const actor = yield* Identity
+				const result = yield* read(ownerKey(actor), id)
+				yield* commands.check(actor, result.connectionId, "read")
+				return result
+			}),
+		complete: (id, key) =>
+			Effect.flatMap(Identity, (actor) =>
+				commands.start(actor, { kind: "Complete", flowId: id }, key),
+			),
+		action: (id) =>
+			Effect.flatMap(Identity, (actor) => commands.get(actor, id)),
+		revoke: (id, key) =>
+			Effect.flatMap(Identity, (actor) =>
+				commands.start(actor, { kind: "Revoke", connectionId: id }, key),
+			),
+
 		receive: Effect.fn("AppAuthorizations.receive")(function* (input, owners) {
 			const origin = yield* publicOrigin
 			if (!URL.canParse(input, origin))
@@ -753,27 +411,40 @@ export const make: Effect.Effect<
 			else {
 				if (url.searchParams.get("code") === null)
 					return yield* authorizationFailure("CallbackMismatch")
-				yield* receiveFlow(id, {
-					callback: url.href,
-					status: "Received",
-					reason: null,
-				})
-				// A failed completion is saved on the flow, or the flow stays
-				// Received, so the signed-in client can complete it. The caller reads
-				// that state after the redirect, so the redirect still happens.
-				yield* Option.match(owners, {
-					onNone: () => Effect.void,
-					// The check above made sure that the account can act as this owner.
-					onSome: () =>
-						complete(record.owner, id).pipe(
-							Effect.catch((error) =>
-								Effect.logInfo(
-									"An App authorization did not complete after its callback.",
-									Cause.fail(error),
-								).pipe(Effect.annotateLogs({ flowId: id })),
-							),
+
+				// The callback and its command commit together. A session never replaces the original token.
+				yield* db
+					.transaction(() =>
+						Effect.gen(function* () {
+							// Commands lock the connection before the flow. Keep the same order here.
+							yield* db
+								.select({ id: appConnections.id })
+								.from(appConnections)
+								.where(
+									and(
+										eq(appConnections.owner, record.owner),
+										eq(appConnections.id, record.state.connectionId),
+									),
+								)
+								.for("update")
+							yield* receiveFlow(id, {
+								callback: url.href,
+								status: "Received",
+								reason: null,
+							})
+							if (Option.isSome(owners) && record.actor !== null)
+								yield* commands.start(
+									record.actor,
+									{ kind: "Complete", flowId: id },
+									Execution.CommandKey.make(`oauth-callback:${id}`),
+								)
+						}),
+					)
+					.pipe(
+						Effect.catchTag(["SqlError", "EffectDrizzleQueryError"], (cause) =>
+							Effect.fail(Execution.StorageError.make({ cause })),
 						),
-				})
+					)
 			}
 			return {
 				flowId: id,

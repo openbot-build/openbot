@@ -1,9 +1,31 @@
+import * as ResetCommands from "../src/apps/ResetCommands.ts"
+import * as AuthorizationCommands from "../src/apps/AuthorizationCommands.ts"
+import * as GrantCleanup from "../src/apps/GrantCleanup.ts"
+import * as Records from "../src/errors/Records.ts"
+import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
+import * as ExecutionStorage from "../src/execution/Store.ts"
+import * as ExecutionObservation from "../src/execution/Observation.ts"
+import { Observation } from "../src/execution/Observation.ts"
+import { ChannelRemoval } from "../src/channels/ChannelRemoval.ts"
+import { ConnectionCommands } from "../src/apps/ConnectionCommands.ts"
+import { Transport } from "../src/resources/Transport.ts"
+import { ChannelConfig } from "../src/channels/ChannelConfig.ts"
+import { ChannelQueue } from "../src/channels/ChannelQueue.ts"
+import { AppCommands } from "../src/apps/AppCommands.ts"
+import { CodeCommands } from "../src/code/CodeCommands.ts"
+import { TurnAccess } from "../src/chats/TurnAccess.ts"
+import { DelegationCommands } from "../src/bots/DelegationCommands.ts"
+import { RequestCommands } from "../src/capabilities/RequestCommands.ts"
+import { InputCommands } from "../src/chats/InputCommands.ts"
+import { Store as ExecutionStore } from "../src/execution/Store.ts"
+import { LiveConnections } from "../src/chats/live/LiveConnections.ts"
+import { Commands as ExecutionCommands } from "../src/execution/Commands.ts"
 import * as BotFixture from "./BotFixture.ts"
 import * as TriggerStore from "../src/triggers/Triggers.ts"
 import * as Channels from "../src/channels/Channels.ts"
 import { ComputerProviders } from "../src/computers/ComputerProviders.ts"
 import { Computers } from "../src/computers/Computers.ts"
-import { Coordinator } from "../src/bots/Coordinator.ts"
+import { Lifecycle as ComputerLifecycle } from "../src/computers/Lifecycle.ts"
 import { Connectors } from "../src/computers/connector/Connectors.ts"
 import { Drivers } from "../src/computers/Drivers.ts"
 import { Pairings } from "../src/computers/Pairings.ts"
@@ -11,12 +33,11 @@ import { Sessions } from "../src/computers/Sessions.ts"
 import { SecretProviders } from "../src/vaults/SecretProviders.ts"
 import { Vaults } from "../src/vaults/Vaults.ts"
 import { Files } from "../src/files/Files.ts"
-import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
 import * as ChannelRegistry from "../src/channels/ChannelRegistry.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/apps/Experience.ts"
 import * as Views from "../src/apps/Views.ts"
-import * as LiveSessions from "../src/chats/live/LiveSessions.ts"
+import { ToolCommands } from "../src/chats/ToolCommands.ts"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
@@ -64,12 +85,8 @@ import * as Connections from "../src/apps/Connections.ts"
 import * as Authorizations from "../src/apps/Authorizations.ts"
 import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
 import * as AppHost from "../src/apps/AppHost.ts"
-import * as Invocations from "../src/apps/Invocations.ts"
-import * as Operations from "../src/apps/Operations.ts"
-import { CodeRuns } from "../src/code/CodeRuns.ts"
 import * as ActionPolicy from "../src/apps/ActionPolicy.ts"
 import * as Lifecycle from "../src/apps/Lifecycle.ts"
-import * as ConnectionLocks from "../src/apps/ConnectionLocks.ts"
 import * as Capabilities from "../src/apps/Capabilities.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Probe from "../src/apps/Probe.ts"
@@ -79,7 +96,6 @@ import * as TokensPostgres from "../src/auth/TokensPostgres.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import { serveHttps } from "../../protocol/test/Fixture.ts"
-import { Backend } from "../src/app/Backend.ts"
 import {
 	AuthApi,
 	DeveloperApi,
@@ -342,11 +358,39 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 	})
 	const encryptionKey = Redacted.make("test:" + Str.repeat(32)("11"))
 	const settings = OrganizationFixture.layerSettings({ publicOrigin })
+	const errorRecords = Records.layer.pipe(
+		Layer.provide(Secrets.layer(encryptionKey)),
+		Layer.provide(NodeCrypto.layer),
+	)
 	const services = yield* Layer.build(
 		HttpRouter.serve(Server.layerApi).pipe(
 			Layer.provide([
+				Layer.mock(ExecutionCommands, {}),
+				Layer.mock(RequestCommands, {}),
+				Layer.mock(DelegationCommands, {}),
+				Layer.mock(InputCommands, {}),
+				Layer.mock(ToolCommands, {}),
+				Layer.mock(AppCommands, {}),
+				Layer.mock(CodeCommands, {}),
+				Layer.mock(TurnAccess, {}),
+				Layer.mock(LiveConnections, {}),
+				Layer.mock(ExecutionStore, {}),
+				errorRecords,
 				discovery,
 				DeveloperLayers.layer.pipe(
+					Layer.provide(IndexCommandsFixture.layer),
+					Layer.provide(
+						ExecutionObservation.layer.pipe(
+							Layer.provideMerge(
+								Layer.merge(ExecutionStorage.layer, Records.layer),
+							),
+						),
+					),
+					Layer.provide(
+						OrganizationFixture.layerAuthorization.pipe(
+							Layer.provide(TokensPostgres.layer),
+						),
+					),
 					Layer.provide(
 						Layer.mergeAll(
 							publicNetwork ?? OutboundPolicy.layerPublicNetwork,
@@ -367,21 +411,34 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 					AppExperience.layer.pipe(Layer.provideMerge(Lifecycle.layer)),
 					Lifecycle.layer,
 					Authorizations.layer,
-					Operations.layer,
-					Views.layer.pipe(Layer.provide(Layer.mock(Backend, {}))),
-					Layer.mock(CodeRuns, {
-						settings: Effect.succeedNone,
-						vault: Effect.succeed([]),
-						stale: Effect.succeed([]),
-					}),
+					Layer.mock(Views.Views, {}),
 				).pipe(
-					Layer.provideMerge(Invocations.layer),
+					Layer.provideMerge(
+						ResetCommands.layer.pipe(
+							Layer.provideMerge(
+								AuthorizationCommands.layer.pipe(
+									Layer.provideMerge(GrantCleanup.layer),
+								),
+							),
+							Layer.provide(ExecutionStorage.layer),
+							Layer.provide(
+								OrganizationFixture.layerAuthorization.pipe(
+									Layer.provide(TokensPostgres.layer),
+								),
+							),
+						),
+					),
 					Layer.provide(
 						ActionPolicy.layer.pipe(
 							Layer.provide(OrganizationFixture.layerDefaultSettings),
 						),
 					),
 					Layer.provideMerge(Connections.layer),
+					Layer.provide(
+						OrganizationFixture.layerAuthorization.pipe(
+							Layer.provide(TokensPostgres.layer),
+						),
+					),
 					Layer.provideMerge(Capabilities.layer),
 					Layer.provide(AppHost.layer),
 					Layer.provide(discovery),
@@ -394,9 +451,9 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 					),
 					Layer.provide(AppHost.layerNetwork),
 					Layer.provideMerge(AppConnections.layerConnectionScopes),
-					Layer.provide(ConnectionLocks.layer),
 					Layer.provide(NodeCrypto.layer),
 					Layer.provideMerge(ProtocolStores.layer),
+					Layer.provide(IndexCommandsFixture.layer),
 					Layer.provideMerge(Secrets.layer(encryptionKey)),
 				),
 				PublicIndex.layer({}).pipe(
@@ -410,12 +467,21 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 				TokensPostgres.layer,
 				// The triggers take the authorizer when they are built.
 				TriggerStore.layer.pipe(
+					Layer.provide(Layer.mock(ExecutionStore, {})),
+					Layer.provide(Secrets.layer(encryptionKey)),
 					Layer.provide(OrganizationFixture.layerAuthorization),
 					Layer.provide(TokensPostgres.layer),
 				),
+				Layer.mock(ChannelQueue, {}),
+				Layer.mock(ChannelConfig, {}),
+				Layer.mock(Observation, {}),
 				ChannelRegistry.layer.pipe(
-					Layer.provideMerge(ChannelQueue.layer),
 					Layer.provideMerge(Channels.layer),
+					Layer.provide(
+						OrganizationFixture.layerAuthorization.pipe(
+							Layer.provide(TokensPostgres.layer),
+						),
+					),
 					Layer.provide(
 						Layer.merge(FetchHttpClient.layer, AppHost.layerNetwork),
 					),
@@ -428,14 +494,15 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 				settings,
 				Secrets.layer(encryptionKey),
 				BotFixture.layerBotServices.pipe(
+					Layer.provide(Secrets.layer(encryptionKey)),
 					Layer.provide(OrganizationFixture.layerAuthorization),
 					Layer.provide(TokensPostgres.layer),
 				),
 				Layer.succeed(Auth.Auth, auth),
-				Layer.mock(Backend, {}),
 				// Discovery never uses Computers. Their handlers only need the services to exist.
 				Layer.mock(ComputerProviders, {}),
 				Layer.mock(Computers, {}),
+				Layer.mock(ComputerLifecycle, {}),
 				Layer.mock(Connectors, {}),
 				Layer.mock(Drivers, {}),
 				// Discovery never uses Vaults. Their handlers only need the services to exist.
@@ -444,10 +511,15 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 				Layer.mock(Sessions, {}),
 				// Discovery never uses files. Their handlers only need the service to exist.
 				Layer.mock(Files, {}),
-				// Discovery never uses Chats. Their handlers only need the Coordinator to exist.
-				Layer.mock(Coordinator, {}),
 				// The Live handlers take the open Live sessions when they are built.
-				LiveSessions.layer,
+			]),
+			// Discovery does not submit connection changes or hold physical sessions.
+			Layer.provide([
+				Layer.mock(ChannelRemoval, {}),
+				Layer.mock(ConnectionCommands, {}),
+				Layer.mock(Transport, {}),
+				Layer.mock(GrantCleanup.GrantCleanup, {}),
+				errorRecords,
 			]),
 			// The services above read the public origin from these settings.
 			Layer.provide(settings),

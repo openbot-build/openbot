@@ -1,16 +1,17 @@
 import { outcomeUnknownMessage } from "./AppResults.ts"
 import {
-	AppExecution,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 	ChatConflict,
-} from "@openbot-build/api"
+} from "@openbot-build/domain"
+import { AppCalls } from "@openbot-build/domain"
+
 import { and, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { appInvocations } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 
 /** The App operations of each owner, kept sealed in Postgres. */
 export type Error =
@@ -21,7 +22,7 @@ export type Error =
  */
 export const unavailable = (message: string) =>
 	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
-const codec = Schema.fromJsonString(AppExecution.Invocation)
+const codec = Schema.fromJsonString(AppCalls.Invocation)
 const AadJson = Schema.fromJsonString(
 	Schema.Tuple([
 		Schema.Literal("app-invocation"),
@@ -39,7 +40,7 @@ export const where = (owner: string, id: string) =>
 export const seal = (
 	secrets: Sealer,
 	owner: string,
-	value: AppExecution.Invocation,
+	value: AppCalls.Invocation,
 ) =>
 	Effect.all([Schema.encodeEffect(codec)(value), aad(owner, value.id)]).pipe(
 		Effect.flatMap(([body, data]) => secrets.seal(body, data)),
@@ -53,7 +54,7 @@ export const open = (
 			Effect.flatMap((data) => secrets.open(row.body, data)),
 			Effect.flatMap(Schema.decodeEffect(codec)),
 		)
-		return yield* Schema.decodeUnknownEffect(AppExecution.Invocation)({
+		return yield* Schema.decodeUnknownEffect(AppCalls.Invocation)({
 			...value,
 			status: row.status,
 			result:
@@ -74,7 +75,7 @@ export const get = (
 	secrets: Sealer,
 	owner: string,
 	id: string,
-): Effect.Effect<AppExecution.Invocation, Error> =>
+): Effect.Effect<AppCalls.Invocation, Error> =>
 	Effect.gen(function* () {
 		const row = (yield* db
 			.select()

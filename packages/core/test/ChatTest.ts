@@ -22,8 +22,9 @@ export const ChatTest = <
 	R = never,
 	BuildE = never,
 	BuildR = never,
+	HostTools extends Record<string, Tool.Any> = {},
 >(
-	bot: Bot.Definition<Tools, E, R, BuildE, BuildR> = {},
+	bot: Bot.Definition<Tools, E, R, BuildE, BuildR, HostTools> = {},
 	options: {
 		/** Give the same persistence to a second store, as after a restart. */
 		readonly persistence?: ChatStore.Persistence

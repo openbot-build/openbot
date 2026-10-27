@@ -4,6 +4,9 @@ description:
   Rufe OpenBot aus TypeScript auf, mit typisierten Anfragen und Fehlern.
 ---
 
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+API-Anbindung, App-Veröffentlichung und Projektarbeit.
+
 `@openbot-build/client` ist der TypeScript-Client für OpenBot. Er entsteht aus
 demselben API-Vertrag wie der Server. Jede Anfrage, jede Antwort und jeder
 Fehler hat einen Typ. Dein Editor zeigt Fehler, bevor du den Code ausführst.
@@ -21,7 +24,8 @@ Die OpenBot-Pakete sind noch nicht auf npm. Nutze sie aus dem OpenBot-Workspace:
 {
 	"dependencies": {
 		"@openbot-build/client": "workspace:*",
-		"effect": "4.0.5"
+		"effect": "4.0.6",
+		"@effect/platform-node": "4.0.6"
 	}
 }
 ```
@@ -32,20 +36,21 @@ Die OpenBot-Pakete sind noch nicht auf npm. Nutze sie aus dem OpenBot-Workspace:
 ein Rezept in Effect, das einen Dienst baut.
 
 ```ts
-import { Client, layer } from "@openbot-build/client"
+import { Chats, layer } from "@openbot-build/client"
+import { NodeCrypto } from "@effect/platform-node"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
-	const client = yield* Client
-	const receipt = yield* client.api.chats.sendBotMessage({
-		params: { botId },
-		payload: { input: "Write the release notes." },
+	const command = yield* Chats.botMessage(botId, {
+		input: "Write the release notes.",
 	})
+	const receipt = yield* command.send
 	return receipt.chat
 })
 
 const id = await Effect.runPromise(
 	program.pipe(
+		Effect.provide(NodeCrypto.layer),
 		Effect.provide(
 			layer({
 				baseUrl: "https://api.example.com",
@@ -56,6 +61,15 @@ const id = await Effect.runPromise(
 )
 ```
 
+Bereiten Sie einen Befehl einmal vor. `command.commandKey` bleibt bei einem
+neuen Versuch mit `command.send` gleich. `Chats.message` sendet so an einen
+bestehenden Chat. Der Beleg nennt die Ausführung. Beobachten Sie sie über
+`client.api.executions.observe` mit der letzten `afterSequence`. Das Schließen
+der Beobachtung bricht die Arbeit nicht ab. `Executions.cancel` und
+`Executions.decide` bereiten auch Befehle mit festen Schlüsseln vor. Geben Sie
+diesen Helfern einen `Crypto`-Dienst der Plattform. Das Node.js-Beispiel nutzt
+`NodeCrypto.layer`.
+
 | Option           | Pflicht | Was sie tut                                                                                                                 |
 | ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `baseUrl`        | Ja      | Der Origin von OpenBot, zum Beispiel `https://api.example.com`.                                                             |
@@ -64,7 +78,7 @@ const id = await Effect.runPromise(
 | `onUnauthorized` | Nein    | Eine Funktion, die läuft, wenn eine geschützte Anfrage `401` zurückgibt.                                                    |
 
 Wie du ein User Token erstellst, steht unter
-[Authentifizierung](/de/docs/authentication).
+[Authentifizierung](/de/docs/developers/authentication).
 
 Der Client speichert das Token nie und setzt es nie in eine URL.
 `onUnauthorized` meldet nicht an und versucht die Anfrage nicht noch einmal.
@@ -135,6 +149,61 @@ Nutzen Sie `Redacted.value` nur, wenn Sie den Wert senden oder zeigen müssen. I
 JSON bleiben diese Felder Strings. Das gilt für Anbieterschlüssel, Vault-Werte,
 SSO-Geheimnisse, Einladungen, Tokens, Webhooks und Computer-Kopplungen.
 
+## Ausführungen beobachten und steuern
+
+Ein Befehlsbeleg enthält `executionId`, `commandKey` und `sequence`. Er
+bestätigt das Speichern des Befehls, nicht das Ende einer externen Handlung.
+Lies `GET /v1/executions/:executionId` für `status` und `failure`. Ein Fehler
+enthält nur `category` und `errorId`.
+
+Lies gespeicherte Ereignisse mit
+`GET /v1/executions/:executionId/events?afterSequence=0`. Die Seite enthält
+`events`, `afterSequence` und `terminal`. Behalte den zurückgegebenen Cursor für
+die nächste Seite. Für laufende Ereignisse nutze SSE, einen
+Server-Ereignisstrom:
+
+```sh
+curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/executions/$EXECUTION_ID/observe?afterSequence=0"
+```
+
+Jede SSE-Nachricht hat den Ereignisnamen `execution`. Ihre Daten enthalten
+`executionId`, `sequence`, `createdAt` und `body`. Speichere die zuletzt
+verarbeitete Nummer. Sende sie nach einem Verbindungsabbruch als
+`afterSequence`. Jedes Kind braucht einen eigenen Cursor. Textereignisse haben
+`step` und `attempt`. Halte verschiedene Versuche getrennt.
+`Executions.observe(id, cursor)` gibt die Ereignisse als Effect Stream. Das
+Schließen des Streams bricht angenommene Arbeit nicht ab.
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"cancel-work-1"}' \
+  "https://api.example.com/v1/executions/$EXECUTION_ID/cancel"
+```
+
+Abbruch- und Entscheidungsendpunkte geben HTTP 200 mit einem Befehlsbeleg.
+Arbeit kann `cancelling` bleiben, solange Ressourcen freigegeben werden oder ein
+externes Ergebnis unbekannt ist. Endzustände sind `completed`, `failed`,
+`cancelled` und `interrupted`. `waiting` und `outcome_unknown` brauchen noch
+Fortschritt oder eine Entscheidung.
+
+Ein `DecisionNeeded`-Ereignis nennt `decisionId` und die erlaubten `choices`.
+Sende eine davon an `POST /v1/executions/:executionId/decisions`:
+
+```json
+{
+	"commandKey": "answer-work-1",
+	"decisionId": "<saved decision id>",
+	"answer": "stop"
+}
+```
+
+Nutze bei einem neuen Versuch denselben Schlüssel und Inhalt. Ein anderer Inhalt
+mit demselben Schlüssel ergibt `409 ExecutionKeyConflict`. Eine Entscheidung
+hebt aktuelle Rechte oder Token-Grenzen nicht auf. API-Schlüssel und Cookies vom
+gleichen Ursprung nutzen dieselben Prüfungen der Anwendung.
+
 ## Fehler behandeln
 
 Jeder fehlgeschlagene Aufruf gibt einen typisierten Fehler. Der Typ
@@ -199,7 +268,7 @@ das Cookie hinzu. Der Browser fügt auch den Header `Origin` hinzu. Bei Anfragen
 die Daten ändern, prüft OpenBot, dass er genau `publicOrigin` aus den
 Plattform-Einstellungen ist. Die Organisationen der Person liest du mit
 `GET /auth/session`. Siehe
-[Authentifizierung](/de/docs/authentication#die-anmeldung-lesen-und-beenden).
+[Authentifizierung](/de/docs/developers/authentication#die-anmeldung-lesen-und-beenden).
 
 Wie du deine Web-App auf demselben Origin bereitstellst, steht unter
 [Betrieb](/de/docs/deploy#dein-eigener-client-auf-demselben-origin).
@@ -264,22 +333,38 @@ Der Ansichts-Client hält keine Zugangsdaten. Jede Anfrage geht über OpenBot.
 Darum gelten die normalen Prüfungen der Fähigkeiten:
 
 - Er prüft, dass jede Antwort ein gültiges MCP-Ergebnis ist.
-- Er sendet jede Aktion einmal, mit einer neuen Anfrage-ID.
-- Danach prüft er die gespeicherte Aktion alle 250 Millisekunden, bis sie ein
-  Endergebnis hat. Er sendet die Aktion nie noch einmal.
+- Er sendet jede Aktion mit einem Befehlsschlüssel.
+- Er folgt gespeicherten Ereignissen der Kind-Ausführungen, auch nach dem Ende
+  des ersten Turns.
+- Beim Ergebnis-Ereignis liest er das gespeicherte App-Ergebnis. Beim Warten
+  sendet er die Aktion nicht erneut.
+
+`Executions.observe(id, afterSequence)` liest eine Ausführung ab dem
+gespeicherten Cursor. `Executions.observeTree(id)` folgt ihr und ihren
+Kind-Ausführungen von Anfang an. Jedes Kind hat eigene Folgenummern. Mit
+`stopAt: ["AppCall"]` lesen Sie App-Ereignisse ohne deren Entscheidungs-Kinder.
+Die View-Brücke nutzt diese Grenze; das Lesen eines App-Ergebnisses verlangt
+kein Recht zur Genehmigung. `AppViews.act` und `AppViews.message` erstellen
+einen Befehl mit festem Schlüssel. Geht die Antwort verloren, verwenden Sie
+seinen `send`-Effect erneut.
 
 Wenn du die Ansicht schließt, hört der Client mit dem Prüfen auf. Eine Aktion,
-die OpenBot schon angenommen hat, läuft trotzdem bis zum Ende.
+die OpenBot schon angenommen hat, läuft trotzdem bis zum Ende. Alle Server
+speichern das Schließen, Änderungen am Kontext und neue Nachrichten für jede
+Ansicht in einer festen Reihenfolge. Nach dem Schließen können wartende Anfragen
+den Kontext nicht ändern und keine Nachrichten hinzufügen. Ein Neustart schließt
+eine Ansicht nicht. Ihre Laufzeit und die aktuellen Zugriffsrechte gelten
+weiter.
 
 ---
 
 ## Beichten zeigen
 
 Der Bot nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der
-[Memory-Bot](/de/docs/memory#wie-der-bot-lernt) antwortet ihm. Personen dürfen
-das lesen: `GET /v1/chats/:chatId/confessions` listet es, und die Aufrufe sind
-im Verlauf des Chats. Aber der Bot spricht dort freier als in seinen Antworten.
-Mach es darum nicht zu leicht, sie zu lesen:
+[Memory-Bot](/de/docs/developers/memory#wie-der-bot-lernt) antwortet ihm.
+Personen dürfen das lesen: `GET /v1/chats/:chatId/confessions` listet es, und
+die Aufrufe sind im Verlauf des Chats. Aber der Bot spricht dort freier als in
+seinen Antworten. Mach es darum nicht zu leicht, sie zu lesen:
 
 - Zeige Beichten nicht im Gespräch. Klappe die Aufrufe von `confide` im Verlauf
   zu, und erzähle Personen in keiner Nachricht davon.

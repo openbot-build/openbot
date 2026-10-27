@@ -1,0 +1,57 @@
+---
+title: "File storage"
+description: "File storage"
+---
+
+For platform operators.
+
+## Set up storage
+
+A platform admin sets the storage in the platform settings, as `files.storage`.
+It can also be set with `openbot setup`. See [Platform](/docs/platform#setup).
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expectedVersion": 3,
+    "files": {
+      "storage": {
+        "endpoint": "https://s3.us-east-1.amazonaws.com",
+        "publicEndpoint": null,
+        "region": "us-east-1",
+        "bucket": "openbot-files",
+        "accessKeyId": "AKIA…",
+        "secretAccessKey": "…",
+        "forcePathStyle": false
+      },
+      "uploads": { "server": true, "direct": true }
+    }
+  }' \
+  https://api.example.com/v1/platform/settings
+```
+
+| Field                     | Meaning                                                                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `storage.endpoint`        | Where OpenBot reaches the storage, with no path.                                                                                    |
+| `storage.publicEndpoint`  | Where clients put bytes for a direct upload. `null` means `endpoint`. Use it when OpenBot reaches the storage on a private network. |
+| `storage.region`          | The region of the storage, such as `us-east-1`.                                                                                     |
+| `storage.bucket`          | The bucket. Make it before you use it.                                                                                              |
+| `storage.accessKeyId`     | The access key ID.                                                                                                                  |
+| `storage.secretAccessKey` | The secret key. OpenBot stores it encrypted, and it never comes back. Leave it out to keep the current one.                         |
+| `storage.forcePathStyle`  | Put the bucket in the path, as in `https://host/bucket/key`. MinIO and RustFS need `true`.                                          |
+| `uploads.server`          | Allow uploads through OpenBot with `POST /v1/files`.                                                                                |
+| `uploads.direct`          | Allow direct uploads with `POST /v1/files/uploads`.                                                                                 |
+| `maxBytes`                | The largest file, in bytes.                                                                                                         |
+| `quotaBytes`              | The most bytes that the files of one member may take together. `null` means no quota.                                               |
+| `mediaTypes`              | The media types that people can upload. `image/*` takes every image.                                                                |
+| `unusedMs`                | How long a file that no Chat keeps stays, in milliseconds.                                                                          |
+
+`"storage": null` removes the storage. Then nobody can upload files.
+
+OpenBot reaches the storage through its outbound guard. Storage on a private
+network must be in `OPENBOT_OUTBOUND_ALLOW`. See
+[Outbound connections](/docs/configuration#outbound-connections).
+
+The access key needs to put, read and delete objects in the bucket. Do not let
+the bucket expire objects by itself: OpenBot decides when a file goes away.

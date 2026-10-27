@@ -11,7 +11,7 @@ import { Redacted } from "effect"
  *
  * `make(credentials)` needs an `HttpClient` and gives a `Provider`. It does no I/O.
  */
-import type { ComputersApi } from "@openbot-build/api"
+import type { Computers as ComputerData } from "@openbot-build/domain"
 import { Effect, Option, Ref, String as Str } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
@@ -27,6 +27,7 @@ import {
 } from "../Computer.ts"
 import * as Desktop from "./Desktop.ts"
 import * as Envd from "./Envd.ts"
+import * as Background from "../../execution/Background.ts"
 import {
 	failed,
 	field,
@@ -41,7 +42,7 @@ import {
 } from "../Http.ts"
 
 export type Credentials = Extract<
-	ComputersApi.ComputerProviderCredentials,
+	ComputerData.ComputerProviderCredentials,
 	{ readonly kind: "e2b" }
 >
 
@@ -86,6 +87,7 @@ const gone = (id: string) =>
 
 export const make = (credentials: Credentials) =>
 	Effect.gen(function* () {
+		const background = yield* Background.make
 		const client = yield* HttpClient.HttpClient
 		const api = credentials.apiUrl ?? defaultApiUrl
 
@@ -235,19 +237,20 @@ export const make = (credentials: Credentials) =>
 						? Option.some(connectionOf(id, body))
 						: Option.none<Envd.Connection>(),
 				)
-				const connection = Effect.flatMap(Ref.get(cached), (current) =>
-					Option.match(current, {
+				const unavailable = () =>
+					ComputerCallFailed.make({
+						message:
+							"The E2B sandbox needs a resume through its Computer execution.",
+						retry: true,
+					})
+				const connection = Effect.flatMap(
+					Ref.get(cached),
+					Option.match({
 						onSome: Effect.succeed,
-						onNone: () =>
-							Effect.tap(connect(id), (fresh) =>
-								Ref.set(cached, Option.some(fresh)),
-							),
+						onNone: () => Effect.fail(unavailable()),
 					}),
 				)
-				/**
-				 * Runs one envd call. When the sandbox is away, such as paused by E2B at
-				 * its timeout, it resumes the sandbox and tries once more.
-				 */
+				// A lost connection must not make a hidden resume or repeat an unknown command.
 				const withEnvd = <A, R = never>(
 					call: (
 						connection: Envd.Connection,
@@ -255,33 +258,25 @@ export const make = (credentials: Credentials) =>
 				): Effect.Effect<A, ComputerCallFailed | ComputerGone, R> =>
 					Effect.flatMap(connection, call).pipe(
 						Effect.catchTag("SandboxAway", () =>
-							Effect.gen(function* () {
-								yield* Ref.set(cached, Option.none())
-								const fresh = yield* connection
-								return yield* call(fresh)
-							}),
-						),
-						Effect.catchTag("SandboxAway", () =>
-							Effect.fail(
-								ComputerCallFailed.make({
-									message: "The E2B sandbox does not answer after a resume",
-									retry: true,
-								}),
+							Ref.set(cached, Option.none()).pipe(
+								Effect.andThen(Effect.fail(unavailable())),
 							),
 						),
 					)
 
 				const run = (request: RunRequest) =>
-					withEnvd((current) => Envd.run(client, current, request))
+					withEnvd((current) => Envd.run(client, current, request, background))
 
 				const shell = {
 					start: (request: StartRequest) =>
-						withEnvd((current) => Envd.start(client, current, request)),
-					read: (path: string, encoding: ComputersApi.FileEncoding) =>
+						withEnvd((current) =>
+							Envd.start(client, current, request, background),
+						),
+					read: (path: string, encoding: ComputerData.FileEncoding) =>
 						withEnvd((current) => Envd.read(client, current, path)).pipe(
 							Effect.map((bytes) => fileContent(path, encoding, bytes)),
 						),
-					write: (file: ComputersApi.FileContent) =>
+					write: (file: ComputerData.FileContent) =>
 						Effect.gen(function* () {
 							const bytes = yield* fileBytes(file)
 							return yield* withEnvd((current) =>
@@ -325,9 +320,9 @@ export const make = (credentials: Credentials) =>
 										mediaType: "image/png",
 										data: Base64.encode(bytes),
 										...size,
-									} satisfies ComputersApi.Screenshot
+									} satisfies ComputerData.Screenshot
 								}),
-								act: (actions: ReadonlyArray<ComputersApi.DesktopAction>) =>
+								act: (actions: ReadonlyArray<ComputerData.DesktopAction>) =>
 									Effect.asVoid(script(Desktop.actions(actions))),
 								stream: Effect.gen(function* () {
 									const key = Str.trim(yield* script(Desktop.stream))
@@ -343,7 +338,7 @@ export const make = (credentials: Credentials) =>
 									return {
 										url: `https://${host}/vnc.html?${query}`,
 										expiresAt: null,
-									} satisfies ComputersApi.DesktopStream
+									} satisfies ComputerData.DesktopStream
 								}),
 							}
 						: undefined

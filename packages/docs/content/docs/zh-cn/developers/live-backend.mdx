@@ -1,0 +1,34 @@
+---
+title: "添加实时后端"
+description: "添加实时后端"
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+面向扩展服务端后端的开发者。
+
+## 添加 Live 后端
+
+**Live 后端**把 OpenBot 连接到一种 Live 服务。Live 模式的其他部分可以和任何后端一起工作。添加一个后端：
+
+1. 写一个模块，给出 `packages/openbot/src/models/LiveBackends.ts` 中的
+   `LiveBackend`。它的 `make` 给出 `@openbot-build/core/Live` 中的 `LiveModel`。
+2. 在 `capabilities` 中说明这个服务能做什么。OpenBot 从不发送后端不支持的输入。
+3. 把 `Live.Input` 的值映射为这个服务的消息，并把服务的消息映射为 `Live.Event`
+   的值。
+4. 把后端加入 `packages/openbot/src/app/OpenBot.ts` 中的 `layerLiveBackends`。
+
+`packages/openbot/src/providers/openai/OpenAiRealtime.ts` 是 OpenAI Realtime
+API 的后端。可以把它当作例子。
+
+不给出语音文本的服务无法保存 Chat 的历史。OpenBot 目前不会用这样的模型打开会话。
+
+使用供应商确认的计数设置 `ResponseDone.usage.input.total` 和
+`output.total`。缺失的计数设为
+`undefined`，明细计数也一样。缓存输入 token 已包含在输入总数中，不要再次相加。供应商没有给出用量报告时，不要使用
+`Live.emptyUsage`。这种用量保持未知，不会扣款。
+
+`Live.Input.History`
+恢复文本、工具调用和结果。将其插入到当前声音输入之前。保持顺序：先有调用，再有结果。驱动从保存的模型提示发送一次历史。后端不要另外加载一份 Chat 历史。
+
+调用方拥有连接作用域。RPC 失败或中断时，服务器停止使用该连接。终结器必须释放套接字。不要重放声音，也不要把旧回答留给下一次模型请求。

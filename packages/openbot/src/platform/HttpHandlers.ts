@@ -1,16 +1,16 @@
 import { Model, Provider } from "@openbot-build/core"
 import { Redacted } from "effect"
 import {
-	Account,
-	type AccountCaller,
 	ModelProvidersApi,
 	OpenBotApi,
 	PlatformApi,
 	Settings as SettingsApi,
 } from "@openbot-build/api"
+
+import { Account, type AccountCaller } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Stream, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import {
 	Billing,
@@ -86,12 +86,8 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					organizationId: input.organizationId ?? platformLog,
 					action: input.action,
 					actor: {
-						kind: account.kind,
-						userId: account.userId,
+						...account,
 						organizationId: input.organizationId ?? platformLog,
-						...(account.tokenId === undefined
-							? {}
-							: { tokenId: account.tokenId }),
 					},
 					resource: input.resource,
 					details: input.details,
@@ -103,29 +99,25 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 			),
 		)
 		const findProvider = (providerId: string) =>
-			providers
-				.get(platformOwner, providerId)
-				.pipe(
-					Effect.flatMap(
-						Effect.fromOption(() =>
-							ModelProvidersApi.ModelProviderNotFound.make({
-								providerId: Provider.Id.make(providerId),
-							}),
-						),
+			providers.get(platformOwner, providerId).pipe(
+				Effect.flatMap(
+					Effect.fromOption(() =>
+						ModelProvidersApi.ModelProviderNotFound.make({
+							providerId: Provider.Id.make(providerId),
+						}),
 					),
-				)
+				),
+			)
 		const findModel = (modelId: string) =>
-			models
-				.get(platformOwner, modelId)
-				.pipe(
-					Effect.flatMap(
-						Effect.fromOption(() =>
-							ModelProvidersApi.ModelNotFound.make({
-								modelId: Model.Id.make(modelId),
-							}),
-						),
+			models.get(platformOwner, modelId).pipe(
+				Effect.flatMap(
+					Effect.fromOption(() =>
+						ModelProvidersApi.ModelNotFound.make({
+							modelId: Model.Id.make(modelId),
+						}),
 					),
-				)
+				),
+			)
 		/** Every organization, page by page. */
 		const allOrganizations = Stream.paginate(Option.none<string>(), (after) =>
 			organization

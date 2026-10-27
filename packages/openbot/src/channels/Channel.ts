@@ -1,4 +1,4 @@
-import type { ChannelsApi } from "@openbot-build/api"
+import type { Channels as ChannelsApi } from "@openbot-build/domain"
 import { Data, type Effect, Schema } from "effect"
 
 /** A chat with one person, or a group chat. */
@@ -123,6 +123,8 @@ export class ChannelDeliveryFailed extends Schema.TaggedError<
 	retryAfterMs: Schema.optional(Schema.Finite),
 	/** False when trying again cannot help, such as a wrong token. */
 	retry: Schema.Boolean,
+	/** The platform confirms that no action took place. Other failures may have acted. */
+	outcome: Schema.optionalKey(Schema.Literal("rejected")),
 	cause: Schema.optional(Schema.Defect()),
 }) {}
 
@@ -138,10 +140,12 @@ export class Channel extends Data.TaggedClass("Channel.Channel")<{
 	readonly send: (
 		target: Target,
 		message: OutboundMessage,
+		key: string,
 	) => Effect.Effect<MessageRef, ChannelDeliveryFailed>
 	readonly edit: (
 		ref: MessageRef,
 		message: OutboundMessage,
+		key: string,
 	) => Effect.Effect<void, ChannelDeliveryFailed>
 	/** Tells the platform that a button press was handled. */
 	readonly acknowledge: (

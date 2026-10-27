@@ -1,98 +1,18 @@
 ---
-title: Rule 与 Grant
-description:
-  保存关于能力的决定，可以是精确的 Grant，也可以是用自然语言写的 Rule。
+title: "规则与授权"
+description: "规则与授权"
 ---
 
-关于[请求](/zh-cn/docs/requests)的决定不必一次又一次地重做。OpenBot 用两种形式保存它们：
+授权（Grant）保留对 Bot 能力的允许或拒绝决定。规则（Rule）用自然语言说明 Bot 在什么条件下可以工作。两者都会影响后续[请求](/zh-cn/docs/requests)。
 
-| 形式  | 示例                                                                                          | 由谁检查          |
-| ----- | --------------------------------------------------------------------------------------------- | ----------------- |
-| Grant | `apps.call` 作用于 `conn-7/search_orders`，允许，在这个 Chat 中有效                           | OpenBot，精确匹配 |
-| Rule  | "The Programmer may read any repository of the openbot organization, but asks before a push." | 评判模型          |
+## 保留决定
 
-Grant 快速而精确。Rule 能覆盖一整类请求。
+回答请求时，选择你真正需要的范围。Chat 授权作用于该 Chat；长期授权保留到撤销为止。希望后续工作按条件判断时，再编写规则。说清操作、目标和条件。
 
----
+## 检查已保存的选择
 
-## Grant
+通过客户端查看你有权管理的规则和授权。不再需要权限时撤销授权。任务变化后修改或删除规则。这些选择不能扩大你在组织中的访问权限。
 
-**Grant**（授权）是对某个 Bot 的某一项能力保存下来的决定。Bot 永远看不到自己的 Grant。它只能看到有些调用能运行，有些被拒绝。
+## 仍然收到请求时
 
-| 字段         | 含义                                                                 |
-| ------------ | -------------------------------------------------------------------- |
-| `capability` | `action`、`target`（`*` 表示所有目标），以及可选的确切 `arguments`。 |
-| `effect`     | `allow` 或 `deny`。拒绝优先。                                        |
-| `scope`      | `once`（一次调用后用完）、`chat`（在一个 Chat 中）或 `lifetime`。    |
-| `grantedBy`  | 做出决定的人、Bot 或 Rule。                                          |
-| `parent`     | 这个 Grant 来源于决策者的哪个 Grant。                                |
-| `chat`       | 范围为 `chat` 的 Grant 所属的 Chat。                                 |
-| `status`     | `active`、`used` 或 `revoked`。                                      |
-
-OpenBot 把一个 Bot 的有效 Grants 放进一个策略，每个 Grant 对应一条规则。拒绝的 Grant 胜过每个允许的 Grant，与顺序无关。当多个允许的 Grant 都涵盖一次调用时，由第一个给出答案。给出答案的
-`once` Grant 随后就用完了。见[权限](/zh-cn/docs/permissions#规则)。
-
-决策者回答请求时，OpenBot 会创建 Grant。你也可以自己创建：
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"bots.create","target":"*"},"effect":"allow","scope":"lifetime"}' \
-  https://api.example.com/v1/bots/$BOT/grants
-```
-
-`GET /v1/bots/:botId/grants` 列出 Grant。加上 `?status=active`
-只看有效的 Grant。
-
-`DELETE /v1/bots/:botId/grants/:grantId`
-撤销一个 Grant。OpenBot 还会撤销所有来源于它的 Grant，因此下方的 Bot 会失去通过它得到的权限。
-
----
-
-## Rule
-
-**Rule**（规则）是为某个 Bot 写的一句自然语言。当没有 Grant 能对请求做出决定时，评判模型会阅读这个 Bot 的有效 Rule。
-
-- 只有当某条 Rule 明确允许这个请求时，评判模型才会允许；只有当某条 Rule 明确禁止它时，才会拒绝。其他情况下，请求交给决策者。
-- 每次允许或拒绝都必须引用一条 Rule 的原文。OpenBot 会检查引用。没有真实的引用，就没有决定。
-- 拒绝优先于允许。
-- 评判模型出错或太慢时，没有决定。
-
-由 Bot 写的 Rule，只有在这个 Bot 位于本 Bot 的[所有者链](/zh-cn/docs/requests#决策者链)上方，并且自己也能使用这项能力时，才会生效。
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"The Programmer may read any repository of the openbot organization, but must ask before it pushes to main."}' \
-  https://api.example.com/v1/bots/$BOT/rules
-```
-
-| 字段      | 含义                                                        |
-| --------- | ----------------------------------------------------------- |
-| `author`  | 写这条 Rule 的人或 Bot。                                    |
-| `status`  | `active`、`proposed` 或 `retired`。只有有效的 Rule 才生效。 |
-| `version` | 每次修改都会增加。                                          |
-
-人写的 Rule 立刻生效。Bot 可以在审查中提议一条 Rule。提议的 Rule 要等人把它设为有效后才会生效：
-
-```sh
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":0,"status":"active"}' \
-  https://api.example.com/v1/bots/$BOT/rules/$RULE
-```
-
-你也可以在回答请求时保存一条 Rule：在回答中带上
-`rule`。参见[回答请求](/zh-cn/docs/requests#回答请求)。
-
-### 评判模型
-
-评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/docs/organization#设置)中的
-`rulesModel`。它没有默认值。它为 `null`
-时，评判不给出答案，由人或 Bot 来决定。对于相同的 Rule 和相同的能力，OpenBot 会保存每次评判的回答，因此同一个问题不会让评判模型再运行一次。
-
-Rules 模型可以是语言模型，也可以是[决策模型](/zh-cn/docs/models#决策模型)：
-
-- 语言模型写出完整的回答。它引用所用每条 Rule 的原话，并给出理由。
-- 决策模型不写文本。它从 `allow`、`deny` 和 `no_match`
-  中选一个，并对每条 Rule 给出这条 Rule 决定这个请求的可能性。可能性达到 0.5 或以上的每条 Rule，OpenBot 都会引用它的全文。没有这样的 Rule 的允许或拒绝不算决定。
+规则需要管理员配置判断模型。模型无法决定时，仍需 Bot 或人员决定。已保存的选择也可能不匹配新的操作或目标。扩大规则范围前，先阅读新请求。

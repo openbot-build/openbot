@@ -36,7 +36,7 @@ export const StatusSchema = Schema.TaggedUnion({
 	},
 	/** Someone stopped it. */
 	Cancelled: {},
-	/** Its server stopped before it came to an end. */
+	/** Its owning scope closed before it came to an end. */
 	Interrupted: {},
 })
 export type Status = typeof StatusSchema.Type
@@ -77,7 +77,7 @@ export class NotFound extends Schema.TaggedError<
 	id: Id,
 }) {}
 
-/** Where Operations are kept. Hosts keep them in a database. */
+/** A failure while keeping the records of local tool calls. */
 export class StoreError extends Schema.TaggedError<
 	StoreError,
 	{ readonly brand: unique symbol }
@@ -101,25 +101,14 @@ export interface Store {
 	readonly list: (
 		chat: ChatIdentity.Id,
 	) => Effect.Effect<ReadonlyArray<Record>, StoreError>
-	/** The ids of Operations that changed. A host with more servers sends changes from all. */
+	/** The IDs of local Operations that changed. This stream only wakes readers. */
 	readonly changes: Stream.Stream<Id>
-	/**
-	 * Asks the server that runs an Operation to stop it. A store in one process has no
-	 * other server, so it does nothing.
-	 */
-	readonly requestCancel: (id: Id) => Effect.Effect<void>
-	/** The ids that other servers asked this server to stop. */
-	readonly cancelRequests: Stream.Stream<Id>
-	/** Says that this server still runs these Operations. */
-	readonly heartbeat: (
-		ids: ReadonlyArray<Id>,
-	) => Effect.Effect<void, StoreError>
 }
 
 /** A Store in memory, for tests and for one process. */
 export const memoryStore: Effect.Effect<Store> = Effect.gen(function* () {
 	const records = yield* Ref.make(HashMap.empty<Id, Record>())
-	const changed = yield* PubSub.unbounded<Id>()
+	const changed = yield* PubSub.sliding<Id>(256)
 	return {
 		insert: (record) =>
 			Ref.update(records, HashMap.set(record.id, record)).pipe(
@@ -151,8 +140,5 @@ export const memoryStore: Effect.Effect<Store> = Effect.gen(function* () {
 				),
 			),
 		changes: Stream.fromPubSub(changed),
-		requestCancel: () => Effect.void,
-		cancelRequests: Stream.never,
-		heartbeat: () => Effect.void,
 	}
 })

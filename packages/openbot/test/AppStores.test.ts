@@ -1,3 +1,4 @@
+import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
 import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { Authorization, Store } from "@openbot-build/protocol"
@@ -23,6 +24,7 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 				const database = yield* Postgres.start
 				const layers = (key = "test:" + Str.repeat(32)("11")) =>
 					ProtocolStores.layer.pipe(
+						Layer.provide(IndexCommandsFixture.layer),
 						Layer.provide(Secrets.layer(Redacted.make(key))),
 						Layer.provideMerge(
 							Database.layer({ databaseUrl: Redacted.make(database.url) }),

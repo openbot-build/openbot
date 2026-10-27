@@ -16,6 +16,7 @@ services:
     secrets:
       - OPENBOT_DATABASE_URL
       - OPENBOT_SECRET_KEYS
+      - OPENBOT_CLUSTER_SECRET
     healthcheck:
       disable: true
     depends_on:
@@ -24,6 +25,22 @@ services:
 
   openbot:
     ports: !reset []
+    volumes:
+      - ./check.mjs:/check/check.mjs:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+  # A second process shares the database and uses its own private address.
+  openbot-peer:
+    extends:
+      file: compose.production.yaml
+      service: openbot
+    ports: !reset []
+    environment:
+      OPENBOT_CLUSTER_HOST: openbot-peer
+    volumes:
+      - ./check.mjs:/check/check.mjs:ro
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -35,12 +52,16 @@ services:
     image: openbot:${OPENBOT_RELEASE}
     platform: linux/amd64
     command: [/check/check.mjs]
+    secrets:
+      - OPENBOT_CLUSTER_SECRET
     volumes:
       - ./check.mjs:/check/check.mjs:ro
     healthcheck:
       disable: true
     depends_on:
       openbot:
+        condition: service_healthy
+      openbot-peer:
         condition: service_healthy
       protocol-test:
         condition: service_healthy

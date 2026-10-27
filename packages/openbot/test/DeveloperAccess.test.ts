@@ -1,3 +1,8 @@
+import { SqlClient } from "effect/sql"
+import * as Watches from "../src/apps/DeveloperWatches.ts"
+import * as Records from "../src/errors/Records.ts"
+import * as Store from "../src/execution/Store.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
 import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { DeveloperApi as Api } from "@openbot-build/api"
@@ -166,6 +171,11 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 				const servicesFor = () =>
 					Layer.mergeAll(MembersLayer.layer, ReportsLayer.layer).pipe(
 						Layer.provideMerge(AccessLayer.layer),
+						Layer.provideMerge(Watches.layer),
+						Layer.provideMerge(Layer.merge(Store.layer, Records.layer)),
+						Layer.provide(
+							Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
+						),
 						Layer.provideMerge(dependencies),
 						Layer.provideMerge(
 							Database.layer({ databaseUrl: Redacted.make(database.url) }),
@@ -183,6 +193,37 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 				const saved = yield* Effect.gen(function* () {
 					yield* Migration.initialize
 					const access = yield* DeveloperAccess
+					const confirm = (owner: string, id: string) =>
+						Effect.gen(function* () {
+							const claim = yield* access.claim(owner, id)
+							const checked = yield* access.checkEvidence(
+								claim.scope,
+								claim.token,
+							)
+							return yield* access.confirm(
+								owner,
+								id,
+								checked,
+								checked._tag === "Matched"
+									? yield* access.inspectScope(claim.scope)
+									: null,
+							)
+						})
+					const assess = (id: string) =>
+						Effect.gen(function* () {
+							const previous = yield* access.readProof(id)
+							const checked = yield* access.checkEvidence(
+								previous.value.scope,
+								previous.token,
+							)
+							return yield* access.applyEvidence(
+								previous.value,
+								checked,
+								checked._tag === "Matched"
+									? yield* access.inspectScope(previous.value.scope)
+									: null,
+							)
+						})
 					const members = yield* DeveloperMembers
 					const reports = yield* DeveloperReports
 					const db = yield* Db.make
@@ -207,16 +248,16 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						"DeveloperNotFound",
 					)
 					assert.strictEqual(
-						(yield* Effect.flip(access.verify(alice, challenge.id)))._tag,
+						(yield* Effect.flip(confirm(alice, challenge.id)))._tag,
 						"DeveloperConflict",
 					)
 					yield* Ref.set(tokens, [challenge.token])
 					yield* Ref.set(robotsDenied, true)
-					const denied = yield* Effect.flip(access.verify(alice, challenge.id))
+					const denied = yield* Effect.flip(confirm(alice, challenge.id))
 					assert.ok(denied._tag === "DeveloperConflict")
-					assert.strictEqual(denied.reason, "RobotsDenied")
+					assert.strictEqual(denied.reason, "VerificationUnavailable")
 					yield* Ref.set(robotsDenied, false)
-					const proof = yield* access.verify(alice, challenge.id)
+					const proof = yield* confirm(alice, challenge.id)
 					assert.strictEqual(proof.status, "Confirmed")
 					assert.strictEqual((yield* access.overview(alice)).apps.length, 1)
 					assert.strictEqual(
@@ -228,7 +269,7 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						cardUrl: "https://publisher.example/other?app=notes",
 					})
 					assert.strictEqual(
-						(yield* Effect.flip(access.verify(alice, copied.id)))._tag,
+						(yield* Effect.flip(confirm(alice, copied.id)))._tag,
 						"DeveloperConflict",
 					)
 					const revokedClaim = yield* access.start(alice, {
@@ -237,7 +278,7 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 					})
 					yield* access.revoke(alice, revokedClaim.id)
 					assert.strictEqual(
-						(yield* Effect.flip(access.verify(alice, revokedClaim.id)))._tag,
+						(yield* Effect.flip(confirm(alice, revokedClaim.id)))._tag,
 						"DeveloperConflict",
 					)
 					assert.notStrictEqual(
@@ -321,7 +362,7 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						cardUrl,
 					})
 					yield* Ref.update(tokens, Arr.append(independent.token))
-					yield* access.verify(bob, independent.id)
+					yield* confirm(bob, independent.id)
 					assert.strictEqual(
 						(yield* Effect.flip(access.relinquish(alice, independent.id)))._tag,
 						"DeveloperNotFound",
@@ -344,16 +385,13 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						(yield* access.authorize(bob, cardUrl, true)).length,
 						1,
 					)
-					assert.strictEqual(
-						(yield* Effect.flip(access.recheck(proof.id)))._tag,
-						"DeveloperConflict",
-					)
+					assert.strictEqual((yield* assess(proof.id)).status, "Relinquished")
 					const domain = yield* access.start(alice, {
 						_tag: "PublisherHostname",
 						hostname: "publisher.example",
 					})
 					yield* Ref.update(tokens, Arr.append(domain.token))
-					yield* access.verify(alice, domain.id)
+					yield* confirm(alice, domain.id)
 					const child = "https://sub.publisher.example/card"
 					yield* seedApp({
 						candidate: yield* Discovery.Candidate.decode({
@@ -412,15 +450,34 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						domain.id,
 						"viewer",
 					)
+					const sql = yield* SqlClient.SqlClient
+					const beforeCheck = (yield* access.readProof(domain.id)).value
+					// A lost notice write must also roll back the access change.
+					yield* sql`create function reject_proof_notice() returns trigger language plpgsql as $$ begin raise exception 'Fixture notice write failure'; end $$`
+					yield* sql`create trigger reject_proof_notice before insert on openbot_developer_notices for each row execute function reject_proof_notice()`
+					assert.equal(
+						(yield* access
+							.applyEvidence(beforeCheck, { _tag: "Missing" }, null)
+							.pipe(Effect.flip))._tag,
+						"ExecutionStorageError",
+					)
+					assert.deepEqual(
+						(yield* access.readProof(domain.id)).value,
+						beforeCheck,
+					)
+					yield* sql`drop trigger reject_proof_notice on openbot_developer_notices`
+					yield* sql`drop function reject_proof_notice()`
 					yield* Ref.set(unavailable, true)
-					const unconfirmed = yield* access.recheck(domain.id)
+					const unconfirmed = yield* assess(domain.id)
 					assert.strictEqual(unconfirmed.status, "Unconfirmed")
+					// An older network result cannot replace the newer proof state.
+					assert.deepEqual(
+						yield* access.applyEvidence(beforeCheck, { _tag: "Missing" }, null),
+						unconfirmed,
+					)
 					const until = unconfirmed.validUntil
 					yield* TestClock.adjust("8 days")
-					assert.strictEqual(
-						(yield* access.recheck(domain.id)).validUntil,
-						until,
-					)
+					assert.strictEqual((yield* assess(domain.id)).validUntil, until)
 					assert.strictEqual(
 						(yield* Effect.flip(access.authorize(alice, cardUrl)))._tag,
 						"DeveloperNotFound",
@@ -431,7 +488,7 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						"DeveloperConflict",
 					)
 					const expiredClaim = yield* Effect.flip(
-						access.verify(alice, expiringClaim.id),
+						confirm(alice, expiringClaim.id),
 					)
 					assert.ok(expiredClaim._tag === "DeveloperConflict")
 					assert.strictEqual(expiredClaim.reason, "ClaimExpired")
@@ -440,10 +497,7 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 							expiringClaim.expiresAt,
 					)
 					yield* Ref.set(unavailable, false)
-					assert.strictEqual(
-						(yield* access.recheck(domain.id)).status,
-						"Confirmed",
-					)
+					assert.strictEqual((yield* assess(domain.id)).status, "Confirmed")
 					return { proofId: proof.id, reportId: before.id }
 				}).pipe(onNewServices)
 				yield* Effect.gen(function* () {

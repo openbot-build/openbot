@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import { Worker } from "node:worker_threads"
-import type { CodeRunsApi } from "@openbot-build/api"
+import { CodeRuns as CodeDomain } from "@openbot-build/domain"
 import {
 	Cause,
 	Context,
@@ -20,6 +20,8 @@ import type {
 	ToWorker,
 	VaultItem,
 } from "./Protocol.ts"
+import * as Report from "../errors/Report.ts"
+import type { Records } from "../errors/Records.ts"
 
 export interface Program {
 	readonly code: string
@@ -40,7 +42,7 @@ export type Outcome =
 	  }
 	| {
 			readonly _tag: "Failed"
-			readonly reason: CodeRunsApi.FailureReason
+			readonly reason: CodeDomain.FailureReason
 			readonly message: string
 			readonly logs: ReadonlyArray<string>
 	  }
@@ -98,14 +100,15 @@ const unavailable = (message: string): Outcome => ({
 export const make: Effect.Effect<
 	typeof Sandbox.Service,
 	never,
-	FileSystem.FileSystem
+	FileSystem.FileSystem | Records
 > = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem
+	const report = yield* Report.make
 	/** The first worker file that exists. */
 	const workerFile = Effect.findFirst(workerFiles, (url) =>
 		fs.exists(fileURLToPath(url)).pipe(
 			Effect.tapCauseIf(Cause.hasFails, (cause) =>
-				Effect.logWarning(
+				report(
 					"OpenBot could not check a file of the Code Mode worker.",
 					cause,
 				),
@@ -159,7 +162,9 @@ export const make: Effect.Effect<
 					}),
 					(worker) =>
 						Effect.tryPromise(() => worker.terminate()).pipe(
-							Effect.ignore({ log: "Debug" }),
+							Effect.catchCause((cause) =>
+								report("The Code Mode worker could not stop", cause),
+							),
 						),
 				)
 				const post = (message: ToWorker) =>
@@ -190,10 +195,9 @@ export const make: Effect.Effect<
 						} satisfies Outcome
 					}
 					if (event.value._tag === "Ended") {
-						// A worker that fails writes its full report to the server output before it stops.
-						// The report and the exit code stay in the log. They are inside details.
+						// A worker error can quote program data. Keep it in a sealed record.
 						const { message, error, outOfMemory } = event.value
-						yield* Effect.logWarning(
+						yield* report(
 							"The Code Mode worker stopped before the program ended.",
 							error === undefined ? message : Cause.die(error),
 						)
@@ -250,11 +254,12 @@ export const make: Effect.Effect<
 		).pipe(
 			// A defect here is a bug of OpenBot, not of the program. The log keeps it, and the
 			// client gets no inside details. The Turn goes on with an `Unavailable` result.
-			Effect.catchDefect((defect) =>
-				Effect.logError(
-					"OpenBot could not run a Code Mode program.",
-					Cause.die(defect),
-				).pipe(Effect.as(unavailable("OpenBot could not run the program."))),
+			Effect.catchCauseIf(
+				(cause) => !Cause.hasInterrupts(cause),
+				(cause) =>
+					report("OpenBot could not run a Code Mode program.", cause).pipe(
+						Effect.as(unavailable("OpenBot could not run the program.")),
+					),
 			),
 		)
 	return Sandbox.of({ run })

@@ -41,6 +41,18 @@ const rules = {
 		"Do not fork a fiber with no owner. Fork it in a scope (`Effect.forkScoped`, `Effect.forkIn`) or keep it in a `FiberSet` / `FiberMap`.",
 	"promise-then":
 		"Do not chain Promises with `.then`. Turn the Promise into an Effect with `Effect.tryPromise` and go on in Effect.",
+	"domain-boundary":
+		"The domain may use core types and pure rules, but not transport, storage, or execution services.",
+	"storage-contract-boundary":
+		"Business code and storage use domain models. Only HTTP adapters and application assembly use HTTP contracts.",
+	"standalone-boundary":
+		"Core and protocol must work without the OpenBot product packages.",
+	"execution-boundary":
+		"Server work uses the common execution engine. Features must not build local Chat runtimes, another cluster, or a private RPC transport.",
+	"assembly-boundary":
+		"A feature must not import the application entry points or layer assembly.",
+	"public-entry":
+		"Use the public entry of another package, not its source files.",
 	parse: "The rules could not read this file.",
 } as const
 
@@ -166,10 +178,86 @@ const runs = [
 	"runCallback",
 ]
 
+/** Core imports retain their names through aliases and package subpaths. */
+const coreImports = (
+	program: Node,
+): Readonly<Record<string, ReadonlyArray<string>>> =>
+	Rec.fromEntries(
+		Arr.flatMap(
+			descendants(program),
+			(node): ReadonlyArray<readonly [string, ReadonlyArray<string>]> => {
+				if (node.type !== "ImportDeclaration") return []
+				const source = node.source.value
+				if (
+					typeof source !== "string" ||
+					!/^@openbot-build\/core(?:\/|$)/.test(source)
+				)
+					return []
+				const prefix =
+					source === "@openbot-build/core"
+						? []
+						: Arr.drop(Str.split(source, "/"), 2)
+				return Arr.map(
+					node.specifiers,
+					(specifier) =>
+						[
+							specifier.local.name,
+							specifier.type === "ImportSpecifier"
+								? [
+										...prefix,
+										String(
+											specifier.imported.type === "Identifier"
+												? specifier.imported.name
+												: specifier.imported.value,
+										),
+									]
+								: prefix,
+						] as const,
+				)
+			},
+		),
+	)
+
+const memberParts = (node: Node): ReadonlyArray<string> => {
+	if (node.type === "Identifier") return [node.name]
+	if (node.type !== "MemberExpression") return []
+	const key =
+		!node.computed && node.property.type === "Identifier"
+			? node.property.name
+			: node.computed &&
+				  node.property.type === "Literal" &&
+				  typeof node.property.value === "string"
+				? node.property.value
+				: undefined
+	return key === undefined ? [] : [...memberParts(node.object), key]
+}
+
 const check = (file: string, program: Node) => {
 	const main = Str.endsWith("Main.ts")(file)
+	const server = Str.startsWith("packages/openbot/src/")(file)
+	const domain = Str.startsWith("packages/domain/src/")(file)
+	const core = coreImports(program)
 	const blind = isBlind(blindNames(program))
 	return (node: Node): ReadonlyArray<Rule> => {
+		if (server || domain) {
+			const [head, ...tail] = memberParts(node)
+			const imported =
+				head === undefined || !Rec.has(core, head) ? undefined : core[head]
+			const name =
+				imported === undefined ? "" : Arr.join([...imported, ...tail], ".")
+			if (
+				server &&
+				/^(?:ChatRuntime(?:\.|$)|Operations\.(?:make|layer)$)/.test(name)
+			)
+				return ["execution-boundary"]
+			if (
+				domain &&
+				/^(?:ChatRuntime|Operations|TurnRunner|ModelStep|ToolStep|ChatStoreRepository|ChatStoreMemory|MemoryPersistence)(?:\.|$)/.test(
+					name,
+				)
+			)
+				return ["domain-boundary"]
+		}
 		if (node.type === "ThrowStatement") return ["throw"]
 		if (node.type !== "CallExpression") return []
 		const name = propertyName(node.callee)
@@ -255,8 +343,132 @@ const placeOf = Schema.decodeUnknownOption(
 	Schema.Struct({ loc: Schema.Struct({ line: Schema.Int }) }),
 )
 
+/** These files only map an application result to the HTTP contract. */
+const httpViews = ["chats/ChatViews.ts", "chats/ResponseMapping.ts"] as const
+const httpAdapters = [
+	...httpViews,
+	"auth/BetterAuth.ts",
+	"authorization/Layer.ts",
+] as const
+
+const usesHttpContract = (file: string): boolean => {
+	const local = Str.replace("packages/openbot/src/", "")(file)
+	return (
+		Str.startsWith("app/")(local) ||
+		/(?:Http[^/]*|Handlers?)\.ts$/.test(local) ||
+		Arr.some(httpAdapters, (adapter) => local === adapter)
+	)
+}
+
+/** Check type imports too: Node removes them before the Effect rules parse the file. */
+const boundaries = (
+	file: string,
+	code: string,
+	path: Path.Path,
+): ReadonlyArray<Omit<Finding, "file">> => {
+	const source = /^packages\/([^/]+)\/src\//.exec(file)
+	if (source === null) return []
+	const owner = source[1]
+	// Node removes comments and strings inside type imports. Tokenize the original
+	// source so those imports have the same checks as value imports.
+	const comments: Array<Acorn.Comment> = []
+	const tokens = Arr.fromIterable(
+		Acorn.tokenizer(code, {
+			ecmaVersion: "latest",
+			sourceType: "module",
+			onComment: comments,
+		}),
+	)
+	const quoted = Arr.filter(tokens, (token) =>
+		Arr.contains(["string", "regexp", "template"], token.type.label),
+	)
+
+	const scan = Arr.reduce(
+		comments,
+		code,
+		(text, comment) =>
+			Str.slice(0, comment.start)(text) +
+			Str.repeat(comment.end - comment.start)(" ") +
+			Str.slice(comment.end)(text),
+	)
+	const references = Arr.fromIterable(
+		Str.matchAll(
+			/\b(?:(?:import|export)\b\s*(?:type\b\s*)?(?:[\w$]+\s*,\s*)?(?:\{[^}]*\}|\*(?:\s+as\s+[\w$]+)?|[\w$]+)\s*\bfrom\s*|import\s*(?:\(\s*)?)["']([^"']+)["']/g,
+		)(scan),
+	)
+	return Arr.flatMap(
+		references,
+		(match): ReadonlyArray<Omit<Finding, "file">> => {
+			// matchAll always gives an index. Effect types it as optional.
+			const index = match.index!
+			if (
+				Arr.some(
+					[...comments, ...quoted],
+					(node) => index >= node.start && index < node.end,
+				)
+			)
+				return []
+			const target = match[1]!
+			const line = Str.split(Str.slice(0, index)(code), "\n").length
+			const relative = Str.startsWith(".")(target)
+			const resolved = relative
+				? path.normalize(path.join(path.dirname(file), target))
+				: target
+			const product = Str.startsWith("@openbot-build/")(target)
+			const core =
+				target === "@openbot-build/core" ||
+				Str.startsWith("@openbot-build/core/")(target)
+			const found: ReadonlyArray<Rule> = [
+				...(owner === "domain" &&
+				((product && !core) ||
+					/^(?:effect\/(?:http|rpc|sql|cluster|workflow|process)|@effect\/(?:platform|sql)|node:|bun:)/.test(
+						target,
+					))
+					? ["domain-boundary" as const]
+					: []),
+				...(owner === "openbot" &&
+				!usesHttpContract(file) &&
+				(target === "@openbot-build/api" ||
+					Str.startsWith("@openbot-build/api/")(target) ||
+					Str.startsWith("effect/http-api")(target) ||
+					(relative &&
+						Arr.some(
+							httpViews,
+							(view) => resolved === `packages/openbot/src/${view}`,
+						)))
+					? ["storage-contract-boundary" as const]
+					: []),
+				...((owner === "core" || owner === "protocol") && product && !core
+					? ["standalone-boundary" as const]
+					: []),
+				...(owner === "openbot" &&
+				/^effect\/(?:cluster|rpc)(?:\/|$)/.test(target) &&
+				!/^packages\/openbot\/src\/(?:execution|resources|transport|app)\//.test(
+					file,
+				)
+					? ["execution-boundary" as const]
+					: []),
+				...(owner === "openbot" &&
+				/^packages\/openbot\/src\/[^/]+\//.test(file) &&
+				!Str.startsWith("packages/openbot/src/app/")(file) &&
+				Str.startsWith("packages/openbot/src/app/")(resolved)
+					? ["assembly-boundary" as const]
+					: []),
+				...((relative &&
+					/^packages\//.test(resolved) &&
+					!Str.startsWith(`packages/${owner}/`)(resolved)) ||
+				/^@openbot-build\/[^/]+\/(?:src|dist)(?:\/|$)/.test(target)
+					? ["public-entry" as const]
+					: []),
+			]
+			return Arr.map(found, (rule) => ({ line, rule, detail: target }))
+		},
+	)
+}
+
 const checkFile = Effect.fn("EffectRules.checkFile")(function* (file: string) {
 	const fs = yield* FileSystem.FileSystem
+	const path = yield* Path.Path
 	const code = yield* fs.readFileString(file)
 	const comments: Array<Acorn.Comment> = []
 	const parsed = yield* Effect.try(() =>
@@ -303,10 +515,13 @@ const checkFile = Effect.fn("EffectRules.checkFile")(function* (file: string) {
 			rule: "directive-reason" as const,
 		})),
 	)
-	return Arr.map([...found, ...unreasoned], (finding): Finding => ({
-		file,
-		...finding,
-	}))
+	return Arr.map(
+		[...found, ...unreasoned, ...boundaries(file, code, path)],
+		(finding): Finding => ({
+			file,
+			...finding,
+		}),
+	)
 })
 
 const program = Effect.gen(function* () {

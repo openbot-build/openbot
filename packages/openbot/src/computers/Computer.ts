@@ -1,4 +1,5 @@
-import type { ComputersApi } from "@openbot-build/api"
+import type { Execution } from "@openbot-build/domain"
+import type { Computers as ComputerData } from "@openbot-build/domain"
 import { Data, type Effect, Schema, type Scope, type Stream } from "effect"
 
 /** The provider or the connector did not do the call. */
@@ -24,6 +25,7 @@ export class ComputerGone extends Schema.TaggedError<
 }) {}
 
 export type ComputerError = ComputerCallFailed | ComputerGone
+export type ComputerFailure = ComputerError | Execution.Failure
 
 /** What the provider says about a sandbox, in the form that every kind shares. */
 export type MachineState = "starting" | "running" | "paused" | "gone"
@@ -61,6 +63,8 @@ export interface Exit {
 	readonly signal: string | null
 	/** Why the command did not start, or why its stream broke. */
 	readonly error?: string
+	/** A lost result stays unknown. It is not a successful process exit. */
+	readonly failure?: Execution.Failure
 }
 
 /** A command that runs. Closing its Scope stops it. */
@@ -68,36 +72,36 @@ export interface Process {
 	/** The output as it comes: stdout and stderr together. It ends when the command ends. */
 	readonly output: Stream.Stream<Uint8Array>
 	readonly exit: Effect.Effect<Exit>
-	readonly write: (data: Uint8Array) => Effect.Effect<void, ComputerError>
+	readonly write: (data: Uint8Array) => Effect.Effect<void, ComputerFailure>
 	readonly resize: (
 		rows: number,
 		cols: number,
-	) => Effect.Effect<void, ComputerError>
+	) => Effect.Effect<void, ComputerFailure>
 	readonly signal: (
-		signal: ComputersApi.SessionSignal,
-	) => Effect.Effect<void, ComputerError>
+		signal: ComputerData.SessionSignal,
+	) => Effect.Effect<void, ComputerFailure>
 }
 
 /**
  * The work that every Computer can do: commands and files.
- * A paused sandbox resumes by itself on the first call, so callers do not check the state.
+ * The application resumes a paused sandbox through a saved execution before use.
  */
 export interface Shell {
 	/** Starts a command. It stops when the Scope closes. */
 	readonly start: (
 		request: StartRequest,
-	) => Effect.Effect<Process, ComputerError, Scope.Scope>
+	) => Effect.Effect<Process, ComputerFailure, Scope.Scope>
 	readonly read: (
 		path: string,
-		encoding: ComputersApi.FileEncoding,
-	) => Effect.Effect<ComputersApi.FileContent, ComputerError>
+		encoding: ComputerData.FileEncoding,
+	) => Effect.Effect<ComputerData.FileContent, ComputerFailure>
 	readonly write: (
-		file: ComputersApi.FileContent,
-	) => Effect.Effect<void, ComputerError>
+		file: ComputerData.FileContent,
+	) => Effect.Effect<void, ComputerFailure>
 	readonly list: (
 		path: string,
-	) => Effect.Effect<ReadonlyArray<ComputersApi.FileEntry>, ComputerError>
-	readonly remove: (path: string) => Effect.Effect<void, ComputerError>
+	) => Effect.Effect<ReadonlyArray<ComputerData.FileEntry>, ComputerFailure>
+	readonly remove: (path: string) => Effect.Effect<void, ComputerFailure>
 }
 
 /** A Computer that can pause. The provider keeps its files. E2B also keeps its memory and programs. */
@@ -108,12 +112,12 @@ export interface Pausable {
 
 /** A Computer with a desktop. Coordinates are pixels of the last screenshot. */
 export interface Desktop {
-	readonly screenshot: Effect.Effect<ComputersApi.Screenshot, ComputerError>
+	readonly screenshot: Effect.Effect<ComputerData.Screenshot, ComputerFailure>
 	readonly act: (
-		actions: ReadonlyArray<ComputersApi.DesktopAction>,
-	) => Effect.Effect<void, ComputerError>
+		actions: ReadonlyArray<ComputerData.DesktopAction>,
+	) => Effect.Effect<void, ComputerFailure>
 	/** A live view of the desktop. It is there only when the Computer can give one. */
-	readonly stream?: Effect.Effect<ComputersApi.DesktopStream, ComputerError>
+	readonly stream?: Effect.Effect<ComputerData.DesktopStream, ComputerFailure>
 }
 
 /** A Computer that can give a port a public HTTPS address. */
@@ -150,7 +154,7 @@ export interface Spec {
  * Computer provider.
  */
 export class Provider extends Data.TaggedClass("Computer.Provider")<{
-	readonly kind: ComputersApi.ComputerProviderKind
+	readonly kind: ComputerData.ComputerProviderKind
 	/** Checks the key with the provider. */
 	readonly verify: Effect.Effect<void, ComputerCallFailed>
 	/** Makes a sandbox. `ref` is its ID at the provider. OpenBot stores it with the Computer. */

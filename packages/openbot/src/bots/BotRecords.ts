@@ -1,7 +1,7 @@
 import { PgClient } from "@effect/sql-pg"
-import { BotsApi } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 
 /** Fails with `BotStorageUnavailable` in place of a storage failure, and logs the failure. */
 const storageUnavailable = (message: string) =>
@@ -32,13 +32,6 @@ export interface Collection<A, Status extends string = string> {
 		organizationId: string,
 		filter?: Filter<Status>,
 	) => Effect.Effect<ReadonlyArray<A>, BotsApi.BotStorageUnavailable>
-	/** Records with this status in every organization. Recovery uses it after a restart. */
-	readonly withStatus: (
-		status: Status,
-	) => Effect.Effect<
-		ReadonlyArray<{ readonly organizationId: string; readonly value: A }>,
-		BotsApi.BotStorageUnavailable
-	>
 	readonly put: (
 		keys: Keys<Status>,
 		value: A,
@@ -129,35 +122,6 @@ export const make: Effect.Effect<
 						),
 					),
 					Effect.annotateLogs({ botRecordKind: kind, organizationId }),
-				),
-			withStatus: (status) =>
-				sql<{
-					organization_id: string
-					id: string
-					body: string
-				}>`SELECT organization_id, id, body FROM openbot_bot_records WHERE kind = ${kind} AND status = ${status} ORDER BY id`.pipe(
-					storageUnavailable(
-						"The Bot records with a status could not be read.",
-					),
-					Effect.flatMap((rows) =>
-						Effect.forEach(rows, (row) =>
-							decode(row.body).pipe(
-								Effect.map((value) => ({
-									organizationId: row.organization_id,
-									value,
-								})),
-								storageUnavailable("A Bot record could not be read."),
-								Effect.annotateLogs({
-									organizationId: row.organization_id,
-									botRecordId: row.id,
-								}),
-							),
-						),
-					),
-					Effect.annotateLogs({
-						botRecordKind: kind,
-						botRecordStatus: status,
-					}),
 				),
 			put: (keys, value) =>
 				Schema.encodeEffect(codec)(value).pipe(

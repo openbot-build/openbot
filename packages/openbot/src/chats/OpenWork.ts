@@ -1,5 +1,5 @@
 import type { Chat } from "@openbot-build/core"
-import type { BotsApi, OpenWork as OpenWorkView } from "@openbot-build/api"
+import type { Bots, OpenWork as OpenWorkView } from "@openbot-build/domain"
 import { Context, Effect, Layer } from "effect"
 
 /**
@@ -13,7 +13,7 @@ export class OpenWork extends Context.Service<
 		readonly count: (
 			organizationId: string,
 			chat: Chat.Id,
-		) => Effect.Effect<OpenWorkView, BotsApi.BotStorageUnavailable>
+		) => Effect.Effect<OpenWorkView, Bots.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/chats/OpenWork") {}
 

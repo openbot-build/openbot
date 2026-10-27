@@ -1,7 +1,9 @@
+import { FailureBoundary } from "./FailureApi.ts"
+import { ExecutionsApi } from "./ExecutionsApi.ts"
 import { DeveloperApi, DeveloperPublicApi } from "./DeveloperApi.ts"
 import { AppExperienceApi } from "./AppExperienceApi.ts"
 import { ConnectionsApi } from "./ConnectionsApi.ts"
-import { HttpApi, OpenApi } from "effect/http-api"
+import { HttpApi, type HttpApiGroup, OpenApi } from "effect/http-api"
 import { ChatsApi } from "./ChatsApi.ts"
 import { LiveApi } from "./LiveApi.ts"
 import { DelegationsApi } from "./DelegationsApi.ts"
@@ -31,7 +33,7 @@ import {
 } from "./ComputersApi.ts"
 import { SecretProvidersApi, VaultsApi } from "./VaultsApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
-import { OperationsApi } from "./OperationsApi.ts"
+import { ToolCallsApi } from "./ToolCallsApi.ts"
 import { CodeRunsApi } from "./CodeRunsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
 import { BudgetsApi, UsageApi } from "./BillingApi.ts"
@@ -46,7 +48,59 @@ const apps = [own("use", "App")]
  * The shared contract for server handlers, typed clients and generated documentation.
  * Each group that needs a caller also says which permissions its endpoints need.
  */
-export class OpenBotApi extends HttpApi.make("openbot-api")
+type ProtectedGroups =
+	| typeof DeveloperApi
+	| typeof AppAuthorizationApi
+	| typeof AppsApi
+	| typeof AppOperationsApi
+	| typeof CodeRunsApi
+	| typeof AppViewsApi
+	| typeof AppExperienceApi
+	| typeof ConnectionsApi
+	| typeof UserTokensApi
+	| typeof OrganizationApi
+	| typeof ModelProvidersApi
+	| typeof SsoApi
+
+type Groups =
+	| typeof DeveloperPublicApi
+	| typeof AppIndexApi
+	| typeof AppAuthorizationPublicApi
+	| typeof ChatsApi
+	| typeof ToolCallsApi
+	| typeof ExecutionsApi
+	| typeof LiveApi
+	| typeof FilesApi
+	| typeof DelegationsApi
+	| typeof BotsApi
+	| typeof BotInvitationsApi
+	| typeof RequestsApi
+	| typeof MemberSettingsApi
+	| typeof TriggersApi
+	| typeof TriggerHooksApi
+	| typeof ChannelsApi
+	| typeof ChannelLinksApi
+	| typeof ChannelHooksApi
+	| typeof ComputerProvidersApi
+	| typeof ComputersApi
+	| typeof ComputerHooksApi
+	| typeof SecretProvidersApi
+	| typeof VaultsApi
+	| typeof UsageApi
+	| typeof BudgetsApi
+	| typeof AccountApi
+	| typeof SignInApi
+	| typeof OrganizationsApi
+	| typeof PlatformApi
+	| typeof HealthApi
+	| HttpApiGroup.AddMiddleware<
+			HttpApiGroup.AddMiddleware<ProtectedGroups, Authorize>,
+			BotAuth
+	  >
+
+const contract: HttpApi.HttpApi<"openbot-api", Groups> = HttpApi.make(
+	"openbot-api",
+)
 	.add(
 		DeveloperPublicApi,
 		DeveloperApi.annotate(GroupRequired, {
@@ -67,7 +121,8 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		ChatsApi,
-		OperationsApi,
+		ToolCallsApi,
+		ExecutionsApi,
 		LiveApi,
 		FilesApi,
 		DelegationsApi,
@@ -143,4 +198,12 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 	.annotate(
 		OpenApi.Description,
 		"Headless REST API for OpenBot. To authenticate, send `Authorization: Bearer <user token>`. Create tokens at /v1/user/tokens. Every call needs a permission from a role or policy. Browser clients on the same origin can use the sign-in session Cookie instead. Then every write must send the exact public Origin.",
-	) {}
+	)
+
+// A named type keeps TypeScript from expanding the full API for each middleware.
+const publicContract: HttpApi.HttpApi<
+	"openbot-api",
+	HttpApiGroup.AddMiddleware<Groups, FailureBoundary>
+> = contract.middleware(FailureBoundary)
+
+export class OpenBotApi extends publicContract {}

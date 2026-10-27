@@ -20,7 +20,7 @@ import {
 } from "effect"
 import { Base64Url } from "effect/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
-import { serveHttps } from "../../protocol/test/Fixture.ts"
+import { Fixture } from "@openbot-build/protocol/testing"
 import * as Probe from "../src/apps/Probe.ts"
 import type { PublicationMode } from "../src/app/DevelopmentApps.ts"
 
@@ -102,6 +102,7 @@ const listing = (request: RpcRequest, account: string, capabilities: boolean) =>
 									properties: {
 										id: { type: "string" },
 										text: { type: "string" },
+										openbot_reason: { type: "string" },
 									},
 									required: ["id", "text"],
 									additionalProperties: false,
@@ -499,7 +500,14 @@ export const start = Effect.fn("AppFixture.start")(function* (
 			if (params["name"] === "write_board")
 				yield* Ref.update(
 					writes,
-					Arr.append({ account, text: String(argsValue["text"]) }),
+					Arr.append({
+						account,
+						text:
+							String(argsValue["text"]) +
+							(argsValue["openbot_reason"] === undefined
+								? ""
+								: ": " + String(argsValue["openbot_reason"])),
+					}),
 				)
 			return {
 				content: [
@@ -640,7 +648,7 @@ export const start = Effect.fn("AppFixture.start")(function* (
 		return yield* mcp(request)
 	})
 
-	const fixture = yield* serveHttps(app)
+	const fixture = yield* Fixture.serveHttps(app)
 	yield* Deferred.succeed(origin, fixture.ipOrigin)
 	const base = fixture.ipOrigin
 	const network = (owner: string) =>

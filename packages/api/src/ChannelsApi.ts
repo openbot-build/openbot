@@ -1,5 +1,7 @@
+import { Channels as Domain, Execution } from "@openbot-build/domain"
+import { errors as executionErrors } from "./ExecutionsApi.ts"
 import { SecretOutput } from "./Secret.ts"
-import { Array as Arr, Schema } from "effect"
+import { Schema } from "effect"
 import {
 	HttpApi,
 	HttpApiEndpoint,
@@ -18,128 +20,31 @@ import {
 	channels,
 	own,
 } from "./Authorization.ts"
-import { SecretInput, SecretState, Version } from "./Settings.ts"
+import { Version } from "./Settings.ts"
 
-export const ChannelId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/ChannelId"))
-export type ChannelId = typeof ChannelId.Type
+export const ChannelId = Domain.ChannelId
+export type ChannelId = Domain.ChannelId
 
-/** An HTTPS address that a custom Channel sends its replies to. */
-export const ChannelEndpoint = Schema.NonEmptyString.check(
-	Schema.isMaxLength(2048),
-	Schema.makeFilter(
-		(value: string) => {
-			const url = URL.parse(value)
-			return (
-				url !== null &&
-				url.protocol === "https:" &&
-				url.username === "" &&
-				url.password === "" &&
-				url.hash === ""
-			)
-		},
-		{ message: "Expected an HTTPS URL without credentials or fragment" },
-	),
-)
-
-/** Lark has two domains: `feishu` in China and `lark` in other places. */
-export const LarkDomain = Schema.Literals(["feishu", "lark"])
-export type LarkDomain = typeof LarkDomain.Type
-
-/** The secrets that a Channel needs. They go in, but they never come out. */
-export const ChannelCredentials = Schema.Union([
-	Schema.Struct({
-		kind: Schema.Literal("slack"),
-		botToken: SecretInput,
-		signingSecret: SecretInput,
-	}),
-	Schema.Struct({
-		kind: Schema.Literal("lark"),
-		domain: LarkDomain,
-		appId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-		appSecret: SecretInput,
-		verificationToken: SecretInput,
-		encryptKey: SecretInput,
-	}),
-	/** OpenBot makes the webhook secret itself and tells Telegram the webhook. */
-	Schema.Struct({
-		kind: Schema.Literal("telegram"),
-		botToken: SecretInput,
-	}),
-	/** Make the signing secret with `PUT /v1/organization/channels/:channelId/secret`. */
-	Schema.Struct({
-		kind: Schema.Literal("custom"),
-		endpoint: ChannelEndpoint,
-	}),
-])
-export type ChannelCredentials = typeof ChannelCredentials.Type
+export const ChannelEndpoint = Domain.ChannelEndpoint
+export const LarkDomain = Domain.LarkDomain
+export type LarkDomain = Domain.LarkDomain
+export const ChannelCredentials = Domain.CredentialsInput
+export type ChannelCredentials = Domain.CredentialsInput
 
 /**
  * The platform of a Channel. `custom` is any other system that speaks the
  * Channel protocol of OpenBot over signed HTTP requests. It comes from
  * `ChannelCredentials`.
  */
-export const ChannelKind = Schema.Literals(
-	Arr.map(ChannelCredentials.members, (member) => member.fields.kind.literal),
-)
-export type ChannelKind = typeof ChannelKind.Type
+export const ChannelKind = Domain.ChannelKind
+export type ChannelKind = Domain.ChannelKind
 
-/** What the API shows of the secrets of a Channel. */
-export const ChannelCredentialsView = Schema.Union([
-	Schema.Struct({
-		kind: Schema.Literal("slack"),
-		botToken: SecretState,
-		signingSecret: SecretState,
-	}),
-	Schema.Struct({
-		kind: Schema.Literal("lark"),
-		domain: LarkDomain,
-		appId: Schema.String,
-		appSecret: SecretState,
-		verificationToken: SecretState,
-		encryptKey: SecretState,
-	}),
-	Schema.Struct({
-		kind: Schema.Literal("telegram"),
-		botToken: SecretState,
-	}),
-	Schema.Struct({
-		kind: Schema.Literal("custom"),
-		endpoint: Schema.String,
-		secret: SecretState,
-	}),
-])
-export type ChannelCredentialsView = typeof ChannelCredentialsView.Type
+export const ChannelCredentialsView = Domain.ChannelCredentialsView
+export type ChannelCredentialsView = Domain.ChannelCredentialsView
 
-/**
- * A Channel is one bot of the organization on one platform, such as a Slack app.
- * People talk with its Bot in direct chats and group chats. Each chat is one Chat.
- */
 export const Channel = Schema.Struct({
-	id: ChannelId,
-	kind: ChannelKind,
-	name: Schema.String,
-	/** The persistent Bot of the organization that answers in this Channel. */
-	bot: BotId,
-	/**
-	 * The member that owns the Chats of the Channel. It is the last member who
-	 * created or changed the Channel. Each Turn works for the person who spoke.
-	 */
-	actor: Schema.String,
-	enabled: Schema.Boolean,
-	/**
-	 * A path on the public origin where your client lets a person link their account.
-	 * OpenBot adds `?code=...`. Without it, the bot sends only the code.
-	 */
-	linkPath: Schema.NullOr(Schema.String),
-	/** Give this address to the platform. It receives the events of the Channel. */
+	...Domain.Channel.fields,
 	webhookUrl: Schema.String,
-	credentials: ChannelCredentialsView,
-	version: Version,
-	createdAt: Schema.Finite,
-	updatedAt: Schema.Finite,
 })
 export type Channel = typeof Channel.Type
 
@@ -149,6 +54,7 @@ const ChannelName = Schema.String.check(
 )
 
 export const CreateChannelRequest = Schema.Struct({
+	commandKey: Execution.CommandKey,
 	name: ChannelName,
 	bot: BotId,
 	credentials: ChannelCredentials,
@@ -158,6 +64,7 @@ export const CreateChannelRequest = Schema.Struct({
 export type CreateChannelRequest = typeof CreateChannelRequest.Type
 
 export const UpdateChannelRequest = Schema.Struct({
+	commandKey: Execution.CommandKey,
 	expectedVersion: Version,
 	name: Schema.optionalKey(ChannelName),
 	bot: Schema.optionalKey(BotId),
@@ -170,140 +77,55 @@ export const UpdateChannelRequest = Schema.Struct({
 export type UpdateChannelRequest = typeof UpdateChannelRequest.Type
 
 /** The signing secret of a custom Channel. OpenBot shows it only once. */
-export const ChannelSecret = Schema.Struct({ secret: SecretOutput })
+export const ChannelSecret = Schema.Struct({
+	secret: SecretOutput,
+	channel: Channel,
+})
 export type ChannelSecret = typeof ChannelSecret.Type
 
-/** A person on a platform, linked to a member of the organization. */
-export const ChannelIdentity = Schema.Struct({
-	channel: ChannelId,
-	externalUserId: Schema.String,
-	displayName: Schema.String,
-	userId: Schema.String,
-	createdAt: Schema.Finite,
-})
-export type ChannelIdentity = typeof ChannelIdentity.Type
+export const ChannelIdentity = Domain.ChannelIdentity
+export type ChannelIdentity = Domain.ChannelIdentity
 
-/** A link code that a bot gave to a person who is not linked yet. */
-export const ChannelLink = Schema.Struct({
-	channel: ChannelId,
-	channelName: Schema.String,
-	kind: ChannelKind,
-	externalUserId: Schema.String,
-	displayName: Schema.String,
-	expiresAt: Schema.Finite,
-})
-export type ChannelLink = typeof ChannelLink.Type
+export const ChannelLink = Domain.ChannelLink
+export type ChannelLink = Domain.ChannelLink
 
-const ExternalId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(256),
-)
+export const CustomConversation = Domain.CustomConversation
 
-/** A chat on the platform of a custom Channel. */
-export const CustomConversation = Schema.Struct({
-	id: ExternalId,
-	kind: Schema.Literals(["direct", "group"]),
-	title: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(200))),
-})
-export const CustomSender = Schema.Struct({
-	id: ExternalId,
-	name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-})
+export const CustomSender = Domain.CustomSender
 
-/**
- * An event that a custom Channel sends to its webhook. `id` must be unique for the
- * Channel, so OpenBot can drop a repeated event.
- */
-export const CustomEvent = Schema.Union([
-	Schema.Struct({
-		type: Schema.Literal("message"),
-		id: ExternalId,
-		conversation: CustomConversation,
-		sender: CustomSender,
-		text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20000)),
-		/** In a group chat, OpenBot only answers when the message mentions the bot. */
-		mentioned: Schema.optionalKey(Schema.Boolean),
-	}),
-	/** A person pressed a button. `value` is the value of the button. */
-	Schema.Struct({
-		type: Schema.Literal("action"),
-		id: ExternalId,
-		conversation: CustomConversation,
-		sender: CustomSender,
-		value: Schema.String.check(Schema.isMaxLength(1000)),
-	}),
-])
-export type CustomEvent = typeof CustomEvent.Type
+export const CustomEvent = Domain.CustomEvent
+export type CustomEvent = Domain.CustomEvent
 
-/** A button in a message. Pressing it sends an `action` event with its value. */
-export const CustomButton = Schema.Struct({
-	label: Schema.String,
-	value: Schema.String,
-	style: Schema.optionalKey(Schema.Literals(["primary", "danger"])),
-})
+export const CustomButton = Domain.CustomButton
 
-/**
- * What OpenBot sends to the endpoint of a custom Channel. A `send` answers with
- * `{ "ref": "<message id>", "conversation": "<chat id>" }`. An `edit` changes the message
- * with that ref.
- */
-export const CustomDelivery = Schema.Union([
-	Schema.Struct({
-		type: Schema.Literal("send"),
-		/** The chat. Without it, send the message in a direct chat with `person`. */
-		conversation: Schema.optionalKey(Schema.String),
-		/** With a `conversation`, only this person should see the message in that chat. */
-		person: Schema.optionalKey(Schema.String),
-		markdown: Schema.String,
-		buttons: Schema.optionalKey(Schema.Array(CustomButton)),
-	}),
-	Schema.Struct({
-		type: Schema.Literal("edit"),
-		conversation: Schema.String,
-		ref: Schema.String,
-		markdown: Schema.String,
-		buttons: Schema.optionalKey(Schema.Array(CustomButton)),
-	}),
-])
-export type CustomDelivery = typeof CustomDelivery.Type
-export const CustomDeliveryResult = Schema.Struct({
-	ref: Schema.String,
-	/** The chat of the message. Give it when OpenBot sent no `conversation`. */
-	conversation: Schema.optionalKey(Schema.String),
-})
+export const CustomDelivery = Domain.CustomDelivery
+export type CustomDelivery = Domain.CustomDelivery
 
-export class ChannelNotFound extends Schema.TaggedError<
-	ChannelNotFound,
-	{ readonly brand: unique symbol }
->()("ChannelNotFound", { id: Schema.String }) {}
-export class ChannelConflict extends Schema.TaggedError<
-	ChannelConflict,
-	{ readonly brand: unique symbol }
->()("ChannelConflict", { version: Version }) {}
-export class ChannelInvalid extends Schema.TaggedError<
-	ChannelInvalid,
-	{ readonly brand: unique symbol }
->()("ChannelInvalid", { message: Schema.String }) {}
-/** The code is unknown, used or too old. Ask the bot for a new one. */
-export class ChannelLinkInvalid extends Schema.TaggedError<
-	ChannelLinkInvalid,
-	{ readonly brand: unique symbol }
->()("ChannelLinkInvalid", {}) {}
-export class ChannelIdentityNotFound extends Schema.TaggedError<
-	ChannelIdentityNotFound,
-	{ readonly brand: unique symbol }
->()("ChannelIdentityNotFound", {}) {}
-export class ChannelsUnavailable extends Schema.TaggedError<
-	ChannelsUnavailable,
-	{ readonly brand: unique symbol }
->()("ChannelsUnavailable", {}) {}
-/** The signature is wrong, the Channel does not exist, or it is disabled. */
-export class ChannelHookDenied extends Schema.TaggedError<
-	ChannelHookDenied,
-	{ readonly brand: unique symbol }
->()("ChannelHookDenied", {}) {}
+export const CustomDeliveryResult = Domain.CustomDeliveryResult
+
+export const ChannelNotFound = Domain.ChannelNotFound
+export type ChannelNotFound = Domain.ChannelNotFound
+
+export const ChannelConflict = Domain.ChannelConflict
+export type ChannelConflict = Domain.ChannelConflict
+
+export const ChannelInvalid = Domain.ChannelInvalid
+export type ChannelInvalid = Domain.ChannelInvalid
+
+export const ChannelLinkInvalid = Domain.ChannelLinkInvalid
+export type ChannelLinkInvalid = Domain.ChannelLinkInvalid
+
+export const ChannelIdentityNotFound = Domain.ChannelIdentityNotFound
+export type ChannelIdentityNotFound = Domain.ChannelIdentityNotFound
+
+export const ChannelsUnavailable = Domain.ChannelsUnavailable
+export type ChannelsUnavailable = Domain.ChannelsUnavailable
+
+export const ChannelHookDenied = Domain.ChannelHookDenied
+export type ChannelHookDenied = Domain.ChannelHookDenied
 
 export const ChannelErrors = [
+	...executionErrors,
 	...AuthorizationErrors,
 	ChannelNotFound.pipe(HttpApiSchema.status(404)),
 	ChannelConflict.pipe(HttpApiSchema.status(409)),
@@ -327,7 +149,7 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 		HttpApiEndpoint.get("listChannels", "/v1/organization/channels", {
 			success: Schema.Array(Channel),
 			error: ChannelErrors,
-		}).annotate(Required, [channels("read")]),
+		}).annotate(Required, []),
 		HttpApiEndpoint.post("createChannel", "/v1/organization/channels", {
 			payload: CreateChannelRequest,
 			success: Channel.pipe(HttpApiSchema.status(201)),
@@ -336,7 +158,7 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 			.annotate(Required, [channels("write")])
 			.annotate(
 				OpenApi.Description,
-				"Creates a Channel. The caller becomes its actor. For Telegram, OpenBot also sets the webhook of the bot.",
+				"Saves a Channel and starts its configuration execution. The caller becomes its actor. Read executionId to check registration.",
 			),
 		HttpApiEndpoint.get("getChannel", "/v1/organization/channels/:channelId", {
 			params: channelParams,
@@ -354,25 +176,30 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 			},
 		).annotate(
 			OpenApi.Description,
-			"Changes a Channel. The caller becomes its actor.",
+			"Changes a Channel. The caller becomes its actor and clears needsAuthorization.",
 		),
 		HttpApiEndpoint.delete(
 			"deleteChannel",
 			"/v1/organization/channels/:channelId",
 			{
 				params: channelParams,
-				success: HttpApiSchema.NoContent,
+				payload: Schema.Struct({ commandKey: Execution.CommandKey }),
+				success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 				error: ChannelErrors,
 			},
 		).annotate(
 			OpenApi.Description,
-			"Deletes a Channel with its linked people. Its Chats stay.",
+			"Stops Channel work, then deletes the Channel and its links. Read the returned execution to wait for release. Its Chats stay.",
 		),
 		HttpApiEndpoint.put(
 			"setChannelSecret",
 			"/v1/organization/channels/:channelId/secret",
 			{
 				params: channelParams,
+				payload: Schema.Struct({
+					commandKey: Execution.CommandKey,
+					expectedVersion: Version,
+				}),
 				success: ChannelSecret,
 				error: ChannelErrors,
 			},

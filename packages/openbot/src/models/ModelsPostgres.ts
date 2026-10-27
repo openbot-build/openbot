@@ -1,5 +1,6 @@
 import { Model } from "@openbot-build/core"
-import { ModelProvidersApi } from "@openbot-build/api"
+import { Models as ModelsModel } from "@openbot-build/domain"
+
 import {
 	Array as Arr,
 	Clock,
@@ -10,7 +11,7 @@ import {
 	String as Str,
 } from "effect"
 import { and, asc, eq, or } from "drizzle-orm"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { modelProviders, models, providerModels } from "../database/Schema.ts"
 import {
 	ownerColumns,
@@ -22,10 +23,10 @@ import { Models, type StoredModel } from "./Models.ts"
 import * as Db from "../database/Database.ts"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))
-const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
+const AvailabilityJson = Schema.fromJsonString(ModelsModel.Availability)
 const decodeOptions = Schema.decodeUnknownEffect(Options)
 const decodeAvailability = Schema.decodeUnknownEffect(AvailabilityJson)
-const decodeType = Schema.decodeUnknownEffect(ModelProvidersApi.ModelType)
+const decodeType = Schema.decodeUnknownEffect(ModelsModel.ModelType)
 /** The values have their types already, so they always encode. */
 const encodeOptions = (options: typeof Options.Type) =>
 	Schema.encodeEffect(Options)(options).pipe(Effect.orDie)
@@ -35,13 +36,13 @@ const encodeAvailability = (availability: typeof AvailabilityJson.Type) =>
 /** Turns an inside failure into one public error. The log keeps the reason. */
 const unavailable = (message: string) =>
 	Failures.replace(message, () =>
-		ModelProvidersApi.ModelProvidersUnavailable.make({}),
+		ModelsModel.ModelProvidersUnavailable.make({}),
 	)
 
 /** A row with a bad value makes the store unavailable. */
 const stored = (
 	row: typeof models.$inferSelect,
-): Effect.Effect<StoredModel, ModelProvidersApi.ModelProvidersUnavailable> =>
+): Effect.Effect<StoredModel, ModelsModel.ModelProvidersUnavailable> =>
 	Effect.gen(function* () {
 		return {
 			owner: ownerOf(row),
@@ -64,10 +65,10 @@ const stored = (
 
 /** The errors that go to the client as they are. A `ModelProvidersUnavailable` here is in the log already. */
 const Known = Schema.Union([
-	ModelProvidersApi.ModelNotFound,
-	ModelProvidersApi.ModelConflict,
-	ModelProvidersApi.ModelInUse,
-	ModelProvidersApi.ModelProvidersUnavailable,
+	ModelsModel.ModelNotFound,
+	ModelsModel.ModelConflict,
+	ModelsModel.ModelInUse,
+	ModelsModel.ModelProvidersUnavailable,
 ])
 const isKnown = Schema.is(Known)
 
@@ -173,7 +174,7 @@ export const make = Effect.gen(function* () {
 						.select({ version: models.version })
 						.from(models)
 						.where(where(owner, input.id))
-					return yield* ModelProvidersApi.ModelConflict.make({
+					return yield* ModelsModel.ModelConflict.make({
 						version: existing?.version ?? 0,
 					})
 				}),
@@ -188,11 +189,11 @@ export const make = Effect.gen(function* () {
 							.where(where(owner, id))
 							.for("update")
 						if (row === undefined)
-							return yield* ModelProvidersApi.ModelNotFound.make({
+							return yield* ModelsModel.ModelNotFound.make({
 								modelId: Model.Id.make(id),
 							})
 						if (row.version !== patch.expectedVersion)
-							return yield* ModelProvidersApi.ModelConflict.make({
+							return yield* ModelsModel.ModelConflict.make({
 								version: row.version,
 							})
 						const now = yield* Clock.currentTimeMillis
@@ -232,7 +233,7 @@ export const make = Effect.gen(function* () {
 							.where(where(owner, id))
 							.returning()
 						if (updated === undefined)
-							return yield* ModelProvidersApi.ModelNotFound.make({
+							return yield* ModelsModel.ModelNotFound.make({
 								modelId: Model.Id.make(id),
 							})
 						return yield* stored(updated)
@@ -250,7 +251,7 @@ export const make = Effect.gen(function* () {
 							.where(where(owner, id))
 							.for("update")
 						if (row === undefined)
-							return yield* ModelProvidersApi.ModelNotFound.make({
+							return yield* ModelsModel.ModelNotFound.make({
 								modelId: Model.Id.make(id),
 							})
 						const links = yield* tx
@@ -279,7 +280,7 @@ export const make = Effect.gen(function* () {
 									link.ownerId === columns.ownerId,
 							)
 						)
-							return yield* ModelProvidersApi.ModelInUse.make({
+							return yield* ModelsModel.ModelInUse.make({
 								modelId: Model.Id.make(id),
 							})
 						const others = Arr.map(links, (link) => link.providerId)

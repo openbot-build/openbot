@@ -1,0 +1,181 @@
+---
+title: Computers
+description: 给 Bot 一台机器，让它在上面运行命令、修改文件和使用桌面。
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+**Computer**
+是 Bot 工作的机器。Bot 在上面运行 shell 命令、读写文件、打开端口和使用桌面。Computer 有两种：
+
+- Computer 提供方（例如 E2B 或 Daytona）那里的一个**沙箱**。你使用自己在提供方那里的账户。提供方直接向你收费。
+- **你自己的机器**，例如笔记本电脑或服务器。你只需要把它和 OpenBot 配对一次。之后，机器上的一个小程序会保持与 OpenBot 的连接。
+
+Computer 属于一个成员或属于组织，和[触发器](/zh-cn/docs/developers/triggers)一样。Bot 从不拥有 Computer。Bot 得到的是一台 Computer 的**使用权**。很多 Bot 可以使用同一台 Computer。
+
+---
+
+## 添加 Computer 提供方
+
+参见 [Computer 提供方](/zh-cn/docs/admin/computer-providers).
+
+## 创建和使用 Computer
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"create-build-box-1","name":"Build box","source":{"_tag":"Provider","provider":"cpp_...","template":null},"desktop":true}' \
+  https://api.example.com/v1/computers
+```
+
+| 字段         | 作用                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| `source`     | 沙箱用 `{"_tag":"Provider","provider":"<id>","template":null}`。`template` 选择提供方的一个镜像。 |
+| `desktop`    | 可选。`true` 表示需要桌面，用于截图、鼠标和键盘。                                                 |
+| `pauseAfter` | 可选。没有工作多少秒后，OpenBot 暂停这台 Computer。默认是 600。`null` 表示从不暂停。              |
+| `shared`     | 可选。`true` 表示创建组织共享的 Computer。                                                        |
+
+创建需要 `commandKey`，并返回 HTTP 202 和执行回执。读取
+`/v1/executions/:executionId`，其 `resource.id` 是 Computer
+ID。回执表示命令已保存。执行结束后读取 Computer，查看状态。SDK 的
+`Computers.create` 会准备一次命令键。回复丢失后复用该命令的 `send` effect。
+
+Computer 有一个
+`state`（状态）：`starting`、`running`、`paused`、`offline`（你的机器没有连接）或
+`failed`。
+
+| 路由                                                   | 作用                                                            |
+| ------------------------------------------------------ | --------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/sessions`              | 启动一条 shell 命令。见[命令](#命令)。                          |
+| `GET`、`PUT`、`DELETE /v1/computers/:computerId/files` | 读取、写入和删除一个文件。文本用 `utf8`，其他字节用 `base64`。  |
+| `GET /v1/computers/:computerId/directory?path=`        | 列出一个目录。                                                  |
+| `PUT /v1/computers/:computerId/ports/:port`            | 给一个端口一个公开的 HTTPS 地址。任何有这个地址的人都能使用它。 |
+| `POST /v1/computers/:computerId/desktop/screenshot`    | 截一张图。                                                      |
+| `POST /v1/computers/:computerId/desktop/actions`       | 点击、输入、按键和滚动，然后截一张图。                          |
+| `POST /v1/computers/:computerId/desktop/stream`        | 给出一个地址，人可以在那里观看和使用桌面。                      |
+| `POST /v1/computers/:computerId/pause`、`/resume`      | 暂停或恢复这台 Computer。                                       |
+
+配对机器不提供桌面流，因此 `desktop/stream` 返回
+`ComputerUnsupported`。在暂停的 Computer 上执行命令时，会先提交一个持久恢复执行。提供方适配器不会自行恢复沙箱或重复命令。
+
+暂停、恢复和删除接受 `{ "commandKey": "<new command key>" }`，返回 HTTP
+202 和执行回执。SDK 的 `Computers.pause`、`resume` 和 `remove`
+会准备这些命令。重试时保留相同的键和正文。观察执行以读取结果。
+`DELETE /v1/computers/:computerId`
+会删除 Computer 和提供方沙箱，包括文件。回复丢失不能证明已经删除，也不应换新键重发。请检查已保存的状态；外部结果未知时需要决定。
+
+### 命令
+
+命令在一个**会话**里用 `bash -lc` 运行。OpenBot 最多等待
+`yieldTimeMs`（默认 10 秒，范围是 0.25 到 30 秒），然后给出到目前为止的输出：
+
+```json
+{
+	"session": "cse_…",
+	"running": true,
+	"exitCode": null,
+	"signal": null,
+	"output": ">>> ",
+	"truncated": false
+}
+```
+
+命令结束后，`session` 是 `null`，`exitCode` 或 `signal`
+说明它怎样结束。命令还在运行时，用这个会话继续：
+
+| 路由                                                        | 作用                                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/sessions`                   | 启动命令：`command`、`cwd`、`env`、`tty`、`rows`、`cols`。      |
+| `POST /v1/computers/:computerId/sessions/:sessionId/input`  | 把 `chars` 发送到 stdin，并给出新的输出。`chars` 为空时只读取。 |
+| `POST /v1/computers/:computerId/sessions/:sessionId/resize` | 给终端一个新的大小。                                            |
+| `DELETE /v1/computers/:computerId/sessions/:sessionId`      | 停止命令，并给出它最后的输出。                                  |
+
+`chars` 支持 C 转义：`\n` 是回车，`\x03` 是 Ctrl-C，`\x04`
+是 Ctrl-D，也就是输入的结束。使用 `tty`
+时，命令会得到一个**终端**（PTY），适用于 `python3`、`ssh` 或 `top`
+这样的程序。这时 stdout 和 stderr 会合在一起。每次回答最多给出 `maxOutputBytes`
+的新输出（默认 64 KiB）。输出更多时，只给出最后的部分，`truncated` 是 `true`。
+
+会话只属于启动它的人。30 分钟没有使用后，会话会结束。Daytona
+Computer 没有终端，所以在那里 `tty` 会失败。
+
+---
+
+## 配对你自己的机器
+
+参见 [配对机器](/zh-cn/docs/admin/pair-computer).
+
+## Bot 和 Computer 的使用权
+
+给你的 Bot 一台 Computer 的使用权：
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/computers/cmp_.../bots/bot_...
+```
+
+你必须能使用这台 Computer，并且能修改这个 Bot。`GET /v1/computers/:computerId/bots`
+列出有使用权的 Bot。`DELETE /v1/computers/:computerId/bots/:botId`
+收回使用权。Bot 被归档时，使用权也会结束。Computer 会留下。
+
+Bot 有用于 Computer 的工具。它用 `openbot_computers_list`
+列出 Computer。然后它可以：
+
+- 用 `openbot_computers_acquire`
+  请求一台已有 Computer 的使用权。子 Bot 可以请求把工作交给它的那个 Bot 的 Computer。
+- 用 `openbot_computers_create`
+  创建一个新沙箱。这台 Computer 属于 Bot 的那个人，Bot 得到它的使用权。这个工具接收的
+  `name`、`source`、`desktop` 和 `pauseAfter` 与 `POST /v1/computers`
+  的格式相同，另外还有一个 `reason`。`source` 必须是一个 provider。
+- 用 `openbot_computers_release` 放弃它的使用权。带上 `destroy`
+  时，它还会删除这台 Computer。
+- 用 `openbot_computer_exec` 运行命令，用 `openbot_computer_write_stdin`
+  给命令发送输入，方式和[命令](#命令)一样。命令在等待时间之后仍在运行时，它结束时 Chat 会收到一个
+  `computer_session` 类的通知。
+- 修改文件、打开端口和使用桌面。截图会作为图片返回，模型可以看到它。
+
+这四个动作是[能力](/zh-cn/docs/developers/requests#能力)。[决策者链](/zh-cn/docs/developers/requests#决策者链)会决定它们，和其他能力一样：
+
+| 动作                | 目标           | Bot 何时使用                     |
+| ------------------- | -------------- | -------------------------------- |
+| `computers.acquire` | Computer 的 ID | 请求一台 Computer 的使用权时。   |
+| `computers.create`  | 提供方的 ID    | 创建一个新沙箱时。               |
+| `computers.delete`  | Computer 的 ID | 删除一台 Computer 和它的文件时。 |
+| `computers.expose`  | Computer 的 ID | 给一个端口一个公开地址时。       |
+
+OpenBot 无法检查这些动作中的一个时，这个动作不会运行，工具会把原因告诉 Bot。例如，Bot 的那个人看不到这台 Computer，或者 OpenBot 读不到它的数据。
+
+在 Computer 上的其他工作都不需要决定。Computer 就是边界：有使用权的 Bot 可以在里面做任何事。
+
+---
+
+## 暂停和用量
+
+沙箱在 `pauseAfter`
+秒内没有工作时，OpenBot 会暂停它。仍在运行的命令也算作工作。E2B 保留它的文件、内存和正在运行的程序。Daytona 保留它的文件，并从这些文件重新启动它。你自己的机器从不暂停。
+
+`GET /v1/computers/:computerId/usage`
+列出一台 Computer 运行的时间。提供方为这些时间向你收费。OpenBot 只记录它们。它不设定价格，预算也不会停止 Computer。
+
+## 执行与恢复
+
+命令会话绑定到 Computer 和 Chat。`openbot_computer_write_stdin` 工具需要同时提供
+`computer` 和
+`session`。每次调用都检查当前使用权限，包括限制该任务的所有 token。撤销权限后，不能再通过 OpenBot 写入输入或读取输出。Bot 没有 Computer 使用授权时，工具返回安全分类
+`forbidden` 和错误 ID。命令不会发送给提供方。
+
+OpenBot 将命令会话请求交给持有进程的节点。该节点在发送输入前再次检查当前权限。同一会话的调用按顺序执行。正常关闭会保留最后一次回复。回复丢失时，写入结果可能未知；OpenBot 不会再次发送该写入。HTTP 错误
+`ComputerExecutionFailed` 提供安全的错误分类和错误 ID。
+
+Computer 和提供方列表在读取记录前应用所有调用人的当前权限限制。工具回复和 Bot 提示词使用同一列表查询。给 Bot 的授权不能移除 token 的限制。
+
+配对机器和命令会话使用同一套经过认证的私有路由。文件和桌面调用在持有物理连接的节点执行。新连接取代旧连接后，旧连接不能再改变新连接的状态。输出按顺序传送，并使用有界缓冲。流中断或写入结果丢失时，结果会标为未知，不会重放。
+
+同一台 Computer 每次只能运行一个生命周期命令。冲突的命令返回 `ComputerConflict`
+和已有执行 ID。每次向提供方发送动作前，服务端再次检查当前权限。发送前的准备工作失败时，执行失败，Computer 会保留。向提供方发送动作后回复丢失时，执行进入
+`outcome_unknown`。读取 `DecisionNeeded`
+事件，再通过执行接口提交决定。重试前应先检查提供方的结果。选择停止会把 Computer 标为
+`failed`，但不能证明沙箱已停止。迟到的创建回复会保留沙箱引用和使用记录。
+
+所有节点共用一个持久空闲检查计划。每次空闲暂停都有独立执行。节点重启不会重置其他节点的工作。空闲暂停结果未知时，只允许当前有写权限的成员提交
+`stop`。暂停结果未知时，不会像沙箱已停止那样结束使用记录。

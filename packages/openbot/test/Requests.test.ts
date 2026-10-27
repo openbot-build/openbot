@@ -1,17 +1,14 @@
+import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import {
-	BotsApi,
-	type Caller,
-	Settings as SettingsApi,
-} from "@openbot-build/api"
+import { BotsApi, Settings as SettingsApi } from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
+import { Requests as RequestDomain } from "@openbot-build/domain"
 import {
 	Array as Arr,
-	Cause,
 	Deferred,
 	Effect,
-	Exit,
+	Fiber,
 	HashMap,
 	Layer,
 	Logger,
@@ -21,12 +18,9 @@ import {
 	Semaphore,
 } from "effect"
 import { TestClock } from "effect/testing"
-import { AuditLog, AuditUnavailable } from "../src/audit/AuditLog.ts"
 import { BotRecords, type Keys } from "../src/bots/BotRecords.ts"
-import { type Signal, Signals } from "../src/bots/Signals.ts"
 import * as Grants from "../src/capabilities/Grants.ts"
 import * as Requests from "../src/capabilities/Requests.ts"
-import * as Resolve from "../src/capabilities/Resolve.ts"
 import * as Rules from "../src/capabilities/Rules.ts"
 import { Settings } from "../src/settings/Settings.ts"
 
@@ -43,13 +37,11 @@ interface Row {
 
 /**
  * Bot records in memory. Like the real ones, they keep JSON text. One lock for
- * all keys is enough for these tests. `afterStatusRead` runs after each read of
- * `withStatus`, so a test can change the records between that read and the next step.
+ * all keys is enough for these tests.
  */
 const memoryRecords = Effect.gen(function* () {
 	const rows = yield* Ref.make(HashMap.empty<string, Row>())
 	const lock = yield* Semaphore.make(1)
-	const afterStatusRead = yield* Ref.make<Effect.Effect<void>>(Effect.void)
 	const service: BotRecords["Service"] = {
 		collection: (kind, schema) => {
 			const codec = Schema.fromJsonString(Schema.toCodecJson(schema))
@@ -82,18 +74,6 @@ const memoryRecords = Effect.gen(function* () {
 							(filter.scope === undefined || keys.scope === filter.scope) &&
 							(filter.status === undefined || keys.status === filter.status),
 					).pipe(Effect.flatMap(Effect.forEach((row) => decode(row.body)))),
-				withStatus: (status) =>
-					select((keys) => keys.status === status).pipe(
-						Effect.flatMap(
-							Effect.forEach((row) =>
-								Effect.map(decode(row.body), (value) => ({
-									organizationId: row.keys.organizationId,
-									value,
-								})),
-							),
-						),
-						Effect.tap(() => Effect.flatten(Ref.get(afterStatusRead))),
-					),
 				put: (keys, value) =>
 					Schema.encodeEffect(codec)(value).pipe(
 						Effect.orDie,
@@ -113,12 +93,13 @@ const memoryRecords = Effect.gen(function* () {
 		// The transaction already holds the one lock for all keys.
 		lock: () => Effect.void,
 	}
-	return { service, afterStatusRead }
+	return { service }
 })
 
 /** The services of requests on records in memory. The settings cannot be read. */
 const layerOf = (records: BotRecords["Service"]) =>
 	Requests.layer.pipe(
+		Layer.provide(ErrorRecordsFixture.layer),
 		Layer.provideMerge(Layer.mergeAll(Grants.layer, Rules.layer)),
 		Layer.provide(
 			Layer.mergeAll(
@@ -170,6 +151,63 @@ const collect = () => {
 	return { layer, lines: () => lines }
 }
 
+describe("The Chat of a Bot", () => {
+	it("the last Bot uses its own Chat when it gave work to itself", () => {
+		const current = Chat.Id.make("chat_work")
+		assert.strictEqual(
+			Requests.chatOf({
+				chain: {
+					organizationId,
+					userId,
+					bots: [worker, worker],
+					chats: [Chat.Id.make("chat_parent")],
+				},
+				bot: worker,
+				current,
+			}),
+			current,
+		)
+	})
+
+	it("a Bot uses its last earlier Chat when it comes more than once", () => {
+		const nearest = Chat.Id.make("chat_near")
+		assert.strictEqual(
+			Requests.chatOf({
+				chain: {
+					organizationId,
+					userId,
+					bots: [top, worker, top, worker],
+					chats: [
+						Chat.Id.make("chat_first"),
+						Chat.Id.make("chat_middle"),
+						nearest,
+					],
+				},
+				bot: top,
+				current: Chat.Id.make("chat_work"),
+			}),
+			nearest,
+		)
+	})
+
+	it("a Bot outside the chain uses the current Chat", () => {
+		const current = Chat.Id.make("chat_work")
+		assert.strictEqual(
+			Requests.chatOf({
+				chain: {
+					organizationId,
+					userId,
+					bots: [top, worker],
+					chats: [Chat.Id.make("chat_parent")],
+				},
+				bot: BotsApi.BotId.make("bot_other"),
+				current,
+			}),
+			current,
+		)
+	})
+})
+
 describe("The requests of Bots", () => {
 	it.effect(
 		"a request waits the default time when the settings cannot be read, and the log says so",
@@ -188,13 +226,10 @@ describe("The requests of Bots", () => {
 				assert.strictEqual(lines.length, 1)
 				const [line] = lines
 				assert.ok(line !== undefined && Arr.isArray(line.message))
-				assert.strictEqual(line.level, "Warn")
-				assert.strictEqual(
-					line.message[0],
-					"The request timeout of the organization could not be read, so the request uses the default one",
-				)
-				// The log keeps the failure that the fallback hides.
-				assert.ok(Schema.is(SettingsApi.SettingsUnavailable)(line.message[1]))
+				assert.strictEqual(line.level, "Error")
+				assert.strictEqual(line.message[0], "The test saved an error record.")
+				// The log has no inside error value.
+				assert.strictEqual(line.message.length, 1)
 			}).pipe(Effect.provide(logs.layer))
 		},
 	)
@@ -246,75 +281,92 @@ describe("The requests of Bots", () => {
 	)
 
 	it.effect(
-		"a decision between the read and the close of expire wins, and expire closes nothing",
+		"a request that expires while a decision waits for its lock grants nothing",
 		() =>
 			Effect.gen(function* () {
 				const records = yield* memoryRecords
+				const waiting = yield* Deferred.make<void>()
+				const release = yield* Deferred.make<void>()
+				const held = yield* Deferred.make<void>()
+				const service: BotRecords["Service"] = {
+					...records.service,
+					transaction: (key, operation) =>
+						Deferred.succeed(waiting, undefined).pipe(
+							Effect.andThen(records.service.transaction(key, operation)),
+						),
+				}
 				yield* Effect.gen(function* () {
 					const requests = yield* Requests.Requests
 					const grants = yield* Grants.Grants
+					const rules = yield* Rules.Rules
 					const stored = yield* create({ person: true, timeoutMs: 1000 })
 					const id = stored.request.id
+					const holder = yield* records.service
+						.transaction(
+							"request:" + organizationId + ":" + id,
+							Deferred.succeed(held, undefined).pipe(
+								Effect.andThen(Deferred.await(release)),
+							),
+						)
+						.pipe(Effect.forkScoped)
+					yield* Deferred.await(held)
+					const decision = yield* requests
+						.decide(organizationId, id, {
+							by: { _tag: "Person", userId },
+							allow: true,
+							scope: "lifetime",
+							rule: "Allow this search.",
+						})
+						.pipe(Effect.flip, Effect.forkScoped)
+					yield* Deferred.await(waiting)
 					yield* TestClock.adjust("2 seconds")
-					yield* Ref.set(
-						records.afterStatusRead,
-						requests
-							.decide(organizationId, id, {
-								by: { _tag: "Person", userId },
-								allow: true,
-							})
-							.pipe(Effect.orDie, Effect.asVoid),
+					yield* Deferred.succeed(release, undefined)
+					yield* Fiber.join(holder)
+					assert.ok(
+						Schema.is(RequestDomain.RequestConflict)(
+							yield* Fiber.join(decision),
+						),
 					)
-					assert.deepStrictEqual(yield* requests.expire, [])
-					const found = yield* requests.find(organizationId, id)
-					assert.ok(Option.isSome(found))
-					assert.strictEqual(found.value.request.status, "allowed")
-					assert.deepStrictEqual(found.value.request.decision?.by, {
-						_tag: "Person",
-						userId,
-					})
-					assert.strictEqual(
-						(yield* grants.list(organizationId, worker)).length,
-						1,
+					assert.equal(
+						Option.getOrThrow(yield* requests.find(organizationId, id)).request
+							.status,
+						"pending",
 					)
-				}).pipe(Effect.provide(layerOf(records.service)))
-			}),
+					assert.equal((yield* grants.list(organizationId, worker)).length, 0)
+					assert.equal((yield* rules.list(organizationId, worker)).length, 0)
+					const closed = Option.getOrThrow(
+						yield* requests.expireOne(organizationId, id),
+					)
+					assert.equal(closed.request.status, "expired")
+				}).pipe(Effect.provide(layerOf(service)))
+			}).pipe(Effect.scoped),
 	)
 
-	it.effect("two runs of expire at the same time close a request once", () =>
+	it.effect("two expiry commands at the same time close a request once", () =>
 		Effect.gen(function* () {
 			const records = yield* memoryRecords
 			yield* Effect.gen(function* () {
 				const requests = yield* Requests.Requests
 				const stored = yield* create({ timeoutMs: 1000, onExpire: "allow" })
 				yield* TestClock.adjust("2 seconds")
-				// Both runs read the pending request before either one closes it.
-				const reads = yield* Ref.make(0)
-				const bothRead = yield* Deferred.make<void>()
-				yield* Ref.set(
-					records.afterStatusRead,
-					Ref.updateAndGet(reads, (count) => count + 1).pipe(
-						Effect.flatMap((count) =>
-							count === 2 ? Deferred.succeed(bothRead, undefined) : Effect.void,
-						),
-						Effect.andThen(Deferred.await(bothRead)),
-					),
-				)
 				const [first, second] = yield* Effect.all(
-					[requests.expire, requests.expire],
+					[
+						requests.expireOne(organizationId, stored.request.id),
+						requests.expireOne(organizationId, stored.request.id),
+					],
 					{ concurrency: 2 },
 				)
-				const closed = [...first, ...second]
+				const closed = Arr.getSomes([first, second])
 				assert.strictEqual(closed.length, 1)
-				assert.strictEqual(closed[0]?.value.request.id, stored.request.id)
-				assert.strictEqual(closed[0]?.value.request.status, "allowed")
-				assert.strictEqual(closed[0]?.value.request.revision, 1)
+				assert.strictEqual(closed[0]?.request.id, stored.request.id)
+				assert.strictEqual(closed[0]?.request.status, "allowed")
+				assert.strictEqual(closed[0]?.request.revision, 1)
 			}).pipe(Effect.provide(layerOf(records.service)))
 		}),
 	)
 
 	it.effect(
-		"a request that expire cannot close stays pending, and expire still returns the others",
+		"a failed expiry keeps its request pending and does not stop another request",
 		() =>
 			Effect.gen(function* () {
 				const records = yield* memoryRecords
@@ -334,70 +386,28 @@ describe("The requests of Bots", () => {
 					const second = yield* create({ timeoutMs: 1000 })
 					yield* Ref.set(broken, second.request.id)
 					yield* TestClock.adjust("2 seconds")
-					const closed = yield* requests.expire
-					assert.deepStrictEqual(
-						Arr.map(closed, (entry) => entry.value.request.id),
-						[first.request.id],
+					const closed = Option.getOrThrow(
+						yield* requests.expireOne(organizationId, first.request.id),
 					)
-					assert.strictEqual(closed[0]?.value.request.status, "expired")
-					const left = yield* requests.find(organizationId, second.request.id)
-					assert.ok(Option.isSome(left))
-					assert.strictEqual(left.value.request.status, "pending")
+					assert.equal(closed.request.status, "expired")
+					const failure = yield* requests
+						.expireOne(organizationId, second.request.id)
+						.pipe(Effect.flip)
+					assert.isTrue(Schema.is(BotsApi.BotStorageUnavailable)(failure))
+					assert.equal(
+						Option.getOrThrow(
+							yield* requests.find(organizationId, second.request.id),
+						).request.status,
+						"pending",
+					)
+					yield* Ref.set(broken, "")
+					assert.equal(
+						Option.getOrThrow(
+							yield* requests.expireOne(organizationId, second.request.id),
+						).request.status,
+						"expired",
+					)
 				}).pipe(Effect.provide(layerOf(service)))
-			}),
-	)
-
-	it.effect(
-		"a decision that the audit log cannot record still tells the waiting work",
-		() =>
-			Effect.gen(function* () {
-				const records = yield* memoryRecords
-				const published = yield* Ref.make<ReadonlyArray<Signal>>([])
-				yield* Effect.gen(function* () {
-					const requests = yield* Requests.Requests
-					const resolve = yield* Resolve.make
-					const stored = yield* create({ person: true, timeoutMs: 1000 })
-					const id = stored.request.id
-					const caller: Caller = { kind: "member", organizationId, userId }
-					const exit = yield* Effect.exit(
-						resolve.resolveAsPerson(caller, id, {
-							expected: 0,
-							decision: "allow",
-						}),
-					)
-					// The person hears that the audit log failed.
-					assert.ok(Exit.isFailure(exit))
-					assert.ok(
-						Schema.is(BotsApi.BotStorageUnavailable)(
-							Option.getOrUndefined(Cause.findErrorOption(exit.cause)),
-						),
-					)
-					// But the decision is kept, and the waiting work hears of it.
-					const found = yield* requests.find(organizationId, id)
-					assert.ok(Option.isSome(found))
-					assert.strictEqual(found.value.request.status, "allowed")
-					assert.deepStrictEqual(
-						Arr.map(yield* Ref.get(published), (signal) => signal._tag),
-						["RequestChanged"],
-					)
-				}).pipe(
-					Effect.provide(
-						Layer.mergeAll(
-							layerOf(records.service),
-							Layer.succeed(Signals, {
-								...({} as Signals["Service"]),
-								publish: (signal) => Ref.update(published, Arr.append(signal)),
-							}),
-							Layer.succeed(AuditLog, {
-								...({} as AuditLog["Service"]),
-								record: () =>
-									Effect.fail(
-										AuditUnavailable.make({ cause: "The database is down." }),
-									),
-							}),
-						),
-					),
-				)
 			}),
 	)
 })

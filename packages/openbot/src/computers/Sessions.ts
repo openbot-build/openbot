@@ -1,8 +1,13 @@
-import { ComputersApi } from "@openbot-build/api"
+import { Computers as ComputerData } from "@openbot-build/domain"
 import { Chat } from "@openbot-build/core"
-import { PgClient } from "@effect/sql-pg"
+import {
+	Execution,
+	ExecutionIdentity,
+	executionCallers,
+} from "@openbot-build/domain"
 import {
 	Array as Arr,
+	Cause,
 	Chunk,
 	Clock,
 	Context,
@@ -19,59 +24,59 @@ import {
 	Schedule,
 	Schema,
 	Scope,
+	Semaphore,
 	Stream,
 	String as Str,
 } from "effect"
-import * as Background from "../app/Background.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Background from "../execution/Background.ts"
+import * as Send from "../execution/Send.ts"
+import { Records } from "../errors/Records.ts"
+import * as Resource from "../resources/Resource.ts"
+import { Transport } from "../resources/Transport.ts"
 import {
 	ComputerCallFailed,
+	ComputerGone,
 	type ComputerError,
 	type Exit,
 	type Machine,
 	type Process,
 } from "./Computer.ts"
-import * as InstanceCalls from "./InstanceCalls.ts"
+import { Computers } from "./Computers.ts"
 
-/** Who a session belongs to. Only the same owner, in the same Chat, may use it. */
+/** The account and Chat that own the session, and the current caller. */
 export interface Owner {
-	/** Such as the owner key of a member. */
-	readonly key: string
+	readonly identity: ExecutionIdentity
+	readonly computer: string
 	readonly chat?: Chat.Id
 }
 
-/** The session is not there. It ended, or another owner has it. */
 export class SessionGone extends Schema.TaggedError<
 	SessionGone,
 	{ readonly brand: unique symbol }
->()("SessionGone", {
-	id: ComputersApi.ConnectorSessionId,
-}) {}
+>()("SessionGone", { id: ComputerData.ConnectorSessionId }) {}
 
-/** A session ends when nobody reads it or writes to it for this long. */
 export const idleLimit = Duration.minutes(30)
-/** The most output that a session keeps between two reads, in bytes. */
 const keepLimit = 1024 * 1024
-/** Instances send calls for sessions on other instances on this channel. */
-export const channel = "openbot_computer_sessions_calls"
-/** A stored call names its session as `session:<id>`. */
-const rowPrefix = "session:"
 
+type OnEnd = (exit: Exit, output: string) => Effect.Effect<void>
+type Failure = ComputerError | SessionGone | Execution.Failure
 interface Session {
-	readonly id: ComputersApi.ConnectorSessionId
+	readonly id: ComputerData.ConnectorSessionId
 	readonly owner: Owner
 	readonly process: Process
 	readonly scope: Scope.Closeable
-	/** It is done when the command ends and all its output is here. */
+	readonly close: Effect.Effect<void>
 	readonly ended: Deferred.Deferred<Exit>
-	/** The output that nobody has read yet. */
 	readonly unread: Ref.Ref<Unread>
-	readonly touchedAt: Ref.Ref<number>
-	/** Who to tell at the end. It is taken once, by the first that sees the end. */
+	readonly activity: Ref.Ref<{
+		readonly open: boolean
+		readonly touchedAt: number
+	}>
 	readonly onEnd: Ref.Ref<Option.Option<OnEnd>>
+	readonly lock: Semaphore.Semaphore
+	readonly retire: Effect.Effect<void, Execution.StorageError>
+	readonly address: Resource.Address
 }
-
-type OnEnd = (exit: Exit, output: string) => Effect.Effect<void>
 
 interface Unread {
 	readonly chunks: Chunk.Chunk<Uint8Array>
@@ -95,30 +100,34 @@ const keep = (unread: Unread, chunk: Uint8Array): Unread => {
 	return { chunks, bytes, dropped }
 }
 
-/** The call of another instance for a session on this instance. */
 const SessionCall = Schema.TaggedUnion({
-	Write: { request: ComputersApi.WriteStdinRequest },
-	Resize: { request: ComputersApi.ResizeRequest },
+	Write: { request: ComputerData.WriteStdinRequest },
+	Resize: { request: ComputerData.ResizeRequest },
 	Close: {},
 })
 type SessionCall = typeof SessionCall.Type
-const CallRow = Schema.Struct({
-	session: ComputersApi.ConnectorSessionId,
-	owner: Schema.Struct({
-		key: Schema.String,
-		chat: Schema.optionalKey(Chat.Id),
-	}),
+const Request = Schema.Struct({
+	authority: Send.Authority,
+	computer: Schema.String,
+	chat: Schema.optionalKey(Chat.Id),
 	call: SessionCall,
 })
-const CallReply = Schema.TaggedUnion({
-	Done: { output: Schema.NullOr(ComputersApi.SessionOutput) },
+const Reply = Schema.TaggedUnion({
+	Done: { output: Schema.NullOr(ComputerData.SessionOutput) },
 	Gone: {},
-	Failed: { message: Schema.String },
 })
-const encodeRow = Schema.encodeEffect(Schema.fromJsonString(CallRow))
-const decodeRow = Schema.decodeUnknownEffect(Schema.fromJsonString(CallRow))
-const encodeReply = Schema.encodeEffect(Schema.fromJsonString(CallReply))
-const decodeReply = Schema.decodeUnknownEffect(Schema.fromJsonString(CallReply))
+const requestCodec = Schema.toCodecJson(Request)
+const replyCodec = Schema.toCodecJson(Reply)
+const resource = (owner: Owner, id: string): Resource.Ref => ({
+	namespace: owner.identity.owner.organizationId,
+	kind: "computer-session",
+	id,
+})
+const sameOwner = (a: Owner, b: Owner) =>
+	a.identity.owner.organizationId === b.identity.owner.organizationId &&
+	a.identity.owner.userId === b.identity.owner.userId &&
+	a.computer === b.computer &&
+	a.chat === b.chat
 
 /** One C-style escape. The capture group holds the code after the backslash. */
 const escape = /\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|[nrtabefv0\\])/
@@ -167,57 +176,73 @@ const joinTail = (chunks: ReadonlyArray<Uint8Array>, max: number) => {
 		: { bytes: all, truncated: false }
 }
 
-const sameOwner = (a: Owner, b: Owner) => a.key === b.key && a.chat === b.chat
-
-export class Sessions extends Context.Service<
-	Sessions,
-	{
-		/**
-		 * Starts a command and waits up to its yield time. When it still runs, the
-		 * output has a session ID. `onEnd` runs when such a command ends, unless a read
-		 * already gave its end.
-		 */
-		readonly exec: (input: {
-			readonly owner: Owner
-			readonly machine: Machine
-			readonly request: ComputersApi.ExecRequest
-			readonly onEnd?: (exit: Exit, output: string) => Effect.Effect<void>
-		}) => Effect.Effect<ComputersApi.SessionOutput, ComputerError>
-		readonly write: (
-			owner: Owner,
-			id: ComputersApi.ConnectorSessionId,
-			request: ComputersApi.WriteStdinRequest,
-		) => Effect.Effect<ComputersApi.SessionOutput, ComputerError | SessionGone>
-		readonly resize: (
-			owner: Owner,
-			id: ComputersApi.ConnectorSessionId,
-			request: ComputersApi.ResizeRequest,
-		) => Effect.Effect<void, ComputerError | SessionGone>
-		readonly close: (
-			owner: Owner,
-			id: ComputersApi.ConnectorSessionId,
-		) => Effect.Effect<ComputersApi.SessionOutput, ComputerError | SessionGone>
-	}
->()("@openbot-build/openbot/computers/Sessions") {}
-
 export const make = Effect.gen(function* () {
-	const client = yield* PgClient.PgClient
+	const background = yield* Background.make
 	const crypto = yield* Crypto.Crypto
-	// OpenBot needs secure random numbers to run, so a failure here is a defect.
-	const newUuid = crypto.randomUUIDv4().pipe(Effect.orDie)
 	const scope = yield* Scope.Scope
+	const transport = yield* Transport
+	const access = yield* Send.Access
+	const computers = yield* Computers
+	const errors = yield* Records
 	const sessions = yield* Ref.make(
-		HashMap.empty<ComputersApi.ConnectorSessionId, Session>(),
+		HashMap.empty<ComputerData.ConnectorSessionId, Session>(),
 	)
-	const calls = yield* InstanceCalls.make(channel)
-
-	const remove = (session: Session) =>
-		Ref.update(sessions, HashMap.remove(session.id)).pipe(
-			Effect.andThen(Ref.set(session.onEnd, Option.none())),
-			Effect.andThen(Scope.close(session.scope, EffectExit.void)),
+	const safe = <A, E, R>(
+		work: Effect.Effect<A, E, R>,
+	): Effect.Effect<A, Failure, R> =>
+		work.pipe(
+			Effect.catchCause((cause): Effect.Effect<never, Failure> => {
+				if (Cause.hasInterruptsOnly(cause))
+					return Effect.failCause(
+						Cause.fromReasons<never>(
+							Arr.filter(cause.reasons, Cause.isInterruptReason),
+						),
+					)
+				const reason = cause.reasons[0]
+				if (cause.reasons.length === 1 && reason?._tag === "Fail") {
+					const error = reason.error
+					if (
+						Schema.is(SessionGone)(error) ||
+						Schema.is(ComputerCallFailed)(error) ||
+						Schema.is(ComputerGone)(error) ||
+						Schema.is(Execution.Failure)(error)
+					)
+						return Effect.failCause(Cause.map(cause, () => error))
+				}
+				return errors
+					.record(cause, "unavailable")
+					.pipe(Effect.orDie, Effect.flatMap(Effect.fail))
+			}),
 		)
-
-	/** Takes the output since the last read. */
+	const authorize = (owner: Owner, identity: ExecutionIdentity) =>
+		Effect.gen(function* () {
+			if (!sameOwner(owner, { ...owner, identity }))
+				return yield* Execution.Forbidden.make({})
+			for (const caller of executionCallers(identity))
+				yield* computers.get(caller, owner.computer, "use")
+			if (owner.chat !== undefined) {
+				if (
+					identity.botId === undefined ||
+					!(yield* computers.holds(
+						identity.owner.organizationId,
+						identity.botId,
+						owner.computer,
+					))
+				)
+					return yield* Execution.Forbidden.make({})
+			}
+		})
+	// Retirement cannot wait for this call: its reply still holds the transport borrow.
+	const remove = (session: Session) =>
+		Effect.gen(function* () {
+			yield* Ref.update(session.activity, (state) => ({
+				...state,
+				open: false,
+			}))
+			yield* Ref.update(sessions, HashMap.remove(session.id))
+			yield* Ref.set(session.onEnd, Option.none())
+			yield* session.retire.pipe(Effect.ensuring(session.close))
+		})
 	const take = (session: Session, max: number) =>
 		Ref.getAndSet(session.unread, noUnread).pipe(
 			Effect.map((unread) => {
@@ -231,18 +256,16 @@ export const make = Effect.gen(function* () {
 				}
 			}),
 		)
-
-	/** Waits for the end or the yield time, then gives the new output. */
-	const read = (
-		session: Session,
-		yieldMs: number,
-		maxBytes: number,
-	): Effect.Effect<ComputersApi.SessionOutput> =>
+	const read = (session: Session, yieldMs: number, maxBytes: number) =>
 		Effect.gen(function* () {
 			const exit = yield* Deferred.await(session.ended).pipe(
 				Effect.timeoutOption(yieldMs),
 			)
-			yield* Ref.set(session.touchedAt, yield* Clock.currentTimeMillis)
+			const now = yield* Clock.currentTimeMillis
+			yield* Ref.update(session.activity, (state) => ({
+				...state,
+				touchedAt: now,
+			}))
 			const { output, truncated } = yield* take(session, maxBytes)
 			if (Option.isNone(exit))
 				return {
@@ -253,8 +276,13 @@ export const make = Effect.gen(function* () {
 					output,
 					truncated,
 				}
-			// The caller sees the end now, so nobody needs to be told later.
-			yield* remove(session)
+			yield* remove(session).pipe(
+				background.logFailure(
+					"A finished command session could not leave the directory.",
+				),
+			)
+			if (exit.value.failure !== undefined)
+				return yield* Effect.fail(exit.value.failure)
 			return {
 				session: null,
 				running: false,
@@ -267,19 +295,102 @@ export const make = Effect.gen(function* () {
 				truncated,
 			}
 		})
+	const callLocal = (session: Session, call: SessionCall) =>
+		Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			const open = yield* Ref.modify(session.activity, (state) =>
+				state.open ? [true, { ...state, touchedAt: now }] : [false, state],
+			)
+			if (!open) return yield* SessionGone.make({ id: session.id })
+			switch (call._tag) {
+				case "Write": {
+					const bytes = unescape(call.request.chars)
+					if (bytes.length > 0) yield* session.process.write(bytes)
+					return yield* read(
+						session,
+						call.request.yieldTimeMs ?? ComputerData.yieldTimeDefault,
+						call.request.maxOutputBytes ?? ComputerData.maxOutputBytesDefault,
+					)
+				}
+				case "Resize":
+					yield* session.process.resize(call.request.rows, call.request.cols)
+					return null
+				case "Close": {
+					yield* session.process.signal("SIGTERM")
+					const stopped = yield* Deferred.await(session.ended).pipe(
+						Effect.timeoutOption("5 seconds"),
+					)
+					if (Option.isNone(stopped)) yield* session.process.signal("SIGKILL")
+					return yield* read(session, 2000, ComputerData.maxOutputBytesDefault)
+				}
+			}
+		})
+	const receive = (id: ComputerData.ConnectorSessionId, raw: Schema.Json) =>
+		Effect.gen(function* () {
+			const request = yield* Schema.decodeEffect(requestCodec)(raw)
+			const found = HashMap.get(yield* Ref.get(sessions), id)
+			if (Option.isNone(found)) return Reply.cases.Gone.make({})
+			const session = found.value
+			return yield* session.lock.withPermit(
+				Effect.gen(function* () {
+					if (!HashMap.has(yield* Ref.get(sessions), id))
+						return Reply.cases.Gone.make({})
+					if (
+						request.computer !== session.owner.computer ||
+						request.chat !== session.owner.chat
+					)
+						return Reply.cases.Gone.make({})
+					const identity = yield* access.resolve(request.authority)
+					if (!sameOwner(session.owner, { ...session.owner, identity }))
+						return Reply.cases.Gone.make({})
+					const allowed = yield* authorize(session.owner, identity).pipe(
+						Effect.as(true),
+						Effect.catchTags({
+							ComputerNotFound: () => Effect.succeed(false),
+							Forbidden: () => Effect.succeed(false),
+							ExecutionForbidden: () => Effect.succeed(false),
+						}),
+					)
+					if (!allowed) return Reply.cases.Gone.make({})
+					return yield* callLocal(session, request.call).pipe(
+						Send.provide(request.authority),
+						Effect.catchIf(Schema.is(Execution.Failure), (failure) =>
+							Effect.fail(
+								Resource.Failed.make({
+									resource: resource(session.owner, id),
+									outcome:
+										failure.category === "outcome_unknown"
+											? "unknown"
+											: "not_sent",
+									failure,
+								}),
+							),
+						),
+						Effect.map((output) => Reply.cases.Done.make({ output })),
+						Effect.catchTag("SessionGone", () =>
+							Effect.succeed(Reply.cases.Gone.make({})),
+						),
+					)
+				}),
+			)
+		}).pipe(Effect.flatMap(Schema.encodeEffect(replyCodec)))
 
-	const exec: (typeof Sessions.Service)["exec"] = ({
-		owner,
-		machine,
-		request,
-		onEnd,
+	const exec = (input: {
+		readonly owner: Owner
+		readonly machine: Machine
+		readonly request: ComputerData.ExecRequest
+		readonly onEnd?: OnEnd
 	}) =>
 		Effect.gen(function* () {
-			// Only the start can stop in the middle. A started process is then
-			// always in `sessions`, and the idle killer always watches it.
+			const { owner, machine, request, onEnd } = input
+			const authority = yield* Send.authority(owner.identity)
+			yield* authorize(owner, yield* access.resolve(authority))
+			const processScope = yield* Scope.fork(scope)
+			const closeProcess = yield* Effect.cached(
+				Scope.close(processScope, EffectExit.void),
+			)
 			const session = yield* Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
-					const sessionScope = yield* Scope.fork(scope)
 					const process = yield* restore(
 						machine.shell
 							.start({
@@ -290,254 +401,178 @@ export const make = Effect.gen(function* () {
 								...(request.rows === undefined ? {} : { rows: request.rows }),
 								...(request.cols === undefined ? {} : { cols: request.cols }),
 							})
-							.pipe(Scope.provide(sessionScope)),
-					).pipe(
-						Effect.onError((cause) =>
-							Scope.close(sessionScope, EffectExit.failCause(cause)),
-						),
+							.pipe(Scope.provide(processScope)),
 					)
+					const id = ComputerData.ConnectorSessionId.make(
+						"cse_" +
+							Str.replaceAll(
+								"-",
+								"",
+							)(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+					)
+					// The registration has its own scope. Ending the process must not cancel its final RPC reply.
+					const held = yield* transport
+						.register(
+							resource(owner, id),
+							(raw) => Stream.fromEffect(receive(id, raw)),
+							{ release: closeProcess },
+						)
+						.pipe(Scope.provide(scope))
 					const session: Session = {
-						id: ComputersApi.ConnectorSessionId.make(
-							"cse_" + pipe(yield* newUuid, Str.replaceAll("-", "")),
-						),
+						id,
 						owner,
 						process,
-						scope: sessionScope,
+						scope: processScope,
+						close: closeProcess,
+						retire: held.retire,
+						address: held.address,
 						ended: yield* Deferred.make<Exit>(),
 						unread: yield* Ref.make(noUnread),
-						touchedAt: yield* Ref.make(yield* Clock.currentTimeMillis),
-						onEnd: yield* Ref.make(Option.fromNullishOr(onEnd)),
+						activity: yield* Ref.make({
+							open: true,
+							touchedAt: yield* Clock.currentTimeMillis,
+						}),
+						onEnd: yield* Ref.make(Option.none<OnEnd>()),
+						lock: yield* Semaphore.make(1),
 					}
-					yield* Ref.update(sessions, HashMap.set(session.id, session))
-					// Keeps the output until the next read.
+					yield* Ref.update(sessions, HashMap.set(id, session))
+					// Output and the end signal must not wait for a read that holds the command lock.
 					yield* process.output.pipe(
 						Stream.runForEach((chunk) =>
 							Ref.update(session.unread, (unread) => keep(unread, chunk)),
 						),
 						Effect.andThen(process.exit),
-						Effect.flatMap((exit) =>
-							Effect.gen(function* () {
-								yield* Deferred.succeed(session.ended, exit)
-								const tell = yield* Ref.getAndSet(session.onEnd, Option.none())
-								if (Option.isNone(tell)) return
-								const { output } = yield* take(session, 4096)
-								yield* remove(session)
-								yield* tell.value(exit, output)
-							}),
-						),
-						Effect.forkIn(sessionScope),
+						Effect.flatMap((exit) => Deferred.succeed(session.ended, exit)),
+						Effect.forkIn(processScope),
 					)
-					// A session that nobody uses ends, so it does not run for ever.
-					const idle = Effect.gen(function* () {
-						const now = yield* Clock.currentTimeMillis
-						const touchedAt = yield* Ref.get(session.touchedAt)
-						return now - touchedAt > Duration.toMillis(idleLimit)
-					})
-					yield* idle.pipe(
-						Effect.delay(Duration.minutes(1)),
-						Effect.repeat({ until: (ended) => ended }),
-						Effect.andThen(
-							process.signal("SIGKILL").pipe(Effect.ignore({ log: "Debug" })),
+					yield* Deferred.await(session.ended).pipe(
+						Effect.raceFirst(held.lost.pipe(Effect.andThen(Effect.interrupt))),
+						Effect.flatMap((exit) =>
+							session.lock.withPermit(
+								Effect.gen(function* () {
+									const tell = yield* Ref.getAndSet(
+										session.onEnd,
+										Option.none(),
+									)
+									if (Option.isNone(tell)) return
+									const { output } = yield* take(session, 4096)
+									yield* remove(session).pipe(
+										Effect.ensuring(tell.value(exit, output)),
+									)
+								}),
+							),
 						),
-						Effect.andThen(remove(session)),
-						Effect.forkIn(sessionScope),
+						background.logFailure("A command end notice failed."),
+						Effect.forkIn(scope),
+					)
+					yield* held.lost.pipe(
+						Effect.andThen(session.lock.withPermit(remove(session))),
+						background.logFailure("A lost command session could not close."),
+						Effect.forkIn(scope),
 					)
 					return session
 				}),
-			)
-			return yield* read(
-				session,
-				request.yieldTimeMs ?? ComputersApi.yieldTimeDefault,
-				request.maxOutputBytes ?? ComputersApi.maxOutputBytesDefault,
-			)
-		})
-
-	/** The session on this instance, when the owner may use it. */
-	const own = (owner: Owner, id: ComputersApi.ConnectorSessionId) =>
-		Ref.get(sessions).pipe(
-			Effect.map((all) =>
-				HashMap.get(all, id).pipe(
-					Option.filter((session) => sameOwner(session.owner, owner)),
+			).pipe(
+				Effect.onError((cause) =>
+					Scope.close(processScope, EffectExit.failCause(cause)),
 				),
-			),
-		)
-
-	/** Does a call on a session of this instance. */
-	const callLocal = (
-		session: Session,
-		call: SessionCall,
-	): Effect.Effect<ComputersApi.SessionOutput | null, ComputerError> =>
-		Effect.gen(function* () {
-			yield* Ref.set(session.touchedAt, yield* Clock.currentTimeMillis)
-			switch (call._tag) {
-				case "Write": {
-					const bytes = unescape(call.request.chars)
-					if (bytes.length > 0) yield* session.process.write(bytes)
-					return yield* read(
+			)
+			return yield* session.lock.withPermit(
+				Effect.gen(function* () {
+					const result = yield* read(
 						session,
-						call.request.yieldTimeMs ?? ComputersApi.yieldTimeDefault,
-						call.request.maxOutputBytes ?? ComputersApi.maxOutputBytesDefault,
+						request.yieldTimeMs ?? ComputerData.yieldTimeDefault,
+						request.maxOutputBytes ?? ComputerData.maxOutputBytesDefault,
 					)
-				}
-				case "Resize":
-					yield* session.process.resize(call.request.rows, call.request.cols)
-					return null
-				case "Close": {
-					yield* session.process
-						.signal("SIGTERM")
-						.pipe(Effect.ignore({ log: "Debug" }))
-					const stopped = yield* Deferred.await(session.ended).pipe(
-						Effect.timeoutOption("5 seconds"),
-					)
-					if (Option.isNone(stopped))
-						yield* session.process
-							.signal("SIGKILL")
-							.pipe(Effect.ignore({ log: "Debug" }))
-					return yield* read(session, 2000, ComputersApi.maxOutputBytesDefault)
-				}
-			}
-		})
-
-	/** Sends a call to the instance with the session, and waits for its reply. */
-	const callRemote = (
-		owner: Owner,
-		id: ComputersApi.ConnectorSessionId,
-		call: SessionCall,
-		wait: Duration.Input,
-	) =>
-		Effect.gen(function* () {
-			const replied = yield* calls.ask({
-				id: yield* newUuid,
-				computerId: rowPrefix + id,
-				// This file builds the row, so it always encodes.
-				call: yield* encodeRow({ session: id, owner, call }).pipe(Effect.orDie),
-				wait,
-			})
-			// No instance answered in time, so no instance has the session.
-			if (Option.isNone(replied)) return yield* SessionGone.make({ id })
-			const reply = yield* decodeReply(replied.value).pipe(
-				Failures.replace("A stored session reply has a bad value", () =>
-					ComputerCallFailed.make({
-						message: "OpenBot could not read the reply of the session.",
-						retry: false,
-					}),
-				),
+					if (result.running && onEnd !== undefined)
+						yield* Ref.set(session.onEnd, Option.some(onEnd))
+					return result
+				}),
 			)
-			switch (reply._tag) {
-				case "Gone":
-					return yield* SessionGone.make({ id })
-				case "Failed":
-					return yield* ComputerCallFailed.make({
-						message: reply.message,
-						retry: false,
-					})
-				case "Done":
-					return reply.output
-			}
-		})
-
-	/** Another instance asked for a call. Do it when the session is here. */
-	const onCall = (callId: string) =>
+		}).pipe(safe)
+	// This only closes idle physical processes. Durable work belongs to the execution engine.
+	yield* background.repeat(
 		Effect.gen(function* () {
-			const row = yield* calls.row(callId)
-			if (Option.isNone(row)) return
-			// Every instance gets every call, so only the instance with the session reads it.
-			const found = HashMap.get(
-				yield* Ref.get(sessions),
-				yield* Schema.decodeEffect(ComputersApi.ConnectorSessionId)(
-					pipe(row.value.computerId, Str.slice(rowPrefix.length)),
-				),
-			)
-			if (Option.isNone(found)) return
-			const { owner, call } = yield* decodeRow(row.value.call)
-			const session = found.value
-			const reply: typeof CallReply.Type = !sameOwner(session.owner, owner)
-				? { _tag: "Gone" }
-				: yield* callLocal(session, call).pipe(
-						Effect.map((output) => ({ _tag: "Done" as const, output })),
-						Effect.catch((error) =>
-							Effect.succeed({
-								_tag: "Failed" as const,
-								message: error.message,
-							}),
-						),
+			const now = yield* Clock.currentTimeMillis
+			for (const session of HashMap.values(yield* Ref.get(sessions))) {
+				const expired = yield* Ref.modify(session.activity, (state) =>
+					state.open && now - state.touchedAt > Duration.toMillis(idleLimit)
+						? [true, { ...state, open: false }]
+						: [false, state],
+				)
+				if (!expired) continue
+				// Stop admission before forking cleanup. One blocked driver must not hold other sessions.
+				yield* Ref.update(sessions, HashMap.remove(session.id))
+				yield* transport
+					.closeLocal(session.address)
+					.pipe(
+						Effect.andThen(remove(session)),
+						background.logFailure("An idle command process could not close."),
+						Effect.forkIn(scope),
 					)
-			// This file builds the reply, so it always encodes.
-			const encoded = yield* encodeReply(reply).pipe(Effect.orDie)
-			yield* calls.answer(callId, encoded)
-		})
-
-	/** The notices of other instances. A new listen starts when the connection breaks. */
-	const notices = Stream.unwrap(
-		Effect.map(client.listen(channel), (queue) => Stream.fromQueue(queue)),
-	)
-	yield* Background.repeat(
-		notices.pipe(
-			Stream.runForEach(({ payload }) => {
-				const [kind, id = ""] = Str.split(payload, ":")
-				return kind === "call"
-					? Effect.forkIn(
-							onCall(id).pipe(
-								Background.logFailure(
-									"A session call of another instance failed",
-								),
-							),
-							scope,
-						)
-					: kind === "reply"
-						? calls.replied(id)
-						: Effect.void
-			}),
-		),
+			}
+		}),
 		{
-			schedule: Schedule.spaced(Duration.seconds(1)),
-			message: "The session listener stopped. It starts again.",
+			schedule: Schedule.spaced("1 minute"),
+			message: "An idle command session could not close.",
 		},
 	)
 
-	/** Does a call where the session is: here, or on another instance. */
 	const route = (
 		owner: Owner,
-		id: ComputersApi.ConnectorSessionId,
+		id: ComputerData.ConnectorSessionId,
 		call: SessionCall,
-		wait: Duration.Input,
-	): Effect.Effect<
-		ComputersApi.SessionOutput | null,
-		ComputerError | SessionGone
-	> =>
+	) =>
 		Effect.gen(function* () {
-			const session = yield* own(owner, id)
-			if (Option.isSome(session)) return yield* callLocal(session.value, call)
-			if (HashMap.has(yield* Ref.get(sessions), id))
-				return yield* SessionGone.make({ id })
-			return yield* callRemote(owner, id, call, wait)
-		})
-	const yieldOf = (request: { readonly yieldTimeMs?: number }) =>
-		Duration.millis(
-			(request.yieldTimeMs ?? ComputersApi.yieldTimeDefault) + 10_000,
+			const request = yield* Schema.encodeEffect(requestCodec)({
+				authority: yield* Send.authority(owner.identity),
+				computer: owner.computer,
+				...(owner.chat === undefined ? {} : { chat: owner.chat }),
+				call,
+			})
+			const outputs = yield* transport.call(resource(owner, id), request).pipe(
+				Stream.runCollect,
+				Effect.catchTags({
+					ResourceGone: () => Effect.fail(SessionGone.make({ id })),
+					ResourceFailed: (error) =>
+						Effect.fail({
+							...error.failure,
+							category:
+								error.outcome === "unknown"
+									? ("outcome_unknown" as const)
+									: error.failure.category,
+						}),
+				}),
+			)
+			const raw = yield* Effect.fromOption(Arr.head(outputs))
+			const reply = yield* Schema.decodeEffect(replyCodec)(raw)
+			if (reply._tag === "Gone") return yield* SessionGone.make({ id })
+			return reply.output
+		}).pipe(safe)
+	const output = (id: ComputerData.ConnectorSessionId) =>
+		Effect.flatMap((result: ComputerData.SessionOutput | null) =>
+			result === null
+				? Effect.fail(SessionGone.make({ id }))
+				: Effect.succeed(result),
 		)
-
-	return Sessions.of({
+	return {
 		exec,
-		write: (owner, id, request) =>
-			route(owner, id, { _tag: "Write", request }, yieldOf(request)).pipe(
-				Effect.filterOrFail(
-					(output): output is ComputersApi.SessionOutput => output !== null,
-					() => SessionGone.make({ id }),
-				),
-			),
-		resize: (owner, id, request) =>
-			route(owner, id, { _tag: "Resize", request }, "10 seconds").pipe(
-				Effect.asVoid,
-			),
-		close: (owner, id) =>
-			route(owner, id, { _tag: "Close" }, "20 seconds").pipe(
-				Effect.filterOrFail(
-					(output): output is ComputersApi.SessionOutput => output !== null,
-					() => SessionGone.make({ id }),
-				),
-			),
-	})
+		write: (
+			owner: Owner,
+			id: ComputerData.ConnectorSessionId,
+			request: ComputerData.WriteStdinRequest,
+		) => route(owner, id, { _tag: "Write", request }).pipe(output(id)),
+		resize: (
+			owner: Owner,
+			id: ComputerData.ConnectorSessionId,
+			request: ComputerData.ResizeRequest,
+		) => route(owner, id, { _tag: "Resize", request }).pipe(Effect.asVoid),
+		close: (owner: Owner, id: ComputerData.ConnectorSessionId) =>
+			route(owner, id, { _tag: "Close" }).pipe(output(id)),
+	}
 })
-
+export class Sessions extends Context.Service<
+	Sessions,
+	Effect.Success<typeof make>
+>()("@openbot-build/openbot/computers/Sessions") {}
 export const layer = Layer.effect(Sessions, make)

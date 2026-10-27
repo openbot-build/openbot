@@ -74,15 +74,27 @@ it.effect(
 			})
 			const chat = (yield* store.create({})).chat.id
 			const scope = yield* Scope.make()
+			const heldStore: typeof store = {
+				...store,
+				modifyEffect: (input) =>
+					store.modifyEffect({
+						...input,
+						update: (view) =>
+							input.update(view).pipe(
+								// Pause the first Turn commit after the runtime has let it start.
+								Effect.tap(() =>
+									view.chat.turn === undefined && view.chat.inbox.length === 1
+										? Deferred.succeed(entered, undefined).pipe(
+												Effect.andThen(Deferred.await(gate)),
+											)
+										: Effect.void,
+								),
+							),
+					}),
+			}
 			const runtime = yield* ChatRuntime.make({
-				store,
+				store: heldStore,
 				bot: {},
-				// The first start waits here, so the runtime closes while it is in progress.
-				canStart: () =>
-					Deferred.succeed(entered, undefined).pipe(
-						Effect.andThen(Deferred.await(gate)),
-						Effect.as(true),
-					),
 			}).pipe(Scope.provide(scope))
 			const delivering = yield* Effect.forkChild(
 				runtime.deliver({ chat, input: "first" }),
@@ -223,7 +235,7 @@ it.effect(
 				const { runtime, runtimeStore, chat } = yield* ChatTest()
 				const started = yield* runtime.deliver({ chat, input: "work" })
 				yield* Deferred.await(ready)
-				// The second runtime is like another server over the same store.
+				// A second local runtime uses the same memory store.
 				const other = yield* ChatRuntime.make({ store: runtimeStore, bot: {} })
 				const stopped = yield* other.interrupt({ chat, turn: started.turn! })
 				assert.strictEqual(Chat.status(stopped.chat)._tag, "Interrupted")

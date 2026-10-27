@@ -121,6 +121,8 @@ it.effect(
 						ConfigProvider.ConfigProvider,
 						ConfigProvider.fromUnknown({
 							OPENBOT_DATABASE_URL: "postgres://localhost/openbot",
+							OPENBOT_CLUSTER_SECRET:
+								"test-cluster-secret-with-at-least-32-characters",
 							OPENBOT_SECRET_KEYS: "test:" + Str.repeat(32)("11"),
 							...env,
 						}),

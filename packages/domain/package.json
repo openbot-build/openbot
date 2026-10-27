@@ -1,0 +1,67 @@
+{
+	"name": "@openbot-build/domain",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "Product states and rules for OpenBot",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./Accounts": "./dist/Accounts.js",
+		"./AppAuthorizations": "./dist/AppAuthorizations.js",
+		"./AppCalls": "./dist/AppCalls.js",
+		"./AppConnections": "./dist/AppConnections.js",
+		"./AppDiscovery": "./dist/AppDiscovery.js",
+		"./AppIndex": "./dist/AppIndex.js",
+		"./Authorization": "./dist/Authorization.js",
+		"./Billing": "./dist/Billing.js",
+		"./BotMemory": "./dist/BotMemory.js",
+		"./Bots": "./dist/Bots.js",
+		"./BotSharing": "./dist/BotSharing.js",
+		"./Channels": "./dist/Channels.js",
+		"./Chats": "./dist/Chats.js",
+		"./CodeRuns": "./dist/CodeRuns.js",
+		"./Computers": "./dist/Computers.js",
+		"./Delegations": "./dist/Delegations.js",
+		"./Developers": "./dist/Developers.js",
+		"./Email": "./dist/Email.js",
+		"./Execution": "./dist/Execution.js",
+		"./Files": "./dist/Files.js",
+		"./Invitation": "./dist/Invitation.js",
+		"./Live": "./dist/Live.js",
+		"./Models": "./dist/Models.js",
+		"./Name": "./dist/Name.js",
+		"./Organizations": "./dist/Organizations.js",
+		"./PlanApproval": "./dist/PlanApproval.js",
+		"./Platform": "./dist/Platform.js",
+		"./Requests": "./dist/Requests.js",
+		"./Roles": "./dist/Roles.js",
+		"./Secret": "./dist/Secret.js",
+		"./Settings": "./dist/Settings.js",
+		"./SettingsErrors": "./dist/SettingsErrors.js",
+		"./Sso": "./dist/Sso.js",
+		"./Tokens": "./dist/Tokens.js",
+		"./ToolExecution": "./dist/ToolExecution.js",
+		"./Vaults": "./dist/Vaults.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"peerDependencies": {
+		"effect": "4.0.6"
+	},
+	"devDependencies": {
+		"@effect/vitest": "4.0.6",
+		"effect": "4.0.6",
+		"vitest": "5.0.5"
+	},
+	"dependencies": {
+		"@nmnmcc/ability": "3.0.0",
+		"@openbot-build/core": "workspace:*"
+	}
+}

@@ -1,5 +1,5 @@
-import { type AccountCaller, Authorization } from "@openbot-build/api"
-import { type Condition, Policy, type Rule } from "@nmnmcc/ability"
+import { Authorization } from "@openbot-build/api"
+import { Condition, Policy } from "@nmnmcc/ability"
 import { Schema } from "effect"
 
 /**
@@ -7,7 +7,7 @@ import { Schema } from "effect"
  * `Policy.define`, so the types check every kind, action and field. It is an
  * Effect, because the policy goes through its schema.
  */
-export const json = <Rules extends Rule.Any>(
+export const json = <Rules extends Policy.AnyRule>(
 	body: (builder: Builder) => Generator<Rules, void, unknown>,
 ) =>
 	Schema.encodeEffect(Authorization.PolicySchema)(
@@ -15,17 +15,21 @@ export const json = <Rules extends Rule.Any>(
 	)
 
 /** The builder of `Policy.define`. */
-export type Builder = Rule.Builder<Authorization.OpenBot>
+export type Builder = Policy.Builder<Authorization.OpenBot>
+
+const $ = Condition.builder<Authorization.OpenBot, Authorization.Kind>(
+	Authorization.OpenBot,
+	"Chat",
+)
 
 /** Everything in the organization of the principal. */
 export const inOrganization = {
-	when: <B extends Condition.Builder<any, any, AccountCaller>>($: B) =>
-		$.under("org", $.principal("organizationId")),
+	when: () => $.under("org", $.principal("organizationId")),
 } as const
 
 /** Everything of the user of the principal. */
 export const own = {
-	when: <B extends Condition.Builder<any, any, AccountCaller>>($: B) =>
+	when: () =>
 		$.under(
 			"org",
 			$.principal("organizationId"),

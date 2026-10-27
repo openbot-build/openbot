@@ -14,13 +14,11 @@ import {
 	Layer,
 	Option,
 	Ref,
-	Schedule,
 	Stream,
 	type Scope,
 } from "effect"
 import { AiError } from "effect/ai"
 import * as Operation from "./Operation.ts"
-import { logFailure } from "./Failures.ts"
 import type * as ChatIdentity from "./ChatIdentity.ts"
 import type * as TurnIdentity from "./TurnIdentity.ts"
 
@@ -39,8 +37,6 @@ export const defaultSettings: Settings = {
 	limit: 8,
 }
 export interface Options {
-	/** Holds host resources until the work, stored end and notice are done. */
-	readonly whileRunning?: Effect.Effect<void, never, Scope.Scope>
 	readonly store: Operation.Store
 	readonly settings?: (chat: ChatIdentity.Id) => Effect.Effect<Settings>
 }
@@ -52,6 +48,8 @@ export interface RunInput {
 	readonly kind?: Operation.Kind
 	/** The budget of the tool. Without it, the budget of the Chat applies. */
 	readonly budget?: Duration.Input | "foreground"
+	/** Gets resources in the call Scope before the caller can leave. */
+	readonly acquire?: Effect.Effect<void, never, Scope.Scope>
 	/** Gives the end of a background Operation to its Chat. */
 	readonly notify: (record: Operation.Record) => Effect.Effect<void>
 }
@@ -103,12 +101,9 @@ export class Operations extends Context.Service<
 			Operation.NotFound | Operation.StoreError
 		>
 		/**
-		 * Stops every Operation of a Chat, such as when the Chat is deleted. It stops
-		 * the Operations that this server runs, and asks other servers to stop theirs.
+		 * Stops every local Operation of a Chat and waits for its resources to close.
 		 */
-		readonly cancelChat: (
-			chat: ChatIdentity.Id,
-		) => Effect.Effect<void, Operation.StoreError>
+		readonly cancelChat: (chat: ChatIdentity.Id) => Effect.Effect<void>
 	}
 >()("@openbot-build/core/chat/Operations") {}
 
@@ -179,28 +174,6 @@ export const make = (
 				return true
 			})
 
-		yield* Effect.forkScoped(
-			store.cancelRequests.pipe(
-				Stream.runForEach(stopLocal),
-				Effect.tapCause(
-					logFailure("The listener for Operation cancel requests stopped"),
-				),
-			),
-			{ startImmediately: true },
-		)
-		yield* Effect.forkScoped(
-			Ref.get(local).pipe(
-				Effect.flatMap((current) =>
-					HashMap.size(current) === 0
-						? Effect.void
-						: store.heartbeat(Arr.fromIterable(HashMap.keys(current))),
-				),
-				// One bad heartbeat must not stop the next ones.
-				Effect.catchCause(logFailure("The Operations heartbeat failed")),
-				Effect.repeat(Schedule.spaced("20 seconds")),
-			),
-		)
-
 		const run = <A, E, R>(
 			input: RunInput,
 			work: Effect.Effect<A, E, R>,
@@ -209,10 +182,15 @@ export const make = (
 			Effect.gen(function* () {
 				const settings = yield* settingsOf(input.chat)
 				const budget = input.budget ?? settings.budget
-				const foreground = Effect.map(Effect.exit(work), (exit) => ({
-					_tag: "Done" as const,
-					exit,
-				}))
+				const foreground = Effect.map(
+					Effect.exit(
+						Effect.scoped(Effect.andThen(input.acquire ?? Effect.void, work)),
+					),
+					(exit) => ({
+						_tag: "Done" as const,
+						exit,
+					}),
+				)
 				if (budget === "foreground") return yield* foreground
 
 				const id = Operation.Id.make(
@@ -231,6 +209,7 @@ export const make = (
 				}
 				const phase = yield* Ref.make<Phase>("waiting")
 				const done = yield* Deferred.make<Exit.Exit<A, E>>()
+				const acquired = yield* Deferred.make<void>()
 				const inserted = yield* Deferred.make<boolean>()
 				// The time limit ended while the caller still waits, so the caller must
 				// move the call to the background, and the end is stored there.
@@ -278,7 +257,14 @@ export const make = (
 				const tooLong = Operation.Status.Failed({
 					message: `The call ran for more than ${Duration.format(Duration.fromInputUnsafe(settings.maxDuration))}, so it was stopped.`,
 				})
-				const body = Effect.exit(work).pipe(
+				const body = Effect.exit(
+					Effect.andThen(
+						(input.acquire ?? Effect.void).pipe(
+							Effect.ensuring(Deferred.succeed(acquired, undefined)),
+						),
+						work,
+					),
+				).pipe(
 					Effect.timeoutOption(settings.maxDuration),
 					Effect.flatMap((result) =>
 						Effect.gen(function* () {
@@ -346,11 +332,23 @@ export const make = (
 						// The child fiber can be interrupted, even when it is forked here.
 						const fiber = yield* Effect.forkIn(
 							Effect.scoped(
-								Effect.andThen(options.whileRunning ?? Effect.void, body),
+								body.pipe(
+									Effect.onExit((exit) =>
+										Exit.isFailure(exit)
+											? Deferred.succeed(done, Exit.failCause(exit.cause))
+											: Effect.void,
+									),
+									Effect.ensuring(Deferred.succeed(acquired, undefined)),
+								),
 							).pipe(Effect.ensuring(release(input.chat))),
 							scope,
 						)
 
+						// The caller holds the resources until the child has its own lease.
+						// Even a zero budget must wait for this handoff.
+						yield* restore(Deferred.await(acquired)).pipe(
+							Effect.onInterrupt(() => Fiber.interrupt(fiber)),
+						)
 						const waited = yield* restore(
 							Effect.raceFirst(
 								Deferred.await(done).pipe(Effect.asSome),
@@ -455,9 +453,8 @@ export const make = (
 			Effect.gen(function* () {
 				const record = yield* get(chat, id)
 				if (Operation.isTerminal(record.status)) return record
-				if (!(yield* stopLocal(id))) yield* store.requestCancel(id)
-				const after = yield* wait(chat, [id], "5 seconds")
-				return after[0] ?? record
+				yield* stopLocal(id)
+				return yield* get(chat, id)
 			})
 
 		const cancelChat = (chat: ChatIdentity.Id) =>
@@ -469,18 +466,6 @@ export const make = (
 					(entry) => entry.chat === chat,
 				)
 				yield* Effect.forEach(HashMap.keys(mine), stopLocal, { discard: true })
-				// Other servers can run Operations of the Chat too. They get a cancel request.
-				const records = yield* store.list(chat)
-				yield* Effect.forEach(
-					Arr.filter(
-						records,
-						(record) =>
-							!Operation.isTerminal(record.status) &&
-							!HashMap.has(mine, record.id),
-					),
-					(record) => store.requestCancel(record.id),
-					{ discard: true },
-				)
 			})
 
 		return Operations.of({

@@ -6,7 +6,7 @@ import {
 	pipe,
 	type JsonSchema,
 } from "effect"
-import type { Named } from "./CodeRuns.ts"
+import type { Named } from "./Bindings.ts"
 
 /** Writes a TypeScript type for a JSON Schema. Deep or unknown parts become `unknown`. */
 const typeOf = (schema: unknown, depth: number): string => {

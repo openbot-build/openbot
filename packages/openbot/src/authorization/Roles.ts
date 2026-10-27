@@ -1,8 +1,9 @@
 import {
-	Authorization,
-	type OrganizationApi,
-	type Roles as RolesApi,
-} from "@openbot-build/api"
+	type Organizations as OrganizationsModel,
+	type Roles as RolesModel,
+} from "@openbot-build/domain"
+
+import { Authorization } from "@openbot-build/domain"
 import { Array as Arr, Context, type Effect, type Option, Schema } from "effect"
 
 /** OpenBot cannot read or write the roles now. */
@@ -12,7 +13,7 @@ export class RolesUnavailable extends Schema.TaggedError<
 >()("RolesUnavailable", { cause: Schema.Defect() }) {}
 
 /** The built-in roles in their API form. */
-export const builtin: ReadonlyArray<RolesApi.Role> = Arr.map(
+export const builtin: ReadonlyArray<RolesModel.Role> = Arr.map(
 	Authorization.builtinRoles,
 	(role) => ({ ...role, builtin: true }),
 )
@@ -23,33 +24,33 @@ export class Roles extends Context.Service<
 	{
 		readonly list: (
 			organizationId: string,
-		) => Effect.Effect<ReadonlyArray<RolesApi.Role>, RolesUnavailable>
+		) => Effect.Effect<ReadonlyArray<RolesModel.Role>, RolesUnavailable>
 		readonly get: (
 			organizationId: string,
-			roleId: RolesApi.RoleId,
-		) => Effect.Effect<Option.Option<RolesApi.Role>, RolesUnavailable>
+			roleId: RolesModel.RoleId,
+		) => Effect.Effect<Option.Option<RolesModel.Role>, RolesUnavailable>
 		readonly create: (
 			organizationId: string,
-			input: RolesApi.CreateRoleRequest,
-		) => Effect.Effect<RolesApi.Role, RolesUnavailable>
+			input: RolesModel.CreateRoleRequest,
+		) => Effect.Effect<RolesModel.Role, RolesUnavailable>
 		readonly update: (
 			organizationId: string,
-			roleId: RolesApi.RoleId,
-			patch: RolesApi.UpdateRoleRequest,
+			roleId: RolesModel.RoleId,
+			patch: RolesModel.UpdateRoleRequest,
 		) => Effect.Effect<
-			RolesApi.Role,
-			| OrganizationApi.RoleNotFound
-			| OrganizationApi.RoleReadOnly
+			RolesModel.Role,
+			| OrganizationsModel.RoleNotFound
+			| OrganizationsModel.RoleReadOnly
 			| RolesUnavailable
 		>
 		/** The caller checks that nothing uses the role first. */
 		readonly delete: (
 			organizationId: string,
-			roleId: RolesApi.RoleId,
+			roleId: RolesModel.RoleId,
 		) => Effect.Effect<
 			void,
-			| OrganizationApi.RoleNotFound
-			| OrganizationApi.RoleReadOnly
+			| OrganizationsModel.RoleNotFound
+			| OrganizationsModel.RoleReadOnly
 			| RolesUnavailable
 		>
 	}

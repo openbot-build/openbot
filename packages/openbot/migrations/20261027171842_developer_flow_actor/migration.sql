@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_developer_test_flows" ADD COLUMN "actor" text;

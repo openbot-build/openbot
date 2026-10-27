@@ -1,0 +1,188 @@
+---
+title: Share Bots
+description:
+  Invite other people to use one of your Bots in their own organization, by
+  email or with a link.
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+You can share a Bot with people outside your organization, like you add a member
+to an organization. You invite a person by email, or you make an **invitation
+link**. Your client can show the link as a QR code. The person accepts the
+invitation and then uses the Bot in their own organization.
+
+| Word            | Meaning                                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Shared Bot      | Your Bot that other people use.                                                                 |
+| Invitation link | An invitation without an email. Everyone who has its secret can accept it, until you revoke it. |
+| Bot member      | A person who accepted an invitation and uses the Bot.                                           |
+| Linked Bot      | The Bot that a member gets in their own organization. It uses your Bot.                         |
+
+---
+
+## Invite people
+
+You need `share` on the Bot. Members can share their own Bots. Administrators
+can also share the shared Bots of the organization. Only a top Bot can be
+shared: one that a member or the organization owns, and that is not archived.
+
+To invite one person, send their email. The invitation lasts 7 days, like an
+[invitation to the organization](/docs/organization#invitations):
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ana@example.com"}' \
+  https://api.example.com/v1/bots/$BOT/invitations
+```
+
+To make an invitation link, leave out `email`. Many people can use the same
+link.
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/join"}' \
+  https://api.example.com/v1/bots/$BOT/invitations
+```
+
+| Field       | Meaning                                                                      |
+| ----------- | ---------------------------------------------------------------------------- |
+| `email`     | The email of the person. Leave it out to make a link.                        |
+| `expiresAt` | When a link stops (milliseconds since 1970). Without it, a link never stops. |
+| `path`      | A path on the public origin where your client opens invitation links.        |
+
+```json
+{
+	"invitation": {
+		"id": "inv_51c2…",
+		"bot": "bot_7d2c",
+		"email": null,
+		"prefix": "obai_Xk2pQ9aB",
+		"path": "/join",
+		"status": "pending",
+		"invitedBy": "u_123",
+		"createdAt": "2026-10-23T08:00:00.000Z",
+		"expiresAt": null
+	},
+	"secret": "obai_Xk2pQ9aB…",
+	"url": "https://api.example.com/join#obai_Xk2pQ9aB…"
+}
+```
+
+`url` is the public origin, then `path`, then `#` and the secret. A browser
+never sends the part after `#` to a server, so the secret never goes into a
+server log. `url` is `null` when there is no `path`. Show `url` as a QR code, or
+build your own address from `secret`.
+
+`GET /v1/bots/:botId/invitations/:invitationId/secret` gives the secret and the
+`url` of a link again, for example to print the QR code again. OpenBot keeps the
+secret sealed, and keeps a hash to find the link.
+
+`GET /v1/bots/:botId/invitations` lists the invitations.
+`DELETE /v1/bots/:botId/invitations/:invitationId` revokes one. After that,
+nobody can accept it. The people who accepted it before stay members.
+
+---
+
+## Accept an invitation
+
+The invited person signs in. They use the session cookie or their own user
+token.
+
+- An email invitation shows in `GET /v1/invitations`, with `bot`. Accept it with
+  its ID.
+- For a link, send its secret.
+
+```sh
+curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"secret":"obai_Xk2pQ9aB…","organization":"org_9a1f"}' \
+  https://api.example.com/v1/bot-invitations/accept
+```
+
+`organization` is the organization where the person uses the Bot. They must be
+an active member of it. They can leave it out when they have only one
+organization, or when they use a user token. The answer is their new linked Bot.
+
+When the person already uses the Bot, they get their linked Bot back. To say no
+to an email invitation, use `POST /v1/invitations/:invitationId/decline`.
+
+---
+
+## Use a shared Bot
+
+The linked Bot is a Bot of the member, in their own organization. It has
+`source`, which names your Bot:
+
+```json
+{
+	"id": "bot_e40b",
+	"owner": { "_tag": "Member", "userId": "u_456" },
+	"name": "Guide",
+	"source": { "organizationId": "org_3c7e", "bot": "bot_7d2c" }
+}
+```
+
+The member works with it like with their own Bots:
+
+- They talk to it in their own [Chat](/docs/developers/chats), in their own
+  organization, and can make it their default Bot.
+- It works with their permissions, their connected
+  [Apps](/docs/developers/apps), and their other Bots. It can give work to their
+  Bots.
+- Its [requests](/docs/developers/requests) go to the member. Their decisions,
+  [Grants](/docs/developers/requests#answer-a-request) and
+  [Rules](/docs/developers/rules) count only in their organization. Yours count
+  only in yours.
+- Their organization pays for the models. When your Bot names a model that their
+  organization does not have, their Chat does not use it. It uses the default
+  model of the server only in a simulation such as development. Production has
+  no default model; the recipient needs an available model.
+- You never see their Chats.
+
+The name, role, instructions and model always come from your Bot. When you
+change them, every linked Bot changes too. A member cannot change them. A member
+can change `planApproval`.
+
+The Bot keeps [one memory pool](/docs/developers/memory), in your organization.
+What it learns in the organization of a member is for that member, in that
+organization. Nobody reads the memory about another person: not you, and not
+other members. You can remove what a member left with a purge, without reading
+it. Only you manage the memory Bot.
+
+---
+
+## Manage members
+
+| Request                                  | What it does                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| `GET /v1/bots/:botId/members`            | Lists the members: their user ID and organization, and their linked Bot. |
+| `DELETE /v1/bots/:botId/members/:userId` | Takes a person off. Their linked Bot stops working at once.              |
+
+Both need `share` on the Bot. A linked Bot also stops when you archive your Bot.
+
+A member leaves when they archive their linked Bot.
+
+---
+
+## Permissions
+
+| Action on `Bot` | Lets you                                            |
+| --------------- | --------------------------------------------------- |
+| `share`         | Invite people to use a Bot, and manage its members. |
+
+See [Permissions](/docs/permissions).
+
+## Errors
+
+| Status | Error                   | When                                                                             |
+| ------ | ----------------------- | -------------------------------------------------------------------------------- |
+| `400`  | `BotInvalid`            | The Bot cannot be shared, or a member tries to change what the shared Bot is.    |
+| `400`  | `InvitationInvalid`     | The invitation is used, revoked or expired, or you must name the organization.   |
+| `404`  | `InvitationNotFound`    | There is no invitation with this ID or secret for you.                           |
+| `404`  | `BotNotFound`           | There is no Bot with this ID that you may read, or a linked Bot stopped working. |
+| `503`  | `BotStorageUnavailable` | OpenBot cannot reach its database.                                               |

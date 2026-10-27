@@ -1,8 +1,11 @@
-import { BotMemory as Api } from "@openbot-build/api"
+import { BotMemory as Api } from "@openbot-build/domain"
+
 import {
 	Array as Arr,
+	Equal,
 	HashMap,
 	HashSet,
+	Chunk,
 	Option,
 	pipe,
 	Predicate,
@@ -12,7 +15,7 @@ import * as Audience from "./Audience.ts"
 
 /**
  * Bot memory is what one Bot learns over all its Chats: one pool of tagged entries,
- * kept by a memory Bot. The schemas are part of the HTTP contract, so they live in the api package.
+ * kept by a memory Bot. The domain package owns its schemas.
  */
 export const Layer = Api.Layer
 export type Layer = Api.Layer
@@ -22,8 +25,18 @@ export const ItemSource = Api.ItemSource
 export type ItemSource = Api.ItemSource
 export const Source = Api.Source
 export type Source = Api.Source
-export const Entry = Api.Entry
-export type Entry = Api.Entry
+/** A source policy is the access rule saved by the host when an Item is learned. */
+export const SourcePolicy = Schema.Struct({
+	source: ItemSource,
+	tags: Schema.Array(Schema.String),
+})
+export type SourcePolicy = typeof SourcePolicy.Type
+/** Source policies stay inside the host. The public Entry has no such field. */
+export const Entry = Schema.Struct({
+	...Api.Entry.fields,
+	sourcePolicies: Schema.optionalKey(Schema.Array(SourcePolicy)),
+})
+export type Entry = typeof Entry.Type
 export const Edit = Api.Edit
 export type Edit = Api.Edit
 export const LogEntry = Api.LogEntry
@@ -66,6 +79,133 @@ export const isActive = (entry: Entry) =>
 	entry.status === "active" && entry.invalidatedAt === undefined
 export const topicsOf = (entry: Entry) =>
 	Arr.filter(entry.tags, Predicate.not(Audience.isSystem))
+
+/** Keep the private source policy out of API replies. */
+export const publicEntry = ({
+	sourcePolicies: _,
+	...entry
+}: Entry): Api.Entry => entry
+
+/** Checks every source, including the old entries already in the pool. */
+const allowed = (
+	pool: ReadonlyArray<Entry>,
+	tagsAllowed: (tags: ReadonlyArray<string>) => boolean,
+) => {
+	const entries = HashMap.fromIterable(
+		Arr.map(pool, (entry) => [entry.id, entry] as const),
+	)
+	let known = HashMap.empty<string, boolean>()
+	type Step = { readonly entry: Entry; readonly done: boolean }
+	return (entry: Entry): boolean => {
+		let pending: Chunk.Chunk<Step> = Chunk.make({ entry, done: false })
+		let path = HashSet.empty<string>()
+		while (Chunk.isNonEmpty(pending)) {
+			const { entry: current, done } = Chunk.headNonEmpty(pending)
+			pending = Chunk.tailNonEmpty(pending)
+			if (done) {
+				path = HashSet.remove(path, current.id)
+				known = HashMap.set(
+					known,
+					current.id,
+					Arr.every(
+						current.sources,
+						(source) =>
+							"entry" in source &&
+							Option.getOrElse(HashMap.get(known, source.entry), () => false),
+					),
+				)
+				continue
+			}
+			if (HashMap.has(known, current.id)) continue
+			if (HashSet.has(path, current.id) || !tagsAllowed(current.tags)) {
+				known = HashMap.set(known, current.id, false)
+				continue
+			}
+			if (current.layer === "pinned") {
+				known = HashMap.set(known, current.id, current.sources.length === 0)
+				continue
+			}
+			if (current.layer === "fact") {
+				const policies = current.sourcePolicies
+				// Old facts have no source policy. Keep them hidden until they are rebuilt.
+				known = HashMap.set(
+					known,
+					current.id,
+					current.sources.length > 0 &&
+						policies !== undefined &&
+						policies.length > 0 &&
+						Arr.every(current.sources, (source) =>
+							Arr.some(policies, (policy) =>
+								Equal.equals(policy.source, source),
+							),
+						) &&
+						Arr.every(
+							policies,
+							(policy) =>
+								tagsAllowed(policy.tags) &&
+								Arr.some(current.sources, (source) =>
+									Equal.equals(source, policy.source),
+								),
+						),
+				)
+				continue
+			}
+			const supports = Option.all(
+				Arr.map(current.sources, (source) =>
+					"entry" in source
+						? HashMap.get(entries, source.entry).pipe(Option.filter(isActive))
+						: Option.none(),
+				),
+			)
+			if (Option.isNone(supports) || supports.value.length === 0) {
+				known = HashMap.set(known, current.id, false)
+				continue
+			}
+			path = HashSet.add(path, current.id)
+			pending = Chunk.prepend(pending, { entry: current, done: true })
+			for (const support of supports.value)
+				pending = Chunk.prepend(pending, { entry: support, done: false })
+		}
+		return Option.getOrElse(HashMap.get(known, entry.id), () => false)
+	}
+}
+
+/** An entry is readable only when its own rule and every source rule allow it. */
+export const visible = (pool: ReadonlyArray<Entry>, viewer: Audience.Viewer) =>
+	allowed(pool, (tags) => Audience.visible(tags, viewer))
+
+/** The trusted learner also leaves out entries whose sources cannot be checked. */
+export const learnable = (pool: ReadonlyArray<Entry>) => {
+	const proven = allowed(pool, () => true)
+	return Arr.filter(pool, (entry) => isActive(entry) && proven(entry))
+}
+
+const canWiden = (
+	pool: ReadonlyArray<Entry>,
+	entry: Entry,
+	audience: Audience.Audience,
+) => {
+	const organizations = Audience.orgsOf(entry.tags)
+	return (
+		organizations.length > 0 &&
+		Arr.every(organizations, (organizationId) =>
+			allowed(pool, (tags) =>
+				audience._tag === "Bot"
+					? Audience.orgsOf(tags).includes(organizationId) &&
+						Arr.some(
+							Audience.audiencesOf(tags),
+							(value) => value._tag === "Bot",
+						)
+					: Audience.visible(
+							tags,
+							audience._tag === "Person"
+								? { organizationId, person: audience.id }
+								: { organizationId, channel: audience.id },
+						),
+			)(entry),
+		)
+	)
+}
 
 /** One change that the memory Bot asks for. `ref` names a new entry within one answer. */
 export const Operation = Schema.TaggedUnion({
@@ -174,6 +314,10 @@ export const apply = (input: {
 							...operation.topics,
 						]),
 						sources: Arr.dedupe(operation.sources),
+						sourcePolicies: Arr.map(evidence, (entry) => ({
+							source: entry.source,
+							tags: evidenceTags(entry),
+						})),
 						status: "active",
 						createdAt: input.now,
 						updatedAt: input.now,
@@ -241,15 +385,23 @@ export const apply = (input: {
 					]),
 					{
 						onNone: () => reject,
-						onSome: ([entry, audience]) =>
-							put(
-								{
-									...entry,
-									tags: Arr.dedupe([...entry.tags, Audience.forTag(audience)]),
-									updatedAt: input.now,
-								},
-								`${entry.id} for ${operation.audience}: ${operation.reason}`,
-							),
+						onSome: ([entry, audience]) => {
+							const next = {
+								...entry,
+								tags: Arr.dedupe([...entry.tags, Audience.forTag(audience)]),
+								updatedAt: input.now,
+							}
+							return canWiden(
+								Arr.fromIterable(HashMap.values(state.entries)),
+								next,
+								audience,
+							)
+								? put(
+										next,
+										`${entry.id} for ${operation.audience}: ${operation.reason}`,
+									)
+								: reject
+						},
 					},
 				)
 			case "RenameTopic":
@@ -340,10 +492,10 @@ export const edit = (input: {
 		Option.filter(
 			(entry) =>
 				entry.status === "active" &&
-				Audience.visible(entry.tags, {
+				visible(input.pool, {
 					organizationId: person.organizationId,
 					person: person.userId,
-				}),
+				})(entry),
 		),
 		Option.map((entry): Entry => {
 			const others = Arr.filter(

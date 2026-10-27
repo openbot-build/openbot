@@ -1,5 +1,22 @@
+import * as ComputerWorker from "../computers/Worker.ts"
+import * as Send from "../execution/Send.ts"
+import * as ResourceDirectory from "../resources/Directory.ts"
+import * as ResourceTransport from "../resources/Transport.ts"
+import * as PrivateRpc from "../transport/PrivateRpc.ts"
+import * as ExecutionLayers from "./ExecutionLayers.ts"
+import { NetAddress } from "effect/net"
+import * as ExecutionEngine from "../execution/Engine.ts"
+import * as ExecutionStore from "../execution/Store.ts"
+import * as ExecutionCommands from "../execution/Commands.ts"
+import * as ExecutionObservation from "../execution/Observation.ts"
+import * as ErrorRecords from "../errors/Records.ts"
+import * as HttpFailureBoundary from "../errors/HttpBoundary.ts"
+import { RunnerAddress, ShardingConfig } from "effect/cluster"
+import { NodeHttpClient } from "@effect/platform-node"
+import { HttpServer } from "effect/http"
 import type { PgClient } from "@effect/sql-pg"
 import { Settings as Api } from "@openbot-build/api"
+
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.layer needs a function that makes a Node HTTP server.
 import { createServer } from "node:http"
 import { NodeHttpServer } from "@effect/platform-node"
@@ -8,7 +25,8 @@ import { type Crypto, Effect, Layer, Option, Redacted, Result } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import * as OpenBot from "./OpenBot.ts"
 import * as AuthHttpHandlers from "../auth/HttpHandlers.ts"
-import * as ErrorReporting from "./ErrorReporting.ts"
+import * as ErrorReporting from "../errors/Reporting.ts"
+import * as Report from "../errors/Report.ts"
 import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
 import * as Setup from "../platform/Setup.ts"
 import type { Auth } from "../auth/Auth.ts"
@@ -23,14 +41,21 @@ export const layerApi = Layer.mergeAll(
 	Http.layerPlatform,
 	ErrorReporting.layerHttp,
 	AuthHttpHandlers.layerBetterAuth,
-).pipe(Layer.provide(AuthHttpHandlers.layer))
+).pipe(
+	Layer.provide(AuthHttpHandlers.layer),
+	Layer.provide(HttpFailureBoundary.layer),
+)
 
 export interface AppOptions extends OpenBot.Options {
+	/** The same private RPC secret on every node. */
+	readonly clusterSecret: Redacted.Redacted<string>
+	/** The address that other nodes can reach. Defaults to the bound server address. */
+	readonly clusterHost?: string | undefined
 	/** Work that runs when the server starts, such as indexing the development App. */
 	readonly startup?: Layer.Layer<
 		never,
 		never,
-		IndexWork | PgClient.PgClient | Crypto.Crypto
+		IndexWork | PgClient.PgClient | Crypto.Crypto | ErrorRecords.Records
 	>
 	/**
 	 * More routes, such as the routes of the development tools. They can use the
@@ -43,13 +68,60 @@ export interface AppOptions extends OpenBot.Options {
 	>
 }
 
+/** The bound port also works when a test asks for a free port with port 0. */
+const executionServices = (options: AppOptions) => {
+	const config = Layer.unwrap(
+		Effect.gen(function* () {
+			const server = yield* HttpServer.HttpServer
+			if (server.address._tag === "UnixPathAddress")
+				return yield* Effect.die("Cluster RPC needs a TCP server.")
+			return ShardingConfig.layer({
+				runnerAddress: Option.some(
+					RunnerAddress.make(
+						options.clusterHost ?? NetAddress.formatHost(server.address),
+						server.address.port,
+					),
+				),
+			})
+		}),
+	)
+	return Layer.mergeAll(
+		ExecutionCommands.layer,
+		Send.layer,
+		ResourceTransport.layer.pipe(
+			Layer.provideMerge(ResourceDirectory.layer),
+			Layer.provide(NodeHttpClient.layerUndici),
+		),
+	).pipe(
+		Layer.provideMerge(ExecutionEngine.layerRegistry),
+		Layer.provideMerge(ExecutionObservation.layer),
+		Layer.provideMerge(Layer.merge(ExecutionStore.layer, ErrorRecords.layer)),
+		Layer.provideMerge(
+			ExecutionEngine.layer.pipe(
+				// Private RPC uses its own client. The App network still has its public-address guard.
+				Layer.provide(NodeHttpClient.layerUndici),
+			),
+		),
+		Layer.provide(config),
+		Layer.provideMerge(Layer.succeed(PrivateRpc.Secret, options.clusterSecret)),
+	)
+}
+
 /** The routes and services of OpenBot. It needs the same services as `OpenBot.layer`. */
 export const layerApp = (options: AppOptions) =>
 	Layer.mergeAll(
+		ComputerWorker.layer,
 		layerApi,
+		ExecutionEngine.layerRoutes,
+		ResourceTransport.layerRoutes,
+		ExecutionEngine.layerOutbox,
 		options.routes ?? Layer.empty,
 		options.startup ?? Layer.empty,
-	).pipe(Layer.provideMerge(OpenBot.layer(options)))
+	).pipe(
+		Layer.provideMerge(ExecutionLayers.layer),
+		Layer.provideMerge(OpenBot.layer(options)),
+		Layer.provideMerge(executionServices(options)),
+	)
 
 /** The answer of every route except `/health` while the platform has no settings. */
 const setupRequired = HttpServerResponse.schemaJson(Api.SetupRequired)(
@@ -67,6 +139,7 @@ const settingsUnavailable = HttpServerResponse.schemaJson(
  */
 const requireSetup = <E, R>(
 	app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+	report: Report.Report,
 ) =>
 	Effect.gen(function* () {
 		const request = yield* HttpServerRequest.HttpServerRequest
@@ -81,7 +154,7 @@ const requireSetup = <E, R>(
 		const settings = yield* Settings
 		const platform = yield* Effect.result(settings.platform)
 		if (Result.isFailure(platform)) {
-			yield* Effect.logError(
+			yield* report(
 				"OpenBot could not read the platform settings.",
 				platform.failure,
 			)
@@ -96,16 +169,22 @@ const requireSetup = <E, R>(
 const warnBeforeSetup = Layer.effectDiscard(
 	Effect.gen(function* () {
 		const settings = yield* Settings
-		const platform = yield* settings.platform
-		if (Option.isNone(platform))
-			yield* Effect.logWarning(
-				"The platform has no settings yet. Run `openbot setup`. Until then, every route except /health answers with SetupRequired.",
-			)
-	}).pipe(
-		Effect.catchTag("SettingsUnavailable", (error) =>
-			Effect.logWarning("OpenBot could not read the platform settings.", error),
-		),
-	),
+		const report = yield* Report.make
+		yield* settings.platform.pipe(
+			Effect.flatMap((platform) =>
+				Option.isNone(platform)
+					? Effect.logWarning(
+							"The platform has no settings yet. Run `openbot setup`. Until then, every route except /health answers with SetupRequired.",
+						)
+					: Effect.void,
+			),
+			Effect.catchTag("SettingsUnavailable", (error) =>
+				report("OpenBot could not read the platform settings.", error).pipe(
+					Effect.asVoid,
+				),
+			),
+		)
+	}),
 )
 
 /**
@@ -114,7 +193,13 @@ const warnBeforeSetup = Layer.effectDiscard(
  * stops no running request or Turn.
  */
 const serve = (options: AppOptions) =>
-	HttpRouter.serve(layerApp(options), { middleware: requireSetup })
+	Layer.unwrap(
+		Effect.map(Report.make, (report) =>
+			HttpRouter.serve(layerApp(options), {
+				middleware: (app) => requireSetup(app, report),
+			}),
+		),
+	)
 
 /** The address that the server listens on. */
 export interface Listen {

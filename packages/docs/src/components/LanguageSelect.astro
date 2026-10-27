@@ -1,0 +1,9 @@
+---
+import LanguageSelect from "@astrojs/starlight/components/LanguageSelect.astro"
+
+// Starlight's language picker links to API pages that starlight-openapi
+// does not build. The API reference is in English only.
+const isApi = /^\/docs\/api(?:\/|$)/.test(Astro.url.pathname)
+---
+
+{!isApi && <LanguageSelect />}

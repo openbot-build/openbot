@@ -1,4 +1,5 @@
-import { ConnectionsApi as Api } from "@openbot-build/api"
+import { AppConnections as Domain } from "@openbot-build/domain"
+
 import {
 	AppConnections,
 	McpClient,
@@ -8,7 +9,7 @@ import {
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { OutboundPolicy } from "../network/OutboundPolicy.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { Context, Effect, Layer } from "effect"
 
 export class Probe extends Context.Service<
@@ -24,7 +25,7 @@ export class Probe extends Context.Service<
 					readonly scopes: ReadonlyArray<string>
 					readonly resourceMetadataUrl?: string
 			  },
-			Api.ConnectionConfigurationInvalid
+			Domain.ConnectionConfigurationInvalid
 		>
 	}
 >()("@openbot-build/openbot/apps/Probe") {}
@@ -66,7 +67,7 @@ export const layerWithNetwork = (
 					),
 				),
 				Failures.replace("App connection check failed", () =>
-					Api.ConnectionConfigurationInvalid.make({
+					Domain.ConnectionConfigurationInvalid.make({
 						message:
 							"The App connection could not be checked. Check its address and required configuration, then try again.",
 						keys: [],

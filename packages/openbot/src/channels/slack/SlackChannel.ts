@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { Array as Arr, Effect, pipe, String as Str } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
@@ -12,8 +13,8 @@ import { field, parse, text } from "../Json.ts"
 import { hmacHex, recentSeconds, sameSecret, slackMrkdwn } from "../Text.ts"
 
 export interface Secrets {
-	readonly botToken: string
-	readonly signingSecret: string
+	readonly botToken: Redacted.Redacted<string>
+	readonly signingSecret: Redacted.Redacted<string>
 }
 
 const api = "https://slack.com/api/"
@@ -49,7 +50,11 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 		if (!recentSeconds(timestamp, request.now) || signature === undefined)
 			return yield* ChannelDenied.make({ reason: "missing or old signature" })
 		const expected =
-			"v0=" + hmacHex(secrets.signingSecret, `v0:${timestamp}:${request.body}`)
+			"v0=" +
+			hmacHex(
+				Redacted.value(secrets.signingSecret),
+				`v0:${timestamp}:${request.body}`,
+			)
 		if (!sameSecret(signature, expected))
 			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		// Button presses come as a form with one `payload` field.

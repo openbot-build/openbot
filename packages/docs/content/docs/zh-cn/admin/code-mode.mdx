@@ -1,0 +1,27 @@
+---
+title: "配置 Code Mode"
+description: "配置 Code Mode"
+---
+
+面向平台运维人员。
+
+## 打开 Code Mode
+
+Code
+Mode 默认是关闭的。平台管理员在[平台设置](/zh-cn/docs/platform#平台设置)中打开它：
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":3,"codeMode":{"enabled":true,"timeoutMs":30000,"memoryMb":64,"outputBytes":65536}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+| 字段          | 含义                                                                     |
+| ------------- | ------------------------------------------------------------------------ |
+| `enabled`     | 为 `true` 时，在有 App 连接的每个 Turn 中，Bot 都会得到 Code Mode 工具。 |
+| `timeoutMs`   | 程序一次运行可以用多长时间。程序等待 App 调用的时间不算在内。            |
+| `memoryMb`    | 一个程序可以使用多少内存。                                               |
+| `outputBytes` | 程序返回值的最大大小，以及它最多保留多少日志文本。                       |
+
+这些限制保护的是服务器，而不是对 Bot 的限制。OpenBot 的每个实例都使用相同的限制，所以另一个实例再次运行程序时，程序的行为也相同。

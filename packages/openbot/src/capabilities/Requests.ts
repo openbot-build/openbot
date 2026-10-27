@@ -1,13 +1,12 @@
+import { type AppCalls } from "@openbot-build/domain"
 import { Settings } from "../settings/Settings.ts"
 import type { Chat, Turn } from "@openbot-build/core"
-import {
-	BotsApi,
-	type AppExecution,
-	type CodeRunsApi,
-	RequestsApi,
-} from "@openbot-build/api"
+import { Requests as RequestDomain } from "@openbot-build/domain"
+import { CodeRuns as CodeDomain } from "@openbot-build/domain"
+import { Bots as BotsApi } from "@openbot-build/domain"
 import {
 	Array as Arr,
+	Cause,
 	Clock,
 	Context,
 	Crypto,
@@ -22,8 +21,10 @@ import { BotRecords } from "../bots/BotRecords.ts"
 import { Chain } from "../chats/ChatHost.ts"
 import { Grants } from "./Grants.ts"
 import { Rules, deciderKey } from "./Rules.ts"
+import * as Report from "../errors/Report.ts"
+import type { Records } from "../errors/Records.ts"
 
-type Request = RequestsApi.CapabilityRequest
+type Request = RequestDomain.CapabilityRequest
 type Approver = Request["approver"]
 
 /**
@@ -33,8 +34,10 @@ type Approver = Request["approver"]
  * OpenBot gives it back to the Chat, and the call runs then.
  */
 export const Stored = Schema.Struct({
-	request: RequestsApi.CapabilityRequest,
+	request: RequestDomain.CapabilityRequest,
 	chain: Chain,
+	/** The Grant kept for the exact call that this request allows. */
+	approvalGrant: Schema.optionalKey(BotsApi.GrantId),
 	call: Schema.optionalKey(
 		Schema.Struct({
 			name: Schema.String,
@@ -91,7 +94,7 @@ export const chatOf = ({
 	readonly current: Chat.Id
 }): Chat.Id =>
 	pipe(
-		Arr.zip(chain.bots, chain.chats),
+		Arr.zip(chain.bots, Arr.append(chain.chats, current)),
 		Arr.findLast(([id]) => id === bot),
 		Option.map(([, chat]) => chat),
 		Option.getOrElse(() => current),
@@ -145,9 +148,10 @@ export class Requests extends Context.Service<
 				readonly chat: Chat.Id
 				readonly turn: Turn.Id
 				readonly toolCallId: string
-				readonly app?: AppExecution.Invocation
-				readonly code?: CodeRunsApi.RequestCode
+				readonly app?: AppCalls.Invocation
+				readonly code?: CodeDomain.RequestCode
 				readonly ask?: Ask
+				readonly call?: NonNullable<Stored["call"]>
 				/** A request that is decided at once, for example by a Grant or by policy. */
 				readonly decided?: {
 					readonly allow: boolean
@@ -171,27 +175,14 @@ export class Requests extends Context.Service<
 			organizationId: string,
 			chat: Chat.Id,
 		) => Effect.Effect<ReadonlyArray<Stored>, BotsApi.BotStorageUnavailable>
-		/** Keeps the tool call that waits for a request, so it can run when it is allowed. */
-		readonly setCall: (
-			organizationId: string,
-			id: string,
-			call: NonNullable<Stored["call"]>,
-		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
-		readonly pending: Effect.Effect<
-			ReadonlyArray<{
-				readonly organizationId: string
-				readonly value: Stored
-			}>,
-			BotsApi.BotStorageUnavailable
-		>
 		readonly decide: (
 			organizationId: string,
 			id: string,
 			decision: Decision,
 		) => Effect.Effect<
 			Outcome,
-			| RequestsApi.RequestNotFound
-			| RequestsApi.RequestConflict
+			| RequestDomain.RequestNotFound
+			| RequestDomain.RequestConflict
 			| BotsApi.BotStorageUnavailable
 		>
 		/**
@@ -208,23 +199,12 @@ export class Requests extends Context.Service<
 			organizationId: string,
 			id: string,
 		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
-		/**
-		 * Closes pending requests whose time is over. Returns the closed requests. A request
-		 * that cannot be closed is logged and stays pending, so the next run tries it again.
-		 * The error comes only from the read of the pending requests.
-		 */
-		readonly expire: Effect.Effect<
-			ReadonlyArray<{
-				readonly organizationId: string
-				readonly value: Stored
-			}>,
-			BotsApi.BotStorageUnavailable
-		>
-		/** Closes the pending requests of a Chat, for example when its work is cancelled. */
-		readonly cancel: (
+		/** Closes one request after its execution releases its resources. */
+		readonly cancelOne: (
 			organizationId: string,
-			chat: Chat.Id,
-		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
+			id: string,
+			reason?: string,
+		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/capabilities/Requests") {}
 
@@ -234,9 +214,10 @@ export const defaultTimeout = 24 * 60 * 60 * 1000
 export const make: Effect.Effect<
 	typeof Requests.Service,
 	never,
-	BotRecords | Grants | Rules | Settings | Crypto.Crypto
+	BotRecords | Grants | Rules | Settings | Crypto.Crypto | Records
 > = Effect.gen(function* () {
 	const settings = yield* Settings
+	const report = yield* Report.make
 	const records = yield* BotRecords
 	const crypto = yield* Crypto.Crypto
 	const newId = crypto
@@ -247,19 +228,20 @@ export const make: Effect.Effect<
 	const requests = records.collection(
 		"request",
 		Stored,
-		RequestsApi.RequestStatus,
+		RequestDomain.RequestStatus,
 	)
 	/** Each organization says how long its requests wait. */
 	const timeoutOf = (organizationId: string) =>
 		settings.organization(organizationId).pipe(
 			Effect.map((current) => current.document.requestTimeoutMs),
 			// A request must have a time limit, so it gets the default one.
-			Effect.catch((error) =>
-				Effect.logWarning(
+			Effect.tapCauseIf(Cause.hasFails, (cause) =>
+				report(
 					"The request timeout of the organization could not be read, so the request uses the default one",
-					error,
-				).pipe(Effect.as(defaultTimeout)),
+					cause,
+				),
 			),
+			Effect.orElseSucceed(() => defaultTimeout),
 		)
 	/**
 	 * Runs a read-change-write step of one request in a transaction that holds the
@@ -313,7 +295,7 @@ export const make: Effect.Effect<
 				...Arr.map(request.endorsements, (entry) => entry.bot),
 			]
 			// From the top down, so each Grant can name the Grant above it as its parent.
-			yield* Effect.reduce(
+			return yield* Effect.reduce(
 				Arr.reverse(Arr.zip(receivers, givers)),
 				() => Option.none<BotsApi.GrantId>(),
 				(parent, [bot, giver]) =>
@@ -358,27 +340,31 @@ export const make: Effect.Effect<
 			Effect.gen(function* () {
 				const found = yield* requests.find(organizationId, id)
 				if (Option.isNone(found))
-					return yield* RequestsApi.RequestNotFound.make({
-						request: RequestsApi.CapabilityRequestId.make(id),
+					return yield* RequestDomain.RequestNotFound.make({
+						request: RequestDomain.CapabilityRequestId.make(id),
 					})
 				const stored = found.value
 				const request = stored.request
 				if (request.status !== "pending")
-					return yield* RequestsApi.RequestConflict.make({
+					return yield* RequestDomain.RequestConflict.make({
 						message: "The request is already closed.",
 					})
 				if (
 					decision.expected !== undefined &&
 					decision.expected !== request.revision
 				)
-					return yield* RequestsApi.RequestConflict.make({
+					return yield* RequestDomain.RequestConflict.make({
 						message: "The request changed. Read it again and retry.",
 					})
 				if (deciderKey(decision.by) !== deciderKey(request.approver))
-					return yield* RequestsApi.RequestConflict.make({
+					return yield* RequestDomain.RequestConflict.make({
 						message: "The request waits for another decider.",
 					})
 				const now = yield* Clock.currentTimeMillis
+				if (request.expiresAt <= now)
+					return yield* RequestDomain.RequestConflict.make({
+						message: "The request has expired.",
+					})
 				if (decision.rule !== undefined)
 					yield* rules.create(organizationId, {
 						bot: request.bot,
@@ -415,8 +401,14 @@ export const make: Effect.Effect<
 						}),
 					}
 				}
-				if (decision.allow) yield* giveGrants(organizationId, stored, decision)
-				else if (decision.scope !== undefined && decision.scope !== "once")
+				const approvalGrant = decision.allow
+					? yield* giveGrants(organizationId, stored, decision)
+					: Option.none<BotsApi.GrantId>()
+				if (
+					!decision.allow &&
+					decision.scope !== undefined &&
+					decision.scope !== "once"
+				)
 					yield* grants.create(organizationId, {
 						bot: request.bot,
 						capability: request.capability,
@@ -432,6 +424,9 @@ export const make: Effect.Effect<
 					_tag: "Final" as const,
 					stored: yield* put(organizationId, {
 						...stored,
+						...(Option.isSome(approvalGrant)
+							? { approvalGrant: approvalGrant.value }
+							: {}),
 						request: {
 							...request,
 							status: decision.allow ? "allowed" : "denied",
@@ -459,6 +454,7 @@ export const make: Effect.Effect<
 		stored: Stored,
 		status: "expired" | "cancelled",
 		now: number,
+		reason?: string,
 	) => {
 		// Some requests say that silence means yes, such as a plan with `onTimeout: "run"`.
 		const allow = status === "expired" && stored.request.onExpire === "allow"
@@ -469,11 +465,13 @@ export const make: Effect.Effect<
 				status: allow ? "allowed" : status,
 				decision: {
 					by: { _tag: "Person", userId: stored.chain.userId },
-					reason: allow
-						? "Nobody answered the request in time, and the settings allow it then."
-						: status === "expired"
-							? "Nobody answered the request in time."
-							: "The work was cancelled before the request was answered.",
+					reason:
+						reason ??
+						(allow
+							? "Nobody answered the request in time, and the settings allow it then."
+							: status === "expired"
+								? "Nobody answered the request in time."
+								: "The work was cancelled before the request was answered."),
 					at: now,
 				},
 				revision: stored.request.revision + 1,
@@ -489,6 +487,7 @@ export const make: Effect.Effect<
 		organizationId: string,
 		id: string,
 		status: "expired" | "cancelled",
+		reason?: string,
 	) =>
 		locked(
 			organizationId,
@@ -503,7 +502,7 @@ export const make: Effect.Effect<
 				)
 					return Option.none()
 				return Option.some(
-					yield* close(organizationId, found.value, status, now),
+					yield* close(organizationId, found.value, status, now, reason),
 				)
 			}),
 		)
@@ -523,8 +522,9 @@ export const make: Effect.Effect<
 							: "denied"
 				return yield* put(organizationId, {
 					chain: input.chain,
+					...(input.call === undefined ? {} : { call: input.call }),
 					request: {
-						id: RequestsApi.CapabilityRequestId.make("req_" + (yield* newId)),
+						id: RequestDomain.CapabilityRequestId.make("req_" + (yield* newId)),
 						bot: input.bot,
 						capability: input.capability,
 						reason: input.reason,
@@ -573,17 +573,6 @@ export const make: Effect.Effect<
 				.pipe(Effect.map(Arr.map((stored) => stored.request))),
 		forChat: (organizationId, chat) =>
 			requests.list(organizationId, { scope: chat }),
-		setCall: (organizationId, id, call) =>
-			locked(
-				organizationId,
-				id,
-				Effect.gen(function* () {
-					const found = yield* requests.find(organizationId, id)
-					if (Option.isNone(found)) return
-					yield* put(organizationId, { ...found.value, call })
-				}),
-			),
-		pending: requests.withStatus("pending"),
 		decide,
 		pass: (organizationId, id, from) =>
 			locked(
@@ -612,51 +601,8 @@ export const make: Effect.Effect<
 				}),
 			),
 		expireOne,
-		expire: Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			const pending = yield* requests.withStatus("pending")
-			// The read holds no lock, so each request is checked again under its own lock.
-			// A decision, or another server that closed the request first, wins.
-			const closed = yield* Effect.forEach(
-				Arr.filter(pending, (entry) => entry.value.request.expiresAt <= now),
-				(entry) =>
-					expireOne(entry.organizationId, entry.value.request.id).pipe(
-						Effect.map(
-							Option.map((value) => ({
-								organizationId: entry.organizationId,
-								value,
-							})),
-						),
-						// One request that cannot be closed does not stop the others, because the
-						// caller signals only the requests in the list. Its transaction rolls back,
-						// so it stays pending and the next run tries it again.
-						Effect.catch((error) =>
-							Effect.logWarning(
-								"A request could not be closed. The next check tries again.",
-								error,
-							).pipe(Effect.as(Option.none())),
-						),
-						Effect.annotateLogs({
-							organizationId: entry.organizationId,
-							request: entry.value.request.id,
-						}),
-					),
-			)
-			return Arr.getSomes(closed)
-		}),
-		cancel: (organizationId, chat) =>
-			requests
-				.list(organizationId, { scope: chat, status: "pending" })
-				.pipe(
-					Effect.flatMap((list) =>
-						Effect.forEach(
-							list,
-							(stored) =>
-								closePending(organizationId, stored.request.id, "cancelled"),
-							{ discard: true },
-						),
-					),
-				),
+		cancelOne: (organizationId, id, reason) =>
+			closePending(organizationId, id, "cancelled", reason),
 	})
 })
 export const layer = Layer.effect(Requests, make)

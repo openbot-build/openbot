@@ -1,5 +1,7 @@
 import { SecretInput, SecretOutput } from "../src/Secret.ts"
-import { UpdateTodosRequest } from "../src/ChatsApi.ts"
+import { TurnInfo, UpdateTodosRequest } from "../src/ChatsApi.ts"
+import { Chat, Item, Turn } from "@openbot-build/core"
+import { Prompt } from "effect/ai"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Redacted, Schema } from "effect"
 import { SignInRequest } from "../src/AuthApi.ts"
@@ -64,5 +66,30 @@ it.effect("todo input rejects repeated ids and two items in progress", () =>
 			revision: 0,
 			items: [item, { ...item, id: "two", status: "pending" }],
 		})
+	}),
+)
+
+it.effect("public Turns do not encode saved execution input", () =>
+	Effect.gen(function* () {
+		const turn: Turn.Record = {
+			id: Turn.Id.make("turn"),
+			chat: Chat.Id.make("chat"),
+			settings: { mode: "build" },
+			status: { _tag: "Running" },
+			steps: 0,
+			input: [],
+			items: [],
+			startedAt: 0,
+			pendingStep: {
+				step: 1,
+				item: Item.Id.make("step"),
+				input: Prompt.make("private instructions"),
+				before: Prompt.empty,
+				after: Prompt.empty,
+			},
+		}
+		const encoded = yield* Schema.encodeEffect(TurnInfo)(turn)
+		assert.notProperty(encoded, "pendingStep")
+		assert.strictEqual(encoded.id, turn.id)
 	}),
 )

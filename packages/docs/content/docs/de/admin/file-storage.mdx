@@ -1,0 +1,59 @@
+---
+title: "Dateispeicher"
+description: "Dateispeicher"
+---
+
+Für den Plattformbetrieb.
+
+## Den Speicher einrichten
+
+Ein Admin der Platform setzt den Speicher in den Einstellungen der Platform, als
+`files.storage`. Auch `openbot setup` kann ihn setzen. Siehe
+[Platform](/de/docs/platform#setup).
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expectedVersion": 3,
+    "files": {
+      "storage": {
+        "endpoint": "https://s3.us-east-1.amazonaws.com",
+        "publicEndpoint": null,
+        "region": "us-east-1",
+        "bucket": "openbot-files",
+        "accessKeyId": "AKIA…",
+        "secretAccessKey": "…",
+        "forcePathStyle": false
+      },
+      "uploads": { "server": true, "direct": true }
+    }
+  }' \
+  https://api.example.com/v1/platform/settings
+```
+
+| Feld                      | Bedeutung                                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `storage.endpoint`        | Wo OpenBot den Speicher erreicht, ohne Pfad.                                                                                                            |
+| `storage.publicEndpoint`  | Wohin Clients die Bytes beim direkten Hochladen legen. `null` bedeutet `endpoint`. Nutze es, wenn OpenBot den Speicher in einem privaten Netz erreicht. |
+| `storage.region`          | Die Region des Speichers, etwa `us-east-1`.                                                                                                             |
+| `storage.bucket`          | Der Bucket. Erstelle ihn, bevor du ihn nutzt.                                                                                                           |
+| `storage.accessKeyId`     | Die Access Key ID.                                                                                                                                      |
+| `storage.secretAccessKey` | Der geheime Schlüssel. OpenBot speichert ihn verschlüsselt, und er kommt nie zurück. Lass ihn weg, um den aktuellen zu behalten.                        |
+| `storage.forcePathStyle`  | Den Bucket in den Pfad setzen, wie in `https://host/bucket/key`. MinIO und RustFS brauchen `true`.                                                      |
+| `uploads.server`          | Hochladen durch OpenBot mit `POST /v1/files` erlauben.                                                                                                  |
+| `uploads.direct`          | Direktes Hochladen mit `POST /v1/files/uploads` erlauben.                                                                                               |
+| `maxBytes`                | Die größte Datei, in Bytes.                                                                                                                             |
+| `quotaBytes`              | Die größte Zahl an Bytes, die alle Dateien eines Mitglieds zusammen haben dürfen. `null` heißt: kein Kontingent.                                        |
+| `mediaTypes`              | Die Media Types, die Leute hochladen können. `image/*` nimmt jedes Bild an.                                                                             |
+| `unusedMs`                | Wie lange eine Datei bleibt, die kein Chat hält, in Millisekunden.                                                                                      |
+
+`"storage": null` entfernt den Speicher. Dann kann niemand Dateien hochladen.
+
+OpenBot erreicht den Speicher durch seinen Schutz für ausgehende Verbindungen.
+Ein Speicher in einem privaten Netz muss in `OPENBOT_OUTBOUND_ALLOW` stehen.
+Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
+
+Der Access Key muss Objekte im Bucket ablegen, lesen und löschen können. Lass
+den Bucket Objekte nicht selbst ablaufen: OpenBot entscheidet, wann eine Datei
+verschwindet.

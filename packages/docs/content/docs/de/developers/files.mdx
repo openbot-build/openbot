@@ -1,0 +1,210 @@
+---
+title: Dateien
+description:
+  Bilder, PDFs und andere Dateien hochladen und sie einem Bot in einer Nachricht
+  geben.
+---
+
+Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
+erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
+mit dem [Entwicklerhandbuch](/de/docs/developers).
+
+Eine **Datei** ist ein Bild, ein PDF oder ein anderes Dokument, das du OpenBot
+gibst. Du lädst sie einmal hoch und nennst sie dann in einer Nachricht an einen
+Bot. Das Model des Bots sieht die Datei.
+
+OpenBot hält die Bytes jeder Datei in einem **Objektspeicher**: einem Dienst,
+der Dateien speichert und die S3 API spricht, etwa AWS S3, Cloudflare R2, MinIO
+oder RustFS. Ein Admin der Platform richtet den Speicher ein. Siehe
+[Den Speicher einrichten](#den-speicher-einrichten).
+
+Jede Datei gehört einem Member einer Organization. Andere Leute können sie nicht
+lesen.
+
+---
+
+## Eine Datei hochladen
+
+Es gibt zwei Wege zum Hochladen. Ein Admin der Platform kann jeden davon an-
+oder ausschalten.
+
+### Durch OpenBot
+
+Sende die Datei als `multipart/form-data` an `POST /v1/files`. Das Feld `file`
+hat die Datei. OpenBot nimmt andere Felder an, etwa `purpose`, aber nutzt sie
+nicht.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -F file=@photo.png \
+  https://api.example.com/v1/files
+```
+
+```json
+{
+	"id": "file_6f1c…",
+	"object": "file",
+	"filename": "photo.png",
+	"mediaType": "image/png",
+	"bytes": 52731,
+	"status": "ready",
+	"createdAt": 1793000000000
+}
+```
+
+Die Datei ist sofort `ready`. OpenBot liest den Media Type aus dem Formular.
+Wenn das Formular `application/octet-stream` sagt, rät OpenBot den Typ aus dem
+Ende des Dateinamens, etwa `.png` oder `.pdf`.
+
+### Direkt in den Speicher
+
+Bei großen Dateien kann der Client die Bytes selbst in den Speicher legen. Dann
+gehen die Bytes nicht durch OpenBot.
+
+1. Frage mit `POST /v1/files/uploads` nach einer Adresse zum Hochladen:
+
+   ```sh
+   curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"filename":"report.pdf","mediaType":"application/pdf","bytes":1048576}' \
+     https://api.example.com/v1/files/uploads
+   ```
+
+   ```json
+   {
+    "file": { "id": "file_9a2e…", "status": "pending", "…": "…" },
+    "url": "https://s3.example.com/openbot/files/file_9a2e…?X-Amz-Signature=…",
+    "method": "PUT",
+    "headers": {
+        "content-type": "application/pdf",
+        "content-length": "1048576"
+    },
+    "expiresAt": 1793000900000
+   }
+   ```
+
+2. Sende die Bytes mit `PUT` an `url`, mit diesen `headers`. Die Adresse
+   funktioniert 15 Minuten lang. Die Signatur deckt den Media Type und die Größe
+   ab, darum nimmt der Speicher keine anderen Bytes an.
+
+3. Schließe die Datei mit `POST /v1/files/:fileId/complete` ab. OpenBot prüft,
+   dass die Bytes mit der richtigen Größe im Speicher sind. Dann ist die Datei
+   `ready`.
+
+Eine Datei, die niemand in einer Stunde abschließt, wird gelöscht.
+
+<Callout type="info">
+	Ein Browser kann die Bytes nur dann in den Speicher legen, wenn der Bucket
+	seinen Origin erlaubt. Setze dafür die CORS-Regeln des Buckets.
+</Callout>
+
+### Grenzen
+
+Die Einstellungen der Platform sagen, wie groß eine Datei sein darf und welche
+Media Types OpenBot annimmt. Standardmäßig darf eine Datei bis zu 20 MB haben,
+und diese Typen sind erlaubt:
+
+- `image/png`, `image/jpeg`, `image/gif`, `image/webp`
+- `application/pdf`
+- `text/plain`
+
+Jedes Model nimmt nur manche Typen an. Eine Datei, die das Model nicht annimmt,
+lässt den Turn scheitern. Halte die Liste darum bei Typen, die deine Models
+lesen können.
+
+Ein Admin der Platform kann jedem Mitglied auch ein Kontingent mit
+`files.quotaBytes` geben. Das Kontingent ist die größte Zahl an Bytes, die alle
+Dateien eines Mitglieds zusammen haben dürfen. Auch Dateien in `pending` zählen.
+So hält ein direktes Hochladen seinen Platz, bevor die Bytes ankommen. Eine
+Datei, die nicht passt, gibt `413` mit `FileQuotaExceeded` zurück, mit
+`quotaBytes` und `usedBytes`. Lösche Dateien, um den Platz zurückzubekommen.
+Standardmäßig gibt es kein Kontingent.
+
+---
+
+## Eine Datei an einen Bot geben
+
+Nenne eine Datei im `content` einer Nachricht. `input_image` nimmt eine Datei,
+deren Media Type mit `image/` beginnt. `input_file` nimmt jede Datei, etwa ein
+PDF.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": [{
+      "role": "user",
+      "content": [
+        { "type": "input_text", "text": "What is in this picture?" },
+        { "type": "input_image", "file_id": "file_6f1c…" }
+      ]
+    }]
+  }' \
+  https://api.example.com/v1/bots/$BOT/messages
+```
+
+Die Datei muss eine deiner eigenen Dateien sein, und sie muss `ready` sein.
+Sonst antwortet OpenBot mit `400` und `FileInvalid`.
+
+Der Chat hält nur die ID der Datei, nicht ihre Bytes. Vor jedem Aufruf des
+Models liest OpenBot die Bytes aus dem Speicher. Wenn eine Datei gelöscht wurde,
+sieht das Model an ihrer Stelle eine kurze Notiz.
+
+---
+
+## Dateien lesen und löschen
+
+| Anfrage                         | Was sie tut                                                       |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `GET /v1/files`                 | Listet deine Dateien, die neuesten zuerst. Nutze `next` für mehr. |
+| `GET /v1/files/:fileId`         | Liest eine Datei.                                                 |
+| `GET /v1/files/:fileId/content` | Gibt die Bytes einer fertigen Datei.                              |
+| `DELETE /v1/files/:fileId`      | Löscht eine Datei sofort. Antwortet mit `204`.                    |
+
+`GET /v1/files/:fileId/content` sendet die Bytes, während sie aus dem Speicher
+kommen. So wartet eine große Datei nicht im Arbeitsspeicher von OpenBot. Wenn
+der Speicher vor den ersten Bytes ausfällt, ist die Antwort `503`. Wenn er
+danach ausfällt, endet die Antwort zu früh. Vergleiche die Länge mit `bytes` der
+Datei, um zu sehen, dass du alles hast.
+
+Zum Lesen brauchst du `read` auf `File`, zum Hochladen und Löschen `write` auf
+`File`. Jeder Member hat beide für seine eigenen Dateien. Siehe
+[Berechtigungen](/de/docs/permissions).
+
+---
+
+## Wie Dateien verschwinden
+
+OpenBot löscht Dateien, die niemand braucht. Das ist die **Garbage Collection**.
+Jede Instanz führt sie einmal pro Minute aus, und viele Instanzen können sie
+gleichzeitig ausführen.
+
+- Ein Chat, der eine Datei nennt, hält sie. Die Datei bleibt, solange der Chat
+  lebt.
+- Wenn du den Chat löschst, hält er die Datei nicht mehr. Siehe
+  [Den Verlauf löschen](/de/docs/developers/chats#den-verlauf-löschen).
+- Eine Datei, die kein Chat hält, wird gelöscht, wenn niemand sie eine Zeit lang
+  genutzt hat. Die Standardzeit ist 24 Stunden. Ein Admin der Platform kann sie
+  mit `files.unusedMs` ändern.
+- Eine Datei, die niemand abgeschlossen hat, wird nach einer Stunde gelöscht.
+- Eine Datei, die du löschst, ist sofort weg. Ihre Bytes verlassen den Speicher
+  beim nächsten Lauf.
+
+Wenn es keinen Speicher gibt, behält OpenBot die Zeilen gelöschter Dateien. Es
+entfernt ihre Bytes, wenn der Speicher zurückkommt.
+
+---
+
+## Den Speicher einrichten
+
+Siehe [Dateispeicher](/de/docs/admin/file-storage).
+
+## Fehler
+
+| Status | Fehler              | Wann                                                                                         |
+| ------ | ------------------- | -------------------------------------------------------------------------------------------- |
+| `400`  | `FileInvalid`       | Die Datei ist zu groß, hat einen Typ, den die Platform nicht annimmt, oder ist nicht fertig. |
+| `404`  | `FileNotFound`      | Du hast keine Datei mit dieser ID.                                                           |
+| `413`  | `FileQuotaExceeded` | Die Datei passt nicht in den Platz, der in deinem Kontingent noch frei ist.                  |
+| `409`  | `FilesDisabled`     | Die Platform hat keinen Speicher, oder dieser Weg zum Hochladen ist aus.                     |
+| `503`  | `FilesUnavailable`  | OpenBot erreicht seine Datenbank oder den Speicher nicht.                                    |

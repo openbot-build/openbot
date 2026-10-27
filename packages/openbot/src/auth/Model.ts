@@ -1,9 +1,10 @@
-import { Settings as Api } from "@openbot-build/api"
+import { Settings as SettingsModel } from "@openbot-build/domain"
+
 import { Effect, Schema, String as Str } from "effect"
 
 export const Credential = Schema.Redacted(Schema.NonEmptyString)
 const SharedConfiguration = Schema.Struct({
-	publicOrigin: Api.PublicOrigin.check(
+	publicOrigin: SettingsModel.PublicOrigin.check(
 		Schema.makeFilter(Str.startsWith("https://"), {
 			message: "Expected a canonical HTTPS origin",
 		}),
@@ -18,7 +19,7 @@ export const OidcConfiguration = Schema.Struct({
 	mode: Schema.Literal("oidc").pipe(
 		Schema.withDecodingDefault(Effect.succeed("oidc")),
 	),
-	issuer: Api.Issuer,
+	issuer: SettingsModel.Issuer,
 	clientId: Schema.NonEmptyString,
 	clientSecret: Schema.optional(Credential),
 })
@@ -26,12 +27,13 @@ export const DevelopmentConfiguration = Schema.Struct({
 	...SharedConfiguration.fields,
 	mode: Schema.Literal("development"),
 	// The development server runs on this computer, so plain HTTP is enough.
-	publicOrigin: Api.PublicOrigin.check(
+	publicOrigin: SettingsModel.PublicOrigin.check(
 		Schema.makeFilter(
-			// The filter of `Api.PublicOrigin` does not stop the checks after it,
+			// The filter of `SettingsModel.PublicOrigin` does not stop the checks after it,
 			// so this check can see a value that is not a URL.
 			(value) =>
-				URL.canParse(value) && Api.isLoopbackHost(new URL(value).hostname),
+				URL.canParse(value) &&
+				SettingsModel.isLoopbackHost(new URL(value).hostname),
 			{
 				message: "Development authentication needs an origin on this computer",
 			},

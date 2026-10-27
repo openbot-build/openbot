@@ -1,4 +1,6 @@
-import { DeveloperApi as Api } from "@openbot-build/api"
+import * as Models from "./DeveloperModels.ts"
+import { Developers } from "@openbot-build/domain"
+
 import { PgClient } from "@effect/sql-pg"
 import { and, desc, eq, lt, or, type SQL } from "drizzle-orm"
 import {
@@ -23,32 +25,35 @@ export class DeveloperReports extends Context.Service<
 		readonly save: (
 			owner: string,
 			cardUrl: string,
-		) => Effect.Effect<Api.SavedReport, Api.Failure>
+		) => Effect.Effect<Models.SavedReport, Developers.Failure>
 		readonly list: (
 			owner: string,
 			cardUrl: string,
 			before?: string,
-		) => Effect.Effect<ReadonlyArray<Api.SavedReport>, Api.Failure>
+		) => Effect.Effect<ReadonlyArray<Models.SavedReport>, Developers.Failure>
 		readonly get: (
 			owner: string,
 			id: string,
-		) => Effect.Effect<Api.SavedReport, Api.Failure>
+		) => Effect.Effect<Models.SavedReport, Developers.Failure>
 		readonly compare: (
 			owner: string,
 			id: string,
 			other: string,
-		) => Effect.Effect<Api.ReportDiff, Api.Failure>
+		) => Effect.Effect<Developers.ReportDiff, Developers.Failure>
 		readonly remove: (
 			owner: string,
 			id: string,
-		) => Effect.Effect<void, Api.Failure>
+		) => Effect.Effect<void, Developers.Failure>
 		readonly personal: (
 			owner: string,
 			before?: string,
-		) => Effect.Effect<ReadonlyArray<Api.PersonalReport>, Api.Failure>
+		) => Effect.Effect<
+			ReadonlyArray<Developers.PersonalReport>,
+			Developers.Failure
+		>
 	}
 >()("@openbot-build/openbot/apps/DeveloperReports") {}
-export const issueKey = (issue: Api.Issue): string =>
+export const issueKey = (issue: Developers.Issue): string =>
 	JSON.stringify([
 		issue.code,
 		issue.stage,
@@ -56,7 +61,7 @@ export const issueKey = (issue: Api.Issue): string =>
 		issue.fieldPath ?? null,
 	])
 /** Two issues are the same issue when the fields of `issueKey` are the same. */
-export const sameIssue: Equivalence.Equivalence<Api.Issue> =
+export const sameIssue: Equivalence.Equivalence<Developers.Issue> =
 	Equivalence.mapInput(
 		Equivalence.Tuple([
 			Equivalence.String,
@@ -64,13 +69,13 @@ export const sameIssue: Equivalence.Equivalence<Api.Issue> =
 			Equivalence.String,
 			Equivalence.strictEqual<string | null>(),
 		]),
-		(issue: Api.Issue) =>
+		(issue: Developers.Issue) =>
 			[issue.code, issue.stage, issue.source, issue.fieldPath ?? null] as const,
 	)
 const compare = (
-	before: Api.InspectionReport,
-	after: Api.InspectionReport,
-): Api.ReportDiff => ({
+	before: Models.InspectionReport,
+	after: Models.InspectionReport,
+): Developers.ReportDiff => ({
 	introduced: Arr.differenceWith(sameIssue)(after.issues, before.issues),
 	resolved: Arr.differenceWith(sameIssue)(before.issues, after.issues),
 	persisting: Arr.intersectionWith(sameIssue)(after.issues, before.issues),
@@ -92,7 +97,7 @@ export const make: Effect.Effect<
 		const row = (yield* Rows.stored(
 			db.select().from(developerReports).where(reportWhere(id)),
 		))[0]
-		if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+		if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
 		return row
 	})
 	const get = Effect.fn("DeveloperReports.get")(function* (
@@ -124,7 +129,7 @@ export const make: Effect.Effect<
 					.where(and(filter, eq(developerReports.id, before))),
 			))[0]
 			if (cursor === undefined)
-				return yield* Api.DeveloperInputInvalid.make({ message })
+				return yield* Developers.DeveloperInputInvalid.make({ message })
 			after = or(
 				lt(developerReports.checkedAt, cursor.checkedAt),
 				and(
@@ -167,7 +172,7 @@ export const make: Effect.Effect<
 					// Lock the App first, so the monitor does not change it at the same time.
 					const app = yield* Rows.getApp(db, namespace, cardUrl, true)
 					yield* access.authorize(owner, cardUrl, true)
-					const value: Api.SavedReport = {
+					const value: Models.SavedReport = {
 						id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
 						cardUrl,
 						createdBy: owner,
@@ -209,7 +214,7 @@ export const make: Effect.Effect<
 				const before = yield* get(owner, id)
 				const after = yield* get(owner, other)
 				if (before.cardUrl !== after.cardUrl)
-					return yield* Api.DeveloperInputInvalid.make({
+					return yield* Developers.DeveloperInputInvalid.make({
 						message: "Choose two reports for the same Card URL.",
 					})
 				return compare(before.report, after.report)
@@ -217,7 +222,8 @@ export const make: Effect.Effect<
 		),
 		remove: Effect.fn("DeveloperReports.remove")(function* (owner, id) {
 			const row = yield* read(id)
-			if (row.owner !== owner) return yield* Api.DeveloperNotFound.make({})
+			if (row.owner !== owner)
+				return yield* Developers.DeveloperNotFound.make({})
 			yield* Rows.stored(db.delete(developerReports).where(reportWhere(id)))
 		}),
 	})

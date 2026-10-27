@@ -1,17 +1,6 @@
-import { Chat, ChatStore } from "@openbot-build/core"
-import { Array as Arr, Cause, Clock, Effect, Option, Schema } from "effect"
-import {
-	and,
-	asc,
-	desc,
-	eq,
-	gt,
-	inArray,
-	isNull,
-	lt,
-	or,
-	sql,
-} from "drizzle-orm"
+import { Chat, ChatStore, type Turn } from "@openbot-build/core"
+import { Array as Arr, Clock, Effect, Option, Schema } from "effect"
+import { and, asc, desc, eq, gt, inArray, lt, type SQL } from "drizzle-orm"
 import { chats, chatItems, chatTurns, fileRefs } from "../database/Schema.ts"
 import { fileIdsIn } from "../files/Refs.ts"
 import * as Db from "../database/Database.ts"
@@ -66,6 +55,22 @@ const columnsOf = (ref: Schema.Json, chat: Chat.Id) =>
 			createdAt: record.createdAt,
 		}
 	})
+
+/** Hold this row before taking an execution lock in the same transaction. */
+export const lock = (db: Database, namespace: string, chat: Chat.Id) =>
+	db
+		.select({ id: chats.id })
+		.from(chats)
+		.where(and(eq(chats.namespace, namespace), eq(chats.id, chat)))
+		.for("update")
+		.pipe(
+			Effect.mapError(databaseError),
+			Effect.flatMap((rows) =>
+				rows.length === 0
+					? Effect.fail(Chat.ChatNotFound.make({ chat }))
+					: Effect.void,
+			),
+		)
 
 /** The core Chat store persistence of one namespace. */
 export const persistence = (
@@ -187,11 +192,20 @@ export const save = (
 	db: Database,
 	namespace: string,
 	delta: ChatStore.Delta,
+	turn?: Turn.Id,
 ): Effect.Effect<void, ChatStore.ChatStoreError> =>
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
 				const columns = yield* columnsOf(delta.ref, Chat.Id.make(delta.chat))
+				if (
+					turn !== undefined &&
+					(delta.expected === null || columns.turn !== turn)
+				)
+					return yield* ChatStore.ChatStoreError.make({
+						reason: "storage-failed",
+						message: "This execution cannot change another Turn.",
+					})
 				const now = yield* Clock.currentTimeMillis
 				const state = yield* stringify(delta.state ?? null)
 				const values = {
@@ -202,8 +216,6 @@ export const save = (
 					turn: columns.turn,
 					revision: delta.revision,
 					inboxSize: columns.inboxSize,
-					// A change of a running Turn shows that its process still runs.
-					runnerSeenAt: columns.status === "Running" ? now : null,
 					updatedAt: now,
 				}
 				const written =
@@ -230,6 +242,7 @@ export const save = (
 										eq(chats.namespace, namespace),
 										eq(chats.id, delta.chat),
 										eq(chats.revision, delta.expected),
+										turn === undefined ? undefined : eq(chats.turn, turn),
 									),
 								)
 								.returning({ id: chats.id })
@@ -312,6 +325,7 @@ export const list = (
 	input: {
 		readonly bot?: string
 		readonly kinds?: ReadonlyArray<string>
+		readonly where?: SQL
 	} = {},
 ): Effect.Effect<ReadonlyArray<Chat.Ref>, ChatStore.ChatStoreError> =>
 	db
@@ -320,6 +334,7 @@ export const list = (
 		.where(
 			and(
 				eq(chats.namespace, namespace),
+				input.where,
 				input.bot === undefined ? undefined : eq(chats.bot, input.bot),
 				input.kinds === undefined
 					? undefined
@@ -354,79 +369,6 @@ export const direct = (
 			Effect.map((rows) =>
 				Option.map(Arr.head(rows), (row) => Chat.Id.make(row.id)),
 			),
-			Effect.mapError(databaseError),
-		)
-
-/** Shows that the running Turn of a Chat still runs on this server. */
-export const heartbeat = (
-	db: Database,
-	namespace: string,
-	chat: Chat.Id,
-): Effect.Effect<void, ChatStore.ChatStoreError> =>
-	Effect.gen(function* () {
-		const now = yield* Clock.currentTimeMillis
-		yield* db
-			.update(chats)
-			.set({ runnerSeenAt: now })
-			.where(
-				and(
-					eq(chats.namespace, namespace),
-					eq(chats.id, chat),
-					eq(chats.status, "Running"),
-				),
-			)
-	}).pipe(Effect.mapError(databaseError))
-
-/** A Chat that needs the sweep: its body tells whose it is. */
-export interface Swept {
-	readonly namespace: string
-	readonly id: Chat.Id
-	readonly ref: Chat.Ref
-}
-
-/**
- * Chats in every namespace whose input waits while no Turn runs, and Chats whose
- * running Turn has not said that it runs since `staleBefore`.
- */
-export const needingSweep = (
-	db: Database,
-	staleBefore: number,
-): Effect.Effect<ReadonlyArray<Swept>, ChatStore.ChatStoreError> =>
-	db
-		.select({ namespace: chats.namespace, id: chats.id, body: chats.body })
-		.from(chats)
-		.where(
-			or(
-				and(gt(chats.inboxSize, 0), sql`${chats.status} <> 'Running'`),
-				and(
-					eq(chats.status, "Running"),
-					or(isNull(chats.runnerSeenAt), lt(chats.runnerSeenAt, staleBefore)),
-				),
-			),
-		)
-		.limit(500)
-		.pipe(
-			Effect.flatMap((rows) =>
-				Effect.forEach(rows, (row) => {
-					const id = Chat.Id.make(row.id)
-					return decodeRef(row.body, id).pipe(
-						Effect.map((ref) =>
-							Option.some<Swept>({ namespace: row.namespace, id, ref }),
-						),
-						// One bad row must not stop the sweep of the Chats of every namespace.
-						Effect.catchTag("ChatStoreError", (error) =>
-							Effect.logError(
-								"A stored Chat does not decode, so the sweep skips it",
-								Cause.fail(error),
-							).pipe(
-								Effect.annotateLogs({ namespace: row.namespace, chat: id }),
-								Effect.as(Option.none<Swept>()),
-							),
-						),
-					)
-				}),
-			),
-			Effect.map(Arr.getSomes),
 			Effect.mapError(databaseError),
 		)
 

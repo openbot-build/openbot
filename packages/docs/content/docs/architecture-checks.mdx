@@ -1,0 +1,226 @@
+---
+title: Execution design checks
+description:
+  Product coverage, failure checks, and evidence needed for the execution
+  redesign.
+---
+
+This page maps the [execution design](/docs/architecture) to source tests and
+release checks. The source review date is 2026-10-28. A test listed here is
+**source evidence, not a passing test result**. Record the revision, command,
+result, and log for each release run. See
+[end-to-end checks](/docs/developers/testing) for commands and test service
+limits.
+
+## Reading the map
+
+The change starts from a recorded baseline of 581 tests. A larger test count
+does not prove that every old behavior remains. Tests now live in both source
+packages and `packages/e2e`. Keep the old assertion, its new location, or the
+approved behavior change when a test moves or goes away.
+
+`packages/e2e/scenarios.json` is the detailed map of user assertions. It has 22
+task groups and names normal, edge, and extreme cases. An empty case list makes
+no coverage claim. This page adds the shared execution and data move checks.
+
+The tables use these path prefixes:
+
+- `E/` means `packages/e2e/test/`.
+- `S/` means `packages/openbot/test/`.
+- Other paths start at the project root.
+
+Tests may use a real database with a fixed model, a real HTTP server with a test
+workflow, or a complete server. These are different test scopes. A service Layer
+restart is not a process crash. Two service objects in one process are not two
+server processes.
+
+## Baseline trace
+
+`packages/e2e/baseline.json` gives one row for each baseline test declaration at
+revision `2a123ffae6f5aea2cfa02f36975efbacc83f1305`. It compares 566
+declarations in 142 files with the current source. The recorded 581 cases are a
+run count; loops and parameterized tests can expand one declaration into several
+cases. These counts must not be treated as the same thing.
+
+The source snapshot has 371 unchanged test callbacks and 46 more tests that keep
+all their direct assertion syntax. Another 59 same-title tests have changed
+assertions; 90 tests need a renamed or replacement case. The trace keeps removed
+assertion text, current test titles, and review notes. Matching syntax does not
+prove that a shared fixture stayed the same or that a test passed. Recheck this
+snapshot after later code changes.
+
+Some changes follow the approved design: a Turn owns its resources; commands
+return execution receipts; private causes are sealed; permission lists filter
+resources; and failed audit writes roll back decisions. Computer resume is an
+explicit saved action. Memory cannot widen an observation without source proof.
+A request that expires while a decision waits for its lock grants nothing. These
+are recorded changes, not identical old behavior.
+
+`S/MemoryModels.test.ts` checks the spent-budget reply with zero model sends,
+released permits, a sealed cause, and a successful call after the budget is
+removed. `S/TokenThrottle.test.ts` checks the exact joined text of 40 distinct
+parts. `S/ToolCommands.test.ts` keeps both delegation clock cases: an early wake
+keeps the saved deadline; takeover after that deadline pauses without another
+wait.
+
+B463 maps to the three `S/ExecutionStore.test.ts` cases for sealed data, JSON,
+and identity damage. They check storage failure, repair, and a separate missing
+record. B202 maps to `E/chat/ExecutionResources.test.ts`: failed tool
+construction closes its scope, keeps a saved error ID, and lets the next Turn
+succeed. B241 maps to `E/chat/ChatRecovery.test.ts`: a damaged Chat does not
+stop another Chat from recovering or taking new input.
+
+The App, Channel, Computer, Live, Code Mode, and Vault mappings check saved
+receipts and cleanup children, safe error categories and IDs, and owner checks.
+`additionalCurrentChecks` records the newer Pairing and Workflow API cases apart
+from the 566 baseline declarations. Pairing waits for the saved deletion result.
+Cookie and token callers compare complete records after the request enters its
+waiting state. Each mapped case links to its passing local run in
+`validationRuns`; those runs have distinct scopes.
+
+## Product coverage
+
+Each row names retained behavior and concrete tests to inspect. The failure
+checks in the next section apply across these rows.
+
+| Capability and guide                                                                                    | Source tests                                                                                                                                                                                               | Behavior checked in the source                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [API access](/docs/authentication), [client](/docs/client), and [commands](/docs/developers/quickstart) | `E/api-access/ApiE2E.test.ts`, `E/api-access/Tokens.test.ts`, `packages/client/test/Executions.test.ts`, `E/cli/Commands.test.ts`, `E/cli/Dispatch.test.ts`, `E/cli/Pairing.test.ts`                       | Cookie origin checks, token rights, matching saved writes, command-key retry, built command dispatch, and Computer pairing. Route access checks do not prove every valid business task. |
+| [Bots](/docs/bots) and [sharing](/docs/sharing)                                                         | `E/bot-work/Bots.test.ts`, `E/bot-work/BotSharing.test.ts`                                                                                                                                                 | Private and shared Bots, separate member Chats, invitations, memory ownership, and deletion.                                                                                            |
+| [Chats](/docs/chats)                                                                                    | `E/chat/ChatCommands.test.ts`, `E/chat/ChatQueries.test.ts`, `E/chat/ChatControl.test.ts`, `S/InputCommands.test.ts`, `S/TurnPersistence.test.ts`                                                          | Ordered input, steering, one admitted Turn, revision conflicts, saved model/tool results, and stop/delete after resource release.                                                       |
+| [Tools](/docs/developers/chats) and background work                                                     | `E/chat/HostTools.test.ts`, `E/chat/HostToolStorage.test.ts`, `S/ToolCommands.test.ts`                                                                                                                     | Saved tool definitions, detached work, cancellation, and results delivered to the source Chat.                                                                                          |
+| [Approval](/docs/requests), [rules](/docs/rules), and plans                                             | `E/approve-tool-calls/HostTools.test.ts`, `E/bot-work/Work.test.ts`, `S/RequestCommands.test.ts`                                                                                                           | A Turn can end while approval waits. Decisions, Grants, audit, notices, and plan-mode changes commit together.                                                                          |
+| [Delegation](/docs/delegation) and limits                                                               | `E/bot-work/Delegation.test.ts`, `E/bot-work/WorkflowApiE2E.test.ts`, `S/ToolCommands.test.ts`, `S/DelegationUsage.test.ts`                                                                                | Independent child work, parent notices, nested cancellation, pauses, time/step/cost limits, and private task history.                                                                   |
+| [Memory](/docs/memory)                                                                                  | `E/chat-recovery/DevelopmentMemory.test.ts`, `E/bot-work/Bots.test.ts`, `S/MemoryModels.test.ts`, `S/ExecutionPermits.test.ts`, `S/MemoryEvidence.test.ts`                                                 | Learning and stored evidence, owner separation, replay, changed limits, queue timeout, and shared database admission.                                                                   |
+| [Code Mode](/docs/code-mode)                                                                            | `E/run-code/CodeModeApi.test.ts`, `S/CodeMode.test.ts`, `S/VaultCode.test.ts`, `S/ToolCommands.test.ts`                                                                                                    | Sandbox limits, fixed time and random values, call order, saved results, secret references, and stale-owner rejection.                                                                  |
+| [Apps](/docs/apps) and OAuth                                                                            | `E/connect-apps/AppAuthorization.test.ts`, `E/connect-apps/AppLifecycleApi.test.ts`, `E/connect-apps/AppConnectionsApi.test.ts`, `S/AuthorizationCommands.test.ts`, `S/ConnectionCommands.test.ts`         | Discovery, manual credentials, PKCE, issuer checks, code exchange, refresh, revocation, removal, reset, and current connection ownership.                                               |
+| [Publishing](/docs/developer-tools), [index](/docs/app-index), and App Views                            | `E/publish-apps/DeveloperCenter.test.ts`, `E/connect-apps/IndexWork.test.ts`, `E/connect-apps/AppViews.test.ts`, `S/TestCommands.test.ts`, `S/TestCleanup.test.ts`, `S/ProofCommands.test.ts`              | Proofs, reports, member access, test OAuth, cleanup, indexing lists, notifications, and View expiry/access checks.                                                                      |
+| [Channels](/docs/channels)                                                                              | `E/connect-channels/Channels.test.ts`, `E/connect-channels/ChannelAuthority.test.ts`, `E/connect-channels/ChannelRecovery.test.ts`, `S/ChannelCalls.test.ts`, `S/ChannelRemoval.test.ts`                   | Speaker identity, input deduplication, saved sends, unknown results, and removal that waits for every linked delivery version.                                                          |
+| [Triggers](/docs/triggers) and reminders                                                                | `E/triggers/Triggers.test.ts`, `E/bot-work/Work.test.ts`, `S/Reminders.test.ts`                                                                                                                            | Scheduled and webhook input, retained token identity, durable timers, reminder recovery, and cancellation.                                                                              |
+| [Computers](/docs/computers) and Connectors                                                             | `E/connect-computers/Computers.test.ts`, `E/connect-computers/Connectors.test.ts`, `E/connect-computers/ComputerQueries.test.ts`, `S/ResourceTransport.test.ts`, `packages/computer/test/Sessions.test.ts` | Pairing, resource-filtered lists, terminal sessions, owner routing, ordered output, and unknown interactive results.                                                                    |
+| [Live sessions](/docs/live)                                                                             | `E/live-chat/Live.test.ts`, `S/LiveConnections.test.ts`, `S/OpenAiRealtime.test.ts`, `packages/core/test/LiveDriver.test.ts`                                                                               | Provider events, live tools, connection closure, cancellation, and loss of a live connection.                                                                                           |
+| [Files](/docs/files)                                                                                    | `E/files/Files.test.ts`, `S/FileTasks.test.ts`, `S/S3.test.ts`                                                                                                                                             | Upload, model attachments, object references, retention, atomic delete tasks, and old-owner rejection.                                                                                  |
+| [Vaults](/docs/vaults)                                                                                  | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `S/SecretFiles.test.ts`                                                                                                     | Allowed fields, sealed values, owner and token limits, missing secrets, and secret resolution at the call boundary.                                                                     |
+| [Models](/docs/models)                                                                                  | `E/use-models/Cloudflare.test.ts`, `S/OpenAi.test.ts`, `S/Anthropic.test.ts`, `S/OpenAiCompat.test.ts`, `S/ModelRegistry.test.ts`                                                                          | Provider formats, model selection, streams, settings changes, and the optional real model path. The real model test needs its explicit environment setting.                             |
+| [Usage and billing](/docs/usage)                                                                        | `E/bot-work/Billing.test.ts`, `S/BillingPostgres.test.ts`, `S/BillingUnknown.test.ts`, `S/MeteredModel.test.ts`                                                                                            | Prices, credits, budgets, shared reservations, confirmed settlement, unknown usage, and late receipts.                                                                                  |
+| [Organizations](/docs/organization), [SSO](/docs/sso), and [platform settings](/docs/platform)          | `E/organizations/Organization.test.ts`, `E/sign-in/Oidc.test.ts`, `E/admin-settings/AdminApiE2E.test.ts`, `E/admin-settings/PlatformApi.test.ts`                                                           | Membership, invitations, account separation, sign-in, secret hints, and cookie/token administration.                                                                                    |
+| [Permissions](/docs/permissions) and [errors](/docs/error-logs)                                         | `S/TurnAccess.test.ts`, `S/RequestCommands.test.ts`, `S/ExecutionHttp.test.ts`, `S/ErrorRecords.test.ts`, `E/chat/TurnFailures.test.ts`                                                                    | Current rights on reads and sends, resource-filtered lists, safe public failures, and sealed internal causes.                                                                           |
+| Standalone [core and protocol](/docs/packages)                                                          | `packages/core/test/Runtime.test.ts`, `packages/core/test/Persistence.test.ts`, `packages/protocol/test/Sdk.test.ts`, `E/protocol-service/Service.test.ts`                                                 | Independent model/tool loops and protocol use, with no OpenBot server dependency. In-memory core execution makes no process-recovery promise.                                           |
+| [Server](/docs/server), [deployment](/docs/deploy), and docs                                            | `E/start-server/DevelopmentEntry.test.ts`, `E/read-docs/Docs.test.ts`, `deploy/docker/check.sh`                                                                                                            | Built entry points, local deployment, all home languages, three manual languages, generated API pages, and local links.                                                                 |
+
+## Failure and recovery coverage
+
+These are source checks to run against the final revision. The named case gives
+a place to inspect the assertions, not only a filename to count.
+
+| ID  | Required rule                                                                    | Concrete source evidence and scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F01 | A second node takes over saved work; member and service work obey the same rule. | `S/ExecutionCluster.test.ts`: `another process takes over ${kind} work from a saved step`; two OS processes, PostgreSQL, owner kill, decisions, cancellation, and late results. `S/TurnCluster.test.ts` checks a saved model result. `S/FullServerCluster.test.ts` starts two complete server assemblies with fixed model/tool adapters and tests public token/cookie commands, observation, approval, cancellation, owner kill, and database loss at a Chat checkpoint. Its child entry imports server source, not the built release entry. |
+| F02 | Commands deduplicate and old generations cannot commit.                          | `S/ExecutionStore.test.ts`: `a later owner stops writes from an old generation`. `S/InputCommands.test.ts`: `retries and concurrent input admit one Turn` and `an event failure rolls back input and its execution`.                                                                                                                                                                                                                                                                                                                         |
+| F03 | Calls distinguish no send, lost result, safe retry, and unknown write.           | `S/ExecutionExternal.test.ts` uses two OS processes and a real HTTP write endpoint. Its cases stop before send or after reply, with and without provider keys; the late-result case stops the real owner with `SIGSTOP`, terminates its PostgreSQL connections, then resumes it after takeover. Another case checks revoked rights. `S/ExecutionCalls.test.ts` holds a known result while its database save retries.                                                                                                                         |
+| F04 | Readers recover gaps, missed notices, retries, and end states.                   | `S/ExecutionObservation.test.ts`: a slow reader passes 128 events; a real PostgreSQL listener is killed; two real processes read from cursors; model attempts stay separate after reconnect. `S/ExecutionStore.test.ts`: `an observer can read the end again and stop at its cursor`.                                                                                                                                                                                                                                                        |
+| F05 | Restored work cannot gain rights.                                                | `S/TurnAccess.test.ts` checks revoked/expired tokens, Channel identity changes, and review rights. `S/RequestCommands.test.ts` checks current limits before Grants. `S/ExecutionAuthority.test.ts` separates member and service work. `S/ExecutionHttp.test.ts` covers public reads and commands.                                                                                                                                                                                                                                            |
+| F06 | Full causes stay private and secrets stay out of engine messages.                | `S/ErrorRecords.test.ts` checks sealed causes and failure of the error recorder. `S/ExecutionCluster.test.ts` and `S/ExecutionExternal.test.ts` inspect engine messages. `E/bot-work/Bots.test.ts` checks selected memory plaintext across stored records.                                                                                                                                                                                                                                                                                   |
+| F07 | Only confirmed usage is charged, once.                                           | `S/BillingPostgres.test.ts`: `takeover keeps old estimates and late usage commits with its result`. `S/BillingUnknown.test.ts`: `unknown usage releases platform credits and late receipts charge once`, plus zero, missing, and low estimates. `S/ExecutionCalls.test.ts` checks replay with unknown usage.                                                                                                                                                                                                                                 |
+| F08 | Release needs a saved physical result; lost transport is not success.            | `S/ResourceTransport.test.ts` covers saved close replies, all App scopes, and Connector output. `S/ResourceProcesses.test.ts` uses two OS processes, PostgreSQL, and a real TCP peer. It checks owner kill, slow close, lost HTTP reply, a database network cut, and late close after replacement. `S/ExecutionCalls.test.ts` checks failed release during cancellation and pause. The resource processes serve the real transport, not the complete OpenBot application.                                                                    |
+| F09 | Shared admission counts work across service instances and takeover.              | `S/ExecutionPermits.test.ts` checks 32 scopes on 16 executions with two permit services, queue cancellation, old generations, deadlines, and pause/release. `S/ExecutionPermitProcesses.test.ts` adds two Node processes, 32 shared jobs with a peak of two permits, a stopped owner with terminated database connections, deadline takeover, old-owner release, cancellation, and process shutdown. These are permit-service processes, not complete servers.                                                                               |
+| F10 | Deletion cannot admit new work or finish before children close.                  | `S/ChannelRemoval.test.ts`: `Channel removal closes admission and waits for every delivery version`; it includes different members, old ownership, pending release, and an unknown result. `E/chat/ChatControl.test.ts` checks concurrent Chat deletion.                                                                                                                                                                                                                                                                                     |
+| F11 | OAuth cleanup survives lost member rights and cannot revoke an installed grant.  | `S/AuthorizationCommands.test.ts` checks grant-result ownership and cleanup. `S/TestCleanup.test.ts`: `cleanup keeps its owner, private data, and grant reservation across takeover`. `S/ConnectionCommands.test.ts` checks one current connection writer.                                                                                                                                                                                                                                                                                   |
+
+Read the fault checks with these scope rules:
+
+- **A01 — Complete server failover:** `S/FullServerCluster.test.ts` covers two
+  complete server assemblies. The built release entry and its deployment checks
+  are separate evidence. Keep the `full-server-failover` entry in the E2E map
+  linked to the source process checks.
+- **A02 — Business checkpoints:** the complete-server case cuts PostgreSQL
+  connections at a Chat checkpoint and checks one saved model result, Turn, and
+  event set after recovery. `S/InputCommands.test.ts` checks rollback and input
+  admission. `E/chat/ChatRecovery.test.ts` checks new input after recovery.
+- **A03 — Physical owners and shared limits:** resource and permit tests use
+  separate service processes. They cover network loss, lost close replies, and
+  late release from the old owner. Unknown interactive outcomes stay unknown;
+  audio is not replayed. A client disconnect does not prove a provider stopped.
+- **A04 — Old data:** `S/MigrationRehearsal.test.ts` starts with the baseline
+  schema and saved records. It checks conversion, repeat runs, interrupted
+  batches, current reads, and new Chat input. A new database alone does not
+  cover this scope.
+- **A05 — Revision evidence:** record the source revision and each run's scope.
+  Keep optional or skipped checks visible. Compare changed and removed baseline
+  assertions before accepting a test-count change.
+
+## Old paths and replacements
+
+The source tree has the removals below. Check both the deleted entry and its
+callers in the release diff. A codec kept only for migration is not an active
+runner. The standalone `core` runtime is a retained library capability.
+
+| Removed path under `packages/openbot/src/`                                                                                               | Current path to inspect                                                                       | Evidence of the simpler rule                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `chats/ChatHost.ts`, `chats/TurnWorkflow.ts`, `execution/RunScope.ts`                         | No per-member Chat runtime, reference-count wrapper, `keepOpen`, `current` callback, or method proxy. A Turn owns its scope.                  |
+| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `apps/AppCommands.ts`, `apps/AppWorkflow.ts`, `execution/Calls.ts`                            | App work uses common call intent, attempts, saved results, and decisions. Discovery returns descriptions.                                     |
+| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `code/CodeCommands.ts`, `code/CodeWorkflow.ts`, `database/conversion/LegacyV1.ts`             | Sandbox replay uses the common call log. The old lease store and stale-run scan are removed. The data move has its own codec for old records. |
+| `chats/ChatEvents.ts` and the old Chat SSE schemas                                                                                       | `execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                               | Saved execution events replace the local event queue, sequence counter, and end marker. All callers use the same event contract.              |
+| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `execution/Store.ts`, `execution/Observation.ts`, `chats/ToolCommands.ts`                     | No old Operation listener, cancellation notice loop, or stale-operation sweep. `packages/api/src/OperationsApi.ts` is also removed.           |
+| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `chats/ExecutionFeatures.ts`, `bots/DelegationCommands.ts`, `capabilities/RequestCommands.ts` | Execution scopes own their Gate and approvals. The delegation workflow owns limits. Requests close one due record at a time.                  |
+| Developer test run FiberMap and startup run reset                                                                                        | `apps/TestCommands.ts`, `apps/TestWorkflow.ts`, `apps/TestCleanupWorkflow.ts`                 | Stored commands and generation-checked results own runs and cleanup. Connection caches do not own the test lifecycle.                         |
+| Memory helper job queue and node-local model semaphore                                                                                   | `bots/MemoryWorkflow.ts`, `bots/MemoryModels.ts`, `execution/Permits.ts`                      | The common workflow owns recovery. Database permits own admission.                                                                            |
+
+`scripts/effect-rules.ts` checks `domain-boundary`, `storage-contract-boundary`,
+`standalone-boundary`, `assembly-boundary`, and `public-entry`. `pnpm typecheck`
+runs these rules. They check imports; they do not by themselves detect every
+second execution engine or recovery loop. Review new workers, timers, locks, and
+RPC handlers against the shared design.
+
+## Data move checks
+
+The [deployment guide](/docs/deploy) gives the maintenance order and secret-key
+settings. `S/DataUpgrade.test.ts` checks an empty database, exclusion between
+maintenance and a live server, batch rollback/resume, and imported history that
+starts no outside work. These are foundation checks.
+
+`S/MigrationRehearsal.test.ts` starts from the old schema and records. It works
+with the domain conversion tests to check the following before the startup gate
+opens:
+
+| Saved data                                                                         | Required checks                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat, Turn, queued input, tools, approvals, delegation, and Code Mode              | Keep IDs, history, order, owners, limits, and decisions. Link pending work to executions. Missing caller evidence must not create new authority.                                 |
+| Apps, OAuth, developer tests, index work, Channels, triggers, and reminders        | Keep connection/proof IDs, encrypted grants and flows, original caller evidence, timers, pending notices, and send outcomes. Unknown old writes remain unknown.                  |
+| Files, Vaults, models, organizations, accounts, SSO, and physical resource records | Check object references, foreign keys, owner links, saved secret decoding, and supported connection states. Do not silently drop damaged records.                                |
+| Usage, prices, credits, and budgets                                                | Keep confirmed charges and call identity. Keep estimates apart from unknown usage. Re-running conversion must not create another charge.                                         |
+| Conversion progress and release gate                                               | Stop midway and resume; repeat the full move; reject a damaged or wrongly encrypted record; check counts and references; block server startup until every required phase passes. |
+
+Keep the backup and object-reference list for the rehearsal. Restoration is
+allowed before outside work resumes. After that point, test forward repair so an
+old backup cannot cause a second outside write.
+
+## Release evidence
+
+Run the [project checks](/docs/developers/testing) on one fixed revision. Finish
+builds before tests start, because tests and child processes load built files.
+
+| Check                     | Entry point                                                                     | Evidence needed                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Build and types           | `devenv shell -- pnpm build`; `devenv shell -- pnpm typecheck`                  | All packages, test types through package test scripts, and dependency rules.                                                          |
+| Package and user tasks    | `devenv shell -- pnpm -r test`                                                  | Full test output, skipped cases, and the final E2E assertion map.                                                                     |
+| Fault and migration cases | F01–F11 and A01–A04 above                                                       | Process boundaries, fault point, final state, external effect count, and saved event/call evidence.                                   |
+| Images and Compose        | `.github/workflows/ci.yml`, `deploy/docker/check.sh`                            | Docker build checks, Compose startup/migration/API checks, image-layer checks, and vulnerability scan output for the built image IDs. |
+| Docs                      | Docs package build and `E/read-docs/Docs.test.ts`; `.github/workflows/docs.yml` | English, Chinese, German, generated API reference, all home languages, and link checks.                                               |
+| Merge and push            | CI for the exact merged revision                                                | Required jobs pass. A local focused test or an earlier snapshot is not final CI evidence.                                             |
+
+The baseline trace links each case to a recorded local run. Its evidence
+includes a complete build, type checks and rules over 956 files, and the
+standard OpenBot package run with 131 files and 883 tests. That package run
+includes the Activity process cases, full-server cluster checks, and migration
+rehearsal.
+
+E2E evidence combines the full-suite run with affected-case checks: 31 affected
+cases passed in one run, and the DevelopmentApps case passed in a separate
+standard-package run. These 32 cases overlap with the full-suite output, so the
+counts must not be added. One optional live Cloudflare case was skipped. The
+trace records each command, scope, and log; it does not claim one complete final
+combined run.
+
+Use CI for the exact release commit to judge release checks, including images,
+Compose, scans, and docs. Local test evidence does not replace those jobs.

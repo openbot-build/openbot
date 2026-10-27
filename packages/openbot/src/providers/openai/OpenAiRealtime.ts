@@ -14,7 +14,8 @@ import {
 } from "effect"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
-import * as Failures from "../../app/Failures.ts"
+import * as Failures from "../../errors/Failures.ts"
+import * as Report from "../../errors/Report.ts"
 import type { LiveBackend } from "../../models/LiveBackends.ts"
 
 /**
@@ -153,22 +154,46 @@ export const encodeInput = (
 			},
 		],
 		History: ({ messages }) =>
-			Arr.map(messages, (message) =>
-				message.role === "user"
-					? userText(message.text)
-					: {
-							type: "conversation.item.create",
-							item: {
+			// History is sent once. Insert it before sound that may already be in this connection.
+			Arr.map(messages, (message, index) => ({
+				type: "conversation.item.create",
+				previous_item_id: index === 0 ? "root" : `openbot_history_${index - 1}`,
+				item: {
+					id: `openbot_history_${index}`,
+					...("callId" in message
+						? message.role === "tool"
+							? {
+									type: "function_call_output",
+									call_id: message.callId,
+									output: message.output,
+								}
+							: {
+									type: "function_call",
+									call_id: message.callId,
+									name: message.name,
+									arguments: message.arguments,
+								}
+						: {
 								type: "message",
-								role: "assistant",
-								content: [{ type: "output_text", text: message.text }],
-							},
-						},
-			),
+								role: message.role,
+								content: [
+									{
+										type:
+											message.role === "user" ? "input_text" : "output_text",
+										text: message.text,
+									},
+								],
+							}),
+				},
+			})),
 	})
 
-const Count = Schema.optional(Schema.Finite)
+const Count = Schema.optional(
+	Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+)
 const UsageSchema = Schema.Struct({
+	input_tokens: Count,
+	output_tokens: Count,
 	input_token_details: Schema.optional(
 		Schema.Struct({
 			text_tokens: Count,
@@ -282,37 +307,53 @@ const statusOf = (status: string): Live.ResponseStatus =>
 
 const usageOf = (usage: typeof UsageSchema.Type | null | undefined) => ({
 	input: {
-		text: usage?.input_token_details?.text_tokens ?? 0,
-		audio: usage?.input_token_details?.audio_tokens ?? 0,
-		image: usage?.input_token_details?.image_tokens ?? 0,
-		cached: usage?.input_token_details?.cached_tokens ?? 0,
+		total: usage?.input_tokens,
+		text: usage?.input_token_details?.text_tokens,
+		audio: usage?.input_token_details?.audio_tokens,
+		image: usage?.input_token_details?.image_tokens,
+		cached: usage?.input_token_details?.cached_tokens,
 	},
 	output: {
-		text: usage?.output_token_details?.text_tokens ?? 0,
-		audio: usage?.output_token_details?.audio_tokens ?? 0,
+		total: usage?.output_tokens,
+		text: usage?.output_token_details?.text_tokens,
+		audio: usage?.output_token_details?.audio_tokens,
 	},
 })
 
-/**
- * A server event of a known type that OpenBot cannot read, for example because the
- * protocol changed. The details go only to the log. The client gets a protocol
- * Failure, so a Turn does not wait for an event that is lost.
- */
-const unreadable = (type: string, cause: Cause.Cause<unknown>) =>
-	Effect.logWarning(
-		"OpenAI Realtime sent an event that OpenBot cannot read",
-		{ type },
+/** Save the full cause and keep its safe reference with the Live error. */
+const failure = (
+	report: Report.Report,
+	operation: string,
+	cause: Cause.Cause<unknown>,
+	reason: Live.LiveErrorReason,
+	message: string,
+) =>
+	Cause.hasInterruptsOnly(cause)
+		? Effect.failCause(
+				Cause.fromReasons<never>(
+					Arr.filter(cause.reasons, Cause.isInterruptReason),
+				),
+			)
+		: report(operation, cause).pipe(
+				Effect.flatMap((saved) =>
+					Effect.fail(saved).pipe(
+						Failures.replace(operation, () =>
+							Live.LiveError.make({ reason, message }),
+						),
+						Effect.flip,
+					),
+				),
+			)
+
+/** A known event must give an error when its data cannot be read. */
+const unreadable = (report: Report.Report, cause: Cause.Cause<unknown>) =>
+	failure(
+		report,
+		"realtime.decode",
 		cause,
-	).pipe(
-		Effect.as([
-			Live.Event.Failure({
-				error: Live.LiveError.make({
-					reason: "protocol",
-					message: "OpenAI Realtime sent an event that OpenBot cannot read.",
-				}),
-			}),
-		]),
-	)
+		"protocol",
+		"OpenAI Realtime sent an event that OpenBot cannot read.",
+	).pipe(Effect.map((error) => [Live.Event.Failure({ error })]))
 
 /**
  * The Live events for one server event. Text that is not JSON and events of other
@@ -320,17 +361,19 @@ const unreadable = (type: string, cause: Cause.Cause<unknown>) =>
  */
 export const decodeEvent = (
 	text: string,
+	report: Report.Report,
 ): Effect.Effect<ReadonlyArray<Live.Event>> => {
 	const known = Option.filter(parseJson(text), isKnown)
 	if (Option.isNone(known)) return Effect.succeed([])
 	return Exit.match(decodeServerEvent(known.value), {
-		onFailure: (cause) => unreadable(known.value.type, cause),
-		onSuccess: eventsOf,
+		onFailure: (cause) => unreadable(report, cause),
+		onSuccess: (event) => eventsOf(event, report),
 	})
 }
 
 const eventsOf = (
 	event: ServerEvent,
+	report: Report.Report,
 ): Effect.Effect<ReadonlyArray<Live.Event>> => {
 	switch (event.type) {
 		case "session.created":
@@ -371,7 +414,7 @@ const eventsOf = (
 		case "response.output_audio.delta":
 		case "response.audio.delta":
 			return Result.match(Base64.decode(event.delta), {
-				onFailure: (error) => unreadable(event.type, Cause.fail(error)),
+				onFailure: (error) => unreadable(report, Cause.fail(error)),
 				onSuccess: (bytes) =>
 					Effect.succeed([
 						Live.Event.OutputAudio({ itemId: event.item_id, bytes }),
@@ -414,14 +457,13 @@ const eventsOf = (
 			// Cancelling when no answer runs is not a real failure.
 			if (event.error.code === "response_cancel_not_active")
 				return Effect.succeed([])
-			return Effect.succeed([
-				Live.Event.Failure({
-					error: Live.LiveError.make({
-						reason: "provider",
-						message: event.error.message ?? "OpenAI Realtime gave an error.",
-					}),
-				}),
-			])
+			return failure(
+				report,
+				"realtime.provider",
+				Cause.fail(event.error),
+				"provider",
+				"OpenAI Realtime gave an error.",
+			).pipe(Effect.map((error) => [Live.Event.Failure({ error })]))
 	}
 }
 
@@ -437,6 +479,7 @@ export const realtimeUrl = (endpoint: string | null, model: string) => {
 /** The backend for `openai` providers. It needs a WebSocket constructor that can send headers. */
 export const backend = Effect.gen(function* () {
 	const constructor = yield* Socket.WebSocketConstructor
+	const report = yield* Report.make
 	const value: LiveBackend = {
 		kind: "openai",
 		make: ({ provider, apiKey, upstreamModel, providerId, modelId }) =>
@@ -457,13 +500,14 @@ export const backend = Effect.gen(function* () {
 							Effect.provideService(Socket.WebSocketConstructor, constructor),
 						)
 						const reader = yield* socket.reader.pipe(
-							Failures.replace(
-								"OpenBot cannot connect to OpenAI Realtime",
-								() =>
-									Live.LiveError.make({
-										reason: "connect",
-										message: "OpenBot cannot connect to OpenAI Realtime.",
-									}),
+							Effect.catchCause((cause) =>
+								failure(
+									report,
+									"realtime.connect",
+									cause,
+									"connect",
+									"OpenBot cannot connect to OpenAI Realtime.",
+								).pipe(Effect.flatMap(Effect.fail)),
 							),
 						)
 						const writer = yield* socket.writer
@@ -474,6 +518,7 @@ export const backend = Effect.gen(function* () {
 								Effect.forEach(frames, (frame) =>
 									decodeEvent(
 										typeof frame === "string" ? frame : decoder.decode(frame),
+										report,
 									),
 								),
 							),
@@ -481,21 +526,20 @@ export const backend = Effect.gen(function* () {
 								Queue.offerAll(events, Arr.flatten(decoded)),
 							),
 							Effect.forever,
-							Effect.catch((error) =>
-								Effect.logWarning(
-									"OpenAI Realtime closed the connection",
-									error,
-								).pipe(
-									Effect.andThen(
-										Queue.fail(
-											events,
-											Live.LiveError.make({
-												reason: "closed",
-												message: "OpenAI Realtime closed the connection.",
-											}),
-										),
-									),
-								),
+							Effect.catchCause((cause) =>
+								failure(
+									report,
+									"realtime.read",
+									cause,
+									"closed",
+									"OpenAI Realtime closed the connection.",
+								).pipe(Effect.flatMap((error) => Queue.fail(events, error))),
+							),
+							// A recorder defect must also end the queue and keep its sealed causes.
+							Effect.onExit((exit) =>
+								Exit.isFailure(exit)
+									? Queue.failCause(events, exit.cause)
+									: Effect.void,
 							),
 							Effect.forkScoped,
 						)
@@ -507,13 +551,14 @@ export const backend = Effect.gen(function* () {
 									(event) => writer.write(JSON.stringify(event)),
 									{ discard: true },
 								).pipe(
-									Failures.replace(
-										"OpenBot cannot write to OpenAI Realtime",
-										() =>
-											Live.LiveError.make({
-												reason: "closed",
-												message: "OpenBot cannot write to OpenAI Realtime.",
-											}),
+									Effect.catchCause((cause) =>
+										failure(
+											report,
+											"realtime.write",
+											cause,
+											"closed",
+											"OpenBot cannot write to OpenAI Realtime.",
+										).pipe(Effect.flatMap(Effect.fail)),
 									),
 								)
 							})

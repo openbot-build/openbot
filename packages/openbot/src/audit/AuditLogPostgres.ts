@@ -1,4 +1,6 @@
-import { Caller, OrganizationApi } from "@openbot-build/api"
+import { Organizations as OrganizationsModel } from "@openbot-build/domain"
+
+import { Caller } from "@openbot-build/domain"
 import type { PgClient } from "@effect/sql-pg"
 import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { and, desc, eq, lt } from "drizzle-orm"
@@ -19,7 +21,7 @@ const encodeDetails = (details: Schema.JsonObject) =>
 const decodeSequence = Schema.decodeUnknownOption(
 	Schema.FiniteFromString.pipe(Schema.decodeTo(Schema.Int)),
 )
-const decodeAction = Schema.decodeUnknownEffect(OrganizationApi.AuditAction)
+const decodeAction = Schema.decodeUnknownEffect(OrganizationsModel.AuditAction)
 
 export const make: Effect.Effect<
 	typeof AuditLog.Service,

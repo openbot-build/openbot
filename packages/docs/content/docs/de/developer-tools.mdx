@@ -3,6 +3,9 @@ title: Entwickler-Tools
 description: Prüfe, teste und verwalte die Apps, die du veröffentlichst.
 ---
 
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+API-Anbindung, App-Veröffentlichung und Projektarbeit.
+
 Diese Tools sind für Menschen, die Apps veröffentlichen. Du kannst deine App
 prüfen, beweisen, dass du sie kontrollierst, den Zugang mit deinem Team teilen,
 private Tests ausführen, die Aufnahme in den Index anfordern und Hinweise
@@ -10,7 +13,7 @@ bekommen, wenn etwas kaputtgeht.
 
 Nur der Aufruf zur Prüfung ist öffentlich. Alle anderen Aufrufe brauchen ein
 Nutzer-Token oder das Session-Cookie, und `publish` auf `App`. Siehe
-[Authentifizierung](/de/docs/authentication).
+[Authentifizierung](/de/docs/developers/authentication).
 
 ---
 
@@ -36,7 +39,7 @@ Bericht hat:
 | `stages` | Jeder Prüfschritt: `Input`, `Discovery`, `CardRead`, `CardSchema`, `Compatibility`, `PublisherAssociation` und `Eligibility`. Jeder ist `Passed`, `Failed`, `Unconfirmed` oder `NotChecked`. |
 
 Ein Ergebnis `Eligible` heißt nicht, dass die App schon im Index ist. Siehe
-[App Index](/de/docs/app-index#wie-apps-in-den-index-kommen).
+[App Index](/de/docs/developers/app-index#wie-apps-in-den-index-kommen).
 
 ---
 
@@ -105,13 +108,24 @@ OpenBot liest die Card an ihrer genauen URL, ohne Weiterleitungen. Deine
 
 ```sh
 curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
-  -H "Authorization: Bearer $OPENBOT_TOKEN"
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"proof-check-1"}'
 ```
 
-Bei Erfolg bekommst du einen **Beweis** (Proof). Du wirst `administrator` für
-diesen Umfang. Bei einem Fehler bekommst du 409 `DeveloperConflict`. Sein
-`reason` kann `ProofMismatch`, `ClaimExpired`, `VerificationUnavailable`,
-`RobotsDenied`, `RobotsUnconfirmed` oder `CardUnconfirmed` sein.
+Die API gibt 202 mit einer `executionId` zurück. Nutze denselben `commandKey`,
+wenn die Antwort verloren geht. Lies `/v1/executions/:executionId` oder folge
+seinen Ereignissen. Nach dem Abschluss liest du den **Beweis** mit
+`GET /v1/developer/proofs/<claim id>`. Du wirst `administrator` für diesen
+Umfang. Ein Fehler hat eine sichere Fehlerklasse und eine `errorId`. Die volle
+Ursache bleibt im verschlüsselten Fehlerdatensatz. Ein fehlendes Token oder ein
+abgelaufener Anspruch gibt `conflict`. Ein Netzwerkfehler gibt `external`. Das
+Schließen des Ereignisstroms stoppt die Prüfung nicht. Nutze dafür den Endpunkt
+zum Abbruch der Ausführung.
+
+Das SDK hat `Proofs.verifyClaim(id)` und `Proofs.verifyProof(id)`. Beide geben
+einen Befehl mit einem festen Schlüssel und einem `send`-Effect zurück. Nutze
+denselben Befehl für einen neuen Versuch.
 
 </Step>
 </Steps>
@@ -125,8 +139,9 @@ jeden Tag noch einmal:
   Minute noch einmal.
 - Ein Beweis mit `Suspended` gibt keinen Zugang.
 
-Um jetzt zu prüfen, rufe `POST /v1/developer/proofs/:id/verify` auf. Um einen
-Beweis aufzugeben, rufe `POST /v1/developer/proofs/:id/relinquish` auf. Um einen
+Um jetzt zu prüfen, rufe `POST /v1/developer/proofs/:id/verify` mit einem neuen
+`commandKey` auf. Auch das gibt einen Ausführungsbeleg zurück. Um einen Beweis
+aufzugeben, rufe `POST /v1/developer/proofs/:id/relinquish` auf. Um einen
 Anspruch abzubrechen, rufe `POST /v1/developer/claims/:id/revoke` auf.
 
 `GET /v1/developer` gibt deine Apps, deine Beweise und deine Zugänge in `grants`
@@ -189,9 +204,22 @@ zum Index hinzu. Ein Test endet nach einer Stunde.
 2. Wenn der Endpoint Einstellungen braucht, schicke sie:
    `PUT /v1/developer/tests/:id/configuration` mit einem Objekt aus Keys und
    Werten. Die Keys sind dieselben wie bei
-   [Connections](/de/docs/apps#die-connection-prüfen-und-erstellen).
-3. Führe ihn aus: `POST /v1/developer/tests/:id/run`. Lies das Ergebnis mit
-   `GET /v1/developer/tests/:id`.
+   [Connections](/de/docs/developers/apps#die-connection-prüfen-und-erstellen).
+3. Starte ihn mit `POST /v1/developer/tests/:id/run` und
+   `{ "commandKey": "test-run-1" }`. Die Antwort ist `202` mit einem Beleg für
+   die Ausführung. Lies den Test mit `GET /v1/developer/tests/:id` und die
+   gespeicherten Ereignisse mit `GET /v1/executions/:executionId/observe`.
+
+Nutze denselben Befehlsschlüssel, wenn eine Antwort verloren geht. Ein neuer
+Schlüssel startet nach dem Ende des letzten Laufs einen neuen Lauf. Der Test
+behält seine letzte `executionId`. `DeveloperTests.run(id)` im SDK erstellt
+einen Befehl. Seine Methode `send` nutzt den Schlüssel erneut. Das Schließen des
+Ereignisstroms stoppt den Test nicht. Brich ihn über die Ausführungs-API ab,
+oder nutze die Testbereinigung. Diese stoppt den Lauf und wartet auf die
+Freigabe der Verbindung, bevor sie private Daten löscht. Ein weiterer
+Serverstart ändert keinen aktiven Workflow-Lauf. Nach dem Verlust eines Knotens
+nutzt der Lauf bereits gespeicherte Ergebnisse. Ein offener Leseaufruf darf
+erneut laufen.
 
 Jeder Lauf hat `stages`: `configuration`, `negotiation`, `tools`, `resources`,
 `resourceTemplates` und `prompts`. Jede Stufe ist `Passed`, `Failed`,
@@ -204,18 +232,56 @@ Wenn die App ein Konto braucht, wird der Status des Tests
 `AwaitingAuthorization`.
 
 1. Starte die Anmeldung: `POST /v1/developer/tests/:id/authorization` mit
-   `{ "scopes": [] }`. Füge `issuer` hinzu, wenn die App mehr als einen Anbieter
-   hat.
+   `{ "scopes": [], "commandKey": "test-sign-in-1" }`. Füge `issuer` hinzu, wenn
+   die App mehrere Anbieter hat. Die Antwort ist `202` mit einem Beleg. Folge
+   den Ereignissen und lies danach `authorization.authorizationUrl` aus dem
+   Test. `PreparingAuthorization` zeigt, dass die Arbeit noch läuft. Link und
+   verschlüsselter Flow werden zusammen gespeichert. Nutze den Schlüssel nach
+   einer verlorenen Antwort erneut. Der SDK-Helfer
+   `DeveloperTests.authorize(id, { scopes: [] })` behält ihn.
 2. Öffne `authorization.authorizationUrl` in deinem Browser und melde dich an.
 3. Der Anbieter schickt dich zu `/auth/developer/apps/callback`. OpenBot schickt
    dich dann zu `/?developerTest=<testId>`.
-4. Beende es: `POST /v1/developer/tests/:id/authorization/complete`. Führe den
-   Test dann noch einmal aus.
+4. Beende es mit `POST /v1/developer/tests/:id/authorization/complete` und einem
+   neuen `commandKey`. Die Antwort ist ein `202`-Ausführungsbeleg. Bei
+   verlorener Antwort nutze denselben Schlüssel.
+   `DeveloperTests.completeAuthorization` im SDK behält ihn. Warte auf das Ende,
+   lies den Test und starte ihn erneut.
 
-Wenn du fertig bist, rufe `POST /v1/developer/tests/:id/cleanup` auf. OpenBot
-zieht die Anmeldung des Tests zurück, wo der Anbieter das erlaubt, und löscht
-die gespeicherten Tokens. Du kannst einen laufenden Test auch mit `cancel`
-abbrechen oder mit `DELETE` löschen.
+Der Austausch behält den Aufrufer vom Beginn der Anmeldung als Rechtegrenze. Vor
+der Nutzung eines gespeicherten Ergebnisses werden seine Rechte und die des
+abschließenden Aufrufers geprüft. Codes und Tokens bleiben verschlüsselt. Ein
+Verbindungsabbruch stoppt keinen eingereichten Austausch. Bei unbekanntem
+Ergebnis wartet die Ausführung auf eine Entscheidung über die Ausführungs-API.
+OpenBot sendet den Code nicht selbst erneut. Nicht installierte Tokens erhalten
+einen Auftrag zum Aufräumen durch die Plattform.
+
+Wenn du fertig bist, rufe `POST /v1/developer/tests/:id/cleanup` mit einem
+`commandKey` auf. Der Endpunkt `cancel` nutzt denselben Body. Beide geben `202`
+mit einem Ausführungsbeleg zurück.
+`DELETE /v1/developer/tests/:id?commandKey=...` gibt auch einen Beleg zurück.
+Behalte den Schlüssel bei einem neuen Versuch. Das SDK bietet
+`DeveloperTests.cleanup`, `cancel` und `remove`.
+
+`cleanupExecutionId` nennt den Dienst, der Ablauf und Aufräumen des Tests
+verwaltet. Beobachte ihn über die Ausführungs-API. Der Test bleibt `Cancelling`,
+solange Arbeit oder das Aufräumen von Tokens läuft. Ist das Ergebnis eines
+Code-Austauschs unbekannt, braucht dessen Ausführung erst eine Entscheidung.
+Dann zieht OpenBot die Anmeldung zurück, wo der Anbieter das erlaubt. Private
+Daten und der Abschluss werden in einer Transaktion geändert. Ein Löschbefehl
+entfernt dabei auch den Test. Das Ende der Beobachtung hält das Aufräumen nicht
+an.
+
+Das Aufräumen sichert alle gespeicherten Tokens in verschlüsselten Aufträgen,
+bevor es die lokale Anmeldung entfernt. Die gemeinsame Bereinigung der
+Zugangsrechte führt Aufrufe beim Anbieter und neue Versuche aus. Private
+Testdaten bleiben bis zum Ende dieser Arbeit erhalten. `cleanupRemote` wird nur
+nach der bestätigten Rücknahme zu `Complete`. Hat der Anbieter keine Möglichkeit
+zur Rücknahme, steht dort `LocalOnly`.
+
+Derselbe Dienst hält den gespeicherten Ablauf-Timer. Er prüft einmal pro Minute,
+ob der Test noch Zugriff auf die App hat. Er räumt auch nach dem Entzug des
+Zugriffs auf. Ein Serverneustart setzt weder Tests noch Anmeldevorgänge zurück.
 
 ---
 
@@ -233,17 +299,25 @@ prüfen:
 curl -X POST https://api.example.com/v1/developer/indexing \
   -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
+  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card", "commandKey": "index-check-1" }'
 ```
 
-OpenBot prüft die App zuerst. Wenn sie nicht geeignet ist, bekommst du 409 mit
-dem `reason`. Wenn die Installation die App sperrt, bekommst du 403
-`DeveloperRestricted`.
+OpenBot prüft zuerst deine aktuellen Rechte und die App-Beschränkung. Eine
+gesperrte App gibt 403 `DeveloperRestricted` zurück. Die öffentliche Prüfung
+läuft im Hintergrund und speichert ihr Ergebnis.
 
-Der `status` der Anfrage geht von `Accepted` zu `Waiting`, `Verifying` und
-`Completed`. Wenn sie fertig ist, enthält `check` das Ergebnis. Liste Anfragen
-mit `GET /v1/developer/indexing` auf, oder lies eine mit
-`GET /v1/developer/indexing/:id`.
+Behalte `commandKey`, wenn eine Antwort verloren geht. Derselbe Schlüssel gibt
+dieselbe Anfrage zurück. Jede Anfrage hat eine `executionId`. Lies oder
+beobachte sie über `/v1/executions/:executionId`. Nutze den Endpunkt zum
+Abbrechen der Ausführung. Dein Abbruch beendet nicht die gemeinsame öffentliche
+Prüfung.
+
+Der `status` der Anfrage beschreibt die gemeinsame Prüfung: `Waiting`,
+`Verifying`, dann `Completed`. `check` enthält das Ergebnis. Der
+Ausführungsdatensatz zeigt den Zustand deiner Anfrage, auch Abbruch und Fehler.
+Liste Anfragen mit `GET /v1/developer/indexing` auf oder lies eine mit
+`GET /v1/developer/indexing/:id`. Eine fertige Anfrage behält ihr Ergebnis bei
+späteren Prüfungen und Neustarts.
 
 ---
 
@@ -251,6 +325,13 @@ mit `GET /v1/developer/indexing` auf, oder lies eine mit
 
 OpenBot prüft die Apps, die du verwaltest, etwa jede Stunde. Es schickt dir
 einen Hinweis, wenn sich etwas ändert.
+
+Regelmäßige App- und Beweisprüfungen nutzen den gemeinsamen Ausführer.
+PostgreSQL speichert die nächste Prüfzeit und jedes Ergebnis. Ein neuer Server
+setzt mit diesen Daten fort. Der Beweisstatus und die Zugriffsmitteilungen
+werden in einer Transaktion gespeichert. Ein älteres Ergebnis ersetzt keinen
+neueren Beweisstatus. Das erneute Lesen eines gespeicherten App-Ergebnisses
+sendet keine doppelte Mitteilung.
 
 | Art             | Wann                                                                         |
 | --------------- | ---------------------------------------------------------------------------- |
@@ -269,3 +350,12 @@ schicke `PUT /v1/developer/subscriptions` mit
 
 Die vollständigen Formen findest du in der
 [API-Referenz](/docs/api/operations/tags/developer-tools/).
+
+Die Datenmigration behält bestehende Ansprüche, Nachweise, Mitglieder,
+Einladungen, Apps, Berichte und Nachrichteneinstellungen. App- und
+Nachweisprüfungen behalten ihren nächsten Prüftermin. Ein aufgegebener Nachweis
+startet keine neue Prüfung. Alte Indexanfragen behalten ihre IDs und erhalten
+eine Ausführung für ihren Verlauf. Ein gespeichertes Ergebnis bleibt
+abgeschlossen. Eine Anfrage ohne Ergebnis wird unterbrochen, da der
+ursprüngliche Aufrufer fehlt. Die Plattform kann die getrennte öffentliche
+Prüfung abschließen.

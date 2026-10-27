@@ -1,16 +1,8 @@
-import type { ComputersApi } from "@openbot-build/api"
-import {
-	Cause,
-	Effect,
-	Option,
-	Predicate,
-	pipe,
-	Schema,
-	String as Str,
-} from "effect"
+import type { Computers as ComputersApi } from "@openbot-build/domain"
+import { Effect, Option, Predicate, pipe, Schema, String as Str } from "effect"
 import { Base64 } from "effect/encoding"
 import type { HttpClient, HttpClientRequest } from "effect/http"
-import { ComputerCallFailed, type ComputerError } from "./Computer.ts"
+import { ComputerCallFailed } from "./Computer.ts"
 
 /** The answer of the provider, with the whole body. */
 export interface Reply {
@@ -39,15 +31,6 @@ export const unreachable = (cause: unknown) =>
 		retry: true,
 		cause,
 	})
-
-/**
- * Logs a call failure that has an inside cause, with that cause. The message of
- * a failure without one, such as a wrong key, says enough, so it is not logged.
- */
-export const logCause = (error: ComputerError) =>
-	error._tag === "ComputerCallFailed" && error.cause !== undefined
-		? Effect.logWarning("A Computer provider call failed", Cause.fail(error))
-		: Effect.void
 
 /** Sends one request and reads the whole body. Any HTTP status is a reply. */
 export const send = (

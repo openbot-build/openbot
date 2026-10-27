@@ -1,31 +1,41 @@
-import type { Settings as Api } from "@openbot-build/api"
+import type { Settings as Limits } from "@openbot-build/domain"
 import {
 	Array as Arr,
-	Clock,
 	Context,
 	Effect,
-	HashMap,
 	Layer,
 	Option,
-	Ref,
 	Schedule,
+	Schema,
+	Order,
 } from "effect"
-import * as Background from "../app/Background.ts"
+import { SqlClient } from "effect/sql"
+import * as Background from "../execution/Background.ts"
 import { tokenRateOf } from "../settings/Documents.ts"
 import { Settings } from "../settings/Settings.ts"
 import type { Attribution, Call } from "./Billing.ts"
 
 /** One token bucket that a model call takes from. */
 export interface Scope {
-	readonly key: string
-	readonly rate: Api.TokenRate
+	readonly identity: {
+		readonly organizationId: string
+		readonly kind: keyof Limits.TokenRateLimits
+		readonly subjectId: string
+	}
+	readonly rate: Limits.TokenRate
 }
+
+/** The shared token rates could not be read or changed. */
+export class Unavailable extends Schema.TaggedError<
+	Unavailable,
+	{ readonly brand: unique symbol }
+>()("TokenRateUnavailable", { cause: Schema.Defect() }) {}
 
 /**
  * Token buckets that slow model work down instead of refusing it. Each bucket
  * fills at its rate up to its burst size. A taker may push a bucket into debt,
  * and then waits until every bucket of its call is out of debt again. Each
- * instance keeps its own buckets in memory.
+ * process uses the same PostgreSQL buckets and database clock.
  */
 export class TokenThrottle extends Context.Service<
 	TokenThrottle,
@@ -34,32 +44,25 @@ export class TokenThrottle extends Context.Service<
 		readonly scopes: (
 			call: Call,
 			attribution: Attribution,
-		) => Effect.Effect<ReadonlyArray<Scope>>
+		) => Effect.Effect<ReadonlyArray<Scope>, Unavailable>
 		/** Takes tokens, then waits until no bucket is in debt. Zero tokens only waits. */
 		readonly take: (
 			scopes: ReadonlyArray<Scope>,
 			tokens: number,
-		) => Effect.Effect<void>
-		/** Takes tokens without waiting. The next taker of the same buckets waits instead. */
+		) => Effect.Effect<void, Unavailable>
+		/** Changes the count and returns its wait in milliseconds. Negative values give estimates back. */
 		readonly charge: (
 			scopes: ReadonlyArray<Scope>,
 			tokens: number,
-		) => Effect.Effect<void>
+		) => Effect.Effect<number, Unavailable>
 	}
 >()("@openbot-build/openbot/billing/TokenThrottle") {}
 
-interface Bucket {
-	/** Tokens in the bucket. Below 0 is debt. */
-	readonly level: number
-	readonly at: number
-	readonly rate: Api.TokenRate
-}
-
 /** The lower of two rates. Null means no limit. */
 const lower = (
-	a: Api.TokenRate | null,
-	b: Api.TokenRate | null,
-): Api.TokenRate | null =>
+	a: Limits.TokenRate | null,
+	b: Limits.TokenRate | null,
+): Limits.TokenRate | null =>
 	a === null
 		? b
 		: b === null
@@ -69,65 +72,66 @@ const lower = (
 					burstTokens: Math.min(a.burstTokens, b.burstTokens),
 				}
 
-const refill = (bucket: Bucket, rate: Api.TokenRate, now: number): Bucket => ({
-	level: Math.min(
-		rate.burstTokens,
-		bucket.level + (rate.tokensPerSecond * (now - bucket.at)) / 1000,
-	),
-	at: now,
-	rate,
-})
+const identityOrder = Order.combineAll([
+	Order.mapInput(Order.String, (scope: Scope) => scope.identity.organizationId),
+	Order.mapInput(Order.String, (scope: Scope) => scope.identity.kind),
+	Order.mapInput(Order.String, (scope: Scope) => scope.identity.subjectId),
+])
 
 export const make = Effect.gen(function* () {
+	const background = yield* Background.make
 	const settings = yield* Settings
-	const buckets = yield* Ref.make(HashMap.empty<string, Bucket>())
+	const sql = yield* SqlClient.SqlClient
 
-	// A full bucket is the same as no bucket, so a background fiber drops it.
-	yield* Background.repeat(
-		Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			yield* Ref.update(
-				buckets,
-				HashMap.filter(
-					(bucket) =>
-						refill(bucket, bucket.rate, now).level < bucket.rate.burstTokens,
-				),
-			)
-		}),
+	// A full bucket has the same state as a missing bucket. No work lives here.
+	yield* background.repeat(
+		sql`delete from openbot_token_buckets where level + tokens_per_second *
+			greatest(0, extract(epoch from clock_timestamp()) * 1000 - updated_at) / 1000 >= burst_tokens`,
 		{
 			schedule: Schedule.spaced("1 minute"),
 			message: "OpenBot could not drop full token buckets",
 		},
 	)
 
-	/** Takes tokens from each bucket, and gives the wait until the last one is out of debt. */
 	const debit = (scopes: ReadonlyArray<Scope>, tokens: number) =>
 		Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			return yield* Ref.modify(buckets, (map) => {
-				let next = map
-				let wait = 0
-				for (const scope of scopes) {
-					const current = Option.getOrElse(
-						HashMap.get(next, scope.key),
-						() => ({
-							level: scope.rate.burstTokens,
-							at: now,
-							rate: scope.rate,
-						}),
-					)
-					const bucket = refill(current, scope.rate, now)
-					const level = bucket.level - tokens
-					next = HashMap.set(next, scope.key, { ...bucket, level })
-					if (level < 0)
-						wait = Math.max(
-							wait,
-							Math.ceil((-level * 1000) / scope.rate.tokensPerSecond),
-						)
-				}
-				return [wait, next] as const
-			})
-		})
+			// Every call takes its locks in the same order, even if its scopes differ.
+			const ordered = Arr.sort(scopes, identityOrder)
+			for (const { identity } of ordered) {
+				yield* sql`select pg_advisory_xact_lock(hashtextextended(jsonb_build_array(
+					'model-token-rate', ${identity.organizationId}::text, ${identity.kind}::text,
+					${identity.subjectId}::text)::text, 0))`
+			}
+			// Read time after the locks. Host clocks and lock waits cannot add tokens.
+			const rows = yield* sql<{ readonly now: number }>`select
+				extract(epoch from clock_timestamp())::float8 * 1000 as now`
+			const now = yield* Schema.decodeUnknownEffect(Schema.Finite)(rows[0]?.now)
+			let wait = 0
+			for (const { identity, rate } of ordered) {
+				const rows = yield* sql<{
+					readonly level: number
+				}>`insert into openbot_token_buckets
+					(organization_id, kind, subject_id, level, updated_at, tokens_per_second, burst_tokens)
+					values (${identity.organizationId}, ${identity.kind}, ${identity.subjectId},
+						${Math.min(rate.burstTokens, rate.burstTokens - tokens)}, ${now},
+						${rate.tokensPerSecond}, ${rate.burstTokens})
+					on conflict (organization_id, kind, subject_id) do update set
+						level = least(${rate.burstTokens}, least(${rate.burstTokens}, openbot_token_buckets.level +
+							${rate.tokensPerSecond} * greatest(0, ${now} - openbot_token_buckets.updated_at) / 1000) - ${tokens}),
+						updated_at = greatest(${now}, openbot_token_buckets.updated_at),
+						tokens_per_second = ${rate.tokensPerSecond}, burst_tokens = ${rate.burstTokens}
+					returning level`
+				const level = yield* Schema.decodeUnknownEffect(Schema.Finite)(
+					rows[0]?.level,
+				)
+				wait = Math.max(wait, Math.ceil((-level * 1000) / rate.tokensPerSecond))
+			}
+			return wait
+		}).pipe(
+			sql.withTransaction,
+			Effect.timeout("30 seconds"),
+			Effect.mapError((cause) => Unavailable.make({ cause })),
+		)
 
 	return TokenThrottle.of({
 		scopes: (call, attribution) =>
@@ -139,52 +143,33 @@ export const make = Effect.gen(function* () {
 							onSome: (current) => tokenRateOf(current.document),
 						}),
 					),
-					// The throttle never refuses work, so the call goes on without limits.
-					Effect.catchTag("SettingsUnavailable", (error) =>
-						Effect.logWarning(
-							"OpenBot could not read the platform token rates. The model call goes on without them.",
-							error,
-						).pipe(Effect.as(null)),
-					),
 				)
 				const organization = yield* settings
 					.organization(call.organizationId)
-					.pipe(
-						Effect.map((current) => tokenRateOf(current.document)),
-						Effect.catchTag("SettingsUnavailable", (error) =>
-							Effect.logWarning(
-								"OpenBot could not read the token rates of the organization. The model call goes on without them.",
-								error,
-							).pipe(
-								Effect.annotateLogs({ organizationId: call.organizationId }),
-								Effect.as(null),
-							),
-						),
-					)
-				const rate = (scope: keyof Api.TokenRateLimits) =>
+					.pipe(Effect.map((current) => tokenRateOf(current.document)))
+				const rate = (scope: keyof Limits.TokenRateLimits) =>
 					lower(platform?.[scope] ?? null, organization?.[scope] ?? null)
 				const org = call.organizationId
 				const candidates: ReadonlyArray<
-					readonly [keyof Api.TokenRateLimits, string | undefined]
+					readonly [keyof Limits.TokenRateLimits, string | undefined]
 				> = [
-					["organization", "organization:" + org],
-					[
-						"member",
-						attribution.userId && `member:${org}:${attribution.userId}`,
-					],
-					["bot", attribution.botId && `bot:${org}:${attribution.botId}`],
-					[
-						"token",
-						attribution.tokenId && `token:${org}:${attribution.tokenId}`,
-					],
+					["organization", org],
+					["member", attribution.userId],
+					["bot", attribution.botId],
+					["token", attribution.tokenId],
 				]
-				return Arr.flatMap(candidates, ([scope, key]) => {
-					const value = rate(scope)
-					return key === undefined || value === null
+				return Arr.flatMap(candidates, ([kind, subjectId]) => {
+					const value = rate(kind)
+					return subjectId === undefined || value === null
 						? []
-						: [{ key, rate: value }]
+						: [
+								{
+									identity: { organizationId: org, kind, subjectId },
+									rate: value,
+								},
+							]
 				})
-			}),
+			}).pipe(Effect.mapError((cause) => Unavailable.make({ cause }))),
 		take: (scopes, tokens) =>
 			scopes.length === 0
 				? Effect.void
@@ -192,9 +177,9 @@ export const make = Effect.gen(function* () {
 						wait > 0 ? Effect.sleep(wait) : Effect.void,
 					),
 		charge: (scopes, tokens) =>
-			scopes.length === 0 || tokens <= 0
-				? Effect.void
-				: Effect.asVoid(debit(scopes, tokens)),
+			scopes.length === 0 || tokens === 0
+				? Effect.succeed(0)
+				: debit(scopes, tokens),
 	})
 })
 

@@ -660,7 +660,7 @@ it.effect(
 )
 
 it.effect(
-	"an Unconfirmed result keeps the real issue, and a stalled publisher stops at the deadline",
+	"an Unconfirmed result gives a safe issue, and a stalled publisher stops at the deadline",
 	() =>
 		Effect.gen(function* () {
 			const fixture = site()
@@ -674,8 +674,9 @@ it.effect(
 			).pipe(provideSite(fixture))
 			assert.ok(incompatible._tag === "Unconfirmed")
 			assert.strictEqual(incompatible.reason, "InvalidDocument")
-			assert.ok(
-				Str.includes("No HTTPS Streamable HTTP endpoint")(incompatible.issue),
+			assert.strictEqual(
+				incompatible.issue,
+				"The public App Card has no supported connection.",
 			)
 			const stalled = Layer.succeed(Network.PublicNetwork, {
 				readDocument: () => Effect.never,

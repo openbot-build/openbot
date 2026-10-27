@@ -3,6 +3,7 @@ import {
 	Array as Arr,
 	Cause,
 	Deferred,
+	Context,
 	Effect,
 	Exit,
 	Fiber,
@@ -14,7 +15,7 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Response, Tool, Toolkit } from "effect/ai"
-import { Chat, ChatRuntime, ChatState, Plugin, Turn } from "@openbot-build/core"
+import { Chat, ChatState, Plugin, Turn } from "@openbot-build/core"
 import { ChatTest, settled } from "./ChatTest.ts"
 import { LanguageModelTest, finish, textParts } from "./LanguageModelTest.ts"
 
@@ -394,7 +395,7 @@ it.effect(
 			const [pending] = results(prompts.value[1]!)
 			assert.ok(pending)
 			assert.strictEqual(pending.isFailure, false)
-			assert.deepStrictEqual(pending.result, ChatRuntime.pendingResult)
+			assert.deepStrictEqual(pending.result, Chat.pendingResult)
 		}).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls))))
 	},
 )
@@ -612,15 +613,11 @@ it.effect(
 			const release = yield* Deferred.make<void>()
 			const plugin = Plugin.make({ id: Plugin.Id.make("delayed-finalizer") })(
 				() =>
-					Effect.succeed((next, options) =>
-						next(options).pipe(
-							Stream.ensuring(
-								Deferred.succeed(entered, undefined).pipe(
-									Effect.andThen(Deferred.await(release)),
-								),
-							),
+					Effect.addFinalizer(() =>
+						Deferred.succeed(entered, undefined).pipe(
+							Effect.andThen(Deferred.await(release)),
 						),
-					),
+					).pipe(Effect.as({ tools: {}, handlers: Context.empty() })),
 			)
 			const { runtime, runtimeStore, chat } = yield* ChatTest({ plugin })
 			const delivery = yield* runtime.deliver({ chat, input: "finish" })

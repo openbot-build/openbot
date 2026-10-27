@@ -13,6 +13,7 @@ x-server: &server
   secrets:
     - OPENBOT_DATABASE_URL
     - OPENBOT_SECRET_KEYS
+    - OPENBOT_CLUSTER_SECRET
 
 services:
   postgres:
@@ -40,6 +41,7 @@ services:
     command: [/app/dist/app/Migrate.mjs]
     secrets:
       - OPENBOT_DATABASE_URL
+      - OPENBOT_SECRET_KEYS
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,6 +51,7 @@ services:
   openbot:
     <<: *server
     environment:
+      OPENBOT_CLUSTER_HOST: openbot
       OPENBOT_OUTBOUND_ALLOW: ${OPENBOT_OUTBOUND_ALLOW:-}
     ports:
       - "127.0.0.1:${OPENBOT_PUBLISHED_PORT:-8080}:3000"
@@ -73,6 +76,8 @@ secrets:
     environment: POSTGRES_PASSWORD
   OPENBOT_DATABASE_URL:
     environment: OPENBOT_DATABASE_URL
+  OPENBOT_CLUSTER_SECRET:
+    environment: OPENBOT_CLUSTER_SECRET
   OPENBOT_SECRET_KEYS:
     environment: OPENBOT_SECRET_KEYS
 

@@ -4,7 +4,10 @@ import {
 	Model as CoreModel,
 	Provider as CoreProvider,
 } from "@openbot-build/core"
-import type { BillingApi, ModelProvidersApi } from "@openbot-build/api"
+import type {
+	Billing as BillingModel,
+	Models as ModelsModel,
+} from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -22,15 +25,16 @@ import {
 	type Redacted,
 	String as Str,
 } from "effect"
-import { DecisionModel, LanguageModel } from "effect/ai"
+import { DecisionModel, LanguageModel, Telemetry } from "effect/ai"
 import { HttpClient } from "effect/http"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
+import * as Report from "../errors/Report.ts"
 import * as AnthropicProvider from "../providers/anthropic/AnthropicProvider.ts"
 import * as OpenAiCompatProvider from "../providers/openai-compat/OpenAiCompatProvider.ts"
 import * as OpenAiProvider from "../providers/openai/OpenAiProvider.ts"
 import * as TypeSafeProvider from "../providers/typesafe/TypeSafeProvider.ts"
 import { Billing } from "../billing/Billing.ts"
-import { meter } from "../billing/MeteredModel.ts"
+import { meter, meterDecision } from "../billing/MeteredModel.ts"
 import { TokenThrottle } from "../billing/TokenThrottle.ts"
 import { Settings } from "../settings/Settings.ts"
 import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
@@ -43,6 +47,8 @@ import * as LiveBackends from "./LiveBackends.ts"
  * development entry point. The API cannot change them, and every organization can use them.
  */
 export interface Builtin {
+	/** The default of a test or development platform. */
+	readonly defaultModel?: Config.Selection
 	readonly providers: ReadonlyArray<Config.Provider>
 	readonly models: ReadonlyArray<Config.Model>
 	readonly resolve: (
@@ -77,16 +83,15 @@ export interface ResolvedLive {
 export class ModelRegistry extends Context.Service<
 	ModelRegistry,
 	{
+		/** Only the built-in model adapter can supply a default. */
+		readonly defaultModel: Option.Option<Config.Selection>
 		readonly catalog: (
 			organizationId: string,
 		) => Effect.Effect<Catalog, Config.ModelConfigurationError>
 		/** The API form of the catalog. */
 		readonly view: (
 			organizationId: string,
-		) => Effect.Effect<
-			ModelProvidersApi.ModelCatalog,
-			Config.ModelConfigurationError
-		>
+		) => Effect.Effect<ModelsModel.ModelCatalog, Config.ModelConfigurationError>
 		readonly resolve: (
 			organizationId: string,
 			selection: Config.Selection,
@@ -94,6 +99,15 @@ export class ModelRegistry extends Context.Service<
 			LanguageModel.LanguageModel,
 			Config.ModelConfigurationError
 		>
+		/** Read the current helper selection when a step needs it. */
+		readonly helperSelection: (
+			organizationId: string,
+			name: "rulesModel" | "botMemoryModel",
+		) => Effect.Effect<Config.Selection, Config.ModelConfigurationError>
+		readonly resolveAny: (
+			organizationId: string,
+			selection: Config.Selection,
+		) => Effect.Effect<AnyModel, Config.ModelConfigurationError>
 		/**
 		 * The model that judges Rules. It can be a language model or a decision
 		 * model. It fails when the organization has none.
@@ -120,6 +134,15 @@ export class ModelRegistry extends Context.Service<
 			organizationId: string,
 			selection: Config.Selection,
 		) => Effect.Effect<ResolvedLive, Config.ModelConfigurationError>
+		/** Meter a remote Live model without opening a provider key or connection. */
+		readonly meterLive: (
+			organizationId: string,
+			selection: Config.Selection,
+			model: LanguageModel.LanguageModel,
+		) => Effect.Effect<
+			LanguageModel.LanguageModel,
+			Config.ModelConfigurationError
+		>
 		/**
 		 * The decision model that a selection names. It fails when no provider of
 		 * the organization offers it, or when it is not a `decision` model.
@@ -287,6 +310,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		const providers = yield* ModelProviders
 		const models = yield* Models
 		const settings = yield* Settings
+		const report = yield* Report.make
 		// The provider layers are built later, for each model, with this client.
 		const httpClient = yield* HttpClient.HttpClient
 		const builtin = options.builtin
@@ -297,6 +321,12 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					reason: "unavailable",
 					message: "OpenBot cannot open the provider key right now.",
 				}),
+		)
+		const spanTransformer = Option.getOrUndefined(
+			Context.getOption(
+				yield* Effect.context<never>(),
+				Telemetry.CurrentSpanTransformer,
+			),
 		)
 		const billing = yield* Billing
 		const throttle = yield* TokenThrottle
@@ -309,7 +339,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				readonly modelId: string
 			}) =>
 			(model: LanguageModel.LanguageModel) =>
-				meter(model, call, { billing, throttle })
+				meter(model, call, { billing, throttle, report, spanTransformer })
 		/**
 		 * The built models of one type. A key builds its model on first use, and
 		 * the model closes after ten minutes without a call. The build of one key
@@ -373,13 +403,14 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					key.input.upstream,
 				).pipe(
 					// The provider cannot make this model, for example for a bad option.
-					Effect.catchTag("AiError", (error) =>
-						Effect.fail(
+					Failures.replaceTag(
+						"AiError",
+						"The provider could not use the model options",
+						() =>
 							Config.ModelConfigurationError.make({
 								reason: "unsupported-option",
-								message: error.message,
+								message: "The provider does not support these model options.",
 							}),
-						),
 					),
 				),
 		)
@@ -494,8 +525,19 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						reason: "model-not-found",
 						message: "This is a language model, not a decision model.",
 					})
-				return yield* decisionModels(
-					new Key(offer.provider, offer.model.upstream, [offer.model.upstream]),
+				return meterDecision(
+					yield* decisionModels(
+						new Key(offer.provider, offer.model.upstream, [
+							offer.model.upstream,
+						]),
+					),
+					{
+						organizationId,
+						providerId: offer.provider.id,
+						providerOwner: offer.provider.owner.kind,
+						modelId: offer.model.id,
+					},
+					{ billing, throttle, report },
 				)
 			})
 
@@ -594,7 +636,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				}
 			})
 
-		const resolveLive = (organizationId: string, selection: Config.Selection) =>
+		const liveOffer = (organizationId: string, selection: Config.Selection) =>
 			Effect.gen(function* () {
 				const found = Arr.findFirst(
 					(yield* stored(organizationId)).offers,
@@ -615,10 +657,28 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						reason: "unsupported-option",
 						message: `OpenBot has no Live backend for ${offer.provider.kind} providers.`,
 					})
+				return { offer, backend: backend.value }
+			})
+		const meterLive = (
+			organizationId: string,
+			selection: Config.Selection,
+			model: LanguageModel.LanguageModel,
+		) =>
+			Effect.map(liveOffer(organizationId, selection), ({ offer }) =>
+				metered({
+					organizationId,
+					providerId: offer.provider.id,
+					providerOwner: offer.provider.owner.kind,
+					modelId: offer.model.id,
+				})(model),
+			)
+		const resolveLive = (organizationId: string, selection: Config.Selection) =>
+			Effect.gen(function* () {
+				const { offer, backend } = yield* liveOffer(organizationId, selection)
 				const apiKey = yield* providers
 					.openKey(offer.provider)
 					.pipe(keyUnavailable)
-				const model = yield* backend.value
+				const model = yield* backend
 					.make({
 						provider: offer.provider,
 						apiKey,
@@ -630,13 +690,16 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						// Only a model that the backend does not support is a bad option.
 						// Any other failure, such as of the provider, says that it is not
 						// there now.
-						Effect.mapError((error) =>
+						Failures.map("The Live model could not start", (error) =>
 							Config.ModelConfigurationError.make({
 								reason:
 									error.reason === "unsupported"
 										? "unsupported-option"
 										: "unavailable",
-								message: error.message,
+								message:
+									error.reason === "unsupported"
+										? "The provider does not support this Live model."
+										: "OpenBot cannot start the Live model right now.",
 							}),
 						),
 					)
@@ -686,6 +749,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 			})
 
 		return ModelRegistry.of({
+			defaultModel: Option.fromUndefinedOr(builtin?.defaultModel),
 			catalog,
 			view: (organizationId) =>
 				Effect.gen(function* () {
@@ -696,18 +760,14 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 							Arr.map(current.providers, (provider) => provider.id),
 						)
 						.pipe(
-							Effect.catch((error) =>
-								Effect.logWarning(
-									"The prices of the models could not be read",
-									error,
-								).pipe(
-									Effect.as(
-										HashMap.empty<
-											readonly [providerId: string, modelId: string],
-											BillingApi.ModelPrice
-										>(),
-									),
-								),
+							Effect.tapCauseIf(Cause.hasFails, (cause) =>
+								report("The prices of the models could not be read", cause),
+							),
+							Effect.orElseSucceed(() =>
+								HashMap.empty<
+									readonly [providerId: string, modelId: string],
+									BillingModel.ModelPrice
+								>(),
 							),
 						)
 					return {
@@ -764,8 +824,11 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					}
 				}),
 			resolve,
+			helperSelection: setting,
+			resolveAny,
 			liveCatalog,
 			resolveLive,
+			meterLive,
 			decision,
 			rulesModel: (organizationId) =>
 				setting(organizationId, "rulesModel").pipe(

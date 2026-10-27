@@ -1,5 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Settings as Api } from "@openbot-build/api"
+
 import { Config, Effect, Layer, Option } from "effect"
 import { Command, Flag } from "effect/cli"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"

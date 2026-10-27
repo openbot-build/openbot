@@ -1,16 +1,16 @@
+import type { Triggers } from "@openbot-build/domain"
 import {
-	Authorization,
-	type BotsApi,
-	type ComputersApi,
-	type TriggersApi,
-	type VaultsApi,
-} from "@openbot-build/api"
+	type Computers as ComputersModel,
+	type Vaults as VaultsModel,
+} from "@openbot-build/domain"
+import { type Bots as BotsModel } from "@openbot-build/domain"
+import { Authorization } from "@openbot-build/domain"
 
 /**
  * The member at the top of the owner tree of a Bot.
  * It is `null` when the organization owns the Bot at the top.
  */
-export const rootOf = (owner: BotsApi.BotOwner): string | null => {
+export const rootOf = (owner: BotsModel.BotOwner): string | null => {
 	switch (owner._tag) {
 		case "Organization":
 			return null
@@ -27,7 +27,7 @@ export const rootOf = (owner: BotsApi.BotOwner): string | null => {
 export const botResource = (bot: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: BotsApi.BotOwner
+	readonly owner: BotsModel.BotOwner
 }) =>
 	Authorization.Bot.make({
 		organizationId: bot.organizationId,
@@ -37,15 +37,15 @@ export const botResource = (bot: {
 
 const ownerOf = (
 	owner:
-		| TriggersApi.TriggerOwner
-		| ComputersApi.ComputerOwner
-		| VaultsApi.VaultOwner,
+		| Triggers.TriggerOwner
+		| ComputersModel.ComputerOwner
+		| VaultsModel.VaultOwner,
 ): string | null => (owner._tag === "Member" ? owner.userId : null)
 
 export const triggerResource = (trigger: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: TriggersApi.TriggerOwner
+	readonly owner: Triggers.TriggerOwner
 }) =>
 	Authorization.Trigger.make({
 		organizationId: trigger.organizationId,
@@ -56,7 +56,7 @@ export const triggerResource = (trigger: {
 export const computerResource = (computer: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: ComputersApi.ComputerOwner
+	readonly owner: ComputersModel.ComputerOwner
 }) =>
 	Authorization.Computer.make({
 		organizationId: computer.organizationId,
@@ -67,7 +67,7 @@ export const computerResource = (computer: {
 export const computerProviderResource = (provider: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: ComputersApi.ComputerOwner
+	readonly owner: ComputersModel.ComputerOwner
 }) =>
 	Authorization.ComputerProvider.make({
 		organizationId: provider.organizationId,
@@ -78,7 +78,7 @@ export const computerProviderResource = (provider: {
 export const vaultResource = (vault: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: VaultsApi.VaultOwner
+	readonly owner: VaultsModel.VaultOwner
 }) =>
 	Authorization.Vault.make({
 		organizationId: vault.organizationId,
@@ -89,7 +89,7 @@ export const vaultResource = (vault: {
 export const secretProviderResource = (provider: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: VaultsApi.VaultOwner
+	readonly owner: VaultsModel.VaultOwner
 }) =>
 	Authorization.SecretProvider.make({
 		organizationId: provider.organizationId,

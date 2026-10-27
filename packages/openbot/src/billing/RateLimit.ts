@@ -1,11 +1,12 @@
-import { AuthApi, type Caller } from "@openbot-build/api"
+import { Billing, type Caller } from "@openbot-build/domain"
 import { lt, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Effect, Layer, Option, Schedule } from "effect"
-import * as Background from "../app/Background.ts"
+import * as Background from "../execution/Background.ts"
 import { rateWindows } from "../database/Schema.ts"
 import { rateLimitOf } from "../settings/Documents.ts"
 import { Settings } from "../settings/Settings.ts"
 import * as Db from "../database/Database.ts"
+import * as Report from "../errors/Report.ts"
 
 const windowMs = 60_000
 
@@ -17,15 +18,17 @@ export class RateLimiter extends Context.Service<
 	RateLimiter,
 	{
 		/** Counts one request. It fails when the caller sent too many in this minute. */
-		readonly hit: (caller: Caller) => Effect.Effect<void, AuthApi.RateLimited>
+		readonly hit: (caller: Caller) => Effect.Effect<void, Billing.RateLimited>
 	}
 >()("@openbot-build/openbot/billing/RateLimit/RateLimiter") {}
 
 export const make = Effect.gen(function* () {
+	const background = yield* Background.make
 	const db = yield* Db.make
 	const settings = yield* Settings
+	const report = yield* Report.make
 	// Old windows only take space. A background fiber removes them.
-	yield* Background.repeat(
+	yield* background.repeat(
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
 			yield* db
@@ -41,7 +44,12 @@ export const make = Effect.gen(function* () {
 		hit: (caller) =>
 			Effect.gen(function* () {
 				const platform = yield* settings.platform.pipe(
-					Effect.orElseSucceed(() => Option.none()),
+					Effect.catchTag("SettingsUnavailable", (error) =>
+						report(
+							"OpenBot could not read the request rate limit. The request goes on.",
+							Cause.fail(error),
+						).pipe(Effect.as(Option.none())),
+					),
 				)
 				const limit = Option.match(platform, {
 					onNone: () => null,
@@ -68,14 +76,14 @@ export const make = Effect.gen(function* () {
 					.pipe(
 						Effect.map((rows) => rows[0]?.count ?? 0),
 						Effect.catch((error) =>
-							Effect.logWarning(
+							report(
 								"OpenBot could not count a request for the rate limit. The request goes on.",
 								Cause.fail(error),
-							).pipe(Effect.annotateLogs({ rateKey: key }), Effect.as(0)),
+							).pipe(Effect.as(0)),
 						),
 					)
 				if (count > limit)
-					return yield* AuthApi.RateLimited.make({
+					return yield* Billing.RateLimited.make({
 						retryAfterSeconds: Math.ceil((windowStart + windowMs - now) / 1000),
 					})
 			}),

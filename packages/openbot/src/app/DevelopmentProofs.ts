@@ -9,6 +9,7 @@ import {
 	Schema,
 } from "effect"
 import { AuthApi, DeveloperApi as Api } from "@openbot-build/api"
+
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { DomainControl } from "../apps/DomainControl.ts"
 import { scopeKey } from "../apps/DeveloperAccess.ts"

@@ -1,0 +1,384 @@
+---
+title: App
+description: 连接外部服务，让 Bot 可以在 Turn 中使用它们。
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+**App**（应用）是 Bot 可以使用的外部服务。每个 App 都通过
+[OpenBot App Protocol](/zh-cn/docs/protocol)
+发布在网上。本页介绍如何把 App 连接到你的账号、登录 App，以及在 Turn 中使用它。
+
+所有示例都使用用户令牌。同样的调用也可以用 session
+cookie 完成。参见[身份验证](/zh-cn/docs/developers/authentication)。
+
+| 词语             | 含义                                                               |
+| ---------------- | ------------------------------------------------------------------ |
+| Card URL         | App 的 Server Card 的稳定 HTTPS 地址。它就是 App 的身份。          |
+| Connection       | 保存在你账号中的 App，带有你的设置和登录信息。你最多可以有 30 个。 |
+| Connection draft | 保存下来的发现结果。你在创建连接前先审查它。它保留 24 小时。       |
+| App operation    | 从 Turn 到 App 的一次被记录的调用，带有它的状态和结果。            |
+
+---
+
+## 连接 App
+
+<Steps>
+<Step>
+
+### 找到 App
+
+把 App 的地址交给 OpenBot。它可以是一个域名、一个 App 页面、一个 Catalog 链接或一个 Card 链接。二维码里存的也是同样的 HTTPS 链接。
+
+```sh
+curl -X POST https://api.example.com/v1/connection-drafts \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "input": "apps.example.com" }'
+```
+
+响应是一个草稿，状态码为 201。请保留它的 `id` 和 `revision`。`discovery`
+字段有两种：
+
+- `Single` 有一个 `candidate`。
+- `Multiple` 有一个 `candidates`
+  列表。请让用户选择一个。OpenBot 永远不会添加整个 Catalog。
+
+每个候选项都有一个 `cardUrl`、`card`、一个 `endpoints` 列表，以及找到它的
+`sources`。每个端点都有一个 `index` 和它需要的
+`requirements`，比如一个 API 密钥请求头。
+
+如果只想查看而不保存草稿，请把同样的请求体发送到
+`POST /v1/apps/discover`。发现过程永远不会添加、登录或调用 App。
+
+</Step>
+<Step>
+
+### 审查并创建连接
+
+把 App 名称、来源和端点展示给用户。然后创建连接。你必须发送
+`"confirmed": true`。
+
+```sh
+curl -X POST https://api.example.com/v1/connections \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "draftId": "<draft id>",
+    "revision": 0,
+    "cardUrl": "https://apps.example.com/mcp/server-card",
+    "remoteIndex": 0,
+    "name": "Work calendar",
+    "values": { "header:X-API-Key": "<secret>" },
+    "confirmed": true
+  }'
+```
+
+`values` 中的键来自端点的 `requirements`。它们的形式是
+`variable:<name>`、`header:<name>` 或
+`header:<name>:variable:<name>`。OpenBot 会加密这些值。之后读取时只显示不是机密的值。
+
+OpenBot 在保存之前会再次读取 Card。新连接使用草稿的 `id` 作为自己的
+`id`。如果你再次发送同样的请求，会得到同一个连接。
+
+</Step>
+<Step>
+
+### 检查它是否可用
+
+```sh
+curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"check-connection-1"}'
+```
+
+连接更新和检查都是持久命令。`verify`、`revalidate`、
+`PUT /v1/connections/:connectionId` 和手动连接更新端点都需要
+`commandKey`，并返回 HTTP 202 和 `executionId`。网络重试时复用同一个键。通过
+`/v1/executions/:executionId/observe`
+读取进度。关闭事件流不会取消命令；要停止执行，请使用执行取消端点。
+
+通过 `GET /v1/connections/:connectionId/executions/:executionId`
+读取已保存的结果。响应包含 `execution` 和 `result`。检查完成后返回带能力列表的
+`Verified`，或 `Unavailable`。读取连接可查看当前可用状态。变更完成后返回
+`Updated` 和新版本。SDK 的 `Connections.verify`、`update`、`updateManual` 和
+`revalidate`
+为每条命令生成一个键。一个连接同时只接受一项变更。更新、手动修改和重新验证需要当前版本；检查只需要命令键。
+
+</Step>
+</Steps>
+
+### 连接时的错误
+
+| 状态 | 错误                             | 怎么做                                                                                                   |
+| ---- | -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 409  | `ConnectionConflict`             | 查看 `reason`：`CandidateChanged`、`RevisionChanged`、`DraftExpired`、`AlreadyAdded` 或 `LimitReached`。 |
+| 422  | `ConnectionConfigurationInvalid` | 填写 `keys` 中列出的设置项。                                                                             |
+| 422  | `AppDiscoveryFailed`             | 检查地址。`reason` 和 `issues` 说明哪里失败了。                                                          |
+| 403  | `AppRestricted`                  | 本部署屏蔽了这个 App。参见 `restriction.reason` 和 `restriction.appealUrl`。                             |
+
+### 可用性
+
+`availability` 字段告诉你 Bot 能否使用一个连接。
+
+| `_tag`                 | 含义                                              |
+| ---------------------- | ------------------------------------------------- |
+| `Unverified`           | 已保存，但还没有检查。                            |
+| `Available`            | 已检查，可以使用。                                |
+| `PendingAuthorization` | App 需要账号登录。`scopes` 列出它要求的访问权限。 |
+| `AuthorizationExpired` | 登录已失效。请刷新或重新登录。                    |
+| `ConnectionFailed`     | 上次检查失败。`message` 说明原因。                |
+| `NeedsRevalidation`    | App 改变了它的端点或登录要求。请重新审查。        |
+| `CleanupPending`       | 移除没有完成。请再次尝试移除。                    |
+| `Restricted`           | 本部署屏蔽了这个 App。                            |
+| `PendingConfiguration` | 连接需要更多设置。                                |
+
+---
+
+命令被接受后，失败会保存在执行记录中，只含安全的 `category` 和
+`errorId`。供应商文本和完整原因保存在加密错误记录中。读取 OAuth 客户端元数据时，如果无法读取平台设置，会返回
+`503 SettingsUnavailable`。
+
+### 协议的私有错误原因
+
+独立使用 `@openbot-build/protocol` 时，MCP 错误保留安全的 `ClientError`
+消息。网络、SDK 和 Schema 的细节保存在私有 `Cause` 中，它包含失败的全部原因。
+这些细节不会进入普通日志或公开错误 Schema。
+
+如果错误带有私有细节，`Client.errorCause(error)` 会返回包含
+`Redacted<Cause>` 的 `Option`。只有受信任的错误处理器应打开此值。保存前先加密。
+`Client.withCause(error, cause)` 让你的协议适配器以同样的方式保留细节。
+OpenBot 将这些细节保存在加密错误记录中。公开索引也会在 `Unconfirmed`
+结果上保留同样的私有原因。`reason` 和固定的 `issue` 可以安全展示。
+宿主必须在编码结果前保存私有原因。
+
+## 登录 App 账号
+
+有些 App 需要用户自己的账号。OpenBot 为此使用带 PKCE 的 OAuth。用户在 App 的提供方登录，而不是在 OpenBot 登录。
+
+1. 开始流程。发送连接的 `revision`。`scopes`
+   留空表示使用 App 要求的范围。`returnTo` 是一个同源路径。默认是 `/`。
+
+   ```sh
+   curl -X POST https://api.example.com/v1/connections/<connection id>/authorization \
+     -H "Authorization: Bearer $OPENBOT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{ "commandKey": "begin-app-sign-in-1", "revision": 0, "scopes": [], "returnTo": "/apps" }'
+   ```
+
+2. 响应为 HTTP 202，包含执行回执。读取
+   `GET /v1/app-authorization-actions/:executionId`，完成后查看
+   `result`。授权流程保存后才会返回链接。响应丢失时，使用相同的命令键和请求内容重试：
+   - `AuthorizationStarted` 有一个 `flowId` 和一个
+     `authorizationUrl`。在用户的浏览器中打开这个 URL。
+   - `IssuerSelectionRequired` 列出 `issuers`。请让用户选择一个，然后带上
+     `issuer` 重新开始。
+   - `AuthorizationNotRequired` 表示 App 不需要登录。
+3. 用户登录。提供方把浏览器跳转到 `https://api.example.com/auth/apps/callback`。
+4. OpenBot 把浏览器跳转到
+   `returnTo?authorization=<flowId>`。如果浏览器没有 OpenBot 会话，它会跳转到
+   `/?authorization=<flowId>`。你的客户端先让用户登录（参见[身份验证](/zh-cn/docs/developers/authentication#登录)）。
+5. 你的客户端完成流程：
+
+   ```sh
+   curl -X POST https://api.example.com/v1/app-authorizations/<flow id>/complete \
+     -H "Authorization: Bearer $OPENBOT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{ "commandKey": "finish-app-sign-in-1" }'
+   ```
+
+要查看流程，请调用 `GET /v1/app-authorizations/:flowId`。它的 `status` 是
+`Waiting`、`Received`、`Processing`、`Succeeded`、`Cancelled` 或
+`Failed`。完成请求返回 HTTP 202 和执行回执。响应丢失时复用同一个
+`commandKey`。已登录回调使用发起流程的调用人提交命令，原始 token 仍然限制执行权限。流程的
+`executionId` 关联统一执行 API。使用
+`GET /v1/app-authorization-actions/:executionId`
+读取状态和安全结果。关闭观察不会取消命令；取消使用执行取消 API。授权码交换结果未知时等待决策，不会自行重发授权码。
+
+OpenBot 的 OAuth 客户端 ID 是一个公开文档，地址是
+`https://api.example.com/v1/apps/client-metadata`。提供方会读取它，所以你不需要在每个提供方那里注册 OpenBot。
+
+要退出 App，请发送 `DELETE /v1/connections/:connectionId/authorization`，正文为
+`{ "commandKey" }`。请求返回 HTTP
+202。OpenBot 先关闭活动 App 连接作用域，再在同一事务中清除本地登录并保存远端清理任务。读取
+`GET /v1/app-authorization-actions/:executionId`。当 `result` 仍为
+`RevocationPending` 时，`execution` 可能已经是 `completed`。 `cleanupExecutions`
+数组给出远端清理的已保存状态。远端工作结束后，结果为
+`Revoked`；提供方不支持撤销时为 `LocalOnly`。
+
+只要任何 OpenBot 账户的连接或开发测试仍使用相同的签发方和 OAuth 客户端 ID，清理就会等待。提供方可能一起撤销相关令牌；令牌字符串不同不能证明撤销是安全的。失败的远端请求通过持久计时器重试。刷新时也会保存旧凭据的清理任务。本地移除可以在远端清理等待期间完成。
+
+每个清理执行都归源操作的组织所有，由服务身份执行。只有当前权限仍允许读取源操作时，
+你才能读取清理执行的状态和事件。其他组织无法找到该执行。
+
+---
+
+## 管理连接
+
+| 任务               | 请求                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| 列出或读取         | `GET /v1/connections`、`GET /v1/connections/:connectionId`                                  |
+| 重命名、关闭或打开 | `PUT /v1/connections/:connectionId`，带上 `{ "commandKey", "revision", "name", "enabled" }` |
+| 刷新登录           | `POST /v1/connections/:connectionId/refresh`                                                |
+| 审查有变化的 App   | 从 Card URL 创建一个新草稿。然后 `POST /v1/connections/:connectionId/revalidate`。          |
+| 移除               | `DELETE /v1/connections/:connectionId`                                                      |
+
+刷新接受 `{ "commandKey" }`，返回 HTTP 202，操作结果为
+`Refreshed`。刷新不会请求更多权限。刷新可能使旧令牌失效，所以结果未知时等待决策。发送后若未安装新凭据便停止工作，连接会被禁用并标记为
+`AuthorizationExpired`。重新登录可以恢复连接。SDK 的 `AppAuthorizations.begin`、
+`complete`、`refresh` 和 `revoke` 会为网络重试保留同一个命令键。
+
+当 App 改变了它的端点、私密设置、提供方或范围时，连接会变成
+`NeedsRevalidation`。在你审查之前，Bot 不能使用它。把
+`{ "commandKey", "revision", "draftId", "remoteIndex", "values", "confirmed": true }`
+发送到
+`revalidate`。OpenBot 不会把旧令牌发送到新端点。需要登录的 App 这时需要重新登录。
+
+移除接受 `{ "commandKey" }`，返回 HTTP
+202。OpenBot 先停用连接，再关闭所有节点上的活动 App 连接作用域。节点不回应时，此阶段保持待处理。回复丢失后仍可读取已保存的关闭结果。最终事务删除连接和本地令牌，并把远端清理交给独立执行。
+`Removed` 表示本地移除完成，不代表所有远端授权已经撤销。通过授权操作的
+`cleanupExecutions`
+查看这些状态。回复丢失时复用命令键。移除前取消会使连接保持停用；新的移除命令可以继续完成。
+
+已关闭的 App 客户端会保留完整的关闭结果。服务端停止后，调用方仍可再次关闭自己的作用域，
+不会调用已经停止的服务。如果第一次关闭失败，后续关闭仍会报告该失败。
+
+### 手动连接
+
+你也可以连接一个没有 Server Card 的 MCP 服务器。发送
+`POST /v1/connections/manual`，带上一个新的 UUID `id`、一个 `name`、HTTPS
+`url`、`"transport": "streamable-http"` 和 `headers`。用
+`PUT /v1/connections/:connectionId/manual` 修改它，带上 `commandKey`、当前
+`revision` 和完整的新配置。请求头值为 `null` 时保留已保存的值。从 `headers`
+中省略该请求头才会删除它。新的请求头必须提供值。手动连接永远不会进入公开的
+[App Index](/zh-cn/docs/developers/app-index)。
+
+---
+
+## Turn 中的 App
+
+Turn 运行时，OpenBot 会为你可用连接的每项能力给模型一个工具。每个工具名称的形式是
+`openbot_<hash>`。它的描述以 App 名称、连接名称和能力名称开头。
+
+- **工具**（tools）成为可调用的工具。`visibility` 不包含 `model`
+  的工具对模型隐藏。
+- **资源**（resources）、**资源模板**（resource
+  templates）和**提示词**（prompts）成为读取工具。
+
+每次 App 工具调用都要先经过[能力检查](/zh-cn/docs/developers/requests)。一个工具的第一次调用通常会产生一个请求，由决策者回答。之后的调用可以由一个 Grant 或 Rule 覆盖。读取资源和提示词不需要决定，组织在[设置](/zh-cn/docs/organization#设置)中标记为读取的工具也不需要。App 的说明永远不能决定这一点。每个 App 工具都有一个额外的
+`openbot_reason` 参数，用来传 Bot 的理由。OpenBot 永远不会把它发给 App。
+
+模型还会得到三个辅助工具。它们永远不会添加 App、登录或批准动作。
+
+| 工具                  | 作用                                                                      |
+| --------------------- | ------------------------------------------------------------------------- |
+| `openbot_search_apps` | 在公开的 [App Index](/zh-cn/docs/developers/app-index) 中搜索缺少的能力。 |
+| `openbot_app_details` | 通过 Card URL 读取一个 App 的公开信息和来源。                             |
+| `openbot_app_access`  | 列出用户的连接，以及它们在设置或登录方面的需要。                          |
+
+### Code Mode
+
+当平台打开 [Code Mode](/zh-cn/docs/developers/code-mode) 时，模型还会得到
+`openbot_code_api` 和
+`openbot_run_code`。Bot 用它们写一段调用这些 App 工具的小程序。程序中的每次调用都和普通的 App 工具调用走同样的路径。
+
+### App 操作
+
+每个 App 调用都有业务 `id` 和 `executionId`。通过
+`GET /v1/chats/:chatId/app-operations` 或 `GET /v1/app-operations/:id`
+读取。结果包含统一执行 `status`、带错误 ID 的安全 `failure` 和
+`result`。使用执行 API 订阅事件、取消工作，或决定如何处理结果未知的外部调用。
+
+App 需要输入时，`result._tag` 为 `InputRequired`，问题在 `result.request`
+中。提交答案时带上原 `round` 和新的
+`commandKey`。响应丢失后重试时，保留这个键和相同的请求内容。
+
+```json
+{
+	"commandKey": "input-answer-1",
+	"round": 1,
+	"responses": {
+		"<input key>": { "action": "accept", "content": { "label": "Team sync" } }
+	}
+}
+```
+
+将它发送到 `POST /v1/app-operations/:id/inputs`。响应为
+`202`，内容是执行命令回执，并不表示 App 已完成。订阅该执行以获取结束状态。SDK 的
+`AppCalls.respond`
+会创建一个命令键，并在网络重试时保留它。答案的键和值遵循 MCP 输入请求 Schema。
+
+`outcome_unknown`
+执行会等待决定。选择重试前先检查外部状态。它不能自行再次发送结果未确认的写入。
+
+---
+
+升级后，已保存的 App 调用仍可通过同一历史 API 读取，并保留原有 ID。读取时会检查你当前的账户和 Chat 权限。内部错误详情保持私密；公开结果只提供错误类别和 ID。缺少原始调用方的旧调用不能通过补交输入继续运行。开始新调用前，请先确认结果未知的外部操作是否已经生效。
+
+## App 视图
+
+有些 App 工具带有一个交互式视图。视图是来自 App 的 HTML 页面，由 MCP
+Apps 定义。OpenBot 没有用户界面，所以由你的客户端显示视图。你可以跳过这一部分。每个结果也都有文本。
+
+1. 为一个操作打开视图：`POST /v1/app-operations/:operationId/view`，带上
+   `{ "chatId", "itemId" }`。响应包含视图的 `id`、HTML `resource`、视图的
+   `tools`、调用的 `arguments` 和 `result`。
+2. 在 iframe 中显示 HTML。`@openbot-build/protocol/McpApps`
+   模块有一个浏览器宿主可以做这件事。参见 [Protocol](/zh-cn/docs/protocol)。
+3. 把视图的请求转交给 OpenBot：
+
+| 视图请求             | OpenBot 调用                                                |
+| -------------------- | ----------------------------------------------------------- |
+| 列出工具、资源、模板 | `POST /v1/app-views/:viewId/read`                           |
+| 调用工具或读取资源   | `POST /v1/app-views/:viewId/actions`（返回 202 和一个凭据） |
+| 检查一个动作         | `GET /v1/executions/:executionId/events`                    |
+| 更新模型上下文       | `PUT /v1/app-views/:viewId/context`                         |
+| 发送一条文本消息     | `POST /v1/app-views/:viewId/messages`                       |
+| 关闭                 | `DELETE /v1/app-views/:viewId`                              |
+
+动作和消息命令都带有 `commandKey`。每个命令使用一个键，重试时保留这个键。 `202`
+响应包含 `executionId`、`chat` 和
+`turn`。动作作为独立 Turn 在 Chat 队列中等待。从执行事件日志读取子执行、决策和结果。关闭视图会结束对视图的访问，已接纳的动作继续运行。服务器重启不会使视图失效；视图到期、连接或访问权限变化时才会失效。
+
+视图动作遵守同样的批准规则。来自视图的消息作为[通知](/zh-cn/docs/developers/chats#通知)，经过 Chat 的[收件箱](/zh-cn/docs/developers/chats#收件箱)进入这个 Chat。Bot 在下一步读取它，或者它启动一个新的 Turn。如果视图无法打开，你会得到 409
+`AppViewUnavailable`。文本结果仍然在。
+
+---
+
+## 导出、导入和重置
+
+导出你的 App 列表。文件中没有机密信息，也没有登录信息。
+
+```sh
+curl https://api.example.com/v1/app-experience/export \
+  -H "Authorization: Bearer $OPENBOT_TOKEN"
+```
+
+```json
+{
+	"format": "openbot-apps-v1",
+	"apps": [
+		{
+			"name": "Work calendar",
+			"cardUrl": "https://apps.example.com/mcp/server-card",
+			"remoteIndex": 0
+		}
+	]
+}
+```
+
+把同样的 JSON 发送到
+`POST /v1/app-experience/import`。一个文件最多可以包含 30 个 App。导入不会创建连接。对于每个 App，你会得到一个新的草稿或一个
+`error`。草稿的 `imported`
+字段保留名称和端点。请审查每个草稿，然后像平常一样创建连接。
+
+`POST /v1/app-experience/reset` 接受 `{ "commandKey" }`，返回 HTTP
+202。提交时固定要移除的连接集合，并清除草稿和保存的 App
+View 状态。之后新增的连接不受影响。每个连接的移除都是一个子执行。通过
+`GET /v1/app-experience/resets/:executionId`
+读取父执行和子执行，也可以订阅共同执行事件。所有子执行成功后，重置才完成。取消会等待所有子执行释放工作。取消重置时，部分连接可能已经删除。SDK 的
+`AppAuthorizations.remove` 和 `reset` 会为网络重试保留命令键。
+
+在
+[API 参考](/docs/api/operations/tags/connections/)中查看完整的请求和响应结构。

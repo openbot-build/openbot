@@ -19,54 +19,31 @@ import {
 export { TriggerId } from "./TriggerId.ts"
 import { TriggerId } from "./TriggerId.ts"
 
-/** A member owns their own triggers. The organization owns shared triggers. */
-export const TriggerOwner = Schema.TaggedUnion({
-	Member: { userId: Schema.String },
-	Organization: {},
-})
-export type TriggerOwner = typeof TriggerOwner.Type
-
-/** When a trigger fires by itself. `cron` has five fields, such as `0 9 * * 1-5`. */
-export const Schedule = Schema.Struct({
-	cron: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-	/** An IANA time zone, such as `Europe/Berlin`. Without it, the time zone is UTC. */
-	timeZone: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(100))),
-})
-export type Schedule = typeof Schedule.Type
-
+import { Execution } from "@openbot-build/domain"
+import { errors as executionErrors } from "./ExecutionsApi.ts"
+import { Triggers as Domain } from "@openbot-build/domain"
+export const {
+	Trigger,
+	TriggerOwner,
+	Schedule,
+	TriggerNotFound,
+	TriggerConflict,
+	TriggerInvalid,
+	TriggerStorageUnavailable,
+	TriggerHookDenied,
+} = Domain
+export type Trigger = Domain.Trigger
+export type TriggerOwner = Domain.TriggerOwner
+export type Schedule = Domain.Schedule
+export type TriggerNotFound = Domain.TriggerNotFound
+export type TriggerConflict = Domain.TriggerConflict
+export type TriggerInvalid = Domain.TriggerInvalid
+export type TriggerStorageUnavailable = Domain.TriggerStorageUnavailable
+export type TriggerHookDenied = Domain.TriggerHookDenied
 const Prompt = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(20000),
 )
-
-/**
- * A trigger gives one task with one prompt to one Bot, on a schedule or from a webhook.
- * It does nothing else. The Bot decides how to do the work. When the task ends, its
- * result goes to the Chat of the actor with the Bot.
- */
-export const Trigger = Schema.Struct({
-	id: TriggerId,
-	owner: TriggerOwner,
-	bot: BotId,
-	prompt: Schema.String,
-	schedule: Schema.NullOr(Schedule),
-	/** True when the trigger has a webhook secret. */
-	webhook: Schema.Boolean,
-	/**
-	 * The member that the tasks work for. It is the last member who changed
-	 * the trigger or its webhook.
-	 */
-	actor: Schema.String,
-	enabled: Schema.Boolean,
-	/** The next time that the schedule fires. `null` without a schedule, or when disabled. */
-	nextRunAt: Schema.NullOr(Schema.Finite),
-	lastFiredAt: Schema.NullOr(Schema.Finite),
-	revision: Schema.Natural,
-	createdAt: Schema.Finite,
-	updatedAt: Schema.Finite,
-})
-export type Trigger = typeof Trigger.Type
-
 export const CreateTriggerRequest = Schema.Struct({
 	/** Without it, the default Bot of the caller does the work. */
 	bot: Schema.optionalKey(BotId),
@@ -78,15 +55,8 @@ export const CreateTriggerRequest = Schema.Struct({
 })
 export type CreateTriggerRequest = typeof CreateTriggerRequest.Type
 
-export const UpdateTriggerRequest = Schema.Struct({
-	expected: Schema.Natural,
-	bot: Schema.optionalKey(BotId),
-	prompt: Schema.optionalKey(Prompt),
-	/** `null` removes the schedule. */
-	schedule: Schema.optionalKey(Schema.NullOr(Schedule)),
-	enabled: Schema.optionalKey(Schema.Boolean),
-})
-export type UpdateTriggerRequest = typeof UpdateTriggerRequest.Type
+export const UpdateTriggerRequest = Domain.Change
+export type UpdateTriggerRequest = Domain.Change
 
 /** The secret of a webhook. OpenBot shows it only once. */
 export const WebhookSecret = Schema.Struct({
@@ -94,28 +64,6 @@ export const WebhookSecret = Schema.Struct({
 	secret: SecretOutput,
 })
 export type WebhookSecret = typeof WebhookSecret.Type
-
-export class TriggerNotFound extends Schema.TaggedError<
-	TriggerNotFound,
-	{ readonly brand: unique symbol }
->()("TriggerNotFound", { id: Schema.String }) {}
-export class TriggerConflict extends Schema.TaggedError<
-	TriggerConflict,
-	{ readonly brand: unique symbol }
->()("TriggerConflict", { message: Schema.String }) {}
-export class TriggerInvalid extends Schema.TaggedError<
-	TriggerInvalid,
-	{ readonly brand: unique symbol }
->()("TriggerInvalid", { message: Schema.String }) {}
-export class TriggerStorageUnavailable extends Schema.TaggedError<
-	TriggerStorageUnavailable,
-	{ readonly brand: unique symbol }
->()("TriggerStorageUnavailable", {}) {}
-/** The webhook secret is wrong, the trigger has no webhook, or it is disabled. */
-export class TriggerHookDenied extends Schema.TaggedError<
-	TriggerHookDenied,
-	{ readonly brand: unique symbol }
->()("TriggerHookDenied", {}) {}
 
 /** The handlers check permissions on triggers themselves, so these errors are listed here too. */
 export const TriggerErrors = [
@@ -154,7 +102,7 @@ export class TriggersApi extends HttpApiGroup.make("triggers")
 			error: TriggerErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Changes a trigger. The caller becomes its actor, so the new tasks work for the caller.",
+			"Changes a trigger and clears needsAuthorization. The caller becomes its actor, so the new tasks work for the caller.",
 		),
 		HttpApiEndpoint.delete("deleteTrigger", "/v1/triggers/:triggerId", {
 			params: triggerParams,
@@ -194,12 +142,17 @@ export class TriggersApi extends HttpApiGroup.make("triggers")
 export class TriggerHooksApi extends HttpApiGroup.make("triggerHooks").add(
 	HttpApiEndpoint.post("fireTrigger", "/v1/hooks/triggers/:triggerId", {
 		params: triggerParams,
-		headers: { authorization: Schema.String },
+		headers: {
+			authorization: Schema.String,
+			"idempotency-key": Execution.CommandKey,
+		},
 		payload: Schema.Json,
-		success: Schema.Struct({ delegation: DelegationId }).pipe(
-			HttpApiSchema.status(202),
-		),
+		success: Schema.Struct({
+			...Execution.Receipt.fields,
+			delegation: DelegationId,
+		}).pipe(HttpApiSchema.status(202)),
 		error: [
+			...executionErrors,
 			TriggerInvalid.pipe(HttpApiSchema.status(409)),
 			TriggerHookDenied.pipe(HttpApiSchema.status(401)),
 			TriggerStorageUnavailable.pipe(HttpApiSchema.status(503)),

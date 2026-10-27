@@ -1,0 +1,29 @@
+---
+title: "Set up Code Mode"
+description: "Set up Code Mode"
+---
+
+For platform operators.
+
+## Turn on Code Mode
+
+Code Mode is off by default. A platform admin turns it on in the
+[platform settings](/docs/platform#platform-settings):
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":3,"codeMode":{"enabled":true,"timeoutMs":30000,"memoryMb":64,"outputBytes":65536}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+| Field         | What it is                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `enabled`     | When `true`, Bots get the Code Mode tools in each Turn that has App connections.               |
+| `timeoutMs`   | How long one run of a program may take. Time that the program waits for App calls is not part. |
+| `memoryMb`    | How much memory one program may use.                                                           |
+| `outputBytes` | The largest return value of a program, and the most log text that it keeps.                    |
+
+These limits protect the server. They are not limits on the Bot. Every instance
+of OpenBot uses the same limits, so a program acts the same when another
+instance runs it again.

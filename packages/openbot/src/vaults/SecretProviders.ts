@@ -1,18 +1,11 @@
 import { Redacted } from "effect"
-import { type Caller, VaultsApi } from "@openbot-build/api"
+import { Vaults as VaultsModel } from "@openbot-build/domain"
+
+import { type Caller } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
-import {
-	Cause,
-	Clock,
-	Context,
-	Crypto,
-	Effect,
-	Layer,
-	Option,
-	Schema,
-} from "effect"
+import { Clock, Context, Crypto, Effect, Layer, Option, Schema } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import * as Check from "../authorization/Check.ts"
 import { secretProviderResource } from "../authorization/Resources.ts"
 import { toWhere } from "../authorization/Sql.ts"
@@ -21,39 +14,41 @@ import { secretProviders, vaultItems } from "../database/Schema.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import { Readers } from "./Readers.ts"
 
-type Provider = VaultsApi.SecretProvider
-type Credentials = VaultsApi.SecretProviderCredentials
+type Provider = VaultsModel.SecretProvider
+type Credentials = VaultsModel.SecretProviderCredentials
 
 export type Failure =
-	| VaultsApi.SecretProviderFailed
-	| VaultsApi.SecretProviderInUse
-	| VaultsApi.SecretProviderNotFound
-	| VaultsApi.VaultConflict
-	| VaultsApi.VaultInvalid
-	| VaultsApi.VaultsUnavailable
+	| VaultsModel.SecretProviderFailed
+	| VaultsModel.SecretProviderInUse
+	| VaultsModel.SecretProviderNotFound
+	| VaultsModel.VaultConflict
+	| VaultsModel.VaultInvalid
+	| VaultsModel.VaultsUnavailable
 	| Check.Errors
 
-export const unavailable = () => VaultsApi.VaultsUnavailable.make({})
-const invalid = (message: string) => VaultsApi.VaultInvalid.make({ message })
-const notFound = (id: string) => VaultsApi.SecretProviderNotFound.make({ id })
+export const unavailable = () => VaultsModel.VaultsUnavailable.make({})
+const invalid = (message: string) => VaultsModel.VaultInvalid.make({ message })
+const notFound = (id: string) => VaultsModel.SecretProviderNotFound.make({ id })
 
 const binding = (id: string) => `openbot_secret_providers:${id}:credentials`
 
 /** The opened secret holds JSON that only this file writes, from a checked request. */
 const CredentialsJson = Schema.fromJsonString(
-	VaultsApi.SecretProviderCredentials,
+	VaultsModel.SecretProviderCredentials,
 )
 const decodeCredentials = Schema.decodeUnknownEffect(CredentialsJson)
 const encodeCredentials = Schema.encodeEffect(CredentialsJson)
-const decodeKind = Schema.decodeUnknownEffect(VaultsApi.SecretProviderKind)
+const decodeKind = Schema.decodeUnknownEffect(VaultsModel.SecretProviderKind)
 /** The hints column holds the view of the credentials, which only this file writes. */
-const ViewJson = Schema.fromJsonString(VaultsApi.SecretProviderCredentialsView)
+const ViewJson = Schema.fromJsonString(
+	VaultsModel.SecretProviderCredentialsView,
+)
 const decodeView = Schema.decodeUnknownEffect(ViewJson)
 const encodeView = Schema.encodeEffect(ViewJson)
 
 const viewOf = (
 	credentials: Credentials,
-): VaultsApi.SecretProviderCredentialsView => {
+): VaultsModel.SecretProviderCredentialsView => {
 	switch (credentials.kind) {
 		case "onepassword":
 			return {
@@ -89,10 +84,10 @@ type Row = typeof secretProviders.$inferSelect
 /** A row with a bad value is a broken store. The log keeps the cause. */
 const fromRow = (
 	row: Row,
-): Effect.Effect<Provider, VaultsApi.VaultsUnavailable> =>
+): Effect.Effect<Provider, VaultsModel.VaultsUnavailable> =>
 	Effect.gen(function* () {
 		return {
-			id: VaultsApi.SecretProviderId.make(row.id),
+			id: VaultsModel.SecretProviderId.make(row.id),
 			kind: yield* decodeKind(row.kind),
 			name: row.name,
 			owner:
@@ -123,12 +118,12 @@ export class SecretProviders extends Context.Service<
 		) => Effect.Effect<Provider, Failure>
 		readonly create: (
 			caller: Caller,
-			input: VaultsApi.CreateSecretProviderRequest,
+			input: VaultsModel.CreateSecretProviderRequest,
 		) => Effect.Effect<Provider, Failure>
 		readonly update: (
 			caller: Caller,
 			id: string,
-			input: VaultsApi.UpdateSecretProviderRequest,
+			input: VaultsModel.UpdateSecretProviderRequest,
 		) => Effect.Effect<Provider, Failure>
 		/** Fails while Vault items still read from the provider. */
 		readonly remove: (
@@ -141,7 +136,7 @@ export class SecretProviders extends Context.Service<
 			id: string,
 		) => Effect.Effect<
 			Credentials,
-			VaultsApi.SecretProviderNotFound | VaultsApi.VaultsUnavailable
+			VaultsModel.SecretProviderNotFound | VaultsModel.VaultsUnavailable
 		>
 	}
 >()("@openbot-build/openbot/vaults/SecretProviders") {}
@@ -183,16 +178,12 @@ export const make = Effect.gen(function* () {
 	/** The provider must take the token before OpenBot stores it. */
 	const verify = (credentials: Credentials) =>
 		readers.make(credentials).verify.pipe(
-			Effect.tapError((error) =>
-				Effect.logInfo(
-					"OpenBot could not read a secret provider",
-					Cause.fail(error),
-				),
-			),
-			Effect.mapError((error) =>
+			Failures.map("OpenBot could not read a secret provider", (error) =>
 				error.retry
-					? VaultsApi.SecretProviderFailed.make({ message: error.message })
-					: invalid("The provider did not take the token: " + error.message),
+					? VaultsModel.SecretProviderFailed.make({
+							message: "OpenBot could not read the secret provider.",
+						})
+					: invalid("The provider did not take the token."),
 			),
 		)
 	/** A caller who cannot read a provider does not learn that it exists. */
@@ -286,7 +277,7 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const provider = yield* access(caller, id, "write")
 				if (input.expectedVersion !== provider.version)
-					return yield* VaultsApi.VaultConflict.make({
+					return yield* VaultsModel.VaultConflict.make({
 						version: provider.version,
 					})
 				if (
@@ -318,7 +309,7 @@ export const make = Effect.gen(function* () {
 					.pipe(stored("A secret provider could not be changed."))
 				const next = changed[0]
 				if (next === undefined)
-					return yield* VaultsApi.VaultConflict.make({
+					return yield* VaultsModel.VaultConflict.make({
 						version: provider.version,
 					})
 				return yield* fromRow(next)
@@ -340,7 +331,7 @@ export const make = Effect.gen(function* () {
 						stored("The Vault items of a secret provider could not be read."),
 					)
 				if (used.length > 0)
-					return yield* VaultsApi.SecretProviderInUse.make({ id })
+					return yield* VaultsModel.SecretProviderInUse.make({ id })
 				yield* db
 					.delete(secretProviders)
 					.where(where(caller.organizationId, id))
@@ -355,15 +346,12 @@ export const make = Effect.gen(function* () {
 					.pipe(
 						stored("The credentials of a secret provider could not be opened."),
 					)
-				// The decode failure can quote the opened JSON, and it holds the token. So the log does not keep it.
+				// The boundary seals the decode cause, which can hold the token.
 				return yield* decodeCredentials(json).pipe(
-					Effect.catchTag("SchemaError", () =>
-						Effect.logError(
-							"The stored credentials of a secret provider are not valid",
-						).pipe(
-							Effect.annotateLogs({ provider: id }),
-							Effect.andThen(Effect.fail(unavailable())),
-						),
+					Failures.replaceTag(
+						"SchemaError",
+						"The stored credentials of a secret provider are not valid",
+						unavailable,
 					),
 				)
 			}),

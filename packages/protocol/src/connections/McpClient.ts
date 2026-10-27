@@ -32,6 +32,7 @@ import * as App from "./App.ts"
 import * as Store from "./Store.ts"
 import {
 	PermissionDenied,
+	withCause,
 	ClientError,
 	AuthorizationRequired,
 	OutcomeUnknown,
@@ -46,29 +47,18 @@ import {
 	type Client,
 } from "./Client.ts"
 
-/**
- * Close an SDK object as best-effort cleanup.
- * A failed close only logs a warning, so the next cleanup steps still run.
- */
-const closeQuietly = (name: string, close: () => Promise<void>) =>
-	Effect.tryPromise(close).pipe(
-		Effect.catch((error) =>
-			Effect.logWarning(`Could not close the MCP ${name}`, error),
-		),
-	)
+/** Close failures keep their cause. Other owned objects still close in their finalizers. */
+const closeResource = (close: () => Promise<void>) =>
+	Effect.tryPromise(close).pipe(Effect.orDie)
 
-/**
- * Fails with a `ClientError` in place of the failure of `self`.
- * `ClientError` has no field for the cause, so this logs the failure first.
- */
+/** Keep the full cause for the host when making a safe typed failure. */
 const replace =
-	(message: string, error: LazyArg<ClientError>) =>
+	(error: LazyArg<ClientError>) =>
 	<A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, ClientError, R> =>
 		self.pipe(
-			Effect.tapError((failure) =>
-				Effect.logWarning(message, Cause.fail(failure)),
+			Effect.catchCause((cause) =>
+				Effect.failCause(Cause.map(cause, () => withCause(error(), cause))),
 			),
-			Effect.mapError(error),
 		)
 
 export const layerPolicy = (
@@ -118,7 +108,7 @@ interface Next {
  * Check a value with a Standard Schema from the SDK.
  * The schema is built inside `Effect.tryPromise`, because the SDK can throw while it builds a JSON Schema validator.
  * `validate` gives back a result or a Promise, so `Promise.resolve` makes both a Promise.
- * `ClientError` has no field for the cause, so this logs the thrown error or the schema issues first.
+ * The host gets a private cause with the thrown error or the schema issues.
  */
 export const decodeStandard = <A>(
 	schema: () => Mcp.StandardSchemaV1<unknown, A>,
@@ -133,11 +123,10 @@ export const decodeStandard = <A>(
 				? Effect.succeed(result.value)
 				: Effect.fail(result.issues),
 		),
-		Effect.catch((cause) =>
-			Effect.logWarning(
-				"An MCP value does not match its schema",
-				Cause.fail(cause),
-			).pipe(Effect.andThen(Effect.fail(error(cause)))),
+		Effect.catchCause((cause) =>
+			Effect.failCause(
+				Cause.map(cause, (failure) => withCause(error(failure), cause)),
+			),
 		),
 	)
 
@@ -241,9 +230,17 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			action: "connect",
 			target: initial.endpoint,
 		})
-	const scope = yield* Scope.fork(yield* Effect.scope)
+	const { scope, close } = yield* Effect.acquireRelease(
+		Effect.gen(function* () {
+			const scope = yield* Scope.make()
+			const { close } = yield* active
+				.register({ key: options.key, scope })
+				.pipe(Effect.onError(() => Scope.close(scope, Exit.void)))
+			return { scope, close }
+		}),
+		({ close }) => close,
+	)
 	return yield* Effect.gen(function* () {
-		yield* active.register({ key: options.key, scope })
 		const closed = yield* Ref.make(false)
 		const guard = Effect.fn("Client.currentConnection")(function* () {
 			if (yield* Ref.get(closed))
@@ -417,16 +414,14 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			scope,
 			Effect.gen(function* () {
 				yield* Ref.set(closed, true)
-				yield* closeQuietly("client", () => sdk.close())
-				yield* closeQuietly("transport", () => transport.close())
-				yield* PubSub.shutdown(notices)
+				yield* closeResource(() => sdk.close()).pipe(
+					Effect.ensuring(closeResource(() => transport.close())),
+					Effect.ensuring(PubSub.shutdown(notices)),
+				)
 			}),
 		)
-		// `ClientError` has no field for the cause, so this logs the failure first.
-		const logged = (error: unknown, replacement: ClientError) =>
-			Effect.logWarning("The MCP request failed", Cause.fail(error)).pipe(
-				Effect.andThen(Effect.fail(replacement)),
-			)
+		const failed = <E extends Error>(error: unknown, replacement: E) =>
+			Effect.fail(withCause(replacement, Cause.fail(error)))
 		const mapError = (error: unknown): Effect.Effect<never, Error> => {
 			if (
 				Schema.is(ClientError)(error) ||
@@ -436,7 +431,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			)
 				return Effect.fail(error)
 			if (error instanceof Mcp.UnauthorizedError)
-				return Effect.fail(
+				return failed(
+					error,
 					AuthorizationRequired.make({
 						reason:
 							challenge?.error === "invalid_token" ? "Expired" : "Pending",
@@ -445,7 +441,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					}),
 				)
 			if (error instanceof Mcp.InsufficientScopeError)
-				return Effect.fail(
+				return failed(
+					error,
 					AuthorizationRequired.make({
 						reason: "InsufficientScope",
 						scopes: scopeList(error.requiredScope),
@@ -453,28 +450,29 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					}),
 				)
 			if (error instanceof Mcp.ProtocolError)
-				return Effect.fail(
+				return failed(
+					error,
 					ClientError.make({
 						reason: "Protocol",
-						issue: error.message,
+						issue: "The MCP server rejected the request.",
 					}),
 				)
-			// The messages of a NetworkError are fixed texts of this package.
+			// Drivers may put private text in a network error message.
 			if (Schema.is(Network.NetworkError)(error))
-				return logged(
+				return failed(
 					error,
 					ClientError.make({
 						reason: "Network",
-						issue: error.message,
+						issue: "The MCP network request failed.",
 					}),
 				)
 			// The message of an SdkError can hold the raw body of the server,
-			// so `issue` keeps only the code, and the log keeps the full error.
+			// so `issue` keeps only the code. Its private cause keeps the full error.
 			if (
 				error instanceof Mcp.SdkError &&
 				error.code !== Mcp.SdkErrorCode.RequestTimeout
 			)
-				return logged(
+				return failed(
 					error,
 					ClientError.make({
 						reason:
@@ -484,7 +482,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						issue: error.code,
 					}),
 				)
-			return logged(
+			return failed(
 				error,
 				ClientError.make({
 					reason: "Network",
@@ -845,25 +843,18 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			// Manual MRTR must reach the host before the final structured output is checked.
 			// The SDK still handles parameter headers with the real input schema.
 			const { outputSchema, ...requestTool } = tool
-			// `OutcomeUnknown` keeps only a fixed cause name, so this logs the full error first.
+			// Keep the first private error when the remote write has no known result.
 			const unknownOutcome = (
 				error: ClientError,
 				cause: OutcomeUnknown["cause"],
 			) =>
-				Effect.logWarning(
-					"The MCP tool call has an unknown outcome",
-					Cause.fail(error),
-				).pipe(
-					Effect.annotateLogs({ tool: params.name }),
-					Effect.andThen(
-						Effect.fail(
-							OutcomeUnknown.make({
-								key: options.key,
-								target: params.name,
-								cause,
-							}),
-						),
-					),
+				failed(
+					error,
+					OutcomeUnknown.make({
+						key: options.key,
+						target: params.name,
+						cause,
+					}),
 				)
 			const raw = yield* invoke((signal) =>
 				sdk.callTool(
@@ -998,7 +989,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										arguments: Schema.optionalKey(Schema.JsonObject),
 									}),
 								)(continuation.params).pipe(
-									replace("The saved tool call is not valid", inputMismatch),
+									replace(inputMismatch),
 									Effect.flatMap((params) => callTool(params, call, next)),
 								),
 							),
@@ -1012,10 +1003,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										}),
 									]),
 								)(continuation.params).pipe(
-									replace(
-										"The saved resource read is not valid",
-										inputMismatch,
-									),
+									replace(inputMismatch),
 									Effect.flatMap((params) =>
 										"uri" in params
 											? Effect.succeed(params.uri)
@@ -1023,12 +1011,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 													new Mcp.UriTemplate(params.uriTemplate).expand(
 														params.values,
 													),
-												).pipe(
-													replace(
-														"Could not expand the saved resource template",
-														inputMismatch,
-													),
-												),
+												).pipe(replace(inputMismatch)),
 									),
 									Effect.flatMap((uri) => readResource({ uri }, call, next)),
 								),
@@ -1042,10 +1025,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										),
 									}),
 								)(continuation.params).pipe(
-									replace(
-										"The saved prompt request is not valid",
-										inputMismatch,
-									),
+									replace(inputMismatch),
 									Effect.flatMap((params) => getPrompt(params, call, next)),
 								),
 							),
@@ -1085,7 +1065,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				const uri = yield* Effect.try(() =>
 					new Mcp.UriTemplate(template.value.uriTemplate).expand(input.values),
 				).pipe(
-					replace("Could not expand the resource template", () =>
+					replace(() =>
 						ClientError.make({
 							reason: "Schema",
 							issue: "Invalid resource template arguments",
@@ -1107,13 +1087,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							signal,
 						}),
 					),
-					(subscription) =>
-						closeQuietly("subscription", () => subscription.close()),
+					(subscription) => closeResource(() => subscription.close()),
 				)
 				return {
 					honoredFilter: subscription.honoredFilter,
 					closed: Effect.tryPromise(() => subscription.closed).pipe(
-						replace("The MCP subscription failed", () =>
+						replace(() =>
 							ClientError.make({
 								reason: "Protocol",
 								issue: "Subscription failed",
@@ -1123,7 +1102,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					close: invoke(() => subscription.close()),
 				}
 			}),
-			close: Scope.close(scope, Exit.void),
+			close,
 		}
 		// Read only the lists advertised by the live discovery response.
 		if (options.eagerLists !== false) {
@@ -1136,5 +1115,5 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				yield* lists.prompts()
 		}
 		return client
-	}).pipe(Effect.onError(() => Scope.close(scope, Exit.void)))
+	}).pipe(Effect.onError(() => close))
 })

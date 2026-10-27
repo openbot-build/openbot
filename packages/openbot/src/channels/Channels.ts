@@ -1,4 +1,10 @@
-import { BotsApi, ChannelsApi } from "@openbot-build/api"
+import {
+	Authorization,
+	Caller,
+	Execution,
+	Channels as ChannelsApi,
+} from "@openbot-build/domain"
+import { Bots as BotsApi } from "@openbot-build/domain"
 import { and, eq, isNull } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -10,10 +16,11 @@ import {
 	Option,
 	pipe,
 	Record as Rec,
+	Redacted,
 	Schema,
 } from "effect"
 import { Base64Url, Hex } from "effect/encoding"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { ConversationKind } from "./Channel.ts"
 import {
 	channelConversations,
@@ -23,45 +30,48 @@ import {
 } from "../database/Schema.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
+import * as Check from "../authorization/Check.ts"
+import { toWhere } from "../authorization/Sql.ts"
 
 /**
  * The secrets of a Channel, opened. Only the server sees them. They are stored as
- * sealed JSON, and this schema reads them back. The fields are plain strings: the
- * API checked them when they came in.
+ * sealed JSON. Secret fields stay redacted until an adapter uses them.
  */
 export const Credentials = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("slack"),
-		botToken: Schema.String,
-		signingSecret: Schema.String,
+		botToken: Schema.RedactedFromValue(Schema.String),
+		signingSecret: Schema.RedactedFromValue(Schema.String),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("lark"),
 		domain: ChannelsApi.LarkDomain,
 		appId: Schema.String,
-		appSecret: Schema.String,
-		verificationToken: Schema.String,
-		encryptKey: Schema.String,
+		appSecret: Schema.RedactedFromValue(Schema.String),
+		verificationToken: Schema.RedactedFromValue(Schema.String),
+		encryptKey: Schema.RedactedFromValue(Schema.String),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("telegram"),
-		botToken: Schema.String,
-		webhookSecret: Schema.String,
+		botToken: Schema.RedactedFromValue(Schema.String),
+		webhookSecret: Schema.RedactedFromValue(Schema.String),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("custom"),
 		endpoint: Schema.String,
-		secret: Schema.NullOr(Schema.String),
+		secret: Schema.NullOr(Schema.RedactedFromValue(Schema.String)),
 	}),
 ])
 export type Credentials = typeof Credentials.Type
 
-const CredentialsJson = Schema.fromJsonString(Credentials)
+const CredentialsJson = Schema.fromJsonString(
+	Schema.Struct({ credentials: Credentials, caller: Schema.NullOr(Caller) }),
+)
 const decodeCredentials = Schema.decodeUnknownEffect(CredentialsJson)
 const encodeCredentials = Schema.encodeEffect(CredentialsJson)
 
 /** A stored Channel. The API view adds the webhook address of the public origin. */
-export type StoredChannel = Omit<ChannelsApi.Channel, "webhookUrl">
+export type StoredChannel = ChannelsApi.Channel
 
 export interface Conversation {
 	readonly organizationId: string
@@ -85,37 +95,6 @@ const binding = (id: string) => `openbot_channels:${id}:credentials`
  */
 const randomBytes = (crypto: Crypto.Crypto, size: number) =>
 	Effect.orDie(crypto.randomBytes(size))
-
-/** The credentials of the API, with the secrets that OpenBot makes itself. */
-export const fromInput = (
-	crypto: Crypto.Crypto,
-	value: ChannelsApi.ChannelCredentials,
-	current?: Credentials,
-): Effect.Effect<Credentials> =>
-	Effect.gen(function* () {
-		const input = yield* Schema.encodeEffect(ChannelsApi.ChannelCredentials)(
-			value,
-		).pipe(Effect.orDie)
-		switch (input.kind) {
-			case "slack":
-			case "lark":
-				return input
-			case "telegram":
-				return {
-					...input,
-					// A new token keeps the webhook secret, so Telegram does not need it again.
-					webhookSecret:
-						current?.kind === "telegram"
-							? current.webhookSecret
-							: Base64Url.encode(yield* randomBytes(crypto, 32)),
-				}
-			case "custom":
-				return {
-					...input,
-					secret: current?.kind === "custom" ? current.secret : null,
-				}
-		}
-	})
 
 const state = (
 	hints: Readonly<Record<string, string | null>>,
@@ -165,21 +144,31 @@ const isPlain = (key: string) =>
 /** The secret fields of credentials, and the plain fields that the API may show. */
 const split = (credentials: Credentials) => {
 	const fields = Arr.filter(
-		Rec.toEntries<string, string | null>(credentials),
-		(entry): entry is [string, string] =>
+		Rec.toEntries<string, string | Redacted.Redacted<string> | null>(
+			credentials,
+		),
+		(entry): entry is [string, string | Redacted.Redacted<string>] =>
 			entry[0] !== "kind" && entry[1] !== null,
 	)
 	return {
 		hints: pipe(
 			fields,
-			// The webhook secret of Telegram is between OpenBot and Telegram, so it gets no hint.
 			Arr.filter(([key]) => !isPlain(key) && key !== "webhookSecret"),
-			Arr.map(([key, value]) => [key, hint(value)] as const),
+			Arr.map(
+				([key, value]) =>
+					[
+						key,
+						hint(Redacted.isRedacted(value) ? Redacted.value(value) : value),
+					] as const,
+			),
 			Rec.fromEntries,
 		),
 		plain: pipe(
 			fields,
-			Arr.filter(([key]) => isPlain(key)),
+			Arr.filter(
+				(entry): entry is [string, string] =>
+					isPlain(entry[0]) && typeof entry[1] === "string",
+			),
 			Rec.fromEntries,
 		),
 	}
@@ -211,7 +200,10 @@ const readStored = <A>(effect: Effect.Effect<A, Schema.SchemaError>) =>
 		),
 	)
 
-const fromRow = (row: Row): Effect.Effect<StoredChannel, Failure> =>
+const fromRow = (
+	row: Row,
+	needsAuthorization: boolean,
+): Effect.Effect<StoredChannel, Failure> =>
 	Effect.gen(function* () {
 		const stored = yield* readStored(decodeHints(row.hints))
 		const kind = yield* readStored(decodeKind(row.kind))
@@ -222,8 +214,11 @@ const fromRow = (row: Row): Effect.Effect<StoredChannel, Failure> =>
 			bot: BotsApi.BotId.make(row.bot),
 			actor: row.actor,
 			enabled: row.enabled,
+			needsAuthorization,
 			linkPath: row.linkPath,
 			credentials: credentialsView(kind, stored.hints, stored.plain),
+			executionId:
+				row.executionId === null ? null : Execution.Id.make(row.executionId),
 			version: row.version,
 			createdAt: row.createdAt,
 			updatedAt: row.updatedAt,
@@ -249,8 +244,11 @@ export class Channels extends Context.Service<
 	Channels,
 	{
 		readonly list: (
-			organizationId: string,
-		) => Effect.Effect<ReadonlyArray<StoredChannel>, Failure>
+			caller: Caller,
+		) => Effect.Effect<
+			ReadonlyArray<StoredChannel>,
+			Failure | Authorization.PolicyUnavailable
+		>
 		readonly get: (
 			organizationId: string,
 			id: string,
@@ -264,8 +262,7 @@ export class Channels extends Context.Service<
 			Failure
 		>
 		readonly create: (input: {
-			readonly organizationId: string
-			readonly actor: string
+			readonly caller: Caller
 			readonly name: string
 			readonly bot: BotsApi.BotId
 			readonly credentials: Credentials
@@ -274,11 +271,10 @@ export class Channels extends Context.Service<
 		}) => Effect.Effect<StoredChannel, Failure>
 		/** Changes a Channel. The caller of the change becomes its actor. */
 		readonly update: (
-			organizationId: string,
+			caller: Caller,
 			id: string,
 			expected: number,
 			change: {
-				readonly actor: string
 				readonly name?: string
 				readonly bot?: BotsApi.BotId
 				readonly credentials?: Credentials
@@ -289,14 +285,20 @@ export class Channels extends Context.Service<
 			StoredChannel,
 			Failure | ChannelsApi.ChannelNotFound | ChannelsApi.ChannelConflict
 		>
-		readonly remove: (
-			organizationId: string,
-			id: string,
-		) => Effect.Effect<boolean, Failure>
 		readonly credentials: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<Credentials, Failure | ChannelsApi.ChannelNotFound>
+		) => Effect.Effect<
+			{ readonly version: number; readonly credentials: Credentials },
+			Failure | ChannelsApi.ChannelNotFound
+		>
+		readonly authority: (
+			organizationId: string,
+			id: string,
+		) => Effect.Effect<
+			Option.Option<Caller>,
+			Failure | ChannelsApi.ChannelNotFound
+		>
 		readonly identities: (
 			organizationId: string,
 			channelId: string,
@@ -362,6 +364,7 @@ export class Channels extends Context.Service<
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
+	const checks = yield* Check.make
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
 	/** A failure of the database or of the secrets is `ChannelsUnavailable`. The log keeps the cause. */
@@ -382,10 +385,12 @@ export const make = Effect.gen(function* () {
 		stored(db.select().from(channels).where(where(organizationId, id))).pipe(
 			Effect.map((rows) => Option.fromNullishOr(rows[0])),
 		)
-	const seal = (id: string, credentials: Credentials) =>
+	const seal = (id: string, credentials: Credentials, caller: Caller) =>
 		Effect.gen(function* () {
 			// The types already check the credentials, so a failure to encode them is a defect.
-			const json = yield* Effect.orDie(encodeCredentials(credentials))
+			const json = yield* Effect.orDie(
+				encodeCredentials({ credentials, caller }),
+			)
 			const hints = yield* Effect.orDie(encodeHints(split(credentials)))
 			const sealed = yield* stored(secrets.seal(json, binding(id)))
 			return { credentials: sealed, hints }
@@ -393,6 +398,17 @@ export const make = Effect.gen(function* () {
 	const open = (row: Row) =>
 		stored(secrets.open(row.credentials, binding(row.id))).pipe(
 			Effect.flatMap((json) => readStored(decodeCredentials(json))),
+			Effect.filterOrFail(
+				(saved) =>
+					saved.caller === null ||
+					(saved.caller.organizationId === row.organizationId &&
+						saved.caller.userId === row.actor),
+				() => ChannelsApi.ChannelsUnavailable.make({}),
+			),
+		)
+	const view = (row: Row) =>
+		open(row).pipe(
+			Effect.flatMap((saved) => fromRow(row, saved.caller === null)),
 		)
 	/** An open code of the organization, with its Channel. */
 	const openLink = (organizationId: string, code: string) =>
@@ -428,18 +444,37 @@ export const make = Effect.gen(function* () {
 			}),
 		)
 	return Channels.of({
-		list: (organizationId) =>
-			stored(
-				db
-					.select()
-					.from(channels)
-					.where(eq(channels.organizationId, organizationId))
-					.orderBy(channels.createdAt),
-			).pipe(Effect.flatMap((rows) => Effect.forEach(rows, fromRow))),
+		list: (caller) =>
+			Effect.gen(function* () {
+				const allowed = yield* checks
+					.filter(caller, {
+						action: "read",
+						kind: "Channel",
+						within: ($) => $.eq("organizationId", caller.organizationId),
+					})
+					.pipe(
+						Effect.flatMap((condition) =>
+							toWhere(condition, {
+								organizationId: channels.organizationId,
+								id: channels.id,
+							}),
+						),
+					)
+				const rows = yield* stored(
+					db
+						.select()
+						.from(channels)
+						.where(
+							and(eq(channels.organizationId, caller.organizationId), allowed),
+						)
+						.orderBy(channels.createdAt),
+				)
+				return yield* Effect.forEach(rows, view)
+			}),
 		get: (organizationId, id) =>
 			row(organizationId, id).pipe(
 				Effect.flatMap((found) =>
-					Effect.transposeOption(Option.map(found, fromRow)),
+					Effect.transposeOption(Option.map(found, view)),
 				),
 			),
 		find: (id) =>
@@ -447,7 +482,7 @@ export const make = Effect.gen(function* () {
 				Effect.flatMap((rows) =>
 					Effect.transposeOption(
 						Option.map(Option.fromNullishOr(rows[0]), (row) =>
-							Effect.map(fromRow(row), (channel) => ({
+							Effect.map(view(row), (channel) => ({
 								organizationId: row.organizationId,
 								channel,
 							})),
@@ -459,26 +494,28 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const id = "chn_" + Hex.encode(yield* randomBytes(crypto, 16))
-				const sealed = yield* seal(id, input.credentials)
+				const sealed = yield* seal(id, input.credentials, input.caller)
 				const values = {
-					organizationId: input.organizationId,
+					organizationId: input.caller.organizationId,
 					id,
 					kind: input.credentials.kind,
 					name: input.name,
 					bot: input.bot,
-					actor: input.actor,
+					actor: input.caller.userId,
 					enabled: input.enabled,
 					linkPath: input.linkPath,
 					...sealed,
+					executionId: null,
 					version: 0,
 					createdAt: now,
 					updatedAt: now,
 				}
 				yield* stored(db.insert(channels).values(values))
-				return yield* fromRow(values)
+				return yield* view(values)
 			}),
-		update: (organizationId, id, expected, change) =>
+		update: (caller, id, expected, change) =>
 			Effect.gen(function* () {
+				const organizationId = caller.organizationId
 				const current = yield* row(organizationId, id)
 				if (Option.isNone(current))
 					return yield* ChannelsApi.ChannelNotFound.make({ id })
@@ -487,13 +524,14 @@ export const make = Effect.gen(function* () {
 						version: current.value.version,
 					})
 				const now = yield* Clock.currentTimeMillis
-				const sealed =
-					change.credentials === undefined
-						? {}
-						: yield* seal(id, change.credentials)
+				const sealed = yield* seal(
+					id,
+					change.credentials ?? (yield* open(current.value)).credentials,
+					caller,
+				)
 				const values = {
 					...current.value,
-					actor: change.actor,
+					actor: caller.userId,
 					...(change.name === undefined ? {} : { name: change.name }),
 					...(change.bot === undefined ? {} : { bot: change.bot }),
 					...(change.linkPath === undefined
@@ -515,21 +553,24 @@ export const make = Effect.gen(function* () {
 				)
 				if (changed.length === 0)
 					return yield* ChannelsApi.ChannelConflict.make({ version: expected })
-				return yield* fromRow(values)
+				return yield* view(values)
 			}),
-		remove: (organizationId, id) =>
-			stored(
-				db
-					.delete(channels)
-					.where(where(organizationId, id))
-					.returning({ id: channels.id }),
-			).pipe(Effect.map((rows) => rows.length > 0)),
 		credentials: (organizationId, id) =>
 			Effect.gen(function* () {
 				const current = yield* row(organizationId, id)
 				if (Option.isNone(current))
 					return yield* ChannelsApi.ChannelNotFound.make({ id })
-				return yield* open(current.value)
+				return {
+					version: current.value.version,
+					credentials: (yield* open(current.value)).credentials,
+				}
+			}),
+		authority: (organizationId, id) =>
+			Effect.gen(function* () {
+				const current = yield* row(organizationId, id)
+				if (Option.isNone(current))
+					return yield* ChannelsApi.ChannelNotFound.make({ id })
+				return Option.fromNullishOr((yield* open(current.value)).caller)
 			}),
 		identities: (organizationId, channelId) =>
 			stored(

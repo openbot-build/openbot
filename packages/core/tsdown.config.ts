@@ -6,6 +6,10 @@ export default defineConfig({
 	entry: {
 		"bot/Bot": "src/bot/Bot.ts",
 		"chat/Turn": "src/chat/Turn.ts",
+		"chat/ModelStep": "src/chat/ModelStep.ts",
+		"chat/ToolStep": "src/chat/ToolStep.ts",
+		"chat/TurnRunner": "src/chat/TurnRunner.ts",
+		"chat/TurnState": "src/chat/TurnState.ts",
 		"chat/Operation": "src/chat/Operation.ts",
 		"chat/Operations": "src/chat/Operations.ts",
 		"chat/Item": "src/chat/Item.ts",
@@ -20,6 +24,7 @@ export default defineConfig({
 		"models/Live": "src/models/Live.ts",
 		"models/LiveDriver": "src/models/LiveDriver.ts",
 		"models/Model": "src/models/Model.ts",
+		"plugins/ToolRegistration": "src/plugins/ToolRegistration.ts",
 		"plugins/Plugin": "src/plugins/Plugin.ts",
 		"models/Provider": "src/models/Provider.ts",
 		"skills/Skill": "src/skills/Skill.ts",

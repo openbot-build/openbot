@@ -1,13 +1,13 @@
 import {
-	type Caller,
-	Identity,
 	OpenBotApi,
 	type OrganizationApi,
 	type VaultsApi,
 } from "@openbot-build/api"
+
+import { type Caller, Identity } from "@openbot-build/domain"
 import { Effect, type Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { secretProviderKey, vaultKey } from "../audit/Resources.ts"
 import { SecretProviders } from "./SecretProviders.ts"

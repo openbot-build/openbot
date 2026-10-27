@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_executions" ADD COLUMN "cancel_pending" boolean DEFAULT false NOT NULL;

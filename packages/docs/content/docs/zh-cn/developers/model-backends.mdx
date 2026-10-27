@@ -1,0 +1,157 @@
+---
+title: "模型后端"
+---
+
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+
+面向修改或发布 OpenBot 的项目贡献者。
+
+## 内置模型
+
+当你从自己的程序中运行 OpenBot 时，可以用 `builtinModels`
+选项在代码中提供模型。参见[从代码运行](/zh-cn/docs/server)。
+
+- 每个组织都可以使用它们。
+- API 不能修改它们。
+- 它们和保存的提供方一起显示在模型列表中。
+
+`builtinModels` 有三个字段：
+
+| 字段        | 是什么                                                           |
+| ----------- | ---------------------------------------------------------------- |
+| `providers` | 要显示的提供方，比如 `{ id, name }`。                            |
+| `models`    | 要显示的模型，是 `Config.Model` 值。                             |
+| `resolve`   | 一个函数，接收一个选择，返回一个带有 `LanguageModel` 的 Effect。 |
+
+`builtinModels.defaultModel`
+选项指定其中一个模型。当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。只有模拟的平台会设置它，例如开发环境或测试。在真实的平台上，每个 Bot 都指定自己的模型。
+
+这个示例提供一个 Anthropic 模型，密钥来自你程序的环境：
+
+```ts
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { Config, Model, Provider } from "@openbot-build/core"
+import {
+	AnthropicProvider,
+	EnvironmentConfiguration,
+	Server,
+} from "@openbot-build/openbot"
+import { Context, Effect, Layer, Redacted } from "effect"
+import { LanguageModel } from "effect/ai"
+import { FetchHttpClient } from "effect/http"
+
+const selection = Config.Selection.make({
+	provider: Provider.Id.make("house"),
+	model: Model.Id.make("claude-sonnet-4-5"),
+})
+
+NodeRuntime.runMain(
+	Effect.scoped(
+		Effect.gen(function* () {
+			const settings = yield* EnvironmentConfiguration.load
+			// 只构建一次模型。它和程序存在的时间一样长。
+			const layer = Layer.unwrap(
+				AnthropicProvider.make({ max_tokens: 4096 }).model(selection),
+			).pipe(
+				Layer.provide(
+					AnthropicProvider.layerClient({
+						apiKey: Redacted.make(process.env.ANTHROPIC_API_KEY ?? ""),
+					}),
+				),
+				Layer.provide(FetchHttpClient.layer),
+			)
+			const claude = Context.get(
+				yield* Layer.build(layer),
+				LanguageModel.LanguageModel,
+			)
+			const builtinModels = {
+				providers: [{ id: selection.provider, name: "House models" }],
+				models: [
+					Config.Model.make({
+						provider: selection.provider,
+						id: selection.model,
+						name: "Claude Sonnet 4.5",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				],
+				resolve: (requested: Config.Selection) =>
+					requested.model === selection.model
+						? Effect.succeed(claude)
+						: Effect.fail(
+								new Config.ModelConfigurationError({
+									reason: "model-not-found",
+									message: "This model is not available",
+								}),
+							),
+			}
+			return yield* Layer.launch(
+				Server.layerLive({ ...settings, builtinModels }).pipe(
+					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+				),
+			)
+		}),
+	),
+)
+```
+
+当 `resolve` 失败时，启动 Turn 会返回 `503`。开发入口用 `builtinModels`
+提供它的测试模型。完整示例参见 `packages/openbot/src/app/DevelopmentModel.ts`。
+
+### 提供方模块
+
+提供方模块为某一种 API 把模型名称变成一个
+`LanguageModel`。`@openbot-build/openbot`
+导出了三个这样的模块。每个模块都有同样的部分：
+
+| 部分                        | 作用                                                           |
+| --------------------------- | -------------------------------------------------------------- |
+| `make(defaults?)`           | 创建一个提供方。`defaults` 是每次调用都使用的请求选项。        |
+| `provider.model(selection)` | 返回一个选择对应的模型 Layer。它不发送任何请求。               |
+| `layerClient(options)`      | 创建 HTTP 客户端。传入 `apiKey`；要用其他地址时传入 `apiUrl`。 |
+| `layer(tag, defaults?)`     | 把提供方放进一个由你命名的服务中。                             |
+
+| 模块                   | 提供方 ID       | API                                                                              |
+| ---------------------- | --------------- | -------------------------------------------------------------------------------- |
+| `OpenAiProvider`       | `openai`        | OpenAI Responses API。`ResponsesCompaction` 为你自己的程序增加原生的上下文压缩。 |
+| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。                                  |
+| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API。                                                         |
+
+OpenBot 对保存的提供方也使用这些模块。上下文压缩（context
+compaction）会把很长的历史变短，让它能放进模型的上下文窗口。OpenBot 会为每个 Chat 做这件事：由这个 Chat 的模型写一段摘要。它默认不使用
+`ResponsesCompaction`。见
+[压缩](/zh-cn/docs/developers/chats#压缩)。每个提供方的简短示例参见
+[Packages](/zh-cn/docs/packages)。
+
+---
+
+使用 Cloudflare Workers AI 时，请选择 `openai-compat` 提供方，并设置账户地址
+`https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1`。Workers
+AI 不接受工具调用助手消息中的 `null`
+文本。OpenBot 将这条消息的文本设为空字符串，让下一次模型调用能够读取工具结果。此处理仅用于这个 Cloudflare 地址。其他提供方的消息保持原样。
+
+## 开发用模型
+
+开发服务器（`devenv shell -- pnpm dev`）不会调用真实的模型。它改用测试模型。它们每次都给出同样的回答，所以你可以零成本地测试客户端。
+
+提供方 ID 是 `development`。模型 ID 有：
+
+| 模型           | 作用                                                                             |
+| -------------- | -------------------------------------------------------------------------------- |
+| `mock-text`    | 默认模型。立刻返回固定的文本。                                                   |
+| `mock-slow`    | 在十秒内慢慢返回文本。用它测试流式输出和中断。                                   |
+| `mock-tool`    | 调用一个需要决定的无害测试工具。见 [Requests](/zh-cn/docs/developers/requests)。 |
+| `mock-app`     | 调用测试 App 的一个工具，并返回它的真实内容。                                    |
+| `mock-failure` | 先发送一些文本，然后故意以模型错误失败。                                         |
+
+它们回答中的 token 数不是真实的。要选择其中一个，请把它保存到 Chat 上：
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":1,"model":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
+  http://localhost/v1/chats/$CHAT_ID
+```
+
+开发入口通过 `builtinModels`
+提供这些模型，所以开发平台的每个组织都可以使用它们。它把 `mock-text` 作为
+`builtinModels.defaultModel`，所以当新 Chat 的 Bot 没有指定模型时，这个 Chat 会得到它。生产程序永远不会使用它们。

@@ -3,6 +3,8 @@ title: 包
 description: 工作区中的各个包，以及每个包的用途。
 ---
 
+面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+
 OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 把各部分组装成服务器。其他库可以单独使用。
 
@@ -13,17 +15,17 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 
 ## 概览
 
-| 包              | 用途                                                                                |
-| --------------- | ----------------------------------------------------------------------------------- |
-| `openbot`       | 服务器、它的插件和它的模型提供方。请看[从代码中运行](/zh-cn/docs/server)。          |
-| `api`           | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                             |
-| `client`        | TypeScript 客户端。请看[客户端](/zh-cn/docs/client)。                               |
-| `core`          | Bot 核心：Bot、Chat、Turn、存储、插件和技能。                                       |
-| `protocol`      | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。                     |
-| `protocol-test` | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。            |
-| `cli`           | `openbot` 命令。对于 `openbot <name>`，它会运行 `openbot-<name>`。                  |
-| `computer`      | `openbot computer` 命令，用来配对和连接你自己的 [Computer](/zh-cn/docs/computers)。 |
-| `docs`          | 本文档网站。                                                                        |
+| 包              | 用途                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `openbot`       | 服务器、它的插件和它的模型提供方。请看[从代码中运行](/zh-cn/docs/server)。                     |
+| `api`           | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                                        |
+| `client`        | TypeScript 客户端。请看[客户端](/zh-cn/docs/client)。                                          |
+| `core`          | Bot 核心：Bot、Chat、Turn、存储、插件和技能。                                                  |
+| `protocol`      | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。                                |
+| `protocol-test` | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。                       |
+| `cli`           | `openbot` 命令。对于 `openbot <name>`，它会运行 `openbot-<name>`。                             |
+| `computer`      | `openbot computer` 命令，用来配对和连接你自己的 [Computer](/zh-cn/docs/developers/computers)。 |
+| `docs`          | 本文档网站。                                                                                   |
 
 下面的示例省略了模型。要运行它们，请提供一个 `LanguageModel` Layer，例如来自
 `openbot` 中的某个[模型提供方](#模型提供方)。
@@ -87,15 +89,19 @@ const program = Effect.scoped(
 `expectedRevision` 时，冲突会直接失败，不会重试。
 
 `Operation.Store` 的方法在存储失败时返回 `Operation.StoreError`。 `get` 和
-`finish` 返回 `Option<Record>`；`None` 表示没有匹配的记录或没有新的结束状态。
-`Operations.make` 接受带 Scope 的 `whileRunning`
-Effect，在工作、保存结束状态和通知期间持有宿主资源。首次写入失败时，调用会留在当前 Turn 中。结束状态写入失败时，Chat 仍会收到通知，并记录失败。
+`finish` 返回 `Option<Record>`；`None`
+表示没有匹配的记录或没有新的结束状态。每次调用可以通过 `RunInput.acquire`
+在自己的 Scope 中持有资源，直到工作、保存结束状态和通知全部结束。首次写入失败时，调用会留在当前 Turn 中。结束状态写入失败时，Chat 仍会收到通知，并记录失败。
+
+独立使用的 `core`
+运行时只在一个进程中运行。每个 Turn 都在新的 Scope 中打开插件资源。后台调用会继续持有所需资源，直到调用结束。`core`
+不向其他进程发送心跳或取消请求，也不在进程停止后恢复工作。服务器通过持久执行系统处理这些工作。
 
 `execute` 启动一个 Turn，等待它结束，然后返回这个 Chat。`stream`
 在 Turn 运行时提供事件。如果 Chat 中已经有一个 Turn 在运行，两者都会失败。
 
 `deliver`
-按[收件箱](/zh-cn/docs/chats#收件箱)的规则，一步把输入交给一个 Chat。Chat 空闲时，它启动一个 Turn；输入的
+按[收件箱](/zh-cn/docs/developers/chats#收件箱)的规则，一步把输入交给一个 Chat。Chat 空闲时，它启动一个 Turn；输入的
 `author` 相同时，它引导正在运行的 Turn；否则它在收件箱中等待。它返回
 `started`、`steered` 或
 `queued`。每个 Turn 结束后，收件箱中的下一条输入启动下一个 Turn。
@@ -155,31 +161,43 @@ yield *
 	})
 ```
 
+`Bot.Definition.registerTools`
+在 Turn 的作用域内打开工具，返回工具定义、处理器上下文、说明和步骤钩子。它不接收模型循环的继续函数或事件流。所有服务端功能都使用此注册方式。后台调用使用资源期间，资源保持打开。宿主在全部注册完成后统一应用审批和计划模式的规则。工具不会因为较晚注册而绕过规则。Bot 记忆只在模型需要输入时读取；后台调用重建工具时不读取记忆。
+
+`SummaryCompaction.prepare`
+只准备摘要输入，不调用模型。它保留最近的消息，并把有关联的工具调用放在一起。`TurnRunner`
+宿主可以提供
+`summarize(selection, input)`，先保存模型结果，再更新上下文。独立使用时，默认调用当前作用域中的模型。服务端适配器复用其他模型步骤的调用日志和用量记录。接管后可以读取已保存的摘要，无需再次调用模型。摘要文本不会进入回复文本事件。
+
 ### 插件
 
-插件包裹模型循环。用 `Plugin.make`
-创建插件。它的构造函数只运行一次。它返回的中间件包裹每个 Turn 的事件流：
+插件注册工具、步骤钩子和状态。`Plugin.make`
+创建插件。构造函数在每个 Turn 阶段的作用域内运行。排队的宿主动作开始新阶段。阶段结束、失败或取消时释放资源。后台工具持有资源直到调用结束。构建错误会使该 Turn 失败。插件不能包裹或启动模型循环。
 
 ```ts
 import { Plugin } from "@openbot-build/core"
-import { Effect, Stream } from "effect"
+import { Context, Effect } from "effect"
 
 const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
-	Effect.succeed((next, options) =>
-		next(options).pipe(
-			Stream.tap((event) =>
-				event._tag === "ModelStepStarted"
-					? Effect.log("A model step started")
-					: Effect.void,
-			),
-		),
-	),
+	Effect.succeed({
+		tools: {},
+		handlers: Context.empty(),
+		beforeStep: ({ kind }) =>
+			(kind === "model"
+				? Effect.log("A model step started")
+				: Effect.void
+			).pipe(Effect.as(true)),
+	}),
 )
 ```
 
-`PluginComposition.merge(a, b)` 组合两个插件。`a` 在 `b`
-的外层运行。插件还可以把自己的数据保存在 Chat 的记录中，或者保存在它的状态中。把
-`plugin.stores` 传给 `Store.define`，然后使用 `PluginState.make`。
+`PluginComposition.merge(a, b)` 先构建 `a`，再构建
+`b`。步骤前和步骤后的钩子都按此顺序运行。步骤前钩子返回 false 时，跳过后续检查并结束 Turn。`b`
+的工具定义和处理器优先。`ToolRegistration.merge`
+对普通注册使用相同规则。时间限制作为数据交给运行器，运行器从已保存的 Turn 开始时间计算，重启不会重置时限。组合多个时限时，最短时限生效。
+
+插件可以在 Chat 记录或状态中保存数据。把 `plugin.stores` 传给
+`Store.define`，然后使用 `PluginState.make`。
 
 ### 技能
 
@@ -200,7 +218,7 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 ### 记忆
 
 `BotMemory` 包含
-[Bot 记忆](/zh-cn/docs/memory)的类型和辅助函数。服务器用它们实现记忆 Bot 和记忆 API。记忆 API 的 schema 在
+[Bot 记忆](/zh-cn/docs/developers/memory)的类型和辅助函数。服务器用它们实现记忆 Bot 和记忆 API。记忆 API 的 schema 在
 `api` 中，名为 `BotMemory`。
 
 `BotMemory.apply` 接受 `ids` 数组，其中每个操作按顺序对应一个新 ID。

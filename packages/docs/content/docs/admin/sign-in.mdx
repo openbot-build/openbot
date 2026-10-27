@@ -1,0 +1,27 @@
+---
+title: "Set up sign-in"
+---
+
+For platform operators. Register the provider before people sign in.
+
+## Set up the platform provider
+
+Register OpenBot as a client at your provider. Use
+`<publicOrigin>/auth/callback/oidc` as the redirect URI. OpenBot asks for the
+scopes `openid profile email`.
+
+Then give the provider to OpenBot. On a new platform, the setup program does
+this with `--oidc-issuer`, `--oidc-client-id` and `--oidc-client-secret`. Later,
+a platform admin changes it with `PATCH /v1/platform/settings`. See
+[Platform](/docs/platform).
+
+| Setting                         | Value                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| `identityProvider.issuer`       | The issuer URL, for example `https://id.example.com`. HTTPS, no trailing slash. |
+| `identityProvider.clientId`     | The client ID from the provider.                                                |
+| `identityProvider.clientSecret` | The client secret. Leave it out for a public client.                            |
+| `publicOrigin`                  | The public HTTPS origin of OpenBot, for example `https://api.example.com`.      |
+
+Without a client secret, OpenBot signs in as a public client with PKCE. PKCE is
+a check that protects the sign-in code. A platform can have no provider at all.
+Then people sign in only through SSO connections.

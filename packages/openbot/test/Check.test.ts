@@ -1,10 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import {
-	Authorization,
-	type Caller,
-	Identity,
-	TriggersApi,
-} from "@openbot-build/api"
+import { Authorization, type Caller, TriggersApi } from "@openbot-build/api"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Effect } from "effect"
 import * as Check from "../src/authorization/Check.ts"
@@ -26,26 +21,22 @@ const bobTrigger = triggerOf("bob")
 
 /** An authorizer that gives each member every act on their own things. */
 const layerOwnOnly = Authorizer.layer(Authorization.Auth, {
-	principal: Identity,
 	policy: () =>
 		Effect.succeed(
 			Policy.define(Authorization.OpenBot)(function* (_) {
 				yield* _.allow("*", "*", Policies.own)
 			}),
 		),
-	cache: false,
 })
 
 /** An authorizer that gives every act to everyone. */
 const layerEverything = Authorizer.layer(Authorization.Auth, {
-	principal: Identity,
 	policy: () =>
 		Effect.succeed(
 			Policy.define(Authorization.OpenBot)(function* (_) {
 				yield* _.allow("*", "*")
 			}),
 		),
-	cache: false,
 })
 
 /** The checks, made once with the own-things authorizer, as a layer makes them. */

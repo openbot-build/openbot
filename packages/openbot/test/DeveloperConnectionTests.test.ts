@@ -1,12 +1,37 @@
+import * as TestCleanup from "../src/apps/TestCleanup.ts"
+import * as TestCleanupWorkflow from "../src/apps/TestCleanupWorkflow.ts"
+import * as GrantCleanup from "../src/apps/GrantCleanup.ts"
+import * as GrantCleanupWorkflow from "../src/apps/GrantCleanupWorkflow.ts"
+import { DeveloperTestRuntime } from "../src/apps/DeveloperTestRuntime.ts"
+import { Authorization, Execution } from "@openbot-build/domain"
+import * as TestCommands from "../src/apps/TestCommands.ts"
+import * as TestWorkflow from "../src/apps/TestWorkflow.ts"
+import * as ExecutionEngine from "../src/execution/Engine.ts"
+import * as Calls from "../src/execution/Calls.ts"
+import * as Runner from "../src/execution/Runner.ts"
+import * as RunScope from "../src/execution/RunScope.ts"
+import { Billing } from "../src/billing/Billing.ts"
+import { WorkflowEngine } from "effect/workflow"
+import * as Records from "../src/errors/Records.ts"
+import * as TokensPostgres from "../src/auth/TokensPostgres.ts"
+import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
+import * as ExecutionStorage from "../src/execution/Store.ts"
+import * as ExecutionObservation from "../src/execution/Observation.ts"
 import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { DeveloperApi as Api } from "@openbot-build/api"
-import { CatalogDiscovery, Document, Network } from "@openbot-build/protocol"
+import {
+	AppConnections,
+	CatalogDiscovery,
+	Document,
+	Network,
+} from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,
 	Cause,
 	Crypto,
+	Clock,
 	Deferred,
 	Effect,
 	Formatter,
@@ -53,6 +78,21 @@ type Mode = "normal" | "repeat" | "page-failure" | "optional" | "slow"
 
 const get = (account: string, id: string) =>
 	Effect.flatMap(DeveloperTests, (tests) => tests.get(account, id))
+const cleanupTest = (id: string) =>
+	Effect.gen(function* () {
+		const cleanup = yield* TestCleanup.TestCleanup
+		const receipt = yield* cleanup.request(
+			{ kind: "member", organizationId: "developer", userId: "alice" },
+			id,
+			Execution.CommandKey.make("cleanup:" + id),
+			false,
+		)
+		yield* TestCleanupWorkflow.workflow.execute({
+			namespace: owner,
+			id: receipt.executionId,
+		})
+		return receipt
+	})
 /** The stage of a Developer test with this name. */
 const stage = (test: Api.ConnectionTest, name: string) =>
 	Arr.findFirst(test.stages, (stage) => stage.name === name)
@@ -73,6 +113,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const crypto = yield* Crypto.Crypto
+				const liveClock = yield* Clock.Clock
 				const mode = yield* Ref.make<Mode>("normal")
 				const origin = yield* Deferred.make<string>()
 				const tokens = yield* Ref.make<ReadonlyArray<string>>([])
@@ -90,6 +131,36 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 							assert.strictEqual(request.headers["authorization"], undefined)
 							assert.strictEqual(request.headers["cookie"], undefined)
 							const headers = { "cache-control": "no-store" }
+							if (request.url === "/v1/apps/client-metadata")
+								return yield* HttpServerResponse.json(
+									{
+										client_id: base + "/v1/apps/client-metadata",
+										client_name: "Test",
+										redirect_uris: [base + "/auth/developer/apps/callback"],
+										grant_types: ["authorization_code"],
+										response_types: ["code"],
+										token_endpoint_auth_method: "none",
+									},
+									{ headers },
+								)
+							if (request.url === "/.well-known/oauth-protected-resource/mcp")
+								return yield* HttpServerResponse.json(
+									{ resource: base + "/mcp", authorization_servers: [base] },
+									{ headers },
+								)
+							if (request.url === "/.well-known/oauth-authorization-server")
+								return yield* HttpServerResponse.json(
+									{
+										issuer: base,
+										authorization_endpoint: base + "/authorize",
+										token_endpoint: base + "/token",
+										client_id_metadata_document_supported: true,
+										code_challenge_methods_supported: ["S256"],
+										response_types_supported: ["code"],
+									},
+									{ headers },
+								)
+
 							if (request.url === "/card.json") {
 								const card: typeof Document.ServerCard.Encoded = {
 									$schema: Document.cardSchemaUrl,
@@ -249,7 +320,49 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 					databaseUrl: Redacted.make(database.url),
 				})
 				yield* Effect.provide(Database.migrate, databaseLayer)
-				const layer = DeveloperLayers.layer.pipe(
+				const layer = Layer.mergeAll(
+					TestWorkflow.layer,
+					TestCleanupWorkflow.layer,
+					GrantCleanupWorkflow.layer,
+					ExecutionEngine.layerOutbox.pipe(
+						Layer.provide(Layer.succeed(Clock.Clock, liveClock)),
+					),
+				).pipe(
+					Layer.provideMerge(
+						DeveloperLayers.services.pipe(
+							Layer.provide(AppConnections.layerConnectionScopes),
+						),
+					),
+					Layer.provideMerge(GrantCleanup.layer),
+					Layer.provideMerge(
+						Layer.mergeAll(Calls.layer, Runner.layer, RunScope.layer),
+					),
+					Layer.provideMerge(ExecutionEngine.layerRegistry),
+					Layer.provideMerge(WorkflowEngine.layerMemory),
+					Layer.provide(
+						Layer.mock(Billing, {
+							releaseExecution: () => Effect.succeed(true),
+						}),
+					),
+					Layer.provide(IndexCommandsFixture.layer),
+					Layer.provide(
+						ExecutionObservation.layer.pipe(
+							Layer.provideMerge(
+								Layer.merge(ExecutionStorage.layer, Records.layer),
+							),
+						),
+					),
+					Layer.provide(
+						// Keep the authorizer's default settings inside its layer.
+						// The Developer services need the HTTPS fixture's public origin.
+						Layer.effect(Authorization.Auth, Authorization.Auth).pipe(
+							Layer.provide(
+								OrganizationFixture.layerAuthorization.pipe(
+									Layer.provide(TokensPostgres.layer),
+								),
+							),
+						),
+					),
 					Layer.provide(
 						Layer.mergeAll(
 							publicNetwork,
@@ -264,9 +377,10 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 					Layer.provide(Governance.layer),
 					Layer.provide(
 						OrganizationFixture.layerSettings({
-							publicOrigin: "https://localhost",
+							publicOrigin: fixture.ipOrigin,
 						}),
 					),
+
 					Layer.provide(
 						Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 					),
@@ -279,6 +393,25 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 				 */
 				const start = Effect.gen(function* () {
 					const run = Effect.provide(yield* Layer.build(layer))
+					const runTest = (id: string) =>
+						Effect.gen(function* () {
+							const commands = yield* TestCommands.TestCommands
+							const receipt = yield* commands.request(
+								{
+									kind: "member",
+									organizationId: "developer",
+									userId: "alice",
+								},
+								id,
+								Execution.CommandKey.make(yield* crypto.randomUUIDv4()),
+							)
+							yield* TestWorkflow.workflow.execute(
+								{ namespace: owner, id: receipt.executionId },
+								{ discard: true },
+							)
+							return receipt
+						})
+
 					const create = Effect.fn("DeveloperConnectionTests.create")(
 						function* (remoteIndex: number = 0) {
 							const id = yield* crypto.randomUUIDv4()
@@ -302,7 +435,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 							return test
 						},
 					)
-					return { run, create, settle }
+					return { run, create, settle, runTest }
 				})
 
 				const { proof, configured } = yield* Effect.scoped(
@@ -316,7 +449,12 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 									cardUrl,
 								})
 								yield* Ref.set(tokens, [claim.token])
-								return yield* access.verify(owner, claim.id)
+								return yield* access.confirm(
+									owner,
+									claim.id,
+									{ _tag: "Matched" },
+									yield* access.inspectScope(claim.scope),
+								)
 							}),
 						)
 						yield* run(
@@ -327,7 +465,12 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 									cardUrl,
 								})
 								yield* Ref.update(tokens, Arr.append(challenge.token))
-								yield* access.verify(another, challenge.id)
+								yield* access.confirm(
+									another,
+									challenge.id,
+									{ _tag: "Matched" },
+									yield* access.inspectScope(challenge.scope),
+								)
 							}),
 						)
 						const configured = yield* create(1)
@@ -368,16 +511,86 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 
 				const remembered = yield* Effect.scoped(
 					Effect.gen(function* () {
-						const { run, create, settle } = yield* start
+						const { run, create, settle, runTest } = yield* start
+						const conflict = Execution.Conflict.make({
+							id: Execution.Id.make("old-owner"),
+						})
+						const stopped = yield* run(
+							Effect.flatMap(DeveloperTestRuntime, (runtime) =>
+								runtime.execute(owner, configured.id, {
+									check: Effect.fail(conflict),
+									progress: () => Effect.void,
+								}),
+							).pipe(Effect.flip),
+						)
+						assert.strictEqual(stopped._tag, "ExecutionConflict")
+						const signIn = yield* create()
+						const preparation = yield* run(
+							Effect.gen(function* () {
+								const db = yield* Db.make
+								const record = yield* Rows.getTest(db, "public", signIn.id)
+								yield* Rows.putTest(db, "public", {
+									...record,
+									value: {
+										...record.value,
+										status: "AwaitingAuthorization",
+										issuers: [fixture.ipOrigin],
+									},
+								})
+								const commands = yield* TestCommands.TestCommands
+								const receipt = yield* commands.prepare(
+									{
+										kind: "member",
+										organizationId: "developer",
+										userId: "alice",
+									},
+									signIn.id,
+									{ scopes: [] },
+									Execution.CommandKey.make("prepare-https"),
+								)
+								yield* TestWorkflow.workflow.execute(
+									{ namespace: owner, id: receipt.executionId },
+									{ discard: true },
+								)
+								return receipt
+							}),
+						)
+						const ready = yield* run(get(owner, signIn.id)).pipe(
+							Effect.repeat({
+								until: (test) => test.status !== "PreparingAuthorization",
+								schedule: Schedule.spaced("10 millis"),
+								times: 200,
+							}),
+						)
+						assert.strictEqual(
+							ready.status,
+							"AwaitingAuthorization",
+							Formatter.format(ready),
+						)
+						assert.strictEqual(
+							ready.authorization?.status,
+							"Waiting",
+							Formatter.format(ready),
+						)
+						assert.strictEqual(ready.executionId, preparation.executionId)
+						const authorizationUrl = new URL(
+							ready.authorization!.authorizationUrl,
+						)
+						assert.strictEqual(
+							authorizationUrl.searchParams.get("code_challenge_method"),
+							"S256",
+						)
+						assert.strictEqual(
+							authorizationUrl.searchParams.get("state"),
+							ready.authorization!.flowId,
+						)
+						yield* run(cleanupTest(signIn.id))
+
 						assert.strictEqual(
 							(yield* run(get(owner, configured.id))).status,
 							"Queued",
 						)
-						yield* run(
-							Effect.flatMap(DeveloperTests, (tests) =>
-								tests.run(owner, configured.id),
-							),
-						)
+						yield* run(runTest(configured.id))
 						assert.strictEqual(
 							(yield* settle(configured.id)).status,
 							"Succeeded",
@@ -391,11 +604,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 							yield* Ref.set(mode, selected)
 							yield* Ref.set(methods, [])
 							const test = yield* create()
-							yield* run(
-								Effect.flatMap(DeveloperTests, (tests) =>
-									tests.run(owner, test.id),
-								),
-							)
+							yield* run(runTest(test.id))
 							const result = yield* settle(test.id)
 							assert.strictEqual(
 								result.status,
@@ -450,17 +659,24 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						}
 						yield* Ref.set(mode, "slow")
 						const slow = yield* create()
-						yield* run(
-							Effect.flatMap(DeveloperTests, (tests) =>
-								tests.run(owner, slow.id),
-							),
-						)
+						yield* run(runTest(slow.id))
 						yield* Deferred.await(slowOpened).pipe(Effect.timeout("5 seconds"))
-						yield* run(
-							Effect.flatMap(DeveloperTests, (tests) =>
-								tests.cancel(owner, slow.id),
-							),
+						const busy = yield* run(
+							Effect.flatMap(TestCommands.TestCommands, (commands) =>
+								commands.exchange(
+									{
+										kind: "member",
+										organizationId: "developer",
+										userId: "alice",
+									},
+									slow.id,
+									Execution.CommandKey.make("slow-exchange"),
+								),
+							).pipe(Effect.flip),
 						)
+						assert.propertyVal(busy, "reason", "TestBusy")
+
+						yield* run(cleanupTest(slow.id))
 						const cancelled = yield* settle(slow.id)
 						assert.strictEqual(
 							cancelled.cleanup,
@@ -497,7 +713,6 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 								}),
 							),
 						)
-						yield* run(Effect.flatMap(DeveloperTests, (tests) => tests.sweep))
 						const expired = yield* settle(expiring.id).pipe(
 							Effect.repeat({
 								until: (test) => !cleaning(test),
@@ -515,7 +730,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 								db.delete(developerTests).where(brokenTest),
 							),
 						)
-						// A stored proof that does not decode must not stop the monitor.
+						// A bad proof fails its own check before any network call.
 						yield* run(
 							Effect.gen(function* () {
 								const db = yield* Db.make
@@ -529,7 +744,15 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 									.update(developerProofs)
 									.set({ scope: "{", nextVerificationAt: 0 })
 									.where(where)
-								yield* (yield* DeveloperMonitor).run
+								assert.equal(
+									(yield* Effect.flip(
+										(yield* DeveloperMonitor).prepare({
+											kind: "Proof",
+											id: proof.id,
+										}),
+									))._tag,
+									"SchemaError",
+								)
 								yield* db
 									.update(developerProofs)
 									.set({
@@ -539,8 +762,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 									.where(where)
 							}),
 						)
-						// A completion that cannot open its callback must not leave the
-						// test authorization in `Exchanging`.
+						// A broken old flow must fail before the exchange is submitted.
 						const exchanging = yield* create()
 						yield* run(
 							Effect.gen(function* () {
@@ -574,15 +796,23 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 							}),
 						)
 						const completion = yield* run(
-							Effect.flatMap(DeveloperTests, (tests) =>
-								tests.complete(owner, exchanging.id),
+							Effect.flatMap(TestCommands.TestCommands, (commands) =>
+								commands.exchange(
+									{
+										kind: "member",
+										organizationId: "developer",
+										userId: "alice",
+									},
+									exchanging.id,
+									Execution.CommandKey.make("bad-exchange"),
+								),
 							).pipe(Effect.flip),
 						)
-						assert.strictEqual(completion._tag, "DeveloperUnavailable")
+						assert.strictEqual(completion._tag, "DeveloperConflict")
 						const afterCut = yield* run(get(owner, exchanging.id))
 						assert.strictEqual(afterCut.status, "AwaitingAuthorization")
-						assert.strictEqual(afterCut.authorization?.status, "Failed")
-						assert.strictEqual(afterCut.reason, "AuthorizationCouldNotComplete")
+						assert.strictEqual(afterCut.authorization?.status, "Received")
+						assert.isNull(afterCut.reason)
 						const remembered = (yield* create()).id
 						yield* run(
 							Effect.gen(function* () {
@@ -610,7 +840,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 								Rows.getTest(db, "public", remembered),
 							),
 						)
-						assert.strictEqual(restored.value.status, "Interrupted")
+						assert.strictEqual(restored.value.status, "Running")
 						yield* run(
 							Effect.gen(function* () {
 								yield* (yield* DeveloperAccess).relinquish(owner, proof.id)
@@ -621,11 +851,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 								)
 							}),
 						)
-						yield* run(
-							Effect.flatMap(DeveloperTests, (tests) =>
-								tests.cleanup(owner, remembered),
-							),
-						)
+						yield* run(cleanupTest(remembered))
 						const cleaned = yield* run(get(owner, remembered)).pipe(
 							Effect.repeat({
 								until: (test) => !cleaning(test),

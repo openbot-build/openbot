@@ -360,8 +360,20 @@ export const discover = Effect.fn("Authorization.discover")(
 	},
 )
 
-export const begin = Effect.fn("Authorization.begin")(function* (options: {
-	readonly key: Store.ConnectionKey
+/** Check a snapshot before any grant request. */
+const enabled = (connection: Store.UserConnection) =>
+	connection.state === "Enabled"
+		? Effect.void
+		: Effect.fail(
+				AuthorizationError.make({
+					reason: "CallbackMismatch",
+					issue: "Connection is not enabled",
+				}),
+			)
+
+/** Prepare a flow. The host saves it before showing its URL. */
+export const prepare = Effect.fn("Authorization.prepare")(function* (options: {
+	readonly connection: Store.UserConnection
 	readonly issuer: string
 	readonly clientId: string
 	readonly redirectUri: string
@@ -369,7 +381,8 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	readonly resourceMetadataUrl?: string
 	readonly expiresInMs?: number
 }) {
-	const connection = yield* AppConnections.usable(options.key)
+	const connection = options.connection
+	yield* enabled(connection)
 	if (
 		Arr.some(
 			options.scopes,
@@ -417,35 +430,51 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	}))
 		url.searchParams.set(name, value)
 	const now = yield* Clock.currentTimeMillis
-	const store = yield* FlowStore
-	yield* store.save(
-		Flow.make({
-			flowId,
-			binding: {
-				...options.key,
-				resource: connection.endpoint,
-				issuer: metadata.issuer,
-			},
-			clientId: options.clientId,
-			redirectUri: options.redirectUri,
-			scopes: options.scopes,
-			verifier: Redacted.make(verifier),
-			expiresAt: now + (options.expiresInMs ?? 600000),
-			metadata,
-			...(options.resourceMetadataUrl === undefined
-				? {}
-				: { resourceMetadataUrl: options.resourceMetadataUrl }),
-		}),
-	)
-	return {
-		_tag: "PendingAuthorization" as const,
+	const flow = Flow.make({
 		flowId,
-		authorizationUrl: url.href,
-		key: options.key,
-		resource: connection.endpoint,
-		issuer: metadata.issuer,
+		binding: {
+			owner: connection.owner,
+			connectionId: connection.connectionId,
+			resource: connection.endpoint,
+			issuer: metadata.issuer,
+		},
+		clientId: options.clientId,
+		redirectUri: options.redirectUri,
 		scopes: options.scopes,
+		verifier: Redacted.make(verifier),
+		expiresAt: now + (options.expiresInMs ?? 600000),
+		metadata,
+		...(options.resourceMetadataUrl === undefined
+			? {}
+			: { resourceMetadataUrl: options.resourceMetadataUrl }),
+	})
+	return {
+		flow,
+		pending: {
+			_tag: "PendingAuthorization" as const,
+			flowId,
+			authorizationUrl: url.href,
+			key: { owner: connection.owner, connectionId: connection.connectionId },
+			resource: connection.endpoint,
+			issuer: metadata.issuer,
+			scopes: options.scopes,
+		},
 	}
+})
+
+export const begin = Effect.fn("Authorization.begin")(function* (options: {
+	readonly key: Store.ConnectionKey
+	readonly issuer: string
+	readonly clientId: string
+	readonly redirectUri: string
+	readonly scopes: ReadonlyArray<string>
+	readonly resourceMetadataUrl?: string
+	readonly expiresInMs?: number
+}) {
+	const connection = yield* AppConnections.usable(options.key)
+	const prepared = yield* prepare({ ...options, connection })
+	yield* (yield* FlowStore).save(prepared.flow)
+	return prepared.pending
 })
 
 const sameScopes = (
@@ -453,17 +482,19 @@ const sameScopes = (
 	right: ReadonlyArray<string>,
 ) => Equal.equals(HashSet.fromIterable(left), HashSet.fromIterable(right))
 
-const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
+/** A grant is private data. Durable hosts must seal it before saving it. */
+export const Grant = Schema.Struct({
+	credential: Store.Credential,
+	resourceMetadataUrl: Schema.optionalKey(Schema.String),
+})
+export type Grant = typeof Grant.Type
+
+const readTokens = Effect.fn("Authorization.readTokens")(function* (options: {
 	readonly binding: Store.CredentialBinding
 	readonly clientId: string
 	readonly scopes: ReadonlyArray<string>
 	readonly tokens: Mcp.OAuthTokens
 	readonly resourceMetadataUrl?: string
-	/**
-	 * True when live clients must connect again, for example after a new grant.
-	 * A grant with other scopes than `scopes` always closes them.
-	 */
-	readonly reconnect: boolean
 }) {
 	if (Str.toLowerCase(options.tokens.token_type) !== "bearer")
 		return yield* AuthorizationError.make({
@@ -480,17 +511,6 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 			issue: "Token response grants more than was requested",
 		})
 	const now = yield* Clock.currentTimeMillis
-	const credentials = yield* Store.CredentialStore
-	const apps = yield* Store.AppStore
-	const connection = yield* apps.get(options.binding)
-	if (
-		connection.state !== "Enabled" ||
-		connection.endpoint !== options.binding.resource
-	)
-		return yield* AuthorizationError.make({
-			reason: "CallbackMismatch",
-			issue: "Connection was disabled or changed",
-		})
 	// The tokens come from the authorization server, so check them like other outside data.
 	const credential = yield* Store.Credential.decode({
 		binding: options.binding,
@@ -508,21 +528,49 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 		scopes,
 		clientId: options.clientId,
 	})
+	return Grant.make({
+		credential,
+		...(options.resourceMetadataUrl === undefined
+			? {}
+			: { resourceMetadataUrl: options.resourceMetadataUrl }),
+	})
+})
+
+/** Install a grant for an in-memory or standalone host. Durable hosts commit it with their state. */
+const install = Effect.fn("Authorization.install")(function* (options: {
+	readonly grant: Grant
+	readonly scopes: ReadonlyArray<string>
+	readonly reconnect: boolean
+}) {
+	const { credential, resourceMetadataUrl } = options.grant
+	const { binding, scopes } = credential
+
+	const credentials = yield* Store.CredentialStore
+	const apps = yield* Store.AppStore
+	const connection = yield* apps.get(binding)
+	if (
+		connection.state !== "Enabled" ||
+		connection.endpoint !== binding.resource
+	)
+		return yield* AuthorizationError.make({
+			reason: "CallbackMismatch",
+			issue: "Connection was disabled or changed",
+		})
 	const reference = yield* credentials.put(credential)
 	const current = yield* apps.update({
-		key: options.binding,
+		key: binding,
 		change: (old) =>
-			old.state === "Enabled" && old.endpoint === options.binding.resource
+			old.state === "Enabled" && old.endpoint === binding.resource
 				? {
 						...old,
 						authorization: {
 							_tag: "Authorized",
-							binding: options.binding,
+							binding: binding,
 							credentialRef: reference,
 							scopes,
-							...(options.resourceMetadataUrl === undefined
+							...(resourceMetadataUrl === undefined
 								? {}
-								: { resourceMetadataUrl: options.resourceMetadataUrl }),
+								: { resourceMetadataUrl: resourceMetadataUrl }),
 						},
 					}
 				: old,
@@ -531,18 +579,18 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 		Match.when(
 			{
 				state: "Enabled",
-				endpoint: options.binding.resource,
+				endpoint: binding.resource,
 				authorization: {
 					_tag: "Authorized",
 					credentialRef: reference,
-					binding: { issuer: options.binding.issuer },
+					binding: { issuer: binding.issuer },
 				},
 			},
 			() => Effect.void,
 		),
 		Match.orElse(() =>
 			Effect.gen(function* () {
-				yield* credentials.deleteConnection(options.binding)
+				yield* credentials.deleteConnection(binding)
 				return yield* AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Connection was disabled during authorization",
@@ -554,21 +602,28 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 	// same grant does not need to close them and cut off their running calls.
 	if (options.reconnect || !sameScopes(scopes, options.scopes)) {
 		const active = yield* App.ConnectionScopes
-		yield* active.close(options.binding)
+		yield* active.close(binding)
 	}
 	return current
 })
 
-/** Call this only from the trusted callback handler of the host, with its own owner binding. */
-export const complete = Effect.fn("Authorization.complete")(
-	function* (options: {
-		readonly key: Store.ConnectionKey
-		readonly flowId: string
-		readonly callbackUrl: string
-	}) {
-		const store = yield* FlowStore
-		const flow = yield* store.get(options)
-		const connection = yield* AppConnections.usable(options.key)
+/** Validate the full callback before consuming a flow or sending its code. */
+export const validateCallback = Effect.fn("Authorization.validateCallback")(
+	function* (
+		connection: Store.UserConnection,
+		flow: Flow,
+		callbackUrl: string,
+	) {
+		yield* enabled(connection)
+		if (
+			connection.owner !== flow.binding.owner ||
+			connection.connectionId !== flow.binding.connectionId
+		)
+			return yield* AuthorizationError.make({
+				reason: "CallbackMismatch",
+				issue: "Authorization owner changed",
+			})
+
 		if (connection.endpoint !== flow.binding.resource)
 			return yield* AuthorizationError.make({
 				reason: "CallbackMismatch",
@@ -581,7 +636,7 @@ export const complete = Effect.fn("Authorization.complete")(
 				issue: "Authorization callback expired",
 			})
 		const callback = yield* Effect.try({
-			try: () => new URL(options.callbackUrl),
+			try: () => new URL(callbackUrl),
 			catch: (error) =>
 				AuthorizationError.make({
 					reason: "CallbackMismatch",
@@ -633,59 +688,150 @@ export const complete = Effect.fn("Authorization.complete")(
 					cause: error,
 				}),
 		})
-		const exchange = Effect.scoped(
-			Effect.gen(function* () {
-				const fetch = yield* Sdk.fetch({
-					documents: true,
-				})
-				return yield* Effect.tryPromise({
-					try: () =>
-						Mcp.exchangeAuthorization(flow.binding.issuer, {
-							metadata: sdkMetadata(flow.metadata),
-							clientInformation: {
-								client_id: flow.clientId,
-							},
-							authorizationCode: code,
-							...Rec.filter({ iss }, Predicate.isNotUndefined),
-							codeVerifier: Redacted.value(flow.verifier),
-							redirectUri: flow.redirectUri,
-							resource: flow.binding.resource,
-							fetchFn: fetch,
-						}),
-					catch: (error) =>
-						Schema.is(Network.NetworkError)(error)
-							? error
-							: AuthorizationError.make({
-									reason: "GrantRejected",
-									issue: "Authorization code exchange failed",
-									cause: error,
-								}),
-				})
-			}),
-		)
-		// The claim uses up the flow, and the server uses up the code. If the request
-		// stops after the claim, the flow or the issued tokens are lost, so nothing
-		// can interrupt these steps. Each request of the exchange has a time limit.
+		return { code: Redacted.make(code), iss }
+	},
+)
+
+/** Exchange one code. This does not consume a flow or write a credential store. */
+export const redeem = Effect.fn("Authorization.redeem")(function* (options: {
+	readonly connection: Store.UserConnection
+	readonly flow: Flow
+	readonly callbackUrl: string
+}) {
+	const { flow } = options
+	const { code, iss } = yield* validateCallback(
+		options.connection,
+		flow,
+		options.callbackUrl,
+	)
+
+	const tokens = yield* Effect.scoped(
+		Effect.gen(function* () {
+			const fetch = yield* Sdk.fetch({
+				documents: true,
+			})
+			return yield* Effect.tryPromise({
+				try: () =>
+					Mcp.exchangeAuthorization(flow.binding.issuer, {
+						metadata: sdkMetadata(flow.metadata),
+						clientInformation: {
+							client_id: flow.clientId,
+						},
+						authorizationCode: Redacted.value(code),
+						...Rec.filter({ iss }, Predicate.isNotUndefined),
+						codeVerifier: Redacted.value(flow.verifier),
+						redirectUri: flow.redirectUri,
+						resource: flow.binding.resource,
+						fetchFn: fetch,
+					}),
+				catch: (error) =>
+					Schema.is(Network.NetworkError)(error)
+						? error
+						: AuthorizationError.make({
+								reason: "GrantRejected",
+								issue: "Authorization code exchange failed",
+								cause: error,
+							}),
+			})
+		}),
+	)
+	return yield* readTokens({
+		binding: flow.binding,
+		clientId: flow.clientId,
+		scopes: flow.scopes,
+		...(flow.resourceMetadataUrl === undefined
+			? {}
+			: { resourceMetadataUrl: flow.resourceMetadataUrl }),
+		tokens,
+	})
+})
+
+/** Call this only from the trusted callback handler of a standalone host. */
+export const complete = Effect.fn("Authorization.complete")(
+	function* (options: {
+		readonly key: Store.ConnectionKey
+		readonly flowId: string
+		readonly callbackUrl: string
+	}) {
+		const store = yield* FlowStore
+		const flow = yield* store.get(options)
+		const connection = yield* AppConnections.usable(options.key)
+		yield* validateCallback(connection, flow, options.callbackUrl)
+		// The standalone host has no durable call log. Its atomic claim prevents two exchanges.
 		return yield* Effect.uninterruptible(
 			store.consume(options).pipe(
-				Effect.andThen(exchange),
-				Effect.flatMap((tokens) =>
-					saveTokens({
-						binding: flow.binding,
-						clientId: flow.clientId,
-						scopes: flow.scopes,
-						...(flow.resourceMetadataUrl === undefined
-							? {}
-							: { resourceMetadataUrl: flow.resourceMetadataUrl }),
-						tokens,
-						// A new grant can be for another account or other scopes.
-						reconnect: true,
-					}),
+				Effect.andThen(
+					redeem({ connection, flow, callbackUrl: options.callbackUrl }),
+				),
+				Effect.flatMap((grant) =>
+					install({ grant, scopes: flow.scopes, reconnect: true }),
 				),
 			),
 		)
 	},
 )
+
+/** A refresh can rotate its token. A durable host must record this call before sending it. */
+export const renew = Effect.fn("Authorization.renew")(function* (options: {
+	readonly connection: Store.UserConnection
+	readonly credential: Store.Credential
+	readonly metadata: ServerMetadata
+	readonly resourceMetadataUrl?: string
+}) {
+	const { connection, credential, metadata } = options
+	yield* enabled(connection)
+	const { clientId, refreshToken, binding } = credential
+	if (
+		clientId === undefined ||
+		refreshToken === undefined ||
+		connection.owner !== binding.owner ||
+		connection.connectionId !== binding.connectionId ||
+		connection.endpoint !== binding.resource ||
+		metadata.issuer !== binding.issuer
+	)
+		return yield* AuthorizationError.make({
+			reason: "RefreshUnavailable",
+			issue: "Refresh grant does not match the connection",
+		})
+
+	const tokens = yield* Effect.scoped(
+		Effect.gen(function* () {
+			const fetch = yield* Sdk.fetch({ documents: true })
+			return yield* Effect.tryPromise({
+				try: () =>
+					Mcp.refreshAuthorization(credential.binding.issuer, {
+						metadata: sdkMetadata(metadata),
+						clientInformation: {
+							client_id: clientId,
+						},
+						refreshToken: Redacted.value(refreshToken),
+						resource: connection.endpoint,
+						fetchFn: fetch,
+					}),
+				catch: (error) =>
+					Schema.is(Network.NetworkError)(error)
+						? error
+						: AuthorizationError.make({
+								reason: "RefreshFailed",
+								issue: "Refresh grant was rejected",
+								cause: error,
+							}),
+			})
+		}),
+	)
+	return yield* readTokens({
+		binding,
+		clientId,
+		scopes: credential.scopes,
+		...(options.resourceMetadataUrl === undefined
+			? {}
+			: { resourceMetadataUrl: options.resourceMetadataUrl }),
+		tokens: {
+			...tokens,
+			refresh_token: tokens.refresh_token ?? Redacted.value(refreshToken),
+		},
+	})
+})
 
 export const refresh = Effect.fn("Authorization.refresh")(function* (
 	key: Store.ConnectionKey,
@@ -729,54 +875,78 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 			? {}
 			: { resourceMetadataUrl: auth.resourceMetadataUrl }),
 	})
-	const exchange = Effect.scoped(
-		Effect.gen(function* () {
-			const fetch = yield* Sdk.fetch({ documents: true })
-			return yield* Effect.tryPromise({
-				try: () =>
-					Mcp.refreshAuthorization(auth.binding.issuer, {
-						metadata: sdkMetadata(metadata),
-						clientInformation: {
-							client_id: clientId,
-						},
-						refreshToken: Redacted.value(refreshToken),
-						resource: connection.endpoint,
-						fetchFn: fetch,
-					}),
-				catch: (error) =>
-					Schema.is(Network.NetworkError)(error)
-						? error
-						: AuthorizationError.make({
-								reason: "RefreshFailed",
-								issue: "Refresh grant was rejected",
-								cause: error,
-							}),
-			})
-		}),
-	)
-	// The server can rotate the refresh token, and then the old one stops working
-	// when the server answers. If the request stops before the save, only the dead
-	// token stays, so nothing can interrupt these steps. Each request has a time limit.
+	// A standalone host saves a rotated grant before releasing its caller.
 	return yield* Effect.uninterruptible(
-		exchange.pipe(
-			Effect.flatMap((tokens) =>
-				saveTokens({
-					binding: auth.binding,
-					clientId,
-					scopes: credential.scopes,
-					...(auth.resourceMetadataUrl === undefined
-						? {}
-						: { resourceMetadataUrl: auth.resourceMetadataUrl }),
-					tokens: {
-						...tokens,
-						refresh_token: tokens.refresh_token ?? Redacted.value(refreshToken),
-					},
-					reconnect: false,
-				}),
+		renew({
+			connection,
+			credential,
+			metadata,
+			...(auth.resourceMetadataUrl === undefined
+				? {}
+				: { resourceMetadataUrl: auth.resourceMetadataUrl }),
+		}).pipe(
+			Effect.flatMap((grant) =>
+				install({ grant, scopes: credential.scopes, reconnect: false }),
 			),
 		),
 	)
 })
+
+/** Revoke this exact grant. Repeating the same request is safe. */
+export const revokeCredential = Effect.fn("Authorization.revokeCredential")(
+	function* (options: {
+		readonly credential: Store.Credential
+		readonly metadata: ServerMetadata
+	}) {
+		const { credential, metadata } = options
+		if (metadata.issuer !== credential.binding.issuer)
+			return yield* AuthorizationError.make({
+				reason: "Metadata",
+				issue: "Revocation issuer does not match the grant",
+			})
+
+		const endpoint = metadata.revocation_endpoint
+		const clientId = credential.clientId
+		if (endpoint === undefined || clientId === undefined)
+			return { _tag: "LocalOnly" } as const
+		const network = yield* Network.Network
+		yield* Effect.scoped(
+			Effect.gen(function* () {
+				const response = yield* network.execute(
+					HttpClientRequest.post(endpoint).pipe(
+						HttpClientRequest.bodyUrlParams({
+							token: Redacted.value(
+								credential.refreshToken ?? credential.accessToken,
+							),
+							token_type_hint:
+								credential.refreshToken === undefined
+									? "access_token"
+									: "refresh_token",
+							client_id: clientId,
+						}),
+					),
+				)
+				if (response.status !== 200)
+					return yield* AuthorizationError.make({
+						reason: "RevocationFailed",
+						issue: "Authorization server did not confirm revocation",
+					})
+			}),
+		).pipe(
+			Effect.timeoutOrElse({
+				duration: 10_000,
+				orElse: () =>
+					Effect.fail(
+						AuthorizationError.make({
+							reason: "RevocationFailed",
+							issue: "Authorization revocation timed out",
+						}),
+					),
+			}),
+		)
+		return { _tag: "Revoked" } as const
+	},
+)
 
 export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 	key: Store.ConnectionKey,
@@ -799,45 +969,7 @@ export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 						? {}
 						: { resourceMetadataUrl: auth.resourceMetadataUrl }),
 				})
-				const endpoint = metadata.revocation_endpoint
-				const clientId = credential.clientId
-				if (endpoint === undefined || clientId === undefined) return local
-				const network = yield* Network.Network
-				yield* Effect.scoped(
-					Effect.gen(function* () {
-						const response = yield* network.execute(
-							HttpClientRequest.post(endpoint).pipe(
-								HttpClientRequest.bodyUrlParams({
-									token: Redacted.value(
-										credential.refreshToken ?? credential.accessToken,
-									),
-									token_type_hint:
-										credential.refreshToken === undefined
-											? "access_token"
-											: "refresh_token",
-									client_id: clientId,
-								}),
-							),
-						)
-						if (response.status !== 200)
-							return yield* AuthorizationError.make({
-								reason: "RevocationFailed",
-								issue: "Authorization server did not confirm revocation",
-							})
-					}),
-				).pipe(
-					Effect.timeoutOrElse({
-						duration: 10_000,
-						orElse: () =>
-							Effect.fail(
-								AuthorizationError.make({
-									reason: "RevocationFailed",
-									issue: "Authorization revocation timed out",
-								}),
-							),
-					}),
-				)
-				return { _tag: "Revoked" } as const
+				return yield* revokeCredential({ credential, metadata })
 			}),
 		),
 		Match.orElse(() => Effect.succeed(local)),

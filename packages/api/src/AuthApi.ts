@@ -1,5 +1,6 @@
+import { ReturnTo } from "@openbot-build/domain"
 import { SettingsUnavailable } from "./SettingsErrors.ts"
-import { Context, Redacted, Schema, String as Str } from "effect"
+import { Context, Redacted, Schema } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
@@ -9,7 +10,6 @@ import {
 } from "effect/http-api"
 import { Email } from "./Email.ts"
 import { Account, Identity } from "./Identity.ts"
-import { RoleId } from "./Roles.ts"
 
 export const SessionCookie = "__Host-openbot-session"
 /** Better Auth keeps the sign-in state in this cookie during an OpenID Connect round trip. */
@@ -20,29 +20,7 @@ export const AuthBasePath = "/auth"
  * A same-origin path to return to after a browser sign-in or authorization round trip.
  * OpenBot serves no pages. A client on the same origin owns these paths.
  */
-export const ReturnTo = Schema.String.check(
-	Schema.isMaxLength(4096),
-	Schema.makeFilter(
-		(value) => {
-			if (
-				!Str.startsWith("/")(value) ||
-				Str.startsWith("//")(value) ||
-				/[\\\r\n]/.test(value)
-			)
-				return false
-			const url = URL.parse(value, "https://return.invalid")
-			return (
-				url !== null &&
-				url.origin === "https://return.invalid" &&
-				!/^\/(?:auth|v1|development)(?:\/|$)/.test(url.pathname)
-			)
-		},
-		{
-			message:
-				"Expected a path on this origin that starts with one /, has no \\ or line break, and is not under /auth, /v1 or /development",
-		},
-	),
-)
+export { ReturnTo } from "@openbot-build/domain"
 export class AuthenticationRequired extends Schema.TaggedError<
 	AuthenticationRequired,
 	{ readonly brand: unique symbol }
@@ -68,14 +46,8 @@ export class OrganizationRequired extends Schema.TaggedError<
 	OrganizationRequired,
 	{ readonly brand: unique symbol }
 >()("OrganizationRequired", {}) {}
-/** The caller sent more requests in this minute than the platform allows. */
-export class RateLimited extends Schema.TaggedError<
-	RateLimited,
-	{ readonly brand: unique symbol }
->()("RateLimited", {
-	/** Wait this many seconds before the next request. */
-	retryAfterSeconds: Schema.Int,
-}) {}
+import { RateLimited } from "@openbot-build/domain/Billing"
+export { RateLimited } from "@openbot-build/domain/Billing"
 /** The organization that a request with the session cookie acts in. Tokens belong to one organization, so they ignore it. */
 export const OrganizationHeader = "openbot-organization"
 export const AuthErrors = [
@@ -83,27 +55,8 @@ export const AuthErrors = [
 	MembershipRequired.pipe(HttpApiSchema.status(403)),
 	AuthenticationUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
-/** One organization of the signed-in account. */
-export const Membership = Schema.Struct({
-	organizationId: Schema.String,
-	name: Schema.String,
-	status: Schema.Literals(["active", "suspended"]),
-	roles: Schema.Array(RoleId),
-})
-export type Membership = typeof Membership.Type
-export const SessionInfo = Schema.Struct({
-	userId: Schema.String,
-	profile: Schema.Struct({
-		name: Schema.optionalKey(Schema.String),
-		email: Schema.optionalKey(Schema.String),
-		emailVerified: Schema.optionalKey(Schema.Boolean),
-	}),
-	/** The organizations of the account. Send one ID in the `OpenBot-Organization` header. */
-	memberships: Schema.Array(Membership),
-	/** A platform admin can use `/v1/platform`. */
-	platformAdmin: Schema.Boolean,
-	expiresAt: Schema.String,
-})
+import { SessionInfo } from "@openbot-build/domain/Accounts"
+export { Membership, SessionInfo } from "@openbot-build/domain/Accounts"
 export class AuthSession extends Context.Service<
 	AuthSession,
 	{

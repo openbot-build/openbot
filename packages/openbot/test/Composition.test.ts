@@ -1,9 +1,16 @@
+import type { Observation } from "../src/execution/Observation.ts"
+import type { Store } from "../src/execution/Store.ts"
+import type { Directory } from "../src/resources/Directory.ts"
+import type { Access } from "../src/execution/Send.ts"
+import type { Transport } from "../src/resources/Transport.ts"
+import type { Records } from "../src/errors/Records.ts"
+import type { Registry } from "../src/execution/Engine.ts"
+import type { SqlClient } from "effect/sql"
 import { assert, it } from "@effect/vitest"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	type Crypto,
 	Effect,
-	type FileSystem,
 	type Layer,
 	Redacted,
 	String as Str,
@@ -19,31 +26,38 @@ import type { Settings } from "../src/settings/Settings.ts"
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 
 /** The services that `OpenBot.layerShared` gives. */
-type Shared = PgClient.PgClient | Settings | Secrets
+type ExecutionServices =
+	Access | Transport | Directory | Store | Observation | Registry
+
+type Shared =
+	PgClient.PgClient | SqlClient.SqlClient | Settings | Secrets | Records
 
 /** The platform services, such as those of `NodeServices.layer` and `FetchHttpClient.layer`. */
-type Platform = Crypto.Crypto | FileSystem.FileSystem | HttpClient.HttpClient
+type Platform = Crypto.Crypto | HttpClient.HttpClient
 
 const options = {
 	databaseUrl: Redacted.make("postgresql://unused"),
+	clusterSecret: Redacted.make(
+		"test-cluster-secret-with-at-least-32-characters",
+	),
 	secretKeys: Redacted.make("test:" + Str.repeat(32)("11")),
 	host: "127.0.0.1",
 	port: 0,
 }
 
 it.effect(
-	"OpenBot asks for the services from outside, the tools of the host, the shared services and the platform services, and for nothing else",
+	"OpenBot asks for the outside, execution, shared and platform services",
 	() =>
 		Effect.sync(() => {
 			const app = OpenBot.layer(options)
 			const needs: Same<
 				Layer.Services<typeof app>,
-				OpenBot.Outside | HostTools | Shared | Platform
+				OpenBot.Outside | Shared | Platform | ExecutionServices
 			> = true
 			const live = OpenBot.layerLive(options)
 			const liveNeeds: Same<
 				Layer.Services<typeof live>,
-				Shared | Platform
+				Shared | Platform | ExecutionServices
 			> = true
 			const outside = OpenBot.layerOutside
 			const outsideGives: Same<
@@ -52,7 +66,7 @@ it.effect(
 			> = true
 			const outsideNeeds: Same<
 				Layer.Services<typeof outside>,
-				HttpClient.HttpClient
+				HttpClient.HttpClient | Records
 			> = true
 			assert.deepStrictEqual(
 				[needs, liveNeeds, outsideGives, outsideNeeds],
@@ -75,7 +89,12 @@ it.effect(
 			const customNeeds: Same<
 				Exclude<
 					Layer.Services<typeof custom>,
-					OpenBot.Outside | HostTools | Shared | HttpClient.HttpClient
+					| OpenBot.Outside
+					| HostTools
+					| Shared
+					| HttpClient.HttpClient
+					| Crypto.Crypto
+					| SqlClient.SqlClient
 				>,
 				never
 			> = true

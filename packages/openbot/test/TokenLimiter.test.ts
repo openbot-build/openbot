@@ -44,15 +44,12 @@ const call = (n: number) =>
 		providerExecuted: false,
 	})
 const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
-	Effect.succeed((next, options) =>
-		next({
-			...options,
-			toolkit: Effect.map(options.toolkit, (current) =>
-				Toolkit.merge(current, tools),
-			),
-			instructions: Prompt.concat(options.instructions, [
-				{ role: "system", content: "Use Echo" },
-			]),
+	Effect.map(
+		Effect.context<Tool.HandlersFor<typeof tools.tools>>(),
+		(handlers) => ({
+			tools: tools.tools,
+			handlers,
+			instructions: Prompt.make([{ role: "system", content: "Use Echo" }]),
 		}),
 	),
 )

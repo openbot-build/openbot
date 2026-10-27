@@ -1,10 +1,10 @@
 import type {
-	BotsApi,
+	BotSharing as BotSharingModel,
 	Roles,
-	AuthApi,
-	OrganizationApi,
-	PlatformApi,
-} from "@openbot-build/api"
+	Accounts as AccountsModel,
+	Organizations as OrganizationsModel,
+	Platform as PlatformModel,
+} from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Context,
@@ -58,21 +58,21 @@ export class Organization extends Context.Service<
 			account: Account,
 			only: Option.Option<string>,
 		) => Effect.Effect<
-			ReadonlyArray<AuthApi.Membership>,
+			ReadonlyArray<AccountsModel.Membership>,
 			OrganizationUnavailable
 		>
 		/** The organizations of an account, with the status of each membership. */
 		readonly memberships: (
 			userId: string,
 		) => Effect.Effect<
-			ReadonlyArray<AuthApi.Membership>,
+			ReadonlyArray<AccountsModel.Membership>,
 			OrganizationUnavailable
 		>
 		readonly member: (
 			organizationId: string,
 			userId: string,
 		) => Effect.Effect<
-			Option.Option<OrganizationApi.Member>,
+			Option.Option<OrganizationsModel.Member>,
 			OrganizationUnavailable
 		>
 		/** The member, only when both the member and the organization are active. */
@@ -80,13 +80,13 @@ export class Organization extends Context.Service<
 			organizationId: string,
 			userId: string,
 		) => Effect.Effect<
-			Option.Option<OrganizationApi.Member>,
+			Option.Option<OrganizationsModel.Member>,
 			OrganizationUnavailable
 		>
 		readonly get: (
 			organizationId: string,
 		) => Effect.Effect<
-			Option.Option<OrganizationApi.Organization>,
+			Option.Option<OrganizationsModel.Organization>,
 			OrganizationUnavailable
 		>
 		/** Every organization of the platform, for platform admins. */
@@ -94,38 +94,41 @@ export class Organization extends Context.Service<
 			readonly after?: string
 			readonly limit: number
 		}) => Effect.Effect<
-			Page<OrganizationApi.Organization>,
+			Page<OrganizationsModel.Organization>,
 			OrganizationUnavailable
 		>
 		/** Creates an organization. The owner becomes its Super Administrator. */
 		readonly create: (input: {
 			readonly name: string
 			readonly owner: Account
-		}) => Effect.Effect<OrganizationApi.Organization, OrganizationUnavailable>
+		}) => Effect.Effect<
+			OrganizationsModel.Organization,
+			OrganizationUnavailable
+		>
 		readonly update: (
 			organizationId: string,
-			patch: OrganizationApi.UpdateOrganizationRequest,
-		) => Effect.Effect<OrganizationApi.Organization, OrganizationUnavailable>
+			patch: OrganizationsModel.UpdateOrganizationRequest,
+		) => Effect.Effect<OrganizationsModel.Organization, OrganizationUnavailable>
 		readonly setStatus: (
 			organizationId: string,
-			status: OrganizationApi.Organization["status"],
+			status: OrganizationsModel.Organization["status"],
 		) => Effect.Effect<
-			OrganizationApi.Organization,
-			PlatformApi.OrganizationNotFound | OrganizationUnavailable
+			OrganizationsModel.Organization,
+			PlatformModel.OrganizationNotFound | OrganizationUnavailable
 		>
 		readonly listMembers: (
 			organizationId: string,
 			options: { readonly after?: string; readonly limit: number },
-		) => Effect.Effect<Page<OrganizationApi.Member>, OrganizationUnavailable>
+		) => Effect.Effect<Page<OrganizationsModel.Member>, OrganizationUnavailable>
 		/** Fails with LastSuperAdministrator when no active Super Administrator would be left. */
 		readonly updateMember: (
 			organizationId: string,
 			userId: string,
-			patch: OrganizationApi.UpdateMemberRequest,
+			patch: OrganizationsModel.UpdateMemberRequest,
 		) => Effect.Effect<
-			OrganizationApi.Member,
-			| OrganizationApi.MemberNotFound
-			| OrganizationApi.LastSuperAdministrator
+			OrganizationsModel.Member,
+			| OrganizationsModel.MemberNotFound
+			| OrganizationsModel.LastSuperAdministrator
 			| OrganizationUnavailable
 		>
 		/** Removes the member and their tokens. */
@@ -134,16 +137,16 @@ export class Organization extends Context.Service<
 			userId: string,
 		) => Effect.Effect<
 			void,
-			| OrganizationApi.MemberNotFound
-			| OrganizationApi.LastSuperAdministrator
+			| OrganizationsModel.MemberNotFound
+			| OrganizationsModel.LastSuperAdministrator
 			| OrganizationUnavailable
 		>
 		/** The invitations of an organization, newest first. */
 		readonly listInvitations: (
 			organizationId: string,
-			status?: OrganizationApi.InvitationStatus,
+			status?: OrganizationsModel.InvitationStatus,
 		) => Effect.Effect<
-			ReadonlyArray<OrganizationApi.Invitation>,
+			ReadonlyArray<OrganizationsModel.Invitation>,
 			OrganizationUnavailable
 		>
 		/**
@@ -156,24 +159,24 @@ export class Organization extends Context.Service<
 			readonly roles: ReadonlyArray<Roles.RoleId>
 			readonly invitedBy: string
 		}) => Effect.Effect<
-			OrganizationApi.Invitation,
-			OrganizationApi.InvitationInvalid | OrganizationUnavailable
+			OrganizationsModel.Invitation,
+			OrganizationsModel.InvitationInvalid | OrganizationUnavailable
 		>
 		/** Takes back a pending invitation. */
 		readonly revokeInvitation: (
 			organizationId: string,
 			invitationId: string,
 		) => Effect.Effect<
-			OrganizationApi.Invitation,
-			| OrganizationApi.InvitationNotFound
-			| OrganizationApi.InvitationInvalid
+			OrganizationsModel.Invitation,
+			| OrganizationsModel.InvitationNotFound
+			| OrganizationsModel.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/** The pending invitations for the verified email of a user. */
 		readonly invitationsFor: (
 			userId: string,
 		) => Effect.Effect<
-			ReadonlyArray<OrganizationApi.Invitation>,
+			ReadonlyArray<OrganizationsModel.Invitation>,
 			OrganizationUnavailable
 		>
 		/**
@@ -186,18 +189,18 @@ export class Organization extends Context.Service<
 			invitationId: string,
 			answer: "accepted" | "declined",
 		) => Effect.Effect<
-			OrganizationApi.Invitation,
-			| OrganizationApi.InvitationNotFound
-			| OrganizationApi.InvitationInvalid
+			OrganizationsModel.Invitation,
+			| OrganizationsModel.InvitationNotFound
+			| OrganizationsModel.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/** The invitations to use one Bot of an organization, newest first. */
 		readonly listBotInvitations: (
 			organizationId: string,
 			bot: string,
-			status?: OrganizationApi.InvitationStatus,
+			status?: OrganizationsModel.InvitationStatus,
 		) => Effect.Effect<
-			ReadonlyArray<BotsApi.BotInvitation>,
+			ReadonlyArray<BotSharingModel.BotInvitation>,
 			OrganizationUnavailable
 		>
 		/**
@@ -213,8 +216,8 @@ export class Organization extends Context.Service<
 			readonly path?: string
 			readonly invitedBy: string
 		}) => Effect.Effect<
-			BotsApi.BotInvitation,
-			OrganizationApi.InvitationInvalid | OrganizationUnavailable
+			BotSharingModel.BotInvitation,
+			OrganizationsModel.InvitationInvalid | OrganizationUnavailable
 		>
 		/** One invitation to use a Bot, with the secret of a link. */
 		readonly botInvitation: (
@@ -223,19 +226,19 @@ export class Organization extends Context.Service<
 			invitationId: string,
 		) => Effect.Effect<
 			{
-				readonly invitation: BotsApi.BotInvitation
+				readonly invitation: BotSharingModel.BotInvitation
 				readonly link: LinkSecret | null
 			},
-			OrganizationApi.InvitationNotFound | OrganizationUnavailable
+			OrganizationsModel.InvitationNotFound | OrganizationUnavailable
 		>
 		readonly revokeBotInvitation: (
 			organizationId: string,
 			bot: string,
 			invitationId: string,
 		) => Effect.Effect<
-			BotsApi.BotInvitation,
-			| OrganizationApi.InvitationNotFound
-			| OrganizationApi.InvitationInvalid
+			BotSharingModel.BotInvitation,
+			| OrganizationsModel.InvitationNotFound
+			| OrganizationsModel.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/**
@@ -254,8 +257,8 @@ export class Organization extends Context.Service<
 				readonly organizationId: string
 				readonly bot: string
 			},
-			| OrganizationApi.InvitationNotFound
-			| OrganizationApi.InvitationInvalid
+			| OrganizationsModel.InvitationNotFound
+			| OrganizationsModel.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/** Whether a member or the default roles use a role. */

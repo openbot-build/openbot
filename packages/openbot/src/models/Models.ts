@@ -1,5 +1,5 @@
 import { Model } from "@openbot-build/core"
-import type { ModelProvidersApi } from "@openbot-build/api"
+import type { Models as ModelsModel } from "@openbot-build/domain"
 import { Context, DateTime, type Effect, type Option } from "effect"
 import type { Owner } from "./ModelProviders.ts"
 
@@ -7,24 +7,24 @@ import type { Owner } from "./ModelProviders.ts"
 export interface StoredModel {
 	readonly owner: Owner
 	readonly id: string
-	readonly type: ModelProvidersApi.ModelType
+	readonly type: ModelsModel.ModelType
 	readonly name: string
 	readonly reasoningEfforts: ReadonlyArray<string>
 	readonly serviceTiers: ReadonlyArray<string>
 	readonly contextWindow: number | null
 	readonly maxOutputTokens: number | null
-	readonly availability: ModelProvidersApi.Availability | null
+	readonly availability: ModelsModel.Availability | null
 	readonly version: number
 	readonly createdAt: number
 	readonly updatedAt: number
 }
 
 export type Errors =
-	| ModelProvidersApi.ModelNotFound
-	| ModelProvidersApi.ModelConflict
-	| ModelProvidersApi.ModelInUse
-	| ModelProvidersApi.ModelProviderInvalid
-	| ModelProvidersApi.ModelProvidersUnavailable
+	| ModelsModel.ModelNotFound
+	| ModelsModel.ModelConflict
+	| ModelsModel.ModelInUse
+	| ModelsModel.ModelProviderInvalid
+	| ModelsModel.ModelProvidersUnavailable
 
 /** The models of the platform and of each organization. */
 export class Models extends Context.Service<
@@ -34,30 +34,30 @@ export class Models extends Context.Service<
 			owner: Owner,
 		) => Effect.Effect<
 			ReadonlyArray<StoredModel>,
-			ModelProvidersApi.ModelProvidersUnavailable
+			ModelsModel.ModelProvidersUnavailable
 		>
 		readonly get: (
 			owner: Owner,
 			id: string,
 		) => Effect.Effect<
 			Option.Option<StoredModel>,
-			ModelProvidersApi.ModelProvidersUnavailable
+			ModelsModel.ModelProvidersUnavailable
 		>
 		/** The models that an organization can use: its own, and the shared ones it may use. */
 		readonly available: (
 			organizationId: string,
 		) => Effect.Effect<
 			ReadonlyArray<StoredModel>,
-			ModelProvidersApi.ModelProvidersUnavailable
+			ModelsModel.ModelProvidersUnavailable
 		>
 		readonly create: (
 			owner: Owner,
-			input: ModelProvidersApi.CreatePlatformModelRequest,
+			input: ModelsModel.CreatePlatformModelRequest,
 		) => Effect.Effect<StoredModel, Errors>
 		readonly update: (
 			owner: Owner,
 			id: string,
-			patch: ModelProvidersApi.UpdatePlatformModelRequest,
+			patch: ModelsModel.UpdatePlatformModelRequest,
 		) => Effect.Effect<StoredModel, Errors>
 		/**
 		 * A provider of the same owner that links the model stops the delete.
@@ -78,7 +78,7 @@ export const modelKey = ({
 }) => [owner.kind, owner.kind === "platform" ? "" : owner.id, id] as const
 
 /** The API form. */
-export const view = (model: StoredModel): ModelProvidersApi.Model => ({
+export const view = (model: StoredModel): ModelsModel.Model => ({
 	id: Model.Id.make(model.id),
 	owner: model.owner.kind,
 	type: model.type,
@@ -103,7 +103,7 @@ export const effective = ({
 	link,
 }: {
 	readonly model: StoredModel
-	readonly link: ModelProvidersApi.ProviderModel
+	readonly link: ModelsModel.ProviderModel
 }) => ({
 	id: Model.Id.make(model.id),
 	owner: model.owner.kind,

@@ -1,0 +1,55 @@
+---
+prev: false
+title: "Administrator manual"
+description: "Administrator manual"
+---
+
+This manual is for people who manage an organization or run the OpenBot service.
+OpenBot is headless. Management tasks use its API or tools. API examples here
+are part of the management task.
+
+## Choose your responsibility
+
+| Role                       | Responsibility                                                           | Required access                                   |
+| -------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------- |
+| Organization administrator | Members, roles, models, budgets, and shared services in one organization | The rights named on each page                     |
+| Platform administrator     | Platform settings, shared providers, and organization policy limits      | Platform admin rights                             |
+| Server operator            | Install, update, back up, and monitor the service                        | Access to the server, database, storage, and keys |
+
+An organization role does not give platform rights. Server access and platform
+API rights are separate. If a task needs another role, hand it to the person who
+holds that role.
+
+## Manage an organization
+
+1. Read [organizations and members](/docs/organization) and
+   [permissions](/docs/permissions).
+2. Set up [SSO and domains](/docs/sso) if your organization uses its own sign-in
+   provider.
+3. Add [models and providers](/docs/models), then set
+   [prices and budgets](/docs/usage).
+4. Connect [Channels](/docs/admin/channels),
+   [Computer providers](/docs/admin/computer-providers), or
+   [secret providers](/docs/admin/secret-providers) as needed.
+5. Give members the client address and the [user manual](/docs/users).
+
+## Run the platform
+
+1. Read [deployment](/docs/deploy) and
+   [instance configuration](/docs/configuration).
+2. Set up the [platform](/docs/platform) and
+   [sign-in provider](/docs/admin/sign-in).
+3. Set up [file storage](/docs/admin/file-storage),
+   [Live models](/docs/admin/live-models), and
+   [Code Mode](/docs/admin/code-mode) when needed.
+4. Set [App Index restrictions](/docs/admin/app-index), and
+   [pair machines](/docs/admin/pair-computer) that you operate.
+5. Use the [backup steps](/docs/deploy#backups) and
+   [error logs](/docs/error-logs) for ongoing service work.
+
+## Handle a problem
+
+Check which organization and account the problem affects. Check membership,
+rights, and model availability first. A server failure belongs to the operator.
+Include its time and request ID so the operator can find the log. Keep source
+changes in the [developer manual](/docs/developers).

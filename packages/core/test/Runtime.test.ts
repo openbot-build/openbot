@@ -9,13 +9,21 @@ import {
 	Layer,
 	Option,
 	Order,
+	Ref,
 	pipe,
 	Schema,
 	Stream,
 } from "effect"
-import { AiError, Response, Tool, Toolkit } from "effect/ai"
-import { Bot, Chat, ChatState } from "@openbot-build/core"
-import { ChatTest } from "./ChatTest.ts"
+import { AiError, Response, Tool, Toolkit, Prompt } from "effect/ai"
+import {
+	Bot,
+	Chat,
+	ChatState,
+	Item,
+	Plugin,
+	PluginComposition,
+} from "@openbot-build/core"
+import { ChatTest, settled } from "./ChatTest.ts"
 import { LanguageModelTest, finish, textParts } from "./LanguageModelTest.ts"
 
 it.effect("execute saves the input and the completed Turn", () => {
@@ -305,4 +313,254 @@ it.effect(
 			),
 		)
 	},
+)
+
+for (const reason of [
+	"length",
+	"content-filter",
+	"unknown",
+	"other",
+] as const) {
+	it.effect(
+		`a model finish with ${reason} saves a failed tool result without running the tool`,
+		() =>
+			Effect.gen(function* () {
+				const calls = yield* Ref.make(0)
+				const { runtime, runtimeStore, chat } = yield* ChatTest({
+					toolkit: tools,
+				}).pipe(
+					Effect.provide(
+						tools.toLayer({
+							Echo: () =>
+								Ref.update(calls, (n) => n + 1).pipe(Effect.as("must not run")),
+						}),
+					),
+				)
+				yield* runtime.execute({ chat, input: "Run the tool" })
+				assert.strictEqual(yield* Ref.get(calls), 0)
+				const parts = Arr.flatMap(yield* runtimeStore.items(chat), (item) =>
+					Arr.flatMap(item.content.content, (message) =>
+						message.role === "tool" ? message.content : [],
+					),
+				)
+				const result = Arr.findFirst(
+					parts,
+					(part) => part.type === "tool-result",
+				)
+				assert.ok(Option.isSome(result))
+				assert.ok(result.value.type === "tool-result")
+				assert.isTrue(result.value.isFailure)
+			}).pipe(
+				Effect.provide(
+					LanguageModelTest({
+						streamText: ({ prompt }) =>
+							Arr.some(prompt.content, (message) => message.role === "tool")
+								? Stream.fromArray(textParts("The call did not run"))
+								: Stream.make(
+										Response.makePart("tool-call", {
+											id: "call",
+											name: "Echo",
+											params: { text: "write" },
+											providerExecuted: false,
+										}),
+										finish(reason),
+									),
+					}),
+				),
+			),
+	)
+}
+
+it.effect(
+	"a failed model stream keeps results from tools run by the provider",
+	() =>
+		Effect.gen(function* () {
+			const remote = Tool.providerDefined({
+				id: "test.lookup",
+				customName: "remote_lookup",
+				providerName: "remote_lookup",
+				args: Schema.Struct({}),
+				parameters: Schema.Struct({}),
+				success: Schema.Struct({ text: Schema.String }),
+			})({})
+			const { runtime, runtimeStore, chat } = yield* ChatTest({
+				toolkit: Toolkit.make(remote),
+			})
+			const exit = yield* Effect.exit(
+				runtime.execute({ chat, input: "Read the note" }),
+			)
+			assert.isTrue(Exit.isFailure(exit))
+			assert.deepStrictEqual(Exit.findErrorOption(exit), Option.some(failure))
+			const items = yield* runtimeStore.items(chat)
+			const results = Arr.flatMap(items, (item) =>
+				Arr.flatMap(item.content.content, (message) =>
+					message.role === "tool" || message.role === "assistant"
+						? Arr.flatMap(
+								message.content,
+								(part: Prompt.AssistantMessagePart | Prompt.ToolMessagePart) =>
+									part.type === "tool-result" ? [part] : [],
+							)
+						: [],
+				),
+			)
+			assert.strictEqual(results.length, 1)
+			assert.strictEqual(results[0]?.providerExecuted, true)
+			assert.deepStrictEqual(results[0]?.result, { text: "The saved note" })
+		}).pipe(
+			Effect.provide(
+				LanguageModelTest({
+					streamText: () =>
+						Stream.concat(
+							Stream.make(
+								Response.makePart("tool-call", {
+									id: "provider-call",
+									name: "remote_lookup",
+									params: {},
+									providerExecuted: true,
+								}),
+								Response.makePart("tool-result", {
+									id: "provider-call",
+									name: "remote_lookup",
+									result: { text: "The saved note" },
+									encodedResult: { text: "The saved note" },
+									isFailure: false,
+									preliminary: false,
+									providerExecuted: true,
+								}),
+							),
+							Stream.fail(failure),
+						),
+				}),
+			),
+		),
+)
+
+it.effect("a step check stops queued actions and later checks", () =>
+	Effect.gen(function* () {
+		const checks = yield* Ref.make<ReadonlyArray<string>>([])
+		const calls = yield* Ref.make(0)
+		const toolCalls = yield* Ref.make(0)
+		const check = (
+			name: string,
+			allowed: boolean,
+		): Plugin.Plugin<
+			typeof tools.tools,
+			never,
+			never,
+			never,
+			Tool.HandlersFor<typeof tools.tools>
+		> =>
+			Plugin.make({ id: Plugin.Id.make(name) })<
+				typeof tools.tools,
+				never,
+				never,
+				never,
+				Tool.HandlersFor<typeof tools.tools>
+			>(() =>
+				Effect.map(
+					Effect.context<Tool.HandlersFor<typeof tools.tools>>(),
+					(handlers) => ({
+						tools: tools.tools,
+						handlers,
+						beforeStep: ({ step, turn }) =>
+							Effect.gen(function* () {
+								yield* Ref.update(checks, Arr.append(name))
+								assert.equal(step, turn.steps + 1)
+								if (name === "first")
+									yield* runtimeStore
+										.modifyEffect({
+											chat: turn.chat,
+											update: (view) =>
+												Effect.succeed([
+													undefined,
+													Option.some({
+														chat: {
+															inbox: Arr.append(view.chat.inbox, {
+																id: Item.Id.make("queued-action"),
+																kind: "action",
+																turn: turn.id,
+																content: Prompt.empty,
+																action: {
+																	name: "Echo",
+																	arguments: { text: "queued" },
+																},
+															}),
+														},
+													}),
+												] as const),
+										})
+										.pipe(Effect.orDie)
+								return allowed
+							}),
+					}),
+				),
+			)
+		const { runtime, runtimeStore, chat } = yield* ChatTest({
+			plugin: PluginComposition.merge(
+				check("first", false),
+				check("second", true),
+			),
+		}).pipe(
+			Effect.provide(
+				tools.toLayer({
+					Echo: () =>
+						Ref.update(toolCalls, (n) => n + 1).pipe(Effect.as("done")),
+				}),
+			),
+		)
+		const events = yield* runtime.stream({ chat, input: "hello" }).pipe(
+			Stream.runCollect,
+			Effect.provide(
+				LanguageModelTest({
+					streamText: () =>
+						Stream.fromEffectDrain(Ref.update(calls, (n) => n + 1)),
+				}),
+			),
+		)
+		assert.deepEqual(yield* Ref.get(checks), ["first"])
+		assert.equal(yield* Ref.get(calls), 0)
+		assert.equal(yield* Ref.get(toolCalls), 0)
+		assert.equal(
+			Arr.some(events, (event) => event._tag === "ModelStepStarted"),
+			false,
+		)
+	}),
+)
+
+it.effect("a host action passes the step check before its tool runs", () =>
+	Effect.gen(function* () {
+		const calls = yield* Ref.make(0)
+		const kinds = yield* Ref.make<ReadonlyArray<string>>([])
+		const plugin = Plugin.make({ id: Plugin.Id.make("action-check") })<
+			typeof tools.tools,
+			never,
+			never,
+			never,
+			Tool.HandlersFor<typeof tools.tools>
+		>(() =>
+			Effect.map(
+				Effect.context<Tool.HandlersFor<typeof tools.tools>>(),
+				(handlers) => ({
+					tools: tools.tools,
+					handlers,
+					beforeStep: ({ kind }) =>
+						Ref.update(kinds, Arr.append(kind)).pipe(Effect.as(false)),
+				}),
+			),
+		)
+		const { runtime, chat } = yield* ChatTest({ plugin }).pipe(
+			Effect.provide(
+				tools.toLayer({
+					Echo: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as("done")),
+				}),
+			),
+		)
+		yield* runtime.startAction({
+			chat,
+			action: { name: "Echo", arguments: { text: "hello" } },
+		})
+		yield* settled(runtime, chat)
+		assert.deepEqual(yield* Ref.get(kinds), ["action"])
+		assert.equal(yield* Ref.get(calls), 0)
+	}),
 )

@@ -1,484 +1,385 @@
-import { assert, it, layer } from "@effect/vitest"
-import { ConnectionsApi as Api } from "@openbot-build/api"
-import { App, Client, Document, Network, Store } from "@openbot-build/protocol"
-import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { NodeServices } from "@effect/platform-node"
+import { PgClient } from "@effect/sql-pg"
+import { assert, layer } from "@effect/vitest"
+import { Authorizer, Policy } from "@nmnmcc/ability"
+import { ExecutionsApi } from "@openbot-build/api"
+import { Authorization, ConnectionId, Execution } from "@openbot-build/domain"
 import {
-	Array as Arr,
-	Crypto,
+	CatalogDiscovery,
+	Discovery,
+	Document,
+	Index,
+	Network,
+	PublicIndexing,
+	RobotsPolicy,
+} from "@openbot-build/protocol"
+import {
+	Cause,
 	Effect,
 	Layer,
-	type Redacted,
-	Scope,
+	Logger,
+	Redacted,
+	References,
+	Schema,
 	String as Str,
 } from "effect"
-import { HttpClientResponse, type HttpMethod } from "effect/http"
-import { SqlClient } from "effect/sql"
+import * as Commands from "../src/apps/ConnectionCommands.ts"
+import * as AppInspections from "../src/apps/AppInspections.ts"
+import { AppNetwork } from "../src/apps/AppHost.ts"
+import { Governance } from "../src/apps/Governance.ts"
+import { GrantCleanup } from "../src/apps/GrantCleanup.ts"
 import * as Lifecycle from "../src/apps/Lifecycle.ts"
-import * as Probe from "../src/apps/Probe.ts"
-import { AppHost, AppNetwork } from "../src/apps/AppHost.ts"
-import { ownerKey } from "../src/apps/StoredConnections.ts"
-import * as Caller from "./Caller.ts"
-import * as Fixture from "./AppFixture.ts"
-import * as BrowserHost from "./BrowserHost.ts"
+import * as ManualConnection from "../src/apps/ManualConnection.ts"
+import { Probe } from "../src/apps/Probe.ts"
+import * as Stored from "../src/apps/StoredConnections.ts"
+import * as Db from "../src/database/Database.ts"
+import * as Database from "../src/database/DatabasePostgres.ts"
+import { appConnections, appRecords } from "../src/database/Schema.ts"
+import * as Records from "../src/errors/Records.ts"
+import * as HttpErrors from "../src/execution/HttpErrors.ts"
+import * as Store from "../src/execution/Store.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
+import * as Postgres from "./PostgresTest.ts"
 
-const publicOrigin = "https://openbot.fixture.test"
-
-/**
- * Calls the API of the host as a signed-in browser. It reads the address for
- * each call, because a restart changes it.
- */
-const browser =
-	(host: BrowserHost.Host, session: Redacted.Redacted<string>) =>
-	(path: string, method: HttpMethod.HttpMethod, payload?: unknown) =>
-		Effect.flatMap(host.address, (address) =>
-			Caller.withCookie({ address, publicOrigin })(
-				session,
-				path,
-				method,
-				payload,
+const database = Layer.effectDiscard(Database.migrate).pipe(
+	Layer.provideMerge(
+		Layer.unwrap(
+			Effect.map(Postgres.start, (db) =>
+				Database.layer({ databaseUrl: Redacted.make(db.url) }),
 			),
-		)
-
-/** Opens an MCP client on a connection of a member. It closes when the test ends. */
-const openClient = (
-	host: BrowserHost.Host,
-	member: { readonly userId: string; readonly organizationId: string },
-	connectionId: string,
-	name: string,
-) =>
-	Effect.flatMap(Effect.scope, (scope) =>
-		host.run(
-			Effect.gen(function* () {
-				const app = (yield* AppHost).bind(
-					ownerKey(member),
-					Client.InvocationPolicy.of({ check: () => Effect.void }),
-				)
-				return yield* app.open({
-					key: { owner: ownerKey(member), connectionId },
-					clientInfo: { name, version: "1.0.0" },
-				})
-			}).pipe(Effect.provideService(Scope.Scope, scope)),
 		),
-	)
-
-it.effect(
-	"App host failures keep their meaning: a removed connection is not found and a bad declaration is invalid",
-	() =>
-		Effect.gen(function* () {
-			const failure = Lifecycle.hostFailure("removed")
-			const missing = yield* Effect.flip(
-				failure(
-					Store.StoreError.make({ reason: "Missing", operation: "Connection" }),
-				),
-			)
-			assert.ok(
-				missing._tag === "ExperienceNotFound" && missing.id === "removed",
-			)
-			const invalid = Api.ConnectionConfigurationInvalid.make({
-				keys: ["header:X-Account"],
-				message: "Give the account.",
-			})
-			assert.strictEqual(yield* Effect.flip(failure(invalid)), invalid)
-			const document = yield* Effect.flip(
-				failure(
-					Document.InvalidDocument.make({ kind: "Card", issue: "No name" }),
-				),
-			)
-			assert.strictEqual(document._tag, "ConnectionConfigurationInvalid")
-			const pending = yield* Effect.flip(
-				failure(
-					App.CleanupPending.make({
-						key: { owner: "owner", connectionId: "removed" },
-						stage: "Credentials",
+	),
+)
+const services = Layer.merge(Store.layer, Records.layer).pipe(
+	Layer.provideMerge(
+		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
+	),
+	Layer.provideMerge(database),
+	Layer.provideMerge(NodeServices.layer),
+)
+const actor = {
+	kind: "member",
+	organizationId: "lifecycle-org",
+	userId: "lifecycle-user",
+} as const
+const owner = Stored.ownerKey(actor)
+const manual = (id: string) => ({
+	id: ConnectionId.make(id),
+	name: "Test App",
+	url: "https://app.example/mcp",
+	transport: "streamable-http" as const,
+	headers: {},
+})
+const seed = Effect.fn(function* (
+	id: string,
+	state: "Enabled" | "CleanupPending" = "Enabled",
+) {
+	const db = yield* Db.make
+	const secrets = yield* Secrets.Secrets
+	const configured = yield* ManualConnection.configure(owner)(manual(id))
+	const connection: Stored.StoredConnection = {
+		name: "Test App",
+		revision: 0,
+		verification: null,
+		connection: { ...configured.connection, state },
+	}
+	yield* db.insert(appRecords).values({
+		owner,
+		cardUrl: configured.app.cardUrl,
+		body: yield* Schema.encodeEffect(Stored.appCodec)(configured.app),
+	})
+	yield* db.insert(appConnections).values({
+		owner,
+		id,
+		name: connection.name,
+		revision: 0,
+		body: yield* secrets.seal(
+			yield* Schema.encodeEffect(
+				Schema.fromJsonString(Schema.toCodecJson(Stored.StoredConnection)),
+			)(connection),
+			yield* Schema.encodeEffect(
+				Schema.fromJsonString(Schema.Array(Schema.String)),
+			)(["connection", owner, id]),
+		),
+	})
+	return { app: configured.app, connection }
+})
+const collectLogs = () => {
+	let lines: ReadonlyArray<unknown> = []
+	return {
+		lines: () => lines,
+		layer: Logger.layer([
+			Logger.make((log) => {
+				lines = [
+					...lines,
+					{
+						message: log.message,
+						cause: Cause.pretty(log.cause),
+						annotations: log.fiber.getRef(References.CurrentLogAnnotations),
+					},
+				]
+			}),
+		]),
+	}
+}
+const commands = Commands.layer.pipe(
+	Layer.provide(CatalogDiscovery.layerRules),
+	Layer.provide(
+		Authorizer.layer(Authorization.Auth, {
+			policy: () =>
+				Effect.succeed(
+					Policy.define(Authorization.OpenBot)(function* (_) {
+						yield* _.allow("*", "*")
 					}),
 				),
-			)
-			assert.ok(
-				pending._tag === "ConnectionCleanupPending" &&
-					pending.stage === "Credentials",
-			)
-			const storage = yield* Effect.flip(
-				failure(
-					Store.StoreError.make({
-						reason: "Unavailable",
-						operation: "Connection",
-					}),
-				),
-			)
-			assert.strictEqual(storage._tag, "ExperienceStorageUnavailable")
-			const network = yield* Effect.flip(
-				failure(
-					Network.NetworkError.make({
-						reason: "Timeout",
-						message: "No answer",
-					}),
-				),
-			)
-			assert.strictEqual(network._tag, "ExperienceStorageUnavailable")
 		}),
+	),
+	Layer.provide(Layer.mock(Governance, { check: () => Effect.void })),
+	Layer.provide(Layer.mock(GrantCleanup, {})),
 )
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(services, { excludeTestServices: true })((it) => {
 	it.effect(
-		"live connection management closes old clients, asks for review of changed targets, and resumes cleanup without calling business tools",
+		"connection commands keep missing, invalid and cleanup errors before accepting work",
 		() =>
 			Effect.gen(function* () {
-				const publisher = yield* Fixture.start()
-				const host = yield* BrowserHost.start({
-					publicOrigin,
-					discovery: publisher.discovery,
-					appProbe: publisher.probe,
-					appNetwork: Layer.succeed(AppNetwork, {
-						layer: (owner, origins) =>
-							NodeHttpServer.layerUserNetwork({
-								owner,
-								allowedOrigins: origins,
-								ca: publisher.ca,
-								allowAddress: (ip) => ip === "127.0.0.1",
-							}),
-					}),
+				const lifecycle = yield* Commands.ConnectionCommands
+				const safe = yield* HttpErrors.make
+				const sql = yield* PgClient.PgClient
+				const start = (id: string, action: Commands.Action) =>
+					lifecycle
+						.start(actor, id, action, Execution.CommandKey.make(id))
+						.pipe(safe, Effect.flip)
+				const missing = yield* start("removed", { _tag: "Verify" })
+				assert.propertyVal(missing, "_tag", "ExecutionNotFound")
+				assert.propertyVal(missing, "id", "removed")
+				yield* seed("cleanup", "CleanupPending")
+				const pending = yield* start("cleanup", { _tag: "Verify" })
+				assert.propertyVal(pending, "_tag", "ConnectionCleanupPending")
+				assert.propertyVal(pending, "connectionId", "cleanup")
+				assert.propertyVal(pending, "stage", "Connection")
+				yield* seed("headers")
+				const invalid = yield* start("headers", {
+					_tag: "Manual",
+					request: {
+						...manual("headers"),
+						revision: 0,
+						headers: { "X-Account": null },
+					},
 				})
-				const alice = yield* host.login("lifecycle-alice")
-				const bob = yield* host.login("lifecycle-bob")
-				const send = browser(host, alice.session)
-				const sendAsBob = browser(host, bob.session)
-				const prepare = Effect.gen(function* () {
-					const response = yield* send("/v1/connection-drafts", "POST", {
-						input: publisher.origin + "/card",
-					})
-					assert.strictEqual(response.status, 201)
-					return yield* HttpClientResponse.schemaBodyJson(Api.ConnectionDraft)(
-						response,
-					)
-				})
-				const draft = yield* prepare
-				const values = {
-					"header:X-Account": "Work",
-					"header:X-Secret": "lifecycle-private-configuration",
-				}
-				const added = yield* send("/v1/connections", "POST", {
-					draftId: draft.id,
-					revision: draft.revision,
-					cardUrl: publisher.origin + "/card",
-					remoteIndex: 0,
-					name: "Work documents",
-					values,
-					confirmed: true,
-				})
-				assert.strictEqual(added.status, 201)
-				const connection = yield* HttpClientResponse.schemaBodyJson(
-					Api.Connection,
-				)(added)
-				const path = "/v1/connections/" + connection.id
-				const verify = yield* send(path + "/verify", "POST")
-				assert.strictEqual(verify.status, 200, yield* verify.text)
-				const verified = yield* HttpClientResponse.schemaBodyJson(
-					Api.Verification,
-				)(verify)
-				assert.strictEqual(verified._tag, "Verified")
-				assert.ok(verified._tag === "Verified")
-				assert.strictEqual(
-					verified.capabilities.connection.availability._tag,
-					"Available",
+				assert.propertyVal(invalid, "_tag", "ConnectionConfigurationInvalid")
+				assert.deepInclude(invalid, { keys: ["header:X-Account"] })
+				const declaration = yield* ManualConnection.configure(owner)({
+					...manual("bad-declaration"),
+					url: "not a public address",
+				}).pipe(Effect.flip)
+				assert.equal(declaration._tag, "ConnectionConfigurationInvalid")
+				assert.deepEqual(
+					yield* sql`select id from openbot_executions where namespace = ${owner}`,
+					[],
 				)
-				assert.deepStrictEqual(verified.capabilities.tools, [])
-				assert.strictEqual(
-					Str.includes(values["header:X-Secret"])(yield* verify.text),
-					false,
+				assert.deepEqual(
+					yield* sql`select execution_id from openbot_app_connections where owner = ${owner} and execution_id is not null`,
+					[],
 				)
-				const client = yield* openClient(
-					host,
-					alice.identity,
-					connection.id,
-					"Scope test",
-				)
-				const disabled = yield* send(path, "PUT", {
-					revision: verified.capabilities.connection.revision,
-					name: connection.name,
-					enabled: false,
-				})
-				assert.strictEqual(disabled.status, 200)
-				const stopped = yield* HttpClientResponse.schemaBodyJson(
-					Api.Connection,
-				)(disabled)
-				const before = (yield* publisher.requests).length
-				const oldClient = yield* Effect.flip(client.listTools())
-				assert.strictEqual(oldClient._tag, "ClientError")
-				assert.ok(oldClient._tag === "ClientError")
-				assert.strictEqual(oldClient.reason, "Closed")
-				assert.strictEqual((yield* publisher.requests).length, before)
-				assert.strictEqual(
-					(yield* send(path, "PUT", {
-						revision: connection.revision,
-						name: connection.name,
-						enabled: true,
-					})).status,
-					409,
-				)
-				const enabled = yield* Effect.flatMap(
-					send(path, "PUT", {
-						revision: stopped.revision,
-						name: connection.name,
-						enabled: true,
-					}),
-					HttpClientResponse.schemaBodyJson(Api.Connection),
-				)
-				assert.strictEqual(enabled.availability._tag, "Unverified")
-				yield* publisher.changeCard
-				const changed = yield* Effect.flatMap(
-					send(path + "/verify", "POST"),
-					HttpClientResponse.schemaBodyJson(Api.Verification),
-				)
-				assert.strictEqual(changed._tag, "Unavailable")
-				assert.ok(changed._tag === "Unavailable")
-				assert.strictEqual(
-					changed.connection.availability._tag,
-					"NeedsRevalidation",
-				)
-				assert.strictEqual(changed.connection.enabled, false)
-				const reviewed = yield* prepare
-				const incomplete = yield* send(path + "/revalidate", "POST", {
-					revision: changed.connection.revision,
-					draftId: reviewed.id,
-					remoteIndex: 0,
-					values: { "header:X-Account": "Work" },
-					confirmed: true,
-				})
-				assert.strictEqual(incomplete.status, 422, yield* incomplete.text)
-				assert.deepStrictEqual(
-					(yield* HttpClientResponse.schemaBodyJson(
-						Api.ConnectionConfigurationInvalid,
-					)(incomplete)).keys,
-					["header:X-Secret"],
-				)
-				const revalidation = yield* send(path + "/revalidate", "POST", {
-					revision: changed.connection.revision,
-					draftId: reviewed.id,
-					remoteIndex: 0,
-					values,
-					confirmed: true,
-				})
-				assert.strictEqual(revalidation.status, 200, yield* revalidation.text)
-				const current = yield* HttpClientResponse.schemaBodyJson(
-					Api.Connection,
-				)(revalidation)
-				assert.strictEqual(current.enabled, true)
-				assert.strictEqual(current.endpoint, publisher.origin + "/mcp-updated")
-				assert.strictEqual(
-					(yield* Effect.flatMap(
-						send(path + "/verify", "POST"),
-						HttpClientResponse.schemaBodyJson(Api.Verification),
-					))._tag,
-					"Verified",
-				)
-				assert.strictEqual(
-					(yield* sendAsBob(path + "/verify", "POST")).status,
-					404,
-				)
-				assert.strictEqual((yield* sendAsBob(path, "DELETE")).status, 404)
-				yield* host.run(
-					Effect.gen(function* () {
-						const sql = yield* SqlClient.SqlClient
-						yield* sql.unsafe(
-							"CREATE FUNCTION reject_app_removal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'App removal storage unavailable'; END $$",
-						)
-						yield* sql.unsafe(
-							"CREATE TRIGGER reject_app_removal BEFORE DELETE ON openbot_app_connections FOR EACH ROW EXECUTE FUNCTION reject_app_removal()",
-						)
-					}),
-				)
-				const pending = yield* send(path, "DELETE")
-				assert.strictEqual(pending.status, 409, yield* pending.text)
-				assert.strictEqual(
-					(yield* HttpClientResponse.schemaBodyJson(
-						Api.ConnectionCleanupPending,
-					)(pending)).stage,
-					"Connection",
-				)
-				const cleanup = yield* Effect.flatMap(
-					send(path, "GET"),
-					HttpClientResponse.schemaBodyJson(Api.Connection),
-				)
-				assert.strictEqual(cleanup.enabled, false)
-				assert.strictEqual(cleanup.availability._tag, "CleanupPending")
-				assert.strictEqual(
-					(yield* send(path, "PUT", {
-						revision: cleanup.revision,
-						name: cleanup.name,
-						enabled: true,
-					})).status,
-					409,
-				)
-				yield* host.run(
-					Effect.gen(function* () {
-						const sql = yield* SqlClient.SqlClient
-						yield* sql.unsafe(
-							"DROP TRIGGER reject_app_removal ON openbot_app_connections",
-						)
-						yield* sql.unsafe("DROP FUNCTION reject_app_removal()")
-					}),
-				)
-				assert.strictEqual((yield* send(path, "DELETE")).status, 204)
-				assert.strictEqual((yield* send(path, "GET")).status, 404)
-				assert.strictEqual(
-					Arr.filter(yield* publisher.requests, (request) =>
-						Str.includes("tools/call")(request.path),
-					).length,
-					0,
-				)
-			}),
+			}).pipe(Effect.provide(commands)),
 	)
 
 	it.effect(
-		"manual MCP connections stay private, keep secret headers and use the live lifecycle without Card discovery",
+		"a damaged connection stays a sealed storage error at the HTTP boundary",
 		() =>
 			Effect.gen(function* () {
-				const publisher = yield* Fixture.start({ capabilities: true })
-				const network = (owner: string, origins: ReadonlyArray<string>) =>
-					NodeHttpServer.layerUserNetwork({
-						owner,
-						allowedOrigins: origins,
-						ca: publisher.ca,
-						allowAddress: (ip) => ip === "127.0.0.1",
-					})
-				const host = yield* BrowserHost.start({
-					publicOrigin,
-					appProbe: Probe.layerWithNetwork((connection) =>
-						network(connection.owner, [new URL(connection.endpoint).origin]),
-					),
-					appNetwork: Layer.succeed(AppNetwork, { layer: network }),
-				})
-				const alice = yield* host.login("manual-alice")
-				const bob = yield* host.login("manual-bob")
-				const send = browser(host, alice.session)
-				const crypto = yield* Crypto.Crypto
-				const input = {
-					id: yield* crypto.randomUUIDv4(),
-					name: "Manual documents",
-					transport: "streamable-http",
-					url: publisher.origin + "/mcp",
-					headers: { "X-Account": "Work", "X-Secret": "manual-private-secret" },
-				}
-				assert.strictEqual(
-					(yield* send("/v1/connections/manual", "POST", {
+				const lifecycle = yield* Commands.ConnectionCommands
+				const safe = yield* HttpErrors.make
+				const sql = yield* PgClient.PgClient
+				const secrets = yield* Secrets.Secrets
+				yield* seed("damaged")
+				yield* sql`update openbot_app_connections set body = 'private-bad-connection' where owner = ${owner} and id = 'damaged'`
+				const failure = yield* lifecycle
+					.start(
+						actor,
+						"damaged",
+						{ _tag: "Verify" },
+						Execution.CommandKey.make("damaged"),
+					)
+					.pipe(safe, Effect.flip)
+				assert.isTrue(Schema.is(ExecutionsApi.ExecutionUnavailable)(failure))
+				if (!Schema.is(ExecutionsApi.ExecutionUnavailable)(failure)) return
+				const body = yield* Schema.encodeEffect(
+					Schema.fromJsonString(ExecutionsApi.ExecutionUnavailable),
+				)(failure)
+				assert.notMatch(body, /private-/)
+				const rows = yield* sql<{
+					readonly cause: string
+				}>`select cause from openbot_execution_failures where id = ${failure.errorId}`
+				assert.equal(rows.length, 1)
+				assert.notMatch(rows[0]!.cause, /private-/)
+				assert.include(
+					yield* secrets.open(rows[0]!.cause, `failure:${failure.errorId}`),
+					"SecretStorageError",
+				)
+				assert.deepEqual(
+					yield* sql`select id from openbot_executions where namespace = ${owner}`,
+					[],
+				)
+			}).pipe(Effect.provide(commands)),
+	)
+
+	it.effect(
+		"a failed App check seals network details and returns a safe connection state",
+		() => {
+			const logs = collectLogs()
+			return Effect.gen(function* () {
+				const lifecycle = yield* Lifecycle.Lifecycle
+				const sql = yield* PgClient.PgClient
+				const secrets = yield* Secrets.Secrets
+				const input = yield* seed("network")
+				const executionId = Execution.Id.make("network-check")
+				const result = yield* lifecycle.prepare(
+					{
 						...input,
-						url: "http://example.test/mcp",
-					})).status,
-					400,
+						action: { _tag: "Verify" },
+						credential: null,
+						candidate: null,
+					},
+					executionId,
+					Effect.void,
 				)
-				const created = yield* send("/v1/connections/manual", "POST", input)
-				assert.strictEqual(created.status, 201, yield* created.text)
-				const connection = yield* HttpClientResponse.schemaBodyJson(
-					Api.Connection,
-				)(created)
-				const path = "/v1/connections/" + connection.id
-				assert.strictEqual(connection.sources[0]?.role, "manual")
-				assert.strictEqual(
-					Str.includes(input.headers["X-Secret"])(yield* created.text),
-					false,
+				assert.propertyVal(
+					result.connection.verification,
+					"_tag",
+					"ConnectionFailed",
 				)
-				assert.strictEqual(
-					(yield* send("/v1/connections/manual", "POST", input)).status,
-					201,
+				assert.isNull(result.capabilities)
+				assert.notMatch(
+					yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+						logs.lines(),
+					),
+					/private-/,
 				)
-				const verified = yield* Effect.flatMap(
-					send(path + "/verify", "POST"),
-					HttpClientResponse.schemaBodyJson(Api.Verification),
+				assert.notMatch(
+					yield* Schema.encodeEffect(
+						Schema.fromJsonString(Commands.preparedCodec),
+					)(result),
+					/private-/,
 				)
-				assert.strictEqual(verified._tag, "Verified")
-				assert.ok(verified._tag === "Verified")
-				assert.ok(verified.capabilities.tools.length > 0)
-				yield* host.run(
-					Effect.gen(function* () {
-						const sql = yield* SqlClient.SqlClient
-						assert.strictEqual(
-							(yield* sql`SELECT * FROM openbot_app_index_jobs`).length,
-							0,
-						)
-						const records = yield* sql<{
-							readonly body: string
-						}>`SELECT body FROM openbot_app_records UNION ALL SELECT body FROM openbot_app_connections`
-						assert.strictEqual(
-							Arr.some(records, (record) =>
-								Str.includes(input.headers["X-Secret"])(record.body),
+				const rows = yield* sql<{
+					readonly id: string
+					readonly cause: string
+				}>`select id, cause from openbot_execution_failures where execution_id = ${executionId}`
+				assert.equal(rows.length, 1)
+				assert.notMatch(rows[0]!.cause, /private-/)
+				assert.include(
+					yield* secrets.open(rows[0]!.cause, `failure:${rows[0]!.id}`),
+					"private-network-detail",
+				)
+			}).pipe(
+				Effect.provide([
+					logs.layer,
+					Lifecycle.layer.pipe(
+						Layer.provide(CatalogDiscovery.layerRules),
+						Layer.provide(Layer.mock(Discovery.Discovery, {})),
+						Layer.provide(Layer.mock(Probe, {})),
+						Layer.provide(
+							Layer.succeed(AppNetwork, {
+								layer: () =>
+									Layer.succeed(Network.Network, {
+										identity: { scope: "user", owner },
+										execute: () =>
+											Effect.fail(
+												Network.NetworkError.make({
+													reason: "Timeout",
+													message: "No answer",
+													cause: new Error("private-network-detail"),
+												}),
+											),
+										readDocument: () =>
+											Effect.fail(
+												Network.NetworkError.make({
+													reason: "Timeout",
+													message: "No answer",
+													cause: new Error("private-network-detail"),
+												}),
+											),
+									}),
+							}),
+						),
+					),
+				]),
+			)
+		},
+	)
+	it.effect(
+		"an unconfirmed App publication keeps its private cause before returning a report",
+		() => {
+			const logs = collectLogs()
+			return Effect.gen(function* () {
+				const sql = yield* PgClient.PgClient
+				const secrets = yield* Secrets.Secrets
+				const cardUrl = "https://publication.example/card"
+				const candidate = yield* Discovery.Candidate.decode({
+					cardUrl,
+					card: {
+						$schema: Document.cardSchemaUrl,
+						name: "test/app",
+						version: "1.0.0",
+						description: "Read a note.",
+					},
+					endpoints: [],
+					sources: [],
+				})
+				const reports = AppInspections.layer.pipe(
+					Layer.provide(
+						Layer.mock(Discovery.Discovery, {
+							resolve: () =>
+								Effect.succeed({ _tag: "Single", candidate, issues: [] }),
+						}),
+					),
+					Layer.provide(
+						Layer.mock(Index.IndexStore, {
+							get: () => Effect.succeedNone,
+						}),
+					),
+					Layer.provide(
+						PublicIndexing.layerInspection.pipe(
+							Layer.provide(CatalogDiscovery.layerRules),
+							Layer.provide(RobotsPolicy.layer),
+							Layer.provide(
+								Layer.succeed(Network.PublicNetwork, {
+									readDocument: () =>
+										Effect.fail(
+											Network.NetworkError.make({
+												reason: "Transport",
+												message: "private-publication-message",
+												cause: new Error("private-publication-cause"),
+											}),
+										),
+								}),
 							),
-							false,
-						)
-					}),
-				)
-				const client = yield* openClient(
-					host,
-					alice.identity,
-					connection.id,
-					"Manual lifecycle",
-				)
-				const unknownHeader = yield* send(path + "/manual", "PUT", {
-					name: "Updated manual documents",
-					transport: "streamable-http",
-					url: publisher.origin + "/mcp-updated",
-					headers: { "X-Account": null, "X-Unknown": null },
-					revision: verified.capabilities.connection.revision,
-				})
-				assert.strictEqual(unknownHeader.status, 422, yield* unknownHeader.text)
-				assert.deepStrictEqual(
-					(yield* HttpClientResponse.schemaBodyJson(
-						Api.ConnectionConfigurationInvalid,
-					)(unknownHeader)).keys,
-					["header:X-Unknown"],
-				)
-				const updated = yield* send(path + "/manual", "PUT", {
-					name: "Updated manual documents",
-					transport: "streamable-http",
-					url: publisher.origin + "/mcp-updated",
-					headers: { "X-Account": null, "X-Secret": null },
-					revision: verified.capabilities.connection.revision,
-				})
-				assert.strictEqual(updated.status, 200, yield* updated.text)
-				const changed = yield* HttpClientResponse.schemaBodyJson(
-					Api.Connection,
-				)(updated)
-				assert.strictEqual(changed.endpoint, publisher.origin + "/mcp-updated")
-				assert.strictEqual(
-					Str.includes(input.headers["X-Secret"])(yield* updated.text),
-					false,
-				)
-				const before = (yield* publisher.requests).length
-				const closed = yield* Effect.flip(client.listTools())
-				assert.strictEqual(closed._tag, "ClientError")
-				assert.ok(closed._tag === "ClientError")
-				assert.strictEqual(closed.reason, "Closed")
-				assert.strictEqual((yield* publisher.requests).length, before)
-				assert.strictEqual(
-					(yield* send(path + "/manual", "PUT", { ...input, revision: 0 }))
-						.status,
-					409,
-				)
-				assert.strictEqual(
-					(yield* browser(host, bob.session)(path, "GET")).status,
-					404,
-				)
-				yield* host.restart
-				assert.strictEqual(
-					(yield* Effect.flatMap(
-						send(path + "/verify", "POST"),
-						HttpClientResponse.schemaBodyJson(Api.Verification),
-					))._tag,
-					"Verified",
-				)
-				assert.strictEqual(
-					Arr.some(yield* publisher.requests, (request) =>
-						Str.startsWith("/card")(request.path),
+						),
 					),
-					false,
 				)
-				assert.strictEqual(
-					Arr.some(yield* publisher.requests, (request) =>
-						Str.includes("tools/call")(request.path),
-					),
-					false,
+				const result = yield* AppInspections.AppInspections.use((service) =>
+					service.inspect(cardUrl),
+				).pipe(Effect.provide(reports))
+				assert.equal(result.apps[0]?.eligibility._tag, "Unconfirmed")
+				assert.notMatch(
+					yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))([
+						result,
+						logs.lines(),
+					]),
+					/private-/,
 				)
-				assert.strictEqual((yield* send(path, "DELETE")).status, 204)
-				assert.strictEqual((yield* send(path, "GET")).status, 404)
-			}),
+				const [saved] = yield* sql<{
+					readonly id: string
+					readonly cause: string
+				}>`select id, cause from openbot_execution_failures where execution_id is null order by created_at desc limit 1`
+				assert.isDefined(saved)
+				assert.notMatch(saved!.cause, /private-/)
+				const cause = yield* secrets.open(saved!.cause, `failure:${saved!.id}`)
+				assert.include(cause, "private-publication-message")
+				assert.include(cause, "private-publication-cause")
+			}).pipe(Effect.provide(logs.layer))
+		},
 	)
 })

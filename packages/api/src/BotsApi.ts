@@ -1,16 +1,64 @@
+import {
+	BotId,
+	BotMember,
+	Bot,
+	CreateBotRequest,
+	UpdateBotRequest,
+	GrantId,
+	RuleId,
+	GrantStatus,
+	Grant,
+	CreateGrantRequest,
+	Rule,
+	CreateRuleRequest,
+	UpdateRuleRequest,
+	BotMemoryView,
+	UpdateBotMemoryRequest,
+	BotNotFound,
+	RuleNotFound,
+	GrantNotFound,
+	BotConflict,
+	BotInvalid,
+	BotStorageUnavailable,
+} from "@openbot-build/domain/Bots"
+export {
+	BotId,
+	BotOwner,
+	BotSource,
+	BotMember,
+	Bot,
+	CreateBotRequest,
+	UpdateBotRequest,
+	CapabilityAction,
+	Capability,
+	GrantId,
+	RuleId,
+	Decider,
+	GrantScope,
+	GrantStatus,
+	Grant,
+	CreateGrantRequest,
+	RuleStatus,
+	Rule,
+	CreateRuleRequest,
+	UpdateRuleRequest,
+	BotMemoryView,
+	UpdateBotMemoryRequest,
+	BotNotFound,
+	RuleNotFound,
+	GrantNotFound,
+	BotConflict,
+	BotInvalid,
+	BotStorageUnavailable,
+} from "@openbot-build/domain/Bots"
 import { Array as Arr, String as Str, SchemaTransformation, pipe } from "effect"
-import { SecretOutput } from "./Secret.ts"
-import { AccountAuth, BotAuth, NoStore, ReturnTo } from "./AuthApi.ts"
+import { AccountAuth, BotAuth, NoStore } from "./AuthApi.ts"
 import {
 	Authorize,
 	AuthorizationErrors,
-	Decision,
 	GroupRequired,
 } from "./Authorization.ts"
-import { Chat, Config } from "@openbot-build/core"
 import * as BotMemory from "./BotMemory.ts"
-import { Email } from "./Email.ts"
-import { Name } from "./Name.ts"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -19,7 +67,6 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { PlanApproval } from "./PlanApproval.ts"
 import {
 	InvitationId,
 	InvitationInvalid,
@@ -27,222 +74,6 @@ import {
 	InvitationStatus,
 } from "./Invitation.ts"
 
-export const BotId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/BotId"))
-export type BotId = typeof BotId.Type
-
-/**
- * Who owns a Bot.
- * A member owns their own Bots. The organization owns shared Bots.
- * A Bot can own Bots too. `userId` is the member at the top of this tree.
- * It is `null` when the organization owns the Bot at the top.
- */
-export const BotOwner = Schema.TaggedUnion({
-	Member: { userId: Schema.String },
-	Organization: {},
-	Bot: { bot: BotId, userId: Schema.NullOr(Schema.String) },
-})
-export type BotOwner = typeof BotOwner.Type
-
-/** A Bot in another organization. */
-export const BotSource = Schema.Struct({
-	organizationId: Schema.String,
-	bot: BotId,
-})
-export type BotSource = typeof BotSource.Type
-
-/** A person who uses a shared Bot in their own organization. */
-export const BotMember = Schema.Struct({
-	userId: Schema.String,
-	/** The organization where the person uses the Bot. */
-	organizationId: Schema.String,
-	/** The Bot in that organization that uses this Bot. */
-	linked: BotId,
-	joinedAt: Schema.Finite,
-})
-export type BotMember = typeof BotMember.Type
-
-export const Bot = Schema.Struct({
-	id: BotId,
-	owner: BotOwner,
-	name: Schema.String,
-	role: Schema.String,
-	/** The lasting instructions of the Bot, like a job description. */
-	instructions: Schema.String,
-	/** The model of the Chats of this Bot, when a Chat does not choose its own. */
-	model: Schema.optionalKey(Config.Selection),
-	/** How the plans of this Bot are approved. Without it, the settings of the member count. */
-	planApproval: Schema.optionalKey(PlanApproval),
-	/**
-	 * The Bot that this Bot uses, when someone shared it with the owner. The name,
-	 * role, instructions and model always come from that Bot, and only its people change them.
-	 */
-	source: Schema.optionalKey(BotSource),
-	archived: Schema.Boolean,
-	revision: Schema.Natural,
-	createdAt: Schema.Finite,
-	updatedAt: Schema.Finite,
-})
-export type Bot = typeof Bot.Type
-
-const Text = Schema.String.check(Schema.isMaxLength(20000))
-
-export const CreateBotRequest = Schema.Struct({
-	name: Name,
-	role: Schema.String.check(Schema.isMaxLength(500)),
-	instructions: Text,
-	model: Schema.optionalKey(Config.Selection),
-	planApproval: Schema.optionalKey(PlanApproval),
-	/** Shared Bots belong to the organization. Other Bots belong to the caller. */
-	shared: Schema.optionalKey(Schema.Boolean),
-	/** The Bot that owns the new Bot. You cannot use it together with `shared`. */
-	bot: Schema.optionalKey(BotId),
-})
-export type CreateBotRequest = typeof CreateBotRequest.Type
-
-export const UpdateBotRequest = Schema.Struct({
-	expected: Schema.Natural,
-	name: Schema.optionalKey(Name),
-	role: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(500))),
-	instructions: Schema.optionalKey(Text),
-	model: Schema.optionalKey(Schema.NullOr(Config.Selection)),
-	/** `null` makes the Bot follow the settings of the member again. */
-	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
-	archived: Schema.optionalKey(Schema.Boolean),
-})
-export type UpdateBotRequest = typeof UpdateBotRequest.Type
-
-/**
- * What a capability is: an action, the thing it acts on, and optional exact arguments.
- * `target` is `*` for every target.
- */
-export const CapabilityAction = Schema.Literals([
-	"tools.call",
-	"apps.call",
-	"bots.create",
-	"bots.delegate",
-	/** A Bot in plan mode wants to carry out its plan. The target is the Chat. */
-	"plans.run",
-	/** A Bot posts to a chat of a Channel. The target is the Channel. */
-	"channels.send",
-	/**
-	 * Delegated work reached one of its limits and wants to go on. The target is the
-	 * Delegation. The arguments name the limit.
-	 */
-	"delegations.continue",
-	/** A Bot gets the right to use a Computer that exists. The target is the Computer. */
-	"computers.acquire",
-	/** A Bot makes a new Computer at a provider. The target is the Computer provider. */
-	"computers.create",
-	/** A Bot deletes a Computer with its sandbox. The target is the Computer. */
-	"computers.delete",
-	/** A Bot gives a port of a Computer a public address. The target is the Computer. */
-	"computers.expose",
-])
-export type CapabilityAction = typeof CapabilityAction.Type
-export const Capability = Schema.Struct({
-	action: CapabilityAction,
-	target: Schema.String.check(Schema.isMaxLength(512)),
-	arguments: Schema.optionalKey(Schema.JsonObject),
-})
-export type Capability = typeof Capability.Type
-
-/** A person, a Bot, or a Rule that made a decision. */
-export const GrantId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/GrantId"))
-export type GrantId = typeof GrantId.Type
-
-export const RuleId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-).pipe(Schema.brand("@openbot-build/api/RuleId"))
-export type RuleId = typeof RuleId.Type
-
-export const Decider = Schema.TaggedUnion({
-	Person: { userId: Schema.String },
-	Bot: { bot: BotId },
-	Rule: { rule: RuleId },
-})
-export type Decider = typeof Decider.Type
-
-/**
- * How long a decision lasts.
- * `once` is used up by one call. `chat` lasts in one Chat. `lifetime` lasts until it is revoked.
- */
-export const GrantScope = Schema.Literals(["once", "chat", "lifetime"])
-export type GrantScope = typeof GrantScope.Type
-
-/** `used` means a `once` Grant was used up. */
-export const GrantStatus = Schema.Literals(["active", "used", "revoked"])
-export type GrantStatus = typeof GrantStatus.Type
-
-/** A stored decision about one capability of one Bot. The Bot never sees it. */
-export const Grant = Schema.Struct({
-	id: GrantId,
-	bot: BotId,
-	capability: Capability,
-	effect: Decision,
-	scope: GrantScope,
-	chat: Schema.optionalKey(Chat.Id),
-	grantedBy: Decider,
-	reason: Schema.optionalKey(Schema.String),
-	/** The Grant of the decider that this Grant came from. Revoking it revokes this one too. */
-	parent: Schema.optionalKey(GrantId),
-	status: GrantStatus,
-	createdAt: Schema.Finite,
-})
-export type Grant = typeof Grant.Type
-
-export const CreateGrantRequest = Schema.Struct({
-	capability: Capability,
-	effect: Decision,
-	scope: GrantScope,
-	reason: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2000))),
-})
-export type CreateGrantRequest = typeof CreateGrantRequest.Type
-
-/** A `proposed` Rule waits for a person to confirm it. */
-export const RuleStatus = Schema.Literals(["active", "proposed", "retired"])
-export type RuleStatus = typeof RuleStatus.Type
-
-/**
- * A rule in plain language that a decider uses to answer requests of one Bot.
- * A judge model reads it. Only a Rule that the judge quotes can allow a request.
- */
-export const Rule = Schema.Struct({
-	id: RuleId,
-	bot: BotId,
-	author: Decider,
-	text: Schema.String,
-	status: RuleStatus,
-	version: Schema.Natural,
-	createdAt: Schema.Finite,
-	updatedAt: Schema.Finite,
-})
-export type Rule = typeof Rule.Type
-
-const RuleText = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(4000),
-)
-export const CreateRuleRequest = Schema.Struct({ text: RuleText })
-export const UpdateRuleRequest = Schema.Struct({
-	expected: Schema.Natural,
-	text: Schema.optionalKey(RuleText),
-	status: Schema.optionalKey(RuleStatus.pick(["active", "retired"])),
-})
-export type UpdateRuleRequest = typeof UpdateRuleRequest.Type
-
-export const BotMemoryView = BotMemory.View
-export type BotMemoryView = typeof BotMemoryView.Type
-export const UpdateBotMemoryRequest = Schema.Struct({
-	command: BotMemory.Edit,
-})
-export type UpdateBotMemoryRequest = typeof UpdateBotMemoryRequest.Type
 /** Only entries with all of these tags. Separate the tags with commas. */
 const memoryQuery = {
 	tags: Schema.optionalKey(
@@ -264,32 +95,6 @@ const memoryQuery = {
 	),
 }
 
-export class BotNotFound extends Schema.TaggedError<
-	BotNotFound,
-	{ readonly brand: unique symbol }
->()("BotNotFound", { bot: Schema.String }) {}
-export class RuleNotFound extends Schema.TaggedError<
-	RuleNotFound,
-	{ readonly brand: unique symbol }
->()("RuleNotFound", { rule: RuleId }) {}
-export class GrantNotFound extends Schema.TaggedError<
-	GrantNotFound,
-	{ readonly brand: unique symbol }
->()("GrantNotFound", { grant: GrantId }) {}
-export class BotConflict extends Schema.TaggedError<
-	BotConflict,
-	{ readonly brand: unique symbol }
->()("BotConflict", { message: Schema.String }) {}
-export class BotInvalid extends Schema.TaggedError<
-	BotInvalid,
-	{ readonly brand: unique symbol }
->()("BotInvalid", {
-	message: Schema.String,
-}) {}
-export class BotStorageUnavailable extends Schema.TaggedError<
-	BotStorageUnavailable,
-	{ readonly brand: unique symbol }
->()("BotStorageUnavailable", {}) {}
 /** The handlers check permissions on Bots themselves, so these errors are listed here too. */
 export const BotErrors = [
 	...AuthorizationErrors,
@@ -299,68 +104,19 @@ export const BotErrors = [
 	BotStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 
-/** The start of the secret of every Bot invitation link. */
-export const InvitationSecretPrefix = "obai_"
-
-/**
- * An invitation to use one Bot. With `email`, the person with this verified email can
- * accept it once. Without `email`, it is a link: everyone who has its secret can accept it,
- * until someone revokes it or it expires.
- */
-export const BotInvitation = Schema.Struct({
-	id: InvitationId,
-	bot: BotId,
-	email: Schema.NullOr(Schema.String),
-	/** The first characters of the secret of a link, so people can tell links apart. */
-	prefix: Schema.NullOr(Schema.String),
-	/** A same-origin path where a client opens invitation links. */
-	path: Schema.NullOr(ReturnTo),
-	status: InvitationStatus,
-	invitedBy: Schema.String,
-	createdAt: Schema.String,
-	/** A link without it never expires. */
-	expiresAt: Schema.NullOr(Schema.String),
-})
-export type BotInvitation = typeof BotInvitation.Type
-export const CreateBotInvitationRequest = Schema.Struct({
-	/** Without it, the invitation is a link. */
-	email: Schema.optionalKey(Email),
-	/** Milliseconds since 1970. An email invitation always lasts 7 days. */
-	expiresAt: Schema.optionalKey(Schema.Finite),
-	/**
-	 * A path on the public origin where your client opens invitation links.
-	 * With it, a link has a full `url` that you can show as a QR code.
-	 */
-	path: Schema.optionalKey(ReturnTo),
-})
-export type CreateBotInvitationRequest = typeof CreateBotInvitationRequest.Type
-/**
- * An invitation with the secret of its link. `url` is the public origin, then `path`,
- * then `#` and the secret, so the secret never reaches a server log.
- */
-export const BotInvitationSecret = Schema.Struct({
-	invitation: BotInvitation,
-	secret: Schema.NullOr(SecretOutput),
-	url: Schema.NullOr(Schema.String),
-})
-export type BotInvitationSecret = typeof BotInvitationSecret.Type
-export const AcceptBotInvitationRequest = Schema.Struct({
-	/** The ID of an email invitation. */
-	invitation: Schema.optionalKey(InvitationId),
-	/** The secret of an invitation link. */
-	secret: Schema.optionalKey(
-		Schema.RedactedFromValue(
-			Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
-		),
-	),
-	/**
-	 * The organization where you use the Bot. You must be an active member of it.
-	 * You can leave it out when you have only one organization.
-	 */
-	organization: Schema.optionalKey(Schema.String),
-})
-export type AcceptBotInvitationRequest = typeof AcceptBotInvitationRequest.Type
-
+import {
+	BotInvitation,
+	CreateBotInvitationRequest,
+	BotInvitationSecret,
+	AcceptBotInvitationRequest,
+} from "@openbot-build/domain/BotSharing"
+export {
+	InvitationSecretPrefix,
+	BotInvitation,
+	CreateBotInvitationRequest,
+	BotInvitationSecret,
+	AcceptBotInvitationRequest,
+} from "@openbot-build/domain/BotSharing"
 const botParams = { botId: BotId }
 const invitationBotErrors = [
 	...BotErrors,

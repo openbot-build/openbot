@@ -1,4 +1,5 @@
-import { DeveloperApi as Api } from "@openbot-build/api"
+import { Developers } from "@openbot-build/domain"
+
 import { PgClient } from "@effect/sql-pg"
 import { and, desc, eq, lt, or } from "drizzle-orm"
 import {
@@ -23,18 +24,21 @@ export class DeveloperNotifications extends Context.Service<
 		readonly list: (
 			owner: string,
 			before?: string,
-		) => Effect.Effect<ReadonlyArray<Api.Notice>, Api.Failure>
+		) => Effect.Effect<ReadonlyArray<Developers.Notice>, Developers.Failure>
 		readonly read: (
 			owner: string,
 			id: string,
-		) => Effect.Effect<Api.Notice, Api.Failure>
+		) => Effect.Effect<Developers.Notice, Developers.Failure>
 		readonly subscriptions: (
 			owner: string,
-		) => Effect.Effect<ReadonlyArray<Api.Subscription>, Api.Failure>
+		) => Effect.Effect<
+			ReadonlyArray<Developers.Subscription>,
+			Developers.Failure
+		>
 		readonly subscribe: (
 			owner: string,
-			value: Api.Subscription,
-		) => Effect.Effect<Api.Subscription, Api.Failure>
+			value: Developers.Subscription,
+		) => Effect.Effect<Developers.Subscription, Developers.Failure>
 	}
 >()("@openbot-build/openbot/apps/DeveloperNotifications") {}
 export const make: Effect.Effect<
@@ -46,7 +50,7 @@ export const make: Effect.Effect<
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
-	const visible = (owner: string, notice: Api.Notice) =>
+	const visible = (owner: string, notice: Developers.Notice) =>
 		notice.cardUrl === null
 			? Effect.succeed(true)
 			: access.allows(owner, notice.cardUrl)
@@ -99,14 +103,14 @@ export const make: Effect.Effect<
 							.where(noticeWhere(owner, before)),
 					))[0]
 					if (cursor === undefined)
-						return yield* Api.DeveloperInputInvalid.make({
+						return yield* Developers.DeveloperInputInvalid.make({
 							message:
 								"This notification cursor is no longer available. Reload the notifications.",
 						})
 					position = cursor
 				}
 				// Some notices are about Apps that the owner can no longer see. Read on until a page is full.
-				let allowed: ReadonlyArray<Api.Notice> = []
+				let allowed: ReadonlyArray<Developers.Notice> = []
 				while (allowed.length < pageSize) {
 					const rows = yield* page(owner, position)
 					allowed = [
@@ -129,10 +133,11 @@ export const make: Effect.Effect<
 							.where(noticeWhere(owner, id))
 							.for("update"),
 					))[0]
-					if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+					if (row === undefined)
+						return yield* Developers.DeveloperNotFound.make({})
 					const notice = yield* Rows.decodeNotice(row)
 					if (!(yield* visible(owner, notice)))
-						return yield* Api.DeveloperNotFound.make({})
+						return yield* Developers.DeveloperNotFound.make({})
 					if (notice.readAt !== null) return notice
 					const readAt = yield* Clock.currentTimeMillis
 					yield* Rows.stored(
@@ -141,7 +146,7 @@ export const make: Effect.Effect<
 							.set({ readAt })
 							.where(noticeWhere(owner, id)),
 					)
-					return { ...notice, readAt } satisfies Api.Notice
+					return { ...notice, readAt } satisfies Developers.Notice
 				}),
 			),
 		subscriptions: (owner) =>

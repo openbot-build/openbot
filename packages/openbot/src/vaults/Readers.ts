@@ -1,5 +1,5 @@
 import { Redacted } from "effect"
-import type { VaultsApi } from "@openbot-build/api"
+import type { Vaults as VaultsModel } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Context,
@@ -29,7 +29,7 @@ export class VaultReadFailed extends Schema.TaggedError<
 }) {}
 
 /** The credentials of a secret provider. */
-export type Remote = VaultsApi.SecretProviderCredentials
+export type Remote = VaultsModel.SecretProviderCredentials
 
 /** Reads one secret provider. It never writes to it. */
 export interface Reader {
@@ -37,7 +37,7 @@ export interface Reader {
 	readonly verify: Effect.Effect<void, VaultReadFailed>
 	/** The values of these fields of one item. It fails when a field is missing. */
 	readonly read: (
-		source: VaultsApi.VaultItemSource,
+		source: VaultsModel.VaultItemSource,
 		fields: ReadonlyArray<string>,
 	) => Effect.Effect<ReadonlyMap<string, string>, VaultReadFailed>
 }

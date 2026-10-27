@@ -1,5 +1,7 @@
 import { Chat, Turn } from "@openbot-build/core"
-import { BotsApi, DelegationsApi } from "@openbot-build/api"
+import { Execution } from "@openbot-build/domain"
+import { Delegations as DelegationDomain } from "@openbot-build/domain"
+import { Bots as BotsApi } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -17,7 +19,7 @@ import { hash } from "../capabilities/Capability.ts"
 import { Chain } from "../chats/ChatHost.ts"
 import { BotRecords } from "./BotRecords.ts"
 
-type Delegation = DelegationsApi.Delegation
+type Delegation = DelegationDomain.Delegation
 
 /**
  * A delegation as it is stored. `userId` is the member whose Chats hold the work.
@@ -30,17 +32,23 @@ type Delegation = DelegationsApi.Delegation
  * A limit is reached when the usage since `window` reaches it.
  */
 export const Stored = Schema.Struct({
-	delegation: DelegationsApi.Delegation,
+	executionId: Schema.optionalKey(Execution.Id),
+	/** Each new limit pause gets a new number and keeps its task Turn. */
+	limitEpoch: Schema.optionalKey(Schema.Natural),
+	limitTurnExecutionId: Schema.optionalKey(Execution.Id),
+	delegation: DelegationDomain.Delegation,
 	userId: Schema.String,
 	author: Turn.Author,
 	chain: Chain,
 	request: Schema.optionalKey(Schema.String),
-	window: Schema.optionalKey(DelegationsApi.DelegationUsage),
+	window: Schema.optionalKey(DelegationDomain.DelegationUsage),
 	runningSince: Schema.optionalKey(Schema.Finite),
 })
 export type Stored = typeof Stored.Type
 
 export interface CreateInput {
+	readonly id?: DelegationDomain.DelegationId
+	readonly executionId?: Execution.Id
 	readonly userId: string
 	readonly author: Turn.Author
 	readonly chain: Chain
@@ -49,7 +57,7 @@ export interface CreateInput {
 	readonly bot: BotsApi.BotId
 	readonly task: string
 	readonly reason?: string
-	readonly limits?: DelegationsApi.DelegationLimits
+	readonly limits?: DelegationDomain.DelegationLimits
 	/** The task Chat of earlier work that this work goes on with. */
 	readonly chat?: Chat.Id
 	readonly status: "authorizing" | "queued" | "running" | "failed"
@@ -92,14 +100,6 @@ export class Delegations extends Context.Service<
 			chat: Chat.Id,
 			request: string,
 		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
-		/** Delegations that are not closed, in every organization. */
-		readonly open: Effect.Effect<
-			ReadonlyArray<{
-				readonly organizationId: string
-				readonly value: Stored
-			}>,
-			BotsApi.BotStorageUnavailable
-		>
 		/**
 		 * Changes a delegation when it still has one of the expected statuses, and `when`
 		 * holds for it. Returns None when it does not, so two workers never do the same step.
@@ -115,7 +115,7 @@ export class Delegations extends Context.Service<
 >()("@openbot-build/openbot/bots/Delegations") {}
 
 /** Nothing used yet. */
-export const noUsage: DelegationsApi.DelegationUsage = {
+export const noUsage: DelegationDomain.DelegationUsage = {
 	timeMs: 0,
 	steps: 0,
 	costMicros: 0,
@@ -125,7 +125,7 @@ export const noUsage: DelegationsApi.DelegationUsage = {
 export const usageOf = (
 	stored: Stored,
 	now: number,
-): DelegationsApi.DelegationUsage => {
+): DelegationDomain.DelegationUsage => {
 	const usage = stored.delegation.usage ?? noUsage
 	return stored.runningSince === undefined
 		? usage
@@ -141,7 +141,7 @@ export const view = (stored: Stored, now: number): Delegation =>
 		? stored.delegation
 		: { ...stored.delegation, usage: usageOf(stored, now) }
 
-const isOpenStatus = Schema.is(DelegationsApi.OpenDelegationStatus)
+const isOpenStatus = Schema.is(DelegationDomain.OpenDelegationStatus)
 
 /** True when the work has not ended yet. */
 export const isOpen = (stored: Stored) => isOpenStatus(stored.delegation.status)
@@ -161,7 +161,7 @@ export const make: Effect.Effect<
 	const delegations = records.collection(
 		"delegation",
 		Stored,
-		DelegationsApi.DelegationStatus,
+		DelegationDomain.DelegationStatus,
 	)
 	const put = (organizationId: string, stored: Stored) =>
 		delegations
@@ -177,16 +177,18 @@ export const make: Effect.Effect<
 			)
 			.pipe(Effect.as(stored))
 	const idFor = (input: CreateInput) =>
-		input.parent.toolCallId === undefined
-			? crypto.randomUUIDv4({ format: "bytes" }).pipe(
-					// A platform without secure random numbers is broken.
-					Effect.orDie,
-					Effect.map((uuid) => "dlg_" + Hex.encode(uuid)),
-				)
-			: Effect.map(
-					hash(crypto, [input.parent.chat, input.parent.toolCallId]),
-					(value) => "dlg_" + value,
-				)
+		input.id !== undefined
+			? Effect.succeed(input.id)
+			: input.parent.toolCallId === undefined
+				? crypto.randomUUIDv4({ format: "bytes" }).pipe(
+						// A platform without secure random numbers is broken.
+						Effect.orDie,
+						Effect.map((uuid) => "dlg_" + Hex.encode(uuid)),
+					)
+				: Effect.map(
+						hash(crypto, [input.parent.chat, input.parent.toolCallId]),
+						(value) => "dlg_" + value,
+					)
 	return Delegations.of({
 		create: (organizationId, input) =>
 			records.transaction(
@@ -197,6 +199,9 @@ export const make: Effect.Effect<
 					if (Option.isSome(existing)) return existing.value
 					const now = yield* Clock.currentTimeMillis
 					return yield* put(organizationId, {
+						...(input.executionId === undefined
+							? {}
+							: { executionId: input.executionId }),
 						userId: input.userId,
 						author: input.author,
 						chain: input.chain,
@@ -205,7 +210,7 @@ export const make: Effect.Effect<
 							? {}
 							: { runningSince: input.runningSince }),
 						delegation: {
-							id: DelegationsApi.DelegationId.make(id),
+							id: DelegationDomain.DelegationId.make(id),
 							parent: input.parent,
 							...(input.trigger === undefined
 								? {}
@@ -246,10 +251,6 @@ export const make: Effect.Effect<
 						Arr.findFirst(list, (stored) => stored.request === request),
 					),
 				),
-		open: Effect.forEach(
-			DelegationsApi.OpenDelegationStatus.literals,
-			(status) => delegations.withStatus(status),
-		).pipe(Effect.map(Arr.flatten)),
 		change: (organizationId, id, expected, update, when) =>
 			records.transaction(
 				"delegation-item:" + organizationId + ":" + id,

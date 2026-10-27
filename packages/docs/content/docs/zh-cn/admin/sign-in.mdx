@@ -1,0 +1,26 @@
+---
+title: "配置登录"
+---
+
+面向平台运维人员。在用户登录前注册身份提供方。
+
+## 设置平台提供方
+
+在你的提供方那里，把 OpenBot 注册为一个客户端。重定向 URI 使用
+`<publicOrigin>/auth/callback/oidc`。OpenBot 会请求 `openid profile email`
+这几个 scope（权限范围）。
+
+然后把提供方告诉 OpenBot。在新平台上，设置程序通过
+`--oidc-issuer`、`--oidc-client-id` 和 `--oidc-client-secret`
+完成这件事。之后，平台管理员用 `PATCH /v1/platform/settings` 修改它。见
+[Platform](/zh-cn/docs/platform)。
+
+| 设置                            | 值                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| `identityProvider.issuer`       | issuer URL，例如 `https://id.example.com`。必须是 HTTPS，末尾不能有斜杠。 |
+| `identityProvider.clientId`     | 提供方给出的 client ID。                                                  |
+| `identityProvider.clientSecret` | client secret。如果是公共客户端，就不要填。                               |
+| `publicOrigin`                  | OpenBot 的公开 HTTPS 源，例如 `https://api.example.com`。                 |
+
+没有 client
+secret 时，OpenBot 作为公共客户端，使用 PKCE 登录。PKCE 是一种检查，用来保护登录代码。平台也可以完全没有提供方。这时人们只能通过 SSO 连接登录。

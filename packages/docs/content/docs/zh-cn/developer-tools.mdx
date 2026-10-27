@@ -3,10 +3,12 @@ title: 开发者工具
 description: 检查、测试和管理你发布的 App。
 ---
 
+面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+
 这些工具面向发布 App 的人。你可以检查你的 App、证明你控制它、与团队共享访问权限、运行私密测试、请求收录，以及在出现问题时收到通知。
 
 只有检查调用是公开的。其他所有调用都需要用户令牌或 session cookie，以及 `App`
-上的 `publish`。参见[身份验证](/zh-cn/docs/authentication)。
+上的 `publish`。参见[身份验证](/zh-cn/docs/developers/authentication)。
 
 ---
 
@@ -29,7 +31,7 @@ curl -X POST https://api.example.com/v1/developer/inspect \
 | `stages` | 每个检查步骤：`Input`、`Discovery`、`CardRead`、`CardSchema`、`Compatibility`、`PublisherAssociation` 和 `Eligibility`。每个都是 `Passed`、`Failed`、`Unconfirmed` 或 `NotChecked`。 |
 
 `Eligible` 结果并不表示 App 已经在 Index 中。参见
-[App Index](/zh-cn/docs/app-index#app-如何被收录)。
+[App Index](/zh-cn/docs/developers/app-index#app-如何被收录)。
 
 ---
 
@@ -95,13 +97,22 @@ OpenBot 在 Card 确切的 URL 读取它，不跟随重定向。你的 `robots.t
 
 ```sh
 curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
-  -H "Authorization: Bearer $OPENBOT_TOKEN"
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"proof-check-1"}'
 ```
 
-成功时，你会得到一份**证明**（proof）。你会成为这个范围的
-`administrator`。失败时，你会得到 409 `DeveloperConflict`。它的 `reason` 可能是
-`ProofMismatch`、`ClaimExpired`、`VerificationUnavailable`、`RobotsDenied`、`RobotsUnconfirmed`
-或 `CardUnconfirmed`。
+API 返回 202 和 `executionId`。如果响应丢失，使用同一个 `commandKey` 重试。读取
+`/v1/executions/:executionId` 或订阅执行事件。完成后，用
+`GET /v1/developer/proofs/<claim id>` 读取**证明**。你会成为该范围的
+`administrator`。失败结果只包含安全的错误分类和
+`errorId`，完整原因保存在加密错误记录中。令牌缺失或声明过期会产生 `conflict`
+结果；网络读取失败会产生 `external`
+结果。关闭事件流不会停止检查，停止检查需要调用执行取消端点。
+
+SDK 提供 `Proofs.verifyClaim(id)` 和
+`Proofs.verifyProof(id)`。它们返回带有稳定键和 `send`
+Effect 的命令，重试时复用该命令。
 
 </Step>
 </Steps>
@@ -113,8 +124,8 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
   `Unconfirmed`。在到期之前它仍然有效。OpenBot 会在大约一分钟后重试。
 - `Suspended` 的证明不提供任何访问权限。
 
-要立刻检查，请调用
-`POST /v1/developer/proofs/:id/verify`。要放弃一份证明，请调用
+要立刻检查，请向 `POST /v1/developer/proofs/:id/verify` 提交新的
+`commandKey`。它也会返回执行回执。要放弃一份证明，请调用
 `POST /v1/developer/proofs/:id/relinquish`。要取消一个声明，请调用
 `POST /v1/developer/claims/:id/revoke`。
 
@@ -169,9 +180,15 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
 
 1. 用你自己的 UUID 创建一个测试：`POST /v1/developer/tests`，带上
    `{ "id", "cardUrl", "remoteIndex" }`。
-2. 如果端点需要设置，就发送它们：`PUT /v1/developer/tests/:id/configuration`，带上一个由键和值组成的对象。键和[连接](/zh-cn/docs/apps#审查并创建连接)中的相同。
-3. 运行它：`POST /v1/developer/tests/:id/run`。用 `GET /v1/developer/tests/:id`
-   读取结果。
+2. 如果端点需要设置，就发送它们：`PUT /v1/developer/tests/:id/configuration`，带上一个由键和值组成的对象。键和[连接](/zh-cn/docs/developers/apps#审查并创建连接)中的相同。
+3. 运行测试：向 `POST /v1/developer/tests/:id/run` 发送
+   `{ "commandKey": "test-run-1" }`。接口返回 `202` 和执行回执。用
+   `GET /v1/developer/tests/:id` 读取测试，用
+   `GET /v1/executions/:executionId/observe` 订阅已保存的事件。
+
+响应丢失时复用同一个命令键。上次运行结束后，用新键启动下一次运行。测试保留最近一次的
+`executionId`。SDK 的 `DeveloperTests.run(id)` 生成命令，其 `send`
+方法会复用命令键。关闭事件流不会停止测试。通过执行接口取消，或使用测试清理接口先停止运行，再删除私有数据。清理会等待运行释放连接。启动另一个服务器不会改写活动工作流的状态。节点丢失后会复用已保存的调用结果；未完成的读取可以重新执行。
 
 每次运行都有
 `stages`：`configuration`、`negotiation`、`tools`、`resources`、`resourceTemplates`
@@ -183,15 +200,35 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
 当 App 需要账号时，测试状态会变成 `AwaitingAuthorization`。
 
 1. 开始登录：`POST /v1/developer/tests/:id/authorization`，带上
-   `{ "scopes": [] }`。如果 App 有多个提供方，请加上 `issuer`。
+   `{ "scopes": [], "commandKey": "test-sign-in-1" }`。如果 App 有多个提供方，请加上
+   `issuer`。接口返回 `202` 和执行回执。订阅执行事件，结束后读取测试中的
+   `authorization.authorizationUrl`。`PreparingAuthorization`
+   表示准备尚未结束。登录链接和加密 flow 会在同一次提交中保存。响应丢失时复用命令键。SDK 的
+   `DeveloperTests.authorize(id, { scopes: [] })` 会保留此键。
 2. 在浏览器中打开 `authorization.authorizationUrl` 并登录。
 3. 提供方把你跳转到 `/auth/developer/apps/callback`。OpenBot 再把你跳转到
    `/?developerTest=<testId>`。
-4. 完成：`POST /v1/developer/tests/:id/authorization/complete`。然后再次运行测试。
+4. 完成：调用 `POST /v1/developer/tests/:id/authorization/complete`，带上新的
+   `commandKey`。接口返回 `202` 执行回执。回复丢失时复用同一键重试。SDK 的
+   `DeveloperTests.completeAuthorization`
+   会保留此键。等待执行结束后读取测试，再重新运行。
 
-完成后，请调用
-`POST /v1/developer/tests/:id/cleanup`。在提供方允许的情况下，OpenBot 会撤销测试中的登录，并删除保存的令牌。你也可以
-`cancel` 一个正在运行的测试，或者 `DELETE` 它。
+交换会保留发起登录的调用者作为权限限制。复用已保存结果前，会检查此调用者和提交完成命令的调用者。授权码和令牌只进入加密记录。请求断开不会停止已提交的交换。结果不明时，交换会通过执行接口等待决定，不会自行重发授权码。无法安装的授权会交给平台清理。
+
+完成后，请调用 `POST /v1/developer/tests/:id/cleanup`，并提交
+`commandKey`。`cancel` 接口使用相同请求体。两者都返回 `202` 和执行回执。
+`DELETE /v1/developer/tests/:id?commandKey=...`
+也返回回执。重试请求时保留同一个键。SDK 提供 `DeveloperTests.cleanup`、`cancel`
+和 `remove` 方法。
+
+测试的 `cleanupExecutionId`
+指向负责到期和清理的服务执行。通过统一执行接口观察它。只要测试工作或令牌回收仍在进行，测试就保持
+`Cancelling`。如果授权交换结果不明，必须先通过交换执行提交决定，清理才能结束。随后，OpenBot 会在提供方允许时撤销测试登录，并在同一事务中删除私有数据和标记清理完成。删除命令也在该事务中删除测试。关闭观察不会停止清理。
+
+清理会先把所有已保存的令牌交给加密的任务记录，再移除本地登录。共享授权清理负责远端调用和重试。任务结束前，测试私有数据会保留。只有提供方确认撤销后，`cleanupRemote`
+才是 `Complete`。提供方不支持撤销时，该值为 `LocalOnly`。
+
+同一服务持有保存的到期计时器，并每分钟检查一次测试是否仍有 App 访问权。权限被移除后，服务仍可清理。服务器重启不会重置测试或授权流程。
 
 ---
 
@@ -208,21 +245,28 @@ OAuth 测试会保留授权被拒绝的原因，例如 `FlowExpired` 或
 curl -X POST https://api.example.com/v1/developer/indexing \
   -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
+  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card", "commandKey": "index-check-1" }'
 ```
 
-OpenBot 会先检查这个 App。如果它不符合条件，你会得到 409 和
-`reason`。如果本部署屏蔽了这个 App，你会得到 403 `DeveloperRestricted`。
+OpenBot 先检查你当前的权限和 App 限制，再接受命令。被限制的 App 返回 403
+`DeveloperRestricted`。公开检查在后台运行，并保存结果。
 
-请求的 `status` 从 `Accepted` 依次变为 `Waiting`、`Verifying` 和
-`Completed`。完成后，`check` 中有结果。用 `GET /v1/developer/indexing`
-列出请求，或用 `GET /v1/developer/indexing/:id` 读取一个请求。
+丢失响应后重试时保留 `commandKey`。同一个键返回同一个请求。每个请求都有
+`executionId`，可通过 `/v1/executions/:executionId`
+查询或观察。通过执行取消接口取消请求。取消自己的请求不会停止共享的公开检查。
+
+请求的 `status` 表示共享检查状态：`Waiting`、`Verifying`，然后是 `Completed`。
+`check` 保存结果。执行记录表示你的请求状态，包括取消和失败。用
+`GET /v1/developer/indexing` 列出请求，或用 `GET /v1/developer/indexing/:id`
+读取一个请求。后续检查和服务器重启都不会改变已完成请求的结果。
 
 ---
 
 ## 通知
 
 OpenBot 大约每小时检查一次你管理的 App。有变化时，它会给你发送通知。
+
+App 和证明的定期检查使用共同执行器。下次检查时间和每次结果保存在 PostgreSQL 中。新实例会从这些记录继续。证明状态和访问通知在同一事务中提交。旧检查不能覆盖较新的证明状态。重放已保存的 App 检查不会重复发送同一问题通知。
 
 | 类型            | 何时                                       |
 | --------------- | ------------------------------------------ |
@@ -239,3 +283,5 @@ OpenBot 大约每小时检查一次你管理的 App。有变化时，它会给�
 列出你的设置。
 
 在 [API 参考](/docs/api/operations/tags/developer-tools/)中查看完整的结构。
+
+数据迁移保留现有声明、证明、成员、邀请、App、报告和通知设置。App 与证明检查保留保存的下次检查时间。已放弃的证明不会启动新检查。旧索引请求保留原有 ID，并关联历史执行。已保存结果的请求保持完成；没有保存结果的请求标记为中断，因为原始调用人未被保存。平台仍可完成独立的公开检查。

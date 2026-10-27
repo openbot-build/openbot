@@ -1,0 +1,2 @@
+ALTER TABLE "openbot_execution_events" ADD COLUMN "event_key" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "openbot_execution_events_key" ON "openbot_execution_events" ("namespace","execution_id","event_key");

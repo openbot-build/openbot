@@ -1,5 +1,7 @@
+import * as Models from "./DeveloperModels.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { DeveloperApi as Api } from "@openbot-build/api"
+import { Developers } from "@openbot-build/domain"
+
 import { Discovery } from "@openbot-build/protocol"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
@@ -12,42 +14,22 @@ import {
 	developerTests,
 } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import { transactionFailures } from "../execution/Store.ts"
 
 /**
- * The Developer Center tables in Postgres: the codecs between rows and API
+ * The Developer Center tables in Postgres: the codecs between rows and product
  * values, and the queries that more than one Developer module uses.
  * Every table has a `namespace` column, so the development host keeps its own rows.
  */
 export type Database = Db.Database
 
-/** Every storage failure becomes one error. The log keeps the storage failure. */
-export const stored = <A, E, R>(
-	effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, Api.DeveloperUnavailable, R> =>
-	effect.pipe(
-		Failures.replace("A Developer Center query failed.", () =>
-			Api.DeveloperUnavailable.make({}),
-		),
-	)
-/**
- * Run the effect in one database transaction. Drizzle queries on the `db` of
- * `Db.make` join this transaction. A nested call becomes a savepoint.
- */
+/** Keep SQL failures separate from a bad stored value. The boundary hides details. */
+export const stored = transactionFailures
+/** Drizzle queries join this transaction. A nested call uses a savepoint. */
 export const transaction =
 	(sql: PgClient.PgClient) =>
 	<A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		sql
-			.withTransaction(effect)
-			.pipe(
-				Effect.catchTag("SqlError", (error) =>
-					Effect.fail(error).pipe(
-						Failures.replace("A Developer Center transaction failed.", () =>
-							Api.DeveloperUnavailable.make({}),
-						),
-					),
-				),
-			)
+		sql.withTransaction(effect).pipe(transactionFailures)
 
 /** A column that holds a value as JSON text. */
 export const Json = <S extends Schema.Top>(schema: S) =>
@@ -56,19 +38,11 @@ export const Json = <S extends Schema.Top>(schema: S) =>
 export const decodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(row: unknown) =>
-		Schema.decodeUnknownEffect(schema)(row).pipe(
-			Failures.replace("A stored Developer Center value is not valid.", () =>
-				Api.DeveloperUnavailable.make({}),
-			),
-		)
+		Schema.decodeUnknownEffect(schema)(row)
 export const encodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(value: S["Type"]) =>
-		Schema.encodeEffect(schema)(value).pipe(
-			Failures.replace("A Developer Center value could not be stored.", () =>
-				Api.DeveloperUnavailable.make({}),
-			),
-		)
+		Schema.encodeEffect(schema)(value)
 
 /** The account of an owner key, which is `[organizationId, userId]` as JSON. */
 export const identityOf = (owner: string) =>
@@ -79,20 +53,20 @@ export const identityOf = (owner: string) =>
 	)
 
 export const ClaimRow = Schema.Struct({
-	...Api.Challenge.fields,
-	scope: Json(Api.ManagementScope),
+	...Developers.Challenge.fields,
+	scope: Json(Developers.ManagementScope),
 })
 export const decodeClaim = decodeRow(ClaimRow)
 export const encodeClaim = encodeRow(ClaimRow)
 
 export const ProofRow = Schema.Struct({
-	...Api.Proof.fields,
-	scope: Json(Api.ManagementScope),
+	...Developers.Proof.fields,
+	scope: Json(Developers.ManagementScope),
 })
 export interface ProofRecord {
 	readonly owner: string
 	readonly token: string
-	readonly value: Api.Proof
+	readonly value: Developers.Proof
 }
 export const decodeProof = (row: typeof developerProofs.$inferSelect) =>
 	decodeRow(ProofRow)(row).pipe(
@@ -111,7 +85,7 @@ const AppRow = Schema.Struct({
 	leaseUntil: Schema.Finite,
 	monitorToken: Schema.NullOr(Schema.String),
 	monitorRevision: Schema.Natural,
-	monitorIssues: Json(Schema.Array(Api.Issue)),
+	monitorIssues: Json(Schema.Array(Developers.Issue)),
 })
 /** An App that a proof covers, with the state of its monitor check. */
 export type AppRecord = typeof AppRow.Type
@@ -147,7 +121,7 @@ export const getApp = (
 	findApp(db, namespace, cardUrl, lock).pipe(
 		Effect.flatMap(
 			Option.match({
-				onNone: () => Effect.fail(Api.DeveloperNotFound.make({})),
+				onNone: () => Effect.fail(Developers.DeveloperNotFound.make({})),
 				onSome: Effect.succeed,
 			}),
 		),
@@ -170,8 +144,8 @@ export const putApp = Effect.fn("DeveloperRows.putApp")(function* (
 })
 
 const NoticeRow = Schema.Struct({
-	...Api.Notice.fields,
-	issue: Schema.NullOr(Json(Api.Issue)),
+	...Developers.Notice.fields,
+	issue: Schema.NullOr(Json(Developers.Issue)),
 })
 export const decodeNotice = decodeRow(NoticeRow)
 /** Save a notice once. A notice with the same ID stays as it is. */
@@ -179,7 +153,7 @@ export const postNotice = Effect.fn("DeveloperRows.postNotice")(function* (
 	db: Database,
 	namespace: string,
 	owner: string,
-	notice: Api.Notice,
+	notice: Developers.Notice,
 ) {
 	const row = yield* encodeRow(NoticeRow)(notice)
 	yield* stored(
@@ -192,10 +166,8 @@ export const postNotice = Effect.fn("DeveloperRows.postNotice")(function* (
 
 const TestRow = Schema.Struct({
 	owner: Schema.String,
-	value: Json(Api.ConnectionTest),
+	value: Json(Models.ConnectionTest),
 	resourceMetadataUrl: Schema.NullOr(Schema.String),
-	cleanupToken: Schema.NullOr(Schema.String),
-	cleanupLeaseUntil: Schema.Finite,
 })
 /** A connection test with the private fields that only the server reads. */
 export type TestRecord = typeof TestRow.Type
@@ -225,7 +197,7 @@ export const getTest = (
 	findTest(db, namespace, id, lock).pipe(
 		Effect.flatMap(
 			Option.match({
-				onNone: () => Effect.fail(Api.DeveloperNotFound.make({})),
+				onNone: () => Effect.fail(Developers.DeveloperNotFound.make({})),
 				onSome: Effect.succeed,
 			}),
 		),
@@ -256,9 +228,10 @@ export const putTest = Effect.fn("DeveloperRows.putTest")(function* (
 })
 
 const FlowRow = Schema.Struct({
+	actor: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	owner: Schema.String,
 	testId: Schema.String,
-	value: Json(Api.TestAuthorization),
+	value: Json(Developers.TestAuthorization),
 	body: Schema.NullOr(Schema.String),
 	callback: Schema.NullOr(Schema.String),
 	consumed: Schema.Boolean,
@@ -286,7 +259,7 @@ export const getFlow = Effect.fn("DeveloperRows.getFlow")(function* (
 			),
 		)
 	const row = (yield* stored(lock ? query.for("update") : query))[0]
-	if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+	if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
 	return yield* decodeFlow(row)
 })
 export const putFlow = Effect.fn("DeveloperRows.putFlow")(function* (
@@ -314,8 +287,8 @@ export const putFlow = Effect.fn("DeveloperRows.putFlow")(function* (
 /** The owner of a report that the monitor saved. */
 export const monitorOwner = "monitor"
 export const decodeReport = (row: typeof developerReports.$inferSelect) =>
-	decodeRow(Json(Api.InspectionReport))(row.report).pipe(
-		Effect.map((report): Api.SavedReport => ({
+	decodeRow(Json(Models.InspectionReport))(row.report).pipe(
+		Effect.map((report): Models.SavedReport => ({
 			id: row.id,
 			cardUrl: row.cardUrl,
 			createdBy: row.owner ?? monitorOwner,
@@ -327,9 +300,9 @@ export const saveReport = Effect.fn("DeveloperRows.saveReport")(function* (
 	db: Database,
 	namespace: string,
 	owner: string | null,
-	value: Api.SavedReport,
+	value: Models.SavedReport,
 ) {
-	const report = yield* encodeRow(Json(Api.InspectionReport))(value.report)
+	const report = yield* encodeRow(Json(Models.InspectionReport))(value.report)
 	yield* stored(
 		db.insert(developerReports).values({
 			namespace,

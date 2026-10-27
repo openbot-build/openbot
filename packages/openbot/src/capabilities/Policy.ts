@@ -3,7 +3,7 @@
  * ID of the Grant. A deny Grant wins over an allow Grant, as
  * `denyOverrides` says.
  */
-import { BotsApi } from "@openbot-build/api"
+import { Bots as BotsApi } from "@openbot-build/domain"
 import { Domain, Policy, Resource } from "@nmnmcc/ability"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import type { Chat } from "@openbot-build/core"

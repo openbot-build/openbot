@@ -28,3 +28,13 @@ export * as Store from "./store/Store.ts"
 export * as MemoryPersistence from "./store/MemoryPersistence.ts"
 
 export * as ChatStoreRepository from "./store/ChatStoreRepository.ts"
+
+export * as ModelStep from "./chat/ModelStep.ts"
+
+export * as TurnState from "./chat/TurnState.ts"
+
+export * as TurnRunner from "./chat/TurnRunner.ts"
+
+export * as ToolStep from "./chat/ToolStep.ts"
+
+export * as ToolRegistration from "./plugins/ToolRegistration.ts"

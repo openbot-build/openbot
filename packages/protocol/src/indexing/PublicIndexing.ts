@@ -12,12 +12,14 @@ import {
 	Match,
 	pipe,
 	Predicate,
+	Result,
 	Record as Rec,
 	String as Str,
 } from "effect"
 import { Rules } from "../discovery/Discovery.ts"
 
 import * as Index from "./Index.ts"
+import * as Client from "../connections/Client.ts"
 import * as Document from "../Document.ts"
 import * as Network from "../network/Network.ts"
 import * as Robots from "../discovery/Robots.ts"
@@ -593,61 +595,73 @@ export const makeInspection: Effect.Effect<
 								}),
 							),
 					}),
-					Effect.catch((error) =>
-						Match.value(error).pipe(
-							Match.when(
-								{ _tag: "IndexingError", reason: "RobotsDenied" },
-								() => exclude("RobotsDenied", false),
-							),
-							Match.orElse((error) =>
-								Effect.logInfo(
-									"Anonymous verification failed",
-									Cause.fail(error),
-								).pipe(
-									Effect.annotateLogs({ cardUrl: input.cardUrl }),
-									Effect.as<InspectionResult>({
-										_tag: "Unconfirmed" as const,
-										stages,
-										cardUrl: input.cardUrl,
-										...Match.value(error).pipe(
-											Match.tagsExhaustive({
-												IndexingError: (error) => ({
-													reason: error.reason,
-													url: error.url,
-													issue: error.issue,
-												}),
-												NetworkError: (error) => ({
-													reason: error.reason,
-													url: input.cardUrl,
-													issue: error.message,
-												}),
-												SchemaError: (error) => ({
-													reason: "InvalidDocument",
-													url: input.cardUrl,
-													issue: error.message,
-												}),
-												IncompatibleCard: (error) => ({
-													reason: "InvalidDocument",
-													url: input.cardUrl,
-													issue: error.reason,
-												}),
-												InvalidDocument: (error) => ({
-													reason: "InvalidDocument",
-													url: input.cardUrl,
-													issue: error.issue,
-												}),
-												IndexError: () => ({
-													reason: "InvalidDocument",
-													url: input.cardUrl,
-													issue: "The Index entry is not valid",
-												}),
-											}),
+					Effect.catchCause((cause) => {
+						if (Cause.hasDies(cause))
+							return Effect.failCause(cause).pipe(Effect.orDie)
+						return Cause.findError(cause).pipe(
+							Result.match({
+								onFailure: Effect.failCause,
+								onSuccess: (error) =>
+									Match.value(error).pipe(
+										Match.when(
+											{ _tag: "IndexingError", reason: "RobotsDenied" },
+											() => exclude("RobotsDenied", false),
 										),
-									}),
-								),
-							),
-						),
-					),
+										Match.orElse((error) =>
+											Effect.succeed<InspectionResult>(
+												Client.withCause(
+													{
+														_tag: "Unconfirmed" as const,
+														stages,
+														cardUrl: input.cardUrl,
+														...Match.value(error).pipe(
+															Match.tagsExhaustive({
+																IndexingError: (error) => ({
+																	reason: error.reason,
+																	url: error.url,
+																	issue:
+																		"The public App declaration could not be checked.",
+																}),
+																NetworkError: (error) => ({
+																	reason: error.reason,
+																	url: input.cardUrl,
+																	issue:
+																		"The public App address could not be read.",
+																}),
+																SchemaError: () => ({
+																	reason: "InvalidDocument",
+																	url: input.cardUrl,
+																	issue:
+																		"The public App document does not match its schema.",
+																}),
+																IncompatibleCard: () => ({
+																	reason: "InvalidDocument",
+																	url: input.cardUrl,
+																	issue:
+																		"The public App Card has no supported connection.",
+																}),
+																InvalidDocument: () => ({
+																	reason: "InvalidDocument",
+																	url: input.cardUrl,
+																	issue:
+																		"The public App document is not valid.",
+																}),
+																IndexError: () => ({
+																	reason: "InvalidDocument",
+																	url: input.cardUrl,
+																	issue: "The Index entry is not valid.",
+																}),
+															}),
+														),
+													},
+													cause,
+												),
+											),
+										),
+									),
+							}),
+						)
+					}),
 				)
 			},
 		),

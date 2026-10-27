@@ -1,172 +1,38 @@
 ---
-title: Quick start
-description: Run OpenBot on your computer and make your first call.
+title: "Your first task"
+description: "Your first task"
 ---
 
-This page starts OpenBot on your computer with a test account and test models.
-You do not need an identity provider or a model key.
+Use this guide on an OpenBot service that your organization already runs. You
+need its client or a linked [Channel](/docs/channels), an active membership, and
+a Bot with a working model.
 
----
+## Start a conversation
 
-## Prerequisites
+1. [Sign in](/docs/authentication) and choose the organization where you want to
+   work.
+2. Choose a Bot you may use. Ask your administrator for one if none is
+   available.
+3. Send a small task: “Make a list of three things to check before a meeting.”
+4. Read the answer in the same conversation. You can send a correction or a
+   further question there.
 
-You need:
+OpenBot keeps one direct Chat between you and that Bot. Your client may show the
+answer as it arrives or when it is complete.
 
-1. [devenv](https://devenv.sh) 2.3 or newer. It gives you the right Node.js,
-   pnpm, PostgreSQL tools, and Docker command line tools.
-2. A running [Docker](https://docs.docker.com/get-docker/) service. The
-   development database and object storage run in Docker.
-3. A copy of the code:
+## Give the Bot more work
 
-```sh
-git clone https://github.com/openbot-build/openbot.git
-cd openbot
-```
+State the result you want and give the needed facts. Add [files](/docs/files) or
+connect an [App](/docs/apps) when the task needs them. Long work can come back
+later through [delegation](/docs/delegation).
 
-Run every command from the top folder of the code, inside `devenv shell --`.
+If a [request](/docs/requests) arrives, check the action and its scope before
+you decide. An answer in the Chat does not always mean all background work has
+ended.
 
----
+## If you cannot start
 
-## Start OpenBot
-
-<Steps>
-
-<Step>
-
-### Make the local settings
-
-```sh
-devenv shell -- pnpm dev:setup
-```
-
-This command makes `.env.development` with a new secret key. If you have an
-`.env.development` from an older version, delete it first.
-
-</Step>
-
-<Step>
-
-### Start the server
-
-```sh
-devenv shell -- pnpm dev
-```
-
-This starts PostgreSQL and RustFS in Docker, builds OpenBot, updates the
-database, and starts OpenBot at `http://localhost`. On Linux, devenv asks for
-your password with `sudo` the first time. Its proxy needs it to listen on
-port 80. The development server sets up the platform by itself, so you do not
-run the setup program. The first start can take a few minutes. Press **Ctrl+C**
-to stop. Your data stays in the database.
-
-</Step>
-
-<Step>
-
-### Sign in
-
-```sh
-curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
-  -H "Origin: http://localhost" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
-
-In development, this signs you in to the local test account
-`developer@localhost.test` at once. The sign-in cookie goes to `cookies.txt`.
-This account is a platform admin. It has no organization yet.
-
-</Step>
-
-<Step>
-
-### Make an organization
-
-Bots, Chats and tokens belong to an [organization](/docs/organization). Make one
-for yourself:
-
-```sh
-curl -b cookies.txt \
-  -H 'Origin: http://localhost' \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"My lab"}' \
-  http://localhost/v1/organizations
-```
-
-You are the Super Administrator of this organization.
-
-</Step>
-
-<Step>
-
-### Make a user token
-
-```sh
-curl -b cookies.txt \
-  -H 'Origin: http://localhost' \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"local"}' \
-  http://localhost/v1/user/tokens
-```
-
-The token belongs to your new organization. The answer has a `secret` that
-starts with `obut_`. You see it only once, so keep it:
-
-```sh
-export OPENBOT_TOKEN=obut_...
-```
-
-</Step>
-
-<Step>
-
-### Make a Bot
-
-You give work to a [Bot](/docs/bots). A new account has no Bots, so make one:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  http://localhost/v1/bots
-```
-
-Take `id` from the answer. To use this Bot when you name no Bot, make it your
-[default Bot](/docs/bots#your-default-bot).
-
-</Step>
-
-<Step>
-
-### Talk to your Bot
-
-Send your Bot a message:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"input":"Hello"}' \
-  http://localhost/v1/bots/<botId>/messages
-```
-
-OpenBot makes your Chat with the Bot, and the message starts a Turn. The Turn
-runs in the background and you get `202` at once, with `delivery: "started"`.
-Add `"stream": true` to get the answer as a live stream. To read the answer
-later, take `chat` from the answer and call `GET /v1/chats/<chatId>`.
-
-</Step>
-
-</Steps>
-
-The test model `mock-text` answers with `Development response:` and your input.
-See [Models](/docs/models) for the other test models.
-
----
-
-## Next steps
-
-- Read how [Chats](/docs/chats) and Turns work.
-- Use a real identity provider: [Authentication](/docs/authentication) and
-  [Platform](/docs/platform).
-- Add a real model: [Models](/docs/models).
-- Run OpenBot on a server: [Deploy](/docs/deploy).
+A missing organization needs an invitation or access from its administrator. A
+Bot without an available model needs a model choice. Ask your administrator when
+you cannot choose one. For a missing operation in your client, ask the client
+provider.

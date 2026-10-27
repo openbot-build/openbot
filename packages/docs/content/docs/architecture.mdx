@@ -1,0 +1,329 @@
+---
+title: Execution design
+description: The shared design for stored work, state, and events.
+---
+
+For developers. Start with the [developer manual](/docs/developers) to choose
+API work, App publishing, or project changes.
+
+This page fixes the target design. The change is still in progress. It is not
+ready for a production data move. The last section lists the work still needed.
+
+## Scope
+
+OpenBot stays headless and API first. It keeps Bots, Chats, tools, delegation,
+approval, memory, Code Mode, Apps, indexing, Computers, Channels, triggers, live
+sessions, organizations, SSO, files, Vaults, models, and billing. `core` and
+`protocol` must still work on their own.
+
+PostgreSQL and object storage are the only required outside services. OpenBot
+nodes use authenticated private HTTP RPC to call each other. RPC means a call to
+code in another process. One-node and many-node servers use the same engine.
+
+## Modules
+
+| Package          | Owns                                                       |
+| ---------------- | ---------------------------------------------------------- |
+| `core`           | Model steps, tool steps, context size, and basic Chat data |
+| `domain`         | Product data, branded IDs, states, errors, and pure rules  |
+| `api`            | HTTP input and output, authentication, and error mapping   |
+| `protocol`       | MCP, OAuth, App cards, discovery, and connections          |
+| `openbot`        | Use cases, workflows, PostgreSQL, and outside adapters     |
+| `client` and CLI | Calls through the public contract                          |
+
+Storage must not take its data model from HTTP models. Business code returns
+domain failures. HTTP handlers map them to public errors. Model, Computer,
+Vault, and storage adapters remain replaceable. A plain query or pure rule does
+not need a service that only forwards calls.
+
+A service gets its dependencies when its Layer is built. Entry points join
+Layers and own scopes. Product modules must not import from the entry-point
+folder. Importing a module starts no I/O.
+
+The server builds no Chat runtime for a member. Each Turn or child phase owns
+its model and tools. Account connections may share a cache by connection ID and
+version. That cache does not own Chat state or execution.
+
+## Execution
+
+An **execution** is stored work with a stable ID. A business resource keeps its
+own ID and links to its execution. A **command key** names one request and its
+input. A retry reuses that key. A changed input with the same key fails.
+
+A **generation** is the number of the current owner of an execution. Taking over
+adds one. State writes check that number under a database lock. An old owner may
+save a late outside result. It cannot advance the new owner's state.
+
+Effect `Workflow`, `Activity`, `DurableDeferred`, `DurableClock`, and
+`ClusterWorkflowEngine` provide stored steps, signals, timers, messages, and
+node assignment. Features register their own workflows. The engine has no Bot,
+approval, or Computer branches. The standalone core has an in-memory host. It
+does not promise recovery after its process stops.
+
+Each work phase runs in an `Activity` named by its saved phase and generation.
+The engine stores only a safe phase result, such as an error ID or a pause
+reference. Inputs, outside results, and full failures stay in sealed records. A
+new owner gets a new phase name and reuses results through the common call log.
+Cancellation and other signals close the phase gate before waiting for its local
+fiber and resources to stop. A late Activity request cannot start work after
+that gate closes.
+
+The states are `queued`, `running`, `waiting`, `cancelling`, `outcome_unknown`,
+`completed`, `failed`, `cancelled`, and `interrupted`. The last four are end
+states. `outcome_unknown` waits for a saved result or a decision. A cancel
+request enters `cancelling`; it does not prove an outside action stopped.
+
+Execution ownership and source identity are separate. An owner waits for its
+attached children and their notices to end. A detached tool may outlive its
+Turn. Ending a child and creating its notice share one transaction, so an owner
+cannot miss work between two reads. Each cancel phase has its own number and
+stored signal. Repeating an old signal cannot cancel a later phase.
+
+## State and calls
+
+State, results, events, and outgoing commands commit in one transaction. An
+**outbox** holds commands until the engine has stored them. Stable IDs make
+repeated delivery safe. No model, network, or other outside call runs in that
+transaction.
+
+A Chat admits one advancing Turn at a time. Its row lock orders durable input
+commands. Input with the same identity may steer a running Turn. Queued input
+keeps its own identity and place. Ending a Turn and admitting the next input
+commit together, after owned resources close.
+
+Each Chat checkpoint checks both the Turn and execution generation. A failed
+checkpoint reuses saved model and tool results. A model result is saved before
+local tools run. Each tool result is saved before it is published. The saved
+tool definitions keep parameters, routes, App sources, and Vault references. A
+change in discovery cannot change a saved call. New calls still need current
+rights. Hooks run at named steps and deduplicate their writes on replay. Plugins
+cannot change the execution lifecycle.
+
+An outside call first saves intent, then marks itself as sending, then saves its
+result. Safe retries reuse the same provider key. A write with no reliable retry
+rule waits in `outcome_unknown` when its result is lost. A saved result is
+reused. A repeated model request has a new attempt and a new start event; its
+text is not joined to the old attempt's partial text.
+
+The call log stores late results, including confirmed usage. Only the current
+generation may publish them or change business state. Database failures retry at
+the nearest safe boundary. A known result is held while its save retries; the
+provider is not called again. Invalid stored data is reported as a failure, not
+treated as a temporary database outage.
+
+A phase closes resources before it ends or waits for a decision. A close failure
+keeps its full cause and a safe error ID. It blocks new sends. Unknown writes
+still need a result or stop decision. An observer closing its stream does not
+cancel the phase.
+
+Chat stop and delete are execution commands. Delete closes admission, cancels
+linked work, and waits for release. A Live provider session belongs to a scope
+registered before provider connection starts. The node that owns it closes it
+and acknowledges release. Each physical lease keeps its close result in the
+database. A lost reply reads that result. A failed close keeps the same error ID
+after the owner stops. A missing route or unhealthy runner does not prove
+release. The owner closes on lease loss or when it cannot check its lease.
+Unknown interactive writes and audio are never replayed.
+
+App connections can have physical scopes on several nodes. Each scope has its
+own lease. Connection cleanup waits for every scope, including old scopes whose
+route was replaced. Protocol clients use the same close result when a caller
+ends its scope or a remote cleanup closes it.
+
+App authorization exchange and refresh save a cleanup command with each grant
+result, including a late result. The command belongs to the platform, so loss of
+member access does not stop cleanup. Installation records the call ID in the
+same transaction as the credential and the final event. Cleanup waits for the
+source execution and any later connection work. An installed grant keeps its
+connection as its owner. Other cleanup stays pending while any connection or
+developer test uses the same issuer and OAuth client. OAuth servers may revoke
+related tokens together, even when their strings differ. A durable timer checks
+again after users release those grants. The check covers all OpenBot owners.
+
+Grant sends and installation share a database lock with cleanup. A saved
+revocation intent reserves the grant scope across retries and node takeover. New
+grant sends wait for that revocation to end. Cleanup releases the connection and
+grant scope with its final event. A failed remote revocation uses the common
+retry timer. A server with no revocation endpoint gives a saved `LocalOnly`
+result.
+
+## Identity and access
+
+`ExecutionIdentity` keeps the resource owner, current actor, original token,
+Bot, delegation, and source execution separate. A child keeps all limits of its
+source. Other callers may add limits; they cannot remove earlier ones. Channel
+work also keeps its linked speaker. Identity never comes from a string prefix,
+the Turn author, or plugin order.
+
+HTTP, tools, Code Mode, and restored work use the same use cases and access
+rules. The owner and actor must still be valid. Checks run on restore, before
+outside sends, and after waits for model limits or secrets. A saved approval
+cannot grant rights denied by the platform, member, or original token. Lists
+apply resource rules in the database query. API keys and same-origin session
+cookies enter the same use cases.
+
+`ServiceIdentity` names a service whose owner is the platform or one
+organization. It has no member ID. It uses the same execution store, command
+log, outbox, events, and recovery loop. Command keys belong to a member or
+service scope. A service cannot enter a member workflow. A member or token
+cannot send through a service workflow. Each service has its own current access
+check. Public organization endpoints cannot read platform executions.
+
+## Feature workflows
+
+| Feature                                     | Rule                                                                                                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat, Turn, tools                           | Chat orders input. Turn owns model steps. Background tools have their own execution.                                                                                                         |
+| Approval, delegation, plans, limits         | Save decisions and signals. Approval can wait while the source Turn continues. Task notices are deduplicated.                                                                                |
+| Memory                                      | Save learning and helper calls in the common call log. Cursor commits cannot replace newer progress.                                                                                         |
+| Code Mode                                   | Keep sandbox isolation, fixed time and random seed, and call-order checks. Replay uses common call records.                                                                                  |
+| App calls, OAuth, developer tests, indexing | Long work uses workflows. Connection and authorization records belong to Apps. An instance restart does not reset another node's work or valid Views.                                        |
+| Channels, triggers, reminders               | Deduplicate input, store timers, and record sends and retries. Proven rejection and unknown send outcomes have different retry rules.                                                        |
+| Computer, Connector, Live                   | Use the common resource directory and RPC. The actual connection stays with its physical owner. Restore only when the driver supports it. Do not replay audio or unknown interactive writes. |
+| Files, Vaults, models                       | Keep dedicated adapters. Cross-store file deletion uses retryable work. Open secrets only at the call boundary.                                                                              |
+| Accounts, organizations, SSO                | Keep separate business modules. All entry points use the shared identity and access rules.                                                                                                   |
+
+A task's state keeps its time, step, and cost limits. Recovery does not reset
+these limits. Pauses stop new sends and release phase resources. A review may
+answer its own pause but cannot bypass a parent's pause. Time counts only while
+the task and its parents can run. Notices to closed work add history without
+starting a new Turn.
+
+## Usage, failures, and secrets
+
+Each model call has one billing identity. Confirmed usage, the result, and its
+events commit together. Duplicate results do not charge twice. Estimates are
+only for reservations and rate limits. Missing usage stays unknown, with its
+estimate and call ID. It is never recorded as successful zero usage. A call
+releases its hold when it ends. Takeover releases holds from old attempts. The
+estimate stays in a separate field; missing old estimates stay null. Unknown
+usage does not block new calls. Late confirmed usage still settles once. These
+estimates are not proved upper bounds on the provider's final charge.
+
+Full failure causes are saved in sealed error records. HTTP, Channels, parent
+Bots, and workflow results carry only a safe category and error ID. Reusing a
+safe failure preserves its original error ID.
+
+HTTP API server faults return `RequestFailed` with `category` and `errorId`. The
+`openbot-error-id` response header has the same ID. Declared input, access, and
+conflict errors keep their status and type. API keys and session cookies use the
+same error boundary. Typed error mapping keeps the full private cause until that
+boundary saves it; it does not print the cause in ordinary logs.
+
+After an event stream starts, a server fault sends the same `RequestFailed`
+fields in its failure event. Event encoding also runs inside this boundary. A
+fault while saving or encoding that failure closes the connection. The reader
+can resume from its last saved cursor; no inside error is sent as event data.
+
+A later failure while releasing resources gets its own sealed cause and error
+ID, linked to the same execution. It does not replace the first failure or make
+the execution complete. Failed release retries use a delay that grows from 100
+milliseconds to 5 seconds.
+
+Engine messages carry record references. Sensitive input, results, identity, and
+events live in sealed domain records. Vault calls save item IDs and allowed
+fields, not secret values. A new item with an old name cannot replace a saved
+reference. Current rights and fields are checked again before sending.
+
+## Reading events
+
+`observe(executionId, afterSequence)` reads an ordered event log. Each event has
+a sequence within its execution. Text also names its step and attempt. Text is
+stored in small batches before it is published.
+
+PostgreSQL notifications wake a shared reader on each node. The event log is the
+source of truth if a notification is lost. Bounded buffers limit memory. Slow
+readers and reconnecting readers fetch from their cursor. The end state can be
+read again. HTTP, SDKs, Channels, and parent Bots use this same path. Closing
+SSE or long polling closes observation only. Cancellation needs its own command.
+
+## Data move
+
+Stop old nodes and new input before the move. Back up the database and object
+references. Apply new Drizzle migrations, then convert data in batches with
+stored progress. Never change the baseline migration. Runtime storage Layers do
+not execute DDL, the SQL commands that change table structure.
+
+Keep resource IDs, owners, history, approvals, connections, secrets, and pending
+work. Old encrypted records use dedicated migration codecs. Link unfinished work
+to new executions. Unknown outside results remain unknown. Work that cannot be
+rebuilt becomes interrupted with a reason. A broken record stops the move; it is
+not skipped. A developer invitation must have the same owner as its proof.
+
+Imported File and Index request history checks current rights on every read. An
+Index request also checks the current developer proof and its App access. A
+removed proof cannot grant access to old results. Imported records do not
+restart an outside action or gain the caller who reads them.
+
+Check counts, references, decryption, and states before new nodes may start. The
+conversion must resume after a stop and be safe to run again. Restore a backup
+only before traffic resumes. After outside actions resume, repair forward so
+rollback cannot repeat a write.
+
+## Checks and remaining work
+
+See the [execution design checks](/docs/architecture-checks) for the capability
+map, source test cases, removed paths, and open release evidence.
+
+The feature baseline is 581 tests. New tests cover durable commands, generation
+checks, cancellation, late results, slow readers, access changes, and usage.
+Real two-process tests share PostgreSQL, kill the owner, and check recovery from
+saved steps. Member and service work use the same test path.
+
+The member runtime wrappers are removed: `BackendLayers`, `Backend`,
+`ManagedChats`, `Chats`, `Coordinator`, and the old `LiveSessions` map. Their
+reference counts, `keepOpen`, `current`, method proxies, and Chat heartbeat
+sweep are gone. The old memory job queue and helper model path are also gone.
+Turn, tool, approval, delegation, App, Code Mode, Channel, trigger, reminder,
+and memory workflows are registered through the shared application Layers.
+
+The old App `Operations` and `Invocations` services and the Code Mode lease
+runner are removed. App discovery returns descriptions with no action callbacks.
+Calls and programs run only through the common workflows. Server startup does
+not reset old App calls, scan old delegations, or write Chat runner heartbeats.
+The old PostgreSQL Operation listener, cancellation notices, and stale sweep are
+removed. The in-memory runner in `core` still works on its own. Old stored App
+and Code records keep their migration codecs; they are not execution paths.
+
+The old global Gate, tool approvals, work-tool layer, and Bot signal bus are
+also gone. Each execution builds its own Gate and approvals. A reminder tool
+submits a durable command. Request workflows close one due request at a time; no
+global request scan remains. The request, saved tool call, and notification
+commit together. A failed write leaves no waiting request without its call.
+
+The old delegation Limits service is removed too. Limit checks use saved usage
+and the delegation workflow. A failed usage or settings read stops the action;
+it does not use an older cost or a default time limit. A stopped approval check
+leaves the task paused for recovery.
+
+Developer test runs and sign-in preparation now use the common workflow, saved
+calls, and event log. Their command stores the original caller and a stable
+execution ID. Progress commits with a generation check. Cleanup waits for the
+run to close its connection. The old run FiberMap and its result callbacks are
+gone.
+
+Connection checks, updates, manual changes, and revalidation now use common
+execution commands. A saved read proposes a change. The final transaction checks
+the current caller, revision, and generation before applying it. Its checkpoint
+names the saved result, so results remain readable after a connection is
+removed. A replaced grant moves to platform cleanup in that same transaction.
+
+The following work still blocks release:
+
+- Move developer test code exchange and cleanup off their old worker and local
+  coordination paths. Authorization preparation, code exchange, refresh,
+  revocation, removal, reset, and file maintenance use common execution records.
+- Complete full-server checks for each physical adapter. Two resource processes
+  now cover owner loss, slow close, lost replies, database network loss, and
+  late close after replacement. A lease with no saved close result stays
+  unknown.
+- Replace the memory helper's node-local permit limit with shared admission.
+- Build and rehearse the full old-data conversion, progress records, and startup
+  gate. The schema migrations alone are not this conversion.
+- Complete the failure, access, secret, and migration test matrix. Enforce
+  module dependency rules and report the removed coordination paths.
+- Pass full builds, type checks, all package tests, Compose checks, image scans,
+  docs builds, and CI before merging and pushing the release.
+
+The change is complete only when all retained features use this design and the
+old coordination paths are removed.

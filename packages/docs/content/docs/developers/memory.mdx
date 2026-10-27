@@ -1,0 +1,264 @@
+---
+title: Memory
+description:
+  Each Bot learns from its work in all its Chats and uses what it learned later.
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+**Bot memory** is what one [Bot](/docs/developers/bots) learns over all its
+[Chats](/docs/developers/chats). Each Bot has one pool of entries. A **memory
+Bot** keeps the pool. It is a helper that belongs to the Bot. It reads active
+entries with proved source access rules, learns new entries, and adds what helps
+to the work of the Bot. Its learning work does not appear as a Chat. This page
+shows how Bot memory learns, who sees what, and how to read and change it with
+the API.
+
+Bot memory is the only memory. A Chat keeps its history, but no separate list of
+facts. Older versions of OpenBot also kept learned memory for each Session. That
+memory is gone.
+
+---
+
+## Entries and tags
+
+Each entry has a layer:
+
+| Layer         | Meaning                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `fact`        | Something that a Chat shows. Its sources are Items.                                                           |
+| `observation` | What the memory Bot concluded from other entries. Its sources are those entries. `confidence` is from 0 to 1. |
+| `pinned`      | What a person told OpenBot to remember.                                                                       |
+
+**Tags** sort the entries. A tag with a colon belongs to OpenBot. The memory Bot
+cannot write these tags, so a model cannot change who sees an entry.
+
+| Tag                         | Meaning                                                                   |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `from:<userId>`             | A person who said or did what the entry is about.                         |
+| `for:person:<userId>`       | This person may see the entry.                                            |
+| `for:channel:<channelId>`   | The people of this [Channel](/docs/developers/channels) group may see it. |
+| `for:bot`                   | Everyone who uses the Bot may see it.                                     |
+| `org:<organizationId>`      | Where it happened. Only work in this organization sees it.                |
+| `chat:<id>`, `channel:<id>` | Where it comes from.                                                      |
+| `app:<tool>`                | A tool result from an App supports it.                                    |
+
+Other tags, like `testing` or `trip-planning`, are **topics**. The memory Bot
+chooses them and keeps them tidy. A topic has lowercase letters, numbers and
+dashes.
+
+---
+
+## Who sees an entry
+
+OpenBot sets the `for:` tags. Nobody sees an entry without one.
+
+- A fact is for the people who saw it happen: the person of the Turn, or the
+  Channel group when the Chat is a group chat.
+- An observation can be seen only by readers who may see every source. Taking
+  part in one source gives no access to the others or to the combined result.
+- A request to share an entry more widely must still pass every source's access
+  rule. A reason, a model instruction, or ownership of the Bot cannot skip this
+  check.
+
+For a fact with several source Items, OpenBot saves each Item's access rule when
+it learns the fact. These records stay private; the public entry format stays
+the same. For an observation, it checks every source entry and each source of
+that entry in turn. A missing source, a loop in the source links, or missing
+access proof hides the result. The same check applies to reads, change logs,
+edits, and the memory used in confessions and input additions.
+
+Entries are not deleted when they stop being true. The memory Bot marks them
+with `invalidatedAt`, so authorized history stays. An inactive or retracted
+source hides the conclusions that depend on it. These checks use the sources
+that the memory Bot declares. They do not prove that a model names every input
+that shaped its answer.
+
+---
+
+## How the Bot learns
+
+The Bot has a tool called `confide`. The Bot knows it only as a place to say how
+its work goes: when it is stuck, unsure, upset or proud, or when it made a
+mistake. The Bot does not know that the tool leads to its memory. So it confides
+because it needs to, not to change what it will remember.
+
+When the Bot confides:
+
+1. The memory Bot answers at once, like a priest who hears a confession. It
+   listens and does not judge. It says that a mistake is part of the work. It
+   asks the Bot to tell the person plainly and to fix what it can. It gives no
+   new tasks. When no model can answer, the Bot gets a fixed calm answer.
+2. OpenBot saves a learning execution. After its source Turn completes, it reads
+   the new Items through that Turn and learns from them.
+
+The execution waits through the shared event log. A restart keeps the work. Each
+model step has a saved call and attempt. Recovery reuses a saved result. The
+memory change, read position, and execution end commit in one transaction.
+Concurrent learning does not apply the same evidence twice. The saved actor of
+each Turn sets its audience; OpenBot does not parse the Turn author as a user
+ID.
+
+The words of the Bot only show the memory Bot where to look. They never become
+memory themselves. A tool result from an App never becomes memory by itself. A
+[notice](/docs/developers/chats#notices) from OpenBot is never taken as the
+words of a person. A Bot that never confides learns nothing.
+
+Review Chats have no `confide` tool. When `botMemory` is off in the
+[organization settings](/docs/organization#settings), the Bot still gets an
+answer, but nothing is learned.
+
+---
+
+## How the Bot uses memory
+
+When a Turn starts, the memory Bot reads the input of the person. It skips
+notices, because they are not the words of a person. When entries help, it
+writes the input again with them. It may change the words, but it must keep all
+that the person says and asks. It may only use entries that the readers of the
+answer may see, and OpenBot checks this. In a Channel group, those are only
+entries for the group or for everyone.
+
+The model sees the new input. The history of the Chat keeps the words of the
+person. The Bot does not know that the changes come from memory. It sees them as
+its own experience. Requests and their reviews see only what the Bot asks, never
+the changes.
+
+When `botMemory` is off, the input does not change.
+
+---
+
+## The memory Bot
+
+The memory Bot uses `botMemoryModel` from the organization settings. It has no
+default. When it is `null`, the memory Bot gives the fixed calm answer, and it
+adds and learns nothing. For a [shared Bot](/docs/developers/sharing), the model
+and the cost come from the organization of the Chat.
+
+Read and change the settings of the memory Bot with `GET` and
+`PATCH /v1/bots/:botId/memory/bot`. You need `write` on a Bot that is not
+linked:
+
+```json
+{
+	"expected": 0,
+	"instructions": "Decisions of the team may be shared with the team.",
+	"concurrency": 2,
+	"budget": { "period": "month", "limitMicros": 5000000 }
+}
+```
+
+| Field          | Meaning                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `instructions` | Rules about privacy and sharing, in plain language. The memory Bot follows them.                              |
+| `concurrency`  | The most tasks that it runs at the same time on one server. `null` removes the limit.                         |
+| `budget`       | A limit on confirmed model cost in a day or a month, in micro-USD, over all organizations. `null` removes it. |
+
+Without a limit, there is none. When the budget is spent, the Bot gets the fixed
+calm answer, the input stays as it is, and learning waits until the next period.
+
+The answer to `confide` and the new input wait at most 15 seconds. This time
+also counts the wait for a free task when all `concurrency` tasks are busy.
+After that, the Bot gets the fixed calm answer, and the input stays as it is.
+One step of learning may take at most 2 minutes. When it takes longer, the
+execution ends with a safe failure. The read position stays unchanged. A later
+`confide` can ask it to learn from that evidence again.
+
+---
+
+## Read and change it
+
+`GET /v1/bots/:botId/memory` shows the entries that are for you, in your
+organization. Add `tags` with a list separated by commas to see only entries
+with all of them. You need `read` on the Bot. Nobody can read the memory about
+another person, not even with `write` on the Bot.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/bots/$BOT/memory?tags=testing"
+```
+
+```json
+{
+	"entries": [
+		{
+			"id": "mem_4f2a…",
+			"layer": "fact",
+			"content": "Run the tests before you report that work is done.",
+			"tags": [
+				"from:u_123",
+				"for:person:u_123",
+				"org:o_1",
+				"chat:chat_c81d…",
+				"testing"
+			],
+			"sources": [{ "chat": "chat_c81d…", "item": "i-12" }],
+			"status": "active",
+			"createdAt": 1792486800000,
+			"updatedAt": 1792486800000
+		}
+	],
+	"version": 4
+}
+```
+
+Change it with `POST /v1/bots/:botId/memory`:
+
+- `Remember` with `content` and optional `tags` adds a pinned entry. Only you
+  see it.
+- `Forget` with `id` takes back your part. When you are the only person behind
+  the entry, it becomes `retracted`. Otherwise you stop counting as one of its
+  people, and the entry is no longer for you. It stays for the others. An id
+  that is not for you returns `409`.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"command":{"_tag":"Forget","id":"mem_4f2a…"}}' \
+  https://api.example.com/v1/bots/$BOT/memory
+```
+
+`GET /v1/bots/:botId/memory/log` lists the changes of entries that you may see:
+`version`, the time, what made the change (`memory_bot` or `person`), and the
+ids. Changes from older versions of OpenBot can also say `promotion`.
+
+To remove memory without reading it, send one tag of OpenBot to
+`POST /v1/bots/:botId/memory/purge`: a `from:`, `chat:`, `org:` or `channel:`
+tag. Observations that came from those entries have the same tag, so they go
+too. You need `write` on a Bot that is not linked. The answer is only the number
+of removed entries.
+
+When you
+[delete the history of a Chat](/docs/developers/chats#delete-the-history), the
+memory that the Bot learned from it stays. Purge `chat:<id>` to remove it too.
+
+The same source access rule applies to old and new memory. If OpenBot cannot
+prove access to every source of an old entry, it keeps that entry hidden. It
+also leaves that entry and conclusions based on it out of learning input. The
+entry can become visible only after it is rebuilt from sources whose access can
+be checked. OpenBot does not rebuild these entries during an upgrade. It does
+not give a wider audience to old memory. A private pinned entry made with
+`Remember` keeps its own access rule.
+
+---
+
+## Confessions and additions
+
+Two routes show what happened in one of your Chats:
+
+- `GET /v1/chats/:chatId/confessions` lists what the Bot confided, and the
+  answers. Read [Show confessions](/docs/client#show-confessions) before you
+  show them to people.
+- `GET /v1/chats/:chatId/enrichments` lists how the memory Bot wrote the input
+  of each Turn again: the new `text`, the words of the person in `original`, and
+  the entries that it used. Older records have no `original`.
+
+Both need `read` on the Chat, so only the person who owns the Chat can read
+them.
+
+Memory text, change logs, confessions, and input additions are encrypted in
+storage. Workflow messages carry record IDs. Model requests and results stay in
+the encrypted call log. Only usage confirmed by the provider is charged. Missing
+usage is recorded as unknown.

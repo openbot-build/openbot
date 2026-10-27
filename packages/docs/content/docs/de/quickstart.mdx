@@ -1,179 +1,41 @@
 ---
-title: Schnellstart
-description: Starte OpenBot auf deinem Computer und mach deinen ersten Aufruf.
+title: "Deine erste Aufgabe"
+description: "Deine erste Aufgabe"
 ---
 
-Diese Seite startet OpenBot auf deinem Computer mit einem Testkonto und
-Testmodellen. Du brauchst keinen Identitätsanbieter und keinen Modell-Schlüssel.
+Nutze diese Anleitung mit einem OpenBot-Dienst, den deine Organisation bereits
+betreibt. Du brauchst ihren Client oder einen verknüpften
+[Channel](/de/docs/channels), eine aktive Mitgliedschaft und einen Bot mit einem
+verfügbaren Model.
 
----
+## Ein Gespräch beginnen
 
-## Voraussetzungen
+1. [Melde dich an](/de/docs/authentication) und wähle die Organisation für deine
+   Arbeit.
+2. Wähle einen Bot, den du nutzen darfst. Frage die Verwaltung, wenn keiner
+   verfügbar ist.
+3. Sende eine kleine Aufgabe: „Nenne drei Dinge, die ich vor einem Treffen
+   prüfen sollte.“
+4. Lies die Antwort im selben Gespräch. Dort kannst du sie ergänzen, berichtigen
+   oder nachfragen.
 
-Du brauchst:
+OpenBot behält einen direkten Chat zwischen dir und diesem Bot. Dein Client kann
+die Antwort schrittweise oder nach Abschluss zeigen.
 
-1. [devenv](https://devenv.sh) 2.3 oder neuer. Es gibt dir die richtigen
-   Versionen von Node.js, pnpm, den PostgreSQL-Werkzeugen und den
-   Befehlszeilen-Werkzeugen von Docker.
-2. Einen laufenden [Docker](https://docs.docker.com/get-docker/)-Dienst. Die
-   Datenbank und der Objektspeicher für die Entwicklung laufen in Docker.
-3. Eine Kopie des Codes:
+## Mehr Arbeit geben
 
-```sh
-git clone https://github.com/openbot-build/openbot.git
-cd openbot
-```
+Nenne das gewünschte Ergebnis und die nötigen Angaben. Füge
+[Dateien](/de/docs/files) hinzu oder verbinde eine [App](/de/docs/apps), wenn
+die Aufgabe sie braucht. Lange Arbeit kann über
+[Delegation](/de/docs/delegation) später zurückkommen.
 
-Führe jeden Befehl im obersten Ordner des Codes aus, innerhalb von
-`devenv shell --`.
+Prüfe bei einer [Anfrage](/de/docs/requests) die Handlung und den Umfang, bevor
+du entscheidest. Eine Antwort im Chat heißt nicht immer, dass alle
+Hintergrundaufgaben fertig sind.
 
----
+## Wenn der Start nicht klappt
 
-## OpenBot starten
-
-<Steps>
-
-<Step>
-
-### Die lokalen Einstellungen erstellen
-
-```sh
-devenv shell -- pnpm dev:setup
-```
-
-Dieser Befehl erstellt `.env.development` mit einem neuen geheimen Schlüssel.
-Wenn du eine `.env.development` von einer älteren Version hast, lösche sie
-zuerst.
-
-</Step>
-
-<Step>
-
-### Den Server starten
-
-```sh
-devenv shell -- pnpm dev
-```
-
-Das startet PostgreSQL und RustFS in Docker, baut OpenBot, aktualisiert die
-Datenbank und startet OpenBot unter `http://localhost`. Unter Linux fragt devenv
-beim ersten Mal mit `sudo` nach deinem Passwort. Sein Proxy braucht das, um auf
-Port 80 zu lauschen. Der Entwicklungsserver richtet die Platform selbst ein. Du
-führst das Einrichtungsprogramm also nicht aus. Der erste Start kann ein paar
-Minuten dauern. Drücke **Strg+C**, um zu stoppen. Deine Daten bleiben in der
-Datenbank.
-
-</Step>
-
-<Step>
-
-### Anmelden
-
-```sh
-curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
-  -H "Origin: http://localhost" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
-
-In der Entwicklung meldet dich das sofort beim lokalen Testkonto
-`developer@localhost.test` an. Das Anmelde-Cookie landet in `cookies.txt`.
-Dieses Konto ist ein Platform-Admin. Es hat noch keine Organisation.
-
-</Step>
-
-<Step>
-
-### Eine Organisation erstellen
-
-Bots, Chats und Tokens gehören zu einer [Organisation](/de/docs/organization).
-Erstelle eine für dich:
-
-```sh
-curl -b cookies.txt \
-  -H 'Origin: http://localhost' \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"My lab"}' \
-  http://localhost/v1/organizations
-```
-
-Du bist der Super Administrator dieser Organisation.
-
-</Step>
-
-<Step>
-
-### Ein User-Token erstellen
-
-```sh
-curl -b cookies.txt \
-  -H 'Origin: http://localhost' \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"local"}' \
-  http://localhost/v1/user/tokens
-```
-
-Das Token gehört zu deiner neuen Organisation. Die Antwort enthält ein `secret`,
-das mit `obut_` beginnt. Du siehst es nur einmal. Bewahre es also auf:
-
-```sh
-export OPENBOT_TOKEN=obut_...
-```
-
-</Step>
-
-<Step>
-
-### Einen Bot erstellen
-
-Du gibst einem [Bot](/de/docs/bots) Arbeit. Ein neues Konto hat keine Bots.
-Erstelle also einen:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  http://localhost/v1/bots
-```
-
-Nimm `id` aus der Antwort. Wenn du diesen Bot auch ohne Angabe eines Bots nutzen
-willst, mach ihn zu deinem [Standard-Bot](/de/docs/bots#dein-standard-bot).
-
-</Step>
-
-<Step>
-
-### Mit deinem Bot sprechen
-
-Schicke deinem Bot eine Nachricht:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"input":"Hello"}' \
-  http://localhost/v1/bots/<botId>/messages
-```
-
-OpenBot erstellt deinen Chat mit dem Bot, und die Nachricht startet einen Turn.
-Der Turn läuft im Hintergrund, und du bekommst sofort `202` mit
-`delivery: "started"`. Füge `"stream": true` hinzu, um die Antwort als
-Live-Stream zu bekommen. Um die Antwort später zu lesen, nimm `chat` aus der
-Antwort und rufe `GET /v1/chats/<chatId>` auf.
-
-</Step>
-
-</Steps>
-
-Das Testmodell `mock-text` antwortet mit `Development response:` und deiner
-Eingabe. Die anderen Testmodelle findest du unter [Models](/de/docs/models).
-
----
-
-## Nächste Schritte
-
-- Lies, wie [Chats](/de/docs/chats) und Turns funktionieren.
-- Nutze einen echten Identitätsanbieter:
-  [Authentifizierung](/de/docs/authentication) und
-  [Platform](/de/docs/platform).
-- Füge ein echtes Model hinzu: [Models](/de/docs/models).
-- Betreibe OpenBot auf einem Server: [Bereitstellung](/de/docs/deploy).
+Ohne Mitgliedschaft brauchst du eine Einladung oder Zugang von der Verwaltung.
+Ein Bot ohne verfügbares Model braucht eine Model-Auswahl. Frage die Verwaltung,
+wenn du keines wählen kannst. Bei einem fehlenden Bedienelement hilft der
+Client-Anbieter.

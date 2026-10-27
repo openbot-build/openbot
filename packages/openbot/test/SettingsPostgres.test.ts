@@ -12,13 +12,18 @@ import {
 	Redacted,
 	References,
 	Schedule,
+	Schema,
 	Stream,
+	String as Str,
 } from "effect"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import { organizationScope, type Scope } from "../src/settings/Documents.ts"
 import { Settings } from "../src/settings/Settings.ts"
 import * as SettingsPostgres from "../src/settings/SettingsPostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as ErrorRecords from "../src/errors/Records.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
+import { codec, snapshot } from "../src/errors/Snapshot.ts"
 
 /** Starts a new database, and gives the layer of a connection pool to it. */
 const startDatabase = Effect.gen(function* () {
@@ -40,13 +45,20 @@ const startInstance = (
 ) =>
 	Effect.gen(function* () {
 		const services = yield* Layer.buildWithMemoMap(
-			SettingsPostgres.layer.pipe(Layer.provideMerge(databaseLayer)),
+			SettingsPostgres.layer.pipe(
+				Layer.provide(ErrorRecords.layer),
+				Layer.provideMerge(
+					Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
+				),
+				Layer.provideMerge(databaseLayer),
+			),
 			yield* Layer.makeMemoMap,
 			yield* Effect.scope,
 		)
 		return {
 			settings: Context.get(services, Settings),
 			sql: Context.get(services, PgClient.PgClient),
+			secrets: Context.get(services, Secrets.Secrets),
 		}
 	})
 
@@ -102,18 +114,51 @@ const takeUntil = <E>(
 			: takeUntil(pull, last, next)
 	})
 
+it.live("a missed settings notice does not keep old rights", () =>
+	Effect.gen(function* () {
+		const database = yield* startDatabase
+		const first = yield* startInstance(database)
+		const second = yield* startInstance(database)
+		yield* first.settings.updateOrganization("silent", 0, (document) =>
+			Effect.succeed(document),
+		)
+		assert.strictEqual(
+			(yield* second.settings.organization("silent")).document.botMemory,
+			true,
+		)
+		// This direct write sends no pg_notify. The next read must still see it.
+		yield* first.sql`UPDATE openbot_settings SET document = jsonb_set(document::jsonb, '{botMemory}', 'false')::text, version = version + 1 WHERE scope_kind = 'organization' AND scope_id = 'silent'`
+		assert.strictEqual(
+			(yield* second.settings.organization("silent")).document.botMemory,
+			false,
+		)
+	}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+)
+
 // The database is real, so the tests use real time.
 it.live(
-	"the settings listener logs a broken connection, listens again, and then gets every notice",
+	"the settings listener seals a broken connection, listens again, and then gets every notice",
 	() => {
 		let warnings: ReadonlyArray<{
 			readonly message: unknown
 			readonly cause: Cause.Cause<unknown>
+			readonly operation: unknown
+			readonly errorId: unknown
 		}> = []
 		const logs = Logger.layer([
 			Logger.make((log) => {
-				if (log.logLevel === "Warn")
-					warnings = [...warnings, { message: log.message, cause: log.cause }]
+				if (log.logLevel === "Error") {
+					const annotations = log.fiber.getRef(References.CurrentLogAnnotations)
+					warnings = [
+						...warnings,
+						{
+							message: log.message,
+							cause: log.cause,
+							operation: annotations["operation"],
+							errorId: annotations["errorId"],
+						},
+					]
+				}
 			}),
 		])
 		return Effect.gen(function* () {
@@ -149,14 +194,40 @@ it.live(
 			const stopped = Arr.filter(
 				warnings,
 				(warning) =>
-					Arr.isArray(warning.message) &&
-					warning.message[0] ===
-						"The settings listener stopped. It starts again.",
+					warning.operation ===
+					"The settings listener stopped. It starts again.",
 			)
 			assert.strictEqual(stopped.length, 2)
-			assert.ok(Arr.every(stopped, (warning) => Cause.hasFails(warning.cause)))
+			assert.ok(
+				Arr.every(stopped, (warning) => warning.cause.reasons.length === 0),
+			)
+			assert.ok(
+				Arr.every(stopped, (warning) => typeof warning.errorId === "string"),
+			)
+			assert.ok(
+				Arr.every(
+					stopped,
+					(warning) =>
+						Arr.isArray(warning.message) &&
+						warning.message[0] ===
+							"An operation failed. Its cause is in the sealed error record.",
+				),
+			)
+			const records = yield* first.sql<{
+				readonly id: string
+				readonly cause: string
+			}>`SELECT id, cause FROM openbot_execution_failures`
+			assert.strictEqual(records.length, 2)
+			for (const record of records) {
+				const retained = yield* first.secrets.open(
+					record.cause,
+					`failure:${record.id}`,
+				)
+				assert.include(retained, '"kind":"Fail"')
+				assert.notInclude(record.cause, "SqlError")
+			}
 
-			// The notice of a change reaches the second instance long before its cache expires.
+			// Reads see the committed change on both instances.
 			assert.strictEqual(
 				(yield* second.settings.organization("org_after")).version,
 				0,
@@ -176,7 +247,7 @@ it.live(
 )
 
 it.live(
-	"a failed read of the settings is not kept, and its log names the scope",
+	"a failed settings read keeps its private cause and is not cached",
 	() => {
 		let warnings: ReadonlyArray<{
 			readonly message: unknown
@@ -184,7 +255,7 @@ it.live(
 		}> = []
 		const logs = Logger.layer([
 			Logger.make((log) => {
-				if (log.logLevel === "Warn")
+				if (log.logLevel === "Warn" || log.logLevel === "Error")
 					warnings = [
 						...warnings,
 						{
@@ -199,26 +270,25 @@ it.live(
 		return Effect.gen(function* () {
 			const database = yield* startDatabase
 			const instance = yield* startInstance(database)
-			// The listener empties the cache when it starts, so it must be up first.
+			// Wait for the change subscription to start.
 			yield* untilHeard(
 				heard(instance.settings, "org_up"),
 				instance.settings,
 				"org_up",
 			)
-			yield* instance.sql`INSERT INTO openbot_settings (scope_kind, scope_id, document, version, updated_at) VALUES ('organization', 'org_bad', 'not a document', 1, 0)`
+			yield* instance.sql`INSERT INTO openbot_settings (scope_kind, scope_id, document, version, updated_at) VALUES ('organization', 'org_bad', 'private-bad-settings', 1, 0)`
 			const failed = yield* Effect.flip(
 				instance.settings.organization("org_bad"),
 			)
 			assert.strictEqual(failed._tag, "SettingsUnavailable")
-			const bad = Arr.filter(
-				warnings,
-				(warning) =>
-					Arr.isArray(warning.message) &&
-					warning.message[0] ===
-						"The stored organization settings have a bad value",
+			assert.deepStrictEqual(warnings, [])
+			const retained = yield* Cause.fail(failed).pipe(
+				snapshot,
+				Schema.encodeEffect(codec),
 			)
-			assert.strictEqual(bad.length, 1)
-			assert.strictEqual(bad[0]?.scope, "organization:org_bad")
+			// The parser omits the bad input. Its full error still keeps the expected format.
+			assert.include(retained, "SchemaError")
+			assert.include(retained, "Expected a valid JSON string")
 			// The bad row goes, and no notice says so. The next read does not get the old failure.
 			yield* instance.sql`DELETE FROM openbot_settings WHERE scope_kind = 'organization' AND scope_id = 'org_bad'`
 			assert.strictEqual(
@@ -243,7 +313,7 @@ it.live(
 			// This subscriber takes its first change, and then nothing while the other changes come.
 			const slow = yield* Stream.toPull(second.settings.changes)
 			yield* untilHeard(slow, first.settings, "org_start")
-			// The listener is up now, so it does not empty the cache again.
+			// The listener is up now. Read the initial state.
 			assert.strictEqual(
 				(yield* second.settings.organization("org_last")).version,
 				0,

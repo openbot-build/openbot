@@ -9,7 +9,22 @@
 		"dist",
 		"src",
 		"README.md",
-		"migrations"
+		"migrations",
+		"test/Testing.ts",
+		"test/AppFixture.ts",
+		"test/BotFixture.ts",
+		"test/BrowserHost.ts",
+		"test/Caller.ts",
+		"test/ChatTest.ts",
+		"test/DefaultBot.ts",
+		"test/DevelopmentLogin.ts",
+		"test/Messages.ts",
+		"test/OrganizationFixture.ts",
+		"test/Organizations.ts",
+		"test/Policies.ts",
+		"test/PostgresTest.ts",
+		"test/Wait.ts",
+		"test/testing"
 	],
 	"bin": {
 		"openbot-server": "./dist/Main.js",
@@ -19,7 +34,8 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./StorageMigration": "./dist/database/Migrations.js",
-		"./Development": "./dist/Development.js"
+		"./Development": "./dist/Development.js",
+		"./testing": "./test/Testing.ts"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -38,9 +54,10 @@
 		"@effect/platform-node": "4.0.6",
 		"@effect/sql-pg": "4.0.6",
 		"@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0",
-		"@nmnmcc/ability": "1.0.1",
+		"@nmnmcc/ability": "3.0.0",
 		"@openbot-build/api": "workspace:*",
 		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
 		"better-auth": "1.7.8",
 		"drizzle-orm": "1.0.0-rc.5",

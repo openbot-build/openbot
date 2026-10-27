@@ -3,6 +3,9 @@ title: 权限
 description: 资源、操作、策略和角色。
 ---
 
+面向组织管理员。每项任务需要对应权限。只有平台管理员可以修改 `/v1/platform`
+下的设置。从[管理员手册](/zh-cn/docs/admin)开始。
+
 本页说明 OpenBot 如何决定调用者是否可以做某件事。每次调用 `/v1`
 都写明它需要什么：对某个资源的一个操作。OpenBot 在调用运行之前检查它。
 
@@ -26,59 +29,59 @@ OpenBot 用 [ability](https://github.com/nmnmcc/ability)
 用 `GET /v1/organization/resources`
 列出它们。每一项都有一个资源的类型（kind）、操作、字段和路径。
 
-| 资源               | 操作       | 允许什么                                                                               |
-| ------------------ | ---------- | -------------------------------------------------------------------------------------- |
-| `Chat`             | `read`     | 读取 Chats、它们的历史，以及它们交出去的工作。                                         |
-| `Chat`             | `write`    | 修改、中断和删除 Chats，并取消它们交出去的工作。                                       |
-| `Chat`             | `run`      | 给 Bots 发消息，让它们在一个 Chat 中工作。                                             |
-| `File`             | `read`     | 读取你的[文件](/zh-cn/docs/files)和它们的字节。                                        |
-| `File`             | `write`    | 上传和删除你的文件。                                                                   |
-| `Request`          | `resolve`  | 回答你的 Bots 对新能力提出的 request。                                                 |
-| `Bot`              | `read`     | 读取 Bots，以及它们的记忆、Rules 和 Grants。                                           |
-| `Bot`              | `write`    | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。                                     |
-| `Bot`              | `delegate` | 从客户端或另一个 Bot，把工作交给某个 Bot。                                             |
-| `Bot`              | `share`    | 邀请别人[使用某个 Bot](/zh-cn/docs/sharing)，并管理它的成员。                          |
-| `Trigger`          | `read`     | 读取[触发器](/zh-cn/docs/triggers)：它们的计划时间和 webhook。                         |
-| `Trigger`          | `write`    | 创建、修改和删除触发器，并设置它们的 webhook 密钥。                                    |
-| `Channel`          | `read`     | 读取组织的 [Channels](/zh-cn/docs/channels)，以及与它们关联的人。                      |
-| `Channel`          | `write`    | 创建、修改和删除 Channels，设置它们的密钥，并解除人的关联。                            |
-| `Channel`          | `use`      | 与 Channel 的 Bot 交谈，并让你的 Bots 向它发消息。                                     |
-| `ChannelIdentity`  | `read`     | 读取你在 Channel 平台上关联的账户。                                                    |
-| `ChannelIdentity`  | `write`    | 关联和解除关联你在 Channel 平台上的账户。                                              |
-| `Computer`         | `read`     | 读取 [Computers](/zh-cn/docs/computers)、可以使用它们的 Bots，以及它们的用量。         |
-| `Computer`         | `write`    | 创建、修改和删除 Computers，配对机器，并创建连接器令牌。                               |
-| `Computer`         | `use`      | 运行命令、修改文件、打开端口和使用桌面，并让你的 Bots 使用它们。                       |
-| `ComputerProvider` | `read`     | 读取 Computer 提供方的账户。                                                           |
-| `ComputerProvider` | `write`    | 添加、修改和删除 Computer 提供方的账户，以及它们的密钥。                               |
-| `ComputerProvider` | `use`      | 用 Computer 提供方的账户创建 Computers。                                               |
-| `Vault`            | `read`     | 读取 [Vaults](/zh-cn/docs/vaults)、它们的条目，以及可以使用它们的 Bots。从不显示机密。 |
-| `Vault`            | `write`    | 添加、修改和删除 Vaults 和它们的条目，并设置值。                                       |
-| `Vault`            | `use`      | 让你的 Bots 在 Code Mode 中使用 Vaults。                                               |
-| `SecretProvider`   | `read`     | 读取[机密提供方](/zh-cn/docs/vaults#添加机密提供方)的账户。                            |
-| `SecretProvider`   | `write`    | 添加、修改和删除机密提供方的账户，以及它们的令牌。                                     |
-| `SecretProvider`   | `use`      | 让 Vault 条目从机密提供方的账户读取机密。                                              |
-| `Connection`       | `read`     | 读取 App 连接和 App 账户。                                                             |
-| `Connection`       | `write`    | 创建、修改和删除 App 连接，并登录 App 账户。                                           |
-| `App`              | `use`      | 查找 Apps，并使用 App 操作和 App 视图。                                                |
-| `App`              | `publish`  | 为你发布的 Apps 使用开发者工具。                                                       |
-| `Model`            | `use`      | 为 Chat 选择模型，并在模型目录中看到它。                                               |
-| `Token`            | `read`     | 列出 API 令牌。                                                                        |
-| `Token`            | `write`    | 创建和撤销 API 令牌。                                                                  |
-| `Organization`     | `read`     | 读取组织和它的设置。                                                                   |
-| `Organization`     | `write`    | 修改组织和它的设置。                                                                   |
-| `Member`           | `read`     | 列出成员、他们的角色和策略。                                                           |
-| `Member`           | `write`    | 修改成员的角色、策略和状态，以及移除成员。                                             |
-| `Role`             | `write`    | 创建、修改和删除组织的自定义角色。                                                     |
-| `ModelProvider`    | `read`     | 读取组织的模型和模型提供方。密钥永远不会显示。                                         |
-| `ModelProvider`    | `write`    | 添加、修改和移除组织的模型、模型提供方和密钥。                                         |
-| `Sso`              | `read`     | 读取邮箱域名和 SSO 连接。                                                              |
-| `Sso`              | `write`    | 添加和验证邮箱域名，以及修改 SSO 连接。                                                |
-| `AuditLog`         | `read`     | 读取审计日志。                                                                         |
-| `Usage`            | `read`     | 读取[模型用量](/zh-cn/docs/usage)和它的费用，以及组织的额度。                          |
-| `Budget`           | `read`     | 读取[预算](/zh-cn/docs/usage#预算)，以及已经花了多少。                                 |
-| `Budget`           | `write`    | 创建、修改和删除预算。                                                                 |
-| `Platform`         | `read`     | 读取平台设置、组织、管理员，以及共享的模型和模型提供方。                               |
-| `Platform`         | `write`    | 修改平台设置、组织、管理员，以及共享的模型和模型提供方。                               |
+| 资源               | 操作       | 允许什么                                                                                          |
+| ------------------ | ---------- | ------------------------------------------------------------------------------------------------- |
+| `Chat`             | `read`     | 读取 Chats、它们的历史，以及它们交出去的工作。                                                    |
+| `Chat`             | `write`    | 修改、中断和删除 Chats，并取消它们交出去的工作。                                                  |
+| `Chat`             | `run`      | 给 Bots 发消息，让它们在一个 Chat 中工作。                                                        |
+| `File`             | `read`     | 读取你的[文件](/zh-cn/docs/developers/files)和它们的字节。                                        |
+| `File`             | `write`    | 上传和删除你的文件。                                                                              |
+| `Request`          | `resolve`  | 回答你的 Bots 对新能力提出的 request。                                                            |
+| `Bot`              | `read`     | 读取 Bots，以及它们的记忆、Rules 和 Grants。                                                      |
+| `Bot`              | `write`    | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。                                                |
+| `Bot`              | `delegate` | 从客户端或另一个 Bot，把工作交给某个 Bot。                                                        |
+| `Bot`              | `share`    | 邀请别人[使用某个 Bot](/zh-cn/docs/developers/sharing)，并管理它的成员。                          |
+| `Trigger`          | `read`     | 读取[触发器](/zh-cn/docs/developers/triggers)：它们的计划时间和 webhook。                         |
+| `Trigger`          | `write`    | 创建、修改和删除触发器，并设置它们的 webhook 密钥。                                               |
+| `Channel`          | `read`     | 读取组织的 [Channels](/zh-cn/docs/developers/channels)，以及与它们关联的人。                      |
+| `Channel`          | `write`    | 创建、修改和删除 Channels，设置它们的密钥，并解除人的关联。                                       |
+| `Channel`          | `use`      | 与 Channel 的 Bot 交谈，并让你的 Bots 向它发消息。                                                |
+| `ChannelIdentity`  | `read`     | 读取你在 Channel 平台上关联的账户。                                                               |
+| `ChannelIdentity`  | `write`    | 关联和解除关联你在 Channel 平台上的账户。                                                         |
+| `Computer`         | `read`     | 读取 [Computers](/zh-cn/docs/developers/computers)、可以使用它们的 Bots，以及它们的用量。         |
+| `Computer`         | `write`    | 创建、修改和删除 Computers，配对机器，并创建连接器令牌。                                          |
+| `Computer`         | `use`      | 运行命令、修改文件、打开端口和使用桌面，并让你的 Bots 使用它们。                                  |
+| `ComputerProvider` | `read`     | 读取 Computer 提供方的账户。                                                                      |
+| `ComputerProvider` | `write`    | 添加、修改和删除 Computer 提供方的账户，以及它们的密钥。                                          |
+| `ComputerProvider` | `use`      | 用 Computer 提供方的账户创建 Computers。                                                          |
+| `Vault`            | `read`     | 读取 [Vaults](/zh-cn/docs/developers/vaults)、它们的条目，以及可以使用它们的 Bots。从不显示机密。 |
+| `Vault`            | `write`    | 添加、修改和删除 Vaults 和它们的条目，并设置值。                                                  |
+| `Vault`            | `use`      | 让你的 Bots 在 Code Mode 中使用 Vaults。                                                          |
+| `SecretProvider`   | `read`     | 读取[机密提供方](/zh-cn/docs/developers/vaults#添加机密提供方)的账户。                            |
+| `SecretProvider`   | `write`    | 添加、修改和删除机密提供方的账户，以及它们的令牌。                                                |
+| `SecretProvider`   | `use`      | 让 Vault 条目从机密提供方的账户读取机密。                                                         |
+| `Connection`       | `read`     | 读取 App 连接和 App 账户。                                                                        |
+| `Connection`       | `write`    | 创建、修改和删除 App 连接，并登录 App 账户。                                                      |
+| `App`              | `use`      | 查找 Apps，并使用 App 操作和 App 视图。                                                           |
+| `App`              | `publish`  | 为你发布的 Apps 使用开发者工具。                                                                  |
+| `Model`            | `use`      | 为 Chat 选择模型，并在模型目录中看到它。                                                          |
+| `Token`            | `read`     | 列出 API 令牌。                                                                                   |
+| `Token`            | `write`    | 创建和撤销 API 令牌。                                                                             |
+| `Organization`     | `read`     | 读取组织和它的设置。                                                                              |
+| `Organization`     | `write`    | 修改组织和它的设置。                                                                              |
+| `Member`           | `read`     | 列出成员、他们的角色和策略。                                                                      |
+| `Member`           | `write`    | 修改成员的角色、策略和状态，以及移除成员。                                                        |
+| `Role`             | `write`    | 创建、修改和删除组织的自定义角色。                                                                |
+| `ModelProvider`    | `read`     | 读取组织的模型和模型提供方。密钥永远不会显示。                                                    |
+| `ModelProvider`    | `write`    | 添加、修改和移除组织的模型、模型提供方和密钥。                                                    |
+| `Sso`              | `read`     | 读取邮箱域名和 SSO 连接。                                                                         |
+| `Sso`              | `write`    | 添加和验证邮箱域名，以及修改 SSO 连接。                                                           |
+| `AuditLog`         | `read`     | 读取审计日志。                                                                                    |
+| `Usage`            | `read`     | 读取[模型用量](/zh-cn/docs/usage)和它的费用，以及组织的额度。                                     |
+| `Budget`           | `read`     | 读取[预算](/zh-cn/docs/usage#预算)，以及已经花了多少。                                            |
+| `Budget`           | `write`    | 创建、修改和删除预算。                                                                            |
+| `Platform`         | `read`     | 读取平台设置、组织、管理员，以及共享的模型和模型提供方。                                          |
+| `Platform`         | `write`    | 修改平台设置、组织、管理员，以及共享的模型和模型提供方。                                          |
 
 `Platform` 只供平台管理员使用。见 [平台](#平台)。
 
@@ -113,7 +116,11 @@ OpenBot 用 [ability](https://github.com/nmnmcc/ability)
 
 ## 策略
 
-策略是 JSON。下面的策略让调用者读取和修改自己的 Chats：
+策略是 JSON 文本。HTTP 请求和响应中的 `policy` 和 `ceiling`
+字段都是字符串。要发送策略对象，先对该字段调用一次
+`JSON.stringify(policy)`，再把外层请求编码为 JSON。类型化客户端通过策略 Codec（读取和写入策略的 Schema）完成这一步。
+
+下面的文本让调用者读取和修改自己的 Chats：
 
 ```json
 {
@@ -140,6 +147,15 @@ OpenBot 用 [ability](https://github.com/nmnmcc/ability)
 
 OpenBot 在读取每个策略时都会检查它。不存在的类型、操作或字段会返回
 `400`。请求中的一个策略最多有 100 条规则，最多 8 层深。
+
+Ability
+3.0.0 也对已存储的策略设置限制：策略最多 32 层，条件最多 64 层，字段路径最多 5 段，结构单元最多 10000 个。单元包括规则、条件、操作数、列表项和 meta 值。策略文本最多有 1000000 个 UTF-16 代码单元。字段列表只能使用实际路径或
+`*`，不能使用 `owner*` 这样的模式。
+
+升级前，停止所有服务器并运行
+`openbot-migrate`。新迁移把平台 ceiling 从对象转为 JSON 文本。角色、成员和令牌的策略列已经存储 JSON 文本。客户端必须为
+`policy` 和 `ceiling`
+发送字符串。旧策略必须符合新的限制和字段规则。无法加载的策略不会授予访问权限。
 
 ### 规则
 
@@ -234,14 +250,18 @@ OpenBot 检查三个策略：
 
 OpenBot 每次检查时都会重新读取这些策略。所以对角色、成员或令牌的修改会立即生效。
 
+执行会分别保存资源所有者与发起人。对于 Channel 工作，发言人和每个已保存的调用者都必须通过针对真实资源所有者的策略检查。后续检查会重新读取他们当前的权限。审批不能改变这个所有者，也不能去掉令牌限制。
+
 列表（例如
 `GET /v1/triggers`）只包含调用者可以读取的资源。OpenBot把策略变成列表上的一个条件，对大多数列表来说就在数据库查询本身中完成。所以对某一个资源的拒绝规则，也会把它从列表中隐藏。
 
-有几个列表不会这样隐藏资源：`GET /v1/chats`、`GET /v1/files`、`GET /v1/connections`
-和
-`GET /v1/organization/channels`。它们需要对调用者能接触到的这一类的每个资源都有这个操作：调用者自己的所有 Chats、文件或 App 连接，或者组织的所有 Channels。创建这类新资源的调用，同样需要对所有这些资源都有
-`write`。所以对某一个 Chat、文件、App 连接或 Channel 的拒绝规则，会让这些调用以
-`403` 失败。
+当资源没有成员所有者时，列表条件和单项检查的结果相同。例如，
+`NOT (ownerUserId = "member")` 会包含 `ownerUserId` 为 `null` 的共享资源。
+
+Chat、文件、App 连接和 Channel 列表都在数据库查询中应用策略。拒绝规则只会隐藏匹配的项。如果没有可读的项，列表就是空的。文件分页和下一页游标只计算调用者可读的文件。文件游标必须仍属于调用者，并通过当前的读取权限检查。
+
+创建 Chat、文件、App 连接或 Channel 仍需要对这类资源的完整范围有 `write`
+权限。列表过滤不会授予写入权限。
 
 ### 令牌永远不会超过它的成员
 
@@ -270,7 +290,7 @@ OpenBot 每次检查时都会重新读取这些策略。所以对角色、成员
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Dashboard","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read"],"resources":["Chat"]}]}}' \
+  -d '{"name":"Dashboard","policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\"],\"resources\":[\"Chat\"]}]}"}' \
   https://api.example.com/v1/user/tokens
 ```
 
@@ -311,7 +331,7 @@ curl -b cookies.txt \
 curl -X PATCH -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Deny","actions":["run"],"resources":["Chat"]}]}}' \
+  -d '{"policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Deny\",\"actions\":[\"run\"],\"resources\":[\"Chat\"]}]}"}' \
   https://api.example.com/v1/organization/members/u_456
 ```
 
@@ -323,7 +343,7 @@ curl -X PATCH -b cookies.txt \
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","resolve"],"resources":["Chat","Request"],"when":{"_tag":"Under","prefix":[{"_tag":"Literal","value":"org"},{"_tag":"Principal","path":"organizationId"},{"_tag":"Literal","value":"user"},{"_tag":"Principal","path":"userId"}]}}]}}' \
+  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\",\"resolve\"],\"resources\":[\"Chat\",\"Request\"],\"when\":{\"_tag\":\"Under\",\"prefix\":[{\"_tag\":\"Literal\",\"value\":\"org\"},{\"_tag\":\"Principal\",\"path\":\"organizationId\"},{\"_tag\":\"Literal\",\"value\":\"user\"},{\"_tag\":\"Principal\",\"path\":\"userId\"}]}}]}"}' \
   https://api.example.com/v1/organization/roles
 ```
 

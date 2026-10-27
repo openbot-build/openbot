@@ -3,6 +3,10 @@ title: Organization
 description: Organizations, members, settings, roles and the audit log.
 ---
 
+For organization administrators. You need the rights named for each task. Only a
+platform admin can change settings under `/v1/platform`. Start with the
+[administrator manual](/docs/admin).
+
 This page shows how many people share OpenBot. An organization is a group of
 people who share Bots, models and settings. One platform has many organizations.
 A user and an organization are separate things. A user can create organizations,
@@ -11,7 +15,7 @@ also one just for themselves, and can be a member of many organizations.
 The routes of the current organization are under `/v1/organization`. They accept
 a user token or the session cookie. With the cookie, send the
 `OpenBot-Organization` header when you belong to more than one organization. See
-[Authentication](/docs/authentication#choose-an-organization).
+[Authentication](/docs/developers/authentication#choose-an-organization).
 
 ---
 
@@ -155,21 +159,21 @@ them. It needs `read` on `Organization`.
 }
 ```
 
-| Field                     | Default                                           | What it does                                                                                                                                                                   |
-| ------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rulesModel`              | `null`                                            | The model that judges [Rules](/docs/rules). It can be a language model or a decision model. `null` means that no model judges them. See [Models](/docs/models#choose-a-model). |
-| `botMemoryModel`          | `null`                                            | The model that learns [Bot memory](/docs/memory). `null` means that Bots learn nothing.                                                                                        |
-| `botMemory`               | `true`                                            | Let the memory Bot learn from Chats and add to the input of Turns.                                                                                                             |
-| `requestTimeoutMs`        | 24 hours                                          | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                                                                    |
-| `delegationTimeLimitMs`   | 1 hour                                            | The time limit of [work](/docs/delegation#limits) that has none of its own, such as the work of a trigger. From 1 minute to 30 days.                                           |
-| `toolForegroundBudgetMs`  | 30 seconds                                        | How long a tool call runs in its Turn before it goes to the [background](/docs/chats#background-work). From 0 to 10 minutes. 0 sends every call to the background.             |
-| `toolMaxDurationMs`       | 1 hour                                            | The longest time of a background tool call. After it, the call stops and fails. From 1 second to 24 hours.                                                                     |
-| `maxBackgroundOperations` | 8                                                 | How many background tool calls of one Chat may run at one time. From 0 to 100.                                                                                                 |
-| `planApproval`            | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Bot or Chat sets it. See [Plan mode](/docs/chats#plan-mode).                                                                            |
-| `appReadRules`            | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                                                                 |
-| `defaultRoles`            | `["member"]`                                      | The roles of a new member.                                                                                                                                                     |
-| `joinByDomain`            | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                                                                  |
-| `tokenRate`               | no limit                                          | Token rates of each scope. Where the platform sets a lower rate, the lower rate applies. See [Token rate](/docs/usage#token-rate).                                             |
+| Field                     | Default                                           | What it does                                                                                                                                                                              |
+| ------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`              | `null`                                            | The model that judges [Rules](/docs/developers/rules). It can be a language model or a decision model. `null` means that no model judges them. See [Models](/docs/models#choose-a-model). |
+| `botMemoryModel`          | `null`                                            | The model that learns [Bot memory](/docs/developers/memory). `null` means that Bots learn nothing.                                                                                        |
+| `botMemory`               | `true`                                            | Let the memory Bot learn from Chats and add to the input of Turns.                                                                                                                        |
+| `requestTimeoutMs`        | 24 hours                                          | How long a [request](/docs/developers/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                                                                    |
+| `delegationTimeLimitMs`   | 1 hour                                            | The time limit of [work](/docs/developers/delegation#limits) that has none of its own, such as the work of a trigger. From 1 minute to 30 days.                                           |
+| `toolForegroundBudgetMs`  | 30 seconds                                        | How long a tool call runs in its Turn before it goes to the [background](/docs/developers/chats#background-work). From 0 to 10 minutes. 0 sends every call to the background.             |
+| `toolMaxDurationMs`       | 1 hour                                            | The longest time of a background tool call. After it, the call stops and fails. From 1 second to 24 hours.                                                                                |
+| `maxBackgroundOperations` | 8                                                 | How many background tool calls of one Chat may run at one time. From 0 to 100.                                                                                                            |
+| `planApproval`            | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Bot or Chat sets it. See [Plan mode](/docs/developers/chats#plan-mode).                                                                            |
+| `appReadRules`            | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/developers/requests).                                                                                                 |
+| `defaultRoles`            | `["member"]`                                      | The roles of a new member.                                                                                                                                                                |
+| `joinByDomain`            | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                                                                             |
+| `tokenRate`               | no limit                                          | Token rates of each scope. Where the platform sets a lower rate, the lower rate applies. See [Token rate](/docs/usage#token-rate).                                                        |
 
 `PATCH /v1/organization/settings` changes them. It needs `write` on
 `Organization`. The body needs `expectedVersion`, the `version` that you read.
@@ -208,7 +212,7 @@ of the last page.
 			"name": "Ada",
 			"status": "active",
 			"roles": ["super_administrator"],
-			"policy": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
+			"policy": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[]}",
 			"joinedAt": "2026-10-21T09:00:00.000Z"
 		}
 	],
@@ -299,7 +303,8 @@ curl -b cookies.txt \
   returns `400` with `InvitationInvalid` when there is one, or when a member
   already has the email.
 
-You can also invite people to use one Bot. See [Share Bots](/docs/sharing).
+You can also invite people to use one Bot. See
+[Share Bots](/docs/developers/sharing).
 
 `GET /v1/organization/invitations` lists the invitations, newest first. It needs
 `read` on `Member`. Add `?status=pending` to see only the open ones.
@@ -313,7 +318,7 @@ These routes are for the invited person. They do not need a membership.
 - `GET /v1/invitations` lists the pending invitations for your verified email.
   An invitation to use a Bot has `bot` and no `roles`. Accept it with
   `POST /v1/bot-invitations/accept`. See
-  [Share Bots](/docs/sharing#accept-an-invitation).
+  [Share Bots](/docs/developers/sharing#accept-an-invitation).
 - `POST /v1/invitations/:invitationId/accept` makes you a member with the roles
   of the invitation. It returns the organization.
 - `POST /v1/invitations/:invitationId/decline` says no.

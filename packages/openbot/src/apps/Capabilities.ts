@@ -1,5 +1,6 @@
 import { CatalogDiscovery } from "@openbot-build/protocol"
-import { ConnectionsApi as Api } from "@openbot-build/api"
+import { AppIndex } from "@openbot-build/domain"
+
 import { App, Client, Discovery, Store, Ui } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -30,7 +31,7 @@ export class Unavailable extends Schema.TaggedError<
 export type Error =
 	| Client.Error
 	| StorageError
-	| Api.AppRestricted
+	| AppIndex.AppRestricted
 	| Discovery.Error
 	| Unavailable
 export interface Opened {

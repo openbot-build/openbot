@@ -1,0 +1,115 @@
+---
+title: "Publish and check the project"
+---
+
+For developers who connect a client to OpenBot or extend its server. The
+examples need the access stated on this page. Start with the
+[developer manual](/docs/developers).
+
+For project contributors who change or publish OpenBot.
+
+## GitHub Actions
+
+The workflow `.github/workflows/ci.yml` has two jobs. The second job runs only
+when the first one passes.
+
+| Job      | What it does                                                               |
+| -------- | -------------------------------------------------------------------------- |
+| `check`  | Runs `pnpm build`, `pnpm typecheck`, and `pnpm -r test` in `devenv shell`. |
+| `images` | Builds, checks, scans, and publishes the Docker images.                    |
+
+Both jobs run on `ubuntu-latest`. They install Nix with the Determinate Nix
+installer, and then devenv 2.4.0.
+[Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action)
+keeps Nix build results in the GitHub Actions cache, so later runs do not build
+them again. The jobs also download prebuilt devenv packages from
+`devenv.cachix.org`. The `check` job keeps the pnpm store in a cache.
+
+The `images` job does these steps:
+
+1. [hadolint](https://github.com/hadolint/hadolint) and
+   `docker buildx bake lint` check the `Dockerfile`. The second one runs the
+   [Docker build checks](https://docs.docker.com/build/checks/).
+2. Docker Bake builds both images. Build layers stay in the GitHub Actions
+   cache, with one cache for each image, so later runs build only what changed.
+3. `deploy/docker/check.sh` checks the images. See
+   [Check the images](#check-the-images).
+4. [dive](https://github.com/wagoodman/dive) checks that the image layers do not
+   waste space.
+5. [Trivy](https://trivy.dev) scans both images. The job fails when an image has
+   a known `HIGH` or `CRITICAL` vulnerability that has a fix. Trivy does not see
+   the Node.js version, because Node.js is copied into the image and not
+   installed as a package.
+6. The job saves both images as the `images-<commit-sha>` artifact for seven
+   days.
+7. For pushes, the job publishes the images. It uses the build cache, so it does
+   not build again.
+
+The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`.
+It publishes images only for pushes:
+
+| Event               | Published tags              |
+| ------------------- | --------------------------- |
+| A push to `main`    | `<commit-sha>` and `latest` |
+| A tag like `v1.2.3` | `<commit-sha>` and `v1.2.3` |
+
+The images go to the GitHub container registry, at
+`ghcr.io/openbot-build/openbot` and
+`ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy
+OpenBot. To use a published image with Compose, pull it and tag it as
+`openbot:<tag>`.
+
+### Publish the docs site
+
+The workflow `.github/workflows/docs.yml` publishes the docs site to
+[GitHub Pages](https://docs.github.com/pages) at
+[openbot.build](https://openbot.build). It runs for each push to `main`. You can
+also start it by hand from the Actions tab.
+
+| Job      | What it does                                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `build`  | Runs `pnpm --filter "@openbot-build/docs..." build` in `devenv shell`. This builds the docs and the packages they need. |
+| `deploy` | Sends `packages/docs/dist` to GitHub Pages.                                                                             |
+
+The `build` job sets `DOCS_URL` to `https://openbot.build`. Astro uses it for
+full page links, such as the sitemap. Only one deploy runs at a time.
+
+The repository settings must use **GitHub Actions** as the Pages source, with
+`openbot.build` as the custom domain. The DNS for `openbot.build` must point to
+GitHub Pages. See
+[Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
+
+### Check the images
+
+`deploy/docker/check.sh` starts `compose.production.yaml` with test settings.
+The extra file `compose.check.yaml` removes the host ports and adds a second
+OpenBot node, setup, and checks. Both nodes share the database and secrets. Each
+node has its own private host. The `setup` service runs after `migrate`, before
+either node starts. The `check` service runs the checks. `check.env` has the
+test settings. None of them are real secrets.
+
+The `check` service runs `check.mjs` inside the Compose network, after both
+OpenBot nodes and the protocol test service are healthy. It checks that:
+
+- `/v1/chats` returns `401` with no key and with a bad key,
+- `/openapi.json` works on both nodes,
+- private RPC rejects missing and wrong secrets,
+- each node can call the other node with the shared secret,
+- the protocol test Catalog has the right public origin,
+- MCP discovery on the protocol test service works.
+
+The script also checks an empty database, a repeated migration, both registered
+runner addresses, and refusal to migrate while servers are active. Each run uses
+its own Compose project. At the end, it removes that project and its test
+database. Workflow recovery and node failure tests run in the package test
+suite; this image check covers the production wiring.
+
+Run the same checks on your computer:
+
+```sh
+devenv shell -- pnpm images
+devenv shell -- pnpm images:check
+devenv shell -- hadolint deploy/docker/Dockerfile
+devenv shell -- dive --ci --source docker openbot:local
+devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot:local
+```

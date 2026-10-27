@@ -1,0 +1,25 @@
+---
+title: "App Index settings"
+description: "App Index settings"
+---
+
+For platform operators.
+
+## Host restrictions
+
+A platform admin can block some Apps. Each restriction has a `cardUrl`, a public
+`reason`, and an HTTPS `appealUrl`. They live in `appRestrictions` in the
+platform settings. Change them with `PATCH /v1/platform/settings`. See
+[Platform](/docs/platform#platform-settings).
+
+A blocked App:
+
+- shows a `restriction` in search results until the next index check;
+- is excluded at that check, and then no longer shows in search;
+- returns 403 `IndexRestricted` from the details call;
+- cannot be connected (403 `AppRestricted`);
+- has the availability `Restricted` in existing connections, so the Bot cannot
+  use it.
+
+See the full shapes in the
+[API reference](/docs/api/operations/tags/app-index/).

@@ -1,0 +1,129 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "fe68ef75-e7dc-4d26-adfc-4353f471fa99",
+	"prevIds": ["78169919-daf6-4cea-9b7c-915ef8e92d9c"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_executions",
+				"owner_execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_executions.owner_execution_id",
+				"n|col|public.openbot_executions.owner_execution_id",
+				"e|col|public.openbot_executions.owner_execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_executions", "n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_executions",
+				"openbot_executions_work_owner"
+			],
+			"writes": [
+				"s|idx|public.openbot_executions_work_owner",
+				"n|idx|public.openbot_executions_work_owner",
+				"e|idx|public.openbot_executions_work_owner",
+				"n|rel|public.openbot_executions_work_owner"
+			],
+			"reads": [
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_executions.owner_execution_id",
+				"n|col|public.openbot_executions.status"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_executions"],
+			"writes": [
+				"s|fk|public.openbot_executions.openbot_executions_H8rknOXfddde_fkey",
+				"n|fk|public.openbot_executions.openbot_executions_H8rknOXfddde_fkey",
+				"e|fk|public.openbot_executions.openbot_executions_H8rknOXfddde_fkey",
+				"n|con|public.openbot_executions.openbot_executions_H8rknOXfddde_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_executions.owner_execution_id",
+				"n|col|public.openbot_executions.id",
+				"e|uniqueness|public.openbot_executions.id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "owner_execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "openbot_executions_work_owner",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "owner_execution_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "status",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "openbot_executions_H8rknOXfddde_fkey",
+				"nameExplicit": false,
+				"columns": ["owner_execution_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_executions",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		}
+	]
+}

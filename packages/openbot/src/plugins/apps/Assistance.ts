@@ -1,9 +1,12 @@
-import { AppExecution, Identity } from "@openbot-build/api"
+import * as AppExecution from "../../apps/AssistanceResult.ts"
+
+import { Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Schema, type JsonSchema } from "effect"
 import { Tool } from "effect/ai"
 import { Connections } from "../../apps/Connections.ts"
-import type { Entry } from "./AppPlugin.ts"
+import type { Entry } from "./AppTools.ts"
 import type { Error as IndexError, PublicIndex } from "../../apps/Index.ts"
+import type * as Report from "../../errors/Report.ts"
 
 /** The names of the assistance tools. A name gets a suffix when another tool already uses it. */
 export const names = {
@@ -18,6 +21,7 @@ export const entries = (input: {
 	readonly occupied: ReadonlyArray<string>
 	readonly index: typeof PublicIndex.Service
 	readonly connections: typeof Connections.Service
+	readonly report: Report.Report
 }): ReadonlyArray<Entry> => {
 	let occupied = input.occupied
 	const entry = (
@@ -77,10 +81,9 @@ export const entries = (input: {
 						),
 					),
 				IndexUnavailable: (error) =>
-					Effect.logWarning(
-						"The App Index is not available for App assistance.",
-						error.issues,
-					).pipe(Effect.as(failure(error._tag))),
+					input
+						.report("The App Index is not available for App assistance.", error)
+						.pipe(Effect.as(failure(error._tag))),
 			}),
 		)
 	return [
@@ -159,7 +162,11 @@ export const entries = (input: {
 							availability: connection.availability,
 						})),
 					})),
-					Effect.orElseSucceed((error) => failure(error._tag)),
+					Effect.catch((error) =>
+						input
+							.report("App access could not be read", error)
+							.pipe(Effect.as(failure(error._tag))),
+					),
 				),
 		),
 	]

@@ -1,6 +1,7 @@
-import { Settings as Api } from "@openbot-build/api"
+import { Settings as SettingsModel } from "@openbot-build/domain"
+
 import { Effect, Option, Redacted } from "effect"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import type { Configuration } from "../auth/Model.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import type { FilesDocument, PlatformDocument } from "./Documents.ts"
@@ -21,10 +22,13 @@ export const bindings = {
  */
 export const publicOrigin = (
 	settings: typeof Settings.Service,
-): Effect.Effect<string, Api.SettingsUnavailable | Api.SetupRequired> =>
+): Effect.Effect<
+	string,
+	SettingsModel.SettingsUnavailable | SettingsModel.SetupRequired
+> =>
 	Effect.flatMap(settings.platform, (platform) =>
 		Option.match(platform, {
-			onNone: () => Effect.fail(Api.SetupRequired.make({})),
+			onNone: () => Effect.fail(SettingsModel.SetupRequired.make({})),
 			onSome: ({ document }) => Effect.succeed(document.publicOrigin),
 		}),
 	)
@@ -112,7 +116,7 @@ export const authConfiguration = (
 export const changeFiles = (
 	secrets: typeof Secrets.Service,
 	current: FilesDocument,
-	input: Api.FilesInput,
+	input: SettingsModel.FilesInput,
 ) =>
 	Effect.gen(function* () {
 		const { storage, ...limits } = input
@@ -122,7 +126,7 @@ export const changeFiles = (
 		const { secretAccessKey, ...fields } = storage
 		if (secretAccessKey === undefined) {
 			if (current.storage === null)
-				return yield* Api.SettingsInvalid.make({
+				return yield* SettingsModel.SettingsInvalid.make({
 					message: "New file storage needs a secretAccessKey.",
 				})
 			return {

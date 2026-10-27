@@ -1,0 +1,239 @@
+---
+title: Computer
+description:
+  Gib Bots Maschinen, auf denen sie Befehle ausführen, Dateien ändern und einen
+  Desktop nutzen.
+---
+
+Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
+erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
+mit dem [Entwicklerhandbuch](/de/docs/developers).
+
+Ein **Computer** ist eine Maschine, auf der ein Bot arbeitet. Der Bot führt dort
+Shell-Befehle aus, liest und schreibt Dateien, öffnet Ports und nutzt einen
+Desktop. Es gibt zwei Arten von Computern:
+
+- Eine **Sandbox** bei einem Computer-Provider, zum Beispiel E2B oder Daytona.
+  Du bringst dein eigenes Konto bei dem Provider mit. Der Provider stellt dir
+  die Kosten direkt in Rechnung.
+- **Deine eigene Maschine**, zum Beispiel ein Laptop oder ein Server. Du
+  koppelst sie einmal mit OpenBot. Danach hält ein kleines Programm auf ihr eine
+  Verbindung zu OpenBot.
+
+Ein Computer gehört einem Member oder der Organisation, wie ein
+[Trigger](/de/docs/developers/triggers). Bots besitzen nie einen Computer. Ein
+Bot bekommt das **Recht, einen Computer zu nutzen**. Viele Bots können denselben
+Computer nutzen.
+
+---
+
+## Einen Computer-Provider hinzufügen
+
+Siehe [Computer-Provider](/de/docs/admin/computer-providers).
+
+## Einen Computer erstellen und nutzen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"create-build-box-1","name":"Build box","source":{"_tag":"Provider","provider":"cpp_...","template":null},"desktop":true}' \
+  https://api.example.com/v1/computers
+```
+
+| Feld         | Was es tut                                                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `source`     | `{"_tag":"Provider","provider":"<id>","template":null}` für eine Sandbox. Ein `template` wählt ein Image des Providers. |
+| `desktop`    | Optional. `true` fragt nach einem Desktop, für Screenshots, die Maus und die Tastatur.                                  |
+| `pauseAfter` | Optional. Sekunden ohne Arbeit, bevor OpenBot den Computer pausiert. Der Standard ist 600. `null` pausiert ihn nie.     |
+| `shared`     | Optional. `true` erstellt einen gemeinsamen Computer der Organisation.                                                  |
+
+Das Erstellen braucht `commandKey` und gibt HTTP 202 mit einem Ausführungsbeleg.
+Lies `/v1/executions/:executionId`. Dessen `resource.id` ist die Computer-ID.
+Der Beleg bestätigt das Speichern des Befehls. Lies nach dem Ende der Ausführung
+den Computer für seinen Zustand. `Computers.create` im SDK bereitet den
+Schlüssel einmal vor. Nutze nach einer verlorenen Antwort dessen `send` erneut.
+
+Ein Computer hat einen `state` (Zustand): `starting`, `running`, `paused`,
+`offline` (deine Maschine ist nicht verbunden) oder `failed`.
+
+| Route                                                  | Was sie tut                                                                            |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/sessions`              | Startet einen Shell-Befehl. Siehe [Befehle](#befehle).                                 |
+| `GET`, `PUT`, `DELETE /v1/computers/:computerId/files` | Liest, schreibt und entfernt eine Datei. `utf8` für Text, `base64` für andere Bytes.   |
+| `GET /v1/computers/:computerId/directory?path=`        | Listet ein Verzeichnis.                                                                |
+| `PUT /v1/computers/:computerId/ports/:port`            | Gibt einem Port eine öffentliche HTTPS-Adresse. Jeder mit der Adresse kann ihn nutzen. |
+| `POST /v1/computers/:computerId/desktop/screenshot`    | Macht einen Screenshot.                                                                |
+| `POST /v1/computers/:computerId/desktop/actions`       | Klickt, tippt, drückt Tasten und scrollt. Dann macht es einen Screenshot.              |
+| `POST /v1/computers/:computerId/desktop/stream`        | Gibt eine Adresse, unter der eine Person den Desktop ansehen und nutzen kann.          |
+| `POST /v1/computers/:computerId/pause`, `/resume`      | Pausiert den Computer oder setzt ihn fort.                                             |
+
+Eine gekoppelte Maschine bietet keinen Desktop-Stream. `desktop/stream` gibt
+dort `ComputerUnsupported`. Ein Befehl auf einem pausierten Computer setzt ihn
+zuerst fort.
+
+Pause, Fortsetzen und Löschen nehmen `{ "commandKey": "<new command key>" }` an
+und geben HTTP 202 mit einem Ausführungsbeleg. `Computers.pause`, `resume` und
+`remove` im SDK bereiten diese Befehle vor. Behalte bei einem neuen Versuch
+Schlüssel und Inhalt. Beobachte die Ausführung für ihr Ergebnis.
+`DELETE /v1/computers/:computerId` entfernt den Computer und seine Sandbox beim
+Anbieter samt Dateien. Eine verlorene Antwort beweist das Entfernen nicht. Sende
+nicht mit einem neuen Schlüssel erneut. Prüfe den gespeicherten Zustand. Ein
+unbekanntes externes Ergebnis braucht eine Entscheidung.
+
+### Befehle
+
+Ein Befehl läuft mit `bash -lc` in einer **Session**. OpenBot wartet bis zu
+`yieldTimeMs` auf ihn (standardmäßig 10 Sekunden, von 0,25 bis 30 Sekunden).
+Dann gibt es die Ausgabe bis dahin:
+
+```json
+{
+	"session": "cse_…",
+	"running": true,
+	"exitCode": null,
+	"signal": null,
+	"output": ">>> ",
+	"truncated": false
+}
+```
+
+Hat der Befehl geendet, ist `session` gleich `null`, und `exitCode` oder
+`signal` sagt, wie er endete. Solange er läuft, nutzen Sie die Session weiter:
+
+| Route                                                       | Was sie tut                                                                  |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/sessions`                   | Startet einen Befehl: `command`, `cwd`, `env`, `tty`, `rows`, `cols`.        |
+| `POST /v1/computers/:computerId/sessions/:sessionId/input`  | Schickt `chars` an stdin und gibt die neue Ausgabe. Leere `chars` lesen nur. |
+| `POST /v1/computers/:computerId/sessions/:sessionId/resize` | Gibt dem Terminal eine neue Größe.                                           |
+| `DELETE /v1/computers/:computerId/sessions/:sessionId`      | Stoppt den Befehl und gibt seine letzte Ausgabe.                             |
+
+`chars` nimmt C-Escapes: `\n` ist Enter, `\x03` ist Strg-C und `\x04` ist
+Strg-D, das Ende der Eingabe. Mit `tty` bekommt der Befehl ein **Terminal** (ein
+PTY), für Programme wie `python3`, `ssh` oder `top`. Dann kommen stdout und
+stderr zusammen. Jede Antwort gibt höchstens `maxOutputBytes` neue Ausgabe
+(standardmäßig 64 KiB). Bei mehr kommt nur ihr Ende, und `truncated` ist `true`.
+
+Eine Session gehört dem, der sie gestartet hat. Sie endet nach 30 Minuten ohne
+Nutzung. Ein Daytona-Computer gibt kein Terminal, deshalb schlägt `tty` dort
+fehl.
+
+---
+
+## Deine eigene Maschine koppeln
+
+Siehe [Eine Maschine koppeln](/de/docs/admin/pair-computer).
+
+## Bots und das Recht, einen Computer zu nutzen
+
+Gib deinem Bot das Recht, einen Computer zu nutzen:
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/computers/cmp_.../bots/bot_...
+```
+
+Du musst den Computer nutzen und den Bot ändern dürfen.
+`GET /v1/computers/:computerId/bots` listet die Bots mit dem Recht.
+`DELETE /v1/computers/:computerId/bots/:botId` nimmt das Recht weg. Das Recht
+endet auch, wenn der Bot archiviert wird. Der Computer bleibt.
+
+Ein Bot hat Tools für Computer. Er listet sie mit `openbot_computers_list`. Dann
+kann er:
+
+- Mit `openbot_computers_acquire` nach dem Recht fragen, einen Computer zu
+  nutzen, den es schon gibt. Ein Kind-Bot kann nach einem Computer des Bots
+  fragen, der ihm Arbeit gegeben hat.
+- Mit `openbot_computers_create` eine neue Sandbox erstellen. Der Computer
+  gehört seiner Person, und der Bot bekommt das Recht, ihn zu nutzen. Das
+  Werkzeug nimmt `name`, `source`, `desktop` und `pauseAfter` in derselben Form
+  wie `POST /v1/computers`, und einen `reason`. Die `source` muss ein Provider
+  sein.
+- Mit `openbot_computers_release` sein Recht aufgeben. Mit `destroy` löscht er
+  auch den Computer.
+- Befehle mit `openbot_computer_exec` ausführen und ihnen mit
+  `openbot_computer_write_stdin` Eingabe schicken, so wie bei
+  [Befehle](#befehle). Läuft ein Befehl nach seiner Wartezeit noch, bekommt der
+  Chat eine Notice der Art `computer_session`, wenn er endet.
+- Dateien ändern, Ports öffnen und den Desktop nutzen. Ein Screenshot kommt als
+  Bild zurück, das das Model sieht.
+
+Diese vier Aktionen sind
+[Fähigkeiten](/de/docs/developers/requests#fähigkeiten). Die
+[Kette der Entscheider](/de/docs/developers/requests#die-kette-der-entscheider)
+entscheidet über sie, wie bei jeder anderen Fähigkeit:
+
+| Aktion              | Ziel                 | Wann ein Bot sie nutzt                             |
+| ------------------- | -------------------- | -------------------------------------------------- |
+| `computers.acquire` | Die ID des Computer  | Er fragt nach dem Recht, einen Computer zu nutzen. |
+| `computers.create`  | Die ID des Providers | Er erstellt eine neue Sandbox.                     |
+| `computers.delete`  | Die ID des Computer  | Er löscht einen Computer mit seinen Dateien.       |
+| `computers.expose`  | Die ID des Computer  | Er gibt einem Port eine öffentliche Adresse.       |
+
+Wenn OpenBot eine dieser Aktionen nicht prüfen kann, läuft die Aktion nicht, und
+das Werkzeug sagt dem Bot den Grund. Zum Beispiel darf die Person des Bots den
+Computer nicht sehen, oder OpenBot kann seine Daten nicht lesen.
+
+Jede andere Arbeit auf einem Computer braucht keine Entscheidung. Der Computer
+ist die Grenze: Ein Bot mit dem Recht darf darin alles tun.
+
+---
+
+## Pause und Nutzung
+
+OpenBot pausiert eine Sandbox, wenn sie `pauseAfter` Sekunden lang keine Arbeit
+hatte. Ein Befehl, der noch läuft, zählt als Arbeit. E2B behält ihre Dateien,
+ihren Speicher und laufende Programme. Daytona behält ihre Dateien und startet
+sie aus ihnen neu. Deine eigenen Maschinen pausieren nie.
+
+`GET /v1/computers/:computerId/usage` listet die Zeiten, in denen ein Computer
+lief. Der Provider stellt sie dir in Rechnung. OpenBot zeichnet sie nur auf. Es
+legt keinen Preis fest, und Budgets stoppen keinen Computer.
+
+## Ausführung und Wiederherstellung
+
+Eine Befehlssitzung gehört zu ihrem Computer und Chat. Das Tool
+`openbot_computer_write_stdin` braucht `computer` und `session`. Jeder Aufruf
+prüft die aktuellen Nutzungsrechte, auch für alle Tokens, die die Aufgabe
+begrenzen. Nach dem Entzug des Zugriffs kann OpenBot keine weiteren Eingaben
+senden oder Ausgaben lesen. Ohne Freigabe für den Computer erhält der Bot die
+sichere Fehlerart `forbidden` und eine Fehler-ID. Der Befehl erreicht den
+Anbieter nicht.
+
+OpenBot leitet Aufrufe an den Knoten mit dem Prozess. Dieser prüft die aktuellen
+Rechte vor jeder Eingabe erneut. Aufrufe einer Sitzung laufen der Reihe nach.
+Beim normalen Schließen bleibt die letzte Antwort erhalten. Geht eine Antwort
+verloren, kann das Ergebnis eines Schreibvorgangs unbekannt sein. OpenBot sendet
+ihn nicht erneut. Der HTTP-Fehler `ComputerExecutionFailed` nennt eine sichere
+Fehlerart und eine Fehler-ID.
+
+Computer- und Anbieterlisten prüfen alle aktuellen Rechte der Aufrufer, bevor
+sie Zeilen lesen. Tool-Antworten und Bot-Prompts nutzen dieselben Listen. Eine
+Freigabe für einen Bot hebt die Grenzen eines Tokens nicht auf.
+
+Gekoppelte Maschinen nutzen denselben privaten, geschützten Weg wie
+Befehlssitzungen. Datei- und Desktop-Aufrufe laufen auf dem Knoten mit der
+Verbindung. Eine neue Verbindung ersetzt die alte. Die alte Verbindung kann den
+Zustand der neuen nicht ändern. Ausgabe kommt in Reihenfolge mit einem
+begrenzten Puffer. Bei einem Abbruch oder einer verlorenen Schreibantwort ist
+das Ergebnis unbekannt. OpenBot wiederholt den Aufruf nicht.
+
+Pro Computer läuft nur ein Befehl zum Erstellen, Pausieren, Fortsetzen oder
+Löschen. Ein weiterer Befehl gibt `ComputerConflict` mit der laufenden
+Ausführungs-ID zurück. Vor jeder Provider-Aktion prüft der Server die aktuellen
+Rechte erneut. Die automatische Fortsetzung nutzt auch eine gespeicherte
+Ausführung. Provider-Adapter setzen keine Sandbox selbst fort und wiederholen
+keine Befehle.
+
+Scheitert die Vorbereitung vor dem Senden, schlägt die Ausführung fehl und der
+Computer bleibt. Eine verlorene Antwort nach einer Provider-Aktion führt zu
+`outcome_unknown`. Lies das Ereignis `DecisionNeeded` und sende eine
+Entscheidung an die Ausführungs-API. Prüfe vor einem neuen Versuch das Ergebnis
+beim Provider. Ein Stopp setzt den Computer auf `failed`. Er beweist nicht, dass
+die Sandbox stillsteht. Späte Antworten auf das Erstellen behalten den
+Sandbox-Verweis und den Nutzungsnachweis.
+
+Alle Knoten teilen einen gespeicherten Plan für die Prüfung auf Leerlauf. Jede
+Pause hat eine eigene Ausführung. Ein Neustart setzt fremde Arbeit nicht zurück.
+Bei unbekanntem Ergebnis einer solchen Pause darf nur ein Mitglied mit aktuellen
+Schreibrechten `stop` senden. Ein unbekanntes Ergebnis beendet keinen
+Nutzungsnachweis wie eine bestätigte Pause.

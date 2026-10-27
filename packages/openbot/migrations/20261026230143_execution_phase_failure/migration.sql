@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_executions" ADD COLUMN "phase_failed" boolean DEFAULT false NOT NULL;

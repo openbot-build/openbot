@@ -1,4 +1,5 @@
-import { ConnectionsApi as Api } from "@openbot-build/api"
+import { AppConnections as Domain } from "@openbot-build/domain"
+
 import { Discovery, Document, Store } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -12,13 +13,13 @@ import {
 export const configure =
 	(owner: string) =>
 	(
-		input: Api.ManualConnectionRequest,
+		input: Domain.ManualConnectionRequest,
 	): Effect.Effect<
 		{
 			readonly app: Store.AppRecord
 			readonly connection: Store.UserConnection
 		},
-		Api.ConnectionConfigurationInvalid
+		Domain.ConnectionConfigurationInvalid
 	> =>
 		Effect.gen(function* () {
 			const card = yield* Document.ServerCard.decode({
@@ -42,7 +43,7 @@ export const configure =
 			}).pipe(
 				Effect.catchTag("InvalidDocument", () =>
 					Effect.fail(
-						Api.ConnectionConfigurationInvalid.make({
+						Domain.ConnectionConfigurationInvalid.make({
 							keys: [],
 							message: "The manual MCP configuration is invalid.",
 						}),

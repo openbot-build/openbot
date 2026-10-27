@@ -5,8 +5,14 @@ import { Effect, Stream } from "effect"
 import { type Prompt, type Tool } from "effect/ai"
 
 /** Runs one Turn of a plugin in a new Chat over a store in memory. */
-export const ChatTest = <Tools extends Record<string, Tool.Any>, E, R>(
-	plugin: Plugin.Plugin<Tools, E, R>,
+export const ChatTest = <
+	Tools extends Record<string, Tool.Any>,
+	E,
+	R,
+	BuildE,
+	BuildR,
+>(
+	plugin: Plugin.Plugin<Tools, E, R, BuildE, BuildR>,
 ) => {
 	const create = Effect.gen(function* () {
 		const definition = yield* Store.define({

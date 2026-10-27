@@ -1,3 +1,4 @@
+import { Redacted } from "effect"
 import { Array as Arr, Effect, pipe, Predicate, String as Str } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
@@ -12,9 +13,9 @@ import { field, id, parse, text } from "../Json.ts"
 import { sameSecret, telegramHtml } from "../Text.ts"
 
 export interface Secrets {
-	readonly botToken: string
+	readonly botToken: Redacted.Redacted<string>
 	/** OpenBot makes it and gives it to Telegram. Telegram sends it back with each update. */
-	readonly webhookSecret: string
+	readonly webhookSecret: Redacted.Redacted<string>
 }
 
 const sender = (from: unknown) => {
@@ -69,7 +70,10 @@ const markup = (message: OutboundMessage) =>
 const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 	Effect.gen(function* () {
 		const secret = request.headers["x-telegram-bot-api-secret-token"]
-		if (secret === undefined || !sameSecret(secret, secrets.webhookSecret))
+		if (
+			secret === undefined ||
+			!sameSecret(secret, Redacted.value(secrets.webhookSecret))
+		)
 			return yield* ChannelDenied.make({ reason: "wrong secret token" })
 		const update = parse(request.body)
 		if (update === undefined)
@@ -129,7 +133,7 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 		Effect.gen(function* () {
 			const reply = yield* call(
 				HttpClientRequest.post(
-					`https://api.telegram.org/bot${secrets.botToken}/${name}`,
+					`https://api.telegram.org/bot${Redacted.value(secrets.botToken)}/${name}`,
 				).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
 			)
 			if (reply.status === 200 && field(reply.json, "ok") === true)
@@ -140,6 +144,7 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 					message: `Telegram asked to wait before ${name}`,
 					retry: true,
 					retryAfterMs: after * 1000,
+					outcome: "rejected",
 				})
 			return yield* failed(
 				reply,
@@ -184,7 +189,7 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 		register: (webhookUrl) =>
 			method("setWebhook", {
 				url: webhookUrl,
-				secret_token: secrets.webhookSecret,
+				secret_token: Redacted.value(secrets.webhookSecret),
 				allowed_updates: ["message", "callback_query"],
 			}).pipe(Effect.asVoid),
 	})

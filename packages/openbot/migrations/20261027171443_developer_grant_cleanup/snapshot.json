@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "381b2080-b00c-4983-9a81-03efeeab615b",
+	"prevIds": ["46bbb1a1-b76d-432c-baa6-ec3cecaa77dc"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_tests",
+				"grant_cleanup_execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_developer_tests.grant_cleanup_execution_id",
+				"n|col|public.openbot_developer_tests.grant_cleanup_execution_id",
+				"e|col|public.openbot_developer_tests.grant_cleanup_execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_developer_tests", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_developer_tests",
+				"name": "grant_cleanup_execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

@@ -1,4 +1,4 @@
-import type { AuthApi } from "@openbot-build/api"
+import type { Accounts as AccountsModel } from "@openbot-build/domain"
 import { Context, type Effect, type Option, type Redacted } from "effect"
 import type { AuthUnavailable, CredentialRejected } from "./Model.ts"
 
@@ -27,7 +27,7 @@ export class Auth extends Context.Service<
 			credential: Redacted.Redacted<string>,
 			options?: { readonly refresh: boolean },
 		) => Effect.Effect<
-			typeof AuthApi.SessionInfo.Type & {
+			typeof AccountsModel.SessionInfo.Type & {
 				readonly setCookies: ReadonlyArray<string>
 			},
 			CredentialRejected | AuthUnavailable

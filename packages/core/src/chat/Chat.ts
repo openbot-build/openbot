@@ -5,7 +5,6 @@ import {
 	type Duration,
 	type Option,
 	type Effect,
-	type Scope,
 	type Stream,
 } from "effect"
 import { type Prompt, type Tool, type Toolkit } from "effect/ai"
@@ -187,21 +186,8 @@ export interface RuntimeOptions<
 > {
 	readonly store: ChatStore.Store<P>
 	readonly bot: Bot.Definition<Tools, E, R, BuildE, BuildR, HostTools>
-	/**
-	 * Whether this runtime may start a Turn in the Chat now. The default is yes. When it
-	 * is no, input waits in the inbox, and a runtime that may start it drains it later.
-	 * A host uses it when only one process can run the Turns of a Chat.
-	 */
-	/** Background tool calls, when the host turns them on. */
+	/** Background tool calls in this process, when the host turns them on. */
 	readonly operations?: typeof Operations.Operations.Service
-	readonly canStart?: (view: View<P>) => Effect.Effect<boolean>
-	/**
-	 * Runs while a Turn of the Chat runs: from its start until the runtime has
-	 * closed it and started the next Turn from the inbox. Its scope closes then.
-	 * A host uses it to keep its runtime open while the Turn works, or to tell
-	 * other processes that the Turn still runs.
-	 */
-	readonly whileRunning?: (chat: Id) => Effect.Effect<void, never, Scope.Scope>
 }
 export interface Runtime<
 	P = {},
@@ -284,3 +270,9 @@ export interface Runtime<
 export class Chat extends Context.Service<Chat, Runtime>()(
 	"@openbot-build/core/chat/Chat",
 ) {}
+
+/** What the model gets for a tool call that waits for a decision, when no host decides. */
+export const pendingResult = {
+	pending: true,
+	note: "This call waits for a decision. The answer comes back to this Chat as a message later.",
+}

@@ -5,6 +5,10 @@ description:
   Einstellungen liegen.
 ---
 
+Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
+brauchst je nach Aufgabe Serverzugriff oder Plattformrechte. Beginne mit dem
+[Administrationshandbuch](/de/docs/admin).
+
 OpenBot kann als viele Instanzen laufen. Eine Instanz ist ein laufender Prozess
 des OpenBot-Servers. Alle Instanzen einer Installation nutzen dieselbe
 Datenbank. Diese Seite listet die wenigen Werte, die jede Instanz beim Start
@@ -23,10 +27,10 @@ Es gibt zwei Arten von Einstellungen:
   PostgreSQL. Du änderst sie über die API, und jede Instanz nutzt die Änderung
   sofort.
 
-Es gibt eine Ausnahme: `OPENBOT_SECRET_KEYS`. Jede Instanz braucht dieselben
-Schlüssel. Aber diese Schlüssel verschlüsseln die Geheimnisse in der Datenbank.
-Darum können sie nicht in der Datenbank liegen. Jede Instanz liest sie aus ihrer
-Umgebung.
+Es gibt zwei Ausnahmen: `OPENBOT_SECRET_KEYS` und `OPENBOT_CLUSTER_SECRET`. Alle
+Knoten brauchen dieselben Werte. Sie schützen gespeicherte Daten und private
+Nachrichten zwischen Knoten. Jeder Knoten liest sie aus seiner Umgebung oder aus
+Dateien mit Geheimnissen.
 
 Wenn ein nötiger Wert fehlt oder falsch ist, startet OpenBot nicht. Es schreibt
 einen Fehler zur Konfiguration ins Log.
@@ -37,16 +41,23 @@ einen Fehler zur Konfiguration ins Log.
 
 Das ist die vollständige Liste der Umgebungsvariablen, die der Server liest.
 
-| Variable                 | Pflicht | Standard    | Bedeutung                                                                          |
-| ------------------------ | ------- | ----------- | ---------------------------------------------------------------------------------- |
-| `OPENBOT_HOST`           | Nein    | `127.0.0.1` | Die Netzwerk-Adresse, auf der der Server lauscht.                                  |
-| `OPENBOT_PORT`           | Nein    | `3000`      | Der Port, auf dem der Server lauscht.                                              |
-| `OPENBOT_DATABASE_URL`   | Ja      |             | Eine URL für die Verbindung zu PostgreSQL.                                         |
-| `OPENBOT_SECRET_KEYS`    | Ja      |             | Die Schlüssel, die Geheimnisse in der Datenbank verschlüsseln. Siehe unten.        |
-| `OPENBOT_OUTBOUND_ALLOW` | Nein    |             | Private Hosts und IP-Bereiche, mit denen OpenBot sich verbinden darf. Siehe unten. |
+| Variable                 | Pflicht | Standard          | Bedeutung                                                                          |
+| ------------------------ | ------- | ----------------- | ---------------------------------------------------------------------------------- |
+| `OPENBOT_HOST`           | Nein    | `127.0.0.1`       | Die Netzwerk-Adresse, auf der der Server lauscht.                                  |
+| `OPENBOT_PORT`           | Nein    | `3000`            | Der Port, auf dem der Server lauscht.                                              |
+| `OPENBOT_CLUSTER_SECRET` | Ja      |                   | Das gemeinsame Geheimnis für private RPC. Mindestens 32 Zeichen.                   |
+| `OPENBOT_CLUSTER_HOST`   | Nein    | Gebundene Adresse | Der Host, den andere Knoten am Server-Port erreichen.                              |
+| `OPENBOT_DATABASE_URL`   | Ja      |                   | Eine URL für die Verbindung zu PostgreSQL.                                         |
+| `OPENBOT_SECRET_KEYS`    | Ja      |                   | Die Schlüssel, die Geheimnisse in der Datenbank verschlüsseln. Siehe unten.        |
+| `OPENBOT_OUTBOUND_ALLOW` | Nein    |                   | Private Hosts und IP-Bereiche, mit denen OpenBot sich verbinden darf. Siehe unten. |
 
 Das Docker-Image setzt `OPENBOT_HOST=0.0.0.0` und `OPENBOT_PORT=3000`. So kann
 der Server Verkehr von außerhalb des Containers annehmen.
+
+Private Aufrufe zwischen Knoten nutzen `/internal/executions/rpc`. Halte diesen
+Pfad im privaten Netzwerk. Alle Knoten nutzen dasselbe zufällige Geheimnis. Gib
+bei mehreren Knoten jedem Knoten einen eigenen erreichbaren Host. Der private
+RPC-Client ist vom Schutz des App-Netzwerks getrennt.
 
 ### Datenbank
 
@@ -255,22 +266,21 @@ Manche Werte waren früher Optionen im Code. Sie sind jetzt auch Einstellungen:
 
 ### Wie eine Änderung jede Instanz erreicht
 
-Jede Instanz hält die Einstellungen in einem Cache. Das ist eine kurzlebige
-Kopie im Speicher. Eine Änderung läuft so ab:
+Jeder Lesezugriff nutzt die gespeicherte Datenbankzeile. Eine Änderung läuft so
+ab:
 
-1. Die API schreibt die neuen Einstellungen in die Datenbank.
-2. Sie schickt eine PostgreSQL-Nachricht `NOTIFY` auf dem Kanal
-   `openbot_settings`.
-3. Jede Instanz hört auf diesem Kanal. Sie liest die neuen Einstellungen sofort.
+1. Die API schreibt die neuen Einstellungen in einer Transaktion.
+2. Beim Commit sendet PostgreSQL `NOTIFY` auf `openbot_settings`.
+3. Abonnenten reagieren auf die Nachricht. Auch ohne Nachricht sieht der nächste
+   Lesezugriff die gespeicherte Zeile.
 
-Jeder Eintrag im Cache läuft außerdem nach 30 Sekunden ab. So bekommt auch eine
-Instanz, die eine Nachricht verpasst, die Änderung bald. Der Cache behält kein
-fehlgeschlagenes Lesen. Nach einem kurzen Fehler der Datenbank liest die nächste
-Anfrage die Einstellungen also wieder.
+Kein lokaler Cache hält alte Zugriffsrechte fest. Wenn das Lesen scheitert,
+scheitert auch die Aktion. App-Beschränkungen werden bei einem Datenbankfehler
+nicht leer. Eine Liste liest einen Stand der Regeln für alle ihre Einträge.
 
-Wenn die Verbindung abbricht, auf der die Instanz hört, kann sie Nachrichten
-verpassen. Deshalb vergisst sie alle Einstellungen in ihrem Cache und hört nach
-einer Sekunde wieder zu.
+Wenn die Verbindung zum Zuhören abbricht, wird der Fehler protokolliert. Nach
+einer Sekunde startet das Zuhören erneut. Lesezugriffe nutzen weiter die
+Datenbank.
 
 Eine Änderung an `publicOrigin`, am Identitäts-Anbieter der Platform oder am
 Anmelde-Geheimnis ändert, wie die Anmeldung funktioniert. Jede Instanz liest
@@ -352,7 +362,7 @@ braucht keinen Setup-Schritt. Bei jedem Start schreibt er die Einstellungen der
 Platform für diesen Ursprung selbst. Er macht das lokale Konto
 `developer@localhost.test` zum Admin der Platform und schaltet die lokale
 Test-Anmeldung ein. Siehe
-[Authentifizierung](/de/docs/authentication#entwicklungskonto).
+[Authentifizierung](/de/docs/developers/authentication#entwicklungskonto).
 
 Das Programm für den Betrieb nutzt nie das lokale Test-Konto. Es gibt keinen
 Schalter dafür.
@@ -363,9 +373,9 @@ deiner Maschine zu nutzen, zum Beispiel Ollama, setze
 [Ausgehende Verbindungen](#ausgehende-verbindungen).
 
 devenv startet auch [RustFS](https://rustfs.com), einen kleinen Objektspeicher,
-für [Dateien](/de/docs/files). Es läuft in Docker. Seine Daten liegen im
-Docker-Volume `openbot-dev-rustfs`. Bei jedem Start macht der Einstiegspunkt für
-die Entwicklung den Bucket `openbot` und schreibt den Speicher in die
+für [Dateien](/de/docs/developers/files). Es läuft in Docker. Seine Daten liegen
+im Docker-Volume `openbot-dev-rustfs`. Bei jedem Start macht der Einstiegspunkt
+für die Entwicklung den Bucket `openbot` und schreibt den Speicher in die
 Einstellungen der Platform. RustFS ist auf `127.0.0.1`, einer privaten Adresse.
 Darum öffnet der Einstiegspunkt für die Entwicklung diesen einen Host für sich
 selbst. Du musst ihn nicht zu `OPENBOT_OUTBOUND_ALLOW` hinzufügen.

@@ -3,6 +3,10 @@ title: Berechtigungen
 description: Ressourcen, Aktionen, Policies und Roles.
 ---
 
+Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
+Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
+[Administrationshandbuch](/de/docs/admin).
+
 Diese Seite zeigt, wie OpenBot entscheidet, ob ein Aufrufer etwas tun darf.
 Jeder Aufruf an `/v1` nennt, was er braucht: eine Aktion auf einer Ressource.
 OpenBot prüft sie, bevor der Aufruf läuft.
@@ -30,59 +34,59 @@ Deny-Regeln hinzufügen. Siehe
 Liste sie mit `GET /v1/organization/resources` auf. Jeder Eintrag hat die Art,
 die Aktionen, die Felder und den Pfad einer Ressource.
 
-| Ressource          | Aktion     | Was sie erlaubt                                                                                                     |
-| ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------- |
-| `Chat`             | `read`     | Chats lesen, mit ihrem Verlauf und der Arbeit, die sie abgegeben haben.                                             |
-| `Chat`             | `write`    | Chats ändern, unterbrechen und löschen und die Arbeit abbrechen, die sie abgegeben haben.                           |
-| `Chat`             | `run`      | Bots Nachrichten schicken, damit sie in einem Chat arbeiten.                                                        |
-| `File`             | `read`     | Deine [Dateien](/de/docs/files) und ihre Bytes lesen.                                                               |
-| `File`             | `write`    | Deine Dateien hochladen und löschen.                                                                                |
-| `Request`          | `resolve`  | Die Requests deiner Bots für neue Fähigkeiten beantworten.                                                          |
-| `Bot`              | `read`     | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                                               |
-| `Bot`              | `write`    | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                                |
-| `Bot`              | `delegate` | Einem Bot Arbeit geben, von einem Client oder von einem anderen Bot aus.                                            |
-| `Bot`              | `share`    | Personen einladen, einen [Bot zu nutzen](/de/docs/sharing), und seine Bot-Mitglieder verwalten.                     |
-| `Trigger`          | `read`     | [Trigger](/de/docs/triggers) lesen: ihre Zeitpläne und Webhooks.                                                    |
-| `Trigger`          | `write`    | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen.                                       |
-| `Channel`          | `read`     | Die [Channels](/de/docs/channels) der Organisation lesen und die Personen, die mit ihnen verknüpft sind.            |
-| `Channel`          | `write`    | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen von Personen lösen.            |
-| `Channel`          | `use`      | Mit dem Bot eines Channel sprechen und deine Bots dorthin schreiben lassen.                                         |
-| `ChannelIdentity`  | `read`     | Deine verknüpften Konten auf den Plattformen von Channels lesen.                                                    |
-| `ChannelIdentity`  | `write`    | Deine Konten auf den Plattformen von Channels verknüpfen und die Verknüpfung lösen.                                 |
-| `Computer`         | `read`     | [Computer](/de/docs/computers) lesen, die Bots, die sie nutzen dürfen, und ihre Nutzung.                            |
-| `Computer`         | `write`    | Computer erstellen, ändern und löschen, Maschinen koppeln und Connector-Tokens erstellen.                           |
-| `Computer`         | `use`      | Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen, und deine Bots sie nutzen lassen.           |
-| `ComputerProvider` | `read`     | Die Konten bei Computer-Providern lesen.                                                                            |
-| `ComputerProvider` | `write`    | Konten bei Computer-Providern und ihre Schlüssel hinzufügen, ändern und löschen.                                    |
-| `ComputerProvider` | `use`      | Computer mit einem Konto bei einem Computer-Provider erstellen.                                                     |
-| `Vault`            | `read`     | [Vaults](/de/docs/vaults), ihre Einträge und die Bots lesen, die sie nutzen dürfen. Geheimnisse werden nie gezeigt. |
-| `Vault`            | `write`    | Vaults und ihre Einträge hinzufügen, ändern und löschen, und ihre Werte setzen.                                     |
-| `Vault`            | `use`      | Deine Bots Vaults in Code Mode nutzen lassen.                                                                       |
-| `SecretProvider`   | `read`     | Die Konten bei [Secret-Providern](/de/docs/vaults#einen-secret-provider-hinzufügen) lesen.                          |
-| `SecretProvider`   | `write`    | Konten bei Secret-Providern und ihre Tokens hinzufügen, ändern und löschen.                                         |
-| `SecretProvider`   | `use`      | Vault-Einträge ihre Geheimnisse aus einem Konto bei einem Secret-Provider lesen lassen.                             |
-| `Connection`       | `read`     | App-Verbindungen und App-Konten lesen.                                                                              |
-| `Connection`       | `write`    | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                                   |
-| `App`              | `use`      | Apps finden und App-Operationen und App-Ansichten nutzen.                                                           |
-| `App`              | `publish`  | Die Entwicklerwerkzeuge für Apps nutzen, die du veröffentlichst.                                                    |
-| `Model`            | `use`      | Ein Model für einen Chat wählen und es im Model-Katalog sehen.                                                      |
-| `Token`            | `read`     | API-Tokens auflisten.                                                                                               |
-| `Token`            | `write`    | API-Tokens erstellen und widerrufen.                                                                                |
-| `Organization`     | `read`     | Die Organisation und ihre Einstellungen lesen.                                                                      |
-| `Organization`     | `write`    | Die Organisation und ihre Einstellungen ändern.                                                                     |
-| `Member`           | `read`     | Members auflisten, mit ihren Roles und Policies.                                                                    |
-| `Member`           | `write`    | Roles, Policies und Status von Members ändern und Members entfernen.                                                |
-| `Role`             | `write`    | Die eigenen Roles der Organisation erstellen, ändern und löschen.                                                   |
-| `ModelProvider`    | `read`     | Die Models und Model Providers der Organisation lesen. Schlüssel werden nie gezeigt.                                |
-| `ModelProvider`    | `write`    | Die Models, Model Providers und Schlüssel der Organisation hinzufügen, ändern und entfernen.                        |
-| `Sso`              | `read`     | Die E-Mail-Domains und SSO-Verbindungen lesen.                                                                      |
-| `Sso`              | `write`    | E-Mail-Domains hinzufügen und bestätigen, und SSO-Verbindungen ändern.                                              |
-| `AuditLog`         | `read`     | Das Audit-Log lesen.                                                                                                |
-| `Usage`            | `read`     | Die [Nutzung der Models](/de/docs/usage) und ihre Kosten lesen, und die Credits der Organisation.                   |
-| `Budget`           | `read`     | Die [Budgets](/de/docs/usage#budgets) lesen und wie viel davon ausgegeben ist.                                      |
-| `Budget`           | `write`    | Budgets erstellen, ändern und löschen.                                                                              |
-| `Platform`         | `read`     | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers lesen.                |
-| `Platform`         | `write`    | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers ändern.               |
+| Ressource          | Aktion     | Was sie erlaubt                                                                                                                |
+| ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Chat`             | `read`     | Chats lesen, mit ihrem Verlauf und der Arbeit, die sie abgegeben haben.                                                        |
+| `Chat`             | `write`    | Chats ändern, unterbrechen und löschen und die Arbeit abbrechen, die sie abgegeben haben.                                      |
+| `Chat`             | `run`      | Bots Nachrichten schicken, damit sie in einem Chat arbeiten.                                                                   |
+| `File`             | `read`     | Deine [Dateien](/de/docs/developers/files) und ihre Bytes lesen.                                                               |
+| `File`             | `write`    | Deine Dateien hochladen und löschen.                                                                                           |
+| `Request`          | `resolve`  | Die Requests deiner Bots für neue Fähigkeiten beantworten.                                                                     |
+| `Bot`              | `read`     | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                                                          |
+| `Bot`              | `write`    | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                                           |
+| `Bot`              | `delegate` | Einem Bot Arbeit geben, von einem Client oder von einem anderen Bot aus.                                                       |
+| `Bot`              | `share`    | Personen einladen, einen [Bot zu nutzen](/de/docs/developers/sharing), und seine Bot-Mitglieder verwalten.                     |
+| `Trigger`          | `read`     | [Trigger](/de/docs/developers/triggers) lesen: ihre Zeitpläne und Webhooks.                                                    |
+| `Trigger`          | `write`    | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen.                                                  |
+| `Channel`          | `read`     | Die [Channels](/de/docs/developers/channels) der Organisation lesen und die Personen, die mit ihnen verknüpft sind.            |
+| `Channel`          | `write`    | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen von Personen lösen.                       |
+| `Channel`          | `use`      | Mit dem Bot eines Channel sprechen und deine Bots dorthin schreiben lassen.                                                    |
+| `ChannelIdentity`  | `read`     | Deine verknüpften Konten auf den Plattformen von Channels lesen.                                                               |
+| `ChannelIdentity`  | `write`    | Deine Konten auf den Plattformen von Channels verknüpfen und die Verknüpfung lösen.                                            |
+| `Computer`         | `read`     | [Computer](/de/docs/developers/computers) lesen, die Bots, die sie nutzen dürfen, und ihre Nutzung.                            |
+| `Computer`         | `write`    | Computer erstellen, ändern und löschen, Maschinen koppeln und Connector-Tokens erstellen.                                      |
+| `Computer`         | `use`      | Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen, und deine Bots sie nutzen lassen.                      |
+| `ComputerProvider` | `read`     | Die Konten bei Computer-Providern lesen.                                                                                       |
+| `ComputerProvider` | `write`    | Konten bei Computer-Providern und ihre Schlüssel hinzufügen, ändern und löschen.                                               |
+| `ComputerProvider` | `use`      | Computer mit einem Konto bei einem Computer-Provider erstellen.                                                                |
+| `Vault`            | `read`     | [Vaults](/de/docs/developers/vaults), ihre Einträge und die Bots lesen, die sie nutzen dürfen. Geheimnisse werden nie gezeigt. |
+| `Vault`            | `write`    | Vaults und ihre Einträge hinzufügen, ändern und löschen, und ihre Werte setzen.                                                |
+| `Vault`            | `use`      | Deine Bots Vaults in Code Mode nutzen lassen.                                                                                  |
+| `SecretProvider`   | `read`     | Die Konten bei [Secret-Providern](/de/docs/developers/vaults#einen-secret-provider-hinzufügen) lesen.                          |
+| `SecretProvider`   | `write`    | Konten bei Secret-Providern und ihre Tokens hinzufügen, ändern und löschen.                                                    |
+| `SecretProvider`   | `use`      | Vault-Einträge ihre Geheimnisse aus einem Konto bei einem Secret-Provider lesen lassen.                                        |
+| `Connection`       | `read`     | App-Verbindungen und App-Konten lesen.                                                                                         |
+| `Connection`       | `write`    | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                                              |
+| `App`              | `use`      | Apps finden und App-Operationen und App-Ansichten nutzen.                                                                      |
+| `App`              | `publish`  | Die Entwicklerwerkzeuge für Apps nutzen, die du veröffentlichst.                                                               |
+| `Model`            | `use`      | Ein Model für einen Chat wählen und es im Model-Katalog sehen.                                                                 |
+| `Token`            | `read`     | API-Tokens auflisten.                                                                                                          |
+| `Token`            | `write`    | API-Tokens erstellen und widerrufen.                                                                                           |
+| `Organization`     | `read`     | Die Organisation und ihre Einstellungen lesen.                                                                                 |
+| `Organization`     | `write`    | Die Organisation und ihre Einstellungen ändern.                                                                                |
+| `Member`           | `read`     | Members auflisten, mit ihren Roles und Policies.                                                                               |
+| `Member`           | `write`    | Roles, Policies und Status von Members ändern und Members entfernen.                                                           |
+| `Role`             | `write`    | Die eigenen Roles der Organisation erstellen, ändern und löschen.                                                              |
+| `ModelProvider`    | `read`     | Die Models und Model Providers der Organisation lesen. Schlüssel werden nie gezeigt.                                           |
+| `ModelProvider`    | `write`    | Die Models, Model Providers und Schlüssel der Organisation hinzufügen, ändern und entfernen.                                   |
+| `Sso`              | `read`     | Die E-Mail-Domains und SSO-Verbindungen lesen.                                                                                 |
+| `Sso`              | `write`    | E-Mail-Domains hinzufügen und bestätigen, und SSO-Verbindungen ändern.                                                         |
+| `AuditLog`         | `read`     | Das Audit-Log lesen.                                                                                                           |
+| `Usage`            | `read`     | Die [Nutzung der Models](/de/docs/usage) und ihre Kosten lesen, und die Credits der Organisation.                              |
+| `Budget`           | `read`     | Die [Budgets](/de/docs/usage#budgets) lesen und wie viel davon ausgegeben ist.                                                 |
+| `Budget`           | `write`    | Budgets erstellen, ändern und löschen.                                                                                         |
+| `Platform`         | `read`     | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers lesen.                           |
+| `Platform`         | `write`    | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers ändern.                          |
 
 `Platform` ist nur für Platform-Admins. Siehe [Die Platform](#die-platform).
 
@@ -119,8 +123,12 @@ Besitzers.
 
 ## Policies
 
-Eine Policy ist JSON. Diese Policy lässt den Aufrufer seine eigenen Chats lesen
-und ändern:
+Eine Policy ist JSON-Text. Die HTTP-Felder `policy` und `ceiling` sind in
+Anfragen und Antworten Strings. Nutze `JSON.stringify(policy)` einmal für dieses
+Feld. Schreibe danach die äußere Anfrage als JSON. Der typisierte Client macht
+dies mit dem Policy-Codec (dem Schema, das die Policy liest und schreibt).
+
+Dieser Text lässt den Aufrufer seine eigenen Chats lesen und ändern:
 
 ```json
 {
@@ -148,6 +156,18 @@ und ändern:
 OpenBot prüft jede Policy, wenn es sie liest. Eine Art, eine Aktion oder ein
 Feld, das es nicht gibt, ergibt `400`. Eine Policy in einer Anfrage darf
 höchstens 100 Regeln haben und höchstens 8 Ebenen tief sein.
+
+Ability 3.0.0 begrenzt auch gespeicherte Policies: 32 Policy-Ebenen, 64 Ebenen
+für Bedingungen, 5 Teile in einem Feldpfad und 10000 Struktureinheiten. Dazu
+zählen Regeln, Bedingungen, Operanden, Listeneinträge und Meta-Werte. Der
+Policy-Text hat höchstens 1000000 UTF-16-Codeeinheiten. Feldlisten nutzen echte
+Pfade oder `*`. Muster wie `owner*` sind nicht gültig.
+
+Stoppe vor dem Upgrade alle Server und starte `openbot-migrate`. Die neue
+Migration ändert die Platform-Ceiling von einem Objekt zu JSON-Text. Die Spalten
+für Rollen, Mitglieder und Tokens halten schon JSON-Text. Clients müssen für
+`policy` und `ceiling` Strings senden. Alte Policies müssen die neuen Grenzen
+und Feldregeln einhalten. Eine Policy, die nicht lädt, gibt keinen Zugriff.
 
 ### Regeln
 
@@ -248,19 +268,30 @@ Antwort ist die Antwort nein.
 OpenBot liest diese Policies bei jeder Prüfung neu. Eine Änderung an einer Role,
 einem Member oder einem Token gilt also sofort.
 
+Eine Ausführung speichert den Ressourcenbesitzer getrennt von der Person, die
+sie startet. Bei Channel-Arbeit müssen der Sprecher und jeder gespeicherte
+Aufrufer die Policy für den echten Ressourcenbesitzer bestehen. Eine spätere
+Prüfung liest ihre aktuellen Rechte erneut. Eine Freigabe kann diesen Besitzer
+nicht ändern und keine Token-Grenze entfernen.
+
 Eine Liste, zum Beispiel `GET /v1/triggers`, enthält nur die Ressourcen, die der
 Aufrufer lesen darf. OpenBot macht aus der Policy eine Bedingung für die Liste,
 bei den meisten Listen direkt in der Abfrage an die Datenbank. Eine Deny-Regel
 auf einer Ressource versteckt sie also auch in der Liste.
 
-Einige Listen verstecken Ressourcen nicht auf diese Weise: `GET /v1/chats`,
-`GET /v1/files`, `GET /v1/connections` und `GET /v1/organization/channels`. Sie
-brauchen die Aktion auf jeder Ressource ihrer Art, die der Aufrufer erreicht:
-auf allen eigenen Chats, Dateien oder App-Verbindungen, oder auf allen Channels
-der Organisation. Ein Aufruf, der eine neue solche Ressource erstellt, braucht
-genauso `write` auf allen. Eine Deny-Regel auf einem Chat, einer Datei, einer
-App-Verbindung oder einem Channel lässt diese Aufrufe also mit `403`
-fehlschlagen.
+Listenbedingungen und direkte Prüfungen geben bei einem fehlenden Besitzer
+dieselbe Antwort. Zum Beispiel schließt `NOT (ownerUserId = "member")` eine
+gemeinsame Ressource mit `ownerUserId: null` ein.
+
+Listen von Chats, Dateien, App-Verbindungen und Channels wenden die Policy in
+der Datenbankabfrage an. Eine Deny-Regel versteckt nur die passenden Einträge.
+Ohne lesbare Einträge ist die Liste leer. Dateiseiten und ihr nächster Cursor
+zählen nur Dateien, die der Aufrufer lesen darf. Eine Cursor-Datei muss weiter
+dem Aufrufer gehören und die aktuelle Leseprüfung bestehen.
+
+Das Erstellen eines Chats, einer Datei, einer App-Verbindung oder eines Channels
+braucht weiter `write` für den ganzen Bereich dieser Art. Listenfilter geben
+keinen Schreibzugriff.
 
 ### Tokens tun nie mehr als ihr Member
 
@@ -292,7 +323,7 @@ Dieses Beispiel erstellt ein Token, das nur deine Chats lesen kann:
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Dashboard","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read"],"resources":["Chat"]}]}}' \
+  -d '{"name":"Dashboard","policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\"],\"resources\":[\"Chat\"]}]}"}' \
   https://api.example.com/v1/user/tokens
 ```
 
@@ -338,7 +369,7 @@ kann seine Chats aber weiter lesen:
 curl -X PATCH -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Deny","actions":["run"],"resources":["Chat"]}]}}' \
+  -d '{"policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Deny\",\"actions\":[\"run\"],\"resources\":[\"Chat\"]}]}"}' \
   https://api.example.com/v1/organization/members/u_456
 ```
 
@@ -351,7 +382,7 @@ Roles erstellen, ändern und löschen braucht `write` auf `Role`.
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","resolve"],"resources":["Chat","Request"],"when":{"_tag":"Under","prefix":[{"_tag":"Literal","value":"org"},{"_tag":"Principal","path":"organizationId"},{"_tag":"Literal","value":"user"},{"_tag":"Principal","path":"userId"}]}}]}}' \
+  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":"{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[{\"_tag\":\"Allow\",\"actions\":[\"read\",\"resolve\"],\"resources\":[\"Chat\",\"Request\"],\"when\":{\"_tag\":\"Under\",\"prefix\":[{\"_tag\":\"Literal\",\"value\":\"org\"},{\"_tag\":\"Principal\",\"path\":\"organizationId\"},{\"_tag\":\"Literal\",\"value\":\"user\"},{\"_tag\":\"Principal\",\"path\":\"userId\"}]}}]}"}' \
   https://api.example.com/v1/organization/roles
 ```
 

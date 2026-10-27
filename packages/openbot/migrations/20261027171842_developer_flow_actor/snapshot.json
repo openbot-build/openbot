@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "1b36fac7-8ca3-4349-9f2c-94e72b8f1ce9",
+	"prevIds": ["381b2080-b00c-4983-9a81-03efeeab615b"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_test_flows",
+				"actor"
+			],
+			"writes": [
+				"s|col|public.openbot_developer_test_flows.actor",
+				"n|col|public.openbot_developer_test_flows.actor",
+				"e|col|public.openbot_developer_test_flows.actor"
+			],
+			"reads": ["n|tbl|public.openbot_developer_test_flows", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_developer_test_flows",
+				"name": "actor",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

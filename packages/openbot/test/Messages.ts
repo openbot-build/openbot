@@ -1,5 +1,5 @@
-import { ChatView, MessageReceipt } from "@openbot-build/api"
-import { Effect, Schema } from "effect"
+import { ChatView, ChatCommandReceipt, ExecutionsApi } from "@openbot-build/api"
+import { Effect, Random, Schema } from "effect"
 import * as Caller from "./Caller.ts"
 
 /** Sends one request with the credential of a person. */
@@ -51,36 +51,43 @@ export const bot = Effect.fn("Messages.bot")(function* (
 
 /** Sends a message to the direct Chat of the caller with a Bot. */
 export const message = (send: Send, bot: string, input: string) =>
-	Effect.flatMap(
-		send(`/v1/bots/${bot}/messages`, "POST", { input }),
-		Caller.json(MessageReceipt, 202),
-	)
+	Effect.gen(function* () {
+		return yield* send(`/v1/bots/${bot}/messages`, "POST", {
+			input,
+			commandKey: `test:${yield* Random.nextInt}:${yield* Random.nextInt}`,
+		}).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+	})
 
 /** Sends a message to a Chat. */
 export const send = (request: Send, chat: string, input: string) =>
-	Effect.flatMap(
-		request(`/v1/chats/${chat}/messages`, "POST", { input }),
-		Caller.json(MessageReceipt, 202),
-	)
+	Effect.gen(function* () {
+		return yield* request(`/v1/chats/${chat}/messages`, "POST", {
+			input,
+			commandKey: `test:${yield* Random.nextInt}:${yield* Random.nextInt}`,
+		}).pipe(Effect.flatMap(Caller.json(ChatCommandReceipt, 202)))
+	})
 
 /** Reads the view of a Chat. */
 export const view = (send: Send, chat: string) =>
 	Effect.flatMap(send(`/v1/chats/${chat}`, "GET"), Caller.json(ChatView))
 
-/** Waits for a change of a Chat after the given view, at most half a second. */
+/** The event log gives the end of a submitted execution. The next view may name its successor. */
 const next = (send: Send, chat: string, current: ChatView) =>
-	Effect.flatMap(
-		send(
-			`/v1/chats/${chat}/wait?` +
-				new URLSearchParams({
-					after: String(current.chat.revision),
-					afterActivity: current.activity,
-					timeoutMs: "500",
-				}),
-			"GET",
-		),
-		Caller.json(ChatView),
-	)
+	Effect.gen(function* () {
+		if (current.executionId !== null) {
+			let afterSequence = 0
+			while (true) {
+				const page = yield* send(
+					`/v1/executions/${current.executionId}/events?afterSequence=${afterSequence}`,
+					"GET",
+				).pipe(Effect.flatMap(Caller.json(ExecutionsApi.EventPage)))
+				if (page.terminal) break
+				afterSequence = page.afterSequence
+				yield* Effect.sleep("50 millis")
+			}
+		}
+		return yield* view(send, chat)
+	})
 
 /** Waits from a view until the Chat rests. */
 const rest = (
@@ -92,9 +99,7 @@ const rest = (
 	Effect.Error<ReturnType<typeof next>>,
 	Effect.Services<ReturnType<typeof next>>
 > =>
-	current.activity !== "active" &&
-	current.status !== "Running" &&
-	current.inbox === 0
+	current.status !== "Running" && current.inbox === 0
 		? Effect.succeed(current)
 		: Effect.flatMap(next(send, chat, current), (view) =>
 				rest(send, chat, view),

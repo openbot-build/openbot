@@ -1,0 +1,48 @@
+---
+title: "Ein Live-Backend hinzufügen"
+description: "Ein Live-Backend hinzufügen"
+---
+
+Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
+erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
+mit dem [Entwicklerhandbuch](/de/docs/developers).
+
+Für Entwickler, die ein Server-Backend ergänzen.
+
+## Ein Live-Backend hinzufügen
+
+Ein **Live-Backend** verbindet OpenBot mit einer Art von Live-Dienst. Alles
+andere im Live-Modus arbeitet mit jedem Backend. So fügst du eines hinzu:
+
+1. Schreib ein Modul, das ein `LiveBackend` aus
+   `packages/openbot/src/models/LiveBackends.ts` gibt. Sein `make` gibt ein
+   `LiveModel` aus `@openbot-build/core/Live`.
+2. Sag in `capabilities`, was der Dienst kann. OpenBot schickt nie eine Eingabe,
+   die das Backend nicht kann.
+3. Bilde die Werte von `Live.Input` auf die Nachrichten des Dienstes ab, und die
+   Nachrichten des Dienstes auf Werte von `Live.Event`.
+4. Füge das Backend zu `layerLiveBackends` in
+   `packages/openbot/src/app/OpenBot.ts` hinzu.
+
+`packages/openbot/src/providers/openai/OpenAiRealtime.ts` ist das Backend für
+die OpenAI Realtime API. Nimm es als Beispiel.
+
+Ein Dienst, der den Text der Sprache nicht gibt, kann den Verlauf des Chats
+nicht halten. OpenBot öffnet mit so einem Model noch keine Session.
+
+Setzen Sie `ResponseDone.usage.input.total` und `output.total` auf die vom
+Anbieter bestätigten Zahlen. Fehlende Zahlen bleiben `undefined`, auch bei
+Details. Token aus dem Cache sind Teil der Eingabesumme. Addieren Sie sie nicht
+erneut. Nutzen Sie `Live.emptyUsage` nicht, wenn der Anbieter keinen
+Nutzungsbericht gibt. Diese Nutzung bleibt unbekannt und wird nicht berechnet.
+
+`Live.Input.History` stellt Text, Werkzeugaufrufe und Ergebnisse wieder her.
+Fügen Sie sie vor aktuellem Ton ein. Die Reihenfolge bleibt gleich: Ein Aufruf
+muss vor seinem Ergebnis stehen. Der Treiber sendet den Verlauf einmal aus dem
+gespeicherten Prompt. Laden Sie im Backend keine weitere Kopie des
+Chat-Verlaufs.
+
+Der Aufrufer hält den Verbindungsscope. Nach einem RPC-Fehler oder Abbruch wird
+die Verbindung nicht erneut genutzt. Der Finalizer gibt den Socket frei.
+Wiederholen Sie keinen Ton und halten Sie keine alte Antwort für die nächste
+Anfrage.

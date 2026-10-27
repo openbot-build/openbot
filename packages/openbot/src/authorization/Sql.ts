@@ -20,14 +20,15 @@ import { Array as Arr, Effect } from "effect"
  * gives the column of each field of the resource. A field with no column is
  * a mistake in the code, so it is a defect.
  *
- * A test with `null` follows the meaning of the condition, not of SQL: `ne`
- * is true when the column is `NULL`, so it uses `IS DISTINCT FROM`.
+ * A leaf always returns true or false. SQL NULL must not change the result of
+ * a later NOT: a shared resource has no member owner, but it can still match
+ * a negated owner condition.
  */
 export const toWhere = (
 	condition: Condition.Any,
-	columns: Readonly<Record<string, AnyColumn>>,
+	columns: Readonly<Record<string, AnyColumn | SQL>>,
 ): Effect.Effect<SQL> => {
-	const column = (field: string) => columns[field]!
+	const column = (field: string) => sql`${columns[field]!}`
 	const missing = Arr.filter(
 		Condition.fields(condition),
 		(field) => columns[field] === undefined,
@@ -49,24 +50,26 @@ export const toWhere = (
 						: sql`FALSE`
 			switch (op) {
 				case "eq":
-					return sql`${target} = ${value}`
+					return sql`${target} IS NOT DISTINCT FROM ${value}`
 				case "ne":
 					return sql`${target} IS DISTINCT FROM ${value}`
 				case "lt":
-					return lt(target, value)
+					return sql`coalesce(${lt(target, value)}, FALSE)`
 				case "lte":
-					return lte(target, value)
+					return sql`coalesce(${lte(target, value)}, FALSE)`
 				case "gt":
-					return gt(target, value)
+					return sql`coalesce(${gt(target, value)}, FALSE)`
 				case "gte":
-					return gte(target, value)
+					return sql`coalesce(${gte(target, value)}, FALSE)`
 			}
 		},
 		in: (field, values) => {
 			const target = column(field)
 			const present = Arr.filter(values, (value) => value !== null)
 			const parts = [
-				...(present.length > 0 ? [inArray(target, present)] : []),
+				...(present.length > 0
+					? [sql`coalesce(${inArray(target, present)}, FALSE)`]
+					: []),
 				...(values.includes(null) ? [isNull(target)] : []),
 			]
 			return or(...parts) ?? sql`FALSE`

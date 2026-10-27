@@ -1,6 +1,8 @@
-import { ComputersApi } from "@openbot-build/api"
+import type { ExecutionIdentity } from "@openbot-build/domain"
+import { Computers as ComputerData } from "@openbot-build/domain"
+
 import { Duration, Effect, Schema } from "effect"
-import * as Failures from "../../app/Failures.ts"
+import * as Failures from "../../errors/Failures.ts"
 import { ComputerCallFailed, Machine } from "../Computer.ts"
 import type { Connectors } from "./Connectors.ts"
 
@@ -26,26 +28,28 @@ const as =
  * and that desktop has no live stream.
  */
 export const make = (input: {
+	readonly identity: ExecutionIdentity
 	readonly computerId: string
 	readonly desktop: boolean
 	readonly connectors: Connectors["Service"]
 	readonly online: boolean
 }) => {
 	const call = (
-		operation: ComputersApi.ConnectorCall["operation"],
+		operation: ComputerData.ConnectorCall["operation"],
 		wait?: Duration.Duration,
-	) => input.connectors.call(input.computerId, operation, wait)
+	) => input.connectors.call(input.identity, input.computerId, operation, wait)
 	return new Machine({
 		shell: {
-			start: (request) => input.connectors.start(input.computerId, request),
+			start: (request) =>
+				input.connectors.start(input.identity, input.computerId, request),
 			read: (path, encoding) =>
 				call({ _tag: "Read", path, encoding }).pipe(
-					Effect.flatMap(as(ComputersApi.FileContent)),
+					Effect.flatMap(as(ComputerData.FileContent)),
 				),
 			write: (file) => call({ _tag: "Write", file }).pipe(Effect.asVoid),
 			list: (path) =>
 				call({ _tag: "List", path }).pipe(
-					Effect.flatMap(as(Schema.Array(ComputersApi.FileEntry))),
+					Effect.flatMap(as(Schema.Array(ComputerData.FileEntry))),
 				),
 			remove: (path) => call({ _tag: "Remove", path }).pipe(Effect.asVoid),
 		},
@@ -53,7 +57,7 @@ export const make = (input: {
 			? {
 					desktop: {
 						screenshot: call({ _tag: "Screenshot" }).pipe(
-							Effect.flatMap(as(ComputersApi.Screenshot)),
+							Effect.flatMap(as(ComputerData.Screenshot)),
 						),
 						act: (actions) =>
 							call({ _tag: "Desktop", actions }).pipe(Effect.asVoid),
@@ -62,6 +66,9 @@ export const make = (input: {
 			: {}),
 		state: Effect.succeed(input.online ? "running" : "starting"),
 		// OpenBot only forgets the machine. The machine itself stays as it is.
-		destroy: input.connectors.close(input.computerId),
+		destroy: input.connectors.close(
+			input.identity.owner.organizationId,
+			input.computerId,
+		),
 	})
 }

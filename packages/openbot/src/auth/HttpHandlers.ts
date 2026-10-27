@@ -1,15 +1,15 @@
 import {
 	AuthApi,
-	type Caller,
-	Identity,
 	type OrganizationApi,
 	OpenBotApi,
 	UserTokensApi,
 } from "@openbot-build/api"
+
+import { type Caller, Identity } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { userKey } from "../audit/Resources.ts"
 import * as AuthorizationLayer from "../authorization/Layer.ts"

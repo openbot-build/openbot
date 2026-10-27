@@ -1,3 +1,5 @@
+import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
+import { ComputerCallFailed } from "../src/computers/Computer.ts"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
@@ -94,6 +96,7 @@ const credentials: E2bProvider.Credentials = {
 
 const provider = (client: HttpClient.HttpClient) =>
 	E2bProvider.make(credentials).pipe(
+		Effect.provide(ErrorRecordsFixture.layer),
 		Effect.provideService(HttpClient.HttpClient, client),
 	)
 
@@ -366,6 +369,7 @@ it.effect(
 					const failure = yield* Effect.flip(
 						process.write(new TextEncoder().encode("x")),
 					)
+					assert.ok(Schema.is(ComputerCallFailed)(failure))
 					assert.strictEqual(failure.message, "The command did not start.")
 				}),
 			)
@@ -460,24 +464,24 @@ it.effect("E2B maps a missing file to a failure that a retry cannot fix", () =>
 			json({ code: 404, message: "path '/x' does not exist" }, 404),
 		)
 		const error = yield* Effect.flip(machine.shell.read("/x", "utf8"))
-		assert.strictEqual(error._tag, "ComputerCallFailed")
+		assert.ok(Schema.is(ComputerCallFailed)(error))
 		assert.strictEqual(
-			error._tag === "ComputerCallFailed" && error.missingPath,
+			Schema.is(ComputerCallFailed)(error) && error.missingPath,
 			"/x",
 		)
 		assert.strictEqual(
-			error._tag === "ComputerCallFailed" && error.retry,
+			Schema.is(ComputerCallFailed)(error) && error.retry,
 			false,
 		)
 		assert.match(
-			error._tag === "ComputerCallFailed" ? error.message : "",
+			Schema.is(ComputerCallFailed)(error) ? error.message : "",
 			/is not there/,
 		)
 	}),
 )
 
 it.effect(
-	"E2B pauses with memory kept, and resumes with connect on the next call",
+	"E2B keeps memory on pause and resumes only through its resume method",
 	() =>
 		Effect.gen(function* () {
 			const { machine, log } = yield* attach((seen) => {
@@ -493,6 +497,12 @@ it.effect(
 				(seen) => seen.url.pathname === "/sandboxes/sbx1/pause",
 			)
 			assert.strictEqual(pause.method, "POST")
+			assert.ok(
+				Schema.is(ComputerCallFailed)(
+					yield* machine.shell.list("/").pipe(Effect.flip),
+				),
+			)
+			yield* machine.pausable!.resume
 			yield* machine.shell.list("/")
 			const connect = yield* findRequest(
 				log,
@@ -515,7 +525,7 @@ it.effect(
 )
 
 it.effect(
-	"E2B resumes a sandbox that the proxy reports away, and tries once more",
+	"E2B does not resume or repeat a command when the proxy reports it away",
 	() =>
 		Effect.gen(function* () {
 			let first = true
@@ -531,11 +541,22 @@ it.effect(
 				}
 				return json({ entries: [] })
 			})
-			assert.deepStrictEqual(yield* machine.shell.list("/"), [])
+			assert.ok(
+				Schema.is(ComputerCallFailed)(
+					yield* machine.shell.list("/").pipe(Effect.flip),
+				),
+			)
 			assert.strictEqual(
 				Arr.filter(
 					yield* log,
 					(seen) => seen.url.pathname === "/sandboxes/sbx1/connect",
+				).length,
+				0,
+			)
+			assert.strictEqual(
+				Arr.filter(
+					yield* log,
+					(seen) => seen.url.pathname === "/filesystem.Filesystem/ListDir",
 				).length,
 				1,
 			)
@@ -654,12 +675,15 @@ it.effect(
 			const value = yield* E2bProvider.make({
 				...credentials,
 				sandboxDomain: "my domain",
-			}).pipe(Effect.provideService(HttpClient.HttpClient, client))
+			}).pipe(
+				Effect.provide(ErrorRecordsFixture.layer),
+				Effect.provideService(HttpClient.HttpClient, client),
+			)
 			const machine = yield* value.attach("sbx1")
 			const failure = yield* Effect.flip(machine.ports!.open(3000))
-			assert.strictEqual(failure._tag, "ComputerCallFailed")
+			assert.ok(Schema.is(ComputerCallFailed)(failure))
 			assert.strictEqual(
-				failure._tag === "ComputerCallFailed" && failure.retry,
+				Schema.is(ComputerCallFailed)(failure) && failure.retry,
 				false,
 			)
 		}),

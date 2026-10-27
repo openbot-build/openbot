@@ -197,9 +197,7 @@ const migrated = Layer.effect(
 	Layer.provide(NodeServices.layer),
 )
 
-const decodePolicy = Schema.decodeEffect(
-	Schema.fromJsonString(Authorization.PolicySchema),
-)
+const decodePolicy = Schema.decodeEffect(Authorization.PolicySchema)
 const decodeDocument = Schema.decodeEffect(
 	Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
 )
@@ -344,6 +342,7 @@ layer(migrated, { excludeTestServices: true, timeout: "120 seconds" })(
 					)
 					const document = yield* decodeDocument(rows.platform)
 					assert.isFalse(Rec.has(document, "policyCeiling"))
+					assert.isString(document["ceiling"])
 					const cap = yield* decodeCeiling(document["ceiling"])
 					assert.strictEqual(
 						decide(cap, { action: "delegate", resource: bot("user_a") }),

@@ -3,6 +3,9 @@ title: Packages
 description: The workspace packages and what each one is for.
 ---
 
+For developers. Start with the [developer manual](/docs/developers) to choose
+API work, App publishing, or project changes.
+
 OpenBot is a pnpm workspace. Each package has one job. `openbot` puts the parts
 together into the server. You can use the other libraries on their own.
 
@@ -14,17 +17,17 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 
 ## Overview
 
-| Package         | What it is for                                                                                 |
-| --------------- | ---------------------------------------------------------------------------------------------- |
-| `openbot`       | The server, its plugins, and its model providers. See [Run from code](/docs/server).           |
-| `api`           | The typed HTTP contract. The server, the client, and the API reference use it.                 |
-| `client`        | The TypeScript client. See [Client](/docs/client).                                             |
-| `core`          | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                |
-| `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                              |
-| `protocol-test` | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test).          |
-| `cli`           | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                          |
-| `computer`      | The `openbot computer` command, which pairs and connects your own [Computer](/docs/computers). |
-| `docs`          | This docs site.                                                                                |
+| Package         | What it is for                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| `openbot`       | The server, its plugins, and its model providers. See [Run from code](/docs/server).                      |
+| `api`           | The typed HTTP contract. The server, the client, and the API reference use it.                            |
+| `client`        | The TypeScript client. See [Client](/docs/client).                                                        |
+| `core`          | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                           |
+| `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                                         |
+| `protocol-test` | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test).                     |
+| `cli`           | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                     |
+| `computer`      | The `openbot computer` command, which pairs and connects your own [Computer](/docs/developers/computers). |
+| `docs`          | This docs site.                                                                                           |
 
 The examples below leave out the model. To run them, provide a `LanguageModel`
 Layer, for example from a [model provider](#model-providers) in `openbot`.
@@ -93,20 +96,26 @@ update again, so the update must have no outside effects. An explicit
 
 `Operation.Store` methods fail with `Operation.StoreError` on a store failure.
 `get` and `finish` return `Option<Record>`; `None` means no matching record or
-no new end. `Operations.make` takes a `whileRunning` scoped Effect to hold host
-resources through the work, stored end, and notice. If the first write fails,
-the call stays in its Turn. If the end write fails, the Chat still gets its
-notice, and the failure is logged.
+no new end. Each call can use `RunInput.acquire` to hold resources in its Scope
+through the work, stored end, and notice. If the first write fails, the call
+stays in its Turn. If the end write fails, the Chat still gets its notice, and
+the failure is logged.
+
+The independent `core` runtime runs in one process. Each Turn opens its plugin
+resources in a new Scope. Background calls hold the resources they still need
+until they end. `core` does not send heartbeats or cancel requests to other
+processes, and it does not resume work after a process stops. The server uses
+its durable execution system for that work.
 
 `execute` starts a Turn, waits for it to end, and returns the Chat. `stream`
 gives events while the Turn runs. Both fail when a Turn already runs in the
 Chat.
 
 `deliver` gives input to a Chat in one step, by the rules of the
-[inbox](/docs/chats#the-inbox). It starts a Turn when the Chat is idle, steers
-the running Turn when the input has the same `author`, and waits in the inbox
-otherwise. It returns `started`, `steered` or `queued`. After each Turn, the
-next input in the inbox starts the next Turn.
+[inbox](/docs/developers/chats#the-inbox). It starts a Turn when the Chat is
+idle, steers the running Turn when the input has the same `author`, and waits in
+the inbox otherwise. It returns `started`, `steered` or `queued`. After each
+Turn, the next input in the inbox starts the next Turn.
 
 Each Turn runs in its own fiber, and the runtime owns that fiber. A fiber is a
 light thread of Effect. When the Scope of the runtime closes, every running Turn
@@ -171,31 +180,57 @@ yield *
 	})
 ```
 
+`Bot.Definition.registerTools` opens tools in the Turn scope. It returns tool
+definitions, their handler context, instructions, and step hooks. It has no
+model continuation or event stream. All server features use this registration.
+Their resources stay open while a background call uses them. The host applies
+review and plan rules after all tools are registered. A tool cannot escape the
+rules by being added later. Bot memory is read only when the model needs its
+prompt, not when a background call rebuilds its tools.
+
+`SummaryCompaction.prepare` builds summary input without calling a model. It
+keeps recent messages and linked tool calls together. A `TurnRunner` host can
+supply `summarize(selection, input)` to save the model result before it changes
+the context. The standalone default uses the model of the current scope. The
+server adapter uses the same call log and usage records as other model steps. A
+saved summary can be read after takeover without another model call. Summary
+text does not enter the reply text events.
+
 ### Plugins
 
-A plugin wraps the model loop. `Plugin.make` makes one. Its constructor runs
-once. The middleware it returns wraps the event stream of each Turn:
+A plugin registers tools, step hooks, and state. `Plugin.make` makes one. Its
+constructor runs in the scope of each Turn phase. A queued host action starts a
+new phase. Resources close when that phase ends, fails, or is cancelled. A
+background tool holds its resources until its call ends. Construction errors
+fail that Turn. Plugins cannot wrap or start the model loop.
 
 ```ts
 import { Plugin } from "@openbot-build/core"
-import { Effect, Stream } from "effect"
+import { Context, Effect } from "effect"
 
 const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
-	Effect.succeed((next, options) =>
-		next(options).pipe(
-			Stream.tap((event) =>
-				event._tag === "ModelStepStarted"
-					? Effect.log("A model step started")
-					: Effect.void,
-			),
-		),
-	),
+	Effect.succeed({
+		tools: {},
+		handlers: Context.empty(),
+		beforeStep: ({ kind }) =>
+			(kind === "model"
+				? Effect.log("A model step started")
+				: Effect.void
+			).pipe(Effect.as(true)),
+	}),
 )
 ```
 
-`PluginComposition.merge(a, b)` combines two plugins. `a` runs outside `b`. A
-plugin can also save its own data in the record of the Chat or in its state.
-Pass `plugin.stores` to `Store.define`, then use `PluginState.make`.
+`PluginComposition.merge(a, b)` builds `a` then `b`. Both before-step and
+after-step hooks run in that order. A false before-step result skips later
+checks and stops the Turn. Tool definitions and handlers from `b` take
+precedence. `ToolRegistration.merge` applies the same rules to plain
+registrations. A time limit is data for the runner. It uses the saved Turn start
+time, so a restart cannot reset it. When limits are combined, the shortest one
+applies.
+
+A plugin can save data in the Chat record or its state. Pass `plugin.stores` to
+`Store.define`, then use `PluginState.make`.
 
 ### Skills
 
@@ -218,9 +253,9 @@ takes `timeoutMs` as a number of milliseconds.
 
 ### Memory
 
-`BotMemory` has the types and helpers of [Bot memory](/docs/memory). The server
-uses them for the memory Bot and the memory API. The schemas of the memory API
-are in `api`, as `BotMemory`.
+`BotMemory` has the types and helpers of [Bot memory](/docs/developers/memory).
+The server uses them for the memory Bot and the memory API. The schemas of the
+memory API are in `api`, as `BotMemory`.
 
 `BotMemory.apply` takes an `ids` array with one new ID for each operation, in
 the same order. `BotMemory.edit` takes a new ID string as `id`. The caller makes

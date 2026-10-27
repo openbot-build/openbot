@@ -3,6 +3,9 @@ title: Pakete
 description: Die Pakete im Workspace und wofür jedes da ist.
 ---
 
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+API-Anbindung, App-Veröffentlichung und Projektarbeit.
+
 OpenBot ist ein pnpm-Workspace. Jedes Paket hat eine Aufgabe. `openbot` setzt
 die Teile zum Server zusammen. Die anderen Bibliotheken kannst du auch einzeln
 nutzen.
@@ -15,17 +18,17 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 
 ## Überblick
 
-| Paket           | Wofür es da ist                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------ |
-| `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/docs/server).        |
-| `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                   |
-| `client`        | Der TypeScript-Client. Siehe [Client](/de/docs/client).                                                |
-| `core`          | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                        |
-| `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                      |
-| `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).       |
-| `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                              |
-| `computer`      | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/docs/computers). |
-| `docs`          | Diese Doku-Seite.                                                                                      |
+| Paket           | Wofür es da ist                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/docs/server).                   |
+| `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                              |
+| `client`        | Der TypeScript-Client. Siehe [Client](/de/docs/client).                                                           |
+| `core`          | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                                   |
+| `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                                 |
+| `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).                  |
+| `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                                         |
+| `computer`      | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/docs/developers/computers). |
+| `docs`          | Diese Doku-Seite.                                                                                                 |
 
 Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen
 `LanguageModel`-Layer an, zum Beispiel von einem
@@ -96,22 +99,28 @@ festen `expectedRevision` schlägt ein Konflikt ohne neuen Versuch fehl.
 
 Die Methoden von `Operation.Store` melden Speicherfehler als
 `Operation.StoreError`. `get` und `finish` geben `Option<Record>` zurück. `None`
-heißt, dass kein Eintrag passt oder kein neues Ende vorliegt. `Operations.make`
-nimmt einen Effect mit Scope als `whileRunning`. Er hält die Mittel des Hosts
-während der Arbeit, beim Speichern des Endes und bei der Mitteilung. Schlägt der
-erste Schreibvorgang fehl, bleibt der Aufruf in seinem Turn. Schlägt das
-Speichern des Endes fehl, bekommt der Chat trotzdem seine Mitteilung. Der Fehler
-kommt ins Log.
+heißt, dass kein Eintrag passt oder kein neues Ende vorliegt. Jeder Aufruf kann
+mit `RunInput.acquire` Mittel in seinem Scope halten: während der Arbeit, beim
+Speichern des Endes und bei der Mitteilung. Schlägt der erste Schreibvorgang
+fehl, bleibt der Aufruf in seinem Turn. Schlägt das Speichern des Endes fehl,
+bekommt der Chat trotzdem seine Mitteilung. Der Fehler kommt ins Log.
+
+Die unabhängige `core`-Runtime läuft in einem Prozess. Jeder Turn öffnet seine
+Plugin-Mittel in einem neuen Scope. Aufrufe im Hintergrund halten die nötigen
+Mittel, bis sie enden. `core` sendet keine Heartbeats oder Stopp-Anfragen an
+andere Prozesse. Nach einem Prozessende nimmt es die Arbeit nicht wieder auf.
+Der Server nutzt dafür sein System für dauerhafte Ausführungen.
 
 `execute` startet einen Turn, wartet, bis er endet, und gibt den Chat zurück.
 `stream` liefert Ereignisse, während der Turn läuft. Beide schlagen fehl, wenn
 im Chat schon ein Turn läuft.
 
 `deliver` gibt einem Chat eine Eingabe in einem Schritt, nach den Regeln der
-[Inbox](/de/docs/chats#die-inbox). Es startet einen Turn, wenn der Chat frei
-ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author` hat, und
-wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued` zurück.
-Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten Turn.
+[Inbox](/de/docs/developers/chats#die-inbox). Es startet einen Turn, wenn der
+Chat frei ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author`
+hat, und wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued`
+zurück. Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten
+Turn.
 
 Jeder Turn läuft in einer eigenen Fiber, und diese Fiber gehört der Runtime.
 Eine Fiber ist ein leichter Thread von Effect. Wenn der Scope der Runtime
@@ -180,33 +189,61 @@ yield *
 	})
 ```
 
+`Bot.Definition.registerTools` öffnet Tools im Scope des Turns. Es gibt
+Tool-Definitionen, ihren Handler-Kontext, Anweisungen und Schritt-Hooks zurück.
+Es erhält weder eine Fortsetzung der Modellschleife noch einen Ereignisstrom.
+Alle Server-Funktionen nutzen diese Registrierung. Die Ressourcen bleiben offen,
+solange ein Hintergrundaufruf sie braucht. Der Host prüft die Regeln für Review
+und Plan erst nach der Registrierung aller Tools. Ein später ergänztes Tool kann
+diese Regeln nicht umgehen. Bot-Speicher wird erst gelesen, wenn das Modell
+seine Eingabe braucht, nicht beim Neubau der Tools für einen Hintergrundaufruf.
+
+`SummaryCompaction.prepare` baut die Eingabe für eine Zusammenfassung ohne
+Modellaufruf. Es hält neue Nachrichten und verbundene Tool-Aufrufe zusammen. Ein
+`TurnRunner`-Host kann `summarize(selection, input)` geben, um das
+Modellergebnis vor der Änderung des Kontexts zu speichern. Der Standard für den
+eigenen Betrieb nutzt das Modell im aktuellen Scope. Der Server-Adapter nutzt
+dasselbe Aufrufprotokoll und dieselben Verbrauchsdaten wie andere
+Modellschritte. Nach einer Übernahme kann er die gespeicherte Zusammenfassung
+ohne neuen Modellaufruf lesen. Der Text der Zusammenfassung kommt nicht in die
+Textereignisse der Antwort.
+
 ### Plugins
 
-Ein Plugin legt sich um die Model-Schleife. `Plugin.make` erstellt eines. Sein
-Konstruktor läuft einmal. Die Middleware, die er zurückgibt, legt sich um den
-Ereignis-Stream jedes Turns:
+Ein Plugin meldet Tools, Schritt-Hooks und Zustand an. `Plugin.make` erstellt
+es. Der Konstruktor läuft im Scope jeder Turn-Phase. Eine wartende Host-Aktion
+beginnt eine neue Phase. Am Ende, bei Fehler oder Abbruch schließen die
+Ressourcen. Ein Hintergrund-Tool hält sie bis zum Ende seines Aufrufs. Ein
+Baufehler lässt den Turn scheitern. Plugins können die Modellschleife nicht
+umgeben oder starten.
 
 ```ts
 import { Plugin } from "@openbot-build/core"
-import { Effect, Stream } from "effect"
+import { Context, Effect } from "effect"
 
 const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
-	Effect.succeed((next, options) =>
-		next(options).pipe(
-			Stream.tap((event) =>
-				event._tag === "ModelStepStarted"
-					? Effect.log("A model step started")
-					: Effect.void,
-			),
-		),
-	),
+	Effect.succeed({
+		tools: {},
+		handlers: Context.empty(),
+		beforeStep: ({ kind }) =>
+			(kind === "model"
+				? Effect.log("A model step started")
+				: Effect.void
+			).pipe(Effect.as(true)),
+	}),
 )
 ```
 
-`PluginComposition.merge(a, b)` kombiniert zwei Plugins. `a` läuft außen um `b`.
-Ein Plugin kann auch eigene Daten im Eintrag des Chats oder in seinem Zustand
-speichern. Gib `plugin.stores` an `Store.define` und nutze dann
-`PluginState.make`.
+`PluginComposition.merge(a, b)` baut erst `a`, dann `b`. Hooks vor und nach dem
+Schritt laufen in dieser Reihenfolge. Gibt ein Hook vor dem Schritt false
+zurück, entfallen spätere Prüfungen und der Turn endet. Tool-Definitionen und
+Handler aus `b` haben Vorrang. `ToolRegistration.merge` nutzt dieselben Regeln
+für einfache Registrierungen. Die Laufzeit erhält Zeitgrenzen als Daten. Sie
+rechnet ab der gespeicherten Startzeit des Turns. Ein Neustart setzt die Grenze
+nicht zurück. Bei mehreren Grenzen gilt die kürzeste.
+
+Ein Plugin kann Daten im Chat-Eintrag oder im Zustand speichern. Gib
+`plugin.stores` an `Store.define` und nutze dann `PluginState.make`.
 
 ### Skills
 
@@ -231,8 +268,9 @@ nimmt weiter eine Zahl von Millisekunden als `timeoutMs`.
 ### Memory
 
 `BotMemory` enthält die Typen und Hilfsfunktionen für
-[Bot Memory](/de/docs/memory). Der Server nutzt sie für den Memory-Bot und die
-Memory-API. Die Schemas der Memory-API liegen in `api`, als `BotMemory`.
+[Bot Memory](/de/docs/developers/memory). Der Server nutzt sie für den
+Memory-Bot und die Memory-API. Die Schemas der Memory-API liegen in `api`, als
+`BotMemory`.
 
 `BotMemory.apply` nimmt ein Array `ids` mit einer neuen ID je Operation in
 derselben Reihenfolge. `BotMemory.edit` nimmt eine neue ID als String `id`. Der

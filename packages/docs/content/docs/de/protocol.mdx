@@ -5,6 +5,9 @@ description:
   kann.
 ---
 
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+API-Anbindung, App-Veröffentlichung und Projektarbeit.
+
 Das **OpenBot App Protocol** ist ein offener Weg, eine App im Web zu
 veröffentlichen. Jeder Bot-Host kann die App dann finden, sich mit ihr verbinden
 und sie nutzen. Du brauchst kein Entwicklerkonto, keine Registry und keine
@@ -292,7 +295,7 @@ erreichbar ist, zählt nicht als Entfernung.
 
 Du brauchst keine Registry, um eine App zu veröffentlichen, hinzuzufügen oder
 aufzurufen. Ein Host darf auch andere Registries lesen. Wie OpenBot das macht,
-siehst du unter [App Index](/de/docs/app-index).
+siehst du unter [App Index](/de/docs/developers/app-index).
 
 ---
 
@@ -353,6 +356,18 @@ OAuth-Netzfehler bleiben `NetworkError`. Sie bedeuten nicht, dass der Anbieter
 die Freigabe abgelehnt hat. Das Schließen des Verbindungs-Scopes stoppt offene
 SDK-Anfragen. Das gilt auch beim Warten auf Antwort-Header oder gespeicherte
 Tokens.
+
+Ein Host mit dauerhafter Ausführung nutzt `OAuthAuthorization.prepare`,
+`redeem`, `renew` und `revokeCredential`. Diese Funktionen geben einen Ablauf
+oder Zugangsdaten zurück. Sie schreiben nicht in den Speicher des Hosts.
+Speichere den Ablauf vor der Anzeige der Anmelde-URL. Speichere den Aufruf vor
+dem Austausch eines Codes oder dem Erneuern eines Tokens. Speichere die neuen
+Zugangsdaten verschlüsselt und übernimm sie mit dem Verbindungszustand. Bei
+einem verlorenen Ergebnis ist eine Entscheidung nötig. Sende den Code oder das
+Refresh-Token vorher nicht erneut. Der Widerruf nutzt feste Zugangsdaten und
+darf wiederholt werden. Die eigenständigen Funktionen `begin`, `complete`,
+`refresh` und `revoke` ändern auch den gegebenen Speicher. Sie stellen keine
+Arbeit nach einem Prozessneustart wieder her.
 
 Eine kleine App veröffentlichen:
 

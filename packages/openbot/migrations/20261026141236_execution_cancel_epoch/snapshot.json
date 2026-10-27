@@ -1,0 +1,73 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "8654cad5-c6fe-44bb-a701-422ee7595e59",
+	"prevIds": ["a92eeb10-a4f8-407e-9b11-edc680eeb09f"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_commands",
+				"cancel_epoch"
+			],
+			"writes": [
+				"s|col|public.openbot_execution_commands.cancel_epoch",
+				"n|col|public.openbot_execution_commands.cancel_epoch",
+				"e|col|public.openbot_execution_commands.cancel_epoch"
+			],
+			"reads": ["n|tbl|public.openbot_execution_commands", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_executions",
+				"cancel_epoch"
+			],
+			"writes": [
+				"s|col|public.openbot_executions.cancel_epoch",
+				"n|col|public.openbot_executions.cancel_epoch",
+				"e|col|public.openbot_executions.cancel_epoch"
+			],
+			"reads": ["n|tbl|public.openbot_executions", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_commands",
+				"name": "cancel_epoch",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "cancel_epoch",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "0",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

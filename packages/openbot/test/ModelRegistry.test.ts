@@ -1,17 +1,8 @@
+import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, describe, it } from "@effect/vitest"
 import { ModelProvidersApi } from "@openbot-build/api"
 import { Config, Live, Model, Provider } from "@openbot-build/core"
-import {
-	Array as Arr,
-	Cause,
-	Effect,
-	Layer,
-	Logger,
-	Option,
-	Redacted,
-	Schema,
-	Stream,
-} from "effect"
+import { Cause, Effect, Layer, Logger, Redacted, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { Billing } from "../src/billing/Billing.ts"
 import { TokenThrottle } from "../src/billing/TokenThrottle.ts"
@@ -25,6 +16,7 @@ import * as ModelRegistry from "../src/models/ModelRegistry.ts"
 import { Models, type StoredModel } from "../src/models/Models.ts"
 import { organizationDefaults } from "../src/settings/Documents.ts"
 import { Settings } from "../src/settings/Settings.ts"
+import { codec, snapshot } from "../src/errors/Snapshot.ts"
 
 const organizationId = "org_a"
 
@@ -81,6 +73,7 @@ const registryWith = (input: {
 }) =>
 	Layer.effect(ModelRegistry.ModelRegistry, ModelRegistry.make()).pipe(
 		Layer.provide([
+			ErrorRecordsFixture.layer,
 			Layer.mock(ModelProviders, {
 				available: () => input.providers ?? Effect.succeed([provider]),
 				openKey: input.openKey,
@@ -131,20 +124,41 @@ describe("The model registry", () => {
 								openKey: key,
 								backend: () =>
 									Effect.fail(
-										Live.LiveError.make({ reason, message: "It failed." }),
+										Live.LiveError.make({
+											reason,
+											message: "private-live-key",
+										}),
 									),
 							}),
 						),
 					)
 					assert.ok(Schema.is(Config.ModelConfigurationError)(failed))
 					assert.strictEqual(failed.reason, expected)
-					assert.strictEqual(failed.message, "It failed.")
+					assert.strictEqual(
+						failed.message,
+						reason === "unsupported"
+							? "The provider does not support this Live model."
+							: "OpenBot cannot start the Live model right now.",
+					)
+					assert.notMatch(
+						yield* Schema.encodeEffect(
+							Schema.fromJsonString(Config.ModelConfigurationError),
+						)(failed),
+						/private-/,
+					)
+					assert.include(
+						yield* Cause.fail(failed).pipe(
+							snapshot,
+							Schema.encodeEffect(codec),
+						),
+						"private-live-key",
+					)
 				}
 			}),
 	)
 
 	it.effect(
-		"logs why a provider key cannot be opened, and tells the caller only that it is unavailable",
+		"keeps a private key failure and tells the caller only that it is unavailable",
 		() => {
 			let lines: ReadonlyArray<{
 				readonly level: string
@@ -163,21 +177,15 @@ describe("The model registry", () => {
 				const failed = yield* resolveLive.pipe(Effect.flip)
 				assert.ok(Schema.is(Config.ModelConfigurationError)(failed))
 				assert.strictEqual(failed.reason, "unavailable")
-				// The error goes to the client, so it does not hold the inside failure.
+				// The public fields have no inside failure. A sealed record can still keep it.
 				assert.strictEqual(
 					failed.message,
 					"OpenBot cannot open the provider key right now.",
 				)
-				assert.deepStrictEqual(
-					Arr.map(lines, (line) => [line.level, line.message]),
-					[["Warn", ["The key of a model provider could not be opened"]]],
-				)
-				const [line] = lines
-				assert.ok(line !== undefined)
-				assert.ok(
-					Schema.is(ModelProvidersApi.ModelProvidersUnavailable)(
-						Option.getOrUndefined(Cause.findErrorOption(line.cause)),
-					),
+				assert.deepStrictEqual(lines, [])
+				assert.include(
+					yield* Cause.fail(failed).pipe(snapshot, Schema.encodeEffect(codec)),
+					"ModelProvidersUnavailable",
 				)
 			}).pipe(
 				Effect.provide(
@@ -233,13 +241,13 @@ describe("The model registry", () => {
 				// The first build cannot open the key. The registry does not keep the failure.
 				const failed = yield* Effect.flip(decide)
 				assert.strictEqual(failed.reason, "unavailable")
-				const model = yield* decide
-				assert.strictEqual(yield* decide, model)
+				// Each lookup adds its own organization meter around the cached model.
+				yield* decide
+				yield* decide
 				assert.strictEqual(opened, 2)
 				// A changed provider has a new version, so it gets a new model.
 				version = 2
-				const changed = yield* decide
-				assert.notStrictEqual(changed, model)
+				yield* decide
 				assert.strictEqual(opened, 3)
 			}).pipe(
 				Effect.provide(

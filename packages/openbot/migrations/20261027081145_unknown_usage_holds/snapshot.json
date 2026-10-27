@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "46bbb1a1-b76d-432c-baa6-ec3cecaa77dc",
+	"prevIds": ["14018ca7-44dc-44b7-a4c6-2a5ae81d185c"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"reservation_known"
+			],
+			"writes": [
+				"s|col|public.openbot_usage_events.reservation_known",
+				"n|col|public.openbot_usage_events.reservation_known",
+				"e|col|public.openbot_usage_events.reservation_known"
+			],
+			"reads": ["n|tbl|public.openbot_usage_events", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_usage_events",
+				"name": "reservation_known",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "false",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

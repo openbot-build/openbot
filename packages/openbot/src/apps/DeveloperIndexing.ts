@@ -1,58 +1,55 @@
-import { DeveloperApi as Api } from "@openbot-build/api"
+import { Developers } from "@openbot-build/domain"
+import { Authorization, Caller, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
 	Context,
 	Crypto,
 	Effect,
+	HashMap,
 	Layer,
-	Match,
 	Option,
+	Schema,
+	Stream,
 } from "effect"
-import { DeveloperAccess } from "./DeveloperAccess.ts"
-import { AppInspections } from "./AppInspections.ts"
-import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
 import { developerIndexRequests } from "../database/Schema.ts"
+import * as Db from "../database/Database.ts"
+import * as Check from "../authorization/Check.ts"
+import * as Failures from "../errors/Failures.ts"
+import {
+	Store,
+	storage,
+	transactionFailures,
+	type Key,
+	type Fence,
+} from "../execution/Store.ts"
+import type { Authorize } from "../execution/Engine.ts"
+import { Observation } from "../execution/Observation.ts"
+import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
-import * as IndexWork from "./IndexWork.ts"
+import { IndexWork } from "./IndexWork.ts"
 import { Governance } from "./Governance.ts"
-import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import { ownerKey } from "./StoredConnections.ts"
 
-export class DeveloperIndexing extends Context.Service<
-	DeveloperIndexing,
-	{
-		readonly request: (
-			owner: string,
-			cardUrl: string,
-		) => Effect.Effect<Api.IndexRequest, Api.Failure>
-		readonly list: (
-			owner: string,
-			cardUrl?: string,
-		) => Effect.Effect<ReadonlyArray<Api.IndexRequest>, Api.Failure>
-		readonly get: (
-			owner: string,
-			id: string,
-		) => Effect.Effect<Api.IndexRequest, Api.Failure>
-	}
->()("@openbot-build/openbot/apps/DeveloperIndexing") {}
-export const make: Effect.Effect<
-	typeof DeveloperIndexing.Service,
-	never,
-	| DeveloperAccess
-	| AppInspections
-	| PgClient.PgClient
-	| Governance
-	| Crypto.Crypto
-> = Effect.gen(function* () {
+export const workflowName = "openbot.index-request"
+const Input = Schema.Struct({
+	cardUrl: Schema.String,
+	generation: Schema.String,
+	watch: Schema.Struct({ namespace: Schema.String, id: Execution.Id }),
+})
+const sameCaller = Schema.toEquivalence(Caller)
+export const make = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
-	const inspections = yield* AppInspections
+	const checks = yield* Check.make
 	const crypto = yield* Crypto.Crypto
 	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
-	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+	const store = yield* Store
+	const index = yield* IndexWork
+	const observation = yield* Observation
+	const governance = yield* Governance
 	const requestWhere = (owner: string, cardUrl?: string) =>
 		and(
 			eq(developerIndexRequests.namespace, namespace),
@@ -61,22 +58,49 @@ export const make: Effect.Effect<
 				? undefined
 				: eq(developerIndexRequests.cardUrl, cardUrl),
 		)
-	const governance = yield* Governance
-	const read = (record: typeof developerIndexRequests.$inferSelect) =>
+	const check = (actor: Caller, cardUrl: string, write: boolean) =>
+		Effect.gen(function* () {
+			yield* checks.check(actor, {
+				action: "publish",
+				resource: Authorization.App.make({
+					organizationId: actor.organizationId,
+					ownerUserId: actor.userId,
+				}),
+			})
+			yield* access.authorize(ownerKey(actor), cardUrl, write)
+		}).pipe(
+			Effect.catchTags({
+				Forbidden: () => Effect.fail(Execution.Forbidden.make({})),
+				Pending: () => Effect.fail(Execution.Forbidden.make({})),
+				ExecutionConflict: (cause) =>
+					Effect.fail(Execution.StorageError.make({ cause })),
+				ExecutionKeyConflict: (cause) =>
+					Effect.fail(Execution.StorageError.make({ cause })),
+				DeveloperForbidden: () => Effect.fail(Execution.Forbidden.make({})),
+				DeveloperNotFound: () => Effect.fail(Execution.Forbidden.make({})),
+			}),
+			storage,
+		)
+	const read = (
+		record: typeof developerIndexRequests.$inferSelect,
+		restrictions?: Effect.Success<typeof governance.snapshot>,
+	) =>
 		Effect.gen(function* () {
 			yield* access.authorize(record.owner, record.cardUrl)
-			const job = yield* IndexWork.job(
-				db,
-				namespace,
-				record.cardUrl,
-				record.generation,
-			).pipe(
-				Failures.replace("Could not read the Public Index job.", () =>
-					Api.DeveloperUnavailable.make({}),
-				),
-			)
+			if (record.executionId === null)
+				return yield* Effect.die(
+					"The Index request has no execution. Complete the data move first.",
+				)
+			const job = yield* index
+				.job(record.cardUrl, record.generation)
+				.pipe(
+					Failures.replace("Could not read the Public Index job.", () =>
+						Developers.DeveloperUnavailable.make({}),
+					),
+				)
 			return {
 				id: record.id,
+				executionId: Execution.Id.make(record.executionId),
 				cardUrl: record.cardUrl,
 				generation: record.generation,
 				acceptedAt: record.acceptedAt,
@@ -87,123 +111,174 @@ export const make: Effect.Effect<
 				check: Option.getOrNull(
 					Option.flatMapNullishOr(job, (job) => job.check),
 				),
-				restriction: Option.getOrNull(governance.find(record.cardUrl)),
-			} satisfies Api.IndexRequest
+				restriction: Option.getOrNull(
+					HashMap.get(
+						restrictions ??
+							(yield* governance.snapshot.pipe(
+								Failures.replace("Could not read App restrictions.", () =>
+									Developers.DeveloperUnavailable.make({}),
+								),
+							)),
+						new URL(record.cardUrl).href,
+					),
+				),
+			} satisfies Developers.IndexRequest
 		})
-	return DeveloperIndexing.of({
-		get: (owner, id) =>
-			Effect.gen(function* () {
-				const record = (yield* Rows.stored(
+	const get = (owner: string, id: string) =>
+		Effect.gen(function* () {
+			const record = Arr.head(
+				yield* Rows.stored(
 					db
 						.select()
 						.from(developerIndexRequests)
 						.where(and(requestWhere(owner), eq(developerIndexRequests.id, id))),
-				))[0]
-				if (record === undefined) return yield* Api.DeveloperNotFound.make({})
-				return yield* read(record)
-			}),
-		list: (owner, cardUrl) =>
-			Effect.gen(function* () {
-				if (cardUrl !== undefined) yield* access.authorize(owner, cardUrl)
-				const requests = yield* Rows.stored(
-					db
-						.select()
-						.from(developerIndexRequests)
-						.where(requestWhere(owner, cardUrl))
-						.orderBy(developerIndexRequests.id),
-				)
-				// Hide requests for Apps that the owner can no longer see.
-				return yield* Effect.forEach(requests, (record) =>
-					read(record).pipe(
-						Effect.asSome,
-						Effect.catchTag("DeveloperNotFound", () => Effect.succeedNone),
-					),
-				).pipe(Effect.map(Arr.getSomes))
-			}),
-		request: (owner, cardUrl) =>
-			Effect.gen(function* () {
-				yield* access.authorize(owner, cardUrl, true)
-				yield* Option.match(governance.find(cardUrl), {
-					onNone: () => Effect.void,
-					onSome: (restriction) =>
-						Effect.fail(Api.DeveloperRestricted.make({ restriction })),
-				})
-				const report = yield* inspections.inspect(cardUrl)
-				const app = yield* Arr.findFirst(
-					report.apps,
-					(app) => app.candidate.cardUrl === cardUrl,
-				).pipe(
-					Effect.fromOption(() =>
-						Api.DeveloperConflict.make({ reason: "PublicationUnavailable" }),
-					),
-				)
-				yield* Match.value(app.eligibility).pipe(
-					Match.tagsExhaustive({
-						Eligible: () => Effect.void,
-						Excluded: (value) =>
-							Effect.fail(Api.DeveloperConflict.make({ reason: value.reason })),
-						Unconfirmed: (value) =>
-							Effect.fail(Api.DeveloperConflict.make({ reason: value.reason })),
-					}),
-				)
-				return yield* inTransaction(
-					Effect.gen(function* () {
-						yield* access.authorize(owner, cardUrl, true)
-						const job = yield* IndexWork.enqueue(
-							db,
-							namespace,
+				),
+			)
+			if (Option.isNone(record))
+				return yield* Developers.DeveloperNotFound.make({})
+			return yield* read(record.value)
+		})
+	const load = (key: Key) =>
+		Effect.gen(function* () {
+			const execution = yield* store.loadMember(key)
+			const input = yield* Schema.decodeUnknownEffect(Input)(execution.input)
+			if (
+				execution.workflow !== workflowName ||
+				execution.record.resource.kind !== "IndexRequest" ||
+				key.namespace !== ownerKey(execution.identity.owner)
+			)
+				return yield* Execution.Forbidden.make({})
+			return { execution, input }
+		}).pipe(storage)
+	const authorize: Authorize = (key, actor, mode) =>
+		Effect.gen(function* () {
+			const saved = yield* load(key)
+			if (
+				ownerKey(actor) !== ownerKey(saved.execution.identity.owner) ||
+				((mode === "advance" || mode === "replay") &&
+					!sameCaller(actor, saved.execution.identity.actor))
+			)
+				return yield* Execution.Forbidden.make({})
+			yield* check(actor, saved.input.cardUrl, mode !== "read")
+		})
+	const request = Effect.fn("DeveloperIndexing.request")(function* (
+		actor: Caller,
+		cardUrl: string,
+		commandKey: Execution.CommandKey,
+	) {
+		yield* check(actor, cardUrl, true)
+		const owner = ownerKey(actor)
+		const receipt = yield* store.accept(
+			owner,
+			commandKey,
+			{ actor, body: { kind: "index-request", cardUrl } },
+			(create) =>
+				Effect.gen(function* () {
+					yield* check(actor, cardUrl, true)
+					const restriction = yield* governance.find(cardUrl).pipe(storage)
+					if (Option.isSome(restriction))
+						return yield* Developers.DeveloperRestricted.make({
+							restriction: restriction.value,
+						})
+					const app = yield* Rows.getApp(db, namespace, cardUrl)
+					const watch = yield* index.request(cardUrl, app.candidate.sources)
+					const id = yield* crypto.randomUUIDv4()
+					const key = yield* create({
+						workflow: workflowName,
+						identity: {
+							owner: {
+								organizationId: actor.organizationId,
+								userId: actor.userId,
+							},
+							actor,
+						},
+						resource: { kind: "IndexRequest", id },
+						input: {
 							cardUrl,
-							app.candidate.sources,
-						).pipe(
-							Effect.provideService(Crypto.Crypto, crypto),
-							Failures.replace("Could not add the Public Index job.", () =>
-								Api.DeveloperUnavailable.make({}),
-							),
-						)
-						const value: Api.IndexRequest = {
-							id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
-							cardUrl,
-							generation: job.generation,
-							acceptedAt: yield* Clock.currentTimeMillis,
-							status: "Accepted",
-							check: null,
-							restriction: null,
-						}
-						// A job that still waits keeps its generation. Then the owner has asked already.
-						const inserted = yield* Rows.stored(
-							db
-								.insert(developerIndexRequests)
-								.values({
-									namespace,
-									owner,
-									id: value.id,
-									cardUrl,
-									generation: value.generation,
-									acceptedAt: value.acceptedAt,
-								})
-								.onConflictDoNothing()
-								.returning({ id: developerIndexRequests.id }),
-						)
-						if (inserted.length === 1) return value
-						const previous = (yield* Rows.stored(
-							db
-								.select()
-								.from(developerIndexRequests)
-								.where(
-									and(
-										requestWhere(owner, cardUrl),
-										eq(developerIndexRequests.generation, job.generation),
-									),
-								),
-						))[0]
-						if (previous === undefined)
-							return yield* Effect.die(
-								"An Index request blocked the insert, but OpenBot can not read it.",
-							)
-						return yield* read(previous)
-					}),
+							generation: watch.job.generation,
+							watch: watch.execution,
+						},
+					})
+					yield* db.insert(developerIndexRequests).values({
+						namespace,
+						owner,
+						id,
+						executionId: key.id,
+						cardUrl,
+						generation: watch.job.generation,
+						acceptedAt: yield* Clock.currentTimeMillis,
+					})
+					return { executionId: key.id, start: true }
+				}),
+		)
+		const saved = yield* store.get({
+			namespace: owner,
+			id: receipt.executionId,
+		})
+		return yield* get(owner, saved.resource.id)
+	}, transactionFailures)
+	const list = (owner: string, cardUrl?: string) =>
+		Effect.gen(function* () {
+			if (cardUrl !== undefined) yield* access.authorize(owner, cardUrl)
+			const requests = yield* Rows.stored(
+				db
+					.select()
+					.from(developerIndexRequests)
+					.where(requestWhere(owner, cardUrl))
+					.orderBy(developerIndexRequests.id),
+			)
+			const restrictions = yield* governance.snapshot.pipe(
+				Failures.replace("Could not read App restrictions.", () =>
+					Developers.DeveloperUnavailable.make({}),
+				),
+			)
+			return yield* Effect.forEach(requests, (record) =>
+				read(record, restrictions).pipe(
+					Effect.asSome,
+					Effect.catchTag("DeveloperNotFound", () => Effect.succeedNone),
+				),
+			).pipe(Effect.map(Arr.getSomes))
+		})
+	const work = (fence: Fence) =>
+		Effect.gen(function* () {
+			const saved = yield* load(fence)
+			yield* authorize(fence, saved.execution.identity.actor, "advance")
+			while (true) {
+				// Read the cursor first. A result saved during the next read is still in the log.
+				const watch = yield* store.get(saved.input.watch)
+				const job = yield* index.job(
+					saved.input.cardUrl,
+					saved.input.generation,
 				)
-			}),
-	})
+				if (Option.isSome(job) && job.value.status === "Completed") {
+					yield* authorize(fence, saved.execution.identity.actor, "advance")
+					yield* store.commit(
+						fence,
+						{
+							status: "completed",
+							events: [
+								{ _tag: "Result", resource: saved.execution.record.resource },
+							],
+						},
+						Effect.void,
+					)
+					return
+				}
+				if (Execution.isTerminal(watch.status)) {
+					if (watch.failure !== null) return yield* Effect.fail(watch.failure)
+					yield* store.commit(fence, { status: "interrupted" }, Effect.void)
+					return
+				}
+				yield* observation
+					.observe(saved.input.watch, watch.sequence)
+					.pipe(Stream.take(1), Stream.runDrain)
+				yield* authorize(fence, saved.execution.identity.actor, "advance")
+			}
+		})
+	return { request, list, get, authorize, work }
 })
+export class DeveloperIndexing extends Context.Service<
+	DeveloperIndexing,
+	Effect.Success<typeof make>
+>()("@openbot-build/openbot/apps/DeveloperIndexing") {}
 export const layer = Layer.effect(DeveloperIndexing, make)

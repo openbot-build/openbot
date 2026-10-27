@@ -1,0 +1,104 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "14018ca7-44dc-44b7-a4c6-2a5ae81d185c",
+	"prevIds": ["c4521529-b238-4300-a876-237b4fb104b9"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_app_authorizations",
+				"actor"
+			],
+			"writes": [
+				"s|col|public.openbot_app_authorizations.actor",
+				"n|col|public.openbot_app_authorizations.actor",
+				"e|col|public.openbot_app_authorizations.actor"
+			],
+			"reads": ["n|tbl|public.openbot_app_authorizations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_app_authorizations",
+				"execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_app_authorizations.execution_id",
+				"n|col|public.openbot_app_authorizations.execution_id",
+				"e|col|public.openbot_app_authorizations.execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_app_authorizations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_app_connections",
+				"execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_app_connections.execution_id",
+				"n|col|public.openbot_app_connections.execution_id",
+				"e|col|public.openbot_app_connections.execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_app_connections", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_authorizations",
+				"name": "actor",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_authorizations",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_connections",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

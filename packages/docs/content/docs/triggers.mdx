@@ -1,131 +1,35 @@
 ---
-title: Triggers
-description:
-  Give a task to a Bot with a prompt, on a schedule or from a webhook.
+title: "Run work at a set time"
+description: "Run work at a set time"
 ---
 
-A **trigger** gives one task with one prompt to one Bot. It fires on a schedule,
-from a webhook, or both. It does nothing else: the Bot decides how to do the
-work. It can plan first, keep a [todo list](/docs/chats#todo-list), and give
-work to other Bots. When the task ends, its result goes to your
-[Chat](/docs/chats) with the Bot.
+A trigger starts Bot work from a schedule or an outside event. Set it up with
+the trigger controls your client provides.
 
----
+## Set the task
 
-## Create a trigger
+Choose the Bot and write the message it should receive. If you leave the Bot
+unset, the trigger uses your default Bot. Make sure that Bot is available and
+has a model.
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"Check the open issues and sum them up.","schedule":{"cron":"0 9 * * 1-5","timeZone":"Europe/Berlin"}}' \
-  https://api.example.com/v1/triggers
-```
+Choose a one-time or repeated schedule and check its time zone. For an outside
+event, a webhook is the address another service calls to start the task. Give
+its address and secret only to the service that should start it.
 
-| Field      | What it does                                                                                               |
-| ---------- | ---------------------------------------------------------------------------------------------------------- |
-| `prompt`   | The task.                                                                                                  |
-| `bot`      | Optional. The Bot that does the work. Without it, your [default Bot](/docs/bots#your-default-bot) does it. |
-| `schedule` | Optional. When the trigger fires by itself.                                                                |
-| `shared`   | Optional. `true` makes a shared trigger that belongs to the organization.                                  |
-| `enabled`  | Optional. `false` keeps the trigger from firing. The default is `true`.                                    |
+A restart keeps the schedule. If a run is overdue, OpenBot starts one task when
+it is back. After an upgrade, your client may ask you to confirm the trigger
+again. Review and save its settings with your current access before it can run.
+Old work does not start again under the new access.
 
-The answer is `201` with the trigger. It has `nextRunAt`, the next time that the
-schedule fires, and `lastFiredAt`.
+## Check a run
 
-`GET /v1/triggers` lists your triggers and the shared ones. `GET`, `PATCH` and
-`DELETE /v1/triggers/:triggerId` read, change and delete one. A change needs
-`expected`, the `revision` that you read. An old revision returns `409` with
-`TriggerConflict`.
+Read the trigger history and the task result in your client. Work from a trigger
+still uses your access. It can need a [decision](/docs/requests), and it can
+fail when a model, connection, or default Bot is no longer available.
 
----
+## Change or stop the trigger
 
-## What a firing does
-
-Each firing gives the task to the Bot as a [delegation](/docs/delegation). The
-work runs in a new task Chat of the Bot. Its first input is the prompt, from "a
-trigger". The delegation has `trigger` with the ID of the trigger.
-
-When the work ends, its result goes as a [notice](/docs/chats#notices) to the
-direct Chat of the actor with the Bot. OpenBot makes that Chat when it does not
-exist yet. So the Bot reads the result there, and it can tell the actor about it
-or go on with the work. The [audit log](/docs/organization#audit-log) records
-`trigger.fired` with the ID of the delegation in `details.delegation`.
-
-To find the work of a trigger, read `GET /v1/chats/:chatId/delegations` for that
-direct Chat, or list the task Chats of the Bot with
-`GET /v1/chats?kind=task&bot=<id>`.
-
----
-
-## Schedules
-
-A schedule has a `cron` text with five fields, such as `0 9 * * 1-5` for 9:00 on
-work days. `timeZone` is an IANA time zone, such as `Europe/Berlin`. Without it,
-the time zone is UTC. A cron text that is not valid returns `400` with
-`TriggerInvalid`. A cron text that never fires, such as `0 0 30 2 *` (February
-30), returns the same error.
-
-OpenBot looks for schedules that are due every 15 seconds. When many servers
-run, each trigger fires only once.
-
----
-
-## Webhooks
-
-`PUT /v1/triggers/:triggerId/webhook` makes a webhook secret. OpenBot shows it
-only once:
-
-```json
-{
-	"url": "https://api.example.com/v1/hooks/triggers/trg_4c1e...",
-	"secret": "otg_..."
-}
-```
-
-Another system fires the trigger with the secret:
-
-```sh
-curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"issue": 42}' \
-  https://api.example.com/v1/hooks/triggers/trg_4c1e...
-```
-
-The answer is `202` with the `delegation`. The JSON body goes to the Bot with
-the task. OpenBot marks it as data from another system, not as an instruction. A
-wrong secret, a trigger without a webhook, or a disabled trigger returns `401`
-with `TriggerHookDenied`.
-
-A new `PUT` makes a new secret, and the old one stops working.
-`DELETE /v1/triggers/:triggerId/webhook` removes the webhook.
-
-If the actor can no longer give work to the Bot, or the Bot is archived, the
-webhook returns `409 TriggerInvalid`. A storage or execution failure returns
-`503 TriggerStorageUnavailable`.
-
----
-
-## Who the work is for
-
-The work of a trigger is for its **actor**: the last member who created or
-changed the trigger or its webhook. So a change makes you the actor. The task
-Chat belongs to the actor, and the result goes to the Chat of the actor. The
-actor must be able to give work to the Bot. If the actor cannot do that any
-more, the trigger does not fire.
-
-The Bot works as it does in any task. It has no extra limits, and it asks for
-new capabilities with [requests](/docs/requests). The requests go to the actor.
-
----
-
-## Permissions
-
-| Action on `Trigger` | What it allows                                                     |
-| ------------------- | ------------------------------------------------------------------ |
-| `read`              | Read triggers: their schedules and webhooks.                       |
-| `write`             | Create, change and delete triggers, and set their webhook secrets. |
-
-The path of your own triggers is `org / <org> / user / <you> / trigger / <id>`.
-A shared trigger has no owner: its `ownerUserId` is `null`. Every member can
-read the shared triggers. Administrators can change them. The list only has the
-triggers that you may read. See [Permissions](/docs/permissions).
+Turn off a trigger when it should not start more work. Check already started
+work separately. Update the task or schedule when the need changes. Ask your
+administrator about access or model failures; use your integration provider for
+webhook setup.

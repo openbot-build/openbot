@@ -1,245 +1,45 @@
 ---
-title: App Index
-description: Durchsuche die öffentliche Liste der Apps, ohne dich anzumelden.
+title: "Eine App finden"
+description: "Eine App finden"
 ---
 
-Der **App Index** ist eine öffentliche Liste von Apps. Jeder kann darin suchen.
-Du musst dich nicht anmelden und kein Nutzer-Token schicken. Der Index enthält
-nur öffentliche Beschreibungen von Apps. Er enthält nie Konten, Einstellungen,
-Anmeldungen oder Ergebnisse.
+Der App Index ist eine öffentliche Liste von Apps. Du kannst ohne Anmeldung
+suchen. Dein Client kann den OpenBot-Index oder einen anderen Indexdienst
+nutzen.
 
-Der Bot nutzt denselben Index über die Tools `openbot_search_apps` und
-`openbot_app_details`. Siehe [Apps](/de/docs/apps#apps-in-turns).
+## Suchen und prüfen
 
----
+Suche nach Aufgabe oder App-Name. Lies Beschreibung, Herausgeber und
+Quelladresse. Ergebnisse können unvollständig sein, wenn ein externer Index
+nicht erreichbar ist. Versuche es später erneut, wenn eine erwartete Quelle
+fehlt.
 
-## Quellen
+## Ein Ergebnis verbinden
 
-Ein Index kann aus mehr als einer Quelle lesen. Liste sie auf:
+Wähle die gewünschte App und folge [Apps verbinden und nutzen](/de/docs/apps).
+Ein Suchergebnis ist noch keine Verbindung oder Freigabe. Prüfe den Dienst und
+melde dich bei Bedarf an.
 
-```sh
-curl https://api.example.com/v1/app-index/sources
-```
+## Wenn eine App fehlt
 
-```json
-[
-	{
-		"id": "openbot",
-		"name": "OpenBot Index",
-		"url": "https://api.example.com/v1/app-index/apps",
-		"simulated": false
-	}
-]
-```
+Der Herausgeber hat vielleicht keinen Indexeintrag beantragt oder ihn
+zurückgezogen. Auch der Host kann ihn beschränken. Eine private manuelle
+Verbindung erscheint nicht im öffentlichen Index. Frage den App-Anbieter nach
+der Adresse oder die Verwaltung nach der Verfügbarkeit.
 
-Die Quelle `openbot` ist der Index dieses OpenBot-Servers. Wer die Installation
-betreibt, kann im Code den Index anderer OpenBot-Server hinzufügen. OpenBot
-liest sie ohne Zugangsdaten eines Nutzers. Im Entwicklungsmodus heißt die Quelle
-`OpenBot Development Index`, und `simulated` ist `true`.
+## Gespeicherte öffentliche Prüfungen
 
----
+Eine öffentliche Prüfung hat eine gemeinsame Ausführung. PostgreSQL speichert
+jedes Ergebnis. Ein gespeicherter Timer startet die nächste Prüfung. Ein Befehl
+kann sie früher anfordern. Mehrere Anfragen können dieselbe offene Prüfung
+nutzen. Ein Neustart behält den gespeicherten Fortschritt.
 
-## Suchen
+Bei einem kurzen Netzwerkfehler bleibt der letzte bestätigte Eintrag bestehen.
+Eine weitere Prüfung folgt. Ein bestätigter Rückzug, `noindex` oder ein Verbot
+durch robots entfernt den Eintrag. Private App-Verbindungen bleiben bestehen.
+Eine Plattformbeschränkung sperrt die Nutzung weiterhin.
 
-```sh
-curl "https://api.example.com/v1/app-index/apps?query=calendar&limit=10"
-```
-
-| Parameter | Beschreibung                                                                                                                                                                           |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `query`   | Bis zu 200 Zeichen. Passt zu Name und Titel der App, zur Beschreibung oder zum Host-Namen des Herausgebers. Groß- und Kleinschreibung ist egal. Lass es weg, um alle Apps aufzulisten. |
-| `source`  | Sucht nur in einer Quelle, über ihre `id`.                                                                                                                                             |
-| `limit`   | Eine Zahl von 1 bis 50. Der Standard ist 20.                                                                                                                                           |
-| `cursor`  | Der Wert `nextCursor` von der Seite davor.                                                                                                                                             |
-
-Die Antwort ist eine Seite:
-
-```json
-{
-	"apps": [
-		{
-			"entry": {
-				"cardUrl": "https://apps.example.com/mcp/server-card",
-				"card": {
-					"name": "com.example/calendar",
-					"title": "Calendar",
-					"description": "...",
-					"remotes": []
-				},
-				"evidence": [
-					{
-						"publisherUrl": "https://apps.example.com",
-						"catalogUrl": "https://apps.example.com/.well-known/ai-catalog.json",
-						"cardUrl": "https://apps.example.com/mcp/server-card",
-						"association": "CardOrigin"
-					}
-				],
-				"checkedAt": 1792454400000,
-				"validators": { "etag": "\"v1\"" }
-			},
-			"sources": [
-				{
-					"id": "openbot",
-					"name": "OpenBot Index",
-					"url": "https://api.example.com/v1/app-index/apps",
-					"simulated": false
-				}
-			],
-			"matches": ["name"],
-			"check": { "_tag": "Indexed", "attemptedAt": 1792454400000 }
-		}
-	],
-	"nextCursor": null,
-	"issues": []
-}
-```
-
-- `entry.card` ist die vollständige öffentliche Server Card, mit Icons und
-  Beispielen zur Nutzung.
-- `entry.evidence` zeigt, wo der Herausgeber diese Card auflistet.
-- `matches` sagt, welche Felder zu deiner Suche gepasst haben.
-- `check` ist die letzte Prüfung für den Index. Siehe
-  [Wie Apps in den Index kommen](#wie-apps-in-den-index-kommen).
-- `restriction` erscheint, wenn die Installation die App sperrt. Siehe
-  [Sperren durch den Host](#sperren-durch-den-host).
-
-Die Ergebnisse sind nach dem Namen der Card sortiert, dann nach der Card URL.
-Wenn dieselbe App in mehr als einer Quelle ist, erscheint sie einmal, mit allen
-ihren `sources`.
-
-### Seiten
-
-Wenn `nextCursor` nicht `null` ist, gibt es mehr Ergebnisse. Schicke dieselbe
-`query` und `source` noch einmal, mit `cursor` auf diesem Wert.
-
-Wenn sich die Suche oder ihre Quellen zwischen den Seiten ändern, bekommst du
-400 `IndexInputInvalid`. Beginne dann wieder bei der ersten Seite.
-
-### Teilweise Ergebnisse
-
-Wenn eine Quelle fehlschlägt, bekommst du trotzdem Ergebnisse aus den anderen.
-Die Liste `issues` nennt jede fehlgeschlagene Quelle und gibt eine `message`.
-Zeige diese Probleme dem Nutzer. So weiß er, dass die Liste vielleicht nicht
-vollständig ist.
-
-Wenn alle Quellen fehlschlagen, bekommst du 503 `IndexUnavailable` mit den
-`issues`.
-
----
-
-## Details einer App
-
-Lies eine App über ihre Card URL:
-
-```sh
-curl "https://api.example.com/v1/app-index/app?cardUrl=https%3A%2F%2Fapps.example.com%2Fmcp%2Fserver-card"
-```
-
-Die Antwort hat dieselbe Form wie ein Eintrag in `apps`. Du kannst `source`
-hinzufügen, um nur aus einer Quelle zu lesen.
-
-| Status | Fehler              | Bedeutung                                   |
-| ------ | ------------------- | ------------------------------------------- |
-| 400    | `IndexInputInvalid` | Die Eingabe ist nicht gültig.               |
-| 403    | `IndexRestricted`   | Die Installation sperrt diese App.          |
-| 404    | `IndexNotFound`     | Die App oder die Quelle ist nicht im Index. |
-| 503    | `IndexUnavailable`  | Keine Quelle konnte gelesen werden.         |
-
----
-
-## Wie Apps in den Index kommen
-
-Niemand muss eine App registrieren. Eine App kommt in den Index, nachdem ein
-Nutzer sie verbunden hat:
-
-1. Ein Nutzer speichert eine Connection zur App. Manuelle Connections kommen
-   nicht in den Index.
-2. OpenBot legt die Card URL in eine Warteschlange. Die Connection wartet nicht
-   darauf. Sie funktioniert auch, wenn der Index nicht erreichbar ist.
-3. Ein Worker im Hintergrund liest die Card noch einmal, ohne Daten des Nutzers
-   und ohne Zugangsdaten. Er prüft:
-   - Die Card ist öffentlich und gültig und hat einen Endpoint, der das
-     Protokoll unterstützt.
-   - `robots.txt` erlaubt den User-Agent `OpenBot`.
-   - Die Card hat keine Regel `noindex`.
-   - Ein Catalog des Herausgebers listet dieselbe Card URL.
-4. Wenn alle Prüfungen bestanden sind, speichert OpenBot den öffentlichen
-   Eintrag.
-
-Der Catalog des Herausgebers kann am eigenen Ursprung der Card unter
-`/.well-known/ai-catalog.json` liegen, in einem Link `ai-catalog` in der Antwort
-der Card oder auf der Seite, die in `websiteUrl` der Card steht. Eine Kopie der
-Card im Catalog von jemand anderem reicht nicht.
-
-OpenBot prüft jede App etwa jede Stunde noch einmal. Nach einer fehlgeschlagenen
-oder unsicheren Prüfung versucht es nach etwa einer Minute noch einmal.
-
-| `check._tag`  | Bedeutung                                                                                |
-| ------------- | ---------------------------------------------------------------------------------------- |
-| `Pending`     | Wartet auf die erste Prüfung.                                                            |
-| `Indexed`     | Die App ist im Index.                                                                    |
-| `Excluded`    | Die App darf nicht in den Index. Sie erscheint nicht in der Suche. `reason` sagt, warum. |
-| `Withdrawn`   | Die App war im Index und ist jetzt entfernt.                                             |
-| `Unconfirmed` | Eine nötige Prüfung ist nicht fertig geworden. Ein bestehender Eintrag bleibt.           |
-| `Failed`      | Die Prüfung konnte nicht laufen.                                                         |
-
-Herausgeber können eine Prüfung auch über die
-[Entwickler-Tools](/de/docs/developer-tools#die-aufnahme-in-den-index-anfordern)
-anfordern.
-
----
-
-Eine Prüfung hat vier Minuten Zeit. OpenBot schreibt das Ergebnis nur, solange
-der Worker den Auftrag noch besitzt. Ein spätes Ergebnis eines alten Workers
-kann den aktuellen Eintrag nicht ersetzen. Die Quellenliste gibt
-`503 SettingsUnavailable` zurück, wenn OpenBot die Plattform-Einstellungen nicht
-lesen kann.
-
-## Rückzug durch den Herausgeber und noindex
-
-Ein Herausgeber bestimmt, ob seine App im Index ist:
-
-- **`noindex`.** Schicke `X-Robots-Tag: noindex` in der Antwort der Card. Du
-  kannst auch `X-Robots-Tag: OpenBot: noindex` schicken, um nur diesen Crawler
-  zu treffen. Bei der nächsten Prüfung entfernt OpenBot den Eintrag oder fügt
-  ihn nie hinzu.
-- **Entferne die Card aus deinem Catalog.** Bei der nächsten Prüfung zieht
-  OpenBot den Eintrag zurück.
-- **`robots.txt`.** Sperre den User-Agent `OpenBot`. Bei der nächsten Prüfung
-  schließt OpenBot die App aus, und sie erscheint nicht mehr in der Suche.
-
-Wenn dein Catalog nicht erreichbar ist, ist das kein Rückzug. Die Prüfung ist
-`Unconfirmed`, und der Eintrag bleibt.
-
-Wenn ein Eintrag aus dem Index entfernt wird, entfernt das nie die Connection
-von jemandem. Nutzer können eine App auch dann nutzen, wenn sie nicht im Index
-ist.
-
-<Callout type="info">
-	`noindex` steuert nur den öffentlichen Index. Es schützt deine App nicht.
-	Nutze eine echte Anmeldung, um private Daten zu schützen.
-</Callout>
-
----
-
-## Sperren durch den Host
-
-Ein Admin der Platform kann manche Apps sperren. Jede Sperre hat eine `cardUrl`,
-einen öffentlichen `reason` und eine HTTPS-`appealUrl` für einen Einspruch. Sie
-stehen in `appRestrictions` in den Einstellungen der Platform. Ändere sie mit
-`PATCH /v1/platform/settings`. Siehe
-[Platform](/de/docs/platform#einstellungen-der-platform).
-
-Eine gesperrte App:
-
-- zeigt eine `restriction` in den Suchergebnissen, bis zur nächsten Prüfung für
-  den Index;
-- wird bei dieser Prüfung ausgeschlossen und erscheint danach nicht mehr in der
-  Suche;
-- gibt beim Aufruf der Details 403 `IndexRestricted` zurück;
-- kann nicht verbunden werden (403 `AppRestricted`);
-- hat in bestehenden Connections die Verfügbarkeit `Restricted`, darum kann der
-  Bot sie nicht nutzen.
-
-Die vollständigen Formen findest du in der
-[API-Referenz](/docs/api/operations/tags/app-index/).
+Die Datenmigration behält alte Einträge, Prüfergebnisse und den nächsten
+Prüftermin. Jeder alte Indexauftrag erhält eine gemeinsame Plattformausführung.
+Eine offene öffentliche Leseanfrage kann nach dem Start erneut laufen. Die
+Migration selbst sendet keine Netzwerkanfrage.

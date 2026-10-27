@@ -5,6 +5,10 @@ description:
   your organization.
 ---
 
+For organization administrators. You need the rights named for each task. Only a
+platform admin can change settings under `/v1/platform`. Start with the
+[administrator manual](/docs/admin).
+
 SSO (single sign-on) lets people sign in with the account provider of their own
 company. An organization can add its own OpenID Connect provider for the email
 domains that it owns. OpenID Connect (OIDC) is a standard way to let another
@@ -183,7 +187,7 @@ they can also sign in with the platform provider.
 
 `POST /auth/sign-in` starts a browser sign-in. It needs no credential. It checks
 the `Origin` header, like every cookie write. See
-[Authentication](/docs/authentication#the-origin-rule).
+[Authentication](/docs/developers/authentication#the-origin-rule).
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in \
@@ -205,7 +209,7 @@ Both fields are optional. OpenBot picks the provider like this:
 
 Send the browser to `url`. The answer also sets the login state cookie, which
 Better Auth needs to finish the sign-in. After the sign-in, the browser goes to
-`returnTo`. See [Return paths](/docs/authentication#return-paths).
+`returnTo`. See [Return paths](/docs/developers/authentication#return-paths).
 
 ---
 

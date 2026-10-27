@@ -16,11 +16,11 @@ import {
 	appConnections,
 	appSecrets,
 } from "../database/Schema.ts"
-import { IndexNamespace } from "./IndexNamespace.ts"
+import { IndexWork } from "./IndexWork.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 
 export interface OwnedStores {
 	readonly apps: typeof Store.AppStore.Service
@@ -79,9 +79,9 @@ const flowCodec = Schema.fromJsonString(Schema.toCodecJson(Authorization.Flow))
 export const make: Effect.Effect<
 	typeof ProtocolStores.Service,
 	never,
-	PgClient.PgClient | Secrets | Crypto.Crypto
+	PgClient.PgClient | Secrets | Crypto.Crypto | IndexWork
 > = Effect.gen(function* () {
-	const namespace = yield* IndexNamespace
+	const index = yield* IndexWork
 	const secrets = yield* Secrets
 	const db = yield* Db.make
 	const crypto = yield* Crypto.Crypto
@@ -122,7 +122,7 @@ export const make: Effect.Effect<
 				save: (input) =>
 					owned(input.connection).pipe(
 						Effect.andThen(
-							StoredConnections.save(db, secrets, namespace, owner, {
+							StoredConnections.save(db, secrets, index, owner, {
 								...input,
 								name: pipe(
 									input.app.card.title ?? input.app.card.name,

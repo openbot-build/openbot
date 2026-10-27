@@ -11,7 +11,7 @@ import {
 	Store,
 	Turn,
 } from "@openbot-build/core"
-import { Context, Effect, Option, Schema, Stream } from "effect"
+import { Context, Effect, Option, Schema } from "effect"
 class DecodeDependency extends Context.Service<DecodeDependency, number>()(
 	"@openbot-build/core/test/Runtime.types/DecodeDependency",
 ) {}
@@ -50,12 +50,15 @@ export const checkLiveChannels = (input: {
 			id: Plugin.Id.make("counter"),
 			store: declaration,
 		})(() =>
-			Effect.succeed((next, options) =>
-				Stream.fromEffect(PluginDependency).pipe(
-					Stream.flatMap(() => Stream.fail("plugin-error" as const)),
-					Stream.concat(next(options)),
-				),
-			),
+			Effect.succeed({
+				tools: {},
+				handlers: Context.empty(),
+				beforeStep: () =>
+					Effect.andThen(
+						PluginDependency,
+						Effect.fail("plugin-error" as const),
+					),
+			}),
 		)
 		const own = yield* PluginState.make({ store, plugin })
 		const runtimeConstruction = ChatRuntime.make({ store, bot: { plugin } })
@@ -200,13 +203,15 @@ export const checkHostConstructionChannels = (input: {
 					const value = yield* ConstructionDependency
 					if (value < 0)
 						return yield* Effect.fail("host-construction-error" as const)
-					return (next, options) =>
-						Stream.fromEffect(PluginDependency).pipe(
-							Stream.flatMap(() =>
-								Stream.fail("host-execution-error" as const),
+					return {
+						tools: {},
+						handlers: Context.empty(),
+						beforeStep: () =>
+							Effect.andThen(
+								PluginDependency,
+								Effect.fail("host-execution-error" as const),
 							),
-							Stream.concat(next(options)),
-						)
+					}
 				}),
 		)
 		const construction = ChatRuntime.make({
@@ -222,7 +227,7 @@ export const checkHostConstructionChannels = (input: {
 					: false
 			>,
 			Assert<
-				"host-construction-error" extends Effect.Error<typeof construction>
+				"host-construction-error" extends Effect.Error<typeof execution>
 					? true
 					: false
 			>,
@@ -252,18 +257,22 @@ export const checkConstructionChannels = ({
 			Effect.gen(function* () {
 				const value = yield* ConstructionDependency
 				if (value < 0) return yield* Effect.fail("construction-error" as const)
-				return (next, options) =>
-					Stream.fromEffect(PluginDependency).pipe(
-						Stream.flatMap(() => Stream.fail("execution-error" as const)),
-						Stream.concat(next(options)),
-					)
+				return {
+					tools: {},
+					handlers: Context.empty(),
+					beforeStep: () =>
+						Effect.andThen(
+							PluginDependency,
+							Effect.fail("execution-error" as const),
+						),
+				}
 			}),
 		)
 		const combined = PluginComposition.merge(
 			plugin,
 			PluginComposition.withStore(
 				Plugin.make({ id: Plugin.Id.make("plain") })(() =>
-					Effect.succeed((next, options) => next(options)),
+					Effect.succeed({ tools: {}, handlers: Context.empty() }),
 				),
 				{ scope: "record", schema: Schema.String },
 			),
@@ -288,15 +297,11 @@ export const checkConstructionChannels = ({
 			Assert<
 				Bot.Context extends Effect.Services<typeof construction> ? false : true
 			>,
-			Assert<
-				Effect.Error<typeof construction> extends "construction-error"
-					? true
-					: false
-			>,
+			Assert<Effect.Error<typeof construction> extends never ? true : false>,
 			Assert<
 				"construction-error" extends Effect.Error<typeof construction>
-					? true
-					: false
+					? false
+					: true
 			>,
 			Assert<
 				ConstructionDependency extends Effect.Services<typeof execution>
@@ -309,9 +314,56 @@ export const checkConstructionChannels = ({
 			>,
 			Assert<
 				"construction-error" extends Effect.Error<typeof execution>
-					? false
-					: true
+					? true
+					: false
 			>,
 		] = [true, true, true, true, true, true, true, true, true]
+		return checks
+	})
+
+/** A registration gets the Turn context from the runner and all other services from its host. */
+export const checkToolRegistrationChannels = (input: {
+	readonly store: ChatStore.Store
+	readonly chat: Chat.Id
+}) =>
+	Effect.gen(function* () {
+		const registerTools = Effect.gen(function* () {
+			yield* Bot.Context
+			if ((yield* ConstructionDependency) < 0)
+				return yield* Effect.fail("registration-failed" as const)
+			if ((yield* PluginDependency) < 0)
+				return yield* Effect.fail("tools-failed" as const)
+			return { tools: {}, handlers: Context.empty() }
+		})
+		const construction = ChatRuntime.make({
+			store: input.store,
+			bot: { registerTools },
+		})
+		const runtime = yield* construction
+		const execution = runtime.execute({ chat: input.chat, input: "go" })
+		const checks: [
+			Assert<
+				ConstructionDependency extends Effect.Services<typeof construction>
+					? true
+					: false
+			>,
+			Assert<
+				PluginDependency extends Effect.Services<typeof construction>
+					? true
+					: false
+			>,
+			Assert<
+				Bot.Context extends Effect.Services<typeof construction> ? false : true
+			>,
+			Assert<
+				"registration-failed" extends Effect.Error<typeof execution>
+					? true
+					: false
+			>,
+			Assert<
+				"tools-failed" extends Effect.Error<typeof execution> ? true : false
+			>,
+			Assert<Effect.Services<typeof execution> extends never ? true : false>,
+		] = [true, true, true, true, true, true]
 		return checks
 	})

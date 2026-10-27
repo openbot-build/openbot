@@ -13,6 +13,9 @@ import {
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 import { openbot_auth_user } from "./AuthSchema.ts"
+export * from "./ExecutionSchema.ts"
+export * from "./PermitSchema.ts"
+export * from "./TokenRateSchema.ts"
 const table = pgTable
 const namespace = () => text().notNull().default("public")
 const time = (name: string) => bigint(name, { mode: "number" })
@@ -133,6 +136,19 @@ export const developerApps = table(
 		),
 	],
 )
+/** A saved check cursor for a proof or a managed App. */
+export const developerWatches = table(
+	"openbot_developer_watches",
+	{
+		namespace: namespace(),
+		kind: text().notNull(),
+		resourceId: text("resource_id").notNull(),
+		executionId: text("execution_id"),
+		revision: integer().notNull().default(0),
+		nextCheckAt: time("next_check_at").notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.namespace, t.kind, t.resourceId] })],
+)
 export const developerReports = table(
 	"openbot_developer_reports",
 	{
@@ -176,8 +192,8 @@ export const developerTests = table(
 		expiresAt: time("expires_at").notNull(),
 		value: text().notNull(),
 		resourceMetadataUrl: text("resource_metadata_url"),
-		cleanupToken: text("cleanup_token"),
-		cleanupLeaseUntil: time("cleanup_lease_until").notNull().default(0),
+		/** The platform work that holds this test while it revokes an unused grant. */
+		grantCleanupExecutionId: text("grant_cleanup_execution_id"),
 		/** The sealed connection and credentials of the test. */
 		privateState: text("private_state"),
 	},
@@ -201,6 +217,8 @@ export const developerTestFlows = table(
 		expiresAt: time("expires_at").notNull(),
 		value: text().notNull(),
 		body: text(),
+		/** The sealed caller that started this sign-in. */
+		actor: text("actor"),
 		callback: text(),
 		consumed: boolean().notNull().default(false),
 	},
@@ -221,6 +239,7 @@ export const developerIndexRequests = table(
 	{
 		namespace: namespace(),
 		id: text().notNull(),
+		executionId: text("execution_id"),
 		owner: text().notNull(),
 		cardUrl: text("card_url").notNull(),
 		generation: text().notNull(),
@@ -228,7 +247,7 @@ export const developerIndexRequests = table(
 	},
 	(t) => [
 		primaryKey({ columns: [t.namespace, t.id] }),
-		uniqueIndex("openbot_developer_index_requests_generation").on(
+		index("openbot_developer_index_requests_generation").on(
 			t.namespace,
 			t.owner,
 			t.cardUrl,
@@ -332,6 +351,8 @@ export const codeRuns = table(
 	],
 )
 export const appAuthorizations = table("openbot_app_authorizations", {
+	actor: text(),
+	executionId: text("execution_id"),
 	id: text().primaryKey(),
 	owner: text().notNull(),
 	connectionId: text("connection_id").notNull(),
@@ -350,6 +371,7 @@ export const appIndexJobs = table(
 	{
 		namespace: text().notNull().default("public"),
 		cardUrl: text("card_url").notNull(),
+		executionId: text("execution_id"),
 		nextCheckAt: bigint("next_check_at", { mode: "number" }).notNull(),
 		leaseUntil: bigint("lease_until", { mode: "number" }).notNull().default(0),
 		claim: text(),
@@ -409,6 +431,7 @@ export const appConnections = table(
 	"openbot_app_connections",
 	{
 		owner: text().notNull(),
+		executionId: text("execution_id"),
 		id: text().notNull(),
 		name: text().notNull(),
 		revision: integer().notNull(),
@@ -864,6 +887,7 @@ export const triggers = table(
 		ownerUserId: text("owner_user_id"),
 		bot: text().notNull(),
 		prompt: text().notNull(),
+		scheduleExecutionId: text("schedule_execution_id"),
 		scheduleCron: text("schedule_cron"),
 		scheduleTimeZone: text("schedule_time_zone"),
 		nextRunAt: time("next_run_at"),
@@ -903,6 +927,7 @@ export const channels = table(
 		linkPath: text("link_path"),
 		credentials: text().notNull(),
 		hints: text().notNull(),
+		executionId: text("execution_id"),
 		version: integer().notNull(),
 		createdAt: time("created_at").notNull(),
 		updatedAt: time("updated_at").notNull(),
@@ -1079,7 +1104,8 @@ export const computerPairings = table(
  * A call to a connector, so any instance can reach the instance that holds the
  * connection. `call` and `reply` are JSON text.
  */
-export const computerCalls = table(
+/** Old in-flight calls stay here until the data migration records their unknown outcome. */
+export const legacyComputerCalls = table(
 	"openbot_computer_calls",
 	{
 		id: text().primaryKey(),
@@ -1254,6 +1280,8 @@ export const channelInbox = table(
 		organizationId: text("organization_id").notNull(),
 		channelId: text("channel_id").notNull(),
 		eventId: text("event_id").notNull(),
+		position: bigserial({ mode: "number" }).notNull(),
+		executionId: text("execution_id"),
 		conversationKey: text("conversation_key").notNull(),
 		event: text().notNull(),
 		receivedAt: time("received_at").notNull(),
@@ -1283,6 +1311,7 @@ export const channelDeliveries = table(
 	"openbot_channel_deliveries",
 	{
 		id: text().primaryKey(),
+		executionId: text("execution_id"),
 		organizationId: text("organization_id").notNull(),
 		channelId: text("channel_id").notNull(),
 		/** `reply` for the answer of a Turn, `request` for a request card, `notice` otherwise. */
@@ -1318,7 +1347,7 @@ export const channelDeliveries = table(
 )
 
 /**
- * One row for each model call that reached a provider. Rows are only added.
+ * One row for each model call. Only pending calls hold budget room.
  * Token counts and the cost are copied at the time of the call, so a later
  * price change does not change old rows. Money is in micro-USD (one millionth of a US dollar).
  */
@@ -1326,6 +1355,19 @@ export const usageEvents = table(
 	"openbot_usage_events",
 	{
 		id: text().primaryKey(),
+		executionId: text("execution_id"),
+		status: text().notNull().default("confirmed"),
+		startedAt: time("started_at"),
+		/** The old hold marker. The data migration uses it to keep known estimates. */
+		reservationKnown: boolean("reservation_known").notNull().default(false),
+		reservedMicros: bigint("reserved_micros", { mode: "number" })
+			.notNull()
+			.default(0),
+		/** The saved estimate stays after the active hold is released. */
+		estimatedMicros: bigint("estimated_micros", { mode: "number" }),
+		estimatedTokens: bigint("estimated_tokens", { mode: "number" })
+			.notNull()
+			.default(0),
 		organizationId: text("organization_id").notNull(),
 		occurredAt: time("occurred_at").notNull(),
 		/** `turn`, `compaction`, `judge`, `bot_memory` or `other`. */
@@ -1346,11 +1388,14 @@ export const usageEvents = table(
 		outputReasoning: bigint("output_reasoning", { mode: "number" }).notNull(),
 		/** Null when the model had no price. Then the cost is 0. */
 		priceId: text("price_id"),
+		/** The price used by the reservation. It remains when the provider is removed. */
+		priceSchedule: text("price_schedule"),
 		costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
 		/** True when the cost was taken from the credits of the organization. */
 		charged: boolean().notNull(),
 	},
 	(t) => [
+		index("openbot_usage_events_execution").on(t.executionId),
 		index("openbot_usage_events_time").on(t.organizationId, t.occurredAt),
 		index("openbot_usage_events_user").on(
 			t.organizationId,
@@ -1380,6 +1425,7 @@ export const modelPrices = table(
 	"openbot_model_prices",
 	{
 		id: text().primaryKey(),
+		position: bigint({ mode: "number" }).generatedAlwaysAsIdentity(),
 		providerId: text("provider_id")
 			.notNull()
 			.references(() => modelProviders.id, { onDelete: "cascade" }),
@@ -1490,6 +1536,7 @@ export const files = table(
 		bytes: bigint({ mode: "number" }).notNull(),
 		status: text().notNull(),
 		objectKey: text("object_key").notNull(),
+		cleanupExecutionId: text("cleanup_execution_id"),
 		createdAt: time("created_at").notNull(),
 		updatedAt: time("updated_at").notNull(),
 	},
@@ -1515,3 +1562,7 @@ export const fileRefs = table(
 		index("openbot_file_refs_chat").on(t.namespace, t.chat),
 	],
 )
+
+export * from "./ResourceSchema.ts"
+
+export * from "./UpgradeSchema.ts"

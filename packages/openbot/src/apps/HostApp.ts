@@ -1,10 +1,8 @@
 import { Schema } from "effect"
 import type { Effect, Scope } from "effect"
 import type {
-	Authorization,
 	Client,
 	Discovery,
-	Network,
 	App as ProtocolApp,
 	Store,
 } from "@openbot-build/protocol"
@@ -37,29 +35,6 @@ export interface Added {
 		readonly sources: ReadonlyArray<Discovery.Source>
 	}
 }
-export interface BeginAuthorizationRequest {
-	readonly key: Store.ConnectionKey
-	readonly issuer: string
-	readonly clientId: string
-	readonly redirectUri: string
-	readonly scopes: ReadonlyArray<string>
-	readonly resourceMetadataUrl?: string
-	readonly expiresInMs?: number
-}
-export interface PendingAuthorization {
-	readonly _tag: "PendingAuthorization"
-	readonly flowId: string
-	readonly authorizationUrl: string
-	readonly key: Store.ConnectionKey
-	readonly resource: string
-	readonly issuer: string
-	readonly scopes: ReadonlyArray<string>
-}
-export interface CompleteAuthorizationRequest {
-	readonly key: Store.ConnectionKey
-	readonly flowId: string
-	readonly callbackUrl: string
-}
 export type ClientInfo = NonNullable<
 	NonNullable<
 		Client.Client["discovery"]["_meta"]
@@ -71,10 +46,6 @@ export interface OpenRequest {
 	readonly clientInfo: ClientInfo
 	readonly capabilities?: Client.InputHandler["capabilities"]
 	readonly inputs?: Client.InputHandler
-}
-export interface Removed {
-	readonly _tag: "Removed"
-	readonly key: Store.ConnectionKey
 }
 export type RevalidationResult =
 	| {
@@ -111,31 +82,9 @@ export interface Service {
 	readonly getConnection: (
 		key: Store.ConnectionKey,
 	) => Effect.Effect<Store.UserConnection, Store.StoreError>
-	readonly beginAuthorization: (
-		input: BeginAuthorizationRequest,
-	) => Effect.Effect<
-		PendingAuthorization,
-		| Authorization.AuthorizationError
-		| Network.NetworkError
-		| ProtocolApp.AppError
-		| Schema.SchemaError
-		| Store.StoreError
-	>
-	readonly completeAuthorization: (
-		input: CompleteAuthorizationRequest,
-	) => Effect.Effect<
-		Store.UserConnection,
-		| Authorization.AuthorizationError
-		| Network.NetworkError
-		| ProtocolApp.AppError
-		| Store.StoreError
-	>
 	readonly open: (
 		input: OpenRequest,
 	) => Effect.Effect<Client.Client, Client.Error, Scope.Scope>
-	readonly remove: (
-		key: Store.ConnectionKey,
-	) => Effect.Effect<Removed, ProtocolApp.CleanupPending | Store.StoreError>
 	readonly revalidate: (
 		input: ProtocolApp.RevalidationOptions,
 	) => Effect.Effect<

@@ -1,0 +1,87 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "6986a82d-068e-44e9-9fbb-9d62f70766a5",
+	"prevIds": ["509afd68-be72-41f8-92fb-7de619eb25d6"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_outbox",
+				"retry_at"
+			],
+			"writes": [
+				"s|col|public.openbot_execution_outbox.retry_at",
+				"n|col|public.openbot_execution_outbox.retry_at",
+				"e|col|public.openbot_execution_outbox.retry_at"
+			],
+			"reads": ["n|tbl|public.openbot_execution_outbox", "n|sch|public"]
+		},
+		{
+			"statementType": "recreate_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_execution_outbox",
+				"openbot_execution_outbox_pending"
+			],
+			"writes": [
+				"s|idx|public.openbot_execution_outbox_pending",
+				"n|idx|public.openbot_execution_outbox_pending",
+				"e|idx|public.openbot_execution_outbox_pending",
+				"n|rel|public.openbot_execution_outbox_pending"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_outbox",
+				"n|sch|public",
+				"n|col|public.openbot_execution_outbox.retry_at",
+				"n|col|public.openbot_execution_outbox.created_at"
+			],
+			"sharedWrites": [],
+			"sqlHash": "dfcfe9c48a72d06a"
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_outbox",
+				"name": "retry_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "0",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "indexes\u0000[\"public\",\"openbot_execution_outbox_pending\"]",
+			"set": {
+				"columns": [
+					{
+						"value": "retry_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "created_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				]
+			}
+		}
+	]
+}

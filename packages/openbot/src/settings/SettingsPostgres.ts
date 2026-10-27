@@ -1,12 +1,11 @@
-import { Settings as Api } from "@openbot-build/api"
+import { Settings as SettingsModel } from "@openbot-build/domain"
+
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
-	Cache,
 	Clock,
 	Duration,
 	Effect,
-	Exit,
 	Filter,
 	Layer,
 	Option,
@@ -16,8 +15,8 @@ import {
 	Stream,
 } from "effect"
 import { and, eq, sql } from "drizzle-orm"
-import * as Background from "../app/Background.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Background from "../execution/Background.ts"
+import * as Failures from "../errors/Failures.ts"
 import { settings } from "../database/Schema.ts"
 import {
 	MemberDocument,
@@ -52,7 +51,7 @@ const memberCodec = Schema.fromJsonString(MemberDocument)
 
 /** Turns an inside failure into the public error. The log keeps the reason. */
 const unavailable = (message: string) =>
-	Failures.replace(message, () => Api.SettingsUnavailable.make({}))
+	Failures.replace(message, () => SettingsModel.SettingsUnavailable.make({}))
 
 /** Each log of a read or a change names its scope, so the operator can find the row. */
 const annotate = (scope: Scope) =>
@@ -84,6 +83,7 @@ const columns = (scope: DocumentScope) =>
 		: { scopeKind: scope.kind, scopeId: scope.id }
 
 export const make = Effect.gen(function* () {
+	const background = yield* Background.make
 	const db = yield* Db.make
 	const client = yield* PgClient.PgClient
 	const where = (scope: DocumentScope) => {
@@ -98,98 +98,64 @@ export const make = Effect.gen(function* () {
 			.where(where(scope))
 			.pipe(Effect.map(Arr.head), unavailable("Could not read the settings"))
 
-	/**
-	 * A missed notice must not keep old settings for ever, so each entry also
-	 * expires after a short time. A failure is not kept, so the next read tries
-	 * again.
-	 */
-	const timeToLive = (exit: Exit.Exit<unknown, unknown>) =>
-		Exit.isSuccess(exit) ? Duration.seconds(30) : Duration.zero
-	const platformCache = yield* Cache.makeWith(
-		(_: "platform") =>
-			read(platformScope).pipe(
-				Effect.flatMap(
-					Option.match({
-						onNone: () => Effect.succeedNone,
-						onSome: (row) =>
-							Effect.asSome(
-								decodeSnapshot(
-									platformCodec,
-									"The stored platform settings have a bad value",
-								)(row),
-							),
-					}),
-				),
-				annotate(platformScope),
-			),
-		{ capacity: 1, timeToLive },
+	/** Reads use committed rows. A lost notice must not extend old rights. */
+	const platform = read(platformScope).pipe(
+		Effect.flatMap(
+			Option.match({
+				onNone: () => Effect.succeedNone,
+				onSome: (row) =>
+					decodeSnapshot(
+						platformCodec,
+						"The stored platform settings have a bad value",
+					)(row).pipe(Effect.asSome),
+			}),
+		),
+		annotate(platformScope),
 	)
-	const organizationCache = yield* Cache.makeWith(
-		(organizationId: string) =>
-			read(organizationScope(organizationId)).pipe(
-				Effect.flatMap(
-					Option.match({
-						onNone: () => Effect.succeed(defaults(organizationDefaults)),
-						onSome: decodeSnapshot(
-							organizationCodec,
-							"The stored organization settings have a bad value",
-						),
-					}),
-				),
-				annotate(organizationScope(organizationId)),
+	const organization = (organizationId: string) =>
+		read(organizationScope(organizationId)).pipe(
+			Effect.flatMap(
+				Option.match({
+					onNone: () => Effect.succeed(defaults(organizationDefaults)),
+					onSome: decodeSnapshot(
+						organizationCodec,
+						"The stored organization settings have a bad value",
+					),
+				}),
 			),
-		{ capacity: 10_000, timeToLive },
-	)
-	const memberCache = yield* Cache.makeWith(
-		(key: string) =>
-			read({ kind: "member", id: key }).pipe(
-				Effect.flatMap(
-					Option.match({
-						onNone: () => Effect.succeed(defaults(memberDefaults)),
-						onSome: decodeSnapshot(
-							memberCodec,
-							"The stored member settings have a bad value",
-						),
-					}),
-				),
-				annotate({ kind: "member", id: key }),
+			annotate(organizationScope(organizationId)),
+		)
+	const member = (organizationId: string, userId: string) => {
+		const scope = memberScope({ organizationId, userId })
+		return read(scope).pipe(
+			Effect.flatMap(
+				Option.match({
+					onNone: () => Effect.succeed(defaults(memberDefaults)),
+					onSome: decodeSnapshot(
+						memberCodec,
+						"The stored member settings have a bad value",
+					),
+				}),
 			),
-		{ capacity: 10_000, timeToLive },
-	)
-	const invalidate = (scope: Scope) =>
-		scope.kind === "platform"
-			? Cache.invalidate(platformCache, "platform")
-			: scope.kind === "organization"
-				? Cache.invalidate(organizationCache, scope.id)
-				: scope.kind === "member"
-					? Cache.invalidate(memberCache, scope.id)
-					: Effect.void
+			annotate(scope),
+		)
+	}
 
 	// A slow subscriber loses its oldest changes, so it cannot make memory grow.
 	const pubsub = yield* PubSub.sliding<Scope>(changesCapacity)
 	yield* Effect.addFinalizer(() => PubSub.shutdown(pubsub))
 
-	/**
-	 * The notices from every instance. When the listener connection breaks,
-	 * notices can be lost, so the whole cache is forgotten when the stream starts.
-	 */
+	/** Notices wake subscribers. Reads do not depend on delivery of a notice. */
 	const notices = Stream.unwrap(
-		Effect.gen(function* () {
-			const queue = yield* client.listen(channel)
-			yield* Cache.invalidateAll(platformCache)
-			yield* Cache.invalidateAll(organizationCache)
-			yield* Cache.invalidateAll(memberCache)
-			return Stream.fromQueue(queue)
-		}),
+		client.listen(channel).pipe(Effect.map(Stream.fromQueue)),
 	)
-	yield* Background.repeat(
+
+	yield* background.repeat(
 		notices.pipe(
 			Stream.filterMap(
 				Filter.fromPredicateOption((notice) => parseScopeKey(notice.payload)),
 			),
-			Stream.runForEach((scope) =>
-				Effect.andThen(invalidate(scope), PubSub.publish(pubsub, scope)),
-			),
+			Stream.runForEach((scope) => PubSub.publish(pubsub, scope)),
 		),
 		{
 			schedule: Schedule.spaced(Duration.seconds(1)),
@@ -233,7 +199,9 @@ export const make = Effect.gen(function* () {
 					if (Option.isNone(found)) return yield* input.missing
 					const row = found.value
 					if (row.version !== input.expectedVersion)
-						return yield* Api.SettingsConflict.make({ version: row.version })
+						return yield* SettingsModel.SettingsConflict.make({
+							version: row.version,
+						})
 					const current = yield* Schema.decodeEffect(input.codec)(
 						row.document,
 					).pipe(unavailable("The stored settings have a bad value"))
@@ -259,15 +227,12 @@ export const make = Effect.gen(function* () {
 				Effect.catchTag("SqlError", (error) =>
 					Effect.fail(error).pipe(unavailable("A settings transaction failed")),
 				),
-				// This instance does not wait for its own notice.
-				Effect.tap(() => invalidate(input.scope)),
 				annotate(input.scope),
 			)
 
 	return Settings.of({
-		platform: Cache.get(platformCache, "platform"),
-		organization: (organizationId) =>
-			Cache.get(organizationCache, organizationId),
+		platform,
+		organization,
 		initializePlatform: (document) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
@@ -305,11 +270,7 @@ export const make = Effect.gen(function* () {
 							),
 						),
 					)
-			}).pipe(
-				// This instance does not wait for its own notice.
-				Effect.tap(() => invalidate(platformScope)),
-				annotate(platformScope),
-			),
+			}).pipe(annotate(platformScope)),
 		replacePlatform: (document) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
@@ -354,11 +315,7 @@ export const make = Effect.gen(function* () {
 						),
 					)
 				return { document, version, updatedAt: now }
-			}).pipe(
-				// This instance does not wait for its own notice.
-				Effect.tap(() => invalidate(platformScope)),
-				annotate(platformScope),
-			),
+			}).pipe(annotate(platformScope)),
 		updatePlatform: (expectedVersion, change) =>
 			write({
 				scope: platformScope,
@@ -366,7 +323,7 @@ export const make = Effect.gen(function* () {
 				codec: platformCodec,
 				initial: Option.none(),
 				change,
-				missing: Effect.fail(Api.SetupRequired.make({})),
+				missing: Effect.fail(SettingsModel.SetupRequired.make({})),
 			}),
 		updateOrganization: (organizationId, expectedVersion, change) =>
 			write({
@@ -379,8 +336,7 @@ export const make = Effect.gen(function* () {
 					"The settings row is missing after the insert of the defaults.",
 				),
 			}),
-		member: (organizationId, userId) =>
-			Cache.get(memberCache, memberScope({ organizationId, userId }).id),
+		member,
 		updateMember: (organizationId, userId, expectedVersion, change) =>
 			write({
 				scope: memberScope({ organizationId, userId }),

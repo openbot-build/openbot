@@ -1,9 +1,9 @@
 import {
 	Array as Arr,
 	HashMap,
-	HashSet,
 	Match,
-	Option,
+	Order,
+	Number as Num,
 	Schema,
 	pipe,
 } from "effect"
@@ -57,10 +57,14 @@ export const promptOf = (items: ReadonlyArray<Item.Entry>): Prompt.Prompt =>
 /** Client tool calls in some Items that have no tool result yet, by call ID. */
 export const unansweredCalls = (
 	items: ReadonlyArray<Item.Entry>,
+): HashMap.HashMap<string, Prompt.ToolCallPart> => pendingCalls(promptOf(items))
+
+/** Local calls must have a saved result before the next model request. */
+export const pendingCalls = (
+	prompt: Prompt.Prompt,
 ): HashMap.HashMap<string, Prompt.ToolCallPart> =>
 	pipe(
-		items,
-		Arr.flatMap((entry) => entry.content.content),
+		prompt.content,
 		Arr.reduce(HashMap.empty<string, Prompt.ToolCallPart>(), (calls, message) =>
 			Match.value(message).pipe(
 				Match.when({ role: "assistant" }, (message) =>
@@ -88,122 +92,76 @@ export interface OpenApproval {
 	readonly toolCall: Prompt.ToolCallPart
 }
 
-/** The approval requests in a prompt that have no answer yet, in request order. */
+/** One occurrence of a tool call. Reusing its ID starts a new state. */
+interface ToolCallState {
+	readonly call: Prompt.ToolCallPart
+	readonly order: number
+	readonly done: boolean
+	readonly request?: Prompt.ToolApprovalRequestPart
+	readonly answer?: Prompt.ToolApprovalResponsePart
+}
+
+/** Approval state belongs to the latest call occurrence, not to all uses of its ID. */
+export const toolCallStates = (prompt: Prompt.Prompt) => {
+	let calls = HashMap.empty<string, ToolCallState>()
+	let order = 0
+	for (const message of prompt.content) {
+		if (message.role === "assistant") {
+			for (const part of message.content) {
+				if (part.type === "tool-call") {
+					calls = HashMap.set(calls, part.id, {
+						call: part,
+						order: order++,
+						done: false,
+					})
+				} else if (part.type === "tool-approval-request") {
+					const requestOrder = order++
+					calls = HashMap.modify(calls, part.toolCallId, (current) => ({
+						call: current.call,
+						done: current.done,
+						order: requestOrder,
+						request: part,
+					}))
+				}
+			}
+		} else if (message.role === "tool") {
+			for (const part of message.content) {
+				if (part.type === "tool-result") {
+					calls = HashMap.modify(calls, part.id, (current) => ({
+						...current,
+						done: true,
+					}))
+				} else if (part.type === "tool-approval-response") {
+					calls = HashMap.map(calls, (current) =>
+						current.request?.approvalId === part.approvalId
+							? { ...current, answer: part }
+							: current,
+					)
+				}
+			}
+		}
+	}
+	return calls
+}
+
+/** The current approval requests without an answer or a result, in request order. */
 export const openApprovals = (
 	prompt: Prompt.Prompt,
-): ReadonlyArray<OpenApproval> => {
-	const messages = prompt.content
-	const assistant = Arr.flatMap(messages, (message) =>
-		message.role === "assistant" ? message.content : [],
-	)
-	const tool = Arr.flatMap(messages, (message) =>
-		message.role === "tool" ? message.content : [],
-	)
-	const answered = HashSet.fromIterable(
-		Arr.flatMap(tool, (part) =>
-			part.type === "tool-approval-response" ? [part.approvalId] : [],
+): ReadonlyArray<OpenApproval> =>
+	pipe(
+		Arr.fromIterable(HashMap.values(toolCallStates(prompt))),
+		Arr.filter(
+			(current) =>
+				!current.done &&
+				current.request !== undefined &&
+				current.answer === undefined,
 		),
-	)
-	const results = HashSet.fromIterable(
-		Arr.flatMap(tool, (part) => (part.type === "tool-result" ? [part.id] : [])),
-	)
-	return Arr.flatMap(assistant, (part) => {
-		if (
-			part.type !== "tool-approval-request" ||
-			HashSet.has(answered, part.approvalId) ||
-			HashSet.has(results, part.toolCallId)
-		)
-			return []
-		return pipe(
-			Arr.findFirst(
-				assistant,
-				(call): call is Prompt.ToolCallPart =>
-					call.type === "tool-call" && call.id === part.toolCallId,
-			),
-			Option.map((toolCall) => ({ approvalId: part.approvalId, toolCall })),
-			Option.toArray,
-		)
-	})
-}
-
-/**
- * The allowed calls in a prompt that have no result yet and whose tool is not in
- * `tools`. Effect AI would fail the whole step on such a call, so it gets a result
- * that says that it did not run.
- */
-export const withoutTool = (
-	prompt: Prompt.Prompt,
-	tools: ReadonlyArray<string>,
-): ReadonlyArray<Prompt.ToolCallPart> => {
-	const messages = prompt.content
-	const assistant = Arr.flatMap(messages, (message) =>
-		message.role === "assistant" ? message.content : [],
-	)
-	const tool = Arr.flatMap(messages, (message) =>
-		message.role === "tool" ? message.content : [],
-	)
-	const allowed = HashSet.fromIterable(
-		Arr.flatMap(tool, (part) =>
-			part.type === "tool-approval-response" && part.approved
-				? [part.approvalId]
-				: [],
+		Arr.sort(
+			Order.mapInput(Num.Order, (current: ToolCallState) => current.order),
 		),
-	)
-	const results = HashSet.fromIterable(
-		Arr.flatMap(tool, (part) => (part.type === "tool-result" ? [part.id] : [])),
-	)
-	return Arr.flatMap(assistant, (part) => {
-		if (
-			part.type !== "tool-approval-request" ||
-			!HashSet.has(allowed, part.approvalId) ||
-			HashSet.has(results, part.toolCallId)
-		)
-			return []
-		return pipe(
-			Arr.findFirst(
-				assistant,
-				(call): call is Prompt.ToolCallPart =>
-					call.type === "tool-call" && call.id === part.toolCallId,
-			),
-			Option.filter((toolCall) => !tools.includes(toolCall.name)),
-			Option.toArray,
-		)
-	})
-}
-
-/**
- * Puts the results of earlier tool calls first. Effect AI runs an approved call before the
- * model answers, but it gives the result after the answer. A provider needs each result
- * right after its call, so such a result moves in front of the new messages.
- */
-export const resultsFirst = (prompt: Prompt.Prompt): Prompt.Prompt => {
-	const calls = HashSet.fromIterable(
-		Arr.flatMap(prompt.content, (message) =>
-			message.role === "assistant"
-				? Arr.flatMap(message.content, (part) =>
-						part.type === "tool-call" ? [part.id] : [],
-					)
-				: [],
-		),
-	)
-	const earlier = (part: Prompt.ToolMessagePart) =>
-		part.type === "tool-result" && !HashSet.has(calls, part.id)
-	const early = Arr.flatMap(prompt.content, (message) =>
-		message.role === "tool" ? Arr.filter(message.content, earlier) : [],
-	)
-	if (early.length === 0) return prompt
-	const rest = Arr.flatMap(
-		prompt.content,
-		(message): ReadonlyArray<Prompt.Message> => {
-			if (message.role !== "tool") return [message]
-			const kept = Arr.filter(message.content, (part) => !earlier(part))
-			return kept.length === 0
+		Arr.flatMap((current) =>
+			current.request === undefined
 				? []
-				: [Prompt.makeMessage("tool", { content: kept })]
-		},
+				: [{ approvalId: current.request.approvalId, toolCall: current.call }],
+		),
 	)
-	return Prompt.fromMessages([
-		Prompt.makeMessage("tool", { content: early }),
-		...rest,
-	])
-}

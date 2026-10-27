@@ -1,5 +1,8 @@
+export * as FailureApi from "./FailureApi.ts"
+export { FailureBoundary, RequestFailed } from "./FailureApi.ts"
 export { Health, HealthApi, Service, service } from "./HealthApi.ts"
 export { OpenBotApi } from "./OpenBotApi.ts"
+export * as ExecutionsApi from "./ExecutionsApi.ts"
 export { Account, AccountCaller, Caller, Identity } from "./Identity.ts"
 export * as BotsApi from "./BotsApi.ts"
 export { Name } from "./Name.ts"
@@ -62,16 +65,13 @@ export {
 	ChatKind,
 	ChatParent,
 	ChatStatus,
-	ChatActivity,
 	OpenWork,
 	MessageInput,
-	SendMessageRequest,
+	ChatCommandRequest,
+	ChatCommandReceipt,
 	MessageReceipt,
 	ChatResponse,
 	ResponseStatus,
-	ChatResponseEvent,
-	ChatResponseEventType,
-	ChatResponseSseEvent,
 	ChatNotFound,
 	ChatExecutionUnavailable,
 	ChatConflict,
@@ -98,7 +98,7 @@ export * as AppIndexApi from "./AppIndexApi.ts"
 export * as AppAuthorizationApi from "./AppAuthorizationApi.ts"
 export * as AppExecution from "./AppExecution.ts"
 export { AppOperationsApi } from "./AppOperationsApi.ts"
-export { OperationsApi, OperationNotFound } from "./OperationsApi.ts"
+export { ToolCallsApi } from "./ToolCallsApi.ts"
 export * as CodeRunsApi from "./CodeRunsApi.ts"
 export * as AppViewsApi from "./AppViewsApi.ts"
 export {

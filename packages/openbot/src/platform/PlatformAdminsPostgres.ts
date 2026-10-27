@@ -1,4 +1,5 @@
-import { PlatformApi } from "@openbot-build/api"
+import { Platform as PlatformModel } from "@openbot-build/domain"
+
 import { Array as Arr, Cause, Clock, DateTime, Effect, Layer } from "effect"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { platformAdmins } from "../database/Schema.ts"
@@ -11,7 +12,7 @@ import * as Db from "../database/Database.ts"
 
 const view = (
 	row: typeof platformAdmins.$inferSelect,
-): PlatformApi.PlatformAdmin => ({
+): PlatformModel.PlatformAdmin => ({
 	email: row.email,
 	userId: row.userId,
 	addedAt: DateTime.formatIso(DateTime.makeUnsafe(row.addedAt)),
@@ -65,9 +66,9 @@ export const make = Effect.gen(function* () {
 						)
 						const rows = yield* tx.select().from(platformAdmins)
 						if (!Arr.some(rows, (row) => row.email === email))
-							return yield* PlatformApi.PlatformAdminNotFound.make({ email })
+							return yield* PlatformModel.PlatformAdminNotFound.make({ email })
 						if (rows.length === 1)
-							return yield* PlatformApi.LastPlatformAdmin.make({})
+							return yield* PlatformModel.LastPlatformAdmin.make({})
 						yield* tx
 							.delete(platformAdmins)
 							.where(eq(platformAdmins.email, email))

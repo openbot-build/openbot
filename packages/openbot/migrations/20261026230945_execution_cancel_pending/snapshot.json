@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "e0104702-b86c-4e35-aa56-b203148e00f8",
+	"prevIds": ["f263c207-4ee9-4c61-aa66-003f47eee38b"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_executions",
+				"cancel_pending"
+			],
+			"writes": [
+				"s|col|public.openbot_executions.cancel_pending",
+				"n|col|public.openbot_executions.cancel_pending",
+				"e|col|public.openbot_executions.cancel_pending"
+			],
+			"reads": ["n|tbl|public.openbot_executions", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "cancel_pending",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "false",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

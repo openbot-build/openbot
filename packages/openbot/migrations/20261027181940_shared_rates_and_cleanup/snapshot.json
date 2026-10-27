@@ -1,0 +1,194 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "9e6ef2f0-1682-4c66-a836-e4bee34f5f55",
+	"prevIds": ["660b3338-9e71-4085-ab54-04df1ecf56d0"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_token_buckets"],
+			"writes": [
+				"s|tbl|public.openbot_token_buckets",
+				"n|tbl|public.openbot_token_buckets",
+				"e|tbl|public.openbot_token_buckets",
+				"n|rel|public.openbot_token_buckets",
+				"n|type|public.openbot_token_buckets",
+				"n|rel|public.openbot_token_buckets_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_tests",
+				"cleanup_token"
+			],
+			"writes": [
+				"s|col|public.openbot_developer_tests.cleanup_token",
+				"n|col|public.openbot_developer_tests.cleanup_token",
+				"e|col|public.openbot_developer_tests.cleanup_token"
+			],
+			"reads": ["n|tbl|public.openbot_developer_tests", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_tests",
+				"cleanup_lease_until"
+			],
+			"writes": [
+				"s|col|public.openbot_developer_tests.cleanup_lease_until",
+				"n|col|public.openbot_developer_tests.cleanup_lease_until",
+				"e|col|public.openbot_developer_tests.cleanup_lease_until"
+			],
+			"reads": ["n|tbl|public.openbot_developer_tests", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_token_buckets",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "subject_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "level",
+				"type": "double precision",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "updated_at",
+				"type": "double precision",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "tokens_per_second",
+				"type": "double precision",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "burst_tokens",
+				"type": "double precision",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_token_buckets",
+				"name": "openbot_token_buckets_pkey",
+				"columns": ["organization_id", "kind", "subject_id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_developer_tests\",\"cleanup_token\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_developer_tests\",\"cleanup_lease_until\"]"
+		}
+	]
+}

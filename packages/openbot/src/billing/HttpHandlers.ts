@@ -1,12 +1,9 @@
-import {
-	BillingApi,
-	type Caller,
-	Identity,
-	OpenBotApi,
-} from "@openbot-build/api"
+import { BillingApi, OpenBotApi } from "@openbot-build/api"
+
+import { type Caller, Identity } from "@openbot-build/domain"
 import { Clock, DateTime, Effect, Layer, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { organizationKey } from "../audit/Resources.ts"
 import { Billing, periodStart } from "./Billing.ts"

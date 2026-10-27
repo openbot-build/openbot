@@ -1,4 +1,6 @@
-import { Authorization, type Settings as Api } from "@openbot-build/api"
+import { type Settings as SettingsModel } from "@openbot-build/domain"
+
+import { Authorization } from "@openbot-build/domain"
 import { Crypto, Effect, Option, Redacted, Schema } from "effect"
 import { Hex } from "effect/encoding"
 import { hint, Secrets } from "../secrets/Secrets.ts"
@@ -32,7 +34,7 @@ export interface Input {
 	 * The object storage for files. None means that a new platform has none, and
 	 * an existing platform keeps its own.
 	 */
-	readonly fileStorage: Option.Option<Api.FileStorageInput>
+	readonly fileStorage: Option.Option<SettingsModel.FileStorageInput>
 }
 
 /** The platform already has settings, and they are not the same. */
@@ -175,7 +177,7 @@ export const run = (input: Input) =>
 						: // Another instance ran setup at the same time.
 							"unchanged",
 				),
-			onSome: (): Effect.Effect<Outcome, Api.SettingsUnavailable> =>
+			onSome: (): Effect.Effect<Outcome, SettingsModel.SettingsUnavailable> =>
 				input.force
 					? Effect.as(settings.replacePlatform(document), "replaced")
 					: Effect.succeed("unchanged"),

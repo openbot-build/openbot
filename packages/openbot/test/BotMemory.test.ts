@@ -161,7 +161,7 @@ it("an observation comes from all its people, but only people who see every sour
 			person: "u-ana",
 		}),
 	)
-	// Widen needs a reason, and then everyone who uses the Bot sees it.
+	// A reason cannot give access to the private sources of other people.
 	const widened = BotMemory.apply({
 		pool: applied.entries,
 		evidence: [],
@@ -176,13 +176,9 @@ it("an observation comes from all its people, but only people who see every sour
 		now: 2,
 		ids: ["e4"],
 	})
-	assert.strictEqual(widened.reasons.length, 1)
-	assert.ok(
-		Audience.visible(widened.entries[0]!.tags, {
-			organizationId: "org-a",
-			person: "u-carol",
-		}),
-	)
+	assert.strictEqual(widened.rejected, 1)
+	assert.strictEqual(widened.reasons.length, 0)
+	assert.strictEqual(widened.entries.length, 0)
 })
 
 it("the memory Bot cannot change pinned or retracted entries", () => {
@@ -226,7 +222,13 @@ it("Forget takes back only the part of the person who forgets", () => {
 			"for:person:u-ana",
 			"for:person:u-bob",
 		],
-		sources: [],
+		sources: [source("shared")],
+		sourcePolicies: [
+			{
+				source: source("shared"),
+				tags: ["org:org-a", "for:bot"],
+			},
+		],
 		status: "active",
 		createdAt: 1,
 		updatedAt: 1,
@@ -290,5 +292,139 @@ it("a Channel group sees only group entries and entries for everyone", () => {
 			organizationId: "org-a",
 			person: "u-ana",
 		}),
+	)
+})
+
+it("a person sees a group fact only when they may read all its sources", () => {
+	const groupEvidence = Arr.map(Arr.take(evidence, 2), (entry) => ({
+		...entry,
+		audience: Audience.channel("c-group"),
+		channel: "c-group",
+	}))
+	const applied = BotMemory.apply({
+		pool: [],
+		evidence: groupEvidence,
+		operations: [
+			{
+				_tag: "AddFact",
+				ref: "team",
+				content: "Ana and Bob like tabs.",
+				topics: [],
+				sources: Arr.map(groupEvidence, (entry) => entry.source),
+			},
+		],
+		now: 1,
+		ids: ["team"],
+	})
+	assert.strictEqual(applied.rejected, 0)
+	assert.strictEqual(applied.entries.length, 1)
+	const fact = applied.entries[0]!
+	assert.ok(
+		BotMemory.visible(applied.entries, {
+			organizationId: "org-a",
+			channel: "c-group",
+		})(fact),
+	)
+	for (const person of ["u-ana", "u-bob", "u-carol"])
+		assert.ok(
+			!BotMemory.visible(applied.entries, { organizationId: "org-a", person })(
+				fact,
+			),
+		)
+})
+
+it("Widen can name a person who already may read every source", () => {
+	const groupEvidence = Arr.map(
+		["left", "right"],
+		(channel): BotMemory.Evidence => ({
+			...said(channel, "u-ana", "Use tea."),
+			audience: Audience.channel(channel),
+			channel,
+		}),
+	)
+	const applied = BotMemory.apply({
+		pool: [],
+		evidence: groupEvidence,
+		now: 1,
+		ids: ["left", "right", "both", "unused"],
+		operations: [
+			...Arr.map(groupEvidence, (entry): BotMemory.Operation => ({
+				_tag: "AddFact",
+				ref: entry.source.item,
+				content: entry.text,
+				topics: [],
+				sources: [entry.source],
+			})),
+			{
+				_tag: "AddObservation",
+				ref: "both",
+				content: "Tea helps.",
+				topics: [],
+				supports: ["left", "right"],
+				confidence: 1,
+			},
+			{
+				_tag: "Widen",
+				id: "both",
+				audience: "person:u-ana",
+				reason: "Ana may read both sources.",
+			},
+		],
+	})
+	assert.strictEqual(applied.rejected, 0)
+	assert.strictEqual(applied.reasons.length, 1)
+	const observation = Option.getOrThrow(
+		Arr.findFirst(applied.entries, (entry) => entry.id === "both"),
+	)
+	assert.ok(
+		BotMemory.visible(applied.entries, {
+			organizationId: "org-a",
+			person: "u-ana",
+		})(observation),
+	)
+	assert.ok(
+		!BotMemory.visible(applied.entries, {
+			organizationId: "org-a",
+			person: "u-bob",
+		})(observation),
+	)
+	assert.ok(
+		!BotMemory.visible(applied.entries, {
+			organizationId: "org-a",
+			channel: "left",
+		})(observation),
+	)
+})
+
+it("long source chains use a work list and still check the root", () => {
+	const root = Option.getOrThrow(
+		BotMemory.edit({
+			pool: [],
+			person: { organizationId: "org-a", userId: "u-ana" },
+			change: { _tag: "Remember", content: "Use tea." },
+			now: 1,
+			id: "root",
+		}),
+	)
+	const entries = [
+		root,
+		...Arr.makeBy(12000, (index): BotMemory.Entry => ({
+			...root,
+			id: "next-" + index,
+			layer: "observation",
+			sources: [{ entry: index === 0 ? "root" : "next-" + (index - 1) }],
+		})),
+	]
+	const last = Option.getOrThrow(Arr.last(entries))
+	assert.ok(
+		BotMemory.visible(entries, { organizationId: "org-a", person: "u-ana" })(
+			last,
+		),
+	)
+	assert.ok(
+		!BotMemory.visible(Arr.drop(entries, 1), {
+			organizationId: "org-a",
+			person: "u-ana",
+		})(last),
 	)
 })

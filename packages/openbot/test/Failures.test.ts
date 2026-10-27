@@ -1,11 +1,12 @@
 import { assert, it } from "@effect/vitest"
-import { Cause, Effect, Logger, Schema } from "effect"
-import * as Failures from "../src/app/Failures.ts"
+import { Cause, Effect, Exit, Logger, Schema } from "effect"
+import * as Failures from "../src/errors/Failures.ts"
+import { codec, snapshot } from "../src/errors/Snapshot.ts"
 
 class Inside extends Schema.TaggedError<
 	Inside,
 	{ readonly brand: unique symbol }
->()("Inside", {}) {}
+>()("Inside", { detail: Schema.String }) {}
 class Taken extends Schema.TaggedError<
 	Taken,
 	{ readonly brand: unique symbol }
@@ -14,59 +15,79 @@ class Unavailable extends Schema.TaggedError<
 	Unavailable,
 	{ readonly brand: unique symbol }
 >()("Unavailable", {}) {}
-
 const read = Effect.fn("Store.read")(function* (error: Inside | Taken) {
 	return yield* error
 })
 
-/** Runs a failing effect. It gives the error and the text of each Warn log. */
-const warned = <A, E>(effect: Effect.Effect<A, E>) =>
-	Effect.gen(function* () {
-		let logs: ReadonlyArray<string> = []
-		const error = yield* effect.pipe(
-			Effect.flip,
-			Effect.provide(
-				Logger.layer([
-					Logger.make((log) => {
-						if (log.logLevel === "Warn")
-							logs = [...logs, Cause.pretty(log.cause)]
-					}),
-				]),
-			),
-		)
-		return { error, logs }
-	})
-
 it.effect(
-	"replace logs the inside failure with the place where it happened",
+	"replacement keeps the private cause and never sends it to a log or public schema",
 	() =>
 		Effect.gen(function* () {
-			const { error, logs } = yield* read(Inside.make({})).pipe(
+			let logs = 0
+			const result = yield* read(
+				Inside.make({ detail: "private-provider-token" }),
+			).pipe(
 				Failures.replace("The store failed.", () => Unavailable.make({})),
-				warned,
+				Effect.provide(
+					Logger.layer([
+						Logger.make(() => {
+							logs++
+						}),
+					]),
+				),
+				Effect.exit,
 			)
-			assert.strictEqual(error._tag, "Unavailable")
-			assert.strictEqual(logs.length, 1)
-			assert.match(logs[0]!, /Inside/)
-			assert.match(logs[0]!, /at Store\.read/)
+			assert.isTrue(Exit.isFailure(result))
+			if (!Exit.isFailure(result)) return
+			assert.strictEqual(logs, 0)
+			const diagnostic = yield* result.cause.pipe(
+				snapshot,
+				Schema.encodeEffect(codec),
+			)
+			assert.match(diagnostic, /private-provider-token/)
+			assert.match(diagnostic, /Store.read/)
+			assert.notMatch(Cause.pretty(result.cause), /private-provider-token/)
+			const error = Cause.findErrorOption(result.cause)
+			assert.isTrue(error._tag === "Some")
+			if (error._tag !== "Some") return
+			const publicValue = yield* Schema.encodeEffect(
+				Schema.fromJsonString(Unavailable),
+			)(error.value)
+			assert.notMatch(publicValue, /private-provider-token|Inside|cause/)
+			// A later catchTag may start a new Cause. The error itself still holds its private cause.
+			const caught = yield* Cause.fail(error.value).pipe(
+				snapshot,
+				Schema.encodeEffect(codec),
+			)
+			assert.match(caught, /private-provider-token/)
+			assert.match(caught, /Store.read/)
 		}),
 )
 
 it.effect(
-	"replaceTag replaces only the failure with its tag, and logs where it happened",
+	"tag replacement keeps other typed errors, defects, and interruption",
 	() =>
 		Effect.gen(function* () {
-			const replaceInside = Failures.replaceTag(
+			const replacement = Failures.replaceTag(
 				"Inside",
 				"The store failed.",
 				() => Unavailable.make({}),
 			)
-			const replaced = yield* read(Inside.make({})).pipe(replaceInside, warned)
-			assert.strictEqual(replaced.error._tag, "Unavailable")
-			assert.strictEqual(replaced.logs.length, 1)
-			assert.match(replaced.logs[0]!, /at Store\.read/)
-			const kept = yield* read(Taken.make({})).pipe(replaceInside, warned)
-			assert.strictEqual(kept.error._tag, "Taken")
-			assert.deepStrictEqual(kept.logs, [])
+			const kept = yield* read(Taken.make({})).pipe(replacement, Effect.flip)
+			assert.strictEqual(kept._tag, "Taken")
+			const combined = Cause.combine(
+				Cause.fail(Inside.make({ detail: "private" })),
+				Cause.combine(Cause.die("defect"), Cause.interrupt(12)),
+			)
+			const result = yield* Effect.failCause(combined).pipe(
+				replacement,
+				Effect.exit,
+			)
+			assert.isTrue(Exit.isFailure(result))
+			if (!Exit.isFailure(result)) return
+			assert.isTrue(Cause.hasDies(result.cause))
+			assert.isTrue(Cause.hasInterrupts(result.cause))
+			assert.match(Cause.pretty(result.cause), /Unavailable/)
+			assert.notMatch(Cause.pretty(result.cause), /private/)
 		}),
 )

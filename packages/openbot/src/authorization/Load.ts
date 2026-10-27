@@ -1,11 +1,12 @@
 import {
-	type AccountCaller,
-	Authorization,
-	type Settings as SettingsApi,
-	type UserTokensApi,
-} from "@openbot-build/api"
+	type Settings as SettingsModel,
+	type Tokens as TokensModel,
+} from "@openbot-build/domain"
+
+import { Authorization } from "@openbot-build/domain"
+import { type AccountCaller } from "@openbot-build/domain"
 import { Policy } from "@nmnmcc/ability"
-import { Array as Arr, Effect, Option, pipe } from "effect"
+import { Array as Arr, Clock, DateTime, Effect, Option, pipe } from "effect"
 import { Tokens } from "../auth/Tokens.ts"
 import {
 	Organization,
@@ -25,9 +26,9 @@ type OpenBotPolicy = Authorization.Policy
 /** The storage errors while loading a policy. A check turns them into `PolicyUnavailable`. */
 export type Unavailable =
 	| OrganizationUnavailable
-	| UserTokensApi.TokenStorageUnavailable
+	| TokensModel.TokenStorageUnavailable
 	| RolesUnavailable
-	| SettingsApi.SettingsUnavailable
+	| SettingsModel.SettingsUnavailable
 	| PlatformAdminsUnavailable
 
 const define = Policy.define(Authorization.OpenBot)
@@ -131,14 +132,22 @@ export const policyOf = (
 			options.platform && (yield* admins.check({ id: caller.userId }))
 				? Policy.any([member, platformAdmin])
 				: member
-		if (caller.kind === "member" || caller.tokenId === undefined) return policy
+		if (caller.kind === "member") return policy
 		if (caller.organizationId === undefined) return Authorization.emptyPolicy
 		const token = yield* tokens.find(
 			{ organizationId: caller.organizationId, userId: caller.userId },
 			caller.tokenId,
 		)
+		const now = yield* Clock.currentTimeMillis
 		return Option.match(token, {
 			onNone: () => Authorization.emptyPolicy,
-			onSome: (token) => Policy.all([policy, token.policy]),
+			onSome: (token) =>
+				token.expiresAt !== null &&
+				!Option.exists(
+					DateTime.make(token.expiresAt),
+					(expires) => DateTime.toEpochMillis(expires) > now,
+				)
+					? Authorization.emptyPolicy
+					: Policy.all([policy, token.policy]),
 		})
 	})

@@ -3,6 +3,9 @@ title: Client
 description: Call OpenBot from TypeScript with typed requests and errors.
 ---
 
+For developers. Start with the [developer manual](/docs/developers) to choose
+API work, App publishing, or project changes.
+
 `@openbot-build/client` is the TypeScript client for OpenBot. It is built from
 the same API contract as the server. Every request, answer, and error has a
 type. Your editor shows mistakes before you run the code.
@@ -20,7 +23,8 @@ The OpenBot packages are not on npm yet. Use them from the OpenBot workspace:
 {
 	"dependencies": {
 		"@openbot-build/client": "workspace:*",
-		"effect": "4.0.5"
+		"effect": "4.0.6",
+		"@effect/platform-node": "4.0.6"
 	}
 }
 ```
@@ -31,20 +35,21 @@ The OpenBot packages are not on npm yet. Use them from the OpenBot workspace:
 recipe that builds a service.
 
 ```ts
-import { Client, layer } from "@openbot-build/client"
+import { Chats, layer } from "@openbot-build/client"
+import { NodeCrypto } from "@effect/platform-node"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
-	const client = yield* Client
-	const receipt = yield* client.api.chats.sendBotMessage({
-		params: { botId },
-		payload: { input: "Write the release notes." },
+	const command = yield* Chats.botMessage(botId, {
+		input: "Write the release notes.",
 	})
+	const receipt = yield* command.send
 	return receipt.chat
 })
 
 const id = await Effect.runPromise(
 	program.pipe(
+		Effect.provide(NodeCrypto.layer),
 		Effect.provide(
 			layer({
 				baseUrl: "https://api.example.com",
@@ -55,6 +60,14 @@ const id = await Effect.runPromise(
 )
 ```
 
+Prepare a command once. `command.commandKey` stays the same when `command.send`
+is retried after a lost reply. `Chats.message` does the same for an existing
+Chat. The receipt names an execution; observe it through
+`client.api.executions.observe` with the last saved `afterSequence`. Closing
+observation does not cancel work. `Executions.cancel` and `Executions.decide`
+also prepare commands with stable keys. Give a platform `Crypto` service when
+using these helpers; this Node.js example uses `NodeCrypto.layer`.
+
 | Option           | Required | What it does                                                                                                      |
 | ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
 | `baseUrl`        | Yes      | The origin of OpenBot, such as `https://api.example.com`.                                                         |
@@ -62,7 +75,7 @@ const id = await Effect.runPromise(
 | `organization`   | No       | An organization ID. With the session cookie, it is sent as the `OpenBot-Organization` header. A token ignores it. |
 | `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                                      |
 
-To make a user token, see [Authentication](/docs/authentication).
+To make a user token, see [Authentication](/docs/developers/authentication).
 
 The client never saves the token and never puts it in a URL. `onUnauthorized`
 does not sign in or try the request again. Use it to tell the user, for example
@@ -132,6 +145,57 @@ only where you must send or show the secret. JSON still sends these fields as
 strings. This covers provider keys, Vault values, SSO secrets, invitation
 secrets, tokens, webhook secrets and Computer pairing secrets.
 
+## Observe and control executions
+
+A command receipt has `executionId`, `commandKey`, and `sequence`. It confirms
+that the command was saved. It does not confirm that the outside action ended.
+Read `GET /v1/executions/:executionId` for `status` and `failure`. A failure has
+only `category` and `errorId`.
+
+Read saved events with `GET /v1/executions/:executionId/events?afterSequence=0`.
+The page has `events`, `afterSequence`, and `terminal`. Keep the returned cursor
+for the next page. For live events, use SSE, a stream of server events:
+
+```sh
+curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/executions/$EXECUTION_ID/observe?afterSequence=0"
+```
+
+Each SSE message has event name `execution`. Its data has `executionId`,
+`sequence`, `createdAt`, and `body`. Save the last sequence that you handled and
+send it as `afterSequence` after a lost connection. Use a separate cursor for
+each child execution. Text events have `step` and `attempt`; keep different
+attempts apart. `Executions.observe(id, cursor)` gives these events as an Effect
+Stream. Closing the stream does not cancel accepted work.
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"commandKey":"cancel-work-1"}' \
+  "https://api.example.com/v1/executions/$EXECUTION_ID/cancel"
+```
+
+Cancel and decision endpoints return HTTP 200 with a command receipt. A cancel
+can leave work `cancelling` while it releases resources or waits for an unknown
+outside result. The final states are `completed`, `failed`, `cancelled`, and
+`interrupted`. `waiting` and `outcome_unknown` still need progress or a
+decision.
+
+A `DecisionNeeded` event gives `decisionId` and allowed `choices`. Send one of
+those choices to `POST /v1/executions/:executionId/decisions`:
+
+```json
+{
+	"commandKey": "answer-work-1",
+	"decisionId": "<saved decision id>",
+	"answer": "stop"
+}
+```
+
+Keep the same key and body on retry. A different body with the same key gives
+`409 ExecutionKeyConflict`. A decision does not remove current permission or
+token limits. API keys and same-origin cookies use the same application checks.
+
 ## Handle errors
 
 Each failed call gives a typed error. The type `ClientError` lists all of them:
@@ -194,7 +258,7 @@ The client sends requests with `credentials: "same-origin"`, so the browser adds
 the cookie. The browser also adds the `Origin` header. For requests that change
 data, OpenBot checks that it is exactly `publicOrigin` in the platform settings.
 Read the organizations of the person with `GET /auth/session`. See
-[Authentication](/docs/authentication#read-and-end-the-sign-in).
+[Authentication](/docs/developers/authentication#read-and-end-the-sign-in).
 
 To serve your web app on the same origin, see
 [Deploy](/docs/deploy#your-own-client-on-the-same-origin).
@@ -256,22 +320,33 @@ The view client holds no credentials. Every request goes through OpenBot, so the
 normal capability checks apply:
 
 - It checks that each answer is a valid MCP result.
-- It sends each action once, with a new request ID.
-- It then checks the saved action every 250 milliseconds until it has a final
-  result. It never sends the action again.
+- It sends each action with one command key.
+- It follows saved child execution events, even after the first Turn ends.
+- It reads the saved App result when its result event arrives. It never sends
+  the action again while waiting.
+
+`Executions.observe(id, afterSequence)` reads one execution from a saved cursor.
+`Executions.observeTree(id)` follows its child executions from the start. Each
+child has its own sequence. Use `stopAt: ["AppCall"]` to read App events without
+reading their decision children. The View bridge uses this limit; reading an App
+result does not ask for approval rights. `AppViews.act` and `AppViews.message`
+prepare a command with a fixed key; reuse its `send` effect after a lost reply.
 
 When you close the view, the client stops checking. An action that OpenBot
-already accepted still runs to the end.
+already accepted still runs to the end. The server saves a close, a context
+change, or a new message in order for each view, across all server nodes. After
+a close is saved, waiting requests cannot change the context or add messages. A
+server restart does not close a view. Its expiry and current access still apply.
 
 ---
 
 ## Show confessions
 
 The Bot uses the `confide` tool to say how its work goes, and the
-[memory Bot](/docs/memory#how-the-bot-learns) answers it. People may read this:
-`GET /v1/chats/:chatId/confessions` lists it, and the calls are in the history
-of the Chat. But the Bot speaks there more freely than in its answers. So do not
-make it too easy to read:
+[memory Bot](/docs/developers/memory#how-the-bot-learns) answers it. People may
+read this: `GET /v1/chats/:chatId/confessions` lists it, and the calls are in
+the history of the Chat. But the Bot speaks there more freely than in its
+answers. So do not make it too easy to read:
 
 - Do not show confessions in the conversation. Fold the `confide` tool calls in
   the history, and do not tell people about them in a message.

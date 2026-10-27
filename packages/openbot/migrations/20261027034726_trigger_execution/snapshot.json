@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "c0ada2d1-6c95-4567-a920-c75491227f96",
+	"prevIds": ["941e891e-5844-4e1f-b11b-ea30a3fe79d2"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_triggers",
+				"schedule_execution_id"
+			],
+			"writes": [
+				"s|col|public.openbot_triggers.schedule_execution_id",
+				"n|col|public.openbot_triggers.schedule_execution_id",
+				"e|col|public.openbot_triggers.schedule_execution_id"
+			],
+			"reads": ["n|tbl|public.openbot_triggers", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_triggers",
+				"name": "schedule_execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

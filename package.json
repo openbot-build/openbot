@@ -5,10 +5,10 @@
 	"packageManager": "pnpm@9.15.9",
 	"type": "module",
 	"devDependencies": {
-		"@openbot-build/cli": "workspace:*",
-		"@openbot-build/openbot": "workspace:*",
 		"@effect/platform-node": "4.0.6",
 		"@effect/tsgo": "0.56.0",
+		"@openbot-build/cli": "workspace:*",
+		"@openbot-build/openbot": "workspace:*",
 		"@types/node": "26.6.5",
 		"acorn": "8.19.0",
 		"drizzle-kit": "1.0.0-rc.5",
@@ -26,14 +26,16 @@
 		"build": "pnpm -r build",
 		"images": "docker buildx bake -f deploy/docker/docker-bake.hcl --load",
 		"images:check": "bash deploy/docker/check.sh",
-		"test": "vitest run"
+		"test": "vitest run",
+		"test:e2e": "pnpm --filter @openbot-build/e2e test"
 	},
 	"pnpm": {
 		"patchedDependencies": {
 			"effect@4.0.6": "patches/effect@4.0.6.patch",
 			"@effect/ai-anthropic@4.0.6": "patches/@effect__ai-anthropic@4.0.6.patch",
 			"@effect/ai-openai@4.0.6": "patches/@effect__ai-openai@4.0.6.patch",
-			"@effect/ai-openai-compat@4.0.6": "patches/@effect__ai-openai-compat@4.0.6.patch"
+			"@effect/ai-openai-compat@4.0.6": "patches/@effect__ai-openai-compat@4.0.6.patch",
+			"@nmnmcc/ability@3.0.0": "patches/@nmnmcc__ability@3.0.0.patch"
 		}
 	}
 }

@@ -1,5 +1,7 @@
 import { Config, Model, Provider } from "@openbot-build/core"
 import { AppExecution } from "@openbot-build/api"
+import { AppCalls, Execution } from "@openbot-build/domain"
+
 import {
 	Array as Arr,
 	Context,
@@ -239,22 +241,71 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 	]
 })
 
+const AppAnswer = Schema.Struct({
+	source: AppCalls.Source,
+	outcome: Schema.NullOr(AppCalls.Outcome),
+	failure: Schema.NullOr(Execution.Failure),
+})
+const ToolNotice = Schema.Struct({
+	status: Execution.Status,
+	failure: Schema.NullOr(Execution.Failure),
+	result: Schema.optionalKey(
+		Schema.Struct({ result: Schema.Json, isFailure: Schema.Boolean }),
+	),
+})
+
 const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 	options: LanguageModel.ProviderOptions,
 ) {
 	const { index, text } = yield* currentInput(options.prompt)
-	const found = lastToolResult(
-		options.prompt,
-		index,
-		Str.startsWith("openbot_"),
+	const notice = Str.startsWith("[OpenBot] ")(text)
+		? Schema.decodeOption(Schema.fromJsonString(ToolNotice))(
+				Str.slice(10)(text),
+			)
+		: Option.none()
+	if (Option.isSome(notice) && notice.value.status !== "completed")
+		return textParts(
+			"mock-app",
+			`The App call ended with ${notice.value.status}. Error: ${notice.value.failure?.errorId ?? "none"}.`,
+		)
+	const found = Option.orElse(
+		lastToolResult(options.prompt, index, Str.startsWith("openbot_")),
+		() =>
+			Option.flatMap(notice, (notice) => Option.fromUndefinedOr(notice.result)),
 	)
 	if (Option.isSome(found)) {
 		const result = found.value
-		if (Predicate.hasProperty(result.result, "pending"))
+		if (Predicate.hasProperty(result.result, "background"))
 			return textParts(
 				"mock-app",
 				"The simulated App call waits for a decision.",
 			)
+		const answer = Schema.decodeUnknownOption(AppAnswer)(result.result)
+		if (Option.isSome(answer)) {
+			const { source, outcome, failure } = answer.value
+			return textParts(
+				"mock-app",
+				outcome === null
+					? `The App call has no result. Error: ${failure?.errorId ?? "none"}.`
+					: Match.value(outcome).pipe(
+							Match.tag(
+								"Completed",
+								({ result }) =>
+									`Simulated App result from ${source.connectionName}: ${JSON.stringify(result)}`,
+							),
+							Match.tag(
+								"InputRequired",
+								() => "The simulated App needs more input.",
+							),
+							Match.tag(
+								"Failed",
+								({ failure }) =>
+									`The App call failed. Error: ${failure.errorId}.`,
+							),
+							Match.exhaustive,
+						),
+			)
+		}
 		const value = yield* Schema.decodeUnknownEffect(AppExecution.ToolResult)(
 			result.result,
 		).pipe(
@@ -508,6 +559,6 @@ export const make = Effect.gen(function* () {
 		})
 	return {
 		/** Every organization of a development platform can use the simulated models. */
-		builtinModels: { ...catalog, resolve },
+		builtinModels: { ...catalog, resolve, defaultModel: selection },
 	}
 })

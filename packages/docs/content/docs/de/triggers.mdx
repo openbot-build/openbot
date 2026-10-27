@@ -1,138 +1,34 @@
 ---
-title: Trigger
-description:
-  Einem Bot eine Aufgabe mit einem Prompt geben, nach Zeitplan oder über einen
-  Webhook.
+title: "Arbeit zu einer festen Zeit starten"
+description: "Arbeit zu einer festen Zeit starten"
 ---
 
-Ein **Trigger** (Auslöser) gibt einem Bot eine Aufgabe mit einem Prompt. Er löst
-nach einem Zeitplan aus, über einen Webhook oder beides. Mehr tut er nicht: Der
-Bot entscheidet, wie er die Arbeit macht. Er kann zuerst planen, eine
-[Todo-Liste](/de/docs/chats#todo-liste) führen und Arbeit an andere Bots geben.
-Wenn die Aufgabe endet, geht ihr Ergebnis in deinen [Chat](/de/docs/chats) mit
-dem Bot.
+Ein Trigger startet Bot-Arbeit nach einem Zeitplan oder einem externen Ereignis.
+Richte ihn mit den Funktionen deines Clients ein.
 
----
+## Die Aufgabe setzen
 
-## Einen Trigger erstellen
+Wähle den Bot und seine Nachricht. Ohne gewählten Bot nutzt der Trigger deinen
+Standard-Bot. Prüfe, ob dieser verfügbar ist und ein Model hat.
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"Check the open issues and sum them up.","schedule":{"cron":"0 9 * * 1-5","timeZone":"Europe/Berlin"}}' \
-  https://api.example.com/v1/triggers
-```
+Wähle einen einmaligen oder wiederholten Termin und prüfe die Zeitzone. Ein
+Webhook ist eine Adresse, die ein anderer Dienst zum Starten der Aufgabe
+aufruft. Gib Adresse und Geheimnis nur an den vorgesehenen Dienst.
 
-| Feld       | Was es tut                                                                                                        |
-| ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| `prompt`   | Die Aufgabe.                                                                                                      |
-| `bot`      | Optional. Der Bot, der die Arbeit macht. Ohne ihn macht dein [Standard-Bot](/de/docs/bots#dein-standard-bot) sie. |
-| `schedule` | Optional. Wann der Trigger von selbst auslöst.                                                                    |
-| `shared`   | Optional. `true` erstellt einen gemeinsamen Trigger, der der Organisation gehört.                                 |
-| `enabled`  | Optional. `false` verhindert, dass der Trigger auslöst. Der Standard ist `true`.                                  |
+Ein Neustart behält den Zeitplan. Nach einem verpassten Termin startet OpenBot
+eine Aufgabe, sobald es wieder läuft. Nach einem Upgrade kann dein Client eine
+neue Bestätigung verlangen. Prüfe und speichere die Einstellungen mit deinem
+aktuellen Zugriff. Alte Arbeit startet nicht mit dem neuen Zugriff erneut.
 
-Die Antwort ist `201` mit dem Trigger. Er hat `nextRunAt`, die nächste Zeit, zu
-der der Zeitplan auslöst, und `lastFiredAt`.
+## Einen Lauf prüfen
 
-`GET /v1/triggers` listet deine Trigger und die gemeinsamen auf. `GET`, `PATCH`
-und `DELETE /v1/triggers/:triggerId` lesen, ändern und löschen einen. Eine
-Änderung braucht `expected`, die `revision`, die du gelesen hast. Eine alte
-Revision gibt `409` mit `TriggerConflict` zurück.
+Lies Verlauf und Ergebnis im Client. Trigger-Arbeit nutzt weiterhin deine
+Rechte. Sie kann eine [Entscheidung](/de/docs/requests) brauchen oder scheitern,
+wenn Model, Verbindung oder Standard-Bot fehlen.
 
----
+## Den Trigger ändern oder stoppen
 
-## Was ein Auslösen tut
-
-Jedes Auslösen gibt die Aufgabe als [Delegation](/de/docs/delegation) an den
-Bot. Die Arbeit läuft in einem neuen Task-Chat des Bots. Seine erste Eingabe ist
-der Prompt, von "einem Trigger". Die Delegation hat `trigger` mit der ID des
-Triggers.
-
-Wenn die Arbeit endet, geht ihr Ergebnis als
-[Mitteilung](/de/docs/chats#mitteilungen) in den direkten Chat des Actors mit
-dem Bot. OpenBot erstellt diesen Chat, wenn es ihn noch nicht gibt. So liest der
-Bot das Ergebnis dort, und er kann dem Actor davon erzählen oder mit der Arbeit
-weitermachen. Das [Audit-Log](/de/docs/organization#audit-log) zeichnet
-`trigger.fired` mit der ID der Delegation in `details.delegation` auf.
-
-Um die Arbeit eines Triggers zu finden, lies `GET /v1/chats/:chatId/delegations`
-für diesen direkten Chat, oder liste die Task-Chats des Bots mit
-`GET /v1/chats?kind=task&bot=<id>` auf.
-
----
-
-## Zeitpläne
-
-Ein Zeitplan hat einen `cron`-Text mit fünf Feldern, zum Beispiel `0 9 * * 1-5`
-für 9:00 Uhr an Werktagen. `timeZone` ist eine IANA-Zeitzone, zum Beispiel
-`Europe/Berlin`. Ohne sie ist die Zeitzone UTC. Ein ungültiger cron-Text gibt
-`400` mit `TriggerInvalid` zurück. Ein cron-Text, der nie auslöst, zum Beispiel
-`0 0 30 2 *` (30. Februar), gibt denselben Fehler zurück.
-
-OpenBot sucht alle 15 Sekunden nach fälligen Zeitplänen. Wenn viele Server
-laufen, löst jeder Trigger nur einmal aus.
-
----
-
-## Webhooks
-
-`PUT /v1/triggers/:triggerId/webhook` erstellt ein Webhook-Geheimnis. OpenBot
-zeigt es nur einmal:
-
-```json
-{
-	"url": "https://api.example.com/v1/hooks/triggers/trg_4c1e...",
-	"secret": "otg_..."
-}
-```
-
-Ein anderes System löst den Trigger mit dem Geheimnis aus:
-
-```sh
-curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"issue": 42}' \
-  https://api.example.com/v1/hooks/triggers/trg_4c1e...
-```
-
-Die Antwort ist `202` mit der `delegation`. Der JSON-Body geht mit der Aufgabe
-an den Bot. OpenBot markiert ihn als Daten eines anderen Systems, nicht als
-Anweisung. Ein falsches Geheimnis, ein Trigger ohne Webhook oder ein
-abgeschalteter Trigger gibt `401` mit `TriggerHookDenied` zurück.
-
-Ein neues `PUT` erstellt ein neues Geheimnis, und das alte funktioniert nicht
-mehr. `DELETE /v1/triggers/:triggerId/webhook` entfernt den Webhook.
-
-Darf der Akteur dem Bot keine Arbeit mehr geben, oder ist der Bot archiviert,
-kommt `409 TriggerInvalid`. Ein Speicher- oder Ausführungsfehler ergibt
-`503 TriggerStorageUnavailable`.
-
----
-
-## Für wen die Arbeit ist
-
-Die Arbeit eines Triggers ist für seinen **Actor**: das letzte Member, das den
-Trigger oder seinen Webhook erstellt oder geändert hat. Eine Änderung macht dich
-also zum Actor. Der Task-Chat gehört dem Actor, und das Ergebnis geht in den
-Chat des Actors. Der Actor muss dem Bot Arbeit geben können. Wenn er das nicht
-mehr kann, löst der Trigger nicht aus.
-
-Der Bot arbeitet wie bei jeder Aufgabe. Er hat keine zusätzlichen Grenzen und
-fragt mit [Requests](/de/docs/requests) nach neuen Fähigkeiten. Die Requests
-gehen an den Actor.
-
----
-
-## Berechtigungen
-
-| Aktion auf `Trigger` | Was sie erlaubt                                                               |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `read`               | Trigger lesen: ihre Zeitpläne und Webhooks.                                   |
-| `write`              | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen. |
-
-Der Pfad deiner eigenen Trigger ist
-`org / <org> / user / <you> / trigger / <id>`. Ein gemeinsamer Trigger hat
-keinen Besitzer: sein `ownerUserId` ist `null`. Jedes Member kann die
-gemeinsamen Trigger lesen. Administratoren können sie ändern. Die Liste enthält
-nur die Trigger, die du lesen darfst. Siehe
-[Berechtigungen](/de/docs/permissions).
+Schalte ihn aus, wenn keine neue Arbeit starten soll. Prüfe bereits gestartete
+Arbeit getrennt. Passe Aufgabe oder Zeitplan an geänderte Bedürfnisse an. Bei
+Rechten oder Models hilft die Verwaltung. Für die Webhook-Einrichtung hilft der
+Anbieter der Anbindung.

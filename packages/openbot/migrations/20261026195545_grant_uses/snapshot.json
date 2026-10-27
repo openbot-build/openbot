@@ -1,0 +1,213 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "746ab284-4ef2-4b4c-a6ac-aedd663d80f2",
+	"prevIds": ["481c96c1-993c-4424-98a3-eccc9af6785f"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_grant_uses"],
+			"writes": [
+				"s|tbl|public.openbot_grant_uses",
+				"n|tbl|public.openbot_grant_uses",
+				"e|tbl|public.openbot_grant_uses",
+				"n|rel|public.openbot_grant_uses",
+				"n|type|public.openbot_grant_uses",
+				"n|rel|public.openbot_grant_uses_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_grant_uses",
+				"openbot_grant_uses_grant"
+			],
+			"writes": [
+				"s|idx|public.openbot_grant_uses_grant",
+				"n|idx|public.openbot_grant_uses_grant",
+				"e|idx|public.openbot_grant_uses_grant",
+				"n|rel|public.openbot_grant_uses_grant"
+			],
+			"reads": [
+				"n|tbl|public.openbot_grant_uses",
+				"n|sch|public",
+				"n|col|public.openbot_grant_uses.organization_id",
+				"n|col|public.openbot_grant_uses.grant_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_grant_uses"],
+			"writes": [
+				"s|fk|public.openbot_grant_uses.openbot_grant_uses_T28NdeuQhaQq_fkey",
+				"n|fk|public.openbot_grant_uses.openbot_grant_uses_T28NdeuQhaQq_fkey",
+				"e|fk|public.openbot_grant_uses.openbot_grant_uses_T28NdeuQhaQq_fkey",
+				"n|con|public.openbot_grant_uses.openbot_grant_uses_T28NdeuQhaQq_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_grant_uses",
+				"n|sch|public",
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_grant_uses.namespace",
+				"n|col|public.openbot_grant_uses.turn_execution_id",
+				"n|col|public.openbot_executions.namespace",
+				"n|col|public.openbot_executions.id",
+				"e|uniqueness|public.openbot_executions.id.namespace"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_grant_uses",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "turn_execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "call_key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "grant_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "openbot_grant_uses_grant",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "grant_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "openbot_grant_uses_T28NdeuQhaQq_fkey",
+				"nameExplicit": false,
+				"columns": ["namespace", "turn_execution_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_executions",
+				"columnsTo": ["namespace", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_grant_uses",
+				"name": "openbot_grant_uses_pkey",
+				"columns": ["namespace", "turn_execution_id", "call_key"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

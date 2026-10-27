@@ -1,0 +1,82 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "c51d5565-d002-4db8-8c47-4f24058587d2",
+	"prevIds": ["8c466a26-de1d-4b4c-b76e-a3a061bd8989"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_prices",
+				"position"
+			],
+			"writes": [
+				"s|col|public.openbot_model_prices.position",
+				"n|col|public.openbot_model_prices.position",
+				"e|col|public.openbot_model_prices.position"
+			],
+			"reads": ["n|tbl|public.openbot_model_prices", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"price_schedule"
+			],
+			"writes": [
+				"s|col|public.openbot_usage_events.price_schedule",
+				"n|col|public.openbot_usage_events.price_schedule",
+				"e|col|public.openbot_usage_events.price_schedule"
+			],
+			"reads": ["n|tbl|public.openbot_usage_events", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_prices",
+				"name": "position",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": {
+					"type": "always",
+					"name": "openbot_model_prices_position_seq",
+					"increment": "1",
+					"startWith": "1",
+					"minValue": "1",
+					"maxValue": "9223372036854775807",
+					"cache": 1,
+					"cycle": false
+				},
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_usage_events",
+				"name": "price_schedule",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

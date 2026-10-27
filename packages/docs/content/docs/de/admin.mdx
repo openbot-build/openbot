@@ -1,0 +1,55 @@
+---
+prev: false
+title: "Administrationshandbuch"
+description: "Administrationshandbuch"
+---
+
+Dieses Handbuch ist für die Verwaltung einer Organisation und den Betrieb von
+OpenBot. OpenBot hat keine Verwaltungsoberfläche. Aufgaben nutzen die API oder
+Werkzeuge. Die API-Beispiele hier gehören zur Verwaltung.
+
+## Wähle deine Verantwortung
+
+| Rolle                   | Verantwortung                                                                        | Nötiger Zugriff                                       |
+| ----------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Organisationsverwaltung | Mitglieder, Rollen, Models, Budgets und gemeinsame Dienste einer Organisation        | Die auf der Seite genannten Rechte                    |
+| Plattformverwaltung     | Plattformeinstellungen, gemeinsame Anbieter und Grenzen der Organisationsrichtlinien | Plattformrechte                                       |
+| Serverbetrieb           | Installation, Updates, Sicherungen und Überwachung                                   | Zugriff auf Server, Datenbank, Speicher und Schlüssel |
+
+Eine Organisationsrolle gibt keine Plattformrechte. Serverzugriff und Rechte für
+die Plattform-API sind getrennt. Gib eine Aufgabe an die zuständige Person
+weiter, wenn sie eine andere Rolle braucht.
+
+## Eine Organisation verwalten
+
+1. Lies [Organisationen und Mitglieder](/de/docs/organization) sowie
+   [Berechtigungen](/de/docs/permissions).
+2. Richte bei einem eigenen Anmeldedienst [SSO und Domains](/de/docs/sso) ein.
+3. Füge [Models und Anbieter](/de/docs/models) hinzu. Setze dann
+   [Preise und Budgets](/de/docs/usage).
+4. Verbinde nach Bedarf [Channels](/de/docs/admin/channels),
+   [Computer-Provider](/de/docs/admin/computer-providers) oder
+   [Secret-Provider](/de/docs/admin/secret-providers).
+5. Gib Mitgliedern die Client-Adresse und das
+   [Benutzerhandbuch](/de/docs/users).
+
+## Die Plattform betreiben
+
+1. Lies [Bereitstellung](/de/docs/deploy) und
+   [Instanzkonfiguration](/de/docs/configuration).
+2. Richte die [Plattform](/de/docs/platform) und den
+   [Anmeldedienst](/de/docs/admin/sign-in) ein.
+3. Richte nach Bedarf [Dateispeicher](/de/docs/admin/file-storage),
+   [Live-Models](/de/docs/admin/live-models) und
+   [Code Mode](/de/docs/admin/code-mode) ein.
+4. Setze [App-Index-Grenzen](/de/docs/admin/app-index) und
+   [kopple eigene Maschinen](/de/docs/admin/pair-computer).
+5. Nutze die [Sicherungsschritte](/de/docs/deploy#sicherungen) und
+   [Fehlerprotokolle](/de/docs/error-logs) für den laufenden Betrieb.
+
+## Ein Problem bearbeiten
+
+Prüfe zuerst die betroffene Organisation und das Konto. Prüfe Mitgliedschaft,
+Rechte und verfügbare Models. Serverfehler gehören zum Serverbetrieb. Nenne Zeit
+und Anfrage-ID, damit die Person das Protokoll findet. Quellcodeänderungen
+gehören ins [Entwicklerhandbuch](/de/docs/developers).

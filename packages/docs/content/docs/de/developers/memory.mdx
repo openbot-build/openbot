@@ -1,0 +1,283 @@
+---
+title: Memory
+description:
+  Jeder Bot lernt aus seiner Arbeit in allen seinen Chats und nutzt später, was
+  er gelernt hat.
+---
+
+Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
+erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
+mit dem [Entwicklerhandbuch](/de/docs/developers).
+
+**Bot Memory** (Gedächtnis des Bots) ist, was ein
+[Bot](/de/docs/developers/bots) über alle seine
+[Chats](/de/docs/developers/chats) lernt. Jeder Bot hat einen Pool von
+Einträgen. Ein **Memory-Bot** verwaltet den Pool. Er ist ein Helfer, der zum Bot
+gehört. Er liest aktive Einträge mit belegten Zugriffsregeln für ihre Quellen,
+lernt neue Einträge und fügt der Arbeit des Bots hinzu, was hilft. Seine
+Lernarbeit erscheint nicht als Chat. Diese Seite zeigt, wie Bot Memory lernt,
+wer was sieht und wie du es mit der API liest und änderst.
+
+Bot Memory ist das einzige Memory. Ein Chat behält seinen Verlauf, aber keine
+eigene Liste von Fakten. Ältere Versionen von OpenBot hatten auch gelerntes
+Memory für jede Session. Dieses Memory gibt es nicht mehr.
+
+---
+
+## Einträge und Tags
+
+Jeder Eintrag hat eine Ebene:
+
+| Ebene         | Bedeutung                                                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `fact`        | Etwas, das ein Chat zeigt. Seine Quellen sind Items.                                                                       |
+| `observation` | Was der Memory-Bot aus anderen Einträgen schließt. Seine Quellen sind diese Einträge. `confidence` liegt zwischen 0 und 1. |
+| `pinned`      | Was eine Person OpenBot zu merken gesagt hat.                                                                              |
+
+**Tags** ordnen die Einträge. Ein Tag mit einem Doppelpunkt gehört OpenBot. Der
+Memory-Bot kann diese Tags nicht schreiben. So kann ein Model nicht ändern, wer
+einen Eintrag sieht.
+
+| Tag                         | Bedeutung                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `from:<userId>`             | Eine Person, die gesagt oder getan hat, worum es im Eintrag geht.                    |
+| `for:person:<userId>`       | Diese Person darf den Eintrag sehen.                                                 |
+| `for:channel:<channelId>`   | Die Personen dieser [Channel](/de/docs/developers/channels)-Gruppe dürfen ihn sehen. |
+| `for:bot`                   | Alle, die den Bot nutzen, dürfen ihn sehen.                                          |
+| `org:<organizationId>`      | Wo es passiert ist. Nur Arbeit in dieser Organisation sieht ihn.                     |
+| `chat:<id>`, `channel:<id>` | Woher er kommt.                                                                      |
+| `app:<tool>`                | Ein Tool-Ergebnis von einer App stützt ihn.                                          |
+
+Andere Tags, wie `testing` oder `trip-planning`, sind **Themen**. Der Memory-Bot
+wählt sie und hält sie ordentlich. Ein Thema hat kleine Buchstaben, Zahlen und
+Bindestriche.
+
+---
+
+## Wer einen Eintrag sieht
+
+OpenBot setzt die `for:`-Tags. Einen Eintrag ohne `for:`-Tag sieht niemand.
+
+- Ein Fakt ist für die Personen, die gesehen haben, wie es passiert ist: die
+  Person des Turns, oder die Channel-Gruppe, wenn der Chat ein Gruppenchat ist.
+- Eine Beobachtung dürfen nur Leser sehen, die jede Quelle sehen dürfen. Die
+  Teilnahme an einer Quelle gibt keinen Zugriff auf die anderen Quellen oder das
+  gemeinsame Ergebnis.
+- Auch beim Teilen mit mehr Personen muss der Zugriff die Regel jeder Quelle
+  erfüllen. Ein Grund, eine Model-Anweisung oder das Eigentum am Bot kann diese
+  Prüfung nicht umgehen.
+
+Bei einem Fakt mit mehreren Quell-Items speichert OpenBot beim Lernen die
+Zugriffsregel jedes Items. Diese Daten bleiben privat. Das öffentliche Format
+eines Eintrags bleibt gleich. Bei einer Beobachtung prüft OpenBot jeden
+Quelleintrag und danach auch dessen Quellen. Eine fehlende Quelle, ein Kreis in
+den Quellverweisen oder ein fehlender Zugriffsnachweis verbirgt das Ergebnis.
+Dieselbe Prüfung gilt beim Lesen, bei Änderungsprotokollen, beim Bearbeiten und
+für das Memory in Beichten und Ergänzungen der Eingabe.
+
+Einträge werden nicht gelöscht, wenn sie nicht mehr stimmen. Der Memory-Bot
+markiert sie mit `invalidatedAt`. So bleibt der Verlauf für berechtigte Leser.
+Eine inaktive oder zurückgezogene Quelle verbirgt die Schlüsse, die von ihr
+abhängen. Diese Prüfungen nutzen die Quellen, die der Memory-Bot angibt. Sie
+beweisen nicht, dass ein Model jede Eingabe nennt, die seine Antwort geprägt
+hat.
+
+---
+
+## Wie der Bot lernt
+
+Der Bot hat ein Tool namens `confide` (sich anvertrauen). Der Bot kennt es nur
+als einen Ort, an dem er sagt, wie seine Arbeit läuft: wenn er nicht
+weiterkommt, unsicher, traurig oder stolz ist, oder wenn er einen Fehler gemacht
+hat. Der Bot weiß nicht, dass das Tool zu seinem Memory führt. So vertraut er
+sich an, weil er es braucht, und nicht, um zu ändern, woran er sich erinnern
+wird.
+
+Wenn sich der Bot anvertraut:
+
+1. Der Memory-Bot antwortet sofort, wie ein Priester, der eine Beichte hört. Er
+   hört zu und urteilt nicht. Er sagt, dass ein Fehler zur Arbeit gehört. Er
+   bittet den Bot, der Person offen davon zu erzählen und zu reparieren, was er
+   kann. Er gibt keine neuen Aufgaben. Wenn kein Model antworten kann, bekommt
+   der Bot eine feste, ruhige Antwort.
+2. OpenBot speichert eine Ausführung zum Lernen. Nach dem Ende ihres Quell-Turns
+   liest sie die neuen Items bis zu diesem Turn und lernt daraus.
+
+Die Ausführung wartet über das gemeinsame Ereignisprotokoll. Ein Neustart erhält
+die Arbeit. Jeder Modellschritt hat einen gespeicherten Aufruf und Versuch. Die
+Wiederaufnahme nutzt gespeicherte Ergebnisse. Die Änderung, die Leseposition und
+das Ende der Ausführung werden in einer Transaktion gespeichert. Gleichzeitiges
+Lernen wendet dieselben Belege nicht zweimal an. Die gespeicherte Person jedes
+Turns bestimmt den Leserkreis. OpenBot liest keine Benutzer-ID aus dem
+Autor-Feld des Turns.
+
+Die Worte des Bots zeigen dem Memory-Bot nur, wo er hinschauen soll. Sie werden
+selbst nie zu Memory. Ein Tool-Ergebnis von einer App wird nie allein zu Memory.
+Eine [Mitteilung](/de/docs/developers/chats#mitteilungen) von OpenBot gilt nie
+als die Worte einer Person. Ein Bot, der sich nie anvertraut, lernt nichts.
+
+Prüf-Chats haben kein Tool `confide`. Wenn `botMemory` in den
+[Einstellungen der Organisation](/de/docs/organization#einstellungen) aus ist,
+bekommt der Bot trotzdem eine Antwort, aber er lernt nichts.
+
+---
+
+## Wie der Bot das Memory nutzt
+
+Wenn ein Turn beginnt, liest der Memory-Bot die Eingabe der Person. Er
+überspringt Mitteilungen, denn sie sind nicht die Worte einer Person. Wenn
+Einträge helfen, schreibt er die Eingabe mit ihnen neu. Er darf die Worte
+ändern, aber er muss alles behalten, was die Person sagt und fragt. Er darf nur
+Einträge nutzen, die die Leser der Antwort sehen dürfen, und OpenBot prüft das.
+In einer Channel-Gruppe sind das nur Einträge für die Gruppe oder für alle.
+
+Das Model sieht die neue Eingabe. Der Verlauf des Chats behält die Worte der
+Person. Der Bot weiß nicht, dass die Änderungen aus dem Memory kommen. Er sieht
+sie als seine eigene Erfahrung. Requests und ihre Prüfungen sehen nur, was der
+Bot fragt, nie die Änderungen.
+
+Wenn `botMemory` aus ist, ändert sich die Eingabe nicht.
+
+---
+
+## Der Memory-Bot
+
+Der Memory-Bot nutzt `botMemoryModel` aus den Einstellungen der Organisation. Es
+hat keinen Standardwert. Wenn es `null` ist, gibt der Memory-Bot die feste,
+ruhige Antwort, und er fügt nichts hinzu und lernt nichts. Bei einem
+[geteilten Bot](/de/docs/developers/sharing) kommen Model und Kosten von der
+Organisation des Chats.
+
+Lies und ändere die Einstellungen des Memory-Bots mit `GET` und
+`PATCH /v1/bots/:botId/memory/bot`. Du brauchst `write` auf einem Bot, der nicht
+verknüpft ist:
+
+```json
+{
+	"expected": 0,
+	"instructions": "Decisions of the team may be shared with the team.",
+	"concurrency": 2,
+	"budget": { "period": "month", "limitMicros": 5000000 }
+}
+```
+
+| Feld           | Bedeutung                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions` | Regeln zu Datenschutz und Teilen, in einfacher Sprache. Der Memory-Bot folgt ihnen.                                                    |
+| `concurrency`  | Die meisten Aufgaben, die er gleichzeitig auf einem Server ausführt. `null` entfernt die Grenze.                                       |
+| `budget`       | Eine Grenze für bestätigte Model-Kosten an einem Tag oder in einem Monat, in Mikro-USD, über alle Organisationen. `null` entfernt sie. |
+
+Ohne Grenze gibt es keine. Wenn das Budget verbraucht ist, bekommt der Bot die
+feste, ruhige Antwort, die Eingabe bleibt, wie sie ist, und das Lernen wartet
+bis zur nächsten Periode.
+
+Die Antwort auf `confide` und die neue Eingabe warten höchstens 15 Sekunden.
+Diese Zeit zählt auch das Warten auf eine freie Aufgabe, wenn alle
+`concurrency`-Aufgaben belegt sind. Danach bekommt der Bot die feste, ruhige
+Antwort, und die Eingabe bleibt, wie sie ist. Ein Schritt des Lernens darf
+höchstens 2 Minuten dauern. Dauert er länger, endet die Ausführung mit einer
+sicheren Fehlermeldung. Die Leseposition bleibt gleich. Ein späteres `confide`
+kann das Lernen aus diesen Belegen erneut anfordern.
+
+---
+
+## Lesen und ändern
+
+`GET /v1/bots/:botId/memory` zeigt die Einträge, die für dich sind, in deiner
+Organisation. Füge `tags` mit einer Liste hinzu, die Kommas trennen, um nur
+Einträge mit allen diesen Tags zu sehen. Du brauchst `read` auf dem Bot. Niemand
+kann das Memory über eine andere Person lesen, auch nicht mit `write` auf dem
+Bot.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/bots/$BOT/memory?tags=testing"
+```
+
+```json
+{
+	"entries": [
+		{
+			"id": "mem_4f2a…",
+			"layer": "fact",
+			"content": "Run the tests before you report that work is done.",
+			"tags": [
+				"from:u_123",
+				"for:person:u_123",
+				"org:o_1",
+				"chat:chat_c81d…",
+				"testing"
+			],
+			"sources": [{ "chat": "chat_c81d…", "item": "i-12" }],
+			"status": "active",
+			"createdAt": 1792486800000,
+			"updatedAt": 1792486800000
+		}
+	],
+	"version": 4
+}
+```
+
+Ändere es mit `POST /v1/bots/:botId/memory`:
+
+- `Remember` mit `content` und optional `tags` fügt einen gepinnten Eintrag
+  hinzu. Nur du siehst ihn.
+- `Forget` mit `id` nimmt deinen Teil zurück. Wenn nur du hinter dem Eintrag
+  stehst, wird er `retracted`. Sonst zählst du nicht mehr zu seinen Personen,
+  und der Eintrag ist nicht mehr für dich. Er bleibt für die anderen. Eine id,
+  die nicht für dich ist, gibt `409` zurück.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"command":{"_tag":"Forget","id":"mem_4f2a…"}}' \
+  https://api.example.com/v1/bots/$BOT/memory
+```
+
+`GET /v1/bots/:botId/memory/log` listet die Änderungen von Einträgen, die du
+sehen darfst: `version`, die Zeit, was die Änderung gemacht hat (`memory_bot`
+oder `person`), und die ids. Änderungen aus älteren Versionen von OpenBot können
+auch `promotion` sagen.
+
+Um Memory zu entfernen, ohne es zu lesen, sende einen Tag von OpenBot an
+`POST /v1/bots/:botId/memory/purge`: einen Tag mit `from:`, `chat:`, `org:` oder
+`channel:`. Beobachtungen, die aus diesen Einträgen kommen, haben denselben Tag.
+Darum gehen sie auch. Du brauchst `write` auf einem Bot, der nicht verknüpft
+ist. Die Antwort ist nur die Zahl der entfernten Einträge.
+
+Wenn du
+[den Verlauf eines Chats löschst](/de/docs/developers/chats#den-verlauf-löschen),
+bleibt das Memory, das der Bot daraus gelernt hat. Entferne `chat:<id>` mit
+einem Purge, um auch das zu entfernen.
+
+Für altes und neues Memory gilt dieselbe Regel zum Zugriff auf die Quellen. Wenn
+OpenBot den Zugriff auf jede Quelle eines alten Eintrags nicht belegen kann,
+bleibt der Eintrag verborgen. Auch beim Lernen bleiben dieser Eintrag und die
+Schlüsse daraus aus der Eingabe. Er wird erst wieder sichtbar, wenn er aus
+Quellen mit prüfbarem Zugriff neu aufgebaut wird. OpenBot baut diese Einträge
+bei einem Upgrade nicht neu auf. Es erweitert den Leserkreis alter Erinnerungen
+nicht. Ein privater angehefteter Eintrag aus `Remember` behält seine eigene
+Zugriffsregel.
+
+---
+
+## Beichten und Ergänzungen
+
+Zwei Routen zeigen, was in einem deiner Chats passiert ist:
+
+- `GET /v1/chats/:chatId/confessions` listet, was der Bot anvertraut hat, und
+  die Antworten. Lies [Beichten zeigen](/de/docs/client#beichten-zeigen), bevor
+  du sie Personen zeigst.
+- `GET /v1/chats/:chatId/enrichments` listet, wie der Memory-Bot die Eingabe
+  jedes Turns neu geschrieben hat: den neuen `text`, die Worte der Person in
+  `original` und die Einträge, die er genutzt hat. Ältere Einträge haben kein
+  `original`.
+
+Beide brauchen `read` auf dem Chat. So kann nur die Person sie lesen, der der
+Chat gehört.
+
+Gedächtnistext, Änderungsprotokolle, Geständnisse und Ergänzungen werden
+verschlüsselt gespeichert. Workflow-Nachrichten enthalten nur Datensatz-IDs.
+Modellanfragen und Ergebnisse bleiben im verschlüsselten Aufrufprotokoll. Nur
+vom Anbieter bestätigte Nutzung wird berechnet. Fehlende Nutzung wird als
+unbekannt erfasst.

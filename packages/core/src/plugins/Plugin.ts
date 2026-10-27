@@ -2,14 +2,18 @@ import {
 	Context as EffectContext,
 	Data,
 	Schema,
-	Stream,
 	type Brand,
 	Effect,
 	type Option,
 	type Scope,
 } from "effect"
-import { type Prompt, type Toolkit, type Tool } from "effect/ai"
-import { Context, type Event, type Options as BotOptions } from "../bot/Bot.ts"
+import { type Prompt, type Toolkit, type Tool, type Response } from "effect/ai"
+import {
+	Context,
+	type ToolRegistration,
+	type Options as BotOptions,
+} from "../bot/Bot.ts"
+import type * as Turn from "../chat/Turn.ts"
 import type * as Chat from "../chat/Chat.ts"
 import type * as ChatStore from "../store/ChatStore.ts"
 
@@ -22,7 +26,7 @@ export const Id = Schema.String.check(
 ).pipe(Schema.brand("@openbot-build/core/PluginId"))
 export type Id<Key extends string = string> = Key & typeof Id.Type
 
-/** Identity data for the versioned plugin model. Middleware is built separately. */
+/** Identity data for a plugin. Tools are built in the Turn scope. */
 export interface Definition<I extends Id = Id> {
 	readonly id: I
 }
@@ -168,7 +172,7 @@ export interface StoreService<
 	readonly definition: Declaration
 }
 
-/** Contract for plugins that carry persistent schemas. Existing middleware stays independent. */
+/** Plugins can declare their persistent state beside their tools. */
 export interface Stateful<
 	Tools extends Record<string, Tool.Any>,
 	E,
@@ -204,99 +208,27 @@ export interface Stored<
 	readonly store: StoreService<Declaration, StoreE, StoreR, I>
 }
 
-/** Contract for building stateful plugins. The host provides the Store service separately. */
-export interface Factory {
-	readonly make: <
-		const I extends Id,
-		const Declaration extends StateDeclaration,
-		StoreE = Chat.ChatError,
-		StoreR = Context,
-	>(input: {
-		readonly id: I
-		readonly store: Declaration
-	}) => <
-		Tools extends Record<string, Tool.Any> = {},
-		E = never,
-		R = never,
-		BuildE = never,
-		BuildR = never,
-	>(
-		construct: (ctx: {
-			readonly store: StoreService<Declaration, StoreE, StoreR, I>
-		}) => Effect.Effect<Body<Tools, E, R>, BuildE, BuildR | Scope.Scope>,
-	) => Stored<Tools, E, R, Declaration, StoreE, StoreR, I, BuildE, BuildR>
-}
-
-/** Contract for composing schemas. PluginComposition provides the production factory. */
-export interface StateComposition {
-	readonly withStore: <
-		Tools extends Record<string, Tool.Any>,
-		E,
-		R,
-		I extends Id,
-		Declaration extends StateDeclaration,
-		States extends Stores = {},
-		BuildE = never,
-		BuildR = never,
-	>(
-		plugin: Plugin<Tools, E, R, BuildE, BuildR> &
-			Definition<I> & { readonly stores?: States },
-		state: Declaration,
-	) => Stateful<
-		Tools,
-		E,
-		R,
-		States & Readonly<Record<Brand.Brand.Unbranded<I>, Declaration>>,
-		I,
-		BuildE,
-		BuildR
-	>
-	readonly merge: <
-		Left extends Record<string, Tool.Any>,
-		Right extends Record<string, Tool.Any>,
-		LeftE,
-		LeftR,
-		RightE,
-		RightR,
-		LeftStates extends Stores,
-		RightStates extends Stores,
-		I extends Id,
-		LeftBuildE = never,
-		LeftBuildR = never,
-		RightBuildE = never,
-		RightBuildR = never,
-	>(
-		id: I,
-		left: Stateful<Left, LeftE, LeftR, LeftStates, Id, LeftBuildE, LeftBuildR>,
-		right: Stateful<
-			Right,
-			RightE,
-			RightR,
-			RightStates,
-			Id,
-			RightBuildE,
-			RightBuildR
-		>,
-	) => Effect.Effect<
-		Stateful<
-			Toolkit.MergedTools<[Toolkit.Toolkit<Left>, Toolkit.Toolkit<Right>]>,
-			LeftE | RightE,
-			LeftR | RightR,
-			LeftStates & RightStates,
-			I,
-			LeftBuildE | RightBuildE,
-			LeftBuildR | RightBuildR
-		>,
-		StoreConflict
-	>
-}
-
 export class StoreConflict extends Schema.TaggedError<
 	StoreConflict,
 	{ readonly brand: unique symbol }
 >()("Plugin.StoreConflict", { id: Id }) {}
 
-/** Parameters that each plugin maps before the final toolkit resolves its handlers. */
+/** The saved Turn and the next model step. Checks run before model or tool I/O. */
+export interface StepInput {
+	readonly turn: Turn.Record
+	readonly kind: "model" | "action"
+	readonly step: number
+	readonly history: Prompt.Prompt
+}
+
+/** A saved step result. Hooks can run again after a crash, so writes must deduplicate. */
+export interface StepResult extends StepInput {
+	readonly chat: Chat.Id
+	readonly output: Prompt.Prompt
+	readonly finishReason: Response.FinishReason
+}
+
+/** The step runner resolves these options once in its work scope. */
 export interface Options<
 	TK extends Toolkit.Any = Toolkit.Any,
 	E = never,
@@ -304,44 +236,26 @@ export interface Options<
 > extends Omit<BotOptions<Record<string, Tool.Any>>, "toolkit"> {
 	readonly toolkit: Effect.Effect<TK, E, R>
 	readonly instructions: Prompt.Prompt
+	/** False ends the Turn before the step. A failure keeps its typed cause. */
+	readonly beforeStep?: (input: StepInput) => Effect.Effect<boolean, E, R>
+	/** Runs after the model and tool results are saved, before the Turn may end. */
+	readonly afterStep?: (input: StepResult) => Effect.Effect<void, E, R>
 	/**
 	 * Changes the conversation that the model sees in each step. The stored history does not change.
 	 * It must keep the number of messages. Otherwise the runtime uses the conversation as it is.
-	 * A plugin that sets it must call the incoming function first, so that all changes add up.
+	 * The runner applies registered changes in order.
 	 */
 	readonly transformPrompt?: (
 		prompt: Prompt.Prompt,
 	) => Effect.Effect<Prompt.Prompt>
 }
 
-/** Continues with the mapped toolkit and keeps its construction errors and services. */
-export interface Next<E, R> {
-	<TK extends Toolkit.Any, ToolkitE, ToolkitR>(
-		options: Options<TK, ToolkitE, ToolkitR>,
-	): Stream.Stream<Event<Toolkit.MergedTools<[TK]>>, E | ToolkitE, R | ToolkitR>
-}
-
-/** Wraps a complete ReAct stream. Tools describes the definitions this middleware adds. */
-export interface Middleware<
-	Tools extends Record<string, Tool.Any> = {},
-	E = never,
-	R = never,
-> {
-	<InputE, InputR, NextE, NextR>(
-		next: Next<NextE, NextR>,
-		options: Options<Toolkit.Any, InputE, InputR>,
-	): Stream.Stream<
-		Event<Tools>,
-		InputE | NextE | E,
-		InputR | NextR | R | Context
-	>
-}
-
-/** Inference input for a middleware that forwards next generically. */
-type Body<Tools extends Record<string, Tool.Any>, E, R> = (
-	next: Next<never, never>,
-	options: Options,
-) => Stream.Stream<Event<Tools>, E, R | Context>
+/** A plugin registers tools, hooks and state. It does not own an execution stream. */
+type Body<Tools extends Record<string, Tool.Any>, E, R> = ToolRegistration<
+	Tools,
+	E,
+	R
+>
 
 /** The host provides tool handlers and the model separately. */
 export const ToolsTypeId: unique symbol = Symbol.for(
@@ -355,8 +269,8 @@ export class Plugin<
 	BuildR = never,
 > extends Data.TaggedClass("Plugin.Plugin")<{
 	readonly id: Id
-	readonly middleware: Effect.Effect<
-		Middleware<Tools, E, R>,
+	readonly register: Effect.Effect<
+		Body<Tools, E, R>,
 		BuildE,
 		BuildR | Scope.Scope
 	>
@@ -365,7 +279,7 @@ export class Plugin<
 	declare readonly [ToolsTypeId]?: Tools
 }
 
-const makeMiddleware = <
+const makeRegistration = <
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
 	R = never,
@@ -381,10 +295,7 @@ const makeMiddleware = <
 ): Plugin<Tools, E, R, BuildE, BuildR> =>
 	new Plugin({
 		id,
-		middleware: Effect.suspend(construct).pipe(
-			// The callback forwards next generically. Inference uses its empty error and service channels.
-			Effect.map((middleware) => middleware as Middleware<Tools, E, R>),
-		),
+		register: Effect.suspend(construct),
 	})
 
 export function make<I extends Id>(input: {
@@ -451,10 +362,10 @@ export function make<
 			)
 			// A spread would lose the methods of Plugin, such as `pipe`.
 			return Object.assign(
-				makeMiddleware(input.id, () => construct({ store })),
+				makeRegistration(input.id, () => construct({ store })),
 				{ store, stores: { [input.id]: definition } },
 			)
 		}
-		return makeMiddleware(input.id, () => construct())
+		return makeRegistration(input.id, () => construct())
 	}
 }

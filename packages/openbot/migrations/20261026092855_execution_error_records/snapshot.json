@@ -1,0 +1,152 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "509afd68-be72-41f8-92fb-7de619eb25d6",
+	"prevIds": ["5c9a6774-3d30-4a88-9eb3-4754957c7f98"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_execution_failures"],
+			"writes": [
+				"s|tbl|public.openbot_execution_failures",
+				"n|tbl|public.openbot_execution_failures",
+				"e|tbl|public.openbot_execution_failures",
+				"n|rel|public.openbot_execution_failures",
+				"n|type|public.openbot_execution_failures",
+				"n|rel|public.openbot_execution_failures_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_executions",
+				"openbot_executions_id"
+			],
+			"writes": [
+				"s|idx|public.openbot_executions_id",
+				"n|idx|public.openbot_executions_id",
+				"e|idx|public.openbot_executions_id",
+				"n|rel|public.openbot_executions_id"
+			],
+			"reads": [
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_executions.id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_execution_failures",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_failures",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_failures",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_failures",
+				"name": "cause",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_failures",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "openbot_executions_id",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_failures",
+				"name": "openbot_execution_failures_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

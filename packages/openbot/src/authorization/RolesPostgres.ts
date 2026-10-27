@@ -1,8 +1,9 @@
 import {
-	Authorization,
-	OrganizationApi,
-	Roles as RolesApi,
-} from "@openbot-build/api"
+	Organizations as OrganizationsModel,
+	Roles as RolesModel,
+} from "@openbot-build/domain"
+
+import { Authorization } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -18,7 +19,7 @@ import { roles } from "../database/Schema.ts"
 import { builtin, Roles, RolesUnavailable } from "./Roles.ts"
 import * as Db from "../database/Database.ts"
 
-const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
+const PolicyJson = Authorization.PolicySchema
 /** The policy column holds JSON that only this file writes, from a checked policy. */
 const encodePolicy = (policy: typeof PolicyJson.Type) =>
 	Schema.encodeEffect(PolicyJson)(policy).pipe(Effect.orDie)
@@ -26,11 +27,11 @@ const unavailable = (cause: unknown) => RolesUnavailable.make({ cause })
 
 const view = (
 	row: typeof roles.$inferSelect,
-): Effect.Effect<RolesApi.Role, RolesUnavailable> =>
+): Effect.Effect<RolesModel.Role, RolesUnavailable> =>
 	Schema.decodeEffect(PolicyJson)(row.policy).pipe(
 		Effect.mapError(unavailable),
 		Effect.map((policy) => ({
-			id: RolesApi.CustomRoleId.make(row.id),
+			id: RolesModel.CustomRoleId.make(row.id),
 			name: row.name,
 			description: row.description,
 			builtin: false,
@@ -44,8 +45,8 @@ export const make = Effect.gen(function* () {
 	const where = (organizationId: string, roleId: string) =>
 		and(eq(roles.organizationId, organizationId), eq(roles.id, roleId))
 	const readOnly = (roleId: string) =>
-		RolesApi.isBuiltinRole(roleId)
-			? Effect.fail(OrganizationApi.RoleReadOnly.make({ roleId }))
+		RolesModel.isBuiltinRole(roleId)
+			? Effect.fail(OrganizationsModel.RoleReadOnly.make({ roleId }))
 			: Effect.void
 
 	const custom = (organizationId: string) =>
@@ -63,7 +64,7 @@ export const make = Effect.gen(function* () {
 		list: (organizationId) =>
 			Effect.map(custom(organizationId), (custom) => [...builtin, ...custom]),
 		get: (organizationId, roleId) =>
-			RolesApi.isBuiltinRole(roleId)
+			RolesModel.isBuiltinRole(roleId)
 				? Effect.succeed(Arr.findFirst(builtin, (role) => role.id === roleId))
 				: db
 						.select()
@@ -111,7 +112,7 @@ export const make = Effect.gen(function* () {
 					.returning()
 					.pipe(Effect.mapError(unavailable))
 				if (row === undefined)
-					return yield* OrganizationApi.RoleNotFound.make({
+					return yield* OrganizationsModel.RoleNotFound.make({
 						roleId,
 					})
 				return yield* view(row)
@@ -125,7 +126,7 @@ export const make = Effect.gen(function* () {
 					.returning({ id: roles.id })
 					.pipe(Effect.mapError(unavailable))
 				if (deleted.length === 0)
-					return yield* OrganizationApi.RoleNotFound.make({
+					return yield* OrganizationsModel.RoleNotFound.make({
 						roleId,
 					})
 			}),

@@ -1,11 +1,13 @@
 import { Settings as SettingsApi } from "@openbot-build/api"
+
+import { AuthApi } from "@openbot-build/api"
+
 import {
 	Account,
 	type AccountCaller,
-	AuthApi,
 	type Caller,
 	Identity,
-} from "@openbot-build/api"
+} from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Effect,
@@ -25,7 +27,7 @@ import {
 import { Tokens } from "./Tokens.ts"
 import { Auth } from "./Auth.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
-import * as Failures from "../app/Failures.ts"
+import * as Failures from "../errors/Failures.ts"
 import { Organization } from "../organization/Organization.ts"
 import { RateLimiter } from "../billing/RateLimit.ts"
 import * as Platform from "../settings/Platform.ts"
@@ -108,7 +110,7 @@ export const layerSessionAuth = Layer.effect(
 		return {
 			session: (httpEffect, { credential }) =>
 				auth.resolveSession(credential).pipe(
-					Effect.mapError(publicError),
+					Failures.map("The session could not be read.", publicError),
 					Effect.flatMap(({ setCookies, ...session }) =>
 						Effect.andThen(
 							setSessionCookies(setCookies),
@@ -194,7 +196,7 @@ const resolveCookie = (
 			request.headers["origin"] !== publicOrigin
 		const session = yield* auth
 			.resolveSession(credential, { refresh: !forbiddenOrigin })
-			.pipe(Effect.mapError(publicError))
+			.pipe(Failures.map("The session could not be read.", publicError))
 		if (forbiddenOrigin) return yield* AuthApi.ForbiddenOrigin.make({})
 		yield* setSessionCookies(session.setCookies)
 		return { request, session }
@@ -220,7 +222,7 @@ const activeToken = (
 				),
 			),
 		),
-		Effect.mapError(publicError),
+		Failures.map("The token could not be read.", publicError),
 	)
 
 /**
@@ -235,13 +237,28 @@ export const layerBotAuth = Layer.effect(
 		const tokens = yield* Tokens
 		const organization = yield* Organization
 		const limiter = yield* RateLimiter
+		const hit = (caller: Caller) =>
+			limiter.hit(caller).pipe(
+				Effect.mapError((error) =>
+					AuthApi.RateLimited.make({
+						retryAfterSeconds: error.retryAfterSeconds,
+					}),
+				),
+			)
+		// Effect tries the next credential after a middleware error. An active
+		// caller over its limit needs a final response, so no other key is tried.
+		const limited = (error: AuthApi.RateLimited) =>
+			HttpServerResponse.schemaJson(AuthApi.RateLimited)(error, {
+				status: 429,
+			}).pipe(Effect.orDie)
 		return {
 			token: (httpEffect, { credential }) =>
 				activeToken(tokens, organization, credential).pipe(
-					Effect.tap(limiter.hit),
+					Effect.tap(hit),
 					Effect.flatMap((caller) =>
 						Effect.provideService(httpEffect, Identity, caller),
 					),
+					Effect.catchTag("RateLimited", limited),
 				),
 			session: (httpEffect, { credential }) =>
 				Effect.gen(function* () {
@@ -264,9 +281,9 @@ export const layerBotAuth = Layer.effect(
 						userId: session.userId,
 						organizationId,
 					}
-					yield* limiter.hit(caller)
+					yield* hit(caller)
 					return yield* Effect.provideService(httpEffect, Identity, caller)
-				}),
+				}).pipe(Effect.catchTag("RateLimited", limited)),
 		}
 	}),
 )
@@ -283,14 +300,7 @@ export const layerAccountAuth = Layer.effect(
 			token: (httpEffect, { credential }) =>
 				activeToken(tokens, organization, credential).pipe(
 					Effect.flatMap((caller) => {
-						const account: AccountCaller = {
-							kind: "user_token",
-							userId: caller.userId,
-							organizationId: caller.organizationId,
-							...(caller.tokenId === undefined
-								? {}
-								: { tokenId: caller.tokenId }),
-						}
+						const account: AccountCaller = caller
 						return Effect.provideService(httpEffect, Account, account)
 					}),
 				),

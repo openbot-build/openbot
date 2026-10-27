@@ -1,0 +1,350 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "1dde1a40-9d24-460a-8765-1436cb182b32",
+	"prevIds": ["db15da60-03a4-4044-8d3e-7f24d69dd316"],
+	"footprints": [
+		{
+			"statementType": "drop_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_execution_commands",
+				"openbot_execution_commands_key"
+			],
+			"writes": [
+				"s|idx|public.openbot_execution_commands_key",
+				"n|idx|public.openbot_execution_commands_key",
+				"e|idx|public.openbot_execution_commands_key",
+				"n|rel|public.openbot_execution_commands_key"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_commands",
+				"n|sch|public",
+				"e|col|public.openbot_execution_commands.namespace",
+				"e|col|public.openbot_execution_commands.organization_id",
+				"e|col|public.openbot_execution_commands.user_id",
+				"e|col|public.openbot_execution_commands.key"
+			],
+			"sharedWrites": [
+				"e|uniqueness|public.openbot_execution_commands.key.namespace.organization_id.user_id"
+			]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_commands",
+				"principal_kind"
+			],
+			"writes": [
+				"s|col|public.openbot_execution_commands.principal_kind",
+				"n|col|public.openbot_execution_commands.principal_kind",
+				"e|col|public.openbot_execution_commands.principal_kind"
+			],
+			"reads": ["n|tbl|public.openbot_execution_commands", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_commands",
+				"service_id"
+			],
+			"writes": [
+				"s|col|public.openbot_execution_commands.service_id",
+				"n|col|public.openbot_execution_commands.service_id",
+				"e|col|public.openbot_execution_commands.service_id"
+			],
+			"reads": ["n|tbl|public.openbot_execution_commands", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_executions",
+				"principal_kind"
+			],
+			"writes": [
+				"s|col|public.openbot_executions.principal_kind",
+				"n|col|public.openbot_executions.principal_kind",
+				"e|col|public.openbot_executions.principal_kind"
+			],
+			"reads": ["n|tbl|public.openbot_executions", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_executions",
+				"service_id"
+			],
+			"writes": [
+				"s|col|public.openbot_executions.service_id",
+				"n|col|public.openbot_executions.service_id",
+				"e|col|public.openbot_executions.service_id"
+			],
+			"reads": ["n|tbl|public.openbot_executions", "n|sch|public"]
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_commands",
+				"organization_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_execution_commands.organization_id.notNull"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_commands",
+				"n|sch|public",
+				"n|col|public.openbot_execution_commands.organization_id"
+			],
+			"sqlHash": "030b93ceeb8cf0a7"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_commands",
+				"user_id"
+			],
+			"writes": ["s|colprop|public.openbot_execution_commands.user_id.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_execution_commands",
+				"n|sch|public",
+				"n|col|public.openbot_execution_commands.user_id"
+			],
+			"sqlHash": "a49168716439893d"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_executions",
+				"organization_id"
+			],
+			"writes": ["s|colprop|public.openbot_executions.organization_id.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_executions.organization_id"
+			],
+			"sqlHash": "7b265dc13d75a5bf"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": ["column", "public", "openbot_executions", "user_id"],
+			"writes": ["s|colprop|public.openbot_executions.user_id.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_executions.user_id"
+			],
+			"sqlHash": "8fbb805bf83414d2"
+		},
+		{
+			"statementType": "add_unique",
+			"statementTarget": ["table", "public", "openbot_execution_commands"],
+			"writes": [
+				"s|uq|public.openbot_execution_commands.openbot_execution_commands_key",
+				"n|uq|public.openbot_execution_commands.openbot_execution_commands_key",
+				"e|uq|public.openbot_execution_commands.openbot_execution_commands_key",
+				"n|con|public.openbot_execution_commands.openbot_execution_commands_key",
+				"n|rel|public.openbot_execution_commands_key"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_commands",
+				"n|sch|public",
+				"n|col|public.openbot_execution_commands.namespace",
+				"n|col|public.openbot_execution_commands.principal_kind",
+				"n|col|public.openbot_execution_commands.organization_id",
+				"n|col|public.openbot_execution_commands.user_id",
+				"n|col|public.openbot_execution_commands.service_id",
+				"n|col|public.openbot_execution_commands.key"
+			]
+		},
+		{
+			"statementType": "add_check",
+			"statementTarget": ["table", "public", "openbot_execution_commands"],
+			"writes": [
+				"s|ck|public.openbot_execution_commands.openbot_execution_commands_principal",
+				"n|ck|public.openbot_execution_commands.openbot_execution_commands_principal",
+				"e|ck|public.openbot_execution_commands.openbot_execution_commands_principal",
+				"n|con|public.openbot_execution_commands.openbot_execution_commands_principal"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_commands",
+				"n|sch|public",
+				"n|col|public.openbot_execution_commands.principal_kind",
+				"n|col|public.openbot_execution_commands.organization_id",
+				"n|col|public.openbot_execution_commands.user_id",
+				"n|col|public.openbot_execution_commands.service_id"
+			]
+		},
+		{
+			"statementType": "add_check",
+			"statementTarget": ["table", "public", "openbot_executions"],
+			"writes": [
+				"s|ck|public.openbot_executions.openbot_executions_principal",
+				"n|ck|public.openbot_executions.openbot_executions_principal",
+				"e|ck|public.openbot_executions.openbot_executions_principal",
+				"n|con|public.openbot_executions.openbot_executions_principal"
+			],
+			"reads": [
+				"n|tbl|public.openbot_executions",
+				"n|sch|public",
+				"n|col|public.openbot_executions.principal_kind",
+				"n|col|public.openbot_executions.organization_id",
+				"n|col|public.openbot_executions.user_id",
+				"n|col|public.openbot_executions.service_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_commands",
+				"name": "principal_kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "'member'",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_commands",
+				"name": "service_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "principal_kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "'member'",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "service_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_commands",
+				"name": "openbot_execution_commands_key",
+				"nameExplicit": true,
+				"columns": [
+					"namespace",
+					"principal_kind",
+					"organization_id",
+					"user_id",
+					"service_id",
+					"key"
+				],
+				"nullsNotDistinct": true,
+				"entityType": "uniques"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_commands",
+				"name": "openbot_execution_commands_principal",
+				"value": "(\n\t\t\t\"principal_kind\" = 'member' and \"organization_id\" is not null\n\t\t\tand \"user_id\" is not null and \"service_id\" is null\n\t\t) or (\n\t\t\t\"principal_kind\" = 'service' and \"user_id\" is null\n\t\t\tand \"service_id\" is not null\n\t\t)",
+				"entityType": "checks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_executions",
+				"name": "openbot_executions_principal",
+				"value": "(\n\t\t\t\"principal_kind\" = 'member' and \"organization_id\" is not null\n\t\t\tand \"user_id\" is not null and \"service_id\" is null\n\t\t) or (\n\t\t\t\"principal_kind\" = 'service' and \"user_id\" is null\n\t\t\tand \"service_id\" is not null\n\t\t)",
+				"entityType": "checks"
+			}
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_execution_commands_key\"]"
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_execution_commands\",\"organization_id\"]",
+			"set": {
+				"notNull": false
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_execution_commands\",\"user_id\"]",
+			"set": {
+				"notNull": false
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_executions\",\"organization_id\"]",
+			"set": {
+				"notNull": false
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_executions\",\"user_id\"]",
+			"set": {
+				"notNull": false
+			}
+		}
+	]
+}

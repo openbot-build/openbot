@@ -1,0 +1,22 @@
+---
+title: "实时模型"
+description: "实时模型"
+---
+
+面向平台运维人员。
+
+## 添加 Live 模型
+
+Live 模型是类型为 `live`
+的模型。添加它，并把它关联到一个有 Live 后端的提供方。目前只有 `openai`
+提供方有 Live 后端：OpenAI Realtime API。见[模型](/zh-cn/docs/models)。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": "gpt-realtime", "type": "live", "name": "GPT Realtime", "reasoningEfforts": [], "serviceTiers": [] }' \
+  https://api.example.com/v1/organization/models
+```
+
+然后把 `gpt-realtime` 关联到一个 `openai`
+提供方。Live 模型从不运行文字 Turn，文字 Chat 也不能选择它。

@@ -1,5 +1,5 @@
 import type { Live, Model, Provider } from "@openbot-build/core"
-import type { ModelProvidersApi } from "@openbot-build/api"
+import type { Models as ModelsModel } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Context,
@@ -17,7 +17,7 @@ import type { Stored } from "./ModelProviders.ts"
  * `layer`. Nothing else in OpenBot needs to change.
  */
 export interface LiveBackend {
-	readonly kind: ModelProvidersApi.ProviderKind
+	readonly kind: ModelsModel.ProviderKind
 	readonly make: (input: {
 		readonly provider: Stored
 		readonly apiKey: Redacted.Redacted<string>
@@ -31,9 +31,7 @@ export interface LiveBackend {
 export class LiveBackends extends Context.Service<
 	LiveBackends,
 	{
-		readonly get: (
-			kind: ModelProvidersApi.ProviderKind,
-		) => Option.Option<LiveBackend>
+		readonly get: (kind: ModelsModel.ProviderKind) => Option.Option<LiveBackend>
 	}
 >()("@openbot-build/openbot/models/LiveBackends") {}
 

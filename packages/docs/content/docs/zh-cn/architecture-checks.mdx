@@ -1,0 +1,171 @@
+---
+title: 执行设计验收
+description: 执行重设计的产品覆盖、故障检查及发布所需证据。
+---
+
+本页将[执行设计](/zh-cn/docs/architecture)对应到源代码测试和发布检查。源码核对日期为 2026-10-28。这里列出的测试是**源码证据，不是测试通过记录**。每次发布检查应记录版本、命令、结果和日志。命令和测试服务的限制见
+[端到端检查](/zh-cn/docs/developers/testing)。
+
+## 如何阅读本表
+
+本次改动记录的起点是 581 项测试。测试数量增加，不能证明旧行为全部保留。现在测试分布在各源码包和
+`packages/e2e`
+中。测试移动或删除时，应保留原断言、它的新位置，或已获准的行为变更说明。
+
+`packages/e2e/scenarios.json`
+详细记录用户任务的断言。它包含 22 个任务组，区分正常、边界和极端场景。空列表不表示已覆盖。本页补充统一执行和数据迁移检查。
+
+表中使用以下路径前缀：
+
+- `E/` 表示 `packages/e2e/test/`。
+- `S/` 表示 `packages/openbot/test/`。
+- 其他路径从项目根目录开始。
+
+测试可能使用真实数据库和固定模型回复，也可能使用真实 HTTP 服务和测试工作流，或完整服务器。这些测试的范围不同。服务 Layer 重启不等于进程崩溃。同一进程中的两个服务对象也不等于两个服务器进程。
+
+## 基线追踪
+
+`packages/e2e/baseline.json` 为版本 `2a123ffae6f5aea2cfa02f36975efbacc83f1305`
+的每个基线测试声明保留一行。它将 142 个文件中的 566 个声明与当前源码比较。记录中的 581 项是运行用例数；循环和参数化测试可以把一个声明展开成多个用例。两种数量不能混用。
+
+源码快照中，371 个测试回调未变，另有 46 个测试保留全部直接断言的语法。59 个同名测试改变了断言，90 个测试需要对应到改名或替代用例。追踪表保留删除的断言文本、当前测试名称和核对说明。语法相同不证明共享测试环境未变，也不证明测试已经通过。后续修改代码后应重新核对此快照。
+
+部分变化遵循已批准的设计：Turn 持有资源，命令返回执行回执，内部原因加密保存，权限列表过滤资源，审计写入失败时决策一起回滚。Computer 恢复是显式保存的动作。记忆不能在没有来源证据时扩大可见范围。等待决策锁时过期的请求不能授予权限。这些是已记录的变化，不代表旧行为完全相同。
+
+`S/MemoryModels.test.ts`
+检查预算耗尽时的回复、零模型发送、许可释放、加密原因，以及移除预算后成功调用。`S/TokenThrottle.test.ts`
+检查 40 个不同片段拼接后的完整文本。`S/ToolCommands.test.ts`
+保留委派的两个时间边界：提前唤醒后保留原截止时间；接管已超时工作时立即暂停，不再等待。
+
+B463 对应 `S/ExecutionStore.test.ts`
+中密文、JSON 和身份损坏的三项用例，检查存储错误、修复，以及真正缺失的记录。B202 对应
+`E/chat/ExecutionResources.test.ts`：工具构建失败会关闭作用域、保存错误 ID，并允许下一个 Turn 成功。B241 对应
+`E/chat/ChatRecovery.test.ts`：损坏的 Chat 不会阻止另一个 Chat 恢复或接收新输入。
+
+App、Channel、Computer、Live、Code
+Mode 和 Vault 的映射检查持久回执、清理子执行、安全错误分类及 ID，以及资源归属。
+`additionalCurrentChecks` 单列新增的 Pairing 和 Workflow
+API 用例，不计入 566 个历史声明。Pairing 等待持久删除结果；cookie 和 token 在请求进入等待状态后比较完整记录。每个映射用例都关联到
+`validationRuns` 中已通过的本地运行；各次运行的范围不同。
+
+## 产品覆盖
+
+每行列出需要保留的行为和可核对的测试。下一节的故障检查适用于这些功能。
+
+| 能力及指南                                                                                                      | 源码测试                                                                                                                                                                                                   | 源码中检查的行为                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [API 访问](/zh-cn/docs/authentication)、[客户端](/zh-cn/docs/client)和[命令](/zh-cn/docs/developers/quickstart) | `E/api-access/ApiE2E.test.ts`, `E/api-access/Tokens.test.ts`, `packages/client/test/Executions.test.ts`, `E/cli/Commands.test.ts`, `E/cli/Dispatch.test.ts`, `E/cli/Pairing.test.ts`                       | Cookie 来源检查、token 权限、写入结果一致、命令键重试、构建后命令分派和 Computer 配对。路由访问检查不能证明每项有效业务任务都能完成。 |
+| [Bot](/zh-cn/docs/bots)和[共享](/zh-cn/docs/sharing)                                                            | `E/bot-work/Bots.test.ts`, `E/bot-work/BotSharing.test.ts`                                                                                                                                                 | 私有及共享 Bot、成员各自的 Chat、邀请、记忆归属和删除。                                                                               |
+| [Chat](/zh-cn/docs/chats)                                                                                       | `E/chat/ChatCommands.test.ts`, `E/chat/ChatQueries.test.ts`, `E/chat/ChatControl.test.ts`, `S/InputCommands.test.ts`, `S/TurnPersistence.test.ts`                                                          | 输入顺序、steering、同时只准许一个 Turn 推进、版本冲突、保存模型和工具结果、资源释放后停止或删除。                                    |
+| [工具](/zh-cn/docs/developers/chats)和后台工作                                                                  | `E/chat/HostTools.test.ts`, `E/chat/HostToolStorage.test.ts`, `S/ToolCommands.test.ts`                                                                                                                     | 保存的工具定义、独立后台工作、取消和结果送回原 Chat。                                                                                 |
+| [审批](/zh-cn/docs/requests)、[规则](/zh-cn/docs/rules)和计划                                                   | `E/approve-tool-calls/HostTools.test.ts`, `E/bot-work/Work.test.ts`, `S/RequestCommands.test.ts`                                                                                                           | 等待审批时 Turn 可以结束。决策、Grant、审计、通知和计划模式更改一起提交。                                                             |
+| [委派](/zh-cn/docs/delegation)和限额                                                                            | `E/bot-work/Delegation.test.ts`, `E/bot-work/WorkflowApiE2E.test.ts`, `S/ToolCommands.test.ts`, `S/DelegationUsage.test.ts`                                                                                | 独立子工作、父级通知、嵌套取消、暂停、时间/步骤/费用限制和私有任务历史。                                                              |
+| [记忆](/zh-cn/docs/memory)                                                                                      | `E/chat-recovery/DevelopmentMemory.test.ts`, `E/bot-work/Bots.test.ts`, `S/MemoryModels.test.ts`, `S/ExecutionPermits.test.ts`, `S/MemoryEvidence.test.ts`                                                 | 学习及保存的证据、归属隔离、重放、限额变化、排队超时和数据库共享准入。                                                                |
+| [Code Mode](/zh-cn/docs/code-mode)                                                                              | `E/run-code/CodeModeApi.test.ts`, `S/CodeMode.test.ts`, `S/VaultCode.test.ts`, `S/ToolCommands.test.ts`                                                                                                    | 沙箱限制、固定时间和随机值、调用顺序、保存结果、密钥引用和拒绝旧执行者。                                                              |
+| [App](/zh-cn/docs/apps)和 OAuth                                                                                 | `E/connect-apps/AppAuthorization.test.ts`, `E/connect-apps/AppLifecycleApi.test.ts`, `E/connect-apps/AppConnectionsApi.test.ts`, `S/AuthorizationCommands.test.ts`, `S/ConnectionCommands.test.ts`         | 发现、手动凭据、PKCE、签发方检查、授权码交换、刷新、撤销、移除、重置和当前连接归属。                                                  |
+| [发布](/zh-cn/docs/developer-tools)、[索引](/zh-cn/docs/app-index)和 App View                                   | `E/publish-apps/DeveloperCenter.test.ts`, `E/connect-apps/IndexWork.test.ts`, `E/connect-apps/AppViews.test.ts`, `S/TestCommands.test.ts`, `S/TestCleanup.test.ts`, `S/ProofCommands.test.ts`              | 证明、报告、成员权限、测试 OAuth、清理、索引列表、通知及 View 的有效期和访问检查。                                                    |
+| [Channel](/zh-cn/docs/channels)                                                                                 | `E/connect-channels/Channels.test.ts`, `E/connect-channels/ChannelAuthority.test.ts`, `E/connect-channels/ChannelRecovery.test.ts`, `S/ChannelCalls.test.ts`, `S/ChannelRemoval.test.ts`                   | 发言人身份、输入去重、保存发送结果、未知结果，以及等待全部关联投递版本结束后删除。                                                    |
+| [触发器](/zh-cn/docs/triggers)和提醒                                                                            | `E/triggers/Triggers.test.ts`, `E/bot-work/Work.test.ts`, `S/Reminders.test.ts`                                                                                                                            | 定时和 webhook 输入、保留原 token 身份、持久计时、提醒恢复和取消。                                                                    |
+| [Computer](/zh-cn/docs/computers)和 Connector                                                                   | `E/connect-computers/Computers.test.ts`, `E/connect-computers/Connectors.test.ts`, `E/connect-computers/ComputerQueries.test.ts`, `S/ResourceTransport.test.ts`, `packages/computer/test/Sessions.test.ts` | 配对、按资源权限过滤列表、终端会话、路由到持有者、有序输出和未知交互结果。                                                            |
+| [Live 会话](/zh-cn/docs/live)                                                                                   | `E/live-chat/Live.test.ts`, `S/LiveConnections.test.ts`, `S/OpenAiRealtime.test.ts`, `packages/core/test/LiveDriver.test.ts`                                                                               | 供应商事件、实时工具、关闭连接、取消和实时连接丢失。                                                                                  |
+| [文件](/zh-cn/docs/files)                                                                                       | `E/files/Files.test.ts`, `S/FileTasks.test.ts`, `S/S3.test.ts`                                                                                                                                             | 上传、模型附件、对象引用、保留策略、原子删除任务和拒绝旧执行者。                                                                      |
+| [Vault](/zh-cn/docs/vaults)                                                                                     | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `S/SecretFiles.test.ts`                                                                                                     | 允许的字段、加密值、归属和 token 限制、缺失密钥，以及调用边界上的密钥解析。                                                           |
+| [模型](/zh-cn/docs/models)                                                                                      | `E/use-models/Cloudflare.test.ts`, `S/OpenAi.test.ts`, `S/Anthropic.test.ts`, `S/OpenAiCompat.test.ts`, `S/ModelRegistry.test.ts`                                                                          | 供应商格式、模型选择、流、配置变更和可选的真实模型路径。真实模型测试需要显式环境设置。                                                |
+| [用量与计费](/zh-cn/docs/usage)                                                                                 | `E/bot-work/Billing.test.ts`, `S/BillingPostgres.test.ts`, `S/BillingUnknown.test.ts`, `S/MeteredModel.test.ts`                                                                                            | 价格、余额、预算、共享预留、确认用量结算、未知用量和迟到回执。                                                                        |
+| [组织](/zh-cn/docs/organization)、[SSO](/zh-cn/docs/sso)和[平台配置](/zh-cn/docs/platform)                      | `E/organizations/Organization.test.ts`, `E/sign-in/Oidc.test.ts`, `E/admin-settings/AdminApiE2E.test.ts`, `E/admin-settings/PlatformApi.test.ts`                                                           | 成员、邀请、账户隔离、登录、密钥提示及 cookie/token 管理入口。                                                                        |
+| [权限](/zh-cn/docs/permissions)和[错误](/zh-cn/docs/error-logs)                                                 | `S/TurnAccess.test.ts`, `S/RequestCommands.test.ts`, `S/ExecutionHttp.test.ts`, `S/ErrorRecords.test.ts`, `E/chat/TurnFailures.test.ts`                                                                    | 读取和发送前的当前权限、按资源权限过滤列表、安全公开错误和加密内部原因。                                                              |
+| 独立的 [core 和 protocol](/zh-cn/docs/packages)                                                                 | `packages/core/test/Runtime.test.ts`, `packages/core/test/Persistence.test.ts`, `packages/protocol/test/Sdk.test.ts`, `E/protocol-service/Service.test.ts`                                                 | 不依赖 OpenBot 服务器的模型/工具循环和协议使用。core 的内存执行不承诺进程恢复。                                                       |
+| [服务器](/zh-cn/docs/server)、[部署](/zh-cn/docs/deploy)和文档                                                  | `E/start-server/DevelopmentEntry.test.ts`, `E/read-docs/Docs.test.ts`, `deploy/docker/check.sh`                                                                                                            | 构建后入口、本地部署、全部主页语言、三语手册、生成的 API 页面和本地链接。                                                             |
+
+## 故障与恢复覆盖
+
+这些源码检查需要在最终版本上运行。列出用例是为了核对断言，不只是统计文件。
+
+| ID  | 必需规则                                                 | 具体源码证据及范围                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F01 | 第二节点接管保存的工作；成员和服务工作使用同一规则。     | `S/ExecutionCluster.test.ts`：`another process takes over ${kind} work from a saved step`；两个操作系统进程、PostgreSQL、杀死持有者、决策、取消和迟到结果。`S/TurnCluster.test.ts` 检查已保存的模型结果。`S/FullServerCluster.test.ts` 使用固定模型和工具适配器启动两个完整服务器装配，检查公开 token/cookie 命令、观察、审批、取消、杀死持有者及 Chat 检查点数据库断连。其子进程入口导入服务器源码，并非构建后的发布入口。 |
+| F02 | 命令去重，旧代次不能提交。                               | `S/ExecutionStore.test.ts`：`a later owner stops writes from an old generation`。`S/InputCommands.test.ts`：`retries and concurrent input admit one Turn` 和 `an event failure rolls back input and its execution`。                                                                                                                                                                                                        |
+| F03 | 区分未发送、结果丢失、安全重试和未知写入。               | `S/ExecutionExternal.test.ts` 使用两个操作系统进程和真实 HTTP 写入端点。在发送前或回复后停止，分别检查支持和不支持供应商幂等键的情况；迟到结果用例通过 `SIGSTOP` 暂停真实持有者，终止其 PostgreSQL 连接，并在接管后恢复它。另一用例检查权限撤销。`S/ExecutionCalls.test.ts` 在数据库重试保存时保留已知结果。                                                                                                                |
+| F04 | 读取者恢复缺口、遗漏通知、重试和终态。                   | `S/ExecutionObservation.test.ts`：慢读取超过 128 个事件、杀死真实 PostgreSQL 监听连接、两个真实进程按游标读取、重连后模型 attempt 保持独立。`S/ExecutionStore.test.ts`：`an observer can read the end again and stop at its cursor`。                                                                                                                                                                                       |
+| F05 | 恢复的工作不能扩大权限。                                 | `S/TurnAccess.test.ts` 检查撤销或过期 token、Channel 身份变化和审核权限。`S/RequestCommands.test.ts` 在建立 Grant 前检查当前限制。`S/ExecutionAuthority.test.ts` 隔离成员与服务工作。`S/ExecutionHttp.test.ts` 覆盖公开读取和命令。                                                                                                                                                                                         |
+| F06 | 完整原因保持私密，秘密不进入引擎消息。                   | `S/ErrorRecords.test.ts` 检查加密原因和错误记录器自身失败。`S/ExecutionCluster.test.ts` 与 `S/ExecutionExternal.test.ts` 检查引擎消息。`E/bot-work/Bots.test.ts` 检查多类保存记录中是否含有选定的记忆明文。                                                                                                                                                                                                                 |
+| F07 | 只结算已确认用量，且只结算一次。                         | `S/BillingPostgres.test.ts`：`takeover keeps old estimates and late usage commits with its result`。`S/BillingUnknown.test.ts`：`unknown usage releases platform credits and late receipts charge once`，以及零值、缺失和偏低估算。`S/ExecutionCalls.test.ts` 检查未知用量的重放。                                                                                                                                          |
+| F08 | 释放需要保存的物理结果；传输丢失不表示成功。             | `S/ResourceTransport.test.ts` 覆盖保存的关闭结果、全部 App 作用域和 Connector 输出。`S/ResourceProcesses.test.ts` 使用两个操作系统进程、PostgreSQL 和真实 TCP 对端，检查持有者被杀死、缓慢关闭、HTTP 回复丢失、数据库网络断开和替换后的迟到关闭。`S/ExecutionCalls.test.ts` 检查取消或暂停时释放失败。资源进程运行真实传输服务，但不是完整 OpenBot 应用。                                                                   |
+| F09 | 共享准入跨服务实例和接管计算占用。                       | `S/ExecutionPermits.test.ts` 检查两个 permit 服务、16 个执行上的 32 个作用域、排队取消、旧代次、截止时间和暂停/释放。`S/ExecutionPermitProcesses.test.ts` 增加两个 Node 进程、共享的 32 个任务且许可峰值为两个、暂停持有者并终止数据库连接、截止时间后接管、旧持有者释放、取消和进程关闭。它们是许可服务进程，不是完整服务器。                                                                                              |
+| F10 | 删除期间不能接收新工作，子工作关闭前不能完成。           | `S/ChannelRemoval.test.ts`：`Channel removal closes admission and waits for every delivery version`；包含不同成员、旧持有者、待释放资源和未知结果。`E/chat/ChatControl.test.ts` 检查并发删除 Chat。                                                                                                                                                                                                                         |
+| F11 | OAuth 清理在成员失去权限后继续，且不能撤销已安装的授权。 | `S/AuthorizationCommands.test.ts` 检查授权结果归属和清理。`S/TestCleanup.test.ts`：`cleanup keeps its owner, private data, and grant reservation across takeover`。`S/ConnectionCommands.test.ts` 检查连接只有一个当前写入者。                                                                                                                                                                                              |
+
+阅读故障检查时，应区分以下范围：
+
+- **A01 — 完整服务器故障转移：** `S/FullServerCluster.test.ts`
+  覆盖两个完整服务器装配。构建后的发布入口及部署检查是另一组证据。E2E 清单中的
+  `full-server-failover` 项应关联这些源码进程检查。
+- **A02 — 业务检查点：**
+  完整服务器用例在 Chat 检查点切断 PostgreSQL 连接，检查恢复后只有一份保存的模型结果、Turn 和事件集。
+  `S/InputCommands.test.ts` 检查回滚和输入准入；`E/chat/ChatRecovery.test.ts`
+  检查恢复后接收新输入。
+- **A03 — 物理持有者与共享限额：**
+  资源和许可测试使用独立服务进程，覆盖网络断连、关闭回复丢失和旧持有者迟到释放。未知交互结果保持未知，音频不重放。客户端断连不能证明供应商已停止。
+- **A04 — 旧数据：** `S/MigrationRehearsal.test.ts`
+  从基线结构和保存的记录开始，检查转换、重复运行、批次中断、当前读取和新 Chat 输入。仅使用新数据库不能覆盖这些行为。
+- **A05 — 版本证据：**
+  记录源码版本及各次运行范围，明确列出可选或跳过的检查。接受测试数量变化前，比较变更和删除的基线断言。
+
+## 旧路径与替代实现
+
+源码树已有以下删除。发布差异中应同时核对被删除入口及其调用方。仅用于迁移的 codec 不是活动执行器。独立的
+`core` runtime 是保留的库能力。
+
+| `packages/openbot/src/` 下删除的路径                                                                                                     | 当前需要核对的路径                                                                            | 简化规则的证据                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `chats/ChatHost.ts`, `chats/TurnWorkflow.ts`, `execution/RunScope.ts`                         | 不再有逐成员 Chat runtime、引用计数包装、`keepOpen`、`current` 回调或逐方法代理。Turn 持有自己的作用域。     |
+| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `apps/AppCommands.ts`, `apps/AppWorkflow.ts`, `execution/Calls.ts`                            | App 工作使用共同的调用意图、attempt、保存结果和决策。发现返回描述。                                          |
+| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `code/CodeCommands.ts`, `code/CodeWorkflow.ts`, `database/conversion/LegacyV1.ts`             | 沙箱重放使用共同调用日志。旧租约存储和过期运行扫描已删除。数据迁移用专用 codec 读取旧记录。                  |
+| `chats/ChatEvents.ts` 和旧 Chat SSE Schema                                                                                               | `execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                               | 持久执行事件替代本地事件队列、序号计数器和结束标记。所有调用方使用同一事件契约。                             |
+| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `execution/Store.ts`, `execution/Observation.ts`, `chats/ToolCommands.ts`                     | 不再有旧 Operation 监听器、取消通知循环或过期 Operation 扫描。`packages/api/src/OperationsApi.ts` 也已删除。 |
+| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `chats/ExecutionFeatures.ts`, `bots/DelegationCommands.ts`, `capabilities/RequestCommands.ts` | 执行作用域管理 Gate 和审批。委派工作流管理限额。请求逐条到期关闭。                                           |
+| 开发测试运行 FiberMap 和启动时重置运行                                                                                                   | `apps/TestCommands.ts`, `apps/TestWorkflow.ts`, `apps/TestCleanupWorkflow.ts`                 | 保存的命令和检查代次的结果控制运行与清理。连接缓存不管理测试生命周期。                                       |
+| 记忆辅助任务队列和节点本地模型 semaphore                                                                                                 | `bots/MemoryWorkflow.ts`, `bots/MemoryModels.ts`, `execution/Permits.ts`                      | 共同工作流负责恢复。数据库 permit 负责准入。                                                                 |
+
+`scripts/effect-rules.ts` 检查 `domain-boundary`、
+`storage-contract-boundary`、`standalone-boundary`、`assembly-boundary` 和
+`public-entry`。`pnpm typecheck`
+运行这些规则。它们检查导入关系，本身不能找出所有第二套执行器或恢复循环。新增 worker、计时器、锁和 RPC
+handler 仍需按统一设计审查。
+
+## 数据迁移检查
+
+[部署指南](/zh-cn/docs/deploy)说明维护顺序和密钥配置。 `S/DataUpgrade.test.ts`
+检查空数据库、维护与活动服务器互斥、批次回滚与续跑，以及导入历史不会启动外部工作。这些是基础检查。
+
+`S/MigrationRehearsal.test.ts`
+从旧结构和记录开始，与各领域转换测试一起检查以下内容，全部通过后才打开启动门禁：
+
+| 保存的数据                                            | 必需检查                                                                                               |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Chat、Turn、排队输入、工具、审批、委派和 Code Mode    | 保留 ID、历史、顺序、归属、限额和决策。待处理工作关联执行。缺失调用人证据不能产生新权限。              |
+| App、OAuth、开发测试、索引工作、Channel、触发器和提醒 | 保留连接和证明 ID、加密授权及流程、原调用人证据、计时器、待投递通知和发送结果。旧未知写入保持未知。    |
+| 文件、Vault、模型、组织、账户、SSO 和物理资源记录     | 检查对象引用、外键、归属关联、保存密钥的解码和支持的连接状态。不能静默丢弃损坏记录。                   |
+| 用量、价格、余额和预算                                | 保留确认扣费及调用身份。估算与未知用量分开。重跑转换不能再次扣费。                                     |
+| 转换进度和启动门禁                                    | 中途停止后续跑；完整重跑；拒绝损坏或错误加密的记录；校验数量和引用；全部必需阶段通过前阻止服务器启动。 |
+
+演练时保留备份和对象引用清单。外部工作恢复前可以还原。之后应测试向前修复，避免旧备份引发重复外部写入。
+
+## 发布证据
+
+在同一个固定版本上运行[项目检查](/zh-cn/docs/developers/testing)。先完成构建，再开始测试，因为测试和子进程会加载构建文件。
+
+| 检查           | 入口                                                                 | 所需证据                                                                              |
+| -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 构建与类型     | `devenv shell -- pnpm build`; `devenv shell -- pnpm typecheck`       | 全部包、包测试脚本中的测试类型检查及依赖规则。                                        |
+| 包和用户任务   | `devenv shell -- pnpm -r test`                                       | 完整测试输出、跳过项目和最终 E2E 断言表。                                             |
+| 故障与迁移     | 上面的 F01–F11 和 A01–A04                                            | 进程边界、故障点、终态、外部动作次数及保存的事件/调用证据。                           |
+| 镜像与 Compose | `.github/workflows/ci.yml`, `deploy/docker/check.sh`                 | Docker 构建检查、Compose 启动/迁移/API 检查、镜像层检查和对应镜像 ID 的漏洞扫描输出。 |
+| 文档           | 文档包构建、`E/read-docs/Docs.test.ts`、`.github/workflows/docs.yml` | 英语、中文、德语、生成的 API 参考、全部主页语言和链接检查。                           |
+| 合并与推送     | 合并后精确版本的 CI                                                  | 必需任务通过。本地局部测试或较早快照不是最终 CI 证据。                                |
+
+基线追踪将每个用例关联到已记录的本地运行。证据包括完整构建、类型检查及 956 个文件的规则检查，以及标准 OpenBot 包运行中的 131 个文件、883 项测试。包测试包含 Activity 进程用例、完整服务器集群检查及迁移演练。
+
+E2E 证据由完整测试组运行和受影响用例的检查共同组成：31 项受影响用例在一次运行中通过，DevelopmentApps 用例在另一次标准包运行中通过。这 32 项与完整测试组的输出有重叠，数量不能相加。一项可选的真实 Cloudflare 用例被跳过。追踪表记录各次命令、范围和日志，不将它们描述为一次最终合并运行。
+
+发布检查应以精确发布提交的 CI 为准，包括镜像、Compose、扫描及文档。本地测试证据不能替代这些任务。

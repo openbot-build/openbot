@@ -1,126 +1,28 @@
 ---
-title: Rules und Grants
-description:
-  Speichere Entscheidungen über Fähigkeiten, als genaue Grants oder als Rules in
-  normaler Sprache.
+title: "Regeln und Freigaben"
+description: "Regeln und Freigaben"
 ---
 
-Du musst Entscheidungen über [Requests](/de/docs/requests) nicht immer wieder
-neu treffen. OpenBot speichert sie in zwei Formen:
+Eine Freigabe (Grant) behält eine erlaubende oder ablehnende Entscheidung für
+eine Bot-Fähigkeit. Eine Regel beschreibt in Alltagssprache, wann ein Bot
+handeln darf. Beide können spätere [Anfragen](/de/docs/requests) beeinflussen.
 
-| Form  | Sieht so aus                                                                                      | Wer sie prüft                    |
-| ----- | ------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Grant | `apps.call` auf `conn-7/search_orders`, erlauben, in diesem Chat                                  | OpenBot, durch genauen Vergleich |
-| Rule  | "Der Programmer darf jedes Repository der Organisation openbot lesen, fragt aber vor einem Push." | Ein Prüf-Modell                  |
+## Eine Entscheidung behalten
 
-Ein Grant ist schnell und genau. Eine Rule (Regel) deckt eine ganze Art von
-Requests ab.
+Wähle bei der Antwort den gewünschten Umfang. Eine Chat-Freigabe gilt in diesem
+Chat. Eine dauerhafte Freigabe bleibt bis zum Widerruf. Schreibe eine Regel,
+wenn spätere Arbeit nach einer Bedingung beurteilt werden soll. Nenne Handlung,
+Ziel und Bedingung klar.
 
----
+## Gespeicherte Entscheidungen prüfen
 
-## Grants
+Lies im Client die Regeln und Freigaben, die du verwalten darfst. Widerrufe eine
+nicht mehr gewünschte Freigabe. Ändere oder lösche Regeln bei neuen Aufgaben.
+Sie geben keine Rechte über deinen Organisationszugriff hinaus.
 
-Ein **Grant** ist eine gespeicherte Entscheidung über eine Fähigkeit eines Bot.
-Der Bot sieht seine Grants nie. Er sieht nur, dass manche Aufrufe laufen und
-manche abgelehnt werden.
+## Wenn weiter Anfragen kommen
 
-| Feld         | Bedeutung                                                                       |
-| ------------ | ------------------------------------------------------------------------------- |
-| `capability` | `action`, `target` (`*` für jedes Ziel) und optional genaue `arguments`.        |
-| `effect`     | `allow` oder `deny`. Ein Ablehnen gewinnt.                                      |
-| `scope`      | `once` (durch einen Aufruf verbraucht), `chat` (in einem Chat) oder `lifetime`. |
-| `grantedBy`  | Die Person, der Bot oder die Rule, die entschieden hat.                         |
-| `parent`     | Der Grant des Entscheiders, aus dem dieser Grant entstanden ist.                |
-| `chat`       | Der Chat eines Grant mit dem Umfang `chat`.                                     |
-| `status`     | `active`, `used` oder `revoked`.                                                |
-
-OpenBot setzt die aktiven Grants eines Bots in eine Policy, mit einer Regel für
-jeden Grant. Ein Deny-Grant gewinnt gegen jeden Allow-Grant, in jeder
-Reihenfolge. Wenn mehr als ein Allow-Grant einen Aufruf abdeckt, gibt der erste
-die Antwort. Ein `once`-Grant, der die Antwort gibt, ist danach verbraucht.
-Siehe [Berechtigungen](/de/docs/permissions#regeln).
-
-OpenBot erstellt Grants, wenn ein Entscheider einen Request beantwortet. Du
-kannst auch selbst einen erstellen:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"bots.create","target":"*"},"effect":"allow","scope":"lifetime"}' \
-  https://api.example.com/v1/bots/$BOT/grants
-```
-
-`GET /v1/bots/:botId/grants` listet Grants auf. Füge `?status=active` hinzu, um
-nur aktive Grants zu sehen.
-
-`DELETE /v1/bots/:botId/grants/:grantId` nimmt einen Grant zurück. OpenBot nimmt
-auch jeden Grant zurück, der aus ihm entstanden ist. So verlieren Bots weiter
-unten, was sie dadurch bekommen haben.
-
----
-
-## Rules
-
-Eine **Rule** ist ein Satz in normaler Sprache für einen Bot. Wenn kein Grant
-über einen Request entscheidet, liest ein Prüf-Modell die aktiven Rules des Bot.
-
-- Das Prüf-Modell erlaubt nur, wenn eine Rule diesen Request klar erlaubt. Es
-  lehnt nur ab, wenn eine Rule ihn klar verbietet. In allen anderen Fällen geht
-  der Request an den Entscheider.
-- Jedes Erlauben oder Ablehnen muss den Text einer Rule zitieren. OpenBot prüft
-  das Zitat. Ohne echtes Zitat gibt es keine Entscheidung.
-- Ein Ablehnen gewinnt gegen ein Erlauben.
-- Wenn das Prüf-Modell einen Fehler hat oder zu langsam ist, gibt es keine
-  Entscheidung.
-
-Eine Rule, die ein Bot geschrieben hat, zählt nur unter zwei Bedingungen: Dieser
-Bot steht in der [Besitzer-Kette](/de/docs/requests#die-kette-der-entscheider)
-über dem Bot, und er darf die Fähigkeit selbst nutzen.
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"The Programmer may read any repository of the openbot organization, but must ask before it pushes to main."}' \
-  https://api.example.com/v1/bots/$BOT/rules
-```
-
-| Feld      | Bedeutung                                                     |
-| --------- | ------------------------------------------------------------- |
-| `author`  | Die Person oder der Bot, die die Rule geschrieben hat.        |
-| `status`  | `active`, `proposed` oder `retired`. Nur aktive Rules zählen. |
-| `version` | Steigt mit jeder Änderung.                                    |
-
-Eine Rule von einer Person ist sofort aktiv. Ein Bot kann in einer Prüfung eine
-Rule vorschlagen. Eine vorgeschlagene Rule zählt erst, wenn eine Person sie
-aktiv macht:
-
-```sh
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":0,"status":"active"}' \
-  https://api.example.com/v1/bots/$BOT/rules/$RULE
-```
-
-Du kannst auch eine Rule speichern, wenn du einen Request beantwortest: Schicke
-`rule` mit der Antwort. Siehe
-[Einen Request beantworten](/de/docs/requests#einen-request-beantworten).
-
-### Das Prüf-Modell
-
-Das Prüf-Modell nutzt das **Rules-Model**. Es ist `rulesModel` in den
-[Einstellungen der Organization](/de/docs/organization#einstellungen). Es hat
-keinen Standardwert. Wenn es `null` ist, gibt das Prüf-Modell keine Antwort.
-Dann entscheidet eine Person oder ein Bot. OpenBot speichert jede Antwort des
-Prüf-Modells für dieselben Rules und dieselbe Fähigkeit. So läuft das
-Prüf-Modell für dieselbe Frage nicht noch einmal.
-
-Das Rules-Model kann ein Language-Model oder ein
-[Decision-Model](/de/docs/models#decision-model) sein:
-
-- Ein Language-Model schreibt die ganze Antwort. Es zitiert die Worte jeder
-  Rule, die es nutzt, und nennt seinen Grund.
-- Ein Decision-Model schreibt keinen Text. Es wählt `allow`, `deny` oder
-  `no_match`. Für jede Rule sagt es, wie wahrscheinlich diese Rule über den
-  Request entscheidet. OpenBot zitiert den ganzen Text jeder Rule mit einer
-  Wahrscheinlichkeit von 0,5 oder mehr. Ein Allow oder Deny ohne eine solche
-  Rule ist keine Entscheidung.
+Eine Regel braucht ein Prüfmodel, das die Verwaltung einrichtet. Kann es nicht
+entscheiden, entscheidet ein Bot oder Mensch. Eine gespeicherte Wahl passt auch
+nicht zwingend zur neuen Handlung oder zum neuen Ziel. Lies die Anfrage, bevor
+du eine Regel weiter fasst.

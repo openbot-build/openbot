@@ -1,6 +1,7 @@
-import { Array as Arr, Context, Effect, Layer } from "effect"
-import type { AppExecution } from "@openbot-build/api"
+import { Array as Arr, Cause, Context, Effect, Layer } from "effect"
+import { AppCalls } from "@openbot-build/domain"
 import { Settings } from "../settings/Settings.ts"
+import * as Report from "../errors/Report.ts"
 
 /**
  * Only the organization says which App tools only read, in its `appReadRules`
@@ -11,7 +12,7 @@ export class ActionPolicy extends Context.Service<
 	{
 		readonly isRead: (input: {
 			readonly organizationId: string
-			readonly source: AppExecution.Source
+			readonly source: AppCalls.Source
 		}) => Effect.Effect<boolean>
 	}
 >()("@openbot-build/openbot/apps/ActionPolicy") {}
@@ -20,6 +21,7 @@ export const layer = Layer.effect(
 	ActionPolicy,
 	Effect.gen(function* () {
 		const settings = yield* Settings
+		const report = yield* Report.make
 		return ActionPolicy.of({
 			isRead: ({ organizationId, source }) =>
 				source.kind !== "tool"
@@ -34,6 +36,9 @@ export const layer = Layer.effect(
 								),
 							),
 							// Without the settings, a tool counts as one that changes something.
+							Effect.tapCauseIf(Cause.hasFails, (cause) =>
+								report("App read rules could not be read.", cause),
+							),
 							Effect.orElseSucceed(() => false),
 						),
 		})
