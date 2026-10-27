@@ -14,8 +14,8 @@ stages: [check, build]
   tags: [docker, privileged, arm64]
   variables:
     # Keep native TypeScript builds within the runner memory budget.
-    GOMEMLIMIT: 1GiB
-    GOGC: "50"
+    GOMEMLIMIT: 512MiB
+    GOGC: "25"
     GIT_CONFIG_COUNT: "1"
     GIT_CONFIG_KEY_0: safe.directory
     GIT_CONFIG_VALUE_0: $CI_PROJECT_DIR
