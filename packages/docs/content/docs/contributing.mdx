@@ -247,6 +247,29 @@ comment next to the code.
 Use the immutable data types of Effect, such as `HashMap`, `Chunk`, and
 `Option`. Use the mutable types of JavaScript only when you really need them.
 
+### Type first
+
+Write the types before the code that carries out the work. A service contract is
+its set of inputs, outputs, errors, and needs.
+
+1. Define domain values and outside data with Schema. Use `typeof Name.Type` to
+   share the type of a schema. Do not copy its fields into another type.
+2. Give each `Context.Service` an explicit interface or object type. Define it
+   before `make`. Do not use `Effect.Success<typeof make>` or
+   `ReturnType<typeof make>` to get the service type from its implementation.
+3. State each method as `Effect.Effect<Value, Error, Needs>` or a typed Stream.
+   Use named errors. Keep generic errors as `E`, not `any` or `unknown`. Keep
+   needs at construction, except for context supplied by the caller.
+4. Check the implementation with `Service.of`, then build its Layer. Local
+   helper functions may use type inference. Shared types may use another
+   declared contract, but must not depend on a constructor's inferred result.
+
+The `service-contract` check follows imported type aliases too. It stops a
+service whose type comes from `make`. The compiler also rejects `any` or
+`unknown` in error and context channels, unsafe Effect casts, missing service
+dependencies, and service provision outside the allowed boundaries. Tests may
+provide their own Layers.
+
 ### Effect rules
 
 The same check also tests module boundaries, including type imports. `domain`
@@ -299,6 +322,7 @@ and checks the rules that the language service cannot see:
 
 | Rule               | What it stops                                                                                                                                                                                                               |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `service-contract` | A service type taken from its constructor, including through imported aliases. Write its contract first.                                                                                                                    |
 | `blind-error-map`  | `Effect.mapError(() => ...)`, `Effect.orElseFail(() => ...)` and `catch: () => ...`, which drop the cause of a failure. A handler given by name counts too, when the same file declares it as a function with no parameter. |
 | `throw`            | `throw`. Fail with a typed error, use `Effect.die` for a broken rule of the code, or `assert.fail` in a test.                                                                                                               |
 | `run-outside-main` | `Effect.runPromise` and the other `run` functions outside a program entry point (a `*Main.ts` file). This includes `runForkWith`; an outside callback uses a scoped `FiberSet` runtime.                                     |

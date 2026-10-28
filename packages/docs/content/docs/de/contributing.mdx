@@ -258,6 +258,31 @@ Nutze die unveränderlichen Datentypen von Effect, zum Beispiel `HashMap`,
 `Chunk` und `Option`. Nutze die veränderlichen Typen von JavaScript nur, wenn du
 sie wirklich brauchst.
 
+### Typen zuerst
+
+Schreibe die Typen vor dem Code, der die Arbeit ausführt. Der Vertrag eines
+Dienstes nennt Eingaben, Ausgaben, Fehler und Abhängigkeiten.
+
+1. Definiere Werte der Domäne und externe Daten mit Schema. Teile den Typ eines
+   Schemas mit `typeof Name.Type`. Kopiere seine Felder nicht in einen anderen
+   Typ.
+2. Gib jedem `Context.Service` ein festes Interface oder einen Objekttyp vor
+   `make`. Leite den Diensttyp nicht mit `Effect.Success<typeof make>` oder
+   `ReturnType<typeof make>` aus der Implementierung ab.
+3. Deklariere Methoden als `Effect.Effect<Value, Error, Needs>` oder typisierten
+   Stream. Nutze benannte Fehler. Behalte generische Fehler als `E`, nicht als
+   `any` oder `unknown`. Hole Abhängigkeiten beim Aufbau des Dienstes, außer dem
+   Kontext, den der Aufrufer liefert.
+4. Prüfe die Implementierung mit `Service.of` und baue dann den Layer. Lokale
+   Hilfsfunktionen dürfen Typen ableiten. Gemeinsame Typen dürfen andere feste
+   Verträge nutzen, aber kein abgeleitetes Ergebnis eines Konstruktors.
+
+Die Prüfung `service-contract` folgt auch importierten Typ-Aliasen. Sie stoppt
+Dienste, deren Typ aus `make` kommt. Der Compiler lehnt auch `any` oder
+`unknown` in Fehlern und Abhängigkeiten, unsichere Effect-Typumwandlungen,
+fehlende Dienste und das Bereitstellen von Diensten außerhalb erlaubter Grenzen
+ab. Tests dürfen ihre eigenen Layer bereitstellen.
+
 ### Effect-Regeln
 
 Diese Prüfung prüft auch Modulgrenzen und Typ-Imports. `domain` darf `core`
@@ -313,6 +338,7 @@ TypeScript-Datei und prüft die Regeln, die der Language Service nicht sieht:
 
 | Regel              | Was sie verhindert                                                                                                                                                                                                                                          |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `service-contract` | Ein aus dem Konstruktor abgeleiteter Diensttyp, auch über importierte Aliase. Schreibe zuerst den Vertrag.                                                                                                                                                  |
 | `blind-error-map`  | `Effect.mapError(() => ...)`, `Effect.orElseFail(() => ...)` und `catch: () => ...`, die die Ursache eines Fehlers verwerfen. Ein Handler, der mit seinem Namen übergeben wird, zählt auch, wenn dieselbe Datei ihn als Funktion ohne Parameter deklariert. |
 | `throw`            | `throw`. Scheitere mit einem typisierten Fehler, nutze `Effect.die` für eine verletzte Regel des Codes oder `assert.fail` in einem Test.                                                                                                                    |
 | `run-outside-main` | `Effect.runPromise` und die anderen `run`-Funktionen außerhalb eines Einstiegspunkts (einer `*Main.ts`-Datei). Das gilt auch für `runForkWith`; ein Callback von außen nutzt eine `FiberSet`-Runtime mit Scope.                                             |

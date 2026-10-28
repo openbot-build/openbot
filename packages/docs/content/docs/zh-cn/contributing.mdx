@@ -215,6 +215,25 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 使用 Effect 的不可变数据类型，例如 `HashMap`、`Chunk` 和
 `Option`。只有真正需要时，才使用 JavaScript 的可变类型。
 
+### 类型优先
+
+先写类型，再写执行工作的代码。服务契约说明输入、输出、错误和依赖。
+
+1. 用 Schema 定义领域值和外部数据。用 `typeof Name.Type`
+   共享 Schema 的类型，不要在另一个类型中重复字段。
+2. 为每个 `Context.Service` 写明确的接口或对象类型，放在 `make` 之前。不要用
+   `Effect.Success<typeof make>` 或 `ReturnType<typeof make>`
+   从实现反推服务类型。
+3. 用 `Effect.Effect<Value, Error, Needs>`
+   或有类型的 Stream 声明方法。错误要有名字。泛型错误保留为 `E`，不要改成 `any`
+   或 `unknown`。在构建服务时取得依赖，调用方提供的上下文除外。
+4. 用 `Service.of`
+   检查实现，再构建 Layer。局部辅助函数可以使用类型推导。共享类型可以引用另一个已声明的契约，但不能依赖构造函数推导出的结果。
+
+`service-contract` 检查也会跟踪导入的类型别名，阻止从 `make`
+推导服务类型。编译器还会拒绝错误和依赖通道中的 `any` 或
+`unknown`、不安全的 Effect 类型断言、缺失的服务依赖，以及在允许边界之外提供服务。测试可以提供自己的 Layer。
+
 ### Effect 规则
 
 同一检查也验证模块依赖，包括类型导入。`domain` 可以使用
@@ -259,6 +278,7 @@ OpenBot 用 [Effect](https://effect.website)
 
 | 规则               | 它禁止什么                                                                                                                                                                     |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `service-contract` | 从构造函数反推的服务类型，包括通过导入的别名推导。先写服务契约。                                                                                                               |
 | `blind-error-map`  | `Effect.mapError(() => ...)`、`Effect.orElseFail(() => ...)` 和 `catch: () => ...`，它们会丢掉失败的原因。按名字传入的处理函数也算在内，只要同一文件把它声明为没有参数的函数。 |
 | `throw`            | `throw`。用有类型的错误失败；代码自身的规则被破坏时用 `Effect.die`；测试中用 `assert.fail`。                                                                                   |
 | `run-outside-main` | 在程序入口（`*Main.ts` 文件）之外使用 `Effect.runPromise` 和其他 `run` 函数，包括 `runForkWith`。外部回调应使用受作用域管理的 `FiberSet` runtime。                             |

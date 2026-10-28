@@ -50,7 +50,7 @@
 					"abortControllerInEffect": "error",
 					"acquireReleaseDisposable": "error",
 					"allOfMapToForEach": "error",
-					"anyUnknownInErrorContext": "warning",
+					"anyUnknownInErrorContext": "error",
 					"apiStabilityLeak": "off",
 					"asyncFunction": "error",
 					"catchAllTagDispatchToCatchTag": "error",
@@ -107,7 +107,7 @@
 					"matchEffectToMapBoth": "error",
 					"matchEffectToMatch": "error",
 					"missedPipeableOpportunity": "warning",
-					"missingEffectServiceDependency": "warning",
+					"missingEffectServiceDependency": "error",
 					"missingPipeableSignature": "off",
 					"multipleCatchTag": "error",
 					"multipleEffectProvide": "error",
@@ -149,7 +149,7 @@
 					"scopeInLayerEffect": "error",
 					"serviceNotAsClass": "warning",
 					"strictBooleanExpressions": "warning",
-					"strictEffectProvide": "warning",
+					"strictEffectProvide": "error",
 					"syncToSucceed": "error",
 					"timeoutCatchTagToTimeoutOrElse": "error",
 					"tryCatchInEffectGen": "error",
@@ -160,7 +160,7 @@
 					"unnecessaryPipe": "error",
 					"unnecessaryPipeChain": "error",
 					"unnecessaryTypeofType": "error",
-					"unsafeEffectTypeAssertion": "warning",
+					"unsafeEffectTypeAssertion": "error",
 					"unstableApiUsage": "off"
 				}
 			}

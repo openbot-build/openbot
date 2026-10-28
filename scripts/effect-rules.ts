@@ -22,6 +22,7 @@ import {
 	String as Str,
 } from "effect"
 import { stripTypeScriptTypes } from "node:module"
+import * as ServiceContracts from "./service-contracts.ts"
 
 /** The folders with the TypeScript code that the rules cover. */
 const roots = ["packages", "protocol-test", "scripts"] as const
@@ -29,6 +30,8 @@ const roots = ["packages", "protocol-test", "scripts"] as const
 const skipped = ["node_modules", "dist", ".cache", "docs"] as const
 
 const rules = {
+	"service-contract":
+		"Write the service type before its implementation. Do not take its shape from a constructor.",
 	"directive-reason":
 		"Give the reason after ` -- `, in a few words, for each `@effect-diagnostics` and `@effect-rules` comment.",
 	"blind-error-map":
@@ -544,9 +547,15 @@ const program = Effect.gen(function* () {
 			),
 		),
 	).pipe(Effect.map(Arr.flatten))
-	const findings = yield* Effect.forEach(files, checkFile, {
+	const codeFindings = yield* Effect.forEach(files, checkFile, {
 		concurrency: 16,
 	}).pipe(Effect.map(Arr.flatten))
+	const findings: ReadonlyArray<Finding> = [
+		...codeFindings,
+		...(yield* ServiceContracts.check(
+			Arr.map(files, (file) => path.resolve(file)),
+		)),
+	]
 	yield* Effect.forEach(
 		findings,
 		(finding) =>
