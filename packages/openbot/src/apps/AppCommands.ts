@@ -242,7 +242,7 @@ const make = Effect.gen(function* () {
 	/** The call log gives each round's result. There is no second sending state. */
 	const current = Effect.fn("AppCommands.current")(function* (key: Key) {
 		const saved = yield* load(key)
-		const history = yield* store.calls(key)
+		const history = yield* store.latestCalls(key)
 		let next: AppCall.Input = {
 			round: 0,
 			source: saved.input.source,
@@ -251,14 +251,9 @@ const make = Effect.gen(function* () {
 		}
 		let answer: Option.Option<typeof Response.Type> = Option.none()
 		while (true) {
-			const matching = Arr.filter(
+			const call = Arr.findFirst(
 				history,
 				(call) => call.step === AppCall.stepId(next.round),
-			)
-			const call = Arr.findFirst(
-				matching,
-				(value) =>
-					!Arr.some(matching, (other) => other.attempt > value.attempt),
 			)
 			if (
 				Option.isSome(call) &&
@@ -336,15 +331,7 @@ const make = Effect.gen(function* () {
 						execution.status === "outcome_unknown")
 				)
 					return empty
-				const history = Arr.filter(
-					yield* store.calls(key),
-					(call) => call.step === AppCall.stepId(0),
-				)
-				const call = Arr.findFirst(
-					history,
-					(value) =>
-						!Arr.some(history, (other) => other.attempt > value.attempt),
-				)
+				const call = yield* store.latestCall(key, AppCall.stepId(0))
 				const outcome =
 					Option.isSome(call) && call.value.status === "completed"
 						? Option.some(

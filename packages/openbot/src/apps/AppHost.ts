@@ -5,7 +5,6 @@ import {
 	Client,
 	Discovery,
 	Document,
-	McpClient,
 	Network,
 	OAuthAuthorization,
 	Store,
@@ -19,7 +18,6 @@ import {
 	Effect,
 	Layer,
 	Match,
-	Redacted,
 	Schema,
 	Scope,
 } from "effect"
@@ -231,42 +229,34 @@ export const make: Effect.Effect<
 					if (!input.confirmed)
 						return yield* App.AppError.make({ reason: "ConfirmationRequired" })
 					const current = yield* discovery.refreshCard(input.candidate.cardUrl)
-					yield* Match.value(
-						rules.compare({ previous: input.candidate, current }),
-					).pipe(
-						Match.tag("NeedsRevalidation", () =>
-							Effect.fail(App.AppError.make({ reason: "CandidateChanged" })),
-						),
-						Match.orElse(() => Effect.void),
-					)
-					const configured = yield* rules.configureEndpoint({
-						candidate: current,
-						index: input.remoteIndex,
+					const prepared = yield* AppConnections.prepare({
+						key: input.key,
+						previous: input.candidate,
+						current,
+						remoteIndex: input.remoteIndex,
 						values: input.values,
+					}).pipe(Effect.provideService(Discovery.Rules, rules))
+					const protection = yield* probe.check(prepared)
+					const connection = yield* stores.apps.save({
+						...prepared,
+						connection: {
+							...prepared.connection,
+							authorization: protection.requiresAuthorization
+								? {
+										_tag: "PendingAuthorization",
+										resource: prepared.connection.endpoint,
+										scopes: [],
+									}
+								: { _tag: "Unprotected" },
+						},
 					})
-					const connection = Store.UserConnection.make({
-						...input.key,
-						cardUrl: current.cardUrl,
-						endpoint: configured.url,
-						remoteIndex: configured.remoteIndex,
-						configuration: Redacted.make(input.values),
-						headers: Redacted.make(configured.headers),
-						state: "Enabled",
-						authorization: { _tag: "Unprotected" },
-					})
-					const protection = yield* probe.check({
-						app: Store.AppRecord.make({
-							cardUrl: current.cardUrl,
-							card: current.card,
-							sources: current.sources,
-						}),
+					return {
 						connection,
-					})
-					return yield* AppConnections.add({
-						...input,
-						candidate: current,
-						requiresAuthorization: protection.requiresAuthorization,
-					}).pipe(Effect.provideContext(services))
+						publicHints: {
+							cardUrl: current.cardUrl,
+							sources: current.sources,
+						},
+					}
 				}),
 				open: (input) =>
 					Effect.gen(function* () {
@@ -292,9 +282,7 @@ export const make: Effect.Effect<
 						return yield* withNetwork(
 							input.key,
 							[],
-							McpClient.open({ ...input, eagerLists: false }).pipe(
-								Effect.provideContext(services),
-							),
+							AppConnections.open(input).pipe(Effect.provideContext(services)),
 						)
 					}),
 				revalidate: (input) =>
@@ -309,9 +297,7 @@ export const make: Effect.Effect<
 					Effect.scoped(
 						Effect.gen(function* () {
 							const connection = yield* stores.apps.get(key)
-							const app = yield* stores.apps.getApp(connection.cardUrl)
 							const protection = yield* probe.check({
-								app,
 								connection: {
 									...connection,
 									authorization: { _tag: "Unprotected" },

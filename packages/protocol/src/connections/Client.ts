@@ -129,12 +129,15 @@ export class ToolFailure extends Schema.TaggedError<
 	result: CallToolResult,
 }) {}
 
-export interface Invocation {
-	readonly connection: Store.UserConnection
+export interface Request {
 	readonly action: Action
 	readonly target: string
 	readonly arguments: unknown
 	readonly source: CallSource
+}
+
+export interface Invocation extends Request {
+	readonly connection: Store.UserConnection
 }
 
 export class InvocationPolicy extends Context.Service<
@@ -189,12 +192,56 @@ export const Continuation = Schema.Struct({
 })
 export type Continuation = typeof Continuation.Type
 
-export interface Client {
+/** The source and target belong to one resolved action. */
+export type InvokeOptions = Omit<CallOptions, "source">
+interface ActionOperations<Params> {
+	readonly invoke: (
+		params: Params,
+		options: InvokeOptions,
+	) => Effect.Effect<OperationResult<unknown>, Error>
 	readonly resume: (
 		continuation: Continuation,
 		responses: Schema.JsonObject,
-		options: CallOptions,
+		options: InvokeOptions,
 	) => Effect.Effect<OperationResult<unknown>, Error>
+}
+export interface ResolvedTool extends ActionOperations<
+	Omit<Mcp.CallToolRequest["params"], "name">
+> {
+	readonly kind: "tool"
+	readonly definition: Mcp.Tool
+}
+export interface ResolvedResource extends ActionOperations<
+	Omit<Mcp.ReadResourceRequest["params"], "uri">
+> {
+	readonly kind: "resource"
+	readonly definition: Mcp.Resource
+}
+export interface ResolvedTemplate extends ActionOperations<{
+	readonly values: Mcp.Variables
+	readonly _meta?: Mcp.RequestMetaObject
+}> {
+	readonly kind: "template"
+	readonly definition: Mcp.ResourceTemplateType
+}
+export interface ResolvedPrompt extends ActionOperations<
+	Omit<Mcp.GetPromptRequest["params"], "name">
+> {
+	readonly kind: "prompt"
+	readonly definition: Mcp.Prompt
+}
+export type ResolvedAction =
+	ResolvedTool | ResolvedResource | ResolvedTemplate | ResolvedPrompt
+export interface ActionTarget {
+	readonly kind: ResolvedAction["kind"]
+	readonly name: string
+}
+
+export interface Client {
+	readonly resolve: (
+		target: ActionTarget,
+		source: CallSource,
+	) => Effect.Effect<Option.Option<ResolvedAction>, Error>
 	readonly key: Store.ConnectionKey
 	readonly discovery: Mcp.DiscoverResult
 	readonly notifications: Stream.Stream<Mcp.Notification>
@@ -220,23 +267,10 @@ export interface Client {
 		source?: CallOptions["source"],
 		options?: { readonly singlePage?: boolean },
 	) => Effect.Effect<Mcp.ListPromptsResult, Error>
-	readonly callTool: (
-		params: Mcp.CallToolRequest["params"],
-		options: CallOptions,
-	) => Effect.Effect<OperationResult<Mcp.CallToolResult>, Error>
 	readonly readResource: (
 		params: Mcp.ReadResourceRequest["params"],
 		options: CallOptions,
 	) => Effect.Effect<OperationResult<Mcp.ReadResourceResult>, Error>
-	readonly readTemplate: (options: {
-		readonly template: string
-		readonly values: Mcp.Variables
-		readonly source: CallOptions["source"]
-	}) => Effect.Effect<OperationResult<Mcp.ReadResourceResult>, Error>
-	readonly getPrompt: (
-		params: Mcp.GetPromptRequest["params"],
-		options: CallOptions,
-	) => Effect.Effect<OperationResult<Mcp.GetPromptResult>, Error>
 	readonly listen: (filter: Mcp.SubscriptionFilter) => Effect.Effect<
 		{
 			readonly honoredFilter: Mcp.SubscriptionFilter

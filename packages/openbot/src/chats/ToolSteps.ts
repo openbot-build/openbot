@@ -231,14 +231,7 @@ const make = Effect.gen(function* () {
 	) {
 		yield* calls.authorize(fence, "replay")
 		const step = stepId(position.item, call.id)
-		const matches = Arr.filter(
-			yield* store.calls(fence),
-			(prior) => prior.step === step,
-		)
-		const prior = Arr.findFirst(
-			matches,
-			(entry) => !Arr.some(matches, (other) => other.attempt > entry.attempt),
-		)
+		const prior = yield* store.latestCall(fence, step)
 		if (Option.isNone(prior)) return Option.none<Schema.Json>()
 		const request = yield* Schema.decodeUnknownEffect(
 			Schema.Struct({

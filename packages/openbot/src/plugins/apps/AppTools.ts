@@ -31,7 +31,7 @@ import * as Bindings from "../../apps/Bindings.ts"
 import * as Assistance from "./Assistance.ts"
 import { PublicIndex } from "../../apps/Index.ts"
 import { Connections } from "../../apps/Connections.ts"
-import { Capabilities } from "../../apps/Capabilities.ts"
+import { ConnectionSessions } from "../../apps/ConnectionSessions.ts"
 import { ActionPolicy } from "../../apps/ActionPolicy.ts"
 import { Work } from "../../capabilities/Work.ts"
 import { ownerKey } from "../../apps/StoredConnections.ts"
@@ -153,7 +153,7 @@ export const durable = (fence: Fence) =>
 			db,
 			secrets,
 			report,
-			capabilities: yield* Capabilities,
+			sessions: yield* ConnectionSessions,
 			policy: yield* ActionPolicy,
 			crypto: yield* Crypto.Crypto,
 		}

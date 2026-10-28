@@ -1,4 +1,4 @@
-import * as TestStores from "./DeveloperTestStores.ts"
+import * as GrantUses from "./GrantUses.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as Rows from "./DeveloperRows.ts"
 import {
@@ -18,18 +18,13 @@ import {
 	Effect,
 	Layer,
 	Option,
-	Record as Rec,
 	Schema,
 	Stream,
 } from "effect"
-import { and, eq, inArray, notInArray } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { SqlClient } from "effect/sql"
 import * as Db from "../database/Database.ts"
-import {
-	appConnections,
-	appSecrets,
-	developerTests,
-} from "../database/Schema.ts"
+import { appConnections, developerTests } from "../database/Schema.ts"
 import {
 	Store,
 	storage,
@@ -38,8 +33,6 @@ import {
 	type Key,
 } from "../execution/Store.ts"
 import type { End } from "../execution/Program.ts"
-import { Secrets } from "../secrets/Secrets.ts"
-import { executionCalls, executions } from "../database/ExecutionSchema.ts"
 import * as Observation from "../execution/Observation.ts"
 import * as Connections from "./StoredConnections.ts"
 
@@ -61,9 +54,6 @@ const inputCodec = Schema.toCodecJson(Schema.Union([Reference, Detached]))
 const detachedId = (source: Key, reference: string) =>
 	"detached:" + source.id + ":" + reference
 const grantCodec = Schema.toCodecJson(OAuthAuthorization.Grant)
-const credentialCodec = Schema.fromJsonString(
-	Schema.toCodecJson(Protocol.Credential),
-)
 /** This event commits with installation. It remains after a connection is removed. */
 export const installed = (
 	callId: Execution.CallId,
@@ -72,19 +62,9 @@ export const installed = (
 	resource: { kind: "InstalledAppGrant", id: callId },
 	revision: 0,
 })
-/** OAuth may revoke the whole grant. Token strings do not show its full scope. */
-export const GrantScope = Schema.Struct({
-	issuer: Schema.String,
-	clientId: Schema.NullOr(Schema.String),
-})
-export type GrantScope = typeof GrantScope.Type
-export const scopeOf = (credential: Protocol.Credential): GrantScope => ({
-	issuer: credential.binding.issuer,
-	clientId: credential.clientId ?? null,
-})
-const sameScope = Schema.toEquivalence(GrantScope)
-const grantInput = Schema.Struct({ grantScope: GrantScope })
-const terminal = ["completed", "failed", "cancelled", "interrupted"] as const
+export const GrantScope = GrantUses.Scope
+export type GrantScope = GrantUses.Scope
+export const scopeOf = GrantUses.scopeOf
 const organizationOf = (identity: ExecutionIdentity | ServiceIdentity) =>
 	Schema.is(ExecutionIdentity)(identity)
 		? identity.owner.organizationId
@@ -95,7 +75,7 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
 	const store = yield* Store
-	const secrets = yield* Secrets
+	const uses = yield* GrantUses.make
 	const indexNamespace = yield* IndexNamespace
 	const observation = yield* Observation.Observation
 	/** Call only from Calls.onResult, in the result transaction. */
@@ -239,10 +219,7 @@ const make = Effect.gen(function* () {
 				Connections.ownerKey(source.identity.owner) !== key.namespace
 			)
 				return yield* Execution.Forbidden.make({})
-			const call = Arr.findFirst(
-				yield* store.calls(sourceKey),
-				(call) => call.id === ref.callId,
-			)
+			const call = yield* store.call(sourceKey, ref.callId)
 			if (
 				Option.isNone(call) ||
 				call.value.status !== "completed" ||
@@ -260,73 +237,11 @@ const make = Effect.gen(function* () {
 				return yield* Execution.Forbidden.make({})
 			return { detached: false as const, ref, sourceKey, source, grant }
 		})
-	// All grants with this issuer and client can be in the same remote grant family.
-	// The lock is global: two OpenBot owners can use the same remote account.
-	const lockScope = (scope: GrantScope) =>
-		Effect.gen(function* () {
-			const name =
-				"app-grant:" +
-				(yield* Schema.encodeEffect(Schema.fromJsonString(GrantScope))(scope))
-			yield* storage(
-				sql`select pg_advisory_xact_lock(hashtextextended(${name}, 0))`,
-			)
-		})
-	const pendingCalls = (scope: GrantScope, revocation: boolean, except?: Key) =>
-		Effect.gen(function* () {
-			const rows = yield* storage(
-				db
-					.selectDistinct({
-						namespace: executions.namespace,
-						id: executions.id,
-						sequence: executions.sequence,
-					})
-					.from(executions)
-					.innerJoin(
-						executionCalls,
-						and(
-							eq(executionCalls.namespace, executions.namespace),
-							eq(executionCalls.executionId, executions.id),
-						),
-					)
-					.where(
-						and(
-							notInArray(executions.status, [...terminal]),
-							inArray(
-								executions.resourceKind,
-								revocation
-									? ["AppGrant"]
-									: ["AppAuthorization", "DeveloperTest"],
-							),
-							inArray(
-								executionCalls.step,
-								revocation ? ["revoke"] : ["exchange", "refresh"],
-							),
-						),
-					),
-			)
-			for (const row of rows) {
-				const key = { namespace: row.namespace, id: Execution.Id.make(row.id) }
-				if (except?.namespace === key.namespace && except.id === key.id)
-					continue
-				for (const call of yield* store.calls(key)) {
-					if (
-						!(revocation
-							? call.step === "revoke"
-							: call.step === "exchange" || call.step === "refresh")
-					)
-						continue
-					const input = Schema.decodeUnknownOption(grantInput)(call.input)
-					if (Option.isSome(input) && sameScope(scope, input.value.grantScope))
-						return Option.some({ key, sequence: row.sequence })
-				}
-			}
-			return Option.none<{ readonly key: Key; readonly sequence: number }>()
-		})
 	/** Call in the installation transaction, after locking the business row. */
 	const assertInstallable = (scope: GrantScope) =>
 		Effect.gen(function* () {
-			yield* lockScope(scope)
-			const held = yield* pendingCalls(scope, true)
+			yield* uses.lock(scope)
+			const held = yield* uses.pending(scope, "revoke")
 			if (Option.isSome(held))
 				return yield* Execution.Conflict.make({ id: held.value.key.id })
 		})
@@ -342,17 +257,16 @@ const make = Effect.gen(function* () {
 				const next = yield* sql
 					.withTransaction(
 						Effect.gen(function* () {
-							yield* lockScope(scope)
-							const held = yield* pendingCalls(scope, true)
+							yield* uses.lock(scope)
+							const held = yield* uses.pending(scope, "revoke")
 							if (Option.isSome(held))
 								return { _tag: "Wait" as const, ...held.value }
-							return {
-								_tag: "Ready" as const,
-								call: yield* store.writeAttempt(fence, step, {
-									input,
-									grantScope: scope,
-								}),
-							}
+							const call = yield* store.writeAttempt(fence, step, {
+								input,
+								grantScope: scope,
+							})
+							yield* uses.reserve(fence, "send", call.id, scope)
+							return { _tag: "Ready" as const, call }
 						}),
 					)
 					.pipe(transactionFailures)
@@ -362,110 +276,31 @@ const make = Effect.gen(function* () {
 					.pipe(Stream.runDrain)
 			}
 		})
-	const inUse = (scope: GrantScope) =>
-		Effect.gen(function* () {
-			// Read the reference and its secrets in one snapshot. A concurrent removal
-			// must not look like a broken stored grant between two separate reads.
-			const connections = yield* storage(
-				db
-					.select({ connection: appConnections, credential: appSecrets })
-					.from(appConnections)
-					.leftJoin(
-						appSecrets,
-						and(
-							eq(appSecrets.owner, appConnections.owner),
-							eq(appSecrets.connectionId, appConnections.id),
-							eq(appSecrets.kind, "credential"),
-						),
-					),
-			)
-			for (const rows of Rec.values(
-				Arr.groupBy(
-					connections,
-					({ connection }) =>
-						connection.owner.length + ":" + connection.owner + connection.id,
-				),
-			)) {
-				const row = Arr.headNonEmpty(rows).connection
-				const current = yield* Connections.openRecord(
-					secrets,
-					row.owner,
-					row.id,
-					row.body,
-				)
-				const auth = current.connection.authorization
-				if (auth._tag !== "Authorized" || auth.binding.issuer !== scope.issuer)
-					continue
-				const found = Arr.findFirst(
-					rows,
-					({ credential }) => credential?.id === auth.credentialRef,
-				)
-				if (Option.isNone(found) || found.value.credential === null)
-					return yield* Execution.StorageError.make({
-						cause: "The current grant is missing.",
-					})
-				const credential = yield* secrets
-					.open(
-						found.value.credential.body,
-						yield* Schema.encodeEffect(
-							Schema.fromJsonString(Schema.Array(Schema.String)),
-						)(["credential", row.owner, auth.credentialRef]),
-					)
-					.pipe(Effect.flatMap(Schema.decodeEffect(credentialCodec)))
-				if (sameScope(scope, scopeOf(credential))) return true
-			}
-			for (const row of yield* storage(db.select().from(developerTests))) {
-				if (row.privateState === null) continue
-				const state = yield* secrets
-					.open(
-						row.privateState,
-						yield* Schema.encodeEffect(
-							Schema.fromJsonString(Schema.Array(Schema.String)),
-						)(["developer-test", row.owner, row.id]),
-					)
-					.pipe(
-						Effect.flatMap(Schema.decodeEffect(TestStores.privateStateCodec)),
-					)
-				const auth = state.connection?.authorization
-				if (auth?._tag !== "Authorized" || auth.binding.issuer !== scope.issuer)
-					continue
-				const credential = Arr.findFirst(
-					state.credentials,
-					(saved) => saved.reference === auth.credentialRef,
-				)
-				if (Option.isNone(credential))
-					return yield* Execution.StorageError.make({
-						cause: "The current test grant is missing.",
-					})
-				if (sameScope(scope, scopeOf(credential.value.credential))) return true
-			}
-			return false
-		})
 	const reserveRevocation = (fence: Fence, credential: Protocol.Credential) =>
 		Effect.gen(function* () {
 			const scope = scopeOf(credential)
-			yield* lockScope(scope)
-			const held = yield* pendingCalls(scope, true, fence)
+			yield* uses.lock(scope)
+			const held = yield* uses.pending(scope, "revoke", fence)
 			if (Option.isSome(held)) return { _tag: "Wait" as const, ...held.value }
-			const sending = yield* pendingCalls(scope, false)
+			const sending = yield* uses.pending(scope, "send")
 			if (Option.isSome(sending))
 				return { _tag: "Wait" as const, ...sending.value }
-			if (yield* inUse(scope)) return { _tag: "InUse" as const }
-			// The common call intent is also the durable reservation. End releases it.
-			const prior = Arr.findFirst(
-				yield* store.calls(fence),
-				(call) => call.step === "revoke",
+			if (yield* uses.inUse(scope)) return { _tag: "InUse" as const }
+			const prior = yield* store.firstCall(fence, "revoke")
+			if (
+				Option.isNone(prior) &&
+				(yield* store.get(fence)).status === "waiting"
 			)
-			if (Option.isNone(prior)) {
-				if ((yield* store.get(fence)).status === "waiting")
-					yield* store.commit(fence, { status: "running" }, Effect.void)
-				yield* store.writeAttempt(
-					fence,
-					"revoke",
-					{ grantScope: scope },
-					"idempotent",
-				)
-			}
+				yield* store.commit(fence, { status: "running" }, Effect.void)
+			const call = Option.isSome(prior)
+				? prior.value
+				: yield* store.writeAttempt(
+						fence,
+						"revoke",
+						{ grantScope: scope },
+						"idempotent",
+					)
+			yield* uses.reserve(fence, "revoke", call.id, scope)
 
 			return { _tag: "Ready" as const }
 		})

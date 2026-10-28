@@ -11,7 +11,7 @@ import * as AppExperience from "../apps/Experience.ts"
 import * as AppIndex from "../apps/Index.ts"
 import * as Connections from "../apps/Connections.ts"
 import * as Lifecycle from "../apps/Lifecycle.ts"
-import * as Capabilities from "../apps/Capabilities.ts"
+import * as ConnectionSessions from "../apps/ConnectionSessions.ts"
 import * as AppDiscovery from "../apps/Discovery.ts"
 import * as ActionPolicy from "../apps/ActionPolicy.ts"
 import * as Secrets from "../secrets/Secrets.ts"
@@ -156,7 +156,7 @@ export const layerShared = (options: {
  */
 const layerApps = Layer.mergeAll(Lifecycle.layer, Authorizations.layer).pipe(
 	Layer.provideMerge(Connections.layer),
-	Layer.provideMerge(Capabilities.layer),
+	Layer.provideMerge(ConnectionSessions.layer),
 	Layer.provideMerge(AuthorizationCommands.layer),
 	Layer.provideMerge(ConnectionCommands.layer),
 	Layer.provideMerge(GrantCleanup.layer),

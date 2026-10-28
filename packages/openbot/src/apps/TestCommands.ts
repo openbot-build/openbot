@@ -566,17 +566,11 @@ const make = Effect.gen(function* () {
 					if (action._tag !== "Exchange" || exchange === undefined)
 						return yield* Execution.Conflict.make({ id: fence.id })
 					yield* authorize(fence, saved.identity.actor, "advance")
-					const history = yield* store.calls(fence)
-					const call = Arr.findFirst(history, (call) => call.id === callId)
+					const call = yield* store.latestCall(fence, "exchange")
 					if (
 						Option.isNone(call) ||
+						call.value.id !== callId ||
 						call.value.status !== "completed" ||
-						call.value.step !== "exchange" ||
-						Arr.some(
-							history,
-							(other) =>
-								other.step === "exchange" && other.attempt > call.value.attempt,
-						) ||
 						!Schema.toEquivalence(Schema.Json)(
 							call.value.result,
 							yield* Schema.encodeEffect(

@@ -32,7 +32,8 @@ import * as Hex from "effect/encoding/Hex"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
 import * as Failures from "../errors/Failures.ts"
-import { Capabilities, type Opened } from "./Capabilities.ts"
+import * as Capabilities from "./Capabilities.ts"
+import { ConnectionSessions, type Opened } from "./ConnectionSessions.ts"
 import { appSecrets } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
@@ -74,7 +75,7 @@ export const make = Effect.gen(function* () {
 	const store = yield* Store
 	const policy = yield* ActionPolicy
 	const sql = yield* SqlClient.SqlClient
-	const capabilities = yield* Capabilities
+	const sessions = yield* ConnectionSessions
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
@@ -277,7 +278,7 @@ export const make = Effect.gen(function* () {
 		| AppViews.AppViewUnavailable,
 		Scope.Scope
 	> =>
-		capabilities
+		sessions
 			.open({
 				owner: ownerKey(identity),
 				connectionId,
@@ -285,7 +286,9 @@ export const make = Effect.gen(function* () {
 					check: (invocation) =>
 						invocation.connection.owner === ownerKey(identity) &&
 						invocation.connection.connectionId === connectionId &&
-						(Schema.is(Client.ListAction)(invocation.action) ||
+						((invocation.action === "connect" &&
+							invocation.target === invocation.connection.endpoint) ||
+							Schema.is(Client.ListAction)(invocation.action) ||
 							invocation.action === "resources/read")
 							? Effect.void
 							: Effect.fail(
@@ -408,8 +411,14 @@ export const make = Effect.gen(function* () {
 					)
 					if (opened.stored.revision !== operation.source.revision)
 						return yield* viewUnavailable("ConnectionChanged")
+					const tools = yield* Capabilities.tools(opened.client).pipe(
+						replaceUnavailable(
+							"OpenBot could not read the tools of an App view",
+							"Protocol",
+						),
+					)
 					const tool = Arr.findFirst(
-						opened.tools,
+						tools,
 						(tool) => tool.name === operation.source.name,
 					)
 					if (
@@ -474,7 +483,7 @@ export const make = Effect.gen(function* () {
 					return {
 						...(yield* binding(identity, view)),
 						resource,
-						tools: yield* Effect.forEach(opened.tools, (tool) =>
+						tools: yield* Effect.forEach(tools, (tool) =>
 							jsonObject(tool).pipe(
 								replaceUnavailable(
 									"A tool of an App view is not a JSON object",
@@ -603,29 +612,27 @@ export const make = Effect.gen(function* () {
 					const opened = yield* openClient(identity, view.connectionId)
 					if (opened.stored.revision !== view.revision)
 						return yield* viewUnavailable("ConnectionChanged")
-					const declaration: Option.Option<unknown> =
-						request.kind === "tool"
-							? Arr.findFirst(opened.tools, (tool) => tool.name === target)
-							: Arr.findFirst(
-									opened.resources,
-									(resource) => resource.uri === target,
-								)
-					if (Option.isNone(declaration))
+					const resolved = yield* opened.client
+						.resolve({ kind: request.kind, name: target }, "host")
+						.pipe(
+							replaceUnavailable(
+								"OpenBot could not read the action of an App view",
+								"Declaration",
+							),
+						)
+					if (Option.isNone(resolved))
 						return yield* viewUnavailable("Declaration")
+					const declaration = resolved.value
 					const original = yield* apps.read(identity, view.operationId)
 					const origin: AppCalls.Source = {
 						...original.source,
 						kind: request.kind,
 						name: target,
-						definition: yield* json(declaration.value),
+						definition: yield* json(declaration.definition),
 					}
 					const parameters =
-						request.kind === "tool"
-							? yield* jsonObject(
-									Option.getOrThrow(
-										Arr.findFirst(opened.tools, (tool) => tool.name === target),
-									).inputSchema,
-								)
+						declaration.kind === "tool"
+							? yield* jsonObject(declaration.definition.inputSchema)
 							: { type: "object", properties: {}, additionalProperties: false }
 					const actionDefinition = {
 						name,

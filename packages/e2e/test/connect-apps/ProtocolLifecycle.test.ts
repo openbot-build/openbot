@@ -3,7 +3,7 @@ import {
 	MemoryStore,
 	MemoryIndex,
 	AppConnections,
-	McpClient,
+	Client,
 	Index,
 	Discovery,
 	Document,
@@ -29,6 +29,21 @@ import {
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import * as Mcp from "@modelcontextprotocol/client"
 import { Fixture } from "@openbot-build/protocol/testing"
+
+/** Resolve one tool before it runs. The handle keeps that declaration. */
+const resolveTool = Effect.fn("Test.resolveTool")(function* (
+	client: Client.Client,
+	name: string,
+	source: Client.CallSource,
+) {
+	const selected = yield* client.resolve({ kind: "tool", name }, source)
+	if (Option.isNone(selected) || selected.value.kind !== "tool")
+		return yield* Client.PermissionDenied.make({
+			action: "tools/call",
+			target: name,
+		})
+	return selected.value
+})
 
 // Build the services to test real HTTP cancellation and lifecycle storage
 // failures. The tests use it.live, because they talk to a real HTTPS server.
@@ -144,7 +159,7 @@ const service = Effect.gen(function* () {
 		MemoryStore.layerCredentials,
 		MemoryIndex.layer,
 		AppConnections.layerConnectionScopes,
-		McpClient.layerPolicy(() => Effect.void),
+		AppConnections.layerPolicy(() => Effect.void),
 	)
 	const key = { owner: "alice", connectionId: "notes" }
 	const connection = Store.UserConnection.make({
@@ -218,21 +233,17 @@ it.live(
 							],
 						}),
 					)
-					const client = yield* McpClient.open({
+					const client = yield* AppConnections.open({
 						key: fixture.key,
 						clientInfo: {
 							name: "test",
 							version: "1.0.0",
 						},
 					})
+					const hostHang = yield* resolveTool(client, "Hang", "host")
+					const appHang = yield* resolveTool(client, "Hang", "app")
 					const request = yield* Effect.forkChild(
-						client.callTool(
-							{ name: "Hang" },
-							{
-								source: "host",
-								readOnly: true,
-							},
-						),
+						hostHang.invoke({}, { readOnly: true }),
 					)
 					yield* fixture.hanging
 					const credentials = yield* Store.CredentialStore
@@ -270,16 +281,7 @@ it.live(
 						"Failure",
 					)
 					assert.strictEqual(
-						(yield* Effect.result(
-							client.callTool(
-								{
-									name: "Hang",
-								},
-								{
-									source: "app",
-								},
-							),
-						))._tag,
+						(yield* Effect.result(appHang.invoke({}, {})))._tag,
 						"Failure",
 					)
 					assert.strictEqual(yield* fixture.reads, before)
@@ -426,7 +428,7 @@ it.live(
 					const before = yield* fixture.reads
 					assert.strictEqual(
 						(yield* Effect.result(
-							McpClient.open({
+							AppConnections.open({
 								key: fixture.key,
 								clientInfo: {
 									name: "test",
@@ -462,7 +464,7 @@ it.live(
 					)
 					assert.strictEqual(
 						(yield* Effect.result(
-							McpClient.open({
+							AppConnections.open({
 								key: fixture.key,
 								clientInfo: {
 									name: "test",
@@ -534,7 +536,7 @@ it.live(
 						)
 						assert.strictEqual(
 							(yield* Effect.result(
-								McpClient.open({
+								AppConnections.open({
 									key,
 									clientInfo: {
 										name: "test",

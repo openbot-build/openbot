@@ -1,5 +1,5 @@
 import { Execution } from "@openbot-build/domain"
-import { Array as Arr, Cause, Clock, Effect, Option, Schema } from "effect"
+import { Cause, Clock, Effect, Option, Schema } from "effect"
 import { DurableClock } from "effect/workflow"
 import { Records } from "../errors/Records.ts"
 import { Calls } from "./Calls.ts"
@@ -25,14 +25,7 @@ export const make = Effect.gen(function* () {
 	) =>
 		Effect.gen(function* () {
 			yield* calls.authorize(fence, "replay")
-			const history = yield* store.calls(fence)
-			const prior = Arr.head(
-				Arr.sort(
-					Arr.filter(history, (saved) => saved.step === step),
-					(a: Execution.Call, b: Execution.Call) =>
-						a.attempt === b.attempt ? 0 : a.attempt > b.attempt ? -1 : 1,
-				),
-			)
+			const prior = yield* store.latestCall(fence, step)
 			let call = Option.isSome(prior)
 				? prior.value
 				: yield* store.writeAttempt(fence, step, input, "idempotent")
@@ -41,11 +34,8 @@ export const make = Effect.gen(function* () {
 				!Schema.toEquivalence(Schema.Json)(call.input, input)
 			)
 				return yield* Execution.Conflict.make({ id: fence.id })
-			const first = Arr.findFirst(
-				yield* store.calls(fence),
-				(saved) => saved.step === step && saved.attempt === 0,
-			)
-			if (Option.isNone(first))
+			const first = yield* store.firstCall(fence, step)
+			if (Option.isNone(first) || first.value.attempt !== 0)
 				return yield* Effect.die("The call has no first attempt.")
 			const idempotencyKey = first.value.id
 			while (true) {

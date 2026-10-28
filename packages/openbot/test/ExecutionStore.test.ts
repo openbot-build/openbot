@@ -58,6 +58,129 @@ const submission = {
 } satisfies Store.Submission
 
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
+	it.effect("call queries keep steps, attempts, and owners separate", () =>
+		Effect.gen(function* () {
+			const store = yield* Store.Store
+			const namespace = "call-queries"
+			const receipt = yield* store.submit(
+				namespace,
+				Execution.CommandKey.make("start"),
+				submission,
+			)
+			const key = { namespace, id: receipt.executionId }
+			const fence = yield* store.takeOver(key)
+			const last = yield* store.intent(fence, {
+				step: "model",
+				attempt: 3,
+				retry: "read_only",
+				input: { attempt: 3 },
+			})
+			const first = yield* store.intent(fence, {
+				step: "model",
+				attempt: 0,
+				retry: "read_only",
+				input: { attempt: 0 },
+			})
+			yield* store.intent(fence, {
+				step: "model",
+				attempt: 1,
+				retry: "read_only",
+				input: { attempt: 1 },
+			})
+			const tool = yield* store.intent(fence, {
+				step: "tool",
+				attempt: 0,
+				retry: "never",
+				input: { value: "tool input" },
+			})
+			const other = yield* store.submit(
+				namespace,
+				Execution.CommandKey.make("other"),
+				submission,
+			)
+			const otherKey = { namespace, id: other.executionId }
+			const otherFence = yield* store.takeOver(otherKey)
+			const otherCall = yield* store.intent(otherFence, {
+				step: "model",
+				attempt: 9,
+				retry: "read_only",
+				input: { value: "other input" },
+			})
+			assert.deepEqual(Option.getOrThrow(yield* store.call(key, tool.id)), tool)
+			assert.equal(
+				Option.getOrThrow(yield* store.firstCall(key, "model")).id,
+				first.id,
+			)
+			assert.equal(
+				Option.getOrThrow(yield* store.latestCall(key, "model")).id,
+				last.id,
+			)
+			const latest = yield* store.latestCalls(key)
+			assert.equal(latest.length, 2)
+			assert.equal(
+				Option.getOrThrow(
+					Arr.findFirst(latest, (call) => call.step === "model"),
+				).id,
+				last.id,
+			)
+			assert.equal(
+				Option.getOrThrow(Arr.findFirst(latest, (call) => call.step === "tool"))
+					.id,
+				tool.id,
+			)
+			assert.equal(
+				Option.getOrThrow(yield* store.latestCall(otherKey, "model")).id,
+				otherCall.id,
+			)
+			assert.isTrue(Option.isNone(yield* store.call(otherKey, last.id)))
+			assert.isTrue(Option.isNone(yield* store.firstCall(key, "missing")))
+			assert.isTrue(Option.isNone(yield* store.latestCall(key, "missing")))
+			const wrongOwner = { ...key, namespace: "other-call-queries" }
+			assert.isTrue(Option.isNone(yield* store.call(wrongOwner, last.id)))
+			assert.isTrue(Option.isNone(yield* store.firstCall(wrongOwner, "model")))
+			assert.isTrue(Option.isNone(yield* store.latestCall(wrongOwner, "model")))
+			assert.deepEqual(yield* store.latestCalls(wrongOwner), [])
+		}),
+	)
+	it.effect("a query opens only the calls it needs", () =>
+		Effect.gen(function* () {
+			const store = yield* Store.Store
+			const sql = yield* PgClient.PgClient
+			const namespace = "call-query-secrets"
+			const receipt = yield* store.submit(
+				namespace,
+				Execution.CommandKey.make("start"),
+				submission,
+			)
+			const key = { namespace, id: receipt.executionId }
+			const fence = yield* store.takeOver(key)
+			const first = yield* store.intent(fence, {
+				step: "model",
+				attempt: 0,
+				retry: "read_only",
+				input: { value: "first input" },
+			})
+			const last = yield* store.intent(fence, {
+				step: "model",
+				attempt: 1,
+				retry: "read_only",
+				input: { value: "last input" },
+			})
+			yield* store.sending(fence, last.id)
+			yield* store.finishCall(fence, last.id, { value: "saved result" })
+			yield* sql`update openbot_execution_calls set input = ${"broken secret envelope"} where namespace = ${namespace} and id = ${first.id}`
+			const selected = Option.getOrThrow(yield* store.call(key, last.id))
+			assert.deepEqual(selected.input, last.input)
+			assert.deepEqual(selected.result, { value: "saved result" })
+			assert.deepEqual(
+				Option.getOrThrow(yield* store.latestCall(key, "model")),
+				selected,
+			)
+			assert.deepEqual(yield* store.latestCalls(key), [selected])
+			const failed = yield* store.firstCall(key, "model").pipe(Effect.flip)
+			assert.isTrue(Schema.is(Execution.StorageError)(failed))
+		}),
+	)
 	for (const damage of ["seal", "JSON", "identity"] as const) {
 		it.effect(
 			`a corrupt execution ${damage} is a storage failure, not a missing record`,

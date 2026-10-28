@@ -13,7 +13,7 @@ import { SqlClient } from "effect/sql"
 import * as ExecutionTables from "../ExecutionSchema.ts"
 import * as PermitTables from "../PermitSchema.ts"
 import * as ResourceTables from "../ResourceSchema.ts"
-import { developerWatches } from "../Schema.ts"
+import { appGrantUses, developerWatches } from "../Schema.ts"
 import { Secrets } from "../../secrets/Secrets.ts"
 import { Store } from "../../execution/Store.ts"
 import * as TestCleanup from "../../apps/TestCleanup.ts"
@@ -50,6 +50,7 @@ export const counts = Effect.gen(function* () {
 			...PermitTables,
 			...ResourceTables,
 			developerWatches,
+			appGrantUses,
 		}),
 		getTableName,
 	)

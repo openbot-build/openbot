@@ -17,7 +17,8 @@ import {
 import { Hex } from "effect/encoding"
 import { json } from "./AppResults.ts"
 import type { Binding } from "../code/Bindings.ts"
-import type { Capabilities, Opened } from "./Capabilities.ts"
+import * as Capabilities from "./Capabilities.ts"
+import type { ConnectionSessions, Opened } from "./ConnectionSessions.ts"
 import type { ActionPolicy } from "./ActionPolicy.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { organizationOf } from "./StoredConnections.ts"
@@ -30,7 +31,7 @@ import * as Failures from "../errors/Failures.ts"
 export interface DiscoveryServices {
 	readonly db: Db.Database
 	readonly secrets: typeof Secrets.Service
-	readonly capabilities: typeof Capabilities.Service
+	readonly sessions: typeof ConnectionSessions.Service
 	readonly policy: typeof ActionPolicy.Service
 	readonly crypto: Crypto.Crypto
 	readonly report: Report.Report
@@ -49,7 +50,7 @@ const hash = (crypto: Crypto.Crypto, value: unknown) =>
 		// The value is JSON data and SHA-256 is always there, so a failure here is a defect.
 		Effect.orDie,
 	)
-const visible = (tool: Opened["tools"][number]) => {
+const visible = (tool: Capabilities.Catalog["tools"][number]) => {
 	const metadata = Schema.decodeUnknownOption(
 		Schema.Struct({ visibility: Schema.Array(Schema.String) }),
 	)(tool._meta?.["ui"])
@@ -66,6 +67,7 @@ const bindingsFor = (
 	services: DiscoveryServices,
 	owner: string,
 	opened: Opened,
+	declarations: ReadonlyArray<Capabilities.Declaration>,
 	occupied: ReadonlyArray<string>,
 	selected: Option.Option<Selected>,
 ) =>
@@ -129,78 +131,78 @@ const bindingsFor = (
 					readOnly,
 				})
 			})
-		for (const tool of Arr.filter(opened.tools, (tool) =>
-			Option.match(selected, {
-				onNone: () => visible(tool),
-				onSome: ({ source }) =>
-					source.kind === "tool" && source.target === tool.name,
-			}),
-		)) {
-			const origin = source("tool", tool.name, yield* json(tool))
-			yield* add(
-				origin,
-				tool.inputSchema,
-				tool.description ?? "Call this App capability.",
-				true,
-				yield* services.policy.isRead({
-					organizationId: organizationOf(owner),
-					source: origin,
-				}),
-			)
-		}
-		for (const resource of Arr.filter(opened.resources, (resource) =>
-			Option.match(selected, {
-				onNone: () => true,
-				onSome: ({ source }) =>
-					source.kind === "resource" && source.target === resource.uri,
-			}),
-		))
-			yield* add(
-				source("resource", resource.uri, yield* json(resource)),
-				{ type: "object", properties: {}, additionalProperties: false },
-				resource.description ?? "Read this App resource.",
-				false,
-				true,
-			)
-		for (const template of Option.isNone(selected)
-			? opened.resourceTemplates
-			: [])
-			yield* add(
-				source("template", template.uriTemplate, yield* json(template)),
-				{ type: "object", additionalProperties: { type: "string" } },
-				template.description ?? "Read this App resource template.",
-				false,
-				true,
-			)
-		for (const prompt of Option.isNone(selected) ? opened.prompts : []) {
-			const args = prompt.arguments ?? []
-			yield* add(
-				source("prompt", prompt.name, yield* json(prompt)),
-				{
-					type: "object",
-					properties: Rec.fromEntries(
-						Arr.map(args, (argument) => [
-							argument.name,
+		const addDeclaration = (declaration: Capabilities.Declaration) =>
+			Effect.gen(function* () {
+				switch (declaration.kind) {
+					case "tool": {
+						const tool = declaration.definition
+						if (Option.isNone(selected) && !visible(tool)) return
+						const origin = source("tool", tool.name, yield* json(tool))
+						yield* add(
+							origin,
+							tool.inputSchema,
+							tool.description ?? "Call this App capability.",
+							true,
+							yield* services.policy.isRead({
+								organizationId: organizationOf(owner),
+								source: origin,
+							}),
+						)
+						return
+					}
+					case "resource": {
+						const resource = declaration.definition
+						return yield* add(
+							source("resource", resource.uri, yield* json(resource)),
+							{ type: "object", properties: {}, additionalProperties: false },
+							resource.description ?? "Read this App resource.",
+							false,
+							true,
+						)
+					}
+					case "template": {
+						const template = declaration.definition
+						return yield* add(
+							source("template", template.uriTemplate, yield* json(template)),
+							{ type: "object", additionalProperties: { type: "string" } },
+							template.description ?? "Read this App resource template.",
+							false,
+							true,
+						)
+					}
+					case "prompt": {
+						const prompt = declaration.definition
+						const args = prompt.arguments ?? []
+						return yield* add(
+							source("prompt", prompt.name, yield* json(prompt)),
 							{
-								type: "string",
-								...(argument.description === undefined
-									? {}
-									: { description: argument.description }),
+								type: "object",
+								properties: Rec.fromEntries(
+									Arr.map(args, (argument) => [
+										argument.name,
+										{
+											type: "string",
+											...(argument.description === undefined
+												? {}
+												: { description: argument.description }),
+										},
+									]),
+								),
+								required: pipe(
+									args,
+									Arr.filter((argument) => argument.required === true),
+									Arr.map((argument) => argument.name),
+								),
+								additionalProperties: false,
 							},
-						]),
-					),
-					required: pipe(
-						args,
-						Arr.filter((argument) => argument.required === true),
-						Arr.map((argument) => argument.name),
-					),
-					additionalProperties: false,
-				},
-				prompt.description ?? "Read this App prompt as external content.",
-				false,
-				true,
-			)
-		}
+							prompt.description ?? "Read this App prompt as external content.",
+							false,
+							true,
+						)
+					}
+				}
+			})
+		yield* Effect.forEach(declarations, addDeclaration, { discard: true })
 		return entries
 	})
 
@@ -285,14 +287,20 @@ const read = (
 								action: invocation.action,
 								target: invocation.target,
 							})
-						if (!Schema.is(Client.ListAction)(invocation.action))
+						if (
+							!Schema.is(Client.ListAction)(invocation.action) &&
+							!(
+								invocation.action === "connect" &&
+								invocation.target === current.connection.endpoint
+							)
+						)
 							return yield* Client.PermissionDenied.make({
 								action: invocation.action,
 								target: invocation.target,
 							})
 					}),
 			})
-			const result = yield* services.capabilities
+			const result = yield* services.sessions
 				.open({
 					owner,
 					connectionId: ConnectionId.make(stored.connection.connectionId),
@@ -300,16 +308,48 @@ const read = (
 				})
 				.pipe(
 					Effect.flatMap((opened) =>
-						bindingsFor(
-							services,
-							owner,
-							opened,
-							Arr.appendAll(
-								occupied,
-								Arr.map(entries, (entry) => entry.name),
-							),
-							selected,
-						),
+						Effect.gen(function* () {
+							if (
+								Option.exists(
+									selected,
+									({ source }) => source.revision !== opened.stored.revision,
+								)
+							)
+								return []
+							const declarations = yield* Option.match(selected, {
+								onNone: () =>
+									Capabilities.discover(opened.client).pipe(
+										Effect.map(Capabilities.declarations),
+									),
+								onSome: ({ source }) =>
+									opened.client
+										.resolve({ kind: source.kind, name: source.target }, "host")
+										.pipe(
+											Effect.map(
+												Option.match({
+													onNone:
+														(): ReadonlyArray<Capabilities.Declaration> => [],
+													onSome: (
+														action,
+													): ReadonlyArray<Capabilities.Declaration> => [
+														action,
+													],
+												}),
+											),
+										),
+							})
+							return yield* bindingsFor(
+								services,
+								owner,
+								opened,
+								declarations,
+								Arr.appendAll(
+									occupied,
+									Arr.map(entries, (entry) => entry.name),
+								),
+								selected,
+							)
+						}),
 					),
 					Effect.tapCauseIf(Cause.hasFails, (cause) =>
 						services

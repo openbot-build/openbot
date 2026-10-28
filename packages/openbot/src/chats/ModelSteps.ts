@@ -65,14 +65,7 @@ const make = Effect.gen(function* () {
 		purpose: "turn" | "compaction" = "turn",
 	) {
 		yield* calls.authorize(fence, "replay")
-		const history = Arr.filter(
-			yield* store.calls(fence),
-			(call) => call.step === step,
-		)
-		const prior = Arr.findFirst(
-			history,
-			(call) => !Arr.some(history, (other) => other.attempt > call.attempt),
-		)
+		const prior = yield* store.latestCall(fence, step)
 		const request = {
 			purpose,
 			selection: yield* Schema.encodeEffect(

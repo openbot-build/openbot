@@ -3,20 +3,19 @@ import { AppConnections as Domain } from "@openbot-build/domain"
 import {
 	AppConnections,
 	McpClient,
-	MemoryStore,
 	Store,
+	Client,
 	Network,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { OutboundPolicy } from "../network/OutboundPolicy.ts"
 import * as Failures from "../errors/Failures.ts"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Option } from "effect"
 
 export class Probe extends Context.Service<
 	Probe,
 	{
 		readonly check: (input: {
-			readonly app: Store.AppRecord
 			readonly connection: Store.UserConnection
 		}) => Effect.Effect<
 			| { readonly requiresAuthorization: false }
@@ -38,10 +37,23 @@ export const layerWithNetwork = (
 		check: (input) =>
 			Effect.scoped(
 				Effect.gen(function* () {
-					const store = yield* Store.AppStore
-					yield* store.save(input)
 					yield* McpClient.open({
 						key: input.connection,
+						endpoint: input.connection.endpoint,
+						headers: input.connection.headers,
+						readToken: AppConnections.authorizationToken(
+							input.connection,
+							Option.none(),
+						),
+						check: (request) =>
+							request.action === "connect"
+								? Effect.void
+								: Effect.fail(
+										Client.PermissionDenied.make({
+											action: request.action,
+											target: request.target,
+										}),
+									),
 						clientInfo: { name: "OpenBot", version: "0.1.0" },
 					})
 					return { requiresAuthorization: false } as const
@@ -56,16 +68,8 @@ export const layerWithNetwork = (
 							: { resourceMetadataUrl: error.resourceMetadataUrl }),
 					} as const),
 				),
-				// @effect-diagnostics-next-line strictEffectProvide:off -- Each check builds its own short-lived store and network for one handshake.
-				Effect.provide(
-					Layer.mergeAll(
-						MemoryStore.layer,
-						MemoryStore.layerCredentials,
-						AppConnections.layerConnectionScopes,
-						McpClient.layerPolicy(() => Effect.void),
-						network(input.connection),
-					),
-				),
+				// @effect-diagnostics-next-line strictEffectProvide:off -- Each check builds its own network for one handshake.
+				Effect.provide(network(input.connection)),
 				Failures.replace("App connection check failed", () =>
 					Domain.ConnectionConfigurationInvalid.make({
 						message:

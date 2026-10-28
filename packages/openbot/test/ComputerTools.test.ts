@@ -205,6 +205,47 @@ const unavailable = () =>
 	Effect.fail(ComputersApi.ComputersUnavailable.make({}))
 
 describe("Computer tools", () => {
+	it.effect("a saved Computer tool needs no model tool list", () =>
+		Effect.gen(function* () {
+			const work = yield* makeWork
+			const seen = yield* Effect.all({
+				checks: Ref.make<ReadonlyArray<string>>([]),
+				runs: Ref.make<ReadonlyArray<ComputersApi.ExecRequest>>([]),
+			})
+			const checked = yield* Ref.make(false)
+			const registration = yield* Effect.gen(function* () {
+				const tools = yield* ComputerTools.ComputerTools
+				return yield* tools.restore(
+					{ notify: () => Effect.void },
+					names.read,
+					work,
+				)
+			}).pipe(
+				Effect.provide(
+					pluginWith(seen, {
+						computers: {
+							list: () =>
+								Effect.die("A saved tool must not read model instructions."),
+							holds: () => Ref.set(checked, true).pipe(Effect.as(false)),
+							machine: () =>
+								Effect.die("A denied tool must not open a machine."),
+						},
+					}),
+				),
+			)
+			assert.deepStrictEqual(Rec.keys(registration.tools), [names.read])
+			assert.isUndefined(registration.instructions)
+			const toolkit = Toolkit.make(...Rec.values(registration.tools))
+			yield* Effect.gen(function* () {
+				const tools = yield* toolkit
+				yield* tools
+					.handle(names.read, { computer: "computer", path: "/file" }, "read")
+					.pipe(Effect.flatMap(Stream.runDrain))
+			}).pipe(Effect.provideContext(registration.handlers))
+			assert.isTrue(yield* Ref.get(checked))
+		}),
+	)
+
 	it.effect(
 		"held Computer tools check the task input token before using a machine or session",
 		() =>

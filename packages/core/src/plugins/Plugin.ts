@@ -66,82 +66,25 @@ export type StoreEffect<A, E, R> = Effect.Effect<
 	R
 >
 
-/** Operations on this plugin's optional value. An update may run again after a write conflict, so it must have no outside effects. */
+/** Leave `value` out to keep the store as it is. `None` removes the value. */
+export interface StoreChange<A, B> {
+	readonly result: B
+	readonly value?: Option.Option<A>
+}
+
+/** Operations on this plugin's optional value. */
 export interface StoreOperations<A, E = never, R = never> {
 	readonly get: StoreEffect<Option.Option<A>, E, R>
 	readonly snapshot: StoreEffect<StoreState<A>, E, R>
-	/** Replaces the value only if the revision that snapshot returned still matches. */
+	/** Run outside work after `snapshot`, then use this to save only if its revision still matches. A conflict is not retried. */
 	readonly setAt: (input: {
 		readonly base: Chat.Position
 		readonly value: Option.Option<A>
 	}) => StoreEffect<Chat.Ref, E, R>
-	readonly set: (value: Option.Option<A>) => StoreEffect<void, E, R>
-	readonly getAndSet: (
-		value: Option.Option<A>,
-	) => StoreEffect<Option.Option<A>, E, R>
-	readonly setAndGet: (
-		value: Option.Option<A>,
-	) => StoreEffect<Option.Option<A>, E, R>
+	/** The pure update may run again after a write conflict. It must have no outside effects. */
 	readonly modify: <B>(
-		f: (value: Option.Option<A>) => readonly [B, Option.Option<A>],
+		f: (value: Option.Option<A>) => StoreChange<A, B>,
 	) => StoreEffect<B, E, R>
-	readonly modifyEffect: <B, E2, R2>(
-		f: (
-			value: Option.Option<A>,
-		) => Effect.Effect<readonly [B, Option.Option<A>], E2, R2>,
-	) => StoreEffect<B, E | E2, R | R2>
-	readonly modifySome: <B>(
-		f: (
-			value: Option.Option<A>,
-		) => readonly [B, Option.Option<Option.Option<A>>],
-	) => StoreEffect<B, E, R>
-	readonly modifySomeEffect: <B, E2, R2>(
-		f: (
-			value: Option.Option<A>,
-		) => Effect.Effect<readonly [B, Option.Option<Option.Option<A>>], E2, R2>,
-	) => StoreEffect<B, E | E2, R | R2>
-	readonly update: (
-		f: (value: Option.Option<A>) => Option.Option<A>,
-	) => StoreEffect<void, E, R>
-	readonly updateEffect: <E2, R2>(
-		f: (value: Option.Option<A>) => Effect.Effect<Option.Option<A>, E2, R2>,
-	) => StoreEffect<void, E | E2, R | R2>
-	readonly getAndUpdate: (
-		f: (value: Option.Option<A>) => Option.Option<A>,
-	) => StoreEffect<Option.Option<A>, E, R>
-	readonly getAndUpdateEffect: <E2, R2>(
-		f: (value: Option.Option<A>) => Effect.Effect<Option.Option<A>, E2, R2>,
-	) => StoreEffect<Option.Option<A>, E | E2, R | R2>
-	readonly updateAndGet: (
-		f: (value: Option.Option<A>) => Option.Option<A>,
-	) => StoreEffect<Option.Option<A>, E, R>
-	readonly updateAndGetEffect: <E2, R2>(
-		f: (value: Option.Option<A>) => Effect.Effect<Option.Option<A>, E2, R2>,
-	) => StoreEffect<Option.Option<A>, E | E2, R | R2>
-	readonly updateSome: (
-		f: (value: Option.Option<A>) => Option.Option<Option.Option<A>>,
-	) => StoreEffect<void, E, R>
-	readonly updateSomeEffect: <E2, R2>(
-		f: (
-			value: Option.Option<A>,
-		) => Effect.Effect<Option.Option<Option.Option<A>>, E2, R2>,
-	) => StoreEffect<void, E | E2, R | R2>
-	readonly getAndUpdateSome: (
-		f: (value: Option.Option<A>) => Option.Option<Option.Option<A>>,
-	) => StoreEffect<Option.Option<A>, E, R>
-	readonly getAndUpdateSomeEffect: <E2, R2>(
-		f: (
-			value: Option.Option<A>,
-		) => Effect.Effect<Option.Option<Option.Option<A>>, E2, R2>,
-	) => StoreEffect<Option.Option<A>, E | E2, R | R2>
-	readonly updateSomeAndGet: (
-		f: (value: Option.Option<A>) => Option.Option<Option.Option<A>>,
-	) => StoreEffect<Option.Option<A>, E, R>
-	readonly updateSomeAndGetEffect: <E2, R2>(
-		f: (
-			value: Option.Option<A>,
-		) => Effect.Effect<Option.Option<Option.Option<A>>, E2, R2>,
-	) => StoreEffect<Option.Option<A>, E | E2, R | R2>
 }
 
 /** Module schema data and its operations keep separate types. The caller provides the store. */

@@ -8,6 +8,7 @@ import {
 	pipe,
 	Queue,
 	Redacted,
+	Ref,
 	Schema,
 	Stream,
 	Match,
@@ -28,6 +29,32 @@ import { assert, it } from "@effect/vitest"
 import * as Mcp from "@modelcontextprotocol/client"
 
 import { Fixture } from "@openbot-build/protocol/testing"
+
+/** Resolve one tool before it runs. The handle keeps that declaration. */
+const resolveTool = Effect.fn("Test.resolveTool")(function* (
+	client: Client.Client,
+	name: string,
+	source: Client.CallSource,
+) {
+	const selected = yield* client.resolve({ kind: "tool", name }, source)
+	if (Option.isNone(selected) || selected.value.kind !== "tool")
+		return yield* Client.PermissionDenied.make({
+			action: "tools/call",
+			target: name,
+		})
+	return selected.value
+})
+
+const resultValue = <A>(
+	schema: () => Mcp.StandardSchemaV1<unknown, A>,
+	value: unknown,
+) =>
+	McpClient.decodeStandard(schema, value, () =>
+		Client.ClientError.make({
+			reason: "Schema",
+			issue: "The result has the wrong form.",
+		}),
+	)
 
 // These tests build their Layers at the edge of the test runtime.
 
@@ -395,17 +422,42 @@ const service = Effect.gen(function* () {
 					}),
 				),
 				Match.when("resources/read", () =>
-					reply({
-						contents: [
-							{
-								uri: params.uri,
-								text: "resource text",
-								mimeType: "text/plain",
-								_meta: {
-									origin: "independent",
+					Effect.gen(function* () {
+						if (params.uri === "notes://ask,more") {
+							if (params.inputResponses === undefined)
+								return yield* HttpServerResponse.json({
+									jsonrpc: "2.0",
+									id: request.id,
+									result: {
+										resultType: "input_required",
+										inputRequests: {
+											consent: {
+												method: "elicitation/create",
+												params: {
+													message: "Read these notes?",
+													requestedSchema: { type: "object", properties: {} },
+												},
+											},
+										},
+										requestState: "saved-template-read",
+										_meta: meta,
+									},
+								})
+							assert.strictEqual(params.requestState, "saved-template-read")
+							assert.deepStrictEqual(params.inputResponses, {
+								consent: { action: "accept", content: {} },
+							})
+						}
+						return yield* reply({
+							contents: [
+								{
+									uri: params.uri,
+									text: "resource text",
+									mimeType: "text/plain",
+									_meta: { origin: "independent" },
 								},
-							},
-						],
+							],
+						})
 					}),
 				),
 				Match.when("prompts/list", () =>
@@ -475,7 +527,7 @@ const service = Effect.gen(function* () {
 		MemoryStore.layer,
 		MemoryStore.layerCredentials,
 		AppConnections.layerConnectionScopes,
-		McpClient.layerPolicy((invocation) =>
+		AppConnections.layerPolicy((invocation) =>
 			denied && invocation.action === "tools/call"
 				? Effect.fail(
 						Client.PermissionDenied.make({
@@ -491,7 +543,7 @@ const service = Effect.gen(function* () {
 		yield* store.save({ app: record, connection })
 	})
 	const connect = (inputs?: Client.InputHandler) =>
-		McpClient.open({
+		AppConnections.open({
 			key,
 			clientInfo: { name: "protocol-test-host", version: "1.0.0" },
 			...(inputs === undefined ? {} : { inputs }),
@@ -548,6 +600,75 @@ const layersOf = (fixture: Effect.Success<typeof service>) =>
 	fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules]))
 
 it.live(
+	"a connection needs no App stores and keeps one selected tool until its scope ends",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* service
+			const token = yield* Ref.make("first-token")
+			yield* Effect.scoped(
+				Effect.gen(function* () {
+					const client = yield* McpClient.open({
+						key: fixture.key,
+						endpoint: fixture.endpoint,
+						headers: fixture.connection.headers,
+						clientInfo: { name: "test-host", version: "1.0.0" },
+						readToken: Ref.get(token).pipe(
+							Effect.map((value) => Option.some(Redacted.make(value))),
+						),
+						check: () => Effect.void,
+					})
+					assert.deepStrictEqual(
+						Arr.map(fixture.requests, (request) => request.request.method),
+						["server/discover"],
+					)
+					assert.deepStrictEqual(
+						Option.flatMap(Arr.head(fixture.requests), (request) =>
+							Headers.get(request.headers, "authorization"),
+						),
+						Option.some("Bearer first-token"),
+					)
+					const before = fixture.requests.length
+					const write = yield* resolveTool(client, "Write", "model")
+					assert.deepStrictEqual(
+						Arr.map(
+							Arr.drop(fixture.requests, before),
+							(request) => request.request.method,
+						),
+						["tools/list"],
+					)
+					const lists = fixture.state.listReads
+					yield* Ref.set(token, "next-token")
+					yield* write.invoke({ arguments: { text: "saved declaration" } }, {})
+					assert.strictEqual(fixture.state.listReads, lists)
+					assert.deepStrictEqual(
+						Option.flatMap(Arr.last(fixture.requests), (request) =>
+							Headers.get(request.headers, "authorization"),
+						),
+						Option.some("Bearer next-token"),
+					)
+					yield* client.close
+					const closedAt = fixture.requests.length
+					const closed = yield* Effect.flip(
+						write.invoke({ arguments: { text: "closed" } }, {}),
+					)
+					assert.ok(closed._tag === "ClientError")
+					assert.strictEqual(closed.reason, "Closed")
+					assert.strictEqual(fixture.requests.length, closedAt)
+				}),
+			).pipe(
+				Effect.provide(
+					NodeHttpServer.layerUserNetwork({
+						owner: fixture.key.owner,
+						allowedOrigins: [fixture.ipOrigin],
+						allowAddress: (ip) => ip === "127.0.0.1",
+						ca: fixture.ca,
+					}),
+				),
+			)
+		}).pipe(Effect.provide(NodeServices.layer)),
+)
+
+it.live(
 	"the protocol client uses live discovery, standard pages, schemas, headers and one shared policy",
 	() =>
 		Effect.gen(function* () {
@@ -566,6 +687,10 @@ it.live(
 						fixture.requests[0]?.request.method,
 						"server/discover",
 					)
+					assert.deepStrictEqual(
+						Arr.map(fixture.requests, (request) => request.request.method),
+						["server/discover"],
+					)
 					assert.strictEqual((yield* client.listTools()).tools.length, 9)
 					assert.strictEqual(
 						Arr.some(
@@ -574,29 +699,40 @@ it.live(
 						),
 						false,
 					)
-					const created = yield* client.callTool(
+					const listsBefore = fixture.state.listReads
+					const write = yield* resolveTool(client, "Write", "model")
+					assert.strictEqual(fixture.state.listReads, listsBefore + 1)
+					const resolvedAt = fixture.requests.length
+					const created = yield* write.invoke(
 						{
-							name: "Write",
 							arguments: {
 								text: "real MCP result",
 							},
 						},
-						{ source: "model" },
+						{},
 					)
 					assert.ok(created._tag === "Completed")
-					assert.deepStrictEqual(created.result.structuredContent, {
-						id: 1,
-					})
+					const createdValue = yield* resultValue(
+						() => Mcp.specTypeSchemas.CallToolResult,
+						created.result,
+					)
+					assert.deepStrictEqual(createdValue.structuredContent, { id: 1 })
+					assert.deepStrictEqual(
+						Arr.map(
+							Arr.drop(fixture.requests, resolvedAt),
+							(request) => request.request.method,
+						),
+						["tools/call"],
+					)
 					const before = fixture.requests.length
 					const invalid = yield* Effect.flip(
-						client.callTool(
+						write.invoke(
 							{
-								name: "Write",
 								arguments: {
 									text: "",
 								},
 							},
-							{ source: "model" },
+							{},
 						),
 					)
 					assert.ok(invalid._tag === "ClientError")
@@ -608,28 +744,27 @@ it.live(
 						),
 					)
 					const malformed = yield* Effect.result(
-						client.callTool(
-							{ name: "BadOutput" },
-							{ source: "host", readOnly: true },
+						(yield* resolveTool(client, "BadOutput", "host")).invoke(
+							{},
+							{ readOnly: true },
 						),
 					)
 					assert.ok(malformed._tag === "Failure")
 					assert.strictEqual(malformed.failure._tag, "ClientError")
 					const failed = yield* Effect.flip(
-						client.callTool({ name: "Fail" }, { source: "host" }),
+						(yield* resolveTool(client, "Fail", "host")).invoke({}, {}),
 					)
 					assert.ok(failed._tag === "ToolFailure")
 					const failedContent = failed.result.content[0]
 					assert.ok(failedContent?.type === "text")
 					assert.strictEqual(failedContent.text, "business rejected")
-					yield* client.callTool(
+					yield* (yield* resolveTool(client, "Mapped", "host")).invoke(
 						{
-							name: "Mapped",
 							arguments: {
 								locale: "\uFF2F\uFF2B",
 							},
 						},
-						{ source: "host" },
+						{},
 					)
 					assert.deepStrictEqual(
 						pipe(
@@ -641,33 +776,47 @@ it.live(
 						),
 						Option.some("=?base64?77yv77yr?="),
 					)
-					const resource = yield* client.readTemplate({
-						template: "notes://{id}",
-						values: { id: "42" },
-						source: "model",
-					})
-					assert.ok(resource._tag === "Completed")
-					assert.strictEqual(resource.result.contents[0]?.uri, "notes://42")
-					const prompt = yield* client.getPrompt(
-						{ name: "Summary" },
-						{ source: "model" },
+					const template = yield* client.resolve(
+						{ kind: "template", name: "notes://{id}" },
+						"model",
 					)
+					assert.ok(
+						Option.isSome(template) && template.value.kind === "template",
+					)
+					const resource = yield* template.value.invoke(
+						{ values: { id: "42" } },
+						{},
+					)
+					assert.ok(resource._tag === "Completed")
+					const resourceValue = yield* resultValue(
+						() => Mcp.specTypeSchemas.ReadResourceResult,
+						resource.result,
+					)
+					assert.strictEqual(resourceValue.contents[0]?.uri, "notes://42")
+					const summary = yield* client.resolve(
+						{ kind: "prompt", name: "Summary" },
+						"model",
+					)
+					assert.ok(Option.isSome(summary) && summary.value.kind === "prompt")
+					const prompt = yield* summary.value.invoke({}, {})
 					assert.ok(prompt._tag === "Completed")
-					assert.strictEqual(prompt.result.messages[0]?.content.type, "text")
+					const promptValue = yield* resultValue(
+						() => Mcp.specTypeSchemas.GetPromptResult,
+						prompt.result,
+					)
+					assert.strictEqual(promptValue.messages[0]?.content.type, "text")
+					const appWrite = yield* resolveTool(client, "Write", "app")
 					yield* fixture.deny
 					const deniedCount = fixture.requests.length
-					for (const source of ["model", "app"] as const) {
+					for (const action of [write, appWrite]) {
 						const denied = yield* Effect.flip(
-							client.callTool(
+							action.invoke(
 								{
-									name: "Write",
 									arguments: {
 										text: "denied",
 									},
 								},
-								{
-									source,
-								},
+								{},
 							),
 						)
 						assert.ok(denied._tag === "PermissionDenied")
@@ -717,10 +866,11 @@ it.live(
 				Effect.gen(function* () {
 					yield* fixture.prepare
 					const noInputs = yield* fixture.connect()
-					const pending = yield* noInputs.callTool(
-						{ name: "NeedInput" },
-						{ source: "host" },
-					)
+					const pending = yield* (yield* resolveTool(
+						noInputs,
+						"NeedInput",
+						"host",
+					)).invoke({}, {})
 					assert.ok(pending._tag === "InputRequired")
 					assert.strictEqual(fixture.state.writes, 0)
 					const unavailable = yield* Effect.flip(pending.handle)
@@ -741,13 +891,16 @@ it.live(
 								},
 							}),
 					})
-					const operation = yield* client.callTool(
-						{ name: "NeedInput" },
-						{ source: "host" },
-					)
+					const operation = yield* (yield* resolveTool(
+						client,
+						"NeedInput",
+						"host",
+					)).invoke({}, {})
 					assert.ok(operation._tag === "InputRequired")
+					const listsBeforeResume = fixture.state.listReads
 					const completed = yield* operation.handle
 					assert.strictEqual(completed._tag, "Completed")
+					assert.strictEqual(fixture.state.listReads, listsBeforeResume)
 					assert.strictEqual(fixture.state.writes, 1)
 					const requests = Arr.filter(
 						fixture.requests,
@@ -764,6 +917,132 @@ it.live(
 )
 
 it.live(
+	"saved tool input resumes on its selected action without new list reads",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* service
+			yield* Effect.scoped(
+				Effect.gen(function* () {
+					yield* fixture.prepare
+					const first = yield* fixture.connect()
+					const pending = yield* (yield* resolveTool(
+						first,
+						"NeedInput",
+						"host",
+					)).invoke({}, {})
+					assert.ok(pending._tag === "InputRequired")
+					const continuation = Client.Continuation.make({
+						method: "tools/call",
+						params: { name: "NeedInput" },
+						request: yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
+							pending.result,
+						),
+					})
+					yield* first.close
+					const restored = yield* fixture.connect({
+						capabilities: { elicitation: { form: {} } },
+						handle: () =>
+							Effect.succeed({ action: "accept", content: { text: "yes" } }),
+					})
+					const action = yield* resolveTool(restored, "NeedInput", "host")
+					const listsBefore = fixture.state.listReads
+					const responses = {
+						consent: { action: "accept", content: { text: "yes" } },
+					}
+					for (const changed of [
+						Client.Continuation.make({
+							...continuation,
+							method: "resources/read",
+							params: { uri: "notes://latest" },
+						}),
+						Client.Continuation.make({
+							...continuation,
+							params: { name: "Write" },
+						}),
+					]) {
+						const before = fixture.requests.length
+						const rejected = yield* Effect.flip(
+							action.resume(changed, responses, {}),
+						)
+						assert.ok(rejected._tag === "ClientError")
+						assert.strictEqual(rejected.reason, "Schema")
+						assert.strictEqual(fixture.requests.length, before)
+					}
+					const result = yield* action.resume(continuation, responses, {})
+					assert.strictEqual(result._tag, "Completed")
+					assert.strictEqual(fixture.state.listReads, listsBefore)
+					assert.strictEqual(fixture.state.writes, 1)
+					const sent = Arr.filter(
+						fixture.requests,
+						(request) => request.request.method === "tools/call",
+					)
+					assert.strictEqual(sent.length, 2)
+					assert.strictEqual(
+						sent[1]?.params.requestState,
+						"server-owned-operation-1",
+					)
+				}),
+			).pipe(Effect.provide(layersOf(fixture)))
+		}).pipe(Effect.provide(NodeServices.layer)),
+)
+
+it.live("saved template input keeps array values on a new connection", () =>
+	Effect.gen(function* () {
+		const fixture = yield* service
+		yield* Effect.scoped(
+			Effect.gen(function* () {
+				yield* fixture.prepare
+				const first = yield* fixture.connect()
+				const selected = yield* first.resolve(
+					{ kind: "template", name: "notes://{id}" },
+					"host",
+				)
+				assert.ok(Option.isSome(selected) && selected.value.kind === "template")
+				const values = { id: ["ask", "more"] }
+				const pending = yield* selected.value.invoke({ values }, {})
+				assert.ok(pending._tag === "InputRequired")
+				const continuation = Client.Continuation.make({
+					method: "resources/read",
+					params: { uriTemplate: "notes://{id}", values },
+					request: yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
+						pending.result,
+					),
+				})
+				yield* first.close
+				const restored = yield* fixture.connect({
+					capabilities: { elicitation: { form: {} } },
+					handle: () => Effect.succeed({ action: "accept", content: {} }),
+				})
+				const action = yield* restored.resolve(
+					{ kind: "template", name: "notes://{id}" },
+					"host",
+				)
+				assert.ok(Option.isSome(action) && action.value.kind === "template")
+				const before = fixture.requests.length
+				const completed = yield* action.value.resume(
+					continuation,
+					{ consent: { action: "accept", content: {} } },
+					{},
+				)
+				assert.ok(completed._tag === "Completed")
+				const result = yield* resultValue(
+					() => Mcp.specTypeSchemas.ReadResourceResult,
+					completed.result,
+				)
+				assert.strictEqual(result.contents[0]?.uri, "notes://ask,more")
+				const sent = Arr.drop(fixture.requests, before)
+				assert.deepStrictEqual(
+					Arr.map(sent, (value) => value.request.method),
+					["resources/read"],
+				)
+				assert.strictEqual(sent[0]?.params.uri, "notes://ask,more")
+				assert.strictEqual(sent[0]?.params.requestState, "saved-template-read")
+			}),
+		).pipe(Effect.provide(layersOf(fixture)))
+	}).pipe(Effect.provide(NodeServices.layer)),
+)
+
+it.live(
 	"SSE progress, explicit subscriptions, cancellation and unknown write outcomes stay distinct",
 	() =>
 		Effect.gen(function* () {
@@ -773,10 +1052,13 @@ it.live(
 					yield* fixture.prepare
 					const client = yield* fixture.connect()
 					let progress: ReadonlyArray<number> = []
-					const result = yield* client.callTool(
-						{ name: "Stream" },
+					const result = yield* (yield* resolveTool(
+						client,
+						"Stream",
+						"host",
+					)).invoke(
+						{},
 						{
-							source: "host",
 							onprogress: (event) =>
 								(progress = Arr.append(progress, event.progress)),
 						},
@@ -805,17 +1087,14 @@ it.live(
 					yield* subscription.close
 					assert.strictEqual(yield* subscription.closed, "local")
 					const hanging = yield* Effect.forkChild(
-						client.callTool({ name: "Hang" }, { source: "host" }),
+						(yield* resolveTool(client, "Hang", "host")).invoke({}, {}),
 					)
 					yield* fixture.hanging
 					yield* Fiber.interrupt(hanging)
 					const unknown = yield* Effect.result(
-						client.callTool(
-							{ name: "Drop" },
-							{
-								source: "host",
-								timeoutMs: 500,
-							},
+						(yield* resolveTool(client, "Drop", "host")).invoke(
+							{},
+							{ timeoutMs: 500 },
 						),
 					)
 					assert.ok(unknown._tag === "Failure")
@@ -839,7 +1118,7 @@ it.live(
 )
 
 it.live(
-	"Version mismatch fails before tools, and a service that advertises only tools gets no other lists",
+	"Version mismatch fails before tools, and opening a client reads no lists",
 	() =>
 		Effect.gen(function* () {
 			const fixture = yield* service
@@ -869,10 +1148,9 @@ it.live(
 					yield* fixture.connect()
 				}),
 			).pipe(Effect.provide(layersOf(fixture)))
-			assert.ok(
-				Arr.every(fixture.requests, (r) =>
-					Arr.contains(["server/discover", "tools/list"], r.request.method),
-				),
+			assert.deepStrictEqual(
+				Arr.map(fixture.requests, (r) => r.request.method),
+				["server/discover"],
 			)
 		}).pipe(Effect.provide(NodeServices.layer)),
 )
@@ -891,10 +1169,11 @@ it.live(
 						handle: () =>
 							Effect.succeed({ action: "accept", content: { text: "yes" } }),
 					})
-					const operation = yield* client.callTool(
-						{ name: "NeedInput" },
-						{ source: "host" },
-					)
+					const operation = yield* (yield* resolveTool(
+						client,
+						"NeedInput",
+						"host",
+					)).invoke({}, {})
 					assert.ok(operation._tag === "InputRequired")
 					const before = fixture.requests.length
 					const response = {
@@ -923,10 +1202,9 @@ it.live(
 			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
-					const client = yield* McpClient.open({
+					const client = yield* AppConnections.open({
 						key: fixture.key,
 						clientInfo: { name: "protocol-test-host", version: "1.0.0" },
-						eagerLists: false,
 					})
 					const error = yield* Effect.flip(client.modelTools)
 					assert.ok(error._tag === "ClientError")
@@ -949,9 +1227,9 @@ it.live(
 					yield* fixture.prepare
 					const client = yield* fixture.connect()
 					const failure = yield* Effect.flip(
-						client.callTool(
-							{ name: "BadOutput" },
-							{ source: "host", readOnly: true },
+						(yield* resolveTool(client, "BadOutput", "host")).invoke(
+							{},
+							{ readOnly: true },
 						),
 					)
 					assert.ok(failure._tag === "ClientError")
@@ -969,7 +1247,7 @@ it.live(
 						"private-remote-detail",
 					)
 					const unknown = yield* Effect.flip(
-						client.callTool({ name: "BadOutput" }, { source: "host" }),
+						(yield* resolveTool(client, "BadOutput", "host")).invoke({}, {}),
 					)
 					assert.ok(unknown._tag === "OutcomeUnknown")
 					assert.equal(unknown.cause, "Protocol")

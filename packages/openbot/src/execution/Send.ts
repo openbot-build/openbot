@@ -1,5 +1,5 @@
 import { Execution, ExecutionIdentity } from "@openbot-build/domain"
-import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Registry } from "./Engine.ts"
 import { Store } from "./Store.ts"
 
@@ -48,10 +48,7 @@ const make = Effect.gen(function* () {
 			saved.phaseFailed
 		)
 			return yield* Execution.Conflict.make({ id: ref.id })
-		const call = Arr.findFirst(
-			yield* store.calls(ref),
-			(call) => call.id === ref.callId,
-		)
+		const call = yield* store.call(ref, ref.callId)
 		if (Option.isNone(call) || call.value.status !== "sending")
 			return yield* Execution.Conflict.make({ id: ref.id })
 		const feature = yield* registry.get(saved.workflow)

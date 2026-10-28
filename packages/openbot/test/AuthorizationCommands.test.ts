@@ -10,6 +10,7 @@ import * as Records from "../src/errors/Records.ts"
 import { Billing } from "../src/billing/Billing.ts"
 import { WorkflowEngine } from "effect/workflow"
 import * as Cleanup from "../src/apps/GrantCleanup.ts"
+import * as GrantUses from "../src/apps/GrantUses.ts"
 import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -96,6 +97,7 @@ layer(services, { excludeTestServices: true })((it) => {
 				yield* Effect.gen(function* () {
 					const commands = yield* Commands.AuthorizationCommands
 					const cleanup = yield* Cleanup.GrantCleanup
+					const uses = yield* GrantUses.make
 					const store = yield* Store.Store
 					const secrets = yield* Secrets.Secrets
 					const db = yield* Db.make
@@ -362,7 +364,9 @@ layer(services, { excludeTestServices: true })((it) => {
 						"Processing",
 					)
 					assert.equal((yield* db.select().from(appSecrets)).length, 1)
+					assert.isFalse(yield* uses.inUse(Cleanup.scopeOf(grant.credential)))
 					yield* commands.commit(second, result)
+					assert.isTrue(yield* uses.inUse(Cleanup.scopeOf(grant.credential)))
 					assert.equal((yield* store.get(key)).status, "completed")
 					assert.equal(
 						(yield* db.select().from(appAuthorizations))[0]?.status,
@@ -535,7 +539,16 @@ layer(services, { excludeTestServices: true })((it) => {
 					if (waitingForCall._tag === "Wait")
 						assert.equal(waitingForCall.key.id, inFlight.id)
 					yield* store.commit(inFlight, { status: "interrupted" }, Effect.void)
+					// A broken record of another grant does not stop this cleanup.
+					yield* db.insert(appConnections).values({
+						owner: "other-owner",
+						id: "broken-connection",
+						name: "App",
+						revision: 0,
+						body: "broken-body",
+					})
 					assert.equal((yield* cleanup.claim(lateFence))._tag, "Revoke")
+					yield* sql`delete from openbot_app_connections where owner = 'other-owner' and id = 'broken-connection'`
 					assert.propertyVal(
 						yield* sql
 							.withTransaction(
@@ -794,6 +807,13 @@ layer(services, { excludeTestServices: true })((it) => {
 							)(["credential", otherOwner, "other-reference"]),
 						),
 					})
+					yield* Connections.update(
+						db,
+						secrets,
+						otherOwner,
+						"other-connection",
+						() => otherConnection,
+					)
 					yield* Connections.update(
 						db,
 						secrets,

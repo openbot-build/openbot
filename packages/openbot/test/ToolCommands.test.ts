@@ -37,7 +37,7 @@ import { organizationDefaults } from "../src/settings/Documents.ts"
 import { Settings as SettingsApi } from "@openbot-build/api"
 import { Vaults } from "../src/vaults/Vaults.ts"
 import * as AppSessionModule from "../src/apps/AppSession.ts"
-import { Capabilities } from "../src/apps/Capabilities.ts"
+import { ConnectionSessions } from "../src/apps/ConnectionSessions.ts"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Authorization } from "@openbot-build/domain"
 import * as StoredConnections from "../src/apps/StoredConnections.ts"
@@ -126,14 +126,12 @@ import * as ToolControls from "../src/chats/ToolControls.ts"
 import * as Observation from "../src/execution/Observation.ts"
 import * as ToolSteps from "../src/chats/ToolSteps.ts"
 import * as HostTools from "../src/chats/HostTools.ts"
-import * as ChatFeatures from "../src/chats/ChatFeatures.ts"
 import { ExecutionFeatures } from "../src/chats/ExecutionFeatures.ts"
 import * as TurnContext from "../src/chats/TurnContext.ts"
 import { InputCommands } from "../src/chats/InputCommands.ts"
 import * as InputCommandsModule from "../src/chats/InputCommands.ts"
 import * as ToolNotices from "../src/chats/ToolNotices.ts"
 import * as ToolNoticeWorkflow from "../src/chats/ToolNoticeWorkflow.ts"
-import { Work } from "../src/capabilities/Work.ts"
 import { Bots } from "../src/bots/Bots.ts"
 import { layerEveryoneAdministrator } from "./OrganizationFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
@@ -451,7 +449,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								Ref.get(failure).pipe(
 									Effect.map((fail) => ({
 										providers: [
-											{ id: DevelopmentModel.selection.provider, name: "Test" },
+											{
+												id: DevelopmentModel.selection.provider,
+												name: "Test",
+											},
 										],
 										models:
 											fail === "model"
@@ -3401,6 +3402,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		"revoked",
 		"connection changed",
 		"definition changed",
+		"target missing",
 		"read rule changed",
 		"input actor current",
 		"input actor revoked",
@@ -3527,7 +3529,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 											}
 										}),
 								}),
-								Layer.succeed(Capabilities, {
+								Layer.succeed(ConnectionSessions, {
 									open: () =>
 										Effect.gen(function* () {
 											yield* Ref.update(openedCount, (n) => n + 1)
@@ -3542,38 +3544,51 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 												yield* saveConnection(2).pipe(Effect.orDie)
 											return {
 												stored: connection,
-												resources: [],
-												resourceTemplates: [],
-												prompts: [],
-												tools: [
-													mode === "definition changed"
-														? { ...declaration, description: "Changed tool" }
-														: declaration,
-												],
 												client: {
 													...({} as Client.Client),
-													callTool: () =>
-														Ref.update(sends, (n) => n + 1).pipe(
-															Effect.as({
-																_tag: "Completed" as const,
-																result: { content: [] },
-															}),
-														),
-													resume: (next, responses) =>
-														Effect.gen(function* () {
-															assert.equal(next.method, "tools/call")
-															assert.deepEqual(responses, {
-																consent: {
-																	action: "accept",
-																	content: { confirmed: true },
-																},
-															})
-															yield* Ref.update(sends, (n) => n + 1)
-															return {
-																_tag: "Completed" as const,
-																result: { content: [] },
-															}
-														}),
+													resolve: (target, source) => {
+														assert.deepEqual(target, {
+															kind: "tool",
+															name: "write",
+														})
+														assert.equal(source, "host")
+														return Effect.succeed(
+															mode === "target missing"
+																? Option.none()
+																: Option.some({
+																		kind: "tool" as const,
+																		definition:
+																			mode === "definition changed"
+																				? {
+																						...declaration,
+																						description: "Changed tool",
+																					}
+																				: declaration,
+																		invoke: () =>
+																			Ref.update(sends, (n) => n + 1).pipe(
+																				Effect.as({
+																					_tag: "Completed" as const,
+																					result: { content: [] },
+																				}),
+																			),
+																		resume: (next, responses) =>
+																			Effect.gen(function* () {
+																				assert.equal(next.method, "tools/call")
+																				assert.deepEqual(responses, {
+																					consent: {
+																						action: "accept",
+																						content: { confirmed: true },
+																					},
+																				})
+																				yield* Ref.update(sends, (n) => n + 1)
+																				return {
+																					_tag: "Completed" as const,
+																					result: { content: [] },
+																				}
+																			}),
+																	}),
+														)
+													},
 												},
 											}
 										}),
@@ -5438,20 +5453,19 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						success: Schema.Json,
 					}),
 				)
-				const featureLayer = Layer.mock(ChatFeatures.ChatFeatures, {
-					withFiles: (model) => model,
-					approvals: Chat.Approvals.of({
-						decide: () =>
-							Effect.succeed(
-								Chat.Decision.Pending({ result: Chat.pendingResult }),
-							),
-					}),
-					registerTool: (_, host, policy) =>
+				const featureLayer = Layer.mock(ExecutionFeatures, {
+					open: () => Effect.die("A saved tool must not build the tool list."),
+					restore: () => Option.none(),
+					restoreTool: (fence, frame, { host: register, policy }) =>
 						Effect.gen(function* () {
+							const host = yield* register
+							assert.equal(frame.identity.actor.userId, "speaker")
+							assert.equal(frame.turn, test.position.turn)
+							assert.notEqual(fence.id, test.parent.id)
 							assert.isFalse(policy.plan)
 							if (yield* Ref.get(missing))
 								return { ...host, tools: {}, handlers: Context.empty() }
-							const current = yield* Work
+							const current = frame
 							const context = yield* Bot.Context
 							assert.equal(yield* context.turn, test.position.turn)
 							assert.equal(
@@ -5532,20 +5546,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							Layer.provide(layerEveryoneAdministrator),
 						),
 					),
-					Layer.provide(
-						Layer.effect(
-							ExecutionFeatures,
-							Effect.map(ChatFeatures.ChatFeatures, (features) => ({
-								restore: () => Option.none(),
-								open: (fence, frame) => {
-									assert.equal(frame.identity.actor.userId, "speaker")
-									assert.equal(frame.turn, test.position.turn)
-									assert.notEqual(fence.id, test.parent.id)
-									return Effect.succeed(features)
-								},
-							})),
-						).pipe(Layer.provide(featureLayer)),
-					),
+					Layer.provide(featureLayer),
 					Layer.provide(HostTools.none),
 					Layer.provide(Layer.mock(InputCommands, {})),
 				)
@@ -7384,6 +7385,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 											Layer.mergeAll(
 												Layer.succeed(ExecutionFeatures, {
 													open: () => Effect.die("Must restore the saved tool"),
+													restoreTool: () =>
+														Effect.die("Must use the saved App or Code tool."),
 													restore: workflows.restore,
 												}),
 												Layer.mock(TurnContext.TurnContext, {}),

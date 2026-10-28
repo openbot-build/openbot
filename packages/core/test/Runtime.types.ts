@@ -81,13 +81,7 @@ export const checkLiveChannels = (input: {
 		})
 		const execution = runtime.execute({ chat: input.chat, input: "input" })
 		const delivery = runtime.deliver({ chat: input.chat, input: "input" })
-		const ownUpdate = own.modifyEffect((value) =>
-			Effect.flatMap(PluginDependency, (number) =>
-				number < 0
-					? Effect.fail("own-update-error" as const)
-					: Effect.succeed([number, value] as const),
-			),
-		)
+		const ownUpdate = own.modify((value) => ({ result: value, value }))
 		const checks: [
 			Assert<
 				DecodeDependency extends Effect.Services<typeof construction>
@@ -129,9 +123,23 @@ export const checkLiveChannels = (input: {
 				Bot.Context extends Effect.Services<typeof ownUpdate> ? true : false
 			>,
 			Assert<
-				"own-update-error" extends Effect.Error<typeof ownUpdate> ? true : false
+				ChatStore.ChatStoreError extends Effect.Error<typeof ownUpdate>
+					? true
+					: false
+			>,
+			Assert<
+				PluginDependency extends Effect.Services<typeof ownUpdate>
+					? false
+					: true
+			>,
+			Assert<
+				Effect.Success<typeof ownUpdate> extends Option.Option<number>
+					? true
+					: false
 			>,
 		] = [
+			true,
+			true,
 			true,
 			true,
 			true,
@@ -149,6 +157,23 @@ export const checkLiveChannels = (input: {
 		]
 		return checks
 	})
+
+export const checkStoreUpdateTypes = (input: {
+	readonly store: Plugin.StoreOperations<number>
+	readonly effect: (
+		value: Option.Option<number>,
+	) => Effect.Effect<Plugin.StoreChange<number, number>>
+	readonly promise: (
+		value: Option.Option<number>,
+	) => Promise<Plugin.StoreChange<number, number>>
+}) => {
+	// @ts-expect-error Store updates use a pure function, not an Effect.
+	const effect = input.store.modify(input.effect)
+	// @ts-expect-error Store updates use a pure function, not a Promise.
+	const promise = input.store.modify(input.promise)
+	return { effect, promise }
+}
+
 export const checkIdentities = ({
 	chat,
 	turn,

@@ -61,6 +61,13 @@ node assignment. Features register their own workflows. The engine has no Bot,
 approval, or Computer branches. The standalone core has an in-memory host. It
 does not promise recovery after its process stops.
 
+`Program` owns one loop for recovery, owner checks, cancellation, and phase
+failures. Each feature gives `next` to choose its next phase and `end` to save
+its own end state. The phase's `after` work runs only after its resources close.
+Turn, Tool, App, and Delegation use this loop, as do simple workflows. Features
+keep their child work, time limits, and business transactions. `Runner` owns
+takeover and storage retries; `RunScope` owns phase resources and signals.
+
 Each work phase runs in an `Activity` named by its saved phase and generation.
 The engine stores only a safe phase result, such as an error ID or a pause
 reference. Inputs, outside results, and full failures stay in sealed records. A
@@ -99,6 +106,28 @@ tool definitions keep parameters, routes, App sources, and Vault references. A
 change in discovery cannot change a saved call. New calls still need current
 rights. Hooks run at named steps and deduplicate their writes on replay. Plugins
 cannot change the execution lifecycle.
+
+Execution storage selects calls by ID, step, or latest attempt. Full call
+history stays available for audit. Recovery and retry code use these shared
+queries to choose an attempt.
+
+Tool discovery builds the list for a model. A saved tool call uses its saved
+definition to find its handler. Restoring a Computer or host tool does not run
+App discovery. It still checks current rights and owns its resources in a phase.
+
+Opening an App connection does not read its capability lists. A saved App call
+finds only its selected kind and name, then checks the full saved declaration
+and connection revision. The returned action holds that declaration for sending
+and further input in the same phase. Sending does not read the list again. A
+restored phase finds and checks the declaration again. Full discovery is a
+separate operation for callers that need a full list.
+
+Memory reads its tags, source links, and access rules before it opens content.
+Only selected visible content is decrypted. Reads hold a shared lock for that
+Bot's memory; changes hold the same lock alone. This keeps access rules and
+content in one read state. Model calls run outside these locks. Memory owns
+context selection and learning changes; callers do not read or replace a full
+pool. Changes to tags or status keep the existing content ciphertext.
 
 An outside call first saves intent, then marks itself as sending, then saves its
 result. Safe retries reuse the same provider key. A write with no reliable retry
@@ -142,6 +171,16 @@ connection or developer test uses the same issuer and OAuth client. OAuth
 servers may revoke related tokens together, even when their strings differ. A
 durable timer checks again after users release those grants. The check covers
 all OpenBot owners.
+
+A shared grant-use table records which connection or developer test holds an
+authorization. It also records pending grant sends and revocations. These
+records change in the same transaction as the data they describe. Cleanup
+queries the grant scope in this table. It does not open every connection or test
+secret.
+
+App connection setup shares one preparation rule. Each host refreshes the App
+card once, checks the selected endpoint and values, then probes and saves the
+same prepared connection.
 
 Grant sends and installation share a database lock with cleanup. A saved
 revocation intent reserves the grant scope across retries and node takeover. New
@@ -246,6 +285,11 @@ Stop old nodes and new input before the move. Back up the database and object
 references. Apply new Drizzle migrations, then convert data in batches with
 stored progress. Never change the baseline migration. Runtime storage Layers do
 not execute DDL, the SQL commands that change table structure.
+
+The grant-use data move also covers databases that already use stored
+executions. It reads current authorizations and pending grant calls in batches.
+Startup waits until the grant-use records are complete. Tokens stay in their
+encrypted records.
 
 Keep resource IDs, owners, history, approvals, connections, secrets, and pending
 work. Old encrypted records use dedicated migration codecs. Link unfinished work

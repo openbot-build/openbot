@@ -1,4 +1,5 @@
 import { Authorization, Store } from "@openbot-build/protocol"
+import * as GrantUses from "./GrantUses.ts"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	Context,
@@ -85,6 +86,7 @@ export const make: Effect.Effect<
 	const secrets = yield* Secrets
 	const db = yield* Db.make
 	const crypto = yield* Crypto.Crypto
+	const uses = GrantUses.makeWith(db, secrets)
 	return ProtocolStores.of({
 		bind: (owner) => {
 			const owned = (key: Store.ConnectionKey) =>
@@ -187,6 +189,9 @@ export const make: Effect.Effect<
 												reason: "Missing",
 												operation: "Owned App storage",
 											})
+										yield* uses
+											.hold(owner, "connection", key.connectionId, null)
+											.pipe(unavailable("Could not remove an App grant use."))
 										yield* tx
 											.delete(appSecrets)
 											.where(
@@ -265,7 +270,17 @@ export const make: Effect.Effect<
 				}),
 				deleteConnection: (key) =>
 					owned(key).pipe(
-						Effect.andThen(remove("credential", key.connectionId)),
+						Effect.andThen(
+							db
+								.transaction(() =>
+									remove("credential", key.connectionId).pipe(
+										Effect.andThen(
+											uses.hold(owner, "connection", key.connectionId, null),
+										),
+									),
+								)
+								.pipe(unavailable("Could not remove an App grant use.")),
+						),
 					),
 			})
 			const flows = Authorization.FlowStore.of({

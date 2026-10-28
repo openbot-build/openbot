@@ -16,6 +16,8 @@ import { openbot_auth_user } from "./AuthSchema.ts"
 export * from "./ExecutionSchema.ts"
 export * from "./PermitSchema.ts"
 export * from "./TokenRateSchema.ts"
+export * from "./AppGrantSchema.ts"
+
 const table = pgTable
 const namespace = () => text().notNull().default("public")
 const time = (name: string) => bigint(name, { mode: "number" })

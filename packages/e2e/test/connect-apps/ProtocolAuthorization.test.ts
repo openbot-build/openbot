@@ -18,7 +18,6 @@ import {
 	MemoryStore,
 	OAuthAuthorization,
 	AppConnections,
-	McpClient,
 	Authorization,
 	Document,
 	Network,
@@ -178,7 +177,7 @@ it.live(
 				AppConnections.layerConnectionScopes,
 				NodeCrypto.layer,
 				TestClock.layer(),
-				McpClient.layerPolicy(() => Effect.void),
+				AppConnections.layerPolicy(() => Effect.void),
 				NodeHttpServer.layerUserNetwork({
 					owner: "alice",
 					allowedOrigins: [origin],
@@ -416,7 +415,7 @@ it.live(
 					assert.strictEqual(yield* Ref.get(beforeRefresh), false)
 					yield* TestClock.adjust("61 seconds")
 					const expired = yield* Effect.flip(
-						McpClient.open({
+						AppConnections.open({
 							key,
 							clientInfo: {
 								name: "test",

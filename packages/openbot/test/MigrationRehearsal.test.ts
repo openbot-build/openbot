@@ -20,6 +20,7 @@ import { Prompt } from "effect/ai"
 import { WorkflowEngine } from "effect/workflow"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as Migrations from "../src/database/Migrations.ts"
+import * as Convert from "../src/database/conversion/Convert.ts"
 import * as Progress from "../src/database/conversion/Progress.ts"
 import * as Imported from "../src/database/conversion/Executions.ts"
 import * as ImportedWorkflow from "../src/database/conversion/ImportedWorkflow.ts"
@@ -206,7 +207,7 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 					yield* sql`update openbot_vault_items set values = 'broken private key' where id = 'vault-item'`
 					assert.ok(
 						Schema.is(Progress.InvalidRecord)(
-							yield* Migrations.upgrade.pipe(Effect.flip),
+							yield* Progress.withMaintenance(Convert.run).pipe(Effect.flip),
 						),
 					)
 					assert.ok(

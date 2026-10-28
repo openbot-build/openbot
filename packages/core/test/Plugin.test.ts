@@ -10,7 +10,6 @@ import {
 	Deferred,
 	Exit,
 	Fiber,
-	SynchronizedRef,
 	Effect,
 	Option,
 	Schema,
@@ -21,6 +20,7 @@ import {
 	Result,
 } from "effect"
 import { Prompt } from "effect/ai"
+import { TestClock } from "effect/testing"
 import {
 	Bot,
 	Chat,
@@ -81,25 +81,7 @@ it.effect(
 					value: Option.some({ value: n }),
 				}
 			}),
-			set: unusedWrite,
-			getAndSet: unusedWrite,
-			setAndGet: unusedWrite,
 			modify: unusedWrite,
-			modifyEffect: unusedWrite,
-			modifySome: unusedWrite,
-			modifySomeEffect: unusedWrite,
-			update: unusedWrite,
-			updateEffect: unusedWrite,
-			getAndUpdate: unusedWrite,
-			getAndUpdateEffect: unusedWrite,
-			updateAndGet: unusedWrite,
-			updateAndGetEffect: unusedWrite,
-			updateSome: unusedWrite,
-			updateSomeEffect: unusedWrite,
-			getAndUpdateSome: unusedWrite,
-			getAndUpdateSomeEffect: unusedWrite,
-			updateSomeAndGet: unusedWrite,
-			updateSomeAndGetEffect: unusedWrite,
 			setAt: () =>
 				Effect.fail(
 					Chat.ChatError.make({
@@ -431,7 +413,7 @@ const counterStore = (
 			step: Effect.succeed(0),
 			history: Effect.succeed(Prompt.empty),
 		})
-		return { own, runtime, runtimeStore, storage, initial, context }
+		return { own, runtime, runtimeStore, storage, definition, initial, context }
 	})
 
 it.effect(
@@ -469,7 +451,10 @@ it.effect(
 			})
 			yield* Effect.gen(function* () {
 				assert.deepStrictEqual(yield* own.get, Option.none())
-				yield* own.set(Option.some({ value: 4 }))
+				yield* own.modify(() => ({
+					result: undefined,
+					value: Option.some({ value: 4 }),
+				}))
 				const view = yield* runtimeStore.read(chat)
 				assert.strictEqual(view.chat.revision, initial.chat.revision + 1)
 				assert.deepStrictEqual(view.chat.business["b"], { value: 4 })
@@ -482,11 +467,14 @@ it.effect(
 					value: 4,
 				})
 				const invalid = yield* own
-					.set(Option.some({ value: -1 }))
+					.modify(() => ({
+						result: undefined,
+						value: Option.some({ value: -1 }),
+					}))
 					.pipe(Effect.flip)
 				assert.ok(Predicate.hasProperty(invalid, "reason"))
 				assert.strictEqual(invalid.reason, "encode-failed")
-				yield* own.set(Option.none())
+				yield* own.modify(() => ({ result: undefined, value: Option.none() }))
 				const removed = yield* runtimeStore.read(chat)
 				assert.strictEqual(Rec.has(removed.chat.business, "b"), false)
 				assert.deepStrictEqual(removed.state, initial.state)
@@ -494,387 +482,213 @@ it.effect(
 		}),
 )
 
-it.effect(
-	"Store safe methods match SynchronizedRef return values and commit only selected writes",
-	() =>
-		Effect.gen(function* () {
-			const { own, runtimeStore, initial, context } = yield* counterStore()
-			const native = yield* SynchronizedRef.make<
-				Option.Option<{ readonly value: number }>
-			>(Option.some({ value: 0 }))
-			const increment = (value: Option.Option<{ readonly value: number }>) =>
-				Option.map(value, (counter) => ({ value: counter.value + 1 }))
-			const selected = (value: Option.Option<{ readonly value: number }>) =>
-				Option.some(increment(value))
-			const check = <A, E>(
-				name: string,
-				actual: Effect.Effect<A, E, Bot.Context>,
-				expected: Effect.Effect<A>,
-				writes = true,
-			) =>
-				Effect.gen(function* () {
-					const previous = yield* runtimeStore.read(initial.chat.id)
-					assert.deepStrictEqual(yield* actual, yield* expected, name)
-					assert.deepStrictEqual(
-						yield* own.get,
-						yield* SynchronizedRef.get(native),
-						name,
-					)
-					const view = yield* runtimeStore.read(initial.chat.id)
-					assert.deepStrictEqual(view.state["other"], { keep: true }, name)
-					assert.deepStrictEqual(
-						view.state.conversation,
-						initial.state.conversation,
-						name,
-					)
-					assert.strictEqual(
-						view.chat.revision,
-						previous.chat.revision + Number(writes),
-						name,
-					)
-					assert.deepStrictEqual(
-						view.chat.business,
-						initial.chat.business,
-						name,
-					)
-				})
-			const program = Effect.gen(function* () {
-				yield* check("get", own.get, SynchronizedRef.get(native), false)
-				yield* check(
-					"set",
-					own.set(Option.some({ value: 1 })),
-					SynchronizedRef.set(native, Option.some({ value: 1 })).pipe(
-						Effect.asVoid,
-					),
-					true,
-				)
-				yield* check(
-					"getAndSet",
-					own.getAndSet(Option.some({ value: 2 })),
-					SynchronizedRef.getAndSet(native, Option.some({ value: 2 })),
-					true,
-				)
-				yield* check(
-					"setAndGet",
-					own.setAndGet(Option.some({ value: 3 })),
-					SynchronizedRef.setAndGet(native, Option.some({ value: 3 })),
-					true,
-				)
-				yield* check(
-					"update",
-					own.update(increment),
-					SynchronizedRef.update(native, increment),
-					true,
-				)
-				yield* check(
-					"getAndUpdate",
-					own.getAndUpdate(increment),
-					SynchronizedRef.getAndUpdate(native, increment),
-					true,
-				)
-				yield* check(
-					"updateAndGet",
-					own.updateAndGet(increment),
-					SynchronizedRef.updateAndGet(native, increment),
-					true,
-				)
-				yield* check(
-					"modify",
-					own.modify((value) => ["result", increment(value)] as const),
-					SynchronizedRef.modify(
-						native,
-						(value) => ["result", increment(value)] as const,
-					),
-					true,
-				)
-				yield* check(
-					"modifyEffect",
-					own.modifyEffect((value) =>
-						Effect.succeed(["result", increment(value)] as const),
-					),
-					SynchronizedRef.modifyEffect(native, (value) =>
-						Effect.succeed(["result", increment(value)] as const),
-					),
-					true,
-				)
-				yield* check(
-					"updateEffect",
-					own.updateEffect((value) => Effect.succeed(increment(value))),
-					SynchronizedRef.updateEffect(native, (value) =>
-						Effect.succeed(increment(value)),
-					),
-					true,
-				)
-				yield* check(
-					"getAndUpdateEffect",
-					own.getAndUpdateEffect((value) => Effect.succeed(increment(value))),
-					SynchronizedRef.getAndUpdateEffect(native, (value) =>
-						Effect.succeed(increment(value)),
-					),
-					true,
-				)
-				yield* check(
-					"updateAndGetEffect",
-					own.updateAndGetEffect((value) => Effect.succeed(increment(value))),
-					SynchronizedRef.updateAndGetEffect(native, (value) =>
-						Effect.succeed(increment(value)),
-					),
-					true,
-				)
-				yield* check(
-					"modifySome selected",
-					own.modifySome((value) => ["result", selected(value)] as const),
-					SynchronizedRef.modifySome(
-						native,
-						(value) => ["result", selected(value)] as const,
-					),
-					true,
-				)
-				yield* check(
-					"modifySome skipped",
-					own.modifySome(() => ["result", Option.none()] as const),
-					SynchronizedRef.modifySome(
-						native,
-						() => ["result", Option.none()] as const,
-					),
-					false,
-				)
-				yield* check(
-					"modifySomeEffect selected",
-					own.modifySomeEffect((value) =>
-						Effect.succeed(["result", selected(value)] as const),
-					),
-					SynchronizedRef.modifySomeEffect(native, (value) =>
-						Effect.succeed(["result", selected(value)] as const),
-					),
-					true,
-				)
-				yield* check(
-					"modifySomeEffect skipped",
-					own.modifySomeEffect(() =>
-						Effect.succeed(["result", Option.none()] as const),
-					),
-					SynchronizedRef.modifySomeEffect(native, () =>
-						Effect.succeed(["result", Option.none()] as const),
-					),
-					false,
-				)
-				yield* check(
-					"updateSome selected",
-					own.updateSome((value) => selected(value)),
-					SynchronizedRef.updateSome(native, (value) => selected(value)),
-					true,
-				)
-				yield* check(
-					"updateSome skipped",
-					own.updateSome(() => Option.none()),
-					SynchronizedRef.updateSome(native, () => Option.none()),
-					false,
-				)
-				yield* check(
-					"updateSomeEffect selected",
-					own.updateSomeEffect((value) => Effect.succeed(selected(value))),
-					SynchronizedRef.updateSomeEffect(native, (value) =>
-						Effect.succeed(selected(value)),
-					),
-					true,
-				)
-				yield* check(
-					"updateSomeEffect skipped",
-					own.updateSomeEffect(() => Effect.succeedNone),
-					SynchronizedRef.updateSomeEffect(native, () => Effect.succeedNone),
-					false,
-				)
-				yield* check(
-					"getAndUpdateSome selected",
-					own.getAndUpdateSome((value) => selected(value)),
-					SynchronizedRef.getAndUpdateSome(native, (value) => selected(value)),
-					true,
-				)
-				yield* check(
-					"getAndUpdateSome skipped",
-					own.getAndUpdateSome(() => Option.none()),
-					SynchronizedRef.getAndUpdateSome(native, () => Option.none()),
-					false,
-				)
-				yield* check(
-					"getAndUpdateSomeEffect selected",
-					own.getAndUpdateSomeEffect((value) =>
-						Effect.succeed(selected(value)),
-					),
-					SynchronizedRef.getAndUpdateSomeEffect(native, (value) =>
-						Effect.succeed(selected(value)),
-					),
-					true,
-				)
-				yield* check(
-					"getAndUpdateSomeEffect skipped",
-					own.getAndUpdateSomeEffect(() => Effect.succeedNone),
-					SynchronizedRef.getAndUpdateSomeEffect(
-						native,
-						() => Effect.succeedNone,
-					),
-					false,
-				)
-				yield* check(
-					"updateSomeAndGet selected",
-					own.updateSomeAndGet((value) => selected(value)),
-					SynchronizedRef.updateSomeAndGet(native, (value) => selected(value)),
-					true,
-				)
-				yield* check(
-					"updateSomeAndGet skipped",
-					own.updateSomeAndGet(() => Option.none()),
-					SynchronizedRef.updateSomeAndGet(native, () => Option.none()),
-					false,
-				)
-				yield* check(
-					"updateSomeAndGetEffect selected",
-					own.updateSomeAndGetEffect((value) =>
-						Effect.succeed(selected(value)),
-					),
-					SynchronizedRef.updateSomeAndGetEffect(native, (value) =>
-						Effect.succeed(selected(value)),
-					),
-					true,
-				)
-				yield* check(
-					"updateSomeAndGetEffect skipped",
-					own.updateSomeAndGetEffect(() => Effect.succeedNone),
-					SynchronizedRef.updateSomeAndGetEffect(
-						native,
-						() => Effect.succeedNone,
-					),
-					false,
-				)
-				yield* check(
-					"same value",
-					own.update((value) => value),
-					SynchronizedRef.update(native, (value) => value),
-					false,
-				)
-				yield* check(
-					"delete",
-					own.updateSome(() => Option.some(Option.none())),
-					SynchronizedRef.updateSome(native, () => Option.some(Option.none())),
-				)
-				assert.strictEqual(
-					Rec.has((yield* runtimeStore.read(initial.chat.id)).state, "a"),
-					false,
-				)
-			})
-			yield* program.pipe(Effect.provideService(Bot.Context, context))
-		}),
+it.effect("a plugin change can save, remove, or keep its value", () =>
+	Effect.gen(function* () {
+		const { own, runtimeStore, initial, context } = yield* counterStore()
+		yield* Effect.gen(function* () {
+			const kept = yield* own.modify((value) => ({ result: value }))
+			assert.deepStrictEqual(kept, Option.some({ value: 0 }))
+			assert.deepStrictEqual(yield* runtimeStore.read(initial.chat.id), initial)
+			const previous = yield* own.modify((value) => ({
+				result: Option.getOrThrow(value).value,
+				value: Option.some({ value: 4 }),
+			}))
+			assert.strictEqual(previous, 0)
+			assert.deepStrictEqual(yield* own.get, Option.some({ value: 4 }))
+			const saved = yield* runtimeStore.read(initial.chat.id)
+			assert.strictEqual(saved.chat.revision, initial.chat.revision + 1)
+			assert.deepStrictEqual(saved.state["other"], { keep: true })
+			assert.deepStrictEqual(
+				saved.state.conversation,
+				initial.state.conversation,
+			)
+			assert.deepStrictEqual(saved.chat.business, initial.chat.business)
+			const removed = yield* own.modify(() => ({
+				result: "removed",
+				value: Option.none(),
+			}))
+			assert.strictEqual(removed, "removed")
+			assert.deepStrictEqual(yield* own.get, Option.none())
+			const after = yield* runtimeStore.read(initial.chat.id)
+			assert.strictEqual(Rec.has(after.state, "a"), false)
+			assert.strictEqual(after.chat.revision, saved.chat.revision + 1)
+			assert.deepStrictEqual(after.state["other"], { keep: true })
+			assert.deepStrictEqual(
+				after.state.conversation,
+				initial.state.conversation,
+			)
+			assert.deepStrictEqual(after.chat.business, initial.chat.business)
+		}).pipe(Effect.provideService(Bot.Context, context))
+	}),
 )
 
-it.effect(
-	"concurrent Store Effect updates use committed state and keep failures and interruption",
-	() =>
-		Effect.gen(function* () {
-			let reject = false
-			const { own, runtime, runtimeStore, initial, context } =
-				yield* counterStore(() =>
-					reject
-						? Effect.fail(
-								ChatStore.ChatStoreError.make({
-									reason: "storage-failed",
-									message: "Fixture storage failure",
+it.effect("plugin changes retry with new data, and setAt tries once", () =>
+	Effect.gen(function* () {
+		let beforeSave: (delta: ChatStore.Delta) => Effect.Effect<void> = () =>
+			Effect.void
+		const { own, runtimeStore, storage, definition, initial, context } =
+			yield* counterStore((delta) => beforeSave(delta))
+		const peer = yield* ChatStoreRepository.make({
+			definition,
+			persistence: storage,
+		})
+		let saves = 0
+		let otherValue = 10
+		beforeSave = () =>
+			Effect.gen(function* () {
+				saves++
+				if (saves !== 1) return
+				yield* peer
+					.modifyEffect({
+						chat: initial.chat.id,
+						update: (current) =>
+							Effect.succeed([
+								undefined,
+								Option.some({
+									value: { ...current.state, a: { value: otherValue } },
 								}),
-							)
-						: Effect.yieldNow,
-				)
-			const observer = yield* runtime
-				.events({
-					chat: initial.chat.id,
-					after: initial.chat.revision,
-				})
-				.pipe(
-					Stream.filter((event) => event._tag === "ChatUpdated"),
-					Stream.map((event) => event.view.chat.revision),
-					Stream.take(21),
-					Stream.runCollect,
-					Effect.forkChild({ startImmediately: true }),
-				)
-			const program = Effect.gen(function* () {
-				const refs = yield* Effect.forEach(
-					Array.from({ length: 20 }),
-					() =>
-						own.updateAndGetEffect((value) =>
-							Effect.yieldNow.pipe(
-								Effect.as(
-									Option.map(value, (counter) => ({
-										value: counter.value + 1,
-									})),
-								),
-							),
-						),
-					{ concurrency: "unbounded" },
-				)
-				assert.deepStrictEqual(
-					Arr.sort(
-						Arr.map(refs, (value) => Option.getOrThrow(value).value),
-						Order.Number,
-					),
-					Array.from({ length: 20 }, (_, i) => i + 1),
-				)
-				assert.deepStrictEqual(yield* own.get, Option.some({ value: 20 }))
-				const before = yield* runtimeStore.read(initial.chat.id)
-				assert.strictEqual(before.chat.revision, initial.chat.revision + 20)
-				const invalid = yield* own
-					.set(Option.some({ value: -1 }))
-					.pipe(Effect.flip)
-				assert.ok(Predicate.hasProperty(invalid, "reason"))
-				assert.strictEqual(invalid.reason, "encode-failed")
-				assert.strictEqual(
-					yield* own
-						.updateEffect(() => Effect.fail("update-failed" as const))
-						.pipe(Effect.flip),
-					"update-failed",
-				)
-				const defect = yield* own
-					.modifyEffect(() => Effect.die("fixture defect"))
-					.pipe(Effect.exit)
-				assert.ok(Exit.hasDies(defect))
-				assert.ok(!Cause.hasFails(defect.cause))
-				const entered = yield* Deferred.make<void>()
-				const interrupted = yield* own
-					.updateEffect(() =>
-						Deferred.succeed(entered, undefined).pipe(
-							Effect.andThen(Effect.never),
-						),
-					)
-					.pipe(Effect.forkChild)
-				yield* Deferred.await(entered)
-				yield* Fiber.interrupt(interrupted)
-				assert.deepStrictEqual(
-					yield* runtimeStore.read(initial.chat.id),
-					before,
-				)
-				reject = true
-				const failure = yield* own
-					.set(Option.some({ value: 99 }))
-					.pipe(Effect.flip)
-				assert.ok(Predicate.hasProperty(failure, "reason"))
-				assert.strictEqual(failure.reason, "storage-failed")
-				assert.deepStrictEqual(yield* own.get, Option.some({ value: 20 }))
-				assert.deepStrictEqual(
-					yield* runtimeStore.read(initial.chat.id),
-					before,
-				)
-				reject = false
-				yield* own.set(Option.some({ value: 21 }))
-				assert.deepStrictEqual(yield* own.get, Option.some({ value: 21 }))
-				const observed = yield* Fiber.join(observer)
-				assert.deepStrictEqual(
-					Arr.sort(observed, Order.Number),
-					Array.from({ length: 21 }, (_, i) => initial.chat.revision + i + 1),
-				)
+							] as const),
+					})
+					.pipe(Effect.orDie)
 			})
-			yield* program.pipe(Effect.provideService(Bot.Context, context))
-		}),
+		const writing = yield* own
+			.modify((value) => {
+				const current = Option.getOrThrow(value).value
+				return {
+					result: current + 1,
+					value: Option.some({ value: current + 1 }),
+				}
+			})
+			.pipe(
+				Effect.provideService(Bot.Context, context),
+				Effect.forkChild({ startImmediately: true }),
+			)
+		yield* TestClock.adjust("1 second")
+		assert.strictEqual(yield* Fiber.join(writing), 11)
+		assert.strictEqual(saves, 2)
+		const base = yield* own.snapshot.pipe(
+			Effect.provideService(Bot.Context, context),
+		)
+		saves = 0
+		otherValue = 20
+		const conflict = yield* own
+			.setAt({
+				base: base.at,
+				value: Option.some({ value: 99 }),
+			})
+			.pipe(Effect.provideService(Bot.Context, context), Effect.flip)
+		assert.ok(Predicate.hasProperty(conflict, "reason"))
+		assert.strictEqual(conflict.reason, "reference-conflict")
+		assert.strictEqual(saves, 1)
+		const saved = yield* runtimeStore.read(initial.chat.id)
+		assert.deepStrictEqual(saved.state.a, { value: 20 })
+		assert.strictEqual(saved.chat.revision, initial.chat.revision + 3)
+	}),
 )
 
-it.effect("Store writes return and notify only after the change is saved", () =>
+it.effect("concurrent plugin changes keep saved data and failures", () =>
+	Effect.gen(function* () {
+		let reject = false
+		const { own, runtime, runtimeStore, initial, context } =
+			yield* counterStore(() =>
+				reject
+					? Effect.fail(
+							ChatStore.ChatStoreError.make({
+								reason: "storage-failed",
+								message: "Test storage failure",
+							}),
+						)
+					: Effect.yieldNow,
+			)
+		const observer = yield* runtime
+			.events({
+				chat: initial.chat.id,
+				after: initial.chat.revision,
+			})
+			.pipe(
+				Stream.filter((event) => event._tag === "ChatUpdated"),
+				Stream.map((event) => event.view.chat.revision),
+				Stream.take(21),
+				Stream.runCollect,
+				Effect.forkChild({ startImmediately: true }),
+			)
+		yield* Effect.gen(function* () {
+			const values = yield* Effect.forEach(
+				Arr.range(1, 20),
+				() =>
+					own.modify((value) => {
+						const next = Option.getOrThrow(value).value + 1
+						return { result: next, value: Option.some({ value: next }) }
+					}),
+				{ concurrency: "unbounded" },
+			)
+			assert.deepStrictEqual(Arr.sort(values, Order.Number), Arr.range(1, 20))
+			assert.deepStrictEqual(yield* own.get, Option.some({ value: 20 }))
+			const before = yield* runtimeStore.read(initial.chat.id)
+			assert.strictEqual(before.chat.revision, initial.chat.revision + 20)
+			const invalid = yield* own
+				.modify(() => ({
+					result: undefined,
+					value: Option.some({ value: -1 }),
+				}))
+				.pipe(Effect.flip)
+			assert.ok(Predicate.hasProperty(invalid, "reason"))
+			assert.strictEqual(invalid.reason, "encode-failed")
+			assert.deepStrictEqual(yield* runtimeStore.read(initial.chat.id), before)
+			reject = true
+			const failure = yield* own
+				.modify(() => ({
+					result: undefined,
+					value: Option.some({ value: 99 }),
+				}))
+				.pipe(Effect.flip)
+			assert.ok(Predicate.hasProperty(failure, "reason"))
+			assert.strictEqual(failure.reason, "storage-failed")
+			assert.deepStrictEqual(yield* own.get, Option.some({ value: 20 }))
+			assert.deepStrictEqual(yield* runtimeStore.read(initial.chat.id), before)
+			reject = false
+			yield* own.modify(() => ({
+				result: undefined,
+				value: Option.some({ value: 21 }),
+			}))
+			const observed = yield* Fiber.join(observer)
+			const expected: ReadonlyArray<number> = Array.from(
+				{ length: 21 },
+				(_, index) => initial.chat.revision + index + 1,
+			)
+			assert.deepStrictEqual(Arr.sort(observed, Order.Number), expected)
+		}).pipe(Effect.provideService(Bot.Context, context))
+	}),
+)
+
+it.effect("a stopped plugin save leaves its value as it was", () =>
+	Effect.gen(function* () {
+		const started = yield* Deferred.make<void>()
+		let blocked = false
+		const { own, runtimeStore, initial, context } = yield* counterStore(() =>
+			blocked
+				? Deferred.succeed(started, undefined).pipe(
+						Effect.andThen(Effect.never),
+					)
+				: Effect.void,
+		)
+		blocked = true
+		const writing = yield* own
+			.modify(() => ({
+				result: undefined,
+				value: Option.some({ value: 1 }),
+			}))
+			.pipe(Effect.provideService(Bot.Context, context), Effect.forkChild)
+		yield* Deferred.await(started)
+		yield* Fiber.interrupt(writing)
+		const exit = yield* Fiber.await(writing)
+		assert.ok(Exit.isFailure(exit))
+		assert.ok(Cause.hasInterruptsOnly(exit.cause))
+		assert.deepStrictEqual(yield* runtimeStore.read(initial.chat.id), initial)
+	}),
+)
+
+it.effect("plugin writes return and notify after the change is saved", () =>
 	Effect.gen(function* () {
 		const started = yield* Deferred.make<void>()
 		const release = yield* Deferred.make<void>()
@@ -896,15 +710,20 @@ it.effect("Store writes return and notify only after the change is saved", () =>
 				timeout: "1 minute",
 			})
 			.pipe(Effect.forkChild)
-		const writing = yield* own.set(Option.some({ value: 1 })).pipe(
-			Effect.tap(() =>
-				Effect.sync(() => {
-					returned = true
-				}),
-			),
-			Effect.provideService(Bot.Context, context),
-			Effect.forkChild,
-		)
+		const writing = yield* own
+			.modify(() => ({
+				result: undefined,
+				value: Option.some({ value: 1 }),
+			}))
+			.pipe(
+				Effect.tap(() =>
+					Effect.sync(() => {
+						returned = true
+					}),
+				),
+				Effect.provideService(Bot.Context, context),
+				Effect.forkChild,
+			)
 		yield* Deferred.await(started)
 		assert.strictEqual(returned, false)
 		assert.deepStrictEqual(

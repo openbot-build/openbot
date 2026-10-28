@@ -84,6 +84,7 @@ const make = Effect.gen(function* () {
 	const bots = yield* Bots
 	const inputs = yield* InputCommands
 	const models = yield* ModelRegistry
+
 	const settings = yield* Settings
 	const crypto = yield* Crypto.Crypto
 	const definition = yield* CoreStore.define({
@@ -396,7 +397,7 @@ const make = Effect.gen(function* () {
 					? Option.none()
 					: Option.some(
 							yield* models.catalog(
-								saved.execution.identity.owner.organizationId,
+								saved.execution.identity.actor.organizationId,
 							),
 						)
 			return yield* store.accept(fence.namespace, commandKey, command, () =>
@@ -1005,18 +1006,14 @@ const make = Effect.gen(function* () {
 		}
 		const limits = saved.stored.delegation.limits
 		if (limits !== undefined) {
-			const history = yield* store.calls(task.value.key)
+			const latest = yield* store.latestCalls(task.value.key)
 			const pendingModel = Arr.some(
-				history,
+				latest,
 				(call) =>
 					call.retry === "read_only" &&
 					call.status === "intended" &&
 					Schema.is(Schema.Struct({ purpose: Schema.Literal("turn") }))(
 						call.input,
-					) &&
-					!Arr.some(
-						history,
-						(later) => later.step === call.step && later.attempt > call.attempt,
 					),
 			)
 			const wake =

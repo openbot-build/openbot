@@ -41,6 +41,12 @@ const Result = Schema.Union([
 	Schema.TaggedStruct("Changed", {}),
 ])
 
+export interface Options {
+	readonly deadline?: number
+	readonly decisionId?: string
+	readonly afterSequence?: number
+}
+
 const make = Effect.gen(function* () {
 	const observation = yield* Observation
 	const store = yield* Store
@@ -51,11 +57,7 @@ const make = Effect.gen(function* () {
 		fence: Fence,
 		name: string,
 		work: Effect.Effect<void, E, R | Scope.Scope> | undefined,
-		options?: {
-			readonly deadline?: number
-			readonly decisionId?: string
-			readonly afterSequence?: number
-		},
+		options?: Options,
 	) =>
 		Effect.gen(function* () {
 			const before = yield* store.load(fence)
@@ -335,11 +337,7 @@ const make = Effect.gen(function* () {
 		fence: Fence,
 		name: string,
 		work: Effect.Effect<void, E, R | Scope.Scope> | undefined,
-		options?: {
-			readonly deadline?: number
-			readonly decisionId?: string
-			readonly afterSequence?: number
-		},
+		options?: Options,
 	) =>
 		Effect.gen(function* () {
 			let phase = name

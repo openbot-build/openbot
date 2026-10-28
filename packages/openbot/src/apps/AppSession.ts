@@ -1,16 +1,7 @@
 import { Calls } from "../execution/Calls.ts"
 import { AppCalls, Authorization, Execution } from "@openbot-build/domain"
 import { Client } from "@openbot-build/protocol"
-import {
-	Array as Arr,
-	Context,
-	Effect,
-	Layer,
-	Option,
-	Redacted,
-	Ref,
-	Schema,
-} from "effect"
+import { Context, Effect, Layer, Option, Redacted, Ref, Schema } from "effect"
 import * as Gate from "../capabilities/Gate.ts"
 import { RequestCommands } from "../capabilities/RequestCommands.ts"
 import * as CallFrame from "../chats/CallFrame.ts"
@@ -19,7 +10,7 @@ import { ActionPolicy } from "./ActionPolicy.ts"
 import * as AppCall from "./AppCall.ts"
 import { AppCommands, continuation } from "./AppCommands.ts"
 import { json } from "./AppResults.ts"
-import { Capabilities, type Opened } from "./Capabilities.ts"
+import { ConnectionSessions } from "./ConnectionSessions.ts"
 import { ownerKey, get as connection } from "./StoredConnections.ts"
 import * as Check from "../authorization/Check.ts"
 import * as Db from "../database/Database.ts"
@@ -27,30 +18,6 @@ import { Secrets } from "../secrets/Secrets.ts"
 import * as AppSecrets from "../vaults/AppSecrets.ts"
 import * as VaultCode from "../vaults/CodeMode.ts"
 
-const declaration = (
-	opened: Opened,
-	source: AppCalls.Source,
-): Option.Option<unknown> => {
-	switch (source.kind) {
-		case "tool":
-			return Arr.findFirst(opened.tools, (value) => value.name === source.name)
-		case "resource":
-			return Arr.findFirst(
-				opened.resources,
-				(value) => value.uri === source.name,
-			)
-		case "template":
-			return Arr.findFirst(
-				opened.resourceTemplates,
-				(value) => value.uriTemplate === source.name,
-			)
-		case "prompt":
-			return Arr.findFirst(
-				opened.prompts,
-				(value) => value.name === source.name,
-			)
-	}
-}
 const sameJson = Schema.toEquivalence(Schema.Json)
 const strings = Schema.decodeUnknownEffect(
 	Schema.Record(Schema.String, Schema.String),
@@ -66,7 +33,7 @@ const open = (fence: Fence) =>
 		const requests = yield* RequestCommands
 		const frames = yield* CallFrame.make
 		const actions = yield* ActionPolicy
-		const capabilities = yield* Capabilities
+		const sessions = yield* ConnectionSessions
 		const executionCalls = yield* Calls
 		const calls = yield* AppCall.make
 		const vault = yield* AppSecrets.make
@@ -198,7 +165,9 @@ const open = (fence: Fence) =>
 				check: (invocation) =>
 					invocation.connection.owner === owner &&
 					invocation.connection.connectionId === source.connectionId &&
-					(Schema.is(Client.ListAction)(invocation.action) ||
+					((invocation.action === "connect" &&
+						invocation.target === invocation.connection.endpoint) ||
+						Schema.is(Client.ListAction)(invocation.action) ||
 						(invocation.action === method &&
 							(invocation.target === source.name ||
 								source.kind === "template")))
@@ -210,17 +179,20 @@ const open = (fence: Fence) =>
 								}),
 							),
 			})
-			const opened = yield* capabilities.open({
+			const opened = yield* sessions.open({
 				owner,
 				connectionId: source.connectionId,
 				policy,
 			})
-			const found = declaration(opened, source)
+			const found = yield* opened.client.resolve(
+				{ kind: source.kind, name: source.name },
+				"host",
+			)
 			if (
 				opened.stored.revision !== source.revision ||
 				Option.isNone(found) ||
 				source.definition === undefined ||
-				!sameJson(source.definition, yield* json(found.value))
+				!sameJson(source.definition, yield* json(found.value.definition))
 			)
 				return yield* Execution.Conflict.make({ id: fence.id })
 			const prepared = yield* Ref.make<
@@ -237,7 +209,8 @@ const open = (fence: Fence) =>
 				yield* ready
 				yield* Ref.set(prepared, Option.some(values))
 			})
-			const options = { source: "host", readOnly: input.readOnly } as const
+			const action = found.value
+			const options = { readOnly: input.readOnly }
 			const operation = Effect.gen(function* (): Effect.fn.Return<
 				Client.OperationResult<unknown>,
 				Client.Error | Schema.SchemaError
@@ -253,31 +226,24 @@ const open = (fence: Fence) =>
 						issue: "An App call with Vault values cannot ask for more input.",
 					})
 				if (phase.input.continuation !== undefined)
-					return yield* opened.client.resume(
+					return yield* action.resume(
 						continuation(input, phase.input.continuation.request),
 						phase.input.continuation.responses,
 						options,
 					)
-				switch (source.kind) {
+				switch (action.kind) {
 					case "tool":
-						return yield* opened.client.callTool(
-							{ name: source.name, arguments: arguments_ },
-							options,
-						)
+						return yield* action.invoke({ arguments: arguments_ }, options)
 					case "resource":
-						return yield* opened.client.readResource(
-							{ uri: source.name },
+						return yield* action.invoke({}, options)
+					case "template":
+						return yield* action.invoke(
+							{ values: yield* strings(input.arguments) },
 							options,
 						)
-					case "template":
-						return yield* opened.client.readTemplate({
-							template: source.name,
-							values: yield* strings(input.arguments),
-							source: "host",
-						})
 					case "prompt":
-						return yield* opened.client.getPrompt(
-							{ name: source.name, arguments: yield* strings(input.arguments) },
+						return yield* action.invoke(
+							{ arguments: yield* strings(input.arguments) },
 							options,
 						)
 				}

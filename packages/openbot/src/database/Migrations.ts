@@ -13,6 +13,7 @@ import {
 import * as Db from "./Database.ts"
 import * as Progress from "./conversion/Progress.ts"
 import * as Convert from "./conversion/Convert.ts"
+import * as GrantUses from "./conversion/GrantUses.ts"
 
 const folder = fileURLToPath(new URL("../../migrations", import.meta.url))
 
@@ -64,13 +65,27 @@ const schema = Effect.gen(function* () {
 
 /** Schema changes and the first inventory run with all servers stopped. */
 export const initialize = Progress.withMaintenance(
-	schema.pipe(Effect.andThen(Progress.establish), Effect.asVoid),
+	schema.pipe(
+		Effect.andThen(Progress.establish),
+		Effect.andThen(GrantUses.establish),
+	),
 )
 
 /** The maintenance program resumes the data move, then requires the complete version. */
 export const upgrade = Progress.withMaintenance(
-	schema.pipe(Effect.andThen(Convert.run)),
+	schema.pipe(
+		// A completed data move must not check new rows against its old counts.
+		Effect.andThen(
+			Progress.checkReady.pipe(
+				Effect.catchTag("DataUpgradeRequired", () => Convert.run),
+			),
+		),
+		Effect.andThen(GrantUses.run),
+	),
 )
 
 /** This scope must outlive the application services. It performs no DDL. */
-export const checkStartup = check.pipe(Effect.andThen(Progress.checkStartup))
+export const checkStartup = check.pipe(
+	Effect.andThen(Progress.checkStartup),
+	Effect.andThen(GrantUses.checkReady),
+)

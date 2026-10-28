@@ -1,6 +1,7 @@
 import { sameConnection } from "../discovery/CatalogDiscovery.ts"
 import {
 	Option,
+	Clock,
 	HashMap,
 	HashSet,
 	Effect,
@@ -13,6 +14,8 @@ import {
 	Match,
 	Schema,
 } from "effect"
+import * as McpClient from "./McpClient.ts"
+import * as Client from "./Client.ts"
 import * as OAuthAuthorization from "./OAuthAuthorization.ts"
 
 import * as Discovery from "../discovery/Discovery.ts"
@@ -83,33 +86,24 @@ export const layerConnectionScopes = Layer.effect(
 	}),
 )
 
-export const add = Effect.fn("App.add")(function* (options: {
+/** Build one connection from the card that was checked for this request. */
+export const prepare = Effect.fn("App.prepare")(function* (options: {
 	readonly key: Store.ConnectionKey
-	readonly candidate: Discovery.Candidate
+	readonly previous: Discovery.Candidate
+	readonly current: Discovery.Candidate
 	readonly remoteIndex: number
 	readonly values: Readonly<Record<string, string>>
-	readonly confirmed: boolean
-	readonly requiresAuthorization: boolean
 }) {
-	if (!options.confirmed)
-		return yield* AppError.make({
-			reason: "ConfirmationRequired",
-		})
-	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
-	const current = yield* discovery.refreshCard(options.candidate.cardUrl)
-	if (
-		rules.compare({ previous: options.candidate, current })._tag ===
-		"NeedsRevalidation"
-	)
+	const { previous, current } = options
+	if (rules.compare({ previous, current })._tag === "NeedsRevalidation")
 		return yield* AppError.make({ reason: "CandidateChanged" })
 	const configured = yield* rules.configureEndpoint({
 		candidate: current,
 		index: options.remoteIndex,
 		values: options.values,
 	})
-	const store = yield* Store.AppStore
-	const connection = yield* store.save({
+	return {
 		app: Store.AppRecord.make({
 			cardUrl: current.cardUrl,
 			card: current.card,
@@ -123,14 +117,43 @@ export const add = Effect.fn("App.add")(function* (options: {
 			configuration: Redacted.make(options.values),
 			headers: Redacted.make(configured.headers),
 			state: "Enabled",
+			authorization: { _tag: "Unprotected" },
+		}),
+	}
+})
+
+export const add = Effect.fn("App.add")(function* (options: {
+	readonly key: Store.ConnectionKey
+	readonly candidate: Discovery.Candidate
+	readonly remoteIndex: number
+	readonly values: Readonly<Record<string, string>>
+	readonly confirmed: boolean
+	readonly requiresAuthorization: boolean
+}) {
+	if (!options.confirmed)
+		return yield* AppError.make({
+			reason: "ConfirmationRequired",
+		})
+	const discovery = yield* Discovery.Discovery
+	const current = yield* discovery.refreshCard(options.candidate.cardUrl)
+	const prepared = yield* prepare({
+		...options,
+		previous: options.candidate,
+		current,
+	})
+	const store = yield* Store.AppStore
+	const connection = yield* store.save({
+		...prepared,
+		connection: {
+			...prepared.connection,
 			authorization: options.requiresAuthorization
 				? {
 						_tag: "PendingAuthorization",
-						resource: configured.url,
+						resource: prepared.connection.endpoint,
 						scopes: [],
 					}
 				: { _tag: "Unprotected" },
-		}),
+		},
 	})
 	return {
 		connection,
@@ -152,6 +175,151 @@ export const usable = Effect.fn("App.usable")(function* (
 	if (connection.state !== "Enabled")
 		return yield* AppError.make({ reason: "Unavailable" })
 	return connection
+})
+
+/** Check authorization values without making a storage adapter. */
+export const authorizationToken = Effect.fn("App.authorizationToken")(
+	function* (
+		connection: Store.UserConnection,
+		credential: Option.Option<Store.Credential>,
+	) {
+		if (connection.state !== "Enabled")
+			return yield* AppError.make({ reason: "Unavailable" })
+		return yield* Match.value(connection.authorization).pipe(
+			Match.tag("Unprotected", () =>
+				Effect.succeed(Option.none<Redacted.Redacted<string>>()),
+			),
+			Match.tag("Authorized", (auth) =>
+				Effect.gen(function* () {
+					if (
+						auth.binding.owner !== connection.owner ||
+						auth.binding.connectionId !== connection.connectionId ||
+						auth.binding.resource !== connection.endpoint
+					)
+						return yield* Client.ClientError.make({
+							reason: "ConnectionChanged",
+							issue: "Credential binding no longer matches this connection",
+						})
+					if (Option.isNone(credential))
+						return yield* Store.StoreError.make({
+							reason: "Missing",
+							operation: "Connection credential",
+						})
+					const value = credential.value
+					if (
+						!Schema.toEquivalence(Store.CredentialBinding)(
+							auth.binding,
+							value.binding,
+						)
+					)
+						return yield* Client.ClientError.make({
+							reason: "ConnectionChanged",
+							issue: "Credential binding no longer matches this connection",
+						})
+					if (
+						value.expiresAt !== undefined &&
+						value.expiresAt <= (yield* Clock.currentTimeMillis)
+					)
+						return yield* Client.AuthorizationRequired.make({
+							reason: "Expired",
+							scopes: value.scopes,
+						})
+					return Option.some(value.accessToken)
+				}),
+			),
+			Match.tag("ScopeRequired", (auth) =>
+				Effect.fail(
+					Client.AuthorizationRequired.make({
+						reason: "InsufficientScope",
+						scopes: auth.scopes,
+					}),
+				),
+			),
+			Match.tag("PendingAuthorization", (auth) =>
+				Effect.fail(
+					Client.AuthorizationRequired.make({
+						reason: "Pending",
+						scopes: auth.scopes,
+					}),
+				),
+			),
+			Match.tag("AuthorizationFailed", () =>
+				Effect.fail(
+					Client.AuthorizationRequired.make({ reason: "Pending", scopes: [] }),
+				),
+			),
+			Match.exhaustive,
+		)
+	},
+)
+
+export const layerPolicy = (
+	check: (
+		invocation: Client.Invocation,
+	) => Effect.Effect<void, Client.PermissionDenied | Client.ClientError>,
+) => Layer.succeed(Client.InvocationPolicy, { check })
+
+/** Open a saved connection with current state and credentials on every request. */
+export const open = Effect.fn("App.open")(function* (
+	options: Pick<
+		McpClient.OpenOptions,
+		"key" | "clientInfo" | "capabilities" | "inputs"
+	>,
+) {
+	const apps = yield* Store.AppStore
+	const credentials = yield* Store.CredentialStore
+	const policy = yield* Client.InvocationPolicy
+	const active = yield* ConnectionScopes
+	const initial = yield* usable(options.key)
+	const sameHeaders = Schema.toEquivalence(
+		Schema.Record(Schema.String, Schema.String),
+	)
+	const current = Effect.gen(function* () {
+		const connection = yield* apps.get(options.key)
+		if (connection.state !== "Enabled")
+			return yield* AppError.make({ reason: "Unavailable" })
+		if (
+			connection.owner !== initial.owner ||
+			connection.connectionId !== initial.connectionId ||
+			connection.endpoint !== initial.endpoint ||
+			connection.cardUrl !== initial.cardUrl ||
+			!sameHeaders(
+				Redacted.value(connection.headers),
+				Redacted.value(initial.headers),
+			)
+		)
+			return yield* Client.ClientError.make({
+				reason: "ConnectionChanged",
+				issue: "Open a client after explicit revalidation",
+			})
+		const auth = connection.authorization
+		const credential =
+			auth._tag === "Authorized"
+				? Option.some(
+						yield* credentials.get({
+							binding: auth.binding,
+							reference: auth.credentialRef,
+						}),
+					)
+				: Option.none<Store.Credential>()
+		return {
+			connection,
+			token: yield* authorizationToken(connection, credential),
+		}
+	})
+	return yield* McpClient.open({
+		...options,
+		endpoint: initial.endpoint,
+		headers: initial.headers,
+		readToken: current.pipe(Effect.map((value) => value.token)),
+		check: (request) =>
+			current.pipe(
+				Effect.flatMap(({ connection }) =>
+					policy.check({ ...request, connection }),
+				),
+			),
+		registerScope: (scope) => active.register({ key: options.key, scope }),
+	})
 })
 
 /** Save the stop before releasing anything, so a failure cannot make the connection callable again. */

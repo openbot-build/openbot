@@ -2,12 +2,10 @@ import {
 	HashSet,
 	Array as Arr,
 	Cause,
-	Clock,
 	Effect,
 	Equal,
 	Exit,
 	FiberSet,
-	Layer,
 	PubSub,
 	Redacted,
 	Ref,
@@ -22,7 +20,6 @@ import {
 	pipe,
 } from "effect"
 import { dual, type LazyArg } from "effect/Function"
-import * as AppConnections from "./AppConnections.ts"
 import * as Sdk from "../network/Sdk.ts"
 import * as Mcp from "@modelcontextprotocol/client"
 
@@ -37,8 +34,14 @@ import {
 	AuthorizationRequired,
 	OutcomeUnknown,
 	ToolFailure,
-	InvocationPolicy,
-	type Invocation,
+	type Request,
+	type ResolvedAction,
+	type ResolvedTool,
+	type ResolvedResource,
+	type ResolvedTemplate,
+	type ResolvedPrompt,
+	type ActionTarget,
+	type InvokeOptions,
 	type Error,
 	type CallOptions,
 	type InputHandler,
@@ -60,10 +63,6 @@ const replace =
 				Effect.failCause(Cause.map(cause, () => withCause(error(), cause))),
 			),
 		)
-
-export const layerPolicy = (
-	check: (invocation: Invocation) => Effect.Effect<void, PermissionDenied>,
-) => Layer.succeed(InvocationPolicy, { check })
 
 const visibility = (tool: Mcp.Tool, source: CallOptions["source"]) => {
 	const ui = tool._meta?.["ui"]
@@ -209,130 +208,65 @@ export const validateInputs: {
 	decodeInputs(continuation, responses).pipe(Effect.asVoid),
 )
 
-export const open = Effect.fn("Client.open")(function* (options: {
+/** Open a scoped MCP connection. The host owns access and current credentials. */
+export interface OpenOptions {
 	readonly key: Store.ConnectionKey
+	readonly endpoint: string
+	readonly headers: Redacted.Redacted<Readonly<Record<string, string>>>
 	readonly clientInfo: Mcp.Implementation
 	readonly capabilities?: Mcp.ClientCapabilities
 	readonly inputs?: InputHandler
-	readonly eagerLists?: boolean
-}) {
-	const store = yield* Store.AppStore
-	const credentials = yield* Store.CredentialStore
-	const policy = yield* InvocationPolicy
-	const active = yield* App.ConnectionScopes
+	readonly readToken: Effect.Effect<
+		Option.Option<Redacted.Redacted<string>>,
+		Error
+	>
+	readonly check: (request: Request) => Effect.Effect<void, Error>
+	readonly registerScope?: (
+		scope: Scope.Closeable,
+	) => Effect.Effect<{ readonly close: Effect.Effect<void> }>
+}
+export const open = Effect.fn("Client.open")(function* (options: OpenOptions) {
 	const network = yield* Network.Network
-	const initial = yield* AppConnections.usable(options.key)
 	if (
 		network.identity.scope === "user" &&
-		network.identity.owner !== initial.owner
+		network.identity.owner !== options.key.owner
 	)
 		return yield* PermissionDenied.make({
 			action: "connect",
-			target: initial.endpoint,
+			target: options.endpoint,
 		})
+	const closed = yield* Ref.make(false)
 	const { scope, close } = yield* Effect.acquireRelease(
 		Effect.gen(function* () {
 			const scope = yield* Scope.make()
-			const { close } = yield* active
-				.register({ key: options.key, scope })
-				.pipe(Effect.onError(() => Scope.close(scope, Exit.void)))
-			return { scope, close }
+			yield* Scope.addFinalizer(scope, Ref.set(closed, true))
+			const registered = yield* (
+				options.registerScope === undefined
+					? Effect.succeed({ close: Scope.close(scope, Exit.void) })
+					: options.registerScope(scope)
+			).pipe(Effect.onError(() => Scope.close(scope, Exit.void)))
+			return { scope, close: registered.close }
 		}),
 		({ close }) => close,
 	)
 	return yield* Effect.gen(function* () {
-		const closed = yield* Ref.make(false)
-		const guard = Effect.fn("Client.currentConnection")(function* () {
+		const guard = Effect.gen(function* () {
 			if (yield* Ref.get(closed))
 				return yield* ClientError.make({
 					reason: "Closed",
 					issue: "Connection Scope is closed",
 				})
-			const connection = yield* store.get(options.key)
-			if (connection.state !== "Enabled")
-				return yield* App.AppError.make({
-					reason: "Unavailable",
-				})
-			if (
-				connection.endpoint !== initial.endpoint ||
-				connection.cardUrl !== initial.cardUrl
-			)
-				return yield* ClientError.make({
-					reason: "ConnectionChanged",
-					issue: "Open a client after explicit revalidation",
-				})
-			return yield* Match.value(connection.authorization).pipe(
-				Match.tag("Unprotected", () =>
-					Effect.succeed({
-						connection,
-						token: Option.none<Redacted.Redacted<string>>(),
-					}),
-				),
-				Match.tag("Authorized", (auth) =>
-					Effect.gen(function* () {
-						if (
-							auth.binding.owner !== connection.owner ||
-							auth.binding.connectionId !== connection.connectionId ||
-							auth.binding.resource !== connection.endpoint
-						)
-							return yield* ClientError.make({
-								reason: "ConnectionChanged",
-								issue: "Credential binding no longer matches this connection",
-							})
-						const credential = yield* credentials.get({
-							binding: auth.binding,
-							reference: auth.credentialRef,
-						})
-						const now = yield* Clock.currentTimeMillis
-						if (
-							credential.expiresAt !== undefined &&
-							credential.expiresAt <= now
-						)
-							return yield* AuthorizationRequired.make({
-								reason: "Expired",
-								scopes: credential.scopes,
-							})
-						return {
-							connection,
-							token: Option.some(credential.accessToken),
-						}
-					}),
-				),
-				Match.tag("ScopeRequired", (auth) =>
-					Effect.fail(
-						AuthorizationRequired.make({
-							reason: "InsufficientScope",
-							scopes: auth.scopes,
-						}),
-					),
-				),
-				Match.tag("PendingAuthorization", (auth) =>
-					Effect.fail(
-						AuthorizationRequired.make({
-							reason: "Pending",
-							scopes: auth.scopes,
-						}),
-					),
-				),
-				Match.tag("AuthorizationFailed", () =>
-					Effect.fail(
-						AuthorizationRequired.make({
-							reason: "Pending",
-							scopes: [],
-						}),
-					),
-				),
-				Match.exhaustive,
-			)
 		})
-		yield* guard()
-		const checked = Effect.fn("Client.check")(function* (
-			invocation: Omit<Invocation, "connection">,
-		) {
-			const { connection } = yield* guard()
-			yield* policy.check({ ...invocation, connection })
-			return connection
+		const checked = (request: Request) =>
+			guard.pipe(Effect.andThen(options.check(request)))
+		yield* checked({
+			action: "connect",
+			target: options.endpoint,
+			arguments: {},
+			source: "host",
 		})
+		yield* options.readToken
+
 		// The SDK auth provider and notification handlers are Promise callbacks.
 		// When the guard fails, the Promise rejects with the typed error, the SDK
 		// stops the request, and `mapError` below gets the same typed error back.
@@ -344,9 +278,10 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			start(Effect.andThen(Effect.yieldNow, effect))
 		const token = () =>
 			run(
-				guard().pipe(
-					Effect.map((current) =>
-						Option.getOrUndefined(Option.map(current.token, Redacted.value)),
+				guard.pipe(
+					Effect.andThen(options.readToken),
+					Effect.map((token) =>
+						Option.getOrUndefined(Option.map(token, Redacted.value)),
 					),
 				),
 			)
@@ -375,9 +310,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			...options.inputs?.capabilities,
 		}
 		const cachePartition = yield* Schema.encodeEffect(CachePartition)([
-			initial.owner,
-			initial.connectionId,
-			initial.endpoint,
+			options.key.owner,
+			options.key.connectionId,
+			options.endpoint,
 		]).pipe(Effect.orDie)
 		const sdk = new Mcp.Client(options.clientInfo, {
 			versionNegotiation: {
@@ -393,11 +328,11 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		// before it calls this handler, so the handler only passes the notification on.
 		sdk.fallbackNotificationHandler = (notification) =>
 			run(PubSub.publish(notices, notification).pipe(Effect.asVoid))
-		const transport = new Sdk.HttpTransport(new URL(initial.endpoint), {
+		const transport = new Sdk.HttpTransport(new URL(options.endpoint), {
 			fetch,
 			authProvider: { token },
 			requestInit: {
-				headers: Redacted.value(initial.headers),
+				headers: Redacted.value(options.headers),
 				redirect: "manual",
 			},
 			redirectPolicy: "same-origin",
@@ -425,6 +360,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		const mapError = (error: unknown): Effect.Effect<never, Error> => {
 			if (
 				Schema.is(ClientError)(error) ||
+				Schema.is(PermissionDenied)(error) ||
+				Schema.is(OutcomeUnknown)(error) ||
+				Schema.is(ToolFailure)(error) ||
 				Schema.is(AuthorizationRequired)(error) ||
 				Schema.is(Store.StoreError)(error) ||
 				Schema.is(App.AppError)(error)
@@ -494,6 +432,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			Effect.tryPromise(request).pipe(
 				Effect.catch((error) => mapError(error.cause)),
 			)
+		yield* guard
 		yield* invoke((signal) => sdk.connect(transport, { signal }))
 		const discovery = sdk.getDiscoverResult()
 		if (discovery === undefined)
@@ -811,12 +750,14 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				? inputRequired(result, resume)
 				: { _tag: "Completed", result }
 		const callTool: (
+			tool: Mcp.Tool,
 			params: Mcp.CallToolRequest["params"],
 			call: CallOptions,
 			next?: Next,
 		) => Effect.Effect<OperationResult<Mcp.CallToolResult>, Error> = Effect.fn(
 			"Client.callTool",
 		)(function* (
+			tool: Mcp.Tool,
 			params: Mcp.CallToolRequest["params"],
 			call: CallOptions,
 			next?: Next,
@@ -829,16 +770,6 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				arguments: params.arguments,
 				source: call.source,
 			})
-			const visible = pipe(
-				Arr.findFirst(yield* allTools(), (tool) => tool.name === params.name),
-				Option.filter((tool) => visibility(tool, call.source)),
-			)
-			if (Option.isNone(visible))
-				return yield* PermissionDenied.make({
-					action: "tools/call",
-					target: params.name,
-				})
-			const tool = visible.value
 			yield* validateDynamic(tool.inputSchema, params.arguments ?? {})
 			// Manual MRTR must reach the host before the final structured output is checked.
 			// The SDK still handles parameter headers with the real input schema.
@@ -895,7 +826,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					}),
 			).pipe(Effect.catch(writeOutcome))
 			if (Mcp.isInputRequiredResult(decoded))
-				return inputRequired(decoded, (next) => callTool(params, call, next))
+				return inputRequired(decoded, (next) =>
+					callTool(tool, params, call, next),
+				)
 			if (decoded.isError === true)
 				return yield* ToolFailure.make({
 					result: decoded,
@@ -971,69 +904,263 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			)
 			return finish(result, (next) => getPrompt(params, call, next))
 		})
-		const client: Client = {
-			resume: Effect.fn("Client.resume")(
-				function* (continuation, responses, call) {
-					const { parsed, decoded } = yield* decodeInputs(
-						continuation,
-						responses,
-					)
-					const resume = (
-						next: Next,
-					): Effect.Effect<OperationResult<unknown>, Error> =>
-						Match.value(continuation.method).pipe(
-							Match.when("tools/call", () =>
-								Schema.decodeUnknownEffect(
-									Schema.Struct({
-										name: Schema.String,
-										arguments: Schema.optionalKey(Schema.JsonObject),
-									}),
-								)(continuation.params).pipe(
-									replace(inputMismatch),
-									Effect.flatMap((params) => callTool(params, call, next)),
-								),
-							),
-							Match.when("resources/read", () =>
-								Schema.decodeUnknownEffect(
-									Schema.Union([
-										Schema.Struct({ uri: Schema.String }),
-										Schema.Struct({
-											uriTemplate: Schema.String,
-											values: Schema.Record(Schema.String, Schema.String),
-										}),
-									]),
-								)(continuation.params).pipe(
-									replace(inputMismatch),
-									Effect.flatMap((params) =>
-										"uri" in params
-											? Effect.succeed(params.uri)
-											: Effect.try(() =>
-													new Mcp.UriTemplate(params.uriTemplate).expand(
-														params.values,
-													),
-												).pipe(replace(inputMismatch)),
-									),
-									Effect.flatMap((uri) => readResource({ uri }, call, next)),
-								),
-							),
-							Match.when("prompts/get", () =>
-								Schema.decodeUnknownEffect(
-									Schema.Struct({
-										name: Schema.String,
-										arguments: Schema.optionalKey(
-											Schema.Record(Schema.String, Schema.String),
-										),
-									}),
-								)(continuation.params).pipe(
-									replace(inputMismatch),
-									Effect.flatMap((params) => getPrompt(params, call, next)),
-								),
-							),
-							Match.exhaustive,
-						)
-					return yield* inputRequired(parsed, resume).respond(decoded)
+		const findDefinition = <A>(
+			read: (cursor?: string) => Effect.Effect<
+				{
+					readonly items: ReadonlyArray<A>
+					readonly nextCursor?: string | undefined
 				},
+				Error
+			>,
+			matches: (value: A) => boolean,
+		) => {
+			const page = (
+				cursor: string | undefined,
+				seen: HashSet.HashSet<string>,
+				count: number,
+			): Effect.Effect<Option.Option<A>, Error> =>
+				Effect.gen(function* () {
+					const value = yield* read(cursor)
+					const found = Arr.findFirst(value.items, matches)
+					if (Option.isSome(found) || value.nextCursor === undefined)
+						return found
+					if (HashSet.has(seen, value.nextCursor))
+						return yield* ClientError.make({
+							reason: "Protocol",
+							issue: "The service repeated a capability cursor",
+						})
+					if (count >= maxPages)
+						return yield* ClientError.make({
+							reason: "Protocol",
+							issue: "The service sent too many pages",
+						})
+					return yield* page(
+						value.nextCursor,
+						HashSet.add(seen, value.nextCursor),
+						count + 1,
+					)
+				})
+			return page(undefined, HashSet.empty(), 1)
+		}
+		const bind = <Params>(
+			method: Continuation["method"],
+			target: Readonly<Record<string, string>>,
+			source: CallOptions["source"],
+			decode: (value: Schema.JsonObject) => Effect.Effect<Params, ClientError>,
+			send: (
+				params: Params,
+				call: CallOptions,
+				next?: Next,
+			) => Effect.Effect<OperationResult<unknown>, Error>,
+		) => ({
+			invoke: (params: Params, call: InvokeOptions) =>
+				send(params, { ...call, source }),
+			resume: Effect.fn("Client.resume")(function* (
+				continuation: Continuation,
+				responses: Schema.JsonObject,
+				call: InvokeOptions,
+			) {
+				if (
+					continuation.method !== method ||
+					Rec.some(target, (value, key) => continuation.params[key] !== value)
+				)
+					return yield* inputMismatch()
+				const params = yield* decode(continuation.params)
+				const { parsed, decoded } = yield* decodeInputs(continuation, responses)
+				return yield* inputRequired(parsed, (next) =>
+					send(params, { ...call, source }, next),
+				).respond(decoded)
+			}),
+		})
+		const toolAction = (
+			definition: Mcp.Tool,
+			source: CallOptions["source"],
+		): ResolvedTool => ({
+			kind: "tool",
+			definition,
+			...bind(
+				"tools/call",
+				{ name: definition.name },
+				source,
+				(value) =>
+					decodeStandard(
+						() => Mcp.specTypeSchemas.CallToolRequest,
+						{ method: "tools/call", params: value },
+						inputMismatch,
+					).pipe(Effect.map((value) => value.params)),
+				(params: Omit<Mcp.CallToolRequest["params"], "name">, call, next) =>
+					callTool(
+						definition,
+						{ ...params, name: definition.name },
+						call,
+						next,
+					),
 			),
+		})
+		const resourceAction = (
+			definition: Mcp.Resource,
+			source: CallOptions["source"],
+		): ResolvedResource => ({
+			kind: "resource",
+			definition,
+			...bind(
+				"resources/read",
+				{ uri: definition.uri },
+				source,
+				(value) =>
+					decodeStandard(
+						() => Mcp.specTypeSchemas.ReadResourceRequest,
+						{ method: "resources/read", params: value },
+						inputMismatch,
+					).pipe(Effect.map((value) => value.params)),
+				(params: Omit<Mcp.ReadResourceRequest["params"], "uri">, call, next) =>
+					readResource({ ...params, uri: definition.uri }, call, next),
+			),
+		})
+		const promptAction = (
+			definition: Mcp.Prompt,
+			source: CallOptions["source"],
+		): ResolvedPrompt => ({
+			kind: "prompt",
+			definition,
+			...bind(
+				"prompts/get",
+				{ name: definition.name },
+				source,
+				(value) =>
+					decodeStandard(
+						() => Mcp.specTypeSchemas.GetPromptRequest,
+						{ method: "prompts/get", params: value },
+						inputMismatch,
+					).pipe(Effect.map((value) => value.params)),
+				(params: Omit<Mcp.GetPromptRequest["params"], "name">, call, next) =>
+					getPrompt({ ...params, name: definition.name }, call, next),
+			),
+		})
+		const templateAction = (
+			definition: Mcp.ResourceTemplateType,
+			source: CallOptions["source"],
+		): ResolvedTemplate => ({
+			kind: "template",
+			definition,
+			...bind(
+				"resources/read",
+				{ uriTemplate: definition.uriTemplate },
+				source,
+				(value) =>
+					Schema.decodeUnknownEffect(
+						Schema.Struct({
+							values: Schema.Record(
+								Schema.String,
+								Schema.Union([
+									Schema.String,
+									Schema.mutable(Schema.Array(Schema.String)),
+								]),
+							),
+							_meta: Schema.optionalKey(Schema.JsonObject),
+						}),
+					)(value).pipe(replace(inputMismatch)),
+				(params: Parameters<ResolvedTemplate["invoke"]>[0], call, next) =>
+					Effect.gen(function* () {
+						const uri = yield* Effect.try(() =>
+							new Mcp.UriTemplate(definition.uriTemplate).expand(params.values),
+						).pipe(
+							replace(() =>
+								ClientError.make({
+									reason: "Schema",
+									issue: "Invalid resource template arguments",
+								}),
+							),
+						)
+						return yield* readResource(
+							{
+								uri,
+								...(params._meta === undefined ? {} : { _meta: params._meta }),
+							},
+							call,
+							next,
+						)
+					}),
+			),
+		})
+		const resolve = Effect.fn("Client.resolve")(function* (
+			target: ActionTarget,
+			source: CallOptions["source"],
+		): Effect.fn.Return<Option.Option<ResolvedAction>, Error> {
+			yield* guard
+			switch (target.kind) {
+				case "tool":
+					if (discovery.capabilities.tools === undefined) return Option.none()
+					return Option.map(
+						yield* findDefinition(
+							(cursor) =>
+								lists
+									.tools({
+										...(cursor === undefined ? {} : { cursor }),
+										source,
+										singlePage: true,
+									})
+									.pipe(
+										Effect.map((page) => ({
+											items: page.tools,
+											nextCursor: page.nextCursor,
+										})),
+									),
+							(value) => value.name === target.name,
+						),
+						(definition) => toolAction(definition, source),
+					)
+				case "resource":
+					if (discovery.capabilities.resources === undefined)
+						return Option.none()
+					return Option.map(
+						yield* findDefinition(
+							(cursor) =>
+								lists.resources(cursor, source, { singlePage: true }).pipe(
+									Effect.map((page) => ({
+										items: page.resources,
+										nextCursor: page.nextCursor,
+									})),
+								),
+							(value) => value.uri === target.name,
+						),
+						(definition) => resourceAction(definition, source),
+					)
+				case "template":
+					if (discovery.capabilities.resources === undefined)
+						return Option.none()
+					return Option.map(
+						yield* findDefinition(
+							(cursor) =>
+								lists.templates(cursor, source, { singlePage: true }).pipe(
+									Effect.map((page) => ({
+										items: page.resourceTemplates,
+										nextCursor: page.nextCursor,
+									})),
+								),
+							(value) => value.uriTemplate === target.name,
+						),
+						(definition) => templateAction(definition, source),
+					)
+				case "prompt":
+					if (discovery.capabilities.prompts === undefined) return Option.none()
+					return Option.map(
+						yield* findDefinition(
+							(cursor) =>
+								lists.prompts(cursor, source, { singlePage: true }).pipe(
+									Effect.map((page) => ({
+										items: page.prompts,
+										nextCursor: page.nextCursor,
+									})),
+								),
+							(value) => value.name === target.name,
+						),
+						(definition) => promptAction(definition, source),
+					)
+			}
+		})
+		const client: Client = {
+			resolve,
 			key: options.key,
 			discovery,
 			notifications: Stream.fromPubSub(notices),
@@ -1042,38 +1169,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			listResources: lists.resources,
 			listResourceTemplates: lists.templates,
 			listPrompts: lists.prompts,
-			callTool,
 			readResource,
-			getPrompt,
-			readTemplate: Effect.fn("Client.readTemplate")(function* (input) {
-				const template = Arr.findFirst(
-					yield* allPages((cursor) =>
-						lists.templates(cursor, "host", { singlePage: true }).pipe(
-							Effect.map((page) => ({
-								items: page.resourceTemplates,
-								nextCursor: page.nextCursor,
-							})),
-						),
-					),
-					(template) => template.uriTemplate === input.template,
-				)
-				if (Option.isNone(template))
-					return yield* ClientError.make({
-						reason: "Schema",
-						issue: "Unknown resource template",
-					})
-				const uri = yield* Effect.try(() =>
-					new Mcp.UriTemplate(template.value.uriTemplate).expand(input.values),
-				).pipe(
-					replace(() =>
-						ClientError.make({
-							reason: "Schema",
-							issue: "Invalid resource template arguments",
-						}),
-					),
-				)
-				return yield* readResource({ uri }, { source: input.source })
-			}),
+
 			listen: Effect.fn("Client.listen")(function* (filter) {
 				yield* checked({
 					action: "subscriptions/listen",
@@ -1103,16 +1200,6 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				}
 			}),
 			close,
-		}
-		// Read only the lists advertised by the live discovery response.
-		if (options.eagerLists !== false) {
-			if (sdk.getServerCapabilities()?.tools !== undefined) yield* lists.tools()
-			if (sdk.getServerCapabilities()?.resources !== undefined) {
-				yield* lists.resources()
-				yield* lists.templates()
-			}
-			if (sdk.getServerCapabilities()?.prompts !== undefined)
-				yield* lists.prompts()
 		}
 		return client
 	}).pipe(Effect.onError(() => close))

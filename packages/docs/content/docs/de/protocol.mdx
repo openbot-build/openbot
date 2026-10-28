@@ -347,6 +347,25 @@ Veröffentlichung an. Sie prüfen sie einmal beim Start des Layers. `registerUi`
 prüft einfache UI-Ressourcendaten in seinem Effect. Falsche Eingaben geben einen
 Fehler mit Typ zurück.
 
+`McpClient.open` öffnet eine Verbindung mit Schlüssel, Endpunkt, Headern und
+Client-Daten. `readToken` liest das aktuelle Token; `check` prüft jede Aktion.
+Ein Host kann mit `registerScope` die Verbindung vor jedem Netzwerkaufruf
+anmelden. Der Client braucht keinen App- oder Zugangsdaten-Speicher. Sein Scope
+hält und schließt die Verbindung. Für gespeicherte Verbindungen nutze
+`AppConnections.open`. Dieser Adapter liest den aktuellen Zustand und die
+Zugangsdaten, prüft den Zugriff und meldet den Scope an. Token-Abfragen und
+Senden prüfen weiter den aktuellen Zustand.
+
+Das Öffnen liest keine Listen der Fähigkeiten. Mit
+`client.resolve({ kind, name }, source)` suchst du ein Tool, eine Ressource,
+eine Vorlage oder einen Prompt. Es liest nur diese Art von Liste und stoppt beim
+ersten Treffer. Der Treffer enthält die Deklaration und die Operationen `invoke`
+und `resume`. Sie nutzen dieselbe Deklaration, ohne die Liste erneut zu lesen.
+Gib `invoke` die Anfrageparameter ohne den gebundenen Namen oder die URI; eine
+Vorlage nimmt `{ values }`. Nutze die Aktion nur im Scope ihrer Verbindung. Eine
+wiederhergestellte Phase sucht und prüft die Deklaration neu. Direktes
+`readResource` unterstützt auch UI-Ressourcen außerhalb der Liste.
+
 `CatalogDiscovery.sameConnection` vergleicht die Teile eines Remotes, die eine
 Verbindung ändern. Neue Beschreibungstexte oder Erweiterungsfelder erhalten die
 Verbindung und die Anmeldung. Ein neues Eingabeformat oder eine Änderung der

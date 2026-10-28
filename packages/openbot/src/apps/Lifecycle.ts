@@ -6,7 +6,6 @@ import {
 	Discovery,
 	Document,
 	McpClient,
-	MemoryStore,
 	Network,
 	OAuthAuthorization,
 	Store as Protocol,
@@ -16,6 +15,7 @@ import {
 	Cause,
 	Clock,
 	Context,
+	Option,
 	Effect,
 	Equal,
 	HashSet,
@@ -194,7 +194,7 @@ export const make = Effect.gen(function* () {
 					authorization: { _tag: "Unprotected" as const },
 				}
 				yield* check
-				const protection = yield* probe.check({ app, connection: configured })
+				const protection = yield* probe.check({ connection: configured })
 				yield* check
 				let trustedIssuer = ""
 				if (
@@ -306,31 +306,8 @@ export const make = Effect.gen(function* () {
 					)
 				},
 			})
-			// A private store gives the protocol a fixed snapshot. It cannot change saved state.
 			const observed = yield* Effect.scoped(
 				Effect.gen(function* () {
-					const context = yield* Layer.build(
-						Layer.mergeAll(
-							MemoryStore.layer,
-							MemoryStore.layerCredentials,
-							ProtocolConnections.layerConnectionScopes,
-						),
-					)
-					const apps = Context.get(context, Protocol.AppStore)
-					const credentials = Context.get(context, Protocol.CredentialStore)
-					const credentialRef =
-						input.credential === null
-							? null
-							: yield* credentials.put(input.credential)
-					const authorization = connection.authorization
-					const snapshot =
-						credentialRef !== null && authorization._tag === "Authorized"
-							? {
-									...connection,
-									authorization: { ...authorization, credentialRef },
-								}
-							: connection
-					yield* apps.save({ app, connection: snapshot })
 					yield* check
 					return yield* withNetwork(
 						connection.owner,
@@ -338,9 +315,32 @@ export const make = Effect.gen(function* () {
 						Effect.gen(function* () {
 							const client = yield* McpClient.open({
 								key: connection,
+								endpoint: connection.endpoint,
+								headers: connection.headers,
+								readToken: ProtocolConnections.authorizationToken(
+									connection,
+									Option.fromNullishOr(input.credential),
+								),
+								check: (request) =>
+									request.action === "connect"
+										? check.pipe(
+												Effect.catchCause((cause) =>
+													errors.record(cause, "forbidden", executionId).pipe(
+														Effect.orDie,
+														Effect.andThen(
+															Effect.fail(
+																Client.PermissionDenied.make({
+																	action: request.action,
+																	target: request.target,
+																}),
+															),
+														),
+													),
+												),
+											)
+										: policy.check({ ...request, connection }),
 								clientInfo: { name: "OpenBot", version: "1.0.0" },
 								capabilities: {},
-								eagerLists: false,
 							})
 							const lists = capabilityLists(client)
 							const collect = <A>(list: {
@@ -367,11 +367,7 @@ export const make = Effect.gen(function* () {
 								resourceTemplates: yield* collect(lists.resourceTemplates),
 								prompts: yield* collect(lists.prompts),
 							}
-						}).pipe(
-							Effect.provideContext(
-								Context.add(context, Client.InvocationPolicy, policy),
-							),
-						),
+						}),
 					)
 				}),
 			).pipe(Effect.result)

@@ -1,3 +1,4 @@
+import * as GrantUses from "./GrantUses.ts"
 import {
 	AppConnections,
 	Authorization,
@@ -82,6 +83,7 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
 	const secrets = yield* Secrets
+	const uses = GrantUses.makeWith(db, secrets)
 	const store = yield* Store
 	const checks = yield* Check.make
 	const governance = yield* Governance
@@ -400,6 +402,7 @@ const make = Effect.gen(function* () {
 					})
 					.where(Connections.connectionWhere(owner, id)),
 			)
+			yield* uses.connection(value.connection).pipe(storage)
 		})
 	const commit = (fence: Fence, prepared: Prepared, callId: Execution.CallId) =>
 		sql
@@ -407,17 +410,11 @@ const make = Effect.gen(function* () {
 				Effect.gen(function* () {
 					const { saved, input } = yield* guard(fence)
 					yield* authorize(fence, saved.identity.actor, "advance")
-					const history = yield* store.calls(fence)
-					const call = Arr.findFirst(history, (value) => value.id === callId)
+					const call = yield* store.latestCall(fence, "prepare")
 					if (
 						Option.isNone(call) ||
-						call.value.step !== "prepare" ||
+						call.value.id !== callId ||
 						call.value.status !== "completed" ||
-						Arr.some(
-							history,
-							(other) =>
-								other.step === "prepare" && other.attempt > call.value.attempt,
-						) ||
 						!Schema.toEquivalence(Schema.Json)(
 							call.value.result,
 							yield* Schema.encodeEffect(preparedCodec)(prepared),
@@ -569,9 +566,9 @@ const make = Effect.gen(function* () {
 				if (Option.isNone(marker) || marker.value.body._tag !== "Checkpoint")
 					return yield* Effect.die("The connection result has no checkpoint.")
 				const checkpoint = marker.value.body
-				const call = Arr.findFirst(
-					yield* store.calls(key),
-					(call) => call.id === checkpoint.resource.id,
+				const call = yield* store.call(
+					key,
+					Execution.CallId.make(checkpoint.resource.id),
 				)
 				if (Option.isNone(call) || call.value.status !== "completed")
 					return yield* Effect.die("The connection result has no saved call.")

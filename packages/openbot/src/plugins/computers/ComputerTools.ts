@@ -265,6 +265,12 @@ export class ComputerTools extends Context.Service<
 		readonly register: (
 			input: ForOwnerInput,
 		) => Effect.Effect<Bot.ToolRegistration<Tools>, never, Work>
+		/** Restore one tool without reading the list used in model instructions. */
+		readonly restore: (
+			input: ForOwnerInput,
+			name: string,
+			work: typeof Work.Service,
+		) => Effect.Effect<Bot.ToolRegistration<Tools>>
 	}
 >()("@openbot-build/openbot/plugins/computers/ComputerTools") {}
 
@@ -274,608 +280,610 @@ export const make = Effect.gen(function* () {
 	const sessions = yield* Sessions
 	const providers = yield* ComputerProviders
 	const gate = yield* Gate
-	return ComputerTools.of({
-		register: (input) =>
-			Effect.gen(function* () {
-				const current = yield* Work
-				const work = Effect.succeed(current)
+	const register = (input: ForOwnerInput, selected?: string) =>
+		Effect.gen(function* () {
+			const current = yield* Work
+			const work = Effect.succeed(current)
 
-				/** The Computer, when the current Bot may use it. */
-				const held = (id: string) =>
-					Effect.gen(function* () {
-						const current = yield* work
-						const may = yield* computers.holds(
-							current.identity.actor.organizationId,
-							current.bot.id,
-							id,
-						)
-						if (!may) return yield* Execution.Forbidden.make({})
-						// A held Computer still needs every later caller's current right to use it.
-						for (const caller of executionCallers(current.identity)) {
-							if (caller === current.identity.actor) continue
-							yield* computers.get(caller, id, "use")
-						}
-						return current
-					})
-				const onMachine = <A, E>(
-					id: string,
-					use: (machine: Machine) => Effect.Effect<A, E>,
-				) =>
-					Effect.gen(function* () {
-						const current = yield* held(id)
-						const { machine } = yield* computers.machine(current.identity, id)
-						return yield* use(machine)
-					})
-				/** The Bots above the current one. A child Bot may ask for their Computers. */
-				const parents = (current: typeof Work.Service) =>
-					pipe(
-						Arr.appendAll(current.deciders, current.chain.bots),
-						Arr.dedupe,
-						Arr.filter((id) => id !== current.bot.id),
-						Arr.map((id) => BotsApi.BotId.make(id)),
+			/** The Computer, when the current Bot may use it. */
+			const held = (id: string) =>
+				Effect.gen(function* () {
+					const current = yield* work
+					const may = yield* computers.holds(
+						current.identity.actor.organizationId,
+						current.bot.id,
+						id,
 					)
-				/** Asks the gate. A failed check never lets the action run. */
-				const ask = (
-					input: Parameters<typeof gate.check>[0],
-				): Effect.Effect<boolean> =>
-					gate.check(input).pipe(
-						Effect.map((answer) => answer._tag !== "Allow"),
-						Effect.catchCause((cause) =>
-							Cause.hasInterruptsOnly(cause)
-								? Effect.interrupt
-								: report("A Computer action could not be checked", cause).pipe(
-										Effect.andThen(
-											gate.remember(
-												input.site.main,
-												Answer.Deny({
-													reason: "OpenBot could not check this action.",
-												}),
-											),
-										),
-										Effect.as(true),
-									),
-						),
-					)
-				const ownerOf = (id: string) =>
-					Effect.gen(function* () {
-						const current = yield* work
-						const computer = yield* computers.get(current.identity.actor, id)
-						return computer.owner
-					})
-
-				/**
-				 * Makes a tool. Its JSON Schema comes from `input`, the Schema that reads its input.
-				 * `needsApproval` runs before the handler. When it fails, the action never runs:
-				 * the Turn keeps a Deny for the call, so no other check can allow it.
-				 */
-				const tool = <A, I>(
-					name: string,
-					description: string,
-					input: Schema.Codec<A, I>,
-					handle: (
-						request: A,
-					) => Effect.Effect<unknown, Shown | Execution.Failure>,
-					needsApproval?: (
-						request: A,
-						toolCallId: string,
-					) => Effect.Effect<boolean, Shown>,
-					readonly = false,
-				) => {
-					const decode = Schema.decodeUnknownEffect(input)
-					const base = {
-						description,
-						parameters: Tool.getJsonSchemaFromSchema(input),
-						success: Schema.Json,
-						failure: Execution.Failure,
+					if (!may) return yield* Execution.Forbidden.make({})
+					// A held Computer still needs every later caller's current right to use it.
+					for (const caller of executionCallers(current.identity)) {
+						if (caller === current.identity.actor) continue
+						yield* computers.get(caller, id, "use")
 					}
-					const definition =
-						needsApproval === undefined
-							? Tool.dynamic(name, base)
-							: Tool.dynamic(name, {
-									...base,
-									needsApproval: (raw, call) =>
-										decode(raw).pipe(
-											Effect.matchEffect({
-												// A wrong call fails in its handler with the same error, so it does not wait.
-												onFailure: () => Effect.succeed(false),
-												onSuccess: (request) =>
-													needsApproval(request, call.toolCallId).pipe(
-														Effect.catch((error) =>
-															report(
-																"A Computer action could not be checked",
-																error,
-															).pipe(
-																Effect.flatMap((failure) =>
-																	gate.remember(
-																		call.toolCallId,
-																		Answer.Deny({
-																			reason: `${failure.category} (${failure.errorId})`,
-																		}),
-																	),
-																),
-																Effect.as(true),
-															),
-														),
-													),
+					return current
+				})
+			const onMachine = <A, E>(
+				id: string,
+				use: (machine: Machine) => Effect.Effect<A, E>,
+			) =>
+				Effect.gen(function* () {
+					const current = yield* held(id)
+					const { machine } = yield* computers.machine(current.identity, id)
+					return yield* use(machine)
+				})
+			/** The Bots above the current one. A child Bot may ask for their Computers. */
+			const parents = (current: typeof Work.Service) =>
+				pipe(
+					Arr.appendAll(current.deciders, current.chain.bots),
+					Arr.dedupe,
+					Arr.filter((id) => id !== current.bot.id),
+					Arr.map((id) => BotsApi.BotId.make(id)),
+				)
+			/** Asks the gate. A failed check never lets the action run. */
+			const ask = (
+				input: Parameters<typeof gate.check>[0],
+			): Effect.Effect<boolean> =>
+				gate.check(input).pipe(
+					Effect.map((answer) => answer._tag !== "Allow"),
+					Effect.catchCause((cause) =>
+						Cause.hasInterruptsOnly(cause)
+							? Effect.interrupt
+							: report("A Computer action could not be checked", cause).pipe(
+									Effect.andThen(
+										gate.remember(
+											input.site.main,
+											Answer.Deny({
+												reason: "OpenBot could not check this action.",
 											}),
 										),
-								})
-					const read = readonly
-						? definition.annotate(Tool.Readonly, true)
-						: definition
-					const marked = HashSet.has(foreground, name)
-						? read.annotate(Operation.Budget, "foreground")
-						: read
-					const run = (raw: unknown) =>
-						decode(raw).pipe(
-							Effect.flatMap(handle),
-							Effect.map((value) =>
-								value === undefined ? json({ done: true }) : json(value),
-							),
-							Effect.catchIf(
-								(error): error is Shown | Schema.SchemaError =>
-									!Schema.is(Execution.Failure)(error),
-								(error) =>
-									report("A Computer tool failed", error).pipe(
-										Effect.map((failure) => json({ error: failure })),
 									),
-							),
-						)
-					return { definition: marked, run }
-				}
+									Effect.as(true),
+								),
+					),
+				)
+			const ownerOf = (id: string) =>
+				Effect.gen(function* () {
+					const current = yield* work
+					const computer = yield* computers.get(current.identity.actor, id)
+					return computer.owner
+				})
 
-				const toolsFor = (input: ForOwnerInput) => [
-					tool(
-						names.list,
-						"List the Computers that you may use, and the Computers that you may ask for. Also list the Computer providers where you can make a new Computer.",
-						ListInput,
-						() =>
-							Effect.gen(function* () {
-								const current = yield* work
-								const mine = yield* computers.list(
-									current.identity,
-									current.bot.id,
-								)
-								const mineIds = HashSet.fromIterable(
-									Arr.map(mine, (computer) => computer.id),
-								)
-								const usable = yield* computers.list(current.identity)
-								const ofParents = yield* Effect.forEach(
-									parents(current),
-									(parent) => computers.list(current.identity, parent),
-								)
-								const fromParents = HashSet.fromIterable(
-									Arr.flatMap(ofParents, (list) =>
-										Arr.map(list, (computer) => computer.id),
-									),
-								)
-								const view = (computer: ComputerData.Computer) => ({
-									id: computer.id,
-									name: computer.name,
-									kind:
-										computer.source._tag === "Connector"
-											? "machine"
-											: "sandbox",
-									state: computer.state,
-									features: computer.features,
-								})
-								const accounts = yield* providers.list(current.identity)
-								return {
-									yours: Arr.map(mine, view),
-									available: pipe(
-										usable,
-										Arr.filter(
-											(computer) => !HashSet.has(mineIds, computer.id),
-										),
-										Arr.map((computer) => ({
-											...view(computer),
-											...(HashSet.has(fromParents, computer.id)
-												? { usedByParent: true }
-												: {}),
-										})),
-									),
-									providers: Arr.map(accounts, (provider) => ({
-										id: provider.id,
-										name: provider.name,
-										kind: provider.kind,
-									})),
-								}
-							}),
-						undefined,
-						true,
-					),
-					tool(
-						names.acquire,
-						"Ask for the right to use a Computer that exists, such as a machine of your person or a Computer of the Bot that gave you work. The Bot above you or your person decides.",
-						WithReason,
-						(request) =>
-							Effect.gen(function* () {
-								const current = yield* work
-								return yield* computers.grantApproved(
-									current.identity.actor.organizationId,
-									request.computer,
-									current.bot.id,
-									current.identity.actor.userId,
-								)
-							}),
-						(request, toolCallId) =>
-							Effect.gen(function* () {
-								const current = yield* work
-								if (
-									yield* computers.holds(
-										current.identity.actor.organizationId,
-										current.bot.id,
-										request.computer,
-									)
-								)
-									return false
-								const owner = yield* ownerOf(request.computer)
-								return yield* ask({
-									capability: {
-										action: "computers.acquire",
-										target: request.computer,
-									},
-									computerOwner: owner,
-									reason:
-										request.reason ?? `Use the Computer ${request.computer}.`,
-									site: { main: toolCallId, path: [] },
-								})
-							}),
-					),
-					tool(
-						names.release,
-						"Give up your right to use a Computer. With destroy, also delete the Computer and its files for everyone. Deleting needs a decision.",
-						ReleaseInput,
-						(request) =>
-							Effect.gen(function* () {
-								const current = yield* held(request.computer)
-								if (request.destroy === true)
-									yield* computers.remove(
-										current.identity.actor,
-										request.computer,
-									)
-								else
-									yield* computers.release(
-										current.identity.actor.organizationId,
-										current.bot.id,
-										request.computer,
-									)
-							}),
-						(request, toolCallId) =>
-							request.destroy !== true
-								? Effect.succeed(false)
-								: Effect.gen(function* () {
-										const owner = yield* ownerOf(request.computer)
-										return yield* ask({
-											capability: {
-												action: "computers.delete",
-												target: request.computer,
-											},
-											computerOwner: owner,
-											reason:
-												request.reason ??
-												`Delete the Computer ${request.computer}.`,
-											site: { main: toolCallId, path: [] },
-										})
-									}),
-					),
-					tool(
-						names.create,
-						"Make a new Computer with a Computer provider. It belongs to your person, and you may use it. It needs a decision.",
-						CreateInput,
-						(request) =>
-							Effect.gen(function* () {
-								const current = yield* work
-								const computer = yield* computers.create(
-									current.identity.actor,
-									{
-										name: request.name,
-										source: request.source,
-										...(request.desktop === undefined
-											? {}
-											: { desktop: request.desktop }),
-										...(request.pauseAfter === undefined
-											? {}
-											: { pauseAfter: request.pauseAfter }),
-									},
-									current.bot.id,
-								)
-								return {
-									id: computer.id,
-									name: computer.name,
-									state: computer.state,
-								}
-							}),
-						(request, toolCallId) =>
-							Effect.gen(function* () {
-								const current = yield* work
-								const provider = yield* providers.get(
-									current.identity.actor,
-									request.source.provider,
-								)
-								return yield* ask({
-									capability: {
-										action: "computers.create",
-										target: request.source.provider,
-									},
-									computerOwner: provider.owner,
-									reason:
-										request.reason ?? `Make the Computer ${request.name}.`,
-									site: { main: toolCallId, path: [] },
-								})
-							}),
-					),
-					tool(
-						names.pause,
-						"Pause a Computer that you do not need now. It keeps its files and memory.",
-						Ref,
-						(request) =>
-							Effect.gen(function* () {
-								const current = yield* held(request.computer)
-								const computer = yield* computers.pause(
-									current.identity.actor,
-									request.computer,
-								)
-								return { state: computer.state }
-							}),
-					),
-					tool(
-						names.resume,
-						"Resume a paused Computer. Other Computer tools also resume it by themselves.",
-						Ref,
-						(request) =>
-							Effect.gen(function* () {
-								const current = yield* held(request.computer)
-								const computer = yield* computers.resume(
-									current.identity.actor,
-									request.computer,
-								)
-								return { state: computer.state }
-							}),
-					),
-					tool(
-						names.exec,
-						"Start a shell command on a Computer. It waits up to yield_time_ms for the command. When the command still runs then, you get a session ID: use " +
-							names.writeStdin +
-							" with it to send input and read more output. When it ends later, you get a message with its end. Set tty for programs that need a terminal, such as python3, ssh or top.",
-						ExecInput,
-						({ computer, ...request }) =>
-							Effect.gen(function* () {
-								const current = yield* work
-								const owner = {
-									identity: current.identity,
-									chat: current.chat,
-									computer,
-								}
-								return yield* onMachine(computer, (machine) =>
-									computers.work(
-										sessions.exec({
-											owner,
-											machine,
-											request,
-											onEnd: (exit, output) =>
-												input.notify(current.chat, {
-													text: JSON.stringify({
-														computer,
-														command: Str.slice(0, 200)(request.command),
-														exitCode: exit.code,
-														...(exit.failure === undefined
-															? {}
-															: { failure: exit.failure }),
-														signal: exit.signal,
-														...(exit.error === undefined
-															? {}
-															: { error: exit.error }),
-														output,
-													}),
-													ref: computer,
-													author: ChatHost.chainAuthor(current.chain),
-												}),
+			/**
+			 * Makes a tool. Its JSON Schema comes from `input`, the Schema that reads its input.
+			 * `needsApproval` runs before the handler. When it fails, the action never runs:
+			 * the Turn keeps a Deny for the call, so no other check can allow it.
+			 */
+			const tool = <A, I>(
+				name: string,
+				description: string,
+				input: Schema.Codec<A, I>,
+				handle: (
+					request: A,
+				) => Effect.Effect<unknown, Shown | Execution.Failure>,
+				needsApproval?: (
+					request: A,
+					toolCallId: string,
+				) => Effect.Effect<boolean, Shown>,
+				readonly = false,
+			) => {
+				const decode = Schema.decodeUnknownEffect(input)
+				const base = {
+					description,
+					parameters: Tool.getJsonSchemaFromSchema(input),
+					success: Schema.Json,
+					failure: Execution.Failure,
+				}
+				const definition =
+					needsApproval === undefined
+						? Tool.dynamic(name, base)
+						: Tool.dynamic(name, {
+								...base,
+								needsApproval: (raw, call) =>
+									decode(raw).pipe(
+										Effect.matchEffect({
+											// A wrong call fails in its handler with the same error, so it does not wait.
+											onFailure: () => Effect.succeed(false),
+											onSuccess: (request) =>
+												needsApproval(request, call.toolCallId).pipe(
+													Effect.catch((error) =>
+														report(
+															"A Computer action could not be checked",
+															error,
+														).pipe(
+															Effect.flatMap((failure) =>
+																gate.remember(
+																	call.toolCallId,
+																	Answer.Deny({
+																		reason: `${failure.category} (${failure.errorId})`,
+																	}),
+																),
+															),
+															Effect.as(true),
+														),
+													),
+												),
 										}),
 									),
-								)
-							}),
-					),
-					tool(
-						names.writeStdin,
-						"Send text to the stdin of a command session, and read its output since the last call. Send empty chars to only read. C escapes work: \\x03 is Ctrl-C, \\x04 is Ctrl-D (end of input), \\n is Enter.",
-						WriteStdinInput,
-						({ computer, session, rows, cols, ...request }) =>
-							Effect.gen(function* () {
-								const current = yield* held(computer)
-								yield* computers.get(current.identity.actor, computer, "use")
-								const owner = {
-									identity: current.identity,
-									chat: current.chat,
-									computer,
-								}
-								const gone = () =>
-									ToolFailure.make({
-										message: `There is no session ${session}. It ended, or it is not one of this Chat.`,
-									})
-								if (rows !== undefined && cols !== undefined)
-									yield* computers.work(
-										sessions
-											.resize(owner, session, { rows, cols })
-											.pipe(Effect.catchTag("SessionGone", () => Effect.void)),
-									)
-								return yield* sessions.write(owner, session, request).pipe(
-									Effect.catchTag("SessionGone", () => Effect.fail(gone())),
-									(effect) =>
-										Effect.catchIf(
-											effect,
-											(error): error is Exclude<typeof error, ToolFailure> =>
-												!Schema.is(ToolFailure)(error),
-											(error) => computers.work(Effect.fail(error)),
-										),
-								)
-							}),
-					),
-					tool(names.read, "Read a file on a Computer.", ReadInput, (request) =>
-						onMachine(request.computer, (machine) =>
-							computers.work(
-								machine.shell.read(request.path, request.encoding ?? "utf8"),
-							),
+							})
+				const read = readonly
+					? definition.annotate(Tool.Readonly, true)
+					: definition
+				const marked = HashSet.has(foreground, name)
+					? read.annotate(Operation.Budget, "foreground")
+					: read
+				const run = (raw: unknown) =>
+					decode(raw).pipe(
+						Effect.flatMap(handle),
+						Effect.map((value) =>
+							value === undefined ? json({ done: true }) : json(value),
 						),
-					),
-					tool(
-						names.write,
-						"Write a file on a Computer. Missing directories are made.",
-						WriteInput,
-						({ computer, ...file }) =>
-							checkFile(file).pipe(
-								Effect.andThen(
-									onMachine(computer, (machine) =>
-										computers.work(machine.shell.write(file)),
-									),
+						Effect.catchIf(
+							(error): error is Shown | Schema.SchemaError =>
+								!Schema.is(Execution.Failure)(error),
+							(error) =>
+								report("A Computer tool failed", error).pipe(
+									Effect.map((failure) => json({ error: failure })),
 								),
-							),
-					),
-					tool(
-						names.files,
-						"List the files in a directory of a Computer.",
-						PathInput,
-						(request) =>
-							onMachine(request.computer, (machine) =>
-								computers.work(machine.shell.list(request.path)),
-							),
-						undefined,
-						true,
-					),
-					tool(
-						names.remove,
-						"Remove a file, or a directory with everything in it, on a Computer.",
-						PathInput,
-						(request) =>
-							onMachine(request.computer, (machine) =>
-								computers.work(machine.shell.remove(request.path)),
-							),
-					),
-					tool(
-						names.port,
-						"Give a port of a Computer a public HTTPS address. Anyone with the address can use it. It needs a decision.",
-						PortInput,
-						(request) =>
-							onMachine(request.computer, (machine) =>
-								Effect.gen(function* () {
-									if (machine.ports === undefined)
-										return yield* ToolFailure.make({
-											message: "This Computer has no public ports.",
-										})
-									const url = yield* computers.work(
-										machine.ports.open(request.port),
-									)
-									return { port: request.port, url }
-								}),
-							),
-						(request, toolCallId) =>
-							Effect.gen(function* () {
-								yield* held(request.computer)
-								const owner = yield* ownerOf(request.computer)
-								return yield* ask({
-									capability: {
-										action: "computers.expose",
-										target: request.computer,
-									},
-									computerOwner: owner,
-									reason:
-										request.reason ??
-										`Open the port ${request.port} of the Computer ${request.computer}.`,
-									site: { main: toolCallId, path: [] },
-								})
-							}),
-					),
-					tool(
-						names.screenshot,
-						"Take a screenshot of the desktop of a Computer. You see the image.",
-						Ref,
-						(request) =>
-							onMachine(request.computer, (machine) =>
-								Effect.gen(function* () {
-									if (machine.desktop === undefined)
-										return yield* ToolFailure.make({
-											message: "This Computer has no desktop.",
-										})
-									return withImage(
-										yield* computers.work(machine.desktop.screenshot),
-									)
-								}),
-							),
-						undefined,
-						true,
-					),
-					tool(
-						names.desktop,
-						"Use the desktop of a Computer: click, move, drag, scroll, type and press keys, in order. Then you see a new screenshot. Coordinates are pixels of the last screenshot.",
-						DesktopInput,
-						(request) =>
-							onMachine(request.computer, (machine) =>
-								Effect.gen(function* () {
-									const desktop = machine.desktop
-									if (desktop === undefined)
-										return yield* ToolFailure.make({
-											message: "This Computer has no desktop.",
-										})
-									yield* computers.work(desktop.act(request.actions))
-									return withImage(yield* computers.work(desktop.screenshot))
-								}),
-							),
-					),
-				]
-
-				const tools = toolsFor(input)
-				const own = Toolkit.make(...Arr.map(tools, (entry) => entry.definition))
-				const handlers = yield* own.toHandlers(
-					Rec.fromEntries(
-						Arr.map(
-							tools,
-							(entry) => [entry.definition.name, entry.run] as const,
-						),
-					),
-				)
-				// The list only helps the Bot. The tools still work without it.
-				const mine = yield* computers
-					.list(current.identity, current.bot.id)
-					.pipe(
-						Effect.catch((error) =>
-							report(
-								"OpenBot could not list the Computers of a Bot",
-								error,
-							).pipe(Effect.as([])),
 						),
 					)
-				const instructions = Prompt.concat(
-					Prompt.empty,
-					Prompt.make([
-						{
-							role: "system",
-							content: Arr.join(
-								[
-									`You can work on Computers: machines where you run commands, change files and use a desktop. Use ${names.list} to see them.`,
-									mine.length === 0
-										? "You may use no Computer yet."
-										: "Computers that you may use:\n" +
-											pipe(
-												mine,
-												Arr.map(
-													(computer) =>
-														`- ${computer.id}: ${computer.name} (${computer.state})`,
-												),
-												Arr.join("\n"),
-											),
-								],
-								"\n\n",
+				return { definition: marked, run }
+			}
+
+			const toolsFor = (input: ForOwnerInput) => [
+				tool(
+					names.list,
+					"List the Computers that you may use, and the Computers that you may ask for. Also list the Computer providers where you can make a new Computer.",
+					ListInput,
+					() =>
+						Effect.gen(function* () {
+							const current = yield* work
+							const mine = yield* computers.list(
+								current.identity,
+								current.bot.id,
+							)
+							const mineIds = HashSet.fromIterable(
+								Arr.map(mine, (computer) => computer.id),
+							)
+							const usable = yield* computers.list(current.identity)
+							const ofParents = yield* Effect.forEach(
+								parents(current),
+								(parent) => computers.list(current.identity, parent),
+							)
+							const fromParents = HashSet.fromIterable(
+								Arr.flatMap(ofParents, (list) =>
+									Arr.map(list, (computer) => computer.id),
+								),
+							)
+							const view = (computer: ComputerData.Computer) => ({
+								id: computer.id,
+								name: computer.name,
+								kind:
+									computer.source._tag === "Connector" ? "machine" : "sandbox",
+								state: computer.state,
+								features: computer.features,
+							})
+							const accounts = yield* providers.list(current.identity)
+							return {
+								yours: Arr.map(mine, view),
+								available: pipe(
+									usable,
+									Arr.filter((computer) => !HashSet.has(mineIds, computer.id)),
+									Arr.map((computer) => ({
+										...view(computer),
+										...(HashSet.has(fromParents, computer.id)
+											? { usedByParent: true }
+											: {}),
+									})),
+								),
+								providers: Arr.map(accounts, (provider) => ({
+									id: provider.id,
+									name: provider.name,
+									kind: provider.kind,
+								})),
+							}
+						}),
+					undefined,
+					true,
+				),
+				tool(
+					names.acquire,
+					"Ask for the right to use a Computer that exists, such as a machine of your person or a Computer of the Bot that gave you work. The Bot above you or your person decides.",
+					WithReason,
+					(request) =>
+						Effect.gen(function* () {
+							const current = yield* work
+							return yield* computers.grantApproved(
+								current.identity.actor.organizationId,
+								request.computer,
+								current.bot.id,
+								current.identity.actor.userId,
+							)
+						}),
+					(request, toolCallId) =>
+						Effect.gen(function* () {
+							const current = yield* work
+							if (
+								yield* computers.holds(
+									current.identity.actor.organizationId,
+									current.bot.id,
+									request.computer,
+								)
+							)
+								return false
+							const owner = yield* ownerOf(request.computer)
+							return yield* ask({
+								capability: {
+									action: "computers.acquire",
+									target: request.computer,
+								},
+								computerOwner: owner,
+								reason:
+									request.reason ?? `Use the Computer ${request.computer}.`,
+								site: { main: toolCallId, path: [] },
+							})
+						}),
+				),
+				tool(
+					names.release,
+					"Give up your right to use a Computer. With destroy, also delete the Computer and its files for everyone. Deleting needs a decision.",
+					ReleaseInput,
+					(request) =>
+						Effect.gen(function* () {
+							const current = yield* held(request.computer)
+							if (request.destroy === true)
+								yield* computers.remove(
+									current.identity.actor,
+									request.computer,
+								)
+							else
+								yield* computers.release(
+									current.identity.actor.organizationId,
+									current.bot.id,
+									request.computer,
+								)
+						}),
+					(request, toolCallId) =>
+						request.destroy !== true
+							? Effect.succeed(false)
+							: Effect.gen(function* () {
+									const owner = yield* ownerOf(request.computer)
+									return yield* ask({
+										capability: {
+											action: "computers.delete",
+											target: request.computer,
+										},
+										computerOwner: owner,
+										reason:
+											request.reason ??
+											`Delete the Computer ${request.computer}.`,
+										site: { main: toolCallId, path: [] },
+									})
+								}),
+				),
+				tool(
+					names.create,
+					"Make a new Computer with a Computer provider. It belongs to your person, and you may use it. It needs a decision.",
+					CreateInput,
+					(request) =>
+						Effect.gen(function* () {
+							const current = yield* work
+							const computer = yield* computers.create(
+								current.identity.actor,
+								{
+									name: request.name,
+									source: request.source,
+									...(request.desktop === undefined
+										? {}
+										: { desktop: request.desktop }),
+									...(request.pauseAfter === undefined
+										? {}
+										: { pauseAfter: request.pauseAfter }),
+								},
+								current.bot.id,
+							)
+							return {
+								id: computer.id,
+								name: computer.name,
+								state: computer.state,
+							}
+						}),
+					(request, toolCallId) =>
+						Effect.gen(function* () {
+							const current = yield* work
+							const provider = yield* providers.get(
+								current.identity.actor,
+								request.source.provider,
+							)
+							return yield* ask({
+								capability: {
+									action: "computers.create",
+									target: request.source.provider,
+								},
+								computerOwner: provider.owner,
+								reason: request.reason ?? `Make the Computer ${request.name}.`,
+								site: { main: toolCallId, path: [] },
+							})
+						}),
+				),
+				tool(
+					names.pause,
+					"Pause a Computer that you do not need now. It keeps its files and memory.",
+					Ref,
+					(request) =>
+						Effect.gen(function* () {
+							const current = yield* held(request.computer)
+							const computer = yield* computers.pause(
+								current.identity.actor,
+								request.computer,
+							)
+							return { state: computer.state }
+						}),
+				),
+				tool(
+					names.resume,
+					"Resume a paused Computer. Other Computer tools also resume it by themselves.",
+					Ref,
+					(request) =>
+						Effect.gen(function* () {
+							const current = yield* held(request.computer)
+							const computer = yield* computers.resume(
+								current.identity.actor,
+								request.computer,
+							)
+							return { state: computer.state }
+						}),
+				),
+				tool(
+					names.exec,
+					"Start a shell command on a Computer. It waits up to yield_time_ms for the command. When the command still runs then, you get a session ID: use " +
+						names.writeStdin +
+						" with it to send input and read more output. When it ends later, you get a message with its end. Set tty for programs that need a terminal, such as python3, ssh or top.",
+					ExecInput,
+					({ computer, ...request }) =>
+						Effect.gen(function* () {
+							const current = yield* work
+							const owner = {
+								identity: current.identity,
+								chat: current.chat,
+								computer,
+							}
+							return yield* onMachine(computer, (machine) =>
+								computers.work(
+									sessions.exec({
+										owner,
+										machine,
+										request,
+										onEnd: (exit, output) =>
+											input.notify(current.chat, {
+												text: JSON.stringify({
+													computer,
+													command: Str.slice(0, 200)(request.command),
+													exitCode: exit.code,
+													...(exit.failure === undefined
+														? {}
+														: { failure: exit.failure }),
+													signal: exit.signal,
+													...(exit.error === undefined
+														? {}
+														: { error: exit.error }),
+													output,
+												}),
+												ref: computer,
+												author: ChatHost.chainAuthor(current.chain),
+											}),
+									}),
+								),
+							)
+						}),
+				),
+				tool(
+					names.writeStdin,
+					"Send text to the stdin of a command session, and read its output since the last call. Send empty chars to only read. C escapes work: \\x03 is Ctrl-C, \\x04 is Ctrl-D (end of input), \\n is Enter.",
+					WriteStdinInput,
+					({ computer, session, rows, cols, ...request }) =>
+						Effect.gen(function* () {
+							const current = yield* held(computer)
+							yield* computers.get(current.identity.actor, computer, "use")
+							const owner = {
+								identity: current.identity,
+								chat: current.chat,
+								computer,
+							}
+							const gone = () =>
+								ToolFailure.make({
+									message: `There is no session ${session}. It ended, or it is not one of this Chat.`,
+								})
+							if (rows !== undefined && cols !== undefined)
+								yield* computers.work(
+									sessions
+										.resize(owner, session, { rows, cols })
+										.pipe(Effect.catchTag("SessionGone", () => Effect.void)),
+								)
+							return yield* sessions.write(owner, session, request).pipe(
+								Effect.catchTag("SessionGone", () => Effect.fail(gone())),
+								(effect) =>
+									Effect.catchIf(
+										effect,
+										(error): error is Exclude<typeof error, ToolFailure> =>
+											!Schema.is(ToolFailure)(error),
+										(error) => computers.work(Effect.fail(error)),
+									),
+							)
+						}),
+				),
+				tool(names.read, "Read a file on a Computer.", ReadInput, (request) =>
+					onMachine(request.computer, (machine) =>
+						computers.work(
+							machine.shell.read(request.path, request.encoding ?? "utf8"),
+						),
+					),
+				),
+				tool(
+					names.write,
+					"Write a file on a Computer. Missing directories are made.",
+					WriteInput,
+					({ computer, ...file }) =>
+						checkFile(file).pipe(
+							Effect.andThen(
+								onMachine(computer, (machine) =>
+									computers.work(machine.shell.write(file)),
+								),
 							),
-						},
-					]),
+						),
+				),
+				tool(
+					names.files,
+					"List the files in a directory of a Computer.",
+					PathInput,
+					(request) =>
+						onMachine(request.computer, (machine) =>
+							computers.work(machine.shell.list(request.path)),
+						),
+					undefined,
+					true,
+				),
+				tool(
+					names.remove,
+					"Remove a file, or a directory with everything in it, on a Computer.",
+					PathInput,
+					(request) =>
+						onMachine(request.computer, (machine) =>
+							computers.work(machine.shell.remove(request.path)),
+						),
+				),
+				tool(
+					names.port,
+					"Give a port of a Computer a public HTTPS address. Anyone with the address can use it. It needs a decision.",
+					PortInput,
+					(request) =>
+						onMachine(request.computer, (machine) =>
+							Effect.gen(function* () {
+								if (machine.ports === undefined)
+									return yield* ToolFailure.make({
+										message: "This Computer has no public ports.",
+									})
+								const url = yield* computers.work(
+									machine.ports.open(request.port),
+								)
+								return { port: request.port, url }
+							}),
+						),
+					(request, toolCallId) =>
+						Effect.gen(function* () {
+							yield* held(request.computer)
+							const owner = yield* ownerOf(request.computer)
+							return yield* ask({
+								capability: {
+									action: "computers.expose",
+									target: request.computer,
+								},
+								computerOwner: owner,
+								reason:
+									request.reason ??
+									`Open the port ${request.port} of the Computer ${request.computer}.`,
+								site: { main: toolCallId, path: [] },
+							})
+						}),
+				),
+				tool(
+					names.screenshot,
+					"Take a screenshot of the desktop of a Computer. You see the image.",
+					Ref,
+					(request) =>
+						onMachine(request.computer, (machine) =>
+							Effect.gen(function* () {
+								if (machine.desktop === undefined)
+									return yield* ToolFailure.make({
+										message: "This Computer has no desktop.",
+									})
+								return withImage(
+									yield* computers.work(machine.desktop.screenshot),
+								)
+							}),
+						),
+					undefined,
+					true,
+				),
+				tool(
+					names.desktop,
+					"Use the desktop of a Computer: click, move, drag, scroll, type and press keys, in order. Then you see a new screenshot. Coordinates are pixels of the last screenshot.",
+					DesktopInput,
+					(request) =>
+						onMachine(request.computer, (machine) =>
+							Effect.gen(function* () {
+								const desktop = machine.desktop
+								if (desktop === undefined)
+									return yield* ToolFailure.make({
+										message: "This Computer has no desktop.",
+									})
+								yield* computers.work(desktop.act(request.actions))
+								return withImage(yield* computers.work(desktop.screenshot))
+							}),
+						),
+				),
+			]
+
+			const tools = Arr.filter(
+				toolsFor(input),
+				(entry) => selected === undefined || entry.definition.name === selected,
+			)
+			const own = Toolkit.make(...Arr.map(tools, (entry) => entry.definition))
+			const handlers = yield* own.toHandlers(
+				Rec.fromEntries(
+					Arr.map(
+						tools,
+						(entry) => [entry.definition.name, entry.run] as const,
+					),
+				),
+			)
+			if (selected !== undefined) return { tools: own.tools, handlers }
+			// The list only helps the Bot. The tools still work without it.
+			const mine = yield* computers
+				.list(current.identity, current.bot.id)
+				.pipe(
+					Effect.catch((error) =>
+						report("OpenBot could not list the Computers of a Bot", error).pipe(
+							Effect.as([]),
+						),
+					),
 				)
-				return {
-					tools: own.tools,
-					handlers,
-					instructions,
-					transformPrompt: (prompt) => Effect.succeed(keepNewestImage(prompt)),
-				}
-			}),
+			const instructions = Prompt.concat(
+				Prompt.empty,
+				Prompt.make([
+					{
+						role: "system",
+						content: Arr.join(
+							[
+								`You can work on Computers: machines where you run commands, change files and use a desktop. Use ${names.list} to see them.`,
+								mine.length === 0
+									? "You may use no Computer yet."
+									: "Computers that you may use:\n" +
+										pipe(
+											mine,
+											Arr.map(
+												(computer) =>
+													`- ${computer.id}: ${computer.name} (${computer.state})`,
+											),
+											Arr.join("\n"),
+										),
+							],
+							"\n\n",
+						),
+					},
+				]),
+			)
+			return {
+				tools: own.tools,
+				handlers,
+				instructions,
+				transformPrompt: (prompt: Prompt.Prompt) =>
+					Effect.succeed(keepNewestImage(prompt)),
+			}
+		})
+	return ComputerTools.of({
+		register: (input) => register(input),
+		restore: (input, name, work) =>
+			register(input, name).pipe(Effect.provideService(Work, work)),
 	})
 })
 export const layer = Layer.effect(ComputerTools, make)

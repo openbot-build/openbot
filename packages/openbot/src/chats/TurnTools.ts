@@ -58,9 +58,8 @@ const make = Effect.gen(function* () {
 				record.position.item === position.item &&
 				record.callId === call.id,
 		)
-		const prior = Arr.some(
-			yield* store.calls(parent),
-			(prior) => prior.step === stepId(position.item, call.id),
+		const prior = Option.isSome(
+			yield* store.latestCall(parent, stepId(position.item, call.id)),
 		)
 		if (Option.isSome(child) && prior)
 			return yield* Execution.Conflict.make({ id: parent.id })

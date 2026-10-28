@@ -10,7 +10,7 @@ import {
 	Identity,
 } from "@openbot-build/domain"
 import type * as Models from "./ConnectionModels.ts"
-import { Discovery, Store } from "@openbot-build/protocol"
+import { AppConnections, Discovery, Store } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Clock,
@@ -318,57 +318,46 @@ export const make: Effect.Effect<
 						DiscoveryService.failure(previous.cardUrl, error),
 					),
 				)
-			if (rules.compare({ previous, current })._tag === "NeedsRevalidation")
-				return yield* Api.ConnectionConflict.make({
-					reason: "CandidateChanged",
-					message:
-						"The App connection requirements changed. Discover it again and review the current configuration.",
-				})
-			const configured = yield* rules
-				.configureEndpoint({
-					candidate: current,
-					index: input.remoteIndex,
-					values: input.values,
-				})
-				.pipe(
-					// The values come from the caller, so each failure here is a bad input.
-					Effect.catchTag(["DiscoveryError", "SchemaError"], (error) =>
-						Effect.fail(
-							Api.ConnectionConfigurationInvalid.make({
-								message:
-									"Complete the required configuration for the selected endpoint.",
-								keys: DiscoveryService.configurationKeys(
-									error,
-									current,
-									input.remoteIndex,
-								),
-							}),
-						),
+			const prepared = yield* AppConnections.prepare({
+				key: { owner: key, connectionId: input.draftId },
+				previous,
+				current,
+				remoteIndex: input.remoteIndex,
+				values: input.values,
+			}).pipe(
+				Effect.provideService(Discovery.Rules, rules),
+				Failures.replaceTag(
+					"AppError",
+					"The App connection requirements changed",
+					() =>
+						Api.ConnectionConflict.make({
+							reason: "CandidateChanged",
+							message:
+								"The App connection requirements changed. Discover it again and review the current configuration.",
+						}),
+				),
+				// The values come from the caller, so each failure here is a bad input.
+				Effect.catchTag(["DiscoveryError", "SchemaError"], (error) =>
+					Effect.fail(
+						Api.ConnectionConfigurationInvalid.make({
+							message:
+								"Complete the required configuration for the selected endpoint.",
+							keys: DiscoveryService.configurationKeys(
+								error,
+								current,
+								input.remoteIndex,
+							),
+						}),
 					),
-				)
-			const app = Store.AppRecord.make({
-				cardUrl: current.cardUrl,
-				card: current.card,
-				sources: current.sources,
-			})
-			const provisional = Store.UserConnection.make({
-				owner: key,
-				connectionId: input.draftId,
-				cardUrl: current.cardUrl,
-				endpoint: configured.url,
-				remoteIndex: configured.remoteIndex,
-				configuration: Redacted.make(input.values),
-				headers: Redacted.make(configured.headers),
-				state: "Enabled",
-				authorization: { _tag: "Unprotected" },
-			})
-			const protection = yield* probe.check({ app, connection: provisional })
+				),
+			)
+			const protection = yield* probe.check(prepared)
 			const connection: Store.UserConnection = {
-				...provisional,
+				...prepared.connection,
 				authorization: protection.requiresAuthorization
 					? {
 							_tag: "PendingAuthorization",
-							resource: configured.url,
+							resource: prepared.connection.endpoint,
 							scopes: protection.scopes,
 						}
 					: { _tag: "Unprotected" },
@@ -376,7 +365,7 @@ export const make: Effect.Effect<
 			return yield* project(
 				key,
 				yield* StoredConnections.save(db, secrets, index, key, {
-					app,
+					app: prepared.app,
 					connection,
 					name: input.name,
 					draftRevision: input.revision,

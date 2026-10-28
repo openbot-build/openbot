@@ -1,3 +1,4 @@
+import * as GrantUses from "./GrantUses.ts"
 import * as GrantCleanup from "./GrantCleanup.ts"
 import * as RetryingCall from "../execution/RetryingCall.ts"
 import {
@@ -95,6 +96,7 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
 	const secrets = yield* Secrets
+	const uses = GrantUses.makeWith(db, secrets)
 	const store = yield* Store
 	const cleanup = yield* GrantCleanup.GrantCleanup
 	const checks = yield* Check.make
@@ -180,6 +182,7 @@ const make = Effect.gen(function* () {
 					.set({ body, revision: value.revision, name: value.name })
 					.where(Connections.connectionWhere(owner, connectionId)),
 			)
+			yield* uses.connection(value.connection).pipe(storage)
 		})
 	const load = (key: Key) =>
 		Effect.gen(function* () {
@@ -437,22 +440,14 @@ const make = Effect.gen(function* () {
 					if (result !== null) {
 						if (input._tag !== "Complete" && input._tag !== "Refresh")
 							return yield* Execution.Conflict.make({ id: fence.id })
-						const history = yield* store.calls(fence)
-						const call = Arr.findFirst(
-							history,
-							(call) => call.id === result.callId,
+						const call = yield* store.latestCall(
+							fence,
+							input._tag === "Complete" ? "exchange" : "refresh",
 						)
 						if (
 							Option.isNone(call) ||
+							call.value.id !== result.callId ||
 							call.value.status !== "completed" ||
-							call.value.step !==
-								(input._tag === "Complete" ? "exchange" : "refresh") ||
-							Arr.some(
-								history,
-								(other) =>
-									other.step === call.value.step &&
-									other.attempt > call.value.attempt,
-							) ||
 							!Schema.toEquivalence(Schema.Json)(
 								call.value.result,
 								yield* Schema.encodeEffect(
@@ -641,6 +636,7 @@ const make = Effect.gen(function* () {
 										),
 								)
 								if (input._tag === "Remove") {
+									yield* uses.hold(owner, "connection", id, null)
 									yield* storage(
 										db
 											.delete(appConnections)

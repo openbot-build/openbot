@@ -326,6 +326,24 @@ other registries. See how OpenBot does this in
 it once when the layer starts. `registerUi` checks plain UI resource data in its
 Effect. Bad input fails with a typed error.
 
+`McpClient.open` opens a connection from its key, endpoint, headers, and client
+data. Give it `readToken` to read the current token and `check` to check each
+action. A host can also give `registerScope` to track the connection before any
+network call. The client needs no App or credential store. Its scope owns the
+connection and closes it. For a saved connection, use `AppConnections.open`.
+That adapter reads the current connection and credentials, checks access, and
+tracks its scope. Token reads and sends still check the current state.
+
+Opening a client does not read capability lists. Use
+`client.resolve({ kind, name }, source)` to find one tool, resource, template,
+or prompt. It reads only that kind of list and stops at the first match. A match
+gives the declaration and its `invoke` and `resume` operations. They use that
+same declaration without reading the list again. Pass request parameters without
+the bound name or URI to `invoke`; a template takes `{ values }`. Keep the
+returned action inside its connection scope. A restored phase finds and checks
+the declaration again. Direct `readResource` also supports UI resources that are
+not in the resource list.
+
 `CatalogDiscovery.sameConnection` compares the parts of a remote that affect a
 connection. A change to description text or an extension field keeps the
 connection and its sign-in. A change to an input format or its secret flag needs

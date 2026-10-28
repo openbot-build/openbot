@@ -1,12 +1,18 @@
 import { Chat } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
-import { Array as Arr, Cause, Effect, Layer, Schema, Stream } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Effect,
+	Layer,
+	Option,
+	Schema,
+	Stream,
+} from "effect"
 import { Records } from "../errors/Records.ts"
-import * as CallRecovery from "../execution/CallRecovery.ts"
 import * as Engine from "../execution/Engine.ts"
 import { Observation } from "../execution/Observation.ts"
-import { Runner } from "../execution/Runner.ts"
-import { RunScope } from "../execution/RunScope.ts"
+import * as Program from "../execution/Program.ts"
 import { Store, type Fence } from "../execution/Store.ts"
 import { InputCommands, workflowName } from "./InputCommands.ts"
 import { ToolCommands } from "./ToolCommands.ts"
@@ -17,16 +23,23 @@ export const workflow = Engine.define(workflowName)
 export const layer = Layer.unwrap(
 	Effect.gen(function* () {
 		const store = yield* Store
-		const settle = yield* CallRecovery.make
 		const inputs = yield* InputCommands
 		const tools = yield* ToolCommands
 		const session = yield* TurnSession
-		const scopes = yield* RunScope
-		const runner = yield* Runner
+		const run = yield* Program.phased
 		const errors = yield* Records
 		const observation = yield* Observation
 		const registry = yield* Engine.Registry
 		const access = yield* TurnAccess
+		const chatOf = (fence: Fence) =>
+			store.loadMember(fence).pipe(
+				Effect.flatMap((saved) =>
+					Schema.decodeUnknownEffect(Schema.Struct({ chat: Chat.Id }))(
+						saved.input,
+					),
+				),
+				Effect.map((input) => input.chat),
+			)
 		const stopChildren = (fence: Fence) =>
 			Effect.gen(function* () {
 				const children = yield* tools.stopAttached(fence)
@@ -47,100 +60,72 @@ export const layer = Layer.unwrap(
 					{ concurrency: "unbounded", discard: true },
 				)
 			})
-		const run = (fence: Fence, initialFailure?: Execution.Failure) =>
-			Effect.gen(function* () {
-				const saved = yield* store.loadMember(fence)
-				const { chat } = yield* Schema.decodeUnknownEffect(
-					Schema.Struct({ chat: Chat.Id }),
-				)(saved.input)
-				let failure = initialFailure
-				while (true) {
-					const settled = yield* settle(fence, failure !== undefined)
-					if (settled.restarted) failure = undefined
-					const state = yield* store.loadMember(fence)
-					failure = (state.phaseFailed ? state.record.failure : null) ?? failure
-					if (state.generation !== fence.generation)
-						return yield* Effect.interrupt
-					if (Execution.isTerminal(state.record.status)) return
-					if (state.record.status === "cancelling") {
-						yield* stopChildren(fence)
-						yield* inputs.finish(fence, chat, {
-							status: "cancelled",
-							epoch: state.cancelEpoch,
-						})
-						continue
-					}
-					const history = yield* store.calls(fence)
-					const latest = Arr.filter(
-						history,
-						(call) =>
-							!Arr.some(
-								history,
-								(other) =>
-									other.step === call.step && other.attempt > call.attempt,
-							),
-					)
-					if (settled.stop) {
-						yield* stopChildren(fence)
-						const ended =
-							failure ??
-							(yield* errors.record(
-								Cause.fail("The operator stopped an unknown tool call."),
-								"interrupted",
-								fence.id,
-							))
-						yield* inputs.finish(fence, chat, {
-							status: "interrupted",
-							failure: ended,
-						})
-						return
-					}
-					if (failure !== undefined) {
-						yield* stopChildren(fence)
-						yield* inputs.finish(fence, chat, { status: "failed", failure })
-						return
-					}
-					// A decision or a late result changes this phase, while call IDs stay stable.
-					const phase = Arr.join(
-						Arr.map(latest, (call) => `${call.id}:${call.status}`),
-						",",
-					)
-					const result = yield* scopes.run(
-						fence,
-						`turn:${phase}`,
-						session
-							.run(fence)
-							.pipe(
-								Effect.catchTag("ExecutionOutcomeUnknown", () => Effect.void),
-							),
-					)
-					if (result._tag === "Cancelled") continue
-					if (result._tag === "Failed") {
-						failure = result.failure
-						continue
-					}
-					const after = yield* store.calls(fence)
+		const next = Effect.fn("TurnWorkflow.next")(function* ({
+			fence,
+		}: Program.Current) {
+			const chat = yield* chatOf(fence)
+			const latest = yield* store.latestCalls(fence)
+			// A decision or a late result changes this phase, while call IDs stay stable.
+			const phase = Arr.join(
+				Arr.map(latest, (call) => `${call.id}:${call.status}`),
+				",",
+			)
+			return {
+				_tag: "Phase" as const,
+				name: `turn:${phase}`,
+				work: session
+					.run(fence)
+					.pipe(Effect.catchTag("ExecutionOutcomeUnknown", () => Effect.void)),
+				options: undefined,
+				after: Effect.gen(function* () {
+					const after = yield* store.latestCalls(fence)
 					if (
 						Arr.some(
 							after,
 							(call) =>
 								call.retry === "never" &&
-								!Arr.some(
-									after,
-									(other) =>
-										other.step === call.step && other.attempt > call.attempt,
-								) &&
 								(call.status === "sending" ||
 									call.status === "outcome_unknown"),
 						)
 					)
-						continue
+						return
 					yield* inputs.finish(fence, chat, { status: "completed" })
-					return
-				}
+				}),
+			}
+		})
+		const end = Effect.fn("TurnWorkflow.end")(function* (
+			fence: Fence,
+			reason: Program.EndReason,
+		) {
+			const chat = yield* chatOf(fence)
+			yield* stopChildren(fence)
+			if (reason._tag === "Cancel") {
+				yield* inputs.finish(fence, chat, {
+					status: "cancelled",
+					epoch: reason.epoch,
+				})
+				return
+			}
+			if (reason._tag === "Fail") {
+				yield* inputs.finish(fence, chat, {
+					status: "failed",
+					failure: reason.failure,
+				})
+				return
+			}
+			const failure = yield* Option.match(reason.failure, {
+				onNone: () =>
+					errors.record(
+						Cause.fail("The operator stopped an unknown tool call."),
+						"interrupted",
+						fence.id,
+					),
+				onSome: Effect.succeed,
 			})
+			yield* inputs.finish(fence, chat, { status: "interrupted", failure })
+		})
 		return workflow
-			.toLayer((key) => runner.run(key, (fence) => run(fence), run))
+			.toLayer((key) => run(key, { next, end }))
 			.pipe(
 				Layer.provideMerge(
 					Layer.effectDiscard(

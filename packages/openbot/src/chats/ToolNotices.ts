@@ -12,7 +12,7 @@ import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
 import { type Authorize } from "../execution/Engine.ts"
 import { Store, storage, type Fence, type Key } from "../execution/Store.ts"
-import { latestCall } from "./ToolResults.ts"
+import { stepId } from "./ToolSteps.ts"
 import { InputCommands } from "./InputCommands.ts"
 import { ToolCommands, noticeWorkflowName } from "./ToolCommands.ts"
 
@@ -71,8 +71,10 @@ const make = Effect.gen(function* () {
 	const deliver = Effect.fn("ToolNotices.deliver")(function* (fence: Fence) {
 		const saved = yield* load(fence)
 		yield* authorize(fence, saved.notice.identity.actor, "advance")
-		const history = yield* store.calls(saved.source)
-		const latest = latestCall(saved.tool.record, history)
+		const latest = yield* store.latestCall(
+			saved.source,
+			stepId(saved.tool.record.position.item, saved.tool.record.callId),
+		)
 		const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(
 			{
 				toolExecutionId: saved.source.id,

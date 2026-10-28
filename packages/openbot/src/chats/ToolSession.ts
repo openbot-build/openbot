@@ -71,7 +71,6 @@ const make = Effect.gen(function* () {
 			host: frame.host,
 			turn: position.turn,
 		})
-		const features = yield* featureScopes.open(fence, current)
 		const context = Bot.Context.of({
 			options: {
 				prompt: frame.prompt,
@@ -91,7 +90,7 @@ const make = Effect.gen(function* () {
 			history: Effect.succeed(frame.prompt),
 		})
 		// A session callback keeps application services and identity data, not a Turn scope.
-		const notify: Parameters<typeof features.registerTool>[0]["notify"] = (
+		const notify: Parameters<typeof featureScopes.restoreTool>[2]["notify"] = (
 			chat,
 			notice,
 		) =>
@@ -119,14 +118,15 @@ const make = Effect.gen(function* () {
 				),
 			)
 		return yield* Effect.gen(function* () {
-			const registration = yield* features.registerTool(
-				{ notify },
-				yield* host.register,
-				{
+			const registration = yield* featureScopes.restoreTool(fence, current, {
+				name: call.name,
+				notify,
+				host: host.register,
+				policy: {
 					review: frame.host.kind === "review",
 					plan: frame.settings.mode === "plan",
 				},
-			)
+			})
 			const tools: Readonly<Record<string, Tool.Any>> = registration.tools
 			const tool = tools[call.name]
 			if (tool === undefined)

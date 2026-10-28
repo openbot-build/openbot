@@ -1,3 +1,4 @@
+import * as GrantUses from "./GrantUses.ts"
 import * as Models from "./ConnectionModels.ts"
 import type { IndexWork } from "./IndexWork.ts"
 import {
@@ -290,6 +291,9 @@ export const save = (
 				yield* tx
 					.insert(appConnections)
 					.values({ owner, id, name: stored.name, revision: 0, body })
+				yield* GrantUses.makeWith(db, secrets)
+					.connection(stored.connection)
+					.pipe(unavailable("Could not save an App grant use."))
 				if (
 					!Arr.some(input.app.sources, (source) => source.role === "manual")
 				) {
@@ -360,6 +364,9 @@ export const update = (
 					.update(appConnections)
 					.set({ name: updated.name, revision: updated.revision, body })
 					.where(connectionWhere(owner, id))
+				yield* GrantUses.makeWith(db, secrets)
+					.connection(updated.connection)
+					.pipe(unavailable("Could not save an App grant use."))
 				return updated
 			}),
 		)

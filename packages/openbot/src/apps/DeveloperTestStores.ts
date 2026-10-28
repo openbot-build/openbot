@@ -1,4 +1,5 @@
 import { Authorization, Store } from "@openbot-build/protocol"
+import * as GrantUses from "./GrantUses.ts"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
 import {
@@ -51,6 +52,7 @@ export const make: Effect.Effect<
 	const namespace = yield* IndexNamespace
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
+	const uses = GrantUses.makeWith(db, secrets)
 	const codec = privateStateCodec
 	const flowCodec = Schema.fromJsonString(
 		Schema.toCodecJson(Authorization.Flow),
@@ -116,12 +118,25 @@ export const make: Effect.Effect<
 					.set({ privateState })
 					.where(testWhere)
 					.pipe(Effect.asVoid, Effect.mapError(unavailable))
-			const write = (value: PrivateState) =>
-				Schema.encodeEffect(codec)(value).pipe(
-					Effect.flatMap((body) => secrets.seal(body, binding)),
-					Effect.mapError(unavailable),
-					Effect.flatMap(setPrivateState),
-				)
+			const write = (value: PrivateState, release: boolean = false) =>
+				inTransaction(
+					Schema.encodeEffect(codec)(value).pipe(
+						Effect.flatMap((body) => secrets.seal(body, binding)),
+						Effect.mapError(unavailable),
+						Effect.flatMap(setPrivateState),
+						Effect.andThen(
+							release
+								? uses.hold(
+										owner,
+										"developer-test",
+										GrantUses.testReference(namespace, id),
+										null,
+									)
+								: uses.test(namespace, owner, id, value),
+						),
+						Effect.mapError(unavailable),
+					),
+				).pipe(Effect.catchTag("ExecutionStorageError", unavailable))
 			/** Run the change while the test row is locked. */
 			const locked = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 				inTransaction(ownedTest(true).pipe(Effect.andThen(effect)))
@@ -192,7 +207,19 @@ export const make: Effect.Effect<
 							}),
 						),
 					delete: (key) =>
-						keyChecked(key).pipe(Effect.andThen(setPrivateState(null))),
+						locked(
+							keyChecked(key).pipe(
+								Effect.andThen(setPrivateState(null)),
+								Effect.andThen(
+									uses.hold(
+										owner,
+										"developer-test",
+										GrantUses.testReference(namespace, id),
+										null,
+									),
+								),
+							),
+						).pipe(Effect.mapError(unavailable)),
 				}),
 				credentials: Store.CredentialStore.of({
 					put: (credential) =>
@@ -238,7 +265,7 @@ export const make: Effect.Effect<
 						keyChecked(key).pipe(
 							Effect.andThen(read),
 							Effect.flatMap((current) =>
-								write({ ...current, credentials: [] }),
+								write({ ...current, credentials: [] }, true),
 							),
 						),
 				}),
@@ -311,19 +338,29 @@ export const make: Effect.Effect<
 							}),
 						).pipe(Effect.catchTag("ExecutionStorageError", unavailable)),
 				}),
-				clear: Effect.gen(function* () {
-					yield* setPrivateState(null)
-					yield* db
-						.delete(developerTestFlows)
-						.where(
-							and(
-								eq(developerTestFlows.namespace, namespace),
-								eq(developerTestFlows.testId, id),
-								eq(developerTestFlows.owner, owner),
-							),
-						)
-						.pipe(Effect.mapError(unavailable))
-				}),
+				clear: locked(
+					Effect.gen(function* () {
+						yield* setPrivateState(null)
+						yield* uses
+							.hold(
+								owner,
+								"developer-test",
+								GrantUses.testReference(namespace, id),
+								null,
+							)
+							.pipe(Effect.mapError(unavailable))
+						yield* db
+							.delete(developerTestFlows)
+							.where(
+								and(
+									eq(developerTestFlows.namespace, namespace),
+									eq(developerTestFlows.testId, id),
+									eq(developerTestFlows.owner, owner),
+								),
+							)
+							.pipe(Effect.mapError(unavailable))
+					}),
+				).pipe(Effect.catchTag("ExecutionStorageError", unavailable)),
 			}
 		},
 	})

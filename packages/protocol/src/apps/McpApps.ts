@@ -23,7 +23,9 @@ import {
 	type Implementation,
 } from "@modelcontextprotocol/client"
 
-import type * as Client from "../connections/Client.ts"
+import * as Client from "../connections/Client.ts"
+import { decodeStandard } from "../connections/McpClient.ts"
+import * as Mcp from "@modelcontextprotocol/client"
 import { FrameTransport } from "./FrameBoundary.ts"
 import * as App from "../connections/App.ts"
 import * as Ui from "./Ui.ts"
@@ -61,15 +63,82 @@ const sdk = <A>(call: () => Promise<A>) =>
 			}),
 	})
 
-export type UiClient = Pick<
-	Client.Client,
-	| "key"
-	| "listTools"
-	| "callTool"
-	| "readResource"
-	| "listResources"
-	| "listResourceTemplates"
->
+/** The UI bridge can use remote and HTTP backed clients. */
+export interface UiClient {
+	readonly key: { readonly owner: string; readonly connectionId: string }
+	readonly listTools: (options?: {
+		readonly cursor?: string
+		readonly source?: Client.CallSource
+		readonly refresh?: boolean
+		readonly singlePage?: boolean
+	}) => Effect.Effect<Mcp.ListToolsResult, Client.Error>
+	readonly callTool: (
+		params: Mcp.CallToolRequest["params"],
+		options: Client.CallOptions,
+	) => Effect.Effect<Client.OperationResult<Mcp.CallToolResult>, Client.Error>
+	readonly readResource: (
+		params: Mcp.ReadResourceRequest["params"],
+		options: Client.CallOptions,
+	) => Effect.Effect<
+		Client.OperationResult<Mcp.ReadResourceResult>,
+		Client.Error
+	>
+	readonly listResources: (
+		cursor?: string,
+		source?: Client.CallSource,
+		options?: { readonly singlePage?: boolean },
+	) => Effect.Effect<Mcp.ListResourcesResult, Client.Error>
+	readonly listResourceTemplates: (
+		cursor?: string,
+		source?: Client.CallSource,
+		options?: { readonly singlePage?: boolean },
+	) => Effect.Effect<Mcp.ListResourceTemplatesResult, Client.Error>
+}
+
+const toolResult = (
+	operation: Client.OperationResult<unknown>,
+): Effect.Effect<Client.OperationResult<Mcp.CallToolResult>, Client.Error> => {
+	if (operation._tag === "Completed")
+		return decodeStandard(
+			() => Mcp.specTypeSchemas.CallToolResult,
+			operation.result,
+			() =>
+				Client.ClientError.make({
+					reason: "Schema",
+					issue: "Invalid standard tool result",
+				}),
+		).pipe(Effect.map((result) => ({ _tag: "Completed" as const, result })))
+	return Effect.succeed({
+		...operation,
+		respond: (responses: Mcp.InputResponses) =>
+			operation.respond(responses).pipe(Effect.flatMap(toolResult)),
+		handle: operation.handle.pipe(Effect.flatMap(toolResult)),
+	})
+}
+
+/** Bind the protocol client to the small set of operations of an App UI. */
+export const fromClient = (client: Client.Client): UiClient => ({
+	key: client.key,
+	listTools: client.listTools,
+	listResources: client.listResources,
+	listResourceTemplates: client.listResourceTemplates,
+	readResource: client.readResource,
+	callTool: (params, options) =>
+		Effect.gen(function* () {
+			const action = yield* client.resolve(
+				{ kind: "tool", name: params.name },
+				options.source,
+			)
+			if (Option.isNone(action) || action.value.kind !== "tool")
+				return yield* Client.PermissionDenied.make({
+					action: "tools/call",
+					target: params.name,
+				})
+			return yield* action.value
+				.invoke(params, options)
+				.pipe(Effect.flatMap(toolResult))
+		}),
+})
 
 /** The Client is already bound to one connection. The bridge never gets a raw SDK Client. */
 export const mount = Effect.fn("Apps.mount")(function* (options: {

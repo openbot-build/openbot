@@ -10,7 +10,7 @@ import {
 	App,
 	Authorization,
 	Client,
-	McpClient,
+	AppConnections,
 	Network,
 	Document,
 	OAuthAuthorization,
@@ -74,6 +74,7 @@ export class DeveloperTestRuntime extends Context.Service<
 >()("@openbot-build/openbot/apps/DeveloperTestRuntime") {}
 const policy = Client.InvocationPolicy.of({
 	check: (invocation) =>
+		invocation.action === "connect" ||
 		Schema.is(Client.ListAction)(invocation.action)
 			? Effect.void
 			: Effect.fail(
@@ -262,14 +263,13 @@ export const make: Effect.Effect<
 					[],
 					Effect.gen(function* () {
 						yield* steps.check
-						const client = yield* McpClient.open({
+						const client = yield* AppConnections.open({
 							key: { owner, connectionId: id },
 							clientInfo: {
 								name: "OpenBot Developer Center",
 								version: "1.0.0",
 							},
 							capabilities: {},
-							eagerLists: false,
 						})
 						let stages: ReadonlyArray<Developers.TestStage> = [
 							{

@@ -1,5 +1,5 @@
 import { Execution } from "@openbot-build/domain"
-import { Array as Arr, Effect, Option } from "effect"
+import { Effect, Option } from "effect"
 import { Calls } from "./Calls.ts"
 import { RunScope } from "./RunScope.ts"
 import { Store, type Fence } from "./Store.ts"
@@ -22,15 +22,7 @@ export const make = Effect.gen(function* () {
 				state.record.status === "cancelling"
 			)
 				return { stop: false, restarted }
-			const history = yield* store.calls(fence)
-			const latest = Arr.filter(
-				history,
-				(call) =>
-					!Arr.some(
-						history,
-						(other) => other.step === call.step && other.attempt > call.attempt,
-					),
-			)
+			const latest = yield* store.latestCalls(fence)
 			let reload = false
 			let stop = false
 			let pending = Option.none<{

@@ -460,21 +460,11 @@ const make = Effect.gen(function* () {
 								events,
 							},
 							Effect.gen(function* () {
-								const attempts = yield* store.calls(fence)
-								const latest = Arr.filter(
-									attempts,
-									(call) =>
-										!Arr.some(
-											attempts,
-											(other) =>
-												other.step === call.step &&
-												other.attempt > call.attempt,
-										),
-								)
+								const latest = yield* store.latestCalls(fence)
 								if (
 									end.status === "completed" &&
 									!Option.exists(
-										latestCall(saved.record, attempts),
+										latestCall(saved.record, latest),
 										(call) => call.status === "completed",
 									)
 								)

@@ -1,42 +1,7 @@
-import { CatalogDiscovery } from "@openbot-build/protocol"
-import { AppIndex } from "@openbot-build/domain"
+import { Client } from "@openbot-build/protocol"
+import { Array as Arr, Effect, HashSet } from "effect"
 
-import { App, Client, Discovery, Store, Ui } from "@openbot-build/protocol"
-import {
-	Array as Arr,
-	Context,
-	Effect,
-	HashSet,
-	Layer,
-	Schema,
-	type Scope,
-} from "effect"
-import { AppHost } from "./AppHost.ts"
-import { Governance } from "./Governance.ts"
-import type { PgClient } from "@effect/sql-pg"
-import { Secrets } from "../secrets/Secrets.ts"
-import * as StoredConnections from "./StoredConnections.ts"
-import type {
-	Error as StorageError,
-	StoredConnection,
-} from "./StoredConnections.ts"
-import * as Db from "../database/Database.ts"
-
-export class Unavailable extends Schema.TaggedError<
-	Unavailable,
-	{ readonly brand: unique symbol }
->()("AppCapabilitiesUnavailable", {
-	reason: Schema.Literals(["Disabled", "NeedsRevalidation"]),
-}) {}
-export type Error =
-	| Client.Error
-	| StorageError
-	| AppIndex.AppRestricted
-	| Discovery.Error
-	| Unavailable
-export interface Opened {
-	readonly stored: StoredConnection
-	readonly client: Client.Client
+export interface Catalog {
 	readonly tools: Readonly<
 		Effect.Success<ReturnType<Client.Client["listTools"]>>["tools"]
 	>
@@ -53,16 +18,11 @@ export interface Opened {
 	>
 }
 
-export class Capabilities extends Context.Service<
-	Capabilities,
-	{
-		readonly open: (input: {
-			readonly owner: string
-			readonly connectionId: string
-			readonly policy: typeof Client.InvocationPolicy.Service
-		}) => Effect.Effect<Opened, Error, Scope.Scope>
-	}
->()("@openbot-build/openbot/apps/Capabilities") {}
+export type Declaration =
+	| Pick<Client.ResolvedTool, "kind" | "definition">
+	| Pick<Client.ResolvedResource, "kind" | "definition">
+	| Pick<Client.ResolvedTemplate, "kind" | "definition">
+	| Pick<Client.ResolvedPrompt, "kind" | "definition">
 
 /**
  * The most capability pages that `pages` reads.
@@ -166,107 +126,47 @@ export const capabilityLists = (client: Client.Client) => {
 	}
 }
 
-export const make: Effect.Effect<
-	typeof Capabilities.Service,
-	never,
-	| AppHost
-	| PgClient.PgClient
-	| Secrets
-	| Governance
-	| Discovery.Discovery
-	| App.ConnectionScopes
-> = Effect.gen(function* () {
-	const factory = yield* AppHost
-	const db = yield* Db.make
-	const secrets = yield* Secrets
-	const governance = yield* Governance
-	const discovery = yield* Discovery.Discovery
-	const scopes = yield* App.ConnectionScopes
-	const sameRemote = CatalogDiscovery.sameConnection
-	return Capabilities.of({
-		open: Effect.fn("Apps.openCapabilities")(function* (input) {
-			const stored = yield* StoredConnections.get(
-				db,
-				secrets,
-				input.owner,
-				input.connectionId,
-			)
-			yield* governance.check(stored.connection.cardUrl)
-			if (stored.connection.state !== "Enabled")
-				return yield* Unavailable.make({
-					reason:
-						stored.connection.state === "NeedsRevalidation"
-							? "NeedsRevalidation"
-							: "Disabled",
-				})
-			const previous = yield* StoredConnections.getApp(
-				db,
-				input.owner,
-				stored.connection.cardUrl,
-			)
-			if (!Arr.some(previous.sources, (source) => source.role === "manual")) {
-				const declared = yield* discovery.refreshCard(stored.connection.cardUrl)
-				if (
-					!sameRemote(
-						previous.card.remotes?.[stored.connection.remoteIndex],
-						declared.card.remotes?.[stored.connection.remoteIndex],
-					)
-				) {
-					yield* StoredConnections.update(
-						db,
-						secrets,
-						input.owner,
-						input.connectionId,
-						(row) => ({
-							...row,
-							connection: { ...row.connection, state: "NeedsRevalidation" },
-							verification: { _tag: "NeedsRevalidation" },
-						}),
-						stored.revision,
-					)
-					yield* scopes.close(input)
-					yield* StoredConnections.updateApp(
-						db,
-						input.owner,
-						Store.AppRecord.make({
-							cardUrl: declared.cardUrl,
-							card: declared.card,
-							sources: declared.sources,
-						}),
-					)
-					return yield* Unavailable.make({ reason: "NeedsRevalidation" })
-				}
-				yield* StoredConnections.updateApp(
-					db,
-					input.owner,
-					Store.AppRecord.make({
-						cardUrl: declared.cardUrl,
-						card: declared.card,
-						sources: declared.sources,
-					}),
-				)
-			}
-			const client = yield* factory.bind(input.owner, input.policy).open({
-				key: input,
-				clientInfo: { name: "OpenBot", version: "1.0.0" },
-				capabilities: { ...Ui.clientCapabilities, elicitation: { form: {} } },
-			})
-			const lists = capabilityLists(client)
-			return {
-				stored,
-				client,
-				tools: lists.tools.advertised ? yield* pages(lists.tools.page) : [],
-				resources: lists.resources.advertised
-					? yield* pages(lists.resources.page)
-					: [],
-				resourceTemplates: lists.resourceTemplates.advertised
-					? yield* pages(lists.resourceTemplates.page)
-					: [],
-				prompts: lists.prompts.advertised
-					? yield* pages(lists.prompts.page)
-					: [],
-			}
-		}),
+/** Read tools for callers that need the whole tool list. */
+export const tools = (
+	client: Client.Client,
+): Effect.Effect<Catalog["tools"], Client.Error> => {
+	const list = capabilityLists(client).tools
+	return list.advertised ? pages(list.page) : Effect.succeed([])
+}
+
+/** Read the full catalog only when the caller needs all declarations. */
+export const discover = (
+	client: Client.Client,
+): Effect.Effect<Catalog, Client.Error> =>
+	Effect.gen(function* () {
+		const lists = capabilityLists(client)
+		return {
+			tools: lists.tools.advertised ? yield* pages(lists.tools.page) : [],
+			resources: lists.resources.advertised
+				? yield* pages(lists.resources.page)
+				: [],
+			resourceTemplates: lists.resourceTemplates.advertised
+				? yield* pages(lists.resourceTemplates.page)
+				: [],
+			prompts: lists.prompts.advertised ? yield* pages(lists.prompts.page) : [],
+		}
 	})
-})
-export const layer = Layer.effect(Capabilities, make)
+
+export const declarations = (catalog: Catalog): ReadonlyArray<Declaration> => [
+	...Arr.map(catalog.tools, (definition) => ({
+		kind: "tool" as const,
+		definition,
+	})),
+	...Arr.map(catalog.resources, (definition) => ({
+		kind: "resource" as const,
+		definition,
+	})),
+	...Arr.map(catalog.resourceTemplates, (definition) => ({
+		kind: "template" as const,
+		definition,
+	})),
+	...Arr.map(catalog.prompts, (definition) => ({
+		kind: "prompt" as const,
+		definition,
+	})),
+]

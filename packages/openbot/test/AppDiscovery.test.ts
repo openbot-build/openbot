@@ -19,6 +19,7 @@ import { RequestCommands } from "../src/capabilities/RequestCommands.ts"
 import { InputCommands } from "../src/chats/InputCommands.ts"
 import { Store as ExecutionStore } from "../src/execution/Store.ts"
 import { LiveConnections } from "../src/chats/live/LiveConnections.ts"
+import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
 import { Commands as ExecutionCommands } from "../src/execution/Commands.ts"
 import * as BotFixture from "./BotFixture.ts"
 import * as TriggerStore from "../src/triggers/Triggers.ts"
@@ -87,7 +88,7 @@ import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
 import * as AppHost from "../src/apps/AppHost.ts"
 import * as ActionPolicy from "../src/apps/ActionPolicy.ts"
 import * as Lifecycle from "../src/apps/Lifecycle.ts"
-import * as Capabilities from "../src/apps/Capabilities.ts"
+import * as ConnectionSessions from "../src/apps/ConnectionSessions.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Probe from "../src/apps/Probe.ts"
 import * as DomainControl from "../src/apps/DomainControl.ts"
@@ -374,6 +375,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 				Layer.mock(CodeCommands, {}),
 				Layer.mock(TurnAccess, {}),
 				Layer.mock(LiveConnections, {}),
+				Layer.mock(ProviderOAuth, {}),
 				Layer.mock(ExecutionStore, {}),
 				errorRecords,
 				discovery,
@@ -439,7 +441,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 							Layer.provide(TokensPostgres.layer),
 						),
 					),
-					Layer.provideMerge(Capabilities.layer),
+					Layer.provideMerge(ConnectionSessions.layer),
 					Layer.provide(AppHost.layer),
 					Layer.provide(discovery),
 					Layer.provide(CatalogDiscovery.layerRules),

@@ -15,14 +15,11 @@ import * as Report from "../errors/Report.ts"
 import { Files } from "../files/Files.ts"
 import { withFiles } from "../files/ModelFiles.ts"
 import { AppTools } from "../plugins/apps/AppTools.ts"
-import { BotTools, names as botNames } from "../plugins/bots/BotTools.ts"
-import {
-	ChannelTools,
-	names as channelNames,
-} from "../plugins/channels/ChannelTools.ts"
+import { BotTools } from "../plugins/bots/BotTools.ts"
+import { ChannelTools } from "../plugins/channels/ChannelTools.ts"
 import { ComputerTools } from "../plugins/computers/ComputerTools.ts"
 import { names as executionToolNames } from "./ToolControls.ts"
-import { WorkTools, names as workNames } from "../plugins/work/WorkTools.ts"
+import { WorkTools } from "../plugins/work/WorkTools.ts"
 import { operationsOf } from "../settings/Documents.ts"
 import { Settings } from "../settings/Settings.ts"
 import * as ChatHost from "./ChatHost.ts"
@@ -69,16 +66,6 @@ export class ChatFeatures extends Context.Service<
 			host: Bot.ToolRegistration,
 			identity: ExecutionIdentity,
 		) => Effect.Effect<Bot.ToolRegistration, never, Bot.Context | Scope.Scope>
-		/** Rebuilds tools that may run after their Turn has ended. */
-		readonly registerTool: (
-			input: Parameters<typeof ComputerTools.Service.register>[0],
-			host: Bot.ToolRegistration,
-			policy: { readonly review: boolean; readonly plan: boolean },
-		) => Effect.Effect<
-			Bot.ToolRegistration,
-			never,
-			Work | Bot.Context | Scope.Scope
-		>
 		/** Decides the tool calls that ask for approval. */
 		readonly approvals: typeof Chat.Approvals.Service
 		/** Gives a model the content of the files that a prompt names. */
@@ -100,8 +87,6 @@ export const none = Layer.succeed(
 	ChatFeatures,
 	ChatFeatures.of({
 		register: (_, host) => Effect.succeed(host),
-		registerTool: (_, host, policy) =>
-			Effect.succeed(Registration.select(host, policy)),
 		approvals: Chat.Approvals.of({
 			decide: () =>
 				Effect.succeed(Chat.Decision.Pending({ result: Chat.pendingResult })),
@@ -129,32 +114,6 @@ export const make = Effect.gen(function* () {
 	const turns = yield* TurnContext
 	return ChatFeatures.of({
 		approvals,
-		registerTool: (input, host, policy) =>
-			Effect.gen(function* () {
-				if (policy.review) return Registration.select(host, policy)
-				const current = yield* Work
-				const computerTools = yield* computers.register(input)
-				const fixed = Registration.merge([host, computerTools])
-				// App names must stay the same in the parent Turn and its child.
-				const occupied = [
-					...Rec.keys(fixed.tools),
-					...Rec.values(botNames),
-					...Rec.values(channelNames),
-					...Rec.values(workNames),
-					...Rec.values(executionToolNames),
-				]
-				const appTools = yield* apps.register(
-					{
-						kind: "member",
-						...current.identity.owner,
-					},
-					occupied,
-				)
-				return Registration.select(
-					Registration.merge([host, appTools, computerTools]),
-					policy,
-				)
-			}),
 		register: (input, host, identity) =>
 			Effect.gen(function* () {
 				const context = yield* Bot.Context

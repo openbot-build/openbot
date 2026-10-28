@@ -305,8 +305,8 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						}>`select status, reserved_micros::int as reserved, estimated_micros::int as estimate, charged from openbot_usage_events where execution_id = ${held.executionId}`
 						assert.deepStrictEqual(usage, {
 							status: "unknown",
-							// Keep the estimate after the lost owner releases its hold.
-							reserved: 0,
+							// Keep the hold and estimate until a receipt confirms the cost.
+							reserved: 1000,
 							estimate: 1000,
 							charged: false,
 						})

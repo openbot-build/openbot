@@ -199,6 +199,16 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 插件可以在 Chat 记录或状态中保存数据。把 `plugin.stores` 传给
 `Store.define`，然后使用 `PluginState.make`。
 
+插件存储提供四种操作。`get` 读取值。`snapshot` 还返回 Chat 的版本号。 `setAt`
+只在版本号仍匹配时写入。`modify` 在一次操作中读取并修改值。
+
+传给 `modify` 的函数返回 `{ result }` 时保留原值，返回
+`{ result, value: Option.some(value) }` 时替换值，返回
+`{ result, value: Option.none() }`
+时删除值。保留原值的操作不写入，也不发送事件。这个函数必须是纯函数：不能读取时钟、生成 ID 或执行 I/O。写入冲突可能使它再次运行。需要 I/O 时，先读取
+`snapshot`，在 `modify` 之外完成操作，再用 `setAt`
+写入。旧版本号会使写入失败；`setAt` 不会重复外部操作。
+
 ### 技能
 
 `Skill.Descriptor` 描述一个技能。`SkillMap.Catalog`

@@ -1,0 +1,176 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "178ec08f-ee13-4419-8a07-b901a1ee4adf",
+	"prevIds": ["1c33eacb-0121-4396-871c-469bdbdc9608"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_app_grant_uses"],
+			"writes": [
+				"s|tbl|public.openbot_app_grant_uses",
+				"n|tbl|public.openbot_app_grant_uses",
+				"e|tbl|public.openbot_app_grant_uses",
+				"n|rel|public.openbot_app_grant_uses",
+				"n|type|public.openbot_app_grant_uses",
+				"n|rel|public.openbot_app_grant_uses_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_app_grant_uses",
+				"openbot_app_grant_uses_scope"
+			],
+			"writes": [
+				"s|idx|public.openbot_app_grant_uses_scope",
+				"n|idx|public.openbot_app_grant_uses_scope",
+				"e|idx|public.openbot_app_grant_uses_scope",
+				"n|rel|public.openbot_app_grant_uses_scope"
+			],
+			"reads": [
+				"n|tbl|public.openbot_app_grant_uses",
+				"n|sch|public",
+				"n|col|public.openbot_app_grant_uses.scope_key",
+				"n|col|public.openbot_app_grant_uses.kind"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_app_grant_uses",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_grant_uses",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_grant_uses",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_grant_uses",
+				"name": "reference",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_grant_uses",
+				"name": "scope_key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_grant_uses",
+				"name": "execution_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_grant_uses",
+				"name": "openbot_app_grant_uses_scope",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "scope_key",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "kind",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_app_grant_uses",
+				"name": "openbot_app_grant_uses_pkey",
+				"columns": ["namespace", "kind", "reference"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

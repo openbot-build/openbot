@@ -232,6 +232,18 @@ applies.
 A plugin can save data in the Chat record or its state. Pass `plugin.stores` to
 `Store.define`, then use `PluginState.make`.
 
+The plugin store has four operations. `get` reads its value. `snapshot` also
+gives the Chat revision. `setAt` writes only if that revision still matches.
+`modify` reads and changes the value in one operation.
+
+The function given to `modify` returns `{ result }` to leave the value alone,
+`{ result, value: Option.some(value) }` to replace it, or
+`{ result, value: Option.none() }` to remove it. A change that leaves the value
+alone makes no write and sends no event. The function must be pure: it must not
+read the clock, make IDs, or do I/O. A write conflict can run it again. For work
+that needs I/O, first read `snapshot`, do that work outside `modify`, then use
+`setAt`. An old revision fails; `setAt` does not repeat the outside work.
+
 ### Skills
 
 `Skill.Descriptor` describes a skill. `SkillMap.Catalog` is a list of skills.

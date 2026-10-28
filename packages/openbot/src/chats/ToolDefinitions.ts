@@ -51,14 +51,7 @@ export const selected = (
 	current?: Tool.Any,
 ) =>
 	Effect.gen(function* () {
-		const history = Arr.filter(
-			yield* store.calls(parent),
-			(call) => call.step === `model:${position.item}`,
-		)
-		const last = Arr.findFirst(
-			history,
-			(call) => !Arr.some(history, (other) => other.attempt > call.attempt),
-		)
+		const last = yield* store.latestCall(parent, `model:${position.item}`)
 		if (Option.isNone(last)) {
 			// An explicit Turn action has no model call. Its command fixes its first tool definition.
 			const saved = yield* store.loadMember(parent)

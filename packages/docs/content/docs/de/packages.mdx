@@ -245,6 +245,19 @@ nicht zurück. Bei mehreren Grenzen gilt die kürzeste.
 Ein Plugin kann Daten im Chat-Eintrag oder im Zustand speichern. Gib
 `plugin.stores` an `Store.define` und nutze dann `PluginState.make`.
 
+Der Plugin-Speicher hat vier Operationen. `get` liest den Wert. `snapshot` gibt
+auch die Chat-Revision zurück. `setAt` schreibt nur, wenn diese noch stimmt.
+`modify` liest und ändert den Wert in einer Operation.
+
+Die Funktion für `modify` gibt `{ result }` zurück, um den Wert zu lassen,
+`{ result, value: Option.some(value) }`, um ihn zu ersetzen, oder
+`{ result, value: Option.none() }`, um ihn zu entfernen. Bleibt der Wert stehen,
+gibt es keinen Schreibvorgang und kein Ereignis. Die Funktion muss rein sein:
+Sie darf keine Uhr lesen, IDs erzeugen oder I/O ausführen. Bei einem
+Schreibkonflikt kann sie erneut laufen. Für I/O lies erst `snapshot`, führe die
+Arbeit außerhalb von `modify` aus und schreibe dann mit `setAt`. Eine alte
+Revision führt zu einem Fehler; `setAt` wiederholt die äußere Arbeit nicht.
+
 ### Skills
 
 `Skill.Descriptor` beschreibt einen Skill. `SkillMap.Catalog` ist eine Liste von

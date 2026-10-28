@@ -5,7 +5,15 @@ import { NodeServices } from "@effect/platform-node"
 import { ConnectionsApi as Api, Identity } from "@openbot-build/api"
 import type { Caller } from "@openbot-build/domain"
 import { Tokens } from "../src/auth/Tokens.ts"
-import { CatalogDiscovery, Store, Document } from "@openbot-build/protocol"
+import {
+	AppConnections,
+	CatalogDiscovery,
+	Client,
+	Discovery,
+	Network,
+	Store,
+	Document,
+} from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Effect,
@@ -14,6 +22,7 @@ import {
 	pipe,
 	Record as Rec,
 	Redacted,
+	Ref,
 	Schema,
 	String as Str,
 } from "effect"
@@ -21,6 +30,9 @@ import { SqlClient } from "effect/sql"
 import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as Connections from "../src/apps/Connections.ts"
+import * as AppHost from "../src/apps/AppHost.ts"
+import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
+import { Probe } from "../src/apps/Probe.ts"
 import { eq } from "drizzle-orm"
 import { appRecords } from "../src/database/Schema.ts"
 import * as StoredConnections from "../src/apps/StoredConnections.ts"
@@ -48,6 +60,90 @@ const asOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, owner = alice) =>
 const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
 layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+	it.effect("App checks and saves the same card after one refresh", () =>
+		Effect.gen(function* () {
+			const database = yield* Postgres.start
+			const publisher = yield* Fixture.start()
+			const source = yield* Discovery.Discovery.pipe(
+				Effect.provide(publisher.discovery),
+			)
+			const refreshes = yield* Ref.make(0)
+			const checked = yield* Ref.make(Option.none<Store.UserConnection>())
+			const discovery = Layer.succeed(Discovery.Discovery, {
+				...source,
+				refreshCard: (url) =>
+					Ref.update(refreshes, (count) => count + 1).pipe(
+						Effect.andThen(source.refreshCard(url)),
+					),
+			})
+			const app = AppHost.layer.pipe(
+				Layer.provide(ProtocolStores.layer),
+				Layer.provide(IndexCommandsFixture.layer),
+				Layer.provide(discovery),
+				Layer.provide(CatalogDiscovery.layerRules),
+				Layer.provide(AppConnections.layerConnectionScopes),
+				Layer.provide(
+					Layer.succeed(AppHost.AppNetwork, {
+						layer: () =>
+							Layer.effect(
+								Network.Network,
+								Effect.die("This test has no App network."),
+							),
+					}),
+				),
+				Layer.provide(
+					Layer.succeed(Probe, {
+						check: ({ connection }) =>
+							Ref.set(checked, Option.some(connection)).pipe(
+								Effect.andThen(publisher.changeCard),
+								Effect.as({ requiresAuthorization: false } as const),
+							),
+					}),
+				),
+				Layer.provide(
+					Governance.layer.pipe(
+						Layer.provide(OrganizationFixture.layerDefaultSettings),
+					),
+				),
+				Layer.provide(Secrets.layer(encryptionKey)),
+				Layer.provideMerge(
+					Database.layer({ databaseUrl: Redacted.make(database.url) }),
+				),
+				Layer.provide(NodeServices.layer),
+			)
+			yield* Effect.gen(function* () {
+				yield* Database.migrate
+				const host = (yield* AppHost.AppHost).bind(
+					ownerKey(alice),
+					Client.InvocationPolicy.of({ check: () => Effect.void }),
+				)
+				const result = yield* host.discover(publisher.origin + "/card")
+				assert.strictEqual(result._tag, "Single")
+				if (result._tag !== "Single") return
+				const saved = yield* host.add({
+					key: { owner: ownerKey(alice), connectionId: "checked" },
+					candidate: result.candidate,
+					remoteIndex: 0,
+					values: {
+						"header:X-Account": "Work",
+						"header:X-Secret": "private-app-token",
+					},
+					confirmed: true,
+					requiresAuthorization: true,
+				})
+				assert.strictEqual(yield* Ref.get(refreshes), 1)
+				assert.deepStrictEqual(
+					yield* Ref.get(checked),
+					Option.some(saved.connection),
+				)
+				assert.deepStrictEqual(
+					yield* host.getConnection(saved.connection),
+					saved.connection,
+				)
+			}).pipe(Effect.provide(app))
+		}),
+	)
+
 	it.effect(
 		"confirmed App connections save encrypted configuration, reject changes, and keep accounts apart",
 		() =>

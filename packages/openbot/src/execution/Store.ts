@@ -2157,6 +2157,69 @@ const make = Effect.gen(function* () {
 			)
 			.pipe(transactionFailures)
 	})
+	const call = Effect.fn("ExecutionStore.call")(function* (
+		key: Key,
+		id: Execution.CallId,
+	) {
+		const rows = yield* db
+			.select()
+			.from(executionCalls)
+			.where(
+				and(
+					eq(executionCalls.namespace, key.namespace),
+					eq(executionCalls.executionId, key.id),
+					eq(executionCalls.id, id),
+				),
+			)
+			.limit(1)
+		return yield* Option.match(Arr.head(rows), {
+			onNone: () => Effect.succeed(Option.none<Execution.Call>()),
+			onSome: (row) => callView(row).pipe(Effect.asSome),
+		})
+	}, storage)
+	const stepCall = Effect.fn("ExecutionStore.stepCall")(function* (
+		key: Key,
+		step: string,
+		order: "first" | "latest",
+	) {
+		const rows = yield* db
+			.select()
+			.from(executionCalls)
+			.where(
+				and(
+					eq(executionCalls.namespace, key.namespace),
+					eq(executionCalls.executionId, key.id),
+					eq(executionCalls.step, step),
+				),
+			)
+			.orderBy(
+				order === "first"
+					? asc(executionCalls.attempt)
+					: desc(executionCalls.attempt),
+			)
+			.limit(1)
+		return yield* Option.match(Arr.head(rows), {
+			onNone: () => Effect.succeed(Option.none<Execution.Call>()),
+			onSome: (row) => callView(row).pipe(Effect.asSome),
+		})
+	}, storage)
+	const latestCalls = Effect.fn("ExecutionStore.latestCalls")(function* (
+		key: Key,
+	) {
+		const latest = db
+			.selectDistinctOn([executionCalls.step])
+			.from(executionCalls)
+			.where(
+				and(
+					eq(executionCalls.namespace, key.namespace),
+					eq(executionCalls.executionId, key.id),
+				),
+			)
+			.orderBy(asc(executionCalls.step), desc(executionCalls.attempt))
+			.as("latest_calls")
+		const rows = yield* db.select().from(latest).orderBy(asc(latest.createdAt))
+		return yield* Effect.forEach(rows, callView)
+	}, storage)
 	const calls = Effect.fn("ExecutionStore.calls")(function* (key: Key) {
 		return yield* db
 			.select()
@@ -2224,6 +2287,10 @@ const make = Effect.gen(function* () {
 		finishCall,
 		uncertain,
 		incompleteRead,
+		call,
+		firstCall: (key: Key, step: string) => stepCall(key, step, "first"),
+		latestCall: (key: Key, step: string) => stepCall(key, step, "latest"),
+		latestCalls,
 		calls,
 	}
 })

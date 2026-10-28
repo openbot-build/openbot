@@ -66,6 +66,14 @@ Nachrichten und Knotenzuweisung. Funktionen melden ihre eigenen Workflows an.
 Die Engine hat keine Bot-, Freigabe- oder Computer-Zweige. Der eigenständige
 Core hat einen Speicher-Host ohne Wiederherstellung nach Prozessende.
 
+`Program` hält eine Schleife für Wiederherstellung, Besitzerprüfung, Abbruch und
+Phasenfehler. Jede Funktion gibt `next` für die nächste Phase und `end` für
+ihren eigenen Endzustand. Die Arbeit in `after` läuft erst nach dem Schließen
+der Phasenressourcen. Turn, Tool, App, Delegation und einfache Workflows nutzen
+diese Schleife. Die Funktionen behalten Kindarbeit, Zeitgrenzen und
+Geschäftstransaktionen. `Runner` hält Übernahme und Speicherwiederholungen;
+`RunScope` hält Phasenressourcen und Signale.
+
 Jede Arbeitsphase läuft in einer `Activity`. Ihr Name enthält die gespeicherte
 Phase und Generation. Die Engine speichert nur ein sicheres Phasenergebnis, etwa
 eine Fehler-ID oder einen Verweis auf eine Pause. Eingaben, externe Ergebnisse
@@ -109,6 +117,31 @@ Parameter, Routen, App-Quellen und Vault-Verweise fest. Neue Erkennung ändert
 keinen gespeicherten Aufruf. Neue Aufrufe brauchen aktuelle Rechte. Hooks laufen
 an benannten Schritten und vermeiden doppelte Schreibvorgänge bei Wiederholung.
 Plugins dürfen den Lebenszyklus einer Ausführung nicht ändern.
+
+Der Ausführungsspeicher liest Aufrufe nach ID, Schritt oder letztem Versuch. Der
+ganze Verlauf bleibt für Prüfungen verfügbar. Wiederherstellung und Wiederholung
+wählen Versuche mit diesen gemeinsamen Abfragen.
+
+Die Werkzeugerkennung baut die Liste für ein Modell. Ein gespeicherter Aufruf
+findet seinen Handler mit der gespeicherten Definition. Das Wiederherstellen
+eines Computer- oder Host-Werkzeugs startet keine App-Erkennung. Aktuelle Rechte
+werden weiter geprüft. Die Phase hält die Ressourcen.
+
+Das Öffnen einer App-Verbindung liest keine Fähigkeitslisten. Ein gespeicherter
+App-Aufruf sucht nur seine gewählte Art und seinen Namen. Dann prüft er die
+ganze gespeicherte Deklaration und die Verbindungsrevision. Die gefundene Aktion
+hält diese Deklaration für das Senden und weitere Eingaben in derselben Phase.
+Das Senden liest die Liste nicht erneut. Eine wiederhergestellte Phase sucht und
+prüft die Deklaration neu. Eine vollständige Erkennung ist eine eigene Operation
+für Aufrufer, die die ganze Liste brauchen.
+
+Memory liest Tags, Quellverweise und Zugriffsregeln vor dem Inhalt. Nur
+gewählte, sichtbare Inhalte werden entschlüsselt. Lesevorgänge teilen eine
+Sperre für das Memory des Bots; Änderungen halten dieselbe Sperre allein. So
+stammen Rechte und Inhalt aus demselben Lesezustand. Modellaufrufe laufen
+außerhalb der Sperre. Memory wählt den Kontext und führt Lernänderungen aus.
+Aufrufer lesen oder ersetzen keinen ganzen Pool. Neue Tags oder Zustände lassen
+den verschlüsselten Inhalt unverändert.
 
 Ein externer Aufruf speichert zuerst seine Absicht, markiert dann den Versand
 und speichert zuletzt das Ergebnis. Sichere Wiederholungen nutzen denselben
@@ -158,6 +191,16 @@ Verbindung oder ein Entwicklertest denselben Aussteller und OAuth-Client nutzt.
 OAuth-Server können verbundene Tokens gemeinsam widerrufen, auch wenn ihre
 Zeichenfolgen verschieden sind. Ein dauerhafter Zeitgeber prüft nach der
 Freigabe erneut. Die Prüfung gilt für alle Besitzer in OpenBot.
+
+Eine gemeinsame Tabelle hält fest, welche Verbindung oder welcher Entwicklertest
+eine Anmeldung nutzt. Sie hält auch offene Token-Aufrufe und Widerrufe fest.
+Diese Einträge ändern sich in derselben Transaktion wie die zugehörigen Daten.
+Die Bereinigung fragt den Bereich in dieser Tabelle ab. Sie öffnet nicht alle
+Verbindungen oder geheimen Testdaten.
+
+Der Aufbau einer App-Verbindung nutzt eine gemeinsame Vorbereitungsregel. Jeder
+Host lädt die App Card einmal neu, prüft Endpunkt und Werte, testet die
+Verbindung und speichert genau diese vorbereitete Verbindung.
 
 Das Senden und Speichern von Tokens nutzt dieselbe Datenbanksperre wie das
 Aufräumen. Eine gespeicherte Widerrufsabsicht hält den Bereich auch bei
@@ -274,6 +317,11 @@ Objektverweise sichern. Neue Drizzle-Migrationen anwenden, dann Daten in Gruppen
 mit gespeichertem Fortschritt umwandeln. Die Basismigration nie ändern.
 Speicher-Layers führen zur Laufzeit keine DDL aus, also SQL zur Änderung der
 Tabellenstruktur.
+
+Der Umzug der Nutzungsdaten gilt auch für Datenbanken mit gespeicherten
+Ausführungen. Er liest aktuelle Anmeldungen und offene Token-Aufrufe in kleinen
+Gruppen. Der Server startet erst, wenn alle Nutzungseinträge vorhanden sind.
+Tokens bleiben in ihren verschlüsselten Datensätzen.
 
 Ressourcen-IDs, Besitzer, Verlauf, Freigaben, Verbindungen, Geheimnisse und
 offene Arbeit behalten. Alte verschlüsselte Daten brauchen eigene

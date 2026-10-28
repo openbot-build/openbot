@@ -1,8 +1,14 @@
 import { NodeServices } from "@effect/platform-node"
+import {
+	Client,
+	Document,
+	Store as ProtocolStore,
+} from "@openbot-build/protocol"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
 	AppIndex,
+	AppViews,
 	Bots,
 	ConnectionId,
 	Execution,
@@ -17,6 +23,7 @@ import {
 	Option,
 	Redacted,
 	References,
+	Ref,
 	Schema,
 	String as Str,
 } from "effect"
@@ -28,7 +35,8 @@ import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Judge from "../src/capabilities/Judge.ts"
 import * as Db from "../src/database/Database.ts"
 import * as Bindings from "../src/apps/Bindings.ts"
-import { Capabilities } from "../src/apps/Capabilities.ts"
+import { ConnectionSessions } from "../src/apps/ConnectionSessions.ts"
+import * as StoredConnections from "../src/apps/StoredConnections.ts"
 import { ActionPolicy } from "../src/apps/ActionPolicy.ts"
 import * as AppPolicy from "../src/apps/ActionPolicy.ts"
 import { Settings } from "../src/settings/Settings.ts"
@@ -86,6 +94,140 @@ const opened = (errorId: Execution.ErrorId) =>
 	})
 
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
+	for (const kind of ["tool", "resource"] as const) {
+		it.effect(`a selected App ${kind} needs no full catalog`, () =>
+			Effect.gen(function* () {
+				const sql = yield* PgClient.PgClient
+				const db = yield* Db.make
+				const secrets = yield* Secrets.Secrets
+				const crypto = yield* Crypto.Crypto
+				const report = yield* Report.make
+				const id = ConnectionId.make(yield* crypto.randomUUIDv4())
+				const owner = StoredConnections.ownerKey({
+					organizationId: "app-org",
+					userId: id,
+				})
+				const cardUrl = "https://app.example/card.json"
+				const connection: StoredConnections.StoredConnection = {
+					name: "Notes",
+					revision: 1,
+					verification: null,
+					connection: ProtocolStore.UserConnection.make({
+						owner,
+						connectionId: id,
+						cardUrl,
+						endpoint: "https://app.example/mcp",
+						remoteIndex: 0,
+						configuration: Redacted.make({}),
+						headers: Redacted.make({}),
+						state: "Enabled",
+						authorization: { _tag: "Unprotected" },
+					}),
+				}
+				const body = yield* secrets.seal(
+					yield* Schema.encodeEffect(
+						Schema.fromJsonString(
+							Schema.toCodecJson(StoredConnections.StoredConnection),
+						),
+					)(connection),
+					yield* encode(["connection", owner, id]),
+				)
+				yield* sql`insert into openbot_app_connections (owner, id, name, revision, body) values (${owner}, ${id}, 'Notes', 1, ${body})`
+				const app = yield* Schema.encodeEffect(StoredConnections.appCodec)(
+					ProtocolStore.AppRecord.make({
+						cardUrl,
+						card: {
+							$schema: Document.cardSchemaUrl,
+							name: "test/notes",
+							version: "1.0.0",
+							description: "Read notes.",
+						},
+						sources: [],
+					}),
+				)
+				yield* sql`insert into openbot_app_records (owner, card_url, body) values (${owner}, ${cardUrl}, ${app})`
+				const target = kind === "tool" ? "read_note" : "notes://one"
+				const requests = yield* Ref.make(0)
+				const closed = yield* Ref.make(false)
+				const unused = () =>
+					Effect.die("A description must not run an App action.")
+				const action: Client.ResolvedAction =
+					kind === "tool"
+						? {
+								kind,
+								definition: { name: target, inputSchema: { type: "object" } },
+								invoke: unused,
+								resume: unused,
+							}
+						: {
+								kind,
+								definition: { name: "Note", uri: target },
+								invoke: unused,
+								resume: unused,
+							}
+				const unavailable = () =>
+					Effect.fail(
+						Client.ClientError.make({
+							reason: "Network",
+							issue: "The catalog is not available.",
+						}),
+					)
+				const client: Client.Client = {
+					...({} as Client.Client),
+					listTools: unavailable,
+					listResources: unavailable,
+					listResourceTemplates: unavailable,
+					listPrompts: unavailable,
+					resolve: (selected, source) =>
+						Effect.gen(function* () {
+							assert.deepEqual(selected, { kind, name: target })
+							assert.equal(source, "host")
+							yield* Ref.update(requests, (n) => n + 1)
+							return Option.some(action)
+						}),
+				}
+				const result = yield* Bindings.describe(
+					{
+						db,
+						secrets,
+						crypto,
+						report,
+						sessions: ConnectionSessions.of({
+							open: () =>
+								Effect.gen(function* () {
+									yield* Effect.addFinalizer(() => Ref.set(closed, true))
+									return { stored: connection, client }
+								}),
+						}),
+						policy: ActionPolicy.of({ isRead: () => Effect.succeed(true) }),
+					},
+					owner,
+					[],
+					Option.some({
+						name: "selected",
+						source: {
+							_tag: "AppUiAction",
+							viewId: AppViews.AppViewId.make("view"),
+							requestId: "request",
+							connectionId: id,
+							revision: 1,
+							kind,
+							target,
+						},
+					}),
+				)
+				assert.equal(result.issues.length, 0)
+				assert.equal(result.entries.length, 1)
+				assert.equal(result.entries[0]?.name, "selected")
+				assert.deepEqual<unknown>(
+					result.entries[0]?.source.definition,
+					action.definition,
+				)
+				assert.equal(yield* Ref.get(requests), 1)
+				assert.isTrue(yield* Ref.get(closed))
+			}),
+		)
+	}
 	it.effect(
 		"App binding discovery keeps a broken private connection before giving an empty list",
 		() => {
@@ -109,7 +251,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						secrets,
 						crypto,
 						report,
-						capabilities: Capabilities.of({
+						sessions: ConnectionSessions.of({
 							open: () => Effect.die("A broken connection must not be opened."),
 						}),
 						policy: ActionPolicy.of({ isRead: () => Effect.succeed(false) }),
