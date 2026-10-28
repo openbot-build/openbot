@@ -411,22 +411,20 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 							ChatGptProvider.layer(key.input.selection, {
 								upstreamModel: key.input.upstream,
 								onUnauthorized: (token) =>
-									oauth
-										.invalidate(key.provider.id, token)
-										.pipe(
-											Failures.replace(
-												"Could not change the provider sign-in state",
-												() =>
-													AiError.AiError.make({
-														module: "ChatGptProvider",
-														method: "invalidate",
-														reason: AiError.UnknownError.make({
-															description:
-																"Could not change the provider sign-in state.",
-														}),
+									oauth.invalidate(key.provider.id, token).pipe(
+										Failures.replace(
+											"Could not change the provider sign-in state",
+											() =>
+												AiError.AiError.make({
+													module: "ChatGptProvider",
+													method: "invalidate",
+													reason: AiError.UnknownError.make({
+														description:
+															"Could not change the provider sign-in state.",
 													}),
-											),
+												}),
 										),
+									),
 								accessToken: oauth.accessToken(key.provider.id).pipe(
 									Failures.map("Could not read the provider token", (error) =>
 										AiError.AiError.make({

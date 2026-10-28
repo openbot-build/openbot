@@ -1,5 +1,4 @@
-import { Schema } from "effect"
-import type { Effect, Scope } from "effect"
+import { Schema, type Effect, type Scope } from "effect"
 import type {
 	Client,
 	Discovery,
