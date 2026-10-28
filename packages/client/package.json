@@ -33,5 +33,13 @@
 		"@openbot-build/protocol": "workspace:*",
 		"@openbot-build/domain": "workspace:*",
 		"@openbot-build/core": "workspace:*"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/client"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
 	}
 }

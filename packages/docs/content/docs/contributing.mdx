@@ -339,3 +339,41 @@ The client package uses MIT. This also covers the OpenBot code bundled with it,
 as set out in `packages/client/LICENSE`. Other packages keep AGPL. Client builds
 include the API contract at `@openbot-build/client/Api` and chat schemas at
 `@openbot-build/client/Core`. Apps do not need the other OpenBot packages.
+
+## Package releases
+
+CI builds, checks types, and tests before it publishes npm packages to
+[GitHub Packages](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry).
+All eight OpenBot release packages share one release version. The client keeps
+its MIT grant. The other packages use AGPL-3.0-only.
+
+- A push to `main` publishes `0.0.0-commit-<full-hash>` with the tag
+  `sha-<full-hash>`. It does not change `latest`.
+- A tag such as `v0.1.0` publishes `0.1.0` with the tag `latest`.
+- Pull requests pack and check the release but do not publish it.
+
+Use `devenv shell -- pnpm packages:pack` to make local archives in `.release`.
+Set `RELEASE_REF=v0.1.0` to check a version release. Internal package
+dependencies use the same exact version. Packing restores the source manifests
+and does not change the workspace lockfile. Publication retries skip an
+identical upload; a version with other contents fails.
+
+The UI repository publishes `@openbot-build/web` with the same version rules. It
+contains static files in `dist`, with no runtime dependencies. Cloud installs
+`@openbot-build/openbot` and `@openbot-build/web`. Its build copies UI files to
+`packages/cloud/dist/web`. Serve those files on the server's public origin, with
+an `index.html` fallback. Send `/v1`, `/auth`, and `/health` to the server,
+including WebSockets. UI development stays in the UI repository.
+
+Publish the first OpenBot release before installing the UI. Publish the UI
+before installing Cloud. Both consumers start at `0.1.0`. Run their
+`scripts/install.sh` after registry access is ready. The first install creates
+`pnpm-lock.yaml`; commit it. Later installs require that lockfile. CI also saves
+the resolved lockfile as an artifact for this first step.
+
+In GitHub Packages, give the UI and Cloud repositories Actions read access to
+the packages they use. Their workflows use `GITHUB_TOKEN` with `packages: read`.
+If separate credentials are needed, set the `PACKAGES_READ_TOKEN` secret to a
+classic PAT with `read:packages`. Publishing uses each source repository's
+`GITHUB_TOKEN` with `packages: write`. Local installs also need a token, even
+for public packages. See the [client setup](/docs/client#install).

@@ -72,5 +72,13 @@
 		"@openbot-build/client": "workspace:*",
 		"@types/pg": "8.23.1",
 		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/openbot"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
 	}
 }

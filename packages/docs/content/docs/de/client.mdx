@@ -18,17 +18,27 @@ für typisierte Programme. Er läuft in Node.js, Deno, Bun, Workern und Browsern
 
 ## Installieren
 
-Die OpenBot-Pakete sind noch nicht auf npm. Nutze sie aus dem OpenBot-Workspace:
+Die Pakete liegen in GitHub Packages unter `https://npm.pkg.github.com`. Trage
+den Scope in die `.npmrc` des Projekts ein:
 
-```json
-{
-	"dependencies": {
-		"@openbot-build/client": "workspace:*",
-		"effect": "4.0.7",
-		"@effect/platform-node": "4.0.7"
-	}
-}
+```ini
+@openbot-build:registry=https://npm.pkg.github.com
 ```
+
+Nutze einen GitHub-Token (classic PAT) mit `read:packages`. Mit
+`npm login --scope=@openbot-build --registry=https://npm.pkg.github.com --auth-type=legacy`
+speicherst du ihn in deinen npm-Einstellungen. Lege den Token nicht in Git ab.
+
+Installiere eine genaue Version. Mit `sha-<vollständiger-Commit-Hash>` wählst du
+einen veröffentlichten Commit. Die Lockdatei hält die genaue Version fest:
+
+```sh
+pnpm add --save-exact @openbot-build/client@0.1.0 effect@4.0.7
+```
+
+Der Client enthält gemeinsamen OpenBot-Code und Typen unter MIT. Du brauchst
+keine Kopie des OpenBot-Quellcodes. Andere OpenBot-Pakete behalten ihre
+Lizenzen.
 
 ## Einen Client erstellen
 

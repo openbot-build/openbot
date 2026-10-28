@@ -297,3 +297,35 @@ Affero 通用公共许可证第 3 版，且仅限该版本（`AGPL-3.0-only`）�
 也为客户端打包的 OpenBot 代码提供 MIT 授权。其他包仍使用 AGPL。客户端在
 `@openbot-build/client/Api` 导出 API 定义，在 `@openbot-build/client/Core`
 导出聊天数据结构。应用无需安装其他 OpenBot 包。
+
+## 包发布
+
+CI 先构建、检查类型并运行测试，再将 npm 包发布到
+[GitHub Packages](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry)。八个 OpenBot 发布包使用同一个版本号。客户端保留 MIT 授权，其他包使用 AGPL-3.0-only。
+
+- 推送到 `main` 时发布 `0.0.0-commit-<完整哈希>`，标签为
+  `sha-<完整哈希>`，不改动 `latest`。
+- `v0.1.0` 这样的标签发布 `0.1.0`，并设置 `latest`。
+- Pull request 只打包并检查，不发布。
+
+运行 `devenv shell -- pnpm packages:pack` 在 `.release` 中生成本地包。设置
+`RELEASE_REF=v0.1.0`
+可检查正式版本。内部包依赖固定为同一个精确版本。打包结束后恢复源码清单，不改动工作区锁文件。发布重试会跳过内容相同的版本；同一版本的内容不同时会失败。
+
+UI 仓库按相同规则发布 `@openbot-build/web`。包内的 `dist`
+是静态文件，没有运行时依赖。Cloud 安装 `@openbot-build/openbot` 和
+`@openbot-build/web`，构建时将 UI 文件复制到
+`packages/cloud/dist/web`。将这些文件放在服务器的公开源下，找不到文件时返回
+`index.html`。将 `/v1`、`/auth`、`/health`
+及 WebSocket 请求转发给服务器。UI 开发仍在 UI 仓库进行。
+
+先发布 OpenBot，再安装 UI；发布 UI 后才能安装 Cloud。两个使用方初始固定为
+`0.1.0`。配置注册表权限后运行各仓库的 `scripts/install.sh`。第一次安装生成
+`pnpm-lock.yaml`，请提交它。后续安装要求锁文件保持一致。CI 也会保存生成的锁文件，供首次安装后取用。
+
+在 GitHub
+Packages 中，将所需包的 Actions 读取权限授予 UI 和 Cloud 仓库。工作流使用带
+`packages: read` 的 `GITHUB_TOKEN`。如需独立凭证，将具有 `read:packages`
+的 classic PAT 存为 `PACKAGES_READ_TOKEN` secret。发布使用源码仓库带
+`packages: write` 的
+`GITHUB_TOKEN`。本地安装公开包也需要令牌。参见[客户端设置](/docs/zh-cn/client)。

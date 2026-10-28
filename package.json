@@ -27,6 +27,9 @@
 		"images": "docker buildx bake -f deploy/docker/docker-bake.hcl --load",
 		"images:check": "bash deploy/docker/check.sh",
 		"test": "vitest run",
-		"test:e2e": "pnpm --filter @openbot-build/e2e test"
+		"test:e2e": "pnpm --filter @openbot-build/e2e test",
+		"packages:pack": "node scripts/packages.mjs pack",
+		"packages:publish": "node scripts/packages.mjs publish",
+		"test:packages": "node --test scripts/packages.test.mjs"
 	}
 }

@@ -19,3 +19,5 @@ dist/
 # Keep the skill links into .agents/skills.
 .claude/*
 !.claude/skills/
+
+.release/

@@ -64,5 +64,13 @@
 	"dependencies": {
 		"@nmnmcc/ability": "3.1.0",
 		"@openbot-build/core": "workspace:*"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/domain"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
 	}
 }
