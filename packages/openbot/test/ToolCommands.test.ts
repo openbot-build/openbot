@@ -5780,6 +5780,46 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				}).pipe(Effect.provide(services))
 			}),
 		)
+	it.effect("a finish reads the result saved between its two reads", () =>
+		Effect.gen(function* () {
+			const test = yield* setup("tool-result-between-reads")
+			const child = yield* test.submit("one")
+			const key = { namespace: test.key.namespace, id: child.executionId }
+			const fence = yield* test.store.takeOver(key)
+			const call = yield* test.store.writeAttempt(
+				fence,
+				ToolSteps.stepId(test.position.item, "one"),
+				{},
+			)
+			yield* test.store.sending(fence, call.id)
+			yield* test.store.finishCall(fence, call.id, { result: "saved result" })
+			const reads = yield* Ref.make(0)
+			const store = {
+				...test.store,
+				loadMember: Effect.fn(function* (key: Store.Key) {
+					if (
+						key.id === fence.id &&
+						(yield* Ref.updateAndGet(reads, (n) => n + 1)) === 2
+					)
+						yield* test.tools.finish(fence, { status: "completed" })
+					return yield* test.store.loadMember(key)
+				}),
+			}
+			const result = yield* Effect.gen(function* () {
+				const tools = yield* ToolCommands.ToolCommands
+				return yield* tools.finish(fence, { status: "completed" })
+			}).pipe(
+				Effect.provide(
+					Layer.fresh(ToolCommands.layer).pipe(
+						Layer.provide(Layer.succeed(Store.Store, store)),
+						Layer.provide(Layer.mock(TurnAccess, {})),
+					),
+				),
+			)
+			assert.isAtLeast(yield* Ref.get(reads), 2)
+			assert.equal(result.status, "completed")
+		}),
+	)
 	it.effect("a detached result and its one notice commit together", () =>
 		Effect.gen(function* () {
 			const test = yield* setup("tool-result-notice")

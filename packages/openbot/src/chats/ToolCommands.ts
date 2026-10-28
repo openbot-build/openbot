@@ -386,7 +386,9 @@ const make = Effect.gen(function* () {
 	) {
 		const saved = yield* load(fence)
 		const state = yield* store.loadMember(fence)
-		if (Execution.isTerminal(state.record.status)) return saved.record
+		// Another caller can finish after the first read. Return the saved final state.
+		if (Execution.isTerminal(state.record.status))
+			return (yield* load(fence)).record
 		// A late result can reopen cancellation in the same epoch for its final close.
 		const phase =
 			end.status === "cancelled"
