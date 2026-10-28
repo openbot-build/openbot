@@ -94,9 +94,9 @@ export const execute: Run = (_, { call, toolkit }) =>
 							encodedResult: result.encodedResult,
 							isFailure: result.isFailure,
 							preliminary: result.preliminary,
-							...(result.content === undefined
+							...(result.modelOutput === undefined
 								? {}
-								: { content: result.content }),
+								: { modelOutput: result.modelOutput }),
 						}),
 					),
 				),

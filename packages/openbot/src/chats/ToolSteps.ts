@@ -30,7 +30,7 @@ const Output = Schema.Struct({
 	result: Schema.optionalKey(Schema.Json),
 	isFailure: Schema.Boolean,
 	preliminary: Schema.Boolean,
-	content: Schema.optionalKey(Schema.Array(Prompt.ToolResultContentPart)),
+	modelOutput: Schema.optionalKey(Schema.Array(Prompt.ToolModelOutputPart)),
 })
 export const outputCodec = Schema.toCodecJson(Output)
 export const stepId = (item: string, call: string) =>
@@ -176,9 +176,9 @@ const make = Effect.gen(function* () {
 											}),
 									isFailure: part.isFailure,
 									preliminary: part.preliminary,
-									...(part.content === undefined
+									...(part.modelOutput === undefined
 										? {}
-										: { content: part.content }),
+										: { modelOutput: part.modelOutput }),
 								})
 								if (part.preliminary) {
 									yield* store.commit(

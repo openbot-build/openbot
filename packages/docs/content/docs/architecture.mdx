@@ -113,6 +113,10 @@ change in discovery cannot change a saved call. New calls still need current
 rights. Hooks run at named steps and deduplicate their writes on replay. Plugins
 cannot change the execution lifecycle.
 
+Effect 4.0.7 tool results use `modelOutput` for text and files sent to the
+model. OpenBot saves and replays this field. The old patch field `content` is
+not read or moved to the new field.
+
 Execution storage selects calls by ID, step, or latest attempt. Full call
 history stays available for audit. Recovery and retry code use these shared
 queries to choose an attempt.

@@ -273,3 +273,35 @@ it.effect("an incomplete model call cannot start through recovery", () =>
 		if (part.type === "tool-result") assert.isTrue(part.isFailure)
 	}),
 )
+
+it.effect("tool model output reaches the next prompt", () =>
+	Effect.gen(function* () {
+		const modelOutput = [
+			Prompt.makePart("text", { text: "The screen" }),
+			Prompt.makePart("file", { mediaType: "image/png", data: "aW1n" }),
+		]
+		const tools = Toolkit.make(
+			Tool.make("Write", {
+				success: Schema.String,
+				toModelOutput: () => modelOutput,
+			}),
+		)
+		const ready = yield* tools.pipe(
+			Effect.provide(tools.toLayer({ Write: () => Effect.succeed("saved") })),
+		)
+		const parts = yield* ToolStep.execute(position, {
+			call,
+			toolkit: ready,
+		}).pipe(Stream.runCollect)
+		assert.deepStrictEqual(parts, [{ ...output, modelOutput }])
+		const prompt = Prompt.fromResponseParts(parts)
+		const message = prompt.content[0]
+		assert.isDefined(message)
+		if (message?.role !== "tool")
+			return yield* Effect.die("Expected a tool result")
+		const part = message.content[0]
+		if (part?.type !== "tool-result")
+			return yield* Effect.die("Expected a tool result")
+		assert.deepStrictEqual(part.modelOutput, modelOutput)
+	}),
+)

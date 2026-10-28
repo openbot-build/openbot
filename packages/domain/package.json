@@ -54,11 +54,11 @@
 		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
 	},
 	"peerDependencies": {
-		"effect": "4.0.6"
+		"effect": "4.0.7"
 	},
 	"devDependencies": {
-		"@effect/vitest": "4.0.6",
-		"effect": "4.0.6",
+		"@effect/vitest": "4.0.7",
+		"effect": "4.0.7",
 		"vitest": "5.0.5"
 	},
 	"dependencies": {

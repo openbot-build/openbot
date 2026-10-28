@@ -124,6 +124,10 @@ keinen gespeicherten Aufruf. Neue Aufrufe brauchen aktuelle Rechte. Hooks laufen
 an benannten Schritten und vermeiden doppelte Schreibvorgänge bei Wiederholung.
 Plugins dürfen den Lebenszyklus einer Ausführung nicht ändern.
 
+Tool-Ergebnisse in Effect 4.0.7 nutzen `modelOutput` für Text und Dateien an das
+Modell. OpenBot speichert dieses Feld und nutzt es bei der Wiederholung. Das
+alte Patch-Feld `content` wird nicht gelesen oder in das neue Feld übertragen.
+
 Der Ausführungsspeicher liest Aufrufe nach ID, Schritt oder letztem Versuch. Der
 ganze Verlauf bleibt für Prüfungen verfügbar. Wiederherstellung und Wiederholung
 wählen Versuche mit diesen gemeinsamen Abfragen.

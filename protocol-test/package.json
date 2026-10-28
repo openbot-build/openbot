@@ -10,13 +10,13 @@
 		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
 	},
 	"dependencies": {
-		"@effect/platform-node": "4.0.6",
+		"@effect/platform-node": "4.0.7",
 		"@modelcontextprotocol/ext-apps": "2.0.3",
 		"@openbot-build/protocol": "workspace:*",
-		"effect": "4.0.6"
+		"effect": "4.0.7"
 	},
 	"devDependencies": {
-		"@effect/vitest": "4.0.6",
+		"@effect/vitest": "4.0.7",
 		"@modelcontextprotocol/client": "2.3.1",
 		"vitest": "5.0.5"
 	},

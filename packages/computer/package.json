@@ -16,13 +16,13 @@
 		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
 	},
 	"dependencies": {
-		"@effect/platform-node": "4.0.6",
+		"@effect/platform-node": "4.0.7",
 		"@lydell/node-pty": "1.2.0-beta.18",
 		"@openbot-build/api": "workspace:*",
-		"effect": "4.0.6"
+		"effect": "4.0.7"
 	},
 	"devDependencies": {
-		"@effect/vitest": "4.0.6",
+		"@effect/vitest": "4.0.7",
 		"@types/ws": "8.18.2",
 		"vitest": "5.0.5",
 		"ws": "8.22.0"
