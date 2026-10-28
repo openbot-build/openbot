@@ -713,9 +713,10 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 								}),
 							),
 						)
+						// Expiry starts in the background. NotRequired does not mean it is done.
 						const expired = yield* settle(expiring.id).pipe(
 							Effect.repeat({
-								until: (test) => !cleaning(test),
+								until: (test) => test.cleanup === "Complete",
 								schedule: Schedule.spaced("10 millis"),
 								times: 100,
 							}),
