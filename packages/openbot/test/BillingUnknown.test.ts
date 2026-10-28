@@ -2,15 +2,7 @@ import { Model } from "@openbot-build/core"
 import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
-import {
-	Array as Arr,
-	Clock,
-	Context,
-	Effect,
-	Exit,
-	Layer,
-	Redacted,
-} from "effect"
+import { Clock, Context, Effect, Layer, Redacted } from "effect"
 import { Billing, type Call, type Tokens } from "../src/billing/Billing.ts"
 import * as BillingPostgres from "../src/billing/BillingPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
@@ -71,7 +63,7 @@ const setup = Effect.gen(function* () {
 })
 
 it.live(
-	"unknown usage releases budget room and keeps its estimate",
+	"unknown usage keeps its budget hold across periods",
 	() =>
 		Effect.gen(function* () {
 			const { billing, sql, events } = yield* setup
@@ -88,28 +80,39 @@ it.live(
 			)
 			yield* billing.unknown(first.id)
 			yield* billing.unknown(first.id)
-			assert.equal((yield* events).items[0]?.reservedMicros, 0)
+			assert.equal((yield* events).items[0]?.reservedMicros, 1000)
 			assert.equal((yield* events).items[0]?.estimatedMicros, 1000)
 			assert.equal((yield* events).items[0]?.estimatedTokens, 1000)
 			assert.isNull((yield* events).items[0]?.costMicros)
-			// An old unknown call does not hold room in a later budget period.
+			// A new budget period does not free an unknown call's hold.
 			yield* sql`update openbot_usage_events set occurred_at = 0, started_at = 0 where id = ${first.id}`
 			const competing = yield* Effect.forEach(
 				[0, 1],
 				() =>
 					billing
 						.reserve(call, { source: "other" }, tokens(1000))
-						.pipe(Effect.exit),
+						.pipe(Effect.flip),
 				{ concurrency: 2 },
 			)
-			const accepted = Arr.filter(competing, Exit.isSuccess)
-			assert.equal(accepted.length, 1)
-			assert.equal(Arr.filter(competing, Exit.isFailure).length, 1)
-			const second = accepted[0]!.value
-			yield* billing.record(second.id, tokens(500))
+			for (const denied of competing) {
+				assert.equal(denied._tag, "SpendingBlocked")
+				if (denied._tag === "SpendingBlocked")
+					assert.equal(denied.reason, "budget")
+			}
 			// Late receipts still count, but each call settles only once.
 			yield* billing.record(first.id, tokens(500))
 			yield* billing.record(first.id, tokens(500))
+			assert.equal((yield* events).items[0]?.reservedMicros, 0)
+			const second = yield* billing.reserve(
+				call,
+				{ source: "other" },
+				tokens(500),
+			)
+			const held = yield* billing
+				.reserve(call, { source: "other" }, tokens(1))
+				.pipe(Effect.flip)
+			assert.equal(held._tag, "SpendingBlocked")
+			yield* billing.record(second.id, tokens(500))
 			const summary = yield* billing.summary(
 				call.organizationId,
 				{ from: 0, to: (yield* Clock.currentTimeMillis) + 1 },
@@ -127,7 +130,7 @@ it.live(
 )
 
 it.live(
-	"unknown usage releases platform credits and late receipts charge once",
+	"unknown usage keeps platform credits until a late receipt",
 	() =>
 		Effect.gen(function* () {
 			const { billing, events } = yield* setup
@@ -143,16 +146,11 @@ it.live(
 				tokens(1000),
 			)
 			yield* billing.unknown(first.id)
-			assert.equal((yield* events).items[0]?.reservedMicros, 0)
+			assert.equal((yield* events).items[0]?.reservedMicros, 1000)
 			assert.equal((yield* events).items[0]?.estimatedMicros, 1000)
 			assert.equal(
 				(yield* billing.credits(call.organizationId)).balanceMicros,
 				1000,
-			)
-			const second = yield* billing.reserve(
-				call,
-				{ source: "other" },
-				tokens(1000),
 			)
 			const denied = yield* billing
 				.reserve(call, { source: "other" }, tokens(1))
@@ -160,9 +158,22 @@ it.live(
 			assert.equal(denied._tag, "SpendingBlocked")
 			if (denied._tag === "SpendingBlocked")
 				assert.equal(denied.reason, "credits")
+			yield* billing.record(first.id, tokens(500))
+			yield* billing.record(first.id, tokens(500))
+			assert.equal(
+				(yield* billing.credits(call.organizationId)).balanceMicros,
+				500,
+			)
+			const second = yield* billing.reserve(
+				call,
+				{ source: "other" },
+				tokens(500),
+			)
+			const held = yield* billing
+				.reserve(call, { source: "other" }, tokens(1))
+				.pipe(Effect.flip)
+			assert.equal(held._tag, "SpendingBlocked")
 			yield* billing.record(second.id, tokens(500))
-			yield* billing.record(first.id, tokens(500))
-			yield* billing.record(first.id, tokens(500))
 			assert.equal(
 				(yield* billing.credits(call.organizationId)).balanceMicros,
 				0,
@@ -199,8 +210,69 @@ it.live(
 	{ timeout: 60000 },
 )
 
+for (const limit of ["budget", "credits"] as const) {
+	it.live(
+		`a saved old estimate still holds ${limit}`,
+		() =>
+			Effect.gen(function* () {
+				const { billing, sql, events } = yield* setup
+				if (limit === "budget")
+					yield* billing.createBudget(call.organizationId, {
+						scope: "organization",
+						period: "day",
+						mode: "hard",
+						limitMicros: 1000,
+					})
+				else {
+					yield* billing.setCreditsEnabled(call.organizationId, true)
+					yield* billing.grantCredits(
+						call.organizationId,
+						{ amountMicros: 1000, note: "Test credits" },
+						"root",
+					)
+				}
+				const first = yield* billing.reserve(
+					call,
+					{ source: "other" },
+					tokens(1000),
+				)
+				// The old release rule lost the hold, but kept the estimate.
+				yield* sql`update openbot_usage_events set status = 'unknown', reserved_micros = 0, reservation_known = false, occurred_at = 0, started_at = 0 where id = ${first.id}`
+				assert.equal((yield* events).items[0]?.reservedMicros, 1000)
+				const denied = yield* billing
+					.reserve(call, { source: "other" }, tokens(1))
+					.pipe(Effect.flip)
+				assert.equal(denied._tag, "SpendingBlocked")
+				if (denied._tag === "SpendingBlocked")
+					assert.equal(denied.reason, limit)
+				yield* billing.record(first.id, tokens(500))
+				yield* billing.record(first.id, tokens(500))
+				assert.equal((yield* events).items[0]?.reservedMicros, 0)
+				const next = yield* billing.reserve(
+					call,
+					{ source: "other" },
+					tokens(500),
+				)
+				yield* billing.record(next.id, tokens(500))
+				const summary = yield* billing.summary(
+					call.organizationId,
+					{ from: 0, to: (yield* Clock.currentTimeMillis) + 1 },
+					"source",
+				)
+				assert.equal(summary.total.costMicros, 1000)
+				assert.equal(summary.total.calls, 2)
+				if (limit === "credits")
+					assert.equal(
+						(yield* billing.credits(call.organizationId)).balanceMicros,
+						0,
+					)
+			}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		{ timeout: 60000 },
+	)
+}
+
 it.live(
-	"an old unknown estimate does not block its budget scope",
+	"a lost old estimate blocks only its budget scope",
 	() =>
 		Effect.gen(function* () {
 			const { billing, sql } = yield* setup
@@ -226,20 +298,43 @@ it.live(
 				tokens(500),
 			)
 			// This is the stored state left by the old release rule.
-			yield* sql`update openbot_usage_events set status = 'unknown', reserved_micros = 0, estimated_micros = null, reservation_known = false where id = ${first.id}`
+			yield* sql`update openbot_usage_events set status = 'unknown', reserved_micros = 0, estimated_micros = null, reservation_known = true, price_id = null, occurred_at = 0, started_at = 0 where id = ${first.id}`
 			const bob = yield* billing.reserve(
 				call,
 				{ source: "other", userId: "bob" },
 				tokens(500),
 			)
 			yield* billing.record(bob.id, tokens(500))
+			const otherCall = { ...call, organizationId: "other-org" }
+			yield* sql`insert into openbot_organizations (id, name, status, created_at) values (${otherCall.organizationId}, 'Other tests', 'active', 0)`
+			yield* billing.createBudget(otherCall.organizationId, {
+				scope: "organization",
+				period: "day",
+				mode: "hard",
+				limitMicros: 1000,
+			})
+			const other = yield* billing.reserve(
+				otherCall,
+				{ source: "other" },
+				tokens(1000),
+			)
+			yield* billing.record(other.id, tokens(1000))
+			const missing = yield* billing
+				.reserve(call, { source: "other", userId: "ana" }, tokens(1))
+				.pipe(Effect.flip)
+			assert.equal(missing._tag, "SpendingBlocked")
+			if (missing._tag === "SpendingBlocked") {
+				assert.equal(missing.reason, "budget")
+				assert.equal(missing.budgetId, ana.id)
+			}
+			yield* billing.record(first.id, tokens(500))
+			yield* billing.record(first.id, tokens(500))
 			const next = yield* billing.reserve(
 				call,
 				{ source: "other", userId: "ana" },
 				tokens(500),
 			)
 			yield* billing.record(next.id, tokens(500))
-			yield* billing.record(first.id, tokens(500))
 			const denied = yield* billing
 				.reserve(call, { source: "other", userId: "ana" }, tokens(1))
 				.pipe(Effect.flip)
@@ -251,7 +346,7 @@ it.live(
 )
 
 it.live(
-	"an old unknown estimate does not block platform credits",
+	"a lost old estimate blocks only its platform credits",
 	() =>
 		Effect.gen(function* () {
 			const { billing, sql } = yield* setup
@@ -267,13 +362,38 @@ it.live(
 				tokens(500),
 			)
 			yield* sql`update openbot_usage_events set status = 'unknown', reserved_micros = 0, estimated_micros = null, reservation_known = false where id = ${first.id}`
+			const missing = yield* billing
+				.reserve(call, { source: "other" }, tokens(1))
+				.pipe(Effect.flip)
+			assert.equal(missing._tag, "SpendingBlocked")
+			if (missing._tag === "SpendingBlocked")
+				assert.equal(missing.reason, "credits")
+			const otherCall = { ...call, organizationId: "other-org" }
+			yield* sql`insert into openbot_organizations (id, name, status, created_at) values (${otherCall.organizationId}, 'Other tests', 'active', 0)`
+			yield* billing.setCreditsEnabled(otherCall.organizationId, true)
+			yield* billing.grantCredits(
+				otherCall.organizationId,
+				{ amountMicros: 1000, note: "Test credits" },
+				"root",
+			)
+			const other = yield* billing.reserve(
+				otherCall,
+				{ source: "other" },
+				tokens(1000),
+			)
+			yield* billing.record(other.id, tokens(1000))
+			assert.equal(
+				(yield* billing.credits(call.organizationId)).balanceMicros,
+				1000,
+			)
+			yield* billing.record(first.id, tokens(500))
+			yield* billing.record(first.id, tokens(500))
 			const next = yield* billing.reserve(
 				call,
 				{ source: "other" },
 				tokens(500),
 			)
 			yield* billing.record(next.id, tokens(500))
-			yield* billing.record(first.id, tokens(500))
 			assert.equal(
 				(yield* billing.credits(call.organizationId)).balanceMicros,
 				0,
@@ -283,7 +403,7 @@ it.live(
 )
 
 it.live(
-	"a zero estimate remains known after its hold is released",
+	"a zero estimate stays known when usage is unknown",
 	() =>
 		Effect.gen(function* () {
 			const { billing, sql } = yield* setup

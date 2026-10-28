@@ -58,12 +58,13 @@ Andere Eingaben bekommen eine grobe Größe. Die echten Kosten können höher se
 Der Schätzwert bleibt nach dem Ende in `estimatedMicros` stehen. Das Feld ist
 `null`, wenn ein alter Datensatz seinen Schätzwert nicht mehr hat.
 
-Wenn der Aufruf endet, gibt OpenBot die Reservierung frei. Fehlende Nutzung
-bleibt `unknown` und nimmt kein Guthaben. Ein neuer Besitzer gibt auch
-Reservierungen älterer Versuche frei. Ein später Beleg des Anbieters bucht die
-echten Kosten nur einmal. Die Summe zählt bestätigte `calls`, `pendingCalls` und
-`unknownCalls` getrennt. Eine Host-Aktion ohne Model-Aufruf hat keine
-Model-Nutzung.
+Aufrufe mit `pending` oder `unknown` behalten ihre Reservierungen. Das Ende oder
+Stoppen einer Ausführung und ein neuer Besitzer geben eine unbekannte
+Reservierung nicht frei. Nur ein bestätigter Beleg rechnet die echten Kosten ab
+und gibt die Reservierung frei. Der Beleg kann Kosten von null bestätigen.
+Fehlende Nutzung ist kein solcher Beleg. Ein später Beleg rechnet den Aufruf nur
+einmal ab. Die Summe zählt bestätigte `calls`, `pendingCalls` und `unknownCalls`
+getrennt. Eine Host-Aktion ohne Model-Aufruf hat keine Model-Nutzung.
 
 Fehler bei Modellkosten und Token-Raten speichern die ganze Ursache in einem
 verschlüsselten Fehlerdatensatz. Öffentliche Fehler und normale Logs enthalten
@@ -325,15 +326,23 @@ Jedes Budget hat auch einen `mode`:
 Ein Budget zählt jeden Aufruf mit Preis, auch mit dem eigenen Schlüssel. Vor dem
 Aufruf prüft OpenBot bestätigte Kosten und offene Reservierungen zusammen. Alle
 Knoten teilen diese Prüfung. Der Aufruf stoppt, wenn der Schätzwert nicht passt.
-Offene Reservierungen zählen auch nach dem Beginn eines neuen Tags oder Monats.
-Beendete Aufrufe geben sie frei, auch bei unbekannter Nutzung. Bestätigte Kosten
-zählen in dem Zeitraum, in dem der Beleg gespeichert wird. Die Endkosten können
-höher als der Schätzwert sein. Das Budget garantiert daher nicht, dass die
-Rechnung des Anbieters unter der Grenze bleibt.
+Reservierungen von `pending`- und `unknown`-Aufrufen zählen auch nach dem Beginn
+eines neuen Tags oder Monats. Nur bestätigte Kosten rechnen den Aufruf ab und
+geben die Reservierung frei. Dazu zählt auch ein Beleg mit ausdrücklich null
+Kosten. Derselbe Beleg bucht nie zweimal. Bestätigte Kosten zählen in dem
+Zeitraum, in dem der Beleg gespeichert wird. Die Endkosten können höher als der
+Schätzwert sein. Das Budget garantiert daher nicht, dass die Rechnung des
+Anbieters unter der Grenze bleibt.
 
-Ein alter Aufruf mit unbekannter Nutzung blockiert keine neuen Aufrufe. Sein
-Schätzwert bleibt zur Prüfung gespeichert. Fehlende alte Schätzwerte bleiben
-`null`. Nur ein bestätigter Beleg des Anbieters kann seine Kosten abrechnen.
+Ein alter `unknown`-Aufruf mit gespeichertem `estimatedMicros` zählt weiter als
+reservierter Betrag, auch wenn `reservedMicros` 0 ist. Fehlende alte Schätzwerte
+bleiben `null`. Hat ein alter unbekannter Aufruf keinen Schätzwert und kann er
+Kosten haben, stoppt OpenBot neue Aufrufe unter den passenden harten Budgets,
+bis seine Kosten bestätigt sind. Bei Platform-Aufrufen gilt dies auch für die
+betroffene Guthabengrenze. Ein gespeicherter Schätzwert von null löst diese
+Sperre wegen fehlender Schätzung nicht aus und fügt keine Reservierung hinzu.
+Auch ein bekannter kostenloser alter Aufruf löst diese Sperre nicht aus. Andere
+Budget- und Guthabengrenzen gelten weiter für neue Aufrufe.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -397,17 +406,25 @@ Audit-Log der Platform.
 
 Solange Credits an sind:
 
-- Jeder Aufruf eines Model der Platform nimmt seine Kosten vom Guthaben.
-- Wenn das Guthaben 0 oder weniger ist, schlagen Aufrufe der Models der Platform
-  fehl. Aufrufe mit dem eigenen Schlüssel der Organisation funktionieren weiter.
+- Jeder bestätigte Aufruf eines Model der Platform nimmt seine Kosten vom
+  Guthaben.
+- Ein Aufruf stoppt, wenn nach allen Reservierungen kein Guthaben übrig ist oder
+  sein Schätzwert nicht hineinpasst. Aufrufe mit dem eigenen Schlüssel der
+  Organisation unterliegen nicht den Credits der Platform.
 - OpenBot prüft das Guthaben und reservierte Beträge vor einem Aufruf. Ein
   bestätigter Beleg zieht die echten Kosten vom Guthaben ab und gibt die
   Reservierung frei. Kosten über dem Schätzwert können das Guthaben unter 0
   senken.
-- Ein beendeter Aufruf mit unbekannter Nutzung gibt seine Reservierung frei,
-  ohne Guthaben zu nehmen. Sein Schätzwert bleibt gespeichert. Ein später
-  bestätigter Beleg bucht seine echten Kosten einmal. Das kann das Guthaben
-  unter 0 senken.
+- Aufrufe mit `pending` oder `unknown` behalten ihre Reservierungen. Unbekannte
+  Nutzung senkt das bestätigte Guthaben nicht. Der reservierte Betrag kann aber
+  nicht erneut genutzt werden. Ein später bestätigter Beleg bucht die echten
+  Kosten einmal und gibt die Reservierung frei. Das kann das Guthaben unter 0
+  senken.
+- Ein alter unbekannter Platform-Aufruf ohne Schätzwert und mit möglichen Kosten
+  stoppt neue Platform-Aufrufe, bis seine Kosten bestätigt sind. Ein
+  gespeicherter Schätzwert von null oder ein bekannter kostenloser alter Aufruf
+  löst diese Sperre wegen fehlender Schätzung nicht aus und fügt keine
+  Reservierung hinzu. Andere Guthabengrenzen gelten weiter für neue Aufrufe.
 
 Aufrufe mit dem eigenen Schlüssel der Organisation nehmen nie Credits, auch wenn
 Credits an sind.

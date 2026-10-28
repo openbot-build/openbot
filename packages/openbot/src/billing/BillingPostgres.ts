@@ -9,8 +9,10 @@ import {
 	and,
 	desc,
 	eq,
+	gt,
 	gte,
 	inArray,
+	isNull,
 	lt,
 	lte,
 	or,
@@ -49,6 +51,7 @@ import {
 	BillingStorageError,
 	type Call,
 	costOf,
+	isFreeAt,
 	ratesOf,
 	OrganizationMissing,
 	periodStart,
@@ -133,7 +136,10 @@ const eventView = (row: EventRow) =>
 				row.executionId === null ? null : Execution.Id.make(row.executionId),
 			status,
 			startedAt: iso(row.startedAt ?? row.occurredAt),
-			reservedMicros: row.reservedMicros,
+			reservedMicros:
+				status === "confirmed"
+					? row.reservedMicros
+					: Math.max(row.reservedMicros, row.estimatedMicros ?? 0),
 			estimatedMicros: row.estimatedMicros,
 			estimatedTokens: row.estimatedTokens,
 			occurredAt: iso(row.occurredAt),
@@ -193,6 +199,8 @@ const scopeIdOf = (
 
 const sumOf = <T>(value: T) =>
 	sql<number>`coalesce(sum(${value}), 0)`.mapWith(Number)
+// Old calls may keep their estimate after losing the stored hold.
+const heldMicros = sql<number>`case when ${usageEvents.status} in ('pending', 'unknown') then greatest(${usageEvents.reservedMicros}, coalesce(${usageEvents.estimatedMicros}, 0)) else ${usageEvents.reservedMicros} end`
 const totals = {
 	calls:
 		sql<number>`count(*) FILTER (WHERE ${usageEvents.status} = 'confirmed')`.mapWith(
@@ -313,6 +321,45 @@ export const make = Effect.gen(function* () {
 			),
 		)
 	}
+
+	/** An old call with no saved amount must not make budget room. */
+	const hasUnknownCost = (where: SQL | undefined) =>
+		Effect.gen(function* () {
+			let after: string | undefined
+			while (true) {
+				const rows = yield* db
+					.select({
+						id: usageEvents.id,
+						priceId: usageEvents.priceId,
+						priceSchedule: usageEvents.priceSchedule,
+						startedAt: usageEvents.startedAt,
+						occurredAt: usageEvents.occurredAt,
+					})
+					.from(usageEvents)
+					.where(
+						and(
+							where,
+							inArray(usageEvents.status, ["pending", "unknown"]),
+							isNull(usageEvents.estimatedMicros),
+							eq(usageEvents.reservedMicros, 0),
+							after === undefined ? undefined : gt(usageEvents.id, after),
+						),
+					)
+					.orderBy(usageEvents.id)
+					.limit(100)
+				for (const row of rows) {
+					if (row.priceSchedule === null) {
+						if (row.priceId !== null) return true
+						continue
+					}
+					const schedule = yield* decodeSchedule(row.priceSchedule)
+					if (!isFreeAt(schedule, row.startedAt ?? row.occurredAt)) return true
+				}
+				const last = Arr.last(rows)
+				if (rows.length < 100 || Option.isNone(last)) return false
+				after = last.value.id
+			}
+		})
 
 	const budgetView = (row: BudgetRow, now: number) =>
 		Effect.gen(function* () {
@@ -538,24 +585,24 @@ export const make = Effect.gen(function* () {
 								continue
 							const column = scopeColumn(scope)
 							const start = periodStart(yield* decodePeriod(budget.period), now)
+							const where = and(
+								eq(usageEvents.organizationId, call.organizationId),
+								column === undefined ? undefined : eq(column, budget.scopeId),
+							)
+							// Read missing amounts first, so a late receipt reaches the later sum.
+							const unknown = yield* hasUnknownCost(where)
 							const [sum] = yield* db
 								.select({
 									spent:
-										sql<number>`coalesce(sum(case when ${usageEvents.occurredAt} >= ${start} then ${usageEvents.costMicros} else 0 end + ${usageEvents.reservedMicros}), 0)`.mapWith(
+										sql<number>`coalesce(sum(case when ${usageEvents.occurredAt} >= ${start} then ${usageEvents.costMicros} else 0 end + ${heldMicros}), 0)`.mapWith(
 											Number,
 										),
 								})
 								.from(usageEvents)
-								.where(
-									and(
-										eq(usageEvents.organizationId, call.organizationId),
-										column === undefined
-											? undefined
-											: eq(column, budget.scopeId),
-									),
-								)
+								.where(where)
 							const used = sum?.spent ?? 0
 							if (
+								unknown ||
 								used >= budget.limitMicros ||
 								used + reserved > budget.limitMicros
 							)
@@ -573,25 +620,28 @@ export const make = Effect.gen(function* () {
 									eq(organizationCredits.organizationId, call.organizationId),
 								)
 								.for("update")
-							const [sum] = yield* db
-								.select({ held: sumOf(usageEvents.reservedMicros) })
-								.from(usageEvents)
-								.where(
-									and(
-										eq(usageEvents.organizationId, call.organizationId),
-										eq(usageEvents.providerOwner, "platform"),
-									),
-								)
-							const held = sum?.held ?? 0
-							if (
-								credits?.enabled === true &&
-								(credits.balanceMicros <= held ||
-									credits.balanceMicros < held + reserved)
+							const where = and(
+								eq(usageEvents.organizationId, call.organizationId),
+								eq(usageEvents.providerOwner, "platform"),
 							)
-								return yield* SpendingBlocked.make({
-									reason: "credits",
-									message: "The organization has no credits for this call.",
-								})
+							const unknown =
+								credits?.enabled === true ? yield* hasUnknownCost(where) : false
+							const [sum] = yield* db
+								.select({ held: sumOf(heldMicros) })
+								.from(usageEvents)
+								.where(where)
+							const held = sum?.held ?? 0
+							if (credits?.enabled === true) {
+								if (
+									unknown ||
+									credits.balanceMicros <= held ||
+									credits.balanceMicros < held + reserved
+								)
+									return yield* SpendingBlocked.make({
+										reason: "credits",
+										message: "The organization has no credits for this call.",
+									})
+							}
 						}
 						yield* db.insert(usageEvents).values({
 							id,
@@ -723,7 +773,7 @@ export const make = Effect.gen(function* () {
 			stored(
 				db
 					.update(usageEvents)
-					.set({ status: "unknown", reservedMicros: 0 })
+					.set({ status: "unknown" })
 					.where(
 						and(
 							eq(usageEvents.id, id),
@@ -747,7 +797,7 @@ export const make = Effect.gen(function* () {
 						)
 						yield* db
 							.update(usageEvents)
-							.set({ status: "unknown", reservedMicros: 0 })
+							.set({ status: "unknown" })
 							.where(
 								and(
 									eq(usageEvents.executionId, owner.executionId),

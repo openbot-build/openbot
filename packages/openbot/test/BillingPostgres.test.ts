@@ -114,9 +114,9 @@ it.live(
 			assert.strictEqual(before.items[0]?.status, "unknown")
 			assert.strictEqual(before.items[0]?.costMicros, null)
 			assert.strictEqual(before.items[0]?.inputUncached, null)
-			assert.strictEqual(before.items[0]?.reservedMicros, 0)
+			assert.strictEqual(before.items[0]?.reservedMicros, 1000)
 			assert.strictEqual(before.items[0]?.estimatedMicros, 1000)
-			// A confirmed zero receipt keeps the released call free of charge.
+			// A confirmed zero receipt frees the hold without a charge.
 			const zero = { ...tokens, inputUncached: 0 }
 			yield* billing.record(id, zero)
 			const store = Context.get(services, Store.Store)
@@ -189,7 +189,7 @@ it.live(
 )
 
 it.live(
-	"takeover keeps old estimates and late usage commits with its result",
+	"takeover keeps old holds and late usage commits with its result",
 	() =>
 		Effect.gen(function* () {
 			const database = yield* PostgresTest.start
@@ -265,7 +265,7 @@ it.live(
 			assert.isTrue(yield* billing.releaseExecution(currentCall))
 			assert.deepEqual((yield* state(firstCall.id))[0], {
 				status: "unknown",
-				reserved: 0,
+				reserved: 1000,
 			})
 			assert.deepEqual((yield* state(currentCall.id))[0], {
 				status: "pending",
@@ -310,7 +310,7 @@ it.live(
 			)
 			assert.deepEqual((yield* state(firstCall.id))[0], {
 				status: "unknown",
-				reserved: 0,
+				reserved: 1000,
 			})
 			yield* sql`drop trigger fail_usage on openbot_usage_events`
 			yield* sql`drop function fail_usage()`
@@ -337,12 +337,12 @@ it.live(
 			assert.isTrue(yield* billing.releaseExecution(currentCall))
 			assert.deepEqual((yield* state(currentCall.id))[0], {
 				status: "unknown",
-				reserved: 0,
+				reserved: 1000,
 			})
 			assert.isTrue(yield* billing.releaseExecution(currentCall))
 			assert.deepEqual((yield* state(currentCall.id))[0], {
 				status: "unknown",
-				reserved: 0,
+				reserved: 1000,
 			})
 			assert.deepEqual((yield* state(firstCall.id))[0], {
 				status: "confirmed",
@@ -350,7 +350,7 @@ it.live(
 			})
 			assert.deepEqual((yield* state(endedPending.id))[0], {
 				status: "unknown",
-				reserved: 0,
+				reserved: 1000,
 			})
 			// The ended call can still settle a late receipt once.
 			yield* billing.record(currentCall.id, tokens)

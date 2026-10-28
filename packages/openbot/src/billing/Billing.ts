@@ -129,6 +129,35 @@ const holds = (
 				(local.minute < end && on(local.day - 1))
 }
 
+/** The tiers in the first period that holds the start of the call. */
+const tiersAt = (schedule: BillingApi.PriceSchedule, startedAt: number) => {
+	const local = localTime(startedAt, schedule.timeZone)
+	return pipe(
+		Arr.findFirst(schedule.periods, (period) =>
+			Arr.some(period.windows, (window) => holds(window, local)),
+		),
+		Option.match({
+			onNone: () => schedule.tiers,
+			onSome: (period) => period.tiers,
+		}),
+	)
+}
+
+/** No token has a cost in any tier at this time. */
+export const isFreeAt = (
+	schedule: BillingApi.PriceSchedule,
+	startedAt: number,
+): boolean =>
+	Arr.every(
+		tiersAt(schedule, startedAt),
+		(rates) =>
+			rates.inputUncached === 0 &&
+			rates.inputCacheRead === 0 &&
+			rates.inputCacheWrite === 0 &&
+			rates.output === 0 &&
+			(rates.outputReasoning ?? rates.output) === 0,
+	)
+
 /**
  * The rates of one call. The first period with a window that holds the start of
  * the call gives the tiers. Then the first tier that the input tokens fit gives the rates.
@@ -138,16 +167,7 @@ export const ratesOf = (
 	tokens: Tokens,
 	startedAt: number,
 ): BillingApi.Rates => {
-	const local = localTime(startedAt, schedule.timeZone)
-	const tiers = pipe(
-		Arr.findFirst(schedule.periods, (period) =>
-			Arr.some(period.windows, (window) => holds(window, local)),
-		),
-		Option.match({
-			onNone: () => schedule.tiers,
-			onSome: (period) => period.tiers,
-		}),
-	)
+	const tiers = tiersAt(schedule, startedAt)
 	const input =
 		tokens.inputUncached + tokens.inputCacheRead + tokens.inputCacheWrite
 	// The contract makes the last tier open, so a tier always fits.
@@ -231,11 +251,11 @@ export class Billing extends Context.Service<
 			id: Execution.CallId,
 			tokens: Tokens,
 		) => Effect.Effect<void, BillingStorageError>
-		/** The provider did not confirm usage. Release the hold and keep the estimate. */
+		/** The provider did not confirm usage. Keep the hold until a receipt arrives. */
 		readonly unknown: (
 			id: Execution.CallId,
 		) => Effect.Effect<void, BillingStorageError>
-		/** Release old or ended attempts. Keep unknown usage. Reject a stale owner. */
+		/** Mark old or ended attempts unknown. Keep their holds. Reject a stale owner. */
 		readonly releaseExecution: (
 			owner: ExecutionOwner,
 		) => Effect.Effect<boolean, BillingStorageError>

@@ -56,11 +56,12 @@ get a rough size. The actual cost can be higher. The saved estimate stays in
 `estimatedMicros` after the call ends. This field is `null` when an old record
 no longer has its estimate.
 
-When the call ends, OpenBot releases its hold. Missing usage stays `unknown` and
-does not take credits. A new owner also releases holds from older attempts. A
-late provider receipt records the actual cost once. The summary counts confirmed
-`calls`, `pendingCalls`, and `unknownCalls` apart. A host action with no model
-call has no model usage.
+Calls with `pending` or `unknown` usage keep their holds. Ending or stopping an
+execution, or changing its owner, does not release an unknown hold. Only a
+confirmed receipt settles the actual cost and releases the hold. The receipt may
+confirm zero cost; missing usage cannot. A late receipt settles the call once.
+The summary counts confirmed `calls`, `pendingCalls`, and `unknownCalls` apart.
+A host action with no model call has no model usage.
 
 Model billing and token rate errors keep their full cause in a sealed error
 record. Public errors and ordinary logs carry a safe category and an error ID.
@@ -313,15 +314,22 @@ Each budget also has a `mode`:
 
 A budget counts every priced call, also calls with the organization's own key.
 Before a call, OpenBot checks confirmed spend and open reservations together.
-All nodes share this check. A call stops when its estimate does not fit. Active
-holds still count after a new day or month starts. Ended calls release their
-holds, also when usage is unknown. Confirmed costs count in the period when the
-receipt is recorded. The final cost can exceed the estimate, so a budget is not
-a promise that the provider's final charge will stay below its limit.
+All nodes share this check. A call stops when its estimate does not fit. Holds
+for `pending` and `unknown` calls still count after a new day or month starts.
+Only a confirmed cost, including an explicit zero-cost receipt, settles the call
+and releases the hold. The same receipt never adds a charge twice. Confirmed
+costs count in the period when the receipt is recorded. The final cost can
+exceed the estimate, so a budget is not a promise that the provider's final
+charge will stay below its limit.
 
-An old unknown call does not block new calls. Its saved estimate remains for
-review. Missing old estimates stay `null`. Only a confirmed provider receipt can
-settle its cost.
+An old `unknown` call with a saved `estimatedMicros` still counts as held money,
+even if `reservedMicros` is 0. Missing old estimates stay `null`. If an old
+unknown call has no estimate and may have a cost, OpenBot stops new calls under
+the hard budgets that cover it until its cost is confirmed. For platform calls,
+this also applies to the affected credit limit. A saved zero estimate does not
+cause this missing-estimate block or add a hold. An old call known to be free
+does not cause this block either. Other budget and credit limits still apply to
+new calls.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -385,15 +393,22 @@ audit log.
 
 While credits are on:
 
-- Each call to a model of the platform takes its cost from the balance.
-- When the balance is 0 or less, calls to the models of the platform fail. Calls
-  with the organization's own key still work.
+- Each confirmed call to a model of the platform takes its cost from the
+  balance.
+- A call stops when no balance remains after all holds, or its estimate does not
+  fit. Calls with the organization's own key are not subject to platform
+  credits.
 - OpenBot checks the balance and held amounts before a call. A confirmed receipt
   takes the actual cost from the balance and releases its hold. A cost above the
   estimate can take the balance below 0.
-- An ended call with unknown usage releases its hold without taking credits. Its
-  estimate stays in the record. A late confirmed receipt takes its actual cost
-  once, which can take the balance below 0.
+- Calls with `pending` or `unknown` usage keep their holds. Unknown usage does
+  not reduce the confirmed balance, but the held credits cannot be used again. A
+  late confirmed receipt takes the actual cost once and releases the hold. This
+  can take the balance below 0.
+- An old unknown platform call with no estimate and a possible cost stops new
+  platform calls until its cost is confirmed. A saved zero estimate or an old
+  call known to be free does not cause this missing-estimate block or add a
+  hold. Other credit limits still apply to new calls.
 
 Calls with the organization's own key never take credits, also when credits are
 on.

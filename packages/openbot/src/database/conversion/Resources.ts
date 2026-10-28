@@ -100,7 +100,7 @@ export const run = Effect.gen(function* () {
 					Effect.gen(function* () {
 						if (row.charged || row.cost_micros !== 0n)
 							return yield* fail("A pending model call already has a charge.")
-						yield* sql`update openbot_usage_events set status = 'unknown', estimated_micros = coalesce(estimated_micros, reserved_micros), reserved_micros = 0 where id = ${row.key}`
+						yield* sql`update openbot_usage_events set status = 'unknown', estimated_micros = coalesce(estimated_micros, case when reservation_known or reserved_micros > 0 then reserved_micros end), reserved_micros = greatest(reserved_micros, coalesce(estimated_micros, 0)) where id = ${row.key}`
 						yield* progress.record("usage-hold", row.key, "converted", {
 							status: "unknown",
 							reason: "OldCallEnded",
@@ -491,6 +491,6 @@ export const verify = Effect.gen(function* () {
 	)
 	yield* reference(
 		"usage-holds",
-		sql`select count(*)::float8 as count from openbot_usage_events where status not in ('confirmed', 'unknown') or reserved_micros <> 0 or (status = 'unknown' and (charged or cost_micros <> 0))`,
+		sql`select count(*)::float8 as count from openbot_usage_events where status not in ('confirmed', 'unknown') or reserved_micros < 0 or (status = 'confirmed' and reserved_micros <> 0) or (status = 'unknown' and (charged or cost_micros <> 0))`,
 	)
 })

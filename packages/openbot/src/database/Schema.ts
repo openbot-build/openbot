@@ -1347,7 +1347,7 @@ export const channelDeliveries = table(
 )
 
 /**
- * One row for each model call. Only pending calls hold budget room.
+ * One row for each model call. Pending and unknown calls hold budget room.
  * Token counts and the cost are copied at the time of the call, so a later
  * price change does not change old rows. Money is in micro-USD (one millionth of a US dollar).
  */
@@ -1386,7 +1386,7 @@ export const usageEvents = table(
 		inputCacheWrite: bigint("input_cache_write", { mode: "number" }).notNull(),
 		outputText: bigint("output_text", { mode: "number" }).notNull(),
 		outputReasoning: bigint("output_reasoning", { mode: "number" }).notNull(),
-		/** Null when the model had no price. Then the cost is 0. */
+		/** The price ID, when it is known. The saved schedule sets the cost. */
 		priceId: text("price_id"),
 		/** The price used by the reservation. It remains when the provider is removed. */
 		priceSchedule: text("price_schedule"),

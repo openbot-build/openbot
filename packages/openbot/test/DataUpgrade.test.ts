@@ -109,11 +109,8 @@ it.layer(database(), { excludeTestServices: true })((it) => {
 					created_at: 1,
 					updated_at: 1,
 				})}`
-				yield* sql`insert into openbot_usage_events ${sql.insert({
-					id: "usage",
+				const usage = {
 					status: "pending",
-					reservation_known: true,
-					reserved_micros: 400,
 					estimated_tokens: 20,
 					organization_id: "org",
 					occurred_at: 1,
@@ -129,6 +126,20 @@ it.layer(database(), { excludeTestServices: true })((it) => {
 					output_reasoning: 0,
 					cost_micros: 0,
 					charged: false,
+				}
+				yield* sql`insert into openbot_usage_events ${sql.insert({
+					...usage,
+					id: "usage",
+					reservation_known: true,
+					reserved_micros: 400,
+				})}`
+				// This old call has no saved amount.
+				yield* sql`insert into openbot_usage_events ${sql.insert({
+					...usage,
+					id: "usage-lost",
+					status: "unknown",
+					reservation_known: false,
+					reserved_micros: 0,
 				})}`
 				yield* Migrations.initialize
 				yield* Progress.withMaintenance(Resources.run)
@@ -151,9 +162,19 @@ it.layer(database(), { excludeTestServices: true })((it) => {
 				}>`select status, reserved_micros, estimated_micros, charged from openbot_usage_events where id = 'usage'`
 				assert.deepStrictEqual(call, {
 					status: "unknown",
-					reserved_micros: 0n,
+					reserved_micros: 400n,
 					estimated_micros: 400n,
 					charged: false,
+				})
+				const [lost] = yield* sql<{
+					status: string
+					reserved_micros: bigint
+					estimated_micros: bigint | null
+				}>`select status, reserved_micros, estimated_micros from openbot_usage_events where id = 'usage-lost'`
+				assert.deepStrictEqual(lost, {
+					status: "unknown",
+					reserved_micros: 0n,
+					estimated_micros: null,
 				})
 				const [count] = yield* sql<{
 					count: number
