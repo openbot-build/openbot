@@ -33,6 +33,7 @@ const Answer = Schema.Struct({ value: Schema.Json, usage: Response.Usage })
 /** Memory uses the same saved model calls and confirmed usage as a Turn. */
 const make = Effect.gen(function* () {
 	const registry = yield* ModelRegistry
+
 	const models = yield* ModelCalls.make
 	const store = yield* Store
 	const calls = yield* Calls
@@ -111,6 +112,9 @@ const make = Effect.gen(function* () {
 				source: "bot_memory",
 				botId: memoryBotId(home),
 				userId: saved.identity.actor.userId,
+				...(saved.identity.actor.tokenId === undefined
+					? {}
+					: { tokenId: saved.identity.actor.tokenId }),
 			}),
 		)
 		const input = yield* Schema.encodeEffect(requestCodec)(request)

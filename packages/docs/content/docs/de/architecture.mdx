@@ -11,6 +11,12 @@ Diese Seite beschreibt das gemeinsame Ausführungsdesign. Bestehende Daten werde
 in einem Wartungsfenster mit geprüfter Migration umgewandelt. Der letzte
 Abschnitt verweist auf Funktions- und Freigabeprüfungen.
 
+ChatGPT nutzt einen normalen Modellanbieter mit OAuth-Zugangsdaten. OAuth ist
+die Freigabe eines Kontos im Browser. Die verschlüsselten Tokens gehören zum
+Anbieter. Alle Sprachmodellaufrufe nutzen `ModelRegistry`, auch geplante Arbeit,
+Regeln und Bot-Gedächtnis. Der API-Aufrufer empfängt die lokale Browser-Rückgabe
+und sendet sie an die Anbieter-API.
+
 ## Umfang
 
 OpenBot bleibt headless und API first. Bots, Chats, Werkzeuge, Delegation,

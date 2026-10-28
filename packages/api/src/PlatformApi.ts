@@ -1,3 +1,4 @@
+import * as ProviderOAuth from "@openbot-build/domain/ProviderOAuth"
 import { Model as CoreModel, Provider } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
@@ -71,6 +72,45 @@ const ModelParams = { modelId: CoreModel.Id }
 /** The settings of the whole deployment. Only platform admins can use it. */
 export class PlatformApi extends HttpApiGroup.make("platform")
 	.add(
+		HttpApiEndpoint.post(
+			"startPlatformProviderAuthorization",
+			"/v1/platform/model_providers/:providerId/oauth/authorizations",
+			{
+				params: ProviderParams,
+				payload: ProviderOAuth.StartProviderOAuthAuthorizationRequest,
+				success: ProviderOAuth.ProviderOAuthAuthorization,
+				error: [...errors, ...ModelProviderErrors],
+			},
+		),
+		HttpApiEndpoint.post(
+			"completePlatformProviderAuthorization",
+			"/v1/platform/model_providers/:providerId/oauth/authorizations/:authorizationId/complete",
+			{
+				params: { ...ProviderParams, authorizationId: Schema.NonEmptyString },
+				payload: ProviderOAuth.CompleteProviderOAuthAuthorizationRequest,
+				success: ModelProvider,
+				error: [...errors, ...ModelProviderErrors],
+			},
+		),
+		HttpApiEndpoint.delete(
+			"disconnectPlatformProviderOAuth",
+			"/v1/platform/model_providers/:providerId/oauth",
+			{
+				params: ProviderParams,
+				success: ProviderOAuth.ProviderOAuthDisconnect,
+				error: [...errors, ...ModelProviderErrors],
+			},
+		),
+		HttpApiEndpoint.get(
+			"getPlatformProviderAvailableModels",
+			"/v1/platform/model_providers/:providerId/available_models",
+			{
+				params: ProviderParams,
+				success: ProviderOAuth.ProviderOAuthModels,
+				error: [...errors, ...ModelProviderErrors],
+			},
+		),
+
 		HttpApiEndpoint.get("getPlatformSettings", "/v1/platform/settings", {
 			success: PlatformSettings,
 			error: [...errors, ...SettingsErrors],

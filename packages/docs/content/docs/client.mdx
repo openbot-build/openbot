@@ -145,6 +145,60 @@ only where you must send or show the secret. JSON still sends these fields as
 strings. This covers provider keys, Vault values, SSO secrets, invitation
 secrets, tokens, webhook secrets and Computer pairing secrets.
 
+## Connect a ChatGPT account
+
+Use the `modelProviders` group for a `chatgpt` provider. `providerId` is its
+normal `prov_*` ID. Start a local listener at
+`http://127.0.0.1:<port>/auth/callback` before the call. Use its address as
+`redirectUri`.
+
+```ts
+const start = Effect.gen(function* () {
+	const provider = yield* client.api.modelProviders.getModelProvider({
+		params: { providerId },
+	})
+	const authorization =
+		yield* client.api.modelProviders.startProviderAuthorization({
+			params: { providerId },
+			payload: { redirectUri, expectedVersion: provider.version },
+		})
+	return authorization
+})
+```
+
+Open `authorization.url` in the browser. Send the full `callbackUrl` received by
+the listener.
+
+```ts
+const finish = Effect.gen(function* () {
+	const connected =
+		yield* client.api.modelProviders.completeProviderAuthorization({
+			params: { providerId, authorizationId: authorization.id },
+			payload: { callbackUrl },
+		})
+	const available = yield* client.api.modelProviders.getProviderAvailableModels(
+		{
+			params: { providerId },
+		},
+	)
+	return { connected, available }
+})
+
+const disconnect = client.api.modelProviders.disconnectProviderOAuth({
+	params: { providerId },
+})
+```
+
+These calls use normal provider rights, with an API key or same-origin session
+cookie. Tokens stay encrypted on the server. Use `client.api.platform` and the
+matching `PlatformProvider` operations for platform providers. `available.items`
+lists upstream models; add and link them through the normal model API.
+Connecting does not change model selections. `ModelProviderAuthorizationInvalid`
+needs a new attempt; `ModelProviderLoginRequired` needs sign-in;
+`ModelProviderOAuthUnavailable` means the call could not complete now. A
+`ModelProviderConflict` needs the latest provider version. See
+[Models](/docs/models#connect-chatgpt).
+
 ## Observe and control executions
 
 A command receipt has `executionId`, `commandKey`, and `sequence`. It confirms

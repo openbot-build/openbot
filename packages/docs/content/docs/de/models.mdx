@@ -4,9 +4,10 @@ description:
   Verbinde OpenBot mit Sprachmodellen, über Models und Model Providers.
 ---
 
-Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
-Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
-[Administrationshandbuch](/de/docs/admin).
+Für Mitglieder und die Organisationsverwaltung. Mitglieder können ihr eigenes
+ChatGPT-Konto verbinden. Anbieter mit API-Schlüsseln brauchen die unten
+genannten Rechte. Nur Plattform-Admins ändern Einstellungen unter
+`/v1/platform`. Beginne mit dem [Administrationshandbuch](/de/docs/admin).
 
 Ein Bot braucht ein Sprachmodell, um zu arbeiten. OpenBot enthält kein Modell.
 Du verbindest eins. OpenBot speichert dafür zwei Arten von Einträgen:
@@ -17,10 +18,14 @@ Du verbindest eins. OpenBot speichert dafür zwei Arten von Einträgen:
   API-Schlüssel. Ein Anbieter **verknüpft** die Models, die er anbietet. Eine
   Verknüpfung kann manche Werte des Model nur für diesen Anbieter ändern.
 
+ChatGPT nutzt einen normalen Modellanbieter. Siehe
+[Mit ChatGPT anmelden](#mit-chatgpt-anmelden). Das Konto gehört zum Anbieter.
+
 Du fügst beide über die API hinzu. OpenBot speichert sie in der Datenbank. So
 nutzt jede Instanz dieselben.
 
-Die Platform oder eine Organization besitzt jedes Model und jeden Anbieter:
+Die Platform oder eine Organization besitzt jeden solchen Model- und
+Anbieter-Eintrag:
 
 | Besitzer     | Wer es hinzufügt                                       | Wer es nutzen kann                                                                                       |
 | ------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
@@ -103,16 +108,17 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 | Feld       | Regeln                                                                                                                                                                                   |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`     | Pflicht. Die API, die der Dienst spricht: `openai`, `anthropic` oder `openai-compat`. Siehe die Tabelle unten.                                                                           |
+| `kind`     | Pflicht. Die API, die der Dienst spricht: `chatgpt`, `openai`, `anthropic` oder `openai-compat`. Siehe die Tabelle unten.                                                                |
 | `name`     | Pflicht. 1 bis 120 Zeichen.                                                                                                                                                              |
 | `endpoint` | Pflicht für `openai-compat`. Optional für die anderen. Eine Basis-URL mit `http` oder `https`, oft mit `/v1` am Ende. Kein Nutzername, kein Passwort, keine Query und kein Teil mit `#`. |
-| `apiKey`   | Pflicht. OpenBot speichert ihn verschlüsselt und schickt ihn nur an den Endpoint.                                                                                                        |
+| `apiKey`   | Pflicht außer bei `chatgpt`. ChatGPT nutzt die Browser-Anmeldung.                                                                                                                        |
 | `models`   | Pflicht. 0 bis 200 Verknüpfungen. Die Reihenfolge ist die Reihenfolge der Liste der Models.                                                                                              |
 
 | `kind`          | API                                                         |
-| --------------- | ----------------------------------------------------------- |
+| --------------- | ----------------------------------------------------------- | ---------- |
 | `openai`        | OpenAI Responses API.                                       |
 | `anthropic`     | Anthropic Messages API.                                     |
+| `chatgpt`       | OpenAI Responses API (OAuth)                                | `language` |
 | `openai-compat` | OpenAI Chat Completions API und Dienste, die sie nachbauen. |
 
 OpenBot verbindet sich nur mit öffentlichen Adressen. Für einen Model-Server in
@@ -176,6 +182,70 @@ Du kannst einen Anbieter nicht entfernen, solange `rulesModel` oder
 [Einstellungen der Organization](/de/docs/organization#einstellungen) ihn nennt.
 OpenBot gibt `409` mit `ModelProviderInUse` zurück. Ändere zuerst die
 Einstellung.
+
+---
+
+## Mit ChatGPT anmelden
+
+Ein Modellanbieter mit `kind: "chatgpt"` nutzt die Anmeldung im Browser statt
+eines API-Schlüssels. Er gehört der Organisation oder der Plattform. Alle
+Arbeiten mit Zugriff auf ihn nutzen dasselbe verbundene Konto.
+Modellverknüpfungen, Rechte, Preise, Budgets und Plattformguthaben gelten wie
+bei anderen Anbietern.
+
+Erstelle ihn mit `POST /v1/organization/model_providers`:
+
+```json
+{ "kind": "chatgpt", "name": "ChatGPT", "models": [] }
+```
+
+Sende weder `apiKey` noch `endpoint`. Bewahre die erhaltene `prov_*`-ID auf. Für
+einen Plattformanbieter nutze `/v1/platform/model_providers` und setze
+`availability`. Es gelten dieselben Schreibrechte wie für API-Schlüssel.
+
+Nutze die Anbieter-API, um die Anmeldung zu starten, die Browser-Rückgabe zu
+senden und das Konto zu trennen. Die Pfade unten beginnen mit
+`/v1/organization/model_providers/:providerId`. Ersetze für die Plattform
+`organization` durch `platform`.
+
+| Methode und Pfad                                       | Zweck                                                                                                    |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `POST /oauth/authorizations`                           | Sende `redirectUri` und `expectedVersion`. Lies `id`, `url` und `expiresAt`.                             |
+| `POST /oauth/authorizations/:authorizationId/complete` | Sende die vollständige `callbackUrl` vom lokalen Listener.                                               |
+| `DELETE /oauth`                                        | Lösche Tokens und versuche, die Sitzung bei OpenAI zu beenden. Anbieter und Modellverknüpfungen bleiben. |
+| `GET /available_models`                                | Lies verfügbare Modelle des Kontos in `items`.                                                           |
+
+Der lokale Listener nutzt `http://127.0.0.1:<port>/auth/callback`. Starte ihn,
+bevor du die Anmelde-URL öffnest. Ein Versuch gilt zehn Minuten. Nur sein
+Absender kann ihn einmal abschließen. Eine Änderung am Anbieter beendet alte
+Versuche. API-Schlüssel und Session-Cookies desselben Origins werden
+unterstützt. Cookie-Schreibzugriffe brauchen den genauen öffentlichen `Origin`.
+Der Server speichert Tokens verschlüsselt und erneuert sie bei Bedarf.
+
+Das Feld `oauth` zeigt `connected`, `loginRequired` und Kontodaten. Es gibt
+keine Tokens zurück. `apiKey` zeigt `set: false` und `hint: null`. Bei
+`revoked: false` sind die lokalen Tokens gelöscht, aber die Abmeldung bei OpenAI
+ist nicht bestätigt. Du kannst die App auch in den ChatGPT-Einstellungen
+trennen.
+
+Die Liste verfügbarer Modelle ändert keine gespeicherten Modelle. Lege Modelle
+über die normale API an und verknüpfe sie mit dem Anbieter. Nutze die gelieferte
+Modell-ID als Upstream-Namen, wenn deine lokale Modell-ID anders ist. Wähle die
+normale Anbieter-ID:
+
+```json
+{ "_tag": "Config.Selection", "provider": "prov_example", "model": "my-model" }
+```
+
+ChatGPT unterstützt Chats, Regeln, Bot-Gedächtnis und geplante Arbeit. Es bietet
+Sprachmodelle und OpenBot-Funktionswerkzeuge, kein Live-Audio. Es nutzt
+[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+und die öffentliche Responses API. Kontolimits gelten weiter. Bei fehlender
+Anmeldung oder erreichtem Limit wechselt die Arbeit nicht zu einem anderen
+Anbieter.
+
+Typisierte Aufrufe stehen unter
+[Client](/de/docs/client#ein-chatgpt-konto-verbinden).
 
 ---
 

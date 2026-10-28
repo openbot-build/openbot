@@ -64,6 +64,7 @@ const make = Effect.gen(function* () {
 	const tools = yield* TurnTools
 	const controls = yield* ToolControls
 	const models = yield* ModelRegistry
+
 	const bots = yield* Bots
 	const live = yield* LiveConnections
 	const crypto = yield* Crypto.Crypto
@@ -134,7 +135,7 @@ const make = Effect.gen(function* () {
 		const organizationId = saved.identity.owner.organizationId
 		const catalog = yield* isLive
 			? models.liveCatalog(organizationId)
-			: models.catalog(organizationId)
+			: models.catalog(saved.identity.actor.organizationId)
 		let selection = record.settings.model
 		if (selection === undefined) {
 			const botId = ChatHost.hostState(view.chat).bot
@@ -189,7 +190,7 @@ const make = Effect.gen(function* () {
 								models.meterLive(organizationId, selected, model),
 							),
 						)
-				: models.resolve(organizationId, selected)
+				: models.resolve(saved.identity.actor.organizationId, selected)
 		const model = features.withFiles(yield* resolve(selection))
 		const limits = yield* features.operationSettings(organizationId)
 		const adapters = yield* ModelSteps.makeExecutors(

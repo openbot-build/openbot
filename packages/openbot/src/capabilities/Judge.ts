@@ -1,5 +1,5 @@
 import { Config } from "@openbot-build/core"
-import { Execution } from "@openbot-build/domain"
+import { Execution, type Caller } from "@openbot-build/domain"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Authorization } from "@openbot-build/domain"
 import {
@@ -226,7 +226,11 @@ const prepare = (input: Input) => {
 	}
 	return { asked, rules }
 }
-const answer = (input: ReturnType<typeof prepare>, model: RulesModel) =>
+const answer = (
+	input: ReturnType<typeof prepare>,
+	model: RulesModel,
+	actor?: Caller,
+) =>
 	RulesModel.$match(model, {
 		Language: ({ model }) =>
 			Schema.encodeEffect(Schema.fromJsonString(JudgeInput))(input.asked).pipe(
@@ -256,7 +260,14 @@ const answer = (input: ReturnType<typeof prepare>, model: RulesModel) =>
 					usage: decisionUsage(response.usage),
 				})),
 			),
-	}).pipe(attribute({ source: "judge", botId: input.asked.bot.id }))
+	}).pipe(
+		attribute({
+			source: "judge",
+			botId: input.asked.bot.id,
+			...(actor === undefined ? {} : { userId: actor.userId }),
+			...(actor?.tokenId === undefined ? {} : { tokenId: actor.tokenId }),
+		}),
+	)
 
 export const make = Effect.gen(function* () {
 	const helper = yield* HelperModel
@@ -310,6 +321,7 @@ export const durable = (
 ) =>
 	Effect.gen(function* () {
 		const registry = yield* ModelRegistry
+
 		const modelCalls = yield* ModelCalls.make
 		const calls = yield* Calls
 		const store = yield* Store
@@ -352,10 +364,14 @@ export const durable = (
 							yield* Check.model(checks, saved.identity, selection)
 						}),
 						send: () =>
-							registry.resolveAny(input.organizationId, selection).pipe(
-								Effect.flatMap((model) => answer(prepared, model)),
-								Effect.timeout("15 seconds"),
-							),
+							registry
+								.resolveAny(saved.identity.actor.organizationId, selection)
+								.pipe(
+									Effect.flatMap((model) =>
+										answer(prepared, model, saved.identity.actor),
+									),
+									Effect.timeout("15 seconds"),
+								),
 					})).result.verdict
 				}).pipe(
 					Effect.catchCause((cause) =>

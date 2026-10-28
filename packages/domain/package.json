@@ -38,6 +38,7 @@
 		"./Organizations": "./dist/Organizations.js",
 		"./PlanApproval": "./dist/PlanApproval.js",
 		"./Platform": "./dist/Platform.js",
+		"./ProviderOAuth": "./dist/ProviderOAuth.js",
 		"./Requests": "./dist/Requests.js",
 		"./Roles": "./dist/Roles.js",
 		"./Secret": "./dist/Secret.js",

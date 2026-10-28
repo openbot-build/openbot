@@ -1,3 +1,6 @@
+import { AiError } from "effect/ai"
+import { ProviderOAuth } from "./ProviderOAuth.ts"
+import * as ChatGptProvider from "../providers/chatgpt/ChatGptProvider.ts"
 import {
 	Config,
 	type Live,
@@ -212,6 +215,7 @@ const decisionLayer = (
 			)
 		case "openai":
 		case "anthropic":
+		case "chatgpt":
 			return Effect.fail(
 				Config.ModelConfigurationError.make({
 					reason: "unsupported-option",
@@ -265,6 +269,7 @@ const modelLayer = (
 					Layer.provide(OpenAiCompatProvider.layerClient(client)),
 				)
 			}
+			case "chatgpt":
 			case "typesafe":
 				return yield* Config.ModelConfigurationError.make({
 					reason: "unsupported-option",
@@ -308,6 +313,7 @@ interface LanguageInput {
 export const make = (options: { readonly builtin?: Builtin } = {}) =>
 	Effect.gen(function* () {
 		const providers = yield* ModelProviders
+		const oauth = yield* ProviderOAuth
 		const models = yield* Models
 		const settings = yield* Settings
 		const report = yield* Report.make
@@ -352,7 +358,6 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 			tag: Context.Key<I, A>,
 			layerOf: (
 				key: Key<Input>,
-				apiKey: ApiKey,
 			) => Effect.Effect<
 				Layer.Layer<I, E, HttpClient.HttpClient>,
 				Config.ModelConfigurationError
@@ -366,10 +371,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				> = yield* RcMap.make({
 					lookup: (key: Key<Input>) =>
 						Effect.gen(function* () {
-							const apiKey = yield* providers
-								.openKey(key.provider)
-								.pipe(keyUnavailable)
-							const layer = yield* layerOf(key, apiKey)
+							const layer = yield* layerOf(key)
 							const context = yield* Layer.build(layer).pipe(
 								Effect.provideService(HttpClient.HttpClient, httpClient),
 								Failures.replace("A model could not start", () =>
@@ -395,13 +397,68 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		/** One built language model for each version of a provider, model and option. */
 		const languageModels = yield* builtModels(
 			LanguageModel.LanguageModel,
-			(key: Key<LanguageInput>, apiKey) =>
-				modelLayer(
-					key.provider,
-					apiKey,
-					key.input.selection,
-					key.input.upstream,
-				).pipe(
+			(key: Key<LanguageInput>) =>
+				Effect.gen(function* (): Effect.fn.Return<
+					Layer.Layer<
+						LanguageModel.LanguageModel,
+						AiError.AiError,
+						HttpClient.HttpClient
+					>,
+					AiError.AiError | Config.ModelConfigurationError
+				> {
+					if (key.provider.kind === "chatgpt")
+						return yield* Effect.succeed(
+							ChatGptProvider.layer(key.input.selection, {
+								upstreamModel: key.input.upstream,
+								onUnauthorized: (token) =>
+									oauth
+										.invalidate(key.provider.id, token)
+										.pipe(
+											Failures.replace(
+												"Could not change the provider sign-in state",
+												() =>
+													AiError.AiError.make({
+														module: "ChatGptProvider",
+														method: "invalidate",
+														reason: AiError.UnknownError.make({
+															description:
+																"Could not change the provider sign-in state.",
+														}),
+													}),
+											),
+										),
+								accessToken: oauth.accessToken(key.provider.id).pipe(
+									Failures.map("Could not read the provider token", (error) =>
+										AiError.AiError.make({
+											module: "ChatGptProvider",
+											method: "accessToken",
+											reason:
+												error._tag === "ModelProviderLoginRequired"
+													? AiError.AuthenticationError.make({
+															kind: "MissingKey",
+															description:
+																"Sign in to ChatGPT for this provider.",
+														})
+													: AiError.UnknownError.make({
+															description: "Could not read the provider token.",
+														}),
+										}),
+									),
+								),
+							}),
+						)
+					return yield* providers.openKey(key.provider).pipe(
+						keyUnavailable,
+						Effect.flatMap((apiKey) =>
+							modelLayer(
+								key.provider,
+								apiKey,
+								key.input.selection,
+								key.input.upstream,
+							),
+						),
+					)
+				}).pipe(
 					// The provider cannot make this model, for example for a bad option.
 					Failures.replaceTag(
 						"AiError",
@@ -417,8 +474,13 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		/** One built decision model for each version of a provider and upstream model. */
 		const decisionModels = yield* builtModels(
 			DecisionModel.DecisionModel,
-			(key: Key<string>, apiKey) =>
-				decisionLayer(key.provider, apiKey, key.input),
+			(key: Key<string>) =>
+				providers.openKey(key.provider).pipe(
+					keyUnavailable,
+					Effect.flatMap((apiKey) =>
+						decisionLayer(key.provider, apiKey, key.input),
+					),
+				),
 		)
 
 		/** The usable providers, and each model that they offer to the organization. */

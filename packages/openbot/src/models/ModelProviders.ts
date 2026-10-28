@@ -1,4 +1,5 @@
 import { Provider } from "@openbot-build/core"
+import type { ProviderOAuthState } from "@openbot-build/domain/ProviderOAuth"
 import type { Models as ModelsModel } from "@openbot-build/domain"
 import {
 	Context,
@@ -39,8 +40,9 @@ export interface Stored {
 	readonly kind: ModelsModel.ProviderKind
 	readonly name: string
 	readonly endpoint: string | null
-	readonly apiKey: string
+	readonly apiKey: string | null
 	readonly apiKeyHint: string | null
+	readonly oauth?: ProviderOAuthState | null
 	/** The links to the models that the provider offers, in order. */
 	readonly models: ReadonlyArray<ModelsModel.ProviderModel>
 	readonly availability: ModelsModel.Availability | null
@@ -143,7 +145,10 @@ export const view = (provider: Stored): ModelsModel.ModelProvider => ({
 	kind: provider.kind,
 	name: provider.name,
 	endpoint: provider.endpoint,
-	apiKey: { set: true, hint: provider.apiKeyHint },
+	apiKey: { set: provider.apiKey !== null, hint: provider.apiKeyHint },
+	...(provider.kind === "chatgpt"
+		? { oauth: provider.oauth ?? { connected: false, loginRequired: false } }
+		: {}),
 	models: provider.models,
 	availability: provider.availability,
 	version: provider.version,

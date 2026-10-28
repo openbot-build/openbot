@@ -138,6 +138,58 @@ const tasks =
 `Redacted.make` 包装新密钥。只有必须发送或显示密钥时，才调用
 `Redacted.value`。JSON 中这些字段仍是字符串。这包括提供商密钥、Vault 值、SSO 密钥、邀请密钥、令牌、Webhook 密钥和 Computer 配对密钥。
 
+## 连接 ChatGPT 账户
+
+通过 `modelProviders` 分组操作 `chatgpt` 提供方。`providerId` 是普通的 `prov_*`
+ID。调用前先启动 `http://127.0.0.1:<port>/auth/callback` 本机监听，把地址作为
+`redirectUri`。
+
+```ts
+const start = Effect.gen(function* () {
+	const provider = yield* client.api.modelProviders.getModelProvider({
+		params: { providerId },
+	})
+	const authorization =
+		yield* client.api.modelProviders.startProviderAuthorization({
+			params: { providerId },
+			payload: { redirectUri, expectedVersion: provider.version },
+		})
+	return authorization
+})
+```
+
+在浏览器打开 `authorization.url`。把监听程序收到的完整地址作为 `callbackUrl`
+发送。
+
+```ts
+const finish = Effect.gen(function* () {
+	const connected =
+		yield* client.api.modelProviders.completeProviderAuthorization({
+			params: { providerId, authorizationId: authorization.id },
+			payload: { callbackUrl },
+		})
+	const available = yield* client.api.modelProviders.getProviderAvailableModels(
+		{
+			params: { providerId },
+		},
+	)
+	return { connected, available }
+})
+
+const disconnect = client.api.modelProviders.disconnectProviderOAuth({
+	params: { providerId },
+})
+```
+
+接口沿用提供方权限，支持 API 密钥和同源 session
+cookie。令牌加密留在服务器。平台提供方使用 `client.api.platform` 中对应的
+`PlatformProvider` 操作。`available.items`
+是上游模型列表；通过普通模型 API 添加并关联它们。连接不会修改模型选择。`ModelProviderAuthorizationInvalid`
+需要重新开始授权，`ModelProviderLoginRequired`
+需要登录，`ModelProviderOAuthUnavailable`
+表示本次调用暂时无法完成。`ModelProviderConflict`
+需要读取最新提供方版本。见[模型](/zh-cn/docs/models#使用-chatgpt-登录)。
+
 ## 观察和控制执行
 
 命令回执包含 `executionId`、`commandKey` 和

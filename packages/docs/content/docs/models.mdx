@@ -3,21 +3,24 @@ title: Models
 description: Connect OpenBot to language models with models and model providers.
 ---
 
-For organization administrators. You need the rights named for each task. Only a
-platform admin can change settings under `/v1/platform`. Start with the
-[administrator manual](/docs/admin).
+For organization administrators who add model providers. You need the rights
+named for each task. Only a platform admin can change settings under
+`/v1/platform`. Start with the [administrator manual](/docs/admin).
 
 A Bot needs a language model to do work. OpenBot does not include a model. You
 connect one. OpenBot keeps two kinds of records for this:
 
 - A **model** describes one model, such as `gpt-5`: its type, its name, its
   options and its limits. A model does not belong to a provider.
-- A **model provider** is a model service and its API key. A provider **links**
-  the models that it offers. A link can change some values of the model for this
-  provider only.
+- A **model provider** is a model service and its access credentials. A provider
+  **links** the models that it offers. A link can change some values of the
+  model for this provider only.
 
-You add both through the API. OpenBot stores them in the database, so every
-instance uses the same ones.
+You can also connect ChatGPT as a model provider. See
+[Connect ChatGPT](#connect-chatgpt). Its account belongs to the provider.
+
+You add both records through the API. OpenBot stores them in the database, so
+every instance uses the same ones.
 
 The platform or an organization owns each model and each provider:
 
@@ -102,16 +105,17 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 | Field      | Rules                                                                                                                                                                   |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`     | Required. The API that the service speaks: `openai`, `anthropic`, `openai-compat` or `typesafe`. See the table below.                                                   |
+| `kind`     | Required. The API that the service speaks: `chatgpt`, `openai`, `anthropic`, `openai-compat` or `typesafe`. See the table below.                                        |
 | `name`     | Required. 1 to 120 characters.                                                                                                                                          |
 | `endpoint` | Required for `openai-compat` and `typesafe`. Optional for the others. An `http` or `https` base URL, often ending in `/v1`. No user name, password, query, or `#` part. |
-| `apiKey`   | Required. OpenBot stores it encrypted and sends it to the endpoint only.                                                                                                |
+| `apiKey`   | Required except for `chatgpt`. ChatGPT uses browser sign-in.                                                                                                            |
 | `models`   | Required. 0 to 200 links. The order is the order of the model list.                                                                                                     |
 
 | `kind`          | API                                                     | Model types it can link   |
 | --------------- | ------------------------------------------------------- | ------------------------- |
 | `openai`        | OpenAI Responses API, and the Realtime API for `live`.  | `language` and `live`     |
 | `anthropic`     | Anthropic Messages API.                                 | `language`                |
+| `chatgpt`       | OpenAI Responses API (OAuth)                            | `language`                |
 | `openai-compat` | OpenAI Chat Completions API, and services that copy it. | `language` and `decision` |
 | `typesafe`      | The decision API of TypeSafe.                           | `decision`                |
 
@@ -177,6 +181,64 @@ builds each model once, and builds it again when its provider changes.
 You cannot remove a provider while `rulesModel` or `botMemoryModel` in the
 [organization settings](/docs/organization#settings) names it. OpenBot returns
 `409` with `ModelProviderInUse`. Change the setting first.
+
+---
+
+## Connect ChatGPT
+
+A `chatgpt` model provider uses browser sign-in in place of an API key. The
+organization or platform owns the provider. All work that may use it uses the
+same connected account. ChatGPT uses the same model links, permissions, prices,
+budgets, and platform credits as other providers.
+
+Create it with `POST /v1/organization/model_providers`:
+
+```json
+{ "kind": "chatgpt", "name": "ChatGPT", "models": [] }
+```
+
+Do not send `apiKey` or `endpoint`. Keep the returned `prov_*` ID. For a
+platform provider, use `/v1/platform/model_providers` and set `availability`.
+You need the same provider write rights as for an API key provider.
+
+Use the provider API to start sign-in, submit the browser callback, and
+disconnect the account. The paths below start with
+`/v1/organization/model_providers/:providerId`. For the platform, replace
+`organization` with `platform`.
+
+| Method and path                                        | Use                                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `POST /oauth/authorizations`                           | Start sign-in with `redirectUri` and `expectedVersion`. Read `id`, `url`, and `expiresAt`. |
+| `POST /oauth/authorizations/:authorizationId/complete` | Send the full `callbackUrl` from the local listener.                                       |
+| `DELETE /oauth`                                        | Clear tokens and try to end the remote session. Keep the provider and model links.         |
+| `GET /available_models`                                | Read the account's upstream models in `items`.                                             |
+
+The local listener uses `http://127.0.0.1:<port>/auth/callback`. Start it before
+opening the authorization URL. A sign-in attempt lasts ten minutes and can be
+completed once, by the user who started it. A provider change ends old attempts.
+API keys and same-origin session cookies work. Cookie writes need the exact
+public `Origin`. The server stores tokens encrypted and renews them as needed.
+
+Read the provider's `oauth` field for `connected`, `loginRequired`, and account
+info. No token comes back. The `apiKey` field has `set: false` and `hint: null`.
+If sign-out returns `revoked: false`, local tokens are gone but remote sign-out
+was not confirmed. You can also disconnect the app in ChatGPT Settings.
+
+The available model list does not change saved models. Add a model and link it
+through the normal provider API. Use the returned model `id` as the upstream
+name when the local model ID differs. Select the normal provider ID:
+
+```json
+{ "_tag": "Config.Selection", "provider": "prov_example", "model": "my-model" }
+```
+
+ChatGPT works in Chats, Rules, Bot memory, and scheduled work. It supports
+language models and OpenBot function tools, not Live audio. It uses
+[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+and the public Responses API. Plan limits still apply. A failed login or a spent
+plan limit does not switch the work to another provider.
+
+See [Client](/docs/client#connect-a-chatgpt-account) for typed calls.
 
 ---
 

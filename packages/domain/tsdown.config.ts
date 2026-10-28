@@ -12,6 +12,7 @@ export default defineConfig({
 		Settings: "src/Settings.ts",
 		Organizations: "src/Organizations.ts",
 		Models: "src/Models.ts",
+		ProviderOAuth: "src/ProviderOAuth.ts",
 		Tokens: "src/Tokens.ts",
 		Sso: "src/Sso.ts",
 		Platform: "src/Platform.ts",

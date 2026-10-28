@@ -1,6 +1,7 @@
 import {
 	pgTable,
 	text,
+	jsonb,
 	integer,
 	primaryKey,
 	index,
@@ -585,7 +586,11 @@ export const modelProviders = table(
 		kind: text().notNull(),
 		name: text().notNull(),
 		endpoint: text(),
-		apiKey: text("api_key").notNull(),
+		apiKey: text("api_key"),
+		oauth:
+			jsonb().$type<
+				import("@openbot-build/domain/ProviderOAuth").ProviderOAuthState
+			>(),
 		apiKeyHint: text("api_key_hint"),
 		availability: text(),
 		version: integer().notNull(),
@@ -593,6 +598,39 @@ export const modelProviders = table(
 		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 	},
 	(t) => [index("openbot_model_providers_owner").on(t.ownerKind, t.ownerId)],
+)
+
+/** Stable host identity for this installation. */
+export const providerOAuthHosts = table("openbot_provider_oauth_hosts", {
+	id: text().primaryKey(),
+	hostId: text("host_id").notNull(),
+})
+
+/** Registration and tokens are sealed with the provider ID. */
+export const providerOAuth = table("openbot_provider_oauth", {
+	providerId: text("provider_id")
+		.primaryKey()
+		.references(() => modelProviders.id, { onDelete: "cascade" }),
+	registration: text().notNull(),
+	credentials: text(),
+})
+
+/** A sign-in result can be used once by its sender. */
+export const providerOAuthAuthorizations = table(
+	"openbot_provider_oauth_authorizations",
+	{
+		id: text().primaryKey(),
+		providerId: text("provider_id")
+			.notNull()
+			.references(() => modelProviders.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		version: integer().notNull(),
+		request: text().notNull(),
+		expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
+	},
+	(t) => [
+		index("openbot_provider_oauth_authorizations_provider").on(t.providerId),
+	],
 )
 
 /**

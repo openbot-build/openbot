@@ -22,6 +22,7 @@ import * as Todos from "../plugins/work/Todos.ts"
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const models = yield* ModelRegistry
+
 	const records = yield* ChatRecords.make
 	const checks = yield* Check.make
 	const openWork = yield* OpenWork

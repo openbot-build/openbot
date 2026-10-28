@@ -1,3 +1,4 @@
+import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import {
@@ -177,6 +178,7 @@ const registryWith = (input: {
 }) =>
 	Layer.effect(ModelRegistry.ModelRegistry, ModelRegistry.make()).pipe(
 		Layer.provide([
+			Layer.mock(ProviderOAuth, {}),
 			ErrorRecordsFixture.layer,
 			Layer.succeed(ModelProviders, {
 				list: () => Effect.die("unused"),

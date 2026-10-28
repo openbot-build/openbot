@@ -23,7 +23,7 @@ const groups = [
 	[
 		"modelProviders",
 		"Model providers",
-		"Add model providers with your own keys, and list the models you can use.",
+		"Add providers with API keys or ChatGPT sign-in, and list the models you can use.",
 	],
 	["sso", "SSO", "Verify email domains and add SSO connections."],
 	[

@@ -54,6 +54,7 @@ const make = Effect.gen(function* () {
 	const inputs = yield* InputCommands
 	const bots = yield* Bots
 	const models = yield* ModelRegistry
+
 	const observation = yield* Observation
 	const definition = yield* CoreStore.define({
 		stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore, ...Todos.stores },
@@ -87,7 +88,7 @@ const make = Effect.gen(function* () {
 				? Option.none()
 				: Option.some(
 						yield* models.catalog(
-							saved.execution.identity.owner.organizationId,
+							saved.execution.identity.actor.organizationId,
 						),
 					)
 			return yield* sql.withTransaction(

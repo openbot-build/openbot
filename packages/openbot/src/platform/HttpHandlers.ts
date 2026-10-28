@@ -1,3 +1,4 @@
+import { ProviderOAuth } from "../models/ProviderOAuth.ts"
 import { Model, Provider } from "@openbot-build/core"
 import { Redacted } from "effect"
 import {
@@ -55,6 +56,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 		const admins = yield* PlatformAdmins
 		const organization = yield* Organization
 		const providers = yield* ModelProviders
+		const oauth = yield* ProviderOAuth
 		const models = yield* Models
 		const audit = yield* AuditLog
 		const billing = yield* Billing
@@ -142,6 +144,62 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 		// Write handlers do not stop when the client goes away, so a change
 		// always gets its audit entry.
 		return handlers
+			.handle("startPlatformProviderAuthorization", ({ params, payload }) =>
+				Effect.gen(function* () {
+					const caller = yield* Account
+					return yield* oauth.start(
+						platformOwner,
+						params.providerId,
+						caller.userId,
+						payload,
+					)
+				}),
+			)
+			.handle(
+				"completePlatformProviderAuthorization",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Account
+						yield* oauth.complete(
+							platformOwner,
+							params.providerId,
+							caller.userId,
+							params.authorizationId,
+							payload,
+						)
+						const updated = yield* findProvider(params.providerId)
+						yield* record(caller, {
+							action: "model_provider.updated",
+							resource: platformKey,
+							details: { providerId: updated.id, name: updated.name },
+						})
+						return view(updated)
+					}),
+				{ uninterruptible: true },
+			)
+			.handle(
+				"disconnectPlatformProviderOAuth",
+				({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Account
+						const result = yield* oauth.disconnect(
+							platformOwner,
+							params.providerId,
+						)
+						const updated = yield* findProvider(params.providerId)
+						yield* record(caller, {
+							action: "model_provider.updated",
+							resource: platformKey,
+							details: { providerId: updated.id, name: updated.name },
+						})
+						return result
+					}),
+				{ uninterruptible: true },
+			)
+			.handle("getPlatformProviderAvailableModels", ({ params }) =>
+				oauth.models(platformOwner, params.providerId),
+			)
+
 			.handle("getPlatformSettings", () => Effect.map(current, Views.platform))
 			.handle(
 				"updatePlatformSettings",
@@ -514,7 +572,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 							providerId: Provider.Id.make(provider.id),
 							organizationIds,
 						})
-						yield* providers.delete(platformOwner, provider.id)
+						yield* provider.kind === "chatgpt"
+							? oauth.remove(platformOwner, provider.id)
+							: providers.delete(platformOwner, provider.id)
 						yield* record(account, {
 							action: "model_provider.deleted",
 							resource: platformKey,

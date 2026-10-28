@@ -1,3 +1,4 @@
+import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, describe, it } from "@effect/vitest"
 import { ModelProvidersApi } from "@openbot-build/api"
@@ -73,6 +74,7 @@ const registryWith = (input: {
 }) =>
 	Layer.effect(ModelRegistry.ModelRegistry, ModelRegistry.make()).pipe(
 		Layer.provide([
+			Layer.mock(ProviderOAuth, {}),
 			ErrorRecordsFixture.layer,
 			Layer.mock(ModelProviders, {
 				available: () => input.providers ?? Effect.succeed([provider]),

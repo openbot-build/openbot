@@ -31,6 +31,7 @@ export const make = Effect.gen(function* () {
 	const crypto = yield* Crypto.Crypto
 	const bots = yield* Bots
 	const models = yield* ModelRegistry
+
 	const checks = yield* Check.make
 	const definition = yield* Store.define({
 		stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore, ...Todos.stores },

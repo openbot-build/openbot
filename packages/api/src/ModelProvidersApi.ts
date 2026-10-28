@@ -1,3 +1,4 @@
+import * as ProviderOAuth from "@openbot-build/domain/ProviderOAuth"
 import { Model as CoreModel, Provider } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
@@ -56,6 +57,11 @@ export {
 } from "@openbot-build/domain/Models"
 
 export const ModelProviderErrors = [
+	ProviderOAuth.ModelProviderLoginRequired.pipe(HttpApiSchema.status(409)),
+	ProviderOAuth.ModelProviderAuthorizationInvalid.pipe(
+		HttpApiSchema.status(400),
+	),
+	ProviderOAuth.ModelProviderOAuthUnavailable.pipe(HttpApiSchema.status(503)),
 	ModelProviderNotFound.pipe(HttpApiSchema.status(404)),
 	ModelProviderConflict.pipe(HttpApiSchema.status(409)),
 	ModelProviderInUse.pipe(HttpApiSchema.status(409)),
@@ -72,6 +78,45 @@ const ModelParams = { modelId: CoreModel.Id }
 
 /** The models and model providers of the organization. API keys go in, but they never come out. */
 export class ModelProvidersApi extends HttpApiGroup.make("modelProviders").add(
+	HttpApiEndpoint.post(
+		"startProviderAuthorization",
+		"/v1/organization/model_providers/:providerId/oauth/authorizations",
+		{
+			params: ProviderParams,
+			payload: ProviderOAuth.StartProviderOAuthAuthorizationRequest,
+			success: ProviderOAuth.ProviderOAuthAuthorization,
+			error: errors,
+		},
+	),
+	HttpApiEndpoint.post(
+		"completeProviderAuthorization",
+		"/v1/organization/model_providers/:providerId/oauth/authorizations/:authorizationId/complete",
+		{
+			params: { ...ProviderParams, authorizationId: Schema.NonEmptyString },
+			payload: ProviderOAuth.CompleteProviderOAuthAuthorizationRequest,
+			success: ModelProvider,
+			error: errors,
+		},
+	),
+	HttpApiEndpoint.delete(
+		"disconnectProviderOAuth",
+		"/v1/organization/model_providers/:providerId/oauth",
+		{
+			params: ProviderParams,
+			success: ProviderOAuth.ProviderOAuthDisconnect,
+			error: errors,
+		},
+	),
+	HttpApiEndpoint.get(
+		"getProviderAvailableModels",
+		"/v1/organization/model_providers/:providerId/available_models",
+		{
+			params: ProviderParams,
+			success: ProviderOAuth.ProviderOAuthModels,
+			error: errors,
+		},
+	),
+
 	HttpApiEndpoint.get("getModelCatalog", "/v1/organization/model_catalog", {
 		success: ModelCatalog,
 		error: errors,
@@ -136,7 +181,7 @@ export class ModelProvidersApi extends HttpApiGroup.make("modelProviders").add(
 		},
 	).annotate(
 		OpenApi.Description,
-		"Adds a model provider with the API key of the organization.",
+		"Adds a model provider. ChatGPT uses sign-in; other kinds need an API key.",
 	),
 	HttpApiEndpoint.patch(
 		"updateModelProvider",

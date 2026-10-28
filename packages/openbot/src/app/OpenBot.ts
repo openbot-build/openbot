@@ -62,6 +62,8 @@ import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
 import * as AuthorizationLayer from "../authorization/Layer.ts"
 import * as RolesPostgres from "../authorization/RolesPostgres.ts"
 import * as ModelRegistry from "../models/ModelRegistry.ts"
+import * as ProviderOAuth from "../models/ProviderOAuth.ts"
+import * as ChatGptOAuth from "../providers/chatgpt/OAuth.ts"
 import * as LiveBackends from "../models/LiveBackends.ts"
 import * as OpenAiRealtime from "../providers/openai/OpenAiRealtime.ts"
 import * as BillingPostgres from "../billing/BillingPostgres.ts"
@@ -237,6 +239,9 @@ const layerModels = (options: Options) =>
 			? {}
 			: { builtin: options.builtinModels },
 	).pipe(
+		Layer.provideMerge(
+			ProviderOAuth.layer.pipe(Layer.provide(ChatGptOAuth.layer)),
+		),
 		Layer.provideMerge(
 			Layer.merge(ModelProvidersPostgres.layer, ModelsPostgres.layer),
 		),

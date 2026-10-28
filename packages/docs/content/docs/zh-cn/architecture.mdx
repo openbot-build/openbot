@@ -7,6 +7,9 @@ description: 持久工作、状态和事件的统一设计。
 
 本页说明统一执行设计。旧数据在维护窗口中通过带校验的迁移完成转换。最后一节链接功能和发布检查。
 
+ChatGPT 使用普通模型提供方，凭证类型为 OAuth。OAuth 通过浏览器授权访问账户。加密令牌归提供方所有。所有语言模型调用都经过
+`ModelRegistry`，包括定时工作、规则判断和 Bot 记忆。API 调用方接收本机浏览器回调，把结果发送给提供方 API。
+
 ## 范围
 
 OpenBot 保持 headless 和 API first。保留 Bot、Chat、工具、委派、审批、记忆、Code

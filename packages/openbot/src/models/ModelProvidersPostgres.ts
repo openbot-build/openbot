@@ -122,6 +122,7 @@ const stored = (
 			endpoint: row.endpoint,
 			apiKey: row.apiKey,
 			apiKeyHint: row.apiKeyHint,
+			oauth: row.oauth,
 			models: yield* Effect.forEach(links, link),
 			availability:
 				row.availability === null
@@ -141,13 +142,19 @@ const checkEndpoint = (
 	kind: ModelsModel.ProviderKind,
 	endpoint: string | null,
 ) =>
-	(kind === "openai-compat" || kind === "typesafe") && endpoint === null
+	kind === "chatgpt" && endpoint !== null
 		? Effect.fail(
 				ModelsModel.ModelProviderInvalid.make({
-					message: `An ${kind} provider needs an endpoint.`,
+					message: "A ChatGPT provider uses the OpenAI public API address.",
 				}),
 			)
-		: Effect.void
+		: (kind === "openai-compat" || kind === "typesafe") && endpoint === null
+			? Effect.fail(
+					ModelsModel.ModelProviderInvalid.make({
+						message: `An ${kind} provider needs an endpoint.`,
+					}),
+				)
+			: Effect.void
 
 /** The model types that each provider kind can serve. */
 const servesType = (
@@ -158,6 +165,7 @@ const servesType = (
 		// OpenAI also serves Live models through its Realtime API.
 		case "openai":
 			return type === "language" || type === "live"
+		case "chatgpt":
 		case "anthropic":
 			return type === "language"
 		case "typesafe":
@@ -350,10 +358,15 @@ export const make = Effect.gen(function* () {
 					yield* checkEndpoint(input.kind, endpoint)
 					const now = yield* Clock.currentTimeMillis
 					const id = yield* newId
-					const apiKey = yield* secrets.seal(
-						Redacted.value(input.apiKey),
-						binding(id),
-					)
+					if ((input.kind === "chatgpt") !== (input.apiKey === undefined))
+						return yield* ModelsModel.ModelProviderInvalid.make({
+							message:
+								"ChatGPT needs browser sign-in. Other providers need an API key.",
+						})
+					const apiKey =
+						input.apiKey === undefined
+							? null
+							: yield* secrets.seal(Redacted.value(input.apiKey), binding(id))
 					const row = {
 						id,
 						...ownerColumns(owner),
@@ -361,7 +374,14 @@ export const make = Effect.gen(function* () {
 						name: Str.trim(input.name),
 						endpoint,
 						apiKey,
-						apiKeyHint: hint(Redacted.value(input.apiKey)),
+						apiKeyHint:
+							input.apiKey === undefined
+								? null
+								: hint(Redacted.value(input.apiKey)),
+						oauth:
+							input.kind === "chatgpt"
+								? { connected: false, loginRequired: false }
+								: null,
 						availability:
 							owner.kind === "platform"
 								? yield* encodeAvailability(input.availability)
@@ -400,6 +420,11 @@ export const make = Effect.gen(function* () {
 								version: row.version,
 							})
 						const kind = yield* providerValue(decodeKind(row.kind))
+						if (kind === "chatgpt" && patch.apiKey !== undefined)
+							return yield* ModelsModel.ModelProviderInvalid.make({
+								message:
+									"A ChatGPT provider uses browser sign-in, not an API key.",
+							})
 						const endpoint =
 							patch.endpoint === undefined ? row.endpoint : patch.endpoint
 						yield* checkEndpoint(kind, endpoint)
@@ -475,12 +500,14 @@ export const make = Effect.gen(function* () {
 					),
 				),
 		openKey: (provider) =>
-			secrets
-				.open(provider.apiKey, binding(provider.id))
-				.pipe(
-					Effect.map(Redacted.make),
-					unavailable("Could not open the key of the model provider"),
-				),
+			provider.apiKey === null
+				? Effect.fail(ModelsModel.ModelProvidersUnavailable.make({}))
+				: secrets
+						.open(provider.apiKey, binding(provider.id))
+						.pipe(
+							Effect.map(Redacted.make),
+							unavailable("Could not open the key of the model provider"),
+						),
 	})
 })
 

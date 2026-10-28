@@ -3,15 +3,17 @@ title: Model
 description: 通过模型和模型提供方，把 OpenBot 连接到语言模型。
 ---
 
-面向组织管理员。每项任务需要对应权限。只有平台管理员可以修改 `/v1/platform`
-下的设置。从[管理员手册](/zh-cn/docs/admin)开始。
+面向添加模型提供方的组织管理员。每项任务需要对应权限。只有平台管理员可以修改
+`/v1/platform` 下的设置。从[管理员手册](/zh-cn/docs/admin)开始。
 
 Bot 需要一个语言模型才能工作。OpenBot 不自带模型。你需要连接一个。OpenBot 为此保存两种记录：
 
 - **Model**（模型）描述一个语言模型，比如
   `gpt-5`：它的名称、选项和限制。模型不属于某个提供方。
 - **Model
-  Provider**（模型提供方）是一个模型服务和它的 API 密钥。提供方会**关联**它提供的模型。关联可以只为这个提供方修改模型的某些值。
+  Provider**（模型提供方）是一个模型服务和它的访问凭证。提供方会**关联**它提供的模型。关联可以只为这个提供方修改模型的某些值。
+
+ChatGPT 也使用普通模型提供方。见[使用 ChatGPT 登录](#使用-chatgpt-登录)。账户绑定到提供方。
 
 两者都通过 API 添加。OpenBot 把它们保存在数据库中，所以每个实例使用的都是同一份。
 
@@ -96,13 +98,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `kind`     | 必填。服务使用的 API：`openai`、`anthropic` 或 `openai-compat`。见下表。                                                           |
 | `name`     | 必填。1 到 120 个字符。                                                                                                            |
 | `endpoint` | 对 `openai-compat` 必填。对其他类型可选。一个 `http` 或 `https` 基础 URL，通常以 `/v1` 结尾。不能带用户名、密码、查询或 `#` 部分。 |
-| `apiKey`   | 必填。OpenBot 加密保存它，并且只把它发送到该端点。                                                                                 |
+| `apiKey`   | 除 `chatgpt` 外必填。ChatGPT 使用浏览器登录。                                                                                      |
 | `models`   | 必填。0 到 200 个关联。顺序就是模型列表的顺序。                                                                                    |
 
 | `kind`          | API                                             |
-| --------------- | ----------------------------------------------- |
+| --------------- | ----------------------------------------------- | ---------- |
 | `openai`        | OpenAI Responses API。                          |
 | `anthropic`     | Anthropic Messages API。                        |
+| `chatgpt`       | OpenAI Responses API (OAuth)                    | `language` |
 | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。 |
 
 OpenBot 只连接公网地址。如果模型服务器在你自己的网络中或你的机器上，运维人员必须把它的主机写进
@@ -156,6 +159,57 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel` 或 `botMemoryModel`
 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和
 `ModelProviderInUse`。请先修改设置。
+
+---
+
+## 使用 ChatGPT 登录
+
+`chatgpt`
+模型提供方通过浏览器登录，不使用 API 密钥。提供方归组织或平台所有。所有有权使用它的工作共用所连接的账户。模型关联、权限、价格、预算和平台点数都按普通提供方处理。
+
+通过 `POST /v1/organization/model_providers` 创建提供方：
+
+```json
+{ "kind": "chatgpt", "name": "ChatGPT", "models": [] }
+```
+
+不要发送 `apiKey` 或 `endpoint`。保存返回的 `prov_*` ID。平台提供方使用
+`/v1/platform/model_providers`，并设置
+`availability`。写入需要与 API 密钥提供方相同的权限。
+
+通过提供方 API 发起登录、提交浏览器回调或断开连接。下列路径以
+`/v1/organization/model_providers/:providerId` 开头。平台接口把 `organization`
+换成 `platform`。
+
+| 方法与路径                                             | 用途                                                                       |
+| ------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `POST /oauth/authorizations`                           | 发送 `redirectUri` 和 `expectedVersion`，读取 `id`、`url` 和 `expiresAt`。 |
+| `POST /oauth/authorizations/:authorizationId/complete` | 发送本机监听程序收到的完整 `callbackUrl`。                                 |
+| `DELETE /oauth`                                        | 清除令牌并尝试结束远端会话，保留提供方和模型关联。                         |
+| `GET /available_models`                                | 通过 `items` 读取账户可用的上游模型。                                      |
+
+本机回调地址是
+`http://127.0.0.1:<port>/auth/callback`。先启动监听，再打开授权地址。登录请求十分钟有效，只能由发起用户完成一次。修改提供方会使旧请求失效。接口支持 API 密钥和同源 session
+cookie；cookie 写请求需要准确的公共 `Origin`。服务器加密保存令牌，并按需刷新。
+
+提供方的 `oauth` 字段返回 `connected`、`loginRequired`
+和账户资料，不返回令牌。`apiKey` 字段为 `set: false`、`hint: null`。退出返回
+`revoked: false`
+时，本地令牌已经清除，但远端退出未获确认。也可以在 ChatGPT 设置中断开应用。
+
+可用模型列表不会修改已存模型。请通过普通 API 添加模型并关联提供方。本地模型 ID 不同时，用列表中的模型
+`id` 作为上游名称。选择模型时使用普通提供方 ID：
+
+```json
+{ "_tag": "Config.Selection", "provider": "prov_example", "model": "my-model" }
+```
+
+ChatGPT 支持聊天、规则判断、Bot 记忆和定时工作，支持语言模型与 OpenBot 函数工具，不支持 Live 音频。它使用
+[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+和公共 Responses
+API。账户额度限制仍然有效。登录失效或额度用尽不会让工作自动切换到其他提供方。
+
+类型客户端示例见[客户端](/zh-cn/docs/client#连接-chatgpt-账户)。
 
 ---
 

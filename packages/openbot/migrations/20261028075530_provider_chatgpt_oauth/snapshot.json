@@ -1,0 +1,578 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "15bcc089-744a-4268-a0b4-40c891dc1054",
+	"prevIds": ["03ab963f-b09a-43b2-9c98-8d31c0414c85"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_provider_oauth"],
+			"writes": [
+				"s|tbl|public.openbot_provider_oauth",
+				"n|tbl|public.openbot_provider_oauth",
+				"e|tbl|public.openbot_provider_oauth",
+				"n|rel|public.openbot_provider_oauth",
+				"n|type|public.openbot_provider_oauth",
+				"n|rel|public.openbot_provider_oauth_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": [
+				"table",
+				"public",
+				"openbot_provider_oauth_authorizations"
+			],
+			"writes": [
+				"s|tbl|public.openbot_provider_oauth_authorizations",
+				"n|tbl|public.openbot_provider_oauth_authorizations",
+				"e|tbl|public.openbot_provider_oauth_authorizations",
+				"n|rel|public.openbot_provider_oauth_authorizations",
+				"n|type|public.openbot_provider_oauth_authorizations",
+				"n|rel|public.openbot_provider_oauth_authorizations_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_provider_oauth_hosts"],
+			"writes": [
+				"s|tbl|public.openbot_provider_oauth_hosts",
+				"n|tbl|public.openbot_provider_oauth_hosts",
+				"e|tbl|public.openbot_provider_oauth_hosts",
+				"n|rel|public.openbot_provider_oauth_hosts",
+				"n|type|public.openbot_provider_oauth_hosts",
+				"n|rel|public.openbot_provider_oauth_hosts_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": [
+				"table",
+				"public",
+				"openbot_model_account_authorizations"
+			],
+			"writes": [
+				"s|tbl|public.openbot_model_account_authorizations",
+				"n|tbl|public.openbot_model_account_authorizations",
+				"e|tbl|public.openbot_model_account_authorizations",
+				"n|rel|public.openbot_model_account_authorizations",
+				"n|type|public.openbot_model_account_authorizations"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_model_account_hosts"],
+			"writes": [
+				"s|tbl|public.openbot_model_account_hosts",
+				"n|tbl|public.openbot_model_account_hosts",
+				"e|tbl|public.openbot_model_account_hosts",
+				"n|rel|public.openbot_model_account_hosts",
+				"n|type|public.openbot_model_account_hosts"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_model_accounts"],
+			"writes": [
+				"s|tbl|public.openbot_model_accounts",
+				"n|tbl|public.openbot_model_accounts",
+				"e|tbl|public.openbot_model_accounts",
+				"n|rel|public.openbot_model_accounts",
+				"n|type|public.openbot_model_accounts"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_providers",
+				"oauth"
+			],
+			"writes": [
+				"s|col|public.openbot_model_providers.oauth",
+				"n|col|public.openbot_model_providers.oauth",
+				"e|col|public.openbot_model_providers.oauth"
+			],
+			"reads": ["n|tbl|public.openbot_model_providers", "n|sch|public"]
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_providers",
+				"api_key"
+			],
+			"writes": ["s|colprop|public.openbot_model_providers.api_key.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_model_providers",
+				"n|sch|public",
+				"n|col|public.openbot_model_providers.api_key"
+			],
+			"sqlHash": "7bf1e0c2089c33c1"
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_provider_oauth_authorizations",
+				"openbot_provider_oauth_authorizations_provider"
+			],
+			"writes": [
+				"s|idx|public.openbot_provider_oauth_authorizations_provider",
+				"n|idx|public.openbot_provider_oauth_authorizations_provider",
+				"e|idx|public.openbot_provider_oauth_authorizations_provider",
+				"n|rel|public.openbot_provider_oauth_authorizations_provider"
+			],
+			"reads": [
+				"n|tbl|public.openbot_provider_oauth_authorizations",
+				"n|sch|public",
+				"n|col|public.openbot_provider_oauth_authorizations.provider_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_provider_oauth"],
+			"writes": [
+				"s|fk|public.openbot_provider_oauth.openbot_provider_oauth_iQxACxrG0HQs_fkey",
+				"n|fk|public.openbot_provider_oauth.openbot_provider_oauth_iQxACxrG0HQs_fkey",
+				"e|fk|public.openbot_provider_oauth.openbot_provider_oauth_iQxACxrG0HQs_fkey",
+				"n|con|public.openbot_provider_oauth.openbot_provider_oauth_iQxACxrG0HQs_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_provider_oauth",
+				"n|sch|public",
+				"n|tbl|public.openbot_model_providers",
+				"n|sch|public",
+				"n|col|public.openbot_provider_oauth.provider_id",
+				"n|col|public.openbot_model_providers.id",
+				"e|uniqueness|public.openbot_model_providers.id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": [
+				"table",
+				"public",
+				"openbot_provider_oauth_authorizations"
+			],
+			"writes": [
+				"s|fk|public.openbot_provider_oauth_authorizations.openbot_provider_oauth_authorizations_O39JQcfcyLzt_fkey",
+				"n|fk|public.openbot_provider_oauth_authorizations.openbot_provider_oauth_authorizations_O39JQcfcyLzt_fkey",
+				"e|fk|public.openbot_provider_oauth_authorizations.openbot_provider_oauth_authorizations_O39JQcfcyLzt_fkey",
+				"n|con|public.openbot_provider_oauth_authorizations.openbot_provider_oauth_authorizations_O39JQcfcyLzt_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_provider_oauth_authorizations",
+				"n|sch|public",
+				"n|tbl|public.openbot_model_providers",
+				"n|sch|public",
+				"n|col|public.openbot_provider_oauth_authorizations.provider_id",
+				"n|col|public.openbot_model_providers.id",
+				"e|uniqueness|public.openbot_model_providers.id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_provider_oauth",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_provider_oauth_authorizations",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_provider_oauth_hosts",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_providers",
+				"name": "oauth",
+				"type": "jsonb",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth",
+				"name": "registration",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth",
+				"name": "credentials",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "request",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "expires_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_hosts",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_hosts",
+				"name": "host_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "openbot_provider_oauth_authorizations_provider",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "provider_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth",
+				"name": "openbot_provider_oauth_iQxACxrG0HQs_fkey",
+				"nameExplicit": false,
+				"columns": ["provider_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_model_providers",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "openbot_provider_oauth_authorizations_O39JQcfcyLzt_fkey",
+				"nameExplicit": false,
+				"columns": ["provider_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_model_providers",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth",
+				"name": "openbot_provider_oauth_pkey",
+				"columns": ["provider_id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_authorizations",
+				"name": "openbot_provider_oauth_authorizations_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_provider_oauth_hosts",
+				"name": "openbot_provider_oauth_hosts_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_model_account_authorizations\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_model_account_hosts\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_model_accounts\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_account_authorizations\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_account_authorizations\",\"organization_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_account_authorizations\",\"user_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_account_authorizations\",\"request\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_account_authorizations\",\"expires_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_account_hosts\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_account_hosts\",\"host_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_accounts\",\"organization_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_accounts\",\"user_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_accounts\",\"registration\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_accounts\",\"credentials\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_accounts\",\"connected_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_model_account_authorizations_member\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_model_accounts\",\"openbot_model_accounts_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_model_account_authorizations\",\"openbot_model_account_authorizations_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_model_account_hosts\",\"openbot_model_account_hosts_pkey\"]"
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_model_providers\",\"api_key\"]",
+			"set": {
+				"notNull": false
+			}
+		}
+	]
+}

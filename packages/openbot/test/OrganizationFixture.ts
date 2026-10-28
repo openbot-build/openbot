@@ -12,6 +12,7 @@ import {
 } from "../src/settings/Documents.ts"
 import { type AppIndexApi, Authorization } from "@openbot-build/api"
 import { PlatformAdmins } from "../src/platform/PlatformAdmins.ts"
+import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
 import { ModelProviders } from "../src/models/ModelProviders.ts"
 import { Models } from "../src/models/Models.ts"
 import { ModelRegistry } from "../src/models/ModelRegistry.ts"
@@ -130,6 +131,7 @@ export const layerAuthorization = AuthorizationLayer.layer.pipe(
  * hand but never call those endpoints. Only the sign-in checks work.
  */
 export const layerUnusedPlatform = Layer.mergeAll(
+	Layer.mock(ProviderOAuth, {}),
 	layerBuiltinRoles,
 	layerDefaultSettings,
 	Layer.succeed(RateLimiter, { hit: () => Effect.void }),

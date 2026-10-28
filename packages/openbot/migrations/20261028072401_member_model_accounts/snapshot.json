@@ -1,0 +1,358 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "03ab963f-b09a-43b2-9c98-8d31c0414c85",
+	"prevIds": ["178ec08f-ee13-4419-8a07-b901a1ee4adf"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": [
+				"table",
+				"public",
+				"openbot_model_account_authorizations"
+			],
+			"writes": [
+				"s|tbl|public.openbot_model_account_authorizations",
+				"n|tbl|public.openbot_model_account_authorizations",
+				"e|tbl|public.openbot_model_account_authorizations",
+				"n|rel|public.openbot_model_account_authorizations",
+				"n|type|public.openbot_model_account_authorizations",
+				"n|rel|public.openbot_model_account_authorizations_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_model_account_hosts"],
+			"writes": [
+				"s|tbl|public.openbot_model_account_hosts",
+				"n|tbl|public.openbot_model_account_hosts",
+				"e|tbl|public.openbot_model_account_hosts",
+				"n|rel|public.openbot_model_account_hosts",
+				"n|type|public.openbot_model_account_hosts",
+				"n|rel|public.openbot_model_account_hosts_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_model_accounts"],
+			"writes": [
+				"s|tbl|public.openbot_model_accounts",
+				"n|tbl|public.openbot_model_accounts",
+				"e|tbl|public.openbot_model_accounts",
+				"n|rel|public.openbot_model_accounts",
+				"n|type|public.openbot_model_accounts",
+				"n|rel|public.openbot_model_accounts_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_model_account_authorizations",
+				"openbot_model_account_authorizations_member"
+			],
+			"writes": [
+				"s|idx|public.openbot_model_account_authorizations_member",
+				"n|idx|public.openbot_model_account_authorizations_member",
+				"e|idx|public.openbot_model_account_authorizations_member",
+				"n|rel|public.openbot_model_account_authorizations_member"
+			],
+			"reads": [
+				"n|tbl|public.openbot_model_account_authorizations",
+				"n|sch|public",
+				"n|col|public.openbot_model_account_authorizations.organization_id",
+				"n|col|public.openbot_model_account_authorizations.user_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_model_account_authorizations",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_model_account_hosts",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_model_accounts",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_authorizations",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_authorizations",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_authorizations",
+				"name": "user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_authorizations",
+				"name": "request",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_authorizations",
+				"name": "expires_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_hosts",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_hosts",
+				"name": "host_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_accounts",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_accounts",
+				"name": "user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_accounts",
+				"name": "registration",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_accounts",
+				"name": "credentials",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_accounts",
+				"name": "connected_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_authorizations",
+				"name": "openbot_model_account_authorizations_member",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "user_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_accounts",
+				"name": "openbot_model_accounts_pkey",
+				"columns": ["organization_id", "user_id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_authorizations",
+				"name": "openbot_model_account_authorizations_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_model_account_hosts",
+				"name": "openbot_model_account_hosts_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

@@ -149,6 +149,60 @@ Nutzen Sie `Redacted.value` nur, wenn Sie den Wert senden oder zeigen müssen. I
 JSON bleiben diese Felder Strings. Das gilt für Anbieterschlüssel, Vault-Werte,
 SSO-Geheimnisse, Einladungen, Tokens, Webhooks und Computer-Kopplungen.
 
+## Ein ChatGPT-Konto verbinden
+
+Nutze die Gruppe `modelProviders` für einen `chatgpt`-Anbieter. `providerId` ist
+seine normale `prov_*`-ID. Starte vorher einen lokalen Listener unter
+`http://127.0.0.1:<port>/auth/callback`. Seine Adresse ist `redirectUri`.
+
+```ts
+const start = Effect.gen(function* () {
+	const provider = yield* client.api.modelProviders.getModelProvider({
+		params: { providerId },
+	})
+	const authorization =
+		yield* client.api.modelProviders.startProviderAuthorization({
+			params: { providerId },
+			payload: { redirectUri, expectedVersion: provider.version },
+		})
+	return authorization
+})
+```
+
+Öffne `authorization.url` im Browser. Sende die vollständige `callbackUrl`, die
+dein Listener erhält.
+
+```ts
+const finish = Effect.gen(function* () {
+	const connected =
+		yield* client.api.modelProviders.completeProviderAuthorization({
+			params: { providerId, authorizationId: authorization.id },
+			payload: { callbackUrl },
+		})
+	const available = yield* client.api.modelProviders.getProviderAvailableModels(
+		{
+			params: { providerId },
+		},
+	)
+	return { connected, available }
+})
+
+const disconnect = client.api.modelProviders.disconnectProviderOAuth({
+	params: { providerId },
+})
+```
+
+Es gelten normale Anbieterrechte mit API-Schlüssel oder Session-Cookie desselben
+Origins. Tokens bleiben verschlüsselt auf dem Server. Plattformanbieter nutzen
+die entsprechenden `PlatformProvider`-Operationen unter `client.api.platform`.
+`available.items` enthält Upstream-Modelle. Lege sie über die normale Modell-API
+an und verknüpfe sie. Die Anmeldung ändert keine Modellauswahl.
+`ModelProviderAuthorizationInvalid` braucht einen neuen Versuch,
+`ModelProviderLoginRequired` eine Anmeldung. `ModelProviderOAuthUnavailable`
+bedeutet, dass der Aufruf gerade nicht möglich ist. Bei `ModelProviderConflict`
+lies die aktuelle Anbieterversion. Siehe
+[Models](/de/docs/models#mit-chatgpt-anmelden).
+
 ## Ausführungen beobachten und steuern
 
 Ein Befehlsbeleg enthält `executionId`, `commandKey` und `sequence`. Er

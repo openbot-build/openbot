@@ -10,6 +10,12 @@ This page describes the shared execution design. Existing data moves through the
 checked migration during a maintenance window. The last section links the
 feature and release checks.
 
+ChatGPT uses a normal model provider with OAuth credentials. OAuth is browser
+approval to use an account. The provider owns the encrypted tokens. All language
+model calls use `ModelRegistry`, including scheduled work, Rules, and Bot
+memory. The API caller receives the local browser callback and sends that result
+to the provider API.
+
 ## Scope
 
 OpenBot stays headless and API first. It keeps Bots, Chats, tools, delegation,

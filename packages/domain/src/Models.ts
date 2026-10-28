@@ -2,11 +2,13 @@ import { Model as CoreModel, Provider } from "@openbot-build/core"
 import { Array as Arr, pipe, Schema } from "effect"
 import { ModelPrice } from "./Billing.ts"
 import { SecretInput, SecretState } from "./Secret.ts"
+import { ProviderOAuthState } from "./ProviderOAuth.ts"
 import { Version } from "./Version.ts"
 
 /** The API that a provider speaks. */
 export const ProviderKind = Schema.Literals([
 	"openai",
+	"chatgpt",
 	"anthropic",
 	"openai-compat",
 	/** The decision API of TypeSafe, as Jev uses it. It links only decision models. */
@@ -158,6 +160,7 @@ export const ModelProvider = Schema.Struct({
 	/** Null means the default address of the provider kind. */
 	endpoint: Schema.NullOr(Schema.String),
 	apiKey: SecretState,
+	oauth: Schema.optionalKey(ProviderOAuthState),
 	models: Schema.Array(ProviderModel),
 	/** Only providers of the platform have it. */
 	availability: Schema.NullOr(Availability),
@@ -171,14 +174,31 @@ const ProviderName = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(120),
 )
-export const CreateModelProviderRequest = Schema.Struct({
+const CreateProviderFields = {
 	kind: ProviderKind,
 	name: ProviderName,
 	/** An `openai-compat` or `typesafe` provider needs it. */
 	endpoint: Schema.optionalKey(Endpoint),
-	apiKey: SecretInput,
+	apiKey: Schema.optionalKey(SecretInput),
 	models: ProviderModels,
-})
+}
+const checkProviderCredentials = Schema.makeFilter(
+	(input: {
+		readonly kind: ProviderKind
+		readonly apiKey?: unknown
+		readonly endpoint?: string
+	}) =>
+		input.kind === "chatgpt"
+			? input.apiKey !== undefined || input.endpoint !== undefined
+				? "A ChatGPT provider does not take an API key or endpoint."
+				: undefined
+			: input.apiKey === undefined
+				? "An API key is required."
+				: undefined,
+)
+export const CreateModelProviderRequest = Schema.Struct(
+	CreateProviderFields,
+).check(checkProviderCredentials)
 export type CreateModelProviderRequest = typeof CreateModelProviderRequest.Type
 export const UpdateModelProviderRequest = Schema.Struct({
 	expectedVersion: Version,
@@ -190,9 +210,9 @@ export const UpdateModelProviderRequest = Schema.Struct({
 })
 export type UpdateModelProviderRequest = typeof UpdateModelProviderRequest.Type
 export const CreatePlatformModelProviderRequest = Schema.Struct({
-	...CreateModelProviderRequest.fields,
+	...CreateProviderFields,
 	availability: Availability,
-})
+}).check(checkProviderCredentials)
 export type CreatePlatformModelProviderRequest =
 	typeof CreatePlatformModelProviderRequest.Type
 export const UpdatePlatformModelProviderRequest = Schema.Struct({

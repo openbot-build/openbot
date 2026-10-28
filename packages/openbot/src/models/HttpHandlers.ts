@@ -1,3 +1,4 @@
+import { ProviderOAuth } from "./ProviderOAuth.ts"
 import { Model, Provider } from "@openbot-build/core"
 import { ModelProvidersApi, OpenBotApi } from "@openbot-build/api"
 
@@ -56,6 +57,7 @@ export const layer = HttpApiBuilder.group(
 	(handlers) =>
 		Effect.gen(function* () {
 			const providers = yield* ModelProviders
+			const oauth = yield* ProviderOAuth
 			const models = yield* Models
 			const registry = yield* ModelRegistry
 			const audit = yield* AuditLog
@@ -138,6 +140,57 @@ export const layer = HttpApiBuilder.group(
 					),
 				)
 			return handlers
+				.handle("startProviderAuthorization", ({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						return yield* oauth.start(
+							owned(caller),
+							params.providerId,
+							caller.userId,
+							payload,
+						)
+					}),
+				)
+				.handle("completeProviderAuthorization", ({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						yield* oauth.complete(
+							owned(caller),
+							params.providerId,
+							caller.userId,
+							params.authorizationId,
+							payload,
+						)
+						const updated = yield* find(caller, params.providerId)
+						yield* record(caller, "model_provider.updated", {
+							providerId: updated.id,
+							name: updated.name,
+						})
+						return view(updated)
+					}),
+				)
+				.handle("disconnectProviderOAuth", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const result = yield* oauth.disconnect(
+							owned(caller),
+							params.providerId,
+						)
+						const updated = yield* find(caller, params.providerId)
+						yield* record(caller, "model_provider.updated", {
+							providerId: updated.id,
+							name: updated.name,
+						})
+						return result
+					}),
+				)
+				.handle("getProviderAvailableModels", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						return yield* oauth.models(owned(caller), params.providerId)
+					}),
+				)
+
 				.handle("getModelCatalog", () =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
@@ -326,7 +379,9 @@ export const layer = HttpApiBuilder.group(
 							providerId: Provider.Id.make(provider.id),
 							organizationIds: [caller.organizationId],
 						})
-						yield* providers.delete(owned(caller), provider.id)
+						yield* provider.kind === "chatgpt"
+							? oauth.remove(owned(caller), provider.id)
+							: providers.delete(owned(caller), provider.id)
 						yield* record(caller, "model_provider.deleted", {
 							providerId: Provider.Id.make(provider.id),
 							name: provider.name,
