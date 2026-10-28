@@ -486,31 +486,45 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 Für diese Entwicklungsaufgabe siehe
 [Das Projekt veröffentlichen und prüfen](/de/docs/developers/publishing).
 
+Wenn CI nicht fertig wird, darf ein Betreiber einen lokalen Build nur mit
+ausdrücklicher Freigabe veröffentlichen. Quelle, SDK und Image müssen denselben
+vollständigen Commit nutzen. Bewahre die lokalen Build- und Testberichte auf.
+Das bedeutet weder, dass CI bestanden hat, noch, dass der Branch zusammengeführt
+wurde. Nutze für das interne SDK
+`node scripts/publish-kay-sdk.mjs publish-manual` mit `--api-url`,
+`--project-id`, `--revision`, `--token-file` und `--operation-id`. Die
+Token-Datei muss einen absoluten Pfad haben, dem Aufrufer gehören und Modus
+`0600` verwenden. Der Befehl prüft den echten GitLab-Benutzer und den
+Ziel-Commit. Nach dem Rücklesen und Prüfen jedes Pakets speichert er den
+manuellen Vorgang. Setze keine `CI_*`-Werte, um einen lokalen Vorgang als
+CI-Lauf auszugeben. Die normalen Prüfungen für Drain, Sicherung und
+Betriebsbereitschaft gelten weiter.
+
 ## Private Steuerung einer Freigabe
 
 Setzen Sie `OPENBOT_INTERNAL_TOKEN` auf ein eigenes zufälliges Geheimnis mit
 mindestens 32 Zeichen. Damit werden `POST /internal/execution/quiesce`, `status`
 und `resume` aktiviert. Senden Sie das Geheimnis als Bearer-Token. Diese Pfade
-gehören nur ins private Netz der Dienste. Ohne diese Einstellung kommt 404,
-bei einem falschen Token 401.
+gehören nur ins private Netz der Dienste. Ohne diese Einstellung kommt 404, bei
+einem falschen Token 401.
 
 Quiesce sperrt neue öffentliche Schreibzugriffe und neue Hintergrundaufgaben.
 Lesen und Abmelden bleiben möglich. Bereits angenommene Arbeit darf enden,
 einschließlich ihrer Werkzeugaufrufe und der Freigabe ihrer Ressourcen. `status`
-liest `quiesced`, `drained`, `activeExecutions` und `activeLeases` aus gespeicherten
-Daten. Offene Freigaben, unbekannte Ergebnisse und nicht bestätigt geschlossene
-Ressourcen verhindern die Freigabe. Bestätigen oder wiederholen Sie diese Arbeit
-nicht, nur um die Freigabe zu erzwingen.
+liest `quiesced`, `drained`, `activeExecutions` und `activeLeases` aus
+gespeicherten Daten. Offene Freigaben, unbekannte Ergebnisse und nicht bestätigt
+geschlossene Ressourcen verhindern die Freigabe. Bestätigen oder wiederholen Sie
+diese Arbeit nicht, nur um die Freigabe zu erzwingen.
 
-Wartende Timer für Trigger, Dateien, Computer und App-Indizes bleiben gespeichert
-und verhindern die Freigabe nicht. Während der Sperre starten sie keine neue
-Arbeit. Bereits angenommene Arbeit zum Löschen einer Datei oder Pausieren eines
-Computers muss zuerst enden.
-Wird er während der Sperre fällig, wartet er, ohne eine Aufgabe zu starten.
-Nach Resume läuft derselbe Timer weiter. Die Sperre bleibt nach einem Neustart
-erhalten. Warten Sie auf `drained: true`, stoppen Sie alle alten Server, führen
-Sie die Migration aus und starten und prüfen Sie einen neuen Server. Rufen Sie
-vor dem Öffnen des öffentlichen Zugangs `resume` auf. Läuft die Wartezeit vor
-dem Stoppen ab, rufen Sie `resume` auf dem bisherigen Server auf. Das Verfahren
-ersetzt keine Sicherung, Datenprüfung oder sichere Behandlung einer fehlgeschlagenen
+Wartende Timer für Trigger, Dateien, Computer und App-Indizes bleiben
+gespeichert und verhindern die Freigabe nicht. Während der Sperre starten sie
+keine neue Arbeit. Bereits angenommene Arbeit zum Löschen einer Datei oder
+Pausieren eines Computers muss zuerst enden. Wird er während der Sperre fällig,
+wartet er, ohne eine Aufgabe zu starten. Nach Resume läuft derselbe Timer
+weiter. Die Sperre bleibt nach einem Neustart erhalten. Warten Sie auf
+`drained: true`, stoppen Sie alle alten Server, führen Sie die Migration aus und
+starten und prüfen Sie einen neuen Server. Rufen Sie vor dem Öffnen des
+öffentlichen Zugangs `resume` auf. Läuft die Wartezeit vor dem Stoppen ab, rufen
+Sie `resume` auf dem bisherigen Server auf. Das Verfahren ersetzt keine
+Sicherung, Datenprüfung oder sichere Behandlung einer fehlgeschlagenen
 Aktualisierung.

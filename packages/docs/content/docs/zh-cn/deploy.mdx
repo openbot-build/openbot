@@ -424,21 +424,24 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 此开发任务请参见 [发布和检查项目](/zh-cn/docs/developers/publishing).
 
+CI 无法完成时，运维人员只能在得到明确授权后发布本地构建。源码、SDK 和镜像必须固定到同一个完整提交，并保留本地构建和测试记录。这不代表 CI 已通过，也不代表分支已合并。内部 SDK 使用
+`node scripts/publish-kay-sdk.mjs publish-manual`，显式提供
+`--api-url`、`--project-id`、`--revision`、`--token-file` 和
+`--operation-id`。凭据文件必须使用绝对路径、属于当前调用者，且权限为
+`0600`。命令核对真实 GitLab 用户和目标提交，每个包下载核对后更新本地发布操作记录。不要设置
+`CI_*` 值，把本地发布伪装成 CI 运行。正常的排空、备份和就绪检查仍须执行。
+
 ## 私有发布控制
 
 设置独立的 `OPENBOT_INTERNAL_TOKEN` 随机密钥，长度至少为 32 个字符，即可启用
-`POST /internal/execution/quiesce`、`status` 和 `resume`。请求使用 Bearer 认证。
-这些路径只向服务内部网络开放。未配置密钥时返回 404，密钥错误时返回 401。
+`POST /internal/execution/quiesce`、`status` 和
+`resume`。请求使用 Bearer 认证。这些路径只向服务内部网络开放。未配置密钥时返回 404，密钥错误时返回 401。
 
-Quiesce 暂停新的公开写请求和后台任务。读取和退出登录仍可使用。已接收的工作可以
-继续完成，包括其工具调用和物理资源的释放。`status` 从持久记录读取 `quiesced`、
-`drained`、`activeExecutions` 和 `activeLeases`。待审批、结果未知和未确认关闭的资源
-会阻止发布，不能为了发布而自动批准或重试。
+Quiesce 暂停新的公开写请求和后台任务。读取和退出登录仍可使用。已接收的工作可以继续完成，包括其工具调用和物理资源的释放。`status`
+从持久记录读取 `quiesced`、 `drained`、`activeExecutions` 和
+`activeLeases`。待审批、结果未知和未确认关闭的资源会阻止发布，不能为了发布而自动批准或重试。
 
-空闲的触发器、文件保留、电脑维护和 App 索引定时记录继续保留，不阻止发布。
-暂停期间它们不能创建新任务。已经接收的文件删除和电脑暂停操作必须先完成。
-触发器在暂停期间到期时会等待，不会创建新任务。
-Resume 后同一个定时记录继续执行。暂停状态在重启后保留。等待 `drained: true`，
-停止所有旧实例，执行迁移，再启动一个新实例并检查健康状态。开放公开流量前调用
-`resume`。如果停止实例前排空超时，对现有实例调用 `resume`。这个协议不能代替备份、
-迁移校验或升级失败后的安全处理方案。
+空闲的触发器、文件保留、电脑维护和 App 索引定时记录继续保留，不阻止发布。暂停期间它们不能创建新任务。已经接收的文件删除和电脑暂停操作必须先完成。触发器在暂停期间到期时会等待，不会创建新任务。Resume 后同一个定时记录继续执行。暂停状态在重启后保留。等待
+`drained: true`，停止所有旧实例，执行迁移，再启动一个新实例并检查健康状态。开放公开流量前调用
+`resume`。如果停止实例前排空超时，对现有实例调用
+`resume`。这个协议不能代替备份、迁移校验或升级失败后的安全处理方案。

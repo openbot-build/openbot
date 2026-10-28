@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
+import { constants } from "node:fs"
 import {
 	cp,
 	mkdir,
 	mkdtemp,
+	open,
 	readFile,
+	rename,
 	rm,
 	stat,
 	writeFile,
@@ -16,18 +19,21 @@ import { fileURLToPath } from "node:url"
 const root = fileURLToPath(new URL("../", import.meta.url))
 const output = path.join(root, ".devenv/release/sdk")
 const packages = ["core", "domain", "protocol", "api", "client"]
-const command = process.argv[2]
-const revision =
-	process.env.CI_COMMIT_SHA ??
+const sourceRevision = () =>
 	execFileSync("git", ["rev-parse", "HEAD"], {
 		cwd: root,
 		encoding: "utf8",
 	}).trim()
-if (!/^[a-f0-9]{40}$/.test(revision))
-	throw new Error("A full source revision is required")
-const version = `0.1.0-kay.g${revision.slice(0, 12)}`
+const checkedRevision = (revision) => {
+	if (typeof revision !== "string" || !/^[a-f0-9]{40}$/.test(revision))
+		throw new Error("A full source revision is required")
+	return revision
+}
+const sdkVersion = (revision) =>
+	`0.1.0-kay.g${checkedRevision(revision).slice(0, 12)}`
 
-if (command === "pack") {
+export async function packSdk(revision) {
+	const version = sdkVersion(revision)
 	if (
 		execFileSync("git", ["rev-parse", "HEAD"], {
 			cwd: root,
@@ -121,33 +127,120 @@ if (command === "pack") {
 	} finally {
 		await rm(staging, { recursive: true, force: true })
 	}
-} else if (command === "publish") {
-	const api = process.env.CI_API_V4_URL
-	const project = process.env.CI_PROJECT_ID
-	const token = process.env.CI_JOB_TOKEN
-	if (!api || !project || !token || !/^\d+$/.test(project))
-		throw new Error("The internal CI registry is required")
-	const registry = new URL(`${api}/projects/${project}/packages/npm/`)
-	if (registry.protocol !== "https:")
-		throw new Error("The package registry must use HTTPS")
+}
+
+const registryFor = (api, project) => {
+	if (typeof project !== "string" || !/^\d+$/.test(project))
+		throw new Error("A GitLab project ID is required")
+	const base = new URL(api)
+	if (
+		base.protocol !== "https:" ||
+		base.username ||
+		base.password ||
+		base.search ||
+		base.hash ||
+		!/^\/api\/v4\/?$/.test(base.pathname)
+	)
+		throw new Error("Use the HTTPS GitLab API")
+	return new URL(`${base.origin}/api/v4/projects/${project}/packages/npm/`)
+}
+const digest = (bytes) =>
+	`sha512-${createHash("sha512").update(bytes).digest("base64")}`
+
+/** Check all files before the first upload, including the name and version npm uses. */
+export async function checkSdkArtifacts({ directory, revision }) {
+	const version = sdkVersion(revision)
 	const manifest = JSON.parse(
-		await readFile(path.join(output, "manifest.json"), "utf8"),
+		await readFile(path.join(directory, "manifest.json"), "utf8"),
 	)
 	if (manifest.revision !== revision)
 		throw new Error("The SDK artifact has a different revision")
+	if (
+		!Array.isArray(manifest.packages) ||
+		manifest.packages.length !== packages.length
+	)
+		throw new Error("The complete SDK package set is required")
+	const names = new Set()
+	for (const entry of manifest.packages) {
+		const name = packages.find(
+			(name) => entry.name === `@openbot-build/${name}`,
+		)
+		if (
+			!name ||
+			names.has(entry.name) ||
+			entry.version !== version ||
+			entry.file !== `openbot-build-${name}-${version}.tgz`
+		)
+			throw new Error("The SDK package identity does not match the release")
+		names.add(entry.name)
+		const archive = path.join(directory, entry.file)
+		const bytes = await readFile(archive)
+		if (digest(bytes) !== entry.integrity)
+			throw new Error("The SDK artifact changed after packing")
+		const packed = JSON.parse(
+			execFileSync("tar", ["-xOf", archive, "package/package.json"], {
+				encoding: "utf8",
+				maxBuffer: 1024 * 1024,
+			}),
+		)
+		if (
+			packed.name !== entry.name ||
+			packed.version !== version ||
+			packed.gitHead !== revision
+		)
+			throw new Error("The packed SDK identity does not match the release")
+		for (const group of [
+			"dependencies",
+			"optionalDependencies",
+			"peerDependencies",
+		]) {
+			for (const [dependency, range] of Object.entries(packed[group] ?? {})) {
+				if (
+					range.startsWith("workspace:") ||
+					(packages.some((name) => dependency === `@openbot-build/${name}`) &&
+						range !== version)
+				)
+					throw new Error(
+						"The packed SDK dependency does not match the release",
+					)
+			}
+		}
+	}
+	return manifest
+}
+
+/** The CI and manual commands use the same write-once publication and read-back check. */
+export async function publishSdk({
+	api,
+	project,
+	revision,
+	token,
+	directory = output,
+	fetcher = fetch,
+	publisher,
+	onVerified = async () => {},
+}) {
+	const registry = registryFor(api, project)
+	const version = sdkVersion(revision)
+	if (typeof token !== "string" || !token || /[\r\n]/.test(token))
+		throw new Error("A registry token is required")
+	const manifest = await checkSdkArtifacts({ directory, revision })
 	const staging = await mkdtemp(path.join(tmpdir(), "openbot-sdk-auth-"))
 	try {
 		const config = path.join(staging, ".npmrc")
 		await writeFile(
 			config,
-			`${registry.host}${registry.pathname}`.replace(/^/, "//") +
-				`:_authToken=${token}\n`,
+			`//${registry.host}${registry.pathname}:_authToken=${token}\n`,
 			{ mode: 0o600 },
 		)
 		const metadata = async (name) => {
-			const response = await fetch(
+			const response = await fetcher(
 				new URL(encodeURIComponent(name), registry),
-				{ headers: { authorization: `Bearer ${token}` }, redirect: "error" },
+				{
+					headers: { authorization: `Bearer ${token}` },
+					redirect: "error",
+					signal: AbortSignal.timeout(60000),
+				},
 			)
 			if (response.status === 404) return undefined
 			if (!response.ok)
@@ -155,32 +248,31 @@ if (command === "pack") {
 			return (await response.json()).versions?.[version]
 		}
 		for (const entry of manifest.packages) {
-			const archive = path.join(output, entry.file)
-			if (
-				`sha512-${createHash("sha512")
-					.update(await readFile(archive))
-					.digest("base64")}` !== entry.integrity
-			)
+			const archive = path.join(directory, entry.file)
+			if (digest(await readFile(archive)) !== entry.integrity)
 				throw new Error("The SDK artifact changed after packing")
 			const existing = await metadata(entry.name)
 			if (existing === undefined) {
 				try {
-					execFileSync(
-						"npm",
-						[
-							"publish",
-							archive,
-							"--registry",
-							registry.toString(),
-							"--ignore-scripts",
-							"--tag",
-							"kay",
-						],
-						{
-							env: { ...process.env, NPM_CONFIG_USERCONFIG: config },
-							stdio: "pipe",
-						},
-					)
+					if (publisher)
+						await publisher({ archive, registry: registry.toString(), config })
+					else
+						execFileSync(
+							"npm",
+							[
+								"publish",
+								archive,
+								"--registry",
+								registry.toString(),
+								"--ignore-scripts",
+								"--tag",
+								"kay",
+							],
+							{
+								env: { ...process.env, NPM_CONFIG_USERCONFIG: config },
+								stdio: "pipe",
+							},
+						)
 				} catch {
 					throw new Error(
 						`SDK publication failed: ${entry.name}. Read the registry before retrying.`,
@@ -191,23 +283,206 @@ if (command === "pack") {
 			if (typeof published?.dist?.tarball !== "string")
 				throw new Error(`Published SDK is missing: ${entry.name}`)
 			const tarball = new URL(published.dist.tarball)
-			if (tarball.origin !== registry.origin)
+			if (
+				tarball.origin !== registry.origin ||
+				tarball.username ||
+				tarball.password
+			)
 				throw new Error("The registry returned an outside download URL")
-			// GitLab metadata may have only a SHA-1 shasum. Check the actual archive with SHA-512.
-			const downloaded = await fetch(tarball, {
+			const downloaded = await fetcher(tarball, {
 				headers: { authorization: `Bearer ${token}` },
 				redirect: "error",
+				signal: AbortSignal.timeout(60000),
 			})
 			if (
 				!downloaded.ok ||
-				`sha512-${createHash("sha512")
-					.update(Buffer.from(await downloaded.arrayBuffer()))
-					.digest("base64")}` !== entry.integrity
+				digest(Buffer.from(await downloaded.arrayBuffer())) !== entry.integrity
 			)
 				throw new Error(`Published SDK does not match: ${entry.name}`)
+			await onVerified(entry)
 			console.log(`Published and checked ${entry.name}@${version}`)
 		}
+		return manifest
 	} finally {
 		await rm(staging, { recursive: true, force: true })
 	}
-} else throw new Error("Use pack or publish")
+}
+
+export async function readPrivateToken(file) {
+	if (!path.isAbsolute(file)) throw new Error("Use an absolute token file path")
+	const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW)
+	try {
+		const info = await handle.stat()
+		if (
+			!info.isFile() ||
+			(info.mode & 0o777) !== 0o600 ||
+			info.uid !== process.getuid() ||
+			info.size > 16384
+		)
+			throw new Error(
+				"The token file must belong to this user and have mode 0600",
+			)
+		const token = (await handle.readFile("utf8")).trim()
+		if (!token || /\s/.test(token))
+			throw new Error("The token file must contain one registry token")
+		return token
+	} finally {
+		await handle.close()
+	}
+}
+
+export function manualOptions(args) {
+	const keys = new Set([
+		"api-url",
+		"project-id",
+		"revision",
+		"token-file",
+		"operation-id",
+	])
+	const values = {}
+	for (let index = 0; index < args.length; index += 2) {
+		const key = args[index]?.slice(2)
+		if (
+			!args[index]?.startsWith("--") ||
+			!keys.has(key) ||
+			values[key] !== undefined ||
+			!args[index + 1] ||
+			args[index + 1].startsWith("--")
+		)
+			throw new Error("Use each manual publication option exactly once")
+		values[key] = args[index + 1]
+	}
+	if (Object.keys(values).length !== keys.size)
+		throw new Error(
+			"Supply api-url, project-id, revision, token-file and operation-id",
+		)
+	registryFor(values["api-url"], values["project-id"])
+	checkedRevision(values.revision)
+	if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(values["operation-id"]))
+		throw new Error("Use a plain publication operation ID")
+	return {
+		api: values["api-url"],
+		project: values["project-id"],
+		revision: values.revision,
+		tokenFile: values["token-file"],
+		operationId: values["operation-id"],
+	}
+}
+
+/** A local publication records the real GitLab user; it never creates CI identity. */
+export async function publishManual({
+	api,
+	project,
+	revision,
+	tokenFile,
+	operationId,
+	directory = output,
+	head = sourceRevision(),
+	fetcher = fetch,
+	publisher,
+}) {
+	if (checkedRevision(revision) !== head)
+		throw new Error("The checked out source does not match the release")
+	registryFor(api, project)
+	if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(operationId))
+		throw new Error("Use a plain publication operation ID")
+	await checkSdkArtifacts({ directory, revision })
+	const token = await readPrivateToken(tokenFile)
+	const base = api.replace(/\/$/, "")
+	const read = async (suffix) => {
+		const response = await fetcher(base + suffix, {
+			headers: { "PRIVATE-TOKEN": token },
+			redirect: "error",
+			signal: AbortSignal.timeout(60000),
+		})
+		if (!response.ok)
+			throw new Error(
+				`The manual publication identity could not be checked: ${response.status}`,
+			)
+		return response.json()
+	}
+	const caller = await read("/user")
+	if (
+		!Number.isSafeInteger(caller.id) ||
+		caller.id <= 0 ||
+		typeof caller.username !== "string" ||
+		!caller.username
+	)
+		throw new Error("GitLab did not return a user identity")
+	const target = await read(`/projects/${project}`)
+	if (String(target.id) !== project)
+		throw new Error("GitLab returned a different project")
+	const commit = await read(
+		`/projects/${project}/repository/commits/${revision}`,
+	)
+	if (commit.id !== revision)
+		throw new Error("The source commit is not in the target project")
+	const recordPath = path.join(directory, `publish-${operationId}.json`)
+	let record = {
+		version: 1,
+		source: "manual",
+		operationId,
+		api: base,
+		project,
+		revision,
+		caller: { id: caller.id, username: caller.username },
+		startedAt: new Date().toISOString(),
+		status: "running",
+		verified: [],
+	}
+	await writeFile(recordPath, JSON.stringify(record, null, 2) + "\n", {
+		mode: 0o600,
+		flag: "wx",
+	})
+	const save = async (change) => {
+		record = { ...record, ...change }
+		const next = recordPath + ".tmp"
+		await writeFile(next, JSON.stringify(record, null, 2) + "\n", {
+			mode: 0o600,
+			flag: "wx",
+		})
+		await rename(next, recordPath)
+	}
+	try {
+		await publishSdk({
+			api,
+			project,
+			revision,
+			token,
+			directory,
+			fetcher,
+			publisher,
+			onVerified: async (entry) =>
+				save({ verified: [...record.verified, entry] }),
+		})
+		await save({ status: "completed", finishedAt: new Date().toISOString() })
+	} catch (error) {
+		await save({
+			status: "failed",
+			finishedAt: new Date().toISOString(),
+		}).catch(() => {})
+		throw error
+	}
+	return { recordPath, record }
+}
+
+export async function main(args = process.argv.slice(2), env = process.env) {
+	const [command, ...options] = args
+	if (command === "pack" && options.length === 0)
+		return packSdk(checkedRevision(env.CI_COMMIT_SHA ?? sourceRevision()))
+	if (command === "publish" && options.length === 0) {
+		const {
+			CI_API_V4_URL: api,
+			CI_PROJECT_ID: project,
+			CI_JOB_TOKEN: token,
+			CI_COMMIT_SHA: revision,
+		} = env
+		if (!api || !project || !token || !revision)
+			throw new Error("The internal CI registry is required")
+		return publishSdk({ api, project, revision, token })
+	}
+	if (command === "publish-manual") return publishManual(manualOptions(options))
+	throw new Error("Use pack, publish, or publish-manual with explicit options")
+}
+
+if (import.meta.main) await main()

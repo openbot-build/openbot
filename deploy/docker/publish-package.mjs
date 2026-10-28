@@ -7,13 +7,16 @@ export async function publishPackageFile({
 	project,
 	commit,
 	token,
+	tokenHeader = "JOB-TOKEN",
 	directory,
 	packageName,
 	fileName,
 	fetcher = fetch,
 }) {
 	if (!/^[0-9a-f]{40}$/.test(commit) || !/^\d+$/.test(project) || !token)
-		throw new Error("A CI commit and job token are required")
+		throw new Error("A source commit and registry token are required")
+	if (tokenHeader !== "JOB-TOKEN" && tokenHeader !== "PRIVATE-TOKEN")
+		throw new Error("Use a known GitLab token header")
 	const base = new URL(api)
 	if (
 		base.protocol !== "https:" ||
@@ -40,7 +43,7 @@ export async function publishPackageFile({
 		commit +
 		"/" +
 		fileName
-	const headers = { "JOB-TOKEN": token }
+	const headers = { [tokenHeader]: token }
 	const get = () =>
 		fetcher(url, {
 			headers,
