@@ -111,6 +111,90 @@ devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/use-models
 Without `OPENBOT_E2E_LIVE=true`, this one test is skipped. A skipped
 real-service test is not a successful service check.
 
+## Paper experiments
+
+```sh
+devenv shell -- python3 papers/experiments/run.py --seeds 30 --output .cache/e2e/papers.json
+```
+
+The runner uses only Python's standard library. It runs each of the 15 papers'
+small abstract models and worked examples. The JSON result records inputs,
+seeds, source hashes, checks, observations, and limits. A failed check gives a
+nonzero exit code. A check is an assertion made during a run, not an independent
+study or a separate user scenario.
+
+The experiments compare the stated method with a baseline where the paper gives
+one. They include counterexamples: inputs where a baseline breaks an intended
+rule. Passing these small models does not prove that the product implements the
+method, or that a large service has the same result.
+
+| Paper                       | Main experiment                                             |
+| --------------------------- | ----------------------------------------------------------- |
+| 01: Durable execution       | Unknown outside results, ownership fences, and replay       |
+| 02: Authority preservation  | Current rights, saved identity, and action admission        |
+| 03: Layered authorization   | Exact rules, model thresholds, and human review             |
+| 04: Agent coordination      | Messages in flight, work counts, and closing a task         |
+| 05: Evidence-based memory   | Cited source support, corrections, and cursor movement      |
+| 06: Memory information flow | Source readers and access to combined memory                |
+| 07: Context compaction      | Links across a cut and stale writes                         |
+| 08: Tool program replay     | Input frames, call order, delivery order, and return checks |
+| 09: Secret references       | Secret handles, allowed uses, and output forms              |
+| 10: Tool discovery          | Conflicting evidence and withdrawal with failed reads       |
+| 11: Protocol tests          | Reachable states and faults in generated traces             |
+| 12: Budget scheduling       | Unknown cost, late receipts, prices, caps, and shares       |
+| 13: Live history            | Playback receipts, epochs, and committed prefixes           |
+| 14: Compute fit             | Resource needs and effect limits on every trace prefix      |
+| 15: Runtime composition     | Plugin order, guards, hooks, and resource release           |
+
+## Product and paper differences
+
+The papers define methods and studies. Several methods go beyond current product
+behavior. Keep three results apart: product regression tests, abstract model
+experiments, and checks that compare the product with a paper's intended rule.
+
+Run the internal product checks for Papers 06 and 12 after the build:
+
+```sh
+devenv shell -- node --disable-warning=ExperimentalWarning packages/openbot/test/PaperProductEvidenceMain.ts --strict
+```
+
+These checks call internal services. They compare product rules with the papers;
+they are not end-to-end user tasks in `packages/e2e`.
+
+The command writes its evidence as JSON to standard output. With `--strict`, it
+exits with a nonzero code when an intended paper rule fails. The checks first
+confirm that the test data and access rules are in place. Missing data cannot
+make a check pass.
+
+The Paper 06 check combines sources from Ana and Bob into one memory. An early
+run showed that each could read the result without access to the other person's
+source. The check now requires access to every source. Neither person may read
+the result alone. A group that can read both sources may read it. Other users
+and organizations stay blocked. This is the intersection of source readers: only
+readers shared by all sources may read the result. Old memory with no proof of
+its sources' access stays hidden until it is rebuilt.
+
+The Paper 12 check sets a cap of 1,000 microUSD. A microUSD is one millionth of
+a US dollar. An early run released the first call's held estimate when its cost
+became unknown. A second call spent the freed amount. A late receipt for the
+first call then took the final cost to 2,000 microUSD. The check now requires
+OpenBot to keep that hold and block the second call. A confirmed receipt
+replaces the hold with the actual cost. Sending the same receipt again must not
+add a charge. An old unknown call whose hold was lost must block new calls under
+the hard budgets it affects until its cost is confirmed. Held unknown costs must
+also survive a new budget period.
+
+These checks must pass before the repairs are treated as complete. They do not
+prove a hard bound on the provider's final charge. Paper 12's bound assumes that
+every held amount is a verified upper bound on its call's cost. OpenBot uses an
+estimate based on input size and a fixed output allowance. The actual cost can
+exceed that estimate. See [Budgets](/docs/usage#budgets).
+
+Paper 13's device playback receipts, Paper 14's trace-based placement rules, and
+Paper 15's stronger registration checks are not established by the existing
+product tests. Do not describe passing adapter or plugin tests as proof of those
+methods.
+
 ## Limits
 
 A full test run covers the named inputs and paths. It cannot cover all possible

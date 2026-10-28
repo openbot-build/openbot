@@ -1,0 +1,5989 @@
+{
+	"checks": 1139696,
+	"elapsed_seconds": 2.814565,
+	"failures": [],
+	"generated_utc": "2026-10-28T04:03:05.527189+00:00",
+	"papers": [
+		{
+			"checks": 176,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"This is an abstract model. It does not test OpenBot, PostgreSQL locks, process death, or network delivery.",
+				"It does not run the paper's full barrier matrix, keyed provider mode, event reader, or 1000-seed study."
+			],
+			"observations": [
+				{
+					"late_reply_first_effects": 1,
+					"late_reply_first_seeds": 13,
+					"model": "proposed state rules",
+					"no_network_send_state": "unknown",
+					"retry_first_effects": 2,
+					"retry_first_seeds": 17
+				},
+				{
+					"automatic_resend_baseline_effects_after_lost_reply": 2,
+					"proposed_effects_without_retry_choice": 1
+				},
+				{
+					"bounds": {
+						"attempts": 2,
+						"logical_steps": 1,
+						"owners": 2,
+						"provider_effects_per_permit": 1,
+						"publications_per_attempt": 2,
+						"recorded_retry_choices": 1,
+						"reply_values": [1, 2],
+						"send_permits_per_attempt": 2,
+						"takeovers": 1
+					},
+					"experiment": "bounded exhaustive unsafe-call model",
+					"limitations": [
+						"Finite reachability is not an unbounded proof and gives no timing, failure rate, or liveness result.",
+						"One atomic model step stands for a locked database transaction. The search does not establish SQL isolation or product refinement.",
+						"P1 command admission and P6 cancellation are not modeled. There is no outbox, event reader, model stream, keyed write, or access policy.",
+						"The one-effect-per-permit bound assumes no hidden adapter retry or duplicate provider delivery. The model does not prove at-most-once business effects.",
+						"There is no third owner, third attempt, second choice, or more than two duplicate sends or completion groups. Paths at those limits are outside the search."
+					],
+					"results": [
+						{
+							"coverage": {
+								"late_reply_before_retry_reuses_attempt": true,
+								"one_saved_reply_then_current_publication": true,
+								"provider_effect_after_takeover": true,
+								"retry_before_late_reply_keeps_new_attempt": true,
+								"stale_owner_saves_evidence": true,
+								"two_effects_after_explicit_retry": true
+							},
+							"coverage_witnesses": {
+								"late_reply_before_retry_reuses_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 1 records retry choice selecting attempt 0"
+								],
+								"one_saved_reply_then_current_publication": [
+									"owner 0 gets send permit for attempt 0",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 0 publishes attempt 0"
+								],
+								"provider_effect_after_takeover": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1"
+								],
+								"retry_before_late_reply_keeps_new_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 1 records retry choice selecting attempt 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"stale_owner_saves_evidence": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"two_effects_after_explicit_retry": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 1 records retry choice selecting attempt 1",
+									"owner 1 gets send permit for attempt 1",
+									"provider effect for attempt 1, reply 1"
+								]
+							},
+							"max_shortest_path_depth": 10,
+							"mode": "proposed",
+							"properties_hold": true,
+							"property_edge_checks": {
+								"P2_current_owner_controls_work": 569,
+								"P3_later_send_has_prior_retry_choice": 569,
+								"P3_one_send_per_unsafe_attempt": 569,
+								"P4_saved_evidence_does_not_change": 569,
+								"P5_one_completion_per_attempt": 569,
+								"P5_publication_has_saved_evidence": 569,
+								"P5_publication_is_current": 569
+							},
+							"search_complete_within_bounds": true,
+							"shortest_counterexamples": {},
+							"state_changing_edges_by_kind": {
+								"choice": 15,
+								"evidence": 176,
+								"outside": 176,
+								"publish": 52,
+								"send": 17,
+								"takeover": 82,
+								"unknown": 51
+							},
+							"states": 287,
+							"termination": "queue empty; search continues after each found violation",
+							"transitions": 569
+						},
+						{
+							"coverage": {
+								"late_reply_before_retry_reuses_attempt": true,
+								"one_saved_reply_then_current_publication": true,
+								"provider_effect_after_takeover": true,
+								"retry_before_late_reply_keeps_new_attempt": true,
+								"stale_owner_saves_evidence": true,
+								"two_effects_after_explicit_retry": true
+							},
+							"coverage_witnesses": {
+								"late_reply_before_retry_reuses_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 0 records retry choice selecting attempt 0"
+								],
+								"one_saved_reply_then_current_publication": [
+									"owner 0 gets send permit for attempt 0",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 0 publishes attempt 0"
+								],
+								"provider_effect_after_takeover": [
+									"takeover by owner 1",
+									"owner 0 gets send permit for attempt 0",
+									"provider effect for attempt 0, reply 1"
+								],
+								"retry_before_late_reply_keeps_new_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 records retry choice selecting attempt 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"stale_owner_saves_evidence": [
+									"takeover by owner 1",
+									"owner 0 gets send permit for attempt 0",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"two_effects_after_explicit_retry": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 records retry choice selecting attempt 1",
+									"owner 0 gets send permit for attempt 1",
+									"provider effect for attempt 1, reply 1"
+								]
+							},
+							"max_shortest_path_depth": 10,
+							"mode": "no-generation-check",
+							"properties_hold": false,
+							"property_edge_checks": {
+								"P2_current_owner_controls_work": 805,
+								"P3_later_send_has_prior_retry_choice": 805,
+								"P3_one_send_per_unsafe_attempt": 805,
+								"P4_saved_evidence_does_not_change": 805,
+								"P5_one_completion_per_attempt": 805,
+								"P5_publication_has_saved_evidence": 805,
+								"P5_publication_is_current": 805
+							},
+							"search_complete_within_bounds": true,
+							"shortest_counterexamples": {
+								"P2_current_owner_controls_work": {
+									"length": 2,
+									"trace": [
+										"takeover by owner 1",
+										"owner 0 gets send permit for attempt 0"
+									]
+								},
+								"P5_publication_is_current": {
+									"length": 5,
+									"trace": [
+										"takeover by owner 1",
+										"owner 0 gets send permit for attempt 0",
+										"provider effect for attempt 0, reply 1",
+										"owner 0 saves reply 1 for attempt 0",
+										"owner 0 publishes attempt 0"
+									]
+								}
+							},
+							"state_changing_edges_by_kind": {
+								"choice": 25,
+								"evidence": 238,
+								"outside": 238,
+								"publish": 110,
+								"send": 28,
+								"takeover": 82,
+								"unknown": 84
+							},
+							"states": 365,
+							"termination": "queue empty; search continues after each found violation",
+							"transitions": 805
+						},
+						{
+							"coverage": {
+								"late_reply_before_retry_reuses_attempt": true,
+								"one_saved_reply_then_current_publication": true,
+								"provider_effect_after_takeover": true,
+								"retry_before_late_reply_keeps_new_attempt": true,
+								"stale_owner_saves_evidence": true,
+								"two_effects_after_explicit_retry": true
+							},
+							"coverage_witnesses": {
+								"late_reply_before_retry_reuses_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 1 records retry choice selecting attempt 0"
+								],
+								"one_saved_reply_then_current_publication": [
+									"owner 0 gets send permit for attempt 0",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 0 publishes attempt 0"
+								],
+								"provider_effect_after_takeover": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1"
+								],
+								"retry_before_late_reply_keeps_new_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 1 records retry choice selecting attempt 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"stale_owner_saves_evidence": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"two_effects_after_explicit_retry": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 1 records retry choice selecting attempt 1",
+									"owner 1 gets send permit for attempt 1",
+									"provider effect for attempt 1, reply 1"
+								]
+							},
+							"max_shortest_path_depth": 11,
+							"mode": "no-completion-marker",
+							"properties_hold": false,
+							"property_edge_checks": {
+								"P2_current_owner_controls_work": 667,
+								"P3_later_send_has_prior_retry_choice": 667,
+								"P3_one_send_per_unsafe_attempt": 667,
+								"P4_saved_evidence_does_not_change": 667,
+								"P5_one_completion_per_attempt": 667,
+								"P5_publication_has_saved_evidence": 667,
+								"P5_publication_is_current": 667
+							},
+							"search_complete_within_bounds": true,
+							"shortest_counterexamples": {
+								"P5_one_completion_per_attempt": {
+									"length": 5,
+									"trace": [
+										"owner 0 gets send permit for attempt 0",
+										"provider effect for attempt 0, reply 1",
+										"owner 0 saves reply 1 for attempt 0",
+										"owner 0 publishes attempt 0",
+										"owner 0 publishes attempt 0"
+									]
+								}
+							},
+							"state_changing_edges_by_kind": {
+								"choice": 15,
+								"evidence": 192,
+								"outside": 192,
+								"publish": 104,
+								"send": 17,
+								"takeover": 96,
+								"unknown": 51
+							},
+							"states": 339,
+							"termination": "queue empty; search continues after each found violation",
+							"transitions": 667
+						},
+						{
+							"coverage": {
+								"late_reply_before_retry_reuses_attempt": true,
+								"one_saved_reply_then_current_publication": true,
+								"provider_effect_after_takeover": true,
+								"retry_before_late_reply_keeps_new_attempt": true,
+								"stale_owner_saves_evidence": true,
+								"two_effects_after_explicit_retry": true
+							},
+							"coverage_witnesses": {
+								"late_reply_before_retry_reuses_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 1 records retry choice selecting attempt 0"
+								],
+								"one_saved_reply_then_current_publication": [
+									"owner 0 gets send permit for attempt 0",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0",
+									"owner 0 publishes attempt 0"
+								],
+								"provider_effect_after_takeover": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1"
+								],
+								"retry_before_late_reply_keeps_new_attempt": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 1 records retry choice selecting attempt 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"stale_owner_saves_evidence": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 0 saves reply 1 for attempt 0"
+								],
+								"two_effects_after_explicit_retry": [
+									"owner 0 gets send permit for attempt 0",
+									"takeover by owner 1",
+									"provider effect for attempt 0, reply 1",
+									"owner 1 records retry choice selecting attempt 1",
+									"owner 1 gets send permit for attempt 1",
+									"provider effect for attempt 1, reply 1"
+								]
+							},
+							"max_shortest_path_depth": 14,
+							"mode": "no-unsafe-guard",
+							"properties_hold": false,
+							"property_edge_checks": {
+								"P2_current_owner_controls_work": 11431,
+								"P3_later_send_has_prior_retry_choice": 11431,
+								"P3_one_send_per_unsafe_attempt": 11431,
+								"P4_saved_evidence_does_not_change": 11431,
+								"P5_one_completion_per_attempt": 11431,
+								"P5_publication_has_saved_evidence": 11431,
+								"P5_publication_is_current": 11431
+							},
+							"search_complete_within_bounds": true,
+							"shortest_counterexamples": {
+								"P3_one_send_per_unsafe_attempt": {
+									"length": 2,
+									"trace": [
+										"owner 0 gets send permit for attempt 0",
+										"owner 0 gets send permit for attempt 0"
+									]
+								}
+							},
+							"state_changing_edges_by_kind": {
+								"choice": 60,
+								"evidence": 4056,
+								"outside": 4496,
+								"publish": 860,
+								"send": 248,
+								"takeover": 1091,
+								"unknown": 620
+							},
+							"states": 4062,
+							"termination": "queue empty; search continues after each found violation",
+							"transitions": 11431
+						}
+					],
+					"scope": [
+						"The model separates send permission, provider effect, reply save, takeover, retry choice, and publication.",
+						"Each permit can reach the provider once, before or after takeover. It can also remain undelivered in any trace prefix.",
+						"Each provider effect returns one of two reply values. The reply can be delayed or left unsaved.",
+						"P3 counts locally admitted send permits, not arbitrary provider effects. P5 checks the selected attempt when publication occurs, not only at the end.",
+						"The provider is honest. In the proposed model, a single admitted invocation has one reply value; conflicting provider replies are not part of that model.",
+						"P4 is checked on reachable edges under honest replies. Result replacement is refused by construction; this study has no P4 guard-removal experiment.",
+						"A known result is saved only by the owner of that invocation. Saving evidence is separate from current publication.",
+						"The search checks every generated edge. Equal replay and refused commands leave state unchanged and are omitted.",
+						"Breadth-first traversal makes each reported trace shortest in state-changing model steps for that failed property."
+					],
+					"search": "breadth-first search of all reachable states within finite bounds"
+				}
+			],
+			"paper_id": "01",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "01-durable-execution/main.typ",
+			"title": "Durable execution with unknown outside results"
+		},
+		{
+			"checks": 29356,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"The finite model does not test OpenBot policy parsing, saved identity, or placement of every access check.",
+				"A local version check does not cancel a request already admitted to an outside service.",
+				"The full generated policy-tree and process-restart study remains separate work."
+			],
+			"observations": [
+				{
+					"child_resources": ["X"],
+					"model": "finite rights and proposed version permit",
+					"owner_substitution_extra_resource": "Y",
+					"safe_final_policy_refused_by_leaf_guard": true
+				},
+				{
+					"stale_read_admissions": 30,
+					"version_guard_refusals": 30
+				},
+				{
+					"bound": "Three resources, four limits, one positive and one negative leaf; four revoke orders.",
+					"four_limit_cases": 4096,
+					"limit": "Admission is the local guarded point. A later revoke cannot recall a prior send permit.",
+					"model": "bounded authority and admission comparison",
+					"permit_checks": [
+						"policy version",
+						"owner generation",
+						"action",
+						"expiry"
+					],
+					"policy_leaf_cases": 512,
+					"positive_leaf_accepted_cases": 216,
+					"resource_count": 3,
+					"revocation_schedules": [
+						{
+							"admitted": false,
+							"invalid_admission": false,
+							"order": ["revoke", "read", "admit", "send"],
+							"policy": "separate_read_and_admit",
+							"send_after_revoke": false
+						},
+						{
+							"admitted": false,
+							"invalid_admission": false,
+							"order": ["revoke", "read", "admit", "send"],
+							"policy": "atomic_authority_oracle",
+							"send_after_revoke": false
+						},
+						{
+							"admitted": false,
+							"invalid_admission": false,
+							"order": ["revoke", "read", "admit", "send"],
+							"policy": "epoch_at_admit",
+							"send_after_revoke": false
+						},
+						{
+							"admitted": true,
+							"invalid_admission": true,
+							"order": ["read", "revoke", "admit", "send"],
+							"policy": "separate_read_and_admit",
+							"send_after_revoke": true
+						},
+						{
+							"admitted": false,
+							"invalid_admission": false,
+							"order": ["read", "revoke", "admit", "send"],
+							"policy": "atomic_authority_oracle",
+							"send_after_revoke": false
+						},
+						{
+							"admitted": false,
+							"invalid_admission": false,
+							"order": ["read", "revoke", "admit", "send"],
+							"policy": "epoch_at_admit",
+							"send_after_revoke": false
+						},
+						{
+							"admitted": true,
+							"invalid_admission": false,
+							"order": ["read", "admit", "revoke", "send"],
+							"policy": "separate_read_and_admit",
+							"send_after_revoke": true
+						},
+						{
+							"admitted": true,
+							"invalid_admission": false,
+							"order": ["read", "admit", "revoke", "send"],
+							"policy": "atomic_authority_oracle",
+							"send_after_revoke": true
+						},
+						{
+							"admitted": true,
+							"invalid_admission": false,
+							"order": ["read", "admit", "revoke", "send"],
+							"policy": "epoch_at_admit",
+							"send_after_revoke": true
+						},
+						{
+							"admitted": true,
+							"invalid_admission": false,
+							"order": ["read", "admit", "send", "revoke"],
+							"policy": "separate_read_and_admit",
+							"send_after_revoke": false
+						},
+						{
+							"admitted": true,
+							"invalid_admission": false,
+							"order": ["read", "admit", "send", "revoke"],
+							"policy": "atomic_authority_oracle",
+							"send_after_revoke": false
+						},
+						{
+							"admitted": true,
+							"invalid_admission": false,
+							"order": ["read", "admit", "send", "revoke"],
+							"policy": "epoch_at_admit",
+							"send_after_revoke": false
+						}
+					],
+					"safe_final_but_leaf_refused_cases": 127,
+					"safe_final_policy_cases": 343
+				}
+			],
+			"paper_id": "02",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "02-authority-preservation/main.typ",
+			"title": "Authority through delegation and restart"
+		},
+		{
+			"checks": 15799,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"The Rule reference is fixed by the fixture. No language model or human review was run.",
+				"Serial claim orders describe an atomic Grant model; they do not test database concurrency.",
+				"The selection experiment assumes supplied labels and scores. It does not measure their accuracy or fit a score map.",
+				"Semantic support, calibration, review time, and error spread through reused Grants need a separate study."
+			],
+			"observations": [
+				{
+					"model": "defined Grant and quote baseline",
+					"omitted_argument_limit_allows_outside_match": true,
+					"one_call_winners_per_order": 1,
+					"outside_send_reference": "deny",
+					"same_fields_different_order_match": false,
+					"valid_but_irrelevant_quote": true
+				},
+				{
+					"allow_threshold": 0.85,
+					"deny_score_0_8_with_strong_allow": "no_match",
+					"deny_threshold": 0.9,
+					"finite_label_score_cases": 14425,
+					"model": "proposed Rule selection with an identity score map",
+					"selected_counts": {
+						"allow": 219,
+						"deny": 3270,
+						"no_match": 10936
+					},
+					"support_cutoff": 0.7
+				},
+				{
+					"Grant_decisions": 40,
+					"Rule_coverage": 0.6,
+					"Rule_decisions": 36,
+					"agent_decisions": 18,
+					"attempts": 100,
+					"human_request_rate": 0.06,
+					"human_requests": 6,
+					"model": "paper workload example"
+				},
+				{
+					"Grant_contexts": 16,
+					"Grants": 36,
+					"complete_truth_cases": 40,
+					"contained_scope_pairs": 150,
+					"family_error_limit": 0.05,
+					"limits": [
+						"Labels are given by the fixture. This does not test semantic support or score quality.",
+						"Scope sets do not test grant lineage, live revocation, or a shared one-call budget.",
+						"The risk bound assumes independent selected cases at each fixed threshold and stable use data."
+					],
+					"missing_deny_cases": 34,
+					"missing_deny_witness": {
+						"missing_rule_index": 1,
+						"observed_labels": ["allow"],
+						"selected_decision": "allow",
+						"true_decision": "deny",
+						"true_rule_labels": ["allow", "deny"]
+					},
+					"missing_deny_wrong_allows": 11,
+					"model": "finite truth, Grant scope, and future study size",
+					"parent_child_scope_pairs": 1296,
+					"risk_target": 0.01,
+					"zero_error_study_sizes": [
+						{
+							"fixed_threshold_pairs": 1,
+							"one_sided_upper_risk": 0.009974054826946355,
+							"per_test_delta": 0.025,
+							"selected_cases_per_effect_with_zero_errors": 368
+						},
+						{
+							"fixed_threshold_pairs": 10,
+							"one_sided_upper_risk": 0.009985761877752353,
+							"per_test_delta": 0.0025,
+							"selected_cases_per_effect_with_zero_errors": 597
+						},
+						{
+							"fixed_threshold_pairs": 100,
+							"one_sided_upper_risk": 0.009990977565253467,
+							"per_test_delta": 0.00025,
+							"selected_cases_per_effect_with_zero_errors": 826
+						}
+					]
+				}
+			],
+			"paper_id": "03",
+			"seed_values": [],
+			"seeds": 0,
+			"source": "03-layered-authorization/main.typ",
+			"title": "Exact Grants, Rule quotes, and review"
+		},
+		{
+			"checks": 823940,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"The models check one child handoff with at most one added child or correction. They do not test OpenBot or prove all task trees settle.",
+				"No model task quality, service delay, global budget comparison, or deadlock claim is measured."
+			],
+			"observations": [
+				{
+					"early_release_false_empty_state": true,
+					"first_pass_complete_orders": 2,
+					"handoff_orders": 24,
+					"model": "proposed round and revision rules",
+					"time_after_pause_seconds": 20,
+					"time_after_renewal_seconds": 60
+				},
+				{
+					"action_attempts": 374400,
+					"candidate_commit_races": [
+						{
+							"case": "correction_after_candidate",
+							"proposed": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"correction",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "v guard no-op",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									}
+								]
+							},
+							"without_v_guard": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"correction",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									}
+								]
+							}
+						},
+						{
+							"case": "child_after_candidate",
+							"proposed": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"spawn",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "w guard no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									}
+								]
+							},
+							"without_w_guard": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"spawn",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									}
+								]
+							}
+						}
+					],
+					"checks": 823882,
+					"limitations": [
+						"This is a finite abstract model. It does not run OpenBot or test database locks, network loss, or real threads.",
+						"The search does not test pause, recovery, or fencing. Fencing means refusing a write from an old work owner.",
+						"The search has one child handoff and at most one added correction or child. It is not a proof for unbounded task trees.",
+						"No-op attempts are not retried. No-close counts therefore do not measure deadlock, fairness, or time to completion.",
+						"Counts are exact for these action sets. They are not event rates or a probability model of real schedules."
+					],
+					"model": "Finite operational task-close model",
+					"prefix_checks": 374400,
+					"rows": [
+						{
+							"action_attempts": 4320,
+							"busy_no_ops": 117,
+							"case": "handoff",
+							"closed_no_ops": 0,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 717,
+							"order_no_ops": 1680,
+							"prefix_checks": 4320,
+							"rules": "proposed",
+							"schedule_attempts": 720,
+							"successful_closes": 3,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 4320,
+							"busy_no_ops": 102,
+							"case": "handoff",
+							"closed_no_ops": 8,
+							"false_closes": 6,
+							"first_false_close": {
+								"order": [
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"accept"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "order no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									}
+								]
+							},
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 708,
+							"order_no_ops": 1319,
+							"prefix_checks": 4320,
+							"rules": "early_retire",
+							"schedule_attempts": 720,
+							"successful_closes": 12,
+							"true_closes": 6,
+							"v_guard_no_ops": 6,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 4320,
+							"busy_no_ops": 117,
+							"case": "handoff",
+							"closed_no_ops": 0,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 717,
+							"order_no_ops": 1680,
+							"prefix_checks": 4320,
+							"rules": "without_v_guard",
+							"schedule_attempts": 720,
+							"successful_closes": 3,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 4320,
+							"busy_no_ops": 117,
+							"case": "handoff",
+							"closed_no_ops": 0,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 717,
+							"order_no_ops": 1680,
+							"prefix_checks": 4320,
+							"rules": "without_w_guard",
+							"schedule_attempts": 720,
+							"successful_closes": 3,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 4320,
+							"busy_no_ops": 117,
+							"case": "handoff",
+							"closed_no_ops": 0,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 717,
+							"order_no_ops": 1680,
+							"prefix_checks": 4320,
+							"rules": "without_both_guards",
+							"schedule_attempts": 720,
+							"successful_closes": 3,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 825,
+							"case": "one_correction",
+							"closed_no_ops": 3,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"correction"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5028,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "proposed",
+							"schedule_attempts": 5040,
+							"successful_closes": 12,
+							"true_closes": 12,
+							"v_guard_no_ops": 3,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 766,
+							"case": "one_correction",
+							"closed_no_ops": 40,
+							"false_closes": 14,
+							"first_false_close": {
+								"order": [
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"accept",
+									"correction"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "order no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									}
+								]
+							},
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"correction"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5000,
+							"order_no_ops": 9237,
+							"prefix_checks": 35280,
+							"rules": "early_retire",
+							"schedule_attempts": 5040,
+							"successful_closes": 40,
+							"true_closes": 26,
+							"v_guard_no_ops": 34,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 825,
+							"case": "one_correction",
+							"closed_no_ops": 3,
+							"false_closes": 3,
+							"first_false_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"correction",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									}
+								]
+							},
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"correction"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5025,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "without_v_guard",
+							"schedule_attempts": 5040,
+							"successful_closes": 15,
+							"true_closes": 12,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 825,
+							"case": "one_correction",
+							"closed_no_ops": 3,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"correction"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5028,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "without_w_guard",
+							"schedule_attempts": 5040,
+							"successful_closes": 12,
+							"true_closes": 12,
+							"v_guard_no_ops": 3,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 825,
+							"case": "one_correction",
+							"closed_no_ops": 3,
+							"false_closes": 3,
+							"first_false_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"correction",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["correction-1", "result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["correction-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": ["correction-1"],
+											"required_input_ids": ["correction-1", "result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 3,
+											"w": 1
+										}
+									}
+								]
+							},
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"correction"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "correction",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5025,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "without_both_guards",
+							"schedule_attempts": 5040,
+							"successful_closes": 15,
+							"true_closes": 12,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 830,
+							"case": "one_new_child",
+							"closed_no_ops": 3,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"spawn"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5037,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "proposed",
+							"schedule_attempts": 5040,
+							"successful_closes": 3,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 7
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 762,
+							"case": "one_new_child",
+							"closed_no_ops": 40,
+							"false_closes": 14,
+							"first_false_close": {
+								"order": [
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"accept",
+									"spawn"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "order no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": true,
+											"context_read": [0, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 1
+										}
+									}
+								]
+							},
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"spawn"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5020,
+							"order_no_ops": 9237,
+							"prefix_checks": 35280,
+							"rules": "early_retire",
+							"schedule_attempts": 5040,
+							"successful_closes": 20,
+							"true_closes": 6,
+							"v_guard_no_ops": 28,
+							"w_guard_no_ops": 30
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 830,
+							"case": "one_new_child",
+							"closed_no_ops": 3,
+							"false_closes": 0,
+							"first_false_close": null,
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"spawn"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5037,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "without_v_guard",
+							"schedule_attempts": 5040,
+							"successful_closes": 3,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 7
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 830,
+							"case": "one_new_child",
+							"closed_no_ops": 3,
+							"false_closes": 7,
+							"first_false_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"spawn",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									}
+								]
+							},
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"spawn"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5030,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "without_w_guard",
+							"schedule_attempts": 5040,
+							"successful_closes": 10,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						},
+						{
+							"action_attempts": 35280,
+							"busy_no_ops": 830,
+							"case": "one_new_child",
+							"closed_no_ops": 3,
+							"false_closes": 7,
+							"first_false_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"spawn",
+									"commit"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-2"],
+											"obligation_read": [1, true],
+											"open_child_ids": ["child-2"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1", "result-2"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 2
+										}
+									}
+								]
+							},
+							"first_true_close": {
+								"order": [
+									"accept",
+									"retire",
+									"incorporate",
+									"read_obligations",
+									"read_context",
+									"commit",
+									"spawn"
+								],
+								"steps": [
+									{
+										"action": "start",
+										"state": {
+											"accepted_input_ids": [],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 0,
+											"w": 0
+										}
+									},
+									{
+										"action": "accept",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": ["child-1"],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 0
+										}
+									},
+									{
+										"action": "retire",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": false,
+											"missing_required_input_ids": ["result-1"],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": ["result-1"],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": [],
+											"v": 1,
+											"w": 1
+										}
+									},
+									{
+										"action": "incorporate",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": null,
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_obligations",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": null,
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "read_context",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": false,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "commit",
+										"outcome": "done",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									},
+									{
+										"action": "spawn",
+										"outcome": "closed no-op",
+										"state": {
+											"accepted_input_ids": ["result-1"],
+											"closed": true,
+											"context_read": [2, true],
+											"live_completion_truth": true,
+											"missing_required_input_ids": [],
+											"obligation_read": [1, true],
+											"open_child_ids": [],
+											"pending_input_ids": [],
+											"required_input_ids": ["result-1"],
+											"used_input_ids": ["result-1"],
+											"v": 2,
+											"w": 1
+										}
+									}
+								]
+							},
+							"no_close": 5030,
+							"order_no_ops": 11760,
+							"prefix_checks": 35280,
+							"rules": "without_both_guards",
+							"schedule_attempts": 5040,
+							"successful_closes": 10,
+							"true_closes": 3,
+							"v_guard_no_ops": 0,
+							"w_guard_no_ops": 0
+						}
+					],
+					"schedule_attempts": 54000,
+					"semantics": [
+						"Each action ID occurs once. All orders are attempted; an action with unmet order rules is a no-op.",
+						"Pause, active-work, and terminal-record flags stay in a state that permits closure. Input use stands for an activation that has ended.",
+						"The child owes result-1 at the start. The close oracle checks live open children and all required input IDs.",
+						"Read obligations saves w and the open-child test. Read context then saves v and the pending-input test.",
+						"Commit tests the saved facts and the enabled version guards. It does not repeat the live oracle.",
+						"Accept and input use change v. Retire and child creation change w. The child result is accepted before safe retirement.",
+						"An accepted correction is an added required input. A new child adds both an open obligation and a required result.",
+						"Closure freezes this round. Later attempted actions are no-ops; a real later input would need a new round.",
+						"A successful close means the commit took effect. The separate true and false counts say whether that close was sound."
+					]
+				}
+			],
+			"paper_id": "04",
+			"seed_values": [],
+			"seeds": 0,
+			"source": "04-async-agent-coordination/main.typ",
+			"title": "Task completion and result handoff"
+		},
+		{
+			"checks": 12130,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"The first-60 rule and the latest-60 baseline are abstract readers. This run does not check the current product reader.",
+				"No language model tests claim support, poisoning resistance, user intent, or later task success.",
+				"The sampled audit tape measures available evidence only; it assumes no extraction or meaning errors."
+			],
+			"observations": [
+				{
+					"baseline_correction_seen": false,
+					"baseline_cursor": 62,
+					"false_scope_claim_passes_source_gate": true,
+					"mixed_source_poison_passes_source_gate": true,
+					"model": "defined structural baseline and proposed prefix rule",
+					"proposed_correction_seen": true,
+					"proposed_cursor": 61,
+					"proposed_unread_records": 1
+				},
+				{
+					"useful_claims_in_cue_batches": 158,
+					"useful_claims_in_cue_or_audit_batches": 250
+				},
+				{
+					"baseline": "A latest-60 reader that advances to the full horizon; a cited input rewrite gate.",
+					"product_executed_by_this_model": false
+				},
+				{
+					"audit_probability": "1/4",
+					"cue_audit_mask_pairs": 256,
+					"direct_only_invalidation_bad_cases": 516,
+					"forward_graphs": 64,
+					"graph_retraction_cases": 960,
+					"limits": [
+						"All source links are recorded and all parents are needed. The model does not infer missing links.",
+						"The graph order makes cycles absent. The source graph is small and stored in one transaction.",
+						"The audit uses complete task labels, independent sampling, and fixed claim ownership.",
+						"Adding audits adds work. These inclusion checks do not compare equal-cost task quality."
+					],
+					"model": "bounded source graph and exact audit expectation",
+					"sampling_rows": [
+						{
+							"cue_mask": [false, false, false, false],
+							"estimate_mean": "6",
+							"estimate_variance": "42",
+							"silent_claim_count": 6
+						},
+						{
+							"cue_mask": [false, false, false, true],
+							"estimate_mean": "3",
+							"estimate_variance": "15",
+							"silent_claim_count": 3
+						},
+						{
+							"cue_mask": [false, false, true, false],
+							"estimate_mean": "4",
+							"estimate_variance": "30",
+							"silent_claim_count": 4
+						},
+						{
+							"cue_mask": [false, false, true, true],
+							"estimate_mean": "1",
+							"estimate_variance": "3",
+							"silent_claim_count": 1
+						},
+						{
+							"cue_mask": [false, true, false, false],
+							"estimate_mean": "5",
+							"estimate_variance": "39",
+							"silent_claim_count": 5
+						},
+						{
+							"cue_mask": [false, true, false, true],
+							"estimate_mean": "2",
+							"estimate_variance": "12",
+							"silent_claim_count": 2
+						},
+						{
+							"cue_mask": [false, true, true, false],
+							"estimate_mean": "3",
+							"estimate_variance": "27",
+							"silent_claim_count": 3
+						},
+						{
+							"cue_mask": [false, true, true, true],
+							"estimate_mean": "0",
+							"estimate_variance": "0",
+							"silent_claim_count": 0
+						},
+						{
+							"cue_mask": [true, false, false, false],
+							"estimate_mean": "6",
+							"estimate_variance": "42",
+							"silent_claim_count": 6
+						},
+						{
+							"cue_mask": [true, false, false, true],
+							"estimate_mean": "3",
+							"estimate_variance": "15",
+							"silent_claim_count": 3
+						},
+						{
+							"cue_mask": [true, false, true, false],
+							"estimate_mean": "4",
+							"estimate_variance": "30",
+							"silent_claim_count": 4
+						},
+						{
+							"cue_mask": [true, false, true, true],
+							"estimate_mean": "1",
+							"estimate_variance": "3",
+							"silent_claim_count": 1
+						},
+						{
+							"cue_mask": [true, true, false, false],
+							"estimate_mean": "5",
+							"estimate_variance": "39",
+							"silent_claim_count": 5
+						},
+						{
+							"cue_mask": [true, true, false, true],
+							"estimate_mean": "2",
+							"estimate_variance": "12",
+							"silent_claim_count": 2
+						},
+						{
+							"cue_mask": [true, true, true, false],
+							"estimate_mean": "3",
+							"estimate_variance": "27",
+							"silent_claim_count": 3
+						},
+						{
+							"cue_mask": [true, true, true, true],
+							"estimate_mean": "0",
+							"estimate_variance": "0",
+							"silent_claim_count": 0
+						}
+					],
+					"sampling_tasks": 4,
+					"scan_insert_commit_orders": [
+						{
+							"live_children_of_invalid_source": [2],
+							"order": ["scan", "insert", "commit"],
+							"scan_retries": 0,
+							"version_guard": false
+						},
+						{
+							"live_children_of_invalid_source": [],
+							"order": ["scan", "insert", "commit"],
+							"scan_retries": 1,
+							"version_guard": true
+						},
+						{
+							"live_children_of_invalid_source": [],
+							"order": ["scan", "commit", "insert"],
+							"scan_retries": 0,
+							"version_guard": false
+						},
+						{
+							"live_children_of_invalid_source": [],
+							"order": ["scan", "commit", "insert"],
+							"scan_retries": 0,
+							"version_guard": true
+						},
+						{
+							"live_children_of_invalid_source": [],
+							"order": ["insert", "scan", "commit"],
+							"scan_retries": 0,
+							"version_guard": false
+						},
+						{
+							"live_children_of_invalid_source": [],
+							"order": ["insert", "scan", "commit"],
+							"scan_retries": 0,
+							"version_guard": true
+						}
+					],
+					"serialized_insert_retract_orders": 7680,
+					"vertices": 4
+				}
+			],
+			"paper_id": "05",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "05-evidence-based-memory/main.typ",
+			"title": "Memory sources, coverage, and current intent"
+		},
+		{
+			"checks": 33396,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"This is a finite policy model. It does not prove product memory privacy.",
+				"No model attacks, release authority, real purge race, or hidden metadata check runs here."
+			],
+			"observations": [
+				{
+					"baseline_permitted_reads_lost": 352,
+					"baseline_unsafe_reads": 1216,
+					"oracle_permitted_reads": 20880,
+					"pair_read_decisions": 123008,
+					"root_policies": 124,
+					"source_pairs": 15376,
+					"source_rule_permitted_reads_lost": 0,
+					"source_rule_unsafe_reads": 0,
+					"viewers": 8
+				},
+				{
+					"no_withdrawal_propagation_stale_reads": 219,
+					"source_rule_stale_reads": 0,
+					"withdrawal_changed_nodes": 721,
+					"withdrawal_node_checks": 1440
+				},
+				{
+					"baseline_Ana_read": true,
+					"source_graph_nodes": 1200,
+					"source_rule_Ana_read": false,
+					"stale_output_accepted": false
+				},
+				{
+					"product_review": "The token baseline is defined in this model. Product checks run apart from this model."
+				}
+			],
+			"paper_id": "06",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "06-memory-information-flow/main.typ",
+			"title": "Shared memory source rules"
+		},
+		{
+			"checks": 24420,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"The model checks link sets, not provider message validity or complete tool execution.",
+				"No summary model, semantic retention, exact provider token count, or real database race runs here."
+			],
+			"observations": [
+				{
+					"closed_boundary": 1,
+					"one_step_boundary": 2,
+					"random_traces": 1200,
+					"second_summary_source": ["s1", "m2", "m3"]
+				},
+				{
+					"exhaustive_boundary_cases": 7737,
+					"exhaustive_histories": 1365,
+					"keys": 2,
+					"max_history_length": 5
+				},
+				{
+					"seeded_baselines": {
+						"closure": {
+							"kept_messages": 23441,
+							"split_histories": 0,
+							"split_keys": 0
+						},
+						"one_step": {
+							"kept_messages": 23132,
+							"split_histories": 92,
+							"split_keys": 268
+						},
+						"recent_window": {
+							"kept_messages": 14682,
+							"split_histories": 727,
+							"split_keys": 4591
+						}
+					},
+					"seeded_histories": 1200
+				}
+			],
+			"paper_id": "07",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "07-context-compaction/main.typ",
+			"title": "Context link closure"
+		},
+		{
+			"checks": 1780,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"This is a finite frame model, not a JavaScript interpreter or product replay test.",
+				"A send before durable outcome storage is unknown and is outside these no-resend checks.",
+				"No model generation, repair, timing, or token-cost study runs here."
+			],
+			"observations": [
+				{
+					"fault_schedules": 30,
+					"reads_sent": 2,
+					"writes_sent_after_allow": 1,
+					"writes_sent_after_deny": 0
+				},
+				{
+					"positional_rejections": 0,
+					"replay_mutations": [
+						{
+							"mutation": "changed_manifest",
+							"positional": "done",
+							"strong": "manifest mismatch"
+						},
+						{
+							"mutation": "split_frame",
+							"positional": "done",
+							"strong": "frame mismatch"
+						},
+						{
+							"mutation": "merged_frame",
+							"positional": "done",
+							"strong": "frame mismatch"
+						},
+						{
+							"mutation": "early_return",
+							"positional": "done",
+							"strong": "unread history"
+						}
+					],
+					"strong_rejections": 4
+				},
+				{
+					"all_saved_outcome_cuts": 408,
+					"plain_restart_duplicate_sends": 3449,
+					"plain_restart_sends": 9939,
+					"strong_duplicate_sends": 0,
+					"strong_sends": 6490
+				},
+				{
+					"blind_retry_effects": [1, 2],
+					"no_retry_effects": [0, 1],
+					"unknown_world_count": 2
+				},
+				{
+					"product_review": "This frame model does not run a language interpreter. Product replay needs separate tests."
+				}
+			],
+			"paper_id": "08",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "08-replayable-tool-programs/main.typ",
+			"title": "Replay frame model"
+		},
+		{
+			"checks": 449,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"All values are synthetic and grant no access.",
+				"This model does not test product approval, provider errors, public logs, or a real policy race.",
+				"Finite text redaction does not give end-to-end secrecy after an allowed release."
+			],
+			"observations": [
+				{
+					"known_encoding_cases": 150,
+					"marker_contains_secret": true,
+					"short_forms": [
+						"ab",
+						"YWI",
+						"\u27e6hidden:github/token\u27e7",
+						"\u27e6hidden:github/token\u27e7"
+					],
+					"split_echo_recovered": "ABCD1234"
+				},
+				{
+					"known_form_whole_echoes": 0,
+					"no_filter_whole_echoes": 150,
+					"raw_only_whole_echoes": 120,
+					"whole_echo_cases": 150
+				},
+				{
+					"boolean_replies_per_secret": 8,
+					"byte_secrets": 256,
+					"distinct_boolean_transcripts": 256,
+					"distinct_constant_transcripts": 1,
+					"recovered_secrets": 256
+				},
+				{
+					"product_review": "This finite filter model does not check product rights, approval, or value reads."
+				}
+			],
+			"paper_id": "09",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "09-secret-references/main.typ",
+			"title": "Secret reference boundaries"
+		},
+		{
+			"checks": 4377,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"These are finite state and merge models, not real HTTP or product index tests.",
+				"No timing, robots, DNS, private-store, queue, or owner-transaction integration test runs here."
+			],
+			"observations": [
+				{
+					"first_wins_bodies": ["old", "new"],
+					"mixed_baseline_false_withdrawals": 176,
+					"proposed_false_withdrawals": 0,
+					"publisher_states": 1800,
+					"unique_cards": 3
+				},
+				{
+					"ambiguous_states": 358,
+					"exhaustive_methods": {
+						"all_negative": {
+							"confirmed_withdrawals": 5,
+							"false_withdrawals": 0,
+							"missed_clear_withdrawals": 0,
+							"unconfirmed": 358
+						},
+						"failure_is_negative": {
+							"confirmed_withdrawals": 5,
+							"false_withdrawals": 301,
+							"missed_clear_withdrawals": 0,
+							"unconfirmed": 0
+						},
+						"keep_prior": {
+							"confirmed_withdrawals": 0,
+							"false_withdrawals": 0,
+							"missed_clear_withdrawals": 5,
+							"unconfirmed": 363
+						},
+						"mixed_negative": {
+							"confirmed_withdrawals": 5,
+							"false_withdrawals": 244,
+							"missed_clear_withdrawals": 0,
+							"unconfirmed": 62
+						}
+					},
+					"exhaustive_truth_availability_states": 1364,
+					"max_paths": 5
+				},
+				{
+					"conflict_merge_results": 1,
+					"first_wins_results": 3,
+					"non_atomic_read_false_withdrawal": true,
+					"source_orders": 6
+				},
+				{
+					"product_review": "The compared rules are abstract methods. Product HTTP and index checks run apart from this model."
+				}
+			],
+			"paper_id": "10",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "10-open-tool-discovery/main.typ",
+			"title": "Public discovery evidence"
+		},
+		{
+			"checks": 13537,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"This is the note and one-use handle model, not an MCP server or wire test.",
+				"OAuth exchange, real concurrent consumption, network search and independent target comparisons are not run.",
+				"Exhaustive coverage is only all words through length four in seven note operations. It does not cover the full paper alphabet.",
+				"The reducer checks one receipt-loss trace and single-step minimality, not globally shortest traces.",
+				"The planned 10,000-request, 30-seed study and defect-rate comparison remain open."
+			],
+			"observations": [
+				{
+					"receipt_trace": {
+						"hidden_write": {
+							"reply": [1, [[1, "a"]]],
+							"view": [3, [[3, "a"]]]
+						},
+						"lost_receipt": {
+							"reply": [3, [[3, "a"]]],
+							"view": [3, [[3, "a"]]]
+						},
+						"none": {
+							"reply": [1, [[1, "a"]]],
+							"view": [2, []]
+						}
+					}
+				},
+				{
+					"bounded_protocol_campaign": {
+						"alphabet_size": 7,
+						"final_state_observations": 2801,
+						"max_length": 4,
+						"mutation_ablation": {
+							"capacity": {
+								"combined_traces": 240,
+								"effect_traces": 240,
+								"reply_traces": 240,
+								"shortest": [
+									["write", "k0", "a"],
+									["write", "k1", "b"],
+									["write", "k2", "a"]
+								]
+							},
+							"hidden_write": {
+								"combined_traces": 952,
+								"effect_traces": 892,
+								"reply_traces": 320,
+								"shortest": [
+									["write", "k0", "a"],
+									["write", "k0", "a"]
+								]
+							},
+							"key_conflict": {
+								"combined_traces": 468,
+								"effect_traces": 0,
+								"reply_traces": 468,
+								"shortest": [
+									["write", "k0", "a"],
+									["write", "k0", "b"]
+								]
+							},
+							"lost_receipt": {
+								"combined_traces": 120,
+								"effect_traces": 120,
+								"reply_traces": 120,
+								"shortest": [
+									["write", "k0", "a"],
+									["delete", 1, 1],
+									["write", "k0", "a"]
+								]
+							},
+							"stale_delete": {
+								"combined_traces": 1476,
+								"effect_traces": 796,
+								"reply_traces": 1476,
+								"shortest": [["delete", 1, 1]]
+							}
+						},
+						"operation_steps": 10738,
+						"reducer": {
+							"attempts": 9,
+							"final_steps": 4,
+							"one_step_minimal": true,
+							"original_steps": 6
+						},
+						"response_loss_states": 2,
+						"traces": 2801
+					}
+				},
+				{
+					"capacity_keys": 3,
+					"expiry_deadlines": [10, 20, 60],
+					"seeded_state_steps": 3000
+				}
+			],
+			"paper_id": "11",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "11-protocol-conformance/main.typ",
+			"title": "State-Based Conformance Testing for Agent Tool Protocols"
+		},
+		{
+			"checks": 84849,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"The model applies events atomically; it does not test database transactions or process races.",
+				"The strict subset bounds cost by construction. Outlier cases test only the deterministic overrun inequality, not risk calibration.",
+				"Weighted scheduling checks only one always-queued sibling group with no cap blocks, refunds or clipping. Task value and the full tree are not tested.",
+				"These models do not establish product behavior. The separate real-database check supplies product evidence.",
+				"Legacy restoration assumes an available and valid old cost bound. A saved heuristic is not a proved provider ceiling.",
+				"The full planned policy comparison, workload grid and confidence intervals remain open."
+			],
+			"observations": [
+				{
+					"late_receipt_trace": {
+						"released": {
+							"final_cost": 2000,
+							"second_admitted": true
+						},
+						"retained": {
+							"final_cost": 1000,
+							"second_admitted": false
+						}
+					}
+				},
+				{
+					"bounded_budget_campaign": {
+						"cap": 3,
+						"cost_pairs": 25,
+						"event_orders": 20,
+						"fairness_rounds": 1200,
+						"five_class_price_vectors": 1024,
+						"five_class_upper_hold": 67,
+						"hold": 2,
+						"legacy_exposure": {
+							"new_calls_only": {
+								"final_cost": 2000,
+								"new_call_admitted": true
+							},
+							"restore_saved_hold": {
+								"final_cost": 1000,
+								"new_call_admitted": false
+							}
+						},
+						"maximum_normalized_share_gap": 9.0,
+						"missing_old_bound": "strict admission unavailable",
+						"policy_results": {
+							"released": {
+								"cases": 500,
+								"max_exposure": 8,
+								"max_final_cost": 8,
+								"strict_cases": 180,
+								"strict_excess_cases": 10
+							},
+							"retained": {
+								"cases": 500,
+								"max_exposure": 5,
+								"max_final_cost": 5,
+								"strict_cases": 180,
+								"strict_excess_cases": 0
+							}
+						},
+						"zero_cost_visit": {
+							"admitted": 3,
+							"limit": 3,
+							"remaining_deficit": 10
+						}
+					}
+				},
+				{
+					"worked_exposure_trace": [
+						{
+							"agent_excess": 0,
+							"exposure": [40000, 90000, 78000, 88000, 84000],
+							"late_cost": 16000
+						},
+						{
+							"agent_excess": 10000,
+							"exposure": [40000, 90000, 78000, 88000, 100000],
+							"late_cost": 32000
+						}
+					]
+				},
+				{
+					"clipped_share": [
+						[6, 4],
+						[12, 4]
+					],
+					"late_saved_cost": 3600,
+					"tier_hold": 6000,
+					"unclipped_share": [
+						[6, 4],
+						[18, 2]
+					]
+				},
+				{
+					"cap_excess": 0,
+					"largest_scope_exposure": 700,
+					"seeded_events": 6000
+				}
+			],
+			"paper_id": "12",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "12-budget-scheduling/main.typ",
+			"title": "Hierarchical Agent Budgets Under Uncertain Model Usage"
+		},
+		{
+			"checks": 18273,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"This is an abstract protocol model. It does not run the product Live driver.",
+				"The product currently sends raw audio and has no playback receipt or repair barrier in its Live types.",
+				"Clock error bounds and text maps are supplied model inputs. These results do not calibrate a clock or measure speech timing, hearing, or understanding.",
+				"No live model or spoken user study was run. The history counts are known units, not measured later language claims."
+			],
+			"observations": [
+				{
+					"barrier_removed_counterexample": [
+						"render",
+						"receipt",
+						"retire",
+						"stop",
+						"final",
+						"late",
+						"answer"
+					],
+					"blocked_answer_attempts": 238,
+					"checked_prefixes": 2464,
+					"clock_observation_classes": 15,
+					"clock_worlds": 56,
+					"conservative_map_counterexample": {
+						"actual_word_end": 1,
+						"device_end": 1,
+						"map_upper_end": 2,
+						"retained_words": 0
+					},
+					"distinct_actor_host_states": 9,
+					"epoch_removed_counterexample": [
+						"old item played to 2",
+						"new epoch reuses item name",
+						"old receipt commits new unplayed unit"
+					],
+					"events": [
+						"render",
+						"receipt",
+						"retire",
+						"stop",
+						"final",
+						"ack",
+						"late",
+						"answer"
+					],
+					"fixture": "finite legal event orders and clock worlds",
+					"legal_orders": 308,
+					"oracle": "Device render and provider apply events; set intersection of all bounded clock worlds.",
+					"order_edges": [
+						["render", "receipt"],
+						["render", "stop"],
+						["retire", "stop"],
+						["stop", "final"],
+						["final", "ack"],
+						["retire", "late"],
+						["retire", "answer"]
+					],
+					"raw_clock_unsound_worlds": 11,
+					"ready_answer_attempts": 70
+				},
+				{
+					"extra_seconds": 2.3,
+					"fixture": "stop after generation",
+					"guarded_samples": 96000,
+					"stopped_samples": 40800
+				},
+				{
+					"fixture": "same stop, four histories",
+					"scores": {
+						"B0": {
+							"different_views": false,
+							"lost_supported_units": 0,
+							"unsupported_host_units": 1
+						},
+						"B1": {
+							"different_views": false,
+							"lost_supported_units": 1,
+							"unsupported_host_units": 0
+						},
+						"B2": {
+							"different_views": true,
+							"lost_supported_units": 0,
+							"unsupported_host_units": 1
+						},
+						"frontier": {
+							"different_views": false,
+							"lost_supported_units": 0,
+							"unsupported_host_units": 0
+						}
+					}
+				},
+				{
+					"fixture": "receipt order",
+					"played_samples": [14400, 14400, 14400, 26400],
+					"random_reports": 900
+				},
+				{
+					"external_calls": 1,
+					"faulty_retry_external_calls": 2,
+					"faulty_retry_trace": [
+						"book",
+						"result",
+						"speak",
+						"cut",
+						"book",
+						"result",
+						"speak",
+						"finish"
+					],
+					"fixture": "tool notice",
+					"report_after_cut": "queued",
+					"report_after_resume": "done",
+					"saved_outcome_after_cut": "succeeded",
+					"trace": ["book", "result", "speak", "cut", "speak", "finish"]
+				}
+			],
+			"paper_id": "13",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "13-live-history-consistency/main.typ",
+			"title": "History Consistency for Interruptible Voice Agents"
+		},
+		{
+			"checks": 39108,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"These are the paper's abstract M, F, and H profiles, not measured provider guarantees.",
+				"The search covers three rules, chains of length at most two, and four input pairs. It does not prove result equivalence for arbitrary programs.",
+				"No cloud sandbox, real desktop, isolation boundary, terminal, or billed cost was measured here.",
+				"The product's current Boolean pause feature and adapter tests do not implement or validate this proposed selector.",
+				"Random trials vary model event order and claim failure. They are not the planned thirty paired live task trials."
+			],
+			"observations": [
+				{
+					"base_procedure_counterexample": {
+						"forbidden_effects": 1,
+						"lesson": "The source procedure must already meet its result and effect contract. Matching a declared manifest cannot prove arbitrary source code safe.",
+						"matching_identity_variant": true,
+						"result": 42
+					},
+					"checks": 38956,
+					"fixture": "bounded search and phase lease",
+					"lease": {
+						"action_kinds": 8,
+						"allowed_stage_or_run": 218,
+						"claim_cases": 8,
+						"denied_claims": 7,
+						"effects_from_rejected_actions": 0,
+						"histories": 4096,
+						"history_length": 4,
+						"rejected_stage_or_run": 3878,
+						"stale_epoch_effects": 0,
+						"transitions": 16384
+					},
+					"scope": "The finite search uses exact model facts and four input pairs. The lease fixes one task, variant, and environment; it uses an atomic guard and a trusted clock. No provider, network delay, cost, or isolation boundary is measured.",
+					"search": {
+						"ablations": [
+							{
+								"chain": ["batch"],
+								"false_admissions": 1,
+								"place": "F",
+								"removed_check": "precondition"
+							},
+							{
+								"chain": ["batch"],
+								"false_admissions": 1,
+								"place": "F",
+								"removed_check": "phase"
+							},
+							{
+								"chain": ["drop state"],
+								"false_admissions": 1,
+								"place": "P",
+								"removed_check": "result"
+							},
+							{
+								"chain": ["batch", "checkpoint"],
+								"false_admissions": 2,
+								"place": "F",
+								"removed_check": "shared effects"
+							}
+						],
+						"case_count": 9216,
+						"catalog_size": 3,
+						"false_admissions": 0,
+						"false_rejections": 0,
+						"feasible_pairs_over_all_cases": 7600,
+						"input_pairs_per_variant": 4,
+						"max_chain_length": 2,
+						"no_placement_cases": 4468,
+						"words_per_case": 13
+					}
+				},
+				{
+					"F_checkpoint_result": 42,
+					"F_native_result": null,
+					"M_native_result": 42,
+					"fixture": "pause memory"
+				},
+				{
+					"admitted": {
+						"batch": ["M", "F"],
+						"desktop": ["M", "F"],
+						"private files": ["M", "F"],
+						"review gap": ["M"],
+						"terminal": ["M"]
+					},
+					"fixture": "task families"
+				},
+				{
+					"changes": ["batch", "checkpoint"],
+					"cost": 7.6,
+					"fixture": "illustrative placement",
+					"minutes": 40,
+					"selected": "F"
+				},
+				{
+					"fixture": "claim and effect traces",
+					"random_prefixes": 60,
+					"random_rejected_claims": 27
+				}
+			],
+			"paper_id": "14",
+			"seed_offset": 14000,
+			"seed_values": [
+				14000, 14001, 14002, 14003, 14004, 14005, 14006, 14007, 14008, 14009,
+				14010, 14011, 14012, 14013, 14014, 14015, 14016, 14017, 14018, 14019,
+				14020, 14021, 14022, 14023, 14024, 14025, 14026, 14027, 14028, 14029
+			],
+			"seeds": 30,
+			"source": "14-compute-portability/main.typ",
+			"title": "Capability-Aware Portability of Agent Tasks Across Compute Environments"
+		},
+		{
+			"checks": 38106,
+			"evidence_kind": "finite abstract model experiment",
+			"limitations": [
+				"This is a finite Python model. It does not run the OpenBot runtime or a compiler.",
+				"The role lists use one fixed initial prompt and a small declared tool set. Sorted names define the synthetic call order; a real model supplies its own call order.",
+				"The pair check uses handler tokens and unique keys. Schema and replacement declaration checks are outside this model.",
+				"Receipt writes are single-process model transactions. No real database or remote write is tested.",
+				"The scope machine models blocked joins and releases. It does not run real tasks, interrupts, or resource adapters.",
+				"Ablation cases are chosen witnesses, not a random population or a measure of general detection rates.",
+				"No timing, model meaning, static checker, transport, or general proof claim is made."
+			],
+			"metrics": {
+				"ablations": [
+					{
+						"false_rejections": 0,
+						"faults": 1,
+						"faults_with_rule": 0,
+						"faults_without_rule": 1,
+						"removed_rule": "pair validation",
+						"safe_controls": 1
+					},
+					{
+						"false_rejections": 0,
+						"faults": 1,
+						"faults_with_rule": 0,
+						"faults_without_rule": 1,
+						"removed_rule": "short-circuit check",
+						"safe_controls": 1
+					},
+					{
+						"false_rejections": 0,
+						"faults": 1,
+						"faults_with_rule": 0,
+						"faults_without_rule": 1,
+						"removed_rule": "scope cleanup",
+						"safe_controls": 1
+					},
+					{
+						"false_rejections": 0,
+						"faults": 1,
+						"faults_with_rule": 0,
+						"faults_without_rule": 1,
+						"removed_rule": "per-transform prompt check",
+						"safe_controls": 1
+					},
+					{
+						"false_rejections": 0,
+						"faults": 1,
+						"faults_with_rule": 0,
+						"faults_without_rule": 1,
+						"removed_rule": "saved hook receipt",
+						"safe_controls": 1
+					},
+					{
+						"false_rejections": 0,
+						"faults": 1,
+						"faults_with_rule": 0,
+						"faults_without_rule": 1,
+						"removed_rule": "saved deadline start",
+						"safe_controls": 1
+					}
+				],
+				"base_grouped_variants": 736,
+				"base_ordered_lists": 400,
+				"base_traces": 1472,
+				"extended": {
+					"grouped_variants": 1591,
+					"invalid_pair_traces": 244,
+					"ordered_lists": 847,
+					"traces": 3182
+				},
+				"finalizer_dependencies": {
+					"accepted": 76,
+					"bound": 4,
+					"graphs": 4166,
+					"rejected": 4090,
+					"self_edges": "excluded; a finalizer may use its own resource before release"
+				},
+				"hook_laws": {
+					"commuting_pairs": 601,
+					"counterexample": {
+						"first": [0, 0, 0, 3],
+						"once": 2,
+						"second": [0, 0, 2, 2],
+						"start": 3,
+						"twice": 0
+					},
+					"idempotent_maps": 41,
+					"non_idempotent_chains": 264,
+					"noncommuting_idempotent_chains": 816,
+					"ordered_pairs": 1681,
+					"states": 4,
+					"total_maps": 256
+				},
+				"receipt_boundaries": {
+					"distinct_instance_key_writes": 2,
+					"guard_extension_counterexample": {
+						"after": true,
+						"before": false
+					},
+					"shared_instance_key_writes": 1
+				},
+				"scope": {
+					"blocked_cases": 3,
+					"completed_cases": 124
+				}
+			},
+			"observations": [
+				"All 400 ordered role lists and 736 grouped variants passed the leaf oracle.",
+				"All 1472 model and action traces matched; 920 blocked traces had no dispatch.",
+				"All 32 build and release failure cases tried every owned release in reverse order.",
+				"Right replacement kept its handler. Wrong precedence and a shared handler key stopped both model and action steps before dispatch.",
+				"The weak prompt count check accepted 2 messages after the restriction was lost.",
+				"Two hooks each passed local idempotence, but their chain changed (0, 0) to (0, 1) to (1, 1).",
+				"Per-hook receipts kept the chain at (0, 1), with 2 receipts, after prefix and full replay.",
+				"Across 30 seeds and 213 write attempts, each key had 1 committed write.",
+				"Extended cases checked 847 lists and 3182 traces with repeats, empty records, several tools, and all groupings.",
+				"All 1,681 ordered pairs of idempotent four-state maps were checked: 601 commuted, 264 had a non-idempotent chain, and 816 had an idempotent chain without commuting.",
+				"All 124 completed scope cases kept every exit cause; 3 blocked cases stayed closing.",
+				"All 4166 finalizer dependency graphs through four resources matched the independent live-resource oracle.",
+				"Two instances sharing a receipt key lost one intended write; stable instance keys kept both writes once.",
+				"Six single-rule ablations each exposed one designed fault. The full rule set avoided those faults and accepted all six safe controls."
+			],
+			"paper_id": "15",
+			"seed_values": [
+				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+			],
+			"seeds": 30,
+			"source": "15-composable-runtime/main.typ",
+			"title": "Preserving Execution Constraints in a Composable Agent Runtime"
+		}
+	],
+	"platform": "Linux-6.18.56-x86_64-with-glibc2.44",
+	"python": "3.14.7",
+	"schema_version": 1,
+	"scope": "These runs check stated worked cases and finite synthetic models. They do not run OpenBot, test real providers, or complete the papers' planned studies.",
+	"seed_count": 30,
+	"seed_range": [0, 29],
+	"source_changes_during_run": [],
+	"source_sha256": {
+		"01-durable-execution/main.typ": "c40d7c662f5f87b5973c8f92f88f514b4288c8b4355a8369682a84a88193bcef",
+		"01-durable-execution/references.bib": "114f461c3c84b58b38b24984a724008534c4d13532b29f5c466e7ceaa3b5dbaa",
+		"02-authority-preservation/main.typ": "8142d33d407c63e220cedbf307bb3cc475950d7a9234dabfb0391d9cbf59e55f",
+		"02-authority-preservation/references.bib": "bf0900361e377f43459b1ece8a59e6e876fdc08ea2437a413adf1076666d1259",
+		"03-layered-authorization/main.typ": "be22bf2d31d8e2f0ad6d88119f37ddc1642ee7f1b828ec5923025c9447685e5d",
+		"03-layered-authorization/references.bib": "f899031b03a2935727500fc15899ff8a21806afc454dd6e0992f15d21fe4599b",
+		"04-async-agent-coordination/main.typ": "e25e2fa4c8fa1189df6bde54639f76cafce91510497d188cdb08c18a038440a0",
+		"04-async-agent-coordination/references.bib": "af74c0eeb6c7d4b656ea24f5517f06f53f8490ccd647b601ce5591f1eae3fd51",
+		"05-evidence-based-memory/main.typ": "6735842bcf499e46cedb5c0045125e671ffed935c96b051ebdff822ef0e743b5",
+		"05-evidence-based-memory/references.bib": "b49a64e9f52817bffba505080a2fcc69449ac1508fa921ddf3a577a0bafcad09",
+		"06-memory-information-flow/main.typ": "51afd02c25c8588a70053c00f5af1b33884af362152a104cb87c0c136c95b0e6",
+		"06-memory-information-flow/references.bib": "03ed53f8f86e3a9954a81a7a6d875616f774f030f92eaa97d08d4ae246f8dcae",
+		"07-context-compaction/main.typ": "727e9dccc364e5f07774def75e394203aaf91333552c0e46ff666dafd6f760cc",
+		"07-context-compaction/references.bib": "ecc0c58f97ad81976b0084f75538eb3a787705ee4dda4e2a3fc855d0b0496826",
+		"08-replayable-tool-programs/main.typ": "add2f70ae24135cf2bdb26b683412fb656c6d4895d5ad81f9160175d9592e40d",
+		"08-replayable-tool-programs/references.bib": "89b3ec9e51db9c04bf0fe2bcef35e74874c31843504998f71b4defeddbb2a2ae",
+		"09-secret-references/main.typ": "cd6fd038459f2cc6c40c256000606599ec25d68f8e290553b00c9f5feffe0f6a",
+		"09-secret-references/references.bib": "8ceee25a20d8314db7f432e2fac095a4870fd4583c5231348408d34e0dda945b",
+		"10-open-tool-discovery/main.typ": "9f6af8cb4a9da92d40092cbfafc4c5b042ecf428f21603eca53236c389e3eefe",
+		"10-open-tool-discovery/references.bib": "9f513f372b2da745f975da8be627d7fbb02197773ae99d82c47afa91c3847f30",
+		"11-protocol-conformance/main.typ": "ad78b7af0ac0e1716c84e779dc0e85e8f6fa66a5425ee5436e6b6a1ff3f33d23",
+		"11-protocol-conformance/references.bib": "8faf5e786412559c110d35844c56a1410289ca46c73c7fcb564f30c262dc153a",
+		"12-budget-scheduling/main.typ": "a18b866416738178011d00a33dfef04af220328e2b3125154f625e0c6b1a3b43",
+		"12-budget-scheduling/references.bib": "7de08772fd4c34dd80c8f6dce607c39ab71e7bff342a14b7fc03b374401e3b79",
+		"13-live-history-consistency/main.typ": "bddc50984902b74362e04f5aa054d6408ced6de3a90f5190790cd05591c8145e",
+		"13-live-history-consistency/references.bib": "6307ccce4ea352e872eafe380e199d73ad98e9ebe448bb20b0bc2f6e61aa7533",
+		"14-compute-portability/main.typ": "00115fd330af4531f37a014e4f82adaa11c370cc514b58fbb86deb5bc7a83922",
+		"14-compute-portability/references.bib": "411fbdb493849d2d9ab7c99f7e6781c6ccfc0abd25bc28967e37c12672e6179a",
+		"15-composable-runtime/main.typ": "4ed5e43fd1b039732223f29ccd2a42d27659a6bd068bd610822303d0aeef944b",
+		"15-composable-runtime/references.bib": "8808750b0ee854665c127bf8b2872da88b77cf868909973ab4ee13b4a3797bfc",
+		"build.sh": "e1b13ec9a917f71e8b175b2754594666ceab74d2f595ae90cc4dbf91fde3c1ad",
+		"experiments/paper_01_extended.py": "c6363cd84964a4aa5547bb336b311212909bd75dbae7864fa15fcbd2b43c2fd1",
+		"experiments/paper_02_extended.py": "50d91377023c0495cf3ef9ce7e64cfda812d7c494c43bbb464f4299a3b443849",
+		"experiments/paper_03_extended.py": "b99d984ce541e590e7187d356d555bf21463405038f9bcf3118f1ae180b66884",
+		"experiments/paper_04_extended.py": "352eaa7e01ff7b8baea8d4a8a121163251a4931cfff8fa8da3a3971eb98243d3",
+		"experiments/paper_05_extended.py": "b2b3bc2d8f95a8fc5a3d1e0abbfbe8c6ae8875b22d6d81b3d61a3b14d6608e05",
+		"experiments/paper_15.py": "82dc3607d6e4e7d7b5430d161f7da5b49f9d843ab51d7b59991b77ce6f8bf2a9",
+		"experiments/papers_01_05.py": "893bf8c760dd5f9f80d0fc2fa49a11ccf5fdf8f2fbc5dbc3f55147b0711c8188",
+		"experiments/papers_06_10.py": "d6a59301051983a7d6cc609a745b8d859b918a53761a2f1787945868801301a0",
+		"experiments/papers_11_12.py": "3588da50185788bf2b380f38915ae81650856154aa1e159442294c515a0bd1ed",
+		"experiments/papers_13_14.py": "8d878acf7b50d4db6bd8b20152d6b9cb62b039b2d7977214f6b6945c6c9d85af",
+		"experiments/run.py": "0d24b183c38f87c80555d538f59d758414a51ddc114934dd065469921e1a379a",
+		"experiments/support.py": "9b0222b5e2880d2d6b92ca49f15d1800fcfa260ed71f3e71612a0ff81a0b4b4b",
+		"index.typ": "4d3481abd810bbb46cea1d75206bd32590d5a38f663aaa2cc3a618dbcddbdd1b"
+	},
+	"status": "passed",
+	"timing_note": "Elapsed time is a run record, not a speed study."
+}

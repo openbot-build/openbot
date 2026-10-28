@@ -121,6 +121,99 @@ devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/use-models
 Ohne `OPENBOT_E2E_LIVE=true` wird dieser Test übersprungen. Ein übersprungener
 Test des echten Dienstes ist keine erfolgreiche Dienstprüfung.
 
+## Paper-Experimente
+
+```sh
+devenv shell -- python3 papers/experiments/run.py --seeds 30 --output .cache/e2e/papers.json
+```
+
+Der Runner nutzt nur die Python-Standardbibliothek. Er führt die kleinen
+abstrakten Modelle und die ausgearbeiteten Beispiele aller 15 Papers aus. Das
+JSON-Ergebnis enthält Eingaben, Seeds, Quellcode-Hashes, Prüfungen,
+Beobachtungen und Grenzen. Bei einer fehlgeschlagenen Prüfung ist der Exit-Code
+ungleich null. Eine Prüfung ist eine Zusicherung während eines Laufs. Sie ist
+keine unabhängige Studie und kein eigener Nutzungsfall.
+
+Die Experimente vergleichen die genannte Methode mit einer Basis, wenn das Paper
+eine angibt. Sie enthalten Gegenbeispiele: Eingaben, bei denen die Basis eine
+beabsichtigte Regel verletzt. Bestehen diese kleinen Modelle, belegt das weder
+die Umsetzung der Methode im Produkt noch das gleiche Ergebnis bei einem großen
+Dienst.
+
+| Paper                                | Wichtigstes Experiment                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| 01: Dauerhafte Ausführung            | Unbekannte externe Ergebnisse, Eigentumsgrenzen und Wiederholung             |
+| 02: Erhalt von Befugnissen           | Aktuelle Rechte, gespeicherte Identität und Zulassung von Aktionen           |
+| 03: Gestufte Autorisierung           | Genaue Regeln, Model-Schwellen und menschliche Prüfung                       |
+| 04: Koordination von Agenten         | Unterwegs befindliche Nachrichten, Arbeitszähler und Abschluss einer Aufgabe |
+| 05: Gedächtnis mit Belegen           | Belege aus zitierten Quellen, Korrekturen und Cursor-Bewegung                |
+| 06: Informationsfluss im Gedächtnis  | Leser der Quellen und Zugriff auf verbundenes Gedächtnis                     |
+| 07: Kontextkürzung                   | Verbindungen über einen Schnitt hinweg und veraltete Schreibzugriffe         |
+| 08: Wiederholung von Tool-Programmen | Eingaberahmen, Aufrufreihenfolge, Zustellreihenfolge und Rückgabeprüfungen   |
+| 09: Secret-Verweise                  | Secret-Handles, erlaubte Nutzung und Ausgabeformen                           |
+| 10: Tool-Suche                       | Widersprüchliche Belege und Rückzug bei fehlgeschlagenem Lesen               |
+| 11: Protokolltests                   | Erreichbare Zustände und Fehler in erzeugten Ablaufspuren                    |
+| 12: Budgetplanung                    | Unbekannte Kosten, späte Belege, Preise, Obergrenzen und Anteile             |
+| 13: Live-Verlauf                     | Wiedergabebelege, Epochen und festgeschriebene Präfixe                       |
+| 14: Passende Rechenleistung          | Ressourcenbedarf und Effektgrenzen für jedes Präfix einer Ablaufspur         |
+| 15: Zusammensetzung der Laufzeit     | Plugin-Reihenfolge, Schutzprüfungen, Hooks und Freigabe von Ressourcen       |
+
+## Unterschiede zwischen Produkt und Papers
+
+Die Papers legen Methoden und Studien fest. Einige Methoden gehen über das
+aktuelle Produktverhalten hinaus. Halte drei Ergebnisse auseinander:
+Regressionstests des Produkts, Experimente mit abstrakten Modellen und
+Prüfungen, die das Produkt mit einer beabsichtigten Regel aus einem Paper
+vergleichen.
+
+Führe nach dem Build die internen Produktprüfungen für Papers 06 und 12 aus:
+
+```sh
+devenv shell -- node --disable-warning=ExperimentalWarning packages/openbot/test/PaperProductEvidenceMain.ts --strict
+```
+
+Diese Prüfungen rufen interne Dienste auf. Sie vergleichen Produktregeln mit den
+Papers. Sie sind keine End-to-End-Benutzeraufgaben in `packages/e2e`.
+
+Der Befehl schreibt seine Belege als JSON in die Standardausgabe. Mit `--strict`
+ist der Exit-Code ungleich null, wenn eine beabsichtigte Paper-Regel verletzt
+wird. Die Prüfungen stellen zuerst sicher, dass die Testdaten und Zugriffsregeln
+vorliegen. Fehlende Daten können eine Prüfung nicht bestehen lassen.
+
+Die Prüfung für Paper 06 verbindet Quellen von Ana und Bob zu einem
+Gedächtniseintrag. Ein früher Lauf zeigte, dass beide das Ergebnis ohne Zugriff
+auf die Quelle der anderen Person lesen konnten. Die Prüfung verlangt jetzt
+Zugriff auf jede Quelle. Keine der beiden Personen darf das Ergebnis allein
+lesen. Eine Gruppe, die beide Quellen lesen darf, darf es lesen. Andere Benutzer
+und Organisationen bleiben gesperrt. Das ist die Schnittmenge der Quellenleser:
+Nur Leser, die alle Quellen gemeinsam haben, dürfen das Ergebnis lesen. Altes
+Memory ohne Nachweis des Zugriffs auf seine Quellen bleibt bis zu einem
+Neuaufbau verborgen.
+
+Die Prüfung für Paper 12 setzt eine Obergrenze von 1.000 microUSD. Ein microUSD
+ist ein Millionstel eines US-Dollars. Ein früher Lauf gab den Schätzwert des
+ersten Aufrufs frei, als dessen Kosten unbekannt wurden. Ein zweiter Aufruf gab
+den frei gewordenen Betrag aus. Ein später Beleg für den ersten Aufruf hob die
+Endkosten dann auf 2.000 microUSD. Die Prüfung verlangt jetzt, dass OpenBot die
+Reservierung behält und den zweiten Aufruf stoppt. Ein bestätigter Beleg ersetzt
+die Reservierung durch die echten Kosten. Derselbe Beleg darf keine weiteren
+Kosten auslösen. Ein alter unbekannter Aufruf, dessen Reservierung verloren
+ging, muss neue Aufrufe unter seinen betroffenen harten Budgets stoppen, bis
+seine Kosten bestätigt sind. Reservierungen mit unbekannten Kosten müssen auch
+bei einem neuen Budget-Zeitraum erhalten bleiben.
+
+Diese Prüfungen müssen bestehen, bevor die Reparaturen als abgeschlossen gelten.
+Sie beweisen keine feste Grenze für die Endkosten des Anbieters. Die Grenze in
+Paper 12 setzt voraus, dass jeder reservierte Betrag eine geprüfte Obergrenze
+für die Kosten seines Aufrufs ist. OpenBot nutzt einen Schätzwert aus der Größe
+der Eingabe und einer festen Menge an Ausgabe-Tokens. Die echten Kosten können
+diesen Wert überschreiten. Siehe [Budgets](/de/docs/usage#budgets).
+
+Die vorhandenen Produkttests belegen weder die Geräte-Wiedergabebelege aus Paper
+13 noch die Platzierungsregeln anhand von Ablaufspuren aus Paper 14 oder die
+strengeren Registrierungsprüfungen aus Paper 15. Beschreibe bestandene Adapter-
+oder Plugin-Tests nicht als Nachweis dieser Methoden.
+
 ## Grenzen
 
 Ein vollständiger Testlauf deckt die benannten Eingaben und Pfade ab. Er kann
