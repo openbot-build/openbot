@@ -5801,7 +5801,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						key.id === fence.id &&
 						(yield* Ref.updateAndGet(reads, (n) => n + 1)) === 2
 					)
-						yield* test.tools.finish(fence, { status: "completed" })
+						yield* test.tools
+							.finish(fence, { status: "completed" })
+							.pipe(Effect.orDie)
 					return yield* test.store.loadMember(key)
 				}),
 			}
