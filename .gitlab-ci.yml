@@ -47,7 +47,8 @@ check:
   extends: .devenv
   stage: check
   script:
-    - devenv --profile ci shell -- pnpm -r --workspace-concurrency=1 build
+    - devenv --profile ci shell -- bash deploy/docker/ci-resources.sh --run pnpm
+      -r --workspace-concurrency=1 build
     - >-
       devenv --profile ci shell -- bash -euo pipefail -c 'pnpm -r
       --workspace-concurrency=1 exec tsc -p tsconfig.json --noEmit; pnpm exec
@@ -64,8 +65,8 @@ sdk-package:
   stage: build
   needs: [check]
   script:
-    - devenv --profile ci shell -- pnpm --filter '@openbot-build/client...'
-      build
+    - devenv --profile ci shell -- bash deploy/docker/ci-resources.sh --run pnpm
+      --filter '@openbot-build/client...' build
     - devenv --profile ci shell -- node scripts/publish-kay-sdk.mjs pack
   artifacts:
     name: openbot-sdk-$CI_COMMIT_SHORT_SHA
