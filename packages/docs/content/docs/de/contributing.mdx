@@ -384,7 +384,7 @@ Datei passt. Leite `/v1`, `/auth`, `/health` und WebSockets an den Server
 weiter. Die UI wird weiter im UI-Repository entwickelt.
 
 Gib OpenBot vor der UI-Installation frei, dann die UI vor der
-Cloud-Installation. Beide Nutzer starten mit `0.1.0`. Starte
+Cloud-Installation. Beide Nutzer starten mit `0.1.1`. Starte
 `scripts/install.sh`, sobald der Zugriff auf die Registry bereit ist. Die erste
 Installation erstellt `pnpm-lock.yaml`. Committe diese Datei. Spätere
 Installationen verlangen diese Lockdatei. CI speichert die erzeugte Lockdatei
@@ -395,4 +395,4 @@ ihre Pakete. Die Workflows nutzen `GITHUB_TOKEN` mit `packages: read`. Bei
 getrennten Zugangsdaten nutze das Secret `PACKAGES_READ_TOKEN` mit einem classic
 PAT und `read:packages`. Die Veröffentlichung nutzt `GITHUB_TOKEN` mit
 `packages: write` des Quell-Repositorys. Auch lokale Installationen öffentlicher
-Pakete brauchen einen Token. Siehe [Client-Setup](/docs/de/client).
+Pakete brauchen einen Token. Siehe [Client-Setup](/de/docs/client).
