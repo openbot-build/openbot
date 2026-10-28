@@ -42,8 +42,12 @@
 
 ## License
 
-- OpenBot uses `AGPL-3.0-only`. Every `package.json` sets
-  `"license": "AGPL-3.0-only"`, and new packages must do the same.
+- OpenBot uses `AGPL-3.0-only`, except `packages/client`, which uses MIT. New
+  packages use `AGPL-3.0-only`. The client bundles the OpenBot code it needs;
+  `packages/client/LICENSE` gives that code an added MIT grant. Keep third-party
+  code under its own terms. Keep workspace imports for local development.
+  `pnpm pack` makes the bundle; normal builds keep shared type identities across
+  packages.
 - Add a new dependency only when its license lets us share it under the AGPL.
 
 ## Docs

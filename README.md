@@ -104,3 +104,6 @@ In short: you can use, change, and share OpenBot. If you share a changed copy,
 or let people use a changed copy over a network, you must give them the source
 code of your changes under the same license. The [LICENSE](./LICENSE) file has
 the full, legal text. Only that text decides what you can do.
+
+The client package uses MIT, including the OpenBot code bundled with it. See
+[the client license](./packages/client/LICENSE). Other packages keep AGPL.
