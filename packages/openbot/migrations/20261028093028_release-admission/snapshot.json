@@ -1,0 +1,87 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "96652bbb-263d-4b2f-a3d7-d67f3c4c216e",
+  "prevIds": [
+    "1c33eacb-0121-4396-871c-469bdbdc9608",
+    "ce27fd8d-baf6-467f-911d-43e08eb93251"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "openbot_release_admission"
+      ],
+      "writes": [
+        "s|tbl|public.openbot_release_admission",
+        "n|tbl|public.openbot_release_admission",
+        "e|tbl|public.openbot_release_admission",
+        "n|rel|public.openbot_release_admission",
+        "n|type|public.openbot_release_admission",
+        "n|rel|public.openbot_release_admission_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "openbot_release_admission",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_release_admission",
+        "name": "id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_release_admission",
+        "name": "quiesced",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "openbot_release_admission",
+        "name": "openbot_release_admission_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

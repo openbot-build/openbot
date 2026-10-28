@@ -1,3 +1,4 @@
+import { defaultChatMemory } from "@openbot-build/domain/Chats"
 import { Chat, type Item, type Turn } from "@openbot-build/core"
 import type { Execution } from "@openbot-build/domain"
 import type {
@@ -17,6 +18,8 @@ export const info = (ref: Chat.Ref): ChatInfo => {
 		kind: state.kind,
 		bot: state.bot,
 		parent: state.parent ?? null,
+		...(state.branchOf === undefined ? {} : { branchOf: state.branchOf }),
+		memory: state.memory ?? defaultChatMemory,
 		...(state.title === undefined ? {} : { title: state.title }),
 		settings: ref.settings,
 		...(state.planApproval === undefined

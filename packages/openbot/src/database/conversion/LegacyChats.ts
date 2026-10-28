@@ -27,6 +27,7 @@ export const Prompt = Schema.Struct({
 	content: Schema.Array(Schema.JsonObject),
 })
 export const Turn = Schema.Struct({
+	metadata: Schema.optionalKey(Schema.JsonObject),
 	id,
 	chat: id,
 	settings: Settings,
@@ -80,6 +81,7 @@ export const Turn = Schema.Struct({
 	completedAt: Schema.optionalKey(Schema.Finite),
 })
 export const Inbox = Schema.Struct({
+	metadata: Schema.optionalKey(Schema.JsonObject),
 	id,
 	content: Prompt,
 	kind: Schema.Literals(["message", "steer", "action"]),
@@ -98,8 +100,32 @@ export const Chain = Schema.Struct({
 	chats: Schema.Array(id),
 })
 export const Host = Schema.Struct({
+	memory: Schema.optionalKey(
+		Schema.Struct({ read: Schema.Boolean, write: Schema.Boolean }),
+	),
+	memoryEpoch: Schema.optionalKey(Schema.Natural),
+	learnAfterSeq: Schema.optionalKey(Schema.Natural),
+	creation: Schema.optionalKey(
+		Schema.Struct({ requestId: id, signature: text }),
+	),
+	branchOf: Schema.optionalKey(
+		Schema.Struct({
+			chat: id,
+			revision: Schema.Natural,
+			throughSeq: Schema.Natural,
+			root: id,
+			reason: Schema.Literals(["fork", "regenerate"]),
+		}),
+	),
 	bot: id,
-	kind: Schema.Literals(["direct", "channel", "task", "review", "live"]),
+	kind: Schema.Literals([
+		"direct",
+		"conversation",
+		"channel",
+		"task",
+		"review",
+		"live",
+	]),
 	parent: Schema.optionalKey(Schema.Struct({ chat: id, delegation: id })),
 	chain: Chain,
 	review: optionalText,

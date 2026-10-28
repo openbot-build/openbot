@@ -1,3 +1,8 @@
+import {
+	ChatMemory,
+	ChatBranch,
+	defaultChatMemory,
+} from "@openbot-build/domain/Chats"
 import { Chat, type Plugin, type Turn } from "@openbot-build/core"
 import { Caller, Execution, TokenId } from "@openbot-build/domain"
 import {
@@ -42,6 +47,13 @@ export const ChatHostState = Schema.Struct({
 	bot: BotsApi.BotId,
 	kind: ChatKind,
 	parent: Schema.optionalKey(ChatParent),
+	branchOf: Schema.optionalKey(ChatBranch),
+	memory: Schema.optionalKey(ChatMemory),
+	creation: Schema.optionalKey(
+		Schema.Struct({ requestId: Schema.String, signature: Schema.String }),
+	),
+	memoryEpoch: Schema.optionalKey(Schema.Natural),
+	learnAfterSeq: Schema.optionalKey(Schema.Natural),
 	/** The workflow that owns this Chat and all accepted follow-up work. */
 	ownerExecutionId: Schema.optionalKey(Execution.Id),
 	/** Task inputs keep all caller limits. Other Chat kinds do not share these limits. */
@@ -207,3 +219,20 @@ export const chainForHost = (
 	bots: state.chain.bots,
 	chats: state.chain.chats,
 })
+
+/** A Turn keeps its policy even while queued. Changing defaults revokes old memory work. */
+export const memoryMetadata = (chat: Chat.Ref, override?: ChatMemory) => ({
+	memory: override ?? hostState(chat).memory ?? defaultChatMemory,
+	memoryEpoch: hostState(chat).memoryEpoch ?? 0,
+})
+export const memoryOf = (
+	chat: Chat.Ref,
+	turn: Turn.Record | undefined = chat.turn,
+): ChatMemory => {
+	const state = hostState(chat)
+	if (turn?.metadata === undefined) return state.memory ?? defaultChatMemory
+	if (turn.metadata["memoryEpoch"] !== (state.memoryEpoch ?? 0))
+		return { read: false, write: false }
+	const policy = turn.metadata["memory"]
+	return Schema.is(ChatMemory)(policy) ? policy : { read: false, write: false }
+}

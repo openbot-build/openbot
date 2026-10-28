@@ -26,6 +26,15 @@ token also has its own policy, and both must allow the call. The platform can
 add a ceiling with deny rules for every organization. See
 [The order of checks](#the-order-of-checks).
 
+Read your current rights with `GET /v1/organization/capabilities`. The result is
+`{ resources: [{ kind, actions }] }` for `Organization`, `Member`, `Role`,
+`ModelProvider`, `Sso`, `AuditLog`, `Usage` and `Budget`. An empty action list
+means none are allowed. Every active member can read this result, even without
+`Organization.read`. It uses the member roles, member policy, token policy and
+platform ceiling at the time of the call. Clients may use it to show controls;
+each later call still checks its own rights. It does not describe rights on an
+individual Chat, Bot, Channel or other owned resource.
+
 ---
 
 ## Resources and actions

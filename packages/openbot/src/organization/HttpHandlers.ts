@@ -1,3 +1,4 @@
+import * as Check from "../authorization/Check.ts"
 import {
 	type Roles as RolesApi,
 	OrganizationApi,
@@ -16,9 +17,80 @@ import { organizationKey, userKey } from "../audit/Resources.ts"
 import { Roles } from "../authorization/Roles.ts"
 import { ModelRegistry } from "../models/ModelRegistry.ts"
 import { Settings } from "../settings/Settings.ts"
+import * as ChatModels from "../chats/ChatModels.ts"
 import * as Views from "../settings/Views.ts"
 import { PlatformAdmins } from "../platform/PlatformAdmins.ts"
 import { Organization } from "./Organization.ts"
+
+/** These kinds have one value per organization, with no owner or item ID. */
+const capabilityTargets = (organizationId: string) =>
+	[
+		{
+			kind: "Organization",
+			action: "read",
+			resource: Authorization.Organization.make({ organizationId }),
+		},
+		{
+			kind: "Organization",
+			action: "write",
+			resource: Authorization.Organization.make({ organizationId }),
+		},
+		{
+			kind: "Member",
+			action: "read",
+			resource: Authorization.Member.make({ organizationId }),
+		},
+		{
+			kind: "Member",
+			action: "write",
+			resource: Authorization.Member.make({ organizationId }),
+		},
+		{
+			kind: "Role",
+			action: "write",
+			resource: Authorization.Role.make({ organizationId }),
+		},
+		{
+			kind: "ModelProvider",
+			action: "read",
+			resource: Authorization.ModelProvider.make({ organizationId }),
+		},
+		{
+			kind: "ModelProvider",
+			action: "write",
+			resource: Authorization.ModelProvider.make({ organizationId }),
+		},
+		{
+			kind: "Sso",
+			action: "read",
+			resource: Authorization.Sso.make({ organizationId }),
+		},
+		{
+			kind: "Sso",
+			action: "write",
+			resource: Authorization.Sso.make({ organizationId }),
+		},
+		{
+			kind: "AuditLog",
+			action: "read",
+			resource: Authorization.AuditLog.make({ organizationId }),
+		},
+		{
+			kind: "Usage",
+			action: "read",
+			resource: Authorization.Usage.make({ organizationId }),
+		},
+		{
+			kind: "Budget",
+			action: "read",
+			resource: Authorization.Budget.make({ organizationId }),
+		},
+		{
+			kind: "Budget",
+			action: "write",
+			resource: Authorization.Budget.make({ organizationId }),
+		},
+	] as const
 
 const superAdministrator = "super_administrator"
 const storageUnavailable = () =>
@@ -55,6 +127,7 @@ const organizationGroup = HttpApiBuilder.group(
 			const settings = yield* Settings
 			const registry = yield* ModelRegistry
 			const auth = yield* Authorization.Auth
+			const checks = yield* Check.make
 			const audit = yield* AuditLog
 			const record = (
 				caller: Caller,
@@ -83,6 +156,29 @@ const organizationGroup = HttpApiBuilder.group(
 				>,
 			) =>
 				Effect.gen(function* () {
+					if (changes.chatModel != null) {
+						const catalog = yield* registry
+							.catalog(caller.organizationId)
+							.pipe(
+								Failures.replace(
+									"OpenBot could not read the model catalog",
+									() => SettingsApi.SettingsUnavailable.make({}),
+								),
+							)
+						yield* ChatModels.validate(catalog, changes.chatModel).pipe(
+							Effect.mapError((error) =>
+								SettingsApi.SettingsInvalid.make({ message: error.message }),
+							),
+						)
+						yield* checks.check(caller, {
+							action: "use",
+							resource: Authorization.Model.make({
+								organizationId: caller.organizationId,
+								provider: changes.chatModel.provider,
+								id: changes.chatModel.model,
+							}),
+						})
+					}
 					const { botMemoryModel } = changes
 					if (botMemoryModel === undefined || botMemoryModel === null) return
 					const catalog = yield* registry
@@ -173,6 +269,33 @@ const organizationGroup = HttpApiBuilder.group(
 			// Write handlers do not stop when the client goes away, so a change
 			// always gets its audit entry.
 			return handlers
+				.handle("getCapabilities", () =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const targets = capabilityTargets(caller.organizationId)
+						const decisions = yield* Effect.forEach(targets, (target) => {
+							const { kind: _kind, ...permission } = target
+							return checks
+								.allows(caller, permission)
+								.pipe(Effect.map((allowed) => ({ ...target, allowed })))
+						})
+						return {
+							resources: Arr.map(
+								Arr.dedupe(Arr.map(targets, (target) => target.kind)),
+								(kind) => ({
+									kind,
+									actions: Arr.map(
+										Arr.filter(
+											decisions,
+											(item) => item.kind === kind && item.allowed,
+										),
+										(item) => item.action,
+									),
+								}),
+							),
+						}
+					}),
+				)
 				.handle("getOrganization", () =>
 					Effect.flatMap(Identity, (caller) =>
 						organization.get(caller.organizationId),

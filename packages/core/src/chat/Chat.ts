@@ -43,6 +43,7 @@ export const InboxEntry = Schema.Struct({
 	action: Schema.optionalKey(Turn.Action),
 	/** Who the input is for. The Turn that reads it gets the same author. */
 	author: Schema.optionalKey(Turn.Author),
+	metadata: Schema.optionalKey(Schema.JsonObject),
 	notice: Schema.optionalKey(Item.Notice),
 	approved: Schema.optionalKey(ApprovedCall),
 })
@@ -134,6 +135,8 @@ export class Approvals extends Context.Service<
 >()("@openbot-build/core/chat/Chat/Approvals") {}
 
 export interface DeliverInput {
+	/** Data set by the host, kept with the input and its Turn. */
+	readonly metadata?: Schema.JsonObject
 	readonly chat: Id
 	readonly input: Prompt.RawInput
 	/** Who the input is for. See `Turn.Author`. */

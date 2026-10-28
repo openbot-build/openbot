@@ -81,7 +81,7 @@ export const make = Effect.gen(function* () {
 				return { view, record: found.value }
 			})
 		return {
-			executionId: (turn: Turn.Id | undefined) =>
+			executionId: (turn: Turn.Id | undefined, chat: Chat.Id) =>
 				turn === undefined
 					? Effect.succeed(null)
 					: db
@@ -92,6 +92,8 @@ export const make = Effect.gen(function* () {
 									eq(executions.namespace, namespace),
 									eq(executions.resourceKind, "Turn"),
 									eq(executions.resourceId, turn),
+									eq(executions.contextKind, "Chat"),
+									eq(executions.contextId, chat),
 								),
 							)
 							.limit(2)

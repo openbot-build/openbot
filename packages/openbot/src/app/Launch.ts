@@ -56,6 +56,7 @@ export const main = <ROut, E>(
 							"Run the OpenBot HTTP server.",
 							"It takes its settings from these environment variables:",
 							"  OPENBOT_CLUSTER_SECRET  The shared secret for private RPC. Needed.",
+							"  OPENBOT_INTERNAL_TOKEN  An optional private token for release control.",
 							"  OPENBOT_CLUSTER_HOST    The address that other nodes can reach.",
 							"  OPENBOT_DATABASE_URL    The address of the Postgres database. Needed.",
 							"  OPENBOT_SECRET_KEYS     The keys that keep stored secrets safe. Needed.",

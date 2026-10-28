@@ -125,12 +125,34 @@ export const layer = Layer.unwrap(
 									),
 									ClientMetadata.metadata,
 								)
+								const discovered = yield* withNetwork(
+									key.owner,
+									[
+										connection.endpoint,
+										issuer,
+										...(protection.resourceMetadataUrl === undefined
+											? []
+											: [protection.resourceMetadataUrl]),
+									],
+									OAuthAuthorization.discover({
+										resource: connection.endpoint,
+										issuer,
+										...(protection.resourceMetadataUrl === undefined
+											? {}
+											: {
+													resourceMetadataUrl: protection.resourceMetadataUrl,
+												}),
+									}),
+								)
 								const prepared = yield* withNetwork(
 									key.owner,
 									[
 										connection.endpoint,
 										issuer,
 										metadata.client_id,
+										...(discovered.metadata.registration_endpoint === undefined
+											? []
+											: [discovered.metadata.registration_endpoint]),
 										...(protection.resourceMetadataUrl === undefined
 											? []
 											: [protection.resourceMetadataUrl]),

@@ -36,3 +36,40 @@ happened in an App.
 Deleting history removes the Chat history. It does not erase the separate
 [Bot memory](/docs/memory). Files kept only by that Chat can be removed later.
 For a failed Turn, read the error before sending the same task again.
+
+## Independent conversations and saved commands
+
+Use `POST /v1/chats` with a `botId` and a stable `requestId` to start an
+independent `conversation` with an existing Bot. The direct Chat of that Bot
+stays separate. `POST /v1/chats/:chatId/forks` copies committed history at the
+given revision. It never runs copied messages or tools. Pending work, approvals
+and unknown outside results block a fork. `GET /v1/chats/:chatId/branches` lists
+branches the caller may read.
+
+`memory: { read, write }` in a Chat update sets its defaults. The same field in
+a message applies only to that Turn. A default change revokes queued memory
+work; copied history is not learned again.
+
+When a send response is lost, read `GET /v1/execution-commands/:commandKey`. It
+returns the saved receipt or `null`, with the current account and execution
+permissions. A `null` result is not proof that a request was never sent. Keep
+checking the saved command; do not send a new message to restore the old
+response. The native Execution API gives its current status and events.
+
+## Organization model defaults
+
+An administrator can set `chatModel` through `PATCH /v1/organization/settings`,
+using the current `expectedVersion`. The selection must be an available language
+model and the administrator must have permission to use it. A Chat's explicit
+model takes precedence over its Bot's model; the organization's `chatModel` is
+the fallback. New Chats that inherit a choice keep that inheritance. Each Turn
+saves the resolved model before making an outside call, so changing the
+organization default affects the next Turn and does not change recovery of an
+accepted Turn. Existing explicit choices are preserved. Setting a Bot's `model`
+to `null` with its current revision restores inheritance.
+
+Message receipts can include `inputItems`, the original inbox IDs committed by
+that command. Follow an `InputMoved` event only when its `items` intersect those
+IDs. An older receipt without those IDs does not prove that a later move belongs
+to the same message. Queued work without a Turn returns `turn: null`; never
+treat a Chat ID as a Turn ID.

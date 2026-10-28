@@ -59,6 +59,7 @@ import * as VaultReaders from "../src/vaults/Readers.ts"
 /** How a test host starts. */
 export interface Options {
 	readonly publicOrigin: string
+	readonly internalToken?: string
 	readonly port?: number
 	readonly model?: typeof LanguageModel.LanguageModel.Service
 	readonly contextWindow?: number
@@ -396,6 +397,7 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		],
 	}
 	const configuration = {
+		...(options.internalToken === undefined ? {} : { internalToken: Redacted.make(options.internalToken) }),
 		...(options.platformAdmins === undefined
 			? {}
 			: { platformAdmins: options.platformAdmins }),

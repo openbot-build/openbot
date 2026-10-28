@@ -467,3 +467,28 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 For this development task, see
 [Publish and check the project](/docs/developers/publishing).
+
+## Private release control
+
+Set `OPENBOT_INTERNAL_TOKEN` to a separate random secret of at least 32 characters
+to enable `POST /internal/execution/quiesce`, `status`, and `resume`. Send it as a
+Bearer token. Keep these paths on the private service network. Without the token
+setting they return 404; a wrong token returns 401.
+
+Quiesce closes new public writes and new background work. Reads and sign-out
+remain available. Accepted work can finish, including its tool work and physical
+resources. `status` reports `quiesced`, `drained`, `activeExecutions`, and
+`activeLeases` from stored state. Pending approval, unknown results, and resources
+whose close has not been confirmed block a release. Do not approve or retry them
+to force a release.
+
+Idle trigger, file retention, computer maintenance, and App index timers stay
+saved and do not block a release. They cannot start new work while admission is
+closed. Work already accepted to delete a file or pause a computer must end first.
+When a trigger is due
+while admission is closed, it waits without starting a task. Resume lets that
+same timer continue. The closed gate survives a restart. Wait for `drained: true`,
+stop every old server, run the migration, then start one new server and check its
+health. Call `resume` before opening public traffic. If drain times out before
+stopping, call `resume` on the current server. This protocol does not replace
+backups, migration checks, or a safe plan for failed upgrades.

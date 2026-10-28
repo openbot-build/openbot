@@ -196,6 +196,9 @@ export interface Client {
 		options: CallOptions,
 	) => Effect.Effect<OperationResult<unknown>, Error>
 	readonly key: Store.ConnectionKey
+	/** The version selected by the live handshake. */
+	readonly protocolVersion: string
+	/** Live discover data, or the same fields from a legacy initialize answer. */
 	readonly discovery: Mcp.DiscoverResult
 	readonly notifications: Stream.Stream<Mcp.Notification>
 	readonly listTools: (options?: {

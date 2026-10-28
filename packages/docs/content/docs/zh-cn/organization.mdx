@@ -420,3 +420,15 @@ curl -X POST -b cookies.txt \
 | `409`  | `SettingsConflict`               | 在你读取之后，有人修改了设置。                                    |
 | `409`  | `LastSuperAdministrator`         | 这个修改会导致没有活跃的 Super Administrator。                    |
 | `503`  | `OrganizationStorageUnavailable` | OpenBot 无法连接到它的数据库。                                    |
+
+## 注册加入已有组织
+
+平台设置中的 `memberSignupOrganizationId` 默认是
+`null`。设置明确的组织 ID 后，新账号可以以 `member`
+身份加入该组织。账号必须通过平台主 OIDC 提供方登录，且邮箱已经验证；账号不能有已有成员关系或移除记录。此设置不会按邮箱合并账号，也不会改变 SSO 或已验证域名规则选定的组织。
+
+目标组织必须处于活动状态，并有活动的超级管理员。检查与写入使用同一成员变更锁。注册只授予
+`member`，不授予直接策略。受管理的部署还应将 `organizationCreation` 设为
+`platform_admins`。
+
+已暂停的成员关系保持暂停。移除成员时会保留内部移除记录，后续注册或域名准入不能恢复访问。明确发出的邀请仍可经过正常检查重新授予访问。

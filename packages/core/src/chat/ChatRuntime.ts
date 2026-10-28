@@ -593,6 +593,7 @@ export const make = <
 				id: Item.Id.make(item),
 				content: Prompt.make(input.input),
 				kind: "message",
+				...(input.metadata === undefined ? {} : { metadata: input.metadata }),
 				...(input.author === undefined ? {} : { author: input.author }),
 				...(input.notice === undefined ? {} : { notice: input.notice }),
 				...(input.approved === undefined ? {} : { approved: input.approved }),

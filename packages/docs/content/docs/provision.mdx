@@ -1,0 +1,143 @@
+---
+title: Provision an empty platform
+description: Set up one organization and its users without importing old work.
+---
+
+`openbot provision` prepares a new, empty OpenBot database before the server
+starts. It keeps supplied user IDs and OpenID Connect subjects. It does not copy
+Chats, memory, files, tokens or browser sessions. People sign in again through
+the same identity provider. Use the database migrations from the same image
+first. See [Deploy](/docs/deploy).
+
+## Input
+
+Use a private JSON file with mode `0600` or stricter, at most 2 MiB. Never put
+secrets in command arguments. The file has the form below. Replace every example
+value with the exact source value. Every imported email must already be
+verified. `ownerUserId` names the only Super Administrator and platform admin.
+Other users become ordinary members. The issuer comes from
+`platform.identityProvider`; every account must use that provider ID. Accounts
+are never merged by email.
+
+```json
+{
+	"version": 1,
+	"platform": {
+		"publicOrigin": "https://api.example.com",
+		"browserAuth": {
+			"sessionCookie": "__Host-workspace_session",
+			"loginCookie": "__Host-workspace_login",
+			"sessionTtlMs": 86400000
+		},
+		"identityProvider": {
+			"providerId": "company",
+			"issuer": "https://id.example.com",
+			"clientId": "workspace",
+			"clientSecret": "REPLACE_WITH_THE_EXISTING_CLIENT_SECRET",
+			"callbackPath": "/auth/callback",
+			"scopes": ["openid", "profile", "email", "offline_access"]
+		},
+		"authSecret": "REPLACE_WITH_THE_EXISTING_AUTH_SECRET",
+		"fileStorage": {
+			"endpoint": "http://storage:9000",
+			"publicEndpoint": null,
+			"region": "us-east-1",
+			"bucket": "workspace-files",
+			"accessKeyId": "workspace",
+			"secretAccessKey": "REPLACE_WITH_THE_STORAGE_SECRET",
+			"forcePathStyle": true
+		}
+	},
+	"organization": {
+		"name": "Example",
+		"ownerUserId": "existing-user-id",
+		"allowNewAccounts": false
+	},
+	"users": [
+		{
+			"id": "existing-user-id",
+			"name": "Alice",
+			"email": "alice@example.com",
+			"emailVerified": true,
+			"accounts": [
+				{
+					"id": "existing-account-id",
+					"providerId": "company",
+					"subject": "existing-oidc-subject"
+				}
+			]
+		}
+	],
+	"bot": {
+		"name": "Assistant",
+		"role": "Personal assistant",
+		"instructions": "Help the person with their work."
+	},
+	"models": [
+		{
+			"id": "language-model",
+			"name": "Language model",
+			"reasoningEfforts": [],
+			"serviceTiers": []
+		}
+	],
+	"providers": [
+		{
+			"kind": "openai-compat",
+			"name": "Company",
+			"endpoint": "https://models.example.com/v1",
+			"apiKey": "REPLACE_WITH_THE_MODEL_KEY",
+			"models": [
+				{
+					"model": "language-model",
+					"modelOwner": "platform"
+				}
+			]
+		}
+	],
+	"defaultModel": {
+		"providerName": "Company",
+		"modelId": "language-model"
+	}
+}
+```
+
+`models` and `providers` use the native create-model and create-provider fields.
+Their availability is limited to the new organization. The selected language
+model serves the personal Bot, Rules and Bot memory. Each user gets one private
+Bot and a default-Bot setting written with a version check. No Chat is created
+and no model, tool or memory learning runs during setup.
+
+Create the S3 bucket first. This command configures file storage but does not
+create the bucket or test its credentials. Keep the file and the old encryption
+keys out of source control. Store a backup before changing the sign-in
+authority.
+
+## Run
+
+Set `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`, or their existing secret
+files. Stop all executors that use the target. Do not run `setup` first: this
+command sets up the complete empty target in one transaction.
+
+```sh
+openbot provision --input /run/private/provision.json
+```
+
+The source package also offers `node dist/Provision.js`. The Docker image uses
+`/app/dist/app/Provision.mjs`; mount the private file read-only and make it
+readable by the image user. Success prints only the outcome and the
+organization, user, Bot and provider IDs. Use the returned organization ID in
+the product gateway.
+
+## Repeat or stop
+
+A database lock prevents two runs from creating duplicate objects. A failure
+rolls back the transaction. On success, a receipt stores the input digest and a
+digest of the target data. An identical run returns the same IDs without writes.
+Changed input or any changed target row is rejected. After the server accepts
+work, use the normal APIs to manage it; this command is not an update tool.
+
+The command rejects a nonempty target without its own receipt. It never deletes
+old data to make room, imports old OAuth tokens, or prints secrets on failure. A
+successful setup is not proof of login, model or S3 access. Test those through
+the public gateway before opening the service to users.

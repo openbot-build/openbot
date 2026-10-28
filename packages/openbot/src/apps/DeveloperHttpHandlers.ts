@@ -17,6 +17,7 @@ import { ownerKey, ownersOf } from "./StoredConnections.ts"
 import { DeveloperTests } from "./DeveloperTests.ts"
 import { DeveloperIndexing } from "./DeveloperIndexing.ts"
 import { DeveloperNotifications } from "./DeveloperNotifications.ts"
+import { Settings } from "../settings/Settings.ts"
 import { Auth } from "../auth/Auth.ts"
 
 export const layerPublic = HttpApiBuilder.group(
@@ -27,12 +28,16 @@ export const layerPublic = HttpApiBuilder.group(
 			const inspections = yield* AppInspections
 			const tests = yield* DeveloperTests
 			const auth = yield* Auth
+			const settings = yield* Settings
 			const executionErrors = yield* HttpErrors.make
 			return handlers
 				.handleRaw("authorizationCallback", () =>
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
-						const owner = yield* HttpMiddleware.optionalSession(auth).pipe(
+						const owner = yield* HttpMiddleware.optionalSession(
+							auth,
+							settings,
+						).pipe(
 							Effect.map(Option.map(ownersOf)),
 							// The Auth service logs the cause of each failure.
 							Effect.catchTag("AuthUnavailable", () =>

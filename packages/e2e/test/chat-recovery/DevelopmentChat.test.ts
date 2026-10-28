@@ -83,9 +83,10 @@ layer(platform, { excludeTestServices: true })((it) => {
 				assert.ok(summary !== undefined)
 				const id = summary.chat.id
 				const path = `/v1/chats/${id}`
-				// The development platform gives each new Chat a simulated model.
-				assert.deepStrictEqual(summary.chat.settings.model, defaultModel)
+				// Each Turn records its resolved model while the Chat keeps inheritance.
+				assert.strictEqual(summary.chat.settings.model, undefined)
 				const saved = yield* settled(send, id)
+				assert.deepStrictEqual(saved.turn?.settings.model, defaultModel)
 				assert.strictEqual(saved.status, "Completed")
 				const savedItems = yield* Effect.flatMap(
 					send(path + "/items", "GET"),

@@ -331,6 +331,7 @@ const make = Effect.gen(function* () {
 					}
 					break
 				}
+				case "conversation":
 				case "direct":
 				case "live":
 					yield* Check.execution(checks, identity, {

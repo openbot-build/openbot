@@ -141,12 +141,13 @@ const make = Effect.gen(function* () {
 			const bot = yield* bots.find(organizationId, botId)
 			if (Option.isNone(bot))
 				return yield* BotDomain.BotNotFound.make({ bot: botId })
+			const defaultModel = yield* models.chatSelection(organizationId)
 			const selected = yield* ChatModels.select(
 				{
 					kind: ChatHost.hostState(view.chat).kind,
 					bot: bot.value,
-					...(Option.isSome(models.defaultModel)
-						? { defaultModel: models.defaultModel.value }
+					...(Option.isSome(defaultModel)
+						? { defaultModel: defaultModel.value }
 						: {}),
 				},
 				catalog,

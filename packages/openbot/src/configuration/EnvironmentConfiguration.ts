@@ -3,6 +3,10 @@ import { Config, Option, Result, Schema, SchemaIssue } from "effect"
 import * as OutboundPolicy from "../network/OutboundPolicy.ts"
 
 export const load: Configuration.Load = Config.all({
+	internalToken: Config.schema(
+		Schema.Redacted(Schema.String.check(Schema.isMinLength(32))),
+		"OPENBOT_INTERNAL_TOKEN",
+	).pipe(Config.option, Config.map(Option.getOrUndefined)),
 	clusterSecret: Config.schema(
 		Schema.Redacted(Schema.String.check(Schema.isMinLength(32))),
 		"OPENBOT_CLUSTER_SECRET",

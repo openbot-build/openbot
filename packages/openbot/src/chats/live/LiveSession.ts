@@ -322,7 +322,10 @@ export const make = Effect.gen(function* () {
 										: { voice: input.plan.voice }),
 								})
 								const current = yield* chats.read(chat)
-								const active = yield* chats.executionId(current.chat.turn?.id)
+								const active = yield* chats.executionId(
+									current.chat.turn?.id,
+									current.chat.id,
+								)
 								if (active !== null) yield* follow(active)
 								const interruptRunning = (commandKey?: Execution.CommandKey) =>
 									Effect.gen(function* () {

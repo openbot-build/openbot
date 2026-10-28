@@ -452,6 +452,9 @@ const app = Layer.unwrap(
 					shardsPerGroup: 10,
 					shardLockRefreshInterval: Duration.millis(250),
 					shardLockExpiration: Duration.seconds(1),
+					// Restored runners can rebalance a live fixture. Bound that handoff
+					// above the two-second release scope, below the ten-second assertions.
+					entityTerminationTimeout: Duration.seconds(3),
 					refreshAssignmentsInterval: Duration.millis(250),
 					entityMessagePollInterval: Duration.millis(100),
 					entityReplyPollInterval: Duration.millis(50),

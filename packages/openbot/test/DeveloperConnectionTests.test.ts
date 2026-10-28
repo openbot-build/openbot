@@ -155,6 +155,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 										authorization_endpoint: base + "/authorize",
 										token_endpoint: base + "/token",
 										client_id_metadata_document_supported: true,
+										token_endpoint_auth_methods_supported: ["none"],
 										code_challenge_methods_supported: ["S256"],
 										response_types_supported: ["code"],
 									},

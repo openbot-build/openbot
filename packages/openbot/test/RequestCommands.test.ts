@@ -248,6 +248,7 @@ const setup = Effect.fn(function* (
 		{
 			workflow: "openbot.chat-turn",
 			resource: { kind: "Turn", id: turn },
+			context: { kind: "Chat", id: chat },
 			identity,
 			input: { chat },
 		},
@@ -284,6 +285,7 @@ const setup = Effect.fn(function* (
 		id: Item.Id.make("input"),
 		kind: "message" as const,
 		content: Prompt.make("Write a note."),
+		metadata: ChatHost.memoryMetadata((yield* chats.read(chat)).chat),
 	}
 	yield* chats.modifyEffect({
 		chat,

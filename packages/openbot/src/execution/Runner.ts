@@ -11,6 +11,7 @@ import {
 import { Billing } from "../billing/Billing.ts"
 import * as Recovery from "./Recovery.ts"
 import { Store, type Fence, type Key } from "./Store.ts"
+import * as ReleaseAdmission from "../release/Admission.ts"
 
 const make = Effect.gen(function* () {
 	const store = yield* Store
@@ -50,7 +51,9 @@ const make = Effect.gen(function* () {
 				return yield* release({ ...key, generation: initial.generation })
 			const fence = yield* recovery.storage(key.id, store.takeOver(key))
 			yield* release(fence)
-			let task: Effect.Effect<void, E | E2, R | R2> = work(fence)
+			const acceptedWork = () =>
+				work(fence).pipe(Effect.provideService(ReleaseAdmission.Owner, fence))
+			let task: Effect.Effect<void, E | E2, R | R2> = acceptedWork()
 			let delay = 100
 			while (true) {
 				const result = yield* Effect.exit(recovery.storage(key.id, task))
@@ -77,7 +80,7 @@ const make = Effect.gen(function* () {
 							Schema.is(Execution.Conflict)(reason.error),
 					)
 				) {
-					task = work(fence)
+					task = acceptedWork()
 					continue
 				}
 				// Keep each failed release cause, even when the first work failure is saved.
@@ -90,7 +93,9 @@ const make = Effect.gen(function* () {
 				yield* recovery
 					.commit(key.id, store.failPhase(fence, failure))
 					.pipe(Effect.catchTag("ExecutionConflict", () => Effect.interrupt))
-				task = failed(fence, failure)
+				task = failed(fence, failure).pipe(
+					Effect.provideService(ReleaseAdmission.Owner, fence),
+				)
 				// A failed end write must not make the engine report completion.
 				yield* Effect.sleep(delay)
 				delay = Math.min(delay * 2, 5000)

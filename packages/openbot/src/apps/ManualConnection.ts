@@ -1,3 +1,4 @@
+import { ConnectionId } from "@openbot-build/domain"
 import { AppConnections as Domain } from "@openbot-build/domain"
 
 import { Discovery, Document, Store } from "@openbot-build/protocol"
@@ -37,7 +38,7 @@ export const configure =
 							isSecret: true,
 							isRequired: true,
 						})),
-						supportedProtocolVersions: [Document.protocolVersion],
+						// A manual address has no declared version. The SDK negotiates it.
 					},
 				],
 			}).pipe(
@@ -72,3 +73,60 @@ export const configure =
 				}),
 			}
 		})
+
+/** Prepare only. Import must not call the service or copy secret values. */
+export const draft = (
+	owner: string,
+	input: {
+		readonly id: string
+		readonly name: string
+		readonly manual: Domain.ManualTransfer
+		readonly expiresAt: number
+	},
+) =>
+	Effect.gen(function* () {
+		const headers = Rec.fromEntries(
+			Arr.map(input.manual.headers, (name) => [name, ""] as const),
+		)
+		const configured = yield* configure(owner)({
+			id: ConnectionId.make(input.id),
+			name: input.name,
+			url: input.manual.url,
+			transport: input.manual.transport,
+			headers,
+		})
+		const remote = configured.app.card.remotes?.[0]
+		if (remote === undefined)
+			return yield* Domain.ConnectionConfigurationInvalid.make({
+				keys: [],
+				message: "The manual address has no endpoint.",
+			})
+		const result = {
+			id: input.id,
+			revision: 0,
+			input: input.manual.url,
+			expiresAt: input.expiresAt,
+			imported: { name: input.name, remoteIndex: 0 },
+			manual: input.manual,
+			discovery: {
+				_tag: "Single" as const,
+				issues: [],
+				candidate: Discovery.Candidate.make({
+					...configured.app,
+					endpoints: [
+						Discovery.Endpoint.make({
+							index: 0,
+							remote,
+							requirements: Arr.map(input.manual.headers, (name) =>
+								Discovery.ConfigurationRequirement.make({
+									key: "header:" + name,
+									isSecret: true,
+								}),
+							),
+						}),
+					],
+				}),
+			},
+		}
+		return result
+	})

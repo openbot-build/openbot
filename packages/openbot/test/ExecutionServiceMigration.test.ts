@@ -103,7 +103,7 @@ it.layer(database, { excludeTestServices: true })((it) => {
 				)
 				assert.deepEqual(receipt, {
 					executionId: key.id,
-					commandKey: "start",
+					commandKey: Execution.CommandKey.make("start"),
 					sequence: 1,
 				})
 				assert.strictEqual((yield* store.pending(["test"])).length, 1)

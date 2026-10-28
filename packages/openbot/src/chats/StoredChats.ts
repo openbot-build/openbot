@@ -1,7 +1,23 @@
 import { Chat, ChatStore, type Turn } from "@openbot-build/core"
 import { Array as Arr, Clock, Effect, Option, Schema } from "effect"
-import { and, asc, desc, eq, gt, inArray, lt, type SQL } from "drizzle-orm"
-import { chats, chatItems, chatTurns, fileRefs } from "../database/Schema.ts"
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	gt,
+	inArray,
+	notInArray,
+	lt,
+	type SQL,
+} from "drizzle-orm"
+import {
+	chats,
+	chatItems,
+	chatTurns,
+	fileRefs,
+	executions,
+} from "../database/Schema.ts"
 import { fileIdsIn } from "../files/Refs.ts"
 import * as Db from "../database/Database.ts"
 import { chatHostId } from "./ChatHost.ts"
@@ -197,6 +213,43 @@ export const save = (
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
+				if (delta.source !== undefined) {
+					const source = yield* tx
+						.select({ revision: chats.revision })
+						.from(chats)
+						.where(
+							and(
+								eq(chats.namespace, namespace),
+								eq(chats.id, delta.source.chat),
+							),
+						)
+						.for("update")
+					const active = yield* tx
+						.select({ id: executions.id })
+						.from(executions)
+						.where(
+							and(
+								eq(executions.namespace, namespace),
+								eq(executions.contextKind, "Chat"),
+								eq(executions.contextId, delta.source.chat),
+								notInArray(executions.status, [
+									"completed",
+									"failed",
+									"cancelled",
+									"interrupted",
+								]),
+							),
+						)
+						.limit(1)
+					if (
+						source[0]?.revision !== delta.source.revision ||
+						active.length > 0
+					)
+						return yield* ChatStore.ChatStoreError.make({
+							reason: "reference-conflict",
+							message: "The source Chat changed or still has unfinished work",
+						})
+				}
 				const columns = yield* columnsOf(delta.ref, Chat.Id.make(delta.chat))
 				if (
 					turn !== undefined &&
@@ -273,6 +326,12 @@ export const save = (
 							Arr.map(used, (file) => ({ file, namespace, chat: delta.chat })),
 						)
 						.onConflictDoNothing()
+				for (const copied of delta.turns ?? []) {
+					const value = yield* stringify(copied.value)
+					yield* tx
+						.insert(chatTurns)
+						.values({ namespace, chat: delta.chat, id: copied.id, value })
+				}
 				if (delta.turn !== undefined) {
 					const value = yield* stringify(delta.turn.value)
 					yield* tx

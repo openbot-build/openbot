@@ -177,6 +177,28 @@ export const replaceInput = (
 	)
 }
 
+/** Check revocation before and after the cached memory work on every model step. */
+export const guardedMemoryPrompt =
+	<E, R>(
+		allowed: Effect.Effect<boolean, E, R>,
+		enrich: Effect.Effect<
+			{ readonly original: string; readonly changed: Option.Option<string> },
+			E,
+			R
+		>,
+	) =>
+	(prompt: Prompt.Prompt) =>
+		Effect.gen(function* () {
+			if (!(yield* allowed)) return prompt
+			const { original, changed } = yield* enrich
+			// Memory may have been disabled while enrichment was waiting on a model.
+			if (!(yield* allowed)) return prompt
+			return Option.match(changed, {
+				onNone: () => prompt,
+				onSome: (text) => replaceInput(prompt, original, text),
+			})
+		})
+
 /** The Chat data and commands used by the Bot tools. */
 interface ForOwnerInput {
 	readonly owner: typeof Identity.Service
@@ -421,6 +443,12 @@ const makeWith = (memoryWork: {
 						Effect.gen(function* () {
 							const { words } = yield* decode(ConfideInput)(raw)
 							const view = yield* input.read(current.chat)
+							if (
+								!ChatHost.memoryOf(view.chat).read ||
+								!ChatHost.memoryOf(view.chat).write ||
+								!(yield* memoryOn(view.chat))
+							)
+								return json({ message: "Memory is disabled for this Turn." })
 							const home = homeOf(
 								current.identity.actor.organizationId,
 								current.bot,
@@ -440,14 +468,19 @@ const makeWith = (memoryWork: {
 								confession,
 								yield* callIdOf(context),
 							)
-							// When the organization turns Bot memory off, nothing is learned.
-							if (yield* memoryOn(view.chat))
-								yield* memoryWork.learning.start(
-									memoryWork.fence,
-									current.chat,
-									current.turn,
-									Rec.values(names),
-								)
+							const latest = (yield* input.read(current.chat)).chat
+							if (
+								!ChatHost.memoryOf(latest).read ||
+								!ChatHost.memoryOf(latest).write ||
+								!(yield* memoryOn(latest))
+							)
+								return json({ message: "Memory is disabled for this Turn." })
+							yield* memoryWork.learning.start(
+								memoryWork.fence,
+								current.chat,
+								current.turn,
+								Rec.values(names),
+							)
 							return json({ answer })
 						}),
 				),
@@ -467,6 +500,7 @@ const makeWith = (memoryWork: {
 					input.bot.instructions,
 					`You work with ${input.person} now.`,
 					input.state.kind === "direct" ||
+					input.state.kind === "conversation" ||
 					input.state.kind === "channel" ||
 					input.state.kind === "live"
 						? `People talk with you in this Chat. Answer them at once. Give long work, and work with many steps, to delegations with ${names.delegate}. You can also give it to yourself. Then you stay free to answer. The result of each delegation comes back to this Chat as a message.`
@@ -600,6 +634,8 @@ const makeWith = (memoryWork: {
 								const enriched =
 									state.kind === "review" ||
 									original.length === 0 ||
+									!ChatHost.memoryOf((yield* input.read(at.chat)).chat, record)
+										.read ||
 									!(yield* memoryOn(view.chat))
 										? Option.none<string>()
 										: yield* memoryWork.tasks.enrich(memoryWork.fence, {
@@ -616,13 +652,16 @@ const makeWith = (memoryWork: {
 							tools: own.tools,
 							handlers,
 							instructions,
-							transformPrompt: (prompt: Prompt.Prompt) =>
-								Effect.map(enrich, ({ original, changed }) =>
-									Option.match(changed, {
-										onNone: () => prompt,
-										onSome: (text) => replaceInput(prompt, original, text),
-									}),
-								),
+							transformPrompt: guardedMemoryPrompt(
+								Effect.gen(function* () {
+									const latest = (yield* input.read(at.chat)).chat
+									return (
+										ChatHost.memoryOf(latest, record).read &&
+										(yield* memoryOn(latest))
+									)
+								}).pipe(Effect.orDie),
+								enrich,
+							),
 							...(state.kind === "review"
 								? {
 										beforeStep: (step: Plugin.StepInput) =>

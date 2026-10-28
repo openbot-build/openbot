@@ -1,0 +1,26 @@
+{
+	"repository": "https://github.com/openbot-build/openbot",
+	"commit": "f2695964107d80b9e2c173e53386284e752186fd",
+	"license": "AGPL-3.0-only",
+	"derivativeRepository": "https://gitlab.kai.com/KAI/Kay/OpenBot",
+	"localExtensions": [
+		"Independent conversation Chats and immutable branches",
+		"Per-Chat and per-Turn memory read and write policy",
+		"Configurable OIDC scopes, callback and existing browser cookie names",
+		"Current organization permissions from the native policy checks",
+		"Standard remote MCP negotiation with the existing SDK",
+		"OAuth client registration, secret storage and renewal with the existing SDK",
+		"One token renewal for concurrent calls without changing the same grant revision",
+		"Manual connection identities in operations and secret-free import and export",
+		"App views for approved results and read-only copied history",
+		"Explicit, opt-in member signup with removal records",
+		"Fresh workspace setup with stable OIDC identities and secret-file configuration",
+		"Pinned native image and AGPL source publication through GitLab CI",
+		"Read-only receipt lookup by command key with current execution permission checks",
+		"Organization default chat model inherited by Bots without an explicit model",
+		"Persisted command input identities for precise recovery after steering",
+		"Durable admission gate for safe single-instance release drain"
+	],
+	"deployment": "Upgrade only after drain and a successful isolated data-copy rehearsal. Native Execution owns run recovery and generation fencing. Current data and OAuth configuration must be retained.",
+	"reviewedInternalMain": "68ecbdff3dc2b09d6cf3613b5d207a46fcfd3faa"
+}

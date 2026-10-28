@@ -32,7 +32,12 @@ const cardUrl = Schema.URLFromString.check(
 export const Source = Schema.Struct({
 	connectionId: ConnectionId,
 	connectionName: Schema.String,
-	cardUrl,
+	cardUrl: Schema.Union([
+		cardUrl,
+		Schema.String.check(
+			Schema.isPattern(/^urn:openbot:manual:[0-9a-f-]{36}$/i),
+		),
+	]),
 	appName: Schema.String,
 	remoteIndex: Schema.Natural,
 	revision: Schema.Natural,

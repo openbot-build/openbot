@@ -1,3 +1,5 @@
+import * as Receipts from "./Receipts.ts"
+import { ownerKey } from "../apps/StoredConnections.ts"
 import { type Caller, Execution } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Option, Stream } from "effect"
 import { Store } from "./Store.ts"
@@ -88,7 +90,16 @@ const make = Effect.gen(function* () {
 				)
 			: feature.value.decide(key, actor, input)
 	})
-	return { get, events, observe, cancel, decide }
+	const receipt = Effect.fn("ExecutionCommands.receipt")(function* (
+		commandKey: Execution.CommandKey,
+		actor: Caller,
+	) {
+		const found = yield* store.lookupReceipt(ownerKey(actor), commandKey, actor)
+		if (Option.isNone(found)) return null
+		yield* check(found.value.executionId, actor, "read")
+		return yield* Receipts.withInputItems(store, ownerKey(actor), found.value)
+	})
+	return { get, events, observe, cancel, decide, receipt }
 })
 export class Commands extends Context.Service<
 	Commands,

@@ -9,6 +9,7 @@ const entries = [
 	["Main", "src/app/Main.ts"],
 	["Migrate", "src/app/Migrate.ts"],
 	["Setup", "src/app/Setup.ts"],
+	["Provision", "src/app/Provision.ts"],
 	["CodeWorker", "src/code/Worker.ts"],
 ] as const
 

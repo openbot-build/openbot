@@ -4,6 +4,8 @@
 # Build stages make only JavaScript, so they run on the build machine's own platform.
 FROM --platform=$BUILDPLATFORM node:26.12.1-trixie-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS workspace
 RUN npm install --global pnpm@9.15.9
+# Limit the native TypeScript compiler in build stages; runtime starts from its own base.
+ENV GOMEMLIMIT=1GiB GOGC=50
 WORKDIR /workspace
 # This layer changes only when the lockfile changes, so the registry cache keeps the downloaded packages.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -14,11 +16,11 @@ RUN pnpm install --offline --frozen-lockfile
 
 FROM workspace AS build-openbot
 # OpenBot runs as one bundled file, so the image needs no node_modules.
-RUN pnpm --filter-prod @openbot-build/openbot^... build \
+RUN pnpm --workspace-concurrency=1 --filter-prod @openbot-build/openbot^... build \
     && pnpm --filter @openbot-build/openbot exec tsdown --config ../../deploy/docker/tsdown.config.ts
 
 FROM workspace AS build-protocol-test
-RUN pnpm --filter @openbot-build/protocol-test... build \
+RUN pnpm --workspace-concurrency=1 --filter @openbot-build/protocol-test... build \
     && pnpm --filter @openbot-build/protocol-test deploy --prod /deployment
 
 # The Node.js binary for the target platform, at the same version as development.
@@ -38,6 +40,7 @@ ENV OPENBOT_HOST=0.0.0.0 \
     OPENBOT_PORT=3000
 COPY --link --from=build-openbot /workspace/.devenv/openbot/dist/app ./dist/app
 COPY --link --from=build-openbot /workspace/packages/openbot/migrations ./migrations
+COPY --link --from=build-openbot /workspace/LICENSE /workspace/upstream.json ./
 EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=12 \
     CMD ["/usr/local/bin/node", "--input-type=module", "-e", "const response = await fetch('http://127.0.0.1:3000/health'); if (response.status !== 200 || (await response.json()).status !== 'ok') process.exit(1)"]

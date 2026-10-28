@@ -16,7 +16,12 @@ type QueryError = Effect.Error<
 	| ReturnType<Effect.Success<typeof ChatQueries.make>["get" | "models"]>
 	| ReturnType<
 			Effect.Success<typeof ChatCommands.make>[
-				"update" | "todos" | "direct" | "createLive"]
+				| "update"
+				| "todos"
+				| "direct"
+				| "createLive"
+				| "createConversation"
+				| "fork"]
 	  >
 >
 type MappedError = Extract<

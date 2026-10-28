@@ -7,9 +7,10 @@ import {
 } from "@openbot-build/domain"
 
 import { Identity } from "@openbot-build/domain"
-import { Array as Arr, Context, Crypto, Effect, Layer } from "effect"
+import { Array as Arr, Clock, Context, Crypto, Effect, Layer } from "effect"
 import { Connections, type Error as ConnectionsError } from "./Connections.ts"
 import * as Db from "../database/Database.ts"
+import * as ManualConnection from "./ManualConnection.ts"
 import * as Failures from "../errors/Failures.ts"
 
 /**
@@ -47,6 +48,45 @@ export const make = Effect.gen(function* () {
 	const connections = yield* Connections
 	const db = yield* Db.make
 	const crypto = yield* Crypto.Crypto
+	const prepare = (
+		identity: typeof Identity.Service,
+		entry: typeof AppConnections.Entry.Type,
+	) => {
+		const manual = entry.manual
+		return manual === undefined
+			? connections.prepareConnection(entry.cardUrl).pipe(
+					Effect.provideService(Identity, identity),
+					Effect.flatMap((draft) =>
+						Effect.gen(function* () {
+							return yield* StoredConnections.saveDraft(
+								db,
+								ownerKey(identity),
+								{
+									...draft,
+									id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+									imported: {
+										name: entry.name,
+										remoteIndex: entry.remoteIndex,
+									},
+								},
+							)
+						}),
+					),
+				)
+			: Effect.gen(function* () {
+					const draft = yield* ManualConnection.draft(ownerKey(identity), {
+						id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+						name: entry.name,
+						manual,
+						expiresAt: (yield* Clock.currentTimeMillis) + 24 * 60 * 60 * 1000,
+					})
+					return yield* StoredConnections.saveDraft(
+						db,
+						ownerKey(identity),
+						draft,
+					)
+				})
+	}
 	return {
 		export: (identity: typeof Identity.Service) =>
 			connections.listConnections.pipe(
@@ -58,6 +98,18 @@ export const make = Effect.gen(function* () {
 						name: row.name,
 						cardUrl: row.cardUrl,
 						remoteIndex: row.remoteIndex,
+						...(Arr.some(row.sources, (source) => source.role === "manual")
+							? {
+									manual: {
+										url: row.endpoint,
+										transport: "streamable-http" as const,
+										headers: Arr.map(
+											row.card.remotes?.[row.remoteIndex]?.headers ?? [],
+											(header) => header.name,
+										),
+									},
+								}
+							: {}),
 					})),
 				})),
 			),
@@ -66,23 +118,7 @@ export const make = Effect.gen(function* () {
 			transfer: AppConnections.Transfer,
 		) =>
 			Effect.forEach(transfer.apps, (entry) =>
-				connections.prepareConnection(entry.cardUrl).pipe(
-					Effect.provideService(Identity, identity),
-					Effect.flatMap((draft) =>
-						crypto.randomUUIDv4().pipe(
-							Effect.orDie,
-							Effect.flatMap((id) =>
-								StoredConnections.saveDraft(db, ownerKey(identity), {
-									...draft,
-									id,
-									imported: {
-										name: entry.name,
-										remoteIndex: entry.remoteIndex,
-									},
-								}),
-							),
-						),
-					),
+				prepare(identity, entry).pipe(
 					Effect.map((draft) => ({ entry, draft, error: null })),
 					Effect.catchTag("AppDiscoveryFailed", (failure) =>
 						Effect.succeed({

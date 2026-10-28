@@ -8,7 +8,10 @@ import { Effect, Option } from "effect"
 import type { Catalog } from "../models/ModelRegistry.ts"
 
 /** Check the full selection, including reasoning effort and service tier. */
-export const validate = (catalog: Catalog, selection: Config.Selection) => {
+export const validate = (
+	catalog: Catalog,
+	selection: Config.Selection,
+): Effect.Effect<Config.Selection, ChatModelInvalid> => {
 	const problem = ConfigurationOperations.selectionProblem(catalog, selection)
 	return Option.isSome(problem)
 		? Effect.fail(ChatModelInvalid.make(problem.value))
@@ -49,11 +52,11 @@ export const select = (
 					: Option.getOrUndefined(
 							yield* validate(catalog, input.bot.model).pipe(Effect.option),
 						)
-		const selected = botModel ?? input.defaultModel
+		const selected = input.model ?? botModel ?? input.defaultModel
 		if (selected === undefined)
 			return yield* ChatModelInvalid.make({
 				reason: "missing",
-				message: "Set the model of the Bot.",
+				message: "Set a model for the Bot or its organization.",
 			})
 		return yield* validate(catalog, selected)
 	})

@@ -162,14 +162,41 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.ok(created.executionId)
 				const state = (id: Execution.Id, status: Execution.Status) =>
-					until(
-						"the configuration state",
-						Caller.read(Execution.Record, send("/v1/executions/" + id)).pipe(
-							Effect.map((record) =>
-								record.status === status ? Option.some(record) : Option.none(),
+					Effect.gen(function* () {
+						const last = yield* Ref.make(Option.none<Execution.Record>())
+						return yield* until(
+							`the configuration ${id} to be ${status}`,
+							Caller.read(Execution.Record, send("/v1/executions/" + id)).pipe(
+								Effect.tap((record) => Ref.set(last, Option.some(record))),
+								Effect.map((record) =>
+									record.status === status
+										? Option.some(record)
+										: Option.none(),
+								),
 							),
-						),
-					)
+						).pipe(
+							Effect.catchTag("TimedOut", (error) =>
+								Effect.flatMap(Ref.get(last), (record) =>
+									Effect.fail(
+										Wait.TimedOut.make({
+											label: `${error.label}; last state: ${Option.match(
+												record,
+												{
+													onNone: () => "not read",
+													onSome: (value) =>
+														JSON.stringify({
+															status: value.status,
+															sequence: value.sequence,
+															failure: value.failure?.category ?? null,
+														}),
+												},
+											)}`,
+										}),
+									),
+								),
+							),
+						)
+					})
 				yield* state(created.executionId, "outcome_unknown")
 				const changed = yield* Caller.read(
 					ChannelsApi.Channel,

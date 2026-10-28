@@ -1,3 +1,4 @@
+import { ChatMemory } from "@openbot-build/domain/Chats"
 import * as Imported from "../database/conversion/Executions.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import { Definition } from "./ToolDefinitions.ts"
@@ -24,6 +25,7 @@ import {
 	Context,
 	Crypto,
 	Effect,
+	Equal,
 	Layer,
 	Option,
 	Schema,
@@ -44,6 +46,7 @@ import * as Todos from "../plugins/work/Todos.ts"
 import { databaseError, inExecution } from "./ChatEncoding.ts"
 
 export const Input = Schema.Struct({
+	metadata: Schema.optionalKey(Schema.JsonObject),
 	chat: Chat.Id,
 	identity: ExecutionIdentity,
 	content: Chat.InboxEntry.fields.content,
@@ -56,6 +59,7 @@ export const Input = Schema.Struct({
 export type Input = typeof Input.Type
 /** The caller comes from authentication. The request never chooses an execution identity. */
 export const Message = Schema.Struct({
+	memory: Schema.optionalKey(ChatMemory),
 	chat: Chat.Id,
 	caller: Caller,
 	notice: Schema.optionalKey(Item.Notice),
@@ -92,7 +96,12 @@ const make = Effect.gen(function* () {
 		view: Chat.View<ChatHost.Values>,
 	) {
 		const host = ChatHost.hostState(view.chat)
-		if (host.kind !== "direct" && host.kind !== "task" && host.kind !== "live")
+		if (
+			host.kind !== "direct" &&
+			host.kind !== "conversation" &&
+			host.kind !== "task" &&
+			host.kind !== "live"
+		)
 			return yield* Chat.Conflict.make({
 				chat: message.chat,
 				message: "This Chat does not take messages.",
@@ -131,6 +140,7 @@ const make = Effect.gen(function* () {
 			chat: message.chat,
 			content: message.content,
 			queue: message.queue,
+			metadata: ChatHost.memoryMetadata(view.chat, message.memory),
 			...(message.notice === undefined ? {} : { notice: message.notice }),
 			...(message.action === undefined ? {} : { action: message.action }),
 			...(message.actionDefinition === undefined
@@ -146,16 +156,20 @@ const make = Effect.gen(function* () {
 	) => {
 		if ("caller" in submitted) return messageInput(namespace, submitted, view)
 		const host = ChatHost.hostState(view.chat)
+		const input = {
+			...submitted,
+			metadata: submitted.metadata ?? ChatHost.memoryMetadata(view.chat),
+		}
 		return Effect.succeed(
 			host.kind === "task"
 				? {
-						...submitted,
+						...input,
 						identity: restrictExecution(
 							submitted.identity,
 							host.inputConstraints ?? [],
 						),
 					}
-				: submitted,
+				: input,
 		)
 	}
 	const find = Effect.fn("ChatInputCommands.find")(function* (
@@ -171,6 +185,8 @@ const make = Effect.gen(function* () {
 					eq(executionRows.namespace, namespace),
 					eq(executionRows.resourceKind, "Turn"),
 					eq(executionRows.resourceId, turn),
+					eq(executionRows.contextKind, "Chat"),
+					eq(executionRows.contextId, chat),
 				),
 			)
 			.limit(2)
@@ -351,7 +367,8 @@ const make = Effect.gen(function* () {
 								current?.record.status === "waiting" ||
 								current?.record.status === "queued") &&
 							current.identity !== undefined &&
-							sameIdentity(current.identity, input.identity)
+							sameIdentity(current.identity, input.identity) &&
+							Equal.equals(view.chat.turn?.metadata, input.metadata)
 						const last = Arr.last(view.chat.inbox)
 						const pending =
 							Option.isSome(last) &&
@@ -366,7 +383,8 @@ const make = Effect.gen(function* () {
 							pending !== undefined &&
 							pending.record.status === "queued" &&
 							pending.identity !== undefined &&
-							sameIdentity(pending.identity, input.identity)
+							sameIdentity(pending.identity, input.identity) &&
+							Equal.equals(last.value.metadata, input.metadata)
 								? pending
 								: undefined
 						const turn =
@@ -398,6 +416,9 @@ const make = Effect.gen(function* () {
 								},
 							}))
 						const entry: Chat.InboxEntry = {
+							...(input.metadata === undefined
+								? { metadata: ChatHost.memoryMetadata(view.chat) }
+								: { metadata: input.metadata }),
 							id: Item.Id.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
 							content: input.content,
 							...(input.action === undefined ? {} : { action: input.action }),
@@ -495,6 +516,7 @@ const make = Effect.gen(function* () {
 									_tag: "Checkpoint" as const,
 									resource: { kind: "Chat", id: input.chat },
 									revision: changed.view.chat.revision,
+									inputItems: [entry.id],
 								},
 							],
 						}

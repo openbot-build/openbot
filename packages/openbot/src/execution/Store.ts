@@ -43,6 +43,7 @@ import {
 	executionDecisions,
 } from "../database/ExecutionSchema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
+import * as ReleaseAdmission from "../release/Admission.ts"
 
 export const Submission = Schema.Struct({
 	workflow: Schema.String,
@@ -176,6 +177,7 @@ const make = Effect.gen(function* () {
 	const sql = yield* SqlClient.SqlClient
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
+	const releaseAdmission = yield* ReleaseAdmission.make
 	const where = (key: Key) =>
 		and(eq(executions.namespace, key.namespace), eq(executions.id, key.id))
 	const binding = (key: Key, field: string) =>
@@ -286,7 +288,7 @@ const make = Effect.gen(function* () {
 		namespace: string,
 		actor: CommandActor,
 		key: Execution.CommandKey,
-		body: Schema.Json,
+		body?: Schema.Json,
 	) {
 		const scope = principal(actor)
 		const rows = yield* db
@@ -319,7 +321,8 @@ const make = Effect.gen(function* () {
 			`command:${value.id}`,
 			value.body,
 		).pipe(Effect.flatMap(Schema.decodeEffect(json)))
-		if (!sameJson(prior, body)) return yield* Execution.KeyConflict.make({})
+		if (body !== undefined && !sameJson(prior, body))
+			return yield* Execution.KeyConflict.make({})
 		return Option.some({
 			executionId,
 			commandKey: key,
@@ -452,6 +455,7 @@ const make = Effect.gen(function* () {
 						input.body,
 					).pipe(storage)
 					if (Option.isSome(prior)) return prior.value
+					yield* releaseAdmission.admit.pipe(storage)
 					const result = yield* apply((input) => create(namespace, input))
 					const key = { namespace, id: result.executionId }
 					const execution = yield* row(key, true).pipe(storage)
@@ -1877,6 +1881,7 @@ const make = Effect.gen(function* () {
 	) {
 		return yield* sql.withTransaction(
 			Effect.gen(function* () {
+				yield* releaseAdmission.admitCall(key).pipe(storage)
 				// Lock owners before the child. No outside I/O or waits may run here.
 				if (admit !== undefined) yield* admit
 				const execution = yield* checkFence(key)
@@ -2171,6 +2176,11 @@ const make = Effect.gen(function* () {
 			.pipe(Effect.flatMap((rows) => Effect.forEach(rows, callView)))
 	}, storage)
 	return {
+		lookupReceipt: (
+			namespace: string,
+			commandKey: Execution.CommandKey,
+			actor: CommandActor,
+		) => findCommand(namespace, actor, commandKey).pipe(storage),
 		/** Read a saved receipt before work outside a transaction. The caller checks current access. */
 		receipt: (
 			namespace: string,

@@ -4,6 +4,12 @@ import { Effect, Schema, String as Str } from "effect"
 
 export const Credential = Schema.Redacted(Schema.NonEmptyString)
 const SharedConfiguration = Schema.Struct({
+	sessionCookie: SettingsModel.BrowserAuth.fields.sessionCookie.pipe(
+		Schema.withDecodingDefault(Effect.succeed("__Host-openbot-session")),
+	),
+	loginCookie: SettingsModel.BrowserAuth.fields.loginCookie.pipe(
+		Schema.withDecodingDefault(Effect.succeed("__Host-openbot-login")),
+	),
 	publicOrigin: SettingsModel.PublicOrigin.check(
 		Schema.makeFilter(Str.startsWith("https://"), {
 			message: "Expected a canonical HTTPS origin",
@@ -18,6 +24,15 @@ export const OidcConfiguration = Schema.Struct({
 	...SharedConfiguration.fields,
 	mode: Schema.Literal("oidc").pipe(
 		Schema.withDecodingDefault(Effect.succeed("oidc")),
+	),
+	providerId: SettingsModel.ProviderId.pipe(
+		Schema.withDecodingDefault(Effect.succeed("oidc")),
+	),
+	callbackPath: SettingsModel.CallbackPath.pipe(
+		Schema.withDecodingDefault(Effect.succeed("/auth/callback/oidc")),
+	),
+	scopes: SettingsModel.OidcScopes.pipe(
+		Schema.withDecodingDefault(Effect.succeed(SettingsModel.defaultOidcScopes)),
 	),
 	issuer: SettingsModel.Issuer,
 	clientId: Schema.NonEmptyString,

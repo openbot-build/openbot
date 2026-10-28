@@ -9,6 +9,7 @@ import type * as OutboundPolicy from "../network/OutboundPolicy.ts"
  */
 export interface Settings {
 	readonly clusterSecret: Redacted.Redacted<string>
+	readonly internalToken?: Redacted.Redacted<string> | undefined
 	readonly clusterHost?: string | undefined
 	readonly host: string
 	readonly port: number

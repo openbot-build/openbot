@@ -85,6 +85,13 @@ export class ModelRegistry extends Context.Service<
 	{
 		/** Only the built-in model adapter can supply a default. */
 		readonly defaultModel: Option.Option<Config.Selection>
+		/** Read the organization fallback; each Turn freezes its resolved selection. */
+		readonly chatSelection: (
+			organizationId: string,
+		) => Effect.Effect<
+			Option.Option<Config.Selection>,
+			Config.ModelConfigurationError
+		>
 		readonly catalog: (
 			organizationId: string,
 		) => Effect.Effect<Catalog, Config.ModelConfigurationError>
@@ -750,6 +757,14 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 
 		return ModelRegistry.of({
 			defaultModel: Option.fromUndefinedOr(builtin?.defaultModel),
+			chatSelection: (organizationId) =>
+				organizationSettings(organizationId).pipe(
+					Effect.map((snapshot) =>
+						Option.fromNullishOr(
+							snapshot.document.chatModel ?? builtin?.defaultModel,
+						),
+					),
+				),
 			catalog,
 			view: (organizationId) =>
 				Effect.gen(function* () {

@@ -130,6 +130,8 @@ export const Receipt = Schema.Struct({
 	executionId: Id,
 	commandKey: CommandKey,
 	sequence: Sequence,
+	/** Original inbox items of this command, when the feature records them. */
+	inputItems: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 export type Receipt = typeof Receipt.Type
 
@@ -182,7 +184,11 @@ export const EventBody = Schema.TaggedUnion({
 	InputMoved: { executionId: Id, items: Schema.Array(Schema.String) },
 	/** Follow this execution with its own cursor, steps, and attempts. */
 	ChildExecution: { executionId: Id, step: Schema.String },
-	Checkpoint: { resource: Resource, revision: Schema.Natural },
+	Checkpoint: {
+		resource: Resource,
+		revision: Schema.Natural,
+		inputItems: Schema.optionalKey(Schema.Array(Schema.String)),
+	},
 })
 export type EventBody = typeof EventBody.Type
 

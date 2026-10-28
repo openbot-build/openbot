@@ -4,7 +4,6 @@ import {
 	CatalogDiscovery,
 	Client,
 	Discovery,
-	Document,
 	McpClient,
 	MemoryStore,
 	Network,
@@ -361,7 +360,7 @@ export const make = Effect.gen(function* () {
 										)
 									: Effect.succeed([])
 							return {
-								protocolVersion: Document.protocolVersion,
+								protocolVersion: client.protocolVersion,
 								tools: yield* collect(lists.tools),
 								resources: yield* collect(lists.resources),
 								resourceTemplates: yield* collect(lists.resourceTemplates),

@@ -230,13 +230,15 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 							yield* answer.text,
 							/Development response: Verify the built entry/,
 						)
-						// The development platform gives the new direct Chat a simulated model.
+						// The resolved development model is saved on the Turn, not as a Chat override.
 						const [chat] = yield* Effect.flatMap(
 							call(`/v1/chats?bot=${bot}`),
 							HttpClientResponse.schemaBodyJson(Schema.Array(ChatSummary)),
 						)
 						assert.ok(chat !== undefined)
-						const simulatedModel = chat.chat.settings.model
+						assert.strictEqual(chat.chat.settings.model, undefined)
+						const simulatedModel = (yield* Messages.settled(call, chat.chat.id))
+							.turn?.settings.model
 						assert.ok(simulatedModel !== undefined)
 						return { session, simulatedModel }
 					}),

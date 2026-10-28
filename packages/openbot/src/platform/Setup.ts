@@ -1,10 +1,11 @@
-import { type Settings as SettingsModel } from "@openbot-build/domain"
+import { Settings as SettingsModel } from "@openbot-build/domain"
 
 import { Authorization } from "@openbot-build/domain"
 import { Crypto, Effect, Option, Redacted, Schema } from "effect"
 import { Hex } from "effect/encoding"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import {
+	browserAuthOf,
 	filesDefaults,
 	filesOf,
 	type PlatformDocument,
@@ -15,12 +16,19 @@ import { PlatformAdmins } from "./PlatformAdmins.ts"
 
 export interface Input {
 	readonly publicOrigin: string
-	/** None means that the platform has no sign-in provider of its own. */
+	/** None keeps the existing provider, or leaves a new platform without one. */
 	readonly identityProvider: Option.Option<{
+		readonly providerId?: string
+		readonly callbackPath?: string
+		readonly scopes?: typeof SettingsModel.OidcScopes.Type
 		readonly issuer: string
 		readonly clientId: string
 		readonly clientSecret: Option.Option<Redacted.Redacted<string>>
 	}>
+	/** Fixed server configuration can explicitly replace a confidential client with a public one. */
+	readonly preserveIdentityProviderSecret?: boolean
+	readonly memberSignupOrganizationId?: string | null
+	readonly browserAuth?: SettingsModel.BrowserAuth
 	/** People with these verified emails become platform admins. */
 	readonly adminEmails: ReadonlyArray<string>
 	/** Write the settings even when they exist. Use it only when no admin can sign in. */
@@ -83,13 +91,34 @@ export const run = (input: Input) =>
 			})
 		const sameAsCurrent = (document: PlatformDocument) =>
 			document.publicOrigin === input.publicOrigin &&
+			(input.memberSignupOrganizationId === undefined ||
+				(document.memberSignupOrganizationId ?? null) ===
+					input.memberSignupOrganizationId) &&
+			(input.browserAuth === undefined ||
+				(browserAuthOf(document).sessionCookie ===
+					input.browserAuth.sessionCookie &&
+					browserAuthOf(document).loginCookie ===
+						input.browserAuth.loginCookie &&
+					browserAuthOf(document).sessionTtlMs ===
+						input.browserAuth.sessionTtlMs)) &&
 			sameStorage(document) &&
 			Option.match(input.identityProvider, {
-				onNone: () => document.identityProvider === null,
+				onNone: () => true,
 				onSome: (provider) =>
 					document.identityProvider !== null &&
 					document.identityProvider.issuer === provider.issuer &&
-					document.identityProvider.clientId === provider.clientId,
+					document.identityProvider.clientId === provider.clientId &&
+					(provider.providerId === undefined ||
+						(document.identityProvider.providerId ?? "oidc") ===
+							provider.providerId) &&
+					(provider.callbackPath === undefined ||
+						(document.identityProvider.callbackPath ??
+							"/auth/callback/oidc") === provider.callbackPath) &&
+					(provider.scopes === undefined ||
+						JSON.stringify(
+							document.identityProvider.scopes ??
+								SettingsModel.defaultOidcScopes,
+						) === JSON.stringify(provider.scopes)),
 			})
 		if (
 			Option.isSome(current) &&
@@ -98,8 +127,20 @@ export const run = (input: Input) =>
 		)
 			return yield* SetupAlreadyDone.make({})
 
+		const previousProvider =
+			Option.getOrUndefined(current)?.document.identityProvider
+		const preservedSecret =
+			input.preserveIdentityProviderSecret !== false &&
+			Option.isSome(input.identityProvider) &&
+			previousProvider?.issuer === input.identityProvider.value.issuer &&
+			previousProvider?.clientId === input.identityProvider.value.clientId
+				? previousProvider
+				: null
 		const identityProvider = yield* Option.match(input.identityProvider, {
-			onNone: () => Effect.succeed(null),
+			onNone: () =>
+				Effect.succeed(
+					Option.getOrUndefined(current)?.document.identityProvider ?? null,
+				),
 			onSome: (provider) =>
 				Effect.transposeOption(
 					Option.map(provider.clientSecret, (secret) =>
@@ -110,11 +151,29 @@ export const run = (input: Input) =>
 					),
 				).pipe(
 					Effect.map((clientSecret) => ({
+						providerId:
+							provider.providerId ??
+							Option.getOrUndefined(current)?.document.identityProvider
+								?.providerId ??
+							"oidc",
+						callbackPath:
+							provider.callbackPath ??
+							Option.getOrUndefined(current)?.document.identityProvider
+								?.callbackPath ??
+							"/auth/callback/oidc",
+						scopes:
+							provider.scopes ??
+							Option.getOrUndefined(current)?.document.identityProvider
+								?.scopes ??
+							SettingsModel.defaultOidcScopes,
 						issuer: provider.issuer,
 						clientId: provider.clientId,
-						clientSecret: Option.getOrNull(clientSecret),
+						clientSecret:
+							Option.getOrNull(clientSecret) ??
+							preservedSecret?.clientSecret ??
+							null,
 						clientSecretHint: Option.match(provider.clientSecret, {
-							onNone: () => null,
+							onNone: () => preservedSecret?.clientSecretHint ?? null,
 							onSome: (secret) => hint(Redacted.value(secret)),
 						}),
 					})),
@@ -164,6 +223,12 @@ export const run = (input: Input) =>
 		})
 		const document: PlatformDocument = {
 			...kept,
+			...(input.memberSignupOrganizationId === undefined
+				? {}
+				: { memberSignupOrganizationId: input.memberSignupOrganizationId }),
+			...(input.browserAuth === undefined
+				? {}
+				: { browserAuth: input.browserAuth }),
 			...changedFiles,
 			publicOrigin: input.publicOrigin,
 			authSecret,

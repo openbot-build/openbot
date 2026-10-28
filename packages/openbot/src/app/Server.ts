@@ -2,6 +2,7 @@ import * as ComputerWorker from "../computers/Worker.ts"
 import * as Send from "../execution/Send.ts"
 import * as ResourceDirectory from "../resources/Directory.ts"
 import * as ResourceTransport from "../resources/Transport.ts"
+import * as ReleaseHttp from "../release/Http.ts"
 import * as PrivateRpc from "../transport/PrivateRpc.ts"
 import * as ExecutionLayers from "./ExecutionLayers.ts"
 import { NetAddress } from "effect/net"
@@ -49,6 +50,8 @@ export const layerApi = Layer.mergeAll(
 export interface AppOptions extends OpenBot.Options {
 	/** The same private RPC secret on every node. */
 	readonly clusterSecret: Redacted.Redacted<string>
+	/** The private release routes are disabled when this token is absent. */
+	readonly internalToken?: Redacted.Redacted<string> | undefined
 	/** The address that other nodes can reach. Defaults to the bound server address. */
 	readonly clusterHost?: string | undefined
 	/** Work that runs when the server starts, such as indexing the development App. */
@@ -114,6 +117,7 @@ export const layerApp = (options: AppOptions) =>
 		layerApi,
 		ExecutionEngine.layerRoutes,
 		ResourceTransport.layerRoutes,
+		ReleaseHttp.routes(options.internalToken),
 		ExecutionEngine.layerOutbox,
 		options.routes ?? Layer.empty,
 		options.startup ?? Layer.empty,
@@ -194,11 +198,13 @@ const warnBeforeSetup = Layer.effectDiscard(
  */
 const serve = (options: AppOptions) =>
 	Layer.unwrap(
-		Effect.map(Report.make, (report) =>
-			HttpRouter.serve(layerApp(options), {
-				middleware: (app) => requireSetup(app, report),
-			}),
-		),
+		Effect.gen(function* () {
+			const report = yield* Report.make
+			const release = yield* ReleaseHttp.middleware
+			return HttpRouter.serve(layerApp(options), {
+				middleware: (app) => requireSetup(release(app), report),
+			})
+		}),
 	)
 
 /** The address that the server listens on. */
@@ -265,6 +271,7 @@ export const layerFixed = (
 				Effect.gen(function* () {
 					const auth = yield* AuthConfiguration.resolve(options.auth)
 					yield* Setup.run({
+						preserveIdentityProviderSecret: false,
 						publicOrigin: auth.publicOrigin,
 						identityProvider:
 							auth.mode === "oidc"

@@ -18,7 +18,7 @@ import {
 	Layer,
 	Match,
 	Option,
-	pipe,
+	Stream,
 	Schema,
 	type Scope,
 } from "effect"
@@ -335,16 +335,30 @@ export const make = Effect.gen(function* () {
 				identity,
 				AppCalls.AppOperationId.make(operationId),
 			)
-			if (operation.chat !== chatId)
-				return yield* ExperienceNotFound.make({ id: operationId })
-			const { items } = yield* chats
-				.turn(identity, chatId, operation.turn)
-				.pipe(ChatErrors.map)
-			const item = pipe(
-				Arr.findFirst(
-					items,
+			// Read through ChatQueries so copied history uses the destination's current read policy.
+			// A cloned result stays read-only and must match the original committed tool result.
+			const item = yield* Stream.paginate(
+				undefined as Item.Seq | undefined,
+				(before) =>
+					chats
+						.items(identity, chatId, {
+							limit: 100,
+							...(before === undefined ? {} : { before }),
+						})
+						.pipe(
+							ChatErrors.map,
+							Effect.map(
+								(page) =>
+									[page.items, Option.fromNullishOr(page.next)] as const,
+							),
+						),
+			).pipe(
+				Stream.filter(
 					(item) =>
 						(itemId === undefined || item.id === itemId) &&
+						item.origin?.chat === chatId &&
+						item.origin.turn === position.turn &&
+						item.origin.step === position.step &&
 						Arr.some(
 							item.content.content,
 							(message) =>
@@ -352,16 +366,20 @@ export const make = Effect.gen(function* () {
 								Arr.some(
 									message.content,
 									(part) =>
-										part.type === "tool-result" && part.id === operation.callId,
+										part.type === "tool-result" &&
+										part.id === operation.callId &&
+										(operation.chat === chatId ||
+											(operation.result?._tag === "Completed" &&
+												Schema.is(AppCalls.Result)(part.result) &&
+												part.result._tag === "Completed" &&
+												Schema.toEquivalence(Schema.Json)(
+													part.result.result,
+													operation.result.result,
+												))),
 								),
 						),
 				),
-				Option.filter(
-					(item) =>
-						item.origin?.chat === position.chat &&
-						item.origin.turn === position.turn &&
-						item.origin.step === position.step,
-				),
+				Stream.runHead,
 			)
 			if (Option.isNone(item))
 				return yield* ExperienceNotFound.make({ id: operationId })
@@ -451,9 +469,9 @@ export const make = Effect.gen(function* () {
 					const view: View = {
 						id: AppViews.AppViewId.make(yield* newId),
 						operationId: operation.id,
-						readOnly: false,
+						readOnly: operation.chat !== chatId,
 						chat: chatId,
-						turn: operation.turn,
+						turn: item.origin?.turn ?? operation.turn,
 						item: item.id,
 						connectionId: operation.source.connectionId,
 						revision: operation.source.revision,

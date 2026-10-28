@@ -105,7 +105,27 @@ const roleErrors = [
 	RoleReadOnly.pipe(HttpApiSchema.status(409)),
 ] as const
 
+/** The actions allowed for the caller on the current organization. */
+export const OrganizationCapabilities = Schema.Struct({
+	resources: Schema.Array(
+		Schema.Struct({
+			kind: Schema.String,
+			actions: Schema.Array(Schema.String),
+		}),
+	),
+})
+export type OrganizationCapabilities = typeof OrganizationCapabilities.Type
+
 export class OrganizationApi extends HttpApiGroup.make("organization").add(
+	HttpApiEndpoint.get("getCapabilities", "/v1/organization/capabilities", {
+		success: OrganizationCapabilities,
+		error: [...errors, ...AuthorizationErrors],
+	})
+		.annotate(Required, [])
+		.annotate(
+			OpenApi.Description,
+			"Lists the allowed actions on Organization, Member, Role, ModelProvider, Sso, AuditLog, Usage and Budget in the current organization. Uses the current member, token and platform policies. Any signed-in member can read their own result. The result helps clients show controls; each call still checks its own permissions. It does not describe rights on individual Chats, Bots or other owned resources.",
+		),
 	HttpApiEndpoint.get("getOrganization", "/v1/organization", {
 		success: Organization,
 		error: errors,

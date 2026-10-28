@@ -22,6 +22,12 @@ OpenBot 用 [ability](https://github.com/nmnmcc/ability)
 成员得到其角色的策略，再加上自己的成员策略。用户令牌还有它自己的策略，两者都必须允许这次调用。平台可以添加一个上限（ceiling），其中的拒绝规则对每个组织都生效。见
 [检查顺序](#检查顺序)。
 
+使用 `GET /v1/organization/capabilities` 读取自己当前的权限。返回格式是
+`{ resources: [{ kind, actions }] }`，包含 `Organization`、`Member`、`Role`、
+`ModelProvider`、`Sso`、`AuditLog`、`Usage` 和
+`Budget`。操作列表为空表示均不允许。所有有效成员都能读取，即使没有
+`Organization.read`。结果按调用时的成员角色、成员策略、令牌策略和平台上限计算。客户端可据此显示控件，每次实际调用仍会检查权限。它不表示对单个 Chat、Bot、Channel 或其他有归属资源的权限。
+
 ---
 
 ## 资源和操作

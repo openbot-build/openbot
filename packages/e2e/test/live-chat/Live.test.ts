@@ -503,7 +503,7 @@ layer(
 					202,
 				)
 				assert.ok(waiting.executionId.length > 0)
-				assert.ok(waiting.turn.length > 0)
+				assert.ok(waiting.turn !== null && waiting.turn.length > 0)
 				const idle = yield* json(
 					ChatView,
 					send(alice.session, `/v1/chats/${chat}`),

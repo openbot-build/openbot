@@ -1,4 +1,12 @@
-import { Array as Arr, Effect, Match, Option, Struct, pipe } from "effect"
+import {
+	Array as Arr,
+	Effect,
+	Equal,
+	Match,
+	Option,
+	Struct,
+	pipe,
+} from "effect"
 import { Prompt, type Response } from "effect/ai"
 import * as Chat from "./Chat.ts"
 import * as ChatState from "./ChatState.ts"
@@ -79,7 +87,9 @@ export const leading = <P>(
 					Arr.prepend(
 						Arr.takeWhile(
 							Arr.tailNonEmpty(messages),
-							(entry) => entry.author === head.author,
+							(entry) =>
+								entry.author === head.author &&
+								Equal.equals(entry.metadata, head.metadata),
 						),
 						head,
 					),
@@ -99,6 +109,7 @@ export const place = (
 		current !== undefined &&
 		current.status._tag === "Running" &&
 		current.author === entry.author &&
+		Equal.equals(current.metadata, entry.metadata) &&
 		!queue
 			? Option.some(current.id)
 			: Option.none<Turn.Id>()
@@ -140,6 +151,7 @@ export const start = <P>(
 	const settings = { ...view.chat.settings, ...input.overrides }
 	const selectedIds = Arr.map(input.selected, (entry) => entry.id)
 	const record: Turn.Record = {
+		...(head.metadata === undefined ? {} : { metadata: head.metadata }),
 		...(input.action === undefined ? {} : { action: input.action }),
 		...(author === undefined ? {} : { author }),
 		id: input.turn,

@@ -226,11 +226,28 @@ export const run = Effect.gen(function* () {
 				const chat = yield* chatOf(row.namespace, row.chat)
 				if (turn.id !== row.id || turn.chat !== row.chat)
 					return yield* invalid("The Turn indexes do not match its record.")
-				const [other] = yield* sql<{
-					id: string
-				}>`select id from openbot_chat_turns where namespace = ${row.namespace} and id = ${row.id} and chat <> ${row.chat} limit 1`
-				if (other !== undefined)
-					return yield* invalid("The same Turn ID belongs to two Chats.")
+				const duplicates = yield* sql<{
+					value: string
+					chat: string
+				}>`select value, chat from openbot_chat_turns where namespace = ${row.namespace} and id = ${row.id} and chat <> ${row.chat}`
+				for (const duplicate of duplicates) {
+					const other = yield* decode(Legacy.Turn)(duplicate.value)
+					const otherChat = yield* chatOf(row.namespace, duplicate.chat)
+					const root = chat.host.branchOf?.root ?? row.chat
+					const otherRoot = otherChat.host.branchOf?.root ?? duplicate.chat
+					if (
+						turn.status._tag === "Running" ||
+						other.status._tag === "Running" ||
+						root !== otherRoot ||
+						!Schema.toEquivalence(Schema.Json)(
+							{ ...turn, chat: "" },
+							{ ...other, chat: "" },
+						)
+					)
+						return yield* invalid(
+							"The same Turn ID belongs to unrelated or different Chat history.",
+						)
+				}
 				const items = yield* sql<{
 					value: string
 				}>`select value from openbot_chat_items where namespace = ${row.namespace} and chat = ${row.chat} and turn = ${row.id} order by seq`

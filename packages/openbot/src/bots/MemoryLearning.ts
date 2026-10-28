@@ -63,6 +63,16 @@ const make = Effect.gen(function* () {
 		"memory_cursor",
 		Schema.Struct({ after: Schema.Natural }),
 	)
+	const policy = (namespace: string, chat: Chat.Ref, turn: Turn.Id) =>
+		Effect.gen(function* () {
+			const raw = yield* StoredChats.persistence(db, namespace).turn(
+				chat.id,
+				turn,
+			)
+			if (Option.isNone(raw)) return { read: false, write: false }
+			const record = yield* Schema.decodeUnknownEffect(Turn.Record)(raw.value)
+			return ChatHost.memoryOf(chat, record)
+		})
 	const turnExecution = Effect.fn("MemoryLearning.turnExecution")(function* (
 		namespace: string,
 		chat: Chat.Id,
@@ -76,6 +86,8 @@ const make = Effect.gen(function* () {
 					eq(executions.namespace, namespace),
 					eq(executions.resourceKind, "Turn"),
 					eq(executions.resourceId, turn),
+					eq(executions.contextKind, "Chat"),
+					eq(executions.contextId, chat),
 				),
 			)
 			.limit(2)
@@ -125,6 +137,7 @@ const make = Effect.gen(function* () {
 		yield* access.authorize(parent.key, caller.identity.actor, "replay")
 		const found = yield* StoredChats.ref(db, source.namespace, chat)
 		if (Option.isNone(found)) return yield* Execution.Forbidden.make({})
+		if (!(yield* policy(source.namespace, found.value, turn)).write) return
 		const bot = yield* bots.find(
 			caller.identity.owner.organizationId,
 			ChatHost.hostState(found.value).bot,
@@ -195,6 +208,10 @@ const make = Effect.gen(function* () {
 		const found = yield* StoredChats.ref(db, fence.namespace, input.chat)
 		if (Option.isNone(found)) return yield* Execution.Forbidden.make({})
 		const chat = found.value
+		if (!(yield* policy(fence.namespace, chat, input.turn)).write) {
+			yield* finish(fence, { status: "completed" })
+			return
+		}
 		const bot = yield* bots.find(
 			saved.identity.owner.organizationId,
 			ChatHost.hostState(chat).bot,
@@ -218,13 +235,15 @@ const make = Effect.gen(function* () {
 					),
 				))[0]?.seq ?? 0
 		const cursorId = home.bot + "/" + input.chat
-		const cursor = cursors
-			.find(home.organizationId, cursorId)
-			.pipe(
-				Effect.map(
-					Option.match({ onNone: () => 0, onSome: (value) => value.after }),
-				),
-			)
+		const cursor = cursors.find(home.organizationId, cursorId).pipe(
+			Effect.map(
+				Option.match({
+					onNone: () => ChatHost.hostState(chat).learnAfterSeq ?? 0,
+					onSome: (value) =>
+						Math.max(value.after, ChatHost.hostState(chat).learnAfterSeq ?? 0),
+				}),
+			),
+		)
 		while (true) {
 			const after = yield* cursor
 			if (after >= last) {
@@ -252,6 +271,11 @@ const make = Effect.gen(function* () {
 							)(row.value)
 							if (item.origin?.notice !== undefined) return []
 							if (row.turn === null) return yield* Execution.Forbidden.make({})
+							if (
+								!(yield* policy(fence.namespace, chat, Turn.Id.make(row.turn)))
+									.write
+							)
+								return []
 							const source = yield* turnExecution(
 								fence.namespace,
 								input.chat,
@@ -324,6 +348,16 @@ const make = Effect.gen(function* () {
 			const settled = yield* records.transaction(
 				"memory_cursor:" + home.organizationId + ":" + cursorId,
 				Effect.gen(function* () {
+					// Lock the policy before committing learned memory; a disabled or changed policy revokes queued work.
+					yield* StoredChats.lock(db, fence.namespace, input.chat)
+					const latest = yield* StoredChats.ref(db, fence.namespace, input.chat)
+					if (
+						Option.isNone(latest) ||
+						!(yield* policy(fence.namespace, latest.value, input.turn)).write
+					) {
+						yield* finish(fence, { status: "completed" })
+						return true
+					}
 					// Another execution can move the cursor while the model runs. Read a new window in that case.
 					if ((yield* cursor) !== after) return false
 					yield* authorize(fence, saved.identity.actor, "advance")

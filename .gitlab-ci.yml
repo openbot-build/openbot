@@ -1,0 +1,105 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if:
+        '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE ==
+        "push"'
+      when: never
+    - if: "$CI_COMMIT_BRANCH || $CI_COMMIT_TAG"
+
+stages: [check, build, publish]
+
+.devenv:
+  image: ghcr.io/cachix/devenv/devenv:v2.4.0
+  tags: [docker, privileged, arm64]
+  variables:
+    # Keep native TypeScript builds within the runner memory budget.
+    GOMEMLIMIT: 512MiB
+    GOGC: "25"
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: safe.directory
+    GIT_CONFIG_VALUE_0: $CI_PROJECT_DIR
+    NIX_CONFIG: |
+      extra-experimental-features = nix-command flakes
+      extra-substituters = file://$CI_PROJECT_DIR/.cache/nix?trusted=1&priority=10
+  cache:
+    - key:
+        prefix: openbot-nix-arm64-devenv-2.4.0
+        files: [devenv.lock, devenv.nix]
+      paths: [.cache/nix/]
+    - key:
+        prefix: openbot-pnpm-arm64
+        files: [pnpm-lock.yaml]
+      paths: [.cache/pnpm/]
+  before_script:
+    - >-
+      devenv --profile ci shell -- bash -euo pipefail -c ' test "$(node
+      --version)" = v26.12.1; nix copy --to
+      "file://$CI_PROJECT_DIR/.cache/nix?compression=zstd" "$DEVENV_PROFILE";
+      pnpm install --frozen-lockfile --store-dir .cache/pnpm'
+  interruptible: true
+
+check:
+  extends: .devenv
+  stage: check
+  script:
+    - devenv --profile ci shell -- pnpm -r --workspace-concurrency=1 build
+    - >-
+      devenv --profile ci shell -- bash -euo pipefail -c 'pnpm -r
+      --workspace-concurrency=1 exec tsc -p tsconfig.json --noEmit; pnpm exec
+      tsc -p scripts/tsconfig.json --noEmit; pnpm rules'
+    - >-
+      devenv --profile ci shell -- bash -euo pipefail -c ' export
+      GOMEMLIMIT=512MiB GOGC=25 GOMAXPROCS=2; printf "Test compiler:
+      GOMEMLIMIT=%s GOGC=%s GOMAXPROCS=%s\n" "$GOMEMLIMIT" "$GOGC"
+      "$GOMAXPROCS"; pnpm -r --workspace-concurrency=1 test'
+    - devenv --profile ci shell -- node --test deploy/docker/*.test.mjs
+
+sdk-package:
+  extends: .devenv
+  stage: build
+  needs: [check]
+  script:
+    - devenv --profile ci shell -- pnpm --filter '@openbot-build/client...'
+      build
+    - devenv --profile ci shell -- node scripts/publish-kay-sdk.mjs pack
+  artifacts:
+    name: openbot-sdk-$CI_COMMIT_SHORT_SHA
+    paths: [.devenv/release/sdk/]
+    expire_in: 30 days
+
+sdk-publish:
+  extends: .devenv
+  stage: publish
+  needs: [sdk-package, platform-image]
+  interruptible: false
+  resource_group: openbot-sdk-release
+  rules:
+    - if:
+        '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED ==
+        "true"'
+  script:
+    - devenv --profile ci shell -- node scripts/publish-kay-sdk.mjs publish
+
+platform-image:
+  extends: .devenv
+  stage: build
+  needs: [check]
+  interruptible: false
+  resource_group: openbot-release
+  services:
+    - name: docker:29-dind
+      alias: docker
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - devenv --profile ci shell -- bash deploy/docker/ci-platform.sh
+  artifacts:
+    name: openbot-$CI_COMMIT_SHORT_SHA
+    paths:
+      - .devenv/release/
+    reports:
+      dotenv: .devenv/release/image.env
+    expire_in: 30 days

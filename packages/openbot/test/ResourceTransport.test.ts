@@ -1065,27 +1065,35 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			Effect.gen(function* () {
 				const sql = yield* SqlClient.SqlClient
 				const commits = yield* Ref.make(0)
-				const transactions = Layer.mock(SqlClient.SqlClient, {
-					...sql,
-					withTransaction: (work) =>
-						sql.withTransaction(work).pipe(
-							Effect.flatMap((value) =>
-								Ref.updateAndGet(commits, (n) => n + 1).pipe(
-									Effect.flatMap((count) =>
-										count === 1
-											? Effect.fail(
-													SqlError.SqlError.make({
-														reason: SqlError.ConnectionError.make({
-															cause: "The commit reply was lost.",
-														}),
+				const withTransaction: typeof sql.withTransaction = (work) =>
+					sql.withTransaction(work).pipe(
+						Effect.flatMap((value) =>
+							Ref.updateAndGet(commits, (n) => n + 1).pipe(
+								Effect.flatMap((count) =>
+									count === 1
+										? Effect.fail(
+												SqlError.SqlError.make({
+													reason: SqlError.ConnectionError.make({
+														cause: "The commit reply was lost.",
 													}),
-												)
-											: Effect.succeed(value),
-									),
+												}),
+											)
+										: Effect.succeed(value),
 								),
 							),
 						),
-				})
+					)
+				// Keep the callable SQL client used by the release check. Only the
+				// first commit reply is lost; query calls still use the real database.
+				const transactions = Layer.succeed(
+					SqlClient.SqlClient,
+					new Proxy(sql, {
+						get: (target, key, receiver) =>
+							key === "withTransaction"
+								? withTransaction
+								: Reflect.get(target, key, receiver),
+					}),
+				)
 				const first = yield* start({ transactions })
 				const second = yield* start()
 				const resource = {

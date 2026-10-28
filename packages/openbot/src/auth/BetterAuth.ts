@@ -51,7 +51,7 @@ import type { Records } from "../errors/Records.ts"
  * `/auth/callback/oidc`. An SSO connection uses its own ID, such as
  * `/auth/callback/sso_...`.
  */
-const providerId = "oidc"
+import * as BrowserRoutes from "./BrowserRoutes.ts"
 
 /**
  * SDK rejections and database errors go to the typed error channel. Other
@@ -98,6 +98,8 @@ interface OidcProvider {
 	readonly issuer: string
 	readonly clientId: string
 	readonly clientSecret: Redacted.Redacted<string> | undefined
+	readonly redirectUri?: string
+	readonly scopes?: ReadonlyArray<string>
 }
 
 const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
@@ -108,8 +110,10 @@ const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
 			? undefined
 			: Redacted.value(provider.clientSecret),
 	discoveryUrl: provider.issuer + "/.well-known/openid-configuration",
-	redirectURI: publicOrigin + "/auth/callback/" + provider.providerId,
-	scopes: ["openid", "profile", "email"],
+	redirectURI:
+		provider.redirectUri ??
+		publicOrigin + "/auth/callback/" + provider.providerId,
+	scopes: [...(provider.scopes ?? ["openid", "profile", "email"])],
 	pkce: true,
 	requireIdTokenVerification: true,
 	accountSubject: ({
@@ -233,10 +237,12 @@ export const layer = (
 						config.mode === "oidc"
 							? [
 									{
-										providerId,
+										providerId: config.providerId,
 										issuer: config.issuer,
 										clientId: config.clientId,
 										clientSecret: config.clientSecret,
+										redirectUri: config.redirectUri,
+										scopes: config.scopes,
 									},
 									...connectionProviders,
 								]
@@ -295,8 +301,8 @@ export const layer = (
 							path: "/",
 						},
 						cookies: {
-							session_token: { name: AuthApi.SessionCookie },
-							state: { name: AuthApi.LoginCookie },
+							session_token: { name: config.sessionCookie },
+							state: { name: config.loginCookie },
 						},
 					},
 					plugins: [
@@ -451,7 +457,7 @@ export const layer = (
 			) =>
 				new Headers({
 					cookie:
-						AuthApi.SessionCookie +
+						config.sessionCookie +
 						"=" +
 						encodeURIComponent(Redacted.value(credential)),
 					origin: config.publicOrigin,
@@ -484,17 +490,40 @@ export const layer = (
 							)
 						)
 							return yield* CredentialRejected.make({ kind: "session" })
-						return Option.some(used.value.organizationId)
+						return {
+							organization: Option.some(used.value.organizationId),
+							provider,
+						}
 					}
 					if (Option.exists(byEmail, (connection) => connection.enforce))
 						return yield* CredentialRejected.make({ kind: "session" })
-					return Option.none<string>()
+					return { organization: Option.none<string>(), provider }
 				})
 
 			return Auth.of({
 				handle: (request) =>
-					withCurrent((_, current) =>
-						Effect.promise(() => current.sdk.handler(request)),
+					withCurrent((instance, current) =>
+						BrowserRoutes.handler(instance.config, {
+							handler: (request) => current.sdk.handler(request),
+							signIn: (returnTo) =>
+								instance.config.mode === "oidc"
+									? current.sdk.api.signInSocial({
+											body: {
+												provider: instance.config.providerId,
+												callbackURL: instance.config.publicOrigin + returnTo,
+											},
+											headers: new Headers({
+												origin: instance.config.publicOrigin,
+											}),
+											request: new Request(
+												instance.config.publicOrigin + "/auth/login",
+											),
+											asResponse: true,
+										})
+									: Promise.resolve(new Response(null, { status: 503 })),
+							signOut: (headers) =>
+								current.sdk.api.signOut({ headers, asResponse: true }),
+						})(request),
 					).pipe(
 						Effect.catchTag("AuthUnavailable", () =>
 							Effect.sync(() => HttpServerResponse.toWeb(unavailableResponse)),
@@ -538,7 +567,7 @@ export const layer = (
 									onSome: (connection) => Option.some(connection.id),
 									onNone: () =>
 										instance.config.mode === "oidc"
-											? Option.some(providerId)
+											? Option.some(instance.config.providerId)
 											: Option.none(),
 								},
 							),
@@ -559,7 +588,7 @@ export const layer = (
 								Effect.gen(function* () {
 									if (result === null)
 										return yield* CredentialRejected.make({ kind: "session" })
-									const ssoOrganization = yield* checkProvider(
+									const signIn = yield* checkProvider(
 										current.connections,
 										result.user,
 									)
@@ -571,7 +600,14 @@ export const layer = (
 									}
 									const memberships = yield* organization.admit(
 										account,
-										ssoOrganization,
+										signIn.organization,
+										{
+											platformSignIn:
+												instance.config.mode === "oidc" &&
+												Option.isNone(signIn.organization) &&
+												Option.getOrUndefined(signIn.provider) ===
+													instance.config.providerId,
+										},
 									)
 									const platformAdmin = yield* admins.check(account)
 									return {

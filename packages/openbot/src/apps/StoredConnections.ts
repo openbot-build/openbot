@@ -44,6 +44,24 @@ export const StoredConnection = Schema.Struct({
 	verification: Schema.NullOr(AppConnections.Availability),
 })
 export type StoredConnection = typeof StoredConnection.Type
+const sameConnection = Schema.toEquivalence(Store.UserConnection)
+const sameStoredConnection = Schema.toEquivalence(StoredConnection)
+
+/** A new token for the same grant does not change the public connection. */
+export const isCredentialRotation = (
+	previous: Store.UserConnection,
+	next: Store.UserConnection,
+) =>
+	previous.authorization._tag === "Authorized" &&
+	next.authorization._tag === "Authorized" &&
+	previous.authorization.credentialRef !== next.authorization.credentialRef &&
+	sameConnection(previous, {
+		...next,
+		authorization: {
+			...next.authorization,
+			credentialRef: previous.authorization.credentialRef,
+		},
+	})
 export interface SaveRequest {
 	readonly app: Store.AppRecord
 	readonly connection: Store.UserConnection
@@ -343,9 +361,16 @@ export const update = (
 						reason: "RevisionChanged",
 						message: "This connection changed. Refresh it before updating.",
 					})
+				const next = change(previous)
+				const rotation =
+					isCredentialRotation(previous.connection, next.connection) &&
+					sameStoredConnection(previous, {
+						...next,
+						connection: previous.connection,
+					})
 				const updated = yield* Schema.decodeEffect(StoredConnection)({
-					...change(previous),
-					revision: previous.revision + 1,
+					...next,
+					revision: previous.revision + (rotation ? 0 : 1),
 				})
 				if (
 					updated.connection.owner !== owner ||

@@ -2,12 +2,17 @@ import { AppConnections, Execution } from "@openbot-build/domain"
 import { errors as ExecutionErrors } from "./ExecutionsApi.ts"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { Document } from "@openbot-build/protocol"
-import { ConnectionDraft, ConnectionId } from "./ConnectionsApi.ts"
+import {
+	ConnectionDraft,
+	ConnectionId,
+	AppIdentity,
+	ManualTransfer,
+} from "./ConnectionsApi.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 export const Entry = Schema.Struct({
 	...AppConnections.Entry.fields,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
+	manual: Schema.optionalKey(ManualTransfer),
 })
 export const Transfer = Schema.Struct({
 	...AppConnections.Transfer.fields,

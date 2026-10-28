@@ -121,6 +121,7 @@ const setup = (namespace: string) =>
 		const chats = yield* ChatStoreRepository.make({ definition, persistence })
 		const { chain, kind, bot } = BotFixture.direct()
 		const initial = yield* chats.create({
+			settings: { model: selection },
 			business: { [chatHostId]: { chain, kind, bot: bot.id } },
 		})
 		const chat = initial.chat.id
@@ -154,6 +155,7 @@ const setup = (namespace: string) =>
 			{
 				workflow: "openbot.chat-turn",
 				resource: { kind: "Turn", id: turn },
+				context: { kind: "Chat", id: chat },
 				identity: {
 					owner: { organizationId: chain.organizationId, userId: chain.userId },
 					actor: {

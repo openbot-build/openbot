@@ -24,6 +24,7 @@ import { resourceLeases, resourceOwners } from "../database/ResourceSchema.ts"
 import { storage, transactionFailures } from "../execution/Store.ts"
 import * as Background from "../execution/Background.ts"
 import * as Resource from "./Resource.ts"
+import * as ReleaseAdmission from "../release/Admission.ts"
 
 class ResourceKey extends Data.Class<
 	Resource.Ref & { readonly afterLease: string | null }
@@ -34,6 +35,7 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* PgClient.PgClient
 	const transactions = yield* SqlClient.SqlClient
+	const releaseAdmission = yield* ReleaseAdmission.make
 	const crypto = yield* Crypto.Crypto
 	const runners = yield* RunnerStorage.RunnerStorage
 	const config = yield* ShardingConfig.ShardingConfig
@@ -172,6 +174,7 @@ const make = Effect.gen(function* () {
 		const commit = transactions
 			.withTransaction(
 				Effect.gen(function* () {
+					yield* releaseAdmission.admit.pipe(storage)
 					yield* admit
 					yield* lock(address)
 					const found = yield* find(address)

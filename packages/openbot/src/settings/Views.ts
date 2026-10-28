@@ -1,6 +1,7 @@
-import type { Settings as SettingsModel } from "@openbot-build/domain"
+import { Settings as SettingsModel } from "@openbot-build/domain"
 import { DateTime } from "effect"
 import {
+	browserAuthOf,
 	codeModeOf,
 	filesOf,
 	quotaOf,
@@ -21,12 +22,20 @@ export const platform = (
 ): SettingsModel.PlatformSettings => {
 	const { document } = snapshot
 	return {
+		memberSignupOrganizationId: document.memberSignupOrganizationId ?? null,
+		browserAuth: browserAuthOf(document),
 		version: snapshot.version,
 		publicOrigin: document.publicOrigin,
 		identityProvider:
 			document.identityProvider === null
 				? null
 				: {
+						providerId: document.identityProvider.providerId ?? "oidc",
+						callbackPath:
+							document.identityProvider.callbackPath ?? "/auth/callback/oidc",
+						scopes:
+							document.identityProvider.scopes ??
+							SettingsModel.defaultOidcScopes,
 						issuer: document.identityProvider.issuer,
 						clientId: document.identityProvider.clientId,
 						clientSecret: {
@@ -63,6 +72,7 @@ export const organization = (
 	snapshot: Snapshot<OrganizationDocument>,
 ): SettingsModel.OrganizationSettings => ({
 	...snapshot.document,
+	chatModel: snapshot.document.chatModel ?? null,
 	delegationTimeLimitMs: delegationTimeLimitOf(snapshot.document),
 	...operationsOf(snapshot.document),
 	tokenRate: tokenRateOf(snapshot.document),

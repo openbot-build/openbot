@@ -1,7 +1,6 @@
-import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import * as Index from "./AppIndexApi.ts"
-import { Availability, ConnectionId } from "./ConnectionsApi.ts"
+import { Availability, ConnectionId, AppIdentity } from "./ConnectionsApi.ts"
 
 // tsdown drops star exports from the built API namespace. List the names here.
 export {
@@ -18,7 +17,7 @@ import { Result } from "@openbot-build/domain/AppCalls"
 export const AccessConnection = Schema.Struct({
 	id: ConnectionId,
 	name: Schema.String,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	revision: Schema.Natural,
 	enabled: Schema.Boolean,
 	availability: Availability,

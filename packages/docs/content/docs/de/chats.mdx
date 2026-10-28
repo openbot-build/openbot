@@ -38,3 +38,40 @@ Das Löschen des Verlaufs entfernt den Chat-Verlauf, aber nicht das
 [Bot-Gedächtnis](/de/docs/memory). Dateien, die nur dieser Chat hält, können
 später verschwinden. Lies bei einem fehlgeschlagenen Turn den Fehler, bevor du
 dieselbe Aufgabe erneut sendest.
+
+## Eigene Gespräche und gespeicherte Befehle
+
+Mit `POST /v1/chats`, `botId` und einer festen `requestId` entsteht eine eigene
+`conversation` mit einem vorhandenen Bot. Sein direct Chat bleibt getrennt.
+`POST /v1/chats/:chatId/forks` kopiert den gespeicherten Verlauf der angegebenen
+Revision, ohne Nachrichten oder Werkzeuge erneut auszuführen. Offene Arbeit,
+Freigaben und unklare externe Ergebnisse verhindern eine Kopie.
+`GET /v1/chats/:chatId/branches` zeigt nur lesbare Zweige.
+
+`memory: { read, write }` bei einer Chat-Änderung legt die Vorgabe fest.
+Dasselbe Feld einer Nachricht gilt nur für diesen Turn. Eine neue Vorgabe
+widerruft wartende Speicherarbeit. Kopierter Verlauf wird nicht erneut gelernt.
+
+Bei einer verlorenen Antwort liest `GET /v1/execution-commands/:commandKey` den
+Beleg oder `null` mit den aktuellen Konto- und Ausführungsrechten. `null`
+beweist nicht, dass der Befehl nie gesendet wurde. Prüfen Sie den alten Befehl
+weiter, ohne eine neue Nachricht zu senden. Die native Execution-API liefert
+Zustand und Ereignisse.
+
+## Standardmodell der Organisation
+
+Administratoren können `chatModel` mit `PATCH /v1/organization/settings` und der
+aktuellen `expectedVersion` setzen. Das Modell muss ein verfügbares Sprachmodell
+sein, das der Administrator verwenden darf. Eine explizite Chat-Auswahl hat
+Vorrang vor dem Bot-Modell; danach folgt der Organisationsstandard. Neue Chats
+behalten diese Vererbung. Jeder Turn speichert seine aufgelöste Auswahl vor dem
+externen Aufruf. Änderungen gelten deshalb für folgende Turns, nicht für die
+Wiederherstellung bereits angenommener Arbeit. Vorhandene explizite Auswahlen
+bleiben erhalten. `model: null` mit der aktuellen Bot-Revision stellt die
+Vererbung wieder her.
+
+Nachrichtenquittungen können `inputItems` mit den ursprünglichen Inbox-IDs
+dieses Befehls enthalten. Ein `InputMoved`-Ereignis gehört nur dann zu dieser
+Nachricht, wenn seine `items` diese IDs enthalten. Fehlen die IDs in einer
+älteren Quittung, darf der Client die Zuordnung nicht erraten. Arbeit ohne Turn
+liefert `turn: null`; eine Chat-ID ist keine Turn-ID.

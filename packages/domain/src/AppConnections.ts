@@ -54,7 +54,16 @@ export class ConnectionCleanupPending extends Schema.TaggedError<
 	message: Schema.String,
 }) {}
 
+export const ManualTransfer = Schema.Struct({
+	url: Schema.NonEmptyString,
+	transport: Schema.Literal("streamable-http"),
+	headers: Schema.Array(
+		Schema.String.check(Schema.isPattern(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/)),
+	).check(Schema.isMaxLength(100)),
+})
+export type ManualTransfer = typeof ManualTransfer.Type
 export const DraftState = Schema.Struct({
+	manual: Schema.optionalKey(ManualTransfer),
 	id: Schema.NonEmptyString,
 	revision: Schema.Natural,
 	input: Schema.NonEmptyString,
@@ -121,6 +130,7 @@ export type ManualConnectionRequest = typeof ManualConnectionRequest.Type
 
 /** Connection exports hold the description, without account secrets. */
 export const Entry = Schema.Struct({
+	manual: Schema.optionalKey(ManualTransfer),
 	name: ConnectionName,
 	cardUrl: Schema.NonEmptyString,
 	remoteIndex: Schema.Natural,

@@ -16,9 +16,15 @@ import { AuthorizationErrors, Required, own } from "./Authorization.ts"
 
 export const ConnectionName = AppConnections.ConnectionName
 export const Values = Schema.Record(Schema.String, Schema.String)
+export const ManualTransfer = Schema.Struct({
+	...AppConnections.ManualTransfer.fields,
+	url: Document.Link,
+})
+export type ManualTransfer = typeof ManualTransfer.Type
 export const ConnectionDraft = Schema.Struct({
 	...AppConnections.DraftState.fields,
 	discovery: AppDiscoveryResult,
+	manual: Schema.optionalKey(ManualTransfer),
 })
 export type ConnectionDraft = typeof ConnectionDraft.Type
 export const Availability = AppConnections.Availability
@@ -46,10 +52,11 @@ export type ManualConnectionUpdate = typeof ManualConnectionUpdate.Type
 const ManualIdentity = Schema.String.check(
 	Schema.isPattern(/^urn:openbot:manual:[0-9a-f-]{36}$/i),
 )
+export const AppIdentity = Schema.Union([Document.Link, ManualIdentity])
 export const Connection = Schema.Struct({
 	id: ConnectionId,
 	name: ConnectionName,
-	cardUrl: Schema.Union([Document.Link, ManualIdentity]),
+	cardUrl: AppIdentity,
 	card: Document.ServerCard,
 	endpoint: Schema.String,
 	remoteIndex: Schema.Natural,
@@ -63,7 +70,7 @@ export type Connection = typeof Connection.Type
 export const ConnectionRequest = Schema.Struct({
 	draftId: Schema.NonEmptyString,
 	revision: Schema.Natural,
-	cardUrl: Document.Link,
+	cardUrl: AppIdentity,
 	remoteIndex: Schema.Natural,
 	name: ConnectionName,
 	values: Values,

@@ -1,3 +1,4 @@
+import * as Receipts from "../execution/Receipts.ts"
 import * as Failures from "../errors/Failures.ts"
 import * as ChatCommands from "./ChatCommands.ts"
 import * as ChatQueries from "./ChatQueries.ts"
@@ -74,10 +75,16 @@ const send = (
 				caller,
 				content,
 				queue: payload.queue ?? false,
+				...(payload.memory === undefined ? {} : { memory: payload.memory }),
 			})
 			.pipe(ChatErrors.map)
 		const saved = yield* store.get({ namespace, id: receipt.executionId })
-		return { ...receipt, chat, turn: Turn.Id.make(saved.resource.id) }
+		return {
+			...(yield* Receipts.withInputItems(store, namespace, receipt)),
+			chat,
+			turn:
+				saved.resource.kind === "Turn" ? Turn.Id.make(saved.resource.id) : null,
+		}
 	})
 const implementations = Effect.gen(function* () {
 	const control = yield* ChatControl.make
@@ -91,6 +98,25 @@ const implementations = Effect.gen(function* () {
 	const store = yield* Store
 	const safe = yield* HttpErrors.make
 	return {
+		createConversation: ({ payload }: Request<"createConversation">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const view = yield* commands.createConversation(caller, payload)
+				return ChatViews.project(yield* queries.describe(caller, view))
+			}).pipe(ChatErrors.map),
+		forkChat: ({ params, payload }: Request<"forkChat">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const view = yield* commands.fork(caller, params.chatId, payload)
+				return ChatViews.project(yield* queries.describe(caller, view))
+			}).pipe(ChatErrors.map),
+		chatBranches: ({ params }: Request<"chatBranches">) =>
+			Effect.gen(function* () {
+				return Arr.map(
+					yield* queries.branches(yield* Identity, params.chatId),
+					({ ref, executionId }) => ChatViews.summary(ref, executionId),
+				)
+			}).pipe(ChatErrors.map),
 		sendBotMessage: ({ params, payload }: Request<"sendBotMessage">) =>
 			Effect.gen(function* () {
 				const caller = yield* Identity

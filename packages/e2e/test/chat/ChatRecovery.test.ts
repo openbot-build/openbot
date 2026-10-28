@@ -185,6 +185,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						[second.turn, "Completed"],
 					],
 				)
+				assert.ok(first.turn !== null)
 				const saved = yield* Read.turn(send, first.chat, first.turn)
 				const encoded = yield* Schema.encodeEffect(
 					Schema.fromJsonString(Schema.Unknown),

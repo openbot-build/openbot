@@ -84,6 +84,7 @@ export class ServerMetadata extends Schema.Opaque<
 			issuer: Schema.NonEmptyString,
 			authorization_endpoint: Schema.NonEmptyString,
 			token_endpoint: Schema.NonEmptyString,
+			registration_endpoint: Schema.optional(Schema.NonEmptyString),
 			revocation_endpoint: Schema.optional(Schema.String),
 			client_id_metadata_document_supported: Schema.optional(Schema.Boolean),
 			authorization_response_iss_parameter_supported: Schema.optional(
@@ -117,6 +118,10 @@ export class Flow extends Schema.Opaque<
 		flowId: Schema.String,
 		binding: Store.CredentialBinding,
 		clientId: Schema.String,
+		clientSecret: Schema.optional(Schema.Redacted(Schema.NonEmptyString)),
+		clientAuthMethod: Schema.optional(
+			Schema.Literals(["none", "client_secret_basic", "client_secret_post"]),
+		),
 		redirectUri: Schema.String,
 		scopes: Schema.Array(Schema.String),
 		verifier: Schema.Redacted(Schema.String),

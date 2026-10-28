@@ -127,10 +127,8 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const receipt = yield* Messages.message(send, bot, "Use the Bot model.")
 				const result = yield* Messages.settled(send, receipt.chat)
 				assert.strictEqual(result.turn?.status._tag, "Completed")
-				assert.deepStrictEqual(
-					result.turn?.settings.model,
-					initial.chat.settings.model,
-				)
+				assert.strictEqual(result.turn?.settings.model?.provider, "fixture")
+				assert.strictEqual(result.turn?.settings.model?.model, "fixture-model")
 				assert.strictEqual(result.chat.settings.model, undefined)
 				const retry = yield* send(`/v1/bots/${bot}/messages`, "POST", {
 					input: "Use the Bot model.",

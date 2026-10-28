@@ -6,7 +6,7 @@ import {
 	type Caller,
 	type ChatKind,
 } from "@openbot-build/domain"
-import { Effect } from "effect"
+import { Effect, Array as Arr } from "effect"
 import { sql } from "drizzle-orm"
 import * as Check from "../authorization/Check.ts"
 import { toWhere } from "../authorization/Sql.ts"
@@ -49,11 +49,11 @@ export const make = Effect.gen(function* () {
 					turn === undefined
 						? []
 						: yield* source.turnLog(view.chat.id, turn.id),
-				executionId: yield* source.executionId(turn?.id),
+				executionId: yield* source.executionId(turn?.id, view.chat.id),
 				open: yield* openWork.count(caller.organizationId, view.chat.id),
 			}
 		})
-	return {
+	const service = {
 		describe,
 		models: (caller: Caller, chat: Chat.Id) =>
 			use(
@@ -119,13 +119,13 @@ export const make = Effect.gen(function* () {
 					...(input.bot === undefined ? {} : { bot: input.bot }),
 					kinds:
 						input.kind === undefined
-							? ["direct", "channel", "live"]
+							? ["direct", "conversation", "channel", "live"]
 							: [input.kind],
 					where: allowed,
 				})
 				return yield* Effect.forEach(refs, (ref) =>
 					records(ownerKey(caller))
-						.executionId(ref.turn?.id)
+						.executionId(ref.turn?.id, ref.id)
 						.pipe(Effect.map((executionId) => ({ ref, executionId }))),
 				)
 			}),
@@ -155,5 +155,19 @@ export const make = Effect.gen(function* () {
 			input: { readonly after?: Item.Id; readonly limit?: number },
 		) =>
 			use(caller, chat, records(ownerKey(caller)).turnItems(chat, turn, input)),
+	}
+	return {
+		...service,
+		branches: (caller: Caller, chat: Chat.Id) =>
+			Effect.gen(function* () {
+				const source = yield* service.read(caller, chat)
+				const root = ChatHost.hostState(source.chat).branchOf?.root ?? chat
+				const rows = yield* service.list(caller, { kind: "conversation" })
+				return Arr.filter(
+					rows,
+					({ ref }) =>
+						ref.id === root || ChatHost.hostState(ref).branchOf?.root === root,
+				)
+			}),
 	}
 })

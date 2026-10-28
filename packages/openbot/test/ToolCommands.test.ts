@@ -300,6 +300,7 @@ const setup = Effect.fn(function* (
 		{
 			workflow: "openbot.chat-turn",
 			resource: { kind: "Turn", id: position.turn },
+			context: { kind: "Chat", id: position.chat },
 			identity: {
 				botId: bot.id,
 				owner: { organizationId: "org", userId: owner },

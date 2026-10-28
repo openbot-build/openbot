@@ -45,6 +45,11 @@ export type Decision = typeof Decision.Type
 /** Authorization uses the business resource of the stored execution. */
 export const ExecutionsApi = HttpApiGroup.make("executions")
 	.add(
+		HttpApiEndpoint.get("receipt", "/v1/execution-commands/:commandKey", {
+			params: { commandKey: Execution.CommandKey },
+			success: Schema.NullOr(Execution.Receipt),
+			error: errors,
+		}),
 		HttpApiEndpoint.get("get", "/v1/executions/:executionId", {
 			params: { executionId: Execution.Id },
 			success: Execution.Record,

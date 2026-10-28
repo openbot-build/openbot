@@ -63,6 +63,11 @@ export const layer = HttpApiBuilder.group(
 				>,
 			) => effect.pipe(Effect.catchCauseFilter(storageCause, unavailable))
 			return handlers
+				.handle("receipt", ({ params }) =>
+					Effect.gen(function* () {
+						return yield* commands.receipt(params.commandKey, yield* Identity)
+					}).pipe(safe),
+				)
 				.handle("get", ({ params }) =>
 					Effect.gen(function* () {
 						return yield* commands.get(params.executionId, yield* Identity)

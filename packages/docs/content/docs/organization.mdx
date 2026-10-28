@@ -441,3 +441,21 @@ absent.
 | `409`  | `SettingsConflict`               | Someone changed the settings after you read them.                                         |
 | `409`  | `LastSuperAdministrator`         | The change would leave no active Super Administrator.                                     |
 | `503`  | `OrganizationStorageUnavailable` | OpenBot cannot reach its database.                                                        |
+
+## Signup into an existing organization
+
+`memberSignupOrganizationId` in platform settings defaults to `null`. An
+explicit organization ID lets a new account join that organization as `member`.
+The account must use the main platform OIDC provider and have a verified email.
+It must have no existing membership or removal record. This setting does not
+merge accounts by email or change an organization selected by SSO or
+verified-domain rules.
+
+The target must be active and have an active Super Administrator. The check and
+insert use the member-change lock. Signup grants only `member`, with no direct
+policies. For a managed deployment, also set `organizationCreation` to
+`platform_admins`.
+
+Suspended memberships remain suspended. Removing a member keeps a private
+removal record, so later signup or domain admission cannot restore access. An
+explicit invitation can grant access again through the normal checks.

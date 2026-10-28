@@ -40,13 +40,14 @@ export type MessageInput = typeof MessageInput.Type
 export const ChatCommandRequest = Schema.Struct({
 	commandKey: Execution.CommandKey,
 	input: MessageInput,
+	memory: Schema.optionalKey(ChatMemory),
 	queue: Schema.optionalKey(Schema.Boolean),
 })
 export type ChatCommandRequest = typeof ChatCommandRequest.Type
 export const ChatCommandReceipt = Schema.Struct({
 	...Execution.Receipt.fields,
 	chat: Chat.Id,
-	turn: Turn.Id,
+	turn: Schema.NullOr(Turn.Id),
 })
 export type ChatCommandReceipt = typeof ChatCommandReceipt.Type
 
@@ -109,19 +110,41 @@ export const ChatResponse = Schema.Struct({
 })
 export type ChatResponse = typeof ChatResponse.Type
 
-import { ChatKind, ChatParent, OpenWork } from "@openbot-build/domain/Chats"
-export { ChatKind, ChatParent, OpenWork } from "@openbot-build/domain/Chats"
+import {
+	ChatKind,
+	ChatParent,
+	OpenWork,
+	ChatMemory,
+	ChatBranch,
+	CreateConversationRequest,
+	ForkChatRequest,
+} from "@openbot-build/domain/Chats"
+export {
+	ChatKind,
+	ChatParent,
+	OpenWork,
+	ChatMemory,
+	ChatBranch,
+	defaultChatMemory,
+} from "@openbot-build/domain/Chats"
 
 export const ChatStatus = Schema.Literals(["Idle", ...Turn.StatusTag.literals])
 export type ChatStatus = typeof ChatStatus.Type
 
 /** What a Chat is, without its history. */
+export {
+	CreateConversationRequest,
+	ForkChatRequest,
+} from "@openbot-build/domain/Chats"
+
 export const ChatInfo = Schema.Struct({
 	id: Chat.Id,
 	revision: Chat.Revision,
 	kind: ChatKind,
 	bot: BotId,
 	parent: Schema.NullOr(ChatParent),
+	branchOf: Schema.optionalKey(ChatBranch),
+	memory: Schema.optionalKey(ChatMemory),
 	/** The name of the chat on the platform of a Channel. */
 	title: Schema.optionalKey(Schema.String),
 	settings: Turn.Settings,
@@ -241,6 +264,25 @@ const sendErrors = [
 
 export class ChatsApi extends HttpApiGroup.make("chats")
 	.add(
+		HttpApiEndpoint.post("createConversation", "/v1/chats", {
+			payload: CreateConversationRequest,
+			success: ChatView.pipe(HttpApiSchema.status(201)),
+			error: [...ChatOperationErrors, ...BotErrors],
+		}).annotate(Required, [own("write", "Chat")]),
+		HttpApiEndpoint.post("forkChat", "/v1/chats/:chatId/forks", {
+			params: chatParams,
+			payload: ForkChatRequest,
+			success: ChatView.pipe(HttpApiSchema.status(201)),
+			error: [...ChatOperationErrors, ...BotErrors],
+		}).annotate(Required, [
+			own("read", "Chat", "chatId"),
+			own("write", "Chat"),
+		]),
+		HttpApiEndpoint.get("chatBranches", "/v1/chats/:chatId/branches", {
+			params: chatParams,
+			success: Schema.Array(ChatSummary),
+			error: ChatOperationErrors,
+		}),
 		HttpApiEndpoint.post("sendBotMessage", "/v1/bots/:botId/messages", {
 			params: { botId: BotId },
 			payload: ChatCommandRequest,

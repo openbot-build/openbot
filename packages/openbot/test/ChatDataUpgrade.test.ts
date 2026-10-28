@@ -632,3 +632,75 @@ it.layer(database(), { excludeTestServices: true })((it) => {
 		30_000,
 	)
 })
+
+it.layer(database(), { excludeTestServices: true })((it) => {
+	it.effect(
+		"conversation branches and their memory choices survive the execution upgrade",
+		() =>
+			Effect.gen(function* () {
+				yield* before
+				const sql = yield* PgClient.PgClient
+				const current = {
+					...turn("shared"),
+					metadata: { memory: { read: false, write: false }, memoryEpoch: 3 },
+				}
+				yield* saveChat(current)
+				yield* saveTurn(current)
+				const [source] = yield* sql<{
+					body: string
+					state: string
+				}>`select body, state from openbot_chats where namespace = ${namespace} and id = 'chat'`
+				assert.isDefined(source)
+				const root = yield* decodeChat(source!.body)
+				const rootHost = {
+					...host,
+					kind: "conversation",
+					memory: { read: false, write: false },
+					memoryEpoch: 3,
+				}
+				const rootBody = { ...root, business: { [Legacy.hostKey]: rootHost } }
+				yield* sql`update openbot_chats set body = ${yield* encode(rootBody)}, kind = 'conversation' where namespace = ${namespace} and id = 'chat'`
+				const branchTurn = { ...current, chat: "branch" }
+				const branch = {
+					...rootBody,
+					id: "branch",
+					turn: branchTurn,
+					business: {
+						[Legacy.hostKey]: {
+							...rootHost,
+							branchOf: {
+								chat: "chat",
+								revision: 7,
+								throughSeq: 0,
+								root: "chat",
+								reason: "fork",
+							},
+							learnAfterSeq: 0,
+						},
+					},
+				}
+				yield* sql`insert into openbot_chats ${sql.insert({ namespace, id: "branch", body: yield* encode(branch), state: source!.state, bot: "bot", kind: "conversation", status: "Completed", turn: "shared", revision: 7, inbox_size: 0, created_at: 1, updated_at: 2 })}`
+				yield* sql`insert into openbot_chat_turns ${sql.insert({ namespace, chat: "branch", id: "shared", value: yield* encode(branchTurn) })}`
+				yield* Migrations.initialize
+				yield* Progress.withMaintenance(Chats.run)
+				yield* Progress.withMaintenance(Chats.run)
+				const executions = yield* sql<{
+					context_id: string
+				}>`select context_id from openbot_executions where namespace = ${namespace} and resource_kind = 'Turn' and resource_id = 'shared' order by context_id`
+				assert.deepStrictEqual(
+					Arr.map(executions, (entry) => entry.context_id),
+					["branch", "chat"],
+				)
+				const [saved] = yield* sql<{
+					body: string
+				}>`select body from openbot_chats where namespace = ${namespace} and id = 'branch'`
+				assert.isDefined(saved)
+				assert.deepStrictEqual(
+					(yield* decodeChat(saved!.body)).business[Legacy.hostKey],
+					branch.business[Legacy.hostKey],
+				)
+			}),
+		30_000,
+	)
+})
+const decodeChat = Schema.decodeEffect(Schema.fromJsonString(Legacy.Chat))

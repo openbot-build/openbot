@@ -61,7 +61,10 @@ export const layer = Layer.merge(
 						const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
 							Api.AppAuthorizationUnavailable.make({}),
 						)
-						const owner = yield* HttpMiddleware.optionalSession(auth).pipe(
+						const owner = yield* HttpMiddleware.optionalSession(
+							auth,
+							settings,
+						).pipe(
 							Effect.map(Option.map(ownersOf)),
 							// The Auth service logs the cause of each failure.
 							Effect.catchTag("AuthUnavailable", () =>

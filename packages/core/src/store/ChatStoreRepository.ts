@@ -5,6 +5,7 @@ import {
 	Effect,
 	Equal,
 	Layer,
+	HashSet,
 	Option,
 	PubSub,
 	RcMap,
@@ -217,12 +218,58 @@ export const make = <S extends Plugin.Stores>(
 				return yield* atomic(id)(
 					Effect.gen(function* () {
 						const value = input.value ?? initial<P>({})
+						const seeded = input.seed
+						if (
+							Arr.some(
+								seeded?.turns ?? [],
+								(turn) => !Turn.isTerminal(turn.status),
+							)
+						)
+							return yield* error("encode-failed", {
+								message: "A copied Turn must have ended",
+							})
+						const items = Arr.map(
+							seeded?.items ?? [],
+							(item, index): Item.Record => ({
+								...item,
+								seq: Item.Seq.make(index + 1),
+								...(item.origin === undefined
+									? {}
+									: { origin: { ...item.origin, chat: id } }),
+							}),
+						)
+						const turns = Arr.map(seeded?.turns ?? [], (turn): Turn.Record => ({
+							...turn,
+							chat: id,
+						}))
+						if (
+							HashSet.size(
+								HashSet.fromIterable(Arr.map(items, (item) => item.id)),
+							) !== items.length ||
+							HashSet.size(
+								HashSet.fromIterable(Arr.map(turns, (turn) => turn.id)),
+							) !== turns.length
+						)
+							return yield* error("encode-failed", {
+								message: "A copied history has duplicate IDs",
+							})
+						if (
+							Arr.some(
+								items,
+								(item) =>
+									item.origin !== undefined &&
+									!Arr.some(turns, (turn) => turn.id === item.origin?.turn),
+							)
+						)
+							return yield* error("encode-failed", {
+								message: "A copied Item has no Turn",
+							})
 						const ref: Chat.Ref = {
 							id,
 							revision: Chat.Revision.make(0),
 							settings: { mode: "build", ...input.settings },
 							inbox: [],
-							seq: Item.Seq.make(0),
+							seq: Item.Seq.make(items.length),
 							business: input.business ?? {},
 							createdAt: yield* Clock.currentTimeMillis,
 						}
@@ -234,11 +281,27 @@ export const make = <S extends Plugin.Stores>(
 								revision: ref.revision,
 								expected: null,
 								state: yield* provide(json(options.definition.schema)(value)),
-								items: [],
+								items: yield* Effect.forEach(items, (item) =>
+									Effect.map(encodeItem(item), (value) => ({
+										seq: item.seq,
+										id: item.id,
+										turn: item.origin?.turn ?? null,
+										value,
+									})),
+								),
+								turns: yield* Effect.forEach(turns, (turn) =>
+									Effect.map(encodeTurn(turn), (value) => ({
+										id: turn.id,
+										value,
+									})),
+								),
+								...(seeded?.source === undefined
+									? {}
+									: { source: seeded.source }),
 							},
 							null,
 							view,
-							[],
+							items,
 						)
 						return view
 					}),

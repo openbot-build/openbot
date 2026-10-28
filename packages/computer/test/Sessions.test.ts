@@ -294,7 +294,8 @@ layer(home, { excludeTestServices: true })((it) => {
 				yield* sessions.handle({
 					_tag: "Start",
 					session: ComputersApi.ConnectorSessionId.make("tty"),
-					command: "seq 1 3000",
+					// Compare the application bytes, without the platform TTY newline conversion.
+					command: "stty -onlcr; seq 1 3000",
 					tty: true,
 				})
 				// The output fits in the buffers of the terminal, so the command ends while
@@ -306,7 +307,7 @@ layer(home, { excludeTestServices: true })((it) => {
 				assert.strictEqual(
 					result.text,
 					Arr.join(
-						Arr.map(Arr.range(1, 3000), (n) => `${n}\r\n`),
+						Arr.map(Arr.range(1, 3000), (n) => `${n}\n`),
 						"",
 					),
 				)

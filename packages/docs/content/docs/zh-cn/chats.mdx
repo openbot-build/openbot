@@ -23,3 +23,31 @@ Chat 是你与 Bot 的对话。OpenBot 为你与每个 Bot 保留一个直接 Ch
 
 删除历史会移除 Chat 历史，不会清除独立的
 [Bot 记忆](/zh-cn/docs/memory)。仅由该 Chat 引用的文件可能稍后被删除。Turn 失败时，先阅读错误，再决定是否重复任务。
+
+## 独立对话与已保存命令
+
+使用 `POST /v1/chats`，传入 `botId` 和固定的
+`requestId`，即可为已有 Bot 创建独立的 `conversation`，与其 direct
+Chat 分开。`POST /v1/chats/:chatId/forks`
+按指定 revision 复制已提交历史，不重新执行消息或工具。尚未结束的任务、审批及结果未知的外部操作会阻止分叉。`GET /v1/chats/:chatId/branches`
+仅列出调用者有权读取的分支。
+
+更新 Chat 的 `memory: { read, write }`
+设置默认策略；消息中的同名字段仅影响该 Turn。修改默认值会撤销已排队的记忆工作，复制的历史不会重新学习。
+
+发送回执丢失时，读取
+`GET /v1/execution-commands/:commandKey`，根据当前账号与执行权限返回已保存回执或
+`null`。`null`
+不证明请求未发送；应继续核对原命令，不重新发送消息来恢复结果。原生 Execution
+API 提供当前状态与事件。
+
+## 组织默认模型
+
+管理员可通过 `PATCH /v1/organization/settings` 和当前 `expectedVersion` 设置
+`chatModel`。该选择必须是可用的语言模型，并通过模型使用权限检查。优先级为 Chat 明确选择、Bot 明确选择、组织默认值。新建 Chat 会保留继承关系；每个 Turn 在调用外部模型前保存实际选择，因此修改组织默认值只影响后续 Turn，不改变已接受任务的恢复模型。已有明确选择保持不变。通过当前 revision 将 Bot 的
+`model` 设置为 `null` 可恢复继承。
+
+消息回执可以包含 `inputItems`，记录该命令提交的原始收件箱条目 ID。只有
+`InputMoved.items`
+与这些 ID 相交时才跟随转交后的执行；旧回执缺少这些 ID 时不能猜测归属。排队工作尚无 Turn 时返回
+`turn: null`，不能把 Chat ID 当作 Turn ID。

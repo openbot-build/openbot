@@ -198,13 +198,14 @@ export const make = Effect.gen(function* () {
 						if (
 							mode === "delete" &&
 							host.kind !== "direct" &&
+							host.kind !== "conversation" &&
 							host.kind !== "channel" &&
 							host.kind !== "live"
 						)
 							return yield* Chat.Conflict.make({
 								chat,
 								message:
-									"Only direct Chats, channel Chats and live Chats can be deleted.",
+									"Only direct, conversation, channel and live Chats can be deleted.",
 							})
 						const rows = yield* active(namespace, chat)
 						const turn = view.chat.turn

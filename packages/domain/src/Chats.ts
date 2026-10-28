@@ -1,5 +1,6 @@
+import { BotId } from "./BotId.ts"
 import { FileId } from "./Files.ts"
-import { Chat, Config } from "@openbot-build/core"
+import { Chat, Config, Item, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
 import { PlanApproval } from "./PlanApproval.ts"
 import { ChatTodos, todoProblem } from "./Todos.ts"
@@ -15,6 +16,7 @@ import { DelegationId } from "./DelegationId.ts"
  */
 export const ChatKind = Schema.Literals([
 	"direct",
+	"conversation",
 	"channel",
 	"task",
 	"review",
@@ -37,9 +39,48 @@ export class ChatModelInvalid extends Schema.TaggedError<
 	message: Schema.String,
 }) {}
 
+/** Whether one Chat may read and add to the memory of its Bot. */
+export const ChatMemory = Schema.Struct({
+	read: Schema.Boolean,
+	write: Schema.Boolean,
+})
+export type ChatMemory = typeof ChatMemory.Type
+export const defaultChatMemory: ChatMemory = { read: true, write: true }
+export const ChatBranch = Schema.Struct({
+	chat: Chat.Id,
+	revision: Chat.Revision,
+	throughSeq: Item.Seq,
+	root: Chat.Id,
+	reason: Schema.Literals(["fork", "regenerate"]),
+})
+export type ChatBranch = typeof ChatBranch.Type
+export const ChatRequestId = Schema.String.check(
+	Schema.isPattern(/^[A-Za-z0-9_-]{1,96}$/),
+)
+
+export const CreateConversationRequest = Schema.Struct({
+	botId: BotId,
+	requestId: ChatRequestId,
+	memory: Schema.optionalKey(ChatMemory),
+})
+export type CreateConversationRequest = typeof CreateConversationRequest.Type
+export const ForkChatRequest = Schema.Struct({
+	expected: Chat.Revision,
+	requestId: ChatRequestId,
+	through: Schema.optionalKey(
+		Schema.Struct({
+			turnId: Turn.Id,
+			edge: Schema.Literals(["before", "after"]),
+		}),
+	),
+	reason: Schema.Literals(["fork", "regenerate"]),
+})
+export type ForkChatRequest = typeof ForkChatRequest.Type
+
 /** A settings change is guarded by the saved Chat revision. */
 export const ChatSettingsChange = Schema.Struct({
 	expected: Chat.Revision,
+	memory: Schema.optionalKey(ChatMemory),
 	mode: Schema.optionalKey(Config.Mode),
 	model: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),

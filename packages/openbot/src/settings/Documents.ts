@@ -30,12 +30,20 @@ export type FilesDocument = typeof FilesDocument.Type
  * secret keys of the instance, and only this code opens them.
  */
 export const PlatformDocument = Schema.Struct({
+	/** Missing or null keeps public member signup disabled. */
+	memberSignupOrganizationId: Schema.optionalKey(
+		Schema.NullOr(SettingsModel.MemberSignupOrganizationId),
+	),
+	browserAuth: Schema.optionalKey(SettingsModel.BrowserAuth),
 	publicOrigin: SettingsModel.PublicOrigin,
 	/** Signs the sign-in cookies of Better Auth. `openbot setup` makes it. */
 	authSecret: Schema.String,
 	/** Null means that people sign in only through the SSO connections of organizations. */
 	identityProvider: Schema.NullOr(
 		Schema.Struct({
+			providerId: Schema.optionalKey(SettingsModel.ProviderId),
+			callbackPath: Schema.optionalKey(SettingsModel.CallbackPath),
+			scopes: Schema.optionalKey(SettingsModel.OidcScopes),
 			issuer: SettingsModel.Issuer,
 			clientId: SettingsModel.ClientId,
 			clientSecret: Schema.NullOr(Schema.String),
@@ -55,6 +63,14 @@ export const PlatformDocument = Schema.Struct({
 	files: Schema.optionalKey(FilesDocument),
 })
 export type PlatformDocument = typeof PlatformDocument.Type
+export const browserAuthDefaults: SettingsModel.BrowserAuth = {
+	sessionCookie: "__Host-openbot-session",
+	loginCookie: "__Host-openbot-login",
+	sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
+}
+export const browserAuthOf = (document: {
+	readonly browserAuth?: SettingsModel.BrowserAuth
+}): SettingsModel.BrowserAuth => document.browserAuth ?? browserAuthDefaults
 
 /** The Code Mode settings of the platform. */
 export const codeModeOf = (
@@ -108,6 +124,10 @@ export const operationsOf = (document: {
 })
 
 export const OrganizationDocument = Schema.Struct({
+	/** Absent in older documents; explicit Bot and Chat selections remain unchanged. */
+	chatModel: Schema.optionalKey(
+		SettingsModel.OrganizationSettings.fields.chatModel,
+	),
 	rulesModel: SettingsModel.OrganizationSettings.fields.rulesModel,
 	botMemoryModel: SettingsModel.OrganizationSettings.fields.botMemoryModel,
 	botMemory: Schema.Boolean,
@@ -133,6 +153,7 @@ export type OrganizationDocument = typeof OrganizationDocument.Type
 
 /** A new organization starts with these settings. */
 export const organizationDefaults: OrganizationDocument = {
+	chatModel: null,
 	rulesModel: null,
 	botMemoryModel: null,
 	botMemory: true,
