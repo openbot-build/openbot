@@ -70,6 +70,12 @@ that entry in turn. A missing source, a loop in the source links, or missing
 access proof hides the result. The same check applies to reads, change logs,
 edits, and the memory used in confessions and input additions.
 
+The server checks tags, source links, and access rules without opening the
+entry's content. It then decrypts only the content needed for the reply. A
+source can be checked without decrypting its content. Reads hold a shared lock
+for the Bot's memory. Changes hold that same lock alone, so a read cannot mix
+old access rules with new content. Model calls run outside the lock.
+
 Entries are not deleted when they stop being true. The memory Bot marks them
 with `invalidatedAt`, so authorized history stays. An inactive or retracted
 source hides the conclusions that depend on it. These checks use the sources
@@ -101,6 +107,12 @@ Concurrent learning does not apply the same evidence twice. The saved actor of
 each Turn sets its audience; OpenBot does not parse the Turn author as a user
 ID.
 
+`learningContext` gives the model the first 300 valid entries in memory order.
+Its topic counts still cover all valid entries. `applyLearning` checks the
+latest source state under the write lock before saving the changes. A topic
+rename still covers all matching entries. Changes to tags or status do not
+decrypt and encrypt the old content again.
+
 The words of the Bot only show the memory Bot where to look. They never become
 memory themselves. A tool result from an App never becomes memory by itself. A
 [notice](/docs/developers/chats#notices) from OpenBot is never taken as the
@@ -127,6 +139,18 @@ its own experience. Requests and their reviews see only what the Bot asks, never
 the changes.
 
 When `botMemory` is off, the input does not change.
+
+Server callers use `context` for visible text and the IDs used in that text. It
+keeps the memory order and stops at the first entry that does not fit the text
+limit. Later entries are not decrypted. This replaces reading a full pool and
+applying access rules in each caller. The HTTP view still returns all entries
+that its reader may see, including the history allowed by its rules.
+
+`hasEntries` says if active entries are visible, even when none fit the text
+limit. The model is not called when no entries are visible. For a saved model
+answer, `validateReferences` checks the current source access without reading
+the content. New entries may move old text past the limit without making the
+saved answer invalid. A source that is no longer allowed makes it invalid.
 
 ---
 

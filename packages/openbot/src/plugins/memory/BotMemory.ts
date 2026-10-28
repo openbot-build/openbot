@@ -10,6 +10,7 @@ import {
 	pipe,
 	Predicate,
 	Schema,
+	Struct,
 } from "effect"
 import * as Audience from "./Audience.ts"
 
@@ -37,6 +38,15 @@ export const Entry = Schema.Struct({
 	sourcePolicies: Schema.optionalKey(Schema.Array(SourcePolicy)),
 })
 export type Entry = typeof Entry.Type
+/** The data needed to check an entry, without its content. */
+export const Metadata = Schema.Struct(Struct.omit(Entry.fields, ["content"]))
+export type Metadata = typeof Metadata.Type
+
+/** Content is set only when a change adds an entry. */
+export interface Change {
+	readonly metadata: Metadata
+	readonly content?: string
+}
 export const Edit = Api.Edit
 export type Edit = Api.Edit
 export const LogEntry = Api.LogEntry
@@ -75,9 +85,9 @@ export const evidenceTags = (evidence: Evidence): ReadonlyArray<string> => [
 		: []),
 ]
 
-export const isActive = (entry: Entry) =>
+export const isActive = (entry: Metadata) =>
 	entry.status === "active" && entry.invalidatedAt === undefined
-export const topicsOf = (entry: Entry) =>
+export const topicsOf = (entry: Metadata) =>
 	Arr.filter(entry.tags, Predicate.not(Audience.isSystem))
 
 /** Keep the private source policy out of API replies. */
@@ -88,15 +98,15 @@ export const publicEntry = ({
 
 /** Checks every source, including the old entries already in the pool. */
 const allowed = (
-	pool: ReadonlyArray<Entry>,
+	metadata: ReadonlyArray<Metadata>,
 	tagsAllowed: (tags: ReadonlyArray<string>) => boolean,
 ) => {
 	const entries = HashMap.fromIterable(
-		Arr.map(pool, (entry) => [entry.id, entry] as const),
+		Arr.map(metadata, (entry) => [entry.id, entry] as const),
 	)
 	let known = HashMap.empty<string, boolean>()
-	type Step = { readonly entry: Entry; readonly done: boolean }
-	return (entry: Entry): boolean => {
+	type Step = { readonly entry: Metadata; readonly done: boolean }
+	return (entry: Metadata): boolean => {
 		let pending: Chunk.Chunk<Step> = Chunk.make({ entry, done: false })
 		let path = HashSet.empty<string>()
 		while (Chunk.isNonEmpty(pending)) {
@@ -171,25 +181,27 @@ const allowed = (
 }
 
 /** An entry is readable only when its own rule and every source rule allow it. */
-export const visible = (pool: ReadonlyArray<Entry>, viewer: Audience.Viewer) =>
-	allowed(pool, (tags) => Audience.visible(tags, viewer))
+export const visible = (
+	metadata: ReadonlyArray<Metadata>,
+	viewer: Audience.Viewer,
+) => allowed(metadata, (tags) => Audience.visible(tags, viewer))
 
 /** The trusted learner also leaves out entries whose sources cannot be checked. */
-export const learnable = (pool: ReadonlyArray<Entry>) => {
-	const proven = allowed(pool, () => true)
-	return Arr.filter(pool, (entry) => isActive(entry) && proven(entry))
+export const learnable = (metadata: ReadonlyArray<Metadata>) => {
+	const proven = allowed(metadata, () => true)
+	return Arr.filter(metadata, (entry) => isActive(entry) && proven(entry))
 }
 
 const canWiden = (
-	pool: ReadonlyArray<Entry>,
-	entry: Entry,
+	metadata: ReadonlyArray<Metadata>,
+	entry: Metadata,
 	audience: Audience.Audience,
 ) => {
 	const organizations = Audience.orgsOf(entry.tags)
 	return (
 		organizations.length > 0 &&
 		Arr.every(organizations, (organizationId) =>
-			allowed(pool, (tags) =>
+			allowed(metadata, (tags) =>
 				audience._tag === "Bot"
 					? Audience.orgsOf(tags).includes(organizationId) &&
 						Arr.some(
@@ -242,8 +254,7 @@ export const Plan = Schema.Struct({ operations: Schema.Array(Operation) })
 export type Plan = typeof Plan.Type
 
 export interface Applied {
-	/** The new and changed entries. */
-	readonly entries: ReadonlyArray<Entry>
+	readonly changes: ReadonlyArray<Change>
 	/** Why entries were shown to more people. */
 	readonly reasons: ReadonlyArray<string>
 	/** How many operations broke a rule and were left out. */
@@ -258,7 +269,7 @@ export interface Applied {
  * - Tags of OpenBot change only with Widen, and Widen keeps a reason.
  */
 export const apply = (input: {
-	readonly pool: ReadonlyArray<Entry>
+	readonly metadata: ReadonlyArray<Metadata>
 	readonly evidence: ReadonlyArray<Evidence>
 	readonly operations: ReadonlyArray<Operation>
 	readonly now: number
@@ -271,7 +282,8 @@ export const apply = (input: {
 	)
 	const step = (
 		state: {
-			readonly entries: HashMap.HashMap<string, Entry>
+			readonly entries: HashMap.HashMap<string, Metadata>
+			readonly contents: HashMap.HashMap<string, string>
 			readonly changed: HashSet.HashSet<string>
 			readonly refs: HashMap.HashMap<string, string>
 			readonly reasons: ReadonlyArray<string>
@@ -281,10 +293,14 @@ export const apply = (input: {
 		id: string,
 	): typeof state => {
 		const reject = { ...state, rejected: state.rejected + 1 }
-		const put = (entry: Entry, reason?: string) => ({
+		const put = (entry: Metadata, reason?: string, content?: string) => ({
 			...state,
 			entries: HashMap.set(state.entries, entry.id, entry),
 			changed: HashSet.add(state.changed, entry.id),
+			contents:
+				content === undefined
+					? state.contents
+					: HashMap.set(state.contents, entry.id, content),
 			reasons:
 				reason === undefined ? state.reasons : [...state.reasons, reason],
 		})
@@ -305,23 +321,26 @@ export const apply = (input: {
 				// Content from an App must not become memory by itself.
 				if (Arr.every(evidence, (source) => source.outside)) return state
 				return {
-					...put({
-						id,
-						layer: "fact",
-						content: operation.content,
-						tags: Arr.dedupe([
-							...Audience.combine(Arr.map(evidence, evidenceTags)),
-							...operation.topics,
-						]),
-						sources: Arr.dedupe(operation.sources),
-						sourcePolicies: Arr.map(evidence, (entry) => ({
-							source: entry.source,
-							tags: evidenceTags(entry),
-						})),
-						status: "active",
-						createdAt: input.now,
-						updatedAt: input.now,
-					}),
+					...put(
+						{
+							id,
+							layer: "fact",
+							tags: Arr.dedupe([
+								...Audience.combine(Arr.map(evidence, evidenceTags)),
+								...operation.topics,
+							]),
+							sources: Arr.dedupe(operation.sources),
+							sourcePolicies: Arr.map(evidence, (entry) => ({
+								source: entry.source,
+								tags: evidenceTags(entry),
+							})),
+							status: "active",
+							createdAt: input.now,
+							updatedAt: input.now,
+						},
+						undefined,
+						operation.content,
+					),
 					refs: HashMap.set(state.refs, operation.ref, id),
 				}
 			}
@@ -336,25 +355,28 @@ export const apply = (input: {
 				if (Option.isNone(supports)) return reject
 				const found = supports.value
 				return {
-					...put({
-						id,
-						layer: "observation",
-						content: operation.content,
-						tags: Arr.dedupe([
-							...Audience.combine(Arr.map(found, (entry) => entry.tags)),
-							...operation.topics,
-						]),
-						sources: pipe(
-							found,
-							Arr.map((entry) => entry.id),
-							Arr.dedupe,
-							Arr.map((entry) => ({ entry })),
-						),
-						confidence: Math.min(1, Math.max(0, operation.confidence)),
-						status: "active",
-						createdAt: input.now,
-						updatedAt: input.now,
-					}),
+					...put(
+						{
+							id,
+							layer: "observation",
+							tags: Arr.dedupe([
+								...Audience.combine(Arr.map(found, (entry) => entry.tags)),
+								...operation.topics,
+							]),
+							sources: pipe(
+								found,
+								Arr.map((entry) => entry.id),
+								Arr.dedupe,
+								Arr.map((entry) => ({ entry })),
+							),
+							confidence: Math.min(1, Math.max(0, operation.confidence)),
+							status: "active",
+							createdAt: input.now,
+							updatedAt: input.now,
+						},
+						undefined,
+						operation.content,
+					),
 					refs: HashMap.set(state.refs, operation.ref, id),
 				}
 			}
@@ -414,7 +436,7 @@ export const apply = (input: {
 							entry.tags.includes(operation.from),
 					),
 					Arr.reduce(state, (current, entry) => {
-						const next: Entry = {
+						const next: Metadata = {
 							...entry,
 							tags: Arr.dedupe(
 								Arr.map(entry.tags, (tag) =>
@@ -436,8 +458,9 @@ export const apply = (input: {
 		Arr.zip(input.operations, input.ids),
 		{
 			entries: HashMap.fromIterable(
-				Arr.map(input.pool, (entry) => [entry.id, entry] as const),
+				Arr.map(input.metadata, (entry) => [entry.id, entry] as const),
 			),
+			contents: HashMap.empty<string, string>(),
 			changed: HashSet.empty<string>(),
 			refs: HashMap.empty<string, string>(),
 			reasons: [] as ReadonlyArray<string>,
@@ -446,8 +469,18 @@ export const apply = (input: {
 		(state, [operation, id]) => step(state, operation, id),
 	)
 	return {
-		entries: Arr.flatMap(Arr.fromIterable(result.changed), (id) =>
-			Option.toArray(HashMap.get(result.entries, id)),
+		changes: Arr.flatMap(Arr.fromIterable(result.changed), (id) =>
+			Option.toArray(
+				HashMap.get(result.entries, id).pipe(
+					Option.map((metadata): Change => ({
+						metadata,
+						...Option.match(HashMap.get(result.contents, id), {
+							onNone: () => ({}),
+							onSome: (content) => ({ content }),
+						}),
+					})),
+				),
+			),
 		),
 		reasons: result.reasons,
 		rejected: result.rejected,
@@ -465,56 +498,61 @@ export interface Person {
  * is not one that the person may see.
  */
 export const edit = (input: {
-	readonly pool: ReadonlyArray<Entry>
+	readonly metadata: ReadonlyArray<Metadata>
 	readonly person: Person
 	readonly change: Edit
 	readonly now: number
 	readonly id: string
-}): Option.Option<Entry> => {
+}): Option.Option<Change> => {
 	const { person, change, now } = input
 	if (change._tag === "Remember")
 		return Option.some({
-			id: input.id,
-			layer: "pinned",
+			metadata: {
+				id: input.id,
+				layer: "pinned",
+				tags: Arr.dedupe([
+					Audience.fromTag(person.userId),
+					Audience.orgTag(person.organizationId),
+					Audience.forTag(Audience.person(person.userId)),
+					...(change.tags ?? []),
+				]),
+				sources: [],
+				status: "active",
+				createdAt: now,
+				updatedAt: now,
+			},
 			content: change.content,
-			tags: Arr.dedupe([
-				Audience.fromTag(person.userId),
-				Audience.orgTag(person.organizationId),
-				Audience.forTag(Audience.person(person.userId)),
-				...(change.tags ?? []),
-			]),
-			sources: [],
-			status: "active",
-			createdAt: now,
-			updatedAt: now,
 		})
-	return Arr.findFirst(input.pool, (entry) => entry.id === change.id).pipe(
+	return Arr.findFirst(input.metadata, (entry) => entry.id === change.id).pipe(
 		Option.filter(
 			(entry) =>
 				entry.status === "active" &&
-				visible(input.pool, {
+				visible(input.metadata, {
 					organizationId: person.organizationId,
 					person: person.userId,
 				})(entry),
 		),
-		Option.map((entry): Entry => {
+		Option.map((entry): Change => {
 			const others = Arr.filter(
 				Audience.peopleOf(entry.tags),
 				(other) => other !== person.userId,
 			)
 			// When others stand behind the entry too, only the part of this person goes.
-			return others.length === 0
-				? { ...entry, status: "retracted", updatedAt: now }
-				: {
-						...entry,
-						tags: Arr.filter(
-							entry.tags,
-							(tag) =>
-								tag !== Audience.fromTag(person.userId) &&
-								tag !== Audience.forTag(Audience.person(person.userId)),
-						),
-						updatedAt: now,
-					}
+			return {
+				metadata:
+					others.length === 0
+						? { ...entry, status: "retracted", updatedAt: now }
+						: {
+								...entry,
+								tags: Arr.filter(
+									entry.tags,
+									(tag) =>
+										tag !== Audience.fromTag(person.userId) &&
+										tag !== Audience.forTag(Audience.person(person.userId)),
+								),
+								updatedAt: now,
+							},
+			}
 		}),
 	)
 }

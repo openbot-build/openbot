@@ -306,7 +306,7 @@ const make = Effect.gen(function* () {
 													Schema.fromJsonString(Schema.Unknown),
 												)(
 													Rules.learningInput(
-														yield* memories.pool(home),
+														yield* memories.learningContext(home),
 														evidence,
 														bot.value,
 													),
@@ -331,20 +331,11 @@ const make = Effect.gen(function* () {
 						fence,
 						{ status: "completed" },
 						Effect.gen(function* () {
-							yield* memories.change(home, (pool) => {
-								const result = Memory.apply({
-									pool,
-									evidence,
-									operations: plan.operations,
-									now,
-									ids,
-								})
-								return Effect.succeed({
-									entries: result.entries,
-									by: "memory_bot" as const,
-									reasons: result.reasons,
-									result,
-								})
+							yield* memories.applyLearning(home, {
+								evidence,
+								operations: plan.operations,
+								now,
+								ids,
 							})
 							yield* cursors.put(
 								{

@@ -3,8 +3,8 @@ import { Schema } from "effect"
 
 /**
  * Bot memory is what one Bot learns over all its Chats.
- * Each Bot has one pool of entries. A memory Bot keeps the pool: it reads all of it,
- * learns new entries, and decides what goes into the work of the Bot.
+ * Each Bot has one pool of entries. A memory Bot checks the sources and access rules,
+ * reads the content it needs, learns new entries, and chooses what the Bot uses.
  * Tags sort the entries. Some tags come from OpenBot and say where an entry comes from
  * and who may see it. Other tags name topics, and the memory Bot chooses them.
  */

@@ -25,7 +25,10 @@ import * as MemoryBot from "../src/bots/MemoryBot.ts"
 import { textOf } from "../src/bots/MemoryEvidence.ts"
 import * as MemoryModels from "../src/bots/MemoryModels.ts"
 import * as MemoryTasks from "../src/bots/MemoryTasks.ts"
-import { BotMemories } from "../src/bots/BotMemories.ts"
+import { BotMemories, make as makeMemories } from "../src/bots/BotMemories.ts"
+import * as MemoryRules from "../src/bots/MemoryRules.ts"
+import * as Audience from "../src/plugins/memory/Audience.ts"
+import type * as Memory from "../src/plugins/memory/BotMemory.ts"
 import { chatHostId } from "../src/chats/ChatHost.ts"
 import * as BotFixture from "./BotFixture.ts"
 import * as BotRecords from "../src/bots/BotRecords.ts"
@@ -244,7 +247,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Effect.provide(
 							MemoryTasks.layer.pipe(
 								Layer.provide(
-									Layer.mock(BotMemories, { pool: () => Effect.succeed([]) }),
+									Layer.mock(BotMemories, {
+										context: () =>
+											Effect.succeed({ text: "", ids: [], hasEntries: false }),
+									}),
 								),
 							),
 						),
@@ -279,6 +285,142 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					yield* sql`select id from openbot_execution_permits where execution_id = ${fence.id}`,
 					[],
 				)
+			}),
+	)
+	it.effect(
+		"a saved memory answer checks its sources outside the context limit",
+		() =>
+			Effect.gen(function* () {
+				const home = {
+					organizationId: actor.organizationId,
+					bot: Bots.BotId.make("replay-context"),
+				}
+				const memories = yield* makeMemories.pipe(
+					Effect.provide(
+						Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
+					),
+				)
+				const source = {
+					chat: Chat.Id.make("replay-source"),
+					item: Item.Id.make("words"),
+				}
+				const evidence: ReadonlyArray<Memory.Evidence> = [
+					{
+						source,
+						role: "user",
+						outside: false,
+						author: actor.userId,
+						organizationId: actor.organizationId,
+						audience: Audience.person(actor.userId),
+						text: "Use tabs for this work.",
+					},
+				]
+				const add = (id: string, content: string, now: number) =>
+					memories.applyLearning(home, {
+						evidence,
+						operations: [
+							{
+								_tag: "AddFact",
+								ref: id,
+								content,
+								topics: [],
+								sources: [source],
+							},
+						],
+						ids: [id],
+						now,
+					})
+				yield* add("old-id", "Use tabs for this work.", 1)
+				const count = yield* Ref.make(0)
+				const answer = "Please use tabs for this work."
+				const encoded = yield* Schema.encodeEffect(
+					Schema.fromJsonString(MemoryRules.Enriched),
+				)({ text: answer, entries: ["old-id"] })
+				const model = yield* LanguageModel.make({
+					generateText: () =>
+						Ref.update(count, (n) => n + 1).pipe(
+							Effect.as([
+								Response.makePart("text", { text: encoded }),
+								Response.makePart("finish", { reason: "stop", usage }),
+							]),
+						),
+					streamText: () => Stream.never,
+				})
+				const models = yield* Layer.build(
+					MemoryModels.layer.pipe(
+						Layer.provide(
+							Layer.mock(ModelRegistry, {
+								defaultModel: Option.some(selection),
+								helperSelection: () => Effect.succeed(selection),
+								resolve: () => Effect.succeed(model),
+							}),
+						),
+					),
+				)
+				const fence = yield* start("memory-replay-context")
+				const chat: Chat.Ref = {
+					id: Chat.Id.make("replay-context-chat"),
+					revision: Chat.Revision.make(1),
+					seq: Item.Seq.make(0),
+					settings: { mode: "build" },
+					inbox: [],
+					createdAt: 0,
+					business: {
+						[chatHostId]: {
+							bot: home.bot,
+							kind: "direct",
+							chain: {
+								organizationId: actor.organizationId,
+								userId: actor.userId,
+								bots: [home.bot],
+								chats: [],
+							},
+						},
+					},
+				}
+				const enrich = Effect.flatMap(MemoryTasks.MemoryTasks, (tasks) =>
+					tasks.enrich(fence, {
+						home,
+						chat,
+						turn: Turn.Id.make("replay-context-turn"),
+						text: "Help with this work.",
+					}),
+				).pipe(
+					Effect.provide(
+						MemoryTasks.layer.pipe(
+							Layer.provide(Layer.succeed(BotMemories, memories)),
+						),
+					),
+					Effect.provideContext(models),
+				)
+				assert.deepEqual(yield* enrich, Option.some(answer))
+				assert.equal(yield* Ref.get(count), 1)
+				const store = yield* Store.Store
+				const saved = yield* store.calls(fence)
+				assert.equal(saved.length, 1)
+				assert.equal(saved[0]?.status, "completed")
+				yield* add("new-id", Str.repeat(1000)("New words. "), 2)
+				assert.deepEqual(
+					yield* memories.context(
+						home,
+						{
+							organizationId: actor.organizationId,
+							person: actor.userId,
+						},
+						8000,
+					),
+					{ text: "", ids: [], hasEntries: true },
+				)
+				assert.deepEqual(yield* enrich, Option.some(answer))
+				assert.equal(yield* Ref.get(count), 1)
+				yield* memories.edit(
+					home,
+					{ organizationId: actor.organizationId, userId: actor.userId },
+					{ _tag: "Forget", id: "old-id" },
+				)
+				assert.deepEqual(yield* enrich, Option.none())
+				assert.equal(yield* Ref.get(count), 1)
+				assert.deepEqual(yield* store.calls(fence), saved)
 			}),
 	)
 	it.effect(

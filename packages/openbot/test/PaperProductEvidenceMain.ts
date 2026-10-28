@@ -59,17 +59,23 @@ const memoryEvidence = Effect.gen(function* () {
 		},
 	]
 	const expectedIds = ["source-ana", "source-bob", "derived"]
-	const applied = yield* memories.change(home, (pool) => {
-		const result = Memory.apply({
-			pool,
-			evidence,
-			operations,
-			now: 1,
-			ids: expectedIds,
-		})
-		return Effect.succeed({ ...result, by: "memory_bot" as const, result })
+	const applied = yield* memories.applyLearning(home, {
+		evidence,
+		operations,
+		now: 1,
+		ids: expectedIds,
 	})
-	const storedIds = Arr.map(yield* memories.pool(home), (entry) => entry.id)
+	const sql = yield* PgClient.PgClient
+	const storedIds = Arr.map(
+		yield* sql<{
+			readonly id: string
+		}>`select id from openbot_bot_memories where organization_id = ${home.organizationId} and home_bot = ${home.bot} order by id`,
+		(row) => row.id,
+	)
+	const storedEntries = (yield* memories.view(home, {
+		organizationId: home.organizationId,
+		channel: "group",
+	})).entries
 	const hasExpectedIds = (ids: ReadonlyArray<string>) =>
 		ids.length === expectedIds.length &&
 		Arr.every(expectedIds, (id) => ids.includes(id))
@@ -118,7 +124,7 @@ const memoryEvidence = Effect.gen(function* () {
 		input: { evidence, operations },
 		observed: {
 			rejected: applied.rejected,
-			entries: applied.entries,
+			entries: storedEntries,
 			storedIds,
 			views,
 		},

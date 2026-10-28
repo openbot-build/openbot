@@ -75,6 +75,13 @@ den Quellverweisen oder ein fehlender Zugriffsnachweis verbirgt das Ergebnis.
 Dieselbe Prüfung gilt beim Lesen, bei Änderungsprotokollen, beim Bearbeiten und
 für das Memory in Beichten und Ergänzungen der Eingabe.
 
+Der Server prüft Tags, Quellverweise und Zugriffsregeln, ohne den Inhalt des
+Eintrags zu öffnen. Danach entschlüsselt er nur die Inhalte für die Antwort.
+Eine Quelle kann ohne ihren entschlüsselten Inhalt geprüft werden. Lesevorgänge
+teilen eine Sperre für das Memory des Bots. Änderungen halten dieselbe Sperre
+allein. So mischt ein Lesevorgang keine alten Rechte mit neuen Inhalten.
+Modellaufrufe laufen außerhalb der Sperre.
+
 Einträge werden nicht gelöscht, wenn sie nicht mehr stimmen. Der Memory-Bot
 markiert sie mit `invalidatedAt`. So bleibt der Verlauf für berechtigte Leser.
 Eine inaktive oder zurückgezogene Quelle verbirgt die Schlüsse, die von ihr
@@ -111,6 +118,13 @@ Lernen wendet dieselben Belege nicht zweimal an. Die gespeicherte Person jedes
 Turns bestimmt den Leserkreis. OpenBot liest keine Benutzer-ID aus dem
 Autor-Feld des Turns.
 
+`learningContext` gibt dem Modell die ersten 300 gültigen Einträge in der
+Memory-Reihenfolge. Die Themenzählung umfasst weiter alle gültigen Einträge.
+`applyLearning` prüft den neuesten Quellzustand unter der Schreibsperre, bevor
+es Änderungen speichert. Eine Themenumbenennung umfasst weiter alle passenden
+Einträge. Änderungen an Tags oder Zustand entschlüsseln und verschlüsseln den
+alten Inhalt nicht erneut.
+
 Die Worte des Bots zeigen dem Memory-Bot nur, wo er hinschauen soll. Sie werden
 selbst nie zu Memory. Ein Tool-Ergebnis von einer App wird nie allein zu Memory.
 Eine [Mitteilung](/de/docs/developers/chats#mitteilungen) von OpenBot gilt nie
@@ -137,6 +151,20 @@ sie als seine eigene Erfahrung. Requests und ihre Prüfungen sehen nur, was der
 Bot fragt, nie die Änderungen.
 
 Wenn `botMemory` aus ist, ändert sich die Eingabe nicht.
+
+Server-Aufrufer nutzen `context` für sichtbaren Text und die darin verwendeten
+Eintrags-IDs. Es hält die Memory-Reihenfolge ein und stoppt beim ersten Eintrag,
+der nicht mehr in die Textgrenze passt. Spätere Einträge werden nicht
+entschlüsselt. Aufrufer lesen keinen ganzen Pool mehr und prüfen den Zugriff
+nicht einzeln. Die HTTP-Ansicht liefert weiter alle Einträge, die der Leser
+sehen darf, samt dem nach den Regeln erlaubten Verlauf.
+
+`hasEntries` zeigt, ob aktive Einträge sichtbar sind, auch wenn keiner in die
+Textgrenze passt. Ohne sichtbare Einträge wird das Modell nicht aufgerufen. Für
+eine gespeicherte Modellantwort prüft `validateReferences` den aktuellen
+Quellzugriff, ohne Inhalte zu lesen. Neue Einträge können alten Text über die
+Grenze schieben, ohne die gespeicherte Antwort ungültig zu machen. Eine nicht
+mehr erlaubte Quelle macht die Antwort ungültig.
 
 ---
 

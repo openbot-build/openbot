@@ -4,6 +4,9 @@ import * as BotMemory from "../src/plugins/memory/BotMemory.ts"
 import * as Audience from "../src/plugins/memory/Audience.ts"
 import { Array as Arr, Option } from "effect"
 
+const changedMetadata = (result: BotMemory.Applied) =>
+	Arr.map(result.changes, (change) => change.metadata)
+
 const source = (item: string) => ({
 	chat: Chat.Id.make("c-1"),
 	item: Item.Id.make(item),
@@ -38,7 +41,7 @@ const evidence: ReadonlyArray<BotMemory.Evidence> = [
 
 it("a fact gets the tags of OpenBot from its source Items", () => {
 	const applied = BotMemory.apply({
-		pool: [],
+		metadata: [],
 		evidence,
 		operations: [
 			{
@@ -53,7 +56,7 @@ it("a fact gets the tags of OpenBot from its source Items", () => {
 		ids: ["e1"],
 	})
 	assert.strictEqual(applied.rejected, 0)
-	const [fact] = applied.entries
+	const [fact] = changedMetadata(applied)
 	assert.deepStrictEqual(
 		[...(fact?.tags ?? [])].sort(),
 		[
@@ -87,7 +90,7 @@ it("a fact gets the tags of OpenBot from its source Items", () => {
 
 it("an App result alone never becomes memory, and unknown sources are refused", () => {
 	const applied = BotMemory.apply({
-		pool: [],
+		metadata: [],
 		evidence,
 		operations: [
 			{
@@ -108,13 +111,13 @@ it("an App result alone never becomes memory, and unknown sources are refused", 
 		now: 1,
 		ids: ["e1", "e2"],
 	})
-	assert.strictEqual(applied.entries.length, 0)
+	assert.strictEqual(changedMetadata(applied).length, 0)
 	assert.strictEqual(applied.rejected, 1)
 })
 
 it("an observation comes from all its people, but only people who see every source see it", () => {
 	const applied = BotMemory.apply({
-		pool: [],
+		metadata: [],
 		evidence,
 		operations: [
 			{
@@ -144,7 +147,7 @@ it("an observation comes from all its people, but only people who see every sour
 		ids: ["e1", "e2", "e3"],
 	})
 	const found = Arr.findFirst(
-		applied.entries,
+		changedMetadata(applied),
 		(entry) => entry.layer === "observation",
 	)
 	assert.ok(Option.isSome(found))
@@ -163,7 +166,7 @@ it("an observation comes from all its people, but only people who see every sour
 	)
 	// A reason cannot give access to the private sources of other people.
 	const widened = BotMemory.apply({
-		pool: applied.entries,
+		metadata: changedMetadata(applied),
 		evidence: [],
 		operations: [
 			{
@@ -178,13 +181,13 @@ it("an observation comes from all its people, but only people who see every sour
 	})
 	assert.strictEqual(widened.rejected, 1)
 	assert.strictEqual(widened.reasons.length, 0)
-	assert.strictEqual(widened.entries.length, 0)
+	assert.strictEqual(changedMetadata(widened).length, 0)
 })
 
 it("the memory Bot cannot change pinned or retracted entries", () => {
 	const pinned = Option.getOrThrow(
 		BotMemory.edit({
-			pool: [],
+			metadata: [],
 			person: { userId: "u-ana", organizationId: "org-a" },
 			change: {
 				_tag: "Remember",
@@ -194,10 +197,10 @@ it("the memory Bot cannot change pinned or retracted entries", () => {
 			now: 1,
 			id: "p1",
 		}),
-	)
+	).metadata
 	assert.strictEqual(pinned.layer, "pinned")
 	const applied = BotMemory.apply({
-		pool: [pinned],
+		metadata: [pinned],
 		evidence: [],
 		operations: [
 			{ _tag: "Invalidate", id: "p1", reason: "No." },
@@ -206,15 +209,14 @@ it("the memory Bot cannot change pinned or retracted entries", () => {
 		now: 2,
 		ids: ["e1", "e2"],
 	})
-	assert.strictEqual(applied.entries.length, 0)
+	assert.strictEqual(changedMetadata(applied).length, 0)
 	assert.strictEqual(applied.rejected, 2)
 })
 
 it("Forget takes back only the part of the person who forgets", () => {
-	const shared: BotMemory.Entry = {
+	const shared: BotMemory.Metadata = {
 		id: "s1",
 		layer: "fact",
-		content: "We use tabs.",
 		tags: [
 			"from:u-ana",
 			"from:u-bob",
@@ -236,32 +238,32 @@ it("Forget takes back only the part of the person who forgets", () => {
 	const ana = { userId: "u-ana", organizationId: "org-a" }
 	const after = Option.getOrThrow(
 		BotMemory.edit({
-			pool: [shared],
+			metadata: [shared],
 			person: ana,
 			change: { _tag: "Forget", id: "s1" },
 			now: 2,
 			id: "unused",
 		}),
-	)
+	).metadata
 	assert.strictEqual(after.status, "active")
 	assert.ok(!after.tags.includes("from:u-ana"))
 	assert.ok(!Audience.visible(after.tags, { ...ana, person: "u-ana" }))
 	const bob = { userId: "u-bob", organizationId: "org-a" }
 	const gone = Option.getOrThrow(
 		BotMemory.edit({
-			pool: [after],
+			metadata: [after],
 			person: bob,
 			change: { _tag: "Forget", id: "s1" },
 			now: 3,
 			id: "unused",
 		}),
-	)
+	).metadata
 	assert.strictEqual(gone.status, "retracted")
 	// A person cannot forget an entry that is not for them.
 	assert.ok(
 		Option.isNone(
 			BotMemory.edit({
-				pool: [gone],
+				metadata: [gone],
 				person: { userId: "u-carol", organizationId: "org-a" },
 				change: { _tag: "Forget", id: "s1" },
 				now: 4,
@@ -302,7 +304,7 @@ it("a person sees a group fact only when they may read all its sources", () => {
 		channel: "c-group",
 	}))
 	const applied = BotMemory.apply({
-		pool: [],
+		metadata: [],
 		evidence: groupEvidence,
 		operations: [
 			{
@@ -317,19 +319,20 @@ it("a person sees a group fact only when they may read all its sources", () => {
 		ids: ["team"],
 	})
 	assert.strictEqual(applied.rejected, 0)
-	assert.strictEqual(applied.entries.length, 1)
-	const fact = applied.entries[0]!
+	assert.strictEqual(changedMetadata(applied).length, 1)
+	const fact = changedMetadata(applied)[0]!
 	assert.ok(
-		BotMemory.visible(applied.entries, {
+		BotMemory.visible(changedMetadata(applied), {
 			organizationId: "org-a",
 			channel: "c-group",
 		})(fact),
 	)
 	for (const person of ["u-ana", "u-bob", "u-carol"])
 		assert.ok(
-			!BotMemory.visible(applied.entries, { organizationId: "org-a", person })(
-				fact,
-			),
+			!BotMemory.visible(changedMetadata(applied), {
+				organizationId: "org-a",
+				person,
+			})(fact),
 		)
 })
 
@@ -343,7 +346,7 @@ it("Widen can name a person who already may read every source", () => {
 		}),
 	)
 	const applied = BotMemory.apply({
-		pool: [],
+		metadata: [],
 		evidence: groupEvidence,
 		now: 1,
 		ids: ["left", "right", "both", "unused"],
@@ -374,22 +377,22 @@ it("Widen can name a person who already may read every source", () => {
 	assert.strictEqual(applied.rejected, 0)
 	assert.strictEqual(applied.reasons.length, 1)
 	const observation = Option.getOrThrow(
-		Arr.findFirst(applied.entries, (entry) => entry.id === "both"),
+		Arr.findFirst(changedMetadata(applied), (entry) => entry.id === "both"),
 	)
 	assert.ok(
-		BotMemory.visible(applied.entries, {
+		BotMemory.visible(changedMetadata(applied), {
 			organizationId: "org-a",
 			person: "u-ana",
 		})(observation),
 	)
 	assert.ok(
-		!BotMemory.visible(applied.entries, {
+		!BotMemory.visible(changedMetadata(applied), {
 			organizationId: "org-a",
 			person: "u-bob",
 		})(observation),
 	)
 	assert.ok(
-		!BotMemory.visible(applied.entries, {
+		!BotMemory.visible(changedMetadata(applied), {
 			organizationId: "org-a",
 			channel: "left",
 		})(observation),
@@ -399,16 +402,16 @@ it("Widen can name a person who already may read every source", () => {
 it("long source chains use a work list and still check the root", () => {
 	const root = Option.getOrThrow(
 		BotMemory.edit({
-			pool: [],
+			metadata: [],
 			person: { organizationId: "org-a", userId: "u-ana" },
 			change: { _tag: "Remember", content: "Use tea." },
 			now: 1,
 			id: "root",
 		}),
-	)
+	).metadata
 	const entries = [
 		root,
-		...Arr.makeBy(12000, (index): BotMemory.Entry => ({
+		...Arr.makeBy(12000, (index): BotMemory.Metadata => ({
 			...root,
 			id: "next-" + index,
 			layer: "observation",
@@ -427,4 +430,81 @@ it("long source chains use a work list and still check the root", () => {
 			person: "u-ana",
 		})(last),
 	)
+})
+
+it("changes to old entries need no content", () => {
+	const original = BotMemory.apply({
+		metadata: [],
+		evidence,
+		operations: [
+			{
+				_tag: "AddFact",
+				ref: "a",
+				content: "Ana likes tabs.",
+				topics: ["code-style"],
+				sources: [source("ana")],
+			},
+		],
+		now: 1,
+		ids: ["a"],
+	})
+	const changed = BotMemory.apply({
+		metadata: changedMetadata(original),
+		evidence: [],
+		operations: [
+			{ _tag: "Retag", id: "a", add: ["style"], remove: ["code-style"] },
+			{ _tag: "RenameTopic", from: "style", to: "tabs" },
+		],
+		now: 2,
+		ids: ["unused-1", "unused-2"],
+	})
+	assert.strictEqual(changed.rejected, 0)
+	assert.strictEqual(changed.changes.length, 1)
+	assert.strictEqual(changed.changes[0]?.content, undefined)
+	assert.deepStrictEqual(BotMemory.topicsOf(changed.changes[0]!.metadata), [
+		"tabs",
+	])
+	const forgotten = Option.getOrThrow(
+		BotMemory.edit({
+			metadata: changedMetadata(changed),
+			person: { organizationId: "org-a", userId: "u-ana" },
+			change: { _tag: "Forget", id: "a" },
+			now: 3,
+			id: "unused",
+		}),
+	)
+	assert.strictEqual(forgotten.content, undefined)
+	assert.strictEqual(forgotten.metadata.status, "retracted")
+})
+
+it("later changes keep the content of a new entry in the same plan", () => {
+	const applied = BotMemory.apply({
+		metadata: [],
+		evidence,
+		operations: [
+			{
+				_tag: "AddFact",
+				ref: "a",
+				content: "Ana likes tabs.",
+				topics: ["code-style"],
+				sources: [source("ana")],
+			},
+			{ _tag: "Retag", id: "a", add: ["style"], remove: ["code-style"] },
+			{ _tag: "RenameTopic", from: "style", to: "tabs" },
+			{
+				_tag: "Widen",
+				id: "a",
+				audience: "person:u-ana",
+				reason: "Ana may read her words.",
+			},
+		],
+		now: 1,
+		ids: ["a-id", "unused-1", "unused-2", "unused-3"],
+	})
+	assert.strictEqual(applied.rejected, 0)
+	assert.strictEqual(applied.changes.length, 1)
+	assert.strictEqual(applied.changes[0]?.content, "Ana likes tabs.")
+	assert.deepStrictEqual(BotMemory.topicsOf(applied.changes[0]!.metadata), [
+		"tabs",
+	])
 })

@@ -5,7 +5,6 @@ import {
 	Clock,
 	Context,
 	Effect,
-	HashSet,
 	Layer,
 	Option,
 	Schema,
@@ -15,7 +14,6 @@ import { LanguageModel, Prompt } from "effect/ai"
 import { Calls } from "../execution/Calls.ts"
 import { Store, storage, type Fence } from "../execution/Store.ts"
 import { Records, category } from "../errors/Records.ts"
-import * as Memory from "../plugins/memory/BotMemory.ts"
 import type { Bots } from "@openbot-build/domain"
 import { BotMemories, type Home } from "./BotMemories.ts"
 import { MemoryLogs } from "./MemoryLogs.ts"
@@ -79,9 +77,12 @@ const make = Effect.gen(function* () {
 							),
 						prompt: (instructions) =>
 							Effect.gen(function* () {
-								const pool = yield* memories.pool(input.home)
 								const viewer = Evidence.viewer(input.chat, saved.identity)
-								const visible = Memory.visible(pool, viewer)
+								const context = yield* memories.context(
+									input.home,
+									viewer,
+									20000,
+								)
 								return Prompt.make([
 									{
 										role: "system",
@@ -116,13 +117,7 @@ const make = Effect.gen(function* () {
 												),
 												8000,
 											),
-											memory: Memory.render(
-												Arr.filter(
-													pool,
-													(entry) => Memory.isActive(entry) && visible(entry),
-												),
-												20000,
-											),
+											memory: context.text,
 										}),
 									},
 								])
@@ -172,13 +167,8 @@ const make = Effect.gen(function* () {
 				yield* calls.authorize(fence, "replay")
 				const saved = yield* store.loadMember(fence)
 				const viewer = Evidence.viewer(input.chat, saved.identity)
-				const pool = yield* memories.pool(input.home)
-				const visible = Memory.visible(pool, viewer)
-				const candidates = Arr.filter(
-					pool,
-					(entry) => Memory.isActive(entry) && visible(entry),
-				)
-				if (candidates.length === 0 || Str.trim(input.text).length === 0)
+				const context = yield* memories.context(input.home, viewer, 8000)
+				if (!context.hasEntries || Str.trim(input.text).length === 0)
 					return Option.none<string>()
 				const answer = yield* models.run(
 					fence,
@@ -202,7 +192,7 @@ const make = Effect.gen(function* () {
 						prompt: (instructions) =>
 							Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
 								message: input.text,
-								memory: Memory.render(candidates, 8000),
+								memory: context.text,
 							}).pipe(
 								Effect.map((content) =>
 									Prompt.make([
@@ -221,14 +211,15 @@ const make = Effect.gen(function* () {
 					},
 				)
 				// A saved answer is checked against current visibility before it reaches the model.
-				const known = HashSet.fromIterable(
-					Arr.map(candidates, (entry) => entry.id),
-				)
 				if (
 					Str.trim(answer.text).length === 0 ||
 					answer.text === input.text ||
 					answer.entries.length === 0 ||
-					!Arr.every(answer.entries, (id) => HashSet.has(known, id))
+					!(yield* memories.validateReferences(
+						input.home,
+						viewer,
+						answer.entries,
+					))
 				)
 					return Option.none<string>()
 				yield* store.commit(
