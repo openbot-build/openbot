@@ -551,7 +551,7 @@ export const PolicySchema = PolicyCodec
 
 /**
  * A policy in a request. It may have at most 100 rules and may be at most 8
- * levels deep. Stored policies use the limits of Ability 3.0.0.
+ * levels deep. These request limits do not apply to stored policies.
  */
 export const PolicyInput = PolicyCodec.check(
 	Schema.makeFilter((policy: Policy) =>

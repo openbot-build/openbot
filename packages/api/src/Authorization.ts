@@ -64,8 +64,6 @@ type OpenBot = Authorization.OpenBot
  * The errors of a check: `Forbidden` (403) when the policy says no, and
  * `PolicyUnavailable` (503) when OpenBot can not load the policy.
  */
-// Ability 3 exposes these schemas through private class declarations. Name their
-// public types here so generated API declarations need no private package paths.
 export interface ForbiddenError extends Authorizer.Forbidden {}
 export interface PolicyUnavailableError extends Authorizer.PolicyUnavailable {}
 export interface PendingError extends Authorizer.Pending {}

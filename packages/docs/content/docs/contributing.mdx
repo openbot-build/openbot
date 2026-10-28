@@ -224,9 +224,10 @@ requirement may only name a path parameter that its endpoint has. A test in
 
 The authorization code comes from the
 [ability](https://github.com/nmnmcc/ability) library, the npm package
-`@nmnmcc/ability`. Version 3.0.0 is fixed in `package.json`. Policies use JSON
-text at HTTP and storage boundaries. A local patch makes the error classes
-public in its type declarations, so TypeScript can emit OpenBot declarations.
+`@nmnmcc/ability`. Version 3.1.0 is fixed in `package.json`. Policies use JSON
+text at HTTP and storage boundaries. This version makes the error classes public
+in its type declarations, so TypeScript can emit OpenBot declarations without a
+local patch.
 
 ### Changes to callers and data
 

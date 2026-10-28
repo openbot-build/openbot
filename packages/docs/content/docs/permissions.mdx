@@ -154,17 +154,15 @@ OpenBot checks every policy when it reads it. A kind, an action or a field that
 does not exist gives `400`. A policy in a request may have at most 100 rules,
 and may be at most 8 levels deep.
 
-Ability 3.0.0 also sets limits for stored policies: 32 policy levels, 64
-condition levels, 5 parts in a field path, and 10000 structural units. Units
-include rules, conditions, operands, list items and meta values. Policy text has
-at most 1000000 UTF-16 code units. Field lists use real paths or `*`; patterns
-such as `owner*` are not valid.
+Ability 3.1.0 has no library size, depth or search limits. The OpenBot request
+limits above still apply. Field lists use real paths or `*`; patterns such as
+`owner*` are not valid.
 
-Before an upgrade, stop all servers and run `openbot-migrate`. The new migration
-changes the platform ceiling from an object to JSON text. Role, member and token
-columns already hold JSON text. Clients must send strings for `policy` and
-`ceiling`. Old policies must meet the new limits and field rules. A policy that
-cannot load grants no access.
+When you move from Ability 2 to 3, stop all servers and run `openbot-migrate`.
+The migration changes the platform ceiling from an object to JSON text. Role,
+member and token columns already hold JSON text. Clients must send strings for
+`policy` and `ceiling`. Old policies must use valid fields. A policy that cannot
+load grants no access.
 
 ### Rules
 

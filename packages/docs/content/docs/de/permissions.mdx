@@ -157,17 +157,15 @@ OpenBot prüft jede Policy, wenn es sie liest. Eine Art, eine Aktion oder ein
 Feld, das es nicht gibt, ergibt `400`. Eine Policy in einer Anfrage darf
 höchstens 100 Regeln haben und höchstens 8 Ebenen tief sein.
 
-Ability 3.0.0 begrenzt auch gespeicherte Policies: 32 Policy-Ebenen, 64 Ebenen
-für Bedingungen, 5 Teile in einem Feldpfad und 10000 Struktureinheiten. Dazu
-zählen Regeln, Bedingungen, Operanden, Listeneinträge und Meta-Werte. Der
-Policy-Text hat höchstens 1000000 UTF-16-Codeeinheiten. Feldlisten nutzen echte
+Ability 3.1.0 hat keine Grenzen für Größe, Tiefe oder Suche in der Bibliothek.
+Die obigen Grenzen für OpenBot-Anfragen gelten weiter. Feldlisten nutzen echte
 Pfade oder `*`. Muster wie `owner*` sind nicht gültig.
 
-Stoppe vor dem Upgrade alle Server und starte `openbot-migrate`. Die neue
-Migration ändert die Platform-Ceiling von einem Objekt zu JSON-Text. Die Spalten
-für Rollen, Mitglieder und Tokens halten schon JSON-Text. Clients müssen für
-`policy` und `ceiling` Strings senden. Alte Policies müssen die neuen Grenzen
-und Feldregeln einhalten. Eine Policy, die nicht lädt, gibt keinen Zugriff.
+Stoppe beim Wechsel von Ability 2 auf 3 alle Server und starte
+`openbot-migrate`. Die Migration ändert die Platform-Ceiling von einem Objekt zu
+JSON-Text. Die Spalten für Rollen, Mitglieder und Tokens halten schon JSON-Text.
+Clients müssen für `policy` und `ceiling` Strings senden. Alte Policies müssen
+gültige Felder nutzen. Eine Policy, die nicht lädt, gibt keinen Zugriff.
 
 ### Regeln
 

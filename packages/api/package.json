@@ -26,7 +26,7 @@
 		"vitest": "5.0.5"
 	},
 	"dependencies": {
-		"@nmnmcc/ability": "3.0.0",
+		"@nmnmcc/ability": "3.1.0",
 		"@openbot-build/core": "workspace:*",
 		"@openbot-build/domain": "workspace:*",
 		"@openbot-build/protocol": "workspace:*"

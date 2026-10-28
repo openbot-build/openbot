@@ -14,9 +14,6 @@ patchedDependencies:
   "@effect/ai-openai@4.0.6":
     hash: hlayjeukwzl7xjzgk4hhn4b7qa
     path: patches/@effect__ai-openai@4.0.6.patch
-  "@nmnmcc/ability@3.0.0":
-    hash: uhsjthkgohxm4ycaha7mezfs2m
-    path: patches/@nmnmcc__ability@3.0.0.patch
   effect@4.0.6:
     hash: sjqjutaw2n7kkagy3tqbjfx5oy
     path: patches/effect@4.0.6.patch
@@ -61,8 +58,8 @@ importers:
   packages/api:
     dependencies:
       "@nmnmcc/ability":
-        specifier: 3.0.0
-        version: 3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
+        specifier: 3.1.0
+        version: 3.1.0(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
@@ -204,8 +201,8 @@ importers:
   packages/domain:
     dependencies:
       "@nmnmcc/ability":
-        specifier: 3.0.0
-        version: 3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
+        specifier: 3.1.0
+        version: 3.1.0(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
@@ -304,8 +301,8 @@ importers:
         specifier: 0.32.0
         version: 0.32.0
       "@nmnmcc/ability":
-        specifier: 3.0.0
-        version: 3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
+        specifier: 3.1.0
+        version: 3.1.0(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1799,10 +1796,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  "@nmnmcc/ability@3.0.0":
+  "@nmnmcc/ability@3.1.0":
     resolution:
       {
-        integrity: sha512-uA3n8gQpRbPCHbXPLql48W0PHtFp8nhMwnvP+FEai1592cFNnsizxo8Wldj0/jFH31fT14ebwqs8Dln/e9NQNw==,
+        integrity: sha512-H3IneGGrFfeB08ul7A4RVvIsh9VinxtDG08gkSMCu/1on7QHek1V+cPa1EXD4uogdXGC7SfT5OylaHmt1mHYdg==,
       }
     peerDependencies:
       effect: 4.0.*
@@ -7019,7 +7016,7 @@ snapshots:
   "@next/swc-win32-x64-msvc@16.3.8":
     optional: true
 
-  "@nmnmcc/ability@3.0.0(patch_hash=uhsjthkgohxm4ycaha7mezfs2m)(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))":
+  "@nmnmcc/ability@3.1.0(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))":
     dependencies:
       effect: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
 
