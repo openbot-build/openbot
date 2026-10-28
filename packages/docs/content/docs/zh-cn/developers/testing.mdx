@@ -17,6 +17,9 @@ devenv shell -- pnpm test:e2e
 devenv shell -- pnpm -r test
 ```
 
+默认情况下，测试文件最多在四个独立测试进程中运行，进程数不超过可用 CPU 数。服务和数据库相互隔离。一个文件内的测试按顺序运行。调试时，加上
+`--maxWorkers=1` 可使用单个进程。
+
 所有端到端检查都放在 `packages/e2e` 中，包名为 `@openbot-build/e2e`。根目录命令
 `pnpm test:e2e`
 会运行该包的类型检查和测试。构建完成后，用以下命令运行一个任务组：
@@ -24,6 +27,17 @@ devenv shell -- pnpm -r test
 ```sh
 devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/read-docs
 ```
+
+小改动可在构建后只运行一个文件，或监视该文件的变更：
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/chat/ChatQueries.test.ts
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest --watch test/chat/ChatQueries.test.ts
+```
+
+这些 `exec vitest`
+命令不会在每次运行时检查整个包的类型。先完成构建，再启动测试。再次构建前，先停止监视模式。改动完成后，仍要运行
+`pnpm typecheck` 和 `pnpm test:e2e`。
 
 `packages/e2e/test` 中的文件夹按用户任务命名。`packages/e2e/scenarios.json`
 记录每项任务的检查和缺口，并区分普通、边界和极端场景。普通场景检查常见结果。边界场景检查接近规则限制的输入或状态。极端场景检查有界的大量输入、重复任务、丢失或恢复。这些名称不代表已经测试了所有可能的输入或故障。

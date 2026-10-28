@@ -23,6 +23,11 @@ devenv shell -- pnpm test:e2e
 devenv shell -- pnpm -r test
 ```
 
+Die Dateien laufen standardmäßig in höchstens vier getrennten Testprozessen. Es
+laufen nicht mehr Prozesse als CPUs verfügbar sind. Dienste und Datenbanken
+bleiben getrennt. Tests in einer Datei laufen der Reihe nach. Nutze beim
+Debuggen `--maxWorkers=1` für einen Prozess.
+
 Alle End-to-End-Prüfungen liegen in `packages/e2e`. Der Paketname ist
 `@openbot-build/e2e`. Der Befehl `pnpm test:e2e` im Stammverzeichnis führt die
 Typprüfung und die Tests dieses Pakets aus. Führe nach einem Build mit diesem
@@ -31,6 +36,19 @@ Befehl eine Aufgabengruppe aus:
 ```sh
 devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/read-docs
 ```
+
+Nach einem Build kannst du für eine kleine Änderung eine Datei ausführen oder
+ihre Änderungen überwachen:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/chat/ChatQueries.test.ts
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest --watch test/chat/ChatQueries.test.ts
+```
+
+Die Befehle mit `exec vitest` lassen die Typprüfung des ganzen Pakets bei jedem
+Lauf aus. Warte zuerst auf das Ende des Builds. Beende den Watch-Modus vor dem
+nächsten Build. Wenn die Änderung fertig ist, führe `pnpm typecheck` und
+`pnpm test:e2e` aus.
 
 Die Ordner in `packages/e2e/test` sind nach Benutzeraufgaben benannt.
 `packages/e2e/scenarios.json` hält die Prüfungen und Lücken jeder Aufgabe fest.

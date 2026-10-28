@@ -21,6 +21,11 @@ devenv shell -- pnpm test:e2e
 devenv shell -- pnpm -r test
 ```
 
+By default, files run in at most four separate test processes. The count does
+not exceed the available CPUs. Services and databases stay separate. Tests
+within one file run in order. Add `--maxWorkers=1` to use one process when you
+debug.
+
 All end-to-end checks live in `packages/e2e`, under the package name
 `@openbot-build/e2e`. The root command `pnpm test:e2e` runs that package's type
 check and tests. To run one task group after a build, use:
@@ -28,6 +33,17 @@ check and tests. To run one task group after a build, use:
 ```sh
 devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/read-docs
 ```
+
+For a small change, run one file or watch it for changes after a build:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest run test/chat/ChatQueries.test.ts
+devenv shell -- pnpm --filter @openbot-build/e2e exec vitest --watch test/chat/ChatQueries.test.ts
+```
+
+`exec vitest` skips a full package type check on each run. Finish the build
+first. Stop watch mode before you build again. When the change is done, run
+`pnpm typecheck` and `pnpm test:e2e`.
 
 Folders in `packages/e2e/test` name user tasks. `packages/e2e/scenarios.json`
 records the checks and gaps for each task. It separates normal, edge, and
