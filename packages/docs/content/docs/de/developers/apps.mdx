@@ -160,18 +160,19 @@ lesbar, gibt das Lesen der OAuth-Client-Metadaten `503 SettingsUnavailable`.
 ### Private Fehlerursachen im Protokoll
 
 Wenn du `@openbot-build/protocol` allein nutzt, haben MCP-Fehler eine sichere
-`ClientError`-Meldung. Netzwerk-, SDK- und Schema-Details bleiben in einer privaten
-`Cause`. Sie enthält alle Gründe des Fehlers. Diese Details kommen nicht in das
-normale Log oder das öffentliche Fehlerschema.
+`ClientError`-Meldung. Netzwerk-, SDK- und Schema-Details bleiben in einer
+privaten `Cause`. Sie enthält alle Gründe des Fehlers. Diese Details kommen
+nicht in das normale Log oder das öffentliche Fehlerschema.
 
-`Client.errorCause(error)` gibt eine `Option` mit einer `Redacted<Cause>` zurück,
-wenn der Fehler private Details hat. Nur ein vertrauenswürdiger Fehlerhandler
-soll diesen Wert öffnen. Verschlüssele ihn vor dem Speichern.
-`Client.withCause(error, cause)` lässt deinen Protokolladapter Details auf dieselbe
-Weise behalten. OpenBot speichert sie im verschlüsselten Fehlerdatensatz.
-Der öffentliche Index behält dieselbe private Ursache an einem `Unconfirmed`-
-Ergebnis. `reason` und der feste Text in `issue` sind sicher für die Anzeige.
-Der Host muss die private Ursache speichern, bevor er das Ergebnis codiert.
+`Client.errorCause(error)` gibt eine `Option` mit einer `Redacted<Cause>`
+zurück, wenn der Fehler private Details hat. Nur ein vertrauenswürdiger
+Fehlerhandler soll diesen Wert öffnen. Verschlüssele ihn vor dem Speichern.
+`Client.withCause(error, cause)` lässt deinen Protokolladapter Details auf
+dieselbe Weise behalten. OpenBot speichert sie im verschlüsselten
+Fehlerdatensatz. Der öffentliche Index behält dieselbe private Ursache an einem
+`Unconfirmed`- Ergebnis. `reason` und der feste Text in `issue` sind sicher für
+die Anzeige. Der Host muss die private Ursache speichern, bevor er das Ergebnis
+codiert.
 
 ## Bei einem Konto einer App anmelden
 
@@ -246,8 +247,8 @@ zeigen nicht, dass ein Widerruf sicher ist. Fehlgeschlagene entfernte Aufrufe
 nutzen gespeicherte Timer für neue Versuche. Auch eine Erneuerung speichert die
 Bereinigung der alten Zugangsdaten. Das lokale Entfernen kann davor enden.
 
-Jede Bereinigung gehört zur Organisation des Quellvorgangs. Ein Dienst führt
-die Arbeit aus. Du kannst Zustand und Ereignisse nur lesen, wenn die aktuellen
+Jede Bereinigung gehört zur Organisation des Quellvorgangs. Ein Dienst führt die
+Arbeit aus. Du kannst Zustand und Ereignisse nur lesen, wenn die aktuellen
 Regeln dir das Lesen des Quellvorgangs erlauben. Andere Organisationen können
 diese Ausführung nicht finden.
 

@@ -6,8 +6,8 @@ description: The shared design for stored work, state, and events.
 For developers. Start with the [developer manual](/docs/developers) to choose
 API work, App publishing, or project changes.
 
-This page describes the shared execution design. Existing data moves through
-the checked migration during a maintenance window. The last section links the
+This page describes the shared execution design. Existing data moves through the
+checked migration during a maintenance window. The last section links the
 feature and release checks.
 
 ## Scope
@@ -138,9 +138,10 @@ records the call ID in the same transaction as the credential and the final
 event. Cleanup of an unused result waits for the source execution. Removing or
 replacing an installed grant hands it to cleanup in the same transaction; that
 cleanup can run before the source ends. Other cleanup stays pending while any
-connection or developer test uses the same issuer and OAuth client. OAuth servers may revoke
-related tokens together, even when their strings differ. A durable timer checks
-again after users release those grants. The check covers all OpenBot owners.
+connection or developer test uses the same issuer and OAuth client. OAuth
+servers may revoke related tokens together, even when their strings differ. A
+durable timer checks again after users release those grants. The check covers
+all OpenBot owners.
 
 Grant sends and installation share a database lock with cleanup. A saved
 revocation intent reserves the grant scope across retries and node takeover. New
@@ -320,19 +321,21 @@ the shared call limit. Model token limits use database buckets, which are shared
 counters. The current execution must still own its permit before sending, so
 node takeover does not reset the shared limit.
 
-The data converter saves progress and checks old records before the startup
-gate allows new servers to run. Tests cover encrypted data, interrupted work,
-repeat runs, and recovery after a partial move. Schema migration and data
-conversion are separate steps of the same maintenance command.
+The data converter saves progress and checks old records before the startup gate
+allows new servers to run. Tests cover encrypted data, interrupted work, repeat
+runs, and recovery after a partial move. Schema migration and data conversion
+are separate steps of the same maintenance command.
 
 Full-server and two-process tests cover owner loss, slow close, lost replies,
 database network loss, and late close after replacement. A physical lease with
 no saved close result stays unknown. The checks also cover access, secrets,
 usage, and module dependencies.
 
-For a release, read the [CI runs](https://github.com/openbot-build/openbot/actions/workflows/ci.yml)
-for that exact commit. The build, typecheck, package tests, Compose checks, image
+For a release, read the
+[CI runs](https://github.com/openbot-build/openbot/actions/workflows/ci.yml) for
+that exact commit. The build, typecheck, package tests, Compose checks, image
 layer checks, and vulnerability scan must pass. A push to `main` also publishes
-the checked images. The [Docs workflow](https://github.com/openbot-build/openbot/actions/workflows/docs.yml)
+the checked images. The
+[Docs workflow](https://github.com/openbot-build/openbot/actions/workflows/docs.yml)
 builds and deploys the docs for that commit. Test counts and a passing run from
 another commit do not replace these release checks.

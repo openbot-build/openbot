@@ -7,8 +7,8 @@ description:
 Für Entwickler. Das [Entwicklerhandbuch](/de/docs/developers) führt zu
 API-Arbeit, App-Veröffentlichung und Änderungen am Projekt.
 
-Diese Seite beschreibt das gemeinsame Ausführungsdesign. Bestehende Daten
-werden in einem Wartungsfenster mit geprüfter Migration umgewandelt. Der letzte
+Diese Seite beschreibt das gemeinsame Ausführungsdesign. Bestehende Daten werden
+in einem Wartungsfenster mit geprüfter Migration umgewandelt. Der letzte
 Abschnitt verweist auf Funktions- und Freigabeprüfungen.
 
 ## Umfang
@@ -151,13 +151,13 @@ zum Aufräumen, auch bei einem späten Ergebnis. Ein Dienst räumt für die
 Quellorganisation auf. Der Verlust von Mitgliedsrechten stoppt ihn daher nicht.
 Beim Speichern des Tokens werden Aufruf-ID, Zugangsdaten und Endereignis in
 einer Transaktion geschrieben. Das Aufräumen eines ungenutzten Ergebnisses
-wartet auf die Quellausführung. Entfernen oder Ersetzen übergibt ein gespeichertes
-Token in derselben Transaktion an die Bereinigung. Diese kann vor dem Ende der
-Quelle laufen. Andere Aufträge bleiben offen, solange eine Verbindung oder
-ein Entwicklertest denselben Aussteller und OAuth-Client nutzt. OAuth-Server
-können verbundene Tokens gemeinsam widerrufen, auch wenn ihre Zeichenfolgen
-verschieden sind. Ein dauerhafter Zeitgeber prüft nach der Freigabe erneut. Die
-Prüfung gilt für alle Besitzer in OpenBot.
+wartet auf die Quellausführung. Entfernen oder Ersetzen übergibt ein
+gespeichertes Token in derselben Transaktion an die Bereinigung. Diese kann vor
+dem Ende der Quelle laufen. Andere Aufträge bleiben offen, solange eine
+Verbindung oder ein Entwicklertest denselben Aussteller und OAuth-Client nutzt.
+OAuth-Server können verbundene Tokens gemeinsam widerrufen, auch wenn ihre
+Zeichenfolgen verschieden sind. Ein dauerhafter Zeitgeber prüft nach der
+Freigabe erneut. Die Prüfung gilt für alle Besitzer in OpenBot.
 
 Das Senden und Speichern von Tokens nutzt dieselbe Datenbanksperre wie das
 Aufräumen. Eine gespeicherte Widerrufsabsicht hält den Bereich auch bei
@@ -358,9 +358,9 @@ Sie hat keinen eigenen Worker und keinen lokalen Koordinationspfad mehr.
 
 Hilfsmodellaufrufe für den Speicher nutzen gemeinsame PostgreSQL-Permits. Ein
 Permit hält einen Platz im gemeinsamen Aufruflimit. Modell-Token-Grenzen nutzen
-gemeinsame Zähler in
-der Datenbank. Vor dem Senden muss die aktuelle Ausführung ihr Permit weiter
-besitzen. Eine Knotenübernahme setzt die gemeinsame Grenze daher nicht zurück.
+gemeinsame Zähler in der Datenbank. Vor dem Senden muss die aktuelle Ausführung
+ihr Permit weiter besitzen. Eine Knotenübernahme setzt die gemeinsame Grenze
+daher nicht zurück.
 
 Die Datenumwandlung speichert Fortschritt und prüft alte Datensätze. Erst dann
 lässt die Startsperre neue Server zu. Tests prüfen verschlüsselte Daten,
@@ -374,9 +374,11 @@ nach Ersatz. Eine physische Lease ohne gespeichertes Schließergebnis bleibt
 unbekannt. Die Prüfungen decken auch Rechte, Geheimnisse, Verbrauch und
 Modulabhängigkeiten ab.
 
-Für eine Freigabe die [CI-Läufe](https://github.com/openbot-build/openbot/actions/workflows/ci.yml)
+Für eine Freigabe die
+[CI-Läufe](https://github.com/openbot-build/openbot/actions/workflows/ci.yml)
 für genau diesen Commit lesen. Build, Typprüfung, Pakettests, Compose-Prüfungen,
 Image-Layer-Prüfungen und Schwachstellenscan müssen bestehen. Ein Push nach
-`main` veröffentlicht auch die geprüften Images. Der [Docs-Workflow](https://github.com/openbot-build/openbot/actions/workflows/docs.yml)
+`main` veröffentlicht auch die geprüften Images. Der
+[Docs-Workflow](https://github.com/openbot-build/openbot/actions/workflows/docs.yml)
 baut und veröffentlicht die Dokumentation für diesen Commit. Testzahlen und ein
 erfolgreicher Lauf eines anderen Commits ersetzen diese Freigabeprüfungen nicht.

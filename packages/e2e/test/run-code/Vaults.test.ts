@@ -264,11 +264,7 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						token: "offline",
 					},
 				})
-				const offlineError = yield* read(
-					offline,
-					503,
-					FailureApi.RequestFailed,
-				)
+				const offlineError = yield* read(offline, 503, FailureApi.RequestFailed)
 				assert.strictEqual(offlineError._tag, "RequestFailed")
 				assert.strictEqual(offlineError.category, "unavailable")
 				assert.isAbove(offlineError.errorId.length, 0)

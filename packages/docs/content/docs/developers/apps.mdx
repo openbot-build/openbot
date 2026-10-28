@@ -158,11 +158,11 @@ log or the public error schema.
 
 `Client.errorCause(error)` gives an `Option` with a `Redacted<Cause>` when the
 error has private details. Only a trusted error handler should open this value.
-Seal it before saving it. `Client.withCause(error, cause)` lets your own protocol
-adapter keep details in the same form. OpenBot saves these details in its sealed
-error record. Public indexing uses the same private cause on an `Unconfirmed`
-result. Its `reason` and fixed `issue` are safe to show. A host must save the
-private cause before it encodes the result.
+Seal it before saving it. `Client.withCause(error, cause)` lets your own
+protocol adapter keep details in the same form. OpenBot saves these details in
+its sealed error record. Public indexing uses the same private cause on an
+`Unconfirmed` result. Its `reason` and fixed `issue` are safe to show. A host
+must save the private cause before it encodes the result.
 
 ## Sign in to an App account
 

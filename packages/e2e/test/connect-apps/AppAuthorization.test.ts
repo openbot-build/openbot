@@ -362,9 +362,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					values: {},
 					confirmed: true,
 				}).pipe(Effect.flatMap(accepted))
-				const reviewed = yield* waitForConnection(
-					sameConfiguration.executionId,
-				)
+				const reviewed = yield* waitForConnection(sameConfiguration.executionId)
 				assert.equal(reviewed.execution.status, "completed")
 				assert.strictEqual(
 					(yield* post("/v1/app-authorizations/" + first.flowId + "/complete", {
