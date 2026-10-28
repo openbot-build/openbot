@@ -14,6 +14,12 @@ Only the inspection call is public. All other calls need a user token or the
 session cookie, and `publish` on `App`. See
 [Authentication](/docs/developers/authentication).
 
+Claim, proof, member, report, and indexing request IDs must be UUID text. This
+also applies to report page cursors (`before`) and comparison IDs (`other`).
+Both old UUID v4 and new UUID v7 values work. The API rejects other text before
+it reaches storage. Invitation bearer tokens and notice IDs keep their own
+formats.
+
 ---
 
 ## Inspect an App

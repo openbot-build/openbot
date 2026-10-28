@@ -91,7 +91,7 @@ export const make = Effect.gen(function* () {
 		Effect.scoped(
 			Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
-					const id = yield* crypto.randomUUIDv4().pipe(storage)
+					const id = yield* crypto.randomUUIDv7().pipe(storage)
 					const duration = Duration.toMillis(
 						Duration.fromInputUnsafe(options.duration),
 					)

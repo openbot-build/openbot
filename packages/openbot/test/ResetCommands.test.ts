@@ -78,7 +78,7 @@ layer(services, { excludeTestServices: true })((it) => {
 					} as const
 					const owner = ownerKey(actor)
 					yield* sql`insert into openbot_app_drafts (owner, id, body)
-					values (${owner}, 'kept-draft', 'saved draft')`
+					values (${owner}, '00000000-0000-4000-8000-000000000001', 'saved draft')`
 					yield* sql`insert into openbot_app_secrets (owner, kind, id, connection_id, body)
 					values (${owner}, 'app-view', 'kept-view', 'no-connection', 'saved view')`
 					const counts = sql<{

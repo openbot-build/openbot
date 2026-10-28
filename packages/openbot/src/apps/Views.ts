@@ -248,7 +248,7 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
-	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
+	const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
 	const read = (owner: string, kind: string, id: string) =>
 		db
 			.select()

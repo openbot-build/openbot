@@ -28,7 +28,7 @@ const make = (kind: string) =>
 					const release = yield* Effect.cached(Scope.close(scope, Exit.void))
 					const resource = {
 						...(yield* group(key)),
-						id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+						id: yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 					}
 					const held = yield* transport
 						.register(resource, () => Stream.empty, { release })

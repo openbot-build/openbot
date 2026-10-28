@@ -109,7 +109,7 @@ export const make = Effect.gen(function* () {
 										Schema.fromJsonString(Schema.Json),
 									)(input.data))
 						const id = Domain.DelegationId.make(
-							"dlg_" + (yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+							"dlg_" + (yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
 						)
 						const limits = {
 							timeMs: delegationTimeLimitOf(

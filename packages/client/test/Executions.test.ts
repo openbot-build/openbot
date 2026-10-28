@@ -19,8 +19,10 @@ import {
 } from "effect"
 import { HttpApiMiddleware } from "effect/http-api"
 import { HttpClient, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
 import * as Client from "../src/Client.ts"
 import * as Executions from "../src/Executions.ts"
+import * as Command from "../src/Command.ts"
 import * as AppViews from "../src/AppViews.ts"
 
 const event = (
@@ -315,3 +317,35 @@ for (const status of ["completed", "failed"] as const)
 				assert.strictEqual((yield* Ref.get(seen)).length, 9)
 			}),
 	)
+
+it.effect(
+	"new command keys sort by time and stay the same when sent again",
+	() =>
+		Effect.gen(function* () {
+			const first = yield* Command.prepare(Effect.succeed)
+			assert.match(
+				first.commandKey,
+				/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+			)
+			assert.strictEqual(yield* first.send, first.commandKey)
+			yield* TestClock.adjust("1 milli")
+			const next = yield* Command.prepare(Effect.succeed)
+			assert.ok(first.commandKey < next.commandKey)
+			assert.strictEqual(yield* first.send, first.commandKey)
+
+			const old = Execution.CommandKey.make(
+				"00000000-0000-4000-8000-000000000001",
+			)
+			const supplied = yield* Command.prepare(Effect.succeed, old)
+			assert.strictEqual(supplied.commandKey, old)
+			assert.strictEqual(yield* supplied.send, old)
+		}).pipe(
+			Effect.provideService(
+				Crypto.Crypto,
+				Crypto.make({
+					randomBytes: (size) => new Uint8Array(size),
+					digest: () => Effect.die("This test makes no digest."),
+				}),
+			),
+		),
+)

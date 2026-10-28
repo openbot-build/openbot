@@ -267,7 +267,7 @@ export const make = Effect.gen(function* () {
 	const crypto = yield* Crypto.Crypto
 	const newId = (prefix: string) =>
 		Effect.map(
-			Effect.orDie(crypto.randomUUIDv4()),
+			Effect.orDie(crypto.randomUUIDv7()),
 			(uuid) => prefix + Str.replaceAll("-", "")(uuid),
 		)
 	/** The price of a model that applies at a time. */
@@ -464,6 +464,10 @@ export const make = Effect.gen(function* () {
 					})
 			}
 			if (input.scope === "token") {
+				if (!Schema.is(Schema.String.check(Schema.isUUID()))(input.scopeId))
+					return yield* BillingApi.BudgetInvalid.make({
+						message: "No token of the organization has this ID.",
+					})
 				const [row] = yield* db
 					.select({ id: tokens.id })
 					.from(tokens)

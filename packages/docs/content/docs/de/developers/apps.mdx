@@ -64,6 +64,10 @@ nie an und ruft nie eine App auf.
 
 ### Die Connection prüfen und erstellen
 
+`draftId` muss die UUID des gespeicherten Entwurfs sein. Alte v4- und neue
+v7-Werte funktionieren. Die API weist anderen Text vor dem Zugriff auf die
+Speicherung zurück. Externe Connection-IDs behalten ihr bisheriges Format.
+
 Zeige dem Nutzer den Namen der App, ihre Quelle und den Endpoint. Erstelle dann
 die Connection (Verbindung). Du musst `"confirmed": true` schicken.
 

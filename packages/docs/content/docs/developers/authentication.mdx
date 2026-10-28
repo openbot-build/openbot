@@ -277,6 +277,9 @@ list until you revoke them.
 
 ### Revoke a token
 
+Use the token's UUID `id` from the list. Old v4 and new v7 IDs both work. The
+API rejects an ID that is not UUID text before it reaches storage.
+
 ```sh
 curl -X DELETE -b cookies.txt \
   -H "Origin: https://api.example.com" \

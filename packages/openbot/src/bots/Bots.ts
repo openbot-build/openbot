@@ -145,7 +145,7 @@ export const make: Effect.Effect<
 	const records = yield* BotRecords
 	const crypto = yield* Crypto.Crypto
 	const { check, filter, guard } = yield* Check.make
-	const newId = crypto.randomUUIDv4({ format: "bytes" }).pipe(
+	const newId = crypto.randomUUIDv7({ format: "bytes" }).pipe(
 		// A platform without secure random numbers is broken.
 		Effect.orDie,
 		Effect.map((uuid) => BotsApi.BotId.make("bot_" + Hex.encode(uuid))),

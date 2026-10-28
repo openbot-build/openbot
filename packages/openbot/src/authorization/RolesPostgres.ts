@@ -79,7 +79,7 @@ export const make = Effect.gen(function* () {
 		create: (organizationId, input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const uuid = yield* Effect.orDie(crypto.randomUUIDv4())
+				const uuid = yield* Effect.orDie(crypto.randomUUIDv7())
 				const row = {
 					organizationId,
 					id: "role_" + Str.replaceAll("-", "")(uuid),

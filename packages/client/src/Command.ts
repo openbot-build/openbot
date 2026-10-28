@@ -13,7 +13,7 @@ export const prepare = Effect.fn("Command.prepare")(function* <A, E>(
 ) {
 	const key =
 		supplied ??
-		Execution.CommandKey.make(yield* (yield* Crypto.Crypto).randomUUIDv4())
+		Execution.CommandKey.make(yield* (yield* Crypto.Crypto).randomUUIDv7())
 	return {
 		commandKey: key,
 		send: send(key).pipe(

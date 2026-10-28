@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm"
 import {
 	pgTable,
 	text,
+	uuid,
 	integer,
 	bigint,
 	bigserial,
@@ -115,7 +116,7 @@ export const executionCommands = pgTable(
 	"openbot_execution_commands",
 	{
 		namespace: text().notNull(),
-		id: text().notNull(),
+		id: uuid().notNull(),
 		executionId: text("execution_id").notNull(),
 		organizationId: text("organization_id"),
 		userId: text("user_id"),
@@ -164,7 +165,7 @@ export const executionOutbox = pgTable(
 	"openbot_execution_outbox",
 	{
 		namespace: text().notNull(),
-		commandId: text("command_id").notNull(),
+		commandId: uuid("command_id").notNull(),
 		executionId: text("execution_id").notNull(),
 		createdAt: time("created_at").notNull(),
 		sentAt: time("sent_at"),

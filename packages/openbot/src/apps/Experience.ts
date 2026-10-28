@@ -137,7 +137,7 @@ export const make = Effect.gen(function* () {
 				connections.prepareConnection(entry.cardUrl).pipe(
 					Effect.provideService(Identity, identity),
 					Effect.flatMap((draft) =>
-						crypto.randomUUIDv4().pipe(
+						crypto.randomUUIDv7().pipe(
 							Effect.orDie,
 							Effect.flatMap((id) =>
 								StoredConnections.saveDraft(db, ownerKey(identity), {

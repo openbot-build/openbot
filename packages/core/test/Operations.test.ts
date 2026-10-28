@@ -195,6 +195,10 @@ it.effect(
 				const running = yield* service.get(chat, result!.operation)
 				assert.strictEqual(running.status._tag, "Running")
 				assert.strictEqual(running.tool, "Slow")
+				assert.match(
+					running.id,
+					/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+				)
 
 				yield* Deferred.succeed(gate, undefined)
 				const [ended] = yield* service.wait(chat, [running.id], "5 seconds")

@@ -76,7 +76,7 @@ export const make = Effect.gen(function* () {
 					Str.replaceAll(
 						"-",
 						"",
-					)(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+					)(yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
 			)
 			yield* check(caller, id, "write")
 			yield* check(caller, id, "run")

@@ -221,7 +221,7 @@ export const make: Effect.Effect<
 	const records = yield* BotRecords
 	const crypto = yield* Crypto.Crypto
 	const newId = crypto
-		.randomUUIDv4()
+		.randomUUIDv7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const grants = yield* Grants
 	const rules = yield* Rules

@@ -74,6 +74,8 @@ const MemberRow = Schema.Struct({
 	role: Developers.MemberRole,
 })
 
+const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
+
 export const make: Effect.Effect<
 	typeof DeveloperMembers.Service,
 	never,
@@ -84,7 +86,7 @@ export const make: Effect.Effect<
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
 	const crypto = yield* Crypto.Crypto
-	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
+	const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
 	const conflict = (reason: string) =>
 		Developers.DeveloperConflict.make({ reason })
 	const admin = Effect.fn("DeveloperMembers.admin")(function* (
@@ -158,6 +160,7 @@ export const make: Effect.Effect<
 	const lockMember = Effect.fn("DeveloperMembers.lockMember")(function* (
 		id: string,
 	) {
+		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 		const row = (yield* Rows.stored(
 			db.select().from(developerMembers).where(memberWhere(id)).for("update"),
 		))[0]

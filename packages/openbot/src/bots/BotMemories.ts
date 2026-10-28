@@ -50,7 +50,7 @@ export interface Learning {
 
 /** Makes the id of a new memory entry. */
 export const newId = (crypto: Crypto.Crypto) =>
-	crypto.randomUUIDv4({ format: "bytes" }).pipe(
+	crypto.randomUUIDv7({ format: "bytes" }).pipe(
 		// A platform without secure random numbers is broken.
 		Effect.orDie,
 		Effect.map((uuid) => "mem_" + Hex.encode(uuid)),

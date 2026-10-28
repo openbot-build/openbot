@@ -133,7 +133,9 @@ const seal = (
 export const connectionWhere = (owner: string, id: string) =>
 	and(eq(appConnections.owner, owner), eq(appConnections.id, id))
 export const draftWhere = (owner: string, id: string) =>
-	and(eq(appDrafts.owner, owner), eq(appDrafts.id, id))
+	Schema.is(AppConnections.DraftId)(id)
+		? and(eq(appDrafts.owner, owner), eq(appDrafts.id, id))
+		: sql`false`
 
 export const list = (
 	db: Database,

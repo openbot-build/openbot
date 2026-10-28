@@ -57,7 +57,7 @@ export const make: Effect.Effect<
 	const records = yield* BotRecords
 	const crypto = yield* Crypto.Crypto
 	const newId = crypto
-		.randomUUIDv4()
+		.randomUUIDv7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const rules = records.collection("rule", BotsApi.Rule, BotsApi.RuleStatus)
 	const put = (organizationId: string, rule: Rule) =>

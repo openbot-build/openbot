@@ -182,6 +182,23 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						),
 					)
 					assert.strictEqual(draft.discovery._tag, "Multiple")
+					assert.match(
+						draft.id,
+						/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+					)
+					assert.deepStrictEqual(
+						yield* sql<{
+							type: string
+							bytes: number
+						}>`select pg_typeof(id)::text as type, pg_column_size(id) as bytes from openbot_app_drafts where id = ${draft.id}`,
+						[{ type: "uuid", bytes: 16 }],
+					)
+					assert.strictEqual(
+						(yield* Effect.flip(
+							asOwner(connections.getConnectionDraft("missing")),
+						))._tag,
+						"ExperienceNotFound",
+					)
 					assert.deepStrictEqual(
 						yield* asOwner(connections.listConnections),
 						[],
@@ -290,7 +307,11 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						),
 					)
 					assert.strictEqual(failure._tag, "ConnectionConflict")
-					const expired = { ...draft, id: "expired", expiresAt: 0 }
+					const expired = {
+						...draft,
+						id: "00000000-0000-4000-8000-000000000001",
+						expiresAt: 0,
+					}
 					const db = yield* Db.make
 					yield* StoredConnections.saveDraft(db, ownerKey(alice), expired)
 					const expiredResult = yield* Effect.flip(

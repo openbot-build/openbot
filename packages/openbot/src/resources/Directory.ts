@@ -136,7 +136,7 @@ const make = Effect.gen(function* () {
 	if (Option.isNone(config.runnerAddress))
 		return yield* Effect.die("Physical resources need a runner address.")
 	const own = config.runnerAddress.value
-	const node = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
+	const node = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
 	const where = (ref: Resource.Ref) =>
 		and(
 			eq(resourceOwners.namespace, ref.namespace),
@@ -243,7 +243,7 @@ const make = Effect.gen(function* () {
 	)
 	const prepare = (ref: Resource.Ref) =>
 		Effect.map(
-			crypto.randomUUIDv4().pipe(Effect.orDie),
+			crypto.randomUUIDv7().pipe(Effect.orDie),
 			(lease): Resource.Address => ({
 				...ref,
 				lease,

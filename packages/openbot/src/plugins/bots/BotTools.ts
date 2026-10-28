@@ -233,7 +233,7 @@ const makeWith = (memoryWork: {
 		const callIdOf = (context: CallContext) =>
 			context.toolCallId === undefined
 				? // A machine with no secure random numbers cannot make IDs, so this is a defect.
-					crypto.randomUUIDv4().pipe(Effect.orDie)
+					crypto.randomUUIDv7().pipe(Effect.orDie)
 				: Effect.succeed(context.toolCallId)
 		const entry = <E>(
 			name: string,

@@ -35,14 +35,18 @@ it.live(
 			const failed = yield* sql
 				.withTransaction(
 					Effect.gen(function* () {
-						yield* db
-							.insert(appDrafts)
-							.values({ owner: "alice", id: "first", body: "{}" })
+						yield* db.insert(appDrafts).values({
+							owner: "alice",
+							id: "00000000-0000-4000-8000-000000000001",
+							body: "{}",
+						})
 						// A nested transaction is a savepoint inside the same transaction.
 						yield* sql.withTransaction(
-							db
-								.insert(appDrafts)
-								.values({ owner: "alice", id: "second", body: "{}" }),
+							db.insert(appDrafts).values({
+								owner: "alice",
+								id: "00000000-0000-7000-8000-000000000002",
+								body: "{}",
+							}),
 						)
 						return yield* Effect.fail("stop")
 					}),
@@ -64,7 +68,7 @@ it.live(
 				cardUrl: "https://a.test",
 			})
 			yield* db.insert(developerClaims).values({
-				id: "claim",
+				id: "00000000-0000-4000-8000-000000000001",
 				owner: "alice",
 				scopeKey: "card:https://a.test",
 				scope,
@@ -74,7 +78,7 @@ it.live(
 				expiresAt: 1,
 			})
 			yield* db.insert(developerProofs).values({
-				id: "claim",
+				id: "00000000-0000-4000-8000-000000000001",
 				owner: "alice",
 				scopeKey: "card:https://a.test",
 				scope,
@@ -88,20 +92,47 @@ it.live(
 			const member = (id: string) =>
 				db
 					.insert(developerMembers)
-					.values({ id, proofId: "claim", owner: "bob", role: "viewer" })
+					.values({
+						id,
+						proofId: "00000000-0000-4000-8000-000000000001",
+						owner: "bob",
+						role: "viewer",
+					})
 					.onConflictDoNothing()
 					.returning({ id: developerMembers.id })
-			assert.strictEqual((yield* member("first")).length, 1)
-			assert.strictEqual((yield* member("second")).length, 0)
+			assert.strictEqual(
+				(yield* member("00000000-0000-7000-8000-000000000002")).length,
+				1,
+			)
+			assert.strictEqual(
+				(yield* member("00000000-0000-7000-8000-000000000003")).length,
+				0,
+			)
 			yield* db.insert(developerInvitations).values({
 				id: "invitation",
-				proofId: "claim",
+				proofId: "00000000-0000-4000-8000-000000000001",
 				owner: "alice",
 				role: "viewer",
 				expiresAt: 1,
 				status: "Pending",
 			})
-			yield* db.delete(developerClaims).where(eq(developerClaims.id, "claim"))
+			const sql = yield* PgClient.PgClient
+			const [stored] = yield* sql<{
+				id: string
+				bytes: number
+				proofBytes: number
+			}>`
+				select id, pg_column_size(id) as bytes, pg_column_size(proof_id) as "proofBytes"
+				from openbot_developer_members
+			`
+			assert.deepStrictEqual(stored, {
+				id: "00000000-0000-7000-8000-000000000002",
+				bytes: 16,
+				proofBytes: 16,
+			})
+			yield* db
+				.delete(developerClaims)
+				.where(eq(developerClaims.id, "00000000-0000-4000-8000-000000000001"))
 			assert.deepStrictEqual(yield* db.select().from(developerProofs), [])
 			assert.deepStrictEqual(yield* db.select().from(developerMembers), [])
 			assert.deepStrictEqual(yield* db.select().from(developerInvitations), [])

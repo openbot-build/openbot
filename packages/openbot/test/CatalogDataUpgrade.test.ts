@@ -27,6 +27,13 @@ import * as PostgresTest from "./PostgresTest.ts"
 const owner = '["org","person"]'
 const cardUrl = "https://example.test/card"
 const secondUrl = "https://example.test/second"
+const draftId = "00000000-0000-4000-8000-000000000020"
+const proofId = "00000000-0000-4000-8000-000000000021"
+const closedProofId = "00000000-0000-4000-8000-000000000022"
+const memberId = "00000000-0000-4000-8000-000000000023"
+const reportId = "00000000-0000-4000-8000-000000000024"
+const completedRequestId = "00000000-0000-4000-8000-000000000025"
+const pendingRequestId = "00000000-0000-4000-8000-000000000026"
 const json = Schema.fromJsonString(Schema.Json)
 const encode = Schema.encodeEffect(json)
 const database = () =>
@@ -106,26 +113,29 @@ const fixture = Effect.gen(function* () {
 		yield* encode(["connection", owner, "connection"]),
 	)
 	yield* sql`insert into openbot_app_records ${sql.insert({ owner, card_url: cardUrl, body: yield* encode({ cardUrl, card, sources }) })}`
-	yield* sql`insert into openbot_app_drafts ${sql.insert({ owner, id: "draft", body: yield* encode({ id: "draft", revision: 1, input: cardUrl, discovery: { _tag: "Single", candidate, issues: [] }, expiresAt: 100 }) })}`
+	yield* sql`insert into openbot_app_drafts ${sql.insert({ owner, id: draftId, body: yield* encode({ id: draftId, revision: 1, input: cardUrl, discovery: { _tag: "Single", candidate, issues: [] }, expiresAt: 100 }) })}`
 	yield* sql`insert into openbot_app_connections ${sql.insert({ owner, id: "connection", name: "Saved App", revision: 2, body })}`
 	yield* sql`insert into openbot_app_index_entries ${sql.insert({ namespace: "public", card_url: cardUrl, body: yield* encode(entry) })}`
 	yield* sql`insert into openbot_app_index_results ${sql.insert({ namespace: "public", card_url: cardUrl, generation: "done", check: yield* encode(check), finished_at: 10 })}`
 	yield* sql`insert into openbot_app_index_jobs ${sql.insert({ namespace: "public", card_url: cardUrl, generation: "done", completed_generation: "done", next_check_at: 321, lease_until: 99, claim: "old-claim", check: yield* encode(check), sources: yield* encode(sources), requested_at: 1, started_at: 2 })}`
 	yield* sql`insert into openbot_app_index_jobs ${sql.insert({ namespace: "public", card_url: secondUrl, generation: "pending", next_check_at: 0, sources: '["broken source"]', requested_at: 5, started_at: 6 })}`
-	for (const id of ["proof", "closed-proof"]) {
+	for (const id of [proofId, closedProofId]) {
 		const scope = yield* encode({ _tag: "AppCard", cardUrl })
 		yield* sql`insert into openbot_developer_claims ${sql.insert({ namespace: "public", id, owner, scope_key: "card:" + cardUrl, scope, token: "private-proof-token", status: "Confirmed", created_at: 1, expires_at: 100 })}`
-		yield* sql`insert into openbot_developer_proofs ${sql.insert({ namespace: "public", id, owner, scope_key: "card:" + cardUrl, scope, token: "private-proof-token", transition: 2, status: id === "proof" ? "Confirmed" : "Relinquished", confirmed_at: 2, valid_until: 9999999999999, next_verification_at: 567, reason: null })}`
+		yield* sql`insert into openbot_developer_proofs ${sql.insert({ namespace: "public", id, owner, scope_key: "card:" + cardUrl, scope, token: "private-proof-token", transition: 2, status: id === proofId ? "Confirmed" : "Relinquished", confirmed_at: 2, valid_until: 9999999999999, next_verification_at: 567, reason: null })}`
 	}
 	const member = '["org","member"]'
-	yield* sql`insert into openbot_developer_members ${sql.insert({ namespace: "public", id: "member", owner: member, proof_id: "proof", role: "viewer" })}`
-	yield* sql`insert into openbot_developer_invitations ${sql.insert({ namespace: "public", id: "private-invitation-token", owner, proof_id: "proof", role: "viewer", expires_at: 50, status: "Accepted", accepted_by: member })}`
+	yield* sql`insert into openbot_developer_members ${sql.insert({ namespace: "public", id: memberId, owner: member, proof_id: proofId, role: "viewer" })}`
+	yield* sql`insert into openbot_developer_invitations ${sql.insert({ namespace: "public", id: "private-invitation-token", owner, proof_id: proofId, role: "viewer", expires_at: 50, status: "Accepted", accepted_by: member })}`
 	yield* sql`insert into openbot_developer_apps ${sql.insert({ namespace: "public", card_url: cardUrl, candidate: yield* encode(candidate), next_check_at: 789, monitor_revision: 4, monitor_issues: "[]", monitor_token: "old-monitor", lease_until: 90 })}`
-	yield* sql`insert into openbot_developer_reports ${sql.insert({ namespace: "public", id: "report", owner, card_url: cardUrl, checked_at: 10, report: yield* encode(report) })}`
-	for (const id of ["done", "old-pending"])
-		yield* sql`insert into openbot_developer_index_requests ${sql.insert({ namespace: "public", id, owner, card_url: cardUrl, generation: id, accepted_at: 1 })}`
+	yield* sql`insert into openbot_developer_reports ${sql.insert({ namespace: "public", id: reportId, owner, card_url: cardUrl, checked_at: 10, report: yield* encode(report) })}`
+	for (const [id, generation] of [
+		[completedRequestId, "done"],
+		[pendingRequestId, "old-pending"],
+	])
+		yield* sql`insert into openbot_developer_index_requests ${sql.insert({ namespace: "public", id, owner, card_url: cardUrl, generation, accepted_at: 1 })}`
 	yield* sql`insert into openbot_developer_subscriptions ${sql.insert({ namespace: "public", owner, card_url: cardUrl, enabled: false })}`
-	yield* sql`insert into openbot_developer_notices ${sql.insert({ namespace: "public", id: "notice", owner, card_url: cardUrl, kind: "AccessChanged", reason: "Saved change.", report_id: "report", created_at: 10 })}`
+	yield* sql`insert into openbot_developer_notices ${sql.insert({ namespace: "public", id: "notice", owner, card_url: cardUrl, kind: "AccessChanged", reason: "Saved change.", report_id: reportId, created_at: 10 })}`
 	return { connection, body }
 })
 
@@ -200,11 +210,13 @@ it.layer(database(), { excludeTestServices: true })((it) => {
 					assert.isFalse("caller" in input.authority)
 					assert.equal(
 						record.record.status,
-						history.request.id === "done" ? "completed" : "interrupted",
+						history.request.id === completedRequestId
+							? "completed"
+							: "interrupted",
 					)
 					assert.equal(
 						history.check?._tag ?? null,
-						history.request.id === "done" ? "Indexed" : null,
+						history.request.id === completedRequestId ? "Indexed" : null,
 					)
 					assert.isEmpty(
 						yield* store.calls({
@@ -265,13 +277,13 @@ it.layer(database(), { excludeTestServices: true })((it) => {
 					assert.notInclude(row.input, "private-invitation-token")
 				}
 				// A valid but changed source also fails. Verification does not trust an old cursor.
-				yield* sql`update openbot_developer_reports set report = ${yield* encode({ ...report, input: "changed source" })} where id = 'report'`
+				yield* sql`update openbot_developer_reports set report = ${yield* encode({ ...report, input: "changed source" })} where id = ${reportId}`
 				assert.isTrue(
 					Schema.is(Progress.InvalidRecord)(
 						yield* move.verify.pipe(Effect.flip),
 					),
 				)
-				yield* sql`update openbot_developer_reports set report = ${yield* encode(report)} where id = 'report'`
+				yield* sql`update openbot_developer_reports set report = ${yield* encode(report)} where id = ${reportId}`
 				yield* move.verify
 				yield* sql`update openbot_app_index_jobs set execution_id = null where card_url = ${cardUrl}`
 				assert.isTrue(

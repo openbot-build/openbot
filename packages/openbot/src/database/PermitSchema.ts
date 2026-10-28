@@ -6,6 +6,7 @@ import {
 	pgTable,
 	primaryKey,
 	text,
+	uuid,
 } from "drizzle-orm/pg-core"
 import { executions } from "./ExecutionSchema.ts"
 
@@ -16,7 +17,7 @@ export const executionPermits = pgTable(
 		namespace: text().notNull(),
 		executionId: text("execution_id").notNull(),
 		generation: integer().notNull(),
-		id: text().notNull(),
+		id: uuid().notNull(),
 		pool: text().notNull(),
 		deadline: bigint({ mode: "number" }).notNull(),
 	},

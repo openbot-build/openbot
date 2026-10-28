@@ -552,7 +552,7 @@ export const resources = Effect.gen(function* () {
 	yield* sql`insert into openbot_members ${sql.insert({ organization_id: "org", user_id: "person", name: "Person", email: "person@example.test", status: "active", roles: '["super_administrator"]', policy, joined_at: 1 })}`
 	yield* sql`insert into openbot_auth_account ${sql.insert({ id: "account", account_id: "person", provider_id: "credential", user_id: "person", password: "private password hash", updated_at: "2026-01-01" })}`
 	yield* sql`insert into openbot_auth_session ${sql.insert({ id: "session", user_id: "person", token: "private session token", expires_at: "2030-01-01", updated_at: "2026-01-01" })}`
-	yield* sql`insert into openbot_tokens ${sql.insert({ id: "token", organization_id: "org", user_id: "person", name: "Saved token", prefix: "obut_saved", hash: "saved-token-hash", policy, created_at: 1 })}`
+	yield* sql`insert into openbot_tokens ${sql.insert({ id: "00000000-0000-4000-8000-000000000016", organization_id: "org", user_id: "person", name: "Saved token", prefix: "obut_saved", hash: "saved-token-hash", policy, created_at: 1 })}`
 	yield* sql`insert into openbot_roles ${sql.insert({ organization_id: "org", id: "role_00000000000000000000000000000000", name: "Saved role", description: "Saved role", policy, created_at: 1, updated_at: 2 })}`
 	const bot = {
 		id: "bot",
@@ -605,7 +605,7 @@ export const resources = Effect.gen(function* () {
 	yield* sql`insert into openbot_sso_connections ${sql.insert({ id: "sso", organization_id: "org", name: "Saved SSO", issuer: "https://login.example.test", client_id: "client", client_secret: yield* secrets.seal("private SSO key", "openbot_sso_connections:sso:client_secret"), domains: '["example.test"]', enforce: false, version: 1, created_at: 1, updated_at: 2 })}`
 	yield* sql`insert into openbot_model_providers ${sql.insert({ id: "provider", owner_kind: "organization", owner_id: "org", kind: "openai", name: "Saved provider", api_key: yield* secrets.seal("private model key", "openbot_model_providers:provider:api_key"), version: 1, created_at: 1, updated_at: 2 })}`
 	yield* sql`insert into openbot_models ${sql.insert({ owner_kind: "organization", owner_id: "org", id: "saved-model", name: "Saved model", type: "language", reasoning_efforts: "[]", service_tiers: "[]", version: 1, created_at: 1, updated_at: 2 })}`
-	yield* sql`insert into openbot_usage_events ${sql.insert({ id: "usage", organization_id: "org", occurred_at: 2, source: "chat", chat_id: "chat", turn_id: "old-turn", bot_id: "bot", user_id: "person", token_id: "token", provider_id: "provider", provider_owner: "organization", model_id: "saved-model", input_uncached: 10, input_cache_read: 2, input_cache_write: 0, output_text: 7, output_reasoning: 1, cost_micros: 42, charged: true })}`
+	yield* sql`insert into openbot_usage_events ${sql.insert({ id: "usage", organization_id: "org", occurred_at: 2, source: "chat", chat_id: "chat", turn_id: "old-turn", bot_id: "bot", user_id: "person", token_id: "00000000-0000-4000-8000-000000000016", provider_id: "provider", provider_owner: "organization", model_id: "saved-model", input_uncached: 10, input_cache_read: 2, input_cache_write: 0, output_text: 7, output_reasoning: 1, cost_micros: 42, charged: true })}`
 	for (const [id, status] of [
 		["file", "ready"],
 		["removed-file", "deleting"],
@@ -670,19 +670,19 @@ export const connections = Effect.gen(function* () {
 		endpoints: [],
 		sources: [{ role: "card", url: source.cardUrl }],
 	}
-	yield* sql`insert into openbot_developer_claims ${sql.insert({ namespace: "public", id: "proof", owner, scope_key: "card:" + source.cardUrl, scope: yield* encode(scope), token: "saved-proof-token", status: "Confirmed", created_at: 1, expires_at: 9999999999999 })}`
-	yield* sql`insert into openbot_developer_proofs ${sql.insert({ namespace: "public", id: "proof", owner, scope_key: "card:" + source.cardUrl, scope: yield* encode(scope), token: "saved-proof-token", transition: 2, status: "Confirmed", confirmed_at: 2, valid_until: 9999999999999, next_verification_at: 100, reason: null })}`
-	yield* sql`insert into openbot_developer_members ${sql.insert({ namespace: "public", id: "developer-member", proof_id: "proof", owner, role: "maintainer" })}`
-	yield* sql`insert into openbot_developer_invitations ${sql.insert({ namespace: "public", id: "developer-invitation", proof_id: "proof", owner, role: "viewer", expires_at: 9999999999999, status: "Pending" })}`
+	yield* sql`insert into openbot_developer_claims ${sql.insert({ namespace: "public", id: "00000000-0000-4000-8000-000000000011", owner, scope_key: "card:" + source.cardUrl, scope: yield* encode(scope), token: "saved-proof-token", status: "Confirmed", created_at: 1, expires_at: 9999999999999 })}`
+	yield* sql`insert into openbot_developer_proofs ${sql.insert({ namespace: "public", id: "00000000-0000-4000-8000-000000000011", owner, scope_key: "card:" + source.cardUrl, scope: yield* encode(scope), token: "saved-proof-token", transition: 2, status: "Confirmed", confirmed_at: 2, valid_until: 9999999999999, next_verification_at: 100, reason: null })}`
+	yield* sql`insert into openbot_developer_members ${sql.insert({ namespace: "public", id: "00000000-0000-4000-8000-000000000012", proof_id: "00000000-0000-4000-8000-000000000011", owner, role: "maintainer" })}`
+	yield* sql`insert into openbot_developer_invitations ${sql.insert({ namespace: "public", id: "developer-invitation", proof_id: "00000000-0000-4000-8000-000000000011", owner, role: "viewer", expires_at: 9999999999999, status: "Pending" })}`
 	yield* sql`insert into openbot_developer_apps ${sql.insert({ namespace: "public", card_url: source.cardUrl, candidate: yield* encode(candidate), next_check_at: 200, lease_until: 9999999999999, monitor_token: "old-monitor", monitor_revision: 3, monitor_issues: "[]" })}`
-	yield* sql`insert into openbot_developer_reports ${sql.insert({ namespace: "public", id: "report", owner, card_url: source.cardUrl, checked_at: 3, report: yield* encode({ input: source.cardUrl, checkedAt: 3, apps: [], stages: [], issues: [] }) })}`
+	yield* sql`insert into openbot_developer_reports ${sql.insert({ namespace: "public", id: "00000000-0000-4000-8000-000000000013", owner, card_url: source.cardUrl, checked_at: 3, report: yield* encode({ input: source.cardUrl, checkedAt: 3, apps: [], stages: [], issues: [] }) })}`
 	yield* sql`insert into openbot_developer_subscriptions ${sql.insert({ namespace: "public", owner, card_url: source.cardUrl, enabled: true })}`
-	yield* sql`insert into openbot_developer_notices ${sql.insert({ namespace: "public", id: "notice", owner, card_url: source.cardUrl, kind: "AccessChanged", reason: "Saved proof", report_id: "report", created_at: 3 })}`
+	yield* sql`insert into openbot_developer_notices ${sql.insert({ namespace: "public", id: "notice", owner, card_url: source.cardUrl, kind: "AccessChanged", reason: "Saved proof", report_id: "00000000-0000-4000-8000-000000000013", created_at: 3 })}`
 	for (const [id, generation] of [
-		["old-index-request", "old-check"],
-		["pending-index-request", "new-check"],
+		["00000000-0000-4000-8000-000000000014", "old-check"],
+		["00000000-0000-4000-8000-000000000015", "new-check"],
 	] as const)
-		yield* sql`insert into openbot_developer_index_requests ${sql.insert({ namespace: "public", id, owner, card_url: source.cardUrl, generation, accepted_at: id === "old-index-request" ? 1 : 2 })}`
+		yield* sql`insert into openbot_developer_index_requests ${sql.insert({ namespace: "public", id, owner, card_url: source.cardUrl, generation, accepted_at: id === "00000000-0000-4000-8000-000000000014" ? 1 : 2 })}`
 	yield* sql`insert into openbot_app_index_jobs ${sql.insert({ namespace: "public", card_url: source.cardUrl, next_check_at: 0, lease_until: 9999999999999, claim: "old-worker", check: yield* encode(check), generation: "new-check", completed_generation: "old-check", sources: yield* encode([{ role: "card", url: source.cardUrl }]), requested_at: 2, started_at: 3 })}`
 	yield* sql`insert into openbot_app_index_results ${sql.insert({ namespace: "public", card_url: source.cardUrl, generation: "old-check", check: yield* encode(check), finished_at: 1 })}`
 	const prompt = yield* Schema.encodeEffect(Item.Entry.fields.content)(

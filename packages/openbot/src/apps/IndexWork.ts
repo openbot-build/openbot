@@ -274,7 +274,7 @@ const make = (options: Options) =>
 						current.generation !== current.completedGeneration
 					const generation = pending
 						? current.generation
-						: yield* crypto.randomUUIDv4()
+						: yield* crypto.randomUUIDv7()
 					if (executionId === null) {
 						const resourceId = Hex.encode(
 							yield* crypto.digest(
@@ -364,7 +364,7 @@ const make = (options: Options) =>
 						current.row.generation !== current.row.completedGeneration
 					const generation = pending
 						? current.row.generation
-						: yield* crypto.randomUUIDv4()
+						: yield* crypto.randomUUIDv7()
 					return yield* store.commit(
 						fence,
 						current.saved.record.status === "waiting"

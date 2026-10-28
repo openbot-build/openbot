@@ -128,6 +128,11 @@ docker run --rm --env-file openbot.env \
   openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
 ```
 
+Dieselbe Migration ändert geeignete UUID-Spalten von Text in den PostgreSQL-Typ
+`uuid`. Jede ID belegt dort 16 Bytes. Alte v4-Werte bleiben gleich. Neue
+gespeicherte IDs nutzen v7, wenn die Zeitfolge hilft. Spalten mit gemischten
+oder externen IDs behalten Text. Stoppe dafür wie oben alle Server.
+
 Führe nach einem Abbruch denselben Befehl erneut aus. Jeder Datenblock und sein
 Fortschritt werden zusammen gespeichert. Ein beschädigter Eintrag stoppt den
 Lauf. Die Fehlerursache bleibt in einem verschlüsselten Bericht. Das Programm

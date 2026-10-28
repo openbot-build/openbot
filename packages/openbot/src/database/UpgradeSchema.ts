@@ -1,4 +1,11 @@
-import { bigint, boolean, pgTable, primaryKey, text } from "drizzle-orm/pg-core"
+import {
+	bigint,
+	boolean,
+	pgTable,
+	primaryKey,
+	text,
+	uuid,
+} from "drizzle-orm/pg-core"
 
 /** A data version is ready only after every required check has passed. */
 export const dataUpgrades = pgTable("openbot_data_upgrades", {
@@ -47,7 +54,7 @@ export const dataUpgradeRecords = pgTable(
 
 /** A bad record stops the move. Its full cause stays sealed. */
 export const dataUpgradeFailures = pgTable("openbot_data_upgrade_failures", {
-	id: text().primaryKey(),
+	id: uuid().primaryKey(),
 	version: text()
 		.notNull()
 		.references(() => dataUpgrades.version),

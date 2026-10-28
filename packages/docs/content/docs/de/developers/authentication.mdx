@@ -286,6 +286,10 @@ Tokens bleiben in der Liste, bis du sie widerrufst.
 
 ### Ein Token widerrufen
 
+Nutze die UUID `id` des Tokens aus der Liste. Alte v4- und neue v7-IDs
+funktionieren. Die API weist IDs ohne UUID-Format vor dem Zugriff auf die
+Speicherung zurück.
+
 ```sh
 curl -X DELETE -b cookies.txt \
   -H "Origin: https://api.example.com" \

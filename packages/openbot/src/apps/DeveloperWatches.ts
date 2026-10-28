@@ -158,7 +158,7 @@ const make = Effect.gen(function* () {
 					}
 					if (!Execution.isTerminal((yield* store.get(key)).status)) return key
 				}
-				const token = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
+				const token = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
 				const resource = Hex.encode(
 					yield* crypto
 						.digest(
@@ -218,7 +218,7 @@ const make = Effect.gen(function* () {
 				yield* store.notify(
 					key,
 					Execution.CommandKey.make(
-						`check:${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`,
+						`check:${yield* crypto.randomUUIDv7().pipe(Effect.orDie)}`,
 					),
 					commandActor(identity),
 					nextSignal(current.row.revision),

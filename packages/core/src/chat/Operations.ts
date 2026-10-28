@@ -194,7 +194,7 @@ export const make = (
 				if (budget === "foreground") return yield* foreground
 
 				const id = Operation.Id.make(
-					yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+					yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 				)
 				const startedAt = yield* Clock.currentTimeMillis
 				const record: Operation.Record = {

@@ -242,7 +242,7 @@ export const make: Effect.Effect<
 			)
 			return yield* StoredConnections.saveDraft(db, yield* owner, {
 				// A platform without secure random numbers is broken.
-				id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+				id: yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 				revision: 0,
 				input,
 				discovery: result,

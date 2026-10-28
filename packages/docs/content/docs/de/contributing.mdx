@@ -252,6 +252,27 @@ Bestehende Datenbanken müssen aktualisiert werden können.
 Erkläre eine Umgehung für einen Fehler in einem externen Paket oder Werkzeug mit
 einem Kommentar direkt am Code.
 
+### UUIDs
+
+Eine UUID ist eine ID mit 16 Bytes. Nutze UUID v7, wenn die Zeitfolge
+gespeicherten Einträgen oder Indizes hilft. Erzeuge sie mit
+`Crypto.randomUUIDv7()` aus Effect. Nutze das Format `bytes`, wenn der nächste
+Schritt Bytes braucht. Behalte UUID v4 für zufällige Geheimnisse und für kurze
+Zeit genutzte IDs, denen eine Zeitfolge nicht hilft.
+
+UUID v7 beginnt mit der Zeit in Millisekunden. IDs aus derselben Millisekunde
+haben eine zufällige Reihenfolge. Behalte Zeitfelder und Folgenummern, wenn die
+genaue Reihenfolge zählt. Siehe
+[RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html#section-5.7).
+
+Speichere UUIDs als Bytes, wenn die Daten es erlauben. Nutze in PostgreSQL den
+eigenen
+[Typ `uuid`](https://www.postgresql.org/docs/current/datatype-uuid.html). Er
+speichert 16 Bytes und nimmt v4 und v7 an. APIs können weiter UUID-Text nutzen.
+Wandle gemischte IDs, externe IDs oder IDs mit Präfix nicht direkt in `uuid` um.
+Prüfe vorher alte Werte, Verweise und die Nutzung in verschlüsselten Daten.
+Erstelle eine neue Migration und teste sie mit alten v4-Werten.
+
 ### Zuerst Effect-Daten
 
 Nutze die unveränderlichen Datentypen von Effect, zum Beispiel `HashMap`,

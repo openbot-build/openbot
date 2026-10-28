@@ -15,6 +15,13 @@ Nur der Aufruf zur Prüfung ist öffentlich. Alle anderen Aufrufe brauchen ein
 Nutzer-Token oder das Session-Cookie, und `publish` auf `App`. Siehe
 [Authentifizierung](/de/docs/developers/authentication).
 
+IDs für Claims, Nachweise, Mitglieder, Berichte und Indexanfragen müssen
+UUID-Text sein. Das gilt auch für den Seitencursor `before` und die
+Vergleichs-ID `other` bei Berichten. Alte UUID-v4- und neue UUID-v7-Werte
+funktionieren. Die API weist anderen Text vor dem Zugriff auf die Speicherung
+zurück. Bearer-Tokens für Einladungen und Hinweis-IDs behalten ihre eigenen
+Formate.
+
 ---
 
 ## Eine App prüfen

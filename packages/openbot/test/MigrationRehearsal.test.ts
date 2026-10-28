@@ -305,11 +305,13 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 					assert.equal(record("AppCall", "c").status, "completed")
 					assert.equal(record("CodeRun", "program").status, "outcome_unknown")
 					assert.equal(
-						record("IndexRequest", "old-index-request").status,
+						record("IndexRequest", "00000000-0000-4000-8000-000000000014")
+							.status,
 						"completed",
 					)
 					assert.equal(
-						record("IndexRequest", "pending-index-request").status,
+						record("IndexRequest", "00000000-0000-4000-8000-000000000015")
+							.status,
 						"interrupted",
 					)
 					yield* Effect.gen(function* () {
@@ -389,7 +391,8 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 						assert.equal(
 							(yield* commands.get(
 								Execution.Id.make(
-									record("IndexRequest", "old-index-request").id,
+									record("IndexRequest", "00000000-0000-4000-8000-000000000014")
+										.id,
 								),
 								actor,
 							)).status,
@@ -399,7 +402,9 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 							const id = Execution.Id.make(
 								record(
 									resource,
-									resource === "File" ? "removed-file" : "old-index-request",
+									resource === "File"
+										? "removed-file"
+										: "00000000-0000-4000-8000-000000000014",
 								).id,
 							)
 							assert.ok(
@@ -411,15 +416,15 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 							)
 						}
 						const indexExecution = Execution.Id.make(
-							record("IndexRequest", "old-index-request").id,
+							record("IndexRequest", "00000000-0000-4000-8000-000000000014").id,
 						)
-						yield* sql`update openbot_developer_proofs set status = 'Relinquished' where namespace = 'public' and id = 'proof'`
+						yield* sql`update openbot_developer_proofs set status = 'Relinquished' where namespace = 'public' and id = '00000000-0000-4000-8000-000000000011'`
 						assert.ok(
 							Schema.is(Execution.Forbidden)(
 								yield* commands.get(indexExecution, actor).pipe(Effect.flip),
 							),
 						)
-						yield* sql`update openbot_developer_proofs set status = 'Confirmed' where namespace = 'public' and id = 'proof'`
+						yield* sql`update openbot_developer_proofs set status = 'Confirmed' where namespace = 'public' and id = '00000000-0000-4000-8000-000000000011'`
 						assert.equal(
 							(yield* commands.get(indexExecution, actor)).status,
 							"completed",

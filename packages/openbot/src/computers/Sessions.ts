@@ -453,7 +453,7 @@ export const make = Effect.gen(function* () {
 							Str.replaceAll(
 								"-",
 								"",
-							)(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+							)(yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
 					)
 					// The registration has its own scope. Ending the process must not cancel its final RPC reply.
 					const held = yield* transport

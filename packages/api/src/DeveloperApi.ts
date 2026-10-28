@@ -93,13 +93,15 @@ export const Subscription = Developers.Subscription
 export type Subscription = Developers.Subscription
 export const Notice = Developers.Notice
 export type Notice = Developers.Notice
+const Uuid = Schema.String.check(Schema.isUUID())
+const UuidId = { id: Uuid }
 const Id = { id: Schema.String }
 const Card = { cardUrl: Schema.String }
-const Page = { before: Schema.optionalKey(Schema.String) }
+const Page = { before: Schema.optionalKey(Uuid) }
 export class DeveloperApi extends HttpApiGroup.make("developer")
 	.add(
 		HttpApiEndpoint.get("personalReports", "/v1/developer/personal-reports", {
-			query: { before: Schema.optionalKey(Schema.String) },
+			query: Page,
 			success: Schema.Array(PersonalReport),
 			error: Errors,
 		}),
@@ -150,7 +152,7 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.get("indexingRequest", "/v1/developer/indexing/:id", {
-			params: Id,
+			params: UuidId,
 			success: IndexRequest,
 			error: Errors,
 		}),
@@ -270,14 +272,14 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.get("getClaim", "/v1/developer/claims/:id", {
-			params: Id,
+			params: UuidId,
 			success: Challenge,
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.post("verifyClaim", "/v1/developer/claims/:id/verify", {
-			params: Id,
+			params: UuidId,
 			payload: Schema.Struct({ commandKey: Execution.CommandKey }),
 			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
@@ -285,21 +287,21 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.post("revokeClaim", "/v1/developer/claims/:id/revoke", {
-			params: Id,
+			params: UuidId,
 			success: Challenge,
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.get("getProof", "/v1/developer/proofs/:id", {
-			params: Id,
+			params: UuidId,
 			success: Proof,
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.post("verifyProof", "/v1/developer/proofs/:id/verify", {
-			params: Id,
+			params: UuidId,
 			payload: Schema.Struct({ commandKey: Execution.CommandKey }),
 			success: Execution.Receipt.pipe(HttpApiSchema.status(202)),
 			error: Errors,
@@ -307,14 +309,14 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.post("relinquish", "/v1/developer/proofs/:id/relinquish", {
-			params: Id,
+			params: UuidId,
 			success: Proof,
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.get("members", "/v1/developer/proofs/:id/members", {
-			params: Id,
+			params: UuidId,
 			success: Schema.Struct({
 				members: Schema.Array(Member),
 				invitations: Schema.Array(Invitation),
@@ -324,7 +326,7 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.post("invite", "/v1/developer/proofs/:id/invitations", {
-			params: Id,
+			params: UuidId,
 			payload: Schema.Struct({ role: MemberRole }),
 			success: Invitation,
 			error: Errors,
@@ -353,7 +355,7 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.put("changeMember", "/v1/developer/members/:id", {
-			params: Id,
+			params: UuidId,
 			payload: Schema.Struct({ role: MemberRole }),
 			success: Member,
 			error: Errors,
@@ -361,7 +363,7 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.delete("removeMember", "/v1/developer/members/:id", {
-			params: Id,
+			params: UuidId,
 			success: Schema.Void,
 			error: Errors,
 		}),
@@ -382,22 +384,22 @@ export class DeveloperApi extends HttpApiGroup.make("developer")
 	)
 	.add(
 		HttpApiEndpoint.get("report", "/v1/developer/reports/:id", {
-			params: Id,
+			params: UuidId,
 			success: SavedReport,
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.get("compare", "/v1/developer/reports/:id/compare", {
-			params: Id,
-			query: { other: Schema.String },
+			params: UuidId,
+			query: { other: Uuid },
 			success: ReportDiff,
 			error: Errors,
 		}),
 	)
 	.add(
 		HttpApiEndpoint.delete("deleteReport", "/v1/developer/reports/:id", {
-			params: Id,
+			params: UuidId,
 			success: Schema.Void,
 			error: Errors,
 		}),

@@ -282,7 +282,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(denied._tag, "PermissionDenied")
 				const confirmation = yield* Effect.flatMap(
 					call(user.session, "/v1/connections", "POST", {
-						draftId: "new",
+						draftId: "00000000-0000-7000-8000-000000000001",
 						revision: 0,
 						cardUrl,
 						remoteIndex: 0,

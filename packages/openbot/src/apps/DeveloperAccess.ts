@@ -301,6 +301,8 @@ const Marker = Schema.fromJsonString(
 		),
 	}),
 )
+const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
+
 export const make: Effect.Effect<
 	typeof DeveloperAccess.Service,
 	never,
@@ -325,7 +327,7 @@ export const make: Effect.Effect<
 	const inspections = yield* AppInspections
 	const crypto = yield* Crypto.Crypto
 	const { grants, authorize, allows } = yield* authorization
-	const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
+	const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
 	const conflict = (reason: string) =>
 		Developers.DeveloperConflict.make({ reason })
 	const proofWhere = (id: string) =>
@@ -337,6 +339,7 @@ export const make: Effect.Effect<
 		id: string,
 		lock: boolean = false,
 	) {
+		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 		const query = db.select().from(developerProofs).where(proofWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
 		if (row === undefined) return yield* Developers.DeveloperNotFound.make({})
@@ -385,6 +388,7 @@ export const make: Effect.Effect<
 		id: string,
 		lock: boolean = false,
 	) {
+		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 		const query = db.select().from(developerClaims).where(claimWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
 		if (row === undefined || row.owner !== owner)

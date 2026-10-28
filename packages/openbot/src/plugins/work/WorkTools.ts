@@ -140,7 +140,7 @@ export const durable = (fence: Fence) =>
 		const settings = yield* Settings
 		const openWork = yield* OpenWork
 		const crypto = yield* Crypto.Crypto
-		const newId = crypto.randomUUIDv4().pipe(Effect.orDie)
+		const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
 		const newItemId = Effect.map(newId, (id) => Item.Id.make(id))
 		/** The ID of a tool call, or a new one when the call has none. */
 		const callIdOf = (context: CallContext) =>

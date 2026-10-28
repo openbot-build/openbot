@@ -226,6 +226,31 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						})
 					const members = yield* DeveloperMembers
 					const reports = yield* DeveloperReports
+					for (const missing of [
+						"missing",
+						"00000000-0000-4000-8000-000000000001",
+					]) {
+						assert.strictEqual(
+							(yield* Effect.flip(access.claim(alice, missing)))._tag,
+							"DeveloperNotFound",
+						)
+						assert.strictEqual(
+							(yield* Effect.flip(access.ownProof(alice, missing)))._tag,
+							"DeveloperNotFound",
+						)
+						assert.strictEqual(
+							(yield* Effect.flip(members.remove(alice, missing)))._tag,
+							"DeveloperNotFound",
+						)
+						assert.strictEqual(
+							(yield* Effect.flip(reports.get(alice, missing)))._tag,
+							"DeveloperNotFound",
+						)
+						assert.strictEqual(
+							(yield* Effect.flip(reports.personal(alice, missing)))._tag,
+							"DeveloperInputInvalid",
+						)
+					}
 					const db = yield* Db.make
 					const seedApp = (app: {
 						readonly candidate: Discovery.Candidate

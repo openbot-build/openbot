@@ -1,6 +1,7 @@
 import {
 	pgTable,
 	text,
+	uuid,
 	jsonb,
 	integer,
 	primaryKey,
@@ -27,7 +28,7 @@ export const developerClaims = table(
 	"openbot_developer_claims",
 	{
 		namespace: namespace(),
-		id: text().notNull(),
+		id: uuid().notNull(),
 		owner: text().notNull(),
 		scopeKey: text("scope_key").notNull(),
 		scope: text().notNull(),
@@ -46,7 +47,7 @@ export const developerProofs = table(
 	"openbot_developer_proofs",
 	{
 		namespace: namespace(),
-		id: text().notNull(),
+		id: uuid().notNull(),
 		owner: text().notNull(),
 		scopeKey: text("scope_key").notNull(),
 		scope: text().notNull(),
@@ -76,8 +77,8 @@ export const developerMembers = table(
 	"openbot_developer_members",
 	{
 		namespace: namespace(),
-		id: text().notNull(),
-		proofId: text("proof_id").notNull(),
+		id: uuid().notNull(),
+		proofId: uuid("proof_id").notNull(),
 		owner: text().notNull(),
 		role: text().notNull(),
 	},
@@ -101,7 +102,7 @@ export const developerInvitations = table(
 		namespace: namespace(),
 		/** A secret bearer token. */
 		id: text().notNull(),
-		proofId: text("proof_id").notNull(),
+		proofId: uuid("proof_id").notNull(),
 		owner: text().notNull(),
 		role: text().notNull(),
 		expiresAt: time("expires_at").notNull(),
@@ -156,7 +157,7 @@ export const developerReports = table(
 	"openbot_developer_reports",
 	{
 		namespace: namespace(),
-		id: text().notNull(),
+		id: uuid().notNull(),
 		/** The account that saved the report. It is null for a monitor report. */
 		owner: text(),
 		cardUrl: text("card_url").notNull(),
@@ -241,7 +242,7 @@ export const developerIndexRequests = table(
 	"openbot_developer_index_requests",
 	{
 		namespace: namespace(),
-		id: text().notNull(),
+		id: uuid().notNull(),
 		executionId: text("execution_id"),
 		owner: text().notNull(),
 		cardUrl: text("card_url").notNull(),
@@ -278,7 +279,7 @@ export const developerNotices = table(
 		kind: text().notNull(),
 		issue: text(),
 		reason: text(),
-		reportId: text("report_id"),
+		reportId: uuid("report_id"),
 		createdAt: time("created_at").notNull(),
 		readAt: time("read_at"),
 	},
@@ -425,7 +426,7 @@ export const appDrafts = table(
 	"openbot_app_drafts",
 	{
 		owner: text().notNull(),
-		id: text().notNull(),
+		id: uuid().notNull(),
 		body: text().notNull(),
 	},
 	(t) => [primaryKey({ columns: [t.owner, t.id] })],
@@ -796,7 +797,7 @@ export const invitations = table(
 export const tokens = table(
 	"openbot_tokens",
 	{
-		id: text().primaryKey(),
+		id: uuid().primaryKey(),
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organizations.id, { onDelete: "cascade" }),

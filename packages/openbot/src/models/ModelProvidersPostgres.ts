@@ -195,7 +195,7 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const crypto = yield* Crypto.Crypto
-	const newId = crypto.randomUUIDv4().pipe(
+	const newId = crypto.randomUUIDv7().pipe(
 		Effect.orDie,
 		Effect.map((uuid) => "prov_" + Str.replaceAll("-", "")(uuid)),
 	)

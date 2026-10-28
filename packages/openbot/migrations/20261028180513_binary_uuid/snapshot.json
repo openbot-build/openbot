@@ -1,0 +1,459 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "f4e957c5-b072-4acd-ba17-0055677eb0a1",
+	"prevIds": ["15bcc089-744a-4268-a0b4-40c891dc1054"],
+	"footprints": [
+		{
+			"statementType": "alter_column",
+			"statementTarget": ["column", "public", "openbot_app_drafts", "id"],
+			"writes": [
+				"s|colprop|public.openbot_app_drafts.id.type",
+				"s|colprop|public.openbot_app_drafts.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_app_drafts",
+				"n|sch|public",
+				"n|col|public.openbot_app_drafts.id"
+			],
+			"sqlHash": "38d856baab865516"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": ["column", "public", "openbot_developer_claims", "id"],
+			"writes": [
+				"s|colprop|public.openbot_developer_claims.id.type",
+				"s|colprop|public.openbot_developer_claims.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_claims",
+				"n|sch|public",
+				"n|col|public.openbot_developer_claims.id"
+			],
+			"sqlHash": "6e04b2e1459fcf70"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_index_requests",
+				"id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_developer_index_requests.id.type",
+				"s|colprop|public.openbot_developer_index_requests.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_index_requests",
+				"n|sch|public",
+				"n|col|public.openbot_developer_index_requests.id"
+			],
+			"sqlHash": "24f171042cd948dc"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_invitations",
+				"proof_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_developer_invitations.proof_id.type",
+				"s|colprop|public.openbot_developer_invitations.proof_id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_invitations",
+				"n|sch|public",
+				"n|col|public.openbot_developer_invitations.proof_id"
+			],
+			"sqlHash": "c6b63338a978fb3a"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_members",
+				"id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_developer_members.id.type",
+				"s|colprop|public.openbot_developer_members.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_members",
+				"n|sch|public",
+				"n|col|public.openbot_developer_members.id"
+			],
+			"sqlHash": "793be5044e0b43be"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_members",
+				"proof_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_developer_members.proof_id.type",
+				"s|colprop|public.openbot_developer_members.proof_id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_members",
+				"n|sch|public",
+				"n|col|public.openbot_developer_members.proof_id"
+			],
+			"sqlHash": "ed1d67bc15d2b9b3"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_notices",
+				"report_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_developer_notices.report_id.type",
+				"s|colprop|public.openbot_developer_notices.report_id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_notices",
+				"n|sch|public",
+				"n|col|public.openbot_developer_notices.report_id"
+			],
+			"sqlHash": "de03cf671f01e038"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": ["column", "public", "openbot_developer_proofs", "id"],
+			"writes": [
+				"s|colprop|public.openbot_developer_proofs.id.type",
+				"s|colprop|public.openbot_developer_proofs.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_proofs",
+				"n|sch|public",
+				"n|col|public.openbot_developer_proofs.id"
+			],
+			"sqlHash": "44d5fd20a2bcba97"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_developer_reports",
+				"id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_developer_reports.id.type",
+				"s|colprop|public.openbot_developer_reports.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_developer_reports",
+				"n|sch|public",
+				"n|col|public.openbot_developer_reports.id"
+			],
+			"sqlHash": "a1ef856c75214199"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": ["column", "public", "openbot_tokens", "id"],
+			"writes": [
+				"s|colprop|public.openbot_tokens.id.type",
+				"s|colprop|public.openbot_tokens.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_tokens",
+				"n|sch|public",
+				"n|col|public.openbot_tokens.id"
+			],
+			"sqlHash": "354fb1c1105085fc"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_commands",
+				"id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_execution_commands.id.type",
+				"s|colprop|public.openbot_execution_commands.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_commands",
+				"n|sch|public",
+				"n|col|public.openbot_execution_commands.id"
+			],
+			"sqlHash": "b2124bb60370d789"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_outbox",
+				"command_id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_execution_outbox.command_id.type",
+				"s|colprop|public.openbot_execution_outbox.command_id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_outbox",
+				"n|sch|public",
+				"n|col|public.openbot_execution_outbox.command_id"
+			],
+			"sqlHash": "0230b7ede4c0fdce"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_resource_owners",
+				"lease"
+			],
+			"writes": [
+				"s|colprop|public.openbot_resource_owners.lease.type",
+				"s|colprop|public.openbot_resource_owners.lease.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_resource_owners",
+				"n|sch|public",
+				"n|col|public.openbot_resource_owners.lease"
+			],
+			"sqlHash": "68ffceff7297e5d6"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_resource_owners",
+				"node"
+			],
+			"writes": [
+				"s|colprop|public.openbot_resource_owners.node.type",
+				"s|colprop|public.openbot_resource_owners.node.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_resource_owners",
+				"n|sch|public",
+				"n|col|public.openbot_resource_owners.node"
+			],
+			"sqlHash": "7844347e8102e921"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_data_upgrade_failures",
+				"id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_data_upgrade_failures.id.type",
+				"s|colprop|public.openbot_data_upgrade_failures.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_data_upgrade_failures",
+				"n|sch|public",
+				"n|col|public.openbot_data_upgrade_failures.id"
+			],
+			"sqlHash": "9510d4be58bb9e75"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_permits",
+				"id"
+			],
+			"writes": [
+				"s|colprop|public.openbot_execution_permits.id.type",
+				"s|colprop|public.openbot_execution_permits.id.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_execution_permits",
+				"n|sch|public",
+				"n|col|public.openbot_execution_permits.id"
+			],
+			"sqlHash": "2ebc216b602f8958"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_resource_leases",
+				"lease"
+			],
+			"writes": [
+				"s|colprop|public.openbot_resource_leases.lease.type",
+				"s|colprop|public.openbot_resource_leases.lease.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_resource_leases",
+				"n|sch|public",
+				"n|col|public.openbot_resource_leases.lease"
+			],
+			"sqlHash": "e290e2a66e5e6807"
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_resource_leases",
+				"node"
+			],
+			"writes": [
+				"s|colprop|public.openbot_resource_leases.node.type",
+				"s|colprop|public.openbot_resource_leases.node.default"
+			],
+			"reads": [
+				"n|tbl|public.openbot_resource_leases",
+				"n|sch|public",
+				"n|col|public.openbot_resource_leases.node"
+			],
+			"sqlHash": "3816a81e5c7d3c12"
+		}
+	],
+	"deltas": [
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_app_drafts\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_claims\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_index_requests\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_invitations\",\"proof_id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_members\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_members\",\"proof_id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_notices\",\"report_id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_proofs\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_developer_reports\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_tokens\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_execution_commands\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_execution_outbox\",\"command_id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_resource_owners\",\"lease\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_resource_owners\",\"node\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_data_upgrade_failures\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_execution_permits\",\"id\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_resource_leases\",\"lease\"]",
+			"set": {
+				"type": "uuid"
+			}
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_resource_leases\",\"node\"]",
+			"set": {
+				"type": "uuid"
+			}
+		}
+	]
+}

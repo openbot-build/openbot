@@ -54,8 +54,9 @@ export class ConnectionCleanupPending extends Schema.TaggedError<
 	message: Schema.String,
 }) {}
 
+export const DraftId = Schema.String.check(Schema.isUUID())
 export const DraftState = Schema.Struct({
-	id: Schema.NonEmptyString,
+	id: DraftId,
 	revision: Schema.Natural,
 	input: Schema.NonEmptyString,
 	expiresAt: Schema.Finite,
@@ -81,7 +82,7 @@ export const ManualUpdate = Schema.Struct({
 export type ManualUpdate = typeof ManualUpdate.Type
 export const Revalidation = Schema.Struct({
 	revision: Schema.Natural,
-	draftId: Schema.NonEmptyString,
+	draftId: DraftId,
 	remoteIndex: Schema.Natural,
 	values: Schema.Record(Schema.String, Schema.String),
 	confirmed: Schema.Literal(true),

@@ -129,8 +129,8 @@ export const make = Effect.gen(function* () {
 				const namespace = ownerKey(identity.owner)
 				const chats = records(namespace)
 				const capabilities = live.model.capabilities
-				const connectionId = yield* crypto.randomUUIDv4()
-				const key = Effect.map(crypto.randomUUIDv4(), Execution.CommandKey.make)
+				const connectionId = yield* crypto.randomUUIDv7()
+				const key = Effect.map(crypto.randomUUIDv7(), Execution.CommandKey.make)
 				const allowed = Effect.gen(function* () {
 					const resource = Authorization.Chat.make({
 						...identity.owner,

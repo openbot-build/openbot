@@ -189,6 +189,8 @@ export class DeveloperIndexing extends Context.Service<
 	Service
 >()("@openbot-build/openbot/apps/DeveloperIndexing") {}
 
+const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
+
 export const make = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const checks = yield* Check.make
@@ -275,6 +277,7 @@ export const make = Effect.gen(function* () {
 		})
 	const get = (owner: string, id: string) =>
 		Effect.gen(function* () {
+			if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 			const record = Arr.head(
 				yield* Rows.stored(
 					db
@@ -331,7 +334,7 @@ export const make = Effect.gen(function* () {
 						})
 					const app = yield* Rows.getApp(db, namespace, cardUrl)
 					const watch = yield* index.request(cardUrl, app.candidate.sources)
-					const id = yield* crypto.randomUUIDv4()
+					const id = yield* crypto.randomUUIDv7()
 					const key = yield* create({
 						workflow: workflowName,
 						identity: {

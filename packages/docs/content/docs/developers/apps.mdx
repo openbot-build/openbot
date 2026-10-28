@@ -59,6 +59,10 @@ To only look, without saving a draft, send the same body to
 
 ### Review and create the connection
 
+`draftId` must be the UUID from the saved draft. Old v4 and new v7 values both
+work. The API rejects other text before it reaches storage. Outside connection
+IDs keep their existing format.
+
 Show the user the App name, its source, and the endpoint. Then create the
 connection. You must send `"confirmed": true`.
 

@@ -52,7 +52,7 @@ export const UserTokensApi = HttpApiGroup.make("userTokens")
 			"revokeToken",
 			`${UserTokensPath}/:tokenId` as const,
 			{
-				params: { tokenId: TokenId },
+				params: { tokenId: TokenId.check(Schema.isUUID()) },
 				success: HttpApiSchema.NoContent,
 				error: [...errors, TokenNotFound.pipe(HttpApiSchema.status(404))],
 			},

@@ -180,7 +180,7 @@ export const make: Effect.Effect<
 		input.id !== undefined
 			? Effect.succeed(input.id)
 			: input.parent.toolCallId === undefined
-				? crypto.randomUUIDv4({ format: "bytes" }).pipe(
+				? crypto.randomUUIDv7({ format: "bytes" }).pipe(
 						// A platform without secure random numbers is broken.
 						Effect.orDie,
 						Effect.map((uuid) => "dlg_" + Hex.encode(uuid)),

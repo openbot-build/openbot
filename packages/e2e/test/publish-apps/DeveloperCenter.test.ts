@@ -352,7 +352,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer), {
 							}
 							const missingCursor = yield* api.developer
 								.personalReports({
-									query: { before: "missing-report" },
+									query: { before: "00000000-0000-4000-8000-000000000001" },
 								})
 								.pipe(Effect.flip)
 							assert.strictEqual(missingCursor._tag, "DeveloperInputInvalid")

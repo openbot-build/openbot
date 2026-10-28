@@ -89,6 +89,21 @@ it.live(
 				{ amountMicros: 5000, note: "Test credits" },
 				"root",
 			)
+			for (const scopeId of [
+				"missing",
+				"00000000-0000-4000-8000-000000000001",
+			]) {
+				const invalid = yield* billing
+					.createBudget(call.organizationId, {
+						scope: "token",
+						scopeId,
+						period: "day",
+						mode: "hard",
+						limitMicros: 1000,
+					})
+					.pipe(Effect.flip)
+				assert.strictEqual(invalid._tag, "BudgetInvalid")
+			}
 			yield* billing.createBudget(call.organizationId, {
 				scope: "organization",
 				period: "day",

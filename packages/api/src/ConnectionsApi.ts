@@ -61,7 +61,7 @@ export const Connection = Schema.Struct({
 })
 export type Connection = typeof Connection.Type
 export const ConnectionRequest = Schema.Struct({
-	draftId: Schema.NonEmptyString,
+	draftId: AppConnections.DraftId,
 	revision: Schema.Natural,
 	cardUrl: Document.Link,
 	remoteIndex: Schema.Natural,
@@ -176,7 +176,7 @@ export class ConnectionsApi extends HttpApiGroup.make("connections").add(
 		error: Errors,
 	}).annotate(Required, [own("write", "Connection")]),
 	HttpApiEndpoint.get("getConnectionDraft", "/v1/connection-drafts/:draftId", {
-		params: { draftId: Schema.NonEmptyString },
+		params: { draftId: AppConnections.DraftId },
 		success: ConnectionDraft,
 		error: Errors,
 	}).annotate(Required, [own("read", "Connection")]),

@@ -108,7 +108,7 @@ export const make = Effect.fn("AppViews.make")(function* (
 	const crypto = yield* Crypto.Crypto
 	/** A new ID for each action, made when the action runs. */
 	const newCommandKey = crypto
-		.randomUUIDv4()
+		.randomUUIDv7()
 		.pipe(Effect.map(Execution.CommandKey.make), Effect.orDie)
 	const params = { viewId: opened.id }
 	const key = { owner, connectionId: opened.source.connectionId }

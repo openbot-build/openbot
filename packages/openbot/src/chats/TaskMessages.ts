@@ -67,7 +67,7 @@ export const make = Effect.gen(function* () {
 						return yield* Execution.Forbidden.make({})
 					// Use another command key inside this transaction. The public key still names the returned Turn.
 					const inputKey = Execution.CommandKey.make(
-						yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+						yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 					)
 					if (!Execution.isTerminal(previous.execution.record.status)) {
 						const receipt = yield* inputs.message(namespace, inputKey, message)
@@ -84,7 +84,7 @@ export const make = Effect.gen(function* () {
 						parentExecutionId: previous.origin.key.id,
 					})
 					const id = Domain.DelegationId.make(
-						"dlg_" + (yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+						"dlg_" + (yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
 					)
 					// A new person command owns this round. It is not a child of the old, ended round.
 					const receipt = yield* store.submit(

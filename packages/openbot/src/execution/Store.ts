@@ -881,7 +881,7 @@ const make = Effect.gen(function* () {
 		notify: boolean = true,
 		cancelEpoch: number | null = null,
 	) {
-		const id = yield* crypto.randomUUIDv4()
+		const id = yield* crypto.randomUUIDv7()
 		const encoded = yield* Schema.encodeEffect(json)(body)
 		yield* db.insert(executionCommands).values({
 			namespace: key.namespace,
@@ -930,7 +930,7 @@ const make = Effect.gen(function* () {
 				return yield* Execution.Conflict.make({ id: input.ownerExecutionId })
 		}
 		const id = yield* Schema.decodeEffect(Execution.Id)(
-			yield* crypto.randomUUIDv4(),
+			yield* crypto.randomUUIDv7(),
 		)
 		const key = { namespace, id }
 		const now = yield* Clock.currentTimeMillis
@@ -2040,7 +2040,7 @@ const make = Effect.gen(function* () {
 					return call
 				}
 				const id = yield* Schema.decodeEffect(Execution.CallId)(
-					yield* crypto.randomUUIDv4(),
+					yield* crypto.randomUUIDv7(),
 				)
 				const now = yield* Clock.currentTimeMillis
 				yield* db.insert(executionCalls).values({

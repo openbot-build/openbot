@@ -210,6 +210,20 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 
 绕过外部包或工具的缺陷时，在相关代码旁用注释解释缺陷。
 
+### UUID
+
+UUID 是一个 16 字节的 ID。当时间顺序有利于已存记录或索引时，使用 UUID
+v7。用 Effect 的 `Crypto.randomUUIDv7()` 生成。如果下一步需要字节，使用 `bytes`
+格式。随机密钥，以及无法从时间顺序获益的短期 ID，保留 UUID v4。
+
+UUID
+v7 的开头是毫秒时间。同一毫秒内生成的 ID 顺序是随机的。需要精确顺序时，保留时间字段和序号。请看
+[RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html#section-5.7)。
+
+数据允许时，以字节存储 UUID。PostgreSQL 使用原生
+[`uuid` 类型](https://www.postgresql.org/docs/current/datatype-uuid.html)。它占 16 字节，同时接受 v4 和 v7。API 仍可使用 UUID 文本。不要把混合格式、外部 ID 或带前缀的 ID 直接转为
+`uuid`。修改存储前，检查旧值、引用和加密数据中的用途。添加新迁移，并用旧 v4 值测试。
+
 ### 优先使用 Effect 数据
 
 使用 Effect 的不可变数据类型，例如 `HashMap`、`Chunk` 和

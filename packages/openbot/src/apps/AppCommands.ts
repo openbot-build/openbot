@@ -432,7 +432,7 @@ const make = Effect.gen(function* () {
 						},
 						Effect.gen(function* () {
 							const id = AppCalls.AppOperationId.make(
-								yield* crypto.randomUUIDv4(),
+								yield* crypto.randomUUIDv7(),
 							)
 							const readOnly = yield* actions.isRead({
 								organizationId: origin.identity.owner.organizationId,

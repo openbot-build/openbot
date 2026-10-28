@@ -88,7 +88,7 @@ export const make = Effect.gen(function* () {
 	const crypto = yield* Crypto.Crypto
 	// A platform without secure random numbers is broken.
 	const newId = crypto
-		.randomUUIDv4()
+		.randomUUIDv7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const randomBytes = (size: number) =>
 		crypto.randomBytes(size).pipe(Effect.orDie)

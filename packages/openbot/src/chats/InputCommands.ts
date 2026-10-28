@@ -387,7 +387,7 @@ const make = Effect.gen(function* () {
 								return yield* Execution.Forbidden.make({})
 							const entry: Item.Entry = {
 								id: Item.Id.make(
-									yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+									yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 								),
 								content: input.content,
 								origin: {
@@ -473,7 +473,7 @@ const make = Effect.gen(function* () {
 								: group !== undefined
 									? Turn.Id.make(group.record.resource.id)
 									: Turn.Id.make(
-											yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+											yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 										)
 						const ownerExecutionId = ChatHost.hostState(
 							view.chat,
@@ -496,7 +496,7 @@ const make = Effect.gen(function* () {
 								},
 							}))
 						const entry: Chat.InboxEntry = {
-							id: Item.Id.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+							id: Item.Id.make(yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
 							content: input.content,
 							...(input.action === undefined ? {} : { action: input.action }),
 							kind: steer ? "steer" : "message",
@@ -539,7 +539,7 @@ const make = Effect.gen(function* () {
 							if (Option.isSome(next)) {
 								const { turn: nextTurn, selected, key: nextKey } = next.value
 								const items = yield* TurnState.inputs(
-									() => crypto.randomUUIDv4().pipe(Effect.orDie),
+									() => crypto.randomUUIDv7().pipe(Effect.orDie),
 									input.chat,
 									nextTurn,
 									0,
@@ -619,7 +619,7 @@ const make = Effect.gen(function* () {
 					if (Option.isNone(next)) return Option.none()
 					const { turn, selected, key } = next.value
 					const items = yield* TurnState.inputs(
-						() => crypto.randomUUIDv4().pipe(Effect.orDie),
+						() => crypto.randomUUIDv7().pipe(Effect.orDie),
 						chat,
 						turn,
 						0,
@@ -764,7 +764,7 @@ const make = Effect.gen(function* () {
 								outcome.status === "cancelled"
 									? ((yield* executions.get(fence)).failure ?? undefined)
 									: outcome.failure,
-								Item.Id.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+								Item.Id.make(yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
 								children,
 							)
 							const completedAt = yield* Clock.currentTimeMillis
@@ -827,13 +827,13 @@ const make = Effect.gen(function* () {
 							)
 								continue
 							const nextTurn = Turn.Id.make(
-								yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+								yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 							)
 							const items = Arr.map(group, (entry) => entry.id)
 							const receipt = yield* executions.accept(
 								fence.namespace,
 								Execution.CommandKey.make(
-									yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+									yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 								),
 								{
 									actor: current.identity.actor,

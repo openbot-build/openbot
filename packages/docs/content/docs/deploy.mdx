@@ -120,6 +120,11 @@ docker run --rm --env-file openbot.env \
   openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
 ```
 
+The same migration changes supported UUID columns from text to PostgreSQL
+`uuid`. These columns store each ID in 16 bytes. Old v4 values keep their value;
+new stored IDs use v7 where time order helps. Columns with mixed or outside IDs
+keep their text form. Run this change with all servers stopped, as above.
+
 Run the same command again after a stopped data move. Each batch commits its
 changes and progress together. A bad record stops the move and saves a sealed
 failure report. The program checks counts, references, secrets and states before

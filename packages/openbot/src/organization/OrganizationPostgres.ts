@@ -177,7 +177,7 @@ export const make: Effect.Effect<
 	const settings = yield* Settings
 	const crypto = yield* Crypto.Crypto
 	const newId = crypto
-		.randomUUIDv4()
+		.randomUUIDv7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 
 	/** Run one change to the members of an organization at a time, so the Super Administrator check stays true. */

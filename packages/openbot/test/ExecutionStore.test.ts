@@ -68,6 +68,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				submission,
 			)
 			const key = { namespace, id: receipt.executionId }
+			assert.isTrue(Schema.is(Schema.String.check(Schema.isUUID(7)))(key.id))
 			const fence = yield* store.takeOver(key)
 			const last = yield* store.intent(fence, {
 				step: "model",
@@ -106,6 +107,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				retry: "read_only",
 				input: { value: "other input" },
 			})
+			assert.isTrue(Schema.is(Schema.String.check(Schema.isUUID(7)))(tool.id))
 			assert.deepEqual(Option.getOrThrow(yield* store.call(key, tool.id)), tool)
 			assert.equal(
 				Option.getOrThrow(yield* store.firstCall(key, "model")).id,

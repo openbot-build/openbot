@@ -256,6 +256,9 @@ curl -b cookies.txt https://api.example.com/v1/user/tokens
 
 ### 撤销令牌
 
+使用列表中令牌的 UUID `id`。旧 v4 和新 v7
+ID 都可使用。API 会在访问存储前拒绝非 UUID 格式的 ID。
+
 ```sh
 curl -X DELETE -b cookies.txt \
   -H "Origin: https://api.example.com" \

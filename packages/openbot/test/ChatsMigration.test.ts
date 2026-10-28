@@ -891,7 +891,7 @@ const insertOldData = Effect.gen(function* () {
 	])
 	yield* insert("openbot_tokens", [
 		{
-			id: "tok_1",
+			id: "00000000-0000-4000-8000-000000000031",
 			organization_id: "org_a",
 			user_id: "user_a",
 			name: "Token",

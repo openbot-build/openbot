@@ -11,6 +11,7 @@ import {
 	Equivalence,
 	Layer,
 	Option,
+	Schema,
 } from "effect"
 import { developerReports } from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
@@ -80,6 +81,8 @@ const compare = (
 	resolved: Arr.differenceWith(sameIssue)(before.issues, after.issues),
 	persisting: Arr.intersectionWith(sameIssue)(after.issues, before.issues),
 })
+const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
+
 export const make: Effect.Effect<
 	typeof DeveloperReports.Service,
 	never,
@@ -94,6 +97,7 @@ export const make: Effect.Effect<
 	const reportWhere = (id: string) =>
 		and(eq(developerReports.namespace, namespace), eq(developerReports.id, id))
 	const read = Effect.fn("DeveloperReports.read")(function* (id: string) {
+		if (!isUuid(id)) return yield* Developers.DeveloperNotFound.make({})
 		const row = (yield* Rows.stored(
 			db.select().from(developerReports).where(reportWhere(id)),
 		))[0]
@@ -119,6 +123,8 @@ export const make: Effect.Effect<
 	) {
 		let after: SQL | undefined
 		if (before !== undefined) {
+			if (!isUuid(before))
+				return yield* Developers.DeveloperInputInvalid.make({ message })
 			const cursor = (yield* Rows.stored(
 				db
 					.select({
@@ -173,7 +179,7 @@ export const make: Effect.Effect<
 					const app = yield* Rows.getApp(db, namespace, cardUrl, true)
 					yield* access.authorize(owner, cardUrl, true)
 					const value: Models.SavedReport = {
-						id: yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+						id: yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 						cardUrl,
 						createdBy: owner,
 						report,

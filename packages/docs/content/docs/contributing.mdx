@@ -242,6 +242,25 @@ databases must be able to upgrade.
 When you work around a bug in an outside package or tool, explain that bug in a
 comment next to the code.
 
+### UUIDs
+
+A UUID is a 16-byte ID. Use UUID v7 when its time order helps stored records or
+indexes. Generate it with `Crypto.randomUUIDv7()` from Effect. Use the `bytes`
+format when the next step needs bytes. Keep UUID v4 for random secrets and for
+short-lived IDs that gain nothing from time order.
+
+UUID v7 starts with the time in milliseconds. IDs made in the same millisecond
+have random order. Keep time fields and sequence numbers when exact order
+matters. See
+[RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html#section-5.7).
+
+Store UUIDs as bytes where the data allows it. In PostgreSQL, use the native
+[`uuid` type](https://www.postgresql.org/docs/current/datatype-uuid.html). It
+stores 16 bytes and accepts both v4 and v7. APIs can still use UUID text. Do not
+cast mixed IDs, outside IDs, or IDs with a prefix straight to `uuid`. Check
+their old values, links, and use in sealed data before a storage change. Add a
+new migration and test it with old v4 values.
+
 ### Effect data first
 
 Use the immutable data types of Effect, such as `HashMap`, `Chunk`, and

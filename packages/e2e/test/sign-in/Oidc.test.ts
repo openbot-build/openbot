@@ -508,7 +508,10 @@ layer(platform, { excludeTestServices: true })((it) => {
 				] as const) {
 					assert.strictEqual(
 						(yield* request(
-							"/v1/user/tokens" + (method === "DELETE" ? "/unknown" : ""),
+							"/v1/user/tokens" +
+								(method === "DELETE"
+									? "/00000000-0000-4000-8000-000000000001"
+									: ""),
 							{
 								method,
 								headers: { cookie: alice.session, origin: publicOrigin },
@@ -517,6 +520,13 @@ layer(platform, { excludeTestServices: true })((it) => {
 						status,
 					)
 				}
+				assert.strictEqual(
+					(yield* request("/v1/user/tokens/unknown", {
+						method: "DELETE",
+						headers: { cookie: alice.session, origin: publicOrigin },
+					})).status,
+					400,
+				)
 				assert.strictEqual(
 					(yield* request("/v1/chats", {
 						headers: { authorization: "Bearer retired" },

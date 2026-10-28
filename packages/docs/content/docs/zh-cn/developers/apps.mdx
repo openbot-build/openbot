@@ -56,6 +56,9 @@ curl -X POST https://api.example.com/v1/connection-drafts \
 
 ### 审查并创建连接
 
+`draftId`
+必须是已保存草稿的 UUID。旧 v4 和新 v7 值都可使用。API 会在访问存储前拒绝其他格式。外部连接 ID 保留已有格式。
+
 把 App 名称、来源和端点展示给用户。然后创建连接。你必须发送
 `"confirmed": true`。
 

@@ -219,7 +219,7 @@ export const make: Effect.Effect<
 			const credentials = Store.CredentialStore.of({
 				put: Effect.fn("AppCredentials.put")(function* (credential) {
 					yield* owned(credential.binding)
-					const id = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
+					const id = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
 					const encoded = yield* Schema.encodeEffect(credentialCodec)(
 						credential,
 					).pipe(unavailable("Could not encode an App credential."))

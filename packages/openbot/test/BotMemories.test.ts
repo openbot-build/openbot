@@ -231,6 +231,10 @@ layer(services)("Memory source access", (it) => {
 				)
 				assert.strictEqual(remembered.entries.length, 1)
 				assert.strictEqual(remembered.entries[0]?.layer, "pinned")
+				assert.match(
+					remembered.entries[0]?.id ?? "",
+					/^mem_[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/,
+				)
 				const input = yield* restarted.learningContext(place)
 				assert.deepStrictEqual(ids(input.memory), ids(remembered.entries))
 				assert.ok(Arr.every(input.memory, (entry) => entry.layer === "pinned"))

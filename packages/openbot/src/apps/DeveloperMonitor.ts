@@ -241,7 +241,7 @@ const make = Effect.gen(function* () {
 									(issue) => ({ issue, kind: "IssueResolved" as const }),
 								),
 							]
-							const reportId = yield* crypto.randomUUIDv4()
+							const reportId = yield* crypto.randomUUIDv7()
 							yield* Rows.saveReport(db, namespace, null, {
 								id: reportId,
 								cardUrl,

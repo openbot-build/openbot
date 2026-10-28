@@ -288,7 +288,7 @@ const make = Effect.gen(function* () {
 								)
 							)
 								return yield* Execution.Conflict.make({ id: parent.id })
-							const id = ToolExecution.Id.make(yield* crypto.randomUUIDv4())
+							const id = ToolExecution.Id.make(yield* crypto.randomUUIDv7())
 							const child = yield* create({
 								workflow: workflowName,
 								context: { kind: "Chat", id: position.chat },

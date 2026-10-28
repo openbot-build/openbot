@@ -423,7 +423,7 @@ export const make = Effect.gen(function* () {
 			)
 		} else
 			commandKey = Execution.CommandKey.make(
-				yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+				yield* crypto.randomUUIDv7().pipe(Effect.orDie),
 			)
 		const receipt = yield* submit(
 			identity,

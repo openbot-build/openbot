@@ -22,6 +22,8 @@ import { AuthUnavailable, CredentialRejected } from "./Model.ts"
 import * as Failures from "../errors/Failures.ts"
 import * as Db from "../database/Database.ts"
 
+const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
+
 const day = 24 * 60 * 60 * 1000
 /** Do not write on every request, but keep the usage information useful. */
 const lastUsedResolution = 60 * 1000
@@ -109,7 +111,7 @@ export const make: Effect.Effect<
 							TokensModel.SecretPrefix +
 							Base64Url.encode(yield* Effect.orDie(crypto.randomBytes(32)))
 						const row = {
-							id: yield* Effect.orDie(crypto.randomUUIDv4()),
+							id: yield* Effect.orDie(crypto.randomUUIDv7()),
 							organizationId: owner.organizationId,
 							userId: owner.userId,
 							name: Str.trim(input.name),
@@ -149,30 +151,34 @@ export const make: Effect.Effect<
 					Effect.flatMap((rows) => Effect.forEach(rows, view)),
 				),
 		revoke: (owner, id) =>
-			db
-				.delete(tokens)
-				.where(and(owned(owner), eq(tokens.id, id)))
-				.returning()
-				.pipe(
-					storageUnavailable("A token could not be revoked."),
-					Effect.flatMap(([row]) =>
-						row === undefined
-							? Effect.fail(TokensModel.TokenNotFound.make({}))
-							: Effect.succeed(row),
-					),
-					Effect.flatMap(view),
-				),
+			!isUuid(id)
+				? Effect.fail(TokensModel.TokenNotFound.make({}))
+				: db
+						.delete(tokens)
+						.where(and(owned(owner), eq(tokens.id, id)))
+						.returning()
+						.pipe(
+							storageUnavailable("A token could not be revoked."),
+							Effect.flatMap(([row]) =>
+								row === undefined
+									? Effect.fail(TokensModel.TokenNotFound.make({}))
+									: Effect.succeed(row),
+							),
+							Effect.flatMap(view),
+						),
 		find: (owner, id) =>
-			db
-				.select()
-				.from(tokens)
-				.where(and(owned(owner), eq(tokens.id, id)))
-				.pipe(
-					storageUnavailable("A token could not be read."),
-					Effect.flatMap((rows) =>
-						Effect.transposeOption(Option.map(Arr.head(rows), view)),
-					),
-				),
+			!isUuid(id)
+				? Effect.succeedNone
+				: db
+						.select()
+						.from(tokens)
+						.where(and(owned(owner), eq(tokens.id, id)))
+						.pipe(
+							storageUnavailable("A token could not be read."),
+							Effect.flatMap((rows) =>
+								Effect.transposeOption(Option.map(Arr.head(rows), view)),
+							),
+						),
 		authenticate: (credential) =>
 			Effect.gen(function* () {
 				const secret = Redacted.value(credential)

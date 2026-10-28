@@ -224,7 +224,7 @@ const make = Effect.gen(function* () {
 			const receipt = yield* store.submit(
 				record.owner,
 				Execution.CommandKey.make(
-					`test-expiry:${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`,
+					`test-expiry:${yield* crypto.randomUUIDv7().pipe(Effect.orDie)}`,
 				),
 				yield* submission(
 					namespace,

@@ -160,7 +160,7 @@ export const makeFor = (dataVersion: string) =>
 		const report = (step: string, cause: Cause.Cause<unknown>) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const errorId = yield* crypto.randomUUIDv4()
+				const errorId = yield* crypto.randomUUIDv7()
 				const sealed = yield* secrets.seal(
 					yield* cause.pipe(snapshot, Schema.encodeEffect(codec)),
 					`data-upgrade-failure:${errorId}`,

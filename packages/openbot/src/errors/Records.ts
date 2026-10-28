@@ -104,7 +104,7 @@ const make = Effect.gen(function* () {
 				Schema.is(Execution.Failure)(reason.error)
 			)
 				return { errorId: reason.error.errorId, category }
-			const errorId = Execution.ErrorId.make(yield* crypto.randomUUIDv4())
+			const errorId = Execution.ErrorId.make(yield* crypto.randomUUIDv7())
 			const saved = yield* secrets.seal(
 				yield* cause.pipe(snapshot, Schema.encodeEffect(codec)),
 				`failure:${errorId}`,

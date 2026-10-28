@@ -392,7 +392,7 @@ const make = Effect.gen(function* () {
 						},
 						Effect.gen(function* () {
 							const limits = yield* enabled
-							const id = CodeRuns.CodeRunId.make(yield* crypto.randomUUIDv4())
+							const id = CodeRuns.CodeRunId.make(yield* crypto.randomUUIDv7())
 							const key = yield* create({
 								workflow: workflowName,
 								...(yield* store.ownership(source)),

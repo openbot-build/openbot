@@ -10,6 +10,11 @@ description: 检查、测试和管理你发布的 App。
 只有检查调用是公开的。其他所有调用都需要用户令牌或 session cookie，以及 `App`
 上的 `publish`。参见[身份验证](/zh-cn/docs/developers/authentication)。
 
+声明、证明、成员、报告和收录请求的 ID 必须是 UUID 文本。报告翻页游标 `before`
+和比较 ID `other` 也遵循此规则。旧 UUID v4 和新 UUID
+v7 都可使用。API 会在访问存储前拒绝其他格式。邀请的 bearer
+token 和通知 ID 保留各自的格式。
+
 ---
 
 ## 检查 App
