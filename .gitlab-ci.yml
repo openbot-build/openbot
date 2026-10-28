@@ -13,9 +13,10 @@ stages: [check, build, publish]
   image: ghcr.io/cachix/devenv/devenv:v2.4.0
   tags: [docker, privileged, arm64]
   variables:
-    # Keep native TypeScript builds within the runner memory budget.
+    # Limit compiler concurrency. The Go memory target is not a hard RSS limit.
     GOMEMLIMIT: 512MiB
     GOGC: "25"
+    GOMAXPROCS: "2"
     GIT_CONFIG_COUNT: "1"
     GIT_CONFIG_KEY_0: safe.directory
     GIT_CONFIG_VALUE_0: $CI_PROJECT_DIR
@@ -32,11 +33,14 @@ stages: [check, build, publish]
         files: [pnpm-lock.yaml]
       paths: [.cache/pnpm/]
   before_script:
+    - bash deploy/docker/ci-resources.sh
     - >-
       devenv --profile ci shell -- bash -euo pipefail -c ' test "$(node
       --version)" = v26.12.1; nix copy --to
       "file://$CI_PROJECT_DIR/.cache/nix?compression=zstd" "$DEVENV_PROFILE";
       pnpm install --frozen-lockfile --store-dir .cache/pnpm'
+  after_script:
+    - bash deploy/docker/ci-resources.sh
   interruptible: true
 
 check:
