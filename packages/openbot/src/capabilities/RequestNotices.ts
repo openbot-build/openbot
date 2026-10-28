@@ -33,6 +33,34 @@ const reason = (stored: Stored) =>
 		" ",
 	)
 
+export interface Service {
+	readonly authorize: Authorize
+	readonly deliver: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly finish: (
+		fence: Fence,
+		end:
+			| { readonly status: "failed"; readonly failure: Execution.Failure }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class RequestNotices extends Context.Service<RequestNotices, Service>()(
+	"@openbot-build/openbot/capabilities/RequestNotices",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -206,10 +234,7 @@ const make = Effect.gen(function* () {
 				Effect.void,
 			)
 	}, storage)
-	return { authorize, deliver, finish }
+	return RequestNotices.of({ authorize, deliver, finish })
 })
-export class RequestNotices extends Context.Service<
-	RequestNotices,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/capabilities/RequestNotices") {}
+
 export const layer = Layer.effect(RequestNotices, make)

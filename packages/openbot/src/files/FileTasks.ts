@@ -1,3 +1,4 @@
+import type { SecretStorageError } from "../secrets/Secrets.ts"
 import {
 	Authorization,
 	Execution,
@@ -34,6 +35,76 @@ export const Reference = Schema.Struct({
 	fileId: Schema.String,
 	objectKey: Schema.String,
 })
+export interface Service {
+	readonly remove: (
+		caller: Caller,
+		id: string,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Files.FileNotFound
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly collect: Effect.Effect<
+		number,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly cleanup: (
+		key: Key,
+	) => Effect.Effect<
+		typeof Reference.Type,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly objectKey: (
+		key: Key,
+	) => Effect.Effect<
+		string,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly complete: (
+		fence: Fence,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly start: Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly authorizeCleanup: (
+		key: Key,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorizeRetention: (
+		key: Key,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+}
+
+export class FileTasks extends Context.Service<FileTasks, Service>()(
+	"@openbot-build/openbot/files/FileTasks",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -245,7 +316,7 @@ const make = Effect.gen(function* () {
 			input: {},
 		},
 	)
-	return {
+	return FileTasks.of({
 		remove,
 		collect,
 		cleanup,
@@ -255,10 +326,7 @@ const make = Effect.gen(function* () {
 		authorizeCleanup: (key: Key) => cleanup(key).pipe(Effect.asVoid),
 		authorizeRetention: (key: Key) =>
 			load(key, retentionWorkflowName).pipe(Effect.asVoid),
-	}
+	})
 })
-export class FileTasks extends Context.Service<
-	FileTasks,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/files/FileTasks") {}
+
 export const layer = Layer.effect(FileTasks, make)

@@ -1,3 +1,4 @@
+import { type SecretStorageError, Secrets } from "../secrets/Secrets.ts"
 import { Paused } from "./Admission.ts"
 import {
 	Caller,
@@ -42,7 +43,6 @@ import {
 	executionCalls,
 	executionDecisions,
 } from "../database/ExecutionSchema.ts"
-import { Secrets } from "../secrets/Secrets.ts"
 
 export const Submission = Schema.Struct({
 	workflow: Schema.String,
@@ -170,6 +170,550 @@ export const transactionFailures = <A, E, R>(
 		}),
 	)
 }
+
+export interface Loaded<I extends WorkIdentity = WorkIdentity> {
+	record: Execution.Record
+	workflow: string
+	context: { kind: string; id: string } | null
+	generation: number
+	cancelEpoch: number
+	cancelPending: boolean
+	phaseFailed: boolean
+	input: Schema.Json
+	identity: I
+}
+export type MemberExecution = Loaded<ExecutionIdentity>
+export type ServiceExecution = Loaded<ServiceIdentity>
+
+export interface Service {
+	readonly receipt: (
+		namespace: string,
+		commandKey: Execution.CommandKey,
+		input: { readonly actor: CommandActor; readonly body: Schema.Json },
+	) => Effect.Effect<
+		Option.None<Execution.Receipt> | Option.Some<Execution.Receipt>,
+		Execution.KeyConflict | Execution.StorageError
+	>
+	readonly accept: <E, R>(
+		namespace: string,
+		commandKey: Execution.CommandKey,
+		input: { readonly actor: CommandActor; readonly body: Schema.Json },
+		apply: (
+			allocate: (
+				input: Submission,
+			) => Effect.Effect<
+				{ namespace: string; id: Execution.Id },
+				Execution.Conflict | Execution.Forbidden | Execution.StorageError
+			>,
+		) => Effect.Effect<
+			{
+				readonly executionId: Execution.Id
+				readonly start: boolean
+				readonly dispatch?: boolean
+				readonly events?: ReadonlyArray<
+					Exclude<Execution.EventBody, { readonly _tag: "State" }>
+				>
+			},
+			E,
+			R
+		>,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+		| Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>,
+		R
+	>
+	readonly activate: (
+		key: Key,
+		events?: ReadonlyArray<
+			Exclude<Execution.EventBody, { readonly _tag: "State" }>
+		>,
+	) => Effect.Effect<
+		void,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly submit: (
+		namespace: string,
+		commandKey: Execution.CommandKey,
+		input: Submission,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly locate: (
+		id: Execution.Id,
+		organizationId: string,
+	) => Effect.Effect<
+		{ namespace: string; id: Execution.Id },
+		Execution.NotFound | Execution.StorageError
+	>
+	readonly get: (
+		key: Key,
+	) => Effect.Effect<
+		Execution.Record,
+		Execution.NotFound | Execution.StorageError
+	>
+	readonly load: (
+		key: Key,
+	) => Effect.Effect<Loaded, Execution.NotFound | Execution.StorageError>
+	readonly loadMember: (
+		key: Key,
+	) => Effect.Effect<
+		MemberExecution,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly loadService: (
+		key: Key,
+		serviceId: ServiceId,
+	) => Effect.Effect<
+		ServiceExecution,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly ownership: (
+		key: Key,
+	) => Effect.Effect<
+		Pick<Submission, "ownerExecutionId">,
+		Execution.NotFound | Execution.StorageError
+	>
+	readonly wake: (
+		key: Key,
+		signal: string,
+	) => Effect.Effect<void, Execution.NotFound | Execution.StorageError>
+	readonly notify: (
+		key: Key,
+		commandKey: Execution.CommandKey,
+		actor: Caller | CommandActor,
+		signalId: string,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly owned: (
+		key: Key,
+		activeOnly?: boolean | undefined,
+	) => Effect.Effect<
+		{
+			key: { namespace: string; id: Execution.Id }
+			record: Execution.Record
+		}[],
+		Execution.NotFound | Execution.StorageError
+	>
+	readonly hold: (
+		key: Key,
+	) => Effect.Effect<void, Execution.NotFound | Execution.StorageError>
+	readonly guard: (
+		key: Fence,
+	) => Effect.Effect<
+		void,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly lock: (
+		key: Fence,
+	) => Effect.Effect<
+		void,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly takeOver: (
+		key: Key,
+	) => Effect.Effect<
+		{ namespace: string; id: Execution.Id; generation: number },
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly failPhase: (
+		key: Fence,
+		failure: Execution.Failure,
+	) => Effect.Effect<
+		void,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly commit: <A, E, R>(
+		key: Fence,
+		change: {
+			readonly status?: Execution.Status
+			readonly failure?: Execution.Failure
+			readonly events?:
+				| ReadonlyArray<
+						Exclude<Execution.EventBody, { readonly _tag: "State" }>
+				  >
+				| ((
+						result: A,
+				  ) => ReadonlyArray<
+						Exclude<Execution.EventBody, { readonly _tag: "State" }>
+				  >)
+		},
+		writes: Effect.Effect<A, E, R>,
+	) => Effect.Effect<
+		A,
+		| Execution.Conflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+		| Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>,
+		R
+	>
+	readonly transition: (
+		key: Fence,
+		status: Execution.Status,
+		failure?: Execution.Failure | undefined,
+	) => Effect.Effect<
+		void,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly events: (
+		key: Key,
+		afterSequence: number,
+	) => Effect.Effect<
+		{
+			executionId: Execution.Id
+			sequence: number
+			createdAt: number
+			body: Execution.EventBody
+		}[],
+		Execution.StorageError
+	>
+	readonly cancel: <E = never, R = never>(
+		key: Key,
+		commandKey: Execution.CommandKey,
+		actor: Caller | CommandActor,
+		beforeLock?: Effect.Effect<void, E, R> | undefined,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+		| Extract<E, typeof known.Type>,
+		R
+	>
+	readonly finishCancellation: <E = never, R = never>(
+		key: Fence,
+		cancelEpoch: number,
+		finish?:
+			| ((
+					status: "cancelled" | "interrupted" | "outcome_unknown",
+			  ) => Effect.Effect<
+					ReadonlyArray<
+						Exclude<Execution.EventBody, { readonly _tag: "State" }>
+					>,
+					E,
+					R
+			  >)
+			| undefined,
+	) => Effect.Effect<
+		"cancelled" | "interrupted" | "outcome_unknown",
+		| Execution.Conflict
+		| Execution.NotFound
+		| Execution.StorageError
+		| Extract<E, typeof known.Type>,
+		R
+	>
+	readonly requestDecision: (
+		key: Fence,
+		id: string,
+		choices: readonly [Execution.Answer, ...Execution.Answer[]],
+	) => Effect.Effect<
+		{
+			id: string
+			choices: readonly [Execution.Answer, ...Execution.Answer[]]
+			answer: {
+				readonly answer: Execution.Answer
+				readonly actor: Caller
+			} | null
+		},
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly decision: (
+		key: Key,
+		id: string,
+	) => Effect.Effect<
+		| Option.None<{
+				id: string
+				choices: readonly [Execution.Answer, ...Execution.Answer[]]
+				answer: {
+					readonly answer: Execution.Answer
+					readonly actor: Caller
+				} | null
+		  }>
+		| Option.Some<{
+				id: string
+				choices: readonly [Execution.Answer, ...Execution.Answer[]]
+				answer: {
+					readonly answer: Execution.Answer
+					readonly actor: Caller
+				} | null
+		  }>,
+		Execution.StorageError
+	>
+	readonly decisionPending: (
+		key: Key,
+		id: string,
+	) => Effect.Effect<boolean, Execution.NotFound | Execution.StorageError>
+	readonly decide: <E = never, R = never>(
+		key: Key,
+		commandKey: Execution.CommandKey,
+		id: string,
+		answer: Execution.Answer,
+		actor: Caller,
+		change?: {
+			readonly input: Schema.Json
+			readonly apply: Effect.Effect<void, E, R>
+		},
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+		| Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>,
+		R
+	>
+	readonly pending: (workflows: readonly string[]) => Effect.Effect<
+		{
+			namespace: string
+			commandId: string
+			executionId: string
+			createdAt: number
+			sentAt: number | null
+		}[],
+		Execution.StorageError
+	>
+	readonly acknowledge: (
+		namespace: string,
+		commandId: string,
+	) => Effect.Effect<void, Execution.StorageError>
+	readonly defer: (
+		namespace: string,
+		commandId: string,
+	) => Effect.Effect<void, Execution.StorageError>
+	readonly command: (
+		namespace: string,
+		commandId: string,
+	) => Effect.Effect<
+		Option.Option<{
+			namespace: string
+			id: string
+			executionId: string
+			organizationId: string | null
+			userId: string | null
+			principalKind: string
+			serviceId: string | null
+			key: string
+			kind: string
+			cancelEpoch: number | null
+			sequence: number
+			createdAt: number
+			body: Schema.Json
+		}>,
+		Execution.StorageError
+	>
+	readonly intent: (
+		key: Fence,
+		input: {
+			readonly step: string
+			readonly attempt: number
+			readonly retry: Execution.Retry
+			readonly input: Schema.Json
+		},
+	) => Effect.Effect<
+		Execution.Call,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly readAttempt: (
+		key: Fence,
+		step: string,
+		input: Schema.Json,
+	) => Effect.Effect<
+		Execution.Call,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly writeAttempt: (
+		key: Fence,
+		step: string,
+		input: Schema.Json,
+		retry?: "idempotent" | "local" | "never" | undefined,
+	) => Effect.Effect<
+		Execution.Call,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly repeatCall: (
+		key: Fence,
+		id: Execution.CallId,
+		result: Schema.Json,
+	) => Effect.Effect<
+		Execution.Call,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly retryCall: (
+		key: Fence,
+		id: Execution.CallId,
+	) => Effect.Effect<
+		Execution.Call,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly recoverCall: (
+		key: Fence,
+		id: Execution.CallId,
+	) => Effect.Effect<
+		| { _tag: "Retry"; decisionId?: never; afterSequence?: never }
+		| { _tag: "Stop"; decisionId?: never; afterSequence?: never }
+		| { _tag: "Recorded"; decisionId?: never; afterSequence?: never }
+		| { _tag: "Pending"; decisionId: string; afterSequence: number },
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly sending: (
+		key: Fence,
+		id: Execution.CallId,
+		admit?:
+			| Effect.Effect<
+					void,
+					| Execution.Conflict
+					| Execution.Forbidden
+					| Execution.NotFound
+					| Paused
+					| Execution.StorageError
+			  >
+			| undefined,
+	) => Effect.Effect<
+		| Execution.Call
+		| {
+				id: Execution.CallId
+				executionId: Execution.Id
+				step: string
+				attempt: number
+				retry: Execution.Retry
+				input: Schema.Json
+				result: Schema.Json
+				status: string
+		  },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Paused
+		| Execution.StorageError
+	>
+	readonly finishCall: <E = never, R = never>(
+		key: Fence,
+		id: Execution.CallId,
+		result: Schema.Json,
+		events?:
+			| readonly (
+					| {
+							readonly _tag: "CallRecorded"
+							readonly callId: Execution.CallId
+							readonly step: string
+							readonly attempt: number
+					  }
+					| {
+							readonly _tag: "Checkpoint"
+							readonly resource: Execution.Resource
+							readonly revision: number
+					  }
+					| {
+							readonly _tag: "ChildExecution"
+							readonly executionId: Execution.Id
+							readonly step: string
+					  }
+					| {
+							readonly _tag: "DecisionMade"
+							readonly decisionId: string
+							readonly answer: Execution.Answer
+					  }
+					| {
+							readonly _tag: "DecisionNeeded"
+							readonly decisionId: string
+							readonly choices: readonly [
+								Execution.Answer,
+								...Execution.Answer[],
+							]
+					  }
+					| {
+							readonly _tag: "InputMoved"
+							readonly executionId: Execution.Id
+							readonly items: readonly string[]
+					  }
+					| { readonly _tag: "Result"; readonly resource: Execution.Resource }
+					| {
+							readonly _tag: "StepCompleted"
+							readonly step: string
+							readonly attempt: number
+					  }
+					| {
+							readonly _tag: "StepStarted"
+							readonly step: string
+							readonly attempt: number
+					  }
+					| {
+							readonly _tag: "Text"
+							readonly step: string
+							readonly attempt: number
+							readonly text: string
+					  }
+					| {
+							readonly _tag: "ToolOutput"
+							readonly step: string
+							readonly attempt: number
+							readonly output: Schema.Json
+					  }
+					| { readonly _tag: "Wake"; readonly key: string }
+			  )[]
+			| undefined,
+		writes?: Effect.Effect<void, E, R> | undefined,
+	) => Effect.Effect<
+		boolean,
+		| Execution.Conflict
+		| Execution.NotFound
+		| Execution.StorageError
+		| Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>,
+		R
+	>
+	readonly uncertain: (
+		key: Fence,
+		id: Execution.CallId,
+	) => Effect.Effect<
+		void,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly incompleteRead: (
+		key: Fence,
+		id: Execution.CallId,
+	) => Effect.Effect<
+		void,
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly call: (
+		key: Key,
+		id: Execution.CallId,
+	) => Effect.Effect<Option.Option<Execution.Call>, Execution.StorageError>
+	readonly firstCall: (
+		key: Key,
+		step: string,
+	) => Effect.Effect<Option.Option<Execution.Call>, Execution.StorageError>
+	readonly latestCall: (
+		key: Key,
+		step: string,
+	) => Effect.Effect<Option.Option<Execution.Call>, Execution.StorageError>
+	readonly latestCalls: (
+		key: Key,
+	) => Effect.Effect<Execution.Call[], Execution.StorageError>
+	readonly calls: (
+		key: Key,
+	) => Effect.Effect<Execution.Call[], Execution.StorageError>
+}
+
+export class Store extends Context.Service<Store, Service>()(
+	"@openbot-build/openbot/execution/Store",
+) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -2233,7 +2777,7 @@ const make = Effect.gen(function* () {
 			.orderBy(asc(executionCalls.createdAt))
 			.pipe(Effect.flatMap((rows) => Effect.forEach(rows, callView)))
 	}, storage)
-	return {
+	return Store.of({
 		/** Read a saved receipt before work outside a transaction. The caller checks current access. */
 		receipt: (
 			namespace: string,
@@ -2292,11 +2836,7 @@ const make = Effect.gen(function* () {
 		latestCall: (key: Key, step: string) => stepCall(key, step, "latest"),
 		latestCalls,
 		calls,
-	}
+	})
 })
 
-export class Store extends Context.Service<
-	Store,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/Store") {}
 export const layer = Layer.effect(Store, make)

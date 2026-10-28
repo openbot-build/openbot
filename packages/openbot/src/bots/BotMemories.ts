@@ -1,5 +1,5 @@
+import { type BotMemory, Bots as BotsApi } from "@openbot-build/domain"
 import { MemoryLogs } from "./MemoryLogs.ts"
-import { Bots as BotsApi } from "@openbot-build/domain"
 import * as Failures from "../errors/Failures.ts"
 import * as Memory from "../plugins/memory/BotMemory.ts"
 import * as Audience from "../plugins/memory/Audience.ts"
@@ -60,6 +60,74 @@ const unavailable = (message: string) =>
 	Failures.replace(message, () => BotsApi.BotStorageUnavailable.make({}))
 
 /** Memory owns access checks, content reads, and changes to its entries. */
+export interface Service {
+	readonly view: (
+		home: Home,
+		viewer: Audience.Viewer,
+		tags?: ReadonlyArray<string>,
+	) => Effect.Effect<
+		{
+			entries: BotMemory.Entry[]
+			version: number
+		},
+		BotsApi.BotStorageUnavailable
+	>
+	readonly context: (
+		home: Home,
+		viewer: Audience.Viewer,
+		maxLength: number,
+	) => Effect.Effect<
+		{ text: string; ids: readonly string[]; hasEntries: boolean },
+		BotsApi.BotStorageUnavailable
+	>
+	readonly validateReferences: (
+		home: Home,
+		viewer: Audience.Viewer,
+		ids: ReadonlyArray<string>,
+	) => Effect.Effect<boolean, BotsApi.BotStorageUnavailable>
+	readonly learningContext: (
+		home: Home,
+	) => Effect.Effect<LearningContext, BotsApi.BotStorageUnavailable>
+	readonly applyLearning: (
+		home: Home,
+		input: Learning,
+	) => Effect.Effect<
+		{ changedIds: string[]; rejected: number },
+		BotsApi.BotStorageUnavailable
+	>
+	readonly edit: (
+		home: Home,
+		person: Memory.Person,
+		command: Memory.Edit,
+	) => Effect.Effect<
+		{
+			entries: BotMemory.Entry[]
+			version: number
+		},
+		BotsApi.BotConflict | BotsApi.BotStorageUnavailable
+	>
+	readonly log: (
+		home: Home,
+		viewer: Audience.Viewer,
+	) => Effect.Effect<
+		{
+			version: number
+			at: number
+			by: "memory_bot" | "person" | "promotion"
+			ids: string[]
+		}[],
+		BotsApi.BotStorageUnavailable
+	>
+	readonly purge: (
+		home: Home,
+		tag: string,
+	) => Effect.Effect<number, BotsApi.BotStorageUnavailable>
+}
+
+export class BotMemories extends Context.Service<BotMemories, Service>()(
+	"@openbot-build/openbot/bots/BotMemories",
+) {}
+
 export const make = Effect.gen(function* () {
 	const records = yield* BotRecords
 	const crypto = yield* Crypto.Crypto
@@ -363,7 +431,7 @@ export const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(unavailable("The memory entries of a tag could not be removed."))
-	return {
+	return BotMemories.of({
 		view,
 		context,
 		validateReferences,
@@ -372,11 +440,7 @@ export const make = Effect.gen(function* () {
 		edit,
 		log,
 		purge,
-	}
+	})
 })
 
-export class BotMemories extends Context.Service<
-	BotMemories,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/BotMemories") {}
 export const layer = Layer.effect(BotMemories, make)

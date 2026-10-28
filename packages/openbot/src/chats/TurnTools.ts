@@ -1,3 +1,6 @@
+import type { Paused } from "../execution/Admission.ts"
+import { type Developers, Execution } from "@openbot-build/domain"
+import type { CallContext } from "../execution/CallContext.ts"
 import * as DecisionWait from "../execution/DecisionWait.ts"
 import * as ToolDefinitions from "./ToolDefinitions.ts"
 import {
@@ -7,7 +10,6 @@ import {
 	type ModelStep,
 	Turn,
 } from "@openbot-build/core"
-import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
@@ -37,6 +39,47 @@ const outputPart = (output: typeof outputCodec.Type): Part =>
 		encodedResult: output.result,
 		providerExecuted: false,
 	})
+export interface Service {
+	readonly executor: (
+		parent: Fence,
+		settings: Operations.Settings,
+	) => ToolStep.Executor<
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.OutcomeUnknown
+		| Paused
+		| Developers.StorageFailure
+		| Execution.Failure
+	>
+	readonly run: <Tools extends Record<string, Tool.Any>>(
+		parent: Fence,
+		position: ModelStep.Position,
+		input: ToolStep.Input<Tools>,
+		settings: Operations.Settings,
+		publish: (part: Part) => Effect.Effect<void>,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.OutcomeUnknown
+		| Paused
+		| Developers.StorageFailure
+		| Execution.Failure,
+		Exclude<
+			Exclude<Tool.HandlerServices<Tools[keyof Tools]>, CallContext>,
+			never
+		>
+	>
+}
+
+export class TurnTools extends Context.Service<TurnTools, Service>()(
+	"@openbot-build/openbot/chats/TurnTools",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const tools = yield* ToolCommands
@@ -271,12 +314,9 @@ const make = Effect.gen(function* () {
 		}
 	}
 
-	return { executor, run }
+	return TurnTools.of({ executor, run })
 })
 
 /** A Turn waits on the same saved event stream as any other observer. */
-export class TurnTools extends Context.Service<
-	TurnTools,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/TurnTools") {}
+
 export const layer = Layer.effect(TurnTools, make)

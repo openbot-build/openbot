@@ -1,13 +1,16 @@
-import type * as PolicyOrigin from "./PolicyOrigin.ts"
-import * as GrantUse from "./GrantUse.ts"
-import type { Fence } from "../execution/Store.ts"
-import { type Chat } from "@openbot-build/core"
-import * as Report from "../errors/Report.ts"
 import {
+	type ExecutionIdentity,
+	type Authorization,
 	executionCallers,
 	Bots as BotsApi,
 	type Execution,
 } from "@openbot-build/domain"
+import type { Chain } from "../chats/ChatHost.ts"
+import { type Turn, type Chat } from "@openbot-build/core"
+import type * as PolicyOrigin from "./PolicyOrigin.ts"
+import * as GrantUse from "./GrantUse.ts"
+import type { Fence } from "../execution/Store.ts"
+import * as Report from "../errors/Report.ts"
 import {
 	Array as Arr,
 	Cause,
@@ -60,6 +63,63 @@ type UseGrant = (
 	| Execution.Conflict
 	| Execution.KeyConflict
 >
+export interface Service {
+	readonly member: (
+		current: {
+			readonly identity: ExecutionIdentity
+			readonly namespace: string
+			readonly bot: BotsApi.Bot
+			readonly chain: Chain
+			readonly deciders: ReadonlyArray<BotsApi.BotId>
+			readonly chat: Chat.Id
+			readonly turn: Turn.Id
+		},
+		attempt: Attempt,
+	) => Effect.Effect<
+		| { readonly _tag: "Allow" }
+		| {
+				readonly _tag: "Deny"
+				readonly by: BotsApi.Decider
+				readonly reason: string
+		  },
+		Authorization.PolicyUnavailable
+	>
+	readonly check: (
+		current: {
+			readonly identity: ExecutionIdentity
+			readonly namespace: string
+			readonly bot: BotsApi.Bot
+			readonly chain: Chain
+			readonly deciders: ReadonlyArray<BotsApi.BotId>
+			readonly chat: Chat.Id
+			readonly turn: Turn.Id
+		},
+		attempt: Attempt,
+	) => Effect.Effect<
+		Decision,
+		| BotsApi.BotStorageUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Authorization.PolicyUnavailable
+		| Execution.StorageError
+	>
+	readonly holds: (input: HoldingInput) => Effect.Effect<boolean, never>
+	readonly holding: (
+		input: HoldingInput,
+	) => Effect.Effect<Option.Option<Holding>>
+	readonly stillHolds: (
+		input: HoldingInput,
+		proof: Option.Option<Holding>,
+	) => Effect.Effect<boolean, BotsApi.BotStorageUnavailable>
+}
+
+export class CapabilityAccess extends Context.Service<
+	CapabilityAccess,
+	Service
+>()("@openbot-build/openbot/capabilities/CapabilityAccess") {}
+
 const makeWith = (useGrant: UseGrant) =>
 	Effect.gen(function* () {
 		const report = yield* Report.make
@@ -260,7 +320,7 @@ const makeWith = (useGrant: UseGrant) =>
 			}
 			return yield* record()
 		})
-		return { member, check, holds, holding, stillHolds }
+		return CapabilityAccess.of({ member, check, holds, holding, stillHolds })
 	})
 /** Used only by the old member runtime until its execution cutover. */
 export const make = Effect.gen(function* () {
@@ -292,8 +352,5 @@ export const durable = (fence: Fence, control?: PolicyOrigin.Control) =>
 			use.check(fence, attempt.site, attempt.capability, control),
 		)
 	})
-export class CapabilityAccess extends Context.Service<
-	CapabilityAccess,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/capabilities/CapabilityAccess") {}
+
 export const layer = Layer.effect(CapabilityAccess, make)

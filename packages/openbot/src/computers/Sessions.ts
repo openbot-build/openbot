@@ -1,10 +1,10 @@
-import { Computers as ComputerData } from "@openbot-build/domain"
-import { Chat } from "@openbot-build/core"
 import {
+	Computers as ComputerData,
 	Execution,
 	ExecutionIdentity,
 	executionCallers,
 } from "@openbot-build/domain"
+import { Chat } from "@openbot-build/core"
 import {
 	Array as Arr,
 	Cause,
@@ -175,6 +175,51 @@ const joinTail = (chunks: ReadonlyArray<Uint8Array>, max: number) => {
 		? { bytes: all.subarray(total - max), truncated: true }
 		: { bytes: all, truncated: false }
 }
+
+export interface Service {
+	readonly exec: (input: {
+		readonly owner: Owner
+		readonly machine: Machine
+		readonly request: ComputerData.ExecRequest
+		readonly onEnd?: OnEnd
+	}) => Effect.Effect<
+		| {
+				session: ComputerData.ConnectorSessionId
+				running: boolean
+				exitCode: null
+				signal: null
+				output: string
+				truncated: boolean
+		  }
+		| {
+				session: null
+				running: boolean
+				exitCode: number | null
+				signal: string | null
+				output: string
+				truncated: boolean
+		  },
+		Failure
+	>
+	readonly write: (
+		owner: Owner,
+		id: ComputerData.ConnectorSessionId,
+		request: ComputerData.WriteStdinRequest,
+	) => Effect.Effect<ComputerData.SessionOutput, Failure>
+	readonly resize: (
+		owner: Owner,
+		id: ComputerData.ConnectorSessionId,
+		request: ComputerData.ResizeRequest,
+	) => Effect.Effect<void, Failure>
+	readonly close: (
+		owner: Owner,
+		id: ComputerData.ConnectorSessionId,
+	) => Effect.Effect<ComputerData.SessionOutput, Failure>
+}
+
+export class Sessions extends Context.Service<Sessions, Service>()(
+	"@openbot-build/openbot/computers/Sessions",
+) {}
 
 export const make = Effect.gen(function* () {
 	const background = yield* Background.make
@@ -555,7 +600,7 @@ export const make = Effect.gen(function* () {
 				? Effect.fail(SessionGone.make({ id }))
 				: Effect.succeed(result),
 		)
-	return {
+	return Sessions.of({
 		exec,
 		write: (
 			owner: Owner,
@@ -569,10 +614,7 @@ export const make = Effect.gen(function* () {
 		) => route(owner, id, { _tag: "Resize", request }).pipe(Effect.asVoid),
 		close: (owner: Owner, id: ComputerData.ConnectorSessionId) =>
 			route(owner, id, { _tag: "Close" }).pipe(output(id)),
-	}
+	})
 })
-export class Sessions extends Context.Service<
-	Sessions,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/computers/Sessions") {}
+
 export const layer = Layer.effect(Sessions, make)

@@ -1,12 +1,15 @@
-import * as StoredConnections from "./StoredConnections.ts"
-import { ownerKey } from "./StoredConnections.ts"
 import {
+	type ExperienceInputInvalid,
+	type ExperienceNotFound,
 	AppConnections,
 	Authorization,
 	ExperienceStorageUnavailable,
+	Identity,
 } from "@openbot-build/domain"
+import type { Discovery } from "@openbot-build/protocol"
+import * as StoredConnections from "./StoredConnections.ts"
+import { ownerKey } from "./StoredConnections.ts"
 
-import { Identity } from "@openbot-build/domain"
 import { Array as Arr, Context, Crypto, Effect, Layer } from "effect"
 import { Connections, type Error as ConnectionsError } from "./Connections.ts"
 import * as Db from "../database/Database.ts"
@@ -43,11 +46,76 @@ const experienceErrors =
 			),
 		)
 
+export interface Service {
+	readonly export: (
+		identity: typeof Identity.Service,
+	) => Effect.Effect<
+		AppConnections.Transfer,
+		ExperienceInputInvalid | ExperienceNotFound | ExperienceStorageUnavailable
+	>
+	readonly import: (
+		identity: typeof Identity.Service,
+		transfer: AppConnections.Transfer,
+	) => Effect.Effect<
+		{
+			entries: (
+				| {
+						entry: {
+							readonly name: string
+							readonly cardUrl: string
+							readonly remoteIndex: number
+						}
+						draft: {
+							readonly id: string
+							readonly revision: number
+							readonly input: string
+							readonly expiresAt: number
+							readonly imported?: {
+								readonly name: string
+								readonly remoteIndex: number
+							}
+							readonly discovery:
+								| {
+										readonly _tag: "Multiple"
+										readonly candidates: readonly [
+											Discovery.Candidate,
+											Discovery.Candidate,
+											...Discovery.Candidate[],
+										]
+										readonly issues: readonly Discovery.Issue[]
+								  }
+								| {
+										readonly _tag: "Single"
+										readonly candidate: Discovery.Candidate
+										readonly issues: readonly Discovery.Issue[]
+								  }
+						}
+						error: null
+				  }
+				| {
+						entry: {
+							readonly name: string
+							readonly cardUrl: string
+							readonly remoteIndex: number
+						}
+						draft: null
+						error: string
+				  }
+			)[]
+		},
+		ExperienceInputInvalid | ExperienceNotFound | ExperienceStorageUnavailable
+	>
+}
+
+export class Experience extends Context.Service<Experience, Service>()(
+	"@openbot-build/openbot/apps/Experience",
+) {}
+
 export const make = Effect.gen(function* () {
 	const connections = yield* Connections
 	const db = yield* Db.make
 	const crypto = yield* Crypto.Crypto
-	return {
+	return Experience.of({
 		export: (identity: typeof Identity.Service) =>
 			connections.listConnections.pipe(
 				Effect.provideService(Identity, identity),
@@ -100,10 +168,7 @@ export const make = Effect.gen(function* () {
 					experienceErrors("An App could not be prepared for import"),
 				),
 			).pipe(Effect.map((entries) => ({ entries }))),
-	}
+	})
 })
-export class Experience extends Context.Service<
-	Experience,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/Experience") {}
+
 export const layer = Layer.effect(Experience, make)

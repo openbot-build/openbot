@@ -1,4 +1,13 @@
 import {
+	type MemberExecution,
+	Store,
+	storage,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import {
+	type Developers,
 	Authorization,
 	Computers as ComputerData,
 	Execution,
@@ -6,6 +15,7 @@ import {
 	type Caller,
 	executionCallers,
 } from "@openbot-build/domain"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
 import { and, eq, isNull } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -31,13 +41,6 @@ import {
 } from "../execution/Engine.ts"
 import { type End } from "../execution/Program.ts"
 import * as Send from "../execution/Send.ts"
-import {
-	Store,
-	storage,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import * as Access from "./Access.ts"
 import * as Activity from "./Activity.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
@@ -61,6 +64,101 @@ const Snapshot = Schema.Struct({
 export const Input = Schema.Struct({ action: Action, computer: Snapshot })
 export type Input = typeof Input.Type
 export const Result = Schema.Struct({ ref: Schema.NullOr(Schema.String) })
+export interface Service {
+	readonly submit: (
+		identity: ExecutionIdentity,
+		commandKey: Execution.CommandKey,
+		action: Action,
+		ownerExecutionId?: Execution.Id | undefined,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| ComputerData.ComputerConflict
+		| ComputerData.ComputerInvalid
+		| ComputerData.ComputerNotFound
+		| ComputerData.ComputerProviderFailed
+		| ComputerData.ComputerProviderInUse
+		| ComputerData.ComputerProviderNotFound
+		| ComputerData.ComputerUnsupported
+		| ComputerData.ComputersUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+		| Check.Errors
+	>
+	readonly execute: (
+		identity: ExecutionIdentity,
+		action: Action,
+	) => Effect.Effect<
+		string,
+		| ComputerData.ComputerConflict
+		| ComputerData.ComputerInvalid
+		| ComputerData.ComputerNotFound
+		| ComputerData.ComputerProviderFailed
+		| ComputerData.ComputerProviderInUse
+		| ComputerData.ComputerProviderNotFound
+		| ComputerData.ComputerUnsupported
+		| ComputerData.ComputersUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+		| Check.Errors
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			saved: MemberExecution
+			input: Input
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: (
+		key: Key,
+		actor: Caller,
+		access: ExecutionAccess,
+	) => Effect.Effect<
+		undefined,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly remember: (
+		fence: Fence,
+		result: Schema.Json,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Developers.StorageFailure
+	>
+	readonly complete: (
+		fence: Fence,
+		result: Schema.Json,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class Lifecycle extends Context.Service<Lifecycle, Service>()(
+	"@openbot-build/openbot/computers/Lifecycle",
+) {}
+
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const store = yield* Store
@@ -498,10 +596,15 @@ export const make = Effect.gen(function* () {
 					.pipe(Effect.asVoid)
 			return yield* store.commit(fence, end, change)
 		}).pipe(transactionFailures)
-	return { submit, execute, load, authorize, remember, complete, finish }
+	return Lifecycle.of({
+		submit,
+		execute,
+		load,
+		authorize,
+		remember,
+		complete,
+		finish,
+	})
 })
-export class Lifecycle extends Context.Service<
-	Lifecycle,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/computers/Lifecycle") {}
+
 export const layer = Layer.effect(Lifecycle, make)

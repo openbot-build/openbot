@@ -9,6 +9,55 @@ const unavailable = Failures.replace(
 	"The memory log could not be read or written.",
 	() => Bots.BotStorageUnavailable.make({}),
 )
+export interface Service {
+	readonly confessions: {
+		put: (
+			keys: Keys,
+			value: BotMemory.Confession,
+		) => Effect.Effect<void, Bots.BotStorageUnavailable>
+		list: (
+			organizationId: string,
+			filter: { readonly owner: string },
+		) => Effect.Effect<
+			readonly BotMemory.Confession[],
+			Bots.BotStorageUnavailable
+		>
+	}
+	readonly enrichments: {
+		put: (
+			keys: Keys,
+			value: BotMemory.Enrichment,
+		) => Effect.Effect<void, Bots.BotStorageUnavailable>
+		list: (
+			organizationId: string,
+			filter: { readonly owner: string },
+		) => Effect.Effect<
+			readonly BotMemory.Enrichment[],
+			Bots.BotStorageUnavailable
+		>
+	}
+	readonly changes: {
+		put: (
+			keys: Keys,
+			value: { readonly bot: Bots.BotId; readonly entry: BotMemory.LogEntry },
+		) => Effect.Effect<void, Bots.BotStorageUnavailable>
+		list: (
+			organizationId: string,
+			filter: { readonly owner: string },
+		) => Effect.Effect<
+			readonly {
+				readonly bot: Bots.BotId
+				readonly entry: BotMemory.LogEntry
+			}[],
+			Bots.BotStorageUnavailable
+		>
+	}
+}
+
+export class MemoryLogs extends Context.Service<MemoryLogs, Service>()(
+	"@openbot-build/openbot/bots/MemoryLogs",
+) {}
+
 const make = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
 	const secrets = yield* Secrets
@@ -49,17 +98,14 @@ const make = Effect.gen(function* () {
 				),
 		}
 	}
-	return {
+	return MemoryLogs.of({
 		confessions: collection("confession", BotMemory.Confession),
 		enrichments: collection("memory_enrichment", BotMemory.Enrichment),
 		changes: collection(
 			"memory_log",
 			Schema.Struct({ bot: Bots.BotId, entry: BotMemory.LogEntry }),
 		),
-	}
+	})
 })
-export class MemoryLogs extends Context.Service<
-	MemoryLogs,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/MemoryLogs") {}
+
 export const layer = Layer.effect(MemoryLogs, make)

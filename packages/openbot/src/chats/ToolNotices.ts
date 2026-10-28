@@ -18,6 +18,34 @@ import { ToolCommands, noticeWorkflowName } from "./ToolCommands.ts"
 
 const Input = Schema.Struct({ toolExecutionId: Execution.Id })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
+export interface Service {
+	readonly authorize: Authorize
+	readonly deliver: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly finish: (
+		fence: Fence,
+		end:
+			| { readonly status: "failed"; readonly failure: Execution.Failure }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class ToolNotices extends Context.Service<ToolNotices, Service>()(
+	"@openbot-build/openbot/chats/ToolNotices",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const tools = yield* ToolCommands
@@ -149,10 +177,7 @@ const make = Effect.gen(function* () {
 			)
 		}
 	}, storage)
-	return { authorize, deliver, finish }
+	return ToolNotices.of({ authorize, deliver, finish })
 })
-export class ToolNotices extends Context.Service<
-	ToolNotices,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/ToolNotices") {}
+
 export const layer = Layer.effect(ToolNotices, make)

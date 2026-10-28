@@ -1,6 +1,12 @@
-import { Developers } from "@openbot-build/domain"
-import { Authorization, Caller, Execution } from "@openbot-build/domain"
 import {
+	type AppIndex,
+	Developers,
+	Authorization,
+	Caller,
+	Execution,
+} from "@openbot-build/domain"
+import {
+	type PlatformError,
 	Array as Arr,
 	Clock,
 	Context,
@@ -12,6 +18,7 @@ import {
 	Schema,
 	Stream,
 } from "effect"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
 import { and, eq } from "drizzle-orm"
 import { developerIndexRequests } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
@@ -40,6 +47,148 @@ const Input = Schema.Struct({
 	watch: Schema.Struct({ namespace: Schema.String, id: Execution.Id }),
 })
 const sameCaller = Schema.toEquivalence(Caller)
+export interface Service {
+	readonly request: (
+		actor: Caller,
+		cardUrl: string,
+		commandKey: Execution.CommandKey,
+	) => Effect.Effect<
+		{
+			id: string
+			executionId: Execution.Id
+			cardUrl: string
+			generation: string
+			acceptedAt: number
+			status: "Accepted" | AppIndex.JobStatus
+			check: NonNullable<
+				| { readonly _tag: "Pending" }
+				| {
+						readonly _tag: "Excluded"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| {
+						readonly _tag: "Failed"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| { readonly _tag: "Indexed"; readonly attemptedAt: number }
+				| {
+						readonly _tag: "Unconfirmed"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| {
+						readonly _tag: "Withdrawn"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| null
+			> | null
+			restriction: AppIndex.Restriction | null
+		},
+		PlatformError.PlatformError | Developers.Failure
+	>
+	readonly list: (
+		owner: string,
+		cardUrl?: string,
+	) => Effect.Effect<
+		{
+			id: string
+			executionId: Execution.Id
+			cardUrl: string
+			generation: string
+			acceptedAt: number
+			status: "Accepted" | AppIndex.JobStatus
+			check: NonNullable<
+				| { readonly _tag: "Pending" }
+				| {
+						readonly _tag: "Excluded"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| {
+						readonly _tag: "Failed"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| { readonly _tag: "Indexed"; readonly attemptedAt: number }
+				| {
+						readonly _tag: "Unconfirmed"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| {
+						readonly _tag: "Withdrawn"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| null
+			> | null
+			restriction: AppIndex.Restriction | null
+		}[],
+		Developers.Failure
+	>
+	readonly get: (
+		owner: string,
+		id: string,
+	) => Effect.Effect<
+		{
+			id: string
+			executionId: Execution.Id
+			cardUrl: string
+			generation: string
+			acceptedAt: number
+			status: "Accepted" | AppIndex.JobStatus
+			check: NonNullable<
+				| { readonly _tag: "Pending" }
+				| {
+						readonly _tag: "Excluded"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| {
+						readonly _tag: "Failed"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| { readonly _tag: "Indexed"; readonly attemptedAt: number }
+				| {
+						readonly _tag: "Unconfirmed"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| {
+						readonly _tag: "Withdrawn"
+						readonly attemptedAt: number
+						readonly reason: string
+				  }
+				| null
+			> | null
+			restriction: AppIndex.Restriction | null
+		},
+		Developers.Failure
+	>
+	readonly authorize: Authorize
+	readonly work: (
+		fence: Fence,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+		| Execution.Failure
+	>
+}
+
+export class DeveloperIndexing extends Context.Service<
+	DeveloperIndexing,
+	Service
+>()("@openbot-build/openbot/apps/DeveloperIndexing") {}
+
 export const make = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const checks = yield* Check.make
@@ -275,10 +424,7 @@ export const make = Effect.gen(function* () {
 				yield* authorize(fence, saved.execution.identity.actor, "advance")
 			}
 		})
-	return { request, list, get, authorize, work }
+	return DeveloperIndexing.of({ request, list, get, authorize, work })
 })
-export class DeveloperIndexing extends Context.Service<
-	DeveloperIndexing,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/DeveloperIndexing") {}
+
 export const layer = Layer.effect(DeveloperIndexing, make)

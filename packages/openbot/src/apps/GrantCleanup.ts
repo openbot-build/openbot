@@ -1,12 +1,23 @@
-import * as GrantUses from "./GrantUses.ts"
-import { IndexNamespace } from "./IndexNamespace.ts"
-import * as Rows from "./DeveloperRows.ts"
 import {
+	type Loaded,
+	type MemberExecution,
+	Store,
+	storage,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import {
+	type Developers,
 	Execution,
 	ExecutionIdentity,
 	ServiceIdentity,
 	ServiceId,
 } from "@openbot-build/domain"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import * as GrantUses from "./GrantUses.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Rows from "./DeveloperRows.ts"
 import {
 	Authorization,
 	OAuthAuthorization,
@@ -25,13 +36,6 @@ import { and, eq } from "drizzle-orm"
 import { SqlClient } from "effect/sql"
 import * as Db from "../database/Database.ts"
 import { appConnections, developerTests } from "../database/Schema.ts"
-import {
-	Store,
-	storage,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import type { End } from "../execution/Program.ts"
 import * as Observation from "../execution/Observation.ts"
 import * as Connections from "./StoredConnections.ts"
@@ -71,6 +75,124 @@ const organizationOf = (identity: ExecutionIdentity | ServiceIdentity) =>
 		: identity.owner.kind === "organization"
 			? identity.owner.organizationId
 			: null
+export interface Service {
+	readonly enqueue: (
+		source: Key,
+		callId: Execution.CallId,
+		metadata: Authorization.ServerMetadata,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly handoff: (
+		source: Key,
+		reference: string,
+		credential: Protocol.Credential,
+		options?: {
+			readonly metadata?: Authorization.ServerMetadata
+			readonly resourceMetadataUrl?: string
+		},
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly assertInstallable: (
+		scope: GrantScope,
+	) => Effect.Effect<undefined, Execution.Conflict | Developers.StorageFailure>
+	readonly writeAttempt: (
+		fence: Fence,
+		step: "exchange" | "refresh",
+		input: Schema.Json,
+		scope: GrantScope,
+	) => Effect.Effect<
+		Execution.Call,
+		Execution.Conflict | Execution.NotFound | Developers.StorageFailure
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		| {
+				detached: true
+				ref: typeof Detached.Type
+				sourceKey: { namespace: string; id: Execution.Id }
+				source: Loaded
+				grant: { credential: Protocol.Credential; resourceMetadataUrl?: string }
+		  }
+		| {
+				detached: false
+				ref: typeof Reference.Type
+				sourceKey: { namespace: string; id: Execution.Id }
+				source: MemberExecution
+				grant: OAuthAuthorization.Grant
+		  },
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly claim: (fence: Fence) => Effect.Effect<
+		| {
+				key: { namespace: string; id: Execution.Id }
+				sequence: number
+				_tag: "Wait"
+		  }
+		| { _tag: "InUse" }
+		| {
+				_tag: "Revoke"
+				grant: { credential: Protocol.Credential; resourceMetadataUrl?: string }
+				metadata: Authorization.ServerMetadata | undefined
+		  }
+		| { _tag: "Retained"; grant?: never; metadata?: never }
+		| {
+				_tag: "Revoke"
+				grant: OAuthAuthorization.Grant
+				metadata: Authorization.ServerMetadata
+		  },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		outcome: End | { readonly status: "completed" },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly complete: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly authorize: (
+		key: Key,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+}
+
+export class GrantCleanup extends Context.Service<GrantCleanup, Service>()(
+	"@openbot-build/openbot/apps/GrantCleanup",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -594,7 +716,7 @@ const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(transactionFailures, Effect.asVoid)
-	return {
+	return GrantCleanup.of({
 		enqueue,
 		handoff,
 		assertInstallable,
@@ -604,12 +726,9 @@ const make = Effect.gen(function* () {
 		finish: end,
 		complete: (fence: Fence) => end(fence, { status: "completed" }),
 		authorize: (key: Key) => load(key).pipe(Effect.asVoid),
-	}
+	})
 })
-export class GrantCleanup extends Context.Service<
-	GrantCleanup,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/GrantCleanup") {}
+
 export const layer = Layer.effect(GrantCleanup, make).pipe(
 	Layer.provide(Observation.layer),
 )

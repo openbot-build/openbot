@@ -1,7 +1,5 @@
-import * as Imported from "../database/conversion/Executions.ts"
-import { ownerKey } from "../apps/StoredConnections.ts"
-import { Definition } from "./ToolDefinitions.ts"
 import {
+	type ChatStore,
 	Chat,
 	ChatStoreRepository,
 	Item,
@@ -9,6 +7,12 @@ import {
 	Turn,
 	TurnState,
 } from "@openbot-build/core"
+import { type SqlError, SqlClient } from "effect/sql"
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import * as Imported from "../database/conversion/Executions.ts"
+import { ownerKey } from "../apps/StoredConnections.ts"
+import { Definition } from "./ToolDefinitions.ts"
 import {
 	Caller,
 	executionCallers,
@@ -28,7 +32,6 @@ import {
 	Option,
 	Schema,
 } from "effect"
-import { SqlClient } from "effect/sql"
 import * as Db from "../database/Database.ts"
 import {
 	executions as executionRows,
@@ -69,6 +72,101 @@ const messageCodec = Schema.toCodecJson(Message)
 const codec = Schema.toCodecJson(Input)
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
 export const workflowName = "openbot.chat-turn"
+
+export interface Service {
+	readonly submit: (
+		namespace: string,
+		key: Execution.CommandKey,
+		input: Input,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Schema.SchemaError
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly notify: (
+		namespace: string,
+		key: Execution.CommandKey,
+		input: Input,
+		source: {
+			readonly executionId: Execution.Id
+			readonly turn: Turn.Id
+			readonly step: number
+		},
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Schema.SchemaError
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly drain: (
+		namespace: string,
+		chat: Chat.Id,
+	) => Effect.Effect<
+		Option.None<Execution.Id> | Option.Some<Execution.Id>,
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SqlError.SqlError
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		chat: Chat.Id,
+		outcome:
+			| { readonly status: "completed" }
+			| { readonly status: "cancelled"; readonly epoch: number }
+			| {
+					readonly status: "failed" | "interrupted"
+					readonly failure: Execution.Failure
+			  },
+	) => Effect.Effect<
+		Option.None<Execution.Id> | Option.Some<Execution.Id>,
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Turn.Conflict
+		| Chat.Conflict
+		| Execution.Conflict
+		| EffectDrizzleQueryError
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| SqlError.SqlError
+		| Execution.StorageError
+	>
+	readonly message: (
+		namespace: string,
+		key: Execution.CommandKey,
+		input: Message,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Schema.SchemaError
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+}
+
+export class InputCommands extends Context.Service<InputCommands, Service>()(
+	"@openbot-build/openbot/chats/InputCommands",
+) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -849,19 +947,16 @@ const make = Effect.gen(function* () {
 			readonly step: number
 		},
 	) => submitInput(namespace, key, input, source)
-	return {
+	return InputCommands.of({
 		submit,
 		notify,
 		drain,
 		finish,
 		message: (namespace: string, key: Execution.CommandKey, input: Message) =>
 			submitInput(namespace, key, input),
-	}
+	})
 })
 
 /** Input commands use database transactions and own no long-running Chat runtime. */
-export class InputCommands extends Context.Service<
-	InputCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/InputCommands") {}
+
 export const layer = Layer.effect(InputCommands, make)

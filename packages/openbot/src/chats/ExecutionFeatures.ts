@@ -87,6 +87,31 @@ const restoreTool = (
 		return selectTool(yield* input.host, input)
 	})
 
+export interface Service {
+	readonly restoreTool: (
+		fence: Fence,
+		frame: typeof Work.Service,
+		input: ToolInput,
+	) => Effect.Effect<
+		Bot.ToolRegistration<{}, never, never>,
+		never,
+		Bot.Context | Scope.Scope
+	>
+	readonly restore: (
+		fence: Fence,
+		definition: Definition,
+	) => Option.Option<WorkflowTools.Entry>
+	readonly open: (
+		fence: Fence,
+		frame: Gate.Frame,
+	) => Effect.Effect<typeof ChatFeatures.ChatFeatures.Service>
+}
+
+export class ExecutionFeatures extends Context.Service<
+	ExecutionFeatures,
+	Service
+>()("@openbot-build/openbot/chats/ExecutionFeatures") {}
+
 const make = Effect.gen(function* () {
 	const workflows = yield* WorkflowTools.make
 	const delegations = yield* DelegationTools.make
@@ -101,7 +126,7 @@ const make = Effect.gen(function* () {
 		// Keep the scope and Bot context of the current phase.
 		Effect.map(Context.omit(Scope.Scope, Bot.Context)),
 	)
-	return {
+	return ExecutionFeatures.of({
 		restoreTool: (fence: Fence, frame: typeof Work.Service, input: ToolInput) =>
 			restoreTool(fence, frame, input).pipe(
 				Effect.provideContext(toolServices),
@@ -115,13 +140,9 @@ const make = Effect.gen(function* () {
 			frame: Gate.Frame,
 		): Effect.Effect<typeof ChatFeatures.ChatFeatures.Service> =>
 			open(fence, frame).pipe(Effect.provideContext(services)),
-	}
+	})
 })
 
-export class ExecutionFeatures extends Context.Service<
-	ExecutionFeatures,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/ExecutionFeatures") {}
 export const layer = Layer.effect(ExecutionFeatures, make)
 
 /** Tests of the execution loop can supply tools without a product policy. */

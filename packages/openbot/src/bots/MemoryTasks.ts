@@ -22,6 +22,34 @@ import { MemoryModels } from "./MemoryModels.ts"
 import * as Rules from "./MemoryRules.ts"
 import * as Evidence from "./MemoryEvidence.ts"
 
+export interface Service {
+	readonly confess: (
+		fence: Fence,
+		input: {
+			readonly home: Home
+			readonly bot: Bots.Bot
+			readonly chat: Chat.Ref
+			readonly items: ReadonlyArray<Item.Record>
+			readonly turn: Turn.Id
+			readonly text: string
+		},
+		callId: string,
+	) => Effect.Effect<string, never>
+	readonly enrich: (
+		fence: Fence,
+		input: {
+			readonly home: Home
+			readonly chat: Chat.Ref
+			readonly turn: Turn.Id
+			readonly text: string
+		},
+	) => Effect.Effect<Option.Option<string>, never>
+}
+
+export class MemoryTasks extends Context.Service<MemoryTasks, Service>()(
+	"@openbot-build/openbot/bots/MemoryTasks",
+) {}
+
 const make = Effect.gen(function* () {
 	const models = yield* MemoryModels
 	const memories = yield* BotMemories
@@ -247,10 +275,7 @@ const make = Effect.gen(function* () {
 			}),
 			Option.none<string>(),
 		)
-	return { confess, enrich }
+	return MemoryTasks.of({ confess, enrich })
 })
-export class MemoryTasks extends Context.Service<
-	MemoryTasks,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/MemoryTasks") {}
+
 export const layer = Layer.effect(MemoryTasks, make)

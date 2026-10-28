@@ -9,6 +9,35 @@ import { DelegationCommands, noticeWorkflowName } from "./DelegationCommands.ts"
 
 const Input = Schema.Struct({ delegationExecutionId: Execution.Id })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
+export interface Service {
+	readonly authorize: Authorize
+	readonly deliver: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly finish: (
+		fence: Fence,
+		end:
+			| { readonly status: "failed"; readonly failure: Execution.Failure }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class DelegationNotices extends Context.Service<
+	DelegationNotices,
+	Service
+>()("@openbot-build/openbot/bots/DelegationNotices") {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const delegations = yield* DelegationCommands
@@ -113,10 +142,7 @@ const make = Effect.gen(function* () {
 				Effect.void,
 			)
 	}, storage)
-	return { authorize, deliver, finish }
+	return DelegationNotices.of({ authorize, deliver, finish })
 })
-export class DelegationNotices extends Context.Service<
-	DelegationNotices,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/DelegationNotices") {}
+
 export const layer = Layer.effect(DelegationNotices, make)

@@ -1,12 +1,31 @@
-import { inExecution } from "../chats/ChatEncoding.ts"
-import { Chat, Item, Turn } from "@openbot-build/core"
 import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Key,
+	type Fence,
+} from "../execution/Store.ts"
+import type { BillingStorageError } from "../billing/Billing.ts"
+import {
+	type ChatStore,
+	type Config,
+	Chat,
+	Item,
+	Turn,
+} from "@openbot-build/core"
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import type { MemoryBudgetSpent } from "./MemoryBot.ts"
+import type { Paused } from "../execution/Admission.ts"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import {
+	type Settings as SettingsData,
 	Bots as Domain,
 	Execution,
 	ExecutionIdentity,
 } from "@openbot-build/domain"
-import { and, asc, eq, gt, lte, max } from "drizzle-orm"
+import { type SqlError, SqlClient } from "effect/sql"
 import {
+	type Cause,
 	Array as Arr,
 	Clock,
 	Context,
@@ -18,14 +37,15 @@ import {
 	Schema,
 	Stream,
 } from "effect"
+import type { Errors } from "../authorization/Check.ts"
+import { inExecution } from "../chats/ChatEncoding.ts"
+import { and, asc, eq, gt, lte, max } from "drizzle-orm"
 import { LanguageModel, Prompt } from "effect/ai"
-import { SqlClient } from "effect/sql"
 import * as Db from "../database/Database.ts"
 import { chatItems } from "../database/Schema.ts"
 import { executions } from "../database/ExecutionSchema.ts"
 import type { Authorize } from "../execution/Engine.ts"
 import { Observation } from "../execution/Observation.ts"
-import { Store, storage, type Key, type Fence } from "../execution/Store.ts"
 import { TurnAccess } from "../chats/TurnAccess.ts"
 import * as StoredChats from "../chats/StoredChats.ts"
 import * as ChatHost from "../chats/ChatHost.ts"
@@ -47,6 +67,76 @@ const Input = Schema.Struct({
 	own: Schema.Array(Schema.String),
 })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
+export interface Service {
+	readonly start: (
+		source: Fence,
+		chat: Chat.Id,
+		turn: Turn.Id,
+		own: readonly string[],
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			saved: MemberExecution
+			input: typeof Input.Type
+			parent: {
+				key: { namespace: string; id: Execution.Id }
+				saved: MemberExecution
+			}
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly learn: (
+		fence: Fence,
+	) => Effect.Effect<
+		undefined,
+		| BillingStorageError
+		| Domain.BotStorageUnavailable
+		| ChatStore.ChatStoreError
+		| Execution.Conflict
+		| EffectDrizzleQueryError
+		| Execution.Forbidden
+		| MemoryBudgetSpent
+		| Config.ModelConfigurationError
+		| Execution.NotFound
+		| Execution.OutcomeUnknown
+		| Paused
+		| Schema.SchemaError
+		| SecretStorageError
+		| SettingsData.SettingsUnavailable
+		| SqlError.SqlError
+		| Execution.StorageError
+		| Cause.TimeoutError
+		| Execution.Failure
+		| Errors
+	>
+	readonly finish: (
+		fence: Fence,
+		end:
+			| { readonly status: "completed" }
+			| { readonly status: "failed"; readonly failure: Execution.Failure }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class MemoryLearning extends Context.Service<MemoryLearning, Service>()(
+	"@openbot-build/openbot/bots/MemoryLearning",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const db = yield* Db.make
@@ -355,10 +445,7 @@ const make = Effect.gen(function* () {
 			if (settled) return
 		}
 	}, inExecution)
-	return { start, load, authorize, learn, finish }
+	return MemoryLearning.of({ start, load, authorize, learn, finish })
 })
-export class MemoryLearning extends Context.Service<
-	MemoryLearning,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/MemoryLearning") {}
+
 export const layer = Layer.effect(MemoryLearning, make)

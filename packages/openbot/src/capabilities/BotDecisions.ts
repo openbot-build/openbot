@@ -38,6 +38,80 @@ export const Proposal = Schema.Struct({
 })
 const Reference = Schema.Struct({ chat: Chat.Id })
 const sameCaller = Schema.toEquivalence(Caller)
+export interface Service {
+	readonly forReview: (
+		review: Fence,
+	) => Effect.Effect<
+		{ namespace: string; id: Execution.Id },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly decide: (
+		key: Key,
+		review: Fence,
+		commandKey: Execution.CommandKey,
+		input: typeof Decision.Type,
+	) => Effect.Effect<
+		{ receipt: Execution.Receipt; outcome: "allowed" | "denied" | "passed" },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly propose: (
+		key: Key,
+		review: Fence,
+		commandKey: Execution.CommandKey,
+		input: { readonly text: string },
+	) => Effect.Effect<
+		{ receipt: Execution.Receipt; ruleId: BotDomain.RuleId },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly readDecision: (
+		key: Key,
+		review: Fence,
+		commandKey: Execution.CommandKey,
+		input: typeof Decision.Type,
+	) => Effect.Effect<
+		| Option.None<{
+				receipt: Execution.Receipt
+				outcome: "allowed" | "denied" | "passed"
+		  }>
+		| Option.Some<{
+				receipt: Execution.Receipt
+				outcome: "allowed" | "denied" | "passed"
+		  }>,
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly readProposal: (
+		key: Key,
+		review: Fence,
+		commandKey: Execution.CommandKey,
+		input: { readonly text: string },
+	) => Effect.Effect<
+		| Option.None<{ receipt: Execution.Receipt; ruleId: BotDomain.RuleId }>
+		| Option.Some<{ receipt: Execution.Receipt; ruleId: BotDomain.RuleId }>,
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class BotDecisions extends Context.Service<BotDecisions, Service>()(
+	"@openbot-build/openbot/capabilities/BotDecisions",
+) {}
+
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const store = yield* Store
@@ -491,10 +565,13 @@ export const make = Effect.gen(function* () {
 			? Option.none()
 			: Option.some(yield* proposalResult(review, receipt.value))
 	}, storage)
-	return { forReview, decide, propose, readDecision, readProposal }
+	return BotDecisions.of({
+		forReview,
+		decide,
+		propose,
+		readDecision,
+		readProposal,
+	})
 })
-export class BotDecisions extends Context.Service<
-	BotDecisions,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/capabilities/BotDecisions") {}
+
 export const layer = Layer.effect(BotDecisions, make)

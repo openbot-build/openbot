@@ -1,15 +1,20 @@
-import { Chat, Item, Turn } from "@openbot-build/core"
+import { type Ui, AppUi, Client } from "@openbot-build/protocol"
 import {
+	type ChatNotFound,
+	type ChatStorageUnavailable,
 	type AppIndex,
 	ExperienceInputInvalid,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 	ChatConflict,
+	Identity,
+	Execution,
+	AppCalls,
+	AppViews,
 } from "@openbot-build/domain"
-
-import { Identity, Execution, AppCalls, AppViews } from "@openbot-build/domain"
-import { AppUi, Client } from "@openbot-build/protocol"
+import type { Errors } from "../authorization/Check.ts"
 import {
+	type PlatformError,
 	Array as Arr,
 	Clock,
 	Context,
@@ -22,6 +27,8 @@ import {
 	Schema,
 	type Scope,
 } from "effect"
+import { Chat, Item, Turn } from "@openbot-build/core"
+
 import * as AppQueries from "./AppQueries.ts"
 import * as ChatQueries from "../chats/ChatQueries.ts"
 import * as ChatErrors from "../chats/ChatErrors.ts"
@@ -68,6 +75,168 @@ const replaceUnavailable = (
 /** Logs a storage failure, then fails with `ExperienceStorageUnavailable` in its place. */
 const replaceStorage = (message: string) =>
 	Failures.replace(message, () => ExperienceStorageUnavailable.make({}))
+export interface Service {
+	readonly open: (
+		identity: typeof Identity.Service,
+		operationId: string,
+		chatId: Chat.Id,
+		itemId: Item.Id,
+	) => Effect.Effect<
+		{
+			id: AppViews.AppViewId
+			operationId: AppCalls.AppOperationId
+			readOnly: boolean
+			chat: Chat.Id
+			turn: Turn.Id
+			item: Item.Id
+			source: AppCalls.Source
+			interaction: AppViews.Interaction
+			resource: Ui.Resource
+			tools: { readonly [x: string]: Schema.Json }[]
+			arguments: { readonly [x: string]: Schema.Json }
+			result?: { readonly [x: string]: Schema.Json }
+		},
+		| AppIndex.AppRestricted
+		| AppViews.AppViewUnavailable
+		| Execution.Conflict
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+	>
+	readonly get: (
+		identity: typeof Identity.Service,
+		id: string,
+	) => Effect.Effect<
+		{
+			id: AppViews.AppViewId
+			operationId: AppCalls.AppOperationId
+			readOnly: boolean
+			chat: Chat.Id
+			turn: Turn.Id
+			item: Item.Id
+			source: AppCalls.Source
+			interaction: AppViews.Interaction
+		},
+		| AppViews.AppViewUnavailable
+		| Execution.Conflict
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+	>
+	readonly close: (
+		identity: typeof Identity.Service,
+		id: string,
+	) => Effect.Effect<
+		void,
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+	>
+	readonly read: (
+		identity: typeof Identity.Service,
+		id: string,
+		method: AppViews.ViewReadAction,
+		params: Schema.JsonObject,
+	) => Effect.Effect<
+		{ readonly [x: string]: Schema.Json },
+		| AppIndex.AppRestricted
+		| AppViews.AppViewUnavailable
+		| ExperienceInputInvalid
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+	>
+	readonly act: (
+		identity: typeof Identity.Service,
+		id: string,
+		request: AppViews.ActionRequest,
+	) => Effect.Effect<
+		{
+			executionId: Execution.Id
+			commandKey: Execution.CommandKey
+			sequence: number
+			chat: Chat.Id
+			turn: Turn.Id
+		},
+		| AppIndex.AppRestricted
+		| AppViews.AppViewUnavailable
+		| Execution.Conflict
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| Execution.KeyConflict
+		| PlatformError.PlatformError
+		| Schema.SchemaError
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly confirmContext: (
+		identity: typeof Identity.Service,
+		id: string,
+		revision: number,
+		context: Schema.JsonObject,
+	) => Effect.Effect<
+		AppViews.Interaction,
+		| AppViews.AppViewUnavailable
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+	>
+	readonly interaction: (
+		identity: typeof Identity.Service,
+		operationId: string,
+		chatId: Chat.Id,
+	) => Effect.Effect<
+		AppViews.Interaction,
+		| Execution.Conflict
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+	>
+	readonly message: (
+		identity: typeof Identity.Service,
+		id: string,
+		content: Schema.JsonObject,
+		commandKey: Execution.CommandKey,
+	) => Effect.Effect<
+		{
+			executionId: Execution.Id
+			commandKey: Execution.CommandKey
+			sequence: number
+			chat: Chat.Id
+			turn: Turn.Id
+		},
+		| AppViews.AppViewUnavailable
+		| Execution.Conflict
+		| ExperienceNotFound
+		| ExperienceStorageUnavailable
+		| Execution.KeyConflict
+		| Schema.SchemaError
+		| (ChatConflict | ChatNotFound | ChatStorageUnavailable)
+		| Errors
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+}
+
+export class Views extends Context.Service<Views, Service>()(
+	"@openbot-build/openbot/apps/Views",
+) {}
+
 export const make = Effect.gen(function* () {
 	const apps = yield* AppQueries.make
 	const chats = yield* ChatQueries.make
@@ -388,7 +557,7 @@ export const make = Effect.gen(function* () {
 				),
 			}
 		})
-	return {
+	return Views.of({
 		open: (
 			identity: typeof Identity.Service,
 			operationId: string,
@@ -768,10 +937,7 @@ export const make = Effect.gen(function* () {
 					}
 				}),
 			),
-	}
+	})
 })
-export class Views extends Context.Service<
-	Views,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/Views") {}
+
 export const layer = Layer.effect(Views, make)

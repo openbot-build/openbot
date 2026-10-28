@@ -20,6 +20,26 @@ class EventKey extends Data.Class<Key> {}
 const ended = (event: Execution.Event): boolean =>
 	event.body._tag === "State" && Execution.isTerminal(event.body.status)
 
+export interface Service {
+	readonly observe: (
+		key: Key,
+		afterSequence: number,
+	) => Stream.Stream<
+		| Execution.Event
+		| {
+				executionId: Execution.Id
+				sequence: number
+				createdAt: number
+				body: Execution.EventBody
+		  },
+		Execution.NotFound | Execution.StorageError
+	>
+}
+
+export class Observation extends Context.Service<Observation, Service>()(
+	"@openbot-build/openbot/execution/Observation",
+) {}
+
 const make = Effect.gen(function* () {
 	const background = yield* Background.make
 	const store = yield* Store
@@ -131,11 +151,7 @@ const make = Effect.gen(function* () {
 				)
 			}),
 		)
-	return { observe }
+	return Observation.of({ observe })
 })
 
-export class Observation extends Context.Service<
-	Observation,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/Observation") {}
 export const layer = Layer.effect(Observation, make)

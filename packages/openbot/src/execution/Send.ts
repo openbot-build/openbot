@@ -1,3 +1,4 @@
+import type { Paused } from "./Admission.ts"
 import { Execution, ExecutionIdentity } from "@openbot-build/domain"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Registry } from "./Engine.ts"
@@ -33,6 +34,23 @@ export const authority = (
 export const provide = (authority: Authority) =>
 	Effect.provideService(Current, Option.some(authority))
 
+export interface Service {
+	readonly resolve: (
+		authority: Authority,
+	) => Effect.Effect<
+		ExecutionIdentity,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Paused
+		| Execution.StorageError
+	>
+}
+
+export class Access extends Context.Service<Access, Service>()(
+	"@openbot-build/openbot/execution/Send/Access",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const registry = yield* Registry
@@ -58,10 +76,7 @@ const make = Effect.gen(function* () {
 			yield* feature.value.admit(ref, false, call.value)
 		return saved.identity
 	})
-	return { resolve }
+	return Access.of({ resolve })
 })
-export class Access extends Context.Service<
-	Access,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/Send/Access") {}
+
 export const layer = Layer.effect(Access, make)

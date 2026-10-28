@@ -1,5 +1,14 @@
-import * as GrantUses from "./GrantUses.ts"
 import {
+	type MemberExecution,
+	Store,
+	storage,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import { type SecretStorageError, Secrets } from "../secrets/Secrets.ts"
+import {
+	type Developers,
 	AppConnections,
 	Authorization,
 	Caller,
@@ -7,6 +16,7 @@ import {
 	Execution,
 	executionCallers,
 } from "@openbot-build/domain"
+import * as GrantUses from "./GrantUses.ts"
 import { Discovery, Store as Protocol } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -30,14 +40,6 @@ import {
 	appRecords,
 	appSecrets,
 } from "../database/Schema.ts"
-import { Secrets } from "../secrets/Secrets.ts"
-import {
-	Store,
-	storage,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import type { Authorize } from "../execution/Engine.ts"
 import type { End } from "../execution/Program.ts"
 import { Governance } from "./Governance.ts"
@@ -79,6 +81,74 @@ const credentialCodec = Schema.fromJsonString(
 const sameCaller = Schema.toEquivalence(Caller)
 const binding = (kind: string, owner: string, id: string) =>
 	JSON.stringify([kind, owner, id])
+export interface Service {
+	readonly start: (
+		actor: Caller,
+		id: string,
+		action: Action,
+		commandKey: Execution.CommandKey,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| AppConnections.ConnectionCleanupPending
+		| AppConnections.ConnectionConfigurationInvalid
+		| AppConnections.ConnectionConflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			saved: MemberExecution
+			input: Input
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly commit: (
+		fence: Fence,
+		prepared: Prepared,
+		callId: Execution.CallId,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly get: (
+		actor: Caller,
+		id: string,
+		executionId: Execution.Id,
+	) => Effect.Effect<
+		{ execution: Execution.Record; result: AppConnections.Result | null },
+		Execution.Forbidden | Execution.NotFound | Developers.StorageFailure
+	>
+}
+
+export class ConnectionCommands extends Context.Service<
+	ConnectionCommands,
+	Service
+>()("@openbot-build/openbot/apps/ConnectionCommands") {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -593,10 +663,7 @@ const make = Effect.gen(function* () {
 
 			return { execution: saved.record, result }
 		})
-	return { start, load, authorize, commit, finish, get }
+	return ConnectionCommands.of({ start, load, authorize, commit, finish, get })
 })
-export class ConnectionCommands extends Context.Service<
-	ConnectionCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/ConnectionCommands") {}
+
 export const layer = Layer.effect(ConnectionCommands, make)

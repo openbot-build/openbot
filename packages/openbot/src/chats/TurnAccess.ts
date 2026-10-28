@@ -1,3 +1,4 @@
+import type { Check as CheckType } from "../execution/Admission.ts"
 import { triggerResource } from "../authorization/Resources.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import * as DelegationSource from "../bots/DelegationSource.ts"
@@ -72,6 +73,31 @@ const failures = <A, E, R>(
 	)
 
 /** Turn commands and restored steps use the same current resource policy. */
+export interface Service {
+	readonly admit: CheckType
+	readonly input: (
+		chat: Chat.Ref,
+		identity: ExecutionIdentity,
+	) => Effect.Effect<void, Failure>
+	readonly command: (
+		chat: Chat.Ref,
+		caller: Caller,
+	) => Effect.Effect<void, Failure>
+	readonly authorize: Authorize
+	readonly model: (
+		key: Key,
+		selection: Config.Selection,
+	) => Effect.Effect<void, Failure>
+	readonly notice: (
+		chat: Chat.Ref,
+		identity: ExecutionIdentity,
+	) => Effect.Effect<boolean, Failure>
+}
+
+export class TurnAccess extends Context.Service<TurnAccess, Service>()(
+	"@openbot-build/openbot/chats/TurnAccess",
+) {}
+
 const make = Effect.gen(function* () {
 	const admission = yield* WorkAdmission.make
 	const db = yield* Db.make
@@ -480,7 +506,7 @@ const make = Effect.gen(function* () {
 					resource: resource(chat, execution.identity),
 				})
 		}).pipe(failures)
-	return {
+	return TurnAccess.of({
 		admit: admission.check,
 		input,
 		/** The command caller needs their own right to add input to the saved Chat. */
@@ -495,10 +521,7 @@ const make = Effect.gen(function* () {
 			}).pipe(failures),
 		notice: (chat: Chat.Ref, identity: ExecutionIdentity) =>
 			inputFrom(chat, identity, HashSet.empty(), false),
-	}
+	})
 })
-export class TurnAccess extends Context.Service<
-	TurnAccess,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/TurnAccess") {}
+
 export const layer = Layer.effect(TurnAccess, make)

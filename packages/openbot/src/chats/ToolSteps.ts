@@ -1,7 +1,7 @@
+import { type Developers, Execution } from "@openbot-build/domain"
 import type { Paused } from "../execution/Admission.ts"
 import type { Definition } from "./ToolDefinitions.ts"
 import { ChatState, type ModelStep, ToolStep } from "@openbot-build/core"
-import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Context,
@@ -76,6 +76,49 @@ export const beforeSend = (
 			if (required) return yield* Execution.Forbidden.make({})
 		}
 	})
+
+export interface Service {
+	readonly executor: (fence: Fence) => ToolStep.Executor<Failure>
+	readonly run: <Tools extends Record<string, Tool.Any>>(
+		fence: Fence,
+		position: ModelStep.Position,
+		input: ToolStep.Input<Tools>,
+		publish: (
+			part: Response.StreamPart<Record<string, Tool.Any>>,
+		) => Effect.Effect<void>,
+		approve?:
+			Effect.Effect<void, Execution.Forbidden | Schema.SchemaError> | undefined,
+		definition?: Definition | undefined,
+	) => Effect.Effect<
+		Schema.Json,
+		Failure,
+		Exclude<
+			Exclude<Tool.HandlerServices<Tools[keyof Tools]>, CallContext>,
+			never
+		>
+	>
+	readonly saved: (
+		fence: Fence,
+		position: ModelStep.Position,
+		call: Prompt.ToolCallPart,
+	) => Effect.Effect<
+		Option.Option<Schema.Json>,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.OutcomeUnknown
+		| Paused
+		| Developers.StorageFailure
+		| {
+				errorId: Execution.ErrorId
+				category: Execution.Failure["category"]
+		  }
+	>
+}
+
+export class ToolSteps extends Context.Service<ToolSteps, Service>()(
+	"@openbot-build/openbot/chats/ToolSteps",
+) {}
 
 const make = Effect.gen(function* () {
 	const calls = yield* Calls
@@ -308,12 +351,9 @@ const make = Effect.gen(function* () {
 				{ bufferSize: 128 },
 			),
 	})
-	return { executor, run, saved }
+	return ToolSteps.of({ executor, run, saved })
 })
 
 /** Server tool results are JSON. The call log seals them before the Chat checkpoint. */
-export class ToolSteps extends Context.Service<
-	ToolSteps,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/ToolSteps") {}
+
 export const layer = Layer.effect(ToolSteps, make)

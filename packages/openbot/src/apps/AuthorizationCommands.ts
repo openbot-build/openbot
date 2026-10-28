@@ -1,7 +1,14 @@
-import * as GrantUses from "./GrantUses.ts"
-import * as GrantCleanup from "./GrantCleanup.ts"
-import * as RetryingCall from "../execution/RetryingCall.ts"
 import {
+	type MemberExecution,
+	Store,
+	storage,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import { type SecretStorageError, Secrets } from "../secrets/Secrets.ts"
+import {
+	type Developers,
 	AppAuthorizations,
 	Authorization,
 	Caller,
@@ -10,6 +17,9 @@ import {
 	ExecutionIdentity,
 	executionCallers,
 } from "@openbot-build/domain"
+import * as GrantUses from "./GrantUses.ts"
+import * as GrantCleanup from "./GrantCleanup.ts"
+import * as RetryingCall from "../execution/RetryingCall.ts"
 import {
 	Authorization as OAuth,
 	OAuthAuthorization,
@@ -34,14 +44,6 @@ import {
 	appConnections,
 	appSecrets,
 } from "../database/Schema.ts"
-import { Secrets } from "../secrets/Secrets.ts"
-import {
-	Store,
-	storage,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import type { Authorize } from "../execution/Engine.ts"
 import type { End } from "../execution/Program.ts"
 import { Governance } from "./Governance.ts"
@@ -92,6 +94,105 @@ const binding = (kind: string, owner: string, id: string) =>
 	JSON.stringify([kind, owner, id])
 export const actorBinding = (owner: string, id: string) =>
 	binding("app-authorization-actor", owner, id)
+export interface Service {
+	readonly start: (
+		actor: Caller,
+		request:
+			| {
+					readonly kind: "Begin"
+					readonly connectionId: string
+					readonly input: AppAuthorizations.Begin
+			  }
+			| { readonly kind: "Complete"; readonly flowId: string }
+			| {
+					readonly kind: "Revoke" | "Refresh" | "Remove"
+					readonly connectionId: string
+			  },
+		commandKey: Execution.CommandKey,
+		parent?: Fence,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| AppAuthorizations.AppAuthorizationFailed
+		| OAuth.AuthorizationError
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly get: (
+		actor: Caller,
+		id: Execution.Id,
+	) => Effect.Effect<
+		{
+			execution: Execution.Record
+			cleanupExecutions: readonly Execution.Record[]
+			result: AppAuthorizations.ActionResult | null
+		},
+		Execution.Forbidden | Execution.NotFound | Developers.StorageFailure
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			saved: MemberExecution
+			input: Input
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly commit: (
+		fence: Fence,
+		result: {
+			readonly callId: Execution.CallId
+			readonly grant: OAuthAuthorization.Grant
+		} | null,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly commitPrepared: (
+		fence: Fence,
+		prepared: Preparation,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly check: (
+		actor: Caller,
+		id: string,
+		action?: "read" | "write",
+	) => Effect.Effect<void, Execution.Forbidden | Execution.StorageError>
+}
+
+export class AuthorizationCommands extends Context.Service<
+	AuthorizationCommands,
+	Service
+>()("@openbot-build/openbot/apps/AuthorizationCommands") {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -913,10 +1014,16 @@ const make = Effect.gen(function* () {
 			}
 			return { execution: saved.record, cleanupExecutions, result }
 		})
-	return { start, get, load, authorize, commit, commitPrepared, finish, check }
+	return AuthorizationCommands.of({
+		start,
+		get,
+		load,
+		authorize,
+		commit,
+		commitPrepared,
+		finish,
+		check,
+	})
 })
-export class AuthorizationCommands extends Context.Service<
-	AuthorizationCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/AuthorizationCommands") {}
+
 export const layer = Layer.effect(AuthorizationCommands, make)

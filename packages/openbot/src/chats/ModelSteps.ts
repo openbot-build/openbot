@@ -1,14 +1,17 @@
-import * as ToolDefinitions from "./ToolDefinitions.ts"
-import { Execution } from "@openbot-build/domain"
-import { CurrentAttribution } from "../billing/MeteredModel.ts"
-import * as ModelCalls from "../models/ModelCalls.ts"
-import { Billing } from "../billing/Billing.ts"
+import { type BillingStorageError, Billing } from "../billing/Billing.ts"
+import type { Paused } from "../execution/Admission.ts"
 import {
+	type Provider,
+	type Model,
 	ModelStep,
 	SummaryCompaction,
 	ContextCompaction,
 	Config,
 } from "@openbot-build/core"
+import * as ToolDefinitions from "./ToolDefinitions.ts"
+import { Execution } from "@openbot-build/domain"
+import { CurrentAttribution } from "../billing/MeteredModel.ts"
+import * as ModelCalls from "../models/ModelCalls.ts"
 import {
 	Array as Arr,
 	Clock,
@@ -39,6 +42,72 @@ const resultCodec = Schema.toCodecJson(ModelStep.Result)
 const promptCodec = Schema.toCodecJson(Prompt.Prompt)
 
 /** Build this layer in the Turn scope with its selected model and tools. */
+export interface Service {
+	readonly run: <Tools extends Record<string, Tool.Any>>(
+		fence: Fence,
+		step: string,
+		selection: Config.Selection,
+		input: {
+			readonly prompt: Prompt.Prompt
+			readonly toolkit: Toolkit.Toolkit<Tools>
+			readonly toolChoice?: LanguageModel.GenerateTextOptions<Tools>["toolChoice"]
+		},
+		onPart?:
+			| ((part: Response.StreamPart<Tools, "deferred">) => Effect.Effect<void>)
+			| undefined,
+		purpose?: "compaction" | "turn" | undefined,
+	) => Effect.Effect<
+		{ callId: Execution.CallId; attempt: number; result: ModelStep.Result },
+		| BillingStorageError
+		| Execution.Conflict
+		| Execution.OutcomeUnknown
+		| Paused
+		| Schema.SchemaError
+		| Execution.Failure
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly executor: (
+		fence: Fence,
+		selection: Config.Selection,
+	) => ModelStep.Executor<
+		Effect.Error<
+			Effect.Effect<
+				{
+					callId: Execution.CallId
+					attempt: number
+					result: ModelStep.Result
+				},
+				| BillingStorageError
+				| Execution.Conflict
+				| Execution.OutcomeUnknown
+				| Paused
+				| Schema.SchemaError
+				| Execution.Failure
+				| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+			>
+		>
+	>
+	readonly summarize: (
+		fence: Fence,
+		selection: Config.Selection,
+		input: ContextCompaction.NonNativeRequest,
+	) => Effect.Effect<
+		| {
+				readonly _tag: "Native"
+				readonly provider: Provider.Id
+				readonly model: Model.Id
+				readonly items: readonly Schema.Json[]
+				readonly prompt: Prompt.Prompt
+		  }
+		| { readonly _tag: "Prompt"; readonly prompt: Prompt.Prompt },
+		ContextCompaction.ContextCompactionError | Execution.OutcomeUnknown
+	>
+}
+
+export class ModelSteps extends Context.Service<ModelSteps, Service>()(
+	"@openbot-build/openbot/chats/ModelSteps",
+) {}
+
 const make = Effect.gen(function* () {
 	const model = yield* LanguageModel.LanguageModel
 	const retry = yield* CallRetry
@@ -266,13 +335,9 @@ const make = Effect.gen(function* () {
 			run(fence, `model:${position.item}`, selection, input, onPart).pipe(
 				Effect.map((saved) => saved.result),
 			)
-	return { run, executor, summarize }
+	return ModelSteps.of({ run, executor, summarize })
 })
 
-export class ModelSteps extends Context.Service<
-	ModelSteps,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/ModelSteps") {}
 export const layer = Layer.effect(ModelSteps, make)
 
 /** Build the adapters once. Each call builds its services with the model selected by core. */
@@ -293,7 +358,7 @@ export const makeExecutors = (
 			Effect.provideContext(services),
 			Effect.provideService(CallRetry, retry),
 		)
-		const executeModel: ReturnType<Effect.Success<typeof make>["executor"]> = (
+		const executeModel: ReturnType<Service["executor"]> = (
 			position,
 			input,
 			onPart,

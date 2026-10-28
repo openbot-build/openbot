@@ -1,8 +1,19 @@
+import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import {
+	type Channels,
+	type Developers,
+	Execution,
+} from "@openbot-build/domain"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Chat } from "@openbot-build/core"
-import { Execution } from "@openbot-build/domain"
 import { Effect, Context, Layer, Schema } from "effect"
-import { Store, storage, type Fence, type Key } from "../execution/Store.ts"
 
 export const workflowName = "openbot.channel-watch"
 export const Input = Schema.Struct({
@@ -13,6 +24,50 @@ export const Input = Schema.Struct({
 	chat: Chat.Id,
 })
 const codec = Schema.toCodecJson(Input)
+export interface Service {
+	readonly start: (
+		namespace: string,
+		input: typeof Input.Type,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Channels.ChannelConflict
+		| Channels.ChannelNotFound
+		| Channels.ChannelsUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			execution: MemberExecution
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		outcome:
+			| {
+					readonly status: "completed" | "failed" | "interrupted"
+					readonly failure?: Execution.Failure
+			  }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class ChannelWatch extends Context.Service<ChannelWatch, Service>()(
+	"@openbot-build/openbot/channels/ChannelWatch",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const admit = yield* ChannelAdmission.make
@@ -65,10 +120,7 @@ const make = Effect.gen(function* () {
 		outcome.status === "cancelled"
 			? store.finishCancellation(fence, outcome.epoch).pipe(Effect.asVoid)
 			: store.commit(fence, outcome, Effect.void)
-	return { start, load, finish }
+	return ChannelWatch.of({ start, load, finish })
 })
-export class ChannelWatch extends Context.Service<
-	ChannelWatch,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/channels/ChannelWatch") {}
+
 export const layer = Layer.effect(ChannelWatch, make)

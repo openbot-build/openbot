@@ -1,6 +1,8 @@
-import { Bot, Chat } from "@openbot-build/core"
-import { Execution } from "@openbot-build/domain"
+import type { Paused } from "../execution/Admission.ts"
+import { type Developers, Execution } from "@openbot-build/domain"
+import { type Failure, TurnContext } from "./TurnContext.ts"
 import {
+	type Scope,
 	Context,
 	Crypto,
 	Effect,
@@ -9,6 +11,7 @@ import {
 	Record as Rec,
 	Schema,
 } from "effect"
+import { Bot, Chat } from "@openbot-build/core"
 import { Prompt, Toolkit, type Tool } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { Work } from "../capabilities/Work.ts"
@@ -22,7 +25,26 @@ import { InputCommands } from "./InputCommands.ts"
 import * as StoredChats from "./StoredChats.ts"
 import { ToolCommands } from "./ToolCommands.ts"
 import { ToolSteps, beforeSend } from "./ToolSteps.ts"
-import { TurnContext } from "./TurnContext.ts"
+
+export interface Service {
+	readonly run: (
+		fence: Fence,
+	) => Effect.Effect<
+		Schema.Json,
+		| Execution.Conflict
+		| Execution.NotFound
+		| Execution.OutcomeUnknown
+		| Paused
+		| Developers.StorageFailure
+		| Execution.Failure
+		| Failure,
+		Scope.Scope
+	>
+}
+
+export class ToolSession extends Context.Service<ToolSession, Service>()(
+	"@openbot-build/openbot/chats/ToolSession",
+) {}
 
 const make = Effect.gen(function* () {
 	const background = yield* Background.make
@@ -149,11 +171,7 @@ const make = Effect.gen(function* () {
 			Effect.provideService(Bot.Context, context),
 		)
 	})
-	return { run }
+	return ToolSession.of({ run })
 })
 
-export class ToolSession extends Context.Service<
-	ToolSession,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/ToolSession") {}
 export const layer = Layer.effect(ToolSession, make)

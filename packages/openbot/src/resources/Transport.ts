@@ -1,3 +1,5 @@
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import type { SqlError } from "effect/sql"
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -75,6 +77,91 @@ interface Local {
 	}>
 	readonly close: Effect.Effect<void>
 }
+
+export interface Service {
+	readonly register: <E, AdmitE = never>(
+		resource: Resource.Ref,
+		handler: Handler<E>,
+		options?: {
+			readonly replace?: boolean
+			readonly admit?: Effect.Effect<void, AdmitE>
+			readonly release?: Effect.Effect<void, Resource.Error>
+		},
+		ownerReleased?: Effect.Effect<void, Resource.Error>,
+	) => Effect.Effect<
+		{
+			address: Resource.Address
+			lost: Effect.Effect<void, never>
+			retire: Effect.Effect<void, Execution.StorageError>
+		},
+		| Resource.Error
+		| Execution.StorageError
+		| Exclude<AdmitE, EffectDrizzleQueryError | SqlError.SqlError>,
+		Scope.Scope
+	>
+	readonly own: <A, E, R, HandlerE, AdmitE>(
+		resource: Resource.Ref,
+		handler: Handler<HandlerE>,
+		options: {
+			readonly admit: Effect.Effect<void, AdmitE>
+			readonly replace?: boolean
+		},
+		use: (
+			held: Effect.Success<
+				Effect.Effect<
+					{
+						address: Resource.Address
+						lost: Effect.Effect<void, never>
+						retire: Effect.Effect<void, Execution.StorageError>
+					},
+					| Resource.Error
+					| Execution.StorageError
+					| Exclude<AdmitE, EffectDrizzleQueryError | SqlError.SqlError>,
+					Scope.Scope
+				>
+			>,
+		) => Effect.Effect<A, E, R>,
+	) => Effect.Effect<
+		A,
+		| E
+		| Resource.Error
+		| Execution.StorageError
+		| Exclude<AdmitE, EffectDrizzleQueryError | SqlError.SqlError>,
+		Exclude<Exclude<R, Scope.Scope>, Scope.Scope>
+	>
+	readonly call: (
+		resource: Resource.Ref,
+		input: Schema.Json,
+	) => Stream.Stream<Schema.Json, Resource.Error>
+	readonly callAt: (
+		address: Resource.Address,
+		input: Schema.Json,
+	) => Stream.Stream<Schema.Json, Resource.Error>
+	readonly dispatch: (
+		address: Resource.Address,
+		input: Schema.Json,
+	) => Stream.Stream<Schema.Json, Resource.Error>
+	readonly closeLocal: (address: Resource.Address) => Effect.Effect<void, never>
+	readonly releaseLocal: (
+		address: Resource.Address,
+	) => Effect.Effect<void, Resource.Error>
+	readonly releaseAt: (
+		address: Resource.Address,
+	) => Effect.Effect<void, Resource.Error>
+	readonly exists: (address: Resource.Address) => Effect.Effect<boolean, never>
+	readonly close: (
+		resource: Resource.Ref,
+	) => Effect.Effect<void, Execution.StorageError>
+	readonly release: (
+		resource: Pick<Resource.Ref, "namespace" | "kind"> & {
+			readonly id?: string
+		},
+	) => Effect.Effect<void, Resource.Error | Execution.StorageError>
+}
+
+export class Transport extends Context.Service<Transport, Service>()(
+	"@openbot-build/openbot/resources/Transport",
+) {}
 
 const make = Effect.gen(function* () {
 	const background = yield* Background.make
@@ -550,7 +637,7 @@ const make = Effect.gen(function* () {
 			})
 		})
 
-	return {
+	return Transport.of({
 		register,
 		own,
 		call,
@@ -562,14 +649,11 @@ const make = Effect.gen(function* () {
 		exists,
 		close,
 		release,
-	}
+	})
 })
 
 /** Physical resources share routing, authentication, bounds and failure semantics. */
-export class Transport extends Context.Service<
-	Transport,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/resources/Transport") {}
+
 export const layer = Layer.effect(Transport, make).pipe(
 	Layer.provide(PrivateRpc.layerClient),
 	Layer.provide(RpcSerialization.layerNdjson),

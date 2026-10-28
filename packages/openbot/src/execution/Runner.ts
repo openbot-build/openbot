@@ -12,6 +12,28 @@ import { Billing } from "../billing/Billing.ts"
 import * as Recovery from "./Recovery.ts"
 import { Store, type Fence, type Key } from "./Store.ts"
 
+export interface Service {
+	readonly run: <E, R, E2, R2>(
+		key: Key,
+		work: (fence: Fence) => Effect.Effect<void, E, R>,
+		failed: (
+			fence: Fence,
+			failure: Execution.Failure,
+		) => Effect.Effect<void, E2, R2>,
+	) => Effect.Effect<
+		void,
+		{
+			errorId: Execution.ErrorId
+			category: Execution.Failure["category"]
+		},
+		R | R2
+	>
+}
+
+export class Runner extends Context.Service<Runner, Service>()(
+	"@openbot-build/openbot/execution/Runner",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const billing = yield* Billing
@@ -107,12 +129,9 @@ const make = Effect.gen(function* () {
 				return recovery.record(cause, key.id).pipe(Effect.flatMap(Effect.fail))
 			}),
 		)
-	return { run }
+	return Runner.of({ run })
 })
-export class Runner extends Context.Service<
-	Runner,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/Runner") {}
+
 export const layer = Layer.effect(Runner, make).pipe(
 	Layer.provide(Recovery.layer),
 )

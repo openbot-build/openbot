@@ -1,4 +1,12 @@
 import {
+	type MemberExecution,
+	Store,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import {
 	Authorization,
 	Caller,
 	Developers,
@@ -8,12 +16,6 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Check from "../authorization/Check.ts"
 import type { Authorize } from "../execution/Engine.ts"
-import {
-	Store,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { ownerKey } from "./StoredConnections.ts"
 import type * as Models from "./DeveloperModels.ts"
@@ -29,6 +31,55 @@ export const Checked = Schema.Struct({
 	evidence: Developers.ProofEvidence,
 })
 const sameCaller = Schema.toEquivalence(Caller)
+export interface Service {
+	readonly request: (
+		actor: Caller,
+		ref: Reference,
+		commandKey: Execution.CommandKey,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			saved: MemberExecution
+			ref: Reference
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly complete: (
+		fence: Fence,
+		checked: typeof Checked.Type,
+		report: Models.InspectionReport | null,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Developers.DeveloperConflict
+		| Developers.DeveloperForbidden
+		| Developers.DeveloperInputInvalid
+		| Developers.DeveloperNotFound
+		| Developers.DeveloperRestricted
+		| Developers.DeveloperUnavailable
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+		| Execution.Failure
+	>
+}
+
+export class ProofCommands extends Context.Service<ProofCommands, Service>()(
+	"@openbot-build/openbot/apps/ProofCommands",
+) {}
+
 const make = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const checks = yield* Check.make
@@ -157,10 +208,7 @@ const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(transactionFailures)
-	return { request, load, authorize, complete }
+	return ProofCommands.of({ request, load, authorize, complete })
 })
-export class ProofCommands extends Context.Service<
-	ProofCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/ProofCommands") {}
+
 export const layer = Layer.effect(ProofCommands, make)

@@ -1,9 +1,20 @@
 import {
+	type ServiceExecution,
+	Store,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import {
+	type Bots as BotsType,
+	type Computers,
 	Execution,
 	ServiceId,
 	type Caller,
 	type ServiceIdentity,
 } from "@openbot-build/domain"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import type { Machine, ComputerError } from "./Computer.ts"
 import { and, eq, isNull, lt } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -27,12 +38,6 @@ import {
 	type DecisionCommand,
 } from "../execution/Engine.ts"
 import type { End } from "../execution/Program.ts"
-import {
-	Store,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import * as Access from "./Access.ts"
 import * as Activity from "./Activity.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
@@ -60,6 +65,122 @@ const idle = (row: typeof computers.$inferSelect, now: number) =>
 	row.state === "running" &&
 	row.pauseAfter !== null &&
 	now - (row.lastActiveAt ?? row.updatedAt) >= row.pauseAfter * 1000
+
+export interface Service {
+	readonly bootstrap: Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly loadSweep: (
+		key: Key,
+	) => Effect.Effect<
+		{ readonly due: number },
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly loadPause: (key: Key) => Effect.Effect<
+		{
+			saved: ServiceExecution
+			input: typeof PauseInput.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorizePause: (
+		key: Key,
+		access: ExecutionAccess,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly publicAccess: (
+		key: Key,
+		caller: Caller,
+		access: ExecutionAccess,
+	) => Effect.Effect<
+		undefined,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly decide: (
+		key: Key,
+		caller: Caller,
+		input: DecisionCommand,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly sweep: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| BotsType.BotStorageUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly finishSweep: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly prepare: (
+		fence: Fence,
+	) => Effect.Effect<
+		Machine,
+		| Computers.ComputerProviderNotFound
+		| Computers.ComputersUnavailable
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| ComputerError
+	>
+	readonly complete: (
+		fence: Fence,
+		paused: boolean,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class Maintenance extends Context.Service<Maintenance, Service>()(
+	"@openbot-build/openbot/computers/Maintenance",
+) {}
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -330,7 +451,7 @@ export const make = Effect.gen(function* () {
 					.pipe(Effect.asVoid)
 			return yield* store.commit(fence, end, change)
 		}).pipe(transactionFailures)
-	return {
+	return Maintenance.of({
 		bootstrap: schedule(0).pipe(Effect.asVoid),
 		loadSweep,
 		loadPause,
@@ -342,10 +463,7 @@ export const make = Effect.gen(function* () {
 		prepare,
 		complete,
 		finish,
-	}
+	})
 })
-export class Maintenance extends Context.Service<
-	Maintenance,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/computers/Maintenance") {}
+
 export const layer = Layer.effect(Maintenance, make)

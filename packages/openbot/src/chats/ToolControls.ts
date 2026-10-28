@@ -1,4 +1,4 @@
-import { Bot, Operation } from "@openbot-build/core"
+import { type Chat, type ChatStore, Bot, Operation } from "@openbot-build/core"
 import { Caller, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -41,6 +41,116 @@ const Many = Schema.Struct({
 	),
 })
 const sameCaller = Schema.toEquivalence(Caller)
+
+export interface Service {
+	readonly register: (parent: Fence) => Effect.Effect<
+		{
+			tools: {
+				readonly openbot_execution_cancel: Tool.Tool<
+					"openbot_execution_cancel",
+					{
+						readonly parameters: Schema.Unknown
+						readonly success: Schema.Codec<
+							Schema.Json,
+							Schema.Json,
+							never,
+							never
+						>
+						readonly failure: Schema.Never
+						readonly failureMode: "error"
+					},
+					CallContext
+				>
+				readonly openbot_execution_status: Tool.Tool<
+					"openbot_execution_status",
+					{
+						readonly parameters: Schema.Unknown
+						readonly success: Schema.Codec<
+							Schema.Json,
+							Schema.Json,
+							never,
+							never
+						>
+						readonly failure: Schema.Never
+						readonly failureMode: "error"
+					},
+					never
+				>
+				readonly openbot_execution_wait: Tool.Tool<
+					"openbot_execution_wait",
+					{
+						readonly parameters: Schema.Unknown
+						readonly success: Schema.Codec<
+							Schema.Json,
+							Schema.Json,
+							never,
+							never
+						>
+						readonly failure: Schema.Never
+						readonly failureMode: "error"
+					},
+					never
+				>
+			}
+			handlers: Context.Context<
+				Tool.HandlersFor<{
+					readonly openbot_execution_cancel: Tool.Tool<
+						"openbot_execution_cancel",
+						{
+							readonly parameters: Schema.Unknown
+							readonly success: Schema.Codec<
+								Schema.Json,
+								Schema.Json,
+								never,
+								never
+							>
+							readonly failure: Schema.Never
+							readonly failureMode: "error"
+						},
+						CallContext
+					>
+					readonly openbot_execution_status: Tool.Tool<
+						"openbot_execution_status",
+						{
+							readonly parameters: Schema.Unknown
+							readonly success: Schema.Codec<
+								Schema.Json,
+								Schema.Json,
+								never,
+								never
+							>
+							readonly failure: Schema.Never
+							readonly failureMode: "error"
+						},
+						never
+					>
+					readonly openbot_execution_wait: Tool.Tool<
+						"openbot_execution_wait",
+						{
+							readonly parameters: Schema.Unknown
+							readonly success: Schema.Codec<
+								Schema.Json,
+								Schema.Json,
+								never,
+								never
+							>
+							readonly failure: Schema.Never
+							readonly failureMode: "error"
+						},
+						never
+					>
+				}>
+			>
+			instructions: Prompt.Prompt
+		},
+		Chat.ChatNotFound | ChatStore.ChatStoreError,
+		Bot.Context
+	>
+}
+
+export class ToolControls extends Context.Service<ToolControls, Service>()(
+	"@openbot-build/openbot/chats/ToolControls",
+) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -256,13 +366,9 @@ const make = Effect.gen(function* () {
 				),
 			}
 		})
-	return { register }
+	return ToolControls.of({ register })
 })
 
-export class ToolControls extends Context.Service<
-	ToolControls,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/ToolControls") {}
 export const layer = Layer.effect(ToolControls, make).pipe(
 	Layer.provide(Recovery.layer),
 )

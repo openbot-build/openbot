@@ -37,6 +37,14 @@ type Permit = {
 }
 
 /** Pauses control new work. They do not replace access checks or block saved results. */
+export interface Service {
+	readonly check: Admission.Check
+}
+
+export class WorkAdmission extends Context.Service<WorkAdmission, Service>()(
+	"@openbot-build/openbot/chats/WorkAdmission",
+) {}
+
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const store = yield* Store
@@ -231,10 +239,7 @@ export const make = Effect.gen(function* () {
 				})
 			}
 		}).pipe(storage)
-	return { check }
+	return WorkAdmission.of({ check })
 })
-export class WorkAdmission extends Context.Service<
-	WorkAdmission,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/WorkAdmission") {}
+
 export const layer = Layer.effect(WorkAdmission, make)

@@ -4,6 +4,79 @@ import { Store } from "./Store.ts"
 import { Registry, type Access } from "./Engine.ts"
 import { Observation } from "./Observation.ts"
 
+export interface Service {
+	readonly get: (
+		id: Execution.Id,
+		actor: Caller,
+	) => Effect.Effect<
+		Execution.Record,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly events: (
+		id: Execution.Id,
+		actor: Caller,
+		afterSequence: number,
+	) => Effect.Effect<
+		{
+			events: {
+				executionId: Execution.Id
+				sequence: number
+				createdAt: number
+				body: Execution.EventBody
+			}[]
+			afterSequence: number
+			terminal: boolean
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly observe: (
+		id: Execution.Id,
+		actor: Caller,
+		afterSequence: number,
+	) => Stream.Stream<
+		| Execution.Event
+		| {
+				executionId: Execution.Id
+				sequence: number
+				createdAt: number
+				body: Execution.EventBody
+		  },
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly cancel: (
+		id: Execution.Id,
+		actor: Caller,
+		commandKey: Execution.CommandKey,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly decide: (
+		id: Execution.Id,
+		actor: Caller,
+		input: {
+			readonly commandKey: Execution.CommandKey
+			readonly decisionId: string
+			readonly answer: Execution.Answer
+		},
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class Commands extends Context.Service<Commands, Service>()(
+	"@openbot-build/openbot/execution/Commands",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const registry = yield* Registry
@@ -88,10 +161,7 @@ const make = Effect.gen(function* () {
 				)
 			: feature.value.decide(key, actor, input)
 	})
-	return { get, events, observe, cancel, decide }
+	return Commands.of({ get, events, observe, cancel, decide })
 })
-export class Commands extends Context.Service<
-	Commands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/Commands") {}
+
 export const layer = Layer.effect(Commands, make)

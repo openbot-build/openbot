@@ -122,6 +122,31 @@ interface Registered {
 	readonly cancel: (key: Key, epoch: number) => Effect.Effect<void>
 	readonly signal: (key: Key, decisionId: string) => Effect.Effect<void>
 }
+export interface Service {
+	readonly register: (
+		workflow: ReturnType<typeof define>,
+		authorize: Authorize,
+		decide?: Decide,
+		admit?: Admission.Check,
+	) => Effect.Effect<void, never>
+	readonly registerService: (
+		workflow: ReturnType<typeof define>,
+		serviceId: ServiceId,
+		authorize: (key: Key, access: Access) => ReturnType<Authorize>,
+		admit?: Admission.Check,
+		publicRead?: Authorize,
+		publicDecision?: { readonly authorize: Authorize; readonly decide: Decide },
+	) => Effect.Effect<void, never>
+	readonly get: (
+		name: string,
+	) => Effect.Effect<Option.Option<Registered>, never>
+	readonly names: Effect.Effect<string[], never>
+}
+
+export class Registry extends Context.Service<Registry, Service>()(
+	"@openbot-build/openbot/execution/Engine/Registry",
+) {}
+
 const makeRegistry = Effect.gen(function* () {
 	const entries = yield* Ref.make(HashMap.empty<string, Registered>())
 	const engine = yield* WorkflowEngine.WorkflowEngine
@@ -223,12 +248,9 @@ const makeRegistry = Effect.gen(function* () {
 	const names = Ref.get(entries).pipe(
 		Effect.map((entries) => Arr.fromIterable(HashMap.keys(entries))),
 	)
-	return { register, registerService, get, names }
+	return Registry.of({ register, registerService, get, names })
 })
-export class Registry extends Context.Service<
-	Registry,
-	Effect.Success<typeof makeRegistry>
->()("@openbot-build/openbot/execution/Engine/Registry") {}
+
 export const layerRegistry = Layer.effect(Registry, makeRegistry)
 
 /** No database lock is held while the engine stores a command. Redelivery is safe. */

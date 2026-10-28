@@ -1,6 +1,13 @@
+import {
+	type MemberExecution,
+	Store,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import { type SecretStorageError, Secrets } from "../secrets/Secrets.ts"
 import { and, eq } from "drizzle-orm"
 import { developerTests } from "../database/Schema.ts"
-import { Secrets } from "../secrets/Secrets.ts"
 import * as GrantCleanup from "./GrantCleanup.ts"
 import {
 	Authorization as OAuth,
@@ -33,12 +40,6 @@ import * as Db from "../database/Database.ts"
 import type { Authorize } from "../execution/Engine.ts"
 import { Observation } from "../execution/Observation.ts"
 import type { End } from "../execution/Program.ts"
-import {
-	Store,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
@@ -115,6 +116,127 @@ const actorBinding = (owner: string, id: string) =>
 		),
 	)(["developer-flow-actor", owner, id])
 const sameCaller = Schema.toEquivalence(Caller)
+export interface Service {
+	readonly request: (
+		actor: Caller,
+		testId: string,
+		key: Execution.CommandKey,
+	) => Effect.Effect<Execution.Receipt, Developers.Failure>
+	readonly prepare: (
+		actor: Caller,
+		testId: string,
+		input: { readonly issuer?: string; readonly scopes: ReadonlyArray<string> },
+		key: Execution.CommandKey,
+	) => Effect.Effect<Execution.Receipt, Developers.Failure>
+	readonly exchange: (
+		actor: Caller,
+		testId: string,
+		key: Execution.CommandKey,
+	) => Effect.Effect<Execution.Receipt, Developers.Failure>
+	readonly available: (
+		owner: string,
+		id: string,
+	) => Effect.Effect<
+		undefined,
+		Developers.DeveloperConflict | Execution.StorageError
+	>
+	readonly exchanged: (
+		fence: Fence,
+		callId: Execution.CallId,
+		grant: OAuthAuthorization.Grant,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly load: (
+		key: Key,
+		lock?: boolean,
+	) => Effect.Effect<
+		{
+			saved: MemberExecution
+			record: Rows.TestRecord
+			action: typeof Action.Type
+			exchange: Exchange | undefined
+		},
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly authorize: Authorize
+	readonly progress: (
+		fence: Fence,
+		stages: ReadonlyArray<Developers.TestStage>,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly complete: (
+		fence: Fence,
+		result: Result,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly prepared: (
+		fence: Fence,
+		prepared: Preparation,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Developers.DeveloperConflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly stop: (
+		owner: string,
+		testId: string,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+}
+
+export class TestCommands extends Context.Service<TestCommands, Service>()(
+	"@openbot-build/openbot/apps/TestCommands",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
@@ -767,7 +889,7 @@ const make = Effect.gen(function* () {
 					)
 			yield* observation.observe(key, 0).pipe(Stream.runDrain)
 		})
-	return {
+	return TestCommands.of({
 		request: (actor: Caller, testId: string, key: Execution.CommandKey) =>
 			submit(actor, testId, key, { _tag: "Run" }),
 		prepare: (
@@ -795,10 +917,7 @@ const make = Effect.gen(function* () {
 		prepared,
 		finish,
 		stop,
-	}
+	})
 })
-export class TestCommands extends Context.Service<
-	TestCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/TestCommands") {}
+
 export const layer = Layer.effect(TestCommands, make)

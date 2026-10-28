@@ -68,6 +68,24 @@ export const category = (
 		return "conflict"
 	return "unavailable"
 }
+export interface Service {
+	readonly record: (
+		cause: Cause.Cause<unknown>,
+		category: Execution.Failure["category"],
+		executionId?: Execution.Id | undefined,
+	) => Effect.Effect<
+		{
+			errorId: Execution.ErrorId
+			category: Execution.Failure["category"]
+		},
+		Execution.StorageError
+	>
+}
+
+export class Records extends Context.Service<Records, Service>()(
+	"@openbot-build/openbot/errors/Records",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
@@ -160,10 +178,7 @@ const make = Effect.gen(function* () {
 				}),
 			),
 	)
-	return { record }
+	return Records.of({ record })
 })
-export class Records extends Context.Service<
-	Records,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/errors/Records") {}
+
 export const layer = Layer.effect(Records, make)

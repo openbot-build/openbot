@@ -1,3 +1,11 @@
+import {
+	type TokenId,
+	type BotId,
+	type DelegationId,
+	Execution,
+	ToolExecution,
+} from "@openbot-build/domain"
+import type { Check } from "../execution/Admission.ts"
 import * as DecisionWait from "../execution/DecisionWait.ts"
 import { type Definition } from "./ToolDefinitions.ts"
 import * as ToolRecords from "./ToolRecords.ts"
@@ -10,7 +18,6 @@ import {
 	Turn,
 	type Operations,
 } from "@openbot-build/core"
-import { Execution, ToolExecution } from "@openbot-build/domain"
 import { and, asc, eq, notInArray } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -49,6 +56,122 @@ export const End = Schema.Union([
 ])
 export type End = typeof End.Type
 const terminal = ["completed", "failed", "cancelled", "interrupted"]
+
+export interface Service {
+	readonly submit: (
+		parent: Fence,
+		position: ToolExecution.Position,
+		call: Prompt.ToolCallPart,
+		settings: Operations.Settings,
+		budget?: "foreground" | Duration.Input | undefined,
+		definition?: Definition | undefined,
+	) => Effect.Effect<
+		ToolExecution.Record,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			record: ToolExecution.Record
+			input: ToolRecords.Input
+			identity: {
+				readonly owner: {
+					readonly organizationId: string
+					readonly userId: string
+				}
+				readonly actor:
+					| {
+							readonly kind: "member"
+							readonly userId: string
+							readonly organizationId: string
+							readonly tokenId?: never
+					  }
+					| {
+							readonly kind: "user_token"
+							readonly userId: string
+							readonly organizationId: string
+							readonly tokenId: TokenId
+					  }
+				readonly constraints?: readonly (
+					| {
+							readonly kind: "member"
+							readonly userId: string
+							readonly organizationId: string
+							readonly tokenId?: never
+					  }
+					| {
+							readonly kind: "user_token"
+							readonly userId: string
+							readonly organizationId: string
+							readonly tokenId: TokenId
+					  }
+				)[]
+				readonly channel?: {
+					readonly id: string
+					readonly externalUserId: string
+				}
+				readonly botId?: BotId
+				readonly delegationId?: DelegationId
+				readonly parentExecutionId?: Execution.Id
+			}
+		},
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly detach: (
+		parent: Fence,
+		child: Execution.Id,
+		waiting?: DecisionWait.Waiting | undefined,
+	) => Effect.Effect<
+		ToolExecution.Record,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly list: (
+		namespace: string,
+		chat: Chat.Id,
+	) => Effect.Effect<
+		ToolExecution.Record[],
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		ToolExecution.Record,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly stopAttached: (
+		parent: Fence,
+	) => Effect.Effect<
+		ToolExecution.Record[],
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly admit: Check
+}
+
+export class ToolCommands extends Context.Service<ToolCommands, Service>()(
+	"@openbot-build/openbot/chats/ToolCommands",
+) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -512,7 +635,7 @@ const make = Effect.gen(function* () {
 		return (yield* load(fence)).record
 	}, storage)
 
-	return {
+	return ToolCommands.of({
 		submit,
 		load,
 		detach,
@@ -521,11 +644,7 @@ const make = Effect.gen(function* () {
 		finish,
 		stopAttached,
 		admit: access.admit,
-	}
+	})
 })
 
-export class ToolCommands extends Context.Service<
-	ToolCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/ToolCommands") {}
 export const layer = Layer.effect(ToolCommands, make)

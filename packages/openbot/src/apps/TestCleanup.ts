@@ -1,3 +1,12 @@
+import {
+	type ServiceExecution,
+	Store,
+	transactionFailures,
+	type Key,
+	type Fence,
+	type Submission,
+} from "../execution/Store.ts"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
 import * as Grants from "./GrantCleanup.ts"
 import * as RetryingCall from "../execution/RetryingCall.ts"
 import {
@@ -29,13 +38,6 @@ import {
 	executions,
 } from "../database/Schema.ts"
 import type { Authorize } from "../execution/Engine.ts"
-import {
-	Store,
-	transactionFailures,
-	type Key,
-	type Fence,
-	type Submission,
-} from "../execution/Store.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import * as Rows from "./DeveloperRows.ts"
@@ -73,6 +75,107 @@ export const submission = (
 			input: { indexNamespace, testId, owner, createdAt },
 		} satisfies Submission
 	})
+export interface Service {
+	readonly transfer: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly ensure: (
+		record: Rows.TestRecord,
+	) => Effect.Effect<
+		{ namespace: string; id: Execution.Id },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly request: (
+		actor: Caller,
+		id: string,
+		commandKey: Execution.CommandKey,
+		remove: boolean,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			saved: ServiceExecution
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly current: (
+		fence: Fence,
+		lock?: boolean,
+	) => Effect.Effect<
+		{
+			revision: number
+			remove: boolean
+			retired: boolean
+			grants: readonly Execution.Id[]
+			saved: ServiceExecution
+			record: Rows.TestRecord
+		},
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly tick: (
+		fence: Fence,
+	) => Effect.Effect<boolean, SecretStorageError | Developers.Failure>
+	readonly pendingGrant: (
+		fence: Fence,
+	) => Effect.Effect<
+		Option.None<Key> | Option.Some<Key>,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly complete: (
+		fence: Fence,
+	) => Effect.Effect<
+		Option.None<Key> | Option.Some<Key>,
+		| Execution.Conflict
+		| Developers.DeveloperNotFound
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly serviceAuthorize: (
+		key: Key,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+}
+
+export class TestCleanup extends Context.Service<TestCleanup, Service>()(
+	"@openbot-build/openbot/apps/TestCleanup",
+) {}
+
 const make = Effect.gen(function* () {
 	const crypto = yield* Crypto.Crypto
 	const db = yield* Db.make
@@ -573,7 +676,7 @@ const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(transactionFailures)
-	return {
+	return TestCleanup.of({
 		transfer,
 		ensure,
 		request,
@@ -584,10 +687,7 @@ const make = Effect.gen(function* () {
 		complete,
 		authorize,
 		serviceAuthorize: (key: Key) => load(key).pipe(Effect.asVoid),
-	}
+	})
 })
-export class TestCleanup extends Context.Service<
-	TestCleanup,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/TestCleanup") {}
+
 export const layer = Layer.effect(TestCleanup, make)

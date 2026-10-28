@@ -1,11 +1,21 @@
-import * as ChannelAdmission from "./ChannelAdmission.ts"
 import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import {
+	type BotId,
+	type Developers,
 	Authorization,
 	Caller,
 	Channels as Domain,
 	Execution,
 	Version,
 } from "@openbot-build/domain"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { and, eq } from "drizzle-orm"
 import {
 	Context,
@@ -26,7 +36,6 @@ import { AuditLog } from "../audit/AuditLog.ts"
 import { organizationKey, segment } from "../audit/Resources.ts"
 import * as Failures from "../errors/Failures.ts"
 import type { Authorize } from "../execution/Engine.ts"
-import { Store, storage, type Fence, type Key } from "../execution/Store.ts"
 import type { End } from "../execution/Program.ts"
 import * as Platform from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
@@ -59,6 +68,130 @@ const Input = Schema.Struct({
 	secret: Schema.NullOr(Schema.RedactedFromValue(Schema.String)),
 })
 const sameCaller = Schema.toEquivalence(Caller)
+export interface Service {
+	readonly create: (
+		caller: Caller,
+		key: Execution.CommandKey,
+		input: typeof Create.Type,
+	) => Effect.Effect<
+		{
+			id: Domain.ChannelId
+			kind: Domain.ChannelKind
+			name: string
+			bot: BotId
+			actor: string
+			enabled: boolean
+			needsAuthorization: boolean
+			linkPath: string | null
+			credentials: Domain.ChannelCredentialsView
+			version: number
+			createdAt: number
+			updatedAt: number
+			executionId: Execution.Id
+		},
+		| Domain.ChannelConflict
+		| Domain.ChannelInvalid
+		| Domain.ChannelNotFound
+		| Domain.ChannelsUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+		| Check.Errors
+	>
+	readonly update: (
+		caller: Caller,
+		key: Execution.CommandKey,
+		id: string,
+		input: typeof Update.Type,
+	) => Effect.Effect<
+		{
+			id: Domain.ChannelId
+			kind: Domain.ChannelKind
+			name: string
+			bot: BotId
+			actor: string
+			enabled: boolean
+			needsAuthorization: boolean
+			linkPath: string | null
+			credentials: Domain.ChannelCredentialsView
+			version: number
+			createdAt: number
+			updatedAt: number
+			executionId: Execution.Id
+		},
+		| Domain.ChannelConflict
+		| Domain.ChannelInvalid
+		| Domain.ChannelNotFound
+		| Domain.ChannelsUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+		| Check.Errors
+	>
+	readonly rotate: (
+		caller: Caller,
+		key: Execution.CommandKey,
+		id: string,
+		expectedVersion: number,
+	) => Effect.Effect<
+		{
+			channel: {
+				id: Domain.ChannelId
+				kind: Domain.ChannelKind
+				name: string
+				bot: BotId
+				actor: string
+				enabled: boolean
+				needsAuthorization: boolean
+				linkPath: string | null
+				credentials: Domain.ChannelCredentialsView
+				version: number
+				createdAt: number
+				updatedAt: number
+				executionId: Execution.Id
+			}
+			secret: Redacted.Redacted<string>
+		},
+		| Domain.ChannelConflict
+		| Domain.ChannelInvalid
+		| Domain.ChannelNotFound
+		| Domain.ChannelsUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+		| Check.Errors
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			execution: MemberExecution
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly finish: (
+		fence: Fence,
+		end: End | { readonly status: "completed" },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class ChannelConfig extends Context.Service<ChannelConfig, Service>()(
+	"@openbot-build/openbot/channels/ChannelConfig",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const admit = yield* ChannelAdmission.make
@@ -380,7 +513,7 @@ const make = Effect.gen(function* () {
 		end.status === "cancelled"
 			? store.finishCancellation(fence, end.epoch).pipe(Effect.asVoid)
 			: store.commit(fence, end, Effect.void)
-	return {
+	return ChannelConfig.of({
 		create: (
 			caller: Caller,
 			key: Execution.CommandKey,
@@ -421,10 +554,7 @@ const make = Effect.gen(function* () {
 		load,
 		authorize,
 		finish,
-	}
+	})
 })
-export class ChannelConfig extends Context.Service<
-	ChannelConfig,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/channels/ChannelConfig") {}
+
 export const layer = Layer.effect(ChannelConfig, make)

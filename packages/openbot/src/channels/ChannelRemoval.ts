@@ -1,4 +1,13 @@
 import {
+	type MemberExecution,
+	Store,
+	commandActor,
+	storage,
+	transactionFailures,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import {
 	Authorization,
 	Caller,
 	Channels as Domain,
@@ -31,19 +40,62 @@ import * as Failures from "../errors/Failures.ts"
 import type { Authorize } from "../execution/Engine.ts"
 import { Observation } from "../execution/Observation.ts"
 import type { End } from "../execution/Program.ts"
-import {
-	Store,
-	commandActor,
-	storage,
-	transactionFailures,
-	type Fence,
-	type Key,
-} from "../execution/Store.ts"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 
 export const workflowName = ChannelAdmission.removalWorkflow
 const Input = Schema.Struct({ channelId: Schema.String })
 const sameCaller = Schema.toEquivalence(Caller)
+export interface Service {
+	readonly request: (
+		caller: Caller,
+		channelId: string,
+		commandKey: Execution.CommandKey,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Domain.ChannelConflict
+		| Domain.ChannelNotFound
+		| Domain.ChannelsUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			execution: MemberExecution
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly work: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End | { readonly status: "completed" },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class ChannelRemoval extends Context.Service<ChannelRemoval, Service>()(
+	"@openbot-build/openbot/channels/ChannelRemoval",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -318,10 +370,7 @@ const make = Effect.gen(function* () {
 			yield* authorize(fence, saved.execution.identity.actor, "advance")
 			yield* finish(fence, { status: "completed" })
 		})
-	return { request, load, authorize, work, finish }
+	return ChannelRemoval.of({ request, load, authorize, work, finish })
 })
-export class ChannelRemoval extends Context.Service<
-	ChannelRemoval,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/channels/ChannelRemoval") {}
+
 export const layer = Layer.effect(ChannelRemoval, make)

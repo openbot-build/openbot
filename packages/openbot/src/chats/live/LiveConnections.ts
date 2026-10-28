@@ -1,11 +1,5 @@
-import * as ModelFailure from "../../models/ModelFailure.ts"
-import { Chat, Config } from "@openbot-build/core"
 import {
-	Authorization,
-	Execution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
-import {
+	type Scope,
 	Array as Arr,
 	Cause,
 	Context,
@@ -19,6 +13,13 @@ import {
 	Semaphore,
 	Stream,
 } from "effect"
+import { type ChatStore, Chat, Config } from "@openbot-build/core"
+import * as ModelFailure from "../../models/ModelFailure.ts"
+import {
+	Authorization,
+	Execution,
+	type ExecutionIdentity,
+} from "@openbot-build/domain"
 import {
 	AiError,
 	LanguageModel,
@@ -96,6 +97,57 @@ const modelResource = (
 	)
 
 /** A Live connection stays at its physical node. Only model requests cross private RPC. */
+export interface Service {
+	readonly use: <A, E, R>(
+		input: {
+			readonly identity: ExecutionIdentity
+			readonly chat: Chat.Id
+			readonly selection: Config.Selection
+			readonly model: Effect.Effect<LanguageModel.LanguageModel>
+			readonly started: (key: Key) => Effect.Effect<void>
+		},
+		run: (held: {
+			readonly address: Resource.Address
+			readonly lost: Effect.Effect<void>
+			readonly retire: Effect.Effect<void, Execution.StorageError>
+		}) => Effect.Effect<A, E, R>,
+	) => Effect.Effect<
+		A,
+		| E
+		| Resource.Busy
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Resource.Failed
+		| Execution.Forbidden
+		| Resource.Gone
+		| Execution.StorageError,
+		Exclude<Exclude<R, Scope.Scope>, Scope.Scope>
+	>
+	readonly model: (
+		key: Key,
+		chat: Chat.Id,
+		selection: Config.Selection,
+	) => Effect.Effect<LanguageModel.LanguageModel, never>
+	readonly wait: (
+		key: Fence,
+		chat: Chat.Id,
+		selection?: Config.Selection,
+	) => Effect.Effect<Resource.Address, Resource.Error | Execution.StorageError>
+	readonly release: (
+		namespace: string,
+		chat: Chat.Id,
+	) => Effect.Effect<void, Resource.Error | Execution.StorageError>
+	readonly available: (
+		namespace: string,
+		chat: Chat.Id,
+	) => Effect.Effect<boolean, Execution.StorageError>
+}
+
+export class LiveConnections extends Context.Service<
+	LiveConnections,
+	Service
+>()("@openbot-build/openbot/chats/live/LiveConnections") {}
+
 const make = Effect.gen(function* () {
 	const transport = yield* Transport
 	const db = yield* Db.make
@@ -508,7 +560,7 @@ const make = Effect.gen(function* () {
 				),
 		})
 	}
-	return {
+	return LiveConnections.of({
 		use,
 		model,
 		wait,
@@ -516,10 +568,7 @@ const make = Effect.gen(function* () {
 			transport.release(resource(namespace, chat)),
 		available: (namespace: string, chat: Chat.Id) =>
 			directory.find(resource(namespace, chat)).pipe(Effect.map(Option.isSome)),
-	}
+	})
 })
-export class LiveConnections extends Context.Service<
-	LiveConnections,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/live/LiveConnections") {}
+
 export const layer = Layer.effect(LiveConnections, make)

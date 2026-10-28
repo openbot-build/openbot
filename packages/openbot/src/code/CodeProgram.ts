@@ -1,5 +1,6 @@
+import type { Paused } from "../execution/Admission.ts"
+import { type Developers, CodeRuns, Execution } from "@openbot-build/domain"
 import * as AppSecrets from "../vaults/AppSecrets.ts"
-import { CodeRuns, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -51,6 +52,25 @@ const errorText = Schema.encodeEffect(
 )
 const callStep = (index: number) => `code:${index}`
 const resultStep = (index: number) => `result:${index}`
+
+export interface Service {
+	readonly run: (fence: Fence) => Effect.Effect<
+		CodeRuns.Output,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Paused
+		| Developers.StorageFailure
+		| {
+				errorId: Execution.ErrorId
+				category: Execution.Failure["category"]
+		  }
+	>
+}
+
+export class CodeProgram extends Context.Service<CodeProgram, Service>()(
+	"@openbot-build/openbot/code/CodeProgram",
+) {}
 
 const make = Effect.gen(function* () {
 	const commands = yield* CodeCommands
@@ -421,10 +441,7 @@ const make = Effect.gen(function* () {
 			return yield* Execution.Conflict.make({ id: fence.id })
 		return yield* Schema.decodeEffect(outputCodec)(result.result)
 	})
-	return { run }
+	return CodeProgram.of({ run })
 })
-export class CodeProgram extends Context.Service<
-	CodeProgram,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/code/CodeProgram") {}
+
 export const layer = Layer.effect(CodeProgram, make)

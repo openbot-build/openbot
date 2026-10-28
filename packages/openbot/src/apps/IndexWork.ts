@@ -1,11 +1,5 @@
 import {
-	AppIndex,
-	Execution,
-	ServiceId,
-	type ServiceIdentity,
-} from "@openbot-build/domain"
-import { Discovery, Index, Indexing } from "@openbot-build/protocol"
-import {
+	type PlatformError,
 	Array as Arr,
 	Clock,
 	Context,
@@ -16,6 +10,23 @@ import {
 	Option,
 	Schema,
 } from "effect"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import {
+	type ServiceExecution,
+	Store,
+	commandActor,
+	storage,
+	transactionFailures,
+	type Key,
+	type Fence,
+} from "../execution/Store.ts"
+import {
+	AppIndex,
+	Execution,
+	ServiceId,
+	type ServiceIdentity,
+} from "@openbot-build/domain"
+import { Discovery, Index, Indexing } from "@openbot-build/protocol"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import { and, eq } from "drizzle-orm"
@@ -25,14 +36,6 @@ import {
 	appIndexResults,
 } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
-import {
-	Store,
-	commandActor,
-	storage,
-	transactionFailures,
-	type Key,
-	type Fence,
-} from "../execution/Store.ts"
 import { Governance } from "./Governance.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import { CheckJson } from "./IndexStore.ts"
@@ -89,6 +92,113 @@ const toJob = (row: typeof appIndexJobs.$inferSelect) =>
 	})
 
 /** The Index owns checks and results. The shared engine owns all scheduling. */
+export interface Service {
+	readonly request: (
+		cardUrl: string,
+		sources: readonly Discovery.Source[],
+	) => Effect.Effect<
+		{
+			job: {
+				cardUrl: string
+				generation: string
+				requestedAt: number
+				status: AppIndex.JobStatus
+				check: AppIndex.Check | null
+			}
+			execution: { namespace: string; id: Execution.Id }
+		},
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| PlatformError.PlatformError
+		| Schema.SchemaError
+		| Execution.StorageError
+	>
+	readonly job: (
+		cardUrl: string,
+		generation?: string | undefined,
+	) => Effect.Effect<
+		Option.Option<AppIndex.Job>,
+		Schema.SchemaError | Execution.StorageError
+	>
+	readonly load: (
+		key: Key,
+		lock?: boolean,
+	) => Effect.Effect<
+		{
+			saved: ServiceExecution
+			row: typeof appIndexJobs.$inferSelect
+		},
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| Execution.StorageError
+	>
+	readonly authorize: (
+		key: Key,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly begin: (fence: Fence) => Effect.Effect<
+		{
+			generation: string
+			input: {
+				cardUrl: string
+				sources: readonly Discovery.Source[]
+				previous: Index.Entry | null
+			}
+		},
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| PlatformError.PlatformError
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly restriction: (
+		cardUrl: string,
+	) => Effect.Effect<
+		Option.Option<AppIndex.Restriction>,
+		Execution.StorageError
+	>
+	readonly inspect: (
+		input: CheckInput,
+		restriction: Option.Option<AppIndex.Restriction>,
+	) => Effect.Effect<
+		| {
+				readonly _tag: "Unconfirmed"
+				readonly stages: readonly Indexing.InspectionStage[]
+				readonly cardUrl: string
+				readonly reason: string
+				readonly url: string
+				readonly issue: string
+		  }
+		| { _tag: "Indexed"; entry: Index.Entry }
+		| { _tag: "Excluded" | "Withdrawn"; cardUrl: string; reason: string },
+		Indexing.IndexingError | Execution.StorageError
+	>
+	readonly complete: (
+		fence: Fence,
+		generation: string,
+		outcome: CheckResult,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class IndexWork extends Context.Service<IndexWork, Service>()(
+	"@openbot-build/openbot/apps/IndexWork",
+) {}
+
 const make = (options: Options) =>
 	Effect.gen(function* () {
 		const db = yield* Db.make
@@ -431,7 +541,7 @@ const make = (options: Options) =>
 				}),
 			)
 		}, transactionFailures)
-		return {
+		return IndexWork.of({
 			request,
 			job,
 			load,
@@ -440,11 +550,8 @@ const make = (options: Options) =>
 			restriction,
 			inspect,
 			complete,
-		}
+		})
 	})
-export class IndexWork extends Context.Service<
-	IndexWork,
-	Effect.Success<ReturnType<typeof make>>
->()("@openbot-build/openbot/apps/IndexWork") {}
+
 export const layer = (options: Options = {}) =>
 	Layer.effect(IndexWork, make(options))

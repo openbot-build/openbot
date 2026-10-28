@@ -1,7 +1,36 @@
+import {
+	type Vaults,
+	type AppIndex,
+	type AppConnections,
+	type ExperienceNotFound,
+	type ExperienceStorageUnavailable,
+	AppCalls,
+	Authorization,
+	Execution,
+} from "@openbot-build/domain"
+import {
+	type App,
+	type Discovery,
+	type Document,
+	type Network,
+	type Store,
+	Client,
+} from "@openbot-build/protocol"
+import type { Paused } from "../execution/Admission.ts"
+import type { Pending } from "@nmnmcc/ability/Authorizer"
+import { type Unavailable, ConnectionSessions } from "./ConnectionSessions.ts"
+import type { VaultReadFailed } from "../vaults/Readers.ts"
+import {
+	type Scope,
+	Context,
+	Effect,
+	Layer,
+	Option,
+	Redacted,
+	Ref,
+	Schema,
+} from "effect"
 import { Calls } from "../execution/Calls.ts"
-import { AppCalls, Authorization, Execution } from "@openbot-build/domain"
-import { Client } from "@openbot-build/protocol"
-import { Context, Effect, Layer, Option, Redacted, Ref, Schema } from "effect"
 import * as Gate from "../capabilities/Gate.ts"
 import { RequestCommands } from "../capabilities/RequestCommands.ts"
 import * as CallFrame from "../chats/CallFrame.ts"
@@ -10,7 +39,6 @@ import { ActionPolicy } from "./ActionPolicy.ts"
 import * as AppCall from "./AppCall.ts"
 import { AppCommands, continuation } from "./AppCommands.ts"
 import { json } from "./AppResults.ts"
-import { ConnectionSessions } from "./ConnectionSessions.ts"
 import { ownerKey, get as connection } from "./StoredConnections.ts"
 import * as Check from "../authorization/Check.ts"
 import * as Db from "../database/Database.ts"
@@ -264,15 +292,88 @@ const open = (fence: Fence) =>
 		})
 		return { permission, send: send.pipe(Effect.asVoid) }
 	})
+export interface Service {
+	readonly open: (fence: Fence) => Effect.Effect<
+		{
+			permission: Effect.Effect<
+				| { readonly _tag: "Ready"; readonly key?: never }
+				| {
+						readonly _tag: "Approval"
+						readonly key: { namespace: string; id: Execution.Id }
+				  },
+				| Execution.Conflict
+				| Execution.Forbidden
+				| Execution.NotFound
+				| Vaults.SecretProviderFailed
+				| Vaults.SecretProviderInUse
+				| Vaults.SecretProviderNotFound
+				| Execution.StorageError
+				| Vaults.VaultConflict
+				| Vaults.VaultInvalid
+				| Vaults.VaultItemNotFound
+				| Vaults.VaultsUnavailable
+				| Check.Errors
+			>
+			send: Effect.Effect<
+				void,
+				| App.AppError
+				| AppIndex.AppRestricted
+				| Client.AuthorizationRequired
+				| Client.ClientError
+				| Execution.Conflict
+				| AppConnections.ConnectionConflict
+				| Discovery.DiscoveryError
+				| ExperienceNotFound
+				| ExperienceStorageUnavailable
+				| Authorization.Forbidden
+				| Execution.Forbidden
+				| Document.IncompatibleCard
+				| Document.InvalidDocument
+				| Document.InvalidLink
+				| Network.NetworkError
+				| Execution.NotFound
+				| Client.OutcomeUnknown
+				| Paused
+				| Pending
+				| Client.PermissionDenied
+				| Authorization.PolicyUnavailable
+				| Schema.SchemaError
+				| Vaults.SecretProviderFailed
+				| Vaults.SecretProviderInUse
+				| Vaults.SecretProviderNotFound
+				| Execution.StorageError
+				| Store.StoreError
+				| Client.ToolFailure
+				| Unavailable
+				| Vaults.VaultConflict
+				| Vaults.VaultInvalid
+				| Vaults.VaultItemNotFound
+				| VaultReadFailed
+				| Vaults.VaultsUnavailable
+				| {
+						errorId: Execution.ErrorId
+						category: Execution.Failure["category"]
+				  },
+				Scope.Scope
+			>
+		},
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class AppSession extends Context.Service<AppSession, Service>()(
+	"@openbot-build/openbot/apps/AppSession",
+) {}
+
 const make = Effect.gen(function* () {
 	const services =
 		yield* Effect.context<Effect.Services<ReturnType<typeof open>>>()
-	return {
+	return AppSession.of({
 		open: (fence: Fence) => open(fence).pipe(Effect.provideContext(services)),
-	}
+	})
 })
-export class AppSession extends Context.Service<
-	AppSession,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/AppSession") {}
+
 export const layer = Layer.effect(AppSession, make)

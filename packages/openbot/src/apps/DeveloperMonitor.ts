@@ -1,7 +1,5 @@
-import * as Models from "./DeveloperModels.ts"
-import { Developers, Execution } from "@openbot-build/domain"
-import { and, eq } from "drizzle-orm"
 import {
+	type PlatformError,
 	Array as Arr,
 	Clock,
 	Context,
@@ -12,6 +10,10 @@ import {
 	Option,
 	Schema,
 } from "effect"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import * as Models from "./DeveloperModels.ts"
+import { Developers, Execution } from "@openbot-build/domain"
+import { and, eq } from "drizzle-orm"
 import {
 	developerProofs,
 	developerMembers,
@@ -39,6 +41,75 @@ export const CheckResult = Schema.TaggedUnion({
 	Failed: { failure: Execution.Failure },
 })
 export type CheckResult = typeof CheckResult.Type
+
+export interface Service {
+	readonly prepare: (ref: Reference) => Effect.Effect<
+		| { readonly kind: "App"; readonly id: string; readonly proof?: never }
+		| {
+				readonly id?: never
+				readonly kind: "Proof"
+				readonly proof: Rows.ProofRecord
+		  },
+		| Developers.DeveloperForbidden
+		| Developers.DeveloperNotFound
+		| Developers.StorageFailure
+	>
+	readonly inspect: (
+		input:
+			| { readonly kind: "App"; readonly id: string; readonly proof?: never }
+			| {
+					readonly id?: never
+					readonly kind: "Proof"
+					readonly proof: Rows.ProofRecord
+			  },
+	) => Effect.Effect<
+		| {
+				readonly _tag: "App"
+				readonly report: Models.InspectionReport
+				readonly previous?: never
+				readonly evidence?: never
+		  }
+		| {
+				readonly _tag: "Relinquished"
+				readonly previous?: never
+				readonly evidence?: never
+				readonly report?: never
+		  }
+		| {
+				readonly _tag: "Proof"
+				readonly previous: Developers.Proof
+				readonly evidence: Developers.ProofEvidence
+				readonly report: Models.InspectionReport | null
+		  },
+		Developers.Failure
+	>
+	readonly complete: (
+		fence: Fence,
+		revision: number,
+		result: CheckResult,
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Developers.DeveloperConflict
+		| Developers.DeveloperForbidden
+		| Developers.DeveloperInputInvalid
+		| Developers.DeveloperNotFound
+		| Developers.DeveloperRestricted
+		| Developers.DeveloperUnavailable
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| PlatformError.PlatformError
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class DeveloperMonitor extends Context.Service<
+	DeveloperMonitor,
+	Service
+>()("@openbot-build/openbot/apps/DeveloperMonitor") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -217,10 +288,7 @@ const make = Effect.gen(function* () {
 			)
 			.pipe(transactionFailures)
 	})
-	return { prepare, inspect, complete }
+	return DeveloperMonitor.of({ prepare, inspect, complete })
 })
-export class DeveloperMonitor extends Context.Service<
-	DeveloperMonitor,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/DeveloperMonitor") {}
+
 export const layer = Layer.effect(DeveloperMonitor, make)

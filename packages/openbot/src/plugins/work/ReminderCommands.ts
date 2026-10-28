@@ -1,3 +1,10 @@
+import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Fence,
+	type Key,
+} from "../../execution/Store.ts"
 import * as Hex from "effect/encoding/Hex"
 import {
 	Execution,
@@ -16,7 +23,6 @@ import {
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
 import { type Authorize } from "../../execution/Engine.ts"
-import { Store, storage, type Fence, type Key } from "../../execution/Store.ts"
 import { TurnAccess } from "../../chats/TurnAccess.ts"
 import { Chat, ToolStep, Turn } from "@openbot-build/core"
 import * as StoredChats from "../../chats/StoredChats.ts"
@@ -31,6 +37,80 @@ const Input = Schema.Struct({
 	callId: Schema.String,
 })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
+export interface Service {
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			execution: MemberExecution
+			record: {
+				readonly id: string
+				readonly executionId?: Execution.Id
+				readonly userId: string
+				readonly author: string
+				readonly chat: Chat.Id
+				readonly turn: Turn.Id
+				readonly toolCallId: string
+				readonly note: string
+				readonly createdAt: number
+				readonly dueAt: number
+				readonly status: "cancelled" | "done" | "waiting"
+			}
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly start: (
+		parent: Fence,
+		callId: string,
+		note: string,
+		dueAt: number,
+	) => Effect.Effect<
+		{
+			readonly id: string
+			readonly executionId?: Execution.Id
+			readonly userId: string
+			readonly author: string
+			readonly chat: Chat.Id
+			readonly turn: Turn.Id
+			readonly toolCallId: string
+			readonly note: string
+			readonly createdAt: number
+			readonly dueAt: number
+			readonly status: "cancelled" | "done" | "waiting"
+		},
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly deliver: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly finish: (
+		fence: Fence,
+		end:
+			| { readonly status: "failed"; readonly failure: Execution.Failure }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class ReminderCommands extends Context.Service<
+	ReminderCommands,
+	Service
+>()("@openbot-build/openbot/plugins/work/ReminderCommands") {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const db = yield* Db.make
@@ -243,10 +323,7 @@ const make = Effect.gen(function* () {
 				close,
 			)
 	}, storage)
-	return { load, authorize, start, deliver, finish }
+	return ReminderCommands.of({ load, authorize, start, deliver, finish })
 })
-export class ReminderCommands extends Context.Service<
-	ReminderCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/plugins/work/ReminderCommands") {}
+
 export const layer = Layer.effect(ReminderCommands, make)

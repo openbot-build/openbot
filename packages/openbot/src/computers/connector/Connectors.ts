@@ -1,5 +1,8 @@
-import { Computers as ComputerData } from "@openbot-build/domain"
-import { Execution, type ExecutionIdentity } from "@openbot-build/domain"
+import {
+	Computers as ComputerData,
+	Execution,
+	type ExecutionIdentity,
+} from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -94,6 +97,37 @@ const sameOwner = (a: ExecutionIdentity, b: ExecutionIdentity) =>
 	a.owner.organizationId === b.owner.organizationId &&
 	a.owner.userId === b.owner.userId &&
 	a.botId === b.botId
+
+export interface Service {
+	readonly serve: (input: {
+		readonly organizationId: string
+		readonly computerId: string
+		readonly socket: Socket.Socket
+		readonly online: (
+			hello: ComputerData.ConnectorHello,
+		) => Effect.Effect<void, ComputerData.ComputersUnavailable>
+		readonly offline: Effect.Effect<void, ComputerData.ComputersUnavailable>
+	}) => Effect.Effect<void, never>
+	readonly call: (
+		identity: ExecutionIdentity,
+		computerId: string,
+		operation: Operation,
+		wait?: Duration.Duration,
+	) => Effect.Effect<Schema.Json, ComputerFailure>
+	readonly start: (
+		identity: ExecutionIdentity,
+		computerId: string,
+		request: StartRequest,
+	) => Effect.Effect<Process, ComputerFailure, Scope.Scope>
+	readonly close: (
+		organizationId: string,
+		id: string,
+	) => Effect.Effect<void, never>
+}
+
+export class Connectors extends Context.Service<Connectors, Service>()(
+	"@openbot-build/openbot/computers/connector/Connectors",
+) {}
 
 export const make = Effect.gen(function* () {
 	const background = yield* Background.make
@@ -575,7 +609,7 @@ export const make = Effect.gen(function* () {
 					control({ _tag: "Signal", session, signal }),
 			}
 		}).pipe(safe)
-	return {
+	return Connectors.of({
 		serve,
 		call,
 		start,
@@ -583,12 +617,9 @@ export const make = Effect.gen(function* () {
 			transport
 				.close(resource(organizationId, id))
 				.pipe(background.logFailure("A connector could not close.")),
-	}
+	})
 })
 
 /** Physical sockets share the resource transport. Commands and output are never stored in notices. */
-export class Connectors extends Context.Service<
-	Connectors,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/computers/connector/Connectors") {}
+
 export const layer = Layer.effect(Connectors, make)

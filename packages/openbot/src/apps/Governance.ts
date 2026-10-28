@@ -4,6 +4,29 @@ import * as Failures from "../errors/Failures.ts"
 import { Settings } from "../settings/Settings.ts"
 
 /** One snapshot serves a whole list. Actions read current restrictions before sending. */
+export interface Service {
+	readonly snapshot: Effect.Effect<
+		HashMap.HashMap<string, AppIndex.Restriction>,
+		ExperienceStorageUnavailable
+	>
+	readonly find: (
+		cardUrl: string,
+	) => Effect.Effect<
+		Option.Option<AppIndex.Restriction>,
+		ExperienceStorageUnavailable
+	>
+	readonly check: (
+		cardUrl: string,
+	) => Effect.Effect<
+		void,
+		AppIndex.AppRestricted | ExperienceStorageUnavailable
+	>
+}
+
+export class Governance extends Context.Service<Governance, Service>()(
+	"@openbot-build/openbot/apps/Governance",
+) {}
+
 const make = Effect.gen(function* () {
 	const settings = yield* Settings
 	const snapshot = settings.platform.pipe(
@@ -36,10 +59,7 @@ const make = Effect.gen(function* () {
 				}),
 			),
 		)
-	return { snapshot, find, check }
+	return Governance.of({ snapshot, find, check })
 })
-export class Governance extends Context.Service<
-	Governance,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/Governance") {}
+
 export const layer = Layer.effect(Governance, make)

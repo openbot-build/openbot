@@ -1,20 +1,36 @@
-import * as ChannelAdmission from "./ChannelAdmission.ts"
-import { Channels as Domain, Execution } from "@openbot-build/domain"
-import { and, eq } from "drizzle-orm"
-import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect"
-import { Hex } from "effect/encoding"
-import { SqlClient } from "effect/sql"
-import * as Db from "../database/Database.ts"
-import { channelDeliveries } from "../database/Schema.ts"
-import { Store, storage, type Fence, type Key } from "../execution/Store.ts"
-import * as Failures from "../errors/Failures.ts"
-import { ChannelInbox } from "./ChannelInbox.ts"
 import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
+import {
+	type ChannelEvent,
 	MessageRef,
 	OutboundMessage,
 	TargetSchema,
 	type Target,
 } from "./Channel.ts"
+import {
+	type PlatformError,
+	Clock,
+	Context,
+	Crypto,
+	Effect,
+	Layer,
+	Schema,
+} from "effect"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import * as ChannelAdmission from "./ChannelAdmission.ts"
+import { Channels as Domain, Execution } from "@openbot-build/domain"
+import { and, eq } from "drizzle-orm"
+import { Hex } from "effect/encoding"
+import { SqlClient } from "effect/sql"
+import * as Db from "../database/Database.ts"
+import { channelDeliveries } from "../database/Schema.ts"
+import * as Failures from "../errors/Failures.ts"
+import { ChannelInbox } from "./ChannelInbox.ts"
 
 export const workflowName = "openbot.channel-delivery"
 export const Input = Schema.Struct({
@@ -31,6 +47,122 @@ const codec = Schema.toCodecJson(Input)
 const messageCodec = Schema.toCodecJson(OutboundMessage)
 const targetCodec = Schema.toCodecJson(TargetSchema)
 const refCodec = Schema.fromJsonString(MessageRef)
+export interface Service {
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			execution: MemberExecution
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly reference: (
+		id: string,
+	) => Effect.Effect<MessageRef | null, Execution.StorageError>
+	readonly finish: (
+		fence: Fence,
+		outcome:
+			| {
+					readonly status: "completed" | "failed" | "interrupted"
+					readonly failure?: Execution.Failure
+					readonly ref?: MessageRef
+			  }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly receive: (
+		organizationId: string,
+		channelId: string,
+		events: Parameters<
+			(
+				organizationId: string,
+				channelId: string,
+				events: ReadonlyArray<ChannelEvent>,
+			) => Effect.Effect<
+				void,
+				| Execution.Conflict
+				| Execution.Forbidden
+				| Execution.KeyConflict
+				| Execution.NotFound
+				| Execution.StorageError
+			>
+		>[2],
+	) => Effect.Effect<void, Domain.ChannelsUnavailable>
+	readonly notice: (
+		source: Fence,
+		step: string,
+		input: {
+			readonly channelId: string
+			readonly target: Target
+			readonly message: OutboundMessage
+			readonly request?: string
+		},
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Domain.ChannelConflict
+		| Domain.ChannelNotFound
+		| Domain.ChannelsUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| PlatformError.PlatformError
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly putRequest: (
+		source: Fence,
+		step: string,
+		input: Parameters<
+			(
+				source: Fence,
+				step: string,
+				input: {
+					readonly channelId: string
+					readonly target: Target
+					readonly message: OutboundMessage
+					readonly request?: string
+				},
+			) => Effect.Effect<
+				Execution.Receipt,
+				| Domain.ChannelConflict
+				| Domain.ChannelNotFound
+				| Domain.ChannelsUnavailable
+				| Execution.Conflict
+				| Execution.Forbidden
+				| Execution.KeyConflict
+				| Execution.NotFound
+				| PlatformError.PlatformError
+				| Schema.SchemaError
+				| SecretStorageError
+				| Execution.StorageError
+			>
+		>[2] & { readonly request: string },
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Domain.ChannelConflict
+		| Domain.ChannelNotFound
+		| Domain.ChannelsUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| PlatformError.PlatformError
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+}
+
+export class ChannelQueue extends Context.Service<ChannelQueue, Service>()(
+	"@openbot-build/openbot/channels/ChannelQueue",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const store = yield* Store
@@ -225,7 +357,7 @@ const make = Effect.gen(function* () {
 				end,
 			)
 		}).pipe(storage, Effect.asVoid)
-	return {
+	return ChannelQueue.of({
 		load,
 		reference,
 		finish,
@@ -247,10 +379,7 @@ const make = Effect.gen(function* () {
 			step: string,
 			input: Parameters<typeof submit>[2] & { readonly request: string },
 		) => submit(source, step, input),
-	}
+	})
 })
-export class ChannelQueue extends Context.Service<
-	ChannelQueue,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/channels/ChannelQueue") {}
+
 export const layer = Layer.effect(ChannelQueue, make)

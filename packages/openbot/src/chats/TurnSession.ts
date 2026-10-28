@@ -1,7 +1,12 @@
-import { Definition } from "./ToolDefinitions.ts"
-import { ReviewTools } from "../capabilities/ReviewTools.ts"
-import * as Registration from "../plugins/Registration.ts"
+import type { Busy, Failed, Gone } from "../resources/Resource.ts"
 import {
+	type ChatModelInvalid,
+	Execution,
+	Bots as BotDomain,
+} from "@openbot-build/domain"
+import {
+	type Bot,
+	type Config,
 	Chat,
 	ChatStoreRepository,
 	Item,
@@ -11,8 +16,10 @@ import {
 	Turn,
 	TurnRunner,
 } from "@openbot-build/core"
-import { Execution, Bots as BotDomain } from "@openbot-build/domain"
+import { type BillingStorageError, Billing } from "../billing/Billing.ts"
+import type { Paused } from "../execution/Admission.ts"
 import {
+	type Scope,
 	Array as Arr,
 	Context,
 	Crypto,
@@ -22,11 +29,13 @@ import {
 	Schema,
 	Stream,
 } from "effect"
+import { Definition } from "./ToolDefinitions.ts"
+import { ReviewTools } from "../capabilities/ReviewTools.ts"
+import * as Registration from "../plugins/Registration.ts"
 import { LanguageModel, Prompt, Toolkit } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { Bots } from "../bots/Bots.ts"
 import * as ChatModels from "./ChatModels.ts"
-import { Billing } from "../billing/Billing.ts"
 import { Records } from "../errors/Records.ts"
 import { CurrentAttribution } from "../billing/MeteredModel.ts"
 import * as Db from "../database/Database.ts"
@@ -52,6 +61,38 @@ const Reference = Schema.Struct({
 	chat: Chat.Id,
 	actionDefinition: Schema.optionalKey(Definition),
 })
+
+export interface Service {
+	readonly run: (
+		fence: Fence,
+	) => Effect.Effect<
+		undefined,
+		| BotDomain.BotNotFound
+		| BotDomain.BotStorageUnavailable
+		| Busy
+		| ChatModelInvalid
+		| Failed
+		| Gone
+		| Bot.ExecutionError<
+				{},
+				| BillingStorageError
+				| Execution.Conflict
+				| Execution.KeyConflict
+				| Config.ModelConfigurationError
+				| Execution.OutcomeUnknown
+				| Paused
+				| Schema.SchemaError
+				| Execution.Failure
+				| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+		  >
+		| Chat.RuntimeError,
+		Scope.Scope
+	>
+}
+
+export class TurnSession extends Context.Service<TurnSession, Service>()(
+	"@openbot-build/openbot/chats/TurnSession",
+) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -325,12 +366,9 @@ const make = Effect.gen(function* () {
 				),
 			)
 	}, inExecution)
-	return { run }
+	return TurnSession.of({ run })
 })
 
 /** One workflow phase owns the model, tools and store of a Turn. */
-export class TurnSession extends Context.Service<
-	TurnSession,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/chats/TurnSession") {}
+
 export const layer = Layer.effect(TurnSession, make)

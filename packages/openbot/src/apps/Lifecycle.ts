@@ -1,5 +1,5 @@
-import { AppConnections, ConnectionId, Execution } from "@openbot-build/domain"
 import {
+	type Authorization,
 	AppConnections as ProtocolConnections,
 	CatalogDiscovery,
 	Client,
@@ -10,6 +10,7 @@ import {
 	OAuthAuthorization,
 	Store as Protocol,
 } from "@openbot-build/protocol"
+import { AppConnections, ConnectionId, Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
@@ -34,6 +35,34 @@ import { type Input, type Prepared } from "./ConnectionCommands.ts"
 import { jsonObject } from "./AppResults.ts"
 
 /** Reads return a proposed change. Only ConnectionCommands may save that change. */
+export interface Service {
+	readonly prepare: (
+		input: Input,
+		executionId: Execution.Id,
+		check: Effect.Effect<
+			void,
+			| Execution.Forbidden
+			| Execution.StorageError
+			| Execution.Conflict
+			| Execution.NotFound
+		>,
+	) => Effect.Effect<
+		Prepared,
+		| Authorization.AuthorizationError
+		| Execution.Conflict
+		| AppConnections.ConnectionConfigurationInvalid
+		| AppConnections.ConnectionConflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| Discovery.Error
+	>
+}
+
+export class Lifecycle extends Context.Service<Lifecycle, Service>()(
+	"@openbot-build/openbot/apps/Lifecycle",
+) {}
+
 export const make = Effect.gen(function* () {
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
@@ -408,10 +437,7 @@ export const make = Effect.gen(function* () {
 				yield* errors.record(Cause.fail(error), "external", executionId)
 			return { ...base, app, connection: { ...stored, verification } }
 		})
-	return { prepare }
+	return Lifecycle.of({ prepare })
 })
-export class Lifecycle extends Context.Service<
-	Lifecycle,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/Lifecycle") {}
+
 export const layer = Layer.effect(Lifecycle, make)

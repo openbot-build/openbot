@@ -1,3 +1,10 @@
+import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Key,
+	type Fence,
+} from "../execution/Store.ts"
 import * as PolicyOrigin from "./PolicyOrigin.ts"
 import * as ToolOrigins from "../chats/ToolOrigins.ts"
 import { Chat, Turn } from "@openbot-build/core"
@@ -19,7 +26,6 @@ import { AuditLog } from "../audit/AuditLog.ts"
 import * as ChatHost from "../chats/ChatHost.ts"
 import { TurnAccess } from "../chats/TurnAccess.ts"
 import { type Authorize, type DecisionCommand } from "../execution/Engine.ts"
-import { Store, storage, type Key, type Fence } from "../execution/Store.ts"
 import { Requests, Stored } from "./Requests.ts"
 
 export const workflowName = "openbot.capability-request"
@@ -76,6 +82,129 @@ export type End =
 	| { readonly status: "completed" }
 	| { readonly status: "cancelled"; readonly epoch: number }
 	| { readonly status: "failed"; readonly failure: Execution.Failure }
+
+export interface Service {
+	readonly admit: (
+		source: Fence,
+		commandKey: Execution.CommandKey,
+		input: Input,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly submit: (
+		source: Fence,
+		commandKey: Execution.CommandKey,
+		input: Input,
+		decided?: PolicyDecision | undefined,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly submitted: (
+		source: Fence,
+		commandKey: Execution.CommandKey,
+		input: Input,
+	) => Effect.Effect<
+		| Option.None<
+				| { readonly _tag: "Allowed" }
+				| {
+						readonly _tag: "Requested"
+						readonly stored: Stored
+						readonly executionId: Execution.Id
+				  }
+		  >
+		| Option.Some<
+				| { readonly _tag: "Allowed" }
+				| {
+						readonly _tag: "Requested"
+						readonly stored: Stored
+						readonly executionId: Execution.Id
+				  }
+		  >,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			execution: MemberExecution
+			sourceKey: { namespace: string; id: Execution.Id }
+			originKey: Key | { namespace: string; id: Execution.Id }
+			control: PolicyOrigin.Control | undefined
+			stored: Stored
+			continuation: "chat" | "workflow"
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly waiting: (
+		fence: Fence,
+	) => Effect.Effect<
+		Option.None<Stored> | Option.Some<Stored>,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly expire: (
+		fence: Fence,
+	) => Effect.Effect<
+		Stored,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly pass: (
+		fence: Fence,
+		revision: number,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly decide: (
+		key: Key,
+		actor: Caller,
+		input: DecisionCommand & { readonly details?: typeof Details.Type },
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class RequestCommands extends Context.Service<
+	RequestCommands,
+	Service
+>()("@openbot-build/openbot/capabilities/RequestCommands") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -697,7 +826,7 @@ const make = Effect.gen(function* () {
 			},
 		)
 	}, storage)
-	return {
+	return RequestCommands.of({
 		admit,
 		submit,
 		submitted,
@@ -708,10 +837,7 @@ const make = Effect.gen(function* () {
 		finish,
 		authorize,
 		decide,
-	}
+	})
 })
-export class RequestCommands extends Context.Service<
-	RequestCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/capabilities/RequestCommands") {}
+
 export const layer = Layer.effect(RequestCommands, make)

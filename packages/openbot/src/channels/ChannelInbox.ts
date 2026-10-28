@@ -1,3 +1,10 @@
+import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Execution } from "@openbot-build/domain"
 import { and, desc, eq } from "drizzle-orm"
@@ -7,7 +14,6 @@ import { SqlClient } from "effect/sql"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import * as Db from "../database/Database.ts"
 import { channelInbox } from "../database/Schema.ts"
-import { Store, storage, type Fence, type Key } from "../execution/Store.ts"
 import { ChannelEventSchema, type ChannelEvent } from "./Channel.ts"
 import { Channels } from "./Channels.ts"
 
@@ -21,6 +27,47 @@ export const Input = Schema.Struct({
 })
 const codec = Schema.toCodecJson(Input)
 const eventCodec = Schema.toCodecJson(ChannelEventSchema)
+export interface Service {
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			execution: MemberExecution
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly receive: (
+		organizationId: string,
+		channelId: string,
+		events: ReadonlyArray<ChannelEvent>,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		outcome:
+			| {
+					readonly status: "completed" | "failed" | "interrupted"
+					readonly failure?: Execution.Failure
+			  }
+			| { readonly status: "cancelled"; readonly epoch: number },
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+}
+
+export class ChannelInbox extends Context.Service<ChannelInbox, Service>()(
+	"@openbot-build/openbot/channels/ChannelInbox",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -172,10 +219,7 @@ const make = Effect.gen(function* () {
 				)
 			return yield* store.commit(fence, outcome, end)
 		}).pipe(storage, Effect.asVoid)
-	return { load, receive, finish }
+	return ChannelInbox.of({ load, receive, finish })
 })
-export class ChannelInbox extends Context.Service<
-	ChannelInbox,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/channels/ChannelInbox") {}
+
 export const layer = Layer.effect(ChannelInbox, make)

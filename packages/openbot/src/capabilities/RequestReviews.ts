@@ -1,11 +1,21 @@
-import * as ChatModels from "../chats/ChatModels.ts"
-import { ModelRegistry } from "../models/ModelRegistry.ts"
 import {
+	type Bots as BotsType,
+	type ChatModelInvalid,
+	Execution,
+	type ExecutionIdentity,
+} from "@openbot-build/domain"
+import {
+	type ChatStore,
+	type Config,
 	Chat,
 	ChatStoreRepository,
 	Store as CoreStore,
 } from "@openbot-build/core"
-import { Execution, type ExecutionIdentity } from "@openbot-build/domain"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import { type SqlError, SqlClient } from "effect/sql"
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import * as ChatModels from "../chats/ChatModels.ts"
+import { ModelRegistry } from "../models/ModelRegistry.ts"
 import {
 	Array as Arr,
 	Clock,
@@ -20,7 +30,6 @@ import {
 import { Prompt } from "effect/ai"
 import { and, eq, inArray } from "drizzle-orm"
 import { executions, toolExecutions } from "../database/ExecutionSchema.ts"
-import { SqlClient } from "effect/sql"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import { Bots } from "../bots/Bots.ts"
 import * as ChatHost from "../chats/ChatHost.ts"
@@ -46,6 +55,51 @@ const text = (stored: Stored) =>
 		code: stored.request.code,
 	})
 const Reference = Schema.Struct({ chat: Chat.Id })
+export interface Service {
+	readonly start: (
+		fence: Fence,
+		revision: number,
+	) => Effect.Effect<
+		| Option.None<{ namespace: string; id: Execution.Id }>
+		| Option.Some<{ namespace: string; id: Execution.Id }>,
+		| BotsType.BotStorageUnavailable
+		| ChatModelInvalid
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Config.ModelConfigurationError
+		| Schema.SchemaError
+		| SecretStorageError
+		| SqlError.SqlError
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly wait: (
+		key: Key,
+	) => Effect.Effect<void, Execution.NotFound | Execution.StorageError>
+	readonly release: (
+		fence: Fence,
+		keepRevision?: number | undefined,
+	) => Effect.Effect<
+		undefined,
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Execution.Conflict
+		| EffectDrizzleQueryError
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SqlError.SqlError
+		| Execution.StorageError
+	>
+}
+
+export class RequestReviews extends Context.Service<RequestReviews, Service>()(
+	"@openbot-build/openbot/capabilities/RequestReviews",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -375,10 +429,7 @@ const make = Effect.gen(function* () {
 		inExecution,
 	)
 
-	return { start, wait, release }
+	return RequestReviews.of({ start, wait, release })
 })
-export class RequestReviews extends Context.Service<
-	RequestReviews,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/capabilities/RequestReviews") {}
+
 export const layer = Layer.effect(RequestReviews, make)

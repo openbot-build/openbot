@@ -1,3 +1,5 @@
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import { type SqlError, SqlClient } from "effect/sql"
 import * as Send from "./Send.ts"
 import * as Admission from "./Admission.ts"
 import { Execution } from "@openbot-build/domain"
@@ -10,7 +12,6 @@ import {
 	Option,
 	Schema,
 } from "effect"
-import { SqlClient } from "effect/sql"
 import { Records } from "../errors/Records.ts"
 import { Registry } from "./Engine.ts"
 import * as Recovery from "./Recovery.ts"
@@ -41,6 +42,102 @@ export interface Input<E = never, R = never> {
 		result: Schema.Json,
 	) => ReadonlyArray<Exclude<Execution.EventBody, { readonly _tag: "State" }>>
 }
+export interface Service {
+	readonly invoke: <
+		E,
+		R,
+		BeforeE = never,
+		BeforeR = never,
+		ResultE = never,
+		ResultR = never,
+	>(
+		fence: Fence,
+		input: Input<ResultE, ResultR>,
+		send: (callId: Execution.CallId) => Effect.Effect<Schema.Json, E, R>,
+		beforeSend?: Effect.Effect<void, BeforeE, BeforeR> | undefined,
+	) => Effect.Effect<
+		Outcome,
+		| BeforeE
+		| ResultE
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Admission.Paused
+		| Execution.StorageError
+		| {
+				errorId: Execution.ErrorId
+				category: Execution.Failure["category"]
+		  },
+		BeforeR | ResultR | Exclude<R, never>
+	>
+	readonly authorize: (
+		fence: Key,
+		access?: "advance" | "replay" | undefined,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly recover: (
+		key: Fence,
+		id: Execution.CallId,
+	) => Effect.Effect<
+		| { _tag: "Retry"; decisionId?: never; afterSequence?: never }
+		| { _tag: "Stop"; decisionId?: never; afterSequence?: never }
+		| { _tag: "Recorded"; decisionId?: never; afterSequence?: never }
+		| { _tag: "Pending"; decisionId: string; afterSequence: number },
+		Execution.Conflict | Execution.NotFound | Execution.StorageError
+	>
+	readonly ready: (
+		key: Key,
+		intent?: Pick<Execution.Call, "retry" | "input">,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Admission.Paused
+		| Execution.StorageError
+	>
+	readonly reserve: <A, E, R>(
+		fence: Fence,
+		call: Execution.Call,
+		work: Effect.Effect<A, E, R>,
+	) => Effect.Effect<
+		A,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Admission.Paused
+		| Execution.StorageError
+		| Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>,
+		R
+	>
+	readonly admission: (
+		key: Key,
+		lock: boolean,
+		call?: Execution.Call | undefined,
+		intent?: Pick<Execution.Call, "input" | "retry"> | undefined,
+	) => Effect.Effect<
+		void,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Admission.Paused
+		| Execution.StorageError
+	>
+	readonly stopOnPause: <A, E, R>(
+		work: Effect.Effect<A, E, R>,
+	) => Effect.Effect<
+		A,
+		E | Execution.NotFound | Admission.Paused | Execution.StorageError,
+		R
+	>
+}
+
+export class Calls extends Context.Service<Calls, Service>()(
+	"@openbot-build/openbot/execution/Calls",
+) {}
+
 const make = Effect.gen(function* () {
 	const client = yield* SqlClient.SqlClient
 	const store = yield* Store
@@ -306,12 +403,17 @@ const make = Effect.gen(function* () {
 	/** Pending carries the cursor saved with the choice, so a late result cannot be missed. */
 	const recover = store.recoverCall
 
-	return { invoke, authorize, recover, ready, reserve, admission, stopOnPause }
+	return Calls.of({
+		invoke,
+		authorize,
+		recover,
+		ready,
+		reserve,
+		admission,
+		stopOnPause,
+	})
 })
-export class Calls extends Context.Service<
-	Calls,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/Calls") {}
+
 export const layer = Layer.effect(Calls, make).pipe(
 	Layer.provide(Recovery.layer),
 )

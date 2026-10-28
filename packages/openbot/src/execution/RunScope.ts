@@ -47,6 +47,30 @@ export interface Options {
 	readonly afterSequence?: number
 }
 
+export interface Service {
+	readonly run: <E = never, R = never>(
+		fence: Fence,
+		name: string,
+		work: Effect.Effect<void, E, R | Scope.Scope> | undefined,
+		options?: Options,
+	) => Effect.Effect<
+		| { readonly _tag: "Done" }
+		| { readonly _tag: "Failed"; readonly failure: Execution.Failure }
+		| { readonly _tag: "Cancelled"; readonly epoch: number }
+		| { readonly _tag: "Expired" }
+		| { readonly _tag: "Decided"; readonly id: string }
+		| { readonly _tag: "Changed" },
+		Execution.Conflict | Execution.NotFound | Execution.StorageError,
+		| WorkflowEngine.WorkflowEngine
+		| WorkflowEngine.WorkflowInstance
+		| Exclude<R, Scope.Scope>
+	>
+}
+
+export class RunScope extends Context.Service<RunScope, Service>()(
+	"@openbot-build/openbot/execution/RunScope",
+) {}
+
 const make = Effect.gen(function* () {
 	const observation = yield* Observation
 	const store = yield* Store
@@ -359,12 +383,9 @@ const make = Effect.gen(function* () {
 				phase = `${name}:resume:${key}`
 			}
 		})
-	return { run }
+	return RunScope.of({ run })
 })
-export class RunScope extends Context.Service<
-	RunScope,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/RunScope") {}
+
 export const layer = Layer.effect(RunScope, make).pipe(
 	Layer.provide(Recovery.layer),
 )

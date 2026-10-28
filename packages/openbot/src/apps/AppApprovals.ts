@@ -1,4 +1,4 @@
-import { AppCalls } from "@openbot-build/domain"
+import { type Execution, AppCalls } from "@openbot-build/domain"
 import { Context, Effect, Layer, Schema } from "effect"
 import { appConnections, appInvocations } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
@@ -9,6 +9,18 @@ import * as StoredInvocations from "./StoredInvocations.ts"
 
 const sameSource = Schema.toEquivalence(AppCalls.Source)
 const sameArguments = Schema.toEquivalence(Schema.JsonObject)
+export interface Service {
+	readonly decide: (
+		owner: string,
+		proposal: AppCalls.Invocation,
+		allowed: boolean,
+	) => Effect.Effect<"Changed" | "Saved", Execution.StorageError>
+}
+
+export class AppApprovals extends Context.Service<AppApprovals, Service>()(
+	"@openbot-build/openbot/apps/AppApprovals",
+) {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
@@ -78,10 +90,7 @@ const make = Effect.gen(function* () {
 			}),
 		)
 	}, storage)
-	return { decide }
+	return AppApprovals.of({ decide })
 })
-export class AppApprovals extends Context.Service<
-	AppApprovals,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/AppApprovals") {}
+
 export const layer = Layer.effect(AppApprovals, make)

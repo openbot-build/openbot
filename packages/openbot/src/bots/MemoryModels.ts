@@ -1,6 +1,12 @@
-import { Config } from "@openbot-build/core"
-import { Execution } from "@openbot-build/domain"
 import {
+	type BillingStorageError,
+	Billing,
+	periodStart,
+} from "../billing/Billing.ts"
+import { type Bots, type Developers, Execution } from "@openbot-build/domain"
+import type { Paused } from "../execution/Admission.ts"
+import {
+	type Cause,
 	Array as Arr,
 	Clock,
 	Context,
@@ -9,8 +15,8 @@ import {
 	Option,
 	Schema,
 } from "effect"
+import { Config } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response } from "effect/ai"
-import { Billing, periodStart } from "../billing/Billing.ts"
 import { attribute } from "../billing/MeteredModel.ts"
 import * as Check from "../authorization/Check.ts"
 import { Calls } from "../execution/Calls.ts"
@@ -31,6 +37,48 @@ const requestCodec = Schema.toCodecJson(Request)
 const Answer = Schema.Struct({ value: Schema.Json, usage: Response.Usage })
 
 /** Memory uses the same saved model calls and confirmed usage as a Turn. */
+export interface Service {
+	readonly run: <A, E>(
+		fence: Fence,
+		step: string,
+		home: Home,
+		options: {
+			readonly schema: Schema.Codec<A, Schema.Json>
+			readonly send: (
+				prompt: Prompt.Prompt,
+			) => Effect.Effect<
+				{ readonly value: A; readonly usage: Response.Usage },
+				E,
+				LanguageModel.LanguageModel
+			>
+			readonly kind: "text" | "object"
+			readonly name: string
+			readonly prompt: (
+				instructions: string,
+			) => Effect.Effect<Prompt.Prompt, Execution.StorageError>
+		},
+	) => Effect.Effect<
+		A,
+		| BillingStorageError
+		| Bots.BotStorageUnavailable
+		| Execution.Conflict
+		| Execution.Forbidden
+		| MemoryBudgetSpent
+		| Config.ModelConfigurationError
+		| Execution.NotFound
+		| Execution.OutcomeUnknown
+		| Paused
+		| Developers.StorageFailure
+		| Cause.TimeoutError
+		| Execution.Failure
+		| Check.Errors
+	>
+}
+
+export class MemoryModels extends Context.Service<MemoryModels, Service>()(
+	"@openbot-build/openbot/bots/MemoryModels",
+) {}
+
 const make = Effect.gen(function* () {
 	const registry = yield* ModelRegistry
 
@@ -161,10 +209,7 @@ const make = Effect.gen(function* () {
 
 		return yield* Schema.decodeEffect(options.schema)(response.result.value)
 	})
-	return { run }
+	return MemoryModels.of({ run })
 })
-export class MemoryModels extends Context.Service<
-	MemoryModels,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/MemoryModels") {}
+
 export const layer = Layer.effect(MemoryModels, make)

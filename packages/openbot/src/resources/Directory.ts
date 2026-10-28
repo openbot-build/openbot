@@ -1,3 +1,6 @@
+import type { Execution } from "@openbot-build/domain"
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import { type SqlError, SqlClient } from "effect/sql"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq, isNull } from "drizzle-orm"
 import {
@@ -17,7 +20,6 @@ import {
 	Option,
 	Schema,
 } from "effect"
-import { SqlClient } from "effect/sql"
 import { RunnerStorage, ShardingConfig } from "effect/cluster"
 import * as Db from "../database/Database.ts"
 import { resourceLeases, resourceOwners } from "../database/ResourceSchema.ts"
@@ -28,6 +30,100 @@ import * as Resource from "./Resource.ts"
 class ResourceKey extends Data.Class<
 	Resource.Ref & { readonly afterLease: string | null }
 > {}
+
+export interface Service {
+	readonly node: string
+	readonly prepare: (
+		ref: Resource.Ref,
+	) => Effect.Effect<Resource.Address, never>
+	readonly claim: <E = never>(
+		address: Resource.Address,
+		replace: boolean,
+		admit?: Effect.Effect<void, E> | undefined,
+	) => Effect.Effect<
+		{ address: Resource.Address; previous: Option.Option<Resource.Address> },
+		| Resource.Busy
+		| Execution.StorageError
+		| Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>
+	>
+	readonly release: (
+		address: Resource.Address,
+	) => Effect.Effect<boolean, Execution.StorageError>
+	readonly find: (ref: Resource.Ref) => Effect.Effect<
+		| Option.None<never>
+		| Option.Some<{
+				namespace: string
+				kind: string
+				id: string
+				lease: string
+				node: string
+				host: string
+				port: number
+		  }>,
+		Execution.StorageError
+	>
+	readonly current: (
+		address: Resource.Address,
+	) => Effect.Effect<boolean, Execution.StorageError>
+	readonly commit: <A, E>(
+		address: Resource.Address,
+		change: Effect.Effect<A, E>,
+	) => Effect.Effect<
+		Option.Option<A>,
+		| Execution.StorageError
+		| Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>
+	>
+	readonly list: (
+		group: Pick<Resource.Ref, "namespace" | "kind">,
+	) => Effect.Effect<
+		{
+			namespace: string
+			kind: string
+			id: string
+			lease: string
+			node: string
+			host: string
+			port: number
+		}[],
+		Execution.StorageError
+	>
+	readonly wait: (
+		ref: Resource.Ref,
+		afterLease?: string,
+	) => Effect.Effect<Resource.Address, Execution.StorageError>
+	readonly leases: (
+		ref: Pick<Resource.Ref, "namespace" | "kind"> & { readonly id?: string },
+	) => Effect.Effect<
+		{
+			lease: string
+			namespace: string
+			kind: string
+			id: string
+			node: string
+			host: string
+			port: number
+			result: string | null
+		}[],
+		Execution.StorageError
+	>
+	readonly released: (
+		address: Resource.Address,
+	) => Effect.Effect<
+		Option.None<Resource.ReleaseResult> | Option.Some<Resource.ReleaseResult>,
+		Execution.StorageError
+	>
+	readonly complete: (
+		address: Resource.Address,
+		result: Resource.ReleaseResult,
+	) => Effect.Effect<void, Execution.StorageError>
+	readonly lost: (
+		address: Resource.Address,
+	) => Effect.Effect<void, Execution.StorageError>
+}
+
+export class Directory extends Context.Service<Directory, Service>()(
+	"@openbot-build/openbot/resources/Directory",
+) {}
 
 const make = Effect.gen(function* () {
 	const background = yield* Background.make
@@ -338,7 +434,7 @@ const make = Effect.gen(function* () {
 				),
 			)
 		})
-	return {
+	return Directory.of({
 		node,
 		prepare,
 		claim,
@@ -352,12 +448,9 @@ const make = Effect.gen(function* () {
 		released,
 		complete,
 		lost,
-	}
+	})
 })
 
 /** Node health comes from the execution engine. There is no second heartbeat. */
-export class Directory extends Context.Service<
-	Directory,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/resources/Directory") {}
+
 export const layer = Layer.effect(Directory, make)

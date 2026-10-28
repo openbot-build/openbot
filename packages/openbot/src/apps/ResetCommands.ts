@@ -1,10 +1,20 @@
-import { Caller, ConnectionId, Execution } from "@openbot-build/domain"
+import {
+	type MemberExecution,
+	Store,
+	storage,
+	type Key,
+} from "../execution/Store.ts"
+import {
+	type Developers,
+	Caller,
+	ConnectionId,
+	Execution,
+} from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Schema } from "effect"
 import { and, asc, eq, inArray } from "drizzle-orm"
 import * as Db from "../database/Database.ts"
 import { appConnections, appDrafts, appSecrets } from "../database/Schema.ts"
 import type { Authorize } from "../execution/Engine.ts"
-import { Store, storage, type Key } from "../execution/Store.ts"
 import { AuthorizationCommands } from "./AuthorizationCommands.ts"
 import * as Check from "../authorization/Check.ts"
 import { ownerKey } from "./StoredConnections.ts"
@@ -12,6 +22,42 @@ import { ownerKey } from "./StoredConnections.ts"
 export const workflowName = "openbot.app-reset"
 const Input = Schema.Struct({ connections: Schema.Array(ConnectionId) })
 const sameCaller = Schema.toEquivalence(Caller)
+export interface Service {
+	readonly start: (
+		actor: Caller,
+		commandKey: Execution.CommandKey,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly get: (
+		actor: Caller,
+		id: Execution.Id,
+	) => Effect.Effect<
+		{
+			execution: Execution.Record
+			connections: { connectionId: ConnectionId; execution: Execution.Record }[]
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		{
+			saved: MemberExecution
+			input: typeof Input.Type
+		},
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+}
+
+export class ResetCommands extends Context.Service<ResetCommands, Service>()(
+	"@openbot-build/openbot/apps/ResetCommands",
+) {}
+
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const authorization = yield* AuthorizationCommands
@@ -134,10 +180,7 @@ const make = Effect.gen(function* () {
 				})),
 			}
 		})
-	return { start, get, load, authorize }
+	return ResetCommands.of({ start, get, load, authorize })
 })
-export class ResetCommands extends Context.Service<
-	ResetCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/ResetCommands") {}
+
 export const layer = Layer.effect(ResetCommands, make)

@@ -1,8 +1,20 @@
 import {
+	type ServiceExecution,
+	Store,
+	commandActor,
+	transactionFailures,
+	type Key,
+	type Fence,
+} from "../execution/Store.ts"
+import {
+	type Developers,
 	Execution,
 	ServiceId,
 	type ServiceIdentity,
 } from "@openbot-build/domain"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
+import { type SqlError, SqlClient } from "effect/sql"
 import { and, eq } from "drizzle-orm"
 import {
 	Array as Arr,
@@ -14,16 +26,8 @@ import {
 	Schema,
 } from "effect"
 import { Hex } from "effect/encoding"
-import { SqlClient } from "effect/sql"
 import * as Db from "../database/Database.ts"
 import { developerWatches } from "../database/Schema.ts"
-import {
-	Store,
-	commandActor,
-	transactionFailures,
-	type Key,
-	type Fence,
-} from "../execution/Store.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 
 export const workflowName = "openbot.developer-watch"
@@ -41,6 +45,74 @@ const Input = Schema.Struct({ namespace: Schema.String, ref: Reference })
 export const nextSignal = (revision: number) => `check:${revision}`
 
 /** The domain holds the check cursor. The shared engine holds its owner and timer. */
+export interface Service {
+	readonly ensure: (
+		ref: Reference,
+		due: number,
+	) => Effect.Effect<
+		{ namespace: string; id: Execution.Id },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly load: (
+		key: Key,
+		lock?: boolean,
+	) => Effect.Effect<
+		{
+			saved: ServiceExecution
+			ref: Reference
+			row: typeof developerWatches.$inferSelect
+		},
+		Execution.Forbidden | Execution.NotFound | Developers.StorageFailure
+	>
+	readonly authorize: (
+		key: Key,
+	) => Effect.Effect<
+		void,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly request: (
+		ref: Reference,
+	) => Effect.Effect<
+		{ key: { namespace: string; id: Execution.Id }; revision: number },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Developers.StorageFailure
+	>
+	readonly complete: <A, E, R>(
+		fence: Fence,
+		revision: number,
+		change: Effect.Effect<
+			{ readonly nextCheckAt: number; readonly value: A },
+			E,
+			R
+		>,
+	) => Effect.Effect<
+		A | undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+		| Exclude<
+				Exclude<E, EffectDrizzleQueryError | SqlError.SqlError>,
+				EffectDrizzleQueryError | SqlError.SqlError
+		  >,
+		R
+	>
+}
+
+export class DeveloperWatches extends Context.Service<
+	DeveloperWatches,
+	Service
+>()("@openbot-build/openbot/apps/DeveloperWatches") {}
+
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
@@ -199,10 +271,7 @@ const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(transactionFailures)
-	return { ensure, load, authorize, request, complete }
+	return DeveloperWatches.of({ ensure, load, authorize, request, complete })
 })
-export class DeveloperWatches extends Context.Service<
-	DeveloperWatches,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/apps/DeveloperWatches") {}
+
 export const layer = Layer.effect(DeveloperWatches, make)

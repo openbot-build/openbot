@@ -1,12 +1,18 @@
-import { Execution } from "@openbot-build/domain"
-import { Context, Effect, Layer } from "effect"
+import {
+	type Bots as BotsType,
+	type ChatModelInvalid,
+	Execution,
+} from "@openbot-build/domain"
+import type { Chat, ChatStore, Config } from "@openbot-build/core"
+import { type Schema, Context, Effect, Layer } from "effect"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import { type Failure, Bots } from "./Bots.ts"
 import * as PolicyOrigin from "../capabilities/PolicyOrigin.ts"
 import * as Gate from "../capabilities/Gate.ts"
 import { RequestCommands } from "../capabilities/RequestCommands.ts"
 import * as CallFrame from "../chats/CallFrame.ts"
 import { inExecution } from "../chats/ChatEncoding.ts"
 import type { Fence } from "../execution/Store.ts"
-import { Bots } from "./Bots.ts"
 import { DelegationCommands } from "./DelegationCommands.ts"
 
 /** Approval waits hold no Chat runtime. A resumed start checks current rights. */
@@ -163,6 +169,57 @@ const continueWork = (fence: Fence) =>
 		return { _tag: "Continued", epoch: control.epoch } as const
 	}).pipe(inExecution)
 
+export interface Service {
+	readonly continueWork: (fence: Fence) => Effect.Effect<
+		| {
+				readonly key?: never
+				readonly _tag: "Continued"
+				readonly epoch: number
+		  }
+		| { readonly key?: never; readonly _tag: "Stopped"; readonly epoch: number }
+		| {
+				readonly epoch?: never
+				readonly _tag: "Approval"
+				readonly key: { namespace: string; id: Execution.Id }
+		  },
+		| BotsType.BotStorageUnavailable
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Schema.SchemaError
+		| SecretStorageError
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly advance: (fence: Fence) => Effect.Effect<
+		| {
+				readonly _tag: "Started"
+				readonly key: { readonly namespace: string; readonly id: Execution.Id }
+		  }
+		| {
+				readonly _tag: "Approval"
+				readonly key: { namespace: string; id: Execution.Id }
+		  },
+		| ChatModelInvalid
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Config.ModelConfigurationError
+		| Schema.SchemaError
+		| SecretStorageError
+		| Failure
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+}
+
+export class DelegationSession extends Context.Service<
+	DelegationSession,
+	Service
+>()("@openbot-build/openbot/bots/DelegationSession") {}
+
 const make = Effect.gen(function* () {
 	const services =
 		yield* Effect.context<
@@ -170,15 +227,12 @@ const make = Effect.gen(function* () {
 				ReturnType<typeof advance> | ReturnType<typeof continueWork>
 			>
 		>()
-	return {
+	return DelegationSession.of({
 		continueWork: (fence: Fence) =>
 			continueWork(fence).pipe(Effect.provideContext(services)),
 		advance: (fence: Fence) =>
 			advance(fence).pipe(Effect.provideContext(services)),
-	}
+	})
 })
-export class DelegationSession extends Context.Service<
-	DelegationSession,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/DelegationSession") {}
+
 export const layer = Layer.effect(DelegationSession, make)

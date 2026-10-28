@@ -1,16 +1,34 @@
 import {
-	Chat,
-	ChatStoreRepository,
-	Store as CoreStore,
-	Turn,
-} from "@openbot-build/core"
+	type MemberExecution,
+	Store,
+	storage,
+	type Fence,
+	type Key,
+} from "../execution/Store.ts"
 import {
+	type BotId,
+	type Bots as BotsType,
+	type Settings as SettingsData,
+	type TriggerId,
+	type Computers,
+	type ToolExecution,
+	type ChatModelInvalid,
 	Delegations as Domain,
 	Execution,
 	Caller,
 	type ExecutionIdentity,
 } from "@openbot-build/domain"
 import {
+	type ChatStore,
+	type Item,
+	type Config,
+	Chat,
+	ChatStoreRepository,
+	Store as CoreStore,
+	Turn,
+} from "@openbot-build/core"
+import {
+	type PlatformError,
 	Array as Arr,
 	Clock,
 	Context,
@@ -21,9 +39,11 @@ import {
 	Schema,
 	Struct,
 } from "effect"
+import type { SecretStorageError } from "../secrets/Secrets.ts"
+import { type Failure, Bots } from "./Bots.ts"
+import { type SqlError, SqlClient } from "effect/sql"
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
-import { SqlClient } from "effect/sql"
 import * as PolicyOrigin from "../capabilities/PolicyOrigin.ts"
 import { Requests } from "../capabilities/Requests.ts"
 import * as CallFrame from "../chats/CallFrame.ts"
@@ -36,12 +56,10 @@ import * as ToolOrigins from "../chats/ToolOrigins.ts"
 import { TurnAccess } from "../chats/TurnAccess.ts"
 import * as Db from "../database/Database.ts"
 import type { Authorize, Decide } from "../execution/Engine.ts"
-import { Store, storage, type Fence, type Key } from "../execution/Store.ts"
 import { ModelRegistry } from "../models/ModelRegistry.ts"
 import * as Todos from "../plugins/work/Todos.ts"
 import { delegationTimeLimitOf } from "../settings/Documents.ts"
 import { Settings } from "../settings/Settings.ts"
-import { Bots } from "./Bots.ts"
 import * as DelegationUsage from "./DelegationUsage.ts"
 import { Delegations, noUsage } from "./Delegations.ts"
 
@@ -69,6 +87,355 @@ export const End = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("cancelled"), epoch: Schema.Natural }),
 ])
 export type End = typeof End.Type
+
+export interface Service {
+	readonly submit: (
+		source: Fence,
+		site: Execution.CallSite,
+		request: {
+			readonly task: string
+			readonly reason: string
+			readonly limits?: Domain.DelegationLimits
+			readonly previous?: Domain.DelegationId
+			readonly bot?: BotId
+		},
+	) => Effect.Effect<
+		Execution.Receipt,
+		| BotsType.BotStorageUnavailable
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| PlatformError.PlatformError
+		| Schema.SchemaError
+		| SecretStorageError
+		| SettingsData.SettingsUnavailable
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly cancel: (
+		source: Fence,
+		site: Execution.CallSite,
+		id: Domain.DelegationId,
+	) => Effect.Effect<
+		{
+			readonly delegation: Domain.DelegationId
+			readonly executionId: Execution.Id
+			readonly accepted: true
+		},
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly load: (key: Key) => Effect.Effect<
+		| {
+				execution: MemberExecution
+				input: {
+					readonly bot: BotId
+					readonly task: string
+					readonly reason: string
+					readonly limits?: Domain.DelegationLimits
+					readonly previous?: Domain.DelegationId
+					readonly source:
+						| { readonly _tag: "Tool"; readonly site: Execution.CallSite }
+						| {
+								readonly _tag: "Trigger"
+								readonly id: TriggerId
+								readonly owner: Computers.ComputerOwner
+								readonly revision: number
+								readonly chat: Chat.Id
+						  }
+						| {
+								readonly _tag: "Message"
+								readonly previousExecutionId: Execution.Id
+								readonly chat: Chat.Id
+								readonly caller: Caller
+						  }
+				}
+				stored: {
+					readonly executionId?: Execution.Id
+					readonly limitEpoch?: number
+					readonly limitTurnExecutionId?: Execution.Id
+					readonly delegation: Domain.Delegation
+					readonly userId: string
+					readonly author: string
+					readonly chain: ChatHost.Chain
+					readonly request?: string
+					readonly window?: Domain.DelegationUsage
+					readonly runningSince?: number
+				}
+				origin: {
+					_tag: "Trigger"
+					key: Key
+					source: {
+						readonly _tag: "Trigger"
+						readonly id: TriggerId
+						readonly owner: Computers.ComputerOwner
+						readonly revision: number
+						readonly chat: Chat.Id
+					}
+				}
+		  }
+		| {
+				execution: MemberExecution
+				input: {
+					readonly bot: BotId
+					readonly task: string
+					readonly reason: string
+					readonly limits?: Domain.DelegationLimits
+					readonly previous?: Domain.DelegationId
+					readonly source:
+						| { readonly _tag: "Tool"; readonly site: Execution.CallSite }
+						| {
+								readonly _tag: "Trigger"
+								readonly id: TriggerId
+								readonly owner: Computers.ComputerOwner
+								readonly revision: number
+								readonly chat: Chat.Id
+						  }
+						| {
+								readonly _tag: "Message"
+								readonly previousExecutionId: Execution.Id
+								readonly chat: Chat.Id
+								readonly caller: Caller
+						  }
+				}
+				stored: {
+					readonly executionId?: Execution.Id
+					readonly limitEpoch?: number
+					readonly limitTurnExecutionId?: Execution.Id
+					readonly delegation: Domain.Delegation
+					readonly userId: string
+					readonly author: string
+					readonly chain: ChatHost.Chain
+					readonly request?: string
+					readonly window?: Domain.DelegationUsage
+					readonly runningSince?: number
+				}
+				origin: {
+					key: { namespace: string; id: Execution.Id }
+					execution: MemberExecution
+					child: {
+						record: {
+							readonly id: ToolExecution.Id
+							readonly executionId: Execution.Id
+							readonly parentExecutionId: Execution.Id
+							readonly position: {
+								readonly chat: Chat.Id
+								readonly turn: Turn.Id
+								readonly item: Item.Id
+								readonly step: number
+							}
+							readonly callId: string
+							readonly tool: string
+							readonly status: Execution.Status
+							readonly detached: boolean
+							readonly startedAt: number
+							readonly deadline: number
+							readonly failure: Execution.Failure | null
+						}
+						input: {
+							readonly position: {
+								readonly chat: Chat.Id
+								readonly turn: Turn.Id
+								readonly item: Item.Id
+								readonly step: number
+							}
+							readonly call: {
+								readonly type: "tool-call"
+								readonly id: string
+								readonly name: string
+								readonly params: unknown
+								readonly providerExecuted: boolean
+								readonly "~effect/ai/Prompt/Part": "~effect/ai/Prompt/Part"
+								readonly options: { readonly [x: string]: Schema.Json }
+							}
+							readonly definition?: {
+								readonly name: string
+								readonly description?: string
+								readonly parameters: { readonly [x: string]: Schema.Json }
+								readonly readOnly: boolean
+								readonly local: boolean
+								readonly idempotent: boolean
+								readonly inputState?: Schema.Json
+								readonly budgetMs?: number | null
+							}
+							readonly budgetMs: number | null
+							readonly maxDurationMs: number
+							readonly limit: number
+							readonly context: {
+								readonly host: ChatHost.ChatHostState
+								readonly settings: Turn.Settings
+								readonly prompt: Prompt.Prompt
+								readonly action?: Turn.Action
+							}
+						}
+						identity: ExecutionIdentity
+					}
+					toolKey: Key
+					path: ReadonlyArray<string>
+					source?: never
+					_tag: "Tool"
+				}
+		  },
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly authorize: Authorize
+	readonly start: (
+		fence: Fence,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| ChatModelInvalid
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Config.ModelConfigurationError
+		| Schema.SchemaError
+		| SecretStorageError
+		| Failure
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly task: (
+		key: Key,
+	) => Effect.Effect<
+		Option.Option<{ namespace: string; id: Execution.Id }>,
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly finish: (
+		fence: Fence,
+		end: End,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly close: (
+		fence: Fence,
+	) => Effect.Effect<
+		void,
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| SqlError.SqlError
+		| Execution.StorageError
+	>
+	readonly view: (
+		key: Key,
+	) => Effect.Effect<
+		Domain.ExecutionView,
+		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+	>
+	readonly inspect: (fence: Fence) => Effect.Effect<
+		| {
+				result?: never
+				readonly _tag: "Changed"
+				readonly task?: never
+				readonly control?: never
+		  }
+		| {
+				readonly _tag: "Ended"
+				readonly task: Key
+				readonly result: Option.Option<string>
+				readonly control?: never
+		  }
+		| {
+				result?: never
+				readonly task?: never
+				readonly _tag: "Limit"
+				readonly control: Domain.LimitControl
+		  }
+		| {
+				result?: never
+				readonly task?: never
+				readonly control?: never
+				readonly _tag: "Wait"
+				readonly watch: {
+					readonly key: {
+						readonly namespace: string
+						readonly id: Execution.Id
+					}
+					readonly sequence: number
+				}[]
+				readonly deadline?: number
+		  },
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly pause: (
+		fence: Fence,
+		control: Domain.LimitControl,
+	) => Effect.Effect<
+		{ receipt: Execution.Receipt; control: Domain.LimitControl },
+		| BotsType.BotStorageUnavailable
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly resume: (
+		fence: Fence,
+		control: Domain.LimitControl,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| BotsType.BotStorageUnavailable
+		| Chat.ChatNotFound
+		| ChatStore.ChatStoreError
+		| Chat.Conflict
+		| Execution.Conflict
+		| Execution.KeyConflict
+		| Schema.SchemaError
+		| SecretStorageError
+		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
+	>
+	readonly stopLimit: (
+		fence: Fence,
+		control: PolicyOrigin.Control,
+	) => Effect.Effect<
+		Execution.Receipt,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.KeyConflict
+		| Execution.NotFound
+		| Schema.SchemaError
+		| SecretStorageError
+		| Execution.StorageError
+	>
+	readonly phase: (
+		fence: Fence,
+		status: "running" | "waiting",
+	) => Effect.Effect<
+		undefined,
+		| Execution.Conflict
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+	>
+	readonly decide: Decide
+}
+
+export class DelegationCommands extends Context.Service<
+	DelegationCommands,
+	Service
+>()("@openbot-build/openbot/bots/DelegationCommands") {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
@@ -1129,7 +1496,7 @@ const make = Effect.gen(function* () {
 			)
 			.pipe(storage)
 	const decide: Decide = () => Effect.fail(Execution.Forbidden.make({}))
-	return {
+	return DelegationCommands.of({
 		submit,
 		cancel,
 		load,
@@ -1160,10 +1527,7 @@ const make = Effect.gen(function* () {
 			),
 		phase,
 		decide,
-	}
+	})
 })
-export class DelegationCommands extends Context.Service<
-	DelegationCommands,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/bots/DelegationCommands") {}
+
 export const layer = Layer.effect(DelegationCommands, make)

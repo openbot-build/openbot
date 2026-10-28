@@ -10,6 +10,32 @@ import {
 } from "effect"
 import { Records, category } from "../errors/Records.ts"
 
+export interface Service {
+	readonly storage: <A, E, R>(
+		id: Execution.Id,
+		work: Effect.Effect<A, E, R>,
+	) => Effect.Effect<A, E | Execution.StorageError, R>
+	readonly commit: <A, E, R>(
+		id: Execution.Id,
+		work: Effect.Effect<A, E, R>,
+	) => Effect.Effect<A, E | Execution.StorageError, R>
+	readonly record: (
+		cause: Cause.Cause<unknown>,
+		id: Execution.Id,
+		kind?: Execution.Failure["category"],
+	) => Effect.Effect<
+		{
+			errorId: Execution.ErrorId
+			category: Execution.Failure["category"]
+		},
+		never
+	>
+}
+
+export class Recovery extends Context.Service<Recovery, Service>()(
+	"@openbot-build/openbot/execution/Recovery",
+) {}
+
 export const make = Effect.gen(function* () {
 	const errors = yield* Records
 	const record = (
@@ -56,10 +82,7 @@ export const make = Effect.gen(function* () {
 	/** Protect the first commit too. Only a failed commit opens an interruptible wait. */
 	const commit = <A, E, R>(id: Execution.Id, work: Effect.Effect<A, E, R>) =>
 		retry(id, work, true)
-	return { storage, commit, record }
+	return Recovery.of({ storage, commit, record })
 })
-export class Recovery extends Context.Service<
-	Recovery,
-	Effect.Success<typeof make>
->()("@openbot-build/openbot/execution/Recovery") {}
+
 export const layer = Layer.effect(Recovery, make)

@@ -153,14 +153,14 @@ export const durable = (fence: Fence) =>
 					const current = yield* Work
 					const work = Effect.succeed(current)
 					// Work tools change the state of their Turn, so they never go to the background.
-					const entry = (
+					const entry = <E>(
 						name: string,
 						description: string,
 						parameters: JsonSchema.JsonSchema,
 						handle: (
 							input: unknown,
 							context: CallContext,
-						) => Effect.Effect<Schema.Json, unknown>,
+						) => Effect.Effect<Schema.Json, E>,
 						needsApproval?: (
 							input: unknown,
 							context: Tool.NeedsApprovalContext,

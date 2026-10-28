@@ -1,6 +1,10 @@
 import { defineRelations } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import {
+	makeWithDefaults,
+	type EffectPgDatabase,
+} from "drizzle-orm/effect-postgres"
 import type { Effect } from "effect"
+import type { PgClient } from "@effect/sql-pg"
 import * as AuthSchema from "./AuthSchema.ts"
 import * as Schema from "./Schema.ts"
 
@@ -150,6 +154,9 @@ export const relations = defineRelations({ ...Schema, ...AuthSchema }, (r) => ({
  * builds it, so every module gets the same relations. Queries join the
  * transaction of the `PgClient` when one is open.
  */
-export const make = makeWithDefaults({ relations })
+export type Database = EffectPgDatabase<typeof relations> & {
+	readonly $client: PgClient.PgClient
+}
 
-export type Database = Effect.Success<typeof make>
+export const make: Effect.Effect<Database, never, PgClient.PgClient> =
+	makeWithDefaults({ relations })
