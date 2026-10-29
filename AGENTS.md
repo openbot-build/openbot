@@ -18,6 +18,10 @@
 - Add a new feature to the HTTP contract in `@openbot-build/api` first. Then
   write the handler in `@openbot-build/openbot`. Make sure it works with an API
   key and with the same-origin session cookie.
+- OpenBot provides model usage records, prices, credits, quotas, budgets, and
+  rate limits. The server checks and applies these rules through the public API.
+- Describe OpenBot on its own. Keep docs and project rules about its features
+  and public contracts, without naming downstream products or repositories.
 
 ## Language
 

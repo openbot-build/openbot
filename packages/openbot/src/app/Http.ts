@@ -30,7 +30,7 @@ import * as ComputerHandlers from "../computers/HttpHandlers.ts"
 import * as VaultHandlers from "../vaults/HttpHandlers.ts"
 import * as BillingHandlers from "../billing/HttpHandlers.ts"
 
-const cloudHealth = HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
+const health = HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
 	handlers
 		.handle("getService", () => Effect.succeed(service))
 		.handle("getHealth", () => Effect.succeed({ status: "ok" })),
@@ -40,7 +40,7 @@ export const layerPlatform = Layer.mergeAll(
 	HttpApiBuilder.layer(OpenBotApi, { openapiPath: service.openapi }).pipe(
 		Layer.provide(
 			Layer.mergeAll(
-				cloudHealth,
+				health,
 				DeveloperHandlers.layerPublic,
 				DeveloperHandlers.layer,
 				AppHandlers.layer,

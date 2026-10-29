@@ -401,22 +401,10 @@ dependencies use the same exact version. Packing restores the source manifests
 and does not change the workspace lockfile. Publication retries skip an
 identical upload; a version with other contents fails.
 
-The UI repository publishes `@openbot-build/web` with the same version rules. It
-contains static files in `dist`, with no runtime dependencies. Cloud installs
-`@openbot-build/openbot` and `@openbot-build/web`. Its build copies UI files to
-`packages/cloud/dist/web`. Serve those files on the server's public origin, with
-an `index.html` fallback. Send `/v1`, `/auth`, and `/health` to the server,
-including WebSockets. UI development stays in the UI repository.
-
-Publish the first OpenBot release before installing the UI. Publish the UI
-before installing Cloud. Both consumers start at `0.1.2`. Run their
-`scripts/install.sh` after registry access is ready. The first install creates
-`pnpm-lock.yaml`; commit it. Later installs require that lockfile. CI also saves
-the resolved lockfile as an artifact for this first step.
-
-In GitHub Packages, give the UI and Cloud repositories Actions read access to
-the packages they use. Their workflows use `GITHUB_TOKEN` with `packages: read`.
-If separate credentials are needed, set the `PACKAGES_READ_TOKEN` secret to a
-classic PAT with `read:packages`. Publishing uses each source repository's
-`GITHUB_TOKEN` with `packages: write`. Local installs also need a token, even
-for public packages. See the [client setup](/docs/client#install).
+In GitHub Packages, give repositories that use OpenBot packages Actions read
+access to those packages. Their workflows use `GITHUB_TOKEN` with
+`packages: read`. If separate credentials are needed, set the
+`PACKAGES_READ_TOKEN` secret to a classic PAT with `read:packages`. Publishing
+uses each source repository's `GITHUB_TOKEN` with `packages: write`. Local
+installs also need a token, even for public packages. See the
+[client setup](/docs/client#install).

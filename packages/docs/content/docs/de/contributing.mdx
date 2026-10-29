@@ -422,24 +422,10 @@ gleiche genaue Version. Danach werden die Quelldateien wiederhergestellt; die
 Workspace-Lockdatei bleibt gleich. Ein erneuter Upload überspringt gleiche
 Inhalte. Andere Inhalte unter der gleichen Version führen zu einem Fehler.
 
-Das UI-Repository gibt `@openbot-build/web` nach den gleichen Regeln frei. Es
-enthält statische Dateien in `dist` und keine Laufzeitabhängigkeiten. Cloud
-installiert `@openbot-build/openbot` und `@openbot-build/web`. Der Build kopiert
-die UI nach `packages/cloud/dist/web`. Stelle diese Dateien am gleichen
-öffentlichen Ursprung wie den Server bereit. Nutze `index.html`, wenn keine
-Datei passt. Leite `/v1`, `/auth`, `/health` und WebSockets an den Server
-weiter. Die UI wird weiter im UI-Repository entwickelt.
-
-Gib OpenBot vor der UI-Installation frei, dann die UI vor der
-Cloud-Installation. Beide Nutzer starten mit `0.1.2`. Starte
-`scripts/install.sh`, sobald der Zugriff auf die Registry bereit ist. Die erste
-Installation erstellt `pnpm-lock.yaml`. Committe diese Datei. Spätere
-Installationen verlangen diese Lockdatei. CI speichert die erzeugte Lockdatei
-auch als Artefakt für diesen ersten Schritt.
-
-Gib den UI- und Cloud-Repositories in GitHub Packages Actions-Lesezugriff auf
-ihre Pakete. Die Workflows nutzen `GITHUB_TOKEN` mit `packages: read`. Bei
-getrennten Zugangsdaten nutze das Secret `PACKAGES_READ_TOKEN` mit einem classic
-PAT und `read:packages`. Die Veröffentlichung nutzt `GITHUB_TOKEN` mit
-`packages: write` des Quell-Repositorys. Auch lokale Installationen öffentlicher
-Pakete brauchen einen Token. Siehe [Client-Setup](/de/docs/client).
+Gib Repositories, die diese Pakete nutzen, in GitHub Packages
+Actions-Lesezugriff auf die Pakete. Die Workflows nutzen `GITHUB_TOKEN` mit
+`packages: read`. Bei getrennten Zugangsdaten nutze das Secret
+`PACKAGES_READ_TOKEN` mit einem classic PAT und `read:packages`. Die
+Veröffentlichung nutzt `GITHUB_TOKEN` mit `packages: write` des
+Quell-Repositorys. Auch lokale Installationen öffentlicher Pakete brauchen einen
+Token. Siehe [Client-Setup](/de/docs/client).

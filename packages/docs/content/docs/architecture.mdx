@@ -27,6 +27,10 @@ PostgreSQL and object storage are the only required outside services. OpenBot
 nodes use authenticated private HTTP RPC to call each other. RPC means a call to
 code in another process. One-node and many-node servers use the same engine.
 
+OpenBot provides model usage records, prices, credits, quotas, budgets, and rate
+limits. These features use the public API. The server checks and applies the
+rules.
+
 ## Modules
 
 | Package          | Owns                                                       |
