@@ -49,9 +49,9 @@ Vertrauen.
 Eine leere Domain-Liste erlaubt jede bestätigte E-Mail-Domain. Sonst gelten nur
 ganze Domains, ohne Beachtung der Großschreibung. `example.com` erlaubt nicht
 `a.example.com`. Die Liste gilt auch für vorab freigegebene Konten. Der
-Setup-Admin hat eine ausdrückliche Erstfreigabe. Nur Plattform-Admins können
-`allowExternalInvitations` einschalten. Eine gültige Einladung zur Organisation
-darf dann die Domain-Liste umgehen.
+Setup-Admin hat eine ausdrückliche Erstfreigabe und muss ebenfalls zur Liste
+passen. Nur Plattform-Admins können `allowExternalInvitations` einschalten. Eine
+gültige Einladung zur Organisation darf dann die Domain-Liste umgehen.
 
 Gib die ID einer Organisationseinladung als `invitation` an
 `POST /auth/sign-in`. OpenBot bindet sie an den geschützten OAuth-Zustand. Der

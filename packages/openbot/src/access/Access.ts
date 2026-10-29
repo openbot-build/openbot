@@ -308,7 +308,6 @@ export const make = Effect.gen(function* () {
 			}
 			const [bootstrap] =
 				yield* sql`select email from openbot_platform_admins where email = ${email} and provider_id = ${identity.providerId} and user_id is null`
-			if (bootstrap !== undefined) return
 			const [grant] =
 				yield* sql`select email from openbot_user_grants where email = ${email} and provider_id = ${identity.providerId}`
 			const domain = Str.split(email, "@").at(-1) ?? ""
@@ -318,7 +317,7 @@ export const make = Effect.gen(function* () {
 				!(invited && policy.allowExternalInvitations)
 			)
 				return yield* denied("domain")
-			if (grant !== undefined) return
+			if (bootstrap !== undefined || grant !== undefined) return
 			const source = invited
 				? "invitations"
 				: (

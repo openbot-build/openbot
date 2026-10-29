@@ -48,9 +48,9 @@ provider with `provider.trusted: true`, or an organization connection ID in
 An empty domain list permits any verified email domain. A list matches whole
 domains, ignoring email case; `example.com` does not include `a.example.com`. It
 applies to every new account, including admin email grants. The setup admin is
-an explicit first-account grant. Only a platform admin can turn on
-`allowExternalInvitations`. This permits a valid organization invitation to
-bypass the domain list.
+an explicit first-account grant and must also match this list. Only a platform
+admin can turn on `allowExternalInvitations`. This permits a valid organization
+invitation to bypass the domain list.
 
 Pass an organization invitation ID as `invitation` to `POST /auth/sign-in`.
 OpenBot binds it to protected OAuth state. It checks the invitation, email,
