@@ -1,3 +1,4 @@
+import type { ProviderAccess } from "@openbot-build/domain/Access"
 import type { Sso as SsoModel } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -19,6 +20,7 @@ export interface Connection {
 	readonly clientSecret: string | null
 	readonly clientSecretHint: string | null
 	readonly domains: ReadonlyArray<string>
+	readonly access?: ProviderAccess
 	readonly enforce: boolean
 	readonly version: number
 	readonly createdAt: number

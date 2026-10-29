@@ -4,7 +4,9 @@ import config from "../../tsdown.config.ts"
 export default defineConfig({
 	...config,
 	entry: {
+		Access: "src/Access.ts",
 		Email: "src/Email.ts",
+		Mail: "src/Mail.ts",
 		Invitation: "src/Invitation.ts",
 		SettingsErrors: "src/SettingsErrors.ts",
 		Secret: "src/Secret.ts",

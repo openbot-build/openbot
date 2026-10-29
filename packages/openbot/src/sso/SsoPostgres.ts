@@ -1,3 +1,5 @@
+import { Access as AccountAccess } from "../access/Access.ts"
+import * as Access from "@openbot-build/domain/Access"
 import { Sso as SsoModel } from "@openbot-build/domain"
 
 import {
@@ -27,6 +29,7 @@ import { Settings } from "../settings/Settings.ts"
 import { type Connection, recordName, Sso } from "./Sso.ts"
 import * as Db from "../database/Database.ts"
 
+const AccessJson = Schema.fromJsonString(Access.ProviderAccess)
 const Domains = Schema.fromJsonString(Schema.Array(Schema.String))
 const unavailable = (message: string) =>
 	Failures.replace(message, () => SsoModel.SsoUnavailable.make({}))
@@ -63,24 +66,31 @@ const connection = (
 ): Effect.Effect<Connection, SsoModel.SsoUnavailable> =>
 	Schema.decodeEffect(Domains)(row.domains).pipe(
 		unavailable("A stored SSO connection has bad domains."),
-		Effect.map((domains) => ({
-			id: row.id,
-			organizationId: row.organizationId,
-			name: row.name,
-			issuer: row.issuer,
-			clientId: row.clientId,
-			clientSecret: row.clientSecret,
-			clientSecretHint: row.clientSecretHint,
-			domains,
-			enforce: row.enforce,
-			version: row.version,
-			createdAt: row.createdAt,
-			updatedAt: row.updatedAt,
-		})),
+		Effect.flatMap((domains) =>
+			Schema.decodeEffect(AccessJson)(row.access).pipe(
+				unavailable("The SSO access settings are invalid."),
+				Effect.map((access) => ({
+					access,
+					id: row.id,
+					organizationId: row.organizationId,
+					name: row.name,
+					issuer: row.issuer,
+					clientId: row.clientId,
+					clientSecret: row.clientSecret,
+					clientSecretHint: row.clientSecretHint,
+					domains,
+					enforce: row.enforce,
+					version: row.version,
+					createdAt: row.createdAt,
+					updatedAt: row.updatedAt,
+				})),
+			),
+		),
 	)
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
+	const accountAccess = yield* AccountAccess
 	const secrets = yield* Secrets
 	const control = yield* DomainControl
 	const settings = yield* Settings
@@ -303,6 +313,18 @@ export const make = Effect.gen(function* () {
 		createConnection: (organizationId, input) =>
 			Effect.gen(function* () {
 				yield* checkDomains(organizationId, input.domains)
+				yield* accountAccess
+					.validateProvider(
+						input.access ?? Access.providerDefaults,
+						organizationId,
+					)
+					.pipe(
+						Failures.replace("The role mappings are invalid.", () =>
+							SsoModel.SsoConnectionInvalid.make({
+								message: "The role mappings are invalid.",
+							}),
+						),
+					)
 				const now = yield* Clock.currentTimeMillis
 				const id = "sso_" + (yield* newId)
 				const row = {
@@ -316,6 +338,9 @@ export const make = Effect.gen(function* () {
 						: yield* sealSecret(id, Redacted.value(input.clientSecret))),
 					domains: yield* encodeDomains(input.domains),
 					enforce: input.enforce,
+					access: yield* Schema.encodeEffect(AccessJson)(
+						input.access ?? Access.providerDefaults,
+					).pipe(Effect.orDie),
 					version: 1,
 					createdAt: now,
 					updatedAt: now,
@@ -329,6 +354,16 @@ export const make = Effect.gen(function* () {
 			}),
 		updateConnection: (organizationId, id, patch) =>
 			Effect.gen(function* () {
+				if (patch.access !== undefined)
+					yield* accountAccess
+						.validateProvider(patch.access, organizationId)
+						.pipe(
+							Failures.replace("The role mappings are invalid.", () =>
+								SsoModel.SsoConnectionInvalid.make({
+									message: "The role mappings are invalid.",
+								}),
+							),
+						)
 				const where = and(
 					eq(ssoConnections.organizationId, organizationId),
 					eq(ssoConnections.id, id),
@@ -368,6 +403,13 @@ export const make = Effect.gen(function* () {
 							? {}
 							: { domains: yield* encodeDomains(patch.domains) }),
 						...(patch.enforce === undefined ? {} : { enforce: patch.enforce }),
+						...(patch.access === undefined
+							? {}
+							: {
+									access: yield* Schema.encodeEffect(AccessJson)(
+										patch.access,
+									).pipe(Effect.orDie),
+								}),
 						version: row.version + 1,
 						updatedAt: now,
 					})

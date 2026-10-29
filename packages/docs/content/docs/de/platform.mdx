@@ -5,6 +5,9 @@ description:
   geteilte Models und Model Providers.
 ---
 
+Siehe [Kontozugang](/de/access) für neue Vorgaben, E-Mail-Anmeldung, Freigaben,
+Gruppenrollen und Admin-Wiederherstellung.
+
 Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
 brauchst je nach Aufgabe Serverzugriff oder Plattformrechte. Beginne mit dem
 [Administrationshandbuch](/de/admin).
@@ -67,44 +70,45 @@ der Platform und die ersten Admins der Platform. Im Image ist es
 `pnpm --filter @openbot-build/openbot setup` aus. Das Paket hat auch den Befehl
 `openbot-setup`.
 
-```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+Erstelle eine private Datei `setup.json` (Modus `600`):
+
+```json
+{
+	"publicOrigin": "https://api.example.com",
+	"identityProvider": {
+		"issuer": "https://id.example.com",
+		"clientId": "openbot"
+	},
+	"adminEmails": ["alice@example.com"]
+}
 ```
 
-| Flag                     | Pflicht          | Was es tut                                                                                                                          |
-| ------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`        | Ja               | Der öffentliche HTTPS-Ursprung von OpenBot, zum Beispiel `https://api.example.com`. Kein Pfad und kein Schrägstrich am Ende.        |
-| `--oidc-issuer`          | Mit der ID       | Die HTTPS-Adresse des OpenID-Connect-Anbieters der Platform, ohne Schrägstrich am Ende.                                             |
-| `--oidc-client-id`       | Mit dem Issuer   | Die Client-ID bei diesem Anbieter.                                                                                                  |
-| `--oidc-client-secret`   | Nein             | Das Client-Secret. Lass es weg für einen öffentlichen Client, der PKCE nutzt.                                                       |
-| `--admin-email`          | Mindestens einer | Eine Person mit dieser bestätigten E-Mail wird Admin der Platform, wenn sie sich anmeldet. Wiederhole das Flag für mehr Personen.   |
-| `--s3-endpoint`          | Mit dem Bucket   | Die Adresse des Objektspeichers für [Dateien](/de/developers/files), etwa `https://s3.us-east-1.amazonaws.com`.                     |
-| `--s3-public-endpoint`   | Nein             | Die Adresse, an die Clients Dateien beim direkten Hochladen senden, wenn sie nicht `--s3-endpoint` ist.                             |
-| `--s3-region`            | Nein             | Die Region des Speichers. Der Standard ist `us-east-1`.                                                                             |
-| `--s3-bucket`            | Mit der Adresse  | Der Bucket für Dateien.                                                                                                             |
-| `--s3-access-key-id`     | Mit der Adresse  | Die Access Key ID für den Speicher.                                                                                                 |
-| `--s3-secret-access-key` | Mit der Adresse  | Der geheime Schlüssel für den Speicher.                                                                                             |
-| `--s3-path-style`        | Nein             | Den Bucket in den Pfad setzen. MinIO und RustFS brauchen das.                                                                       |
-| `--force`                | Nein             | Schreibt die Einstellungen, auch wenn es sie schon gibt. Nutze es nur zur Rettung, wenn sich kein Admin der Platform anmelden kann. |
+Führe Setup einmal aus. Alle Instanzen lesen diese Einstellungen danach aus der
+Datenbank. Gemeinsame Produkteinstellungen sind keine Server-Startargumente.
 
-Setze `--oidc-issuer` und `--oidc-client-id` zusammen, oder lass beide weg. Lass
-beide weg, wenn sich Menschen nur über die [SSO-Verbindungen](/de/sso) von
-Organizations anmelden.
+```sh
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs --config=/run/setup.json
+```
 
-Eine Befehlszeile kann in Prozess-Listen erscheinen. Darum kannst du das
-Client-Secret statt mit `--oidc-client-secret` in der Umgebungsvariable
-`OPENBOT_SETUP_OIDC_CLIENT_SECRET` angeben. Das ist der bessere Weg.
+`--config` gibt den Dateipfad an. Nutze `--force` nur zur Rettung. Die Datei
+braucht `publicOrigin` und mindestens einen Eintrag in `adminEmails`.
+`adminProvider` ist sonst `oidc`; nutze `email` für E-Mail oder die ID einer
+SSO-Verbindung. Lass `identityProvider` bei Organization-SSO oder E-Mail weg.
+Ein öffentlicher PKCE-Client braucht kein `clientSecret`. Die optionalen Felder
+`registration` und `mail` nutzen die Eingabeform der Settings-API.
 
-Setze die vier Speicher-Flags `--s3-endpoint`, `--s3-bucket`,
-`--s3-access-key-id` und `--s3-secret-access-key` zusammen, oder lass alle weg.
-Den geheimen Schlüssel kannst du auch in `OPENBOT_SETUP_S3_SECRET_ACCESS_KEY`
-angeben. Ohne sie hat die Platform keinen Speicher, bis ein Admin `files` in den
-Einstellungen der Platform setzt.
+Das optionale Feld `fileStorage` enthält S3-Werte: `endpoint`, `publicEndpoint`
+(sonst null), `region`, `bucket`, `accessKeyId`, `forcePathStyle` und
+`secretAccessKey`. Nutze `forcePathStyle: true` für MinIO oder RustFS. Ohne
+`fileStorage` hat eine neue Platform keinen Dateispeicher; bei der Rettung
+bleibt der bisherige Speicher erhalten. Ändere ihn später mit
+`PATCH /v1/platform/settings` unter `files.storage`. Geheimnisse bleiben in der
+privaten Datei. Setup speichert sie verschlüsselt in der Datenbank.
+
+Die alten einzelnen Setup-Flags und `OPENBOT_SETUP_*` werden nicht mehr gelesen.
+Trage diese Werte in die Datei ein.
 
 Das Setup erstellt auch ein zufälliges Anmelde-Geheimnis. Better Auth nutzt es,
 um die Anmelde-Cookies zu signieren. OpenBot speichert es verschlüsselt, und du
@@ -143,7 +147,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"hint": "…k9Qz"
 		}
 	},
-	"organizationCreation": "anyone",
+	"organizationCreation": "platform_admins",
 	"ceiling": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[]}",
 	"appRestrictions": [],
 	"codeMode": {
@@ -179,6 +183,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		],
 		"unusedMs": 86400000
 	},
+	"mail": null,
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -195,6 +200,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/usage#rate-limit).                      |
 | `tokenRate`            | Die höchsten Token Rates jedes Bereichs. Organisationen können nur kleinere setzen. Siehe [Token Rate](/de/usage#token-rate).     |
 | `files`                | Der Objektspeicher und die Grenzen für [Dateien](/de/developers/files#den-speicher-einrichten).                                   |
+| `mail`                 | Die SMTP-Einstellungen für [E-Mails](#e-mails-senden), oder `null`, wenn OpenBot keine E-Mails sendet.                            |
 | `updatedAt`            | Wann sich die Einstellungen zuletzt geändert haben.                                                                               |
 
 ### Geheimnisse kommen nie zurück
@@ -205,6 +211,7 @@ stattdessen `{ set, hint }`:
 - `set` ist `true`, wenn ein Geheimnis gespeichert ist.
 - `hint` ist `…` und die letzten 4 Zeichen. So kannst du Geheimnisse
   unterscheiden. Bei einem Geheimnis mit weniger als 12 Zeichen ist es `null`.
+  Für SMTP-Passwörter ist `hint` immer `null`.
 
 ### Die Einstellungen ändern
 
@@ -266,6 +273,86 @@ Request darf höchstens 100 Regeln haben.
 
 ---
 
+## E-Mails senden
+
+OpenBot kann Einladungen in eine Organisation und Einladungen für einen Bot per
+E-Mail senden. Ein Admin der Platform richtet dafür SMTP ein. SMTP ist das
+Protokoll, mit dem OpenBot die Nachricht an deinen Mailserver gibt. Neue und
+alte Installationen senden keine E-Mails, bis `mail` gesetzt ist.
+
+Lies zuerst die aktuelle `version`. Sende sie als `expectedVersion` mit diesen
+Einstellungen an `PATCH /v1/platform/settings`:
+
+```json
+{
+	"expectedVersion": 3,
+	"mail": {
+		"host": "smtp.example.com",
+		"port": 587,
+		"security": "starttls",
+		"from": "openbot@example.com",
+		"fromName": "OpenBot",
+		"username": "openbot",
+		"password": "replace-with-your-smtp-password",
+		"invitationUrl": null
+	}
+}
+```
+
+| Feld            | Bedeutung                                                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `host`          | Der Hostname oder die IP-Adresse des SMTP-Servers, ohne URL oder Port.                                                               |
+| `port`          | Der Port von 1 bis 65535. Meist ist es 587 für STARTTLS oder 465 für TLS.                                                            |
+| `security`      | `tls` verschlüsselt die Verbindung von Anfang an. `starttls` verlangt das Upgrade auf TLS. Beide prüfen das Zertifikat.              |
+| `from`          | Die Absenderadresse, die dein Mailserver senden darf.                                                                                |
+| `fromName`      | Der sichtbare Name des Absenders.                                                                                                    |
+| `username`      | Der SMTP-Benutzername, oder `null`, wenn der Server keine Anmeldung braucht.                                                         |
+| `password`      | Das SMTP-Passwort. OpenBot speichert es verschlüsselt und gibt nur `{ set, hint: null }` zurück.                                     |
+| `invitationUrl` | Die Adresse, die der Button öffnet. Bei `null` nutzt er `publicOrigin`. HTTPS ist nötig; HTTP ist nur für Loopback-Adressen erlaubt. |
+
+Wenn du `mail` bei einer Änderung weglässt, bleibt es gleich. `mail: null`
+schaltet E-Mails aus. Bei einem gesetzten `mail` sende alle Felder außer dem
+Passwort erneut. Ohne `password` bleibt das alte Passwort nur dann erhalten,
+wenn `host`, `port`, `security` und `username` gleich bleiben. Ändere diese
+Werte mit einem neuen Passwort. Bei `username: null` wird das Passwort entfernt.
+Jede Instanz liest die Einstellungen vor dem Senden. Ein Neustart ist nicht
+nötig.
+
+Nur ein Admin der Platform darf eine Testmail senden:
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"alice@example.com"}' \
+  https://api.example.com/v1/platform/mail/test
+```
+
+Die Antwort hat `status`. Beim Erstellen einer E-Mail-Einladung steht dieses
+Ergebnis in `delivery`:
+
+| Status     | Bedeutung                                                                                       |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| `sent`     | Der SMTP-Server hat die Nachricht angenommen. Das beweist nicht, dass sie im Posteingang liegt. |
+| `disabled` | Es sind keine E-Mail-Einstellungen gesetzt.                                                     |
+| `failed`   | OpenBot konnte den Versand nicht bestätigen. Die Einladung bleibt bestehen.                     |
+
+OpenBot wiederholt einen fehlgeschlagenen Versand nicht von selbst. Die
+Einladungs-API kann eine noch offene Einladung erneut senden. Wenn nur die
+Antwort des Mailservers verloren ging, kann dadurch eine zweite E-Mail
+entstehen.
+
+Die Vorlagen nutzen React Email. Graue Flächen, große runde Ecken, Buttons mit
+runden Enden und die Schriftarten DM Sans und DM Mono folgen dem Stil von
+OpenBot. Mailprogramme ohne diese Schriftarten nutzen Ersatzschriften. Die
+Nachricht enthält HTML und einfachen Text.
+
+Der Button „Open OpenBot“ öffnet nur die gesetzte Adresse. Er nimmt keine
+Einladung an. Wenn dein Client eine Seite für Einladungen hat, setze deren
+Adresse als `invitationUrl`. OpenBot stellt dafür die API bereit; es fügt keine
+Einladungsseite hinzu.
+
+---
+
 ## Organizations erstellen
 
 `organizationCreation` entscheidet, wer `POST /v1/organizations` aufrufen kann.
@@ -273,7 +360,7 @@ OpenBot erstellt nie eine Organization, wenn sich ein Konto anmeldet.
 
 | Wert              | Was passiert                                                                                              |
 | ----------------- | --------------------------------------------------------------------------------------------------------- |
-| `anyone`          | Der Standard. Jeder, der sich anmeldet, kann Organizations erstellen.                                     |
+| `anyone`          | Jeder, der sich anmeldet, kann Organizations erstellen.                                                   |
 | `platform_admins` | Nur Admins der Platform können Organizations erstellen. Andere treten per Einladung, Domain oder SSO bei. |
 
 Alle Wege, wie ein Konto beitritt, findest du unter

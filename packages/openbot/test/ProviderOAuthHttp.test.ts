@@ -1,3 +1,4 @@
+import { Access } from "../src/access/Access.ts"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -49,6 +50,7 @@ import { Models } from "../src/models/Models.ts"
 import { ModelRegistry } from "../src/models/ModelRegistry.ts"
 import { Billing } from "../src/billing/Billing.ts"
 import * as Fixture from "./OrganizationFixture.ts"
+import { Mail } from "../src/mail/Mail.ts"
 
 const origin = "https://openbot.example.com"
 const redirectUri = "http://127.0.0.1:1455/auth/callback"
@@ -182,6 +184,7 @@ for (const scope of ["organization", "platform"] as const) {
 							userId: value === "alice-session" ? "alice" : "bob",
 							profile: {},
 							platformAdmin: false,
+							canCreateOrganization: false,
 							memberships: [
 								{
 									organizationId: "org",
@@ -225,6 +228,7 @@ for (const scope of ["organization", "platform"] as const) {
 				const routes = HttpApiBuilder.layer(api).pipe(
 					Layer.provide(Layer.merge(Handlers.layer, PlatformHandlers.layer)),
 					Layer.provide(Boundary.layer),
+					Layer.provide(Layer.mock(Access, {})),
 					Layer.provide(
 						AbilityHttpApi.layer(
 							ApiAuthorization.Authorize,
@@ -243,6 +247,7 @@ for (const scope of ["organization", "platform"] as const) {
 					Layer.provide(
 						Layer.mergeAll(
 							providerOAuth,
+							Layer.mock(Mail, {}),
 							Layer.mock(Secrets, {}),
 							Layer.mock(PlatformAdmins, {}),
 							Authorizer.layer(Authorization.PlatformAuth, {

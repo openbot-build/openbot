@@ -1,0 +1,136 @@
+---
+title: 账号准入
+description: 控制新账号、审批、邮箱验证码与 SSO 组角色。
+---
+
+## 默认值与升级
+
+新平台和升级后的平台都采用邀请制。自助建号和 SSO 自动建号关闭。已有账号和成员资格保留，已有组织角色保留为手工授权。默认只有平台管理员能创建组织。
+
+迁移新增表和字段。停止全部服务，备份数据库和密钥，运行
+`openbot-migrate`，再启动新版服务与客户端。迁移可重复运行。已有待处理邀请受新的邀请策略约束。邀请不会恢复已停用账号。
+
+## 准入设置
+
+读取 `GET /v1/platform/settings`，使用当前 `expectedVersion`，通过
+`PATCH /v1/platform/settings` 更新 `registration`。默认值为：
+
+```json
+{
+	"selfService": "closed",
+	"emailSignIn": false,
+	"invitations": "allow",
+	"sso": "closed",
+	"trustedSsoProviders": [],
+	"allowedEmailDomains": [],
+	"allowExternalInvitations": false,
+	"provider": {
+		"trusted": false,
+		"scopes": [],
+		"groupsClaim": null,
+		"requiredGroups": [],
+		"mappings": []
+	}
+}
+```
+
+`selfService`、`invitations` 和 `sso` 分别支持 `closed`、`allow` 和
+`approval`。普通平台 OIDC 登录属于自助来源。只有设置了 `provider.trusted: true`
+的平台提供方，或 ID 位于 `trustedSsoProviders`
+的组织连接，才使用 SSO 策略。只有平台管理员能设置这种信任。
+
+空域名列表允许任意已验证邮箱域名。非空列表按完整域名匹配，邮箱大小写不影响匹配；
+`example.com` 不包含
+`a.example.com`。限制适用于所有新账号，包括管理员预授权。Setup 指定的首次管理员是明确的首次建号授权。只有平台管理员能开启
+`allowExternalInvitations`，允许有效组织邀请绕过域名限制。
+
+向 `POST /auth/sign-in` 传入组织邀请 ID，字段名为
+`invitation`。OpenBot 将其绑定到受保护的 OAuth
+state，并在回调时再次检查邀请、邮箱、有效期、撤销状态和组织。显式邀请无效时不会回退到其他来源。Bot 邀请和分享链接不能授权平台建号。不同身份提供方的相同邮箱不会自动合并账号。
+
+`GET /auth/options`
+只公开登录方式、自助和邀请模式，不公开域名列表、账号查询或审批记录。客户端应按会话中的
+`canCreateOrganization` 显示创建组织表单。平台管理员无需加入组织即可管理平台。
+
+## 审批与账号
+
+平台接口要求平台管理员身份，可使用会话 Cookie 或个人 API
+token。只有组织范围的 token 不授予平台管理权。
+
+| 接口                                                  | 用途                                                             |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET /v1/platform/users`                              | 列出账号及状态。                                                 |
+| `PATCH /v1/platform/users/:userId`                    | 设置 `status` 为 `active` 或 `suspended`。                       |
+| `GET /v1/platform/registration_requests`              | 列出申请。                                                       |
+| `PATCH /v1/platform/registration_requests/:requestId` | 携带 `expectedVersion`，设置 `approved` 或 `rejected`。          |
+| `GET, POST, DELETE /v1/platform/user_grants`          | 列出、授予或撤销首次建号资格；写入包含 `email` 和 `providerId`。 |
+| `GET /v1/platform/access_events`                      | 查询平台准入审计。                                               |
+
+列表使用 `after`、`limit` 和 `next`
+游标。待审批申请不创建账号、会话或组织角色。申请按提供方、issuer 和稳定身份标识去重。批准后，下次成功认证才生效，仍检查当前域名、邀请和提供方规则。拒绝状态会保留，直到管理员重新处理。版本检查阻止并发决定互相覆盖。
+
+停用账号会删除全部会话和个人 API
+token，并在请求、实时输出及执行检查中拒绝该账号。恢复后必须重新登录并签发新 token。成员停用只影响对应组织，独立组织服务身份继续工作。最后一位有效平台管理员不能被停用或删除。
+
+## 无 IdP 的邮箱登录
+
+邮箱验证码可选，默认关闭。在平台设置配置 SMTP，再设
+`registration.emailSignIn: true`。小团队可将三类来源全部设为
+`closed`，逐个授权员工邮箱，`providerId` 使用
+`email`。验证码只证明邮箱归属，不授予建号资格。
+
+`POST /auth/email/send` 接收 `email` 和可选的 `invitation`。浏览器保留返回的
+`challenge`，与 `code` 一起提交给
+`POST /auth/email/verify`。验证码为八位数字，五分钟有效，最多尝试三次错误值，只能使用一次。发送按邮箱和客户端地址限流。两个接口都要求同源浏览器请求。有效验证码不能接管 OIDC 账号。未配置 SMTP 时入口关闭，发送失败不会创建会话。
+
+首次初始化使用 `--config=/private/setup.json`，文件内设置
+`adminProvider: "email"` 和 `adminEmails`。文件包含上面的 `registration`
+和可选的 `mail` 对象，格式与设置 API 输入一致。只有填好真实 SMTP 后才启用
+`emailSignIn`。文件可能包含 SMTP 密码，权限应为
+`600`。本次不增加密码登录或密码重置方式。
+
+邀请及审批的持久化独立于邮件发送。组织邀请邮件包含邀请 ID。发送失败时仍可复制邀请链接，通过其他方式发送。
+
+## SSO 组角色
+
+平台使用 `registration.provider`，组织连接使用 SSO API 中的 `access`
+字段，例如：
+
+```json
+{
+	"trusted": false,
+	"scopes": ["groups"],
+	"groupsClaim": "groups",
+	"requiredGroups": ["employees"],
+	"mappings": [
+		{ "group": "employees", "organizationId": "org_team", "roles": ["member"] }
+	]
+}
+```
+
+组信息仅来自已验证提供方的已签名 ID token，必须是精确字符串数组。
+`requiredGroups`
+非空时至少匹配一项。claim 缺失或格式错误会拒绝本次登录。平台管理员能映射多个组织；组织连接只能映射本组织，不能自行声明为可信提供方。
+
+每次成功 SSO 登录替换该连接的映射角色，保留手工角色。成员响应的 `manualRoles` 和
+`roleSources` 显示来源。成员更新中的 `roles: []` 移除全部手工角色。设置
+`groupsClaim`
+即启用映射，即使映射列表为空也不额外授予默认角色。没有映射或手工角色就没有组织访问权。同步不会恢复账号停用或成员手工停用。映射不能授予
+`super_administrator` 或平台管理员权限。
+
+组变化只在登录时同步。本次不含 SCIM、LDAP 或 IdP 实时离职同步。需要即时撤权时请停用账号。
+
+## 管理员恢复
+
+日常修改使用平台 API。若没有管理员能登录，在服务器上停止服务，备份数据库和密钥，运行
+`openbot-setup --config=/private/setup.json --force`，指定相同的公开地址、真实提供方设置、
+`adminProvider` 和
+`adminEmails`。邮箱登录使用私有配置文件。也保留所需存储设置：force 会写入提供的设置。
+
+命令恢复指定的已验证管理员账号，删除其会话和个人 token，记录
+`admin.recovered`，并保留签名密钥。恢复要求服务器权限。启动服务后重新登录。
+`openbot-inspect`
+输出不含密钥值的设置及管理员状态 JSON，供本地部署检查使用；输出仍应保密。
+
+本地开发账号可以创建测试组织。这只适用于显式启动的开发入口；生产环境仍使用
+`platform_admins`。

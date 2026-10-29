@@ -39,8 +39,26 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/invitations
 ```
 
+When the platform has [mail settings](/platform#send-email), OpenBot sends the
+email after saving the invitation. The create answer has a top-level `delivery`
+object: `{ "status": "sent" }`, `disabled` or `failed`. `sent` means SMTP
+accepted it, not that it reached the inbox. A failed send keeps the invitation
+and does not retry.
+
+Send a pending email invitation again with its ID:
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/bots/$BOT/invitations/inv_51c2/resend
+```
+
+This also needs `share` on the Bot and returns the delivery result. The
+invitation must not have expired; its end time stays the same. A resend after a
+lost SMTP reply may send a second copy.
+
 To make an invitation link, leave out `email`. Many people can use the same
-link.
+link. OpenBot sends no email for a link, and its create answer has no
+`delivery`. A link cannot use the resend route.
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \

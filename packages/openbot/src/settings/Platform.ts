@@ -3,8 +3,12 @@ import { Settings as SettingsModel } from "@openbot-build/domain"
 import { Effect, Option, Redacted } from "effect"
 import * as Failures from "../errors/Failures.ts"
 import type { Configuration } from "../auth/Model.ts"
-import { hint, Secrets } from "../secrets/Secrets.ts"
-import type { FilesDocument, PlatformDocument } from "./Documents.ts"
+import { hint, Secrets, type SecretStorageError } from "../secrets/Secrets.ts"
+import type {
+	FilesDocument,
+	MailDocument,
+	PlatformDocument,
+} from "./Documents.ts"
 import type { Settings } from "./Settings.ts"
 
 /** The places of the sealed secrets in the platform settings. */
@@ -13,6 +17,7 @@ export const bindings = {
 	identityProviderSecret:
 		"openbot_settings:platform:identityProvider.clientSecret",
 	fileStorageSecret: "openbot_settings:platform:files.storage.secretAccessKey",
+	mailPassword: "openbot_settings:platform:mail.password",
 } as const
 
 /**
@@ -56,7 +61,7 @@ export const publicOriginOr = <E>(
  */
 export type SignInSettings = Pick<
 	PlatformDocument,
-	"publicOrigin" | "authSecret" | "identityProvider"
+	"publicOrigin" | "authSecret" | "identityProvider" | "registration"
 >
 
 /**
@@ -68,6 +73,9 @@ export const signInKey = (document: PlatformDocument): SignInSettings => ({
 	publicOrigin: document.publicOrigin,
 	authSecret: document.authSecret,
 	identityProvider: document.identityProvider,
+	...(document.registration === undefined
+		? {}
+		: { registration: document.registration }),
 })
 
 /**
@@ -149,4 +157,44 @@ export const changeFiles = (
 				secretAccessKeyHint: hint(Redacted.value(secretAccessKey)),
 			},
 		}
+	})
+
+/** A new SMTP password is sealed. A new server never gets an old password. */
+export const changeMail = (
+	secrets: typeof Secrets.Service,
+	current: MailDocument | null,
+	input: SettingsModel.MailInput | null,
+): Effect.Effect<
+	MailDocument | null,
+	SettingsModel.SettingsInvalid | SecretStorageError
+> =>
+	Effect.gen(function* () {
+		if (input === null) return null
+		const { password, ...fields } = input
+		if (input.username === null) return { ...fields, password: null }
+		if (password === null)
+			return yield* SettingsModel.SettingsInvalid.make({
+				message:
+					"An SMTP login needs a password. Set username to null for no login.",
+			})
+		if (password !== undefined)
+			return {
+				...fields,
+				password: yield* secrets.seal(
+					Redacted.value(password),
+					bindings.mailPassword,
+				),
+			}
+		if (
+			current === null ||
+			current.password === null ||
+			current.host !== input.host ||
+			current.port !== input.port ||
+			current.security !== input.security ||
+			current.username !== input.username
+		)
+			return yield* SettingsModel.SettingsInvalid.make({
+				message: "A new SMTP server or login needs a new password.",
+			})
+		return { ...fields, password: current.password }
 	})

@@ -1,3 +1,5 @@
+import { Settings } from "../src/settings/Settings.ts"
+import { Option } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Config, Effect, Layer, Redacted, Stream, String as Str } from "effect"
@@ -30,6 +32,7 @@ const main = Effect.gen(function* () {
 	const app = Layer.unwrap(
 		Effect.gen(function* () {
 			const sql = yield* PgClient.PgClient
+			const settings = yield* Settings
 			const { builtinModels } = yield* DevelopmentModel.make
 			const server = Server.layerFixed({
 				...options,
@@ -80,6 +83,10 @@ const main = Effect.gen(function* () {
 			)
 			return Layer.effectDiscard(
 				Effect.gen(function* () {
+					const platform = Option.getOrThrow(yield* settings.platform)
+					yield* settings.updatePlatform(platform.version, (p) =>
+						Effect.succeed({ ...p, organizationCreation: "anyone" }),
+					)
 					const http = yield* HttpServer.HttpServer
 					const address = HttpServer.formatAddress(http.address)
 					yield* sql`insert into full_server_nodes (node, address) values (${node}, ${address})`

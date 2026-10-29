@@ -1,3 +1,4 @@
+import * as Access from "@openbot-build/domain/Access"
 import { Settings as SettingsModel } from "@openbot-build/domain"
 import { PlanApproval } from "@openbot-build/domain"
 import { Option, Schema } from "effect"
@@ -25,6 +26,13 @@ export const FilesDocument = Schema.Struct({
 })
 export type FilesDocument = typeof FilesDocument.Type
 
+/** The SMTP settings. The password is sealed, or null without a login. */
+export const MailDocument = Schema.Struct({
+	...SettingsModel.Mail.fields,
+	password: Schema.NullOr(Schema.String),
+})
+export type MailDocument = typeof MailDocument.Type
+
 /**
  * The stored form of the platform settings. Secrets are sealed with the
  * secret keys of the instance, and only this code opens them.
@@ -43,6 +51,7 @@ export const PlatformDocument = Schema.Struct({
 		}),
 	),
 	organizationCreation: SettingsModel.OrganizationCreation,
+	registration: Schema.optionalKey(Access.Registration),
 	ceiling: SettingsModel.PlatformSettings.fields.ceiling,
 	appRestrictions: SettingsModel.PlatformSettings.fields.appRestrictions,
 	/** Missing in documents from before Code Mode. Then the defaults apply. */
@@ -53,6 +62,8 @@ export const PlatformDocument = Schema.Struct({
 	tokenRate: Schema.optionalKey(SettingsModel.TokenRateLimits),
 	/** Missing in documents from before files. Then there is no storage. */
 	files: Schema.optionalKey(FilesDocument),
+	/** Missing or null means that no mail is sent. */
+	mail: Schema.optionalKey(Schema.NullOr(MailDocument)),
 })
 export type PlatformDocument = typeof PlatformDocument.Type
 

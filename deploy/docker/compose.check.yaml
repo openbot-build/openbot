@@ -9,10 +9,9 @@ services:
     platform: linux/amd64
     command:
       - /app/dist/app/Setup.mjs
-      - --public-origin=https://openbot.example.com
-      - --oidc-issuer=https://id.example.com
-      - --oidc-client-id=check
-      - --admin-email=admin@example.com
+      - --config=/check/setup.json
+    volumes:
+      - ./check.setup.json:/check/setup.json:ro
     secrets:
       - OPENBOT_DATABASE_URL
       - OPENBOT_SECRET_KEYS

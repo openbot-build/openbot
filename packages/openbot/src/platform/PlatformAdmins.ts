@@ -26,6 +26,7 @@ export class PlatformAdmins extends Context.Service<
 		/** Adds an email. Adding an email that is already there changes nothing. */
 		readonly add: (
 			email: string,
+			providerId?: string,
 		) => Effect.Effect<PlatformModel.PlatformAdmin, PlatformAdminsUnavailable>
 		readonly remove: (
 			email: string,

@@ -1,3 +1,4 @@
+import { AccessApi, LoginOptionsApi, EmailSignInApi } from "./AccessApi.ts"
 import { FailureBoundary } from "./FailureApi.ts"
 import { ExecutionsApi } from "./ExecutionsApi.ts"
 import { DeveloperApi, DeveloperPublicApi } from "./DeveloperApi.ts"
@@ -91,6 +92,9 @@ type Groups =
 	| typeof AccountApi
 	| typeof SignInApi
 	| typeof OrganizationsApi
+	| typeof AccessApi
+	| typeof LoginOptionsApi
+	| typeof EmailSignInApi
 	| typeof PlatformApi
 	| typeof HealthApi
 	| HttpApiGroup.AddMiddleware<
@@ -167,6 +171,9 @@ const contract: HttpApi.HttpApi<"openbot-api", Groups> = HttpApi.make(
 		SignInApi,
 		OrganizationsApi,
 		PlatformApi,
+		AccessApi,
+		LoginOptionsApi,
+		EmailSignInApi,
 		UserTokensApi.annotate(GroupRequired, {
 			read: [own("read", "Token")],
 			write: [own("write", "Token")],

@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_account_states" ADD COLUMN "revoked_at" bigint;

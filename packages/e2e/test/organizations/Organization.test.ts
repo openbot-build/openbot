@@ -8,6 +8,7 @@ import { assert, layer } from "@effect/vitest"
 import {
 	AuthApi,
 	Authorization,
+	Mail,
 	OrganizationApi,
 	Roles,
 	Settings,
@@ -613,13 +614,57 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						...(roles === undefined ? {} : { roles }),
 					})
 				const invitation = yield* json(
-					OrganizationApi.Invitation,
+					OrganizationApi.CreateInvitationResponse,
 					invite("Inv-Bob@example.com", ["member"]),
 					201,
 				)
 				assert.strictEqual(invitation.email, "inv-bob@example.com")
 				assert.strictEqual(invitation.status, "pending")
 				assert.deepStrictEqual(invitation.roles, ["member"])
+				assert.deepStrictEqual(invitation.delivery, { status: "disabled" })
+				const resend = (id: string) =>
+					`/v1/organization/invitations/${id}/resend`
+				assert.deepStrictEqual(
+					yield* json(
+						Mail.Delivery,
+						account(alice.session, resend(invitation.id), "POST"),
+					),
+					{ status: "disabled" },
+				)
+				const token = yield* json(
+					UserTokensApi.CreatedToken,
+					account(alice.session, "/v1/user/tokens", "POST", { name: "mail" }),
+					201,
+				)
+				assert.deepStrictEqual(
+					yield* json(
+						Mail.Delivery,
+						Caller.withToken(yield* host.address)(
+							token.secret,
+							resend(invitation.id),
+							"POST",
+						),
+					),
+					{ status: "disabled" },
+				)
+				const afterResend = yield* json(
+					Invitations,
+					account(alice.session, "/v1/organization/invitations"),
+				)
+				assert.strictEqual(afterResend.items.length, 1)
+				assert.strictEqual(afterResend.items[0]?.id, invitation.id)
+				assert.strictEqual(
+					afterResend.items[0]?.expiresAt,
+					invitation.expiresAt,
+				)
+				assert.strictEqual(afterResend.items[0]?.status, "pending")
+				assert.deepStrictEqual(afterResend.items[0]?.roles, invitation.roles)
+				const outsider = yield* host.login("inv-outsider")
+				assert.strictEqual(
+					(yield* account(outsider.session, resend(invitation.id), "POST"))
+						.status,
+					404,
+				)
 				assert.strictEqual((yield* invite("inv-bob@example.com")).status, 400)
 				assert.strictEqual(
 					(yield* invite("inv-dave@example.com", [
@@ -669,6 +714,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.deepStrictEqual(bobMember.roles, ["member"])
 				assert.strictEqual(
+					(yield* account(alice.session, resend(invitation.id), "POST")).status,
+					400,
+				)
+				assert.strictEqual(
 					(yield* account(
 						bob.session,
 						"/v1/invitations/" + invitation.id + "/accept",
@@ -684,6 +733,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					OrganizationApi.Invitation,
 					invite("inv-carol@example.com"),
 				)
+				assert.strictEqual(
+					(yield* account(bob.session, resend(forCarol.id), "POST")).status,
+					403,
+				)
 				const declined = yield* json(
 					OrganizationApi.Invitation,
 					account(
@@ -694,6 +747,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					200,
 				)
 				assert.strictEqual(declined.status, "declined")
+				assert.strictEqual(
+					(yield* account(alice.session, resend(forCarol.id), "POST")).status,
+					400,
+				)
 				assert.strictEqual(
 					(yield* account(
 						carol.session,
@@ -720,6 +777,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Invitations,
 					account(alice.session, "/v1/organization/invitations"),
 				)
+				assert.strictEqual(
+					(yield* account(alice.session, resend(forDave.id), "POST")).status,
+					400,
+				)
 				assert.deepStrictEqual(
 					Arr.map(listed.items, (item) => [item.email, item.status]),
 					[
@@ -727,6 +788,28 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						["inv-carol@example.com", "declined"],
 						["inv-bob@example.com", "accepted"],
 					],
+				)
+				// An Administrator cannot send an invitation for Super Administrator rights.
+				const forAdmin = yield* json(
+					OrganizationApi.Invitation,
+					invite("inv-admin@example.com", ["super_administrator"]),
+				)
+				yield* json(
+					OrganizationApi.Member,
+					account(alice.session, member(bob.identity.userId), "PATCH", {
+						roles: ["administrator"],
+					}),
+				)
+				assert.strictEqual(
+					(yield* account(bob.session, resend(forAdmin.id), "POST")).status,
+					403,
+				)
+				assert.deepStrictEqual(
+					yield* json(
+						Mail.Delivery,
+						account(alice.session, resend(forAdmin.id), "POST"),
+					),
+					{ status: "disabled" },
 				)
 
 				// Bob leaves. The last Super Administrator cannot leave.

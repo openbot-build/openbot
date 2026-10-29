@@ -1,3 +1,4 @@
+import * as AccessHandlers from "../access/HttpHandlers.ts"
 import * as ExecutionHandlers from "../execution/HttpHandlers.ts"
 import * as DeveloperHandlers from "../apps/DeveloperHttpHandlers.ts"
 import * as AppExperienceHandlers from "../apps/ExperienceHttpHandlers.ts"
@@ -75,6 +76,7 @@ export const layerPlatform = Layer.mergeAll(
 				OrganizationHandlers.layer,
 				ModelProviderHandlers.layer,
 				PlatformHandlers.layer,
+				AccessHandlers.layer,
 				SsoHandlers.layer,
 			),
 		),

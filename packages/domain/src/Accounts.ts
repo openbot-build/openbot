@@ -20,5 +20,6 @@ export const SessionInfo = Schema.Struct({
 	memberships: Schema.Array(Membership),
 	/** Whether the account may manage the platform. */
 	platformAdmin: Schema.Boolean,
+	canCreateOrganization: Schema.Boolean,
 	expiresAt: Schema.String,
 })

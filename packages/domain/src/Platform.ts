@@ -3,6 +3,7 @@ import { Email } from "./Email.ts"
 import { OrganizationStatus } from "./Organizations.ts"
 
 export const PlatformAdmin = Schema.Struct({
+	providerId: Schema.optionalKey(Schema.NonEmptyString),
 	/** A person becomes a platform admin when they sign in with this verified email. */
 	email: Schema.String,
 	/** Null until the person signs in for the first time. */
@@ -11,6 +12,7 @@ export const PlatformAdmin = Schema.Struct({
 })
 export type PlatformAdmin = typeof PlatformAdmin.Type
 export const AddPlatformAdminRequest = Schema.Struct({
+	providerId: Schema.optionalKey(Schema.NonEmptyString),
 	email: Email,
 })
 export const UpdatePlatformOrganizationRequest = Schema.Struct({

@@ -184,20 +184,20 @@ OpenBot 现在用 `k2` 封存新的机密。`k1`
 
 旧版本的 OpenBot 会读取更多环境变量。OpenBot 现在忽略它们。下表显示每个值的去处：
 
-| 旧变量                          | 新位置                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `OPENBOT_PUBLIC_ORIGIN`         | 平台设置中的 `publicOrigin`。设置程序用 `--public-origin` 写入它。                               |
-| `OPENBOT_OIDC_ISSUER`           | 平台设置中的 `identityProvider.issuer`。设置程序用 `--oidc-issuer` 写入它。                      |
-| `OPENBOT_OIDC_CLIENT_ID`        | 平台设置中的 `identityProvider.clientId`。设置程序用 `--oidc-client-id` 写入它。                 |
-| `OPENBOT_OIDC_CLIENT_SECRET`    | 平台设置中的 `identityProvider.clientSecret`，已加密。设置程序用 `--oidc-client-secret` 写入它。 |
-| `BETTER_AUTH_SECRET`            | 登录密钥。设置程序随机生成一个，并加密保存。你永远不需要设置它。                                 |
-| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`。                                                                          |
-| `OPENBOT_OWNER_EMAILS`          | 平台管理员。设置程序用 `--admin-email` 添加他们。用 `/v1/platform/admins` 修改。                 |
-| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | 每个组织的已验证域名，配合其设置中的 `joinByDomain`。参见 [SSO](/zh-cn/sso#已验证的域名)。       |
-| `OPENBOT_MODEL_ENDPOINT`        | 组织或平台的模型提供方。参见 [Model](/zh-cn/models)。                                            |
-| `OPENBOT_MODEL_API_KEY`         | 模型提供方，已加密。                                                                             |
-| `OPENBOT_MODEL_ID`              | 由模型提供方关联的模型，以及每个 Bot 的 `model`。                                                |
-| `OPENBOT_DEV_MODE`              | 由开发入口决定。参见[开发](#开发)。                                                              |
+| 旧变量                          | 新位置                                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `OPENBOT_PUBLIC_ORIGIN`         | 平台设置中的 `publicOrigin`。设置程序用 `publicOrigin` 写入它。                                           |
+| `OPENBOT_OIDC_ISSUER`           | 平台设置中的 `identityProvider.issuer`。设置程序用 `identityProvider.issuer` 写入它。                     |
+| `OPENBOT_OIDC_CLIENT_ID`        | 平台设置中的 `identityProvider.clientId`。设置程序用 `identityProvider.clientId` 写入它。                 |
+| `OPENBOT_OIDC_CLIENT_SECRET`    | 平台设置中的 `identityProvider.clientSecret`，已加密。设置程序用 `identityProvider.clientSecret` 写入它。 |
+| `BETTER_AUTH_SECRET`            | 登录密钥。设置程序随机生成一个，并加密保存。你永远不需要设置它。                                          |
+| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`。                                                                                   |
+| `OPENBOT_OWNER_EMAILS`          | 平台管理员。设置程序用 `adminEmails` 添加他们。用 `/v1/platform/admins` 修改。                            |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | 每个组织的已验证域名，配合其设置中的 `joinByDomain`。参见 [SSO](/zh-cn/sso#已验证的域名)。                |
+| `OPENBOT_MODEL_ENDPOINT`        | 组织或平台的模型提供方。参见 [Model](/zh-cn/models)。                                                     |
+| `OPENBOT_MODEL_API_KEY`         | 模型提供方，已加密。                                                                                      |
+| `OPENBOT_MODEL_ID`              | 由模型提供方关联的模型，以及每个 Bot 的 `model`。                                                         |
+| `OPENBOT_DEV_MODE`              | 由开发入口决定。参见[开发](#开发)。                                                                       |
 
 有些值以前是代码中的选项。现在它们也成了设置：
 

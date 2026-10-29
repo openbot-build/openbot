@@ -111,3 +111,7 @@ export * as AppExperienceApi from "./AppExperienceApi.ts"
 
 export * as DeveloperApi from "./DeveloperApi.ts"
 export type { Failure as DeveloperFailure } from "./DeveloperApi.ts"
+
+export * as Mail from "./Mail.ts"
+
+export * as AccessApi from "./AccessApi.ts"

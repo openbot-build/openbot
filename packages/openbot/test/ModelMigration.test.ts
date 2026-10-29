@@ -1,3 +1,4 @@
+import * as Access from "@openbot-build/domain/Access"
 import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -298,7 +299,14 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 									planApproval,
 								},
 							],
-							["platform", { publicOrigin: "https://a.example" }],
+							[
+								"platform",
+								{
+									publicOrigin: "https://a.example",
+									organizationCreation: "platform_admins",
+									registration: Access.defaults,
+								},
+							],
 						],
 					)
 				}).pipe(
