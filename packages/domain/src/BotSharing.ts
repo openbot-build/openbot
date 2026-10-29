@@ -3,6 +3,7 @@ import { BotId } from "./BotId.ts"
 import { InvitationId, InvitationStatus } from "./Invitation.ts"
 import { ReturnTo } from "./ReturnTo.ts"
 import { Email } from "./Email.ts"
+import { Delivery } from "./Mail.ts"
 import { SecretOutput } from "./Secret.ts"
 
 /** The start of the secret of every Bot invitation link. */
@@ -48,6 +49,8 @@ export const BotInvitationSecret = Schema.Struct({
 	invitation: BotInvitation,
 	secret: Schema.NullOr(SecretOutput),
 	url: Schema.NullOr(Schema.String),
+	/** Only present when creating an invitation by email. */
+	delivery: Schema.optionalKey(Delivery),
 })
 export type BotInvitationSecret = typeof BotInvitationSecret.Type
 export const AcceptBotInvitationRequest = Schema.Struct({

@@ -7,6 +7,7 @@ import {
 	InvitationStatus,
 } from "./Invitation.ts"
 import { Email } from "./Email.ts"
+import { Delivery } from "./Mail.ts"
 import { PolicyInput, PolicySchema } from "./Authorization.ts"
 import { RoleId } from "./Roles.ts"
 
@@ -41,7 +42,13 @@ export const Member = Schema.Struct({
 	email: Schema.NullOr(Schema.String),
 	name: Schema.NullOr(Schema.String),
 	status: MemberStatus,
-	roles: Roles,
+	roles: Schema.Array(RoleId),
+	manualRoles: Schema.optionalKey(Schema.Array(RoleId)),
+	roleSources: Schema.optionalKey(
+		Schema.Array(
+			Schema.Struct({ providerId: Schema.String, role: Schema.String }),
+		),
+	),
 	/** An extra policy for this member, on top of the policies of the roles. */
 	policy: PolicySchema,
 	joinedAt: Schema.String,
@@ -49,7 +56,7 @@ export const Member = Schema.Struct({
 export type Member = typeof Member.Type
 export const UpdateMemberRequest = Schema.Struct({
 	status: Schema.optionalKey(MemberStatus),
-	roles: Schema.optionalKey(Roles),
+	roles: Schema.optionalKey(Schema.Array(RoleId)),
 	policy: Schema.optionalKey(PolicyInput),
 })
 export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
@@ -80,6 +87,12 @@ export const Invitation = Schema.Struct({
 	),
 })
 export type Invitation = typeof Invitation.Type
+/** Creating the invitation succeeds even if its mail could not be sent. */
+export const CreateInvitationResponse = Schema.Struct({
+	...Invitation.fields,
+	delivery: Schema.optionalKey(Delivery),
+})
+export type CreateInvitationResponse = typeof CreateInvitationResponse.Type
 export const CreateInvitationRequest = Schema.Struct({
 	email: Email,
 	/** Without it, the person gets the default roles of the organization. */
@@ -93,7 +106,7 @@ export type CreateInvitationRequest = typeof CreateInvitationRequest.Type
  */
 const auditActionTree = {
 	member: ["joined", "updated", "removed", "left"],
-	invitation: ["created", "revoked", "accepted", "declined"],
+	invitation: ["created", "revoked", "accepted", "declined", "send_requested"],
 	bot_member: ["joined", "removed"],
 	organization: ["created", "updated"],
 	settings: ["updated"],

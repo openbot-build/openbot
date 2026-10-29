@@ -3,6 +3,9 @@ title: Organisation
 description: Organisationen, Members, Einstellungen, Roles und das Audit-Log.
 ---
 
+Siehe [Kontozugang](/de/access) für neue Vorgaben, E-Mail-Anmeldung, Freigaben,
+Gruppenrollen und Admin-Wiederherstellung.
+
 Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
 Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
 [Administrationshandbuch](/de/admin).
@@ -277,8 +280,9 @@ draußen zu halten, sperre es.
 ## Einladungen
 
 Ein Administrator lädt eine Person per E-Mail ein. Die Person meldet sich mit
-dieser E-Mail an und nimmt dann an oder lehnt ab. OpenBot sendet keine E-Mail.
-Sag es der Person selbst.
+dieser E-Mail an und nimmt dann an oder lehnt ab. Wenn die Platform
+[E-Mails eingerichtet hat](/de/platform#e-mails-senden), sendet OpenBot die
+Einladung nach dem Speichern. Sonst musst du es der Person selbst sagen.
 
 `POST /v1/organization/invitations` erstellt eine Einladung. Es braucht `write`
 auf `Member`.
@@ -301,7 +305,8 @@ curl -b cookies.txt \
 	"status": "pending",
 	"invitedBy": "u_123",
 	"createdAt": "2026-10-23T09:00:00.000Z",
-	"expiresAt": "2026-10-30T09:00:00.000Z"
+	"expiresAt": "2026-10-30T09:00:00.000Z",
+	"delivery": { "status": "sent" }
 }
 ```
 
@@ -320,6 +325,27 @@ Du kannst auch Personen einladen, einen Bot zu nutzen. Siehe
 zuerst. Es braucht `read` auf `Member`. Füge `?status=pending` hinzu, um nur die
 offenen zu sehen. `DELETE /v1/organization/invitations/:invitationId` nimmt eine
 offene Einladung zurück. Es braucht `write` auf `Member`.
+
+`delivery.status` ist `sent`, `disabled` oder `failed`. `sent` bedeutet, dass
+der SMTP-Server die E-Mail angenommen hat. Es beweist keine Zustellung im
+Posteingang. Ein Fehler beim Senden löscht die Einladung nicht. OpenBot sendet
+nicht von selbst erneut.
+
+Mit `POST /v1/organization/invitations/:invitationId/resend` kannst du die
+E-Mail erneut senden. Die Route braucht dieselben Rechte wie das Erstellen. Nur
+ein Super Administrator darf eine Einladung mit dieser Role erneut senden. Die
+Einladung muss noch offen und gültig sein. Ihre Roles und ihr Ablaufdatum
+bleiben gleich. Die Antwort ist das Versand-Ergebnis, etwa
+`{ "status": "sent" }`.
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/organization/invitations/inv_51c2/resend
+```
+
+Wenn die SMTP-Antwort verloren ging, kann ein erneuter Versand eine zweite
+E-Mail erzeugen. Erstelle dafür keine neue Einladung: Es gibt bereits eine
+offene Einladung für diese Adresse.
 
 ### Auf eine Einladung antworten
 
@@ -385,49 +411,50 @@ neuesten zuerst. Es braucht `read` auf `AuditLog`.
 }
 ```
 
-| Aktion                   | Wann                                                               |
-| ------------------------ | ------------------------------------------------------------------ |
-| `member.joined`          | Ein Konto tritt der Organisation bei.                              |
-| `member.updated`         | Ein Member bekommt einen neuen Status, Roles oder eine Policy.     |
-| `member.removed`         | Ein Member wird entfernt.                                          |
-| `member.left`            | Ein Member verlässt die Organisation.                              |
-| `invitation.created`     | Ein Member lädt eine E-Mail ein.                                   |
-| `invitation.revoked`     | Ein Member nimmt eine Einladung zurück.                            |
-| `invitation.accepted`    | Die eingeladene Person nimmt an.                                   |
-| `invitation.declined`    | Die eingeladene Person lehnt ab.                                   |
-| `organization.created`   | Jemand erstellt eine Organisation.                                 |
-| `organization.updated`   | Die Organisation bekommt einen neuen Namen.                        |
-| `settings.updated`       | Die Einstellungen der Organisation ändern sich.                    |
-| `role.created`           | Ein Member erstellt eine eigene Role.                              |
-| `role.updated`           | Ein Member ändert eine eigene Role.                                |
-| `role.deleted`           | Ein Member löscht eine eigene Role.                                |
-| `model.created`          | Ein Member fügt ein Model hinzu.                                   |
-| `model.updated`          | Ein Member ändert ein Model.                                       |
-| `model.deleted`          | Ein Member entfernt ein Model.                                     |
-| `model_provider.created` | Ein Member fügt einen Model Provider hinzu.                        |
-| `model_provider.updated` | Ein Member ändert einen Model Provider.                            |
-| `model_provider.deleted` | Ein Member entfernt einen Model Provider.                          |
-| `domain.added`           | Ein Member fügt eine E-Mail-Domain hinzu.                          |
-| `domain.verified`        | Eine E-Mail-Domain wird bestätigt.                                 |
-| `domain.removed`         | Ein Member entfernt eine E-Mail-Domain.                            |
-| `sso_connection.created` | Ein Member fügt eine SSO-Verbindung hinzu.                         |
-| `sso_connection.updated` | Ein Member ändert eine SSO-Verbindung.                             |
-| `sso_connection.deleted` | Ein Member entfernt eine SSO-Verbindung.                           |
-| `token.created`          | Ein Member erstellt ein User-Token.                                |
-| `token.revoked`          | Ein Member widerruft ein User-Token.                               |
-| `bot.created`            | Ein Member erstellt einen Bot.                                     |
-| `bot.updated`            | Ein Member ändert einen Bot.                                       |
-| `bot.memory.updated`     | Ein Member ändert Bot-Memory.                                      |
-| `bot.memory.purged`      | Ein Member entfernt Bot-Memory nach einem Tag.                     |
-| `bot.memory_bot.updated` | Ein Member ändert den Memory-Bot.                                  |
-| `delegation.started`     | Ein Bot gibt Arbeit an einen Bot.                                  |
-| `delegation.completed`   | Abgegebene Arbeit endet.                                           |
-| `capability.decided`     | Eine Person beantwortet einen Request.                             |
-| `request.resolved`       | Ein Request wird geschlossen. `details.chain` listet die Bots auf. |
-| `grant.created`          | Ein Member erstellt einen Grant.                                   |
-| `grant.revoked`          | Ein Member widerruft einen Grant.                                  |
-| `rule.created`           | Ein Member fügt eine Rule hinzu.                                   |
-| `rule.updated`           | Ein Member ändert eine Rule.                                       |
+| Aktion                      | Wann                                                               |
+| --------------------------- | ------------------------------------------------------------------ |
+| `member.joined`             | Ein Konto tritt der Organisation bei.                              |
+| `member.updated`            | Ein Member bekommt einen neuen Status, Roles oder eine Policy.     |
+| `member.removed`            | Ein Member wird entfernt.                                          |
+| `member.left`               | Ein Member verlässt die Organisation.                              |
+| `invitation.created`        | Ein Member lädt eine E-Mail ein.                                   |
+| `invitation.send_requested` | Ein Member fordert den erneuten Versand einer Einladung an.        |
+| `invitation.revoked`        | Ein Member nimmt eine Einladung zurück.                            |
+| `invitation.accepted`       | Die eingeladene Person nimmt an.                                   |
+| `invitation.declined`       | Die eingeladene Person lehnt ab.                                   |
+| `organization.created`      | Jemand erstellt eine Organisation.                                 |
+| `organization.updated`      | Die Organisation bekommt einen neuen Namen.                        |
+| `settings.updated`          | Die Einstellungen der Organisation ändern sich.                    |
+| `role.created`              | Ein Member erstellt eine eigene Role.                              |
+| `role.updated`              | Ein Member ändert eine eigene Role.                                |
+| `role.deleted`              | Ein Member löscht eine eigene Role.                                |
+| `model.created`             | Ein Member fügt ein Model hinzu.                                   |
+| `model.updated`             | Ein Member ändert ein Model.                                       |
+| `model.deleted`             | Ein Member entfernt ein Model.                                     |
+| `model_provider.created`    | Ein Member fügt einen Model Provider hinzu.                        |
+| `model_provider.updated`    | Ein Member ändert einen Model Provider.                            |
+| `model_provider.deleted`    | Ein Member entfernt einen Model Provider.                          |
+| `domain.added`              | Ein Member fügt eine E-Mail-Domain hinzu.                          |
+| `domain.verified`           | Eine E-Mail-Domain wird bestätigt.                                 |
+| `domain.removed`            | Ein Member entfernt eine E-Mail-Domain.                            |
+| `sso_connection.created`    | Ein Member fügt eine SSO-Verbindung hinzu.                         |
+| `sso_connection.updated`    | Ein Member ändert eine SSO-Verbindung.                             |
+| `sso_connection.deleted`    | Ein Member entfernt eine SSO-Verbindung.                           |
+| `token.created`             | Ein Member erstellt ein User-Token.                                |
+| `token.revoked`             | Ein Member widerruft ein User-Token.                               |
+| `bot.created`               | Ein Member erstellt einen Bot.                                     |
+| `bot.updated`               | Ein Member ändert einen Bot.                                       |
+| `bot.memory.updated`        | Ein Member ändert Bot-Memory.                                      |
+| `bot.memory.purged`         | Ein Member entfernt Bot-Memory nach einem Tag.                     |
+| `bot.memory_bot.updated`    | Ein Member ändert den Memory-Bot.                                  |
+| `delegation.started`        | Ein Bot gibt Arbeit an einen Bot.                                  |
+| `delegation.completed`      | Abgegebene Arbeit endet.                                           |
+| `capability.decided`        | Eine Person beantwortet einen Request.                             |
+| `request.resolved`          | Ein Request wird geschlossen. `details.chain` listet die Bots auf. |
+| `grant.created`             | Ein Member erstellt einen Grant.                                   |
+| `grant.revoked`             | Ein Member widerruft einen Grant.                                  |
+| `rule.created`              | Ein Member fügt eine Rule hinzu.                                   |
+| `rule.updated`              | Ein Member ändert eine Rule.                                       |
 
 ---
 

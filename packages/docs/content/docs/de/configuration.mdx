@@ -236,20 +236,20 @@ Dokumente enthalten die meisten davon:
 Ältere Versionen von OpenBot haben mehr Umgebungsvariablen gelesen. OpenBot
 ignoriert sie jetzt. Diese Tabelle zeigt, wohin jeder Wert gewandert ist:
 
-| Alte Variable                   | Neuer Ort                                                                                                                            |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENBOT_PUBLIC_ORIGIN`         | `publicOrigin` in den Einstellungen der Platform. Das Setup schreibt ihn mit `--public-origin`.                                      |
-| `OPENBOT_OIDC_ISSUER`           | `identityProvider.issuer` in den Einstellungen der Platform. Das Setup schreibt ihn mit `--oidc-issuer`.                             |
-| `OPENBOT_OIDC_CLIENT_ID`        | `identityProvider.clientId` in den Einstellungen der Platform. Das Setup schreibt ihn mit `--oidc-client-id`.                        |
-| `OPENBOT_OIDC_CLIENT_SECRET`    | `identityProvider.clientSecret` in den Einstellungen der Platform, verschlüsselt. Das Setup schreibt ihn mit `--oidc-client-secret`. |
-| `BETTER_AUTH_SECRET`            | Das Anmelde-Geheimnis. Das Setup erstellt ein zufälliges und speichert es verschlüsselt. Du setzt es nie.                            |
-| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`.                                                                                                               |
-| `OPENBOT_OWNER_EMAILS`          | Admins der Platform. Das Setup fügt sie mit `--admin-email` hinzu. Ändere sie mit `/v1/platform/admins`.                             |
-| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Bestätigte Domains jeder Organization, mit `joinByDomain` in ihren Einstellungen. Siehe [SSO](/de/sso#bestätigte-domains).           |
-| `OPENBOT_MODEL_ENDPOINT`        | Model Providers einer Organization oder der Platform. Siehe [Models](/de/models).                                                    |
-| `OPENBOT_MODEL_API_KEY`         | Model Providers, verschlüsselt.                                                                                                      |
-| `OPENBOT_MODEL_ID`              | Ein Model, das ein Model Provider verknüpft, und das `model` jedes Bots.                                                             |
-| `OPENBOT_DEV_MODE`              | Der Einstiegspunkt für die Entwicklung entscheidet. Siehe [Entwicklung](#entwicklung).                                               |
+| Alte Variable                   | Neuer Ort                                                                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENBOT_PUBLIC_ORIGIN`         | `publicOrigin` in den Einstellungen der Platform. Das Setup schreibt ihn mit `publicOrigin`.                                                  |
+| `OPENBOT_OIDC_ISSUER`           | `identityProvider.issuer` in den Einstellungen der Platform. Das Setup schreibt ihn mit `identityProvider.issuer`.                            |
+| `OPENBOT_OIDC_CLIENT_ID`        | `identityProvider.clientId` in den Einstellungen der Platform. Das Setup schreibt ihn mit `identityProvider.clientId`.                        |
+| `OPENBOT_OIDC_CLIENT_SECRET`    | `identityProvider.clientSecret` in den Einstellungen der Platform, verschlüsselt. Das Setup schreibt ihn mit `identityProvider.clientSecret`. |
+| `BETTER_AUTH_SECRET`            | Das Anmelde-Geheimnis. Das Setup erstellt ein zufälliges und speichert es verschlüsselt. Du setzt es nie.                                     |
+| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`.                                                                                                                        |
+| `OPENBOT_OWNER_EMAILS`          | Admins der Platform. Das Setup fügt sie mit `adminEmails` hinzu. Ändere sie mit `/v1/platform/admins`.                                        |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Bestätigte Domains jeder Organization, mit `joinByDomain` in ihren Einstellungen. Siehe [SSO](/de/sso#bestätigte-domains).                    |
+| `OPENBOT_MODEL_ENDPOINT`        | Model Providers einer Organization oder der Platform. Siehe [Models](/de/models).                                                             |
+| `OPENBOT_MODEL_API_KEY`         | Model Providers, verschlüsselt.                                                                                                               |
+| `OPENBOT_MODEL_ID`              | Ein Model, das ein Model Provider verknüpft, und das `model` jedes Bots.                                                                      |
+| `OPENBOT_DEV_MODE`              | Der Einstiegspunkt für die Entwicklung entscheidet. Siehe [Entwicklung](#entwicklung).                                                        |
 
 Manche Werte waren früher Optionen im Code. Sie sind jetzt auch Einstellungen:
 

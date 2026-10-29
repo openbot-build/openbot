@@ -1,3 +1,4 @@
+import * as Access from "@openbot-build/domain/Access"
 import type { Settings as SettingsModel } from "@openbot-build/domain"
 import { DateTime } from "effect"
 import {
@@ -35,12 +36,20 @@ export const platform = (
 						},
 					},
 		organizationCreation: document.organizationCreation,
+		registration: document.registration ?? Access.defaults,
 		ceiling: document.ceiling,
 		appRestrictions: document.appRestrictions,
 		codeMode: codeModeOf(document),
 		rateLimit: rateLimitOf(document),
 		tokenRate: tokenRateOf(document),
 		files: files(filesOf(document)),
+		mail:
+			document.mail == null
+				? null
+				: {
+						...document.mail,
+						password: { set: document.mail.password !== null, hint: null },
+					},
 		updatedAt: DateTime.formatIso(DateTime.makeUnsafe(snapshot.updatedAt)),
 	}
 }

@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "29d15476-30b0-405e-bdb1-777a5e8f4a64",
+	"prevIds": ["28e8a897-90a0-4693-8adb-837da8bbb6a8"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_account_states",
+				"revoked_at"
+			],
+			"writes": [
+				"s|col|public.openbot_account_states.revoked_at",
+				"n|col|public.openbot_account_states.revoked_at",
+				"e|col|public.openbot_account_states.revoked_at"
+			],
+			"reads": ["n|tbl|public.openbot_account_states", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_account_states",
+				"name": "revoked_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

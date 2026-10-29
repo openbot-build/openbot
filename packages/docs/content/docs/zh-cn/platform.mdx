@@ -3,6 +3,8 @@ title: Platform
 description: 平台管理员、设置程序、平台设置，以及共享的模型和模型提供方。
 ---
 
+邀请制升级默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
+
 面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/admin)开始。
 
 Platform（平台）就是整个 OpenBot 部署。一个平台有许多组织。平台管理员负责运行平台。本页介绍如何设置平台，以及如何用
@@ -55,43 +57,41 @@ curl -b cookies.txt \
 `/app/dist/app/Setup.mjs`。从源代码运行时，使用
 `pnpm --filter @openbot-build/openbot setup`。这个包还提供命令 `openbot-setup`。
 
-```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+创建私有的 `setup.json` 文件（权限为 `600`）：
+
+```json
+{
+	"publicOrigin": "https://api.example.com",
+	"identityProvider": {
+		"issuer": "https://id.example.com",
+		"clientId": "openbot"
+	},
+	"adminEmails": ["alice@example.com"]
+}
 ```
 
-| 参数                     | 必需           | 作用                                                                                       |
-| ------------------------ | -------------- | ------------------------------------------------------------------------------------------ |
-| `--public-origin`        | 是             | OpenBot 的公开 HTTPS 源，比如 `https://api.example.com`。不带路径，结尾不带斜杠。          |
-| `--oidc-issuer`          | 与 ID 一起     | 平台 OpenID Connect 提供方的 HTTPS 地址，结尾不带斜杠。                                    |
-| `--oidc-client-id`       | 与 issuer 一起 | 在该提供方那里的客户端 ID。                                                                |
-| `--oidc-client-secret`   | 否             | 客户端密钥。对于使用 PKCE 的公开客户端，不填。                                             |
-| `--admin-email`          | 至少一个       | 拥有这个已验证邮箱的人登录后会成为平台管理员。要添加更多人，就重复这个参数。               |
-| `--s3-endpoint`          | 和 bucket 一起 | [文件](/zh-cn/developers/files)的对象存储地址，例如 `https://s3.us-east-1.amazonaws.com`。 |
-| `--s3-public-endpoint`   | 否             | 客户端直接上传文件时用的地址，当它不是 `--s3-endpoint` 时设置。                            |
-| `--s3-region`            | 否             | 存储的区域。默认是 `us-east-1`。                                                           |
-| `--s3-bucket`            | 和地址一起     | 存放文件的 bucket。                                                                        |
-| `--s3-access-key-id`     | 和地址一起     | 存储的访问密钥 ID。                                                                        |
-| `--s3-secret-access-key` | 和地址一起     | 存储的密钥。                                                                               |
-| `--s3-path-style`        | 否             | 把 bucket 放在路径里。MinIO 和 RustFS 需要它。                                             |
-| `--force`                | 否             | 即使设置已存在也写入。只在恢复时使用，也就是没有任何平台管理员能登录的时候。               |
+只运行一次初始化。所有实例随后从数据库读取这些配置。共享的产品配置不作为服务器启动参数。
 
-`--oidc-issuer` 和 `--oidc-client-id`
-要么一起设置，要么都不设置。当大家只通过各组织的
-[SSO 连接](/zh-cn/sso)登录时，两者都不设置。
+```sh
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs --config=/run/setup.json
+```
 
-命令行可能会出现在进程列表中。所以，你可以改用环境变量
-`OPENBOT_SETUP_OIDC_CLIENT_SECRET` 提供客户端密钥，而不是
-`--oidc-client-secret`。这是更好的做法。
+`--config` 指定文件路径，`--force` 只用于恢复。文件必须包含 `publicOrigin`
+和至少一个 `adminEmails`。`adminProvider` 默认是 `oidc`；邮箱登录使用
+`email`，SSO 使用连接 ID。组织 SSO 或邮箱登录可省略
+`identityProvider`。公开 PKCE 客户端无需 `clientSecret`。可选的 `registration`
+和 `mail` 与设置 API 输入格式一致。
 
-四个存储参数 `--s3-endpoint`、`--s3-bucket`、`--s3-access-key-id` 和
-`--s3-secret-access-key` 要一起设置，或者都不设置。你也可以用
-`OPENBOT_SETUP_S3_SECRET_ACCESS_KEY`
-提供密钥。不设置时，平台没有存储，直到管理员在平台设置中设置 `files`。
+可选的 `fileStorage`
+保存 S3 配置：`endpoint`、`publicEndpoint`（不需要时为 null）、`region`、`bucket`、`accessKeyId`、`forcePathStyle`
+和 `secretAccessKey`。MinIO 或 RustFS 的 `forcePathStyle` 设为 true。省略
+`fileStorage` 时，新平台不配置文件存储，恢复时保留原有存储。后续通过
+`PATCH /v1/platform/settings` 的 `files.storage`
+修改。密钥只放在私有文件中，初始化程序会加密保存到数据库。
+
+不再读取旧的逐项设置参数及 `OPENBOT_SETUP_*` 环境变量，请把这些值移入文件。
 
 设置程序还会生成一个随机的登录密钥。Better
 Auth 用它来签名登录 cookie。OpenBot 加密保存它，你永远看不到它。
@@ -126,7 +126,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"hint": "…k9Qz"
 		}
 	},
-	"organizationCreation": "anyone",
+	"organizationCreation": "platform_admins",
 	"ceiling": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[]}",
 	"appRestrictions": [],
 	"codeMode": {
@@ -162,6 +162,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		],
 		"unusedMs": 86400000
 	},
+	"mail": null,
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -178,6 +179,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `rateLimit`            | 每个调用方在一分钟内最多可以发送多少个 API 请求。参见[速率限制](/zh-cn/usage#速率限制)。             |
 | `tokenRate`            | 每个范围最高的 token 速率。组织只能设置更低的速率。参见 [token 速率](/zh-cn/usage#token-速率)。      |
 | `files`                | [文件](/zh-cn/developers/files#设置存储)的对象存储和限制。                                           |
+| `mail`                 | [发送邮件](#发送邮件)的 SMTP 设置。`null` 表示不发送邮件。                                           |
 | `updatedAt`            | 设置最后一次修改的时间。                                                                             |
 
 ### 机密永远不会返回
@@ -188,6 +190,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 - `hint` 是 `…`
   加上最后 4 个字符，方便你区分不同的机密。对于短于 12 个字符的机密，它为
   `null`。
+- SMTP 密码的 `hint` 总是 `null`，不会显示密码的任何字符。
 
 ### 修改设置
 
@@ -241,6 +244,71 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ---
 
+## 发送邮件
+
+平台管理员可以设置 SMTP，也就是把邮件交给邮件服务器的协议。设置后，OpenBot 会发送[组织邀请](/zh-cn/organization#邀请)和
+[Bot 邮箱邀请](/zh-cn/developers/sharing#邀请别人)。新平台和旧版本保存的设置都默认关闭邮件发送。Bot 邀请链接不会发送邮件。
+
+把下面的请求体发给 `PATCH /v1/platform/settings`。`expectedVersion`
+必须是你刚读到的版本。SMTP 密码会加密保存在数据库中，每个实例都会立即使用新设置。
+
+```json
+{
+	"expectedVersion": 3,
+	"mail": {
+		"host": "smtp.example.com",
+		"port": 587,
+		"security": "starttls",
+		"from": "openbot@example.com",
+		"fromName": "OpenBot",
+		"username": "openbot",
+		"password": "replace-with-your-smtp-password",
+		"invitationUrl": null
+	}
+}
+```
+
+| 字段            | 含义                                                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `host`          | SMTP 主机名或 IP 地址，不含协议、端口或路径。                                                                         |
+| `port`          | SMTP 端口，范围是 1 到 65535。                                                                                        |
+| `security`      | `tls` 从连接开始就使用 TLS，通常用于端口 465。`starttls` 要求先升级到 TLS，通常用于端口 587。两者都不会退回明文发送。 |
+| `from`          | 发件人的邮箱。                                                                                                        |
+| `fromName`      | 发件人的显示名称。                                                                                                    |
+| `username`      | SMTP 登录名。不需要登录时设为 `null`，这也会清除已保存的密码。                                                        |
+| `password`      | 只写入的 SMTP 密码。首次设置登录时必须提供。                                                                          |
+| `invitationUrl` | 邮件按钮打开的地址。`null` 使用 `publicOrigin`。可设为客户端自己的邀请页 HTTPS 地址；本机开发地址也可以使用 HTTP。    |
+
+修改 `mail` 时，除 `password` 外，每个字段都要提供。只有 `host`、`port`、
+`security` 和 `username` 都未变时，才能省略 `password`
+并保留原密码。这些值改变后，如果仍需要登录，就必须提供新密码。读取设置时，密码只返回
+`{ "set": true, "hint": null }` 或 `{ "set": false, "hint": null }`。在 `PATCH`
+中省略整个 `mail` 会保留现有设置；`"mail": null` 会关闭发送。
+
+配置后，用测试邮件检查连接：
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"alice@example.com"}' \
+  https://api.example.com/v1/platform/mail/test
+```
+
+此接口只供平台管理员使用，支持 API key 和同源 session cookie。响应是
+`{ "status": "sent" }`、`{ "status": "disabled" }` 或
+`{ "status": "failed" }`。`sent`
+只表示 SMTP 服务器接受了邮件，不保证邮件已进入收件箱。 `disabled`
+表示未启用发送。`failed`
+表示无法确认发送成功，OpenBot 不会自动重试。如果服务器已接收邮件，但它的回复丢失，手动重发可能产生重复邮件。
+
+邮件模板用 React
+Email 构建，同时包含 HTML 和纯文本。它沿用 OpenBot 的灰阶配色、大圆角、胶囊按钮，以及 DM
+Sans 和 DM
+Mono 字体，并为不支持这些字体的邮件客户端提供回退字体。模板没有边框或阴影。按钮显示“Open
+OpenBot”，只打开设置中的地址，不会直接接受邀请。使用自己的邀请页时，由客户端在登录后读取邀请并让用户接受或拒绝。
+
+---
+
 ## 组织创建
 
 `organizationCreation` 决定谁可以调用
@@ -248,7 +316,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 | 值                | 结果                                                                  |
 | ----------------- | --------------------------------------------------------------------- |
-| `anyone`          | 默认值。任何登录的人都可以创建组织。                                  |
+| `anyone`          | 任何登录的人都可以创建组织。                                          |
 | `platform_admins` | 只有平台管理员可以创建组织。其他人通过邀请、已验证的域名或 SSO 加入。 |
 
 账号加入组织的所有方式，参见[组织](/zh-cn/organization#谁可以加入)。

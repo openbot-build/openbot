@@ -72,6 +72,7 @@ it.live(
 							userId: secret === "limited-session" ? "limited-user" : "user",
 							profile: {},
 							platformAdmin: false,
+							canCreateOrganization: false,
 							memberships: [
 								{
 									organizationId: "org",

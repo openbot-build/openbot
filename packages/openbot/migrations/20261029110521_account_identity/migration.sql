@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "openbot_auth_account_identity" ON "openbot_auth_account" ("provider_id","account_id");

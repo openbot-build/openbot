@@ -11,6 +11,7 @@
 	],
 	"exports": {
 		".": "./dist/index.js",
+		"./Access": "./dist/Access.js",
 		"./Accounts": "./dist/Accounts.js",
 		"./AppAuthorizations": "./dist/AppAuthorizations.js",
 		"./AppCalls": "./dist/AppCalls.js",
@@ -33,6 +34,7 @@
 		"./Files": "./dist/Files.js",
 		"./Invitation": "./dist/Invitation.js",
 		"./Live": "./dist/Live.js",
+		"./Mail": "./dist/Mail.js",
 		"./Models": "./dist/Models.js",
 		"./Name": "./dist/Name.js",
 		"./Organizations": "./dist/Organizations.js",

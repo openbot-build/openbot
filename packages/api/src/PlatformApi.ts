@@ -8,6 +8,8 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
+import { Email } from "./Email.ts"
+import { Delivery } from "./Mail.ts"
 import { Limit } from "./Page.ts"
 import {
 	CreditGrant,
@@ -72,6 +74,14 @@ const ModelParams = { modelId: CoreModel.Id }
 /** The settings of the whole deployment. Only platform admins can use it. */
 export class PlatformApi extends HttpApiGroup.make("platform")
 	.add(
+		HttpApiEndpoint.post("sendTestMail", "/v1/platform/mail/test", {
+			payload: Schema.Struct({ to: Email }),
+			success: Delivery,
+			error: errors,
+		}).annotate(
+			OpenApi.Description,
+			"Sends a test email with the current platform SMTP settings. Only platform admins can use this endpoint. Sent means that SMTP accepted the email; it does not prove inbox delivery. A failed send is not retried.",
+		),
 		HttpApiEndpoint.post(
 			"startPlatformProviderAuthorization",
 			"/v1/platform/model_providers/:providerId/oauth/authorizations",

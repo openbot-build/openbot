@@ -1,3 +1,4 @@
+import { Access } from "../src/access/Access.ts"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Effect, HashMap, Layer, Stream, Option } from "effect"
 import { Organization } from "../src/organization/Organization.ts"
@@ -19,6 +20,7 @@ import { ModelRegistry } from "../src/models/ModelRegistry.ts"
 import { Sso } from "../src/sso/Sso.ts"
 import { Billing } from "../src/billing/Billing.ts"
 import { RateLimiter } from "../src/billing/RateLimit.ts"
+import { Mail } from "../src/mail/Mail.ts"
 
 /**
  * An organization where every account is an active Super Administrator.
@@ -131,6 +133,12 @@ export const layerAuthorization = AuthorizationLayer.layer.pipe(
  * hand but never call those endpoints. Only the sign-in checks work.
  */
 export const layerUnusedPlatform = Layer.mergeAll(
+	Layer.mock(Access, {}),
+	Layer.succeed(Mail, {
+		signInCode: () => Effect.succeed({ status: "disabled" }),
+		invitation: () => Effect.succeed({ status: "disabled" }),
+		test: () => Effect.succeed({ status: "disabled" }),
+	}),
 	Layer.mock(ProviderOAuth, {}),
 	layerBuiltinRoles,
 	layerDefaultSettings,

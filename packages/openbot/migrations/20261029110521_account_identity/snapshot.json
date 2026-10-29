@@ -1,0 +1,63 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "e4c68f5c-722a-4cd3-b194-ff20d4166b5d",
+	"prevIds": ["1df8551e-1793-4c0d-8e19-4e8e4481e5bb"],
+	"footprints": [
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_auth_account",
+				"openbot_auth_account_identity"
+			],
+			"writes": [
+				"s|idx|public.openbot_auth_account_identity",
+				"n|idx|public.openbot_auth_account_identity",
+				"e|idx|public.openbot_auth_account_identity",
+				"n|rel|public.openbot_auth_account_identity"
+			],
+			"reads": [
+				"n|tbl|public.openbot_auth_account",
+				"n|sch|public",
+				"n|col|public.openbot_auth_account.provider_id",
+				"n|col|public.openbot_auth_account.account_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_auth_account",
+				"name": "openbot_auth_account_identity",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "provider_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "account_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		}
+	]
+}

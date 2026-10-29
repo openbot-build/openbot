@@ -3,6 +3,9 @@ title: Betrieb
 description: Betreibe OpenBot auf deinem eigenen Server.
 ---
 
+Siehe [Kontozugang](/de/access) für neue Vorgaben, E-Mail-Anmeldung, Freigaben,
+Gruppenrollen und Admin-Wiederherstellung.
+
 Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
 brauchst je nach Aufgabe Serverzugriff oder Plattformrechte. Beginne mit dem
 [Administrationshandbuch](/de/admin).
@@ -156,18 +159,15 @@ Daten wieder her, die diese Aktionen wiederholen würden.
 Führe das Einrichtungsprogramm einmal aus, auf einer neuen Datenbank:
 
 ```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
   /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+  --config=/run/setup.json
 ```
 
-Es schreibt den öffentlichen Origin, den Anbieter der Plattform und die ersten
-Plattform-Admins in die Datenbank. Gib ein Client-Geheimnis mit
-`-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...` an, nicht auf der Befehlszeile. Alle
-Optionen findest du unter [Platform](/de/platform#setup).
+Erstelle die private Datei `setup.json` wie unter
+[Platform](/de/platform#setup). Setup schreibt die gemeinsamen Einstellungen und
+ersten Admins in die Datenbank. Client-Geheimnisse stehen in dieser Datei.
 
 Du kannst die Einrichtung auch nach dem Start des Servers ausführen. Bis dahin
 antwortet jede Route außer `/health` mit `503` und `SetupRequired`.
@@ -216,7 +216,7 @@ Du kannst die Programme auch mit Node.js auf dem Server ausführen:
 pnpm install --frozen-lockfile
 pnpm --filter-prod @openbot-build/openbot... build
 pnpm --filter @openbot-build/openbot migrate
-pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --admin-email=alice@example.com
+pnpm --filter @openbot-build/openbot setup --config=setup.json
 pnpm --filter @openbot-build/openbot start
 ```
 
@@ -314,11 +314,8 @@ Führe das Einrichtungsprogramm einmal aus, nach dem ersten `up`:
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
-  run --rm openbot /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/app/Setup.mjs \
+  --config=/run/setup.json
 ```
 
 Bis du das tust, antwortet jede Route außer `/health` mit `503` und

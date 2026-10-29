@@ -1,3 +1,5 @@
+import { Option } from "effect"
+import { Settings } from "../../src/settings/Settings.ts"
 import { assert } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { SqlClient } from "effect/sql"
@@ -151,6 +153,11 @@ export const seedSession = (env: ReturnType<typeof environment>) =>
 			)
 			const address = HttpServer.formatAddress(
 				Context.get(services, HttpServer.HttpServer).address,
+			)
+			const settings = Context.get(services, Settings)
+			const platform = Option.getOrThrow(yield* settings.platform)
+			yield* settings.updatePlatform(platform.version, (p) =>
+				Effect.succeed({ ...p, organizationCreation: "anyone" }),
 			)
 			return (yield* signIn(address, origin)).credential
 		}),

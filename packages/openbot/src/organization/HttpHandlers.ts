@@ -7,7 +7,16 @@ import {
 
 import { Authorization } from "@openbot-build/domain"
 import { Account, type Caller, Identity } from "@openbot-build/domain"
-import { Array as Arr, Effect, Layer, Option, pipe, Struct } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	DateTime,
+	Effect,
+	Layer,
+	Option,
+	pipe,
+	Struct,
+} from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
@@ -19,6 +28,7 @@ import { Settings } from "../settings/Settings.ts"
 import * as Views from "../settings/Views.ts"
 import { PlatformAdmins } from "../platform/PlatformAdmins.ts"
 import { Organization } from "./Organization.ts"
+import { Mail } from "../mail/Mail.ts"
 
 const superAdministrator = "super_administrator"
 const storageUnavailable = () =>
@@ -51,6 +61,7 @@ const organizationGroup = HttpApiBuilder.group(
 	(handlers) =>
 		Effect.gen(function* () {
 			const organization = yield* Organization
+			const mail = yield* Mail
 			const roles = yield* Roles
 			const settings = yield* Settings
 			const registry = yield* ModelRegistry
@@ -386,7 +397,63 @@ const organizationGroup = HttpApiBuilder.group(
 									roles: [...invitation.roles],
 								},
 							)
-							return invitation
+							const delivery = yield* mail.invitation({
+								id: invitation.id,
+								email: invitation.email,
+								organizationName: invitation.organizationName,
+								expiresAt: DateTime.toEpochMillis(
+									DateTime.makeUnsafe(invitation.expiresAt),
+								),
+							})
+							return { ...invitation, delivery }
+						}),
+					{ uninterruptible: true },
+				)
+				.handle(
+					"resendInvitation",
+					({ params }) =>
+						Effect.gen(function* () {
+							const caller = yield* Identity
+							const invitations = yield* organization
+								.listInvitations(caller.organizationId)
+								.pipe(replaceStorage("OpenBot could not read the invitation"))
+							const invitation = yield* Effect.fromOption(
+								Arr.findFirst(
+									invitations,
+									(item) => item.id === params.invitationId,
+								),
+								() =>
+									OrganizationApi.InvitationNotFound.make({
+										invitationId: params.invitationId,
+									}),
+							)
+							const expiresAt = DateTime.toEpochMillis(
+								DateTime.makeUnsafe(invitation.expiresAt),
+							)
+							if (
+								invitation.status !== "pending" ||
+								expiresAt <= (yield* Clock.currentTimeMillis)
+							)
+								return yield* OrganizationApi.InvitationInvalid.make({
+									message:
+										"Only a pending invitation that has not ended can be sent.",
+								})
+							if (invitation.roles.includes(superAdministrator))
+								yield* requireSuperAdministrator(caller, "write", "Member")
+							yield* record(
+								caller,
+								"invitation.send_requested",
+								organizationKey(caller.organizationId),
+								{
+									invitationId: invitation.id,
+								},
+							)
+							return yield* mail.invitation({
+								id: invitation.id,
+								email: invitation.email,
+								organizationName: invitation.organizationName,
+								expiresAt,
+							})
 						}),
 					{ uninterruptible: true },
 				)

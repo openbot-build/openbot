@@ -1,3 +1,4 @@
+import * as AccountAccess from "../src/access/Access.ts"
 import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -41,6 +42,7 @@ it.live(
 			const records = yield* Ref.make<ReadonlyArray<string>>([])
 			const services = yield* Layer.build(
 				SsoPostgres.layer.pipe(
+					Layer.provide(AccountAccess.layer),
 					Layer.provide(ErrorRecords.layer),
 					Layer.provide(noNotice),
 					Layer.provide(

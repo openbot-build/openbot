@@ -133,6 +133,7 @@ export const AccountApi = HttpApiGroup.make("account")
 	.middleware(NoStore)
 
 export const SignInRequest = Schema.Struct({
+	invitation: Schema.optionalKey(Schema.NonEmptyString),
 	/**
 	 * The email of the person. OpenBot uses its domain to find the SSO connection
 	 * of an organization. Leave it out to use the sign-in provider of the platform.

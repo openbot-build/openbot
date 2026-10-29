@@ -1,3 +1,4 @@
+import { Access } from "../access/Access.ts"
 import { OpenBotApi, type OrganizationApi, SsoApi } from "@openbot-build/api"
 
 import { type Caller, Identity } from "@openbot-build/domain"
@@ -28,6 +29,7 @@ export const view = ({
 	},
 	domains: connection.domains,
 	enforce: connection.enforce,
+	...(connection.access === undefined ? {} : { access: connection.access }),
 	redirectUri: publicOrigin + "/auth/callback/" + connection.id,
 	version: connection.version,
 	createdAt: DateTime.formatIso(DateTime.makeUnsafe(connection.createdAt)),
@@ -38,6 +40,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "sso", (handlers) =>
 	Effect.gen(function* () {
 		const sso = yield* Sso
 		const audit = yield* AuditLog
+		const access = yield* Access
 		const settings = yield* Settings
 		/** The redirect URI of a connection uses the public origin of the platform now. */
 		const publicOrigin = Platform.publicOriginOr(settings, () =>
@@ -57,6 +60,9 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "sso", (handlers) =>
 					details,
 				})
 				.pipe(
+					Effect.andThen(
+						access.record(action, caller.userId, caller.organizationId),
+					),
 					Failures.replace("Could not write the audit log", () =>
 						SsoApi.SsoUnavailable.make({}),
 					),

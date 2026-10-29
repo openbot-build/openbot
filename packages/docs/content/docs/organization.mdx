@@ -3,6 +3,9 @@ title: Organization
 description: Organizations, members, settings, roles and the audit log.
 ---
 
+See [account access](/access) for invitation-only upgrade defaults, email login,
+approvals, group roles and admin recovery.
+
 For organization administrators. You need the rights named for each task. Only a
 platform admin can change settings under `/v1/platform`. Start with the
 [administrator manual](/admin).
@@ -267,8 +270,9 @@ again the next time they sign in. To keep them out, suspend them.
 ## Invitations
 
 An administrator invites a person by email. The person signs in with that email,
-and then accepts or declines. OpenBot does not send the email. Tell the person
-yourself.
+and then accepts or declines. When the platform has
+[mail settings](/platform#send-email), OpenBot sends an email after saving the
+invitation. When mail is off, tell the person yourself.
 
 `POST /v1/organization/invitations` makes an invitation. It needs `write` on
 `Member`.
@@ -291,7 +295,8 @@ curl -b cookies.txt \
 	"status": "pending",
 	"invitedBy": "u_123",
 	"createdAt": "2026-10-23T09:00:00.000Z",
-	"expiresAt": "2026-10-30T09:00:00.000Z"
+	"expiresAt": "2026-10-30T09:00:00.000Z",
+	"delivery": { "status": "sent" }
 }
 ```
 
@@ -302,6 +307,24 @@ curl -b cookies.txt \
 - An email can have only one pending invitation in an organization. OpenBot
   returns `400` with `InvitationInvalid` when there is one, or when a member
   already has the email.
+
+The create answer includes `delivery`: `sent` when SMTP accepted the email,
+`disabled` when mail is off, or `failed` when OpenBot could not confirm the
+send. A failed send keeps the invitation. The result describes this attempt; it
+is not part of the stored invitation or proof of delivery to the inbox.
+
+To send it again, use the saved invitation ID:
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/organization/invitations/inv_51c2/resend
+```
+
+This needs `write` on `Member` and returns the delivery result. Only a Super
+Administrator can resend an invitation with the `super_administrator` role. The
+invitation must still be pending and must not have expired. Its roles and end
+time stay the same. OpenBot does not retry on its own. A resend after a lost
+SMTP reply may send a second copy.
 
 You can also invite people to use one Bot. See
 [Share Bots](/developers/sharing).
@@ -375,49 +398,50 @@ on `AuditLog`.
 }
 ```
 
-| Action                   | When                                              |
-| ------------------------ | ------------------------------------------------- |
-| `member.joined`          | An account joins the organization.                |
-| `member.updated`         | A member gets a new status, roles or policy.      |
-| `member.removed`         | A member is removed.                              |
-| `member.left`            | A member leaves the organization.                 |
-| `invitation.created`     | A member invites an email.                        |
-| `invitation.revoked`     | A member takes back an invitation.                |
-| `invitation.accepted`    | The invited person accepts.                       |
-| `invitation.declined`    | The invited person declines.                      |
-| `organization.created`   | Someone creates an organization.                  |
-| `organization.updated`   | The organization gets a new name.                 |
-| `settings.updated`       | The organization settings change.                 |
-| `role.created`           | A member makes a custom role.                     |
-| `role.updated`           | A member changes a custom role.                   |
-| `role.deleted`           | A member deletes a custom role.                   |
-| `model.created`          | A member adds a model.                            |
-| `model.updated`          | A member changes a model.                         |
-| `model.deleted`          | A member removes a model.                         |
-| `model_provider.created` | A member adds a model provider.                   |
-| `model_provider.updated` | A member changes a model provider.                |
-| `model_provider.deleted` | A member removes a model provider.                |
-| `domain.added`           | A member adds an email domain.                    |
-| `domain.verified`        | An email domain becomes verified.                 |
-| `domain.removed`         | A member removes an email domain.                 |
-| `sso_connection.created` | A member adds an SSO connection.                  |
-| `sso_connection.updated` | A member changes an SSO connection.               |
-| `sso_connection.deleted` | A member removes an SSO connection.               |
-| `token.created`          | A member creates a user token.                    |
-| `token.revoked`          | A member revokes a user token.                    |
-| `bot.created`            | A member makes a Bot.                             |
-| `bot.updated`            | A member changes a Bot.                           |
-| `bot.memory.updated`     | A member changes Bot memory.                      |
-| `bot.memory.purged`      | A member removes Bot memory by a tag.             |
-| `bot.memory_bot.updated` | A member changes the memory Bot.                  |
-| `delegation.started`     | A Bot gives work to a Bot.                        |
-| `delegation.completed`   | Delegated work ends.                              |
-| `capability.decided`     | A person answers a request.                       |
-| `request.resolved`       | A request closes. `details.chain` lists the Bots. |
-| `grant.created`          | A member makes a Grant.                           |
-| `grant.revoked`          | A member revokes a Grant.                         |
-| `rule.created`           | A member adds a Rule.                             |
-| `rule.updated`           | A member changes a Rule.                          |
+| Action                      | When                                              |
+| --------------------------- | ------------------------------------------------- |
+| `member.joined`             | An account joins the organization.                |
+| `member.updated`            | A member gets a new status, roles or policy.      |
+| `member.removed`            | A member is removed.                              |
+| `member.left`               | A member leaves the organization.                 |
+| `invitation.created`        | A member invites an email.                        |
+| `invitation.send_requested` | A member asks to send an invitation again.        |
+| `invitation.revoked`        | A member takes back an invitation.                |
+| `invitation.accepted`       | The invited person accepts.                       |
+| `invitation.declined`       | The invited person declines.                      |
+| `organization.created`      | Someone creates an organization.                  |
+| `organization.updated`      | The organization gets a new name.                 |
+| `settings.updated`          | The organization settings change.                 |
+| `role.created`              | A member makes a custom role.                     |
+| `role.updated`              | A member changes a custom role.                   |
+| `role.deleted`              | A member deletes a custom role.                   |
+| `model.created`             | A member adds a model.                            |
+| `model.updated`             | A member changes a model.                         |
+| `model.deleted`             | A member removes a model.                         |
+| `model_provider.created`    | A member adds a model provider.                   |
+| `model_provider.updated`    | A member changes a model provider.                |
+| `model_provider.deleted`    | A member removes a model provider.                |
+| `domain.added`              | A member adds an email domain.                    |
+| `domain.verified`           | An email domain becomes verified.                 |
+| `domain.removed`            | A member removes an email domain.                 |
+| `sso_connection.created`    | A member adds an SSO connection.                  |
+| `sso_connection.updated`    | A member changes an SSO connection.               |
+| `sso_connection.deleted`    | A member removes an SSO connection.               |
+| `token.created`             | A member creates a user token.                    |
+| `token.revoked`             | A member revokes a user token.                    |
+| `bot.created`               | A member makes a Bot.                             |
+| `bot.updated`               | A member changes a Bot.                           |
+| `bot.memory.updated`        | A member changes Bot memory.                      |
+| `bot.memory.purged`         | A member removes Bot memory by a tag.             |
+| `bot.memory_bot.updated`    | A member changes the memory Bot.                  |
+| `delegation.started`        | A Bot gives work to a Bot.                        |
+| `delegation.completed`      | Delegated work ends.                              |
+| `capability.decided`        | A person answers a request.                       |
+| `request.resolved`          | A request closes. `details.chain` lists the Bots. |
+| `grant.created`             | A member makes a Grant.                           |
+| `grant.revoked`             | A member revokes a Grant.                         |
+| `rule.created`              | A member adds a Rule.                             |
+| `rule.updated`              | A member changes a Rule.                          |
 
 ---
 

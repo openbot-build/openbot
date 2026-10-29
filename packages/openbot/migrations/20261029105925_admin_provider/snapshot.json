@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "1df8551e-1793-4c0d-8e19-4e8e4481e5bb",
+	"prevIds": ["29d15476-30b0-405e-bdb1-777a5e8f4a64"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_platform_admins",
+				"provider_id"
+			],
+			"writes": [
+				"s|col|public.openbot_platform_admins.provider_id",
+				"n|col|public.openbot_platform_admins.provider_id",
+				"e|col|public.openbot_platform_admins.provider_id"
+			],
+			"reads": ["n|tbl|public.openbot_platform_admins", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_platform_admins",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "'oidc'",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

@@ -1,3 +1,4 @@
+import { ProviderAccess } from "./Access.ts"
 import { Schema, SchemaTransformation } from "effect"
 import { ClientId, Issuer } from "./Settings.ts"
 import { SecretInput, SecretState } from "./Secret.ts"
@@ -34,6 +35,7 @@ export const SsoConnection = Schema.Struct({
 	domains: Schema.Array(EmailDomain),
 	/** When true, people with an email in these domains cannot use the sign-in provider of the platform. */
 	enforce: Schema.Boolean,
+	access: Schema.optionalKey(ProviderAccess),
 	/** Add this address to the allowed redirect URIs of the client at the provider. */
 	redirectUri: Schema.String,
 	version: Version,
@@ -57,6 +59,7 @@ export const CreateSsoConnectionRequest = Schema.Struct({
 	clientSecret: Schema.optionalKey(SecretInput),
 	domains: ConnectionDomains,
 	enforce: Schema.Boolean,
+	access: Schema.optionalKey(ProviderAccess),
 })
 export type CreateSsoConnectionRequest = typeof CreateSsoConnectionRequest.Type
 export const UpdateSsoConnectionRequest = Schema.Struct({
@@ -68,6 +71,7 @@ export const UpdateSsoConnectionRequest = Schema.Struct({
 	clientSecret: Schema.optionalKey(Schema.NullOr(SecretInput)),
 	domains: Schema.optionalKey(ConnectionDomains),
 	enforce: Schema.optionalKey(Schema.Boolean),
+	access: Schema.optionalKey(ProviderAccess),
 })
 export type UpdateSsoConnectionRequest = typeof UpdateSsoConnectionRequest.Type
 

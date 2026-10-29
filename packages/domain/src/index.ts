@@ -96,3 +96,7 @@ export * as Accounts from "./Accounts.ts"
 export * as BotSharing from "./BotSharing.ts"
 
 export * as Live from "./Live.ts"
+
+export * as Mail from "./Mail.ts"
+
+export * as Access from "./Access.ts"

@@ -1,0 +1,175 @@
+---
+title: Kontozugang
+description: Neue Konten, Freigaben, E-Mail-Codes und SSO-Gruppenrollen steuern.
+---
+
+## Vorgaben und Updates
+
+Neue und aktualisierte Plattformen erlauben neue Konten über Einladungen.
+Selbstanmeldung und automatische SSO-Konten sind geschlossen. Bestehende Konten
+und Mitgliedschaften bleiben. Alte Rollen gelten als manuelle Rechte. Nur
+Plattform-Admins dürfen standardmäßig Organisationen erstellen.
+
+Die Migration fügt Tabellen und Felder hinzu. Stoppe alle Server, sichere die
+Datenbank und Schlüssel, führe `openbot-migrate` aus und starte neue Server und
+Clients. Die Migration kann erneut laufen. Alte offene Einladungen folgen der
+neuen Regel. Eine Einladung stellt kein gesperrtes Konto wieder her.
+
+## Zugangsregeln
+
+Lies `GET /v1/platform/settings`. Ändere `registration` mit
+`PATCH /v1/platform/settings` und der aktuellen `expectedVersion`. Dies sind die
+Vorgaben:
+
+```json
+{
+	"selfService": "closed",
+	"emailSignIn": false,
+	"invitations": "allow",
+	"sso": "closed",
+	"trustedSsoProviders": [],
+	"allowedEmailDomains": [],
+	"allowExternalInvitations": false,
+	"provider": {
+		"trusted": false,
+		"scopes": [],
+		"groupsClaim": null,
+		"requiredGroups": [],
+		"mappings": []
+	}
+}
+```
+
+`selfService`, `invitations` und `sso` haben die Werte `closed`, `allow` oder
+`approval`. Normales Plattform-OIDC nutzt Selbstanmeldung. Nur ein
+Plattform-Anbieter mit `provider.trusted: true` oder eine Verbindungs-ID in
+`trustedSsoProviders` nutzt die SSO-Regel. Nur Plattform-Admins setzen dieses
+Vertrauen.
+
+Eine leere Domain-Liste erlaubt jede bestätigte E-Mail-Domain. Sonst gelten nur
+ganze Domains, ohne Beachtung der Großschreibung. `example.com` erlaubt nicht
+`a.example.com`. Die Liste gilt auch für vorab freigegebene Konten. Der
+Setup-Admin hat eine ausdrückliche Erstfreigabe und muss ebenfalls zur Liste
+passen. Nur Plattform-Admins können `allowExternalInvitations` einschalten. Eine
+gültige Einladung zur Organisation darf dann die Domain-Liste umgehen.
+
+Gib die ID einer Organisationseinladung als `invitation` an
+`POST /auth/sign-in`. OpenBot bindet sie an den geschützten OAuth-Zustand. Der
+Callback prüft Einladung, E-Mail, Ablauf, Widerruf und Organisation erneut. Eine
+ungültige ausdrückliche Einladung wechselt nicht zu einer anderen Quelle.
+Bot-Einladungen und Freigabelinks erlauben keine Plattformkonten. Gleiche
+E-Mail-Adressen verschiedener Anbieter verbinden keine Konten.
+
+`GET /auth/options` zeigt nur Anmeldearten und die Modi für Selbstanmeldung und
+Einladungen. Domain-Listen, Kontosuche und Anträge bleiben privat. Clients
+nutzen `canCreateOrganization` aus der Sitzung für das Formular.
+Plattform-Admins brauchen keine Organisation zur Plattformverwaltung.
+
+## Freigaben und Konten
+
+Plattform-Routen brauchen einen Plattform-Admin mit Sitzungscookie oder
+persönlichem API-Token. Ein Token nur für eine Organisation gibt keine
+Plattformrechte.
+
+| Route                                                 | Zweck                                                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `GET /v1/platform/users`                              | Konten und Zustand lesen.                                                             |
+| `PATCH /v1/platform/users/:userId`                    | `status` auf `active` oder `suspended` setzen.                                        |
+| `GET /v1/platform/registration_requests`              | Anträge lesen.                                                                        |
+| `PATCH /v1/platform/registration_requests/:requestId` | Mit `expectedVersion` auf `approved` oder `rejected` setzen.                          |
+| `GET, POST, DELETE /v1/platform/user_grants`          | Erstzugang lesen, geben oder entfernen; Änderungen brauchen `email` und `providerId`. |
+| `GET /v1/platform/access_events`                      | Das Plattform-Zugangsprotokoll lesen.                                                 |
+
+Listen nutzen `after`, `limit` und den Cursor `next`. Offene Anträge haben kein
+Konto, keine Sitzung und keine Organisationsrollen. Pro Anbieter, Issuer und
+stabiler Identität gibt es einen Antrag. Eine Freigabe gilt bei der nächsten
+erfolgreichen Anmeldung. Aktuelle Domain-, Anbieter- und Einladungsregeln gelten
+weiter. Abgelehnte Anträge bleiben abgelehnt, bis ein Admin sie erneut
+bearbeitet. Versionsprüfungen schützen gleichzeitige Entscheidungen.
+
+Eine Kontosperre entfernt alle Sitzungen und persönlichen API-Token. Anfragen,
+Live-Ausgaben und Ausführungsprüfungen verweigern den Zugang. Nach der Freigabe
+sind eine neue Anmeldung und neue Token nötig. Eine Mitgliedersperre betrifft
+nur diese Organisation. Eigene Dienstidentitäten der Organisation arbeiten
+weiter. Der letzte aktive Plattform-Admin kann nicht gesperrt oder entfernt
+werden.
+
+## E-Mail-Anmeldung ohne IdP
+
+E-Mail-Codes sind optional und zunächst aus. Richte SMTP ein und setze
+`registration.emailSignIn: true`. Kleine Teams können alle drei Quellen `closed`
+lassen und jede Mitarbeiteradresse mit `providerId: "email"` vorab freigeben.
+Codes bestätigen nur das Postfach. Sie geben kein Kontorecht.
+
+`POST /auth/email/send` nimmt `email` und optional `invitation`. Der Browser
+behält `challenge` und sendet es mit `code` an `POST /auth/email/verify`. Der
+Code hat acht Ziffern, gilt fünf Minuten, erlaubt drei falsche Versuche und
+funktioniert einmal. Versand hat Grenzen pro Postfach und Client-Adresse. Beide
+Routen brauchen einen Browseraufruf gleichen Ursprungs. Ein Code übernimmt kein
+OIDC-Konto. Ohne SMTP bleibt der Zugang geschlossen. Ein Versandfehler erstellt
+keine Sitzung.
+
+Nutze beim ersten Setup `openbot-setup --config=/private/access.json`. Setze
+`publicOrigin`, `adminProvider: "email"` und `adminEmails` in dieser Datei. Die
+Datei enthält `registration` wie oben und optional `mail` in der Form der
+Settings-API. Schalte `emailSignIn` erst mit echten SMTP-Werten ein. Schütze die
+Datei mit Modus `600`; sie kann das SMTP-Passwort enthalten. Es gibt keine neue
+Passwortanmeldung oder Passwort-Wiederherstellung.
+
+Einladungen und Freigaben werden unabhängig vom Mailversand gespeichert.
+Organisationseinladungen enthalten ihre ID. Bei Versandfehlern lässt sich der
+Link kopieren und auf anderem Weg senden.
+
+## SSO-Gruppenrollen
+
+Die Plattform nutzt `registration.provider`. Organisationsverbindungen nutzen
+das Feld `access` der SSO-API. Beispiel:
+
+```json
+{
+	"trusted": false,
+	"scopes": ["groups"],
+	"groupsClaim": "groups",
+	"requiredGroups": ["employees"],
+	"mappings": [
+		{ "group": "employees", "organizationId": "org_team", "roles": ["member"] }
+	]
+}
+```
+
+Gruppen kommen nur aus dem signierten ID-Token des geprüften Anbieters. Die
+Werte müssen ein Array exakter Zeichenketten sein. Eine nicht leere Liste
+`requiredGroups` braucht mindestens einen Treffer. Ein fehlender oder falscher
+Claim verweigert die Anmeldung. Plattform-Admins können mehrere Organisationen
+zuordnen. Organisationsverbindungen können nur ihre eigene zuordnen und sich
+nicht selbst als vertrauenswürdig markieren.
+
+Jede erfolgreiche SSO-Anmeldung ersetzt die Rollen dieser Verbindung. Manuelle
+Rollen bleiben. `manualRoles` und `roleSources` zeigen die Quellen. Ein
+Mitglieder-Update mit `roles: []` entfernt alle manuellen Rollen. `groupsClaim`
+aktiviert die Zuordnung auch mit leerer Liste. Dann gibt es keine zusätzliche
+Standardrolle. Ohne passende oder manuelle Rolle gibt es keinen
+Organisationszugang. Konto- und manuelle Mitgliedersperren bleiben. Zuordnungen
+geben weder `super_administrator` noch Plattform-Adminrechte.
+
+Gruppenänderungen gelten erst bei der Anmeldung. SCIM, LDAP und sofortige
+IdP-Entzüge sind nicht enthalten. Sperre das Konto für sofortigen Entzug.
+
+## Admin-Wiederherstellung
+
+Nutze für normale Änderungen die Plattform-API. Wenn kein Admin sich anmelden
+kann, stoppe die Server und sichere Datenbank und Schlüssel. Führe im Server
+`openbot-setup --config=/private/setup.json --force` mit gleicher öffentlicher
+Adresse, echten Anbieterwerten, `adminProvider` und `adminEmails` in der
+`--config`-Datei aus. E-Mail-Anmeldung nutzt die private Zugangsdatei. Gib auch
+nötige Speicherwerte an: force schreibt die übergebenen Werte.
+
+Der Befehl stellt die angegebenen bestätigten Admin-Konten wieder her, entfernt
+ihre Sitzungen und persönlichen Token und schreibt `admin.recovered`. Der
+Signaturschlüssel bleibt. Nur Serverzugang erlaubt diese Wiederherstellung.
+Starte den Server und melde dich neu an. `openbot-inspect` gibt Einstellungen
+ohne geheime Werte sowie Admin-Zustände als JSON für lokale Prüfungen aus. Halte
+diese Ausgabe privat.
+
+Das lokale Entwicklungskonto kann Testorganisationen anlegen. Das gilt nur für
+den Entwicklungsstart; in Produktion bleibt `platform_admins` gesetzt.

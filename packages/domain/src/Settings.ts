@@ -1,6 +1,8 @@
+import * as Access from "./Access.ts"
 import { Config } from "@openbot-build/core"
-import { Schema, String as Str } from "effect"
+import { Array as Arr, Schema, String as Str } from "effect"
 import { SecretInput, SecretState } from "./Secret.ts"
+import { Email } from "./Email.ts"
 import { Version } from "./Version.ts"
 import { BotId } from "./BotId.ts"
 import { Restriction } from "./AppIndex.ts"
@@ -78,6 +80,67 @@ export const IdentityProviderInput = Schema.Struct({
 	clientSecret: Schema.optionalKey(Schema.NullOr(SecretInput)),
 })
 export type IdentityProviderInput = typeof IdentityProviderInput.Type
+
+/** One SMTP host name or IP address, with no port or URL parts. */
+export const MailHost = Schema.NonEmptyString.check(
+	Schema.isMaxLength(253),
+	Schema.makeFilter(
+		(value) => {
+			if (/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/.test(value))
+				return Arr.every(Str.split(value, "."), (label) =>
+					/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label),
+				)
+			return /^[a-fA-F0-9:]+$/.test(value) && URL.canParse(`https://[${value}]`)
+		},
+		{ message: "Expected one host name or IP address, with no port" },
+	),
+)
+/** The page where a person can read their invitations after sign-in. */
+export const MailInvitationUrl = Schema.NonEmptyString.check(
+	Schema.isMaxLength(2048),
+	Schema.makeFilter(
+		(value) => {
+			if (/[\x00-\x20\x7f]/.test(value) || !URL.canParse(value)) return false
+			const url = new URL(value)
+			return (
+				(url.protocol === "https:" ||
+					(url.protocol === "http:" && isLoopbackHost(url.hostname))) &&
+				url.username === "" &&
+				url.password === ""
+			)
+		},
+		{ message: "Expected an HTTPS URL, or an HTTP URL on this computer" },
+	),
+)
+const mailLine = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(256),
+	Schema.isPattern(/^[^\x00-\x1f\x7f]+$/),
+)
+const mailFields = {
+	host: MailHost,
+	port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
+	/** TLS from the start, or required STARTTLS before any message or password. */
+	security: Schema.Literals(["tls", "starttls"]),
+	from: Email,
+	fromName: mailLine,
+	/** Null means the SMTP server does not need a login. */
+	username: Schema.NullOr(mailLine),
+	/** Null uses the public origin. The link does not accept the invitation. */
+	invitationUrl: Schema.NullOr(MailInvitationUrl),
+}
+/** The shared SMTP settings. The password is never returned. */
+export const Mail = Schema.Struct({
+	...mailFields,
+	password: SecretState,
+})
+export type Mail = typeof Mail.Type
+export const MailInput = Schema.Struct({
+	...mailFields,
+	/** Leave out to keep it for the same server and login. Null needs username null. */
+	password: Schema.optionalKey(Schema.NullOr(SecretInput)),
+})
+export type MailInput = typeof MailInput.Type
 
 export const OrganizationCreation = Schema.Literals([
 	"anyone",
@@ -292,6 +355,7 @@ export const PlatformSettings = Schema.Struct({
 	identityProvider: Schema.NullOr(IdentityProvider),
 	/** Who can create a new organization. */
 	organizationCreation: OrganizationCreation,
+	registration: Access.Registration,
 	/** Deny rules that apply in every organization, before its own policies. */
 	ceiling: CeilingSchema,
 	/** Apps that the App Index hides, with the reason. */
@@ -301,6 +365,8 @@ export const PlatformSettings = Schema.Struct({
 	/** The highest token rates. An organization can only set lower ones. */
 	tokenRate: TokenRateLimits,
 	files: Files,
+	/** Null or absent means that no mail is sent. */
+	mail: Schema.optionalKey(Schema.NullOr(Mail)),
 	updatedAt: Schema.String,
 })
 export type PlatformSettings = typeof PlatformSettings.Type
@@ -309,6 +375,7 @@ export const UpdatePlatformSettingsRequest = Schema.Struct({
 	publicOrigin: Schema.optionalKey(PublicOrigin),
 	identityProvider: Schema.optionalKey(Schema.NullOr(IdentityProviderInput)),
 	organizationCreation: Schema.optionalKey(OrganizationCreation),
+	registration: Schema.optionalKey(Access.Registration),
 	ceiling: Schema.optionalKey(CeilingInput),
 	appRestrictions: Schema.optionalKey(
 		Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
@@ -317,6 +384,8 @@ export const UpdatePlatformSettingsRequest = Schema.Struct({
 	rateLimit: Schema.optionalKey(RateLimit),
 	tokenRate: Schema.optionalKey(TokenRateLimits),
 	files: Schema.optionalKey(FilesInput),
+	/** Leave out to keep the settings. Null turns mail off. */
+	mail: Schema.optionalKey(Schema.NullOr(MailInput)),
 })
 export type UpdatePlatformSettingsRequest =
 	typeof UpdatePlatformSettingsRequest.Type

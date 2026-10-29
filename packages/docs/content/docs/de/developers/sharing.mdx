@@ -41,8 +41,27 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/invitations
 ```
 
+Wenn die Platform [E-Mails eingerichtet hat](/de/platform#e-mails-senden),
+sendet OpenBot die Einladung nach dem Speichern. Die Antwort enthält neben
+`invitation`, `secret` und `url` ein `delivery` mit `status`: `sent`, `disabled`
+oder `failed`. `sent` heißt, dass der SMTP-Server die Nachricht angenommen hat;
+es beweist keine Zustellung im Posteingang. Ein Fehler beim Senden löscht die
+Einladung nicht. OpenBot sendet nicht von selbst erneut.
+
+Mit `POST /v1/bots/:botId/invitations/:invitationId/resend` kannst du eine
+offene, noch gültige E-Mail-Einladung erneut senden. Du brauchst wie beim
+Erstellen `share` für den Bot. Das Ablaufdatum bleibt gleich. Die Antwort hat
+nur den Versandstatus, etwa `{ "status": "sent" }`. Wenn die SMTP-Antwort
+verloren ging, kann ein erneuter Versand eine zweite E-Mail erzeugen.
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/bots/$BOT/invitations/inv_51c2/resend
+```
+
 Um einen Einladungslink zu erstellen, lass `email` weg. Viele Personen können
-denselben Link nutzen.
+denselben Link nutzen. OpenBot sendet für Links keine E-Mail; `delivery` fehlt
+in der Antwort. Ein Link kann auch nicht über die Versandroute gesendet werden.
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \

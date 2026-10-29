@@ -289,6 +289,11 @@ layer(platform, { excludeTestServices: true })((it) => {
 				assert.ok(Exit.isFailure(yield* Effect.exit(start)))
 				yield* Effect.provideContext(DatabasePostgres.migrate, migration)
 				let running = yield* start
+				// This test uses an explicitly public platform. Production defaults stay closed.
+				yield* sql(
+					(client) =>
+						client`update openbot_settings set document=jsonb_set(jsonb_set(document::jsonb,'{organizationCreation}','"anyone"'),'{registration,selfService}','"allow"')::text where scope_kind='platform'`,
+				)
 				/** Stops the running server and starts a new one on the same database. */
 				const restart = Effect.gen(function* () {
 					yield* Scope.close(running.scope, Exit.void)

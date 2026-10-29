@@ -10,10 +10,9 @@ Register OpenBot as a client at your provider. Use
 `<publicOrigin>/auth/callback/oidc` as the redirect URI. OpenBot asks for the
 scopes `openid profile email`.
 
-Then give the provider to OpenBot. On a new platform, the setup program does
-this with `--oidc-issuer`, `--oidc-client-id` and `--oidc-client-secret`. Later,
-a platform admin changes it with `PATCH /v1/platform/settings`. See
-[Platform](/platform).
+Then set `identityProvider` in the private setup JSON file and run
+`openbot setup --config=setup.json`. Later, a platform admin changes it with
+`PATCH /v1/platform/settings`. See [Platform](/platform).
 
 | Setting                         | Value                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------- |

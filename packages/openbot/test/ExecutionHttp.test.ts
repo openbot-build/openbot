@@ -77,6 +77,7 @@ const auth = Layer.mock(Auth, {
 					userId: "user",
 					profile: {},
 					platformAdmin: false,
+					canCreateOrganization: false,
 					memberships: [
 						{
 							organizationId: "org",

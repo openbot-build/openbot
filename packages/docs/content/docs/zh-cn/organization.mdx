@@ -3,6 +3,8 @@ title: 组织
 description: 组织、成员、设置、角色和审计日志。
 ---
 
+邀请制升级默认值、邮箱登录、审批、组角色及管理员恢复请参阅[账号准入](/zh-cn/access)。
+
 面向组织管理员。每项任务需要对应权限。只有平台管理员可以修改 `/v1/platform`
 下的设置。从[管理员手册](/zh-cn/admin)开始。
 
@@ -251,7 +253,8 @@ curl -X PATCH -b cookies.txt \
 
 ## 邀请
 
-管理员按邮箱邀请一个人。这个人用这个邮箱登录，然后接受或拒绝。OpenBot 不会发送邮件，请你自己告诉这个人。
+管理员按邮箱邀请一个人。这个人用这个邮箱登录，然后接受或拒绝。平台设置了
+[SMTP](/zh-cn/platform#发送邮件)时，OpenBot 会在保存邀请后发送邮件。未启用邮件时，请你自己通知这个人。
 
 `POST /v1/organization/invitations` 创建邀请。它需要 `Member` 上的 `write`。
 
@@ -273,7 +276,8 @@ curl -b cookies.txt \
 	"status": "pending",
 	"invitedBy": "u_123",
 	"createdAt": "2026-10-23T09:00:00.000Z",
-	"expiresAt": "2026-10-30T09:00:00.000Z"
+	"expiresAt": "2026-10-30T09:00:00.000Z",
+	"delivery": { "status": "sent" }
 }
 ```
 
@@ -291,6 +295,22 @@ curl -b cookies.txt \
 `read`。加上 `?status=pending`
 只看未处理的邀请。`DELETE /v1/organization/invitations/:invitationId`
 收回一个待处理的邀请。它需要 `Member` 上的 `write`。
+
+创建邀请的响应中，`delivery.status` 表示本次发送的结果：`sent`
+表示 SMTP 服务器接受了邮件，`disabled` 表示未启用发送，`failed`
+表示无法确认发送成功。发送失败不会删除邀请，也不会自动重试。这个结果不会成为邀请列表中的持久状态。
+
+修正邮件设置后，可以重发原邀请：
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/organization/invitations/inv_51c2/resend
+```
+
+此请求需要与创建邀请相同的权限，并返回 `{ "status": "sent" }`、`disabled` 或
+`failed`。只有未过期、未被接受、拒绝或收回的待处理邮箱邀请可以重发。重发不会改变角色或有效期。含
+`super_administrator` 角色的邀请仍只能由 Super
+Administrator 重发。若上次发送的回复丢失，重发可能产生重复邮件。
 
 ### 回答邀请
 
@@ -355,49 +375,50 @@ curl -X POST -b cookies.txt \
 }
 ```
 
-| 动作                     | 何时出现                                             |
-| ------------------------ | ---------------------------------------------------- |
-| `member.joined`          | 一个账户加入组织。                                   |
-| `member.updated`         | 一个成员得到新的状态、角色或策略。                   |
-| `member.removed`         | 一个成员被移除。                                     |
-| `member.left`            | 一个成员离开了组织。                                 |
-| `invitation.created`     | 一个成员邀请了一个邮箱。                             |
-| `invitation.revoked`     | 一个成员收回了一个邀请。                             |
-| `invitation.accepted`    | 被邀请的人接受了邀请。                               |
-| `invitation.declined`    | 被邀请的人拒绝了邀请。                               |
-| `organization.created`   | 有人创建了一个组织。                                 |
-| `organization.updated`   | 组织得到了新名称。                                   |
-| `settings.updated`       | 组织设置发生变化。                                   |
-| `role.created`           | 一个成员创建了自定义角色。                           |
-| `role.updated`           | 一个成员修改了自定义角色。                           |
-| `role.deleted`           | 一个成员删除了自定义角色。                           |
-| `model.created`          | 一个成员添加了模型。                                 |
-| `model.updated`          | 一个成员修改了模型。                                 |
-| `model.deleted`          | 一个成员移除了模型。                                 |
-| `model_provider.created` | 一个成员添加了模型提供方。                           |
-| `model_provider.updated` | 一个成员修改了模型提供方。                           |
-| `model_provider.deleted` | 一个成员移除了模型提供方。                           |
-| `domain.added`           | 一个成员添加了邮箱域名。                             |
-| `domain.verified`        | 一个邮箱域名通过了验证。                             |
-| `domain.removed`         | 一个成员移除了邮箱域名。                             |
-| `sso_connection.created` | 一个成员添加了 SSO 连接。                            |
-| `sso_connection.updated` | 一个成员修改了 SSO 连接。                            |
-| `sso_connection.deleted` | 一个成员移除了 SSO 连接。                            |
-| `token.created`          | 一个成员创建了用户令牌。                             |
-| `token.revoked`          | 一个成员撤销了用户令牌。                             |
-| `bot.created`            | 一个成员创建了 Bot。                                 |
-| `bot.updated`            | 一个成员修改了 Bot。                                 |
-| `bot.memory.updated`     | 一个成员修改了 Bot memory。                          |
-| `bot.memory.purged`      | 一个成员按 Tag 删除了 Bot memory。                   |
-| `bot.memory_bot.updated` | 一个成员修改了记忆 Bot。                             |
-| `delegation.started`     | 一个 Bot 把工作交给一个 Bot。                        |
-| `delegation.completed`   | 委派的工作结束。                                     |
-| `capability.decided`     | 一个人回答了一个 request。                           |
-| `request.resolved`       | 一个 request 关闭。`details.chain` 列出相关的 Bots。 |
-| `grant.created`          | 一个成员创建了 Grant（授权）。                       |
-| `grant.revoked`          | 一个成员撤销了 Grant。                               |
-| `rule.created`           | 一个成员添加了 Rule。                                |
-| `rule.updated`           | 一个成员修改了 Rule。                                |
+| 动作                        | 何时出现                                             |
+| --------------------------- | ---------------------------------------------------- |
+| `member.joined`             | 一个账户加入组织。                                   |
+| `member.updated`            | 一个成员得到新的状态、角色或策略。                   |
+| `member.removed`            | 一个成员被移除。                                     |
+| `member.left`               | 一个成员离开了组织。                                 |
+| `invitation.created`        | 一个成员邀请了一个邮箱。                             |
+| `invitation.send_requested` | 一个成员请求重发邀请邮件。                           |
+| `invitation.revoked`        | 一个成员收回了一个邀请。                             |
+| `invitation.accepted`       | 被邀请的人接受了邀请。                               |
+| `invitation.declined`       | 被邀请的人拒绝了邀请。                               |
+| `organization.created`      | 有人创建了一个组织。                                 |
+| `organization.updated`      | 组织得到了新名称。                                   |
+| `settings.updated`          | 组织设置发生变化。                                   |
+| `role.created`              | 一个成员创建了自定义角色。                           |
+| `role.updated`              | 一个成员修改了自定义角色。                           |
+| `role.deleted`              | 一个成员删除了自定义角色。                           |
+| `model.created`             | 一个成员添加了模型。                                 |
+| `model.updated`             | 一个成员修改了模型。                                 |
+| `model.deleted`             | 一个成员移除了模型。                                 |
+| `model_provider.created`    | 一个成员添加了模型提供方。                           |
+| `model_provider.updated`    | 一个成员修改了模型提供方。                           |
+| `model_provider.deleted`    | 一个成员移除了模型提供方。                           |
+| `domain.added`              | 一个成员添加了邮箱域名。                             |
+| `domain.verified`           | 一个邮箱域名通过了验证。                             |
+| `domain.removed`            | 一个成员移除了邮箱域名。                             |
+| `sso_connection.created`    | 一个成员添加了 SSO 连接。                            |
+| `sso_connection.updated`    | 一个成员修改了 SSO 连接。                            |
+| `sso_connection.deleted`    | 一个成员移除了 SSO 连接。                            |
+| `token.created`             | 一个成员创建了用户令牌。                             |
+| `token.revoked`             | 一个成员撤销了用户令牌。                             |
+| `bot.created`               | 一个成员创建了 Bot。                                 |
+| `bot.updated`               | 一个成员修改了 Bot。                                 |
+| `bot.memory.updated`        | 一个成员修改了 Bot memory。                          |
+| `bot.memory.purged`         | 一个成员按 Tag 删除了 Bot memory。                   |
+| `bot.memory_bot.updated`    | 一个成员修改了记忆 Bot。                             |
+| `delegation.started`        | 一个 Bot 把工作交给一个 Bot。                        |
+| `delegation.completed`      | 委派的工作结束。                                     |
+| `capability.decided`        | 一个人回答了一个 request。                           |
+| `request.resolved`          | 一个 request 关闭。`details.chain` 列出相关的 Bots。 |
+| `grant.created`             | 一个成员创建了 Grant（授权）。                       |
+| `grant.revoked`             | 一个成员撤销了 Grant。                               |
+| `rule.created`              | 一个成员添加了 Rule。                                |
+| `rule.updated`              | 一个成员修改了 Rule。                                |
 
 ---
 

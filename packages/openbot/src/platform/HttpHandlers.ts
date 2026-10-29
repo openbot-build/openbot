@@ -1,4 +1,6 @@
+import { Access } from "../access/Access.ts"
 import { ProviderOAuth } from "../models/ProviderOAuth.ts"
+import { Mail } from "../mail/Mail.ts"
 import { Model, Provider } from "@openbot-build/core"
 import { Redacted } from "effect"
 import {
@@ -29,7 +31,7 @@ import { Models, view as modelView } from "../models/Models.ts"
 import { Organization } from "../organization/Organization.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import { filesOf, type PlatformDocument } from "../settings/Documents.ts"
-import { bindings, changeFiles } from "../settings/Platform.ts"
+import { bindings, changeFiles, changeMail } from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 import * as Views from "../settings/Views.ts"
 import { PlatformAdmins } from "./PlatformAdmins.ts"
@@ -52,6 +54,8 @@ const unavailableFailure =
 const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 	Effect.gen(function* () {
 		const settings = yield* Settings
+		const access = yield* Access
+		const mailService = yield* Mail
 		const secrets = yield* Secrets
 		const admins = yield* PlatformAdmins
 		const organization = yield* Organization
@@ -200,6 +204,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 				oauth.models(platformOwner, params.providerId),
 			)
 
+			.handle("sendTestMail", ({ payload }) => mailService.test(payload.to))
 			.handle("getPlatformSettings", () => Effect.map(current, Views.platform))
 			.handle(
 				"updatePlatformSettings",
@@ -210,8 +215,19 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 							expectedVersion,
 							identityProvider,
 							files: filesInput,
+							mail: mailInput,
 							...changes
 						} = payload
+						if (payload.registration !== undefined)
+							yield* access
+								.validateProvider(payload.registration.provider)
+								.pipe(
+									Failures.replace("The role mappings are invalid.", () =>
+										SettingsApi.SettingsInvalid.make({
+											message: "The role mappings are invalid.",
+										}),
+									),
+								)
 						const updated = yield* settings.updatePlatform(
 							expectedVersion,
 							(document) =>
@@ -257,11 +273,20 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 													filesOf(document),
 													filesInput,
 												)
+									const mail =
+										mailInput === undefined
+											? document.mail
+											: yield* changeMail(
+													secrets,
+													document.mail ?? null,
+													mailInput,
+												)
 									return {
 										...document,
 										...changes,
 										identityProvider: provider,
 										...(files === undefined ? {} : { files }),
+										...(mail === undefined ? {} : { mail }),
 									}
 								}).pipe(
 									Effect.catchTag("SecretStorageError", (error) =>
@@ -283,10 +308,19 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 										? []
 										: ["identityProvider"]),
 									...(filesInput === undefined ? [] : ["files"]),
+									...(mailInput === undefined ? [] : ["mail"]),
 								],
 								version: updated.version,
 							},
 						})
+						if (payload.registration !== undefined)
+							yield* access
+								.record(
+									"registration.settings_changed",
+									account.userId,
+									"platform",
+								)
+								.pipe(unavailable("Could not write the access audit log"))
 						return Views.platform(updated)
 					}).pipe(
 						Effect.catchTag("SetupRequired", () =>
@@ -340,7 +374,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					Effect.gen(function* () {
 						const account = yield* Account
 						const added = yield* admins
-							.add(payload.email)
+							.add(payload.email, payload.providerId)
 							.pipe(unavailable("Could not add a platform admin"))
 						yield* record(account, {
 							action: "member.updated",

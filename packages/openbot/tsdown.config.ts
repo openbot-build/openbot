@@ -11,12 +11,20 @@ export default defineConfig({
 		DevelopmentMain: "src/app/DevelopmentMain.ts",
 		Migrate: "src/app/Migrate.ts",
 		Setup: "src/app/Setup.ts",
+		Inspect: "src/app/Inspect.ts",
 		// The Code Mode worker. Nothing imports it, so it needs its own entry.
 		"code/Worker": "src/code/Worker.ts",
 	},
 	exports: {
 		...config.exports,
-		exclude: ["Main", "Migrate", "Setup", "DevelopmentMain", "code/Worker"],
+		exclude: [
+			"Inspect",
+			"Main",
+			"Migrate",
+			"Setup",
+			"DevelopmentMain",
+			"code/Worker",
+		],
 		customExports(exports) {
 			return {
 				...Object.fromEntries(
@@ -38,6 +46,7 @@ export default defineConfig({
 			"openbot-server": "./src/app/Main.ts",
 			"openbot-migrate": "./src/app/Migrate.ts",
 			"openbot-setup": "./src/app/Setup.ts",
+			"openbot-inspect": "./src/app/Inspect.ts",
 		},
 	},
 })

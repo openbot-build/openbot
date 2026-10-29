@@ -1,0 +1,8 @@
+{
+	"publicOrigin": "https://openbot.example.com",
+	"identityProvider": {
+		"issuer": "https://id.example.com",
+		"clientId": "check"
+	},
+	"adminEmails": ["admin@example.com"]
+}

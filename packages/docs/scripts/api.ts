@@ -7,6 +7,21 @@ import { OpenApi } from "effect/http-api"
 // The title and a short description for each API group, in reading order.
 // The sidebar uses this order. A group with a description gets its own page.
 const groups = [
+	[
+		"emailSignIn",
+		"Email sign-in",
+		"Sign in with a single-use email code when the platform enables it.",
+	],
+	[
+		"access",
+		"Account access",
+		"Manage first access, registration requests, accounts and platform audit events.",
+	],
+	[
+		"loginOptions",
+		"Login options",
+		"Read public sign-in options without private settings.",
+	],
 	["account", "Account", "Read the signed-in user and their organizations."],
 	["signIn", "Sign-in", "Start a browser sign-in."],
 	[

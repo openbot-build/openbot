@@ -29,7 +29,8 @@
 	"bin": {
 		"openbot-server": "./dist/Main.js",
 		"openbot-migrate": "./dist/Migrate.js",
-		"openbot-setup": "./dist/Setup.js"
+		"openbot-setup": "./dist/Setup.js",
+		"openbot-inspect": "./dist/Inspect.js"
 	},
 	"exports": {
 		".": "./dist/index.js",
@@ -59,18 +60,26 @@
 		"@openbot-build/core": "workspace:*",
 		"@openbot-build/domain": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
+		"@react-email/render": "2.2.0",
 		"better-auth": "1.7.8",
 		"drizzle-orm": "1.0.0-rc.5",
 		"effect": "4.0.7",
 		"jose": "6.2.12",
+		"nodemailer": "10.3.0",
 		"pg": "8.23.1",
 		"quickjs-emscripten-core": "0.32.0",
-		"undici": "8.12.3"
+		"react": "19.3.1",
+		"react-dom": "19.3.1",
+		"undici": "8.12.3",
+		"react-email": "6.11.5"
 	},
 	"devDependencies": {
 		"@effect/vitest": "4.0.7",
 		"@openbot-build/client": "workspace:*",
+		"@types/nodemailer": "8.0.2",
 		"@types/pg": "8.23.1",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
 		"vitest": "5.0.5"
 	},
 	"repository": {

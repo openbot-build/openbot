@@ -7,6 +7,7 @@ import {
 } from "effect/http-api"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
 import { Limit } from "./Page.ts"
+import { Delivery } from "./Mail.ts"
 import {
 	AuthorizationErrors,
 	Required,
@@ -39,6 +40,7 @@ import {
 	UpdateMemberRequest,
 	Invitation,
 	CreateInvitationRequest,
+	CreateInvitationResponse,
 	AuditAction,
 	AuditLogEntry,
 	MemberNotFound,
@@ -61,6 +63,7 @@ export {
 	UpdateMemberRequest,
 	Invitation,
 	CreateInvitationRequest,
+	CreateInvitationResponse,
 	type AuditActionOf,
 	AuditAction,
 	AuditLogEntry,
@@ -164,13 +167,27 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 		),
 	HttpApiEndpoint.post("createInvitation", "/v1/organization/invitations", {
 		payload: CreateInvitationRequest,
-		success: Invitation.pipe(HttpApiSchema.status(201)),
+		success: CreateInvitationResponse.pipe(HttpApiSchema.status(201)),
 		error: invitationErrors,
 	})
 		.annotate(Required, writeMembers)
 		.annotate(
 			OpenApi.Description,
-			"Invites a person by email. They accept with `POST /v1/invitations/:invitationId/accept` after they sign in with that verified email. An invitation lasts 7 days.",
+			"Invites a person by email. They accept with `POST /v1/invitations/:invitationId/accept` after they sign in with that verified email. An invitation lasts 7 days. When mail is set up, OpenBot sends it and returns the delivery status. A failed send does not remove the invitation.",
+		),
+	HttpApiEndpoint.post(
+		"resendInvitation",
+		"/v1/organization/invitations/:invitationId/resend",
+		{
+			params: { invitationId: InvitationId },
+			success: Delivery,
+			error: invitationErrors,
+		},
+	)
+		.annotate(Required, writeMembers)
+		.annotate(
+			OpenApi.Description,
+			"Sends a pending email invitation again. Its roles and end time stay the same. Only a Super Administrator can send an invitation with that role.",
 		),
 	HttpApiEndpoint.delete(
 		"revokeInvitation",
