@@ -5,12 +5,12 @@ description: Betreibe OpenBot auf deinem eigenen Server.
 
 Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
 brauchst je nach Aufgabe Serverzugriff oder Plattformrechte. Beginne mit dem
-[Administrationshandbuch](/de/docs/admin).
+[Administrationshandbuch](/de/admin).
 
 Diese Seite zeigt dir, wie du OpenBot im Produktivbetrieb laufen lässt. Du baust
 ein Docker-Image, bereitest die Datenbank vor, richtest die Plattform ein und
 startest den Server hinter einem Reverse Proxy. Alle Einstellungen findest du
-unter [Konfiguration](/de/docs/configuration).
+unter [Konfiguration](/de/configuration).
 
 ---
 
@@ -22,11 +22,10 @@ unter [Konfiguration](/de/docs/configuration).
 - Einen OpenID-Connect-Anbieter für die Plattform, zum Beispiel
   `https://id.example.com`. Registriere dort einen Client mit der Redirect-URI
   `https://api.example.com/auth/callback/oidc`. Du kannst diesen Punkt
-  weglassen, wenn sich alle nur über die [SSO-Verbindungen](/de/docs/sso) von
+  weglassen, wenn sich alle nur über die [SSO-Verbindungen](/de/sso) von
   Organisationen anmelden.
 - Einen Modell-Dienst, wenn der Bot (KI-Assistent) Arbeit erledigen soll. Du
-  fügst ihn nach der Einrichtung über die API hinzu. Siehe
-  [Models](/de/docs/models).
+  fügst ihn nach der Einrichtung über die API hinzu. Siehe [Models](/de/models).
 
 ## Die Images bauen
 
@@ -34,10 +33,10 @@ Alle Docker-Dateien liegen in `deploy/docker/`. Ein einziges `Dockerfile`
 erzeugt beide Images. Jedes Image ist ein Build-Ziel (eine benannte letzte Stufe
 in der Datei):
 
-| Ziel            | Image                   | Was darin läuft                                                                     |
-| --------------- | ----------------------- | ----------------------------------------------------------------------------------- |
-| `openbot`       | `openbot`               | OpenBot und sein Migrationsprogramm.                                                |
-| `protocol-test` | `openbot-protocol-test` | Der Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test). |
+| Ziel            | Image                   | Was darin läuft                                                                |
+| --------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| `openbot`       | `openbot`               | OpenBot und sein Migrationsprogramm.                                           |
+| `protocol-test` | `openbot-protocol-test` | Der Testdienst für das App Protocol. Siehe [Protokolltest](/de/protocol-test). |
 
 Die Datei `docker-bake.hcl` sagt
 [Docker Bake](https://docs.docker.com/build/bake/), wie es die Images baut.
@@ -84,7 +83,7 @@ OpenBot liest jede Einstellung zuerst aus einer Umgebungsvariable. Wenn die
 Variable nicht gesetzt ist, liest OpenBot stattdessen die Datei
 `/run/secrets/<NAME>`, zum Beispiel `/run/secrets/OPENBOT_SECRET_KEYS`. Dort
 legen Docker und Compose Geheimnisse ab. Eine leere Datei zählt als nicht
-gesetzt. Siehe [Konfiguration](/de/docs/configuration#geheimnisse-als-dateien).
+gesetzt. Siehe [Konfiguration](/de/configuration#geheimnisse-als-dateien).
 
 Umgebungsvariablen sind in `docker inspect` sichtbar. Dateien in `/run/secrets`
 sind dort nicht sichtbar. Compose nutzt für alle Geheimnisse Dateien.
@@ -104,7 +103,7 @@ echo "OPENBOT_SECRET_KEYS=k1:$(openssl rand -hex 32)" >> openbot.env
 echo "OPENBOT_CLUSTER_SECRET=$(openssl rand -hex 32)" >> openbot.env
 ```
 
-Siehe [Geheime Schlüssel](/de/docs/configuration#geheime-schlüssel).
+Siehe [Geheime Schlüssel](/de/configuration#geheime-schlüssel).
 
 Private Aufrufe zwischen Knoten nutzen `/internal/executions/rpc` und
 `/internal/resources/rpc`. Halte beide Pfade im privaten Netzwerk. Alle Knoten
@@ -168,7 +167,7 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
 Es schreibt den öffentlichen Origin, den Anbieter der Plattform und die ersten
 Plattform-Admins in die Datenbank. Gib ein Client-Geheimnis mit
 `-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...` an, nicht auf der Befehlszeile. Alle
-Optionen findest du unter [Platform](/de/docs/platform#setup).
+Optionen findest du unter [Platform](/de/platform#setup).
 
 Du kannst die Einrichtung auch nach dem Start des Servers ausführen. Bis dahin
 antwortet jede Route außer `/health` mit `503` und `SetupRequired`.
@@ -204,7 +203,7 @@ Datenbank, die Einrichtung oder das Modell.
 
 Alice kann sich jetzt anmelden. Sie ist Plattform-Admin. Füge als Nächstes ein
 Model und einen Model Provider hinzu, der darauf verweist. Siehe
-[Models](/de/docs/models).
+[Models](/de/models).
 
 </Step>
 </Steps>
@@ -244,7 +243,7 @@ Die Datei `deploy/docker/compose.production.yaml` startet diese Dienste:
 Datenbank immer zuerst.
 
 Der Dienst `protocol-test` ist der öffentliche Testdienst für das App Protocol.
-Siehe [Protokolltest](/de/docs/protocol-test). Die Datei braucht
+Siehe [Protokolltest](/de/protocol-test). Die Datei braucht
 `PROTOCOL_TEST_PUBLIC_ORIGIN`, auch wenn du nur OpenBot nutzt.
 
 Compose gibt `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`
@@ -323,7 +322,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 ```
 
 Bis du das tust, antwortet jede Route außer `/health` mit `503` und
-`SetupRequired`. Siehe [Platform](/de/docs/platform#setup).
+`SetupRequired`. Siehe [Platform](/de/platform#setup).
 
 </Step>
 </Steps>
@@ -343,7 +342,7 @@ jeder Instanz:
 - dieselben `OPENBOT_SECRET_KEYS` und `OPENBOT_CLUSTER_SECRET`,
 - einen eigenen `OPENBOT_CLUSTER_HOST`, den alle anderen Knoten erreichen,
 - dieselbe `OPENBOT_OUTBOUND_ALLOW`, wenn du sie setzt. Siehe
-  [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
+  [Ausgehende Verbindungen](/de/configuration#ausgehende-verbindungen).
 
 Nutze die private Adresse jedes Knotens, nicht die Adresse des Load Balancers.
 Vergrößere den Compose-Dienst `openbot` nur, wenn jeder neue Knoten seinen
@@ -352,7 +351,7 @@ Einrichtung.
 
 Alle gemeinsamen Einstellungen liegen in der Datenbank. Wenn ein Admin sie
 ändert, nutzt jede Instanz die Änderung sofort. Siehe
-[Konfiguration](/de/docs/configuration#wie-eine-änderung-jede-instanz-erreicht).
+[Konfiguration](/de/configuration#wie-eine-änderung-jede-instanz-erreicht).
 Führe das Migrationsprogramm und das Einrichtungsprogramm nur einmal aus, nicht
 auf jeder Instanz.
 
@@ -444,9 +443,9 @@ Client. Standard ist `/`. Dein Client muss auch diese Rücksprungadressen
 verarbeiten:
 
 - `/?authorization=<flowId>` nach einer App-Autorisierung. Rufe danach
-  `completeAppAuthorization` auf. Siehe [Apps](/de/docs/developers/apps).
+  `completeAppAuthorization` auf. Siehe [Apps](/de/developers/apps).
 - `/?developerTest=<testId>` nach einer Autorisierung für einen Entwicklertest.
-  Siehe [Entwicklerwerkzeuge](/de/docs/developer-tools).
+  Siehe [Entwicklerwerkzeuge](/de/developer-tools).
 
 Ein Rücksprungpfad kann jeder Pfad auf demselben Origin sein, außer Pfaden unter
 `/auth/`, `/v1/` und `/development/`.
@@ -465,8 +464,8 @@ Sichere diese Dinge und bewahre sie zusammen auf:
    Datenbank: App-Geheimnisse, Schlüssel der Model Provider,
    SSO-Client-Geheimnisse und das Anmelde-Geheimnis. Eine Datenbank-Sicherung
    ohne die Schlüssel kann diese Geheimnisse nicht wiederherstellen.
-3. **Der Bucket der [Dateien](/de/docs/developers/files).** Er hält die Bytes
-   der Dateien, die Leute hochgeladen haben. Die Datenbank nennt sie nur.
+3. **Der Bucket der [Dateien](/de/developers/files).** Er hält die Bytes der
+   Dateien, die Leute hochgeladen haben. Die Datenbank nennt sie nur.
 
 Mit Compose machst du so eine Datenbank-Sicherung:
 
@@ -489,4 +488,4 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 ## GitHub Actions
 
 Für diese Entwicklungsaufgabe siehe
-[Das Projekt veröffentlichen und prüfen](/de/docs/developers/publishing).
+[Das Projekt veröffentlichen und prüfen](/de/developers/publishing).

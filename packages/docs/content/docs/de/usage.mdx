@@ -7,7 +7,7 @@ description:
 
 Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
 Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
-[Administrationshandbuch](/de/docs/admin).
+[Administrationshandbuch](/de/admin).
 
 OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes
 Member, jeder Bot und jedes User-Token verbraucht hat und was sie gekostet
@@ -23,7 +23,7 @@ viel Geld ausgegeben ist. Eine Platform kann Organisationen **Credits**
 | Budget             | Eine Grenze für Ausgaben der Organisation, eines Member, eines Bot oder eines User-Token, für einen Tag oder einen Monat. |
 | Credits            | Geld, das die Platform einer Organisation gibt, um die Models der Platform zu bezahlen.                                   |
 | Mikro-USD          | Alles Geld in der API ist in Mikro-USD. Ein US-Dollar sind 1.000.000 Mikro-USD.                                           |
-| Platform-Schlüssel | Ein [geteilter Model Provider](/de/docs/platform#geteilte-model-providers). Die Platform bezahlt ihn.                     |
+| Platform-Schlüssel | Ein [geteilter Model Provider](/de/platform#geteilte-model-providers). Die Platform bezahlt ihn.                          |
 | Eigener Schlüssel  | Ein Model Provider der Organisation. Die Organisation bezahlt die Firma des Model selbst.                                 |
 
 ---
@@ -38,18 +38,18 @@ ChatGPT-Kontolimits gelten zusätzlich.
 OpenBot zeichnet einen Model-Aufruf auf, bevor er zum Anbieter geht. Jedes Usage
 event hat eine `source` (Quelle):
 
-| `source`     | Was den Aufruf gemacht hat                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------- |
-| `turn`       | Ein Schritt eines Model in einem Turn eines [Chats](/de/docs/developers/chats).                   |
-| `compaction` | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt.                       |
-| `judge`      | Das Model, das [Rules](/de/docs/developers/rules) prüft.                                          |
-| `bot_memory` | Der [Memory-Bot](/de/docs/developers/memory#der-memory-bot): was er lernt, ergänzt und antwortet. |
-| `other`      | Jeder andere Aufruf.                                                                              |
+| `source`     | Was den Aufruf gemacht hat                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| `turn`       | Ein Schritt eines Model in einem Turn eines [Chats](/de/developers/chats).                   |
+| `compaction` | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt.                  |
+| `judge`      | Das Model, das [Rules](/de/developers/rules) prüft.                                          |
+| `bot_memory` | Der [Memory-Bot](/de/developers/memory#der-memory-bot): was er lernt, ergänzt und antwortet. |
+| `other`      | Jeder andere Aufruf.                                                                         |
 
 Ein Usage event hat auch den Chat (`chatId`), den Turn, den Bot, das Member und
 das User-Token, wenn der Aufruf sie hat. In einem
-[Channel](/de/docs/developers/channels) ist das Member die Person, die die
-Nachricht geschrieben hat.
+[Channel](/de/developers/channels) ist das Member die Person, die die Nachricht
+geschrieben hat.
 
 Jeder Aufruf hat eine feste `id`. Ein dauerhafter Schritt hat auch eine
 `executionId`. Sein `status` ist während der Arbeit `pending`. Mit bestätigter
@@ -123,8 +123,8 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Ein Anbieter kann nur die Models mit einem Preis versehen, die er verknüpft. Ein
 anderes Model ergibt `400` mit `ModelProviderInvalid`. Der
-[Katalog der Models](/de/docs/models#ein-model-auswählen) zeigt den aktuellen
-`price` jedes Model.
+[Katalog der Models](/de/models#ein-model-auswählen) zeigt den aktuellen `price`
+jedes Model.
 
 Ein neuer Preis gilt für Aufrufe, die ab jetzt beginnen. Jede Reservierung liest
 den Preis aus der Datenbank und behält eine Kopie. Eine Preisänderung auf einem
@@ -382,7 +382,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `DELETE /v1/organization/budgets/:budgetId` | Entfernt ein Budget.                                                         |
 
 Budgets lesen braucht `read` auf `Budget`. Budgets ändern braucht `write` auf
-`Budget`. Jede Änderung kommt ins [Audit-Log](/de/docs/organization#audit-log).
+`Budget`. Jede Änderung kommt ins [Audit-Log](/de/organization#audit-log).
 
 ---
 
@@ -462,7 +462,7 @@ Ein Platform-Admin kann begrenzen, wie viele API-Anfragen jeder Aufrufer in
 einer Minute sendet. Diese Grenze heißt Rate Limit. Jedes User-Token zählt für
 sich. Eine angemeldete Person ohne Token zählt als ein Aufrufer. Alle Instanzen
 von OpenBot teilen die Zählung. Setze `rateLimit` in den
-[Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform):
+[Einstellungen der Platform](/de/platform#einstellungen-der-platform):
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -512,12 +512,11 @@ Ein Aufruf eines Model nimmt aus jedem Bucket seiner Bereiche:
   bestehen. Dies kostet kein Geld.
 
 Der Platform-Admin setzt die höchsten Raten in den
-[Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform). Eine
+[Einstellungen der Platform](/de/platform#einstellungen-der-platform). Eine
 Organisation kann ihre eigenen Raten in ihren
-[Einstellungen](/de/docs/organization#einstellungen) setzen. Für jeden Bereich
-gilt die kleinere der beiden Raten. Eine Organisation kann eine Rate also nur
-kleiner machen. `null` heißt: keine Grenze für diesen Bereich. Das ist der
-Standard.
+[Einstellungen](/de/organization#einstellungen) setzen. Für jeden Bereich gilt
+die kleinere der beiden Raten. Eine Organisation kann eine Rate also nur kleiner
+machen. `null` heißt: keine Grenze für diesen Bereich. Das ist der Standard.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -548,5 +547,5 @@ Model-Aufruf beginnen, bis OpenBot die Raten wieder prüfen kann.
 | `503`  | `BillingUnavailable`   | OpenBot erreicht seine Datenbank nicht.                                                  |
 
 Die vollständigen Formen findest du in der
-[Usage-Referenz](/docs/api/operations/tags/usage/) und der
-[Budgets-Referenz](/docs/api/operations/tags/budgets/).
+[Usage-Referenz](/api/operations/tags/usage/) und der
+[Budgets-Referenz](/api/operations/tags/budgets/).

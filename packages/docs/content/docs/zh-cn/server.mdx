@@ -3,7 +3,7 @@ title: 从代码中运行
 description: 在你自己的 TypeScript 程序中启动 OpenBot。
 ---
 
-面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+面向开发者。从[开发者手册](/zh-cn/developers)选择 API 接入、App 发布或项目贡献。
 
 `openbot`
 程序能满足大多数需要。如果你需要更多，可以在自己的程序中启动 OpenBot。这样你就能加入自己的模型、工具、路由和 App
@@ -25,7 +25,7 @@ Launch.main(Server.layerLive)
 ```
 
 `Launch.main` 先读取命令行。带 `--help`
-时它显示帮助后停止，这时不需要任何设置。然后它从环境变量或机密文件中读取[配置](/zh-cn/docs/configuration)中的变量。它会阻止到私有地址的出站连接，并在启动失败时写入日志。然后它运行你给它的 Layer，直到进程停止。它把 Node.js 服务和 fetch
+时它显示帮助后停止，这时不需要任何设置。然后它从环境变量或机密文件中读取[配置](/zh-cn/configuration)中的变量。它会阻止到私有地址的出站连接，并在启动失败时写入日志。然后它运行你给它的 Layer，直到进程停止。它把 Node.js 服务和 fetch
 HTTP 客户端交给这个 Layer。`Launch.server`
 是同一个程序的 Effect 形式，供你自己运行。请把 `NodeServices.layer` 交给它。
 
@@ -33,7 +33,7 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 给出同样的设置：`host`、`port`、`databaseUrl`、`secretKeys`、`clusterSecret`、`clusterHost`
 和 `outboundAllow`。你也可以在代码中直接写出这些值。
 
-这个程序仍然需要一个平台。在用户使用之前，先运行一次设置程序。请看[平台](/zh-cn/docs/platform#设置)。
+这个程序仍然需要一个平台。在用户使用之前，先运行一次设置程序。请看[平台](/zh-cn/platform#设置)。
 
 ## 包导出了什么
 
@@ -66,18 +66,18 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 
 ### 实例选项
 
-| 选项            | 类型               | 是什么                                                     |
-| --------------- | ------------------ | ---------------------------------------------------------- |
-| `host`          | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                       |
-| `port`          | `number`           | 必需。监听的端口，例如 `3000`。                            |
-| `databaseUrl`   | `Redacted<string>` | 必需。PostgreSQL URL。                                     |
-| `secretKeys`    | `Redacted<string>` | 密钥列表。请看[密钥](/zh-cn/docs/configuration#机密密钥)。 |
-| `clusterSecret` | `Redacted<string>` | 必填。至少 32 个字符。所有节点使用相同机密认证私有 RPC。   |
-| `clusterHost`   | `string`           | 可选。其他节点能访问的地址。默认使用绑定的 HTTP 地址。     |
+| 选项            | 类型               | 是什么                                                   |
+| --------------- | ------------------ | -------------------------------------------------------- |
+| `host`          | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                     |
+| `port`          | `number`           | 必需。监听的端口，例如 `3000`。                          |
+| `databaseUrl`   | `Redacted<string>` | 必需。PostgreSQL URL。                                   |
+| `secretKeys`    | `Redacted<string>` | 密钥列表。请看[密钥](/zh-cn/configuration#机密密钥)。    |
+| `clusterSecret` | `Redacted<string>` | 必填。至少 32 个字符。所有节点使用相同机密认证私有 RPC。 |
+| `clusterHost`   | `string`           | 可选。其他节点能访问的地址。默认使用绑定的 HTTP 地址。   |
 
 ### 登录
 
-服务器不接受登录选项。它从[平台设置](/zh-cn/docs/platform#平台设置)中读取公开源、平台提供方和登录密钥。
+服务器不接受登录选项。它从[平台设置](/zh-cn/platform#平台设置)中读取公开源、平台提供方和登录密钥。
 
 - 在完成设置之前，除 `/health` 外的每个路由都返回 `503` 和 `SetupRequired`。
 - OpenBot 每次使用这些设置时才读取它们。当其中某个设置改变时，下一个请求就会使用新值。服务器只构建一次，所以正在运行的请求和 Turn 会继续。
@@ -90,7 +90,7 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 
 | 选项                         | 作用                                                                                                         |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `builtinModels`              | 在代码中给出、每个组织都能使用的模型。请看[模型](/zh-cn/docs/models#内置模型)。                              |
+| `builtinModels`              | 在代码中给出、每个组织都能使用的模型。请看[模型](/zh-cn/models#内置模型)。                                   |
 | `builtinModels.defaultModel` | 当新 Chat 的 Bot 没有指定模型时，这个 Chat 使用的模型。它是 `builtinModels` 中的一个。只有模拟的平台设置它。 |
 | `routes`                     | 一个带有你自己 HTTP 路由的 Layer。                                                                           |
 | `indexSources`               | App Index 搜索的更多来源，与 OpenBot Index 并列。                                                            |
@@ -98,14 +98,14 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 
 有些值以前是选项。现在它们是数据库中的设置，所以每个实例都共享它们：
 
-| 旧选项                | 设置                                                              |
-| --------------------- | ----------------------------------------------------------------- |
-| `appRestrictions`     | [平台设置](/zh-cn/docs/platform#平台设置)中的 `appRestrictions`。 |
-| `appReadRules`        | [组织设置](/zh-cn/docs/organization#设置)中的 `appReadRules`。    |
-| `bots.helperModel`    | 组织设置中的 `rulesModel` 和 `botMemoryModel`。                   |
-| `bots.requestTimeout` | 组织设置中的 `requestTimeoutMs`。                                 |
-| `bots.memory`         | 组织设置中的 `botMemory`。                                        |
-| `appEncryptionKey`    | 实例选项 `secretKeys`。                                           |
+| 旧选项                | 设置                                                         |
+| --------------------- | ------------------------------------------------------------ |
+| `appRestrictions`     | [平台设置](/zh-cn/platform#平台设置)中的 `appRestrictions`。 |
+| `appReadRules`        | [组织设置](/zh-cn/organization#设置)中的 `appReadRules`。    |
+| `bots.helperModel`    | 组织设置中的 `rulesModel` 和 `botMemoryModel`。              |
+| `bots.requestTimeout` | 组织设置中的 `requestTimeoutMs`。                            |
+| `bots.memory`         | 组织设置中的 `botMemory`。                                   |
+| `appEncryptionKey`    | 实例选项 `secretKeys`。                                      |
 
 ---
 
@@ -145,8 +145,8 @@ Launch.main((settings) =>
 
 ## Chats
 
-模型来自数据库中的模型提供方和 `builtinModels`。请看[模型](/zh-cn/docs/models)。
-[Bot 记忆](/zh-cn/docs/developers/memory)遵循[组织设置](/zh-cn/docs/organization#设置)中的
+模型来自数据库中的模型提供方和 `builtinModels`。请看[模型](/zh-cn/models)。
+[Bot 记忆](/zh-cn/developers/memory)遵循[组织设置](/zh-cn/organization#设置)中的
 `botMemory`。
 
 服务器持有应用级服务和活动执行。每个 Turn 在自己的作用域中创建模型和工具。保存的执行身份包含成员、原始 token、Bot 和委派限制。请求不再维持成员运行时。每个 Chat 同时只允许一个 Turn 推进。命令、检查点、事件和结果保存在 PostgreSQL 中，可跨节点和重启继续使用。关闭 HTTP 事件流只关闭观察；取消使用独立命令。
@@ -195,7 +195,7 @@ Launch.main(server)
 如果每次调用都需要一个决定，就在 `Tool.make` 中加上
 `needsApproval: true`。这样 OpenBot 会为它检查能力
 `tools.call`。当这次调用需要决策者时，Bot 会得到一个待定的结果，调用会在之后被允许时运行。请看
-[Request](/zh-cn/docs/developers/requests)。
+[Request](/zh-cn/developers/requests)。
 
 ---
 
@@ -238,7 +238,7 @@ Server.layerLive({ ...settings, routes })
 `OPENBOT_DATABASE_URL` 和
 `OPENBOT_SECRET_KEYS`。运行前停止所有实例。`OpenBot.layerShared`
 在启动服务前检查表结构和已完成的数据版本。它在服务器的整个生命周期内持有共享锁。备份和恢复步骤见
-[部署](/zh-cn/docs/deploy#准备数据库)。
+[部署](/zh-cn/deploy#准备数据库)。
 
 ```sh
 pnpm --filter @openbot-build/openbot migrate
@@ -266,4 +266,4 @@ NodeRuntime.runMain(Development.launch)
 
 ## 把错误日志发送到你自己的服务
 
-OpenBot 把失败写成错误日志。添加你自己的 Effect 日志器，就能把它们发送到其他服务。每条日志包含什么，以及完整示例，请看[错误日志](/zh-cn/docs/error-logs)。
+OpenBot 把失败写成错误日志。添加你自己的 Effect 日志器，就能把它们发送到其他服务。每条日志包含什么，以及完整示例，请看[错误日志](/zh-cn/error-logs)。

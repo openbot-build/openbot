@@ -3,7 +3,7 @@ title: 配置
 description: 每个 OpenBot 实例从环境中读取什么，以及其他所有设置存放在哪里。
 ---
 
-面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/docs/admin)开始。
+面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/admin)开始。
 
 OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenBot 服务器进程。同一个部署的所有实例使用同一个数据库。本页列出每个实例在启动时读取的少数几个值。它也说明其他所有设置存放在哪里。
 
@@ -49,11 +49,11 @@ Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和
 `OPENBOT_DATABASE_URL`
 的形式是：`postgres://openbot:secret@db.example.com:5432/openbot`。服务器、迁移程序和设置程序都会读取它。
 
-服务器启动时，会检查所有表是否都存在。如果不存在，它就会停止。请先运行迁移程序。参见[部署](/zh-cn/docs/deploy)。
+服务器启动时，会检查所有表是否都存在。如果不存在，它就会停止。请先运行迁移程序。参见[部署](/zh-cn/deploy)。
 
 ### TLS
 
-OpenBot 只提供普通 HTTP，它自己没有 HTTPS。要提供 HTTPS，请在它前面放一个反向代理，例如 Caddy 或 nginx。代理持有证书，并把流量转发给 OpenBot。参见[部署](/zh-cn/docs/deploy#tls-和反向代理)。
+OpenBot 只提供普通 HTTP，它自己没有 HTTPS。要提供 HTTPS，请在它前面放一个反向代理，例如 Caddy 或 nginx。代理持有证书，并把流量转发给 OpenBot。参见[部署](/zh-cn/deploy#tls-和反向代理)。
 
 ### 出站连接
 
@@ -99,8 +99,8 @@ OpenBot 在数据库中保存一些机密。它用 `OPENBOT_SECRET_KEYS`
 中的密钥加密它们。这些机密是：
 
 - App 连接的私密数据，比如 App 凭据、私密设置和登录状态；
-- [模型提供方](/zh-cn/docs/models)的 API 密钥；
-- [SSO 连接](/zh-cn/docs/sso)的客户端密钥；
+- [模型提供方](/zh-cn/models)的 API 密钥；
+- [SSO 连接](/zh-cn/sso)的客户端密钥；
 - 平台的登录密钥，它用来签名登录 cookie；
 - 平台 OpenID Connect 提供方的客户端密钥。
 
@@ -169,7 +169,7 @@ OpenBot 现在用 `k2` 封存新的机密。`k1`
 ```
 
 日志也会提示你运行设置。所有参数参见
-[Platform](/zh-cn/docs/platform#设置)，命令参见[部署](/zh-cn/docs/deploy)。
+[Platform](/zh-cn/platform#设置)，命令参见[部署](/zh-cn/deploy)。
 
 ---
 
@@ -178,9 +178,9 @@ OpenBot 现在用 `k2` 封存新的机密。`k1`
 其他所有设置都是保存在数据库中的共享设置。大部分设置在两份文档中：
 
 - **平台设置**，位于 `/v1/platform/settings`。只有平台管理员能修改。参见
-  [Platform](/zh-cn/docs/platform)。
+  [Platform](/zh-cn/platform)。
 - **组织设置**，位于
-  `/v1/organization/settings`。每个组织都有自己的一份。参见[组织](/zh-cn/docs/organization#设置)。
+  `/v1/organization/settings`。每个组织都有自己的一份。参见[组织](/zh-cn/organization#设置)。
 
 旧版本的 OpenBot 会读取更多环境变量。OpenBot 现在忽略它们。下表显示每个值的去处：
 
@@ -193,8 +193,8 @@ OpenBot 现在用 `k2` 封存新的机密。`k1`
 | `BETTER_AUTH_SECRET`            | 登录密钥。设置程序随机生成一个，并加密保存。你永远不需要设置它。                                 |
 | `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`。                                                                          |
 | `OPENBOT_OWNER_EMAILS`          | 平台管理员。设置程序用 `--admin-email` 添加他们。用 `/v1/platform/admins` 修改。                 |
-| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | 每个组织的已验证域名，配合其设置中的 `joinByDomain`。参见 [SSO](/zh-cn/docs/sso#已验证的域名)。  |
-| `OPENBOT_MODEL_ENDPOINT`        | 组织或平台的模型提供方。参见 [Model](/zh-cn/docs/models)。                                       |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | 每个组织的已验证域名，配合其设置中的 `joinByDomain`。参见 [SSO](/zh-cn/sso#已验证的域名)。       |
+| `OPENBOT_MODEL_ENDPOINT`        | 组织或平台的模型提供方。参见 [Model](/zh-cn/models)。                                            |
 | `OPENBOT_MODEL_API_KEY`         | 模型提供方，已加密。                                                                             |
 | `OPENBOT_MODEL_ID`              | 由模型提供方关联的模型，以及每个 Bot 的 `model`。                                                |
 | `OPENBOT_DEV_MODE`              | 由开发入口决定。参见[开发](#开发)。                                                              |
@@ -248,7 +248,7 @@ Compose 文件 `deploy/docker/compose.production.yaml` 读取下面这些变量�
 Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/secrets`
 中文件的形式交给 OpenBot。它把 `OPENBOT_OUTBOUND_ALLOW`
 作为环境变量交给 OpenBot。`openbot`
-服务没有其他环境变量。参见[部署](/zh-cn/docs/deploy#用-compose-运行)。完整的模板在
+服务没有其他环境变量。参见[部署](/zh-cn/deploy#用-compose-运行)。完整的模板在
 `deploy/docker/production.env.example` 中。
 
 ---
@@ -267,7 +267,7 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 <Callout type="info">
 	如果你的 `.env.development` 来自旧版本，请删除它，然后再次运行 `devenv shell
 	-- pnpm dev:setup`。你也可以重置开发数据库。请看
-	[参与贡献](/zh-cn/docs/contributing#启动开发服务器)。
+	[参与贡献](/zh-cn/contributing#启动开发服务器)。
 </Callout>
 
 然后 devenv 会为你设置这些值。devenv 会自己选择每个端口：它从基础端口开始，取下一个空闲的端口。它只把带端口的值交给 OpenBot 进程，不交给
@@ -294,7 +294,7 @@ devenv 的代理在 `http://localhost`
 只有开发入口会读取
 `OPENBOT_DEV_PUBLIC_ORIGIN`。它不需要设置步骤。每次启动时，它会自己为这个源写入平台设置。它会把本地账号
 `developer@localhost.test`
-设为平台管理员，并打开本地测试登录。参见[身份验证](/zh-cn/docs/developers/authentication#开发账户)。
+设为平台管理员，并打开本地测试登录。参见[身份验证](/zh-cn/developers/authentication#开发账户)。
 
 生产程序永远不会使用本地测试账号。没有任何开关可以打开它。
 
@@ -302,7 +302,7 @@ devenv 的代理在 `http://localhost`
 `.env.development` 中设置
 `OPENBOT_OUTBOUND_ALLOW=localhost`。参见[出站连接](#出站连接)。
 
-devenv 还会为[文件](/zh-cn/docs/developers/files)启动
+devenv 还会为[文件](/zh-cn/developers/files)启动
 [RustFS](https://rustfs.com)，一个小的对象存储。它在 Docker 中运行，它的数据在 Docker 卷
 `openbot-dev-rustfs` 中。每次启动时，开发入口会创建 bucket
 `openbot`，并把存储写入平台设置。RustFS 在 `127.0.0.1`
@@ -310,7 +310,7 @@ devenv 还会为[文件](/zh-cn/docs/developers/files)启动
 `OPENBOT_OUTBOUND_ALLOW`。
 
 要使用另一个数据库，请在 `.env.development` 中设置
-`OPENBOT_DATABASE_URL`。参见[参与贡献](/zh-cn/docs/contributing)。
+`OPENBOT_DATABASE_URL`。参见[参与贡献](/zh-cn/contributing)。
 
 ---
 

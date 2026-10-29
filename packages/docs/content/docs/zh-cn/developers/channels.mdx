@@ -3,7 +3,7 @@ title: Channels
 description: 在 Slack、Lark、Telegram 或你自己的聊天系统中与 Bot 交谈。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 **Channel**
 是你的组织在一个聊天平台上的一个机器人，比如一个 Slack 应用或一个 Telegram 机器人。人们在私聊和群聊中与这个 Channel 的 Bot 交谈。OpenBot 仍然是无界面的：Channel 是平台和 API 之间的连接，不是用户界面。
@@ -22,7 +22,7 @@ description: 在 Slack、Lark、Telegram 或你自己的聊天系统中与 Bot �
 
 ## 添加 Channel
 
-提供方设置参见[设置 Channel](/zh-cn/docs/admin/channels)。
+提供方设置参见[设置 Channel](/zh-cn/admin/channels)。
 
 使用 `POST /v1/organization/channels` 和 `commandKey` 创建。HTTP
 201 返回已保存的 Channel； `executionId` 指向配置工作。修改使用
@@ -67,9 +67,9 @@ code）。它把关联码发到只有这个人能看到的地方：私聊中，�
 - 在私聊中，每条消息都会交给 Bot。
 - 在群聊中，只有提到机器人的消息才会交给 Bot。每条消息都以写它的人的名字开头，这样 Bot 知道是谁在说话。
 - Bot 正在为某个人工作时，这个人发来的消息会进入正在运行的 Turn。Bot 在下一步读取它。
-- 另一个人发来的消息会在这个 Chat 的[收件箱](/zh-cn/docs/developers/chats#收件箱)中等待。正在运行的 Turn 结束后，它作为单独的 Turn 运行。
+- 另一个人发来的消息会在这个 Chat 的[收件箱](/zh-cn/developers/chats#收件箱)中等待。正在运行的 Turn 结束后，它作为单独的 Turn 运行。
 - Turn 运行时，机器人会显示它的文本，并随着文本变长不断修改这条消息。很长的回答会分成几部分发出。
-- 每个 Turn 的回答都会发到这个聊天。由[通知](/zh-cn/docs/developers/chats#通知)启动的 Turn 也是这样，例如 Bot 交出去的工作的结果。所以 Bot 可以先说“我去看看”，之后再发出结果。
+- 每个 Turn 的回答都会发到这个聊天。由[通知](/zh-cn/developers/chats#通知)启动的 Turn 也是这样，例如 Bot 交出去的工作的结果。所以 Bot 可以先说“我去看看”，之后再发出结果。
 - 如果平台把同一个事件发了第二次，OpenBot 会丢弃它。
 
 ### 每个 Turn 为它的发言人工作
@@ -77,10 +77,10 @@ code）。它把关联码发到只有这个人能看到的地方：私聊中，�
 Turn 为已关联的发言人工作。保存的执行身份分别记录发言人、Chat 所有者和配置 Channel 的调用人。配置时使用的 token 在重启后仍保留限制。核心的
 `author` 字段用于输入分组，不是用户 ID。
 
-- 发言人的[权限](/zh-cn/docs/permissions)限制 Bot 可以做什么。
+- 发言人的[权限](/zh-cn/permissions)限制 Bot 可以做什么。
 - Channel 工作中的工具和计划步骤检查 Channel 使用权限，不会给发言人直接访问所有者所存 Chat 的权限。App 和 Computer 调用仍检查各自资源的权限。
 - 配置调用人的限制也生效。所有者必须仍有使用 Bot 的权限。
-- [Requests](/zh-cn/docs/developers/requests) 发给发言人。
+- [Requests](/zh-cn/developers/requests) 发给发言人。
 - Bot 根据保存的发言人身份使用记忆。
 
 恢复工作和开始外部调用前，OpenBot 会检查当前成员、token、Channel 和账户关联。删除关联会阻止该发言人的新动作。已保存的批准不能绕过这些检查。
@@ -92,14 +92,14 @@ Turn 为已关联的发言人工作。保存的执行身份分别记录发言人
 当一个 request 在等待某个人时，机器人会发送一张带三个按钮的卡片：**Allow
 once**（允许一次）、**Allow in this chat**（在这个聊天中允许）和
 **Deny**（拒绝）。**Allow in this chat** 会创建一个范围为 `chat` 的 Grant。见
-[Requests](/zh-cn/docs/developers/requests#回答请求)。在[计划模式](/zh-cn/docs/developers/chats#计划模式)中等待批准的计划也会收到同样的卡片。如果这个人在这个 Channel 上关联了账户，卡片会发到他的私聊。否则，卡片会发到这项工作所在的聊天。对于 Bot 交出去的工作提出的请求，例如为这个聊天工作的 task
+[Requests](/zh-cn/developers/requests#回答请求)。在[计划模式](/zh-cn/developers/chats#计划模式)中等待批准的计划也会收到同样的卡片。如果这个人在这个 Channel 上关联了账户，卡片会发到他的私聊。否则，卡片会发到这项工作所在的聊天。对于 Bot 交出去的工作提出的请求，例如为这个聊天工作的 task
 Chat 提出的请求，也是这样。
 
 只有 request 在等待的那个人才能按按钮。当 request 发生变化时，卡片会显示这个决定。
 
 Bot 也可以用工具 `openbot_channel_send`
 向同一个 Channel 的另一个聊天发消息。每次发消息都是能力
-`channels.send`，所以由[决策者链](/zh-cn/docs/developers/requests#决策者链)来决定。
+`channels.send`，所以由[决策者链](/zh-cn/developers/requests#决策者链)来决定。
 
 ---
 
@@ -168,7 +168,7 @@ OpenBot 把消息发到 `endpoint`。一个 `send` 包含 `markdown`、可选的
 
 Channel 的路径是
 `org / <org> / channel / <id>`。管理员管理它们。每个成员都可以使用它们，并关联自己的账户。见
-[权限](/zh-cn/docs/permissions)。
+[权限](/zh-cn/permissions)。
 
 ---
 

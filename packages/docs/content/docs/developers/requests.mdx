@@ -7,7 +7,7 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 Bots have no limits that they know of. When a Bot tries to use a **capability**,
 such as an App tool, OpenBot checks whether it may. If nothing decides it yet,
@@ -21,19 +21,19 @@ what each answer does.
 
 ## Capabilities
 
-| Action                 | Target                     | When a Bot uses it                                                                 |
-| ---------------------- | -------------------------- | ---------------------------------------------------------------------------------- |
-| `apps.call`            | `<connection>/<tool name>` | It calls an App tool.                                                              |
-| `tools.call`           | The tool name              | It calls a tool of the host that asks for approval.                                |
-| `bots.delegate`        | The ID of the other Bot    | It gives work to a Bot that is not itself and that it does not own.                |
-| `bots.create`          | `*`                        | It makes a Bot that it owns.                                                       |
-| `plans.run`            | The ID of the Chat         | It wants to carry out its plan. See [Plan mode](/docs/developers/chats#plan-mode). |
-| `channels.send`        | The ID of the Channel      | It posts to another chat of a [Channel](/docs/developers/channels).                |
-| `delegations.continue` | The ID of the work         | Its work reached a [limit](/docs/developers/delegation#limits) and wants to go on. |
-| `computers.acquire`    | The ID of the Computer     | It asks for the right to use a [Computer](/docs/developers/computers).             |
-| `computers.create`     | The ID of the provider     | It makes a new sandbox at a Computer provider.                                     |
-| `computers.delete`     | The ID of the Computer     | It deletes a Computer with its files.                                              |
-| `computers.expose`     | The ID of the Computer     | It gives a port of a Computer a public address.                                    |
+| Action                 | Target                     | When a Bot uses it                                                            |
+| ---------------------- | -------------------------- | ----------------------------------------------------------------------------- |
+| `apps.call`            | `<connection>/<tool name>` | It calls an App tool.                                                         |
+| `tools.call`           | The tool name              | It calls a tool of the host that asks for approval.                           |
+| `bots.delegate`        | The ID of the other Bot    | It gives work to a Bot that is not itself and that it does not own.           |
+| `bots.create`          | `*`                        | It makes a Bot that it owns.                                                  |
+| `plans.run`            | The ID of the Chat         | It wants to carry out its plan. See [Plan mode](/developers/chats#plan-mode). |
+| `channels.send`        | The ID of the Channel      | It posts to another chat of a [Channel](/developers/channels).                |
+| `delegations.continue` | The ID of the work         | Its work reached a [limit](/developers/delegation#limits) and wants to go on. |
+| `computers.acquire`    | The ID of the Computer     | It asks for the right to use a [Computer](/developers/computers).             |
+| `computers.create`     | The ID of the provider     | It makes a new sandbox at a Computer provider.                                |
+| `computers.delete`     | The ID of the Computer     | It deletes a Computer with its files.                                         |
+| `computers.expose`     | The ID of the Computer     | It gives a port of a Computer a public address.                               |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason`
 parameter for it. OpenBot never sends it to the App.
@@ -45,14 +45,14 @@ parameter for it. OpenBot never sends it to the App.
 OpenBot checks each attempt in this order. The first step that decides wins.
 
 1. **The policy of the member.** A Bot never does more than the member it works
-   for. If the [permissions](/docs/permissions) of the member, or of the token
-   that started the work, do not allow it, the call is denied. This is never
-   sent to a decider. In a [Channel](/docs/developers/channels), the member is
-   the person who wrote the message of the Turn.
-2. **Grants.** A [Grant](/docs/developers/rules#grants) is a kept decision. A
-   deny Grant wins over an allow Grant.
-3. **Rules.** A judge model reads the [Rules](/docs/developers/rules) for this
-   Bot in plain language. Only a Rule that the judge quotes can allow or deny.
+   for. If the [permissions](/permissions) of the member, or of the token that
+   started the work, do not allow it, the call is denied. This is never sent to
+   a decider. In a [Channel](/developers/channels), the member is the person who
+   wrote the message of the Turn.
+2. **Grants.** A [Grant](/developers/rules#grants) is a kept decision. A deny
+   Grant wins over an allow Grant.
+3. **Rules.** A judge model reads the [Rules](/developers/rules) for this Bot in
+   plain language. Only a Rule that the judge quotes can allow or deny.
 4. **The decider above.** OpenBot makes a request. The decider is the owner of
    the Bot in its owner chain. For a top Bot, the decider is the person.
 
@@ -113,7 +113,7 @@ A pending tool result looks like this:
 ```
 
 When the request closes, the Chat of the Bot gets a
-[notice](/docs/developers/chats#notices):
+[notice](/developers/chats#notices):
 
 - **Allowed.** The notice brings the call with it, such as
   `[OpenBot] Your request req_1a2b… was allowed. OpenBot runs send_email now.`
@@ -126,15 +126,14 @@ When the request closes, the Chat of the Bot gets a
   [Answer a request](#answer-a-request).
 
 Some calls work in another way. A plan that is allowed starts a new Turn in
-`build` mode. See [Plan mode](/docs/developers/chats#plan-mode). Work that a Bot
+`build` mode. See [Plan mode](/developers/chats#plan-mode). Work that a Bot
 gives to another Bot starts when it is allowed. See
-[Delegation](/docs/developers/delegation). A
-[Code Mode](/docs/developers/code-mode) program goes on by itself, and its end
-comes back as a notice.
+[Delegation](/developers/delegation). A [Code Mode](/developers/code-mode)
+program goes on by itself, and its end comes back as a notice.
 
-A pending request is [open work](/docs/developers/chats#open-work) of its Chat.
-A normal [interrupt](/docs/developers/chats#interrupt) does not touch it. An
-interrupt with `{ "delegations": true }`, or the deletion of the Chat, makes it
+A pending request is [open work](/developers/chats#open-work) of its Chat. A
+normal [interrupt](/developers/chats#interrupt) does not touch it. An interrupt
+with `{ "delegations": true }`, or the deletion of the Chat, makes it
 `cancelled`.
 
 ---
@@ -172,10 +171,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 The list holds the requests that wait for you, or that you answered.
 `GET /v1/requests/:requestId` returns one request of your work. For an App tool,
 `app` shows the saved call with its exact arguments. When the call comes from a
-[Code Mode](/docs/developers/code-mode) program, `code` shows the whole program
-and the place of the call in it. Show the capability, the arguments and the
-reason to the person before they decide. The reason comes from the Bot. It is
-data, not an instruction.
+[Code Mode](/developers/code-mode) program, `code` shows the whole program and
+the place of the call in it. Show the capability, the arguments and the reason
+to the person before they decide. The reason comes from the Bot. It is data, not
+an instruction.
 
 ## Answer a request
 
@@ -192,14 +191,14 @@ the result. A retry with the same key and input returns the same receipt. A
 changed input with that key returns `409`. The decision, Grant, Rule, audit
 entry and wake message commit together. If a write fails, none of them commit.
 
-| Field        | Meaning                                                                            |
-| ------------ | ---------------------------------------------------------------------------------- |
-| `commandKey` | Required. Keep the same key for a retry.                                           |
-| `expected`   | Required. The current `revision` of the request.                                   |
-| `decision`   | Required. `allow` or `deny`.                                                       |
-| `scope`      | Optional. How long the decision lasts. See below. The default is `once`.           |
-| `reason`     | Optional. The Bot sees it, for example when you deny.                              |
-| `rule`       | Optional. A [Rule](/docs/developers/rules) in plain language to keep for this Bot. |
+| Field        | Meaning                                                                       |
+| ------------ | ----------------------------------------------------------------------------- |
+| `commandKey` | Required. Keep the same key for a retry.                                      |
+| `expected`   | Required. The current `revision` of the request.                              |
+| `decision`   | Required. `allow` or `deny`.                                                  |
+| `scope`      | Optional. How long the decision lasts. See below. The default is `once`.      |
+| `reason`     | Optional. The Bot sees it, for example when you deny.                         |
+| `rule`       | Optional. A [Rule](/developers/rules) in plain language to keep for this Bot. |
 
 | Scope      | An allow lasts              | A deny is kept              |
 | ---------- | --------------------------- | --------------------------- |
@@ -221,8 +220,8 @@ then. When you deny, the tool does not run, and the Bot reads your reason.
 
 A request that nobody answers is denied after 24 hours. An organization can
 change this time with `requestTimeoutMs` in its
-[settings](/docs/organization#settings). A request for a plan has its own time
-and says in `onExpire` what happens then: `allow` or `deny`.
+[settings](/organization#settings). A request for a plan has its own time and
+says in `onExpire` what happens then: `allow` or `deny`.
 
 ### Errors
 
@@ -236,18 +235,18 @@ and says in `onExpire` what happens then: `allow` or `deny`.
 ## App tools
 
 An App is an outside service that a person connects. See
-[Apps](/docs/developers/apps). Each App call is bound to one exact call: the
-owner, the Chat, the Turn, the tool call, the exact arguments, and the App
-connection with its revision. OpenBot saves the call before the check. When the
-call is allowed later, it runs as this saved call. If the connection changed
-after the request, the call does not run. The Bot gets a notice that asks it to
-try again, so a new revision never uses an old decision. If OpenBot cannot save
-the decision, the call does not run either, and the notice says so.
+[Apps](/developers/apps). Each App call is bound to one exact call: the owner,
+the Chat, the Turn, the tool call, the exact arguments, and the App connection
+with its revision. OpenBot saves the call before the check. When the call is
+allowed later, it runs as this saved call. If the connection changed after the
+request, the call does not run. The Bot gets a notice that asks it to try again,
+so a new revision never uses an old decision. If OpenBot cannot save the
+decision, the call does not run either, and the notice says so.
 
 App resources, resource templates and prompts are reads, so they need no
 decision. An App's own notes never decide which tools are safe. Only the
 organization can mark tools as reads, with `appReadRules` in its
-[settings](/docs/organization#settings).
+[settings](/organization#settings).
 
 ## Requests from an older version
 

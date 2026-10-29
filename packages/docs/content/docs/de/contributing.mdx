@@ -4,7 +4,7 @@ description:
   Richte den Code ein, führe die Prüfungen aus und folge den Projektregeln.
 ---
 
-Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/developers) zwischen
 API-Anbindung, App-Veröffentlichung und Projektarbeit.
 
 Diese Seite ist für Menschen, die OpenBot selbst ändern. Sie zeigt dir, wie du
@@ -21,7 +21,7 @@ das Projekt: Node.js, pnpm, PostgreSQL und mehr. Du brauchst auch
 Objektspeicher für die Entwicklung laufen in Docker, und mit Docker baust und
 prüfst du die Images. devenv gibt dir die Befehlszeilen-Werkzeuge von Docker.
 Dein Computer braucht nur einen laufenden Docker-Dienst. Siehe
-[Betrieb](/de/docs/deploy#die-images-bauen). Führe jeden Befehl über
+[Betrieb](/de/deploy#die-images-bauen). Führe jeden Befehl über
 `devenv shell -- <command>` aus. So nutzt du immer diese Werkzeuge.
 
 <Steps>
@@ -47,7 +47,7 @@ devenv shell -- pnpm dev:setup
 Schlüssel in `OPENBOT_SECRET_KEYS`. Wenn deine `.env.development` aus einer
 älteren Version stammt, lösche sie und führe `dev:setup` noch einmal aus. Du
 kannst auch die Entwicklungs-Datenbank zurücksetzen. Siehe
-[Konfiguration](/de/docs/configuration#entwicklung).
+[Konfiguration](/de/configuration#entwicklung).
 
 </Step>
 <Step>
@@ -90,7 +90,7 @@ Wenn du eine Datei in `packages/*/src` änderst, startet devenv OpenBot neu.
 
 Der Entwicklungsserver nutzt ein lokales Testkonto, Test-Models und eine
 Test-App. Kein externer Dienst ist nötig. Wie du dich anmeldest und ein User
-Token erstellst, steht unter [Schnellstart](/de/docs/developers/quickstart).
+Token erstellst, steht unter [Schnellstart](/de/developers/quickstart).
 
 ---
 
@@ -118,24 +118,24 @@ braucht, zum Beispiel einer mit einem echten Server, nutzt `it.live`. Tests von
 OpenBot starten ihren eigenen kurzlebigen PostgreSQL-Server mit den Werkzeugen
 aus devenv. Sie brauchen keine Geheimnisse und keine externen Dienste. GitHub
 Actions führt dieselben Befehle `build`, `typecheck` und `test` aus. Siehe
-[Betrieb](/de/docs/developers/publishing#github-actions).
+[Betrieb](/de/developers/publishing#github-actions).
 
 ---
 
 ## Aufbau des Repositorys
 
-| Pfad                       | Was er enthält                                                                                                   |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `packages/`                | Die Pakete des Workspaces. Siehe [Pakete](/de/docs/packages).                                                    |
-| `packages/docs/`           | Diese Doku-Seite.                                                                                                |
-| `packages/template/`       | Ein Startpunkt für ein neues Paket. Er gehört nicht zum Workspace.                                               |
-| `protocol-test/`           | Der öffentliche Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).                  |
-| `deploy/`                  | Dateien, um OpenBot in Betrieb zu nehmen. Jedes Ziel hat einen eigenen Ordner. Siehe [Betrieb](/de/docs/deploy). |
-| `deploy/docker/`           | Das Dockerfile, die Bake-Datei, Compose-Dateien, die Vorlage für die Produktivumgebung und die Image-Prüfungen.  |
-| `.env.development.example` | Die Vorlage für `.env.development`.                                                                              |
-| `patches/`                 | Korrekturen für genaue Versionen externer Pakete.                                                                |
-| `references/`              | Quellcode anderer Open-Source-Projekte, als Git-Submodule. Nur zum Lesen.                                        |
-| `devenv.nix`               | Die Entwicklungswerkzeuge, Einstellungen und Prozesse.                                                           |
+| Pfad                       | Was er enthält                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `packages/`                | Die Pakete des Workspaces. Siehe [Pakete](/de/packages).                                                        |
+| `packages/docs/`           | Diese Doku-Seite.                                                                                               |
+| `packages/template/`       | Ein Startpunkt für ein neues Paket. Er gehört nicht zum Workspace.                                              |
+| `protocol-test/`           | Der öffentliche Testdienst für das App Protocol. Siehe [Protokolltest](/de/protocol-test).                      |
+| `deploy/`                  | Dateien, um OpenBot in Betrieb zu nehmen. Jedes Ziel hat einen eigenen Ordner. Siehe [Betrieb](/de/deploy).     |
+| `deploy/docker/`           | Das Dockerfile, die Bake-Datei, Compose-Dateien, die Vorlage für die Produktivumgebung und die Image-Prüfungen. |
+| `.env.development.example` | Die Vorlage für `.env.development`.                                                                             |
+| `patches/`                 | Korrekturen für genaue Versionen externer Pakete.                                                               |
+| `references/`              | Quellcode anderer Open-Source-Projekte, als Git-Submodule. Nur zum Lesen.                                       |
+| `devenv.nix`               | Die Entwicklungswerkzeuge, Einstellungen und Prozesse.                                                          |
 
 Der Ordner `references/` gehört nicht zum Build. Um diesen Code zu lesen, hole
 ihn mit `git submodule update --init`.
@@ -155,20 +155,20 @@ Dateien. Starte sie mit:
 devenv shell -- pnpm --filter @openbot-build/docs dev
 ```
 
-Öffne dann `http://localhost:4321`.
+Öffne dann `http://localhost:4321`. Das englische Handbuch beginnt unter `/`,
+das chinesische unter `/zh-cn/` und das deutsche unter `/de/`.
 
 | Pfad in `packages/docs/`    | Was es ist                                                                          |
 | --------------------------- | ----------------------------------------------------------------------------------- |
-| `content/docs/*.mdx`        | Die Seiten. Der Dateiname ist die URL: `deploy.mdx` ist `/docs/deploy`.             |
+| `content/docs/*.mdx`        | Die Seiten. Der Dateiname ist die URL: `deploy.mdx` ist `/deploy`.                  |
 | `content/docs/<locale>/`    | Die Übersetzungen: `zh-cn` für vereinfachtes Chinesisch und `de` für Deutsch.       |
 | `astro.config.ts`           | Die Einstellungen der Seite und die Reihenfolge der Seiten in der Seitenleiste.     |
 | `src/components/`           | Die Komponenten, die Seiten ohne Import nutzen können: `Callout`, `Steps` und mehr. |
-| `src/landing/`              | Die Startseite. `messages/` enthält ihren Text, mit einer Datei für jede Sprache.   |
-| `src/i18n.ts`               | Die Sprachen der Doku und der Startseite.                                           |
+| `src/i18n.ts`               | Die drei Sprachen der Doku.                                                         |
 | `src/pages/openapi.json.ts` | Liefert `openapi.json` unter `/openapi.json` aus, damit man es herunterladen kann.  |
 | `scripts/api.ts`            | Erzeugt `openapi.json` aus dem API-Vertrag.                                         |
 
-Die API-Referenz unter `/docs/api` entsteht aus `openapi.json`, mit dem Plugin
+Die API-Referenz unter `/api` entsteht aus `openapi.json`, mit dem Plugin
 [starlight-openapi](https://github.com/HiDeoo/starlight-openapi). Schreibe sie
 nicht von Hand. Das Skript läuft vor jedem `dev` und `build`. Wenn du den
 API-Vertrag in `@openbot-build/api` änderst, ändert sich auch die Referenz. Wenn
@@ -179,8 +179,8 @@ als reinen Text für KI-Werkzeuge. Um zu prüfen, dass jede Seite gebaut wird,
 führe `devenv shell -- pnpm --filter @openbot-build/docs build` aus.
 
 Jeder Push auf `main` veröffentlicht die Seite auf
-[openbot.build](https://openbot.build). Siehe
-[Die Doku-Seite veröffentlichen](/de/docs/developers/publishing#die-doku-seite-veröffentlichen).
+[docs.openbot.build](https://docs.openbot.build). Siehe
+[Die Doku-Seite veröffentlichen](/de/developers/publishing#die-doku-seite-veröffentlichen).
 
 ---
 
@@ -188,14 +188,14 @@ Jeder Push auf `main` veröffentlicht die Seite auf
 
 ### Für einen Leserkreis schreiben
 
-Das [Benutzerhandbuch](/de/docs/users) erklärt Arbeit mit einem vorhandenen
-Client oder Channel. Nenne Aufgabe, Ergebnis und Hilfe. Installation, API-Felder
-und Quellcode gehören nicht auf Benutzerseiten.
+Das [Benutzerhandbuch](/de/users) erklärt Arbeit mit einem vorhandenen Client
+oder Channel. Nenne Aufgabe, Ergebnis und Hilfe. Installation, API-Felder und
+Quellcode gehören nicht auf Benutzerseiten.
 
-Das [Administrationshandbuch](/de/docs/admin) erklärt Einrichtung und Betrieb.
-Nenne die nötigen Organisationsrechte, Plattformrechte oder den Serverzugriff.
+Das [Administrationshandbuch](/de/admin) erklärt Einrichtung und Betrieb. Nenne
+die nötigen Organisationsrechte, Plattformrechte oder den Serverzugriff.
 Client-Verträge, App-Veröffentlichung und Quellcodeänderungen gehören ins
-[Entwicklerhandbuch](/de/docs/developers). Verlinke eine andere Rolle, wenn die
+[Entwicklerhandbuch](/de/developers). Verlinke eine andere Rolle, wenn die
 Aufgabe an sie übergeht.
 
 Halte Code und Felddetails an einer Stelle. Übersetzungen behalten die gleichen
@@ -212,12 +212,11 @@ Fachwörter, die du brauchst. Nutze kurze Sätze. Erkläre jeden Fachbegriff, we
 du ihn zum ersten Mal nutzt.
 
 Englisch ist die Quelle für allen Text. Die Doku gibt es auch auf vereinfachtem
-Chinesisch und auf Deutsch. Die Startseite gibt es in noch viel mehr Sprachen.
-Wenn du eine englische Seite änderst, ändere ihre Übersetzungen in derselben
-Änderung. Eine Übersetzung behält dieselben Überschriften in derselben
-Reihenfolge. Ihre Links führen zu Seiten in ihrer eigenen Sprache, zum Beispiel
-`/de/docs/deploy`. Wenn du Text auf der Startseite änderst, ändere ihn in jeder
-Datei in `src/landing/messages/`. Die API-Referenz gibt es nur auf Englisch.
+Chinesisch und auf Deutsch. Wenn du eine englische Seite änderst, ändere ihre
+Übersetzungen in derselben Änderung. Eine Übersetzung behält dieselben
+Überschriften in derselben Reihenfolge. Ihre Links führen zu Seiten in ihrer
+eigenen Sprache, zum Beispiel `/de/deploy`. Die API-Referenz gibt es nur auf
+Englisch.
 
 ### Headless
 
@@ -230,7 +229,7 @@ Ressource sie braucht, mit einer Annotation `Required` oder `GroupRequired`. Die
 Helfer `own`, `organization`, `channel` und `channels` in
 `packages/api/src/Authorization.ts` erstellen die Annotationen. Eine Anforderung
 darf nur einen Pfadparameter nennen, den ihr Endpunkt hat. Ein Test in
-`packages/api` prüft das. Siehe [Berechtigungen](/de/docs/permissions).
+`packages/api` prüft das. Siehe [Berechtigungen](/de/permissions).
 
 Der Code für die Autorisierung kommt aus der Bibliothek
 [ability](https://github.com/nmnmcc/ability), dem npm-Paket `@nmnmcc/ability`.
@@ -428,4 +427,4 @@ Actions-Lesezugriff auf die Pakete. Die Workflows nutzen `GITHUB_TOKEN` mit
 `PACKAGES_READ_TOKEN` mit einem classic PAT und `read:packages`. Die
 Veröffentlichung nutzt `GITHUB_TOKEN` mit `packages: write` des
 Quell-Repositorys. Auch lokale Installationen öffentlicher Pakete brauchen einen
-Token. Siehe [Client-Setup](/de/docs/client).
+Token. Siehe [Client-Setup](/de/client).

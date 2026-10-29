@@ -3,8 +3,8 @@ title: Packages
 description: The workspace packages and what each one is for.
 ---
 
-For developers. Start with the [developer manual](/docs/developers) to choose
-API work, App publishing, or project changes.
+For developers. Start with the [developer manual](/developers) to choose API
+work, App publishing, or project changes.
 
 OpenBot is a pnpm workspace. Each package has one job. `openbot` puts the parts
 together into the server. You can use the other libraries on their own.
@@ -17,17 +17,17 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 
 ## Overview
 
-| Package         | What it is for                                                                                            |
-| --------------- | --------------------------------------------------------------------------------------------------------- |
-| `openbot`       | The server, its plugins, and its model providers. See [Run from code](/docs/server).                      |
-| `api`           | The typed HTTP contract. The server, the client, and the API reference use it.                            |
-| `client`        | The TypeScript client. See [Client](/docs/client).                                                        |
-| `core`          | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                           |
-| `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                                         |
-| `protocol-test` | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test).                     |
-| `cli`           | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                     |
-| `computer`      | The `openbot computer` command, which pairs and connects your own [Computer](/docs/developers/computers). |
-| `docs`          | This docs site.                                                                                           |
+| Package         | What it is for                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| `openbot`       | The server, its plugins, and its model providers. See [Run from code](/server).                      |
+| `api`           | The typed HTTP contract. The server, the client, and the API reference use it.                       |
+| `client`        | The TypeScript client. See [Client](/client).                                                        |
+| `core`          | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                      |
+| `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                                    |
+| `protocol-test` | A public test service for the App Protocol. See [Protocol test](/protocol-test).                     |
+| `cli`           | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                |
+| `computer`      | The `openbot computer` command, which pairs and connects your own [Computer](/developers/computers). |
+| `docs`          | This docs site.                                                                                      |
 
 The examples below leave out the model. To run them, provide a `LanguageModel`
 Layer, for example from a [model provider](#model-providers) in `openbot`.
@@ -112,10 +112,10 @@ gives events while the Turn runs. Both fail when a Turn already runs in the
 Chat.
 
 `deliver` gives input to a Chat in one step, by the rules of the
-[inbox](/docs/developers/chats#the-inbox). It starts a Turn when the Chat is
-idle, steers the running Turn when the input has the same `author`, and waits in
-the inbox otherwise. It returns `started`, `steered` or `queued`. After each
-Turn, the next input in the inbox starts the next Turn.
+[inbox](/developers/chats#the-inbox). It starts a Turn when the Chat is idle,
+steers the running Turn when the input has the same `author`, and waits in the
+inbox otherwise. It returns `started`, `steered` or `queued`. After each Turn,
+the next input in the inbox starts the next Turn.
 
 Each Turn runs in its own fiber, and the runtime owns that fiber. A fiber is a
 light thread of Effect. When the Scope of the runtime closes, every running Turn
@@ -265,8 +265,8 @@ takes `timeoutMs` as a number of milliseconds.
 
 ### Memory
 
-`BotMemory` has the types and helpers of [Bot memory](/docs/developers/memory).
-The server uses them for the memory Bot and the memory API. The schemas of the
+`BotMemory` has the types and helpers of [Bot memory](/developers/memory). The
+server uses them for the memory Bot and the memory API. The schemas of the
 memory API are in `api`, as `BotMemory`.
 
 `BotMemory.apply` takes an `ids` array with one new ID for each operation, in
@@ -342,7 +342,7 @@ const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
 
 `@openbot-build/openbot` has three model providers. Each one turns a model
 selection into a `LanguageModel` Layer. You give the API key. See
-[Models](/docs/models) for how OpenBot uses them.
+[Models](/models) for how OpenBot uses them.
 
 ### OpenAiCompatProvider
 
@@ -469,4 +469,4 @@ const publisher = McpPublisher.layer({
 ```
 
 Serve `publisher` with `HttpRouter.serve` and an HTTP server Layer. See
-[Protocol](/docs/protocol) for the full guide.
+[Protocol](/protocol) for the full guide.

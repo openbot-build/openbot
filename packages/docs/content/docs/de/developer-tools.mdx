@@ -3,7 +3,7 @@ title: Entwickler-Tools
 description: Prüfe, teste und verwalte die Apps, die du veröffentlichst.
 ---
 
-Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/developers) zwischen
 API-Anbindung, App-Veröffentlichung und Projektarbeit.
 
 Diese Tools sind für Menschen, die Apps veröffentlichen. Du kannst deine App
@@ -13,7 +13,7 @@ bekommen, wenn etwas kaputtgeht.
 
 Nur der Aufruf zur Prüfung ist öffentlich. Alle anderen Aufrufe brauchen ein
 Nutzer-Token oder das Session-Cookie, und `publish` auf `App`. Siehe
-[Authentifizierung](/de/docs/developers/authentication).
+[Authentifizierung](/de/developers/authentication).
 
 IDs für Claims, Nachweise, Mitglieder, Berichte und Indexanfragen müssen
 UUID-Text sein. Das gilt auch für den Seitencursor `before` und die
@@ -46,7 +46,7 @@ Bericht hat:
 | `stages` | Jeder Prüfschritt: `Input`, `Discovery`, `CardRead`, `CardSchema`, `Compatibility`, `PublisherAssociation` und `Eligibility`. Jeder ist `Passed`, `Failed`, `Unconfirmed` oder `NotChecked`. |
 
 Ein Ergebnis `Eligible` heißt nicht, dass die App schon im Index ist. Siehe
-[App Index](/de/docs/developers/app-index#wie-apps-in-den-index-kommen).
+[App Index](/de/developers/app-index#wie-apps-in-den-index-kommen).
 
 ---
 
@@ -211,7 +211,7 @@ zum Index hinzu. Ein Test endet nach einer Stunde.
 2. Wenn der Endpoint Einstellungen braucht, schicke sie:
    `PUT /v1/developer/tests/:id/configuration` mit einem Objekt aus Keys und
    Werten. Die Keys sind dieselben wie bei
-   [Connections](/de/docs/developers/apps#die-connection-prüfen-und-erstellen).
+   [Connections](/de/developers/apps#die-connection-prüfen-und-erstellen).
 3. Starte ihn mit `POST /v1/developer/tests/:id/run` und
    `{ "commandKey": "test-run-1" }`. Die Antwort ist `202` mit einem Beleg für
    die Ausführung. Lies den Test mit `GET /v1/developer/tests/:id` und die
@@ -356,7 +356,7 @@ schicke `PUT /v1/developer/subscriptions` mit
 `GET /v1/developer/subscriptions` auf.
 
 Die vollständigen Formen findest du in der
-[API-Referenz](/docs/api/operations/tags/developer-tools/).
+[API-Referenz](/api/operations/tags/developer-tools/).
 
 Die Datenmigration behält bestehende Ansprüche, Nachweise, Mitglieder,
 Einladungen, Apps, Berichte und Nachrichteneinstellungen. App- und

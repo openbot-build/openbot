@@ -4,7 +4,7 @@ description: 验证邮箱域名，并使用你的组织的 OpenID Connect 提供
 ---
 
 面向组织管理员。每项任务需要对应权限。只有平台管理员可以修改 `/v1/platform`
-下的设置。从[管理员手册](/zh-cn/docs/admin)开始。
+下的设置。从[管理员手册](/zh-cn/admin)开始。
 
 SSO（单点登录）让人们使用自己公司的账户提供方登录。组织可以为它拥有的邮箱域名添加自己的 OpenID
 Connect 提供方。OpenID
@@ -12,7 +12,7 @@ Connect（OIDC）是一种标准方式，让另一个服务来确认一个人的
 
 本页说明如何验证域名，如何添加 SSO 连接，以及登录时如何选择提供方。所有路由都在
 `/v1/organization` 下。读取需要 `Sso` 上的 `read`。修改需要 `Sso` 上的
-`write`。见 [权限](/zh-cn/docs/permissions)。
+`write`。见 [权限](/zh-cn/permissions)。
 
 ---
 
@@ -79,8 +79,8 @@ OpenBot 会查询这条 TXT 记录。记录正确时，回答中会有 `verified
 
 ### 按域名加入
 
-已验证的域名还决定谁能加入组织。当 [组织设置](/zh-cn/docs/organization#设置)
-中的 `joinByDomain` 为 `true`
+已验证的域名还决定谁能加入组织。当 [组织设置](/zh-cn/organization#设置) 中的
+`joinByDomain` 为 `true`
 时，拥有该域名下已验证邮箱的人在登录时就会加入组织。他们会得到组织的
 `defaultRoles`。`joinByDomain` 默认为 `true`。
 
@@ -142,7 +142,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 `redirectUri` 是
 `<publicOrigin>/auth/callback/<connectionId>`。请在提供方那里注册它。client
 secret 永远不会返回。回答中显示的是 `{ set, hint }`。见
-[Platform](/zh-cn/docs/platform#机密永远不会返回)。
+[Platform](/zh-cn/platform#机密永远不会返回)。
 
 ### 修改或删除连接
 
@@ -179,7 +179,7 @@ secret 永远不会返回。回答中显示的是 `{ set, hint }`。见
 
 `POST /auth/sign-in` 开始浏览器登录。它不需要凭据。它会检查 `Origin`
 请求头，和每次使用 cookie 的写操作一样。见
-[身份验证](/zh-cn/docs/developers/authentication#origin-规则)。
+[身份验证](/zh-cn/developers/authentication#origin-规则)。
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in \
@@ -200,7 +200,7 @@ curl -X POST https://api.example.com/auth/sign-in \
 
 把浏览器跳转到 `url`。这个回答还会设置登录状态 cookie，Better
 Auth 需要它来完成登录。登录后，浏览器会跳转到 `returnTo`。见
-[返回路径](/zh-cn/docs/developers/authentication#返回路径)。
+[返回路径](/zh-cn/developers/authentication#返回路径)。
 
 ---
 
@@ -218,4 +218,4 @@ Auth 需要它来完成登录。登录后，浏览器会跳转到 `returnTo`。�
 | `409`  | `SsoConnectionConflict` | 在你读取之后，有人修改了这个连接。        |
 | `503`  | `SsoUnavailable`        | OpenBot 无法连接到它的数据库。            |
 
-完整的数据结构见 [SSO 参考](/docs/api/operations/tags/sso/)。
+完整的数据结构见 [SSO 参考](/api/operations/tags/sso/)。

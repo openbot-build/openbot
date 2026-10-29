@@ -7,10 +7,10 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
-Decisions about [requests](/docs/developers/requests) do not have to be made
-again and again. OpenBot keeps them in two forms:
+Decisions about [requests](/developers/requests) do not have to be made again
+and again. OpenBot keeps them in two forms:
 
 | Form  | Looks like                                                                                    | Who checks it           |
 | ----- | --------------------------------------------------------------------------------------------- | ----------------------- |
@@ -39,8 +39,7 @@ sees its Grants. It only sees that some calls run and some are denied.
 OpenBot puts the active Grants of a Bot into one policy, with one rule for each
 Grant. A deny Grant wins over every allow Grant, in any order. When more than
 one allow Grant covers a call, the first one gives the answer. A `once` Grant
-that gives the answer is then used up. See
-[Permissions](/docs/permissions#rules).
+that gives the answer is then used up. See [Permissions](/permissions#rules).
 
 OpenBot makes Grants when a decider answers a request. You can also make one
 yourself:
@@ -74,7 +73,7 @@ request, a judge model reads the active Rules of the Bot.
 - When the judge fails or is slow, there is no decision.
 
 A Rule that a Bot wrote counts only when that Bot is above this Bot in its
-[owner chain](/docs/developers/requests#the-chain-of-deciders), and may use the
+[owner chain](/developers/requests#the-chain-of-deciders), and may use the
 capability itself.
 
 ```sh
@@ -101,18 +100,18 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 You can also keep a Rule when you answer a request: send `rule` with the answer.
-See [Answer a request](/docs/developers/requests#answer-a-request).
+See [Answer a request](/developers/requests#answer-a-request).
 
 ### The judge model
 
 The judge uses the **Rules model**. It is `rulesModel` in the
-[organization settings](/docs/organization#settings). It has no default. When it
-is `null`, the judge gives no answer, so a person or a Bot decides. OpenBot
-keeps each judge answer for the same Rules and the same capability, so the judge
-does not run again for the same question.
+[organization settings](/organization#settings). It has no default. When it is
+`null`, the judge gives no answer, so a person or a Bot decides. OpenBot keeps
+each judge answer for the same Rules and the same capability, so the judge does
+not run again for the same question.
 
 The Rules model can be a language model or a
-[decision model](/docs/models#decision-model):
+[decision model](/models#decision-model):
 
 - A language model writes the whole answer. It quotes the words of each Rule
   that it uses, and gives its reason.

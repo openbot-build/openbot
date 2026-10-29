@@ -5,7 +5,7 @@ description: Starte OpenBot auf deinem Computer und mach deinen ersten Aufruf.
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Diese Seite startet OpenBot auf deinem Computer mit einem Testkonto und
 Testmodellen. Du brauchst keinen Identitätsanbieter und keinen Modell-Schlüssel.
@@ -90,7 +90,7 @@ Dieses Konto ist ein Platform-Admin. Es hat noch keine Organisation.
 
 ### Eine Organisation erstellen
 
-Bots, Chats und Tokens gehören zu einer [Organisation](/de/docs/organization).
+Bots, Chats und Tokens gehören zu einer [Organisation](/de/organization).
 Erstelle eine für dich:
 
 ```sh
@@ -130,7 +130,7 @@ export OPENBOT_TOKEN=obut_...
 
 ### Einen Bot erstellen
 
-Du gibst einem [Bot](/de/docs/developers/bots) Arbeit. Ein neues Konto hat keine
+Du gibst einem [Bot](/de/developers/bots) Arbeit. Ein neues Konto hat keine
 Bots. Erstelle also einen:
 
 ```sh
@@ -142,7 +142,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Nimm `id` aus der Antwort. Wenn du diesen Bot auch ohne Angabe eines Bots nutzen
 willst, mach ihn zu deinem
-[Standard-Bot](/de/docs/developers/bots#dein-standard-bot).
+[Standard-Bot](/de/developers/bots#dein-standard-bot).
 
 </Step>
 
@@ -170,18 +170,18 @@ Antwort und rufe `GET /v1/chats/<chatId>` auf.
 </Steps>
 
 Das Testmodell `mock-text` antwortet mit `Development response:` und deiner
-Eingabe. Die anderen Testmodelle findest du unter [Models](/de/docs/models).
+Eingabe. Die anderen Testmodelle findest du unter [Models](/de/models).
 
 ---
 
 ## Nächste Schritte
 
-- Lies, wie [Chats](/de/docs/developers/chats) und Turns funktionieren.
+- Lies, wie [Chats](/de/developers/chats) und Turns funktionieren.
 - Nutze einen echten Identitätsanbieter:
-  [Authentifizierung](/de/docs/developers/authentication) und
-  [Platform](/de/docs/platform).
-- Füge ein echtes Model hinzu: [Models](/de/docs/models).
-- Betreibe OpenBot auf einem Server: [Bereitstellung](/de/docs/deploy).
+  [Authentifizierung](/de/developers/authentication) und
+  [Platform](/de/platform).
+- Füge ein echtes Model hinzu: [Models](/de/models).
+- Betreibe OpenBot auf einem Server: [Bereitstellung](/de/deploy).
 
 Dieses Beispiel wählt das Testmodel der Entwicklung. Bots im Produktivbetrieb
 brauchen ein von der Verwaltung bereitgestelltes Model.

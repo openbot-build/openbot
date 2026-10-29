@@ -16,17 +16,17 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/channels
 ```
 
-| 字段          | 作用                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `name`        | 一个简短的名字。                                                                           |
-| `bot`         | 负责回答的 Bot。它必须是组织的共享 Bot。                                                   |
-| `credentials` | 平台的机密。见下文。它们可以写入，但永远不会返回。返回结果只显示 `set` 和一个 `hint`。     |
-| `linkPath`    | 可选。你的公开 origin 上的一个路径，你的客户端在这里让人[关联账户](/zh-cn/docs/channels)。 |
-| `enabled`     | 可选。`false` 会停用这个 Channel。它的 webhook 之后会返回 `401`。                          |
+| 字段          | 作用                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------- |
+| `name`        | 一个简短的名字。                                                                       |
+| `bot`         | 负责回答的 Bot。它必须是组织的共享 Bot。                                               |
+| `credentials` | 平台的机密。见下文。它们可以写入，但永远不会返回。返回结果只显示 `set` 和一个 `hint`。 |
+| `linkPath`    | 可选。你的公开 origin 上的一个路径，你的客户端在这里让人[关联账户](/zh-cn/channels)。  |
+| `enabled`     | 可选。`false` 会停用这个 Channel。它的 webhook 之后会返回 `401`。                      |
 
 返回 `201` 和这个 Channel。把它的 `webhookUrl`
 交给平台。调用者成为这个 Channel 的 **actor**。Channel 的聊天是 actor 的
-[Chats](/zh-cn/docs/developers/chats)。actor 必须能把工作交给这个 Bot。
+[Chats](/zh-cn/developers/chats)。actor 必须能把工作交给这个 Bot。
 
 `GET`、`PATCH` 和 `DELETE /v1/organization/channels/:channelId`
 读取、修改和删除一个 Channel。修改需要 `expectedVersion`，也就是你读到的

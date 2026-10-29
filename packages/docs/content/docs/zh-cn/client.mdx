@@ -3,7 +3,7 @@ title: 客户端
 description: 用 TypeScript 调用 OpenBot，请求和错误都有类型。
 ---
 
-面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+面向开发者。从[开发者手册](/zh-cn/developers)选择 API 接入、App 发布或项目贡献。
 
 `@openbot-build/client`
 是 OpenBot 的 TypeScript 客户端。它和服务器基于同一份 API 契约构建。每个请求、应答和错误都有类型。你在运行代码之前，编辑器就会指出错误。
@@ -80,7 +80,7 @@ const id = await Effect.runPromise(
 | `organization`   | 否   | 组织 ID。使用会话 cookie 时，它以 `OpenBot-Organization` 头发送。使用令牌时会忽略它。                 |
 | `onUnauthorized` | 否   | 一个函数，在受保护的请求返回 `401` 时运行。                                                           |
 
-如何创建用户令牌，请看[认证](/zh-cn/docs/developers/authentication)。
+如何创建用户令牌，请看[认证](/zh-cn/developers/authentication)。
 
 客户端从不保存令牌，也从不把令牌放进 URL。`onUnauthorized`
 不会登录，也不会重试请求。用它来通知用户，例如在令牌过期或被撤销之后。
@@ -96,7 +96,7 @@ type）。品牌可以防止把一种记录的 ID 用在另一种记录上。例
 `Model.Id` 和 `Provider.Id`。JSON 和 URL 中的值仍是字符串。
 
 每个操作都位于 `client.api.<group>.<operation>`。名称和
-[API 参考](/docs/api/)中的相同。每次调用接受一个对象，它有以下可选字段：
+[API 参考](/api/)中的相同。每次调用接受一个对象，它有以下可选字段：
 
 | 字段      | 内容                        |
 | --------- | --------------------------- |
@@ -122,25 +122,25 @@ const tasks =
 
 一些分组及其页面：
 
-| 分组             | 用途                             | 参考                                                          |
-| ---------------- | -------------------------------- | ------------------------------------------------------------- |
-| `chats`          | 和 Bot 说话，读取 Chat 和结果。  | [Chats](/docs/api/operations/tags/chats/)                     |
-| `delegations`    | 读取和停止 Bot 交出去的工作。    | [Delegations](/docs/api/operations/tags/delegations/)         |
-| `bots`           | 创建和管理 Bot。                 | [Bots](/docs/api/operations/tags/bots/)                       |
-| `requests`       | 回答你的 Bot 发出的 Request。    | [Requests](/docs/api/operations/tags/requests/)               |
-| `apps`           | 在某个地址上查找 App。           | [App discovery](/docs/api/operations/tags/app-discovery/)     |
-| `connections`    | 添加和管理 App 连接。            | [Connections](/docs/api/operations/tags/connections/)         |
-| `appIndex`       | 搜索公开的 App Index。           | [App Index](/docs/api/operations/tags/app-index/)             |
-| `userTokens`     | 列出、创建、撤销和检查用户令牌。 | [User tokens](/docs/api/operations/tags/user-tokens/)         |
-| `organizations`  | 列出和创建你的组织。             | [Organizations](/docs/api/operations/tags/organizations/)     |
-| `organization`   | 管理组织及其成员、角色和设置。   | [Organization](/docs/api/operations/tags/organization/)       |
-| `modelProviders` | 管理模型提供方，列出模型。       | [Model providers](/docs/api/operations/tags/model-providers/) |
-| `sso`            | 验证邮箱域名，管理 SSO 连接。    | [SSO](/docs/api/operations/tags/sso/)                         |
-| `platform`       | 管理平台。仅限平台管理员。       | [Platform](/docs/api/operations/tags/platform/)               |
-| `health`         | 读取服务文档和健康状态。         | [Health](/docs/api/operations/tags/service-and-health/)       |
+| 分组             | 用途                             | 参考                                                     |
+| ---------------- | -------------------------------- | -------------------------------------------------------- |
+| `chats`          | 和 Bot 说话，读取 Chat 和结果。  | [Chats](/api/operations/tags/chats/)                     |
+| `delegations`    | 读取和停止 Bot 交出去的工作。    | [Delegations](/api/operations/tags/delegations/)         |
+| `bots`           | 创建和管理 Bot。                 | [Bots](/api/operations/tags/bots/)                       |
+| `requests`       | 回答你的 Bot 发出的 Request。    | [Requests](/api/operations/tags/requests/)               |
+| `apps`           | 在某个地址上查找 App。           | [App discovery](/api/operations/tags/app-discovery/)     |
+| `connections`    | 添加和管理 App 连接。            | [Connections](/api/operations/tags/connections/)         |
+| `appIndex`       | 搜索公开的 App Index。           | [App Index](/api/operations/tags/app-index/)             |
+| `userTokens`     | 列出、创建、撤销和检查用户令牌。 | [User tokens](/api/operations/tags/user-tokens/)         |
+| `organizations`  | 列出和创建你的组织。             | [Organizations](/api/operations/tags/organizations/)     |
+| `organization`   | 管理组织及其成员、角色和设置。   | [Organization](/api/operations/tags/organization/)       |
+| `modelProviders` | 管理模型提供方，列出模型。       | [Model providers](/api/operations/tags/model-providers/) |
+| `sso`            | 验证邮箱域名，管理 SSO 连接。    | [SSO](/api/operations/tags/sso/)                         |
+| `platform`       | 管理平台。仅限平台管理员。       | [Platform](/api/operations/tags/platform/)               |
+| `health`         | 读取服务文档和健康状态。         | [Health](/api/operations/tags/service-and-health/)       |
 
 每个操作都需要对某个资源的一个操作权限。没有它的调用会以 `Forbidden`
-失败。请看[权限](/zh-cn/docs/permissions)。
+失败。请看[权限](/zh-cn/permissions)。
 
 类型客户端中的请求和响应密钥字段使用 Effect `Redacted<string>`。用
 `Redacted.make` 包装新密钥。只有必须发送或显示密钥时，才调用
@@ -196,7 +196,7 @@ cookie。令牌加密留在服务器。平台提供方使用 `client.api.platfor
 需要重新开始授权，`ModelProviderLoginRequired`
 需要登录，`ModelProviderOAuthUnavailable`
 表示本次调用暂时无法完成。`ModelProviderConflict`
-需要读取最新提供方版本。见[模型](/zh-cn/docs/models#使用-chatgpt-登录)。
+需要读取最新提供方版本。见[模型](/zh-cn/models#使用-chatgpt-登录)。
 
 ## 观察和控制执行
 
@@ -308,9 +308,9 @@ const ClientLive = layer({
 发送请求，所以浏览器会带上 cookie。浏览器还会加上 `Origin`
 头。对于修改数据的请求，OpenBot 会检查它是否正好等于平台设置中的
 `publicOrigin`。用 `GET /auth/session`
-读取这个人所属的组织。请看[认证](/zh-cn/docs/developers/authentication#读取和结束登录)。
+读取这个人所属的组织。请看[认证](/zh-cn/developers/authentication#读取和结束登录)。
 
-如何在同源上提供你的 Web 应用，请看[部署](/zh-cn/docs/deploy#同源的自有客户端)。
+如何在同源上提供你的 Web 应用，请看[部署](/zh-cn/deploy#同源的自有客户端)。
 
 <Callout type="warn">
 	不要把用户令牌放进浏览器代码。任何打开这个页面的人都能读到它。
@@ -359,7 +359,7 @@ const program = Effect.gen(function* () {
 | `onChange` | 可选。当视图中某个操作的状态改变时运行。用它来刷新 Request 和 Chat。 |
 
 结果可以配合 `@openbot-build/protocol/McpApps` 中的 `mount` 使用，`mount`
-在 iframe 中显示视图。请看[协议](/zh-cn/docs/protocol)。
+在 iframe 中显示视图。请看[协议](/zh-cn/protocol)。
 
 视图客户端不持有任何凭据。每个请求都经过 OpenBot，所以常规的能力检查都会生效：
 
@@ -382,7 +382,7 @@ const program = Effect.gen(function* () {
 ## 展示告解
 
 Bot 用 `confide`
-工具说出工作情况，[记忆 Bot](/zh-cn/docs/developers/memory#bot-如何学习)
+工具说出工作情况，[记忆 Bot](/zh-cn/developers/memory#bot-如何学习)
 会回答它。人可以读到这些内容：`GET /v1/chats/:chatId/confessions`
 会列出它们，这些调用也在 Chat 的历史中。但 Bot 在那里说话比在回答中更放得开。所以不要让人太容易读到它们：
 

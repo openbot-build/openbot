@@ -3,8 +3,8 @@ title: Contributing
 description: Set up the code, run the checks, and follow the project rules.
 ---
 
-For developers. Start with the [developer manual](/docs/developers) to choose
-API work, App publishing, or project changes.
+For developers. Start with the [developer manual](/developers) to choose API
+work, App publishing, or project changes.
 
 This page is for people who change OpenBot itself. It shows how to set up your
 computer, run the server and the checks, and find your way in the code.
@@ -18,7 +18,7 @@ project: Node.js, pnpm, PostgreSQL, and more. You also need
 [Docker](https://docs.docker.com/get-docker/). The development database and the
 development object storage run in Docker, and you use Docker to build and check
 the images. devenv gives the Docker command line tools. Your computer only needs
-a running Docker service. See [Deploy](/docs/deploy#build-the-images). Run every
+a running Docker service. See [Deploy](/deploy#build-the-images). Run every
 command through `devenv shell -- <command>`, so you always use these tools.
 
 <Steps>
@@ -43,7 +43,7 @@ devenv shell -- pnpm dev:setup
 `dev:setup` makes `.env.development` with a new random secret key in
 `OPENBOT_SECRET_KEYS`. If your `.env.development` is from an older version,
 delete it and run `dev:setup` again. You can also reset the development
-database. See [Configuration](/docs/configuration#development).
+database. See [Configuration](/configuration#development).
 
 </Step>
 <Step>
@@ -84,7 +84,7 @@ When you change a file in `packages/*/src`, devenv starts OpenBot again.
 
 The development server uses a local test account, test models, and a test App.
 No outside service is needed. To sign in and make a user token, see
-[Quick start](/docs/developers/quickstart).
+[Quick start](/developers/quickstart).
 
 ---
 
@@ -111,7 +111,7 @@ when the test moves it. A test that needs real time, for example one with a real
 server, uses `it.live`. OpenBot tests start their own short-lived PostgreSQL
 server with the tools from devenv. They need no secrets and no outside services.
 GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See
-[Deploy](/docs/developers/publishing#github-actions).
+[Deploy](/developers/publishing#github-actions).
 
 ---
 
@@ -119,11 +119,11 @@ GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See
 
 | Path                       | What it holds                                                                                            |
 | -------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `packages/`                | The workspace packages. See [Packages](/docs/packages).                                                  |
+| `packages/`                | The workspace packages. See [Packages](/packages).                                                       |
 | `packages/docs/`           | This docs site.                                                                                          |
 | `packages/template/`       | A starting point for a new package. It is not part of the workspace.                                     |
-| `protocol-test/`           | The public test service for the App Protocol. See [Protocol test](/docs/protocol-test).                  |
-| `deploy/`                  | Files to deploy OpenBot. Each target has its own folder. See [Deploy](/docs/deploy).                     |
+| `protocol-test/`           | The public test service for the App Protocol. See [Protocol test](/protocol-test).                       |
+| `deploy/`                  | Files to deploy OpenBot. Each target has its own folder. See [Deploy](/deploy).                          |
 | `deploy/docker/`           | The Dockerfile, the Bake file, Compose files, the production environment template, and the image checks. |
 | `.env.development.example` | The template for `.env.development`.                                                                     |
 | `patches/`                 | Fixes for exact versions of outside packages.                                                            |
@@ -148,20 +148,20 @@ Start it with:
 devenv shell -- pnpm --filter @openbot-build/docs dev
 ```
 
-Then open `http://localhost:4321`.
+Then open `http://localhost:4321`. The English manual starts at `/`, Chinese at
+`/zh-cn/`, and German at `/de/`.
 
 | Path in `packages/docs/`    | What it is                                                                         |
 | --------------------------- | ---------------------------------------------------------------------------------- |
-| `content/docs/*.mdx`        | The pages. The file name is the URL: `deploy.mdx` is `/docs/deploy`.               |
+| `content/docs/*.mdx`        | The pages. The file name is the URL: `deploy.mdx` is `/deploy`.                    |
 | `content/docs/<locale>/`    | The translations: `zh-cn` for Simplified Chinese and `de` for German.              |
 | `astro.config.ts`           | The site settings and the order of the pages in the sidebar.                       |
 | `src/components/`           | The components that pages can use without an import: `Callout`, `Steps`, and more. |
-| `src/landing/`              | The home page. `messages/` has its text, with one file for each language.          |
-| `src/i18n.ts`               | The languages of the docs and of the home page.                                    |
+| `src/i18n.ts`               | The three languages of the docs.                                                   |
 | `src/pages/openapi.json.ts` | Serves `openapi.json` at `/openapi.json`, so people can download it.               |
 | `scripts/api.ts`            | Makes `openapi.json` from the API contract.                                        |
 
-The API reference at `/docs/api` is made from `openapi.json` by the
+The API reference at `/api` is made from `openapi.json` by the
 [starlight-openapi](https://github.com/HiDeoo/starlight-openapi) plugin. Do not
 write it by hand. The script runs before every `dev` and `build`. When you
 change the API contract in `@openbot-build/api`, the reference changes too. When
@@ -172,8 +172,8 @@ tools. To check that every page builds, run
 `devenv shell -- pnpm --filter @openbot-build/docs build`.
 
 Each push to `main` publishes the site to
-[openbot.build](https://openbot.build). See
-[Publish the docs site](/docs/developers/publishing#publish-the-docs-site).
+[docs.openbot.build](https://docs.openbot.build). See
+[Publish the docs site](/developers/publishing#publish-the-docs-site).
 
 ---
 
@@ -181,15 +181,15 @@ Each push to `main` publishes the site to
 
 ### Write for one reader
 
-Use the [user manual](/docs/users) for work through an existing client or
-Channel. Explain the task, result, and how to get help. Keep installation, API
-fields, and source code out of user pages.
+Use the [user manual](/users) for work through an existing client or Channel.
+Explain the task, result, and how to get help. Keep installation, API fields,
+and source code out of user pages.
 
-Use the [administrator manual](/docs/admin) for setup and service work. State
-whether a task needs organization rights, platform rights, or server access. Put
-client contracts, App publishing, and source changes in the
-[developer manual](/docs/developers). Link to another role when a task must pass
-to that role.
+Use the [administrator manual](/admin) for setup and service work. State whether
+a task needs organization rights, platform rights, or server access. Put client
+contracts, App publishing, and source changes in the
+[developer manual](/developers). Link to another role when a task must pass to
+that role.
 
 Keep code and field details in one place. Each translation must keep the same
 sections and link to its own language. The generated API reference stays in
@@ -204,11 +204,10 @@ need. Use short sentences. Explain each technical term the first time you use
 it.
 
 English is the source for all text. The docs are also in Simplified Chinese and
-German, and the home page is in many more languages. When you change an English
-page, change its translations in the same change. A translation keeps the same
-headings in the same order, and its links go to pages in its own language, such
-as `/de/docs/deploy`. When you change text on the home page, change it in every
-file in `src/landing/messages/`. The API reference is only in English.
+German. When you change an English page, change its translations in the same
+change. A translation keeps the same headings in the same order. Its links go to
+pages in its own language, such as `/de/deploy`. The API reference is only in
+English.
 
 ### Headless
 
@@ -220,7 +219,7 @@ also say which action on which resource it needs, with a `Required` or
 `GroupRequired` annotation. The helpers `own`, `organization`, `channel` and
 `channels` in `packages/api/src/Authorization.ts` make the annotations. A
 requirement may only name a path parameter that its endpoint has. A test in
-`packages/api` checks this. See [Permissions](/docs/permissions).
+`packages/api` checks this. See [Permissions](/permissions).
 
 The authorization code comes from the
 [ability](https://github.com/nmnmcc/ability) library, the npm package
@@ -407,4 +406,4 @@ access to those packages. Their workflows use `GITHUB_TOKEN` with
 `PACKAGES_READ_TOKEN` secret to a classic PAT with `read:packages`. Publishing
 uses each source repository's `GITHUB_TOKEN` with `packages: write`. Local
 installs also need a token, even for public packages. See the
-[client setup](/docs/client#install).
+[client setup](/client#install).

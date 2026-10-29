@@ -5,7 +5,7 @@ description: Talk with a Bot in Slack, Lark, Telegram or your own chat system.
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 A **Channel** is one bot of your organization on one chat platform, such as a
 Slack app or a Telegram bot. People talk with the Bot of the Channel in direct
@@ -27,7 +27,7 @@ once, and does the work later.
 
 ## Add a Channel
 
-See [Set up Channels](/docs/admin/channels) for provider settings.
+See [Set up Channels](/admin/channels) for provider settings.
 
 Create with `POST /v1/organization/channels` and a `commandKey`. HTTP 201
 returns the saved Channel; its `executionId` names the configuration work. A
@@ -86,13 +86,13 @@ chat as its `title`. List them with `GET /v1/chats?kind=channel` as the actor.
 - A message from a person while the Bot works for that same person goes into the
   running Turn. The Bot reads it at its next step.
 - A message from another person waits in the
-  [inbox](/docs/developers/chats#the-inbox) of the Chat. It runs as its own Turn
+  [inbox](/developers/chats#the-inbox) of the Chat. It runs as its own Turn
   after the running Turn ends.
 - While a Turn runs, the bot shows its text and changes the message as it grows.
   A long answer goes out in parts.
 - The answer of every Turn goes to the chat. This is also true for a Turn that a
-  [notice](/docs/developers/chats#notices) starts, such as the result of work
-  that the Bot gave away. So the Bot can say "I will look into it", and post the
+  [notice](/developers/chats#notices) starts, such as the result of work that
+  the Bot gave away. So the Bot can say "I will look into it", and post the
   result later.
 - OpenBot drops an event that the platform sends a second time.
 
@@ -103,13 +103,13 @@ speaker, the Chat owner, and the caller that set up the Channel. A token used to
 set up the Channel keeps its limits after a restart. The core `author` field is
 an input grouping key. Do not read a user ID from it.
 
-- The speaker's [permissions](/docs/permissions) limit what the Bot may do.
+- The speaker's [permissions](/permissions) limit what the Bot may do.
 - Tools and plan steps in Channel work check Channel use rights. They do not
   give the speaker direct access to the owner's stored Chat. App and Computer
   calls still check the rights on their own resources.
 - The Channel caller's limits also apply. The owner must still be allowed to use
   the Bot.
-- [Requests](/docs/developers/requests) go to the speaker.
+- [Requests](/developers/requests) go to the speaker.
 - The Bot uses the saved speaker identity for memory.
 
 OpenBot checks the current member, token, Channel, and account link before work
@@ -123,18 +123,18 @@ speaker. A saved approval does not remove these checks.
 When a request waits for a person, the bot sends a card with three buttons:
 **Allow once**, **Allow in this chat** and **Deny**. **Allow in this chat**
 makes a Grant with the scope `chat`. See
-[Requests](/docs/developers/requests#answer-a-request). Plans that wait for
-approval in [plan mode](/docs/developers/chats#plan-mode) get the same card. The
-card goes to the direct chat of the person when they linked an account on this
-Channel. Otherwise it goes to the chat of the work. This is also true for a
-request from work that the Bot gave away, such as a task Chat for this chat.
+[Requests](/developers/requests#answer-a-request). Plans that wait for approval
+in [plan mode](/developers/chats#plan-mode) get the same card. The card goes to
+the direct chat of the person when they linked an account on this Channel.
+Otherwise it goes to the chat of the work. This is also true for a request from
+work that the Bot gave away, such as a task Chat for this chat.
 
 Only the person that the request waits for can press a button. When the request
 changes, the card shows the decision.
 
 Bots can also post to another chat of the same Channel with the tool
 `openbot_channel_send`. Each post is the capability `channels.send`, so the
-[chain of deciders](/docs/developers/requests#the-chain-of-deciders) decides it.
+[chain of deciders](/developers/requests#the-chain-of-deciders) decides it.
 
 ---
 
@@ -213,7 +213,7 @@ only calls public addresses.
 
 The path of a Channel is `org / <org> / channel / <id>`. Administrators manage
 them. Every member may use them and link their own accounts. See
-[Permissions](/docs/permissions).
+[Permissions](/permissions).
 
 ---
 

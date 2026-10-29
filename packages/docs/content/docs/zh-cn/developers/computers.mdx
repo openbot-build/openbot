@@ -3,7 +3,7 @@ title: Computers
 description: 给 Bot 一台机器，让它在上面运行命令、修改文件和使用桌面。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 **Computer**
 是 Bot 工作的机器。Bot 在上面运行 shell 命令、读写文件、打开端口和使用桌面。Computer 有两种：
@@ -11,13 +11,13 @@ description: 给 Bot 一台机器，让它在上面运行命令、修改文件�
 - Computer 提供方（例如 E2B 或 Daytona）那里的一个**沙箱**。你使用自己在提供方那里的账户。提供方直接向你收费。
 - **你自己的机器**，例如笔记本电脑或服务器。你只需要把它和 OpenBot 配对一次。之后，机器上的一个小程序会保持与 OpenBot 的连接。
 
-Computer 属于一个成员或属于组织，和[触发器](/zh-cn/docs/developers/triggers)一样。Bot 从不拥有 Computer。Bot 得到的是一台 Computer 的**使用权**。很多 Bot 可以使用同一台 Computer。
+Computer 属于一个成员或属于组织，和[触发器](/zh-cn/developers/triggers)一样。Bot 从不拥有 Computer。Bot 得到的是一台 Computer 的**使用权**。很多 Bot 可以使用同一台 Computer。
 
 ---
 
 ## 添加 Computer 提供方
 
-参见 [Computer 提供方](/zh-cn/docs/admin/computer-providers).
+参见 [Computer 提供方](/zh-cn/admin/computer-providers).
 
 ## 创建和使用 Computer
 
@@ -103,7 +103,7 @@ Computer 没有终端，所以在那里 `tty` 会失败。
 
 ## 配对你自己的机器
 
-参见 [配对机器](/zh-cn/docs/admin/pair-computer).
+参见 [配对机器](/zh-cn/admin/pair-computer).
 
 ## Bot 和 Computer 的使用权
 
@@ -134,7 +134,7 @@ Bot 有用于 Computer 的工具。它用 `openbot_computers_list`
   `computer_session` 类的通知。
 - 修改文件、打开端口和使用桌面。截图会作为图片返回，模型可以看到它。
 
-这四个动作是[能力](/zh-cn/docs/developers/requests#能力)。[决策者链](/zh-cn/docs/developers/requests#决策者链)会决定它们，和其他能力一样：
+这四个动作是[能力](/zh-cn/developers/requests#能力)。[决策者链](/zh-cn/developers/requests#决策者链)会决定它们，和其他能力一样：
 
 | 动作                | 目标           | Bot 何时使用                     |
 | ------------------- | -------------- | -------------------------------- |

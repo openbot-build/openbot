@@ -7,16 +7,15 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
-**Bot Memory** (Gedächtnis des Bots) ist, was ein
-[Bot](/de/docs/developers/bots) über alle seine
-[Chats](/de/docs/developers/chats) lernt. Jeder Bot hat einen Pool von
-Einträgen. Ein **Memory-Bot** verwaltet den Pool. Er ist ein Helfer, der zum Bot
-gehört. Er liest aktive Einträge mit belegten Zugriffsregeln für ihre Quellen,
-lernt neue Einträge und fügt der Arbeit des Bots hinzu, was hilft. Seine
-Lernarbeit erscheint nicht als Chat. Diese Seite zeigt, wie Bot Memory lernt,
-wer was sieht und wie du es mit der API liest und änderst.
+**Bot Memory** (Gedächtnis des Bots) ist, was ein [Bot](/de/developers/bots)
+über alle seine [Chats](/de/developers/chats) lernt. Jeder Bot hat einen Pool
+von Einträgen. Ein **Memory-Bot** verwaltet den Pool. Er ist ein Helfer, der zum
+Bot gehört. Er liest aktive Einträge mit belegten Zugriffsregeln für ihre
+Quellen, lernt neue Einträge und fügt der Arbeit des Bots hinzu, was hilft.
+Seine Lernarbeit erscheint nicht als Chat. Diese Seite zeigt, wie Bot Memory
+lernt, wer was sieht und wie du es mit der API liest und änderst.
 
 Bot Memory ist das einzige Memory. Ein Chat behält seinen Verlauf, aber keine
 eigene Liste von Fakten. Ältere Versionen von OpenBot hatten auch gelerntes
@@ -38,15 +37,15 @@ Jeder Eintrag hat eine Ebene:
 Memory-Bot kann diese Tags nicht schreiben. So kann ein Model nicht ändern, wer
 einen Eintrag sieht.
 
-| Tag                         | Bedeutung                                                                            |
-| --------------------------- | ------------------------------------------------------------------------------------ |
-| `from:<userId>`             | Eine Person, die gesagt oder getan hat, worum es im Eintrag geht.                    |
-| `for:person:<userId>`       | Diese Person darf den Eintrag sehen.                                                 |
-| `for:channel:<channelId>`   | Die Personen dieser [Channel](/de/docs/developers/channels)-Gruppe dürfen ihn sehen. |
-| `for:bot`                   | Alle, die den Bot nutzen, dürfen ihn sehen.                                          |
-| `org:<organizationId>`      | Wo es passiert ist. Nur Arbeit in dieser Organisation sieht ihn.                     |
-| `chat:<id>`, `channel:<id>` | Woher er kommt.                                                                      |
-| `app:<tool>`                | Ein Tool-Ergebnis von einer App stützt ihn.                                          |
+| Tag                         | Bedeutung                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `from:<userId>`             | Eine Person, die gesagt oder getan hat, worum es im Eintrag geht.               |
+| `for:person:<userId>`       | Diese Person darf den Eintrag sehen.                                            |
+| `for:channel:<channelId>`   | Die Personen dieser [Channel](/de/developers/channels)-Gruppe dürfen ihn sehen. |
+| `for:bot`                   | Alle, die den Bot nutzen, dürfen ihn sehen.                                     |
+| `org:<organizationId>`      | Wo es passiert ist. Nur Arbeit in dieser Organisation sieht ihn.                |
+| `chat:<id>`, `channel:<id>` | Woher er kommt.                                                                 |
+| `app:<tool>`                | Ein Tool-Ergebnis von einer App stützt ihn.                                     |
 
 Andere Tags, wie `testing` oder `trip-planning`, sind **Themen**. Der Memory-Bot
 wählt sie und hält sie ordentlich. Ein Thema hat kleine Buchstaben, Zahlen und
@@ -127,11 +126,11 @@ alten Inhalt nicht erneut.
 
 Die Worte des Bots zeigen dem Memory-Bot nur, wo er hinschauen soll. Sie werden
 selbst nie zu Memory. Ein Tool-Ergebnis von einer App wird nie allein zu Memory.
-Eine [Mitteilung](/de/docs/developers/chats#mitteilungen) von OpenBot gilt nie
-als die Worte einer Person. Ein Bot, der sich nie anvertraut, lernt nichts.
+Eine [Mitteilung](/de/developers/chats#mitteilungen) von OpenBot gilt nie als
+die Worte einer Person. Ein Bot, der sich nie anvertraut, lernt nichts.
 
 Prüf-Chats haben kein Tool `confide`. Wenn `botMemory` in den
-[Einstellungen der Organisation](/de/docs/organization#einstellungen) aus ist,
+[Einstellungen der Organisation](/de/organization#einstellungen) aus ist,
 bekommt der Bot trotzdem eine Antwort, aber er lernt nichts.
 
 ---
@@ -173,7 +172,7 @@ mehr erlaubte Quelle macht die Antwort ungültig.
 Der Memory-Bot nutzt `botMemoryModel` aus den Einstellungen der Organisation. Es
 hat keinen Standardwert. Wenn es `null` ist, gibt der Memory-Bot die feste,
 ruhige Antwort, und er fügt nichts hinzu und lernt nichts. Bei einem
-[geteilten Bot](/de/docs/developers/sharing) kommen Model und Kosten von der
+[geteilten Bot](/de/developers/sharing) kommen Model und Kosten von der
 Organisation des Chats.
 
 Lies und ändere die Einstellungen des Memory-Bots mit `GET` und
@@ -274,7 +273,7 @@ Darum gehen sie auch. Du brauchst `write` auf einem Bot, der nicht verknüpft
 ist. Die Antwort ist nur die Zahl der entfernten Einträge.
 
 Wenn du
-[den Verlauf eines Chats löschst](/de/docs/developers/chats#den-verlauf-löschen),
+[den Verlauf eines Chats löschst](/de/developers/chats#den-verlauf-löschen),
 bleibt das Memory, das der Bot daraus gelernt hat. Entferne `chat:<id>` mit
 einem Purge, um auch das zu entfernen.
 
@@ -294,8 +293,8 @@ Zugriffsregel.
 Zwei Routen zeigen, was in einem deiner Chats passiert ist:
 
 - `GET /v1/chats/:chatId/confessions` listet, was der Bot anvertraut hat, und
-  die Antworten. Lies [Beichten zeigen](/de/docs/client#beichten-zeigen), bevor
-  du sie Personen zeigst.
+  die Antworten. Lies [Beichten zeigen](/de/client#beichten-zeigen), bevor du
+  sie Personen zeigst.
 - `GET /v1/chats/:chatId/enrichments` listet, wie der Memory-Bot die Eingabe
   jedes Turns neu geschrieben hat: den neuen `text`, die Worte der Person in
   `original` und die Einträge, die er genutzt hat. Ältere Einträge haben kein

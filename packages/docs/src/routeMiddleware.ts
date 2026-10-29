@@ -1,7 +1,7 @@
 import { defineRouteMiddleware } from "@astrojs/starlight/route-data"
 
 export const onRequest = defineRouteMiddleware((context) => {
-	if (!/^\/docs\/api(?:\/|$)/.test(context.url.pathname)) return
+	if (!/^\/api(?:\/|$)/.test(context.url.pathname)) return
 
 	// Starlight adds links for every language, but starlight-openapi builds
 	// only the English API pages. Keep links to pages that exist.

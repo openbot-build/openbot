@@ -7,7 +7,7 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Ein **Channel** ist ein Bot deiner Organisation auf einer Chat-Plattform, zum
 Beispiel eine Slack-App oder ein Telegram-Bot. Personen sprechen mit dem Bot des
@@ -30,8 +30,7 @@ sofort und macht die Arbeit später.
 
 ## Einen Channel hinzufügen
 
-Anbieter-Einstellungen stehen unter
-[Channels einrichten](/de/docs/admin/channels).
+Anbieter-Einstellungen stehen unter [Channels einrichten](/de/admin/channels).
 
 Erstelle mit `POST /v1/organization/channels` und einem `commandKey`. HTTP 201
 gibt den gespeicherten Channel zurück. Seine `executionId` nennt die
@@ -95,14 +94,14 @@ Namen des Chats als `title`. Liste sie als Actor mit
 - Eine Nachricht einer Person, während der Bot für dieselbe Person arbeitet,
   geht in den laufenden Turn. Der Bot liest sie bei seinem nächsten Schritt.
 - Eine Nachricht einer anderen Person wartet in der
-  [Inbox](/de/docs/developers/chats#die-inbox) des Chats. Sie läuft als eigener
-  Turn, nachdem der laufende Turn endet.
+  [Inbox](/de/developers/chats#die-inbox) des Chats. Sie läuft als eigener Turn,
+  nachdem der laufende Turn endet.
 - Während ein Turn läuft, zeigt der Bot seinen Text und ändert die Nachricht,
   während sie wächst. Eine lange Antwort geht in Teilen hinaus.
 - Die Antwort jedes Turns geht in den Chat. Das gilt auch für einen Turn, den
-  eine [Mitteilung](/de/docs/developers/chats#mitteilungen) startet, zum
-  Beispiel das Ergebnis von Arbeit, die der Bot abgegeben hat. So kann der Bot
-  sagen: "Ich sehe es mir an", und das Ergebnis später schreiben.
+  eine [Mitteilung](/de/developers/chats#mitteilungen) startet, zum Beispiel das
+  Ergebnis von Arbeit, die der Bot abgegeben hat. So kann der Bot sagen: "Ich
+  sehe es mir an", und das Ergebnis später schreiben.
 - OpenBot verwirft ein Event, das die Plattform ein zweites Mal schickt.
 
 ### Jeder Turn arbeitet für seinen Sprecher
@@ -112,14 +111,14 @@ Sprecher, Chat-Eigentümer und den Aufrufer der Channel-Einrichtung getrennt. Ei
 Token dieser Einrichtung behält seine Grenzen nach einem Neustart. Das Core-Feld
 `author` dient zur Gruppierung von Eingaben. Es ist keine User-ID.
 
-- Die [Berechtigungen](/de/docs/permissions) des Sprechers begrenzen den Bot.
+- Die [Berechtigungen](/de/permissions) des Sprechers begrenzen den Bot.
 - Werkzeuge und Planschritte in Channel-Arbeit prüfen das Recht zur
   Channel-Nutzung. Sie geben dem Sprecher keinen direkten Zugriff auf den
   gespeicherten Chat des Eigentümers. App- und Computer-Aufrufe prüfen weiter
   die Rechte ihrer Ressourcen.
 - Auch die Grenzen des Channel-Aufrufers gelten. Der Eigentümer muss den Bot
   weiter nutzen dürfen.
-- [Requests](/de/docs/developers/requests) gehen an den Sprecher.
+- [Requests](/de/developers/requests) gehen an den Sprecher.
 - Der Bot nutzt die gespeicherte Identität des Sprechers für Memory.
 
 Vor der Wiederaufnahme und vor einem externen Aufruf prüft OpenBot Member,
@@ -135,12 +134,12 @@ Wenn ein Request auf eine Person wartet, schickt der Bot eine Karte mit drei
 Buttons: **Allow once** (einmal erlauben), **Allow in this chat** (in diesem
 Chat erlauben) und **Deny** (ablehnen). **Allow in this chat** erstellt einen
 Grant mit dem Umfang `chat`. Siehe
-[Requests](/de/docs/developers/requests#einen-request-beantworten). Pläne, die
-im [Plan-Modus](/de/docs/developers/chats#plan-modus) auf eine Freigabe warten,
-bekommen dieselbe Karte. Die Karte geht in den Direkt-Chat der Person, wenn sie
-auf diesem Channel ein Konto verknüpft hat. Sonst geht sie in den Chat der
-Arbeit. Das gilt auch für einen Request aus Arbeit, die der Bot abgegeben hat,
-zum Beispiel aus einem Task-Chat für diesen Chat.
+[Requests](/de/developers/requests#einen-request-beantworten). Pläne, die im
+[Plan-Modus](/de/developers/chats#plan-modus) auf eine Freigabe warten, bekommen
+dieselbe Karte. Die Karte geht in den Direkt-Chat der Person, wenn sie auf
+diesem Channel ein Konto verknüpft hat. Sonst geht sie in den Chat der Arbeit.
+Das gilt auch für einen Request aus Arbeit, die der Bot abgegeben hat, zum
+Beispiel aus einem Task-Chat für diesen Chat.
 
 Nur die Person, auf die der Request wartet, kann einen Button drücken. Wenn sich
 der Request ändert, zeigt die Karte die Entscheidung.
@@ -148,7 +147,7 @@ der Request ändert, zeigt die Karte die Entscheidung.
 Bots können mit dem Tool `openbot_channel_send` auch in einen anderen Chat
 desselben Channel schreiben. Jeder Beitrag ist die Fähigkeit `channels.send`.
 Darum entscheidet die
-[Kette der Entscheider](/de/docs/developers/requests#die-kette-der-entscheider)
+[Kette der Entscheider](/de/developers/requests#die-kette-der-entscheider)
 darüber.
 
 ---
@@ -236,7 +235,7 @@ und das neue `markdown`. OpenBot ruft nur öffentliche Adressen auf.
 
 Der Pfad eines Channel ist `org / <org> / channel / <id>`. Administratoren
 verwalten sie. Jedes Member darf sie nutzen und seine eigenen Konten verknüpfen.
-Siehe [Berechtigungen](/de/docs/permissions).
+Siehe [Berechtigungen](/de/permissions).
 
 ---
 

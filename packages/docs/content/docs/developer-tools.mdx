@@ -3,8 +3,8 @@ title: Developer tools
 description: Check, test and manage the Apps you publish.
 ---
 
-For developers. Start with the [developer manual](/docs/developers) to choose
-API work, App publishing, or project changes.
+For developers. Start with the [developer manual](/developers) to choose API
+work, App publishing, or project changes.
 
 These tools are for people who publish Apps. You can check your App, prove that
 you control it, share access with your team, run private tests, ask for
@@ -12,7 +12,7 @@ indexing, and get notices when something breaks.
 
 Only the inspection call is public. All other calls need a user token or the
 session cookie, and `publish` on `App`. See
-[Authentication](/docs/developers/authentication).
+[Authentication](/developers/authentication).
 
 Claim, proof, member, report, and indexing request IDs must be UUID text. This
 also applies to report page cursors (`before`) and comparison IDs (`other`).
@@ -42,7 +42,7 @@ curl -X POST https://api.example.com/v1/developer/inspect \
 | `stages` | Each check step: `Input`, `Discovery`, `CardRead`, `CardSchema`, `Compatibility`, `PublisherAssociation` and `Eligibility`. Each is `Passed`, `Failed`, `Unconfirmed` or `NotChecked`. |
 
 An `Eligible` result does not mean the App is in the Index yet. See
-[App Index](/docs/developers/app-index#how-apps-get-indexed).
+[App Index](/developers/app-index#how-apps-get-indexed).
 
 ---
 
@@ -201,7 +201,7 @@ test ends after one hour.
 2. If the endpoint needs settings, send them:
    `PUT /v1/developer/tests/:id/configuration` with an object of keys and
    values. The keys are the same as for
-   [connections](/docs/developers/apps#review-and-create-the-connection).
+   [connections](/developers/apps#review-and-create-the-connection).
 3. Run it: `POST /v1/developer/tests/:id/run` with
    `{ "commandKey": "test-run-1" }`. It returns `202` and an execution receipt.
    Read the test with `GET /v1/developer/tests/:id` and follow the saved events
@@ -331,7 +331,7 @@ Issue notices are on for every App. To turn them off for one App, send
 List your settings with `GET /v1/developer/subscriptions`.
 
 See the full shapes in the
-[API reference](/docs/api/operations/tags/developer-tools/).
+[API reference](/api/operations/tags/developer-tools/).
 
 The data move keeps existing claims, proofs, members, invitations, Apps,
 reports, and notice settings. App and proof checks keep their saved next check

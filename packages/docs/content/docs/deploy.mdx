@@ -5,11 +5,11 @@ description: Run OpenBot on your own server.
 
 For platform operators. These tasks affect the whole deployment. Have server
 access or platform admin rights as the task requires. Start with the
-[administrator manual](/docs/admin).
+[administrator manual](/admin).
 
 This page shows how to run OpenBot in production. You build a Docker image,
 prepare the database, set up the platform, and start the server behind a reverse
-proxy. For every setting, see [Configuration](/docs/configuration).
+proxy. For every setting, see [Configuration](/configuration).
 
 ---
 
@@ -21,19 +21,19 @@ proxy. For every setting, see [Configuration](/docs/configuration).
 - An OpenID Connect provider for the platform, such as `https://id.example.com`.
   Register a client with the redirect URI
   `https://api.example.com/auth/callback/oidc`. You can skip it when people sign
-  in only through the [SSO connections](/docs/sso) of organizations.
+  in only through the [SSO connections](/sso) of organizations.
 - A model service, if you want the Bot to do work. You add it through the API
-  after setup. See [Models](/docs/models).
+  after setup. See [Models](/models).
 
 ## Build the images
 
 All Docker files are in `deploy/docker/`. One `Dockerfile` makes both images.
 Each image is a build target (a named last stage in the file):
 
-| Target          | Image                   | What it runs                                                                     |
-| --------------- | ----------------------- | -------------------------------------------------------------------------------- |
-| `openbot`       | `openbot`               | OpenBot and its migration program.                                               |
-| `protocol-test` | `openbot-protocol-test` | The test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
+| Target          | Image                   | What it runs                                                                |
+| --------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `openbot`       | `openbot`               | OpenBot and its migration program.                                          |
+| `protocol-test` | `openbot-protocol-test` | The test service for the App Protocol. See [Protocol test](/protocol-test). |
 
 The file `docker-bake.hcl` tells
 [Docker Bake](https://docs.docker.com/build/bake/) how to build them. Run this
@@ -79,7 +79,7 @@ OpenBot reads each setting from an environment variable first. When the variable
 is not set, OpenBot reads the file `/run/secrets/<NAME>` instead, for example
 `/run/secrets/OPENBOT_SECRET_KEYS`. This is where Docker and Compose put
 secrets. An empty file counts as not set. See
-[Configuration](/docs/configuration#secrets-as-files).
+[Configuration](/configuration#secrets-as-files).
 
 Environment variables show in `docker inspect`. Files in `/run/secrets` do not.
 Compose uses files for all secrets.
@@ -98,7 +98,7 @@ echo "OPENBOT_SECRET_KEYS=k1:$(openssl rand -hex 32)" >> openbot.env
 echo "OPENBOT_CLUSTER_SECRET=$(openssl rand -hex 32)" >> openbot.env
 ```
 
-See [Secret keys](/docs/configuration#secret-keys).
+See [Secret keys](/configuration#secret-keys).
 
 Private node calls use `/internal/executions/rpc` and `/internal/resources/rpc`.
 Keep both paths inside your private network. Give every node the same random
@@ -159,7 +159,7 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
 It writes the public origin, the platform provider, and the first platform
 admins to the database. Give a client secret with
 `-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...`, not on the command line. See
-[Platform](/docs/platform#setup) for every flag.
+[Platform](/platform#setup) for every flag.
 
 You can also run setup after the server starts. Until then, every route except
 `/health` answers `503` with `SetupRequired`.
@@ -194,7 +194,7 @@ curl http://127.0.0.1:8080/health
 database, the setup, or the model.
 
 Alice can now sign in. She is a platform admin. Next, add a model and a model
-provider that links it. See [Models](/docs/models).
+provider that links it. See [Models](/models).
 
 </Step>
 </Steps>
@@ -234,8 +234,8 @@ The file `deploy/docker/compose.production.yaml` runs these services:
 database first.
 
 The `protocol-test` service is the public test service for the App Protocol. See
-[Protocol test](/docs/protocol-test). The file needs
-`PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use OpenBot.
+[Protocol test](/protocol-test). The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN`
+even if you only use OpenBot.
 
 Compose gives `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`
 and `OPENBOT_CLUSTER_SECRET` as files in `/run/secrets`. Their values come from
@@ -311,7 +311,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 ```
 
 Until you do this, every route except `/health` answers `503` with
-`SetupRequired`. See [Platform](/docs/platform#setup).
+`SetupRequired`. See [Platform](/platform#setup).
 
 </Step>
 </Steps>
@@ -330,7 +330,7 @@ instance:
 - the same `OPENBOT_SECRET_KEYS` and `OPENBOT_CLUSTER_SECRET`,
 - a distinct `OPENBOT_CLUSTER_HOST` that every other node can reach,
 - the same `OPENBOT_OUTBOUND_ALLOW`, if you set it. See
-  [Outbound connections](/docs/configuration#outbound-connections).
+  [Outbound connections](/configuration#outbound-connections).
 
 Use a private address for each node, not the load balancer address. Do not scale
 the Compose `openbot` service without giving each new node its own host. The two
@@ -338,8 +338,8 @@ nodes in `compose.check.yaml` show this setup.
 
 All shared settings live in the database. When an admin changes them, every
 instance uses the change at once. See
-[Configuration](/docs/configuration#how-a-change-reaches-every-instance). Run
-the migration program and the setup program only once, not on each instance.
+[Configuration](/configuration#how-a-change-reaches-every-instance). Run the
+migration program and the setup program only once, not on each instance.
 
 ---
 
@@ -427,9 +427,9 @@ After sign-in, OpenBot sends the browser back to a path on your client. The
 default is `/`. Your client must also handle these return addresses:
 
 - `/?authorization=<flowId>` after an App authorization. Call
-  `completeAppAuthorization` next. See [Apps](/docs/developers/apps).
+  `completeAppAuthorization` next. See [Apps](/developers/apps).
 - `/?developerTest=<testId>` after a developer test authorization. See
-  [Developer tools](/docs/developer-tools).
+  [Developer tools](/developer-tools).
 
 A return path can be any path on the same origin, except paths under `/auth/`,
 `/v1/`, and `/development/`.
@@ -447,8 +447,8 @@ Back up these things, and keep them together:
 2. **`OPENBOT_SECRET_KEYS`.** The keys decrypt the secrets in the database: App
    secrets, model provider keys, SSO client secrets, and the sign-in secret. A
    database backup without the keys cannot restore them.
-3. **The bucket of [files](/docs/developers/files).** It holds the bytes of the
-   files that people uploaded. The database only names them.
+3. **The bucket of [files](/developers/files).** It holds the bytes of the files
+   that people uploaded. The database only names them.
 
 With Compose, make a database backup like this:
 
@@ -471,4 +471,4 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 ## GitHub Actions
 
 For this development task, see
-[Publish and check the project](/docs/developers/publishing).
+[Publish and check the project](/developers/publishing).

@@ -5,7 +5,7 @@ description: Organisationen, Members, Einstellungen, Roles und das Audit-Log.
 
 Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
 Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
-[Administrationshandbuch](/de/docs/admin).
+[Administrationshandbuch](/de/admin).
 
 Diese Seite zeigt, wie viele Menschen OpenBot gemeinsam nutzen. Eine
 Organization (Organisation) ist eine Gruppe von Menschen, die Bots, Models und
@@ -18,7 +18,7 @@ Die Routen der aktuellen Organisation liegen unter `/v1/organization`. Sie
 nehmen ein User-Token oder das Session-Cookie an. Mit dem Cookie sendest du den
 Header `OpenBot-Organization`, wenn du zu mehr als einer Organisation gehörst.
 Siehe
-[Authentifizierung](/de/docs/developers/authentication#eine-organisation-wählen).
+[Authentifizierung](/de/developers/authentication#eine-organisation-wählen).
 
 ---
 
@@ -43,8 +43,8 @@ Einladungen antworten.
 dem Namen "Personal" erstellt. Diese Organisationen bleiben. Sie sind normale
 Organisationen. Du kannst sie also umbenennen, Leute einladen oder sie
 verlassen. Wie du eine Domain bestätigst, steht unter
-[SSO und Domains](/de/docs/sso). Zu `organizationCreation` siehe
-[Platform](/de/docs/platform#organizations-erstellen).
+[SSO und Domains](/de/sso). Zu `organizationCreation` siehe
+[Platform](/de/platform#organizations-erstellen).
 
 ---
 
@@ -72,7 +72,7 @@ curl -b cookies.txt https://api.example.com/v1/organizations
 
 `status` ist `active` oder `suspended`. Ein Platform-Admin kann eine
 Organisation sperren. Dann kann niemand sie nutzen, und ihre Tokens
-funktionieren nicht mehr. Siehe [Platform](/de/docs/platform#organizations).
+funktionieren nicht mehr. Siehe [Platform](/de/platform#organizations).
 
 ### Eine Organisation erstellen
 
@@ -164,21 +164,21 @@ liest sie. Es braucht `read` auf `Organization`.
 }
 ```
 
-| Feld                      | Standard                                                         | Was es tut                                                                                                                                                                                                         |
-| ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rulesModel`              | `null`                                                           | Das Model, das [Rules](/de/docs/developers/rules) beurteilt. Es kann ein Language-Model oder ein Decision-Model sein. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
-| `botMemoryModel`          | `null`                                                           | Das Model, das [Bot-Memory](/de/docs/developers/memory) lernt. `null` heißt: Bots lernen nichts.                                                                                                                   |
-| `botMemory`               | `true`                                                           | Der Memory-Bot lernt aus Chats und ergänzt die Eingabe von Turns.                                                                                                                                                  |
-| `requestTimeoutMs`        | 24 Stunden                                                       | Wie lange ein [Request](/de/docs/developers/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                                                                                |
-| `delegationTimeLimitMs`   | 1 Stunde                                                         | Die Zeitgrenze von [Arbeit](/de/docs/developers/delegation#grenzen), die keine eigene hat, wie die Arbeit eines Triggers. Von 1 Minute bis 30 Tage.                                                                |
-| `toolForegroundBudgetMs`  | 30 Sekunden                                                      | Wie lange ein Tool-Aufruf in seinem Turn läuft, bevor er in den [Hintergrund](/de/docs/developers/chats#arbeit-im-hintergrund) geht. Von 0 bis 10 Minuten. 0 schickt jeden Aufruf in den Hintergrund.              |
-| `toolMaxDurationMs`       | 1 Stunde                                                         | Die längste Zeit eines Tool-Aufrufs im Hintergrund. Danach stoppt er und schlägt fehl. Von 1 Sekunde bis 24 Stunden.                                                                                               |
-| `maxBackgroundOperations` | 8                                                                | Wie viele Tool-Aufrufe eines Chats zugleich im Hintergrund laufen dürfen. Von 0 bis 100.                                                                                                                           |
-| `planApproval`            | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Bot und kein Chat es festlegt. Siehe [Plan-Modus](/de/docs/developers/chats#plan-modus).                                                                              |
-| `appReadRules`            | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/developers/requests).                                                                                                                 |
-| `defaultRoles`            | `["member"]`                                                     | Die Roles eines neuen Members.                                                                                                                                                                                     |
-| `joinByDomain`            | `true`                                                           | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                                                                                               |
-| `tokenRate`               | keine Grenze                                                     | Token Rates jedes Bereichs. Wo die Platform eine kleinere Rate setzt, gilt die kleinere Rate. Siehe [Token Rate](/de/docs/usage#token-rate).                                                                       |
+| Feld                      | Standard                                                         | Was es tut                                                                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`              | `null`                                                           | Das Model, das [Rules](/de/developers/rules) beurteilt. Es kann ein Language-Model oder ein Decision-Model sein. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/models#ein-model-auswählen). |
+| `botMemoryModel`          | `null`                                                           | Das Model, das [Bot-Memory](/de/developers/memory) lernt. `null` heißt: Bots lernen nichts.                                                                                                              |
+| `botMemory`               | `true`                                                           | Der Memory-Bot lernt aus Chats und ergänzt die Eingabe von Turns.                                                                                                                                        |
+| `requestTimeoutMs`        | 24 Stunden                                                       | Wie lange ein [Request](/de/developers/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                                                                           |
+| `delegationTimeLimitMs`   | 1 Stunde                                                         | Die Zeitgrenze von [Arbeit](/de/developers/delegation#grenzen), die keine eigene hat, wie die Arbeit eines Triggers. Von 1 Minute bis 30 Tage.                                                           |
+| `toolForegroundBudgetMs`  | 30 Sekunden                                                      | Wie lange ein Tool-Aufruf in seinem Turn läuft, bevor er in den [Hintergrund](/de/developers/chats#arbeit-im-hintergrund) geht. Von 0 bis 10 Minuten. 0 schickt jeden Aufruf in den Hintergrund.         |
+| `toolMaxDurationMs`       | 1 Stunde                                                         | Die längste Zeit eines Tool-Aufrufs im Hintergrund. Danach stoppt er und schlägt fehl. Von 1 Sekunde bis 24 Stunden.                                                                                     |
+| `maxBackgroundOperations` | 8                                                                | Wie viele Tool-Aufrufe eines Chats zugleich im Hintergrund laufen dürfen. Von 0 bis 100.                                                                                                                 |
+| `planApproval`            | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Bot und kein Chat es festlegt. Siehe [Plan-Modus](/de/developers/chats#plan-modus).                                                                         |
+| `appReadRules`            | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/developers/requests).                                                                                                            |
+| `defaultRoles`            | `["member"]`                                                     | Die Roles eines neuen Members.                                                                                                                                                                           |
+| `joinByDomain`            | `true`                                                           | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                                                                                     |
+| `tokenRate`               | keine Grenze                                                     | Token Rates jedes Bereichs. Wo die Platform eine kleinere Rate setzt, gilt die kleinere Rate. Siehe [Token Rate](/de/usage#token-rate).                                                                  |
 
 `PATCH /v1/organization/settings` ändert sie. Es braucht `write` auf
 `Organization`. Der Body braucht `expectedVersion`, also die `version`, die du
@@ -199,7 +199,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   eintragen.
 
 Jede Instanz nutzt eine Änderung sofort. Siehe
-[Konfiguration](/de/docs/configuration#wie-eine-änderung-jede-instanz-erreicht).
+[Konfiguration](/de/configuration#wie-eine-änderung-jede-instanz-erreicht).
 
 ---
 
@@ -237,10 +237,10 @@ Es braucht `write` auf `Member`.
   Organisation nicht nutzen. Seine Tokens für sie funktionieren sofort nicht
   mehr.
 - `roles` ist eine Liste von Role-IDs: eingebaute Roles und eigene Roles. Siehe
-  [Berechtigungen](/de/docs/permissions#roles).
+  [Berechtigungen](/de/permissions#roles).
 - `policy` ist eine zusätzliche Policy für das Member, zusätzlich zu seinen
   Roles. Eine Deny-Regel darin gewinnt gegen die Roles. Siehe
-  [Berechtigungen](/de/docs/permissions#policies).
+  [Berechtigungen](/de/permissions#policies).
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -314,7 +314,7 @@ curl -b cookies.txt \
   oder wenn ein Member diese E-Mail schon hat.
 
 Du kannst auch Personen einladen, einen Bot zu nutzen. Siehe
-[Bots teilen](/de/docs/developers/sharing).
+[Bots teilen](/de/developers/sharing).
 
 `GET /v1/organization/invitations` listet die Einladungen auf, die neuesten
 zuerst. Es braucht `read` auf `Member`. Füge `?status=pending` hinzu, um nur die
@@ -328,7 +328,7 @@ Diese Routen sind für die eingeladene Person. Sie brauchen keine Mitgliedschaft
 - `GET /v1/invitations` listet die offenen Einladungen für deine geprüfte E-Mail
   auf. Eine Einladung, einen Bot zu nutzen, hat `bot` und keine `roles`. Nimm
   sie mit `POST /v1/bot-invitations/accept` an. Siehe
-  [Bots teilen](/de/docs/developers/sharing#eine-einladung-annehmen).
+  [Bots teilen](/de/developers/sharing#eine-einladung-annehmen).
 - `POST /v1/invitations/:invitationId/accept` macht dich zum Member mit den
   Roles der Einladung. Es gibt die Organisation zurück.
 - `POST /v1/invitations/:invitationId/decline` lehnt ab.
@@ -442,7 +442,7 @@ Einladung, fehlt dieses Feld.
 | `400`  | `InvitationInvalid`              | Die Einladung kann jetzt nicht erstellt oder beantwortet werden, zum Beispiel weil sie abgelaufen ist. |
 | `404`  | `InvitationNotFound`             | Es gibt keine Einladung mit dieser ID für dich.                                                        |
 | `404`  | `RoleNotFound`                   | Eine Einladung nennt eine Role, die es nicht gibt.                                                     |
-| `403`  | `Forbidden`                      | Die Policy des Aufrufers erlaubt es nicht. Siehe [Berechtigungen](/de/docs/permissions).               |
+| `403`  | `Forbidden`                      | Die Policy des Aufrufers erlaubt es nicht. Siehe [Berechtigungen](/de/permissions).                    |
 | `400`  | `OrganizationRequired`           | Eine Anfrage mit Cookie ohne `OpenBot-Organization`, und du hast mehr als eine Organisation.           |
 | `400`  | `SettingsInvalid`                | Ein Wert in den Einstellungen ist ungültig, zum Beispiel eine Role, die es nicht gibt.                 |
 | `403`  | `MembershipRequired`             | Du bist kein aktives Member der Organisation.                                                          |

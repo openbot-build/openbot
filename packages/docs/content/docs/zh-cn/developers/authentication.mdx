@@ -3,7 +3,7 @@ title: 身份验证
 description: 登录、选择组织、创建用户令牌，并调用 API。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 本页说明人如何登录 OpenBot，以及程序如何调用 API。一个人在浏览器中登录一次。然后这个人为脚本和服务创建用户令牌。
 
@@ -14,7 +14,7 @@ description: 登录、选择组织、创建用户令牌，并调用 API。
 | 用户令牌       | 脚本、后端服务、机器人                      | `Authorization: Bearer <token>` |
 | Session cookie | 运行在 OpenBot 源（origin）上的浏览器客户端 | `__Host-openbot-session` cookie |
 
-两种方式在每次调用时都需要权限。见 [权限](/zh-cn/docs/permissions)。
+两种方式在每次调用时都需要权限。见 [权限](/zh-cn/permissions)。
 
 ---
 
@@ -26,7 +26,7 @@ Connect（OIDC）是一种标准方式，让另一个服务来确认一个人的
 - **平台提供方**为整个平台的人提供登录。由平台管理员设置。见
   [设置平台提供方](#设置平台提供方)。
 - **SSO 连接**是某一个组织的提供方。邮箱属于该组织已验证域名的人，通过它登录。见
-  [SSO 和域名](/zh-cn/docs/sso)。
+  [SSO 和域名](/zh-cn/sso)。
 
 要开始登录，你的客户端从 OpenBot 源发送这个请求：
 
@@ -75,13 +75,13 @@ curl -X POST https://api.example.com/auth/sign-in/social \
 
 ### 设置平台提供方
 
-由平台运维人员配置身份提供方。参见 [配置登录](/zh-cn/docs/admin/sign-in).
+由平台运维人员配置身份提供方。参见 [配置登录](/zh-cn/admin/sign-in).
 
 ### 开发账户
 
 开发服务器（`devenv shell -- pnpm dev`）使用一个本地测试账户，不使用提供方。这个账户是
 `developer@localhost.test`，它是平台管理员。只有开发入口提供这个账户。生产程序从不提供。见
-[配置](/zh-cn/docs/configuration#开发)。
+[配置](/zh-cn/configuration#开发)。
 
 下面的命令会登录，并把 cookie 保存到文件中：
 
@@ -117,10 +117,10 @@ curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
 }
 ```
 
-| 字段            | 含义                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------- |
-| `memberships`   | 账户所在的组织，以及它在每个组织中的状态和角色。                                                  |
-| `platformAdmin` | 账户是平台管理员时为 `true`。这时它可以使用 `/v1/platform`。见 [Platform](/zh-cn/docs/platform)。 |
+| 字段            | 含义                                                                                         |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| `memberships`   | 账户所在的组织，以及它在每个组织中的状态和角色。                                             |
+| `platformAdmin` | 账户是平台管理员时为 `true`。这时它可以使用 `/v1/platform`。见 [Platform](/zh-cn/platform)。 |
 
 `POST /auth/sign-out` 结束登录。这是一个 Better
 Auth 路由。发送一个 JSON 请求体（`{}`）和 `Origin` 请求头（见下文）。它返回
@@ -136,10 +136,10 @@ Auth 路由。发送一个 JSON 请求体（`{}`）和 `Origin` 请求头（见�
    `joinByDomain`，账户就加入这个组织。
 2. 如果账户是通过 SSO 连接登录的，它就加入该 SSO 连接所属的组织。
 3. OpenBot 不会为它创建组织。没有组织时，组织路由会返回 `403` 和
-   `MembershipRequired`。账户仍然可以[创建组织](/zh-cn/docs/organization#创建组织)或[接受邀请](/zh-cn/docs/organization#回答邀请)。
+   `MembershipRequired`。账户仍然可以[创建组织](/zh-cn/organization#创建组织)或[接受邀请](/zh-cn/organization#回答邀请)。
 
 OpenBot 在每个带 session cookie 的请求上也会做这些检查。见
-[组织](/zh-cn/docs/organization#谁可以加入)。
+[组织](/zh-cn/organization#谁可以加入)。
 
 被暂停的成员使用 cookie 时，会得到 `403` 和
 `MembershipRequired`。他们的令牌会立即失效，并得到 `401` 和
@@ -176,7 +176,7 @@ curl -b cookies.txt \
 
 浏览器的每个请求都会带上 cookie，即使请求来自其他网站。所以 OpenBot 会检查写操作来自哪里。使用 cookie 时，每个
 `POST`、`PUT`、`PATCH` 和 `DELETE` 请求都必须发送 `Origin`
-请求头。这个请求头必须和 [平台设置](/zh-cn/docs/platform#平台设置) 中的
+请求头。这个请求头必须和 [平台设置](/zh-cn/platform#平台设置) 中的
 `publicOrigin` 完全相同。如果不同，OpenBot 返回 `403` 和 `ForbiddenOrigin`。
 
 ```sh
@@ -194,7 +194,7 @@ curl -b cookies.txt \
 ## 用户令牌
 
 用户令牌让程序代表你执行操作。令牌能做的事永远不会超过你能做的事。它还可以有自己的策略，从而做得更少。见
-[权限](/zh-cn/docs/permissions)。
+[权限](/zh-cn/permissions)。
 
 你可以用 session cookie 管理令牌，也可以用可以对 `Token` 做 `write`
 的令牌管理。没有策略的令牌不能管理令牌。
@@ -202,7 +202,7 @@ curl -b cookies.txt \
 令牌属于一个组织：也就是创建它的那个请求所在的组织。使用 cookie 时，发送
 `OpenBot-Organization` 请求头来选择组织。见 [选择组织](#选择组织)。
 
-完整的数据结构见 [User tokens 参考](/docs/api/operations/tags/user-tokens/)。
+完整的数据结构见 [User tokens 参考](/api/operations/tags/user-tokens/)。
 
 ### 创建令牌
 

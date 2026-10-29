@@ -5,14 +5,14 @@ description: Connect outside services so the Bot can use them in Turns.
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 An **App** is an outside service that the Bot can use. Each App is published on
-the web with the [OpenBot App Protocol](/docs/protocol). This page shows how to
+the web with the [OpenBot App Protocol](/protocol). This page shows how to
 connect an App to your account, sign in to it, and use it in Turns.
 
 All examples use a user token. The same calls also work with the session cookie.
-See [Authentication](/docs/developers/authentication).
+See [Authentication](/developers/authentication).
 
 | Word             | Meaning                                                                                    |
 | ---------------- | ------------------------------------------------------------------------------------------ |
@@ -198,7 +198,7 @@ The user signs in at the App's provider, not at OpenBot.
 4. OpenBot sends the browser to `returnTo?authorization=<flowId>`. If the
    browser has no OpenBot session, it goes to `/?authorization=<flowId>`. Your
    client signs the user in first (see
-   [Authentication](/docs/developers/authentication#sign-in)).
+   [Authentication](/developers/authentication#sign-in)).
 5. Your client finishes the flow:
 
    ```sh
@@ -291,8 +291,7 @@ You can also connect an MCP server that has no Server Card. Send
 `PUT /v1/connections/:connectionId/manual` with `commandKey`, the current
 `revision`, and the complete new configuration. A `null` header keeps its saved
 value. Leave a header out of `headers` to remove it. A new header needs a value.
-Manual connections never go into the public
-[App Index](/docs/developers/app-index).
+Manual connections never go into the public [App Index](/developers/app-index).
 
 ---
 
@@ -306,28 +305,27 @@ starts with the App name, the connection name, and the capability name.
   `model` stay hidden from the model.
 - **Resources**, **resource templates** and **prompts** become read tools.
 
-Every App tool call goes through the
-[capability check](/docs/developers/requests) first. The first call of a tool
-usually makes a request that a decider answers. A Grant or a Rule can then cover
-later calls. Reads of resources and prompts need no decision, and neither do
-tools that the organization marked as reads in its
-[settings](/docs/organization#settings). App notes never decide this. Each App
+Every App tool call goes through the [capability check](/developers/requests)
+first. The first call of a tool usually makes a request that a decider answers.
+A Grant or a Rule can then cover later calls. Reads of resources and prompts
+need no decision, and neither do tools that the organization marked as reads in
+its [settings](/organization#settings). App notes never decide this. Each App
 tool has an extra `openbot_reason` parameter for the reason of the Bot. OpenBot
 never sends it to the App.
 
 The model also gets three helper tools. They never add an App, sign in, or
 approve an action.
 
-| Tool                  | What it does                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------- |
-| `openbot_search_apps` | Searches the public [App Index](/docs/developers/app-index) for a missing capability. |
-| `openbot_app_details` | Reads the public details and sources of one App by its Card URL.                      |
-| `openbot_app_access`  | Lists the user's connections and their setup or sign-in needs.                        |
+| Tool                  | What it does                                                                     |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `openbot_search_apps` | Searches the public [App Index](/developers/app-index) for a missing capability. |
+| `openbot_app_details` | Reads the public details and sources of one App by its Card URL.                 |
+| `openbot_app_access`  | Lists the user's connections and their setup or sign-in needs.                   |
 
 ### Code Mode
 
-When the platform turns on [Code Mode](/docs/developers/code-mode), the model
-also gets `openbot_code_api` and `openbot_run_code`. With them, the Bot writes a
+When the platform turns on [Code Mode](/developers/code-mode), the model also
+gets `openbot_code_api` and `openbot_run_code`. With them, the Bot writes a
 short program that calls these App tools. Each call in the program takes the
 same path as a normal App tool call.
 
@@ -376,7 +374,7 @@ the view. You can skip this part. Every result also has text.
    with `{ "chatId", "itemId" }`. The answer has a view `id`, the HTML
    `resource`, the view's `tools`, the call `arguments`, and the `result`.
 2. Show the HTML in an iframe. The `@openbot-build/protocol/McpApps` module has
-   a browser host that does this. See [Protocol](/docs/protocol).
+   a browser host that does this. See [Protocol](/protocol).
 3. Pass the view's requests to OpenBot:
 
 | View request                     | OpenBot call                                                    |
@@ -396,10 +394,10 @@ accepted action keeps running. A view stays valid across server restarts until
 it expires or its connection or access rights change.
 
 View actions go through the same approval rules. A message from the view goes to
-the Chat as a [notice](/docs/developers/chats#notices) through its
-[inbox](/docs/developers/chats#the-inbox). The Bot reads it at its next step, or
-it starts a new Turn. If a view cannot open, you get 409 `AppViewUnavailable`.
-The text result is still there.
+the Chat as a [notice](/developers/chats#notices) through its
+[inbox](/developers/chats#the-inbox). The Bot reads it at its next step, or it
+starts a new Turn. If a view cannot open, you get 409 `AppViewUnavailable`. The
+text result is still there.
 
 ---
 
@@ -441,4 +439,4 @@ The SDK helpers `AppAuthorizations.remove` and `reset` keep the key for network
 retries.
 
 See the full request and response shapes in the
-[API reference](/docs/api/operations/tags/connections/).
+[API reference](/api/operations/tags/connections/).

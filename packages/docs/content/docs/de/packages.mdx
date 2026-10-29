@@ -3,7 +3,7 @@ title: Pakete
 description: Die Pakete im Workspace und wofür jedes da ist.
 ---
 
-Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/developers) zwischen
 API-Anbindung, App-Veröffentlichung und Projektarbeit.
 
 OpenBot ist ein pnpm-Workspace. Jedes Paket hat eine Aufgabe. `openbot` setzt
@@ -18,17 +18,17 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 
 ## Überblick
 
-| Paket           | Wofür es da ist                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/docs/server).                   |
-| `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                              |
-| `client`        | Der TypeScript-Client. Siehe [Client](/de/docs/client).                                                           |
-| `core`          | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                                   |
-| `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                                 |
-| `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).                  |
-| `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                                         |
-| `computer`      | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/docs/developers/computers). |
-| `docs`          | Diese Doku-Seite.                                                                                                 |
+| Paket           | Wofür es da ist                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------ |
+| `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/server).                   |
+| `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                         |
+| `client`        | Der TypeScript-Client. Siehe [Client](/de/client).                                                           |
+| `core`          | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                              |
+| `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                            |
+| `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/protocol-test).                  |
+| `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                                    |
+| `computer`      | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/developers/computers). |
+| `docs`          | Diese Doku-Seite.                                                                                            |
 
 Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen
 `LanguageModel`-Layer an, zum Beispiel von einem
@@ -116,11 +116,10 @@ Der Server nutzt dafür sein System für dauerhafte Ausführungen.
 im Chat schon ein Turn läuft.
 
 `deliver` gibt einem Chat eine Eingabe in einem Schritt, nach den Regeln der
-[Inbox](/de/docs/developers/chats#die-inbox). Es startet einen Turn, wenn der
-Chat frei ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author`
-hat, und wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued`
-zurück. Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten
-Turn.
+[Inbox](/de/developers/chats#die-inbox). Es startet einen Turn, wenn der Chat
+frei ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author` hat, und
+wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued` zurück.
+Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten Turn.
 
 Jeder Turn läuft in einer eigenen Fiber, und diese Fiber gehört der Runtime.
 Eine Fiber ist ein leichter Thread von Effect. Wenn der Scope der Runtime
@@ -281,9 +280,8 @@ nimmt weiter eine Zahl von Millisekunden als `timeoutMs`.
 ### Memory
 
 `BotMemory` enthält die Typen und Hilfsfunktionen für
-[Bot Memory](/de/docs/developers/memory). Der Server nutzt sie für den
-Memory-Bot und die Memory-API. Die Schemas der Memory-API liegen in `api`, als
-`BotMemory`.
+[Bot Memory](/de/developers/memory). Der Server nutzt sie für den Memory-Bot und
+die Memory-API. Die Schemas der Memory-API liegen in `api`, als `BotMemory`.
 
 `BotMemory.apply` nimmt ein Array `ids` mit einer neuen ID je Operation in
 derselben Reihenfolge. `BotMemory.edit` nimmt eine neue ID als String `id`. Der
@@ -361,7 +359,7 @@ const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
 
 `@openbot-build/openbot` hat drei Model Providers. Jeder macht aus einer
 Model-Auswahl einen `LanguageModel`-Layer. Du gibst den API-Schlüssel an. Wie
-OpenBot sie nutzt, steht unter [Models](/de/docs/models).
+OpenBot sie nutzt, steht unter [Models](/de/models).
 
 ### OpenAiCompatProvider
 
@@ -490,4 +488,4 @@ const publisher = McpPublisher.layer({
 ```
 
 Stelle `publisher` mit `HttpRouter.serve` und einem HTTP-Server-Layer bereit.
-Die vollständige Anleitung findest du unter [Protokoll](/de/docs/protocol).
+Die vollständige Anleitung findest du unter [Protokoll](/de/protocol).

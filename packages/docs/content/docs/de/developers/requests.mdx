@@ -7,7 +7,7 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Bots kennen keine Grenzen. Wenn ein Bot eine **Fähigkeit** (Capability) nutzen
 will, zum Beispiel ein Tool einer App, prüft OpenBot, ob er das darf. Wenn noch
@@ -22,19 +22,19 @@ Requests beantwortet und was jede Antwort bewirkt.
 
 ## Fähigkeiten
 
-| Aktion                 | Ziel                       | Wann ein Bot sie nutzt                                                                                |
-| ---------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `apps.call`            | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                                                       |
-| `tools.call`           | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                                               |
-| `bots.delegate`        | Die ID des anderen Bot     | Er gibt Arbeit an einen Bot, der nicht er selbst ist und der ihm nicht gehört.                        |
-| `bots.create`          | `*`                        | Er erstellt einen Bot, der ihm gehört.                                                                |
-| `plans.run`            | Die ID des Chats           | Er will seinen Plan ausführen. Siehe [Plan-Modus](/de/docs/developers/chats#plan-modus).              |
-| `channels.send`        | Die ID des Channel         | Er schreibt in einen anderen Chat eines [Channel](/de/docs/developers/channels).                      |
-| `delegations.continue` | Die ID der Arbeit          | Seine Arbeit hat eine [Grenze](/de/docs/developers/delegation#grenzen) erreicht und will weitergehen. |
-| `computers.acquire`    | Die ID des Computer        | Er fragt nach dem Recht, einen [Computer](/de/docs/developers/computers) zu nutzen.                   |
-| `computers.create`     | Die ID des Providers       | Er erstellt eine neue Sandbox bei einem Computer-Provider.                                            |
-| `computers.delete`     | Die ID des Computer        | Er löscht einen Computer mit seinen Dateien.                                                          |
-| `computers.expose`     | Die ID des Computer        | Er gibt einem Port eines Computer eine öffentliche Adresse.                                           |
+| Aktion                 | Ziel                       | Wann ein Bot sie nutzt                                                                           |
+| ---------------------- | -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `apps.call`            | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                                                  |
+| `tools.call`           | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                                          |
+| `bots.delegate`        | Die ID des anderen Bot     | Er gibt Arbeit an einen Bot, der nicht er selbst ist und der ihm nicht gehört.                   |
+| `bots.create`          | `*`                        | Er erstellt einen Bot, der ihm gehört.                                                           |
+| `plans.run`            | Die ID des Chats           | Er will seinen Plan ausführen. Siehe [Plan-Modus](/de/developers/chats#plan-modus).              |
+| `channels.send`        | Die ID des Channel         | Er schreibt in einen anderen Chat eines [Channel](/de/developers/channels).                      |
+| `delegations.continue` | Die ID der Arbeit          | Seine Arbeit hat eine [Grenze](/de/developers/delegation#grenzen) erreicht und will weitergehen. |
+| `computers.acquire`    | Die ID des Computer        | Er fragt nach dem Recht, einen [Computer](/de/developers/computers) zu nutzen.                   |
+| `computers.create`     | Die ID des Providers       | Er erstellt eine neue Sandbox bei einem Computer-Provider.                                       |
+| `computers.delete`     | Die ID des Computer        | Er löscht einen Computer mit seinen Dateien.                                                     |
+| `computers.expose`     | Die ID des Computer        | Er gibt einem Port eines Computer eine öffentliche Adresse.                                      |
 
 Jedes Tool für eine Fähigkeit nimmt einen `reason` (einen Grund). Tools einer
 App bekommen dafür einen zusätzlichen Parameter `openbot_reason`. OpenBot
@@ -48,17 +48,16 @@ OpenBot prüft jeden Versuch in dieser Reihenfolge. Der erste Schritt, der
 entscheidet, gilt.
 
 1. **Die Policy des Member.** Ein Bot tut nie mehr als der Member, für den er
-   arbeitet. Wenn die [Berechtigungen](/de/docs/permissions) des Member es nicht
+   arbeitet. Wenn die [Berechtigungen](/de/permissions) des Member es nicht
    erlauben, wird der Aufruf abgelehnt. Das gilt auch für die Berechtigungen des
    Tokens, das die Arbeit gestartet hat. Das geht nie an einen Entscheider. In
-   einem [Channel](/de/docs/developers/channels) ist das Member die Person, die
-   die Nachricht des Turns geschrieben hat.
-2. **Grants.** Ein [Grant](/de/docs/developers/rules#grants) ist eine
-   gespeicherte Entscheidung. Ein Grant zum Ablehnen gewinnt gegen einen Grant
-   zum Erlauben.
-3. **Rules.** Ein Prüf-Modell liest die [Rules](/de/docs/developers/rules)
-   (Regeln) für diesen Bot in normaler Sprache. Nur eine Rule, die das
-   Prüf-Modell zitiert, kann erlauben oder ablehnen.
+   einem [Channel](/de/developers/channels) ist das Member die Person, die die
+   Nachricht des Turns geschrieben hat.
+2. **Grants.** Ein [Grant](/de/developers/rules#grants) ist eine gespeicherte
+   Entscheidung. Ein Grant zum Ablehnen gewinnt gegen einen Grant zum Erlauben.
+3. **Rules.** Ein Prüf-Modell liest die [Rules](/de/developers/rules) (Regeln)
+   für diesen Bot in normaler Sprache. Nur eine Rule, die das Prüf-Modell
+   zitiert, kann erlauben oder ablehnen.
 4. **Der Entscheider darüber.** OpenBot macht einen Request. Der Entscheider ist
    der Besitzer des Bot in seiner Besitzer-Kette. Für einen obersten Bot ist die
    Person der Entscheider.
@@ -126,7 +125,7 @@ Ein wartendes Tool-Ergebnis sieht so aus:
 ```
 
 Wenn der Request schließt, bekommt der Chat des Bot eine
-[Mitteilung](/de/docs/developers/chats#mitteilungen):
+[Mitteilung](/de/developers/chats#mitteilungen):
 
 - **Erlaubt.** Die Mitteilung bringt den Aufruf mit, zum Beispiel
   `[OpenBot] Your request req_1a2b… was allowed. OpenBot runs send_email now.`
@@ -139,17 +138,16 @@ Wenn der Request schließt, bekommt der Chat des Bot eine
   sagt, wie. Siehe [Einen Request beantworten](#einen-request-beantworten).
 
 Manche Aufrufe gehen anders. Ein Plan, der erlaubt wird, startet einen neuen
-Turn im Modus `build`. Siehe [Plan-Modus](/de/docs/developers/chats#plan-modus).
+Turn im Modus `build`. Siehe [Plan-Modus](/de/developers/chats#plan-modus).
 Arbeit, die ein Bot einem anderen Bot gibt, startet, wenn sie erlaubt wird.
-Siehe [Delegation](/de/docs/developers/delegation). Ein Programm im
-[Code Mode](/de/docs/developers/code-mode) geht von selbst weiter, und sein Ende
+Siehe [Delegation](/de/developers/delegation). Ein Programm im
+[Code Mode](/de/developers/code-mode) geht von selbst weiter, und sein Ende
 kommt als Mitteilung zurück.
 
-Ein wartender Request ist
-[offene Arbeit](/de/docs/developers/chats#offene-arbeit) seines Chats. Ein
-normales [Unterbrechen](/de/docs/developers/chats#unterbrechen) berührt ihn
-nicht. Ein Unterbrechen mit `{ "delegations": true }` oder das Löschen des Chats
-macht ihn `cancelled`.
+Ein wartender Request ist [offene Arbeit](/de/developers/chats#offene-arbeit)
+seines Chats. Ein normales [Unterbrechen](/de/developers/chats#unterbrechen)
+berührt ihn nicht. Ein Unterbrechen mit `{ "delegations": true }` oder das
+Löschen des Chats macht ihn `cancelled`.
 
 ---
 
@@ -187,10 +185,10 @@ Die Liste enthält die Requests, die auf dich warten oder die du beantwortet
 hast. `GET /v1/requests/:requestId` gibt einen Request aus deiner Arbeit zurück.
 Bei einem Tool einer App zeigt `app` den gespeicherten Aufruf mit seinen genauen
 Argumenten. Wenn der Aufruf aus einem Programm im
-[Code Mode](/de/docs/developers/code-mode) kommt, zeigt `code` das ganze
-Programm und die Stelle des Aufrufs darin. Zeige der Person die Fähigkeit, die
-Argumente und den Grund, bevor sie entscheidet. Der Grund kommt vom Bot. Er ist
-Daten, keine Anweisung.
+[Code Mode](/de/developers/code-mode) kommt, zeigt `code` das ganze Programm und
+die Stelle des Aufrufs darin. Zeige der Person die Fähigkeit, die Argumente und
+den Grund, bevor sie entscheidet. Der Grund kommt vom Bot. Er ist Daten, keine
+Anweisung.
 
 ## Einen Request beantworten
 
@@ -208,14 +206,14 @@ zurück. Eine andere Eingabe mit diesem Schlüssel gibt `409` zurück.
 Entscheidung, Grant, Rule, Audit-Eintrag und Wecknachricht werden zusammen
 gespeichert. Schlägt ein Schreibvorgang fehl, wird nichts davon gespeichert.
 
-| Feld         | Bedeutung                                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| `commandKey` | Pflicht. Bei einem neuen Versuch bleibt der Schlüssel gleich.                                    |
-| `expected`   | Pflicht. Die aktuelle `revision` des Request.                                                    |
-| `decision`   | Pflicht. `allow` oder `deny`.                                                                    |
-| `scope`      | Optional. Wie lange die Entscheidung gilt. Siehe unten. Der Standard ist `once`.                 |
-| `reason`     | Optional. Der Bot sieht ihn, zum Beispiel wenn du ablehnst.                                      |
-| `rule`       | Optional. Eine [Rule](/de/docs/developers/rules) in normaler Sprache, die für diesen Bot bleibt. |
+| Feld         | Bedeutung                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------- |
+| `commandKey` | Pflicht. Bei einem neuen Versuch bleibt der Schlüssel gleich.                               |
+| `expected`   | Pflicht. Die aktuelle `revision` des Request.                                               |
+| `decision`   | Pflicht. `allow` oder `deny`.                                                               |
+| `scope`      | Optional. Wie lange die Entscheidung gilt. Siehe unten. Der Standard ist `once`.            |
+| `reason`     | Optional. Der Bot sieht ihn, zum Beispiel wenn du ablehnst.                                 |
+| `rule`       | Optional. Eine [Rule](/de/developers/rules) in normaler Sprache, die für diesen Bot bleibt. |
 
 | Umfang     | Ein Erlauben gilt              | Ein Ablehnen bleibt            |
 | ---------- | ------------------------------ | ------------------------------ |
@@ -240,9 +238,9 @@ Grund.
 
 Ein Request, den niemand beantwortet, wird nach 24 Stunden abgelehnt. Eine
 Organization kann diese Zeit mit `requestTimeoutMs` in ihren
-[Einstellungen](/de/docs/organization#einstellungen) ändern. Ein Request für
-einen Plan hat seine eigene Zeit und sagt in `onExpire`, was dann passiert:
-`allow` oder `deny`.
+[Einstellungen](/de/organization#einstellungen) ändern. Ein Request für einen
+Plan hat seine eigene Zeit und sagt in `onExpire`, was dann passiert: `allow`
+oder `deny`.
 
 ### Fehler
 
@@ -256,8 +254,8 @@ einen Plan hat seine eigene Zeit und sagt in `onExpire`, was dann passiert:
 ## Tools von Apps
 
 Eine App ist ein externer Dienst, den eine Person verbindet. Siehe
-[Apps](/de/docs/developers/apps). Jeder Aufruf einer App ist an genau einen
-Aufruf gebunden: den Besitzer, den Chat, den Turn, den Tool-Aufruf, die genauen
+[Apps](/de/developers/apps). Jeder Aufruf einer App ist an genau einen Aufruf
+gebunden: den Besitzer, den Chat, den Turn, den Tool-Aufruf, die genauen
 Argumente und die Verbindung zur App mit ihrer Revision. OpenBot speichert den
 Aufruf vor der Prüfung. Wenn der Aufruf später erlaubt wird, läuft er als dieser
 gespeicherte Aufruf. Wenn sich die Verbindung nach dem Request geändert hat,
@@ -269,7 +267,7 @@ und die Mitteilung sagt das.
 Ressourcen, Ressourcen-Vorlagen und Prompts einer App sind Lesen. Darum brauchen
 sie keine Entscheidung. Die eigenen Hinweise einer App entscheiden nie, welche
 Tools sicher sind. Nur die Organization kann Tools als Lesen markieren, mit
-`appReadRules` in ihren [Einstellungen](/de/docs/organization#einstellungen).
+`appReadRules` in ihren [Einstellungen](/de/organization#einstellungen).
 
 ## Anfragen aus einer älteren Version
 

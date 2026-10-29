@@ -3,7 +3,7 @@ title: Live 模式
 description: 和 Bot 实时对话。声音通过一个 WebSocket 进出。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 在
 **Live 模式**中，一个人和 Bot 实时对话。客户端发送这个人的声音，Bot 用声音和文本回答。这个人可以在 Bot 说话时开口，Bot 就会停下。
@@ -13,13 +13,13 @@ Live 模式使用
 **Live 模型**，例如 OpenAI Realtime API 的模型，并把提供方的密钥留在服务器上。
 
 Live 模式在 **live Chat** 中进行：类型为 `live` 的
-[Chat](/zh-cn/docs/developers/chats)。这个人说的每一段话都会成为其中一个普通的 Turn。所以 Bot 有它的指令、工具、Rule 和记忆，和文字 Chat 一样。Chat 保存这个人说的话和 Bot 回答的文本。声音不会被保存。
+[Chat](/zh-cn/developers/chats)。这个人说的每一段话都会成为其中一个普通的 Turn。所以 Bot 有它的指令、工具、Rule 和记忆，和文字 Chat 一样。Chat 保存这个人说的话和 Bot 回答的文本。声音不会被保存。
 
 ---
 
 ## 添加 Live 模型
 
-参见 [实时模型](/zh-cn/docs/admin/live-models).
+参见 [实时模型](/zh-cn/admin/live-models).
 
 ## 创建 live Chat
 
@@ -165,4 +165,4 @@ OpenBot 使用供应商返回的 token 总数。缓存 token 已包含在输入�
 
 ## 添加 Live 后端
 
-参见 [添加实时后端](/zh-cn/docs/developers/live-backend).
+参见 [添加实时后端](/zh-cn/developers/live-backend).

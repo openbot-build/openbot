@@ -2,7 +2,7 @@
 title: "发布和检查项目"
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 面向修改或发布 OpenBot 的项目贡献者。
 
@@ -54,7 +54,7 @@ Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `d
 
 工作流 `.github/workflows/docs.yml` 把文档网站发布到
 [GitHub Pages](https://docs.github.com/pages)，地址是
-[openbot.build](https://openbot.build)。每次推送到 `main`
+[docs.openbot.build](https://docs.openbot.build)。每次推送到 `main`
 时它都会运行。你也可以在 Actions 标签页中手动启动它。
 
 | 作业     | 做什么                                                                                              |
@@ -63,10 +63,13 @@ Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `d
 | `deploy` | 把 `packages/docs/dist` 发送到 GitHub Pages。                                                       |
 
 `build` 作业把 `DOCS_URL` 设为
-`https://openbot.build`。Astro 用它生成完整的页面链接，例如站点地图。同一时间只运行一个部署。
+`https://docs.openbot.build`。Astro 用它生成完整的页面链接，例如站点地图。同一时间只运行一个部署。
 
-仓库设置必须把 Pages 的来源设为 **GitHub Actions**，并把 `openbot.build`
-设为自定义域名。`openbot.build` 的 DNS 必须指向 GitHub Pages。请看
+仓库设置必须把 Pages 的来源设为 **GitHub Actions**，并把 `docs.openbot.build`
+设为自定义域名。将这个域名的 DNS CNAME 设为
+`openbot-build.github.io`。这个 Actions 工作流不使用源码中的 `CNAME`
+文件。英文手册从 `/` 开始，中文从 `/zh-cn/` 开始，德文从 `/de/`
+开始。生成的 API 参考从 `/api/` 开始。请看
 [Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
 
 ### 检查镜像

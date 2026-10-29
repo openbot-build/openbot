@@ -9,7 +9,7 @@ Für den Plattformbetrieb.
 
 Ein Admin der Platform setzt den Speicher in den Einstellungen der Platform, als
 `files.storage`. Auch `openbot setup` kann ihn setzen. Siehe
-[Platform](/de/docs/platform#setup).
+[Platform](/de/platform#setup).
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -52,7 +52,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 OpenBot erreicht den Speicher durch seinen Schutz für ausgehende Verbindungen.
 Ein Speicher in einem privaten Netz muss in `OPENBOT_OUTBOUND_ALLOW` stehen.
-Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
+Siehe [Ausgehende Verbindungen](/de/configuration#ausgehende-verbindungen).
 
 Der Access Key muss Objekte im Bucket ablegen, lesen und löschen können. Lass
 den Bucket Objekte nicht selbst ablaufen: OpenBot entscheidet, wann eine Datei

@@ -7,7 +7,7 @@ description:
 
 For platform operators. These tasks affect the whole deployment. Have server
 access or platform admin rights as the task requires. Start with the
-[administrator manual](/docs/admin).
+[administrator manual](/admin).
 
 OpenBot writes a log line at level `Error` when something fails on the server.
 OpenBot does not send these logs to other services. You can add this yourself
@@ -58,9 +58,9 @@ as the error log.
 
 OpenBot also does work in the background. For example, it fires the Triggers
 that are due, deletes old files, pauses idle Computers, checks Apps for the
-[App Index](/docs/developers/app-index), and listens for changes to the
-settings. It also pauses delegated work at its time limit, sends reminders,
-sends the messages of Channels, and listens for calls from its other instances.
+[App Index](/developers/app-index), and listens for changes to the settings. It
+also pauses delegated work at its time limit, sends reminders, sends the
+messages of Channels, and listens for calls from its other instances.
 
 When one run of this work fails, OpenBot writes a log line at level `Warn` with
 the cause. Then it runs the work again at the next time. The work does not stop.
@@ -76,4 +76,4 @@ failure.
 
 ## Send errors to your own service
 
-For this development task, see [Add an error logger](/docs/developers/logging).
+For this development task, see [Add an error logger](/developers/logging).

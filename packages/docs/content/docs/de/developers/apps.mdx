@@ -5,16 +5,15 @@ description: Verbinde externe Dienste, damit der Bot sie in Turns nutzen kann.
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Eine **App** ist ein externer Dienst, den der Bot nutzen kann. Jede App ist im
-Web mit dem [OpenBot App Protocol](/de/docs/protocol) veröffentlicht. Diese
-Seite zeigt dir, wie du eine App mit deinem Konto verbindest, dich bei ihr
-anmeldest und sie in Turns nutzt.
+Web mit dem [OpenBot App Protocol](/de/protocol) veröffentlicht. Diese Seite
+zeigt dir, wie du eine App mit deinem Konto verbindest, dich bei ihr anmeldest
+und sie in Turns nutzt.
 
 Alle Beispiele nutzen ein Nutzer-Token. Dieselben Aufrufe funktionieren auch mit
-dem Session-Cookie. Siehe
-[Authentifizierung](/de/docs/developers/authentication).
+dem Session-Cookie. Siehe [Authentifizierung](/de/developers/authentication).
 
 | Wort             | Bedeutung                                                                                                                |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -208,7 +207,7 @@ PKCE. Der Nutzer meldet sich beim Anbieter der App an, nicht bei OpenBot.
 4. OpenBot schickt den Browser an `returnTo?authorization=<flowId>`. Wenn der
    Browser keine OpenBot-Session hat, geht er zu `/?authorization=<flowId>`.
    Dein Client meldet den Nutzer zuerst an (siehe
-   [Authentifizierung](/de/docs/developers/authentication#anmelden)).
+   [Authentifizierung](/de/developers/authentication#anmelden)).
 5. Dein Client beendet den Ablauf:
 
    ```sh
@@ -308,7 +307,7 @@ HTTPS-`url`, `"transport": "streamable-http"` und `headers`. Ändere sie mit
 `revision` und der vollständigen neuen Konfiguration. `null` behält den
 bisherigen Header-Wert. Lasse einen Header aus `headers` weg, um ihn zu
 entfernen. Ein neuer Header braucht einen Wert. Manuelle Connections kommen nie
-in den öffentlichen [App Index](/de/docs/developers/app-index).
+in den öffentlichen [App Index](/de/developers/app-index).
 
 ---
 
@@ -324,30 +323,30 @@ Namen der Fähigkeit.
 - **Resources**, **resource templates** und **prompts** werden zu Lese-Tools.
 
 Jeder Aufruf eines App-Tools geht zuerst durch die
-[Prüfung der Fähigkeit](/de/docs/developers/requests). Der erste Aufruf eines
-Tools macht meistens einen Request, den ein Entscheider beantwortet. Ein Grant
-oder eine Rule kann dann spätere Aufrufe abdecken. Das Lesen von Resources und
+[Prüfung der Fähigkeit](/de/developers/requests). Der erste Aufruf eines Tools
+macht meistens einen Request, den ein Entscheider beantwortet. Ein Grant oder
+eine Rule kann dann spätere Aufrufe abdecken. Das Lesen von Resources und
 Prompts braucht keine Entscheidung. Das gilt auch für Tools, die die
-Organization in ihren [Einstellungen](/de/docs/organization#einstellungen) als
-Lesen markiert hat. Hinweise der App entscheiden das nie. Jedes App-Tool hat
-einen zusätzlichen Parameter `openbot_reason` für den Grund des Bot. OpenBot
-schickt ihn nie an die App.
+Organization in ihren [Einstellungen](/de/organization#einstellungen) als Lesen
+markiert hat. Hinweise der App entscheiden das nie. Jedes App-Tool hat einen
+zusätzlichen Parameter `openbot_reason` für den Grund des Bot. OpenBot schickt
+ihn nie an die App.
 
 Das Modell bekommt auch drei Helfer-Tools. Sie fügen nie eine App hinzu, melden
 sich nie an und geben nie eine Aktion frei.
 
-| Tool                  | Was es tut                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------------ |
-| `openbot_search_apps` | Sucht im öffentlichen [App Index](/de/docs/developers/app-index) nach einer fehlenden Fähigkeit. |
-| `openbot_app_details` | Liest die öffentlichen Details und Quellen einer App über ihre Card URL.                         |
-| `openbot_app_access`  | Listet die Connections des Nutzers und was sie zum Einrichten oder Anmelden brauchen.            |
+| Tool                  | Was es tut                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `openbot_search_apps` | Sucht im öffentlichen [App Index](/de/developers/app-index) nach einer fehlenden Fähigkeit. |
+| `openbot_app_details` | Liest die öffentlichen Details und Quellen einer App über ihre Card URL.                    |
+| `openbot_app_access`  | Listet die Connections des Nutzers und was sie zum Einrichten oder Anmelden brauchen.       |
 
 ### Code Mode
 
-Wenn die Platform [Code Mode](/de/docs/developers/code-mode) einschaltet,
-bekommt das Modell auch `openbot_code_api` und `openbot_run_code`. Damit
-schreibt der Bot ein kurzes Programm, das diese Tools der Apps aufruft. Jeder
-Aufruf im Programm nimmt denselben Weg wie ein normaler Aufruf eines App-Tools.
+Wenn die Platform [Code Mode](/de/developers/code-mode) einschaltet, bekommt das
+Modell auch `openbot_code_api` und `openbot_run_code`. Damit schreibt der Bot
+ein kurzes Programm, das diese Tools der Apps aufruft. Jeder Aufruf im Programm
+nimmt denselben Weg wie ein normaler Aufruf eines App-Tools.
 
 ### App operations
 
@@ -403,7 +402,7 @@ Benutzeroberfläche. Darum zeigt dein Client die Ansicht. Du kannst diesen Teil
    Antwort hat eine `id` der Ansicht, die HTML-`resource`, die `tools` der
    Ansicht, die `arguments` des Aufrufs und das `result`.
 2. Zeige das HTML in einem iframe. Das Modul `@openbot-build/protocol/McpApps`
-   hat einen Browser-Host, der das macht. Siehe [Protocol](/de/docs/protocol).
+   hat einen Browser-Host, der das macht. Siehe [Protocol](/de/protocol).
 3. Gib die Anfragen der Ansicht an OpenBot weiter:
 
 | Anfrage der Ansicht                        | Aufruf bei OpenBot                                                    |
@@ -425,11 +424,11 @@ keine Ansicht. Sie endet bei Ablauf oder wenn sich die Verbindung oder die
 Zugriffsrechte ändern.
 
 Aktionen einer Ansicht gehen durch dieselben Regeln zur Freigabe. Eine Nachricht
-aus der Ansicht geht als [Mitteilung](/de/docs/developers/chats#mitteilungen)
-durch die [Inbox](/de/docs/developers/chats#die-inbox) in den Chat. Der Bot
-liest sie bei seinem nächsten Schritt, oder sie startet einen neuen Turn. Wenn
-eine Ansicht nicht öffnen kann, bekommst du 409 `AppViewUnavailable`. Das
-Text-Ergebnis ist trotzdem da.
+aus der Ansicht geht als [Mitteilung](/de/developers/chats#mitteilungen) durch
+die [Inbox](/de/developers/chats#die-inbox) in den Chat. Der Bot liest sie bei
+seinem nächsten Schritt, oder sie startet einen neuen Turn. Wenn eine Ansicht
+nicht öffnen kann, bekommst du 409 `AppViewUnavailable`. Das Text-Ergebnis ist
+trotzdem da.
 
 ---
 
@@ -474,4 +473,4 @@ freigeben. Einige Connections können dann bereits gelöscht sein. Die SDK-Helfe
 Netzwerkwiederholungen.
 
 Die vollständigen Formen von Request und Antwort findest du in der
-[API-Referenz](/docs/api/operations/tags/connections/).
+[API-Referenz](/api/operations/tags/connections/).

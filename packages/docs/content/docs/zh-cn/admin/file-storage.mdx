@@ -8,7 +8,7 @@ description: "文件存储"
 ## 设置存储
 
 平台管理员在平台设置中以 `files.storage` 设置存储。也可以用 `openbot setup`
-设置。见[平台](/zh-cn/docs/platform#设置)。
+设置。见[平台](/zh-cn/platform#设置)。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -50,6 +50,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 `"storage": null` 会移除存储。之后没有人能上传文件。
 
 OpenBot 通过它的出站保护访问存储。私有网络上的存储必须在
-`OPENBOT_OUTBOUND_ALLOW` 中。见[出站连接](/zh-cn/docs/configuration#出站连接)。
+`OPENBOT_OUTBOUND_ALLOW` 中。见[出站连接](/zh-cn/configuration#出站连接)。
 
 访问密钥需要能在 bucket 中放入、读取和删除对象。不要让 bucket 自己让对象过期：由 OpenBot 决定文件何时消失。

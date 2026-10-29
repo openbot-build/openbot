@@ -5,7 +5,7 @@ description: Run OpenBot on your computer and make your first call.
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 This page starts OpenBot on your computer with a test account and test models.
 You do not need an identity provider or a model key.
@@ -86,8 +86,8 @@ This account is a platform admin. It has no organization yet.
 
 ### Make an organization
 
-Bots, Chats and tokens belong to an [organization](/docs/organization). Make one
-for yourself:
+Bots, Chats and tokens belong to an [organization](/organization). Make one for
+yourself:
 
 ```sh
 curl -b cookies.txt \
@@ -126,8 +126,8 @@ export OPENBOT_TOKEN=obut_...
 
 ### Make a Bot
 
-You give work to a [Bot](/docs/developers/bots). A new account has no Bots, so
-make one:
+You give work to a [Bot](/developers/bots). A new account has no Bots, so make
+one:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -137,7 +137,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 Take `id` from the answer. To use this Bot when you name no Bot, make it your
-[default Bot](/docs/developers/bots#your-default-bot).
+[default Bot](/developers/bots#your-default-bot).
 
 </Step>
 
@@ -164,18 +164,17 @@ later, take `chat` from the answer and call `GET /v1/chats/<chatId>`.
 </Steps>
 
 The test model `mock-text` answers with `Development response:` and your input.
-See [Models](/docs/models) for the other test models.
+See [Models](/models) for the other test models.
 
 ---
 
 ## Next steps
 
-- Read how [Chats](/docs/developers/chats) and Turns work.
-- Use a real identity provider:
-  [Authentication](/docs/developers/authentication) and
-  [Platform](/docs/platform).
-- Add a real model: [Models](/docs/models).
-- Run OpenBot on a server: [Deploy](/docs/deploy).
+- Read how [Chats](/developers/chats) and Turns work.
+- Use a real identity provider: [Authentication](/developers/authentication) and
+  [Platform](/platform).
+- Add a real model: [Models](/models).
+- Run OpenBot on a server: [Deploy](/deploy).
 
 This example selects the development test model. Production Bots need a model
 made available by their administrator.

@@ -3,7 +3,7 @@ title: App Protocol
 description: 把 App 发布到网上，让任何 Bot 宿主都能找到并使用它。
 ---
 
-面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+面向开发者。从[开发者手册](/zh-cn/developers)选择 API 接入、App 发布或项目贡献。
 
 **OpenBot App
 Protocol**（App 协议）是一种在网上发布 App 的开放方式。发布之后，任何 Bot 宿主都能找到这个 App，连接它，并使用它。你不需要开发者账户、注册中心或审核。有一个你自己控制的 HTTPS 地址就够了。
@@ -252,7 +252,7 @@ App 可以显示一个交互式视图。工具在它的元数据中链接到一�
 不是访问控制。如果你从 Catalog 中删除了 Card，宿主会在下次检查时删除对应的 Index 条目。无法访问的 Catalog 不算删除。
 
 发布、添加或调用 App 都不需要注册中心。宿主也可以读取其他注册中心。OpenBot 的做法请看
-[App Index](/zh-cn/docs/developers/app-index)。
+[App Index](/zh-cn/developers/app-index)。
 
 ---
 
@@ -379,4 +379,4 @@ const result = await Effect.runPromise(
 ```
 
 结果是 `Single` 或
-`Multiple`。要用真实的宿主测试你自己的 App，请使用[协议测试服务](/zh-cn/docs/protocol-test)和[开发者工具](/zh-cn/docs/developer-tools)。
+`Multiple`。要用真实的宿主测试你自己的 App，请使用[协议测试服务](/zh-cn/protocol-test)和[开发者工具](/zh-cn/developer-tools)。

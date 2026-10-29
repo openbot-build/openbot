@@ -6,7 +6,7 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 A **Computer** is a machine where a Bot works. The Bot runs shell commands,
 reads and writes files, opens ports and uses a desktop there. A Computer is one
@@ -18,14 +18,14 @@ of two kinds:
   once. Then a small program on it keeps a connection to OpenBot.
 
 A Computer belongs to a member or to the organization, like a
-[trigger](/docs/developers/triggers). Bots never own a Computer. A Bot gets the
+[trigger](/developers/triggers). Bots never own a Computer. A Bot gets the
 **right to use** a Computer. Many Bots can use the same Computer.
 
 ---
 
 ## Add a Computer provider
 
-See [Computer providers](/docs/admin/computer-providers).
+See [Computer providers](/admin/computer-providers).
 
 ## Create and use a Computer
 
@@ -128,7 +128,7 @@ use. A Daytona Computer gives no terminal, so `tty` fails there.
 
 ## Pair your own machine
 
-See [Pair a machine](/docs/admin/pair-computer).
+See [Pair a machine](/admin/pair-computer).
 
 ## Bots and the right to use a Computer
 
@@ -163,9 +163,9 @@ it can:
 - Change files, open ports and use the desktop. A screenshot comes back as an
   image that the model sees.
 
-These four actions are [capabilities](/docs/developers/requests#capabilities).
-The [chain of deciders](/docs/developers/requests#the-chain-of-deciders) decides
-them, as for any other capability:
+These four actions are [capabilities](/developers/requests#capabilities). The
+[chain of deciders](/developers/requests#the-chain-of-deciders) decides them, as
+for any other capability:
 
 | Action              | Target                 | When a Bot uses it                       |
 | ------------------- | ---------------------- | ---------------------------------------- |

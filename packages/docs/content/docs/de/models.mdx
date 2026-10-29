@@ -7,7 +7,7 @@ description:
 Für Mitglieder und die Organisationsverwaltung. Mitglieder können ihr eigenes
 ChatGPT-Konto verbinden. Anbieter mit API-Schlüsseln brauchen die unten
 genannten Rechte. Nur Plattform-Admins ändern Einstellungen unter
-`/v1/platform`. Beginne mit dem [Administrationshandbuch](/de/docs/admin).
+`/v1/platform`. Beginne mit dem [Administrationshandbuch](/de/admin).
 
 Ein Bot braucht ein Sprachmodell, um zu arbeiten. OpenBot enthält kein Modell.
 Du verbindest eins. OpenBot speichert dafür zwei Arten von Einträgen:
@@ -27,10 +27,10 @@ nutzt jede Instanz dieselben.
 Die Platform oder eine Organization besitzt jeden solchen Model- und
 Anbieter-Eintrag:
 
-| Besitzer     | Wer es hinzufügt                                       | Wer es nutzen kann                                                                                       |
-| ------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Organization | Eine Organization, mit ihrem eigenen Schlüssel         | Nur diese Organization. Das heißt "Bring your own key" (bring deinen eigenen Schlüssel mit).             |
-| Platform     | Ein Admin der Platform, mit dem Schlüssel der Platform | Die Organizations in ihrer `availability`. Siehe [Platform](/de/docs/platform#geteilte-model-providers). |
+| Besitzer     | Wer es hinzufügt                                       | Wer es nutzen kann                                                                                  |
+| ------------ | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Organization | Eine Organization, mit ihrem eigenen Schlüssel         | Nur diese Organization. Das heißt "Bring your own key" (bring deinen eigenen Schlüssel mit).        |
+| Platform     | Ein Admin der Platform, mit dem Schlüssel der Platform | Die Organizations in ihrer `availability`. Siehe [Platform](/de/platform#geteilte-model-providers). |
 
 Eine Organization kann ein Model eines Anbieters nur nutzen, wenn sie sowohl den
 Anbieter als auch das Model nutzen darf.
@@ -43,7 +43,7 @@ Jedes Model hat einen von drei Typen:
   schreibt keinen Text. Es kann Rules beurteilen. Jev von TypeSafe ist ein
   Beispiel. Siehe [Decision-Model](#decision-model).
 - Ein `live`-Model spricht in Echtzeit mit einer Person, mit Ton. Nur der
-  [Live-Modus](/de/docs/developers/live) nutzt es.
+  [Live-Modus](/de/developers/live) nutzt es.
 
 Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben.
 Siehe [Eingebaute Models](#eingebaute-models).
@@ -124,7 +124,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 OpenBot verbindet sich nur mit öffentlichen Adressen. Für einen Model-Server in
 deinem eigenen Netzwerk oder auf deiner Maschine muss der Betreiber seinen Host
 in `OPENBOT_OUTBOUND_ALLOW` schreiben. Bis dahin schlagen Aufrufe an ihn fehl.
-Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
+Siehe [Ausgehende Verbindungen](/de/configuration#ausgehende-verbindungen).
 
 Jede Verknüpfung hat diese Felder:
 
@@ -146,7 +146,7 @@ OpenBot antwortet mit dem Anbieter. Seine `id` beginnt mit `prov_`. Eine
 Anbieter-ID ist in der ganzen Platform eindeutig. Eine Auswahl eines Model nennt
 sie als `provider`. Der API-Schlüssel kommt nie zurück. Die Antwort zeigt
 stattdessen `apiKey: { set, hint }`. Siehe
-[Platform](/de/docs/platform#geheimnisse-kommen-nie-zurück).
+[Platform](/de/platform#geheimnisse-kommen-nie-zurück).
 
 ### Einen Anbieter ändern oder entfernen
 
@@ -179,7 +179,7 @@ es neu, wenn sich sein Anbieter ändert.
 
 Du kannst einen Anbieter nicht entfernen, solange `rulesModel` oder
 `botMemoryModel` in den
-[Einstellungen der Organization](/de/docs/organization#einstellungen) ihn nennt.
+[Einstellungen der Organization](/de/organization#einstellungen) ihn nennt.
 OpenBot gibt `409` mit `ModelProviderInUse` zurück. Ändere zuerst die
 Einstellung.
 
@@ -245,7 +245,7 @@ Anmeldung oder erreichtem Limit wechselt die Arbeit nicht zu einem anderen
 Anbieter.
 
 Typisierte Aufrufe stehen unter
-[Client](/de/docs/client#ein-chatgpt-konto-verbinden).
+[Client](/de/client#ein-chatgpt-konto-verbinden).
 
 ---
 
@@ -303,7 +303,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 `price` ist der aktuelle Preis des Model bei diesem Anbieter. Er fehlt, wenn
-niemand einen Preis gesetzt hat. Siehe [Preise](/de/docs/usage#preise).
+niemand einen Preis gesetzt hat. Siehe [Preise](/de/usage#preise).
 
 Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 
@@ -314,17 +314,17 @@ Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzung
 nennt ihr eigenes Model:
 
-- **Ein neuer [Chat](/de/docs/developers/chats)** nutzt das `model` seines
-  [Bots](/de/docs/developers/bots). Wenn der Bot kein Model hat, schlägt die
-  erste Nachricht an ihn mit `400`, `ChatModelInvalid` und dem Grund `missing`
-  fehl. Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein
+- **Ein neuer [Chat](/de/developers/chats)** nutzt das `model` seines
+  [Bots](/de/developers/bots). Wenn der Bot kein Model hat, schlägt die erste
+  Nachricht an ihn mit `400`, `ChatModelInvalid` und dem Grund `missing` fehl.
+  Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein
   `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/bots/:id`.
-- **Das Prüf-Modell für [Rules](/de/docs/developers/rules)** nutzt `rulesModel`
-  in den [Einstellungen der Organization](/de/docs/organization#einstellungen).
-  Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine
-  Person oder ein Bot.
-- **[Bot-Memory](/de/docs/developers/memory)** nutzt `botMemoryModel` in
-  denselben Einstellungen. Wenn es `null` ist, lernen Bots nichts.
+- **Das Prüf-Modell für [Rules](/de/developers/rules)** nutzt `rulesModel` in
+  den [Einstellungen der Organization](/de/organization#einstellungen). Wenn es
+  `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person
+  oder ein Bot.
+- **[Bot-Memory](/de/developers/memory)** nutzt `botMemoryModel` in denselben
+  Einstellungen. Wenn es `null` ist, lernen Bots nichts.
 
 `rulesModel` kann ein `language`-Model oder ein `decision`-Model sein.
 `botMemoryModel` muss ein `language`-Model sein, weil der Memory-Bot Text
@@ -357,11 +357,11 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
 
 Sende `"model": null`, um wieder das Model des Bots zu nutzen.
 `GET /v1/chats/:id/models` zeigt dieselben Models für einen Chat. Alle Felder
-findest du in der [API-Referenz für Chats](/docs/api/operations/tags/chats/).
+findest du in der [API-Referenz für Chats](/api/operations/tags/chats/).
 
 Um festzulegen, welche Anbieter ein Member auswählen darf, gib dem Member eine
 Deny-Regel für `use` auf `Model` mit dem Feld `provider`. Siehe
-[Berechtigungen](/de/docs/permissions#models-begrenzen).
+[Berechtigungen](/de/permissions#models-begrenzen).
 
 ## Decision-Model
 
@@ -400,7 +400,7 @@ noch nicht über einen `openai-compat`-Anbieter fragen. Du kannst es dort
 verknüpfen, aber nutze einen `typesafe`-Anbieter, um es zu fragen.
 
 Das Prüf-Modell für Rules kann ein Decision-Model nutzen. Setze `rulesModel`
-darauf. Siehe [Das Prüf-Modell](/de/docs/developers/rules#das-prüf-modell).
+darauf. Siehe [Das Prüf-Modell](/de/developers/rules#das-prüf-modell).
 
 ## Ohne Model arbeiten
 
@@ -417,16 +417,16 @@ Eine Nachricht an einen Bot schlägt mit dem Status `503` und dem Fehler
 
 Eine Mitteilung von OpenBot, zum Beispiel das Ergebnis einer Delegation, kommt
 trotzdem in die Inbox ihres Chats. Siehe
-[Mitteilungen](/de/docs/developers/chats#mitteilungen).
+[Mitteilungen](/de/developers/chats#mitteilungen).
 
 ---
 
 ## Eingebaute Models
 
 Für diese Entwicklungsaufgabe siehe
-[Model-Backends](/de/docs/developers/model-backends).
+[Model-Backends](/de/developers/model-backends).
 
 ## Models für die Entwicklung
 
 Für diese Entwicklungsaufgabe siehe
-[Model-Backends](/de/docs/developers/model-backends).
+[Model-Backends](/de/developers/model-backends).

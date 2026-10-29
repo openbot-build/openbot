@@ -4,15 +4,14 @@ title: "Model-Backends"
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Für Mitwirkende, die OpenBot ändern oder veröffentlichen.
 
 ## Eingebaute Models
 
 Wenn du OpenBot aus deinem eigenen Programm startest, kannst du mit der Option
-`builtinModels` Models im Code angeben. Siehe
-[Aus Code starten](/de/docs/server).
+`builtinModels` Models im Code angeben. Siehe [Aus Code starten](/de/server).
 
 - Jede Organization kann sie nutzen.
 - Die API kann sie nicht ändern.
@@ -130,8 +129,8 @@ Kontext-Verdichtung (Context Compaction) macht einen langen Verlauf kürzer,
 damit er in das Kontextfenster des Modells passt. OpenBot macht das für jeden
 Chat mit einer Zusammenfassung, die das Model des Chats schreibt. Standardmäßig
 nutzt es `ResponsesCompaction` nicht. Siehe
-[Kompaktierung](/de/docs/developers/chats#kompaktierung). Ein kurzes Beispiel
-für jeden Anbieter findest du unter [Pakete](/de/docs/packages).
+[Kompaktierung](/de/developers/chats#kompaktierung). Ein kurzes Beispiel für
+jeden Anbieter findest du unter [Pakete](/de/packages).
 
 ---
 
@@ -151,13 +150,13 @@ Antwort. So kannst du Clients ohne Kosten testen.
 
 Die Anbieter-ID ist `development`. Die Model-IDs sind:
 
-| Model          | Was es tut                                                                                                       |
-| -------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `mock-text`    | Der Standard. Gibt sofort einen festen Text zurück.                                                              |
-| `mock-slow`    | Gibt Text langsam über zehn Sekunden zurück. Nutze es, um Streams und Unterbrechungen zu testen.                 |
-| `mock-tool`    | Ruft ein harmloses Test-Tool auf, das eine Entscheidung braucht. Siehe [Requests](/de/docs/developers/requests). |
-| `mock-app`     | Ruft ein Tool der Test-App auf und gibt ihren echten Inhalt zurück.                                              |
-| `mock-failure` | Schickt etwas Text und schlägt dann absichtlich mit einem Fehler des Modells fehl.                               |
+| Model          | Was es tut                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `mock-text`    | Der Standard. Gibt sofort einen festen Text zurück.                                                         |
+| `mock-slow`    | Gibt Text langsam über zehn Sekunden zurück. Nutze es, um Streams und Unterbrechungen zu testen.            |
+| `mock-tool`    | Ruft ein harmloses Test-Tool auf, das eine Entscheidung braucht. Siehe [Requests](/de/developers/requests). |
+| `mock-app`     | Ruft ein Tool der Test-App auf und gibt ihren echten Inhalt zurück.                                         |
+| `mock-failure` | Schickt etwas Text und schlägt dann absichtlich mit einem Fehler des Modells fehl.                          |
 
 Die Token-Zahlen in ihren Antworten sind nicht echt. Um eins auszuwählen,
 speichere es in einem Chat:

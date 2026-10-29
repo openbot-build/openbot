@@ -5,7 +5,7 @@ description: Connect OpenBot to language models with models and model providers.
 
 For organization administrators who add model providers. You need the rights
 named for each task. Only a platform admin can change settings under
-`/v1/platform`. Start with the [administrator manual](/docs/admin).
+`/v1/platform`. Start with the [administrator manual](/admin).
 
 A Bot needs a language model to do work. OpenBot does not include a model. You
 connect one. OpenBot keeps two kinds of records for this:
@@ -24,10 +24,10 @@ every instance uses the same ones.
 
 The platform or an organization owns each model and each provider:
 
-| Owner        | Who adds it                               | Who can use it                                                                                  |
-| ------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Organization | An organization, with its own key         | Only that organization. This is "bring your own key".                                           |
-| Platform     | A platform admin, with the platform's key | The organizations in its `availability`. See [Platform](/docs/platform#shared-model-providers). |
+| Owner        | Who adds it                               | Who can use it                                                                             |
+| ------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Organization | An organization, with its own key         | Only that organization. This is "bring your own key".                                      |
+| Platform     | A platform admin, with the platform's key | The organizations in its `availability`. See [Platform](/platform#shared-model-providers). |
 
 An organization can use a model of a provider only when it may use both the
 provider and the model.
@@ -40,7 +40,7 @@ Each model has one of three types:
   text. It can judge Rules. Jev from TypeSafe is an example. See
   [Decision model](#decision-model).
 - A `live` model talks with a person in real time, with sound. Only
-  [Live mode](/docs/developers/live) uses it.
+  [Live mode](/developers/live) uses it.
 
 When you run OpenBot from code, you can also give built-in models. See
 [Built-in models](#built-in-models).
@@ -124,7 +124,7 @@ passes calls on to other services), such as OpenRouter or LiteLLM, can offer
 both. OpenBot connects only to public addresses. For a model server in your own
 network or on your machine, the operator must list its host in
 `OPENBOT_OUTBOUND_ALLOW`. Until then, calls to it fail. See
-[Outbound connections](/docs/configuration#outbound-connections). A `typesafe`
+[Outbound connections](/configuration#outbound-connections). A `typesafe`
 provider has no default address yet, because TypeSafe has not published one
 official address. Give the address that your account uses. If a provider links a
 model of a type that it cannot serve, OpenBot returns `400` with
@@ -149,7 +149,7 @@ that the platform makes available to you. For any other model, OpenBot returns
 OpenBot answers with the provider. Its `id` starts with `prov_`. A provider ID
 is unique in the whole platform. A model selection names it as `provider`. The
 API key never comes back. The answer shows `apiKey: { set, hint }` instead. See
-[Platform](/docs/platform#secrets-never-come-back).
+[Platform](/platform#secrets-never-come-back).
 
 ### Change or remove a provider
 
@@ -179,8 +179,8 @@ The next model call after a change uses the new key, endpoint or links. OpenBot
 builds each model once, and builds it again when its provider changes.
 
 You cannot remove a provider while `rulesModel` or `botMemoryModel` in the
-[organization settings](/docs/organization#settings) names it. OpenBot returns
-`409` with `ModelProviderInUse`. Change the setting first.
+[organization settings](/organization#settings) names it. OpenBot returns `409`
+with `ModelProviderInUse`. Change the setting first.
 
 ---
 
@@ -238,7 +238,7 @@ language models and OpenBot function tools, not Live audio. It uses
 and the public Responses API. Plan limits still apply. A failed login or a spent
 plan limit does not switch the work to another provider.
 
-See [Client](/docs/client#connect-a-chatgpt-account) for typed calls.
+See [Client](/client#connect-a-chatgpt-account) for typed calls.
 
 ---
 
@@ -296,7 +296,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 `price` is the current price of the model at this provider. It is missing when
-nobody set a price. See [Prices](/docs/usage#prices).
+nobody set a price. See [Prices](/usage#prices).
 
 A model selection names both the provider and the model ID:
 
@@ -307,15 +307,15 @@ A model selection names both the provider and the model ID:
 OpenBot never picks a model for you. There is no default model. Each use names
 its own model:
 
-- **A new [Chat](/docs/developers/chats)** uses the `model` of its
-  [Bot](/docs/developers/bots). When the Bot has no model, the first message to
-  it fails with `400`, `ChatModelInvalid` and the reason `missing`. A new Bot
-  has no model unless you give it one, so set its `model` when you make it, or
-  later with `PATCH /v1/bots/:id`.
-- **The judge of [Rules](/docs/developers/rules)** uses `rulesModel` in the
-  [organization settings](/docs/organization#settings). When it is `null`, the
-  judge gives no answer, so a person or a Bot decides.
-- **[Bot memory](/docs/developers/memory)** uses `botMemoryModel` in the same
+- **A new [Chat](/developers/chats)** uses the `model` of its
+  [Bot](/developers/bots). When the Bot has no model, the first message to it
+  fails with `400`, `ChatModelInvalid` and the reason `missing`. A new Bot has
+  no model unless you give it one, so set its `model` when you make it, or later
+  with `PATCH /v1/bots/:id`.
+- **The judge of [Rules](/developers/rules)** uses `rulesModel` in the
+  [organization settings](/organization#settings). When it is `null`, the judge
+  gives no answer, so a person or a Bot decides.
+- **[Bot memory](/developers/memory)** uses `botMemoryModel` in the same
   settings. When it is `null`, Bots learn nothing.
 
 `rulesModel` can be a `language` model or a `decision` model. `botMemoryModel`
@@ -347,11 +347,11 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
 
 Send `"model": null` to use the model of the Bot again.
 `GET /v1/chats/:id/models` shows the same models for one Chat. See the
-[Chats API reference](/docs/api/operations/tags/chats/) for all fields.
+[Chats API reference](/api/operations/tags/chats/) for all fields.
 
 To limit which providers a member may choose, give the member a deny rule for
 `use` on `Model` with the `provider` field. See
-[Permissions](/docs/permissions#limit-models).
+[Permissions](/permissions#limit-models).
 
 ## Decision model
 
@@ -388,7 +388,7 @@ provider changes. OpenBot cannot ask a decision model through an `openai-compat`
 provider yet. You can link one there, but use a `typesafe` provider to ask it.
 
 The judge of Rules can use a decision model. Set `rulesModel` to it. See
-[The judge model](/docs/developers/rules#the-judge-model).
+[The judge model](/developers/rules#the-judge-model).
 
 ## Run without a model
 
@@ -404,16 +404,14 @@ A message to a Bot fails with status `503` and the error
 ```
 
 A notice from OpenBot, such as the result of a delegation, still goes into the
-inbox of its Chat. See [Notices](/docs/developers/chats#notices).
+inbox of its Chat. See [Notices](/developers/chats#notices).
 
 ---
 
 ## Built-in models
 
-For this development task, see
-[Model backends](/docs/developers/model-backends).
+For this development task, see [Model backends](/developers/model-backends).
 
 ## Development models
 
-For this development task, see
-[Model backends](/docs/developers/model-backends).
+For this development task, see [Model backends](/developers/model-backends).

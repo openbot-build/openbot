@@ -2,14 +2,14 @@
 title: "模型后端"
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 面向修改或发布 OpenBot 的项目贡献者。
 
 ## 内置模型
 
 当你从自己的程序中运行 OpenBot 时，可以用 `builtinModels`
-选项在代码中提供模型。参见[从代码运行](/zh-cn/docs/server)。
+选项在代码中提供模型。参见[从代码运行](/zh-cn/server)。
 
 - 每个组织都可以使用它们。
 - API 不能修改它们。
@@ -120,8 +120,8 @@ NodeRuntime.runMain(
 OpenBot 对保存的提供方也使用这些模块。上下文压缩（context
 compaction）会把很长的历史变短，让它能放进模型的上下文窗口。OpenBot 会为每个 Chat 做这件事：由这个 Chat 的模型写一段摘要。它默认不使用
 `ResponsesCompaction`。见
-[压缩](/zh-cn/docs/developers/chats#压缩)。每个提供方的简短示例参见
-[Packages](/zh-cn/docs/packages)。
+[压缩](/zh-cn/developers/chats#压缩)。每个提供方的简短示例参见
+[Packages](/zh-cn/packages)。
 
 ---
 
@@ -136,13 +136,13 @@ AI 不接受工具调用助手消息中的 `null`
 
 提供方 ID 是 `development`。模型 ID 有：
 
-| 模型           | 作用                                                                             |
-| -------------- | -------------------------------------------------------------------------------- |
-| `mock-text`    | 默认模型。立刻返回固定的文本。                                                   |
-| `mock-slow`    | 在十秒内慢慢返回文本。用它测试流式输出和中断。                                   |
-| `mock-tool`    | 调用一个需要决定的无害测试工具。见 [Requests](/zh-cn/docs/developers/requests)。 |
-| `mock-app`     | 调用测试 App 的一个工具，并返回它的真实内容。                                    |
-| `mock-failure` | 先发送一些文本，然后故意以模型错误失败。                                         |
+| 模型           | 作用                                                                        |
+| -------------- | --------------------------------------------------------------------------- |
+| `mock-text`    | 默认模型。立刻返回固定的文本。                                              |
+| `mock-slow`    | 在十秒内慢慢返回文本。用它测试流式输出和中断。                              |
+| `mock-tool`    | 调用一个需要决定的无害测试工具。见 [Requests](/zh-cn/developers/requests)。 |
+| `mock-app`     | 调用测试 App 的一个工具，并返回它的真实内容。                               |
+| `mock-failure` | 先发送一些文本，然后故意以模型错误失败。                                    |
 
 它们回答中的 token 数不是真实的。要选择其中一个，请把它保存到 Chat 上：
 

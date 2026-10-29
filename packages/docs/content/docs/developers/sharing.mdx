@@ -7,7 +7,7 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 You can share a Bot with people outside your organization, like you add a member
 to an organization. You invite a person by email, or you make an **invitation
@@ -30,7 +30,7 @@ can also share the shared Bots of the organization. Only a top Bot can be
 shared: one that a member or the organization owns, and that is not archived.
 
 To invite one person, send their email. The invitation lasts 7 days, like an
-[invitation to the organization](/docs/organization#invitations):
+[invitation to the organization](/organization#invitations):
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -129,15 +129,13 @@ The linked Bot is a Bot of the member, in their own organization. It has
 
 The member works with it like with their own Bots:
 
-- They talk to it in their own [Chat](/docs/developers/chats), in their own
+- They talk to it in their own [Chat](/developers/chats), in their own
   organization, and can make it their default Bot.
-- It works with their permissions, their connected
-  [Apps](/docs/developers/apps), and their other Bots. It can give work to their
-  Bots.
-- Its [requests](/docs/developers/requests) go to the member. Their decisions,
-  [Grants](/docs/developers/requests#answer-a-request) and
-  [Rules](/docs/developers/rules) count only in their organization. Yours count
-  only in yours.
+- It works with their permissions, their connected [Apps](/developers/apps), and
+  their other Bots. It can give work to their Bots.
+- Its [requests](/developers/requests) go to the member. Their decisions,
+  [Grants](/developers/requests#answer-a-request) and [Rules](/developers/rules)
+  count only in their organization. Yours count only in yours.
 - Their organization pays for the models. When your Bot names a model that their
   organization does not have, their Chat does not use it. It uses the default
   model of the server only in a simulation such as development. Production has
@@ -148,8 +146,8 @@ The name, role, instructions and model always come from your Bot. When you
 change them, every linked Bot changes too. A member cannot change them. A member
 can change `planApproval`.
 
-The Bot keeps [one memory pool](/docs/developers/memory), in your organization.
-What it learns in the organization of a member is for that member, in that
+The Bot keeps [one memory pool](/developers/memory), in your organization. What
+it learns in the organization of a member is for that member, in that
 organization. Nobody reads the memory about another person: not you, and not
 other members. You can remove what a member left with a purge, without reading
 it. Only you manage the memory Bot.
@@ -175,7 +173,7 @@ A member leaves when they archive their linked Bot.
 | --------------- | --------------------------------------------------- |
 | `share`         | Invite people to use a Bot, and manage its members. |
 
-See [Permissions](/docs/permissions).
+See [Permissions](/permissions).
 
 ## Errors
 

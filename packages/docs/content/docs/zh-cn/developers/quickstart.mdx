@@ -3,7 +3,7 @@ title: 快速开始
 description: 在你的电脑上运行 OpenBot，并完成第一次调用。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 本页使用测试账户和测试模型，在你的电脑上启动 OpenBot。你不需要身份提供方，也不需要模型密钥。
 
@@ -81,7 +81,7 @@ curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
 
 ### 创建组织
 
-Bots、Chats 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你自己创建一个：
+Bots、Chats 和令牌都属于一个[组织](/zh-cn/organization)。为你自己创建一个：
 
 ```sh
 curl -b cookies.txt \
@@ -120,8 +120,7 @@ export OPENBOT_TOKEN=obut_...
 
 ### 创建 Bot
 
-你把工作交给一个
-[Bot](/zh-cn/docs/developers/bots)。新账号没有 Bot，所以先创建一个：
+你把工作交给一个 [Bot](/zh-cn/developers/bots)。新账号没有 Bot，所以先创建一个：
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -131,7 +130,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 从回答中取出
-`id`。如果想在不指定 Bot 时也用这个 Bot，把它设为你的[默认 Bot](/zh-cn/docs/developers/bots#你的默认-bot)。
+`id`。如果想在不指定 Bot 时也用这个 Bot，把它设为你的[默认 Bot](/zh-cn/developers/bots#你的默认-bot)。
 
 </Step>
 
@@ -158,16 +157,16 @@ OpenBot 会创建你和这个 Bot 的 Chat，这条消息会启动一个 Turn。
 </Steps>
 
 测试模型 `mock-text` 的回答是 `Development response:`
-加上你的输入。其他测试模型见 [Models](/zh-cn/docs/models)。
+加上你的输入。其他测试模型见 [Models](/zh-cn/models)。
 
 ---
 
 ## 下一步
 
-- 阅读 [Chats](/zh-cn/docs/developers/chats) 和 Turns 的工作方式。
-- 使用真实的身份提供方：[身份验证](/zh-cn/docs/developers/authentication) 和
-  [Platform](/zh-cn/docs/platform)。
-- 添加真实的模型：[Models](/zh-cn/docs/models)。
-- 在服务器上运行 OpenBot：[部署](/zh-cn/docs/deploy)。
+- 阅读 [Chats](/zh-cn/developers/chats) 和 Turns 的工作方式。
+- 使用真实的身份提供方：[身份验证](/zh-cn/developers/authentication) 和
+  [Platform](/zh-cn/platform)。
+- 添加真实的模型：[Models](/zh-cn/models)。
+- 在服务器上运行 OpenBot：[部署](/zh-cn/deploy)。
 
 此示例选择开发用测试模型。正式环境的 Bot 需要选择管理员提供的模型。

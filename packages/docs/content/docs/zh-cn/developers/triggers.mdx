@@ -3,10 +3,10 @@ title: 触发器
 description: 按计划时间或通过 webhook，用一句 prompt 把一个任务交给一个 Bot。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
-**触发器**用一句 prompt 把一个任务交给一个 Bot。它可以按计划时间触发，也可以通过 webhook 触发，或者两者都有。它只做这一件事：怎么完成工作由 Bot 决定。Bot 可以先做计划、维护[待办列表](/zh-cn/docs/developers/chats#待办列表)，也可以把工作交给其他 Bot。任务结束时，结果会进入你和这个 Bot 的
-[Chat](/zh-cn/docs/developers/chats)。
+**触发器**用一句 prompt 把一个任务交给一个 Bot。它可以按计划时间触发，也可以通过 webhook 触发，或者两者都有。它只做这一件事：怎么完成工作由 Bot 决定。Bot 可以先做计划、维护[待办列表](/zh-cn/developers/chats#待办列表)，也可以把工作交给其他 Bot。任务结束时，结果会进入你和这个 Bot 的
+[Chat](/zh-cn/developers/chats)。
 
 ---
 
@@ -19,13 +19,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/triggers
 ```
 
-| 字段       | 作用                                                                                           |
-| ---------- | ---------------------------------------------------------------------------------------------- |
-| `prompt`   | 任务。                                                                                         |
-| `bot`      | 可选。做这项工作的 Bot。不填时由你的[默认 Bot](/zh-cn/docs/developers/bots#你的默认-bot)来做。 |
-| `schedule` | 可选。触发器什么时候自己触发。                                                                 |
-| `shared`   | 可选。`true` 表示创建属于组织的共享触发器。                                                    |
-| `enabled`  | 可选。`false` 表示触发器不会触发。默认是 `true`。                                              |
+| 字段       | 作用                                                                                      |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| `prompt`   | 任务。                                                                                    |
+| `bot`      | 可选。做这项工作的 Bot。不填时由你的[默认 Bot](/zh-cn/developers/bots#你的默认-bot)来做。 |
+| `schedule` | 可选。触发器什么时候自己触发。                                                            |
+| `shared`   | 可选。`true` 表示创建属于组织的共享触发器。                                               |
+| `enabled`  | 可选。`false` 表示触发器不会触发。默认是 `true`。                                         |
 
 返回 `201` 和这个触发器。它有 `nextRunAt`（计划下一次触发的时间）和
 `lastFiredAt`。
@@ -39,12 +39,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## 一次触发做什么
 
-每次触发都把任务作为一个[委派](/zh-cn/docs/developers/delegation)交给 Bot。工作在这个 Bot 的一个新 task
+每次触发都把任务作为一个[委派](/zh-cn/developers/delegation)交给 Bot。工作在这个 Bot 的一个新 task
 Chat 中运行。它的第一条输入是这句 prompt，来自“一个触发器”。这个委派有
 `trigger`，其中是触发器的 ID。
 
-工作结束时，结果作为[通知](/zh-cn/docs/developers/chats#通知)进入 actor 和这个 Bot 的 direct
-Chat。那个 Chat 还不存在时，OpenBot 会创建它。所以 Bot 在那里读到结果，它可以把结果告诉 actor，或者接着做这项工作。[审计日志](/zh-cn/docs/organization#审计日志)会记录
+工作结束时，结果作为[通知](/zh-cn/developers/chats#通知)进入 actor 和这个 Bot 的 direct
+Chat。那个 Chat 还不存在时，OpenBot 会创建它。所以 Bot 在那里读到结果，它可以把结果告诉 actor，或者接着做这项工作。[审计日志](/zh-cn/organization#审计日志)会记录
 `trigger.fired`，并在 `details.delegation` 中记下委派的 ID。
 
 要找到触发器的工作，请为那个 direct Chat 读取
@@ -113,7 +113,7 @@ curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
 Chat 属于 actor，结果也会进入 actor 的 Chat。actor 必须能把工作交给这个 Bot。如果 actor 不再能这样做，触发器就不会触发。
 
 保存的调用身份包含原始用户 token 及其限制。每个步骤都会重新检查当前权限。撤销的 token 不能启动或恢复工作。提示词和 webhook 数据以加密形式保存。需要新能力时，Bot 用
-[requests](/zh-cn/docs/developers/requests) 申请。这些请求会交给 actor。
+[requests](/zh-cn/developers/requests) 申请。这些请求会交给 actor。
 
 ---
 
@@ -131,4 +131,4 @@ Chat 属于 actor，结果也会进入 actor 的 Chat。actor 必须能把工作
 `org / <org> / user / <you> / trigger / <id>`。共享触发器的 `owner` 为
 `{ "_tag": "Organization" }`。个人触发器的 `owner` 为
 `{ "_tag": "Member", "userId": "<member id>" }`。每个成员都能读取共享触发器，管理员可以修改它们。列表中只有你可以读取的触发器。见
-[权限](/zh-cn/docs/permissions)。
+[权限](/zh-cn/permissions)。

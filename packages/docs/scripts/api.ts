@@ -215,7 +215,7 @@ const output = {
 		...document.info,
 		description: `${document.info.description ?? ""}
 
-This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running OpenBot. [Download the OpenAPI document](/openapi.json) to use it with your own tools, such as a code generator. Every OpenBot also serves it at \`/openapi.json\`. See [Authentication](/docs/authentication) and [Permissions](/docs/permissions).`,
+This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running OpenBot. [Download the OpenAPI document](/openapi.json) to use it with your own tools, such as a code generator. Every OpenBot also serves it at \`/openapi.json\`. See [Authentication](/authentication) and [Permissions](/permissions).`,
 	},
 	tags: groups.map(([, name, description]) => ({ name, description })),
 }

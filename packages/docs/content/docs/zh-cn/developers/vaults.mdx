@@ -4,12 +4,12 @@ description:
   汇集来自多个提供方的机密，让 Bots 在 Code Mode 中使用它们，但看不到它们。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 **Vault**（保险箱）是一组机密的集合。Bot 可以使用这些机密，但永远看不到它们，例如登录信息和 API 密钥。Vault 中的每个机密可以来自不同的地方：OpenBot 自己、1Password、Bitwarden 或 HashiCorp
 Vault。所以一个 Vault 可以把团队存放在各处的机密汇集到一起。
 
-Bot 只能在 [Code Mode](/zh-cn/docs/developers/code-mode)
+Bot 只能在 [Code Mode](/zh-cn/developers/code-mode)
 中使用这些机密。Bot 的程序拿到的是一个**引用**，不是机密本身。只有当 OpenBot 发出 App 工具调用时，它才把机密放到引用的位置，而且只发给你允许的工具。
 
 | 词         | 含义                                                                        |
@@ -29,7 +29,7 @@ Bot 只能在 [Code Mode](/zh-cn/docs/developers/code-mode)
 2. **OpenBot 在出口处放入机密。**
    程序把 App 调用交出去之后，OpenBot 在字符串参数里找出每个引用。它检查 Bot 有权使用这个 Vault，并且条目允许这个工具。然后它读取值并发出调用。程序看不到带着值的参数。
 3. **决策者会看到这个调用。**
-   带引用的调用总是一个[请求](/zh-cn/docs/developers/requests)，只读的工具也一样。决策者看到的是引用和工具，不是机密。
+   带引用的调用总是一个[请求](/zh-cn/developers/requests)，只读的工具也一样。决策者看到的是引用和工具，不是机密。
 4. **OpenBot 把机密从结果中拿掉。** 在程序或模型看到 App 结果之前，OpenBot 用
    `⟦hidden:github/token⟧`
    替换值。它也会拿掉值的 base64、base64url、十六进制、URL 和 JSON 形式。短于 4 个字符的值会留在结果里。
@@ -47,7 +47,7 @@ Bot 只能在 [Code Mode](/zh-cn/docs/developers/code-mode)
 
 ## 添加机密提供方
 
-参见 [机密提供方](/zh-cn/docs/admin/secret-providers).
+参见 [机密提供方](/zh-cn/admin/secret-providers).
 
 ## 创建 Vault
 
@@ -139,7 +139,7 @@ Bot 所有 Vault 的条目都在 `vault` 里。如果两个 Vault 有同名的�
 
 ## 权限
 
-`Vault` 和 `SecretProvider` 是[资源](/zh-cn/docs/permissions)，各有三个动作：
+`Vault` 和 `SecretProvider` 是[资源](/zh-cn/permissions)，各有三个动作：
 
 | 资源             | 动作    | 它允许你做什么                                     |
 | ---------------- | ------- | -------------------------------------------------- |
@@ -152,6 +152,6 @@ Bot 所有 Vault 的条目都在 `vault` 里。如果两个 Vault 有同名的�
 
 成员对自己的 Vaults 和提供方有所有动作，对共享的有 `read` 和 `use`。管理员还可以
 `write` 共享的。不能读取某个 Vault 或提供方的调用者会得到
-`404`，就像它不存在一样。[审计日志](/zh-cn/docs/organization#审计日志)会记录每次修改，动作包括
+`404`，就像它不存在一样。[审计日志](/zh-cn/organization#审计日志)会记录每次修改，动作包括
 `vault.created`、`vault.item.created`、`vault.granted`、`secret_provider.created`
 等。

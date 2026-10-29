@@ -7,14 +7,14 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Ein **Trigger** (Auslöser) gibt einem Bot eine Aufgabe mit einem Prompt. Er löst
 nach einem Zeitplan aus, über einen Webhook oder beides. Mehr tut er nicht: Der
 Bot entscheidet, wie er die Arbeit macht. Er kann zuerst planen, eine
-[Todo-Liste](/de/docs/developers/chats#todo-liste) führen und Arbeit an andere
-Bots geben. Wenn die Aufgabe endet, geht ihr Ergebnis in deinen
-[Chat](/de/docs/developers/chats) mit dem Bot.
+[Todo-Liste](/de/developers/chats#todo-liste) führen und Arbeit an andere Bots
+geben. Wenn die Aufgabe endet, geht ihr Ergebnis in deinen
+[Chat](/de/developers/chats) mit dem Bot.
 
 ---
 
@@ -27,13 +27,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/triggers
 ```
 
-| Feld       | Was es tut                                                                                                                   |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `prompt`   | Die Aufgabe.                                                                                                                 |
-| `bot`      | Optional. Der Bot, der die Arbeit macht. Ohne ihn macht dein [Standard-Bot](/de/docs/developers/bots#dein-standard-bot) sie. |
-| `schedule` | Optional. Wann der Trigger von selbst auslöst.                                                                               |
-| `shared`   | Optional. `true` erstellt einen gemeinsamen Trigger, der der Organisation gehört.                                            |
-| `enabled`  | Optional. `false` verhindert, dass der Trigger auslöst. Der Standard ist `true`.                                             |
+| Feld       | Was es tut                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `prompt`   | Die Aufgabe.                                                                                                            |
+| `bot`      | Optional. Der Bot, der die Arbeit macht. Ohne ihn macht dein [Standard-Bot](/de/developers/bots#dein-standard-bot) sie. |
+| `schedule` | Optional. Wann der Trigger von selbst auslöst.                                                                          |
+| `shared`   | Optional. `true` erstellt einen gemeinsamen Trigger, der der Organisation gehört.                                       |
+| `enabled`  | Optional. `false` verhindert, dass der Trigger auslöst. Der Standard ist `true`.                                        |
 
 Die Antwort ist `201` mit dem Trigger. Er hat `nextRunAt`, die nächste Zeit, zu
 der der Zeitplan auslöst, und `lastFiredAt`.
@@ -47,17 +47,17 @@ Revision gibt `409` mit `TriggerConflict` zurück.
 
 ## Was ein Auslösen tut
 
-Jedes Auslösen gibt die Aufgabe als [Delegation](/de/docs/developers/delegation)
-an den Bot. Die Arbeit läuft in einem neuen Task-Chat des Bots. Seine erste
-Eingabe ist der Prompt, von "einem Trigger". Die Delegation hat `trigger` mit
-der ID des Triggers.
+Jedes Auslösen gibt die Aufgabe als [Delegation](/de/developers/delegation) an
+den Bot. Die Arbeit läuft in einem neuen Task-Chat des Bots. Seine erste Eingabe
+ist der Prompt, von "einem Trigger". Die Delegation hat `trigger` mit der ID des
+Triggers.
 
 Wenn die Arbeit endet, geht ihr Ergebnis als
-[Mitteilung](/de/docs/developers/chats#mitteilungen) in den direkten Chat des
-Actors mit dem Bot. OpenBot erstellt diesen Chat, wenn es ihn noch nicht gibt.
-So liest der Bot das Ergebnis dort, und er kann dem Actor davon erzählen oder
-mit der Arbeit weitermachen. Das [Audit-Log](/de/docs/organization#audit-log)
-zeichnet `trigger.fired` mit der ID der Delegation in `details.delegation` auf.
+[Mitteilung](/de/developers/chats#mitteilungen) in den direkten Chat des Actors
+mit dem Bot. OpenBot erstellt diesen Chat, wenn es ihn noch nicht gibt. So liest
+der Bot das Ergebnis dort, und er kann dem Actor davon erzählen oder mit der
+Arbeit weitermachen. Das [Audit-Log](/de/organization#audit-log) zeichnet
+`trigger.fired` mit der ID der Delegation in `details.delegation` auf.
 
 Um die Arbeit eines Triggers zu finden, lies `GET /v1/chats/:chatId/delegations`
 für diesen direkten Chat, oder liste die Task-Chats des Bots mit
@@ -136,8 +136,8 @@ mehr kann, löst der Trigger nicht aus.
 Der gespeicherte Aufrufer behält den ursprünglichen Token und seine Grenzen.
 Jeder Schritt prüft die aktuellen Rechte. Ein widerrufener Token kann keine
 Arbeit starten oder fortsetzen. Prompts und Webhook-Daten werden verschlüsselt
-gespeichert. Der Bot fragt mit [Requests](/de/docs/developers/requests) nach
-neuen Fähigkeiten. Die Requests gehen an den Actor.
+gespeichert. Der Bot fragt mit [Requests](/de/developers/requests) nach neuen
+Fähigkeiten. Die Requests gehen an den Actor.
 
 ---
 
@@ -160,5 +160,4 @@ Der Pfad deiner eigenen Trigger ist
 `owner: { "_tag": "Organization" }`. Ein persönlicher Trigger hat
 `owner: { "_tag": "Member", "userId": "<member id>" }`. Jedes Member kann die
 gemeinsamen Trigger lesen. Administratoren können sie ändern. Die Liste enthält
-nur die Trigger, die du lesen darfst. Siehe
-[Berechtigungen](/de/docs/permissions).
+nur die Trigger, die du lesen darfst. Siehe [Berechtigungen](/de/permissions).

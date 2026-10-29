@@ -28,24 +28,17 @@ const hasTag = (page: Docs.Page, tag: string) =>
 // The full crawl uses real HTTP and has a scope that closes the local server.
 layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 	(it) => {
-		it.effect("normal: read every home language and its docs entry", () =>
+		it.effect("normal: read each manual at its language root", () =>
 			Effect.gen(function* () {
 				const { pages, get } = yield* Docs.Site
-				for (const language of Docs.homeLanguages) {
-					const route =
-						language === "en" ? "/" : `/${Str.toLowerCase(language)}/`
+				for (const { prefix, language } of Docs.manualLanguages) {
+					const route = `${prefix}/`
 					const page = yield* Effect.fromOption(Docs.pageAt(pages, route))
 					const html = yield* Effect.fromOption(
 						Arr.findFirst(page.elements, (node) => node.tag === "html"),
 					)
 					assert.strictEqual(html.attrs["lang"], language, route)
-					assert.strictEqual(
-						html.attrs["dir"],
-						Arr.contains(["ar", "ur", "fa", "lah", "he"], language)
-							? "rtl"
-							: "ltr",
-						route,
-					)
+					assert.strictEqual(html.attrs["dir"], "ltr", route)
 					assert.strictEqual(
 						Arr.filter(page.elements, (node) => node.tag === "h1").length,
 						1,
@@ -66,17 +59,16 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 							),
 							Str.Order,
 						),
-						Arr.sort([...Docs.homeLanguages, "x-default"], Str.Order),
+						["de", "en", "x-default", "zh-CN"],
 						route,
 					)
-					const docs =
-						language === "de" || language === "zh-CN"
-							? `${route}docs/`
-							: "/docs/"
+					const manual = `${prefix}/developers`
 					assert.isTrue(
 						Arr.some(
 							page.references,
-							(ref) => ref.tag === "a" && ref.target === docs,
+							(ref) =>
+								ref.tag === "a" &&
+								(ref.target === manual || ref.target === `${manual}/`),
 						),
 						route,
 					)
@@ -91,9 +83,12 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 				Effect.gen(function* () {
 					const { pages, files, get } = yield* Docs.Site
 					for (const { prefix, language } of Docs.manualLanguages) {
-						const manuals = Arr.filter(HashMap.values(pages), (page) =>
-							Str.startsWith(prefix + "/docs/")(page.route),
-						)
+						const manuals = Arr.filter(HashMap.values(pages), (page) => {
+							if (page.route === "/404.html") return false
+							return prefix === ""
+								? !/^\/(?:de|zh-cn)\//.test(page.route)
+								: Str.startsWith(prefix + "/")(page.route)
+						})
 						assert.isAbove(manuals.length, 0, language)
 						for (const page of manuals) {
 							const html = yield* Effect.fromOption(
@@ -114,7 +109,7 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 							)
 						}
 						assert.strictEqual(
-							(yield* get(prefix + "/docs/developers/testing/")).status,
+							(yield* get(prefix + "/developers/testing/")).status,
 							200,
 						)
 					}
@@ -122,7 +117,6 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 					assert.strictEqual(icon.status, 200)
 					assert.include(icon.body, "<svg")
 					assert.isTrue(Arr.some(files, (file) => Str.endsWith(".css")(file)))
-					assert.isTrue(Arr.some(files, (file) => Str.endsWith(".woff2")(file)))
 					assert.strictEqual((yield* get("/pagefind/pagefind.js")).status, 200)
 					const index = yield* Schema.decodeEffect(
 						Schema.fromJsonString(
@@ -150,7 +144,7 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 							Arr.join(Str.split(operation, "."), ""),
 						)
 						assert.isTrue(
-							HashMap.has(pages, `/docs/api/operations/${slug}/`),
+							HashMap.has(pages, `/api/operations/${slug}/`),
 							operation,
 						)
 					}
@@ -166,7 +160,7 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 				Effect.gen(function* () {
 					const { pages, get } = yield* Docs.Site
 					for (const page of HashMap.values(pages)) {
-						if (/^\/docs\/api(?:\/|$)/.test(page.route)) {
+						if (/^\/api(?:\/|$)/.test(page.route)) {
 							assert.isFalse(hasTag(page, "starlight-lang-select"), page.route)
 							assert.deepStrictEqual(
 								Arr.sort(
@@ -179,7 +173,7 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 								["en", "x-default"],
 								page.route,
 							)
-						} else if (/^(?:\/de|\/zh-cn)?\/docs\//.test(page.route)) {
+						} else if (page.route !== "/404.html") {
 							assert.isTrue(hasTag(page, "starlight-lang-select"), page.route)
 							assert.deepStrictEqual(
 								Arr.sort(
@@ -194,9 +188,9 @@ layer(Docs.layer, { excludeTestServices: true, timeout: "60 seconds" })(
 							)
 						}
 					}
-					assert.strictEqual((yield* get("/docs/api")).status, 200)
-					assert.strictEqual((yield* get("/de/docs/api/")).status, 404)
-					assert.strictEqual((yield* get("/zh-cn/docs/api/")).status, 404)
+					assert.strictEqual((yield* get("/api")).status, 200)
+					assert.strictEqual((yield* get("/de/api/")).status, 404)
+					assert.strictEqual((yield* get("/zh-cn/api/")).status, 404)
 					assert.strictEqual(
 						(yield* get("/this-page-does-not-exist/")).status,
 						404,

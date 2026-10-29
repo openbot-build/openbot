@@ -61,7 +61,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/jso
 
 ## Docs
 
-The docs site is in [`packages/docs`](./packages/docs). Run it on your computer:
+Read the docs at [docs.openbot.build](https://docs.openbot.build). The source is
+in [`packages/docs`](./packages/docs). Run it on your computer:
 
 ```sh
 devenv shell -- pnpm --filter @openbot-build/docs dev

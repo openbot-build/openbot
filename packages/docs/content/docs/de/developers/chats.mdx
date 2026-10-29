@@ -7,16 +7,16 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
-Ein **Chat** ist ein Gespräch mit einem [Bot](/de/docs/developers/bots). Du
-erstellst keine Chats, du wählst sie nicht aus und du schließt sie nicht. Du
-schickst einem Bot eine Nachricht, und OpenBot führt einen Chat für dich und
-diesen Bot. Der Bot antwortet immer sofort. Lange Arbeit geht an andere Chats,
-die parallel laufen. Die Ergebnisse kommen später in deinen Chat zurück. Diese
-Seite zeigt, wie du mit einem Bot sprichst und wie du einen Chat liest. Jede
-Route nimmt ein User-Token oder das Session-Cookie an. Siehe
-[Authentifizierung](/de/docs/developers/authentication).
+Ein **Chat** ist ein Gespräch mit einem [Bot](/de/developers/bots). Du erstellst
+keine Chats, du wählst sie nicht aus und du schließt sie nicht. Du schickst
+einem Bot eine Nachricht, und OpenBot führt einen Chat für dich und diesen Bot.
+Der Bot antwortet immer sofort. Lange Arbeit geht an andere Chats, die parallel
+laufen. Die Ergebnisse kommen später in deinen Chat zurück. Diese Seite zeigt,
+wie du mit einem Bot sprichst und wie du einen Chat liest. Jede Route nimmt ein
+User-Token oder das Session-Cookie an. Siehe
+[Authentifizierung](/de/developers/authentication).
 
 | Begriff    | Bedeutung                                                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -32,13 +32,13 @@ Route nimmt ein User-Token oder das Session-Cookie an. Siehe
 
 OpenBot erstellt jeden Chat selbst. `kind` sagt, warum es einen Chat gibt:
 
-| Art       | Wann OpenBot ihn erstellt                                                                                                                                   | Wem er gehört                               |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `direct`  | Wenn eine Person einem Bot zum ersten Mal eine Nachricht schickt.                                                                                           | Dieser Person.                              |
-| `channel` | Bei der ersten Nachricht in einem Chat eines [Channel](/de/docs/developers/channels).                                                                       | Dem Actor des Channel.                      |
-| `task`    | Jedes Mal, wenn ein Bot einem Bot Arbeit gibt oder ein [Trigger](/de/docs/developers/triggers) auslöst. Siehe [Delegation](/de/docs/developers/delegation). | Dem Besitzer des Chats, der die Arbeit gab. |
-| `review`  | Wenn ein Bot über einen [Request](/de/docs/developers/requests) entscheiden muss.                                                                           | Der Person, für die der Request ist.        |
-| `live`    | Jedes Mal, wenn eine Person `POST /v1/bots/:botId/live` aufruft. Siehe [Live-Modus](/de/docs/developers/live).                                              | Dieser Person.                              |
+| Art       | Wann OpenBot ihn erstellt                                                                                                                         | Wem er gehört                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `direct`  | Wenn eine Person einem Bot zum ersten Mal eine Nachricht schickt.                                                                                 | Dieser Person.                              |
+| `channel` | Bei der ersten Nachricht in einem Chat eines [Channel](/de/developers/channels).                                                                  | Dem Actor des Channel.                      |
+| `task`    | Jedes Mal, wenn ein Bot einem Bot Arbeit gibt oder ein [Trigger](/de/developers/triggers) auslöst. Siehe [Delegation](/de/developers/delegation). | Dem Besitzer des Chats, der die Arbeit gab. |
+| `review`  | Wenn ein Bot über einen [Request](/de/developers/requests) entscheiden muss.                                                                      | Der Person, für die der Request ist.        |
+| `live`    | Jedes Mal, wenn eine Person `POST /v1/bots/:botId/live` aufruft. Siehe [Live-Modus](/de/developers/live).                                         | Dieser Person.                              |
 
 Jede Person hat mit jedem Bot einen direkten Chat. Ein Chat hat kein Ende. Er
 geht weiter, solange Menschen mit dem Bot sprechen, außer du
@@ -61,7 +61,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 Die Nachricht geht in deinen direkten Chat mit diesem Bot. Die erste Nachricht
 erstellt den Chat. Du brauchst `delegate` für den Bot. Um zu wissen, mit welchem
 Bot du zuerst sprichst, lies `defaultBot` aus `GET /v1/me/settings`. Siehe
-[Dein Standard-Bot](/de/docs/developers/bots#dein-standard-bot).
+[Dein Standard-Bot](/de/developers/bots#dein-standard-bot).
 
 | Feld         | Bedeutung                                                                                           |
 | ------------ | --------------------------------------------------------------------------------------------------- |
@@ -95,7 +95,7 @@ Unbekannte Felder ergeben `400`.
 
 Eine Nachricht kann auch Dateien haben, die du hochgeladen hast, mit Teilen vom
 Typ `input_image` und `input_file`. Siehe
-[Eine Datei an einen Bot geben](/de/docs/developers/files#eine-datei-an-einen-bot-geben).
+[Eine Datei an einen Bot geben](/de/developers/files#eine-datei-an-einen-bot-geben).
 
 `POST /v1/chats/:chatId/messages` nimmt denselben Body. Nutze es für einen
 direkten Chat, für einen Live-Chat, oder für einen Task-Chat, wenn du der Arbeit
@@ -151,16 +151,16 @@ zurück.
 
 ### Häufige Fehler
 
-| Status | Fehler                     | Wann                                                                                                       |
-| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `400`  | `ChatModelInvalid`         | Der Chat hat kein Model. Der Bot braucht ein `model`. Siehe [Models](/de/docs/models#ein-model-auswählen). |
-| `400`  | `FileInvalid`              | Ein Dateiteil nennt keine deiner fertigen Dateien, oder die Datei ist kein Bild.                           |
-| `403`  | `Forbidden`                | Du darfst diesem Bot keine Arbeit geben.                                                                   |
-| `404`  | `BotNotFound`              | Es gibt keinen Bot mit dieser ID, den du nutzen darfst.                                                    |
-| `404`  | `ChatNotFound`             | Du hast keinen Chat mit dieser ID.                                                                         |
-| `409`  | `ChatConflict`             | Diese Art von Chat nimmt keine Nachrichten von Personen an.                                                |
-| `503`  | `ChatExecutionUnavailable` | OpenBot hat kein Model, um den Turn auszuführen.                                                           |
-| `503`  | `ChatStorageUnavailable`   | OpenBot erreicht seine Datenbank nicht.                                                                    |
+| Status | Fehler                     | Wann                                                                                                  |
+| ------ | -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `400`  | `ChatModelInvalid`         | Der Chat hat kein Model. Der Bot braucht ein `model`. Siehe [Models](/de/models#ein-model-auswählen). |
+| `400`  | `FileInvalid`              | Ein Dateiteil nennt keine deiner fertigen Dateien, oder die Datei ist kein Bild.                      |
+| `403`  | `Forbidden`                | Du darfst diesem Bot keine Arbeit geben.                                                              |
+| `404`  | `BotNotFound`              | Es gibt keinen Bot mit dieser ID, den du nutzen darfst.                                               |
+| `404`  | `ChatNotFound`             | Du hast keinen Chat mit dieser ID.                                                                    |
+| `409`  | `ChatConflict`             | Diese Art von Chat nimmt keine Nachrichten von Personen an.                                           |
+| `503`  | `ChatExecutionUnavailable` | OpenBot hat kein Model, um den Turn auszuführen.                                                      |
+| `503`  | `ChatStorageUnavailable`   | OpenBot erreicht seine Datenbank nicht.                                                               |
 
 ---
 
@@ -199,33 +199,33 @@ Person.
 
 - Ein Bot gibt einem Bot Arbeit. Der Werkzeugaufruf kehrt sofort zurück. Wenn
   die Arbeit endet, kommt ihr Ergebnis als Mitteilung zurück. Siehe
-  [Delegation](/de/docs/developers/delegation).
+  [Delegation](/de/developers/delegation).
 - Ein Werkzeugaufruf braucht eine Entscheidung. Der Werkzeugaufruf bekommt
   sofort ein Ergebnis, das sagt, dass er wartet. Die Antwort kommt als
   Mitteilung zurück. Wenn der Aufruf erlaubt wird, läuft er dann. Siehe
-  [Requests](/de/docs/developers/requests).
+  [Requests](/de/developers/requests).
 - Ein Bot bittet um eine [Erinnerung](#erinnerungen). Die Notiz kommt zu dieser
   Zeit als Mitteilung zurück.
 
 Eine Mitteilung ist ein Eingabe-Item mit `origin.notice`. Ihr `kind` sagt, worum
 es geht, und `ref` nennt die Sache, zum Beispiel die ID einer Delegation:
 
-| `kind`       | Was sie bringt                                                                            |
-| ------------ | ----------------------------------------------------------------------------------------- |
-| `delegation` | Das Ergebnis von Arbeit, die dieser Chat abgegeben hat.                                   |
-| `task`       | Die Aufgabe eines Task-Chats.                                                             |
-| `request`    | Die Antwort auf einen Request. Ein erlaubter Aufruf läuft mit ihr.                        |
-| `review`     | Den Request, über den ein Prüf-Chat entscheidet.                                          |
-| `plan`       | Die Antwort auf einen Plan. Siehe [Plan-Modus](#plan-modus).                              |
-| `reminder`   | Die Notiz einer Erinnerung.                                                               |
-| `code`       | Das Ende eines Programms im [Code Mode](/de/docs/developers/code-mode), das gewartet hat. |
-| `app`        | Eine Nachricht aus einer [App-Ansicht](/de/docs/developers/apps#app-ansichten).           |
-| `todos`      | Eine Erinnerung an die offenen Einträge der [Todo-Liste](#todo-liste).                    |
+| `kind`       | Was sie bringt                                                                       |
+| ------------ | ------------------------------------------------------------------------------------ |
+| `delegation` | Das Ergebnis von Arbeit, die dieser Chat abgegeben hat.                              |
+| `task`       | Die Aufgabe eines Task-Chats.                                                        |
+| `request`    | Die Antwort auf einen Request. Ein erlaubter Aufruf läuft mit ihr.                   |
+| `review`     | Den Request, über den ein Prüf-Chat entscheidet.                                     |
+| `plan`       | Die Antwort auf einen Plan. Siehe [Plan-Modus](#plan-modus).                         |
+| `reminder`   | Die Notiz einer Erinnerung.                                                          |
+| `code`       | Das Ende eines Programms im [Code Mode](/de/developers/code-mode), das gewartet hat. |
+| `app`        | Eine Nachricht aus einer [App-Ansicht](/de/developers/apps#app-ansichten).           |
+| `todos`      | Eine Erinnerung an die offenen Einträge der [Todo-Liste](#todo-liste).               |
 
 Der Text einer Mitteilung beginnt mit `[OpenBot]`. Der Bot weiß, dass solcher
 Text von OpenBot kommt, nicht von einer Person. Er liest ihn als Daten, nicht
-als Anweisungen. Der [Memory-Bot](/de/docs/developers/memory#der-memory-bot)
-nimmt eine Mitteilung nie als die Worte einer Person.
+als Anweisungen. Der [Memory-Bot](/de/developers/memory#der-memory-bot) nimmt
+eine Mitteilung nie als die Worte einer Person.
 
 Eine Mitteilung geht wie eine Nachricht durch die Inbox. Wenn du also mit dem
 Bot sprichst, kann zur selben Zeit ein Ergebnis kommen. Es lenkt deinen Turn
@@ -250,7 +250,7 @@ den Bot und die erste Zeile jeder Delegation, jeden Request und jede Erinnerung
 mit ihrer Zeit. So weiß er, was zurückkommen wird.
 
 Offene Arbeit entscheidet auch, wann die Arbeit eines Task-Chats endet. Siehe
-[Delegation](/de/docs/developers/delegation#wann-die-arbeit-endet).
+[Delegation](/de/developers/delegation#wann-die-arbeit-endet).
 
 ---
 
@@ -279,7 +279,7 @@ Tools, die ihren Turn ändern, bleiben im Vordergrund. App-Aufrufe, Code Mode un
 Delegationen haben gespeicherte Ausführungen. Computer-Befehle behalten eigene
 Sessions. Die Organisation setzt das Budget, die Höchstdauer und die Zahl
 aktiver Tools. Siehe
-[Organisationseinstellungen](/de/docs/organization#einstellungen).
+[Organisationseinstellungen](/de/organization#einstellungen).
 
 | Route                                     | Was sie tut                                               |
 | ----------------------------------------- | --------------------------------------------------------- |
@@ -348,10 +348,10 @@ Die Ansicht enthält keinen Verlauf. Lies den Verlauf mit diesen Routen:
 
 Ein Turn-Eintrag hat `status`, `settings`, `steps`, `usage`, `input` (die IDs
 seiner Eingabe-Items), `items`, `startedAt` und `completedAt`. `author` ist die
-Person, für die der Turn arbeitet. In einem
-[Channel](/de/docs/developers/channels) ist es die Person, die die Nachricht
-geschrieben hat. Jedes Item hat `id`, `seq` (seine Stelle im Verlauf), `content`
-und `origin` (`chat`, `turn`, `step` und bei einer Mitteilung `notice`).
+Person, für die der Turn arbeitet. In einem [Channel](/de/developers/channels)
+ist es die Person, die die Nachricht geschrieben hat. Jedes Item hat `id`, `seq`
+(seine Stelle im Verlauf), `content` und `origin` (`chat`, `turn`, `step` und
+bei einer Mitteilung `notice`).
 
 Nutze die gespeicherte `executionId`, um Arbeit zu verfolgen. Ereignisse haben
 eine Sequenznummer. Sende nach einer verlorenen Verbindung die letzte Nummer als
@@ -370,13 +370,13 @@ lesen darf. Ohne passende Chats erhält ein gültiges Token eine leere Liste.
 
 Weitere Routen lesen die Arbeit eines Chats:
 
-| Route                                  | Was sie auflistet                                                                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /v1/chats/:chatId/delegations`    | Die Arbeit, die dieser Chat an Bots gegeben hat. Siehe [Delegation](/de/docs/developers/delegation#die-arbeit-beobachten).           |
-| `GET /v1/chats/:chatId/confessions`    | Was der Bot mit `confide` gesagt hat. Siehe [Beichten zeigen](/de/docs/client#beichten-zeigen).                                      |
-| `GET /v1/chats/:chatId/enrichments`    | Wie der Memory-Bot die Eingabe jedes Turns neu geschrieben hat. Siehe [Memory](/de/docs/developers/memory#beichten-und-ergänzungen). |
-| `GET /v1/chats/:chatId/code-runs`      | Die Programme des Chats im [Code Mode](/de/docs/developers/code-mode).                                                               |
-| `GET /v1/chats/:chatId/app-operations` | Die Aufrufe von [Apps](/de/docs/developers/apps) im Chat.                                                                            |
+| Route                                  | Was sie auflistet                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/chats/:chatId/delegations`    | Die Arbeit, die dieser Chat an Bots gegeben hat. Siehe [Delegation](/de/developers/delegation#die-arbeit-beobachten).           |
+| `GET /v1/chats/:chatId/confessions`    | Was der Bot mit `confide` gesagt hat. Siehe [Beichten zeigen](/de/client#beichten-zeigen).                                      |
+| `GET /v1/chats/:chatId/enrichments`    | Wie der Memory-Bot die Eingabe jedes Turns neu geschrieben hat. Siehe [Memory](/de/developers/memory#beichten-und-ergänzungen). |
+| `GET /v1/chats/:chatId/code-runs`      | Die Programme des Chats im [Code Mode](/de/developers/code-mode).                                                               |
+| `GET /v1/chats/:chatId/app-operations` | Die Aufrufe von [Apps](/de/developers/apps) im Chat.                                                                            |
 
 ---
 
@@ -491,7 +491,7 @@ Erinnerungen und `openbot_submit_plan`.
 Wenn der Plan fertig ist, ruft der Bot `openbot_submit_plan` mit den Schritten
 als Todo-Liste und einer kurzen Zusammenfassung auf. OpenBot speichert die Liste
 und prüft die Fähigkeit `plans.run`, wie bei jedem
-[Request](/de/docs/developers/requests).
+[Request](/de/developers/requests).
 
 - Wenn der Plan sofort erlaubt wird, wechselt der Chat in den Modus `build`.
   Nach diesem Turn startet ein neuer Turn mit allen Werkzeugen, und der Bot
@@ -523,14 +523,14 @@ festlegt, gewinnt, auch wenn sie lockerer ist:
 
 1. Der Chat: `planApproval` mit `PATCH /v1/chats/:chatId`. Sende `null`, um es
    zu entfernen.
-2. Der Bot: `planApproval` am [Bot](/de/docs/developers/bots).
+2. Der Bot: `planApproval` am [Bot](/de/developers/bots).
 3. Du: `PATCH /v1/me/settings` mit
    `{ "expectedVersion": 0, "planApproval": { ... } }`. Lies deine Einstellungen
    mit `GET /v1/me/settings`. Dieselben Einstellungen enthalten deinen
-   [Standard-Bot](/de/docs/developers/bots#dein-standard-bot).
+   [Standard-Bot](/de/developers/bots#dein-standard-bot).
 4. Die Organisation: `planApproval` in ihren
-   [Einstellungen](/de/docs/organization#einstellungen). Das ist nur der
-   Standard. Es kann eine lockerere Einstellung nicht verbieten.
+   [Einstellungen](/de/organization#einstellungen). Das ist nur der Standard. Es
+   kann eine lockerere Einstellung nicht verbieten.
 
 ---
 
@@ -596,7 +596,7 @@ aktuelle Revision.
 
 Ein falsches Model ergibt `400` mit `ChatModelInvalid`. Der `reason` ist
 `provider-not-found`, `model-not-found` oder `unsupported-option`. Wie OpenBot
-seine Models bekommt, steht unter [Models](/de/docs/models).
+seine Models bekommt, steht unter [Models](/de/models).
 
 Der Ausführungsmodus ist `build` oder `plan`. `build` ist der normale Modus: Der
 Bot macht die Arbeit. Im Modus `plan` schreibt der Bot zuerst einen Plan.
@@ -618,20 +618,20 @@ Models erreicht, schreibt das Model des Chats eine Zusammenfassung des älteren
 Kontexts. Die neuesten Nachrichten bleiben, wie sie sind.
 
 - Das Kontextfenster kommt vom Model im Katalog. Siehe `contextWindow` unter
-  [Models](/de/docs/models#ein-model-hinzufügen).
+  [Models](/de/models#ein-model-hinzufügen).
 - Ein Model im Code, zum Beispiel ein
-  [eingebautes Model](/de/docs/models#eingebaute-models), kann mit
+  [eingebautes Model](/de/models#eingebaute-models), kann mit
   `autoCompactTokenLimit` eine niedrigere Grenze setzen.
 - Ein Model ohne bekanntes Kontextfenster wird nicht kompaktiert.
 
 Der Verlauf behält immer jedes Item, und `GET /v1/chats/:chatId/items` zeigt
 alle. Nur das, was das Model liest, wird kleiner. Die Aufrufe für die
 Zusammenfassung haben die Nutzungsquelle `compaction`. Siehe
-[Nutzung](/de/docs/usage).
+[Nutzung](/de/usage).
 
 OpenBot nutzt standardmäßig nicht die eingebaute Kompaktierung eines Anbieters,
 zum Beispiel `/responses/compact` von OpenAI. Ein Programm, das die
-[Core-Bibliothek](/de/docs/packages#core) nutzt, kann seinen eigenen Dienst
+[Core-Bibliothek](/de/packages#core) nutzt, kann seinen eigenen Dienst
 `ContextCompaction` geben, zum Beispiel `ResponsesCompaction.layer()`.
 
 ---
@@ -646,16 +646,16 @@ Löschen. Direkte, Channel- und Live-Chats können gelöscht werden. Task- und
 Prüf-Chats geben `409` mit `ChatConflict` zurück.
 
 Danach hält der Chat die
-[Dateien](/de/docs/developers/files#wie-dateien-verschwinden) nicht mehr, die er
+[Dateien](/de/developers/files#wie-dateien-verschwinden) nicht mehr, die er
 genannt hat.
 
 Nachdem du einen direkten Chat gelöscht hast, startet deine nächste Nachricht an
 den Bot einen neuen, leeren Chat mit einer neuen ID. Genauso startet nach dem
 Löschen eines Channel-Chats die nächste Nachricht in diesem Chat einen neuen
 Chat. Was der Bot aus dem Chat gelernt hat, bleibt in seinem
-[Bot Memory](/de/docs/developers/memory). Um auch das zu entfernen, lösche alles
-mit dem Tag `chat:<id>`. Siehe
-[Lesen und ändern](/de/docs/developers/memory#lesen-und-ändern).
+[Bot Memory](/de/developers/memory). Um auch das zu entfernen, lösche alles mit
+dem Tag `chat:<id>`. Siehe
+[Lesen und ändern](/de/developers/memory#lesen-und-ändern).
 
 ---
 
@@ -673,7 +673,7 @@ sendet ihn ohne diese Entscheidung nicht erneut.
 
 Nur bestätigte Nutzung wird berechnet. Unbekannte Nutzung bleibt als unbekannt
 markiert. Alle Felder stehen in der
-[Chats-Referenz](/docs/api/operations/tags/chats/).
+[Chats-Referenz](/api/operations/tags/chats/).
 
 ## Chats aus einer älteren Version
 

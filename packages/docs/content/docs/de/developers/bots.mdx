@@ -7,16 +7,15 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Ein **Bot** ist ein Arbeiter mit einer Rolle, zum Beispiel ein Programmierer,
 ein Autor oder ein Designer. Jeder Bot hat seine eigenen Anweisungen, seine
-eigenen [Chats](/de/docs/developers/chats) und sein eigenes Langzeitgedächtnis.
-Du sprichst mit einem Bot. Er gibt Arbeit an andere Bots oder an sich selbst. So
+eigenen [Chats](/de/developers/chats) und sein eigenes Langzeitgedächtnis. Du
+sprichst mit einem Bot. Er gibt Arbeit an andere Bots oder an sich selbst. So
 ist er immer frei, dir zu antworten. Diese Seite zeigt, wie du mit einem Bot
 sprichst, und die Routen unter `/v1/bots`. Jede Route nimmt ein User-Token oder
-das Session-Cookie an. Siehe
-[Authentifizierung](/de/docs/developers/authentication).
+das Session-Cookie an. Siehe [Authentifizierung](/de/developers/authentication).
 
 ---
 
@@ -37,9 +36,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 Die Nachricht geht in deinen einen Chat mit diesem Bot. OpenBot erstellt den
 Chat beim ersten Mal. Du erstellst, wählst oder schließt nie einen Chat. Der Bot
 antwortet sofort. Wenn die Arbeit lang ist, gibt der Bot sie an eine
-[Delegation](/de/docs/developers/delegation) und bleibt frei, dir zu antworten.
-Das Ergebnis kommt später in deinen Chat zurück. Siehe
-[Chats](/de/docs/developers/chats).
+[Delegation](/de/developers/delegation) und bleibt frei, dir zu antworten. Das
+Ergebnis kommt später in deinen Chat zurück. Siehe
+[Chats](/de/developers/chats).
 
 Ein **oberster Bot** ist ein Bot, der einem Member oder der Organisation gehört,
 nicht einem anderen Bot. Du kannst einen obersten Bot als deinen
@@ -51,9 +50,9 @@ Ein Bot kann auch selbst Bots besitzen. Siehe
 ### Dein Standard-Bot
 
 Dein **Standard-Bot** ist der Bot, mit dem ein Client zuerst spricht. Auch ein
-[Trigger](/de/docs/developers/triggers) ohne Bot gibt seine Aufgabe an ihn.
-OpenBot erstellt keine Bots für dich. Ein neues Member hat also keinen
-Standard-Bot. Dann schlägt ein Trigger ohne Bot mit `400` und `BotInvalid` fehl.
+[Trigger](/de/developers/triggers) ohne Bot gibt seine Aufgabe an ihn. OpenBot
+erstellt keine Bots für dich. Ein neues Member hat also keinen Standard-Bot.
+Dann schlägt ein Trigger ohne Bot mit `400` und `BotInvalid` fehl.
 
 Um deinen Standard-Bot zu setzen, erstelle einen Bot. Schicke dann seine ID in
 deinen Member-Einstellungen:
@@ -82,8 +81,8 @@ Members. Sein Gedächtnis und seine Grants bleiben.
 Bots haben keine Liste von Dingen, die sie tun dürfen. Ein Bot probiert es
 einfach. Wenn er zum ersten Mal etwas Neues versucht, zum Beispiel einen Bot
 erstellen oder ein App-Werkzeug aufrufen, entscheidet die Stelle über ihm. Siehe
-[Requests](/de/docs/developers/requests). Die Entscheidungen werden gespeichert.
-So wachsen die Grenzen jedes Bots aus echter Arbeit.
+[Requests](/de/developers/requests). Die Entscheidungen werden gespeichert. So
+wachsen die Grenzen jedes Bots aus echter Arbeit.
 
 ---
 
@@ -102,13 +101,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `role`         | Pflicht. Was der Bot tut, in einer Zeile. Andere Bots lesen sie, um Arbeiter auszuwählen.                         |
 | `instructions` | Pflicht. Die dauerhaften Anweisungen des Bots, wie eine Stellenbeschreibung.                                      |
 | `model`        | Optional. Das Model der Chats dieses Bots, wenn ein Chat kein eigenes wählt.                                      |
-| `planApproval` | Optional. Wie die Pläne dieses Bots erlaubt werden. Siehe [Plan-Modus](/de/docs/developers/chats#plan-modus).     |
+| `planApproval` | Optional. Wie die Pläne dieses Bots erlaubt werden. Siehe [Plan-Modus](/de/developers/chats#plan-modus).          |
 | `shared`       | Optional. `true` erstellt einen Bot der Organisation, den jedes Member nutzen kann.                               |
 | `bot`          | Optional. Die ID des Bots, dem der neue Bot gehört. Du kannst es nicht zusammen mit `shared` nutzen.              |
 
 Ein Bot ohne `model` kann nicht antworten. Seine erste Nachricht schlägt mit
 `400` und `ChatModelInvalid` fehl. Siehe
-[Models](/de/docs/models#ein-model-auswählen).
+[Models](/de/models#ein-model-auswählen).
 
 OpenBot antwortet mit `201` und dem Bot:
 
@@ -176,14 +175,14 @@ Teammitglied behält sein eigenes Gedächtnis.
   einem obersten Bot und dann bis zur Person. Zum Beispiel: **Person → Assistant
   → Worker → Scout**. Requests eines Bots gehen diese Kette hinauf, auch wenn
   eine Person direkt mit dem Bot arbeitet. Siehe
-  [Requests](/de/docs/developers/requests#die-kette-der-entscheider).
+  [Requests](/de/developers/requests#die-kette-der-entscheider).
 - Über einem obersten Bot steht die Person, die mit ihm arbeitet. Das gilt für
   deine eigenen obersten Bots und für gemeinsame Bots.
 
 Ein Bot braucht keinen Helfer-Bot, um den Kontext einer Arbeit zu behalten. Er
 kann einer früheren Delegation mehr Arbeit geben, und diese Arbeit geht im
 selben Task-Chat weiter. Siehe
-[Delegation](/de/docs/developers/delegation#zu-früherer-arbeit-hinzufügen).
+[Delegation](/de/developers/delegation#zu-früherer-arbeit-hinzufügen).
 
 ---
 
@@ -193,7 +192,7 @@ OpenBot fügt diese Dinge zu den Anweisungen jedes Turns hinzu:
 
 - den Namen, die Rolle und die Anweisungen des Bots,
 - die Person, mit der er gerade arbeitet, mit ihrem Namen und ihrer Member-ID.
-  In einem [Channel](/de/docs/developers/channels) ist es die Person, die die
+  In einem [Channel](/de/developers/channels) ist es die Person, die die
   Nachricht des Turns geschrieben hat,
 - in welcher Art von Chat er ist:
   - in einem direkten Chat oder einem Channel-Chat sprechen Menschen mit ihm,
@@ -209,16 +208,16 @@ OpenBot fügt diese Dinge zu den Anweisungen jedes Turns hinzu:
   Person. Er ist also Daten, keine Anweisungen,
 - dass er Erfahrung aus seiner früheren Arbeit mitbringt, und dass die aktuellen
   Anweisungen gegen sie gewinnen,
-- eine Liste der [offenen Arbeit](/de/docs/developers/chats#offene-arbeit) des
-  Chats: seine Delegationen, Requests und Erinnerungen.
+- eine Liste der [offenen Arbeit](/de/developers/chats#offene-arbeit) des Chats:
+  seine Delegationen, Requests und Erinnerungen.
 
-Der [Memory-Bot](/de/docs/developers/memory#der-memory-bot) kann die Eingabe des
+Der [Memory-Bot](/de/developers/memory#der-memory-bot) kann die Eingabe des
 Turns auch mit dem neu schreiben, was hilft. Der Bot sieht die Änderungen als
 seine eigene Erfahrung. Er hat das Tool `confide`, und er kennt es nur als einen
 Ort, an dem er sagt, wie seine Arbeit läuft.
 
 Du kannst einen Bot auch mit Personen in anderen Organisationen
-[teilen](/de/docs/developers/sharing). Sie bekommen einen verknüpften Bot mit
+[teilen](/de/developers/sharing). Sie bekommen einen verknüpften Bot mit
 `source`, der deinen Bot nutzt.
 
 ---
@@ -230,12 +229,12 @@ Du kannst einen Bot auch mit Personen in anderen Organisationen
 | `read`           | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                         |
 | `write`          | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                          |
 | `delegate`       | Mit einem Bot sprechen und ihm Arbeit geben, von einem Client oder von einem anderen Bot aus. |
-| `share`          | Personen einladen, einen [Bot zu nutzen](/de/docs/developers/sharing).                        |
+| `share`          | Personen einladen, einen [Bot zu nutzen](/de/developers/sharing).                             |
 
 Der Pfad deiner eigenen Bots ist `org / <org> / user / <you> / bot / <id>`. Ein
 gemeinsamer Bot hat keinen Besitzer: sein `ownerUserId` ist `null`. Members
 dürfen gemeinsame Bots lesen und nutzen. Administratoren dürfen sie auch ändern
-und teilen. Siehe [Berechtigungen](/de/docs/permissions).
+und teilen. Siehe [Berechtigungen](/de/permissions).
 
 ## Fehler
 

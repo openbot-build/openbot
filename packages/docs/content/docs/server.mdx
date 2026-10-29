@@ -3,8 +3,8 @@ title: Run from code
 description: Start OpenBot from your own TypeScript program.
 ---
 
-For developers. Start with the [developer manual](/docs/developers) to choose
-API work, App publishing, or project changes.
+For developers. Start with the [developer manual](/developers) to choose API
+work, App publishing, or project changes.
 
 The `openbot` program covers most needs. When you need more, you can start
 OpenBot from your own program. Then you can add your own models, tools, routes,
@@ -28,11 +28,11 @@ Launch.main(Server.layerLive)
 
 `Launch.main` first reads the command line. With `--help` it shows the help and
 stops, and it needs no settings for that. Then it reads the variables in
-[Configuration](/docs/configuration), from the environment or from secret files.
-It blocks outbound connections to private addresses, and logs a failed start.
-Then it runs the Layer that you give it until the process stops. It gives that
-Layer the Node.js services and the fetch HTTP client. `Launch.server` is the
-same program as an Effect, for when you run it yourself. Give it
+[Configuration](/configuration), from the environment or from secret files. It
+blocks outbound connections to private addresses, and logs a failed start. Then
+it runs the Layer that you give it until the process stops. It gives that Layer
+the Node.js services and the fetch HTTP client. `Launch.server` is the same
+program as an Effect, for when you run it yourself. Give it
 `NodeServices.layer`.
 
 `EnvironmentConfiguration.load` gives the same settings: `host`, `port`,
@@ -40,7 +40,7 @@ same program as an Effect, for when you run it yourself. Give it
 `outboundAllow`. You can also write these values in code.
 
 The program still needs a platform. Run the setup program once before people use
-it. See [Platform](/docs/platform#setup).
+it. See [Platform](/platform#setup).
 
 ## What the package exports
 
@@ -79,7 +79,7 @@ program gives them the shared services.
 | `host`          | `string`           | Required. The address to listen on, such as `127.0.0.1`.                            |
 | `port`          | `number`           | Required. The port to listen on, such as `3000`.                                    |
 | `databaseUrl`   | `Redacted<string>` | Required. The PostgreSQL URL.                                                       |
-| `secretKeys`    | `Redacted<string>` | The secret key list. See [Secret keys](/docs/configuration#secret-keys).            |
+| `secretKeys`    | `Redacted<string>` | The secret key list. See [Secret keys](/configuration#secret-keys).                 |
 | `clusterSecret` | `Redacted<string>` | Required. At least 32 characters. All nodes use the same secret for private RPC.    |
 | `clusterHost`   | `string`           | Optional. The address other nodes can reach. It defaults to the bound HTTP address. |
 
@@ -87,7 +87,7 @@ program gives them the shared services.
 
 The server takes no sign-in options. It reads the public origin, the platform
 provider, and the sign-in secret from the
-[platform settings](/docs/platform#platform-settings).
+[platform settings](/platform#platform-settings).
 
 - Before setup, every route except `/health` answers `503` with `SetupRequired`.
 - OpenBot reads these settings each time it uses them. When one of them changes,
@@ -104,7 +104,7 @@ Each server gives the app services to your program, so tests can use them.
 
 | Option                       | What it does                                                                                                      |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `builtinModels`              | Models that every organization can use, given in code. See [Models](/docs/models#built-in-models).                |
+| `builtinModels`              | Models that every organization can use, given in code. See [Models](/models#built-in-models).                     |
 | `builtinModels.defaultModel` | The model of a new Chat when its Bot names none. It is one of `builtinModels`. Only a simulated platform sets it. |
 | `routes`                     | A Layer with your own HTTP routes.                                                                                |
 | `indexSources`               | More sources for the App Index search, next to the OpenBot Index.                                                 |
@@ -113,14 +113,14 @@ Each server gives the app services to your program, so tests can use them.
 Some values were options before. They are settings in the database now, so every
 instance shares them:
 
-| Old option            | Setting                                                                         |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `appRestrictions`     | `appRestrictions` in the [platform settings](/docs/platform#platform-settings). |
-| `appReadRules`        | `appReadRules` in the [organization settings](/docs/organization#settings).     |
-| `bots.helperModel`    | `rulesModel` and `botMemoryModel` in the organization settings.                 |
-| `bots.requestTimeout` | `requestTimeoutMs` in the organization settings.                                |
-| `bots.memory`         | `botMemory` in the organization settings.                                       |
-| `appEncryptionKey`    | The `secretKeys` instance option.                                               |
+| Old option            | Setting                                                                    |
+| --------------------- | -------------------------------------------------------------------------- |
+| `appRestrictions`     | `appRestrictions` in the [platform settings](/platform#platform-settings). |
+| `appReadRules`        | `appReadRules` in the [organization settings](/organization#settings).     |
+| `bots.helperModel`    | `rulesModel` and `botMemoryModel` in the organization settings.            |
+| `bots.requestTimeout` | `requestTimeoutMs` in the organization settings.                           |
+| `bots.memory`         | `botMemory` in the organization settings.                                  |
+| `appEncryptionKey`    | The `secretKeys` instance option.                                          |
 
 ---
 
@@ -163,8 +163,8 @@ The options `chats`, `discovery`, `computerDrivers`, `liveBackends`,
 ## Chats
 
 Models come from the model providers in the database and from `builtinModels`.
-See [Models](/docs/models). [Bot memory](/docs/developers/memory) follows
-`botMemory` in the [organization settings](/docs/organization#settings).
+See [Models](/models). [Bot memory](/developers/memory) follows `botMemory` in
+the [organization settings](/organization#settings).
 
 The server keeps application services and active executions. Each Turn builds
 its model and tools in its own scope. A saved execution identity carries the
@@ -219,7 +219,7 @@ Launch.main(server)
 Add `needsApproval: true` to `Tool.make` when each call needs a decision.
 OpenBot then checks the capability `tools.call` for it. When the call needs a
 decider, the Bot gets a pending result, and the call runs later when it is
-allowed. See [Requests](/docs/developers/requests).
+allowed. See [Requests](/developers/requests).
 
 ---
 
@@ -264,7 +264,7 @@ mark only an empty database ready. Use the maintenance command for a full
 upgrade. It needs `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`. Stop all
 instances before running it. `OpenBot.layerShared` checks both the schema and
 the completed data version before it starts services. Its shared lock stays open
-for the server lifetime. See [Deploy](/docs/deploy#prepare-the-database) for the
+for the server lifetime. See [Deploy](/deploy#prepare-the-database) for the
 backup and recovery steps.
 
 ```sh
@@ -297,5 +297,5 @@ development server in production. Everyone who can reach it can sign in.
 ## Send error logs to your own service
 
 OpenBot writes failures as error logs. Add your own Effect logger to send them
-to another service. See [Error logs](/docs/error-logs) for what each log
-contains and a full example.
+to another service. See [Error logs](/error-logs) for what each log contains and
+a full example.

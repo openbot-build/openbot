@@ -4,14 +4,14 @@ title: "Model backends"
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 For project contributors who change or publish OpenBot.
 
 ## Built-in models
 
 When you run OpenBot from your own program, you can give models in code with the
-`builtinModels` option. See [Run from code](/docs/server).
+`builtinModels` option. See [Run from code](/server).
 
 - Every organization can use them.
 - The API cannot change them.
@@ -125,8 +125,8 @@ OpenBot uses these modules for the stored providers too. Context compaction
 makes a long history shorter so that it fits in the model's context window.
 OpenBot does this for every Chat with a summary that the model of the Chat
 writes. It does not use `ResponsesCompaction` by default. See
-[Compaction](/docs/developers/chats#compaction). See [Packages](/docs/packages)
-for a short example of each provider.
+[Compaction](/developers/chats#compaction). See [Packages](/packages) for a
+short example of each provider.
 
 ---
 
@@ -145,13 +145,13 @@ test clients without cost.
 
 The provider ID is `development`. The model IDs are:
 
-| Model          | What it does                                                                                 |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| `mock-text`    | The default. Returns fixed text at once.                                                     |
-| `mock-slow`    | Returns text slowly over ten seconds. Use it to test streams and interrupts.                 |
-| `mock-tool`    | Calls a harmless test tool that needs a decision. See [Requests](/docs/developers/requests). |
-| `mock-app`     | Calls a tool of the test App and returns its real content.                                   |
-| `mock-failure` | Sends some text, then fails on purpose with a model error.                                   |
+| Model          | What it does                                                                            |
+| -------------- | --------------------------------------------------------------------------------------- |
+| `mock-text`    | The default. Returns fixed text at once.                                                |
+| `mock-slow`    | Returns text slowly over ten seconds. Use it to test streams and interrupts.            |
+| `mock-tool`    | Calls a harmless test tool that needs a decision. See [Requests](/developers/requests). |
+| `mock-app`     | Calls a tool of the test App and returns its real content.                              |
+| `mock-failure` | Sends some text, then fails on purpose with a model error.                              |
 
 The token counts in their answers are not real. To pick one, save it on a Chat:
 

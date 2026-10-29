@@ -7,16 +7,16 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 A **Vault** is a collection of secrets that a Bot may use but never see, such as
 logins and API keys. Each secret in a Vault can come from another place: OpenBot
 itself, 1Password, Bitwarden or HashiCorp Vault. So one Vault can put together
 the secrets of a team from all the places where the team keeps them.
 
-A Bot uses the secrets only in [Code Mode](/docs/developers/code-mode). The
-program of the Bot gets a **reference**, not the secret. OpenBot puts the secret
-in place of the reference only when it sends an App tool call, and only to the
+A Bot uses the secrets only in [Code Mode](/developers/code-mode). The program
+of the Bot gets a **reference**, not the secret. OpenBot puts the secret in
+place of the reference only when it sends an App tool call, and only to the
 tools that you allow.
 
 | Word            | Meaning                                                                                         |
@@ -41,8 +41,8 @@ tools that you allow.
    tool. Then it reads the value and sends the call. The program does not see
    the arguments with the value.
 3. **A decider sees the call.** A call with a reference is always a
-   [request](/docs/developers/requests), also for a tool that only reads. The
-   decider sees the reference and the tool, not the secret.
+   [request](/developers/requests), also for a tool that only reads. The decider
+   sees the reference and the tool, not the secret.
 4. **OpenBot takes the secret out of the result.** Before the program or the
    model sees the App result, OpenBot puts `⟦hidden:github/token⟧` in place of
    the value. It also takes out the value in base64, base64url, hexadecimal, URL
@@ -65,7 +65,7 @@ returns `502 SecretProviderFailed`.
 
 ## Add a secret provider
 
-See [Secret providers](/docs/admin/secret-providers).
+See [Secret providers](/admin/secret-providers).
 
 ## Create a Vault
 
@@ -166,8 +166,8 @@ would come back without this check.
 
 ## Permissions
 
-`Vault` and `SecretProvider` are [resources](/docs/permissions) with three
-actions each:
+`Vault` and `SecretProvider` are [resources](/permissions) with three actions
+each:
 
 | Resource         | Action  | What it lets you do                                                      |
 | ---------------- | ------- | ------------------------------------------------------------------------ |
@@ -181,6 +181,6 @@ actions each:
 A member has every action on their own Vaults and providers, and `read` and
 `use` on shared ones. An administrator can also `write` shared ones. A caller
 who cannot read a Vault or a provider gets `404`, as if it did not exist. The
-[audit log](/docs/organization#audit-log) records each change, with
-`vault.created`, `vault.item.created`, `vault.granted`,
-`secret_provider.created` and the other actions.
+[audit log](/organization#audit-log) records each change, with `vault.created`,
+`vault.item.created`, `vault.granted`, `secret_provider.created` and the other
+actions.

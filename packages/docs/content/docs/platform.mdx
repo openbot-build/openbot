@@ -7,7 +7,7 @@ description:
 
 For platform operators. These tasks affect the whole deployment. Have server
 access or platform admin rights as the task requires. Start with the
-[administrator manual](/docs/admin).
+[administrator manual](/admin).
 
 The platform is the whole OpenBot deployment. One platform has many
 organizations. Platform admins run the platform. This page shows how to set it
@@ -73,24 +73,24 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-| Flag                     | Required          | What it does                                                                                                         |
-| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`        | Yes               | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.                |
-| `--oidc-issuer`          | With the ID       | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                                   |
-| `--oidc-client-id`       | With issuer       | The client ID at that provider.                                                                                      |
-| `--oidc-client-secret`   | No                | The client secret. Leave it out for a public client that uses PKCE.                                                  |
-| `--admin-email`          | At least one      | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people.       |
-| `--s3-endpoint`          | With the bucket   | The address of the object storage for [files](/docs/developers/files), such as `https://s3.us-east-1.amazonaws.com`. |
-| `--s3-public-endpoint`   | No                | The address where clients put files with a direct upload, when it is not `--s3-endpoint`.                            |
-| `--s3-region`            | No                | The region of the storage. The default is `us-east-1`.                                                               |
-| `--s3-bucket`            | With the endpoint | The bucket for files.                                                                                                |
-| `--s3-access-key-id`     | With the endpoint | The access key ID for the storage.                                                                                   |
-| `--s3-secret-access-key` | With the endpoint | The secret key for the storage.                                                                                      |
-| `--s3-path-style`        | No                | Put the bucket in the path. MinIO and RustFS need it.                                                                |
-| `--force`                | No                | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.               |
+| Flag                     | Required          | What it does                                                                                                    |
+| ------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------- |
+| `--public-origin`        | Yes               | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.           |
+| `--oidc-issuer`          | With the ID       | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                              |
+| `--oidc-client-id`       | With issuer       | The client ID at that provider.                                                                                 |
+| `--oidc-client-secret`   | No                | The client secret. Leave it out for a public client that uses PKCE.                                             |
+| `--admin-email`          | At least one      | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people.  |
+| `--s3-endpoint`          | With the bucket   | The address of the object storage for [files](/developers/files), such as `https://s3.us-east-1.amazonaws.com`. |
+| `--s3-public-endpoint`   | No                | The address where clients put files with a direct upload, when it is not `--s3-endpoint`.                       |
+| `--s3-region`            | No                | The region of the storage. The default is `us-east-1`.                                                          |
+| `--s3-bucket`            | With the endpoint | The bucket for files.                                                                                           |
+| `--s3-access-key-id`     | With the endpoint | The access key ID for the storage.                                                                              |
+| `--s3-secret-access-key` | With the endpoint | The secret key for the storage.                                                                                 |
+| `--s3-path-style`        | No                | Put the bucket in the path. MinIO and RustFS need it.                                                           |
+| `--force`                | No                | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.          |
 
 Set `--oidc-issuer` and `--oidc-client-id` together, or leave both out. Leave
-both out when people sign in only through the [SSO connections](/docs/sso) of
+both out when people sign in only through the [SSO connections](/sso) of
 organizations.
 
 A command line can show up in process lists. So you can give the client secret
@@ -179,19 +179,19 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-| Field                  | What it is                                                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `version`              | Goes up by one with each change.                                                                                        |
-| `publicOrigin`         | The public HTTPS origin of OpenBot.                                                                                     |
-| `identityProvider`     | The platform OpenID Connect provider, or `null` when people sign in only through SSO connections.                       |
-| `organizationCreation` | Who can create an organization: `anyone` or `platform_admins`. See [Organization creation](#organization-creation).     |
-| `ceiling`              | A policy with deny rules for every organization. See [Policy ceiling](#policy-ceiling).                                 |
-| `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/developers/app-index#host-restrictions).                           |
-| `codeMode`             | Whether Bots can use Code Mode, and its limits. See [Code Mode](/docs/developers/code-mode#turn-on-code-mode).          |
-| `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/docs/usage#rate-limit).                     |
-| `tokenRate`            | The highest token rates of each scope. Organizations can only set lower ones. See [Token rate](/docs/usage#token-rate). |
-| `files`                | The object storage and the limits for [files](/docs/developers/files#set-up-storage).                                   |
-| `updatedAt`            | When the settings last changed.                                                                                         |
+| Field                  | What it is                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `version`              | Goes up by one with each change.                                                                                    |
+| `publicOrigin`         | The public HTTPS origin of OpenBot.                                                                                 |
+| `identityProvider`     | The platform OpenID Connect provider, or `null` when people sign in only through SSO connections.                   |
+| `organizationCreation` | Who can create an organization: `anyone` or `platform_admins`. See [Organization creation](#organization-creation). |
+| `ceiling`              | A policy with deny rules for every organization. See [Policy ceiling](#policy-ceiling).                             |
+| `appRestrictions`      | Apps that the App Index hides. See [App Index](/developers/app-index#host-restrictions).                            |
+| `codeMode`             | Whether Bots can use Code Mode, and its limits. See [Code Mode](/developers/code-mode#turn-on-code-mode).           |
+| `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/usage#rate-limit).                      |
+| `tokenRate`            | The highest token rates of each scope. Organizations can only set lower ones. See [Token rate](/usage#token-rate).  |
+| `files`                | The object storage and the limits for [files](/developers/files#set-up-storage).                                    |
+| `updatedAt`            | When the settings last changed.                                                                                     |
 
 ### Secrets never come back
 
@@ -228,7 +228,7 @@ again.
 | `{ issuer, clientId, clientSecret: null }` | Sets the provider as a public PKCE client.       |
 
 Every instance uses a change at once. See
-[Configuration](/docs/configuration#how-a-change-reaches-every-instance).
+[Configuration](/configuration#how-a-change-reaches-every-instance).
 
 <Callout type="warn">
 	A new `publicOrigin` signs everyone out. It also changes the sign-in redirect
@@ -243,8 +243,8 @@ Every instance uses a change at once. See
 `ceiling` is a policy that applies in every organization. It may only have deny
 rules. A deny from the ceiling always wins, so no role and no token can do what
 it denies. A condition can use the `organizationId` of the caller. See
-[Permissions](/docs/permissions#policies). The ceiling does not apply to the
-platform API, so it never locks out the platform admins.
+[Permissions](/permissions#policies). The ceiling does not apply to the platform
+API, so it never locks out the platform admins.
 
 This ceiling stops every organization from adding its own model providers:
 
@@ -270,7 +270,7 @@ never makes an organization when an account signs in.
 | `anyone`          | The default. Anyone who signs in can create organizations.                                                       |
 | `platform_admins` | Only platform admins can create organizations. Other people join by invitation, by a verified domain, or by SSO. |
 
-See [Organization](/docs/organization#who-can-join) for all the ways an account
+See [Organization](/organization#who-can-join) for all the ways an account
 joins.
 
 ---
@@ -296,7 +296,7 @@ Nobody can use a suspended organization. Its tokens stop working at once. Set
 
 `GET /v1/platform/organizations/:organizationId/credits` reads the credits of an
 organization. `PATCH` on the same route turns them on or off, and
-`POST .../credits/grants` gives credits. See [Credits](/docs/usage#credits).
+`POST .../credits/grants` gives credits. See [Credits](/usage#credits).
 
 ---
 
@@ -304,22 +304,22 @@ organization. `PATCH` on the same route turns them on or off, and
 
 A platform can pay for model providers and share them with organizations. It can
 also share models. Organizations can also bring their own keys. See
-[Models](/docs/models).
+[Models](/models).
 
-| Route                                                 | What it does                                                             |
-| ----------------------------------------------------- | ------------------------------------------------------------------------ |
-| `GET /v1/platform/models`                             | Lists the shared models.                                                 |
-| `POST /v1/platform/models`                            | Adds a shared model.                                                     |
-| `GET /v1/platform/models/:modelId`                    | Reads one shared model.                                                  |
-| `PATCH /v1/platform/models/:modelId`                  | Changes a shared model.                                                  |
-| `DELETE /v1/platform/models/:modelId`                 | Removes a shared model.                                                  |
-| `GET /v1/platform/model_providers`                    | Lists the shared providers.                                              |
-| `POST /v1/platform/model_providers`                   | Adds a shared provider.                                                  |
-| `GET /v1/platform/model_providers/:providerId`        | Reads one shared provider.                                               |
-| `PATCH /v1/platform/model_providers/:providerId`      | Changes a shared provider.                                               |
-| `DELETE /v1/platform/model_providers/:providerId`     | Removes a shared provider.                                               |
-| `GET /v1/platform/model_providers/:providerId/prices` | Lists the prices of a shared provider. See [Prices](/docs/usage#prices). |
-| `PUT /v1/platform/model_providers/:providerId/prices` | Sets a new price for one model of a shared provider.                     |
+| Route                                                 | What it does                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------------- |
+| `GET /v1/platform/models`                             | Lists the shared models.                                            |
+| `POST /v1/platform/models`                            | Adds a shared model.                                                |
+| `GET /v1/platform/models/:modelId`                    | Reads one shared model.                                             |
+| `PATCH /v1/platform/models/:modelId`                  | Changes a shared model.                                             |
+| `DELETE /v1/platform/models/:modelId`                 | Removes a shared model.                                             |
+| `GET /v1/platform/model_providers`                    | Lists the shared providers.                                         |
+| `POST /v1/platform/model_providers`                   | Adds a shared provider.                                             |
+| `GET /v1/platform/model_providers/:providerId`        | Reads one shared provider.                                          |
+| `PATCH /v1/platform/model_providers/:providerId`      | Changes a shared provider.                                          |
+| `DELETE /v1/platform/model_providers/:providerId`     | Removes a shared provider.                                          |
+| `GET /v1/platform/model_providers/:providerId/prices` | Lists the prices of a shared provider. See [Prices](/usage#prices). |
+| `PUT /v1/platform/model_providers/:providerId/prices` | Sets a new price for one model of a shared provider.                |
 
 The bodies are the same as for the models and providers of an organization, plus
 `availability`. First add the model, then a provider that links it:
@@ -385,8 +385,7 @@ get `403` with `Forbidden`.
 OpenBot writes each platform change to the audit log, with the organization ID
 `platform`. The API cannot read these entries yet.
 
-See the full shapes in the
-[Platform reference](/docs/api/operations/tags/platform/).
+See the full shapes in the [Platform reference](/api/operations/tags/platform/).
 
 ---
 

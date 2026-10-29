@@ -3,12 +3,12 @@ title: 开发者工具
 description: 检查、测试和管理你发布的 App。
 ---
 
-面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+面向开发者。从[开发者手册](/zh-cn/developers)选择 API 接入、App 发布或项目贡献。
 
 这些工具面向发布 App 的人。你可以检查你的 App、证明你控制它、与团队共享访问权限、运行私密测试、请求收录，以及在出现问题时收到通知。
 
 只有检查调用是公开的。其他所有调用都需要用户令牌或 session cookie，以及 `App`
-上的 `publish`。参见[身份验证](/zh-cn/docs/developers/authentication)。
+上的 `publish`。参见[身份验证](/zh-cn/developers/authentication)。
 
 声明、证明、成员、报告和收录请求的 ID 必须是 UUID 文本。报告翻页游标 `before`
 和比较 ID `other` 也遵循此规则。旧 UUID v4 和新 UUID
@@ -36,7 +36,7 @@ curl -X POST https://api.example.com/v1/developer/inspect \
 | `stages` | 每个检查步骤：`Input`、`Discovery`、`CardRead`、`CardSchema`、`Compatibility`、`PublisherAssociation` 和 `Eligibility`。每个都是 `Passed`、`Failed`、`Unconfirmed` 或 `NotChecked`。 |
 
 `Eligible` 结果并不表示 App 已经在 Index 中。参见
-[App Index](/zh-cn/docs/developers/app-index#app-如何被收录)。
+[App Index](/zh-cn/developers/app-index#app-如何被收录)。
 
 ---
 
@@ -185,7 +185,7 @@ Effect 的命令，重试时复用该命令。
 
 1. 用你自己的 UUID 创建一个测试：`POST /v1/developer/tests`，带上
    `{ "id", "cardUrl", "remoteIndex" }`。
-2. 如果端点需要设置，就发送它们：`PUT /v1/developer/tests/:id/configuration`，带上一个由键和值组成的对象。键和[连接](/zh-cn/docs/developers/apps#审查并创建连接)中的相同。
+2. 如果端点需要设置，就发送它们：`PUT /v1/developer/tests/:id/configuration`，带上一个由键和值组成的对象。键和[连接](/zh-cn/developers/apps#审查并创建连接)中的相同。
 3. 运行测试：向 `POST /v1/developer/tests/:id/run` 发送
    `{ "commandKey": "test-run-1" }`。接口返回 `202` 和执行回执。用
    `GET /v1/developer/tests/:id` 读取测试，用
@@ -287,6 +287,6 @@ App 和证明的定期检查使用共同执行器。下次检查时间和每次�
 `{ "cardUrl": "...", "enabled": false }`。用 `GET /v1/developer/subscriptions`
 列出你的设置。
 
-在 [API 参考](/docs/api/operations/tags/developer-tools/)中查看完整的结构。
+在 [API 参考](/api/operations/tags/developer-tools/)中查看完整的结构。
 
 数据迁移保留现有声明、证明、成员、邀请、App、报告和通知设置。App 与证明检查保留保存的下次检查时间。已放弃的证明不会启动新检查。旧索引请求保留原有 ID，并关联历史执行。已保存结果的请求保持完成；没有保存结果的请求标记为中断，因为原始调用人未被保存。平台仍可完成独立的公开检查。

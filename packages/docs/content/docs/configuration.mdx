@@ -7,7 +7,7 @@ description:
 
 For platform operators. These tasks affect the whole deployment. Have server
 access or platform admin rights as the task requires. Start with the
-[administrator manual](/docs/admin).
+[administrator manual](/admin).
 
 OpenBot can run as many instances. An instance is one running OpenBot server
 process. All instances of one deployment use the same database. This page lists
@@ -64,14 +64,14 @@ client is separate from the App network guard.
 migration program, and the setup program all read it.
 
 When the server starts, it checks that all tables exist. If they do not exist,
-it stops. Run the migration program first. See [Deploy](/docs/deploy).
+it stops. Run the migration program first. See [Deploy](/deploy).
 
 ### TLS
 
 OpenBot serves plain HTTP only. It has no HTTPS of its own. To serve HTTPS, put
 a reverse proxy in front of it, such as Caddy or nginx. The proxy holds the
 certificate and sends the traffic to OpenBot. See
-[Deploy](/docs/deploy#tls-and-the-reverse-proxy).
+[Deploy](/deploy#tls-and-the-reverse-proxy).
 
 ### Outbound connections
 
@@ -127,8 +127,8 @@ OpenBot stores some secrets in the database. It encrypts them with the keys in
 
 - the private data of App connections, such as App credentials, private
   settings, and sign-in state,
-- the API keys of [model providers](/docs/models),
-- the client secrets of [SSO connections](/docs/sso),
+- the API keys of [model providers](/models),
+- the client secrets of [SSO connections](/sso),
 - the sign-in secret of the platform, which signs the sign-in cookies,
 - the client secret of the platform OpenID Connect provider.
 
@@ -204,8 +204,8 @@ with this body:
 { "_tag": "SetupRequired" }
 ```
 
-The log also tells you to run setup. See [Platform](/docs/platform#setup) for
-all flags and [Deploy](/docs/deploy) for the commands.
+The log also tells you to run setup. See [Platform](/platform#setup) for all
+flags and [Deploy](/deploy) for the commands.
 
 ---
 
@@ -215,27 +215,27 @@ Every other setting is a shared setting in the database. Two documents hold most
 of them:
 
 - The **platform settings** at `/v1/platform/settings`. Only platform admins can
-  change them. See [Platform](/docs/platform).
+  change them. See [Platform](/platform).
 - The **organization settings** at `/v1/organization/settings`. Each
-  organization has its own. See [Organization](/docs/organization#settings).
+  organization has its own. See [Organization](/organization#settings).
 
 Older versions of OpenBot read more environment variables. OpenBot ignores them
 now. This table shows where each value went:
 
-| Old variable                    | New place                                                                                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `OPENBOT_PUBLIC_ORIGIN`         | `publicOrigin` in the platform settings. Setup writes it with `--public-origin`.                                   |
-| `OPENBOT_OIDC_ISSUER`           | `identityProvider.issuer` in the platform settings. Setup writes it with `--oidc-issuer`.                          |
-| `OPENBOT_OIDC_CLIENT_ID`        | `identityProvider.clientId` in the platform settings. Setup writes it with `--oidc-client-id`.                     |
-| `OPENBOT_OIDC_CLIENT_SECRET`    | `identityProvider.clientSecret` in the platform settings, encrypted. Setup writes it with `--oidc-client-secret`.  |
-| `BETTER_AUTH_SECRET`            | The sign-in secret. Setup makes a random one and stores it encrypted. You never set it.                            |
-| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`.                                                                                             |
-| `OPENBOT_OWNER_EMAILS`          | Platform admins. Setup adds them with `--admin-email`. Change them with `/v1/platform/admins`.                     |
-| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Verified domains of each organization, with `joinByDomain` in its settings. See [SSO](/docs/sso#verified-domains). |
-| `OPENBOT_MODEL_ENDPOINT`        | Model providers of an organization or of the platform. See [Models](/docs/models).                                 |
-| `OPENBOT_MODEL_API_KEY`         | Model providers, encrypted.                                                                                        |
-| `OPENBOT_MODEL_ID`              | A model that a model provider links, and the `model` of each Bot.                                                  |
-| `OPENBOT_DEV_MODE`              | The development entry point decides. See [Development](#development).                                              |
+| Old variable                    | New place                                                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `OPENBOT_PUBLIC_ORIGIN`         | `publicOrigin` in the platform settings. Setup writes it with `--public-origin`.                                  |
+| `OPENBOT_OIDC_ISSUER`           | `identityProvider.issuer` in the platform settings. Setup writes it with `--oidc-issuer`.                         |
+| `OPENBOT_OIDC_CLIENT_ID`        | `identityProvider.clientId` in the platform settings. Setup writes it with `--oidc-client-id`.                    |
+| `OPENBOT_OIDC_CLIENT_SECRET`    | `identityProvider.clientSecret` in the platform settings, encrypted. Setup writes it with `--oidc-client-secret`. |
+| `BETTER_AUTH_SECRET`            | The sign-in secret. Setup makes a random one and stores it encrypted. You never set it.                           |
+| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`.                                                                                            |
+| `OPENBOT_OWNER_EMAILS`          | Platform admins. Setup adds them with `--admin-email`. Change them with `/v1/platform/admins`.                    |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Verified domains of each organization, with `joinByDomain` in its settings. See [SSO](/sso#verified-domains).     |
+| `OPENBOT_MODEL_ENDPOINT`        | Model providers of an organization or of the platform. See [Models](/models).                                     |
+| `OPENBOT_MODEL_API_KEY`         | Model providers, encrypted.                                                                                       |
+| `OPENBOT_MODEL_ID`              | A model that a model provider links, and the `model` of each Bot.                                                 |
+| `OPENBOT_DEV_MODE`              | The development entry point decides. See [Development](#development).                                             |
 
 Some values were options in code before. They are settings now, too:
 
@@ -294,7 +294,7 @@ reach OpenBot.
 The Compose file gives `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS` to
 OpenBot as files in `/run/secrets`. It gives `OPENBOT_OUTBOUND_ALLOW` as an
 environment variable. The `openbot` service has no other environment variables.
-See [Deploy](/docs/deploy#run-with-compose). A full template is in
+See [Deploy](/deploy#run-with-compose). A full template is in
 `deploy/docker/production.env.example`.
 
 ---
@@ -313,7 +313,7 @@ random key named `dev`.
 <Callout type="info">
 	If your `.env.development` is from an older version, delete it and run `devenv
 	shell -- pnpm dev:setup` again. You can also reset the development database.
-	See [Contributing](/docs/contributing#start-the-development-server).
+	See [Contributing](/contributing#start-the-development-server).
 </Callout>
 
 devenv then sets these values for you. devenv picks each port: it starts at the
@@ -342,7 +342,7 @@ Only the development entry point reads `OPENBOT_DEV_PUBLIC_ORIGIN`. It needs no
 setup step. At each start, it writes the platform settings for this origin
 itself. It makes the local account `developer@localhost.test` a platform admin,
 and it turns on the local test sign-in. See
-[Authentication](/docs/developers/authentication#development-account).
+[Authentication](/developers/authentication#development-account).
 
 The production program never uses the local test account. There is no switch for
 it.
@@ -352,14 +352,14 @@ your machine, such as Ollama, set `OPENBOT_OUTBOUND_ALLOW=localhost` in
 `.env.development`. See [Outbound connections](#outbound-connections).
 
 devenv also starts [RustFS](https://rustfs.com), a small object storage, for
-[files](/docs/developers/files). It runs in Docker. Its data lives in the Docker
+[files](/developers/files). It runs in Docker. Its data lives in the Docker
 volume `openbot-dev-rustfs`. At each start, the development entry point makes
 the bucket `openbot` and writes the storage into the platform settings. RustFS
 is at `127.0.0.1`, a private address. So the development entry point opens that
 one host for itself. You do not need to add it to `OPENBOT_OUTBOUND_ALLOW`.
 
 To use another database, set `OPENBOT_DATABASE_URL` in `.env.development`. See
-[Contributing](/docs/contributing).
+[Contributing](/contributing).
 
 ---
 

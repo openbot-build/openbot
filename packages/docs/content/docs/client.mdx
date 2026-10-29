@@ -3,8 +3,8 @@ title: Client
 description: Call OpenBot from TypeScript with typed requests and errors.
 ---
 
-For developers. Start with the [developer manual](/docs/developers) to choose
-API work, App publishing, or project changes.
+For developers. Start with the [developer manual](/developers) to choose API
+work, App publishing, or project changes.
 
 `@openbot-build/client` is the TypeScript client for OpenBot. It is built from
 the same API contract as the server. Every request, answer, and error has a
@@ -85,7 +85,7 @@ using these helpers; this Node.js example uses `NodeCrypto.layer`.
 | `organization`   | No       | An organization ID. With the session cookie, it is sent as the `OpenBot-Organization` header. A token ignores it. |
 | `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                                      |
 
-To make a user token, see [Authentication](/docs/developers/authentication).
+To make a user token, see [Authentication](/developers/authentication).
 
 The client never saves the token and never puts it in a URL. `onUnauthorized`
 does not sign in or try the request again. Use it to tell the user, for example
@@ -102,8 +102,8 @@ IDs use `Model.Id` and `Provider.Id` from `@openbot-build/core`. The JSON and
 URL values are still strings.
 
 Every operation is at `client.api.<group>.<operation>`. The names are the same
-as in the [API reference](/docs/api/). Each call takes one object with these
-optional fields:
+as in the [API reference](/api/). Each call takes one object with these optional
+fields:
 
 | Field     | What it holds                         |
 | --------- | ------------------------------------- |
@@ -129,25 +129,25 @@ const tasks =
 
 Some groups and their pages:
 
-| Group            | Use it to                                                 | Reference                                                     |
-| ---------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
-| `chats`          | Talk to Bots, and read Chats and results.                 | [Chats](/docs/api/operations/tags/chats/)                     |
-| `delegations`    | Read and stop the work that Bots gave away.               | [Delegations](/docs/api/operations/tags/delegations/)         |
-| `bots`           | Make and manage Bots.                                     | [Bots](/docs/api/operations/tags/bots/)                       |
-| `requests`       | Answer the requests of your Bots.                         | [Requests](/docs/api/operations/tags/requests/)               |
-| `apps`           | Find an App at an address.                                | [App discovery](/docs/api/operations/tags/app-discovery/)     |
-| `connections`    | Add and manage App connections.                           | [Connections](/docs/api/operations/tags/connections/)         |
-| `appIndex`       | Search the public App Index.                              | [App Index](/docs/api/operations/tags/app-index/)             |
-| `userTokens`     | List, make, revoke and check user tokens.                 | [User tokens](/docs/api/operations/tags/user-tokens/)         |
-| `organizations`  | List and create your organizations.                       | [Organizations](/docs/api/operations/tags/organizations/)     |
-| `organization`   | Manage the organization, its members, roles and settings. | [Organization](/docs/api/operations/tags/organization/)       |
-| `modelProviders` | Manage model providers and list models.                   | [Model providers](/docs/api/operations/tags/model-providers/) |
-| `sso`            | Verify email domains and manage SSO connections.          | [SSO](/docs/api/operations/tags/sso/)                         |
-| `platform`       | Manage the platform. Only for platform admins.            | [Platform](/docs/api/operations/tags/platform/)               |
-| `health`         | Read the service document and health.                     | [Health](/docs/api/operations/tags/service-and-health/)       |
+| Group            | Use it to                                                 | Reference                                                |
+| ---------------- | --------------------------------------------------------- | -------------------------------------------------------- |
+| `chats`          | Talk to Bots, and read Chats and results.                 | [Chats](/api/operations/tags/chats/)                     |
+| `delegations`    | Read and stop the work that Bots gave away.               | [Delegations](/api/operations/tags/delegations/)         |
+| `bots`           | Make and manage Bots.                                     | [Bots](/api/operations/tags/bots/)                       |
+| `requests`       | Answer the requests of your Bots.                         | [Requests](/api/operations/tags/requests/)               |
+| `apps`           | Find an App at an address.                                | [App discovery](/api/operations/tags/app-discovery/)     |
+| `connections`    | Add and manage App connections.                           | [Connections](/api/operations/tags/connections/)         |
+| `appIndex`       | Search the public App Index.                              | [App Index](/api/operations/tags/app-index/)             |
+| `userTokens`     | List, make, revoke and check user tokens.                 | [User tokens](/api/operations/tags/user-tokens/)         |
+| `organizations`  | List and create your organizations.                       | [Organizations](/api/operations/tags/organizations/)     |
+| `organization`   | Manage the organization, its members, roles and settings. | [Organization](/api/operations/tags/organization/)       |
+| `modelProviders` | Manage model providers and list models.                   | [Model providers](/api/operations/tags/model-providers/) |
+| `sso`            | Verify email domains and manage SSO connections.          | [SSO](/api/operations/tags/sso/)                         |
+| `platform`       | Manage the platform. Only for platform admins.            | [Platform](/api/operations/tags/platform/)               |
+| `health`         | Read the service document and health.                     | [Health](/api/operations/tags/service-and-health/)       |
 
 Every operation needs an action on a resource. A call without it fails with
-`Forbidden`. See [Permissions](/docs/permissions).
+`Forbidden`. See [Permissions](/permissions).
 
 The typed client uses Effect `Redacted<string>` for secret fields in request and
 response values. Wrap a new secret with `Redacted.make`. Use `Redacted.value`
@@ -207,7 +207,7 @@ Connecting does not change model selections. `ModelProviderAuthorizationInvalid`
 needs a new attempt; `ModelProviderLoginRequired` needs sign-in;
 `ModelProviderOAuthUnavailable` means the call could not complete now. A
 `ModelProviderConflict` needs the latest provider version. See
-[Models](/docs/models#connect-chatgpt).
+[Models](/models#connect-chatgpt).
 
 ## Observe and control executions
 
@@ -322,10 +322,10 @@ The client sends requests with `credentials: "same-origin"`, so the browser adds
 the cookie. The browser also adds the `Origin` header. For requests that change
 data, OpenBot checks that it is exactly `publicOrigin` in the platform settings.
 Read the organizations of the person with `GET /auth/session`. See
-[Authentication](/docs/developers/authentication#read-and-end-the-sign-in).
+[Authentication](/developers/authentication#read-and-end-the-sign-in).
 
 To serve your web app on the same origin, see
-[Deploy](/docs/deploy#your-own-client-on-the-same-origin).
+[Deploy](/deploy#your-own-client-on-the-same-origin).
 
 <Callout type="warn">
 	Do not put a user token in browser code. Anyone who opens the page can read
@@ -378,7 +378,7 @@ const program = Effect.gen(function* () {
 | `onChange` | Optional. Runs when an action in the view changes status. Use it to refresh requests and the Chat. |
 
 The result works with `mount` from `@openbot-build/protocol/McpApps`, which
-shows the view in an iframe. See [Protocol](/docs/protocol).
+shows the view in an iframe. See [Protocol](/protocol).
 
 The view client holds no credentials. Every request goes through OpenBot, so the
 normal capability checks apply:
@@ -407,10 +407,10 @@ server restart does not close a view. Its expiry and current access still apply.
 ## Show confessions
 
 The Bot uses the `confide` tool to say how its work goes, and the
-[memory Bot](/docs/developers/memory#how-the-bot-learns) answers it. People may
-read this: `GET /v1/chats/:chatId/confessions` lists it, and the calls are in
-the history of the Chat. But the Bot speaks there more freely than in its
-answers. So do not make it too easy to read:
+[memory Bot](/developers/memory#how-the-bot-learns) answers it. People may read
+this: `GET /v1/chats/:chatId/confessions` lists it, and the calls are in the
+history of the Chat. But the Bot speaks there more freely than in its answers.
+So do not make it too easy to read:
 
 - Do not show confessions in the conversation. Fold the `confide` tool calls in
   the history, and do not tell people about them in a message.

@@ -6,13 +6,13 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 A **trigger** gives one task with one prompt to one Bot. It fires on a schedule,
 from a webhook, or both. It does nothing else: the Bot decides how to do the
-work. It can plan first, keep a [todo list](/docs/developers/chats#todo-list),
-and give work to other Bots. When the task ends, its result goes to your
-[Chat](/docs/developers/chats) with the Bot.
+work. It can plan first, keep a [todo list](/developers/chats#todo-list), and
+give work to other Bots. When the task ends, its result goes to your
+[Chat](/developers/chats) with the Bot.
 
 ---
 
@@ -25,13 +25,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/triggers
 ```
 
-| Field      | What it does                                                                                                          |
-| ---------- | --------------------------------------------------------------------------------------------------------------------- |
-| `prompt`   | The task.                                                                                                             |
-| `bot`      | Optional. The Bot that does the work. Without it, your [default Bot](/docs/developers/bots#your-default-bot) does it. |
-| `schedule` | Optional. When the trigger fires by itself.                                                                           |
-| `shared`   | Optional. `true` makes a shared trigger that belongs to the organization.                                             |
-| `enabled`  | Optional. `false` keeps the trigger from firing. The default is `true`.                                               |
+| Field      | What it does                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `prompt`   | The task.                                                                                                        |
+| `bot`      | Optional. The Bot that does the work. Without it, your [default Bot](/developers/bots#your-default-bot) does it. |
+| `schedule` | Optional. When the trigger fires by itself.                                                                      |
+| `shared`   | Optional. `true` makes a shared trigger that belongs to the organization.                                        |
+| `enabled`  | Optional. `false` keeps the trigger from firing. The default is `true`.                                          |
 
 The answer is `201` with the trigger. It has `nextRunAt`, the next time that the
 schedule fires, and `lastFiredAt`.
@@ -45,17 +45,15 @@ schedule fires, and `lastFiredAt`.
 
 ## What a firing does
 
-Each firing gives the task to the Bot as a
-[delegation](/docs/developers/delegation). The work runs in a new task Chat of
-the Bot. Its first input is the prompt, from "a trigger". The delegation has
-`trigger` with the ID of the trigger.
+Each firing gives the task to the Bot as a [delegation](/developers/delegation).
+The work runs in a new task Chat of the Bot. Its first input is the prompt, from
+"a trigger". The delegation has `trigger` with the ID of the trigger.
 
-When the work ends, its result goes as a
-[notice](/docs/developers/chats#notices) to the direct Chat of the actor with
-the Bot. OpenBot makes that Chat when it does not exist yet. So the Bot reads
-the result there, and it can tell the actor about it or go on with the work. The
-[audit log](/docs/organization#audit-log) records `trigger.fired` with the ID of
-the delegation in `details.delegation`.
+When the work ends, its result goes as a [notice](/developers/chats#notices) to
+the direct Chat of the actor with the Bot. OpenBot makes that Chat when it does
+not exist yet. So the Bot reads the result there, and it can tell the actor
+about it or go on with the work. The [audit log](/organization#audit-log)
+records `trigger.fired` with the ID of the delegation in `details.delegation`.
 
 To find the work of a trigger, read `GET /v1/chats/:chatId/delegations` for that
 direct Chat, or list the task Chats of the Bot with
@@ -131,7 +129,7 @@ more, the trigger does not fire.
 The saved caller includes the original user token and its limits. Each step
 checks current rights. A revoked token cannot start or resume work. Prompts and
 webhook data are encrypted in saved records. The Bot asks for new capabilities
-with [requests](/docs/developers/requests). The requests go to the actor.
+with [requests](/developers/requests). The requests go to the actor.
 
 ---
 
@@ -152,4 +150,4 @@ The path of your own triggers is `org / <org> / user / <you> / trigger / <id>`.
 A shared trigger has `owner: { "_tag": "Organization" }`. A personal trigger has
 `owner: { "_tag": "Member", "userId": "<member id>" }`. Every member can read
 the shared triggers. Administrators can change them. The list only has the
-triggers that you may read. See [Permissions](/docs/permissions).
+triggers that you may read. See [Permissions](/permissions).

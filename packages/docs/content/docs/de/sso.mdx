@@ -7,7 +7,7 @@ description:
 
 Für die Organisationsverwaltung. Jede Aufgabe braucht die genannten Rechte. Nur
 Plattform-Admins ändern Einstellungen unter `/v1/platform`. Beginne mit dem
-[Administrationshandbuch](/de/docs/admin).
+[Administrationshandbuch](/de/admin).
 
 Mit SSO (Single Sign-On, einmalige Anmeldung) melden sich Menschen mit dem
 Kontoanbieter ihrer eigenen Firma an. Eine Organisation kann ihren eigenen
@@ -18,7 +18,7 @@ Person ist.
 Diese Seite zeigt, wie du eine Domain bestätigst, wie du eine SSO-Verbindung
 hinzufügst und wie die Anmeldung einen Anbieter wählt. Alle Routen liegen unter
 `/v1/organization`. Lesen braucht `read` auf `Sso`. Änderungen brauchen `write`
-auf `Sso`. Siehe [Berechtigungen](/de/docs/permissions).
+auf `Sso`. Siehe [Berechtigungen](/de/permissions).
 
 ---
 
@@ -88,10 +88,10 @@ SSO-Verbindung die Domain nutzt, antwortet das Entfernen mit `409` und
 
 Eine bestätigte Domain bestimmt auch, wer der Organisation beitritt. Wenn
 `joinByDomain` in den
-[Einstellungen der Organisation](/de/docs/organization#einstellungen) `true`
-ist, tritt eine Person mit einer geprüften E-Mail in der Domain bei, wenn sie
-sich anmeldet. Sie bekommt die `defaultRoles` der Organisation. `joinByDomain`
-ist standardmäßig `true`.
+[Einstellungen der Organisation](/de/organization#einstellungen) `true` ist,
+tritt eine Person mit einer geprüften E-Mail in der Domain bei, wenn sie sich
+anmeldet. Sie bekommt die `defaultRoles` der Organisation. `joinByDomain` ist
+standardmäßig `true`.
 
 ---
 
@@ -153,7 +153,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 Die `redirectUri` ist `<publicOrigin>/auth/callback/<connectionId>`. Registriere
 sie beim Anbieter. Das Client-Secret kommt nie zurück. Die Antwort zeigt
 stattdessen `{ set, hint }`. Siehe
-[Platform](/de/docs/platform#geheimnisse-kommen-nie-zurück).
+[Platform](/de/platform#geheimnisse-kommen-nie-zurück).
 
 ### Eine Verbindung ändern oder entfernen
 
@@ -197,7 +197,7 @@ Platform-Anbieter anmelden.
 
 `POST /auth/sign-in` startet eine Anmeldung im Browser. Es braucht keine
 Zugangsdaten. Es prüft den Header `Origin`, wie jeder Schreibzugriff mit Cookie.
-Siehe [Authentifizierung](/de/docs/developers/authentication#die-origin-regel).
+Siehe [Authentifizierung](/de/developers/authentication#die-origin-regel).
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in \
@@ -221,7 +221,7 @@ Beide Felder sind optional. OpenBot wählt den Anbieter so:
 Schick den Browser zu `url`. Die Antwort setzt auch das Cookie für den
 Anmeldestatus. Better Auth braucht es, um die Anmeldung abzuschließen. Nach der
 Anmeldung geht der Browser zu `returnTo`. Siehe
-[Rückkehrpfade](/de/docs/developers/authentication#rückkehrpfade).
+[Rückkehrpfade](/de/developers/authentication#rückkehrpfade).
 
 ---
 
@@ -240,4 +240,4 @@ Anmeldung geht der Browser zu `returnTo`. Siehe
 | `503`  | `SsoUnavailable`        | OpenBot erreicht seine Datenbank nicht.                                                     |
 
 Die vollständigen Formen findest du in der
-[SSO-Referenz](/docs/api/operations/tags/sso/).
+[SSO-Referenz](/api/operations/tags/sso/).

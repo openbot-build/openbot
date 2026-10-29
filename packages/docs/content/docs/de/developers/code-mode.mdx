@@ -5,7 +5,7 @@ description: Der Bot schreibt ein kurzes Programm, das Tools von Apps aufruft.
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Im **Code Mode** schreibt der Bot ein kurzes JavaScript-Programm, statt die
 Tools einer App einzeln aufzurufen. Das Programm ruft die Tools auf, arbeitet
@@ -14,10 +14,9 @@ Tokens, denn große Ergebnisse bleiben im Programm und kommen nicht in den
 Kontext des Modells. Das Programm kann auch viele Tools auf einmal aufrufen.
 
 Code Mode gibt dem Bot keine neuen Rechte. Jeder Aufruf einer App in einem
-Programm geht durch dieselbe
-[Prüfung der Fähigkeiten](/de/docs/developers/requests) wie ein normaler Aufruf
-eines App-Tools. Jeder Aufruf ist auch eine normale
-[App operation](/de/docs/developers/apps#app-operations).
+Programm geht durch dieselbe [Prüfung der Fähigkeiten](/de/developers/requests)
+wie ein normaler Aufruf eines App-Tools. Jeder Aufruf ist auch eine normale
+[App operation](/de/developers/apps#app-operations).
 
 | Wort     | Bedeutung                                                                                                                |
 | -------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -31,7 +30,7 @@ eines App-Tools. Jeder Aufruf ist auch eine normale
 
 ## Code Mode einschalten
 
-Siehe [Code Mode einrichten](/de/docs/admin/code-mode).
+Siehe [Code Mode einrichten](/de/admin/code-mode).
 
 ## So nutzt der Bot ihn
 
@@ -64,12 +63,12 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 Ein Aufruf eines Tools gibt dem Programm das Ergebnis, das die App geschickt
 hat. Wenn ein Aufruf nicht klappt, bekommt das Programm einen `Error`:
 
-| Name des Fehlers   | Warum                                                                                                                              |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `AppCallDenied`    | Ein Entscheider hat den Aufruf nicht erlaubt.                                                                                      |
-| `AppCallFailed`    | Der Aufruf der App ist fehlgeschlagen. `details.reason` sagt, warum.                                                               |
-| `AppInputRequired` | Die App braucht mehr Eingaben. Beantworte die App operation in `details.operationId` außerhalb des Codes.                          |
-| `VaultDenied`      | Der Aufruf hat eine [Vault](/de/docs/developers/vaults)-Referenz, die der Bot hier nicht nutzen darf. OpenBot hat nichts gesendet. |
+| Name des Fehlers   | Warum                                                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | Ein Entscheider hat den Aufruf nicht erlaubt.                                                                                 |
+| `AppCallFailed`    | Der Aufruf der App ist fehlgeschlagen. `details.reason` sagt, warum.                                                          |
+| `AppInputRequired` | Die App braucht mehr Eingaben. Beantworte die App operation in `details.operationId` außerhalb des Codes.                     |
+| `VaultDenied`      | Der Aufruf hat eine [Vault](/de/developers/vaults)-Referenz, die der Bot hier nicht nutzen darf. OpenBot hat nichts gesendet. |
 
 Das Programm kann diese Fehler abfangen und weitermachen.
 
@@ -80,8 +79,8 @@ Das Programm kann diese Fehler abfangen und weitermachen.
 Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das
 schreibt. Dann hält das Programm bei diesem Aufruf an. Der Turn wartet nicht:
 Der Werkzeugaufruf des Programms bekommt sofort ein wartendes Ergebnis, und der
-Bot macht weiter. Der [Request](/de/docs/developers/requests) hat den Aufruf der
-App in `app` und das Programm in `code`:
+Bot macht weiter. Der [Request](/de/developers/requests) hat den Aufruf der App
+in `app` und das Programm in `code`:
 
 ```json
 {
@@ -100,8 +99,8 @@ Nach der Entscheidung führt OpenBot das Programm im Hintergrund noch einmal von
 oben aus. Jeder Aufruf, der schon lief, gibt sein gespeichertes Ergebnis.
 OpenBot schickt ihn nicht noch einmal an die App. Dann läuft das Programm nach
 dem Aufruf weiter, der gewartet hat. Wenn es endet, kommt sein Ergebnis als
-[Mitteilung](/de/docs/developers/chats#mitteilungen) in den Chat zurück, und der
-Bot macht damit weiter.
+[Mitteilung](/de/developers/chats#mitteilungen) in den Chat zurück, und der Bot
+macht damit weiter.
 
 Das klappt nur, wenn das Programm jedes Mal dieselben Aufrufe in derselben
 Reihenfolge macht. Darum sieht das Programm in `Date.now()` eine feste Zeit, und
@@ -114,13 +113,13 @@ hat. Nichts wird aus Versehen geschickt.
 
 ## Geheimnisse nutzen
 
-Ein Programm kann Geheimnisse aus einem [Vault](/de/docs/developers/vaults)
-nutzen, ohne sie zu sehen. Der Bot bekommt `vault` neben `apps`.
-`vault.github.token` ist eine Referenz wie `⟦vault:github/token⟧`, nicht das
-Geheimnis. OpenBot setzt das Geheimnis erst ein, wenn es einen App-Tool-Aufruf
-sendet, den der Eintrag erlaubt. Ein Aufruf mit einer Referenz braucht immer
-eine Entscheidung. Das App-Ergebnis kommt mit `⟦hidden:github/token⟧` an der
-Stelle des Geheimnisses zurück.
+Ein Programm kann Geheimnisse aus einem [Vault](/de/developers/vaults) nutzen,
+ohne sie zu sehen. Der Bot bekommt `vault` neben `apps`. `vault.github.token`
+ist eine Referenz wie `⟦vault:github/token⟧`, nicht das Geheimnis. OpenBot setzt
+das Geheimnis erst ein, wenn es einen App-Tool-Aufruf sendet, den der Eintrag
+erlaubt. Ein Aufruf mit einer Referenz braucht immer eine Entscheidung. Das
+App-Ergebnis kommt mit `⟦hidden:github/token⟧` an der Stelle des Geheimnisses
+zurück.
 
 ---
 

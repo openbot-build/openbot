@@ -8,13 +8,13 @@
 
 - OpenBot is headless and API first. Do not add a user interface, pages, or
   client apps. The only web site in the repository is the docs site in
-  `packages/docs`. It also holds the home page.
+  `packages/docs`.
 - Command line tools go in `packages/cli` and the `openbot-*` command packages,
   such as `packages/computer`. They are tools, not a user interface.
 - Command line tools go in `packages/cli` and the `openbot-*` command packages,
   such as `packages/computer`. They are tools, not a user interface.
-- Build the docs site and the home page with Astro and Starlight only. Do not
-  use Next.js or another web framework.
+- Build the docs site with Astro and Starlight only. Do not use Next.js or
+  another web framework.
 - Add a new feature to the HTTP contract in `@openbot-build/api` first. Then
   write the handler in `@openbot-build/openbot`. Make sure it works with an API
   key and with the same-origin session cookie.
@@ -38,9 +38,6 @@
   the docs site:
   - The docs are in English, Simplified Chinese (`zh-cn`), and German (`de`).
     Translations live in `packages/docs/content/docs/<locale>/`.
-  - The home page has all the languages in `homeLocales` in
-    `packages/docs/src/i18n.ts`. Its text lives in
-    `packages/docs/src/landing/messages/<locale>.ts`.
   - Keep the plain style of Basic English in every translation.
 - The `LICENSE` file is the official legal text of the AGPL. Do not change it.
 
@@ -61,7 +58,6 @@
   overview.
 - When you change how something works, update its page in the same change, in
   English, Chinese, and German.
-- When you change text on the home page, update it in every language.
 - A translated page keeps the same headings in the same order as the English
   page, and links to pages in its own language.
 - The API reference is made from the contract by `packages/docs/scripts/api.ts`.

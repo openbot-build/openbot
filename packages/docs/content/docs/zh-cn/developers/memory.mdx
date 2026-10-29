@@ -3,10 +3,10 @@ title: Memory
 description: 每个 Bot 从它所有 Chat 的工作中学习，并在之后使用学到的东西。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
-**Bot 记忆**（Bot memory）是一个 [Bot](/zh-cn/docs/developers/bots) 在它所有
-[Chats](/zh-cn/docs/developers/chats)
+**Bot 记忆**（Bot memory）是一个 [Bot](/zh-cn/developers/bots) 在它所有
+[Chats](/zh-cn/developers/chats)
 中学到的东西。每个 Bot 有一个条目池。**记忆 Bot**（memory
 Bot）保管这个池。它是属于这个 Bot 的助手。它读取来源访问规则已验证的有效条目，学习新的条目，并把有用的内容加入 Bot 的工作。它的学习工作不会显示为 Chat。本页介绍 Bot 记忆如何学习、谁能看到什么，以及如何用 API 读取和修改它。
 
@@ -26,15 +26,15 @@ Bot 记忆是唯一的记忆。Chat 保留它的历史，但没有单独的事�
 
 **Tag**（标签）用来给条目分类。带冒号的 Tag 属于 OpenBot。记忆 Bot 不能写这些 Tag，所以模型无法改变谁能看到一个条目。
 
-| Tag                         | 含义                                                                 |
-| --------------------------- | -------------------------------------------------------------------- |
-| `from:<userId>`             | 说了或做了这件事的人。                                               |
-| `for:person:<userId>`       | 这个人可以看到这个条目。                                             |
-| `for:channel:<channelId>`   | 这个 [Channel](/zh-cn/docs/developers/channels) 群里的人可以看到它。 |
-| `for:bot`                   | 使用这个 Bot 的所有人都可以看到它。                                  |
-| `org:<organizationId>`      | 它发生的组织。只有这个组织中的工作能看到它。                         |
-| `chat:<id>`、`channel:<id>` | 它来自哪里。                                                         |
-| `app:<tool>`                | 有一个来自 App 的工具结果支持它。                                    |
+| Tag                         | 含义                                                            |
+| --------------------------- | --------------------------------------------------------------- |
+| `from:<userId>`             | 说了或做了这件事的人。                                          |
+| `for:person:<userId>`       | 这个人可以看到这个条目。                                        |
+| `for:channel:<channelId>`   | 这个 [Channel](/zh-cn/developers/channels) 群里的人可以看到它。 |
+| `for:bot`                   | 使用这个 Bot 的所有人都可以看到它。                             |
+| `org:<organizationId>`      | 它发生的组织。只有这个组织中的工作能看到它。                    |
+| `chat:<id>`、`channel:<id>` | 它来自哪里。                                                    |
+| `app:<tool>`                | 有一个来自 App 的工具结果支持它。                               |
 
 其他 Tag，比如 `testing` 或
 `trip-planning`，是**主题**（topic）。记忆 Bot 选择它们，并让它们保持整洁。主题只用小写字母、数字和短横线。
@@ -75,9 +75,9 @@ Bot 有一个叫
 `applyLearning`
 在写锁内检查最新来源状态，再保存变更。主题改名仍覆盖所有匹配条目。修改标签或状态不会再次解密和加密原有内容。
 
-Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为记忆。来自 App 的工具结果也不会单独成为记忆。OpenBot 的[通知](/zh-cn/docs/developers/chats#通知)永远不会被当作人说的话。从不倾诉的 Bot 什么都学不到。
+Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为记忆。来自 App 的工具结果也不会单独成为记忆。OpenBot 的[通知](/zh-cn/developers/chats#通知)永远不会被当作人说的话。从不倾诉的 Bot 什么都学不到。
 
-审查 Chat 没有 `confide` 工具。当[组织设置](/zh-cn/docs/organization#设置)中的
+审查 Chat 没有 `confide` 工具。当[组织设置](/zh-cn/organization#设置)中的
 `botMemory` 关闭时，Bot 仍然会得到回答，但不会学到任何东西。
 
 ---
@@ -102,7 +102,7 @@ Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为�
 ## 记忆 Bot
 
 记忆 Bot 使用组织设置中的 `botMemoryModel`。它没有默认值。它为 `null`
-时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/docs/developers/sharing)，模型和费用来自 Chat 所在的组织。
+时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/developers/sharing)，模型和费用来自 Chat 所在的组织。
 
 用 `GET` 和 `PATCH /v1/bots/:botId/memory/bot`
 读取和修改记忆 Bot 的设置。你需要在一个不是关联 Bot 的 Bot 上拥有 `write`：
@@ -190,7 +190,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Bot 的 Bot 上拥有
 `write`。回答只包含删除的条目数量。
 
-当你[删除一个 Chat 的历史](/zh-cn/docs/developers/chats#删除历史)时，Bot 从它学到的记忆仍然保留。要把这些也删除，请清除
+当你[删除一个 Chat 的历史](/zh-cn/developers/chats#删除历史)时，Bot 从它学到的记忆仍然保留。要把这些也删除，请清除
 `chat:<id>`。
 
 新旧记忆都遵守相同的来源访问规则。如果 OpenBot 无法证明对旧条目每个来源的访问权限，这个条目就会保持隐藏。学习输入也会排除这条记忆及依赖它的结论。只有从可以检查访问权限的来源重建后，条目才可重新显示。OpenBot 不会在升级时重建这些条目，也不会扩大旧记忆的可见范围。通过
@@ -203,7 +203,7 @@ Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删�
 有两个路由显示你的某个 Chat 中发生了什么：
 
 - `GET /v1/chats/:chatId/confessions`
-  列出 Bot 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/docs/client#展示告解)。
+  列出 Bot 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/client#展示告解)。
 - `GET /v1/chats/:chatId/enrichments`
   列出记忆 Bot 如何重写每个 Turn 的输入：新的 `text`、`original`
   中这个人原本的话，以及它用了哪些条目。较早的记录没有 `original`。

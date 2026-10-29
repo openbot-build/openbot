@@ -4,7 +4,7 @@ title: "Das Projekt veröffentlichen und prüfen"
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Für Mitwirkende, die OpenBot ändern oder veröffentlichen.
 
@@ -65,21 +65,24 @@ es herunter und gib ihm den Tag `openbot:<tag>`.
 
 Der Workflow `.github/workflows/docs.yml` veröffentlicht die Doku-Seite auf
 [GitHub Pages](https://docs.github.com/pages) unter
-[openbot.build](https://openbot.build). Er läuft bei jedem Push auf `main`. Du
-kannst ihn auch von Hand im Tab „Actions“ starten.
+[docs.openbot.build](https://docs.openbot.build). Er läuft bei jedem Push auf
+`main`. Du kannst ihn auch von Hand im Tab „Actions“ starten.
 
 | Job      | Was er tut                                                                                                                     |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `build`  | Führt `pnpm --filter "@openbot-build/docs..." build` in `devenv shell` aus. Das baut die Doku und die Pakete, die sie braucht. |
 | `deploy` | Schickt `packages/docs/dist` an GitHub Pages.                                                                                  |
 
-Der Job `build` setzt `DOCS_URL` auf `https://openbot.build`. Astro nutzt den
-Wert für vollständige Seitenlinks, zum Beispiel in der Sitemap. Es läuft immer
-nur ein Deploy auf einmal.
+Der Job `build` setzt `DOCS_URL` auf `https://docs.openbot.build`. Astro nutzt
+den Wert für vollständige Seitenlinks, zum Beispiel in der Sitemap. Es läuft
+immer nur ein Deploy auf einmal.
 
 Die Einstellungen des Repositorys müssen **GitHub Actions** als Quelle für Pages
-nutzen, mit `openbot.build` als eigener Domain. Der DNS-Eintrag für
-`openbot.build` muss auf GitHub Pages zeigen. Siehe
+nutzen, mit `docs.openbot.build` als eigener Domain. Setze ihren DNS-CNAME auf
+`openbot-build.github.io`. Dieser Actions-Workflow nutzt keine `CNAME`-Datei im
+Quellcode. Das englische Handbuch beginnt unter `/`, das chinesische unter
+`/zh-cn/` und das deutsche unter `/de/`. Die erzeugte API-Referenz beginnt unter
+`/api/`. Siehe
 [Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
 
 ### Die Images prüfen

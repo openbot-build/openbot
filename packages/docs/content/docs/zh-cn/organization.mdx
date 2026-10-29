@@ -4,13 +4,13 @@ description: 组织、成员、设置、角色和审计日志。
 ---
 
 面向组织管理员。每项任务需要对应权限。只有平台管理员可以修改 `/v1/platform`
-下的设置。从[管理员手册](/zh-cn/docs/admin)开始。
+下的设置。从[管理员手册](/zh-cn/admin)开始。
 
 本页说明多人如何共用 OpenBot。组织（Organization）是一群人，他们共享 Bots、模型和设置。一个平台有很多组织。用户和组织是两种不同的东西。用户可以创建组织，也可以只为自己创建一个，并且可以是多个组织的成员。
 
 当前组织的路由都在 `/v1/organization` 下。它们接受用户令牌或 session
 cookie。使用 cookie 时，如果你属于多个组织，请发送 `OpenBot-Organization`
-请求头。见 [身份验证](/zh-cn/docs/developers/authentication#选择组织)。
+请求头。见 [身份验证](/zh-cn/developers/authentication#选择组织)。
 
 ---
 
@@ -30,8 +30,8 @@ OpenBot 不会为新账户创建组织。没有任何组织的账户，访问组
 `MembershipRequired`。它仍然可以创建组织和回答邀请。
 
 旧版本的 OpenBot 会为每个新账户创建一个名为 "Personal" 的组织。这些组织会保留。它们是普通组织，所以你可以改名、邀请别人或离开它们。验证域名见
-[SSO 和域名](/zh-cn/docs/sso)，`organizationCreation` 见
-[Platform](/zh-cn/docs/platform#组织创建)。
+[SSO 和域名](/zh-cn/sso)，`organizationCreation` 见
+[Platform](/zh-cn/platform#组织创建)。
 
 ---
 
@@ -58,7 +58,7 @@ curl -b cookies.txt https://api.example.com/v1/organizations
 
 `status` 是 `active` 或
 `suspended`。平台管理员可以暂停一个组织。暂停后，没有人能使用它，它的令牌也会失效。见
-[Platform](/zh-cn/docs/platform#组织)。
+[Platform](/zh-cn/platform#组织)。
 
 ### 创建组织
 
@@ -147,21 +147,21 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-| 字段                      | 默认值                            | 作用                                                                                                                                                               |
-| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rulesModel`              | `null`                            | 用来判断 [Rules](/zh-cn/docs/developers/rules) 的模型。它可以是语言模型，也可以是决策模型。`null` 表示没有模型判断它们。见 [Models](/zh-cn/docs/models#选择模型)。 |
-| `botMemoryModel`          | `null`                            | 用来学习 [Bot memory](/zh-cn/docs/developers/memory) 的模型。`null` 表示 Bot 什么都不学。                                                                          |
-| `botMemory`               | `true`                            | 让记忆 Bot 从 Chat 中学习，并补充 Turn 的输入。                                                                                                                    |
-| `requestTimeoutMs`        | 24 小时                           | 一个 [request](/zh-cn/docs/developers/requests) 等待回答的时间，超时后 OpenBot 会拒绝它。范围是 1 秒到 7 天。                                                      |
-| `delegationTimeLimitMs`   | 1 小时                            | 没有自己时间限制的[工作](/zh-cn/docs/developers/delegation#限制)使用的时间限制，例如触发器的工作。范围是 1 分钟到 30 天。                                          |
-| `toolForegroundBudgetMs`  | 30 秒                             | 工具调用在自己的 Turn 里运行多久后进入[后台](/zh-cn/docs/developers/chats#后台工作)。范围是 0 到 10 分钟。0 会让每个调用都进入后台。                               |
-| `toolMaxDurationMs`       | 1 小时                            | 后台工具调用的最长时间。超过后调用会停止并失败。范围是 1 秒到 24 小时。                                                                                            |
-| `maxBackgroundOperations` | 8                                 | 一个 Chat 同时最多能运行多少个后台工具调用。范围是 0 到 100。                                                                                                      |
-| `planApproval`            | 问上一级决策者，24 小时后仍是计划 | 当成员、Bot 和 Chat 都没有设置时，计划如何被批准。见 [计划模式](/zh-cn/docs/developers/chats#计划模式)。                                                           |
-| `appReadRules`            | `[]`                              | 只读取数据的 App 工具：`{ cardUrl, tool }`。见 [Requests](/zh-cn/docs/developers/requests)。                                                                       |
-| `defaultRoles`            | `["member"]`                      | 新成员的角色。                                                                                                                                                     |
-| `joinByDomain`            | `true`                            | 拥有组织已验证域名下已验证邮箱的人，在登录时加入组织。                                                                                                             |
-| `tokenRate`               | 不限制                            | 每个范围的 token 速率。平台设置了更低的速率时，较低的速率生效。见 [token 速率](/zh-cn/docs/usage#token-速率)。                                                     |
+| 字段                      | 默认值                            | 作用                                                                                                                                                     |
+| ------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`              | `null`                            | 用来判断 [Rules](/zh-cn/developers/rules) 的模型。它可以是语言模型，也可以是决策模型。`null` 表示没有模型判断它们。见 [Models](/zh-cn/models#选择模型)。 |
+| `botMemoryModel`          | `null`                            | 用来学习 [Bot memory](/zh-cn/developers/memory) 的模型。`null` 表示 Bot 什么都不学。                                                                     |
+| `botMemory`               | `true`                            | 让记忆 Bot 从 Chat 中学习，并补充 Turn 的输入。                                                                                                          |
+| `requestTimeoutMs`        | 24 小时                           | 一个 [request](/zh-cn/developers/requests) 等待回答的时间，超时后 OpenBot 会拒绝它。范围是 1 秒到 7 天。                                                 |
+| `delegationTimeLimitMs`   | 1 小时                            | 没有自己时间限制的[工作](/zh-cn/developers/delegation#限制)使用的时间限制，例如触发器的工作。范围是 1 分钟到 30 天。                                     |
+| `toolForegroundBudgetMs`  | 30 秒                             | 工具调用在自己的 Turn 里运行多久后进入[后台](/zh-cn/developers/chats#后台工作)。范围是 0 到 10 分钟。0 会让每个调用都进入后台。                          |
+| `toolMaxDurationMs`       | 1 小时                            | 后台工具调用的最长时间。超过后调用会停止并失败。范围是 1 秒到 24 小时。                                                                                  |
+| `maxBackgroundOperations` | 8                                 | 一个 Chat 同时最多能运行多少个后台工具调用。范围是 0 到 100。                                                                                            |
+| `planApproval`            | 问上一级决策者，24 小时后仍是计划 | 当成员、Bot 和 Chat 都没有设置时，计划如何被批准。见 [计划模式](/zh-cn/developers/chats#计划模式)。                                                      |
+| `appReadRules`            | `[]`                              | 只读取数据的 App 工具：`{ cardUrl, tool }`。见 [Requests](/zh-cn/developers/requests)。                                                                  |
+| `defaultRoles`            | `["member"]`                      | 新成员的角色。                                                                                                                                           |
+| `joinByDomain`            | `true`                            | 拥有组织已验证域名下已验证邮箱的人，在登录时加入组织。                                                                                                   |
+| `tokenRate`               | 不限制                            | 每个范围的 token 速率。平台设置了更低的速率时，较低的速率生效。见 [token 速率](/zh-cn/usage#token-速率)。                                                |
 
 `PATCH /v1/organization/settings` 修改设置。它需要 `Organization` 上的
 `write`。请求体需要 `expectedVersion`，也就是你读到的
@@ -180,7 +180,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 - 只有 Super Administrator 能把 `super_administrator` 放进 `defaultRoles`。
 
 每个实例都会立即使用修改后的值。见
-[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。
+[配置](/zh-cn/configuration#修改如何到达每个实例)。
 
 ---
 
@@ -216,9 +216,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 - `status` 是 `active` 或
   `suspended`。被暂停的成员不能使用这个组织，他们在这个组织的令牌会立即失效。
 - `roles` 是角色 ID 的列表：包括内置角色和自定义角色。见
-  [权限](/zh-cn/docs/permissions#角色)。
+  [权限](/zh-cn/permissions#角色)。
 - `policy` 是成员的一个额外策略，在角色之外另外生效。其中的拒绝规则胜过角色。见
-  [权限](/zh-cn/docs/permissions#策略)。
+  [权限](/zh-cn/permissions#策略)。
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -285,7 +285,7 @@ curl -b cookies.txt \
 - 在一个组织中，一个邮箱只能有一个待处理的邀请。如果已经有一个，或者已有成员使用这个邮箱，OpenBot 返回
   `400` 和 `InvitationInvalid`。
 
-你也可以邀请别人使用一个 Bot。见 [分享 Bots](/zh-cn/docs/developers/sharing)。
+你也可以邀请别人使用一个 Bot。见 [分享 Bots](/zh-cn/developers/sharing)。
 
 `GET /v1/organization/invitations` 按从新到旧列出邀请。它需要 `Member` 上的
 `read`。加上 `?status=pending`
@@ -298,7 +298,7 @@ curl -b cookies.txt \
 
 - `GET /v1/invitations` 列出发给你已验证邮箱的待处理邀请。使用 Bot 的邀请带有
   `bot`，没有 `roles`。用 `POST /v1/bot-invitations/accept` 接受它。见
-  [分享 Bots](/zh-cn/docs/developers/sharing#接受邀请)。
+  [分享 Bots](/zh-cn/developers/sharing#接受邀请)。
 - `POST /v1/invitations/:invitationId/accept`
   让你成为成员，并得到邀请中的角色。它返回这个组织。
 - `POST /v1/invitations/:invitationId/decline` 拒绝邀请。
@@ -411,7 +411,7 @@ curl -X POST -b cookies.txt \
 | `400`  | `InvitationInvalid`              | 现在不能创建或回答这个邀请，例如它已经过期。                      |
 | `404`  | `InvitationNotFound`             | 没有发给你的、使用这个 ID 的邀请。                                |
 | `404`  | `RoleNotFound`                   | 邀请中有一个不存在的角色。                                        |
-| `403`  | `Forbidden`                      | 调用者的策略不允许这样做。见 [权限](/zh-cn/docs/permissions)。    |
+| `403`  | `Forbidden`                      | 调用者的策略不允许这样做。见 [权限](/zh-cn/permissions)。         |
 | `400`  | `OrganizationRequired`           | 使用 cookie 的请求没有 `OpenBot-Organization`，而你属于多个组织。 |
 | `400`  | `SettingsInvalid`                | 设置中的某个值无效，例如角色不存在。                              |
 | `403`  | `MembershipRequired`             | 你不是这个组织的活跃成员。                                        |

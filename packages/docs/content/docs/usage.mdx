@@ -7,7 +7,7 @@ description:
 
 For organization administrators. You need the rights named for each task. Only a
 platform admin can change settings under `/v1/platform`. Start with the
-[administrator manual](/docs/admin).
+[administrator manual](/admin).
 
 OpenBot records each call to a model. You can see how many tokens each member,
 Bot, and user token used, and what they cost. A token is a small piece of text
@@ -22,7 +22,7 @@ pay for the models that the platform shares.
 | Budget       | A spending limit for the organization, a member, a Bot, or a user token, for one day or one month. |
 | Credits      | Money that the platform gives an organization to pay for the models of the platform.               |
 | Micro-USD    | All money in the API is in micro-USD. One US dollar is 1,000,000 micro-USD.                        |
-| Platform key | A [shared model provider](/docs/platform#shared-model-providers). The platform pays for it.        |
+| Platform key | A [shared model provider](/platform#shared-model-providers). The platform pays for it.             |
 | Own key      | A model provider of the organization. The organization pays the model company itself.              |
 
 ---
@@ -37,18 +37,17 @@ also apply.
 OpenBot records a model call before it goes to the provider. Each usage event
 has a `source`:
 
-| `source`     | What made the call                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------- |
-| `turn`       | A model step of a Turn in a [Chat](/docs/developers/chats).                                 |
-| `compaction` | A summary of old messages, so the conversation fits the model.                              |
-| `judge`      | The model that judges [Rules](/docs/developers/rules).                                      |
-| `bot_memory` | The [memory Bot](/docs/developers/memory#the-memory-bot): what it learns, adds and answers. |
-| `other`      | Any other call.                                                                             |
+| `source`     | What made the call                                                                     |
+| ------------ | -------------------------------------------------------------------------------------- |
+| `turn`       | A model step of a Turn in a [Chat](/developers/chats).                                 |
+| `compaction` | A summary of old messages, so the conversation fits the model.                         |
+| `judge`      | The model that judges [Rules](/developers/rules).                                      |
+| `bot_memory` | The [memory Bot](/developers/memory#the-memory-bot): what it learns, adds and answers. |
+| `other`      | Any other call.                                                                        |
 
 A usage event also has the Chat (`chatId`), the Turn, the Bot, the member and
-the user token, when the call has them. In a
-[Channel](/docs/developers/channels), the member is the person who wrote the
-message.
+the user token, when the call has them. In a [Channel](/developers/channels),
+the member is the person who wrote the message.
 
 Each call has a stable `id`. A durable step also has an `executionId`. Its
 `status` is `pending` while it runs, `confirmed` when the provider gives usage,
@@ -116,8 +115,8 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PUT /v1/platform/model_providers/:providerId/prices`     | Sets a new price for one model of a shared provider.        |
 
 A provider can only price the models that it links. Another model gives `400`
-with `ModelProviderInvalid`. The [model catalog](/docs/models#choose-a-model)
-shows the current `price` of each model.
+with `ModelProviderInvalid`. The [model catalog](/models#choose-a-model) shows
+the current `price` of each model.
 
 A new price applies to calls that start from now on. Each reservation reads the
 price from the database and keeps its own copy. A price change on another node,
@@ -369,7 +368,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `DELETE /v1/organization/budgets/:budgetId` | Removes a budget.                                                         |
 
 Reading budgets needs `read` on `Budget`. Changing them needs `write` on
-`Budget`. Each change goes to the [audit log](/docs/organization#audit-log).
+`Budget`. Each change goes to the [audit log](/organization#audit-log).
 
 ---
 
@@ -444,7 +443,7 @@ it stops the call too.
 A platform admin can limit how many API requests each caller sends in one
 minute. Each user token counts on its own. A signed-in person without a token
 counts as one caller. Every instance of OpenBot shares the count. Set
-`rateLimit` in the [platform settings](/docs/platform#platform-settings):
+`rateLimit` in the [platform settings](/platform#platform-settings):
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -491,10 +490,10 @@ A model call takes from every bucket of its scopes:
   counts, the rate keeps the estimate. This does not charge money.
 
 The platform admin sets the highest rates in the
-[platform settings](/docs/platform#platform-settings). An organization can set
-its own rates in its [settings](/docs/organization#settings). For each scope,
-the lower of the two rates applies, so an organization can only make a rate
-lower. `null` means no limit for that scope. The default is no limit.
+[platform settings](/platform#platform-settings). An organization can set its
+own rates in its [settings](/organization#settings). For each scope, the lower
+of the two rates applies, so an organization can only make a rate lower. `null`
+means no limit for that scope. The default is no limit.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -524,5 +523,5 @@ checked again.
 | `429`  | `RateLimited`          | The caller sent too many requests in this minute.                          |
 | `503`  | `BillingUnavailable`   | OpenBot cannot reach its database.                                         |
 
-See the full shapes in the [Usage reference](/docs/api/operations/tags/usage/)
-and the [Budgets reference](/docs/api/operations/tags/budgets/).
+See the full shapes in the [Usage reference](/api/operations/tags/usage/) and
+the [Budgets reference](/api/operations/tags/budgets/).

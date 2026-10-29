@@ -6,7 +6,7 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 This page shows how people sign in to OpenBot and how programs call the API. A
 person signs in once in a browser. Then the person creates user tokens for
@@ -19,7 +19,7 @@ There are two ways to call the business routes under `/v1`:
 | User token     | Scripts, backend services, bots        | `Authorization: Bearer <token>`     |
 | Session cookie | A browser client on the OpenBot origin | The `__Host-openbot-session` cookie |
 
-Both ways need a permission for each call. See [Permissions](/docs/permissions).
+Both ways need a permission for each call. See [Permissions](/permissions).
 
 ---
 
@@ -34,7 +34,7 @@ There are two kinds of providers:
   [Set up the platform provider](#set-up-the-platform-provider).
 - An **SSO connection** is the provider of one organization. It signs in people
   with an email in the verified domains of that organization. See
-  [SSO and domains](/docs/sso).
+  [SSO and domains](/sso).
 
 To start a sign-in, your client sends this request from the OpenBot origin:
 
@@ -85,14 +85,14 @@ returns `403`.
 ### Set up the platform provider
 
 The platform operator sets up the provider. See
-[Set up sign-in](/docs/admin/sign-in).
+[Set up sign-in](/admin/sign-in).
 
 ### Development account
 
 The development server (`devenv shell -- pnpm dev`) uses one local test account
 and no provider. The account is `developer@localhost.test`, and it is a platform
 admin. Only the development entry point offers this. The production program
-never does. See [Configuration](/docs/configuration#development).
+never does. See [Configuration](/configuration#development).
 
 This command signs in and saves the cookie in a file:
 
@@ -129,10 +129,10 @@ needs the session cookie.
 }
 ```
 
-| Field           | What it is                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------ |
-| `memberships`   | The organizations of the account, with its status and roles in each one.                                     |
-| `platformAdmin` | `true` when the account is a platform admin. Then it can use `/v1/platform`. See [Platform](/docs/platform). |
+| Field           | What it is                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| `memberships`   | The organizations of the account, with its status and roles in each one.                                |
+| `platformAdmin` | `true` when the account is a platform admin. Then it can use `/v1/platform`. See [Platform](/platform). |
 
 `POST /auth/sign-out` ends the sign-in. It is a Better Auth route. Send a JSON
 body (`{}`) and the `Origin` header (see below). It returns `200`.
@@ -150,11 +150,11 @@ account signs in, OpenBot checks where it belongs:
 2. It joins the organization of its SSO connection, if it signed in through one.
 3. OpenBot never makes an organization for it. Without one, organization routes
    answer `403` with `MembershipRequired`. The account can still
-   [create an organization](/docs/organization#create-an-organization) or
-   [accept an invitation](/docs/organization#answer-an-invitation).
+   [create an organization](/organization#create-an-organization) or
+   [accept an invitation](/organization#answer-an-invitation).
 
 OpenBot also does these checks on each request with the session cookie. See
-[Organization](/docs/organization#who-can-join).
+[Organization](/organization#who-can-join).
 
 A suspended member gets `403` with `MembershipRequired` when they use the
 cookie. Their tokens stop working at once and get `401` with
@@ -193,8 +193,8 @@ A cookie goes with every browser request, even from other sites. So OpenBot
 checks where a write comes from. When you use the cookie, every `POST`, `PUT`,
 `PATCH` and `DELETE` request must send an `Origin` header. The header must be
 exactly equal to `publicOrigin` in the
-[platform settings](/docs/platform#platform-settings). If it is not, OpenBot
-returns `403` with `ForbiddenOrigin`.
+[platform settings](/platform#platform-settings). If it is not, OpenBot returns
+`403` with `ForbiddenOrigin`.
 
 ```sh
 curl -b cookies.txt \
@@ -212,7 +212,7 @@ Requests with a user token do not need the `Origin` header.
 
 A user token lets a program act for you. A token can never do more than you can
 do. It can also have its own policy, so it does less. See
-[Permissions](/docs/permissions).
+[Permissions](/permissions).
 
 You can manage tokens with the session cookie, or with a token that may do
 `write` on `Token`. A token made without a policy cannot manage tokens.
@@ -222,7 +222,7 @@ it. With the cookie, send the `OpenBot-Organization` header to choose it. See
 [Choose an organization](#choose-an-organization).
 
 See the full shapes in the
-[User tokens reference](/docs/api/operations/tags/user-tokens/).
+[User tokens reference](/api/operations/tags/user-tokens/).
 
 ### Create a token
 

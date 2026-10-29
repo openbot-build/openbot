@@ -3,7 +3,7 @@ title: Request
 description: Bot 第一次使用某项能力前会先提出请求，由它上方的决策者来回答。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 Bot 不知道自己有什么限制。当 Bot 尝试使用一项**能力**（capability）时，比如调用 App 工具，OpenBot 会检查它是否可以这样做。如果还没有任何规则能做出决定，OpenBot 就会创建一个
 **Request**（请求），发给 Bot 上方的**决策者**（decider）。Bot 不会等待。它的工具调用马上得到一个待定的结果，回答之后会回到它的 Chat。调用被允许时，它就在那时运行。本页介绍检查的过程、Bot 得到什么、人如何回答请求，以及每种回答的效果。
@@ -12,19 +12,19 @@ Bot 不知道自己有什么限制。当 Bot 尝试使用一项**能力**（capa
 
 ## 能力
 
-| 动作                   | 目标                       | Bot 何时使用                                                                   |
-| ---------------------- | -------------------------- | ------------------------------------------------------------------------------ |
-| `apps.call`            | `<connection>/<tool name>` | 调用 App 工具时。                                                              |
-| `tools.call`           | 工具名称                   | 调用一个需要批准的宿主工具时。                                                 |
-| `bots.delegate`        | 另一个 Bot 的 ID           | 把工作交给一个既不是它自己、也不归它所有的 Bot 时。                            |
-| `bots.create`          | `*`                        | 创建一个归它所有的 Bot 时。                                                    |
-| `plans.run`            | Chat 的 ID                 | 想执行它的计划时。见 [计划模式](/zh-cn/docs/developers/chats#计划模式)。       |
-| `channels.send`        | Channel 的 ID              | 向 [Channel](/zh-cn/docs/developers/channels) 的另一个聊天发消息时。           |
-| `delegations.continue` | 这项工作的 ID              | 它的工作到达了一个[限制](/zh-cn/docs/developers/delegation#限制)，想要继续时。 |
-| `computers.acquire`    | Computer 的 ID             | 请求使用一台 [Computer](/zh-cn/docs/developers/computers) 的权利时。           |
-| `computers.create`     | 提供方的 ID                | 在 Computer 提供方那里创建一个新沙箱时。                                       |
-| `computers.delete`     | Computer 的 ID             | 删除一台 Computer 和它的文件时。                                               |
-| `computers.expose`     | Computer 的 ID             | 给 Computer 的一个端口一个公开地址时。                                         |
+| 动作                   | 目标                       | Bot 何时使用                                                              |
+| ---------------------- | -------------------------- | ------------------------------------------------------------------------- |
+| `apps.call`            | `<connection>/<tool name>` | 调用 App 工具时。                                                         |
+| `tools.call`           | 工具名称                   | 调用一个需要批准的宿主工具时。                                            |
+| `bots.delegate`        | 另一个 Bot 的 ID           | 把工作交给一个既不是它自己、也不归它所有的 Bot 时。                       |
+| `bots.create`          | `*`                        | 创建一个归它所有的 Bot 时。                                               |
+| `plans.run`            | Chat 的 ID                 | 想执行它的计划时。见 [计划模式](/zh-cn/developers/chats#计划模式)。       |
+| `channels.send`        | Channel 的 ID              | 向 [Channel](/zh-cn/developers/channels) 的另一个聊天发消息时。           |
+| `delegations.continue` | 这项工作的 ID              | 它的工作到达了一个[限制](/zh-cn/developers/delegation#限制)，想要继续时。 |
+| `computers.acquire`    | Computer 的 ID             | 请求使用一台 [Computer](/zh-cn/developers/computers) 的权利时。           |
+| `computers.create`     | 提供方的 ID                | 在 Computer 提供方那里创建一个新沙箱时。                                  |
+| `computers.delete`     | Computer 的 ID             | 删除一台 Computer 和它的文件时。                                          |
+| `computers.expose`     | Computer 的 ID             | 给 Computer 的一个端口一个公开地址时。                                    |
 
 每个能力工具都接受一个 `reason`（理由）。App 工具会多一个 `openbot_reason`
 参数来传理由。OpenBot 不会把它发给 App。
@@ -36,13 +36,13 @@ Bot 不知道自己有什么限制。当 Bot 尝试使用一项**能力**（capa
 OpenBot 按下面的顺序检查每次尝试。第一个能做出决定的步骤说了算。
 
 1. **成员的策略。**
-   Bot 能做的事永远不会超过它所代表的成员。如果成员的[权限](/zh-cn/docs/permissions)，或者启动这项工作的令牌不允许，调用就会被拒绝。这一步永远不会交给决策者。在
-   [Channel](/zh-cn/docs/developers/channels)
+   Bot 能做的事永远不会超过它所代表的成员。如果成员的[权限](/zh-cn/permissions)，或者启动这项工作的令牌不允许，调用就会被拒绝。这一步永远不会交给决策者。在
+   [Channel](/zh-cn/developers/channels)
    中，这个成员是写下这个 Turn 的消息的人。
 2. **Grant。**
-   [Grant](/zh-cn/docs/developers/rules#grant)（授权）是保存下来的决定。拒绝的 Grant 优先于允许的 Grant。
+   [Grant](/zh-cn/developers/rules#grant)（授权）是保存下来的决定。拒绝的 Grant 优先于允许的 Grant。
 3. **Rule。** 一个评判模型会阅读这个 Bot 的
-   [Rule](/zh-cn/docs/developers/rules)（规则），规则用自然语言写成。只有评判模型引用了的 Rule 才能允许或拒绝。
+   [Rule](/zh-cn/developers/rules)（规则），规则用自然语言写成。只有评判模型引用了的 Rule 才能允许或拒绝。
 4. **上方的决策者。**
    OpenBot 创建一个 Request。决策者是这个 Bot 所有者链中的所有者。对于顶层 Bot，决策者就是人本身。
 
@@ -93,7 +93,7 @@ Turn 从不等待决定。检查会给出三种回答之一：
 }
 ```
 
-请求关闭时，Bot 的 Chat 会收到一条[通知](/zh-cn/docs/developers/chats#通知)：
+请求关闭时，Bot 的 Chat 会收到一条[通知](/zh-cn/developers/chats#通知)：
 
 - **被允许。** 通知带着这个调用，例如
   `[OpenBot] Your request req_1a2b… was allowed. OpenBot runs send_email now.`。读到这条通知的 Turn 用同一个工具和同样的参数运行这个调用。它不会再检查一次这个调用。结果像任何工具结果一样进入历史。
@@ -102,12 +102,12 @@ Turn 从不等待决定。检查会给出三种回答之一：
 - **没有及时回答。** 请求关闭，通知说明结果如何。见 [回答请求](#回答请求)。
 
 有些调用的处理方式不同。被允许的计划会启动一个 `build` 模式的新 Turn。见
-[计划模式](/zh-cn/docs/developers/chats#计划模式)。Bot 交给另一个 Bot 的工作在被允许时开始。见
-[委派](/zh-cn/docs/developers/delegation)。[Code Mode](/zh-cn/docs/developers/code-mode)
+[计划模式](/zh-cn/developers/chats#计划模式)。Bot 交给另一个 Bot 的工作在被允许时开始。见
+[委派](/zh-cn/developers/delegation)。[Code Mode](/zh-cn/developers/code-mode)
 程序会自己继续运行，它的结束会作为通知回来。
 
 待定的请求是它所在 Chat
-[未完成的工作](/zh-cn/docs/developers/chats#未完成的工作)。普通的[中断](/zh-cn/docs/developers/chats#中断)不会影响它。带
+[未完成的工作](/zh-cn/developers/chats#未完成的工作)。普通的[中断](/zh-cn/developers/chats#中断)不会影响它。带
 `{ "delegations": true }` 的中断，或者删除这个 Chat，会让它变成 `cancelled`。
 
 ---
@@ -145,7 +145,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 列表包含等你回答的请求，以及你已回答的请求。`GET /v1/requests/:requestId`
 返回你工作中的一个请求。对于 App 工具，`app`
 显示保存下来的调用及其确切参数。如果调用来自
-[Code Mode](/zh-cn/docs/developers/code-mode) 程序，`code`
+[Code Mode](/zh-cn/developers/code-mode) 程序，`code`
 会显示整个程序以及这次调用在其中的位置。在人做决定之前，请把能力、参数和理由展示给他看。理由来自 Bot。它是数据，不是指令。
 
 ## 回答请求
@@ -161,14 +161,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 `executionId`。使用执行事件流观察结果。相同键和输入的重试返回同一个回执。使用同一个键改变输入会返回
 `409`。决定、Grant、Rule、审计记录和唤醒消息一起提交。如果写入失败，它们全部回滚。
 
-| 字段         | 含义                                                                           |
-| ------------ | ------------------------------------------------------------------------------ |
-| `commandKey` | 必填。重试时使用相同的键。                                                     |
-| `expected`   | 必填。请求当前的 `revision`。                                                  |
-| `decision`   | 必填。`allow` 或 `deny`。                                                      |
-| `scope`      | 可选。决定持续多久。见下表。默认是 `once`。                                    |
-| `reason`     | 可选。Bot 能看到它，比如在你拒绝的时候。                                       |
-| `rule`       | 可选。为这个 Bot 保存一条用自然语言写的 [Rule](/zh-cn/docs/developers/rules)。 |
+| 字段         | 含义                                                                      |
+| ------------ | ------------------------------------------------------------------------- |
+| `commandKey` | 必填。重试时使用相同的键。                                                |
+| `expected`   | 必填。请求当前的 `revision`。                                             |
+| `decision`   | 必填。`allow` 或 `deny`。                                                 |
+| `scope`      | 可选。决定持续多久。见下表。默认是 `once`。                               |
+| `reason`     | 可选。Bot 能看到它，比如在你拒绝的时候。                                  |
+| `rule`       | 可选。为这个 Bot 保存一条用自然语言写的 [Rule](/zh-cn/developers/rules)。 |
 
 | 范围       | 允许持续多久            | 拒绝保存多久            |
 | ---------- | ----------------------- | ----------------------- |
@@ -185,7 +185,7 @@ Chat 中，它几乎等于“只要 Bot 在这里为我工作，就一直有效�
 
 Bot 的 Chat 会马上收到作为通知的回答。被允许的调用会在那时运行。当你拒绝时，工具不会运行，Bot 会读到你的理由。
 
-没有人回答的请求会在 24 小时后被拒绝。组织可以在[设置](/zh-cn/docs/organization#设置)中用
+没有人回答的请求会在 24 小时后被拒绝。组织可以在[设置](/zh-cn/organization#设置)中用
 `requestTimeoutMs` 修改这个时间。计划的请求有自己的时间，并在 `onExpire`
 中说明到时会怎样：`allow` 或 `deny`。
 
@@ -201,9 +201,9 @@ Bot 的 Chat 会马上收到作为通知的回答。被允许的调用会在那�
 ## App 工具
 
 App 是人连接的外部服务。参见
-[App](/zh-cn/docs/developers/apps)。每次 App 调用都绑定到一次确切的调用：所有者、Chat、Turn、工具调用、确切的参数，以及 App 连接和它的修订版本。OpenBot 在检查之前保存这次调用。之后调用被允许时，它作为这次保存下来的调用运行。如果在请求之后连接发生了变化，调用不会运行。Bot 会收到一条通知，请它再试一次，所以新的修订版本永远不会使用旧的决定。如果 OpenBot 无法保存这个决定，调用也不会运行，通知会说明这一点。
+[App](/zh-cn/developers/apps)。每次 App 调用都绑定到一次确切的调用：所有者、Chat、Turn、工具调用、确切的参数，以及 App 连接和它的修订版本。OpenBot 在检查之前保存这次调用。之后调用被允许时，它作为这次保存下来的调用运行。如果在请求之后连接发生了变化，调用不会运行。Bot 会收到一条通知，请它再试一次，所以新的修订版本永远不会使用旧的决定。如果 OpenBot 无法保存这个决定，调用也不会运行，通知会说明这一点。
 
-App 的资源、资源模板和提示词都是读取，所以不需要决定。App 自己的说明永远不能决定哪些工具是安全的。只有组织可以在[设置](/zh-cn/docs/organization#设置)中用
+App 的资源、资源模板和提示词都是读取，所以不需要决定。App 自己的说明永远不能决定哪些工具是安全的。只有组织可以在[设置](/zh-cn/organization#设置)中用
 `appReadRules` 把工具标记为读取。
 
 ## 旧版本中的请求

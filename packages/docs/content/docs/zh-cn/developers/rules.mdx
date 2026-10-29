@@ -4,9 +4,9 @@ description:
   保存关于能力的决定，可以是精确的 Grant，也可以是用自然语言写的 Rule。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
-关于[请求](/zh-cn/docs/developers/requests)的决定不必一次又一次地重做。OpenBot 用两种形式保存它们：
+关于[请求](/zh-cn/developers/requests)的决定不必一次又一次地重做。OpenBot 用两种形式保存它们：
 
 | 形式  | 示例                                                                                          | 由谁检查          |
 | ----- | --------------------------------------------------------------------------------------------- | ----------------- |
@@ -32,7 +32,7 @@ Grant 快速而精确。Rule 能覆盖一整类请求。
 | `status`     | `active`、`used` 或 `revoked`。                                      |
 
 OpenBot 把一个 Bot 的有效 Grants 放进一个策略，每个 Grant 对应一条规则。拒绝的 Grant 胜过每个允许的 Grant，与顺序无关。当多个允许的 Grant 都涵盖一次调用时，由第一个给出答案。给出答案的
-`once` Grant 随后就用完了。见[权限](/zh-cn/docs/permissions#规则)。
+`once` Grant 随后就用完了。见[权限](/zh-cn/permissions#规则)。
 
 决策者回答请求时，OpenBot 会创建 Grant。你也可以自己创建：
 
@@ -60,7 +60,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 - 拒绝优先于允许。
 - 评判模型出错或太慢时，没有决定。
 
-由 Bot 写的 Rule，只有在这个 Bot 位于本 Bot 的[所有者链](/zh-cn/docs/developers/requests#决策者链)上方，并且自己也能使用这项能力时，才会生效。
+由 Bot 写的 Rule，只有在这个 Bot 位于本 Bot 的[所有者链](/zh-cn/developers/requests#决策者链)上方，并且自己也能使用这项能力时，才会生效。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -85,15 +85,15 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 你也可以在回答请求时保存一条 Rule：在回答中带上
-`rule`。参见[回答请求](/zh-cn/docs/developers/requests#回答请求)。
+`rule`。参见[回答请求](/zh-cn/developers/requests#回答请求)。
 
 ### 评判模型
 
-评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/docs/organization#设置)中的
+评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/organization#设置)中的
 `rulesModel`。它没有默认值。它为 `null`
 时，评判不给出答案，由人或 Bot 来决定。对于相同的 Rule 和相同的能力，OpenBot 会保存每次评判的回答，因此同一个问题不会让评判模型再运行一次。
 
-Rules 模型可以是语言模型，也可以是[决策模型](/zh-cn/docs/models#决策模型)：
+Rules 模型可以是语言模型，也可以是[决策模型](/zh-cn/models#决策模型)：
 
 - 语言模型写出完整的回答。它引用所用每条 Rule 的原话，并给出理由。
 - 决策模型不写文本。它从 `allow`、`deny` 和 `no_match`

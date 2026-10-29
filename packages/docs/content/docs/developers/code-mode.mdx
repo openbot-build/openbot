@@ -5,7 +5,7 @@ description: Let the Bot write a short program that calls App tools.
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 In **Code Mode**, the Bot writes a short JavaScript program instead of calling
 App tools one at a time. The program calls the tools, works with their results,
@@ -14,9 +14,8 @@ stay in the program and do not go into the context of the model. The program can
 also call many tools at once.
 
 Code Mode gives the Bot no new powers. Each App call in a program goes through
-the same [capability check](/docs/developers/requests) as a normal App tool
-call. Each call is also a normal
-[App operation](/docs/developers/apps#app-operations).
+the same [capability check](/developers/requests) as a normal App tool call.
+Each call is also a normal [App operation](/developers/apps#app-operations).
 
 | Word     | Meaning                                                                                         |
 | -------- | ----------------------------------------------------------------------------------------------- |
@@ -30,7 +29,7 @@ call. Each call is also a normal
 
 ## Turn on Code Mode
 
-See [Set up Code Mode](/docs/admin/code-mode).
+See [Set up Code Mode](/admin/code-mode).
 
 ## How the Bot uses it
 
@@ -63,12 +62,12 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 A tool call gives the program the result that the App sent. The program gets an
 `Error` when a call does not work:
 
-| Error name         | Why                                                                                                            |
-| ------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `AppCallDenied`    | A decider did not allow the call.                                                                              |
-| `AppCallFailed`    | The App call failed. `details.reason` says why.                                                                |
-| `AppInputRequired` | The App needs more input. Answer the App operation in `details.operationId` outside the code.                  |
-| `VaultDenied`      | The call has a [Vault](/docs/developers/vaults) reference that the Bot may not use here. OpenBot sent nothing. |
+| Error name         | Why                                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | A decider did not allow the call.                                                                         |
+| `AppCallFailed`    | The App call failed. `details.reason` says why.                                                           |
+| `AppInputRequired` | The App needs more input. Answer the App operation in `details.operationId` outside the code.             |
+| `VaultDenied`      | The call has a [Vault](/developers/vaults) reference that the Bot may not use here. OpenBot sent nothing. |
 
 The program can catch these errors and go on.
 
@@ -78,9 +77,8 @@ The program can catch these errors and go on.
 
 Some App calls need a decision, for example a tool that writes. Then the program
 stops at that call. The Turn does not wait: the tool call of the program gets a
-pending result at once, and the Bot goes on. The
-[request](/docs/developers/requests) has the App call in `app`, and the program
-in `code`:
+pending result at once, and the Bot goes on. The [request](/developers/requests)
+has the App call in `app`, and the program in `code`:
 
 ```json
 {
@@ -99,7 +97,7 @@ After the decision, OpenBot runs the program again from the top, in the
 background. Each call that already ran gives its saved result, and OpenBot does
 not send it to the App again. The program then goes on past the call that
 waited. When it ends, its result comes back to the Chat as a
-[notice](/docs/developers/chats#notices), and the Bot goes on with it.
+[notice](/developers/chats#notices), and the Bot goes on with it.
 
 This works only when the program makes the same calls in the same order each
 time. So the program sees a fixed time in `Date.now()`, and `Math.random()`
@@ -111,7 +109,7 @@ changed while the program waited. Nothing is sent by mistake.
 
 ## Use secrets
 
-A program can use secrets from a [Vault](/docs/developers/vaults) without seeing
+A program can use secrets from a [Vault](/developers/vaults) without seeing
 them. The Bot gets `vault` next to `apps`. `vault.github.token` is a reference
 such as `⟦vault:github/token⟧`, not the secret. OpenBot puts the secret in only
 when it sends an App tool call that the item allows. A call with a reference

@@ -8,7 +8,7 @@ For platform operators.
 ## Set up storage
 
 A platform admin sets the storage in the platform settings, as `files.storage`.
-It can also be set with `openbot setup`. See [Platform](/docs/platform#setup).
+It can also be set with `openbot setup`. See [Platform](/platform#setup).
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -51,7 +51,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 OpenBot reaches the storage through its outbound guard. Storage on a private
 network must be in `OPENBOT_OUTBOUND_ALLOW`. See
-[Outbound connections](/docs/configuration#outbound-connections).
+[Outbound connections](/configuration#outbound-connections).
 
 The access key needs to put, read and delete objects in the bucket. Do not let
 the bucket expire objects by itself: OpenBot decides when a file goes away.

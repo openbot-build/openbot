@@ -22,13 +22,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `name`        | Ein kurzer Name.                                                                                                                    |
 | `bot`         | Der Bot, der antwortet. Er muss ein gemeinsamer Bot der Organisation sein.                                                          |
 | `credentials` | Die Geheimnisse der Plattform. Siehe unten. Sie gehen hinein, kommen aber nie heraus. Die Antwort zeigt nur `set` und einen `hint`. |
-| `linkPath`    | Optional. Ein Pfad auf deinem öffentlichen Origin, auf dem dein Client eine Person [ihr Konto verknüpfen](/de/docs/channels) lässt. |
+| `linkPath`    | Optional. Ein Pfad auf deinem öffentlichen Origin, auf dem dein Client eine Person [ihr Konto verknüpfen](/de/channels) lässt.      |
 | `enabled`     | Optional. `false` stoppt den Channel. Sein Webhook gibt dann `401` zurück.                                                          |
 
 Die Antwort ist `201` mit dem Channel. Gib seine `webhookUrl` an die Plattform.
 Der Aufrufer wird der **Actor** des Channel. Die Chats des Channel sind
-[Chats](/de/docs/developers/chats) des Actors. Der Actor muss dem Bot Arbeit
-geben können.
+[Chats](/de/developers/chats) des Actors. Der Actor muss dem Bot Arbeit geben
+können.
 
 `GET`, `PATCH` und `DELETE /v1/organization/channels/:channelId` lesen, ändern
 und löschen einen Channel. Eine Änderung braucht `expectedVersion`, die

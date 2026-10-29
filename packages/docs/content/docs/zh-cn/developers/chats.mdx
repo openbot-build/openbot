@@ -3,11 +3,11 @@ title: Chats
 description: 和 Bot 说话。它总是马上回答，长的工作会并行运行。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
-**Chat**（聊天）是和一个 [Bot](/zh-cn/docs/developers/bots)
+**Chat**（聊天）是和一个 [Bot](/zh-cn/developers/bots)
 的对话。你不用创建、选择或关闭 Chat。你给一个 Bot 发消息，OpenBot 就为你和这个 Bot 保留一个 Chat。Bot 总是马上回答。长的工作会交给其他 Chat 并行运行，结果之后会回到你的 Chat。本页介绍如何和 Bot 说话，以及如何读取 Chat。每个路由都接受用户令牌或 session
-cookie。见 [身份验证](/zh-cn/docs/developers/authentication)。
+cookie。见 [身份验证](/zh-cn/developers/authentication)。
 
 | 术语     | 含义                                                                             |
 | -------- | -------------------------------------------------------------------------------- |
@@ -23,13 +23,13 @@ cookie。见 [身份验证](/zh-cn/docs/developers/authentication)。
 
 每个 Chat 都由 OpenBot 自己创建。`kind` 说明这个 Chat 为什么存在：
 
-| 种类      | OpenBot 什么时候创建它                                                                                                                   | 归谁所有                       |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `direct`  | 一个人第一次给某个 Bot 发消息时。                                                                                                        | 这个人。                       |
-| `channel` | [Channel](/zh-cn/docs/developers/channels) 的某个聊天中的第一条消息。                                                                    | Channel 的 actor。             |
-| `task`    | 每次一个 Bot 把工作交给一个 Bot，或者一个[触发器](/zh-cn/docs/developers/triggers)触发时。见 [委派](/zh-cn/docs/developers/delegation)。 | 交出这项工作的 Chat 的所有者。 |
-| `review`  | 一个 Bot 必须决定一个 [request](/zh-cn/docs/developers/requests) 时。                                                                    | 这个请求为之服务的人。         |
-| `live`    | 每次一个人调用 `POST /v1/bots/:botId/live` 时。见 [Live 模式](/zh-cn/docs/developers/live)。                                             | 这个人。                       |
+| 种类      | OpenBot 什么时候创建它                                                                                                         | 归谁所有                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| `direct`  | 一个人第一次给某个 Bot 发消息时。                                                                                              | 这个人。                       |
+| `channel` | [Channel](/zh-cn/developers/channels) 的某个聊天中的第一条消息。                                                               | Channel 的 actor。             |
+| `task`    | 每次一个 Bot 把工作交给一个 Bot，或者一个[触发器](/zh-cn/developers/triggers)触发时。见 [委派](/zh-cn/developers/delegation)。 | 交出这项工作的 Chat 的所有者。 |
+| `review`  | 一个 Bot 必须决定一个 [request](/zh-cn/developers/requests) 时。                                                               | 这个请求为之服务的人。         |
+| `live`    | 每次一个人调用 `POST /v1/bots/:botId/live` 时。见 [Live 模式](/zh-cn/developers/live)。                                        | 这个人。                       |
 
 每个人和每个 Bot 只有一个 direct
 Chat。Chat 没有终点。只要人们还在和 Bot 说话，它就一直继续，除非你[删除它的历史](#删除历史)。review
@@ -51,7 +51,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 消息会进入你和这个 Bot 的 direct
 Chat。第一条消息会创建这个 Chat。你需要在这个 Bot 上拥有
 `delegate`。要知道先和哪个 Bot 说话，请从 `GET /v1/me/settings` 读取
-`defaultBot`。见 [你的默认 Bot](/zh-cn/docs/developers/bots#你的默认-bot)。
+`defaultBot`。见 [你的默认 Bot](/zh-cn/developers/bots#你的默认-bot)。
 
 | 字段         | 含义                                                 |
 | ------------ | ---------------------------------------------------- |
@@ -84,7 +84,7 @@ Chat。第一条消息会创建这个 Chat。你需要在这个 Bot 上拥有
 未知字段会返回 `400`。
 
 消息里也可以有你上传的文件，用 `input_image` 和 `input_file`
-部分。见[把文件交给 Bot](/zh-cn/docs/developers/files#把文件交给-bot)。
+部分。见[把文件交给 Bot](/zh-cn/developers/files#把文件交给-bot)。
 
 `POST /v1/chats/:chatId/messages` 接受同样的请求体。它用于 direct Chat、live
 Chat，或者当你想给一个 Bot 的工作补充内容时，用于 task Chat。在 task
@@ -133,16 +133,16 @@ curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### 常见错误
 
-| 状态码 | 错误                       | 何时出现                                                                             |
-| ------ | -------------------------- | ------------------------------------------------------------------------------------ |
-| `400`  | `ChatModelInvalid`         | 这个 Chat 没有模型。Bot 需要一个 `model`。见 [Models](/zh-cn/docs/models#选择模型)。 |
-| `400`  | `FileInvalid`              | 文件部分指向的不是你自己的、已就绪的文件，或者不是图片。                             |
-| `403`  | `Forbidden`                | 你不能把工作交给这个 Bot。                                                           |
-| `404`  | `BotNotFound`              | 没有你可以使用的、这个 ID 的 Bot。                                                   |
-| `404`  | `ChatNotFound`             | 你没有这个 ID 的 Chat。                                                              |
-| `409`  | `ChatConflict`             | 这种 Chat 不接受人发来的消息。                                                       |
-| `503`  | `ChatExecutionUnavailable` | OpenBot 没有可以运行这个 Turn 的模型。                                               |
-| `503`  | `ChatStorageUnavailable`   | OpenBot 无法连接到它的数据库。                                                       |
+| 状态码 | 错误                       | 何时出现                                                                        |
+| ------ | -------------------------- | ------------------------------------------------------------------------------- |
+| `400`  | `ChatModelInvalid`         | 这个 Chat 没有模型。Bot 需要一个 `model`。见 [Models](/zh-cn/models#选择模型)。 |
+| `400`  | `FileInvalid`              | 文件部分指向的不是你自己的、已就绪的文件，或者不是图片。                        |
+| `403`  | `Forbidden`                | 你不能把工作交给这个 Bot。                                                      |
+| `404`  | `BotNotFound`              | 没有你可以使用的、这个 ID 的 Bot。                                              |
+| `404`  | `ChatNotFound`             | 你没有这个 ID 的 Chat。                                                         |
+| `409`  | `ChatConflict`             | 这种 Chat 不接受人发来的消息。                                                  |
+| `503`  | `ChatExecutionUnavailable` | OpenBot 没有可以运行这个 Turn 的模型。                                          |
+| `503`  | `ChatStorageUnavailable`   | OpenBot 无法连接到它的数据库。                                                  |
 
 ---
 
@@ -173,28 +173,28 @@ curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
 Turn 从不等待。任何需要外部时间的事情，之后都会作为**通知**（notice）回来：这是一条来自 OpenBot、而不是来自人的新输入。
 
 - 一个 Bot 把工作交给一个 Bot。工具调用马上返回。工作结束时，结果作为通知回来。见
-  [委派](/zh-cn/docs/developers/delegation)。
+  [委派](/zh-cn/developers/delegation)。
 - 一个工具调用需要决定。这个工具调用马上得到一个待定的结果。回答作为通知回来。调用被允许时，它就在那时运行。见
-  [Requests](/zh-cn/docs/developers/requests)。
+  [Requests](/zh-cn/developers/requests)。
 - 一个 Bot 请求一个[提醒](#提醒)。到了那个时间，备注作为通知回来。
 
 通知是带有 `origin.notice` 的输入 Item。它的 `kind` 说明它是关于什么的，`ref`
 指出那件东西，例如一个委派的 ID：
 
-| `kind`       | 它带来什么                                                              |
-| ------------ | ----------------------------------------------------------------------- |
-| `delegation` | 这个 Chat 交出去的工作的结果。                                          |
-| `task`       | task Chat 的任务。                                                      |
-| `request`    | 对一个请求的回答。被允许的调用会和它一起运行。                          |
-| `review`     | review Chat 要决定的请求。                                              |
-| `plan`       | 对一个计划的回答。见 [计划模式](#计划模式)。                            |
-| `reminder`   | 一个提醒的备注。                                                        |
-| `code`       | 一个等待过的 [Code Mode](/zh-cn/docs/developers/code-mode) 程序结束了。 |
-| `app`        | 来自 [App 视图](/zh-cn/docs/developers/apps#app-视图)的一条消息。       |
-| `todos`      | 关于[待办列表](#待办列表)中未完成项的提醒。                             |
+| `kind`       | 它带来什么                                                         |
+| ------------ | ------------------------------------------------------------------ |
+| `delegation` | 这个 Chat 交出去的工作的结果。                                     |
+| `task`       | task Chat 的任务。                                                 |
+| `request`    | 对一个请求的回答。被允许的调用会和它一起运行。                     |
+| `review`     | review Chat 要决定的请求。                                         |
+| `plan`       | 对一个计划的回答。见 [计划模式](#计划模式)。                       |
+| `reminder`   | 一个提醒的备注。                                                   |
+| `code`       | 一个等待过的 [Code Mode](/zh-cn/developers/code-mode) 程序结束了。 |
+| `app`        | 来自 [App 视图](/zh-cn/developers/apps#app-视图)的一条消息。       |
+| `todos`      | 关于[待办列表](#待办列表)中未完成项的提醒。                        |
 
 通知的文字以 `[OpenBot]`
-开头。Bot 知道这样的文字来自 OpenBot，不是来自人，它把它当作数据来读，而不是当作指令。[记忆 Bot](/zh-cn/docs/developers/memory#记忆-bot)
+开头。Bot 知道这样的文字来自 OpenBot，不是来自人，它把它当作数据来读，而不是当作指令。[记忆 Bot](/zh-cn/developers/memory#记忆-bot)
 永远不会把通知当作人说的话。
 
 通知和消息一样经过收件箱。所以你和 Bot 说话时，一个结果可能同时到达。它会引导你的 Turn，或者等待下一个 Turn。
@@ -215,7 +215,7 @@ Chat 视图中的 `open` 会统计它们：
 每个 Turn 开始时，Bot 会看到一个未完成工作的列表：每个委派的 ID、Bot 和第一行，每个请求，以及每个提醒和它的时间。所以它知道什么会回来。
 
 未完成的工作也决定 task Chat 的工作什么时候结束。见
-[委派](/zh-cn/docs/developers/delegation#工作何时结束)。
+[委派](/zh-cn/developers/delegation#工作何时结束)。
 
 ---
 
@@ -237,7 +237,7 @@ Chat 视图中的 `open` 会统计它们：
 | `openbot_execution_cancel` | 请求取消。`cancelling` 表示仍在释放资源。 |
 
 改变自己 Turn 的工作工具留在前台。App 调用、Code
-Mode 和委派工作有持久执行。Computer 命令保留自己的会话。组织设置时间预算、最长运行时间和活动工具数。见[组织设置](/zh-cn/docs/organization#设置)。
+Mode 和委派工作有持久执行。Computer 命令保留自己的会话。组织设置时间预算、最长运行时间和活动工具数。见[组织设置](/zh-cn/organization#设置)。
 
 | 路由                                      | 作用                             |
 | ----------------------------------------- | -------------------------------- |
@@ -304,8 +304,7 @@ Chat，最早的排在前面。加上 `bot=<id>` 可以列出某个 Bot 的 Chat
 Turn 记录包含
 `status`、`settings`、`steps`、`usage`、`input`（它的输入 Items 的 ID）、`items`、`startedAt`
 和 `completedAt`。`author` 是这个 Turn 为之工作的人。在
-[Channel](/zh-cn/docs/developers/channels)
-中，它是写下这条消息的人。每个 Item 包含
+[Channel](/zh-cn/developers/channels) 中，它是写下这条消息的人。每个 Item 包含
 `id`、`seq`（它在历史中的位置）、`content` 和
 `origin`（`chat`、`turn`、`step`，通知还有 `notice`）。
 
@@ -323,13 +322,13 @@ curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 还有一些路由读取一个 Chat 的工作：
 
-| 路由                                   | 列出什么                                                                                 |
-| -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `GET /v1/chats/:chatId/delegations`    | 这个 Chat 交给 Bots 的工作。见 [委派](/zh-cn/docs/developers/delegation#查看工作)。      |
-| `GET /v1/chats/:chatId/confessions`    | Bot 用 `confide` 说的话。见 [展示告解](/zh-cn/docs/client#展示告解)。                    |
-| `GET /v1/chats/:chatId/enrichments`    | 记忆 Bot 如何重写每个 Turn 的输入。见 [记忆](/zh-cn/docs/developers/memory#告解和补充)。 |
-| `GET /v1/chats/:chatId/code-runs`      | 这个 Chat 的 [Code Mode](/zh-cn/docs/developers/code-mode) 程序。                        |
-| `GET /v1/chats/:chatId/app-operations` | 这个 Chat 的 [App](/zh-cn/docs/developers/apps) 调用。                                   |
+| 路由                                   | 列出什么                                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET /v1/chats/:chatId/delegations`    | 这个 Chat 交给 Bots 的工作。见 [委派](/zh-cn/developers/delegation#查看工作)。      |
+| `GET /v1/chats/:chatId/confessions`    | Bot 用 `confide` 说的话。见 [展示告解](/zh-cn/client#展示告解)。                    |
+| `GET /v1/chats/:chatId/enrichments`    | 记忆 Bot 如何重写每个 Turn 的输入。见 [记忆](/zh-cn/developers/memory#告解和补充)。 |
+| `GET /v1/chats/:chatId/code-runs`      | 这个 Chat 的 [Code Mode](/zh-cn/developers/code-mode) 程序。                        |
+| `GET /v1/chats/:chatId/app-operations` | 这个 Chat 的 [App](/zh-cn/developers/apps) 调用。                                   |
 
 ---
 
@@ -419,7 +418,7 @@ Bot 可以用工具 `openbot_remind` 之后再回到某件事上。它给出 `se
 
 计划写好后，Bot 调用
 `openbot_submit_plan`，把步骤作为待办列表，再加一段简短的总结。OpenBot 会保存这个列表，并像任何
-[request](/zh-cn/docs/developers/requests) 一样检查能力 `plans.run`。
+[request](/zh-cn/developers/requests) 一样检查能力 `plans.run`。
 
 - 计划马上被允许时，Chat 切换到 `build`
   模式。这个 Turn 之后会开始一个带着所有工具的新 Turn，Bot 执行计划。
@@ -447,11 +446,11 @@ Bot 可以用工具 `openbot_remind` 之后再回到某件事上。它给出 `se
 
 1. Chat：用 `PATCH /v1/chats/:chatId` 设置 `planApproval`。发送 `null`
    可以移除它。
-2. Bot：[Bot](/zh-cn/docs/developers/bots) 上的 `planApproval`。
+2. Bot：[Bot](/zh-cn/developers/bots) 上的 `planApproval`。
 3. 你自己：`PATCH /v1/me/settings`，内容是
    `{ "expectedVersion": 0, "planApproval": { ... } }`。用 `GET /v1/me/settings`
-   读取你的设置。同一份设置里也有你的[默认 Bot](/zh-cn/docs/developers/bots#你的默认-bot)。
-4. 组织：[设置](/zh-cn/docs/organization#设置)中的
+   读取你的设置。同一份设置里也有你的[默认 Bot](/zh-cn/developers/bots#你的默认-bot)。
+4. 组织：[设置](/zh-cn/organization#设置)中的
    `planApproval`。它只是默认值，不能禁止更宽松的设置。
 
 ---
@@ -509,8 +508,7 @@ Bot 可以用工具 `openbot_remind` 之后再回到某件事上。它给出 `se
 
 错误的模型会返回 `400` 和 `ChatModelInvalid`。`reason` 是
 `provider-not-found`、`model-not-found` 或
-`unsupported-option`。OpenBot 如何得到它的模型，见
-[Models](/zh-cn/docs/models)。
+`unsupported-option`。OpenBot 如何得到它的模型，见 [Models](/zh-cn/models)。
 
 执行模式是 `build` 或 `plan`。`build` 是普通模式：Bot 直接做事。在 `plan`
 模式下，Bot 先写一个计划。OpenBot 把模式保存在 Chat 上，并把它复制到每个新 Turn 的
@@ -524,18 +522,18 @@ Chat 没有终点，所以它的历史可能变得比模型的上下文窗口还
 
 在每个模型步骤之前，OpenBot 会估计这个 Chat 的输入 token 数。大约四个字符的 JSON 算一个 token。当估计值达到模型上下文窗口的 90% 时，这个 Chat 的模型会为较早的上下文写一段摘要。最新的消息保持原样。
 
-- 上下文窗口来自目录中的模型。见 [模型](/zh-cn/docs/models#添加模型) 中的
+- 上下文窗口来自目录中的模型。见 [模型](/zh-cn/models#添加模型) 中的
   `contextWindow`。
-- 在代码中给出的模型，例如[内置模型](/zh-cn/docs/models#内置模型)，可以用
+- 在代码中给出的模型，例如[内置模型](/zh-cn/models#内置模型)，可以用
   `autoCompactTokenLimit` 设一个更低的限制。
 - 不知道上下文窗口的模型不会被压缩。
 
 历史总是保留每个 Item，`GET /v1/chats/:chatId/items`
 会显示全部。只有模型读到的内容会变小。写摘要的调用的用量来源是 `compaction`。见
-[用量](/zh-cn/docs/usage)。
+[用量](/zh-cn/usage)。
 
 OpenBot 默认不使用提供方的原生压缩，例如 OpenAI 的 `/responses/compact`。运行
-[core 库](/zh-cn/docs/packages#core) 的程序可以给出自己的 `ContextCompaction`
+[core 库](/zh-cn/packages#core) 的程序可以给出自己的 `ContextCompaction`
 服务，例如 `ResponsesCompaction.layer()`。
 
 ---
@@ -546,13 +544,13 @@ OpenBot 默认不使用提供方的原生压缩，例如 OpenAI 的 `/responses/
 和执行回执。它先关闭 Chat 的新工作入口，取消未完成工作，等待资源释放，再删除历史。用同一个键重试会得到同一回执，即使 Chat 已删除。可以删除 direct、channel 和 live
 Chat；task 和 review Chat 返回 `409` 和 `ChatConflict`。
 
-之后这个 Chat 不再保留它指向的[文件](/zh-cn/docs/developers/files#文件怎样被删除)。
+之后这个 Chat 不再保留它指向的[文件](/zh-cn/developers/files#文件怎样被删除)。
 
 删除一个 direct
 Chat 后，你给这个 Bot 的下一条消息会开始一个新的、空的 Chat，它有新的 ID。同样，channel
 Chat 被删除后，那个聊天里的下一条消息会开始一个新的 Chat。Bot 从这个 Chat 学到的东西仍然留在它的
-[Bot 记忆](/zh-cn/docs/developers/memory)中。要把这些也删除，请清除 Tag
-`chat:<id>`。见 [读取和修改](/zh-cn/docs/developers/memory#读取和修改)。
+[Bot 记忆](/zh-cn/developers/memory)中。要把这些也删除，请清除 Tag
+`chat:<id>`。见 [读取和修改](/zh-cn/developers/memory#读取和修改)。
 
 ---
 
@@ -565,7 +563,7 @@ Chat 被删除后，那个聊天里的下一条消息会开始一个新的 Chat�
 等待决定。OpenBot 不会将它标为完成，也不会在没有决定时再次发送。
 
 只结算供应商确认的用量。未知用量保留未知标记。全部字段见
-[Chats 参考](/docs/api/operations/tags/chats/)。
+[Chats 参考](/api/operations/tags/chats/)。
 
 ## 旧版本中的 Chat
 

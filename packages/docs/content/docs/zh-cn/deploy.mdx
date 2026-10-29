@@ -3,9 +3,9 @@ title: 部署
 description: 在你自己的服务器上运行 OpenBot。
 ---
 
-面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/docs/admin)开始。
+面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限或平台管理权限。从[管理员手册](/zh-cn/admin)开始。
 
-本页介绍如何在生产环境中运行 OpenBot。你要构建 Docker 镜像，准备数据库，设置平台，然后在反向代理后面启动服务器。每个设置项的说明，请看[配置](/zh-cn/docs/configuration)。
+本页介绍如何在生产环境中运行 OpenBot。你要构建 Docker 镜像，准备数据库，设置平台，然后在反向代理后面启动服务器。每个设置项的说明，请看[配置](/zh-cn/configuration)。
 
 ---
 
@@ -16,18 +16,18 @@ description: 在你自己的服务器上运行 OpenBot。
 - 一个给平台用的 OpenID Connect 提供方，例如
   `https://id.example.com`。在其中注册一个客户端，重定向 URI 为
   `https://api.example.com/auth/callback/oidc`。如果用户只通过组织的
-  [SSO 连接](/zh-cn/docs/sso)登录，可以跳过这一项。
-- 一个模型服务，如果你想让 Bot（机器人）干活的话。设置完成后，通过 API 添加它。请看[模型](/zh-cn/docs/models)。
+  [SSO 连接](/zh-cn/sso)登录，可以跳过这一项。
+- 一个模型服务，如果你想让 Bot（机器人）干活的话。设置完成后，通过 API 添加它。请看[模型](/zh-cn/models)。
 
 ## 构建镜像
 
 所有 Docker 文件都在 `deploy/docker/` 中。一个 `Dockerfile`
 生成两个镜像。每个镜像是一个构建目标（文件中一个有名字的最终阶段）：
 
-| 目标            | 镜像                    | 运行什么                                                             |
-| --------------- | ----------------------- | -------------------------------------------------------------------- |
-| `openbot`       | `openbot`               | OpenBot 和它的迁移程序。                                             |
-| `protocol-test` | `openbot-protocol-test` | App Protocol 的测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。 |
+| 目标            | 镜像                    | 运行什么                                                        |
+| --------------- | ----------------------- | --------------------------------------------------------------- |
+| `openbot`       | `openbot`               | OpenBot 和它的迁移程序。                                        |
+| `protocol-test` | `openbot-protocol-test` | App Protocol 的测试服务。请看[协议测试](/zh-cn/protocol-test)。 |
 
 文件 `docker-bake.hcl` 告诉 [Docker Bake](https://docs.docker.com/build/bake/)
 如何构建它们。在仓库根目录运行：
@@ -65,7 +65,7 @@ OpenBot 镜像包含 Node.js、打包好的服务器、打包好的迁移程序�
 
 OpenBot 先从环境变量读取每个设置。如果没有设置该变量，OpenBot 就改读文件
 `/run/secrets/<NAME>`，例如
-`/run/secrets/OPENBOT_SECRET_KEYS`。Docker 和 Compose 就把密钥放在这里。空文件视为未设置。请看[配置](/zh-cn/docs/configuration#以文件形式提供机密)。
+`/run/secrets/OPENBOT_SECRET_KEYS`。Docker 和 Compose 就把密钥放在这里。空文件视为未设置。请看[配置](/zh-cn/configuration#以文件形式提供机密)。
 
 环境变量会出现在 `docker inspect` 中。`/run/secrets`
 中的文件不会。Compose 对所有密钥都使用文件。
@@ -84,7 +84,7 @@ echo "OPENBOT_SECRET_KEYS=k1:$(openssl rand -hex 32)" >> openbot.env
 echo "OPENBOT_CLUSTER_SECRET=$(openssl rand -hex 32)" >> openbot.env
 ```
 
-请看[密钥](/zh-cn/docs/configuration#机密密钥)。
+请看[密钥](/zh-cn/configuration#机密密钥)。
 
 节点间的私有调用使用 `/internal/executions/rpc` 和
 `/internal/resources/rpc`。请只在私有网络开放这两个路径。所有节点使用同一个随机密钥。多节点部署中，为每个节点设置不同且可访问的主机地址。私有 RPC 客户端与 App 的出站网络检查分开。
@@ -131,7 +131,7 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
 
 它把公开源、平台提供方和最初的平台管理员写入数据库。客户端密钥请用
 `-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...`
-传入，不要写在命令行参数里。所有参数请看[平台](/zh-cn/docs/platform#设置)。
+传入，不要写在命令行参数里。所有参数请看[平台](/zh-cn/platform#设置)。
 
 你也可以在服务器启动后再运行设置。在那之前，除 `/health` 外的每个路由都返回
 `503` 和 `SetupRequired`。
@@ -163,7 +163,7 @@ curl http://127.0.0.1:8080/health
 
 `/health` 只说明 HTTP 服务器能够应答。它不检查数据库、设置或模型。
 
-现在 Alice 可以登录了。她是平台管理员。下一步，添加一个模型，以及一个关联它的模型提供方。请看[模型](/zh-cn/docs/models)。
+现在 Alice 可以登录了。她是平台管理员。下一步，添加一个模型，以及一个关联它的模型提供方。请看[模型](/zh-cn/models)。
 
 </Step>
 </Steps>
@@ -201,7 +201,7 @@ pnpm --filter @openbot-build/openbot start
 才会启动。所以 `up` 总是先迁移数据库。
 
 `protocol-test` 服务是 App
-Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。即使你只用 OpenBot，这个文件也需要
+Protocol 的公开测试服务。请看[协议测试](/zh-cn/protocol-test)。即使你只用 OpenBot，这个文件也需要
 `PROTOCOL_TEST_PUBLIC_ORIGIN`。
 
 Compose 以 `/run/secrets` 中文件的形式提供 `POSTGRES_PASSWORD`、
@@ -279,7 +279,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 ```
 
 在完成这一步之前，除 `/health` 外的每个路由都返回 `503` 和
-`SetupRequired`。请看[平台](/zh-cn/docs/platform#设置)。
+`SetupRequired`。请看[平台](/zh-cn/platform#设置)。
 
 </Step>
 </Steps>
@@ -297,13 +297,13 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 - 相同的 `OPENBOT_SECRET_KEYS` 和 `OPENBOT_CLUSTER_SECRET`，
 - 各不相同、且其他节点都能访问的 `OPENBOT_CLUSTER_HOST`，
 - 相同的
-  `OPENBOT_OUTBOUND_ALLOW`（如果你设置了它）。参见[出站连接](/zh-cn/docs/configuration#出站连接)。
+  `OPENBOT_OUTBOUND_ALLOW`（如果你设置了它）。参见[出站连接](/zh-cn/configuration#出站连接)。
 
 每个节点使用自己的私有地址，不要使用负载均衡器的地址。扩容 Compose 的 `openbot`
 服务时，必须为每个新节点配置独立主机名。`compose.check.yaml`
 中的两个节点展示了这种配置。
 
-所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。迁移程序和设置程序只运行一次，不要在每个实例上都运行。
+所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/configuration#修改如何到达每个实例)。迁移程序和设置程序只运行一次，不要在每个实例上都运行。
 
 ---
 
@@ -385,9 +385,9 @@ api.example.com {
 `/`。你的客户端还必须处理这些返回地址：
 
 - App 授权之后的 `/?authorization=<flowId>`。接下来调用
-  `completeAppAuthorization`。请看 [App](/zh-cn/docs/developers/apps)。
+  `completeAppAuthorization`。请看 [App](/zh-cn/developers/apps)。
 - 开发者测试授权之后的
-  `/?developerTest=<testId>`。请看[开发者工具](/zh-cn/docs/developer-tools)。
+  `/?developerTest=<testId>`。请看[开发者工具](/zh-cn/developer-tools)。
 
 返回路径可以是同源上的任意路径，但 `/auth/`、`/v1/` 和 `/development/`
 下的路径除外。
@@ -402,7 +402,7 @@ api.example.com {
    它保存平台和组织的设置、账户、组织及其成员、用户令牌、模型和模型提供方、SSO 连接、审计日志、Bot、Chat 及其历史，以及 App 连接。
 2. **`OPENBOT_SECRET_KEYS`。**
    这些密钥用来解密数据库中的机密：App 密钥、模型提供方密钥、SSO 客户端密钥和登录密钥。没有这些密钥，数据库备份无法恢复这些机密。
-3. **[文件](/zh-cn/docs/developers/files)的 bucket。**
+3. **[文件](/zh-cn/developers/files)的 bucket。**
    它保存人们上传的文件的字节。数据库只记录它们的名字。
 
 使用 Compose 时，这样备份数据库：
@@ -425,4 +425,4 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 ## GitHub Actions
 
-此开发任务请参见 [发布和检查项目](/zh-cn/docs/developers/publishing).
+此开发任务请参见 [发布和检查项目](/zh-cn/developers/publishing).

@@ -3,7 +3,7 @@ title: Aus Code starten
 description: Starte OpenBot aus deinem eigenen TypeScript-Programm.
 ---
 
-Für Entwickler. Wähle im [Entwicklerhandbuch](/de/docs/developers) zwischen
+Für Entwickler. Wähle im [Entwicklerhandbuch](/de/developers) zwischen
 API-Anbindung, App-Veröffentlichung und Projektarbeit.
 
 Das Programm `openbot` deckt die meisten Bedürfnisse ab. Wenn du mehr brauchst,
@@ -29,10 +29,10 @@ Launch.main(Server.layerLive)
 
 `Launch.main` liest zuerst die Kommandozeile. Mit `--help` zeigt es die Hilfe
 und endet. Dafür braucht es keine Einstellungen. Dann liest es die Variablen aus
-[Konfiguration](/de/docs/configuration), aus der Umgebung oder aus geheimen
-Dateien. Es sperrt ausgehende Verbindungen zu privaten Adressen und schreibt
-einen fehlgeschlagenen Start ins Log. Dann führt es den Layer aus, den du ihm
-gibst, bis der Prozess endet. Es gibt diesem Layer die Node.js-Dienste und den
+[Konfiguration](/de/configuration), aus der Umgebung oder aus geheimen Dateien.
+Es sperrt ausgehende Verbindungen zu privaten Adressen und schreibt einen
+fehlgeschlagenen Start ins Log. Dann führt es den Layer aus, den du ihm gibst,
+bis der Prozess endet. Es gibt diesem Layer die Node.js-Dienste und den
 Fetch-HTTP-Client. `Launch.server` ist dasselbe Programm als Effect, wenn du es
 selbst ausführst. Gib ihm `NodeServices.layer`.
 
@@ -41,7 +41,7 @@ selbst ausführst. Gib ihm `NodeServices.layer`.
 `outboundAllow`. Du kannst diese Werte auch im Code schreiben.
 
 Das Programm braucht trotzdem eine Plattform. Führe das Einrichtungsprogramm
-einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/docs/platform#setup).
+einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/platform#setup).
 
 ## Was das Paket exportiert
 
@@ -76,20 +76,20 @@ dein Programm ihnen die gemeinsamen Dienste gibt.
 
 ### Instanz-Optionen
 
-| Option          | Typ                | Was es ist                                                                                             |
-| --------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
-| `host`          | `string`           | Pflicht. Die Adresse, auf der der Server hört, zum Beispiel `127.0.0.1`.                               |
-| `port`          | `number`           | Pflicht. Der Port, auf dem der Server hört, zum Beispiel `3000`.                                       |
-| `databaseUrl`   | `Redacted<string>` | Pflicht. Die PostgreSQL-URL.                                                                           |
-| `secretKeys`    | `Redacted<string>` | Die Liste der geheimen Schlüssel. Siehe [Geheime Schlüssel](/de/docs/configuration#geheime-schlüssel). |
-| `clusterSecret` | `Redacted<string>` | Erforderlich. Mindestens 32 Zeichen. Alle Knoten nutzen dasselbe Geheimnis für private RPC.            |
-| `clusterHost`   | `string`           | Optional. Die von anderen Knoten erreichbare Adresse. Standard ist die gebundene HTTP-Adresse.         |
+| Option          | Typ                | Was es ist                                                                                        |
+| --------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| `host`          | `string`           | Pflicht. Die Adresse, auf der der Server hört, zum Beispiel `127.0.0.1`.                          |
+| `port`          | `number`           | Pflicht. Der Port, auf dem der Server hört, zum Beispiel `3000`.                                  |
+| `databaseUrl`   | `Redacted<string>` | Pflicht. Die PostgreSQL-URL.                                                                      |
+| `secretKeys`    | `Redacted<string>` | Die Liste der geheimen Schlüssel. Siehe [Geheime Schlüssel](/de/configuration#geheime-schlüssel). |
+| `clusterSecret` | `Redacted<string>` | Erforderlich. Mindestens 32 Zeichen. Alle Knoten nutzen dasselbe Geheimnis für private RPC.       |
+| `clusterHost`   | `string`           | Optional. Die von anderen Knoten erreichbare Adresse. Standard ist die gebundene HTTP-Adresse.    |
 
 ### Anmeldung
 
 Der Server nimmt keine Anmelde-Optionen. Er liest den öffentlichen Origin, den
 Anbieter der Plattform und das Anmelde-Geheimnis aus den
-[Plattform-Einstellungen](/de/docs/platform#einstellungen-der-platform).
+[Plattform-Einstellungen](/de/platform#einstellungen-der-platform).
 
 - Vor der Einrichtung antwortet jede Route außer `/health` mit `503` und
   `SetupRequired`.
@@ -108,7 +108,7 @@ Programm weiter, damit Tests sie nutzen können.
 
 | Option                       | Was sie tut                                                                                                                        |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `builtinModels`              | Models, die jede Organisation nutzen kann, im Code angegeben. Siehe [Models](/de/docs/models#eingebaute-models).                   |
+| `builtinModels`              | Models, die jede Organisation nutzen kann, im Code angegeben. Siehe [Models](/de/models#eingebaute-models).                        |
 | `builtinModels.defaultModel` | Das Model eines neuen Chats, wenn sein Bot keines nennt. Es ist eines aus `builtinModels`. Nur eine simulierte Plattform setzt es. |
 | `routes`                     | Ein Layer mit deinen eigenen HTTP-Routen.                                                                                          |
 | `indexSources`               | Weitere Quellen für die Suche im App Index, neben dem OpenBot Index.                                                               |
@@ -117,14 +117,14 @@ Programm weiter, damit Tests sie nutzen können.
 Einige Werte waren früher Optionen. Jetzt sind sie Einstellungen in der
 Datenbank. So teilen alle Instanzen sie:
 
-| Alte Option           | Einstellung                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
-| `appRestrictions`     | `appRestrictions` in den [Plattform-Einstellungen](/de/docs/platform#einstellungen-der-platform). |
-| `appReadRules`        | `appReadRules` in den [Organisations-Einstellungen](/de/docs/organization#einstellungen).         |
-| `bots.helperModel`    | `rulesModel` und `botMemoryModel` in den Organisations-Einstellungen.                             |
-| `bots.requestTimeout` | `requestTimeoutMs` in den Organisations-Einstellungen.                                            |
-| `bots.memory`         | `botMemory` in den Organisations-Einstellungen.                                                   |
-| `appEncryptionKey`    | Die Instanz-Option `secretKeys`.                                                                  |
+| Alte Option           | Einstellung                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| `appRestrictions`     | `appRestrictions` in den [Plattform-Einstellungen](/de/platform#einstellungen-der-platform). |
+| `appReadRules`        | `appReadRules` in den [Organisations-Einstellungen](/de/organization#einstellungen).         |
+| `bots.helperModel`    | `rulesModel` und `botMemoryModel` in den Organisations-Einstellungen.                        |
+| `bots.requestTimeout` | `requestTimeoutMs` in den Organisations-Einstellungen.                                       |
+| `bots.memory`         | `botMemory` in den Organisations-Einstellungen.                                              |
+| `appEncryptionKey`    | Die Instanz-Option `secretKeys`.                                                             |
 
 ---
 
@@ -167,9 +167,9 @@ Die Optionen `chats`, `discovery`, `computerDrivers`, `liveBackends`,
 ## Chats
 
 Models kommen von den Model Providers in der Datenbank und aus `builtinModels`.
-Siehe [Models](/de/docs/models). [Bot Memory](/de/docs/developers/memory) folgt
+Siehe [Models](/de/models). [Bot Memory](/de/developers/memory) folgt
 `botMemory` in den
-[Organisations-Einstellungen](/de/docs/organization#einstellungen).
+[Organisations-Einstellungen](/de/organization#einstellungen).
 
 Der Server hält Dienste der Anwendung und aktive Ausführungen. Jeder Turn baut
 Model und Werkzeuge in seinem eigenen Scope. Die gespeicherte Identität hält
@@ -226,7 +226,7 @@ Füge `needsApproval: true` zu `Tool.make` hinzu, wenn jeder Aufruf eine
 Entscheidung braucht. OpenBot prüft dann dafür die Fähigkeit `tools.call`. Wenn
 der Aufruf einen Entscheider braucht, bekommt der Bot ein wartendes Ergebnis,
 und der Aufruf läuft später, wenn er erlaubt wird. Siehe
-[Requests](/de/docs/developers/requests).
+[Requests](/de/developers/requests).
 
 ---
 
@@ -274,7 +274,7 @@ Upgrade den Wartungsbefehl. Er braucht `OPENBOT_DATABASE_URL` und
 Schema und abgeschlossene Datenversion, bevor es Dienste startet. Seine
 gemeinsame Sperre bleibt für die ganze Serverlaufzeit offen. Die Schritte für
 Sicherung und Wiederherstellung stehen unter
-[Deploy](/de/docs/deploy#die-datenbank-vorbereiten).
+[Deploy](/de/deploy#die-datenbank-vorbereiten).
 
 ```sh
 pnpm --filter @openbot-build/openbot migrate
@@ -309,4 +309,4 @@ anmelden.
 
 OpenBot schreibt Fehlschläge als Fehler-Logs. Füge deinen eigenen Effect-Logger
 hinzu, um sie an einen anderen Dienst zu senden. Was jedes Log enthält, und ein
-vollständiges Beispiel, findest du unter [Fehler-Logs](/de/docs/error-logs).
+vollständiges Beispiel, findest du unter [Fehler-Logs](/de/error-logs).

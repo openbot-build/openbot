@@ -4,19 +4,19 @@ description: 查看模型用量和费用，设置预算，并用额度支付平�
 ---
 
 面向组织管理员。每项任务需要对应权限。只有平台管理员可以修改 `/v1/platform`
-下的设置。从[管理员手册](/zh-cn/docs/admin)开始。
+下的设置。从[管理员手册](/zh-cn/admin)开始。
 
 OpenBot 会记录每一次模型调用。你可以看到每个成员、每个 Bot 和每个用户令牌用了多少 token，以及花了多少钱。token 是模型读或写的一小段文本。你也可以设置**预算**。花的钱太多时，预算会停止模型调用。平台可以给组织**额度**，用来支付平台共享的模型。
 
-| 词         | 含义                                                                        |
-| ---------- | --------------------------------------------------------------------------- |
-| 用量事件   | 一次模型调用：它的 token、它的费用，以及谁发起了它。                        |
-| 价格       | 一个模型在一个提供方那里，一百万个 token 的费用。                           |
-| 预算       | 组织、成员、Bot 或用户令牌的花费上限，按一天或一个月计算。                  |
-| 额度       | 平台给组织的钱，用来支付平台的模型。                                        |
-| 微美元     | API 中所有的钱都以微美元（micro-USD）为单位。1 美元等于 1,000,000 微美元。  |
-| 平台密钥   | 一个[共享的模型提供方](/zh-cn/docs/platform#共享的模型提供方)。由平台付费。 |
-| 自己的密钥 | 组织自己的模型提供方。由组织直接向模型公司付费。                            |
+| 词         | 含义                                                                       |
+| ---------- | -------------------------------------------------------------------------- |
+| 用量事件   | 一次模型调用：它的 token、它的费用，以及谁发起了它。                       |
+| 价格       | 一个模型在一个提供方那里，一百万个 token 的费用。                          |
+| 预算       | 组织、成员、Bot 或用户令牌的花费上限，按一天或一个月计算。                 |
+| 额度       | 平台给组织的钱，用来支付平台的模型。                                       |
+| 微美元     | API 中所有的钱都以微美元（micro-USD）为单位。1 美元等于 1,000,000 微美元。 |
+| 平台密钥   | 一个[共享的模型提供方](/zh-cn/platform#共享的模型提供方)。由平台付费。     |
+| 自己的密钥 | 组织自己的模型提供方。由组织直接向模型公司付费。                           |
 
 ---
 
@@ -26,16 +26,16 @@ ChatGPT 提供方沿用普通模型提供方的价格、预算和点数规则。
 
 OpenBot 会在向提供方发送请求前记录模型调用。每个用量事件都有一个 `source`：
 
-| `source`     | 是什么发起了调用                                                                 |
-| ------------ | -------------------------------------------------------------------------------- |
-| `turn`       | [Chat](/zh-cn/docs/developers/chats) 中一个 Turn 的一个模型步骤。                |
-| `compaction` | 对旧消息的总结，让对话能放进模型。                                               |
-| `judge`      | 评判 [Rules](/zh-cn/docs/developers/rules) 的模型。                              |
-| `bot_memory` | [记忆 Bot](/zh-cn/docs/developers/memory#记忆-bot)：它学习、补充和回答时的用量。 |
-| `other`      | 其他任何调用。                                                                   |
+| `source`     | 是什么发起了调用                                                            |
+| ------------ | --------------------------------------------------------------------------- |
+| `turn`       | [Chat](/zh-cn/developers/chats) 中一个 Turn 的一个模型步骤。                |
+| `compaction` | 对旧消息的总结，让对话能放进模型。                                          |
+| `judge`      | 评判 [Rules](/zh-cn/developers/rules) 的模型。                              |
+| `bot_memory` | [记忆 Bot](/zh-cn/developers/memory#记忆-bot)：它学习、补充和回答时的用量。 |
+| `other`      | 其他任何调用。                                                              |
 
 当调用有这些信息时，用量事件还会带有 Chat（`chatId`）、Turn、Bot、成员和用户令牌。在
-[Channel](/zh-cn/docs/developers/channels) 中，成员是写这条消息的人。
+[Channel](/zh-cn/developers/channels) 中，成员是写这条消息的人。
 
 每次调用都有稳定的 `id`。持久步骤还带有 `executionId`。运行时，`status` 是
 `pending`；提供方确认用量后是 `confirmed`；缺少用量时是
@@ -88,7 +88,7 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PUT /v1/platform/model_providers/:providerId/prices`     | 为一个共享的提供方中的一个模型设置新价格。 |
 
 提供方只能为它关联的模型设置价格。其他模型会返回 `400` 和
-`ModelProviderInvalid`。[模型目录](/zh-cn/docs/models#选择模型)会显示每个模型当前的
+`ModelProviderInvalid`。[模型目录](/zh-cn/models#选择模型)会显示每个模型当前的
 `price`。
 
 新价格只对从现在起开始的调用生效。每次预留都从数据库读取价格，并保存一份副本。其他节点调价或移除提供方，都不会改变这次调用的价格。用量记录保留已结算费用。OpenBot 会把每次调用的费用向上取整到整数微美元。
@@ -317,7 +317,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `DELETE /v1/organization/budgets/:budgetId` | 移除一个预算。                                                           |
 
 读取预算需要 `Budget` 上的 `read`。修改预算需要 `Budget` 上的
-`write`。每次修改都会写入[审计日志](/zh-cn/docs/organization#审计日志)。
+`write`。每次修改都会写入[审计日志](/zh-cn/organization#审计日志)。
 
 ---
 
@@ -373,7 +373,7 @@ OpenBot 还没有支付功能。出售额度的平台在自己的系统中记录
 
 ## 速率限制
 
-平台管理员可以限制每个调用方在一分钟内发送多少个 API 请求。这就是速率限制。每个用户令牌单独计数。没有令牌的已登录用户算作一个调用方。所有 OpenBot 实例共享这个计数。在[平台设置](/zh-cn/docs/platform#平台设置)中设置
+平台管理员可以限制每个调用方在一分钟内发送多少个 API 请求。这就是速率限制。每个用户令牌单独计数。没有令牌的已登录用户算作一个调用方。所有 OpenBot 实例共享这个计数。在[平台设置](/zh-cn/platform#平台设置)中设置
 `rateLimit`：
 
 ```sh
@@ -411,7 +411,7 @@ token 速率限制一个范围内的模型工作使用 token 的速度。它把�
 - **模型流式输出时**，OpenBot 把提供方的输出读进一个缓冲区。只有当桶里有足够的空间时，它才把每一段发出去，大约每四个字符算一个 token。所以输出以均匀的速度到来。
 - **调用结束时**，已确认的数量会替换估算量。额外的 token 会增加欠账，未使用的估算量会放回桶中。即使在等待输出时停止调用，也会使用提供方已返回的数量。没有确认数量时，速率限制保留估算量。这不会扣款。
 
-平台管理员在[平台设置](/zh-cn/docs/platform#平台设置)中设置最高的速率。组织可以在自己的[设置](/zh-cn/docs/organization#设置)中设置自己的速率。对每个范围，两个速率中较低的那个生效，所以组织只能把速率调低。`null`
+平台管理员在[平台设置](/zh-cn/platform#平台设置)中设置最高的速率。组织可以在自己的[设置](/zh-cn/organization#设置)中设置自己的速率。对每个范围，两个速率中较低的那个生效，所以组织只能把速率调低。`null`
 表示这个范围没有限制。默认没有限制。
 
 ```sh
@@ -438,5 +438,5 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `429` | `RateLimited`          | 调用方在这一分钟内发送了太多请求。                              |
 | `503` | `BillingUnavailable`   | OpenBot 无法连接它的数据库。                                    |
 
-在 [Usage 参考](/docs/api/operations/tags/usage/)和
-[Budgets 参考](/docs/api/operations/tags/budgets/)中查看完整的结构。
+在 [Usage 参考](/api/operations/tags/usage/)和
+[Budgets 参考](/api/operations/tags/budgets/)中查看完整的结构。

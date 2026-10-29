@@ -3,7 +3,7 @@ title: 参与贡献
 description: 准备代码，运行检查，并遵守项目规则。
 ---
 
-面向开发者。从[开发者手册](/zh-cn/docs/developers)选择 API 接入、App 发布或项目贡献。
+面向开发者。从[开发者手册](/zh-cn/developers)选择 API 接入、App 发布或项目贡献。
 
 本页写给修改 OpenBot 本身的人。它介绍如何准备你的电脑，如何运行服务器和检查，以及如何在代码中找到方向。
 
@@ -13,7 +13,7 @@ description: 准备代码，运行检查，并遵守项目规则。
 
 你需要
 [devenv](https://devenv.sh)。devenv 为项目提供确切版本的工具：Node.js、pnpm、PostgreSQL 等。你还需要
-[Docker](https://docs.docker.com/get-docker/)。开发数据库和开发用的对象存储在 Docker 中运行，构建和检查镜像也要用 Docker。devenv 提供 Docker 命令行工具，你的电脑只需要一个正在运行的 Docker 服务。请看[部署](/zh-cn/docs/deploy#构建镜像)。每条命令都通过
+[Docker](https://docs.docker.com/get-docker/)。开发数据库和开发用的对象存储在 Docker 中运行，构建和检查镜像也要用 Docker。devenv 提供 Docker 命令行工具，你的电脑只需要一个正在运行的 Docker 服务。请看[部署](/zh-cn/deploy#构建镜像)。每条命令都通过
 `devenv shell -- <command>` 运行，这样你用的总是这些工具。
 
 <Steps>
@@ -38,7 +38,7 @@ devenv shell -- pnpm dev:setup
 `dev:setup` 创建 `.env.development`，并在 `OPENBOT_SECRET_KEYS`
 中放入一个新的随机密钥。如果你的 `.env.development`
 来自旧版本，请删除它，然后再次运行
-`dev:setup`。你也可以重置开发数据库。请看[配置](/zh-cn/docs/configuration#开发)。
+`dev:setup`。你也可以重置开发数据库。请看[配置](/zh-cn/configuration#开发)。
 
 </Step>
 <Step>
@@ -76,7 +76,7 @@ devenv 会为每个服务选择一个空闲端口。它从基础端口开始：P
 </Step>
 </Steps>
 
-开发服务器使用本地测试账户、测试模型和一个测试 App。不需要任何外部服务。如何登录并创建用户令牌，请看[快速开始](/zh-cn/docs/developers/quickstart)。
+开发服务器使用本地测试账户、测试模型和一个测试 App。不需要任何外部服务。如何登录并创建用户令牌，请看[快速开始](/zh-cn/developers/quickstart)。
 
 ---
 
@@ -100,24 +100,24 @@ devenv 会为每个服务选择一个空闲端口。它从基础端口开始：P
 `it.effect`。它给测试一个测试时钟：只有测试推动时，时间才会前进。需要真实时间的测试，例如带有真实服务器的测试，使用
 `it.live`。OpenBot 的测试会用 devenv 中的工具启动自己的临时 PostgreSQL 服务器。它们不需要密钥，也不需要外部服务。GitHub
 Actions 运行同样的 `build`、`typecheck` 和 `test`
-命令。请看[部署](/zh-cn/docs/developers/publishing#github-actions)。
+命令。请看[部署](/zh-cn/developers/publishing#github-actions)。
 
 ---
 
 ## 仓库结构
 
-| 路径                       | 内容                                                                          |
-| -------------------------- | ----------------------------------------------------------------------------- |
-| `packages/`                | 工作区中的包。请看[包](/zh-cn/docs/packages)。                                |
-| `packages/docs/`           | 本文档网站。                                                                  |
-| `packages/template/`       | 新包的起点。它不属于工作区。                                                  |
-| `protocol-test/`           | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。      |
-| `deploy/`                  | 部署 OpenBot 的文件。每个目标有自己的文件夹。请看[部署](/zh-cn/docs/deploy)。 |
-| `deploy/docker/`           | Dockerfile、Bake 文件、Compose 文件、生产环境模板和镜像检查。                 |
-| `.env.development.example` | `.env.development` 的模板。                                                   |
-| `patches/`                 | 针对外部包特定版本的修复。                                                    |
-| `references/`              | 其他开源项目的源代码，以 Git 子模块的形式存在。只供阅读。                     |
-| `devenv.nix`               | 开发工具、设置和进程。                                                        |
+| 路径                       | 内容                                                                     |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `packages/`                | 工作区中的包。请看[包](/zh-cn/packages)。                                |
+| `packages/docs/`           | 本文档网站。                                                             |
+| `packages/template/`       | 新包的起点。它不属于工作区。                                             |
+| `protocol-test/`           | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/protocol-test)。      |
+| `deploy/`                  | 部署 OpenBot 的文件。每个目标有自己的文件夹。请看[部署](/zh-cn/deploy)。 |
+| `deploy/docker/`           | Dockerfile、Bake 文件、Compose 文件、生产环境模板和镜像检查。            |
+| `.env.development.example` | `.env.development` 的模板。                                              |
+| `patches/`                 | 针对外部包特定版本的修复。                                               |
+| `references/`              | 其他开源项目的源代码，以 Git 子模块的形式存在。只供阅读。                |
+| `devenv.nix`               | 开发工具、设置和进程。                                                   |
 
 `references/` 文件夹不参与构建。要阅读其中的代码，请用
 `git submodule update --init` 获取它。
@@ -136,20 +136,20 @@ Actions 运行同样的 `build`、`typecheck` 和 `test`
 devenv shell -- pnpm --filter @openbot-build/docs dev
 ```
 
-然后打开 `http://localhost:4321`。
+然后打开 `http://localhost:4321`。英文手册从 `/` 开始，中文从 `/zh-cn/`
+开始，德文从 `/de/` 开始。
 
-| `packages/docs/` 中的路径   | 是什么                                                   |
-| --------------------------- | -------------------------------------------------------- |
-| `content/docs/*.mdx`        | 页面。文件名就是 URL：`deploy.mdx` 对应 `/docs/deploy`。 |
-| `content/docs/<locale>/`    | 翻译：`zh-cn` 是简体中文，`de` 是德语。                  |
-| `astro.config.ts`           | 网站设置，以及页面在侧边栏中的顺序。                     |
-| `src/components/`           | 页面不用导入就能使用的组件：`Callout`、`Steps` 等。      |
-| `src/landing/`              | 首页。`messages/` 存放它的文字，每种语言一个文件。       |
-| `src/i18n.ts`               | 文档和首页支持的语言。                                   |
-| `src/pages/openapi.json.ts` | 在 `/openapi.json` 提供 `openapi.json`，方便大家下载。   |
-| `scripts/api.ts`            | 根据 API 契约生成 `openapi.json`。                       |
+| `packages/docs/` 中的路径   | 是什么                                                 |
+| --------------------------- | ------------------------------------------------------ |
+| `content/docs/*.mdx`        | 页面。文件名就是 URL：`deploy.mdx` 对应 `/deploy`。    |
+| `content/docs/<locale>/`    | 翻译：`zh-cn` 是简体中文，`de` 是德语。                |
+| `astro.config.ts`           | 网站设置，以及页面在侧边栏中的顺序。                   |
+| `src/components/`           | 页面不用导入就能使用的组件：`Callout`、`Steps` 等。    |
+| `src/i18n.ts`               | 文档支持的三种语言。                                   |
+| `src/pages/openapi.json.ts` | 在 `/openapi.json` 提供 `openapi.json`，方便大家下载。 |
+| `scripts/api.ts`            | 根据 API 契约生成 `openapi.json`。                     |
 
-`/docs/api` 上的 API 参考由
+`/api` 上的 API 参考由
 [starlight-openapi](https://github.com/HiDeoo/starlight-openapi) 插件根据
 `openapi.json` 生成。不要手写它。这个脚本在每次 `dev` 和 `build`
 之前运行。当你修改 `@openbot-build/api`
@@ -161,7 +161,7 @@ devenv shell -- pnpm --filter @openbot-build/docs dev
 `devenv shell -- pnpm --filter @openbot-build/docs build`。
 
 每次推送到 `main`，都会把网站发布到
-[openbot.build](https://openbot.build)。请看[发布文档网站](/zh-cn/docs/developers/publishing#发布文档网站)。
+[docs.openbot.build](https://docs.openbot.build)。请看[发布文档网站](/zh-cn/developers/publishing#发布文档网站)。
 
 ---
 
@@ -169,9 +169,9 @@ devenv shell -- pnpm --filter @openbot-build/docs dev
 
 ### 面向一个读者编写
 
-[用户手册](/zh-cn/docs/users)说明通过已有客户端或 Channel 完成工作的方法，写清任务、结果和求助方式。安装、API 字段和源码不放进用户页。
+[用户手册](/zh-cn/users)说明通过已有客户端或 Channel 完成工作的方法，写清任务、结果和求助方式。安装、API 字段和源码不放进用户页。
 
-[管理员手册](/zh-cn/docs/admin)说明配置和运维任务，明确需要组织权限、平台权限还是服务器访问权。客户端契约、App 发布和源码修改放在[开发者手册](/zh-cn/docs/developers)。任务需要交给另一角色时，链接到该角色的说明。
+[管理员手册](/zh-cn/admin)说明配置和运维任务，明确需要组织权限、平台权限还是服务器访问权。客户端契约、App 发布和源码修改放在[开发者手册](/zh-cn/developers)。任务需要交给另一角色时，链接到该角色的说明。
 
 代码和字段细节只保留一份。译文保持相同章节，并链接到自己的语言。自动生成的 API 参考保留英文。
 
@@ -181,9 +181,8 @@ devenv shell -- pnpm --filter @openbot-build/docs dev
 [Basic English](https://en.wikipedia.org/wiki/Basic_English)（基本英语）书写。这包括文档、代码注释、错误消息、日志、提示词和测试文字。尽量使用 Basic
 English 的 850 个词，再加上需要的技术词。使用短句。每个技术词第一次出现时，都要解释它。
 
-英文是所有文字的源头。文档还有简体中文和德语版本，首页还有更多语言的版本。修改英文页面时，请在同一次改动中修改它的翻译。翻译要保留相同的标题，顺序也相同，并且它的链接要指向同一语言的页面，例如
-`/de/docs/deploy`。修改首页的文字时，请修改 `src/landing/messages/`
-中的每个文件。API 参考只有英文版。
+英文是所有文字的源头。文档还有简体中文和德语版本。修改英文页面时，请在同一次改动中修改它的翻译。翻译要保留相同的标题，顺序也相同，并且它的链接要指向同一语言的页面，例如
+`/de/deploy`。API 参考只有英文版。
 
 ### 无界面
 
@@ -194,7 +193,7 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 注解说明自己需要对哪个资源的哪个操作。`packages/api/src/Authorization.ts`
 中的辅助函数 `own`、`organization`、`channel` 和 `channels`
 用来生成这些注解。一个要求只能使用它的端点有的路径参数。`packages/api`
-中的一个测试会检查这一点。请看[权限](/zh-cn/docs/permissions)。
+中的一个测试会检查这一点。请看[权限](/zh-cn/permissions)。
 
 授权代码来自 [ability](https://github.com/nmnmcc/ability) 库，也就是 npm 包
 `@nmnmcc/ability`。`package.json`
@@ -351,4 +350,4 @@ Packages 中，将所需包的 Actions 读取权限授予使用这些包的仓�
 `packages: read` 的 `GITHUB_TOKEN`。如需独立凭证，将具有 `read:packages`
 的 classic PAT 存为 `PACKAGES_READ_TOKEN` secret。发布使用源码仓库带
 `packages: write` 的
-`GITHUB_TOKEN`。本地安装公开包也需要令牌。参见[客户端设置](/zh-cn/docs/client)。
+`GITHUB_TOKEN`。本地安装公开包也需要令牌。参见[客户端设置](/zh-cn/client)。

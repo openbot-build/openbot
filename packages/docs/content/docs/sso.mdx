@@ -7,7 +7,7 @@ description:
 
 For organization administrators. You need the rights named for each task. Only a
 platform admin can change settings under `/v1/platform`. Start with the
-[administrator manual](/docs/admin).
+[administrator manual](/admin).
 
 SSO (single sign-on) lets people sign in with the account provider of their own
 company. An organization can add its own OpenID Connect provider for the email
@@ -16,8 +16,7 @@ service check who a person is.
 
 This page shows how to verify a domain, how to add an SSO connection, and how
 sign-in picks a provider. All routes are under `/v1/organization`. Reading needs
-`read` on `Sso`. Changes need `write` on `Sso`. See
-[Permissions](/docs/permissions).
+`read` on `Sso`. Changes need `write` on `Sso`. See [Permissions](/permissions).
 
 ---
 
@@ -84,8 +83,8 @@ uses the domain, removing it returns `409` with `DomainInUse`.
 ### Join by domain
 
 A verified domain also decides who joins the organization. When `joinByDomain`
-is `true` in the [organization settings](/docs/organization#settings), a person
-with a verified email in the domain joins when they sign in. They get the
+is `true` in the [organization settings](/organization#settings), a person with
+a verified email in the domain joins when they sign in. They get the
 `defaultRoles` of the organization. `joinByDomain` is `true` by default.
 
 ---
@@ -147,7 +146,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 The `redirectUri` is `<publicOrigin>/auth/callback/<connectionId>`. Register it
 at the provider. The client secret never comes back. The answer shows
-`{ set, hint }` instead. See [Platform](/docs/platform#secrets-never-come-back).
+`{ set, hint }` instead. See [Platform](/platform#secrets-never-come-back).
 
 ### Change or remove a connection
 
@@ -187,7 +186,7 @@ they can also sign in with the platform provider.
 
 `POST /auth/sign-in` starts a browser sign-in. It needs no credential. It checks
 the `Origin` header, like every cookie write. See
-[Authentication](/docs/developers/authentication#the-origin-rule).
+[Authentication](/developers/authentication#the-origin-rule).
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in \
@@ -209,7 +208,7 @@ Both fields are optional. OpenBot picks the provider like this:
 
 Send the browser to `url`. The answer also sets the login state cookie, which
 Better Auth needs to finish the sign-in. After the sign-in, the browser goes to
-`returnTo`. See [Return paths](/docs/developers/authentication#return-paths).
+`returnTo`. See [Return paths](/developers/authentication#return-paths).
 
 ---
 
@@ -227,4 +226,4 @@ Better Auth needs to finish the sign-in. After the sign-in, the browser goes to
 | `409`  | `SsoConnectionConflict` | Someone changed the connection after you read it.                            |
 | `503`  | `SsoUnavailable`        | OpenBot cannot reach its database.                                           |
 
-See the full shapes in the [SSO reference](/docs/api/operations/tags/sso/).
+See the full shapes in the [SSO reference](/api/operations/tags/sso/).

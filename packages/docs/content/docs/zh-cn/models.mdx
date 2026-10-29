@@ -4,7 +4,7 @@ description: 通过模型和模型提供方，把 OpenBot 连接到语言模型�
 ---
 
 面向添加模型提供方的组织管理员。每项任务需要对应权限。只有平台管理员可以修改
-`/v1/platform` 下的设置。从[管理员手册](/zh-cn/docs/admin)开始。
+`/v1/platform` 下的设置。从[管理员手册](/zh-cn/admin)开始。
 
 Bot 需要一个语言模型才能工作。OpenBot 不自带模型。你需要连接一个。OpenBot 为此保存两种记录：
 
@@ -19,10 +19,10 @@ ChatGPT 也使用普通模型提供方。见[使用 ChatGPT 登录](#使用-chat
 
 每个模型和每个提供方都归平台或某个组织所有：
 
-| 所有者 | 谁添加                     | 谁可以使用                                                                                 |
-| ------ | -------------------------- | ------------------------------------------------------------------------------------------ |
-| 组织   | 组织，使用自己的密钥       | 只有这个组织。这就是"自带密钥"。                                                           |
-| 平台   | 平台管理员，使用平台的密钥 | 它的 `availability` 中列出的组织。参见 [Platform](/zh-cn/docs/platform#共享的模型提供方)。 |
+| 所有者 | 谁添加                     | 谁可以使用                                                                            |
+| ------ | -------------------------- | ------------------------------------------------------------------------------------- |
+| 组织   | 组织，使用自己的密钥       | 只有这个组织。这就是"自带密钥"。                                                      |
+| 平台   | 平台管理员，使用平台的密钥 | 它的 `availability` 中列出的组织。参见 [Platform](/zh-cn/platform#共享的模型提供方)。 |
 
 只有当组织既能使用提供方、也能使用模型时，它才能使用该提供方的这个模型。
 
@@ -32,7 +32,7 @@ ChatGPT 也使用普通模型提供方。见[使用 ChatGPT 登录](#使用-chat
 - `decision`
   模型只从固定的列表中选一个答案。它不写文本。它可以评判 Rule。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
 - `live` 模型用声音和人实时对话。只有
-  [Live 模式](/zh-cn/docs/developers/live)使用它。
+  [Live 模式](/zh-cn/developers/live)使用它。
 
 当你从代码中运行 OpenBot 时，还可以提供内置模型。参见[内置模型](#内置模型)。
 
@@ -109,7 +109,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。 |
 
 OpenBot 只连接公网地址。如果模型服务器在你自己的网络中或你的机器上，运维人员必须把它的主机写进
-`OPENBOT_OUTBOUND_ALLOW`。在那之前，对它的调用都会失败。参见[出站连接](/zh-cn/docs/configuration#出站连接)。
+`OPENBOT_OUTBOUND_ALLOW`。在那之前，对它的调用都会失败。参见[出站连接](/zh-cn/configuration#出站连接)。
 
 每个关联有下面这些字段：
 
@@ -129,7 +129,7 @@ OpenBot 只连接公网地址。如果模型服务器在你自己的网络中或
 OpenBot 会返回这个提供方。它的 `id` 以 `prov_`
 开头。提供方 ID 在整个平台中是唯一的。模型选择用 `provider`
 指明它。API 密钥永远不会返回。响应中显示的是 `apiKey: { set, hint }`。参见
-[Platform](/zh-cn/docs/platform#机密永远不会返回)。
+[Platform](/zh-cn/platform#机密永远不会返回)。
 
 ### 修改或移除提供方
 
@@ -156,7 +156,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 修改之后的下一次模型调用会使用新的密钥、端点或关联。OpenBot 对每个模型只构建一次，在它的提供方变化时再重新构建。
 
-当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel` 或 `botMemoryModel`
+当[组织设置](/zh-cn/organization#设置)中的 `rulesModel` 或 `botMemoryModel`
 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和
 `ModelProviderInUse`。请先修改设置。
 
@@ -209,7 +209,7 @@ ChatGPT 支持聊天、规则判断、Bot 记忆和定时工作，支持语言�
 和公共 Responses
 API。账户额度限制仍然有效。登录失效或额度用尽不会让工作自动切换到其他提供方。
 
-类型客户端示例见[客户端](/zh-cn/docs/client#连接-chatgpt-账户)。
+类型客户端示例见[客户端](/zh-cn/client#连接-chatgpt-账户)。
 
 ---
 
@@ -265,7 +265,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 `price`
-是这个模型在这个提供方那里的当前价格。没有人设置价格时，它不存在。参见[价格](/zh-cn/docs/usage#价格)。
+是这个模型在这个提供方那里的当前价格。没有人设置价格时，它不存在。参见[价格](/zh-cn/usage#价格)。
 
 模型选择同时指明提供方和模型 ID：
 
@@ -275,16 +275,16 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自己的模型：
 
-- **新的 [Chat](/zh-cn/docs/developers/chats)** 使用它的
-  [Bot](/zh-cn/docs/developers/bots) 的
+- **新的 [Chat](/zh-cn/developers/chats)** 使用它的
+  [Bot](/zh-cn/developers/bots) 的
   `model`。Bot 没有模型时，给它的第一条消息会失败，返回
   `400`、`ChatModelInvalid` 和原因
   `missing`。新的 Bot 没有模型，除非你给它一个。所以请在创建时设置它的
   `model`，或之后用 `PATCH /v1/bots/:id` 设置。
-- **[Rule](/zh-cn/docs/developers/rules)
-  的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为
-  `null` 时，评判不给出答案，由人或 Bot 来决定。
-- **[Bot 记忆](/zh-cn/docs/developers/memory)**使用同一份设置中的
+- **[Rule](/zh-cn/developers/rules)
+  的评判**使用[组织设置](/zh-cn/organization#设置)中的 `rulesModel`。它为 `null`
+  时，评判不给出答案，由人或 Bot 来决定。
+- **[Bot 记忆](/zh-cn/developers/memory)**使用同一份设置中的
   `botMemoryModel`。它为 `null` 时，Bot 什么都不学。
 
 `rulesModel` 可以是 `language` 模型，也可以是 `decision` 模型。`botMemoryModel`
@@ -314,10 +314,10 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
 
 发送 `"model": null` 可以重新使用 Bot 的模型。`GET /v1/chats/:id/models`
 为一个 Chat 显示同样的模型。所有字段参见
-[Chats API 参考](/docs/api/operations/tags/chats/)。
+[Chats API 参考](/api/operations/tags/chats/)。
 
 要限制成员可以选择哪些提供方，请给成员一条拒绝规则，针对 `Model` 上的
-`use`，并用 `provider` 字段。参见[权限](/zh-cn/docs/permissions#限制模型)。
+`use`，并用 `provider` 字段。参见[权限](/zh-cn/permissions#限制模型)。
 
 ## 决策模型
 
@@ -352,7 +352,7 @@ token，并把 `upstream`
 `typesafe` 提供方。
 
 Rule 的评判可以使用决策模型。把 `rulesModel`
-设为它即可。见[评判模型](/zh-cn/docs/developers/rules#评判模型)。
+设为它即可。见[评判模型](/zh-cn/developers/rules#评判模型)。
 
 ## 没有模型时运行
 
@@ -366,14 +366,14 @@ Rule 的评判可以使用决策模型。把 `rulesModel`
 ```
 
 OpenBot 的通知，例如一个委派的结果，仍然会进入它所在 Chat 的收件箱。见
-[通知](/zh-cn/docs/developers/chats#通知)。
+[通知](/zh-cn/developers/chats#通知)。
 
 ---
 
 ## 内置模型
 
-此开发任务请参见 [模型后端](/zh-cn/docs/developers/model-backends).
+此开发任务请参见 [模型后端](/zh-cn/developers/model-backends).
 
 ## 开发用模型
 
-此开发任务请参见 [模型后端](/zh-cn/docs/developers/model-backends).
+此开发任务请参见 [模型后端](/zh-cn/developers/model-backends).

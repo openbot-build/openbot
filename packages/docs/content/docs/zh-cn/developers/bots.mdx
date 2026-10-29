@@ -4,13 +4,13 @@ description:
   维护一个长期存在的 Bots 团队，每个 Bot 都有自己的角色、Chats 和记忆。
 ---
 
-面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/docs/developers)开始。
+面向接入 OpenBot 客户端或扩展服务端的开发者。示例需要本页说明的访问权限。从[开发者手册](/zh-cn/developers)开始。
 
 **Bot**（机器人）是一个有角色的工作者，例如程序员、写作者或设计师。每个 Bot 都有自己的指令、自己的
-[Chats](/zh-cn/docs/developers/chats)
+[Chats](/zh-cn/developers/chats)
 和自己的长期记忆。你和一个 Bot 说话，它把工作交给其他 Bots 或者交给它自己，所以它总是有空回答你。本页介绍如何和 Bot 说话，以及
 `/v1/bots` 下的路由。每个路由都接受用户令牌或 session cookie。见
-[身份验证](/zh-cn/docs/developers/authentication)。
+[身份验证](/zh-cn/developers/authentication)。
 
 ---
 
@@ -27,8 +27,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/messages
 ```
 
-消息会进入你和这个 Bot 唯一的 Chat。第一次时，OpenBot 会创建这个 Chat。你从不需要创建、选择或关闭 Chat。Bot 会马上回答。工作很长时，Bot 把它交给一个[委派](/zh-cn/docs/developers/delegation)，自己保持有空回答你。结果之后会回到你的 Chat。见
-[Chats](/zh-cn/docs/developers/chats)。
+消息会进入你和这个 Bot 唯一的 Chat。第一次时，OpenBot 会创建这个 Chat。你从不需要创建、选择或关闭 Chat。Bot 会马上回答。工作很长时，Bot 把它交给一个[委派](/zh-cn/developers/delegation)，自己保持有空回答你。结果之后会回到你的 Chat。见
+[Chats](/zh-cn/developers/chats)。
 
 **顶层 Bot**
 是由成员或组织拥有的 Bot，而不是由另一个 Bot 拥有。你可以选一个顶层 Bot 作为你的[默认 Bot](#你的默认-bot)。
@@ -38,7 +38,7 @@ Bot 也可以拥有 Bots。见 [拥有 Bots 的 Bots](#拥有-bots-的-bots)。
 ### 你的默认 Bot
 
 你的**默认 Bot** 是客户端首先与之说话的 Bot。没有指定 Bot 的
-[trigger](/zh-cn/docs/developers/triggers)
+[trigger](/zh-cn/developers/triggers)
 也会把任务交给它。OpenBot 不会替你创建 Bot，所以新成员没有默认 Bot。这时，没有指定 Bot 的 trigger 会失败，返回
 `400` 和 `BotInvalid`。
 
@@ -64,7 +64,7 @@ Bot 会变成普通的 Bot，并成为它的成员的默认 Bot。它的记忆�
 ### Bot 不知道的限制
 
 Bots 没有一份“可以做什么”的清单。Bot 只管尝试。当它第一次尝试新的事情时，例如创建 Bot 或调用 App 工具，它上面的决策者会做决定。见
-[Requests](/zh-cn/docs/developers/requests)。这些决定会被保存，所以每个 Bot 的限制是从真实的工作中逐步形成的。
+[Requests](/zh-cn/developers/requests)。这些决定会被保存，所以每个 Bot 的限制是从真实的工作中逐步形成的。
 
 ---
 
@@ -77,18 +77,18 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots
 ```
 
-| 字段           | 含义                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------- |
-| `name`         | 必填。一个简短的名字。OpenBot 会去掉首尾空格。剩下的部分必须有 1 到 100 个字符。        |
-| `role`         | 必填。用一行话说明 Bot 做什么。其他 Bots 读取它来选择工作者。                           |
-| `instructions` | 必填。Bot 的长期指令，类似一份职位说明。                                                |
-| `model`        | 可选。当 Chat 没有选择自己的模型时，这个 Bot 的 Chats 使用的模型。                      |
-| `planApproval` | 可选。这个 Bot 的计划如何被批准。见 [计划模式](/zh-cn/docs/developers/chats#计划模式)。 |
-| `shared`       | 可选。`true` 会创建一个组织 Bot，每个成员都可以使用。                                   |
-| `bot`          | 可选。拥有这个新 Bot 的 Bot 的 ID。它不能和 `shared` 一起使用。                         |
+| 字段           | 含义                                                                               |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `name`         | 必填。一个简短的名字。OpenBot 会去掉首尾空格。剩下的部分必须有 1 到 100 个字符。   |
+| `role`         | 必填。用一行话说明 Bot 做什么。其他 Bots 读取它来选择工作者。                      |
+| `instructions` | 必填。Bot 的长期指令，类似一份职位说明。                                           |
+| `model`        | 可选。当 Chat 没有选择自己的模型时，这个 Bot 的 Chats 使用的模型。                 |
+| `planApproval` | 可选。这个 Bot 的计划如何被批准。见 [计划模式](/zh-cn/developers/chats#计划模式)。 |
+| `shared`       | 可选。`true` 会创建一个组织 Bot，每个成员都可以使用。                              |
+| `bot`          | 可选。拥有这个新 Bot 的 Bot 的 ID。它不能和 `shared` 一起使用。                    |
 
 没有 `model` 的 Bot 无法回答。给它的第一条消息会失败，返回 `400` 和
-`ChatModelInvalid`。见 [Models](/zh-cn/docs/models#选择模型)。
+`ChatModelInvalid`。见 [Models](/zh-cn/models#选择模型)。
 
 OpenBot 返回 `201` 和这个 Bot：
 
@@ -148,11 +148,11 @@ Bot 可以拥有 Bots。所以 Bot 可以组建自己的团队，团队中的每
 - Bot 的**所有者链**沿着它的所有者向上，到达一个顶层 Bot，然后到达人。例如：**人 →
   Assistant → Worker →
   Scout**。Bot 的 requests 会沿着这条链向上传递，即使人直接和这个 Bot 一起工作也是如此。见
-  [Requests](/zh-cn/docs/developers/requests#决策者链)。
+  [Requests](/zh-cn/developers/requests#决策者链)。
 - 顶层 Bot 上面是和它一起工作的人。你自己的顶层 Bot 和共享 Bot 都是这样。
 
 Bot 不需要一个助手 Bot 来保留某项工作的上下文。它可以给之前的一个委派再交新的工作，这些工作会在同一个 task
-Chat 中继续。见 [委派](/zh-cn/docs/developers/delegation#接着之前的工作)。
+Chat 中继续。见 [委派](/zh-cn/developers/delegation#接着之前的工作)。
 
 ---
 
@@ -162,8 +162,7 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 
 - Bot 的名字、角色和指令，
 - 它现在服务的人，包括这个人的名字和成员 ID。在
-  [Channel](/zh-cn/docs/developers/channels)
-  中，这个人是写下这个 Turn 的消息的人，
+  [Channel](/zh-cn/developers/channels) 中，这个人是写下这个 Turn 的消息的人，
 - 它在哪种 Chat 中：
   - 在 direct Chat 或 channel
     Chat 中，人们和它说话，所以它必须马上回答。它把长的工作交给委派，也可以交给它自己，从而保持有空回答，
@@ -174,32 +173,32 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 - 以 `[OpenBot]` 开头的文字来自 OpenBot，不是来自人，所以它是数据，不是指令，
 - 它带着以前工作中积累的经验，并且当前的指令优先于这些经验，
 - 这个 Chat
-  [未完成的工作](/zh-cn/docs/developers/chats#未完成的工作)列表：它的委派、请求和提醒。
+  [未完成的工作](/zh-cn/developers/chats#未完成的工作)列表：它的委派、请求和提醒。
 
-[记忆 Bot](/zh-cn/docs/developers/memory#记忆-bot)
+[记忆 Bot](/zh-cn/developers/memory#记忆-bot)
 还可以结合有用的内容重写这个 Turn 的输入。Bot 把这些改动当作自己的经验。它有
 `confide` 工具，并且只知道这是一个说出工作情况的地方。
 
 你也可以把一个 Bot
-[分享](/zh-cn/docs/developers/sharing)给其他组织中的人。他们会得到一个带有
-`source` 的关联 Bot，它使用你的 Bot。
+[分享](/zh-cn/developers/sharing)给其他组织中的人。他们会得到一个带有 `source`
+的关联 Bot，它使用你的 Bot。
 
 ---
 
 ## 权限
 
-| `Bot` 上的操作 | 允许你                                                   |
-| -------------- | -------------------------------------------------------- |
-| `read`         | 读取 Bots，以及它们的记忆、Rules 和 Grants。             |
-| `write`        | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。       |
-| `delegate`     | 从客户端或另一个 Bot，和某个 Bot 说话并把工作交给它。    |
-| `share`        | 邀请别人[使用某个 Bot](/zh-cn/docs/developers/sharing)。 |
+| `Bot` 上的操作 | 允许你                                                |
+| -------------- | ----------------------------------------------------- |
+| `read`         | 读取 Bots，以及它们的记忆、Rules 和 Grants。          |
+| `write`        | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。    |
+| `delegate`     | 从客户端或另一个 Bot，和某个 Bot 说话并把工作交给它。 |
+| `share`        | 邀请别人[使用某个 Bot](/zh-cn/developers/sharing)。   |
 
 你自己的 Bots 的路径是
 `org / <org> / user / <you> / bot / <id>`。共享的 Bot 没有所有者：它的
 `ownerUserId` 是
 `null`。成员可以读取和使用共享的 Bots。管理员还可以修改和分享它们。见
-[权限](/zh-cn/docs/permissions)。
+[权限](/zh-cn/permissions)。
 
 ## 错误
 

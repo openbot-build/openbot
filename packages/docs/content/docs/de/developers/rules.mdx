@@ -7,10 +7,10 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
-Du musst Entscheidungen über [Requests](/de/docs/developers/requests) nicht
-immer wieder neu treffen. OpenBot speichert sie in zwei Formen:
+Du musst Entscheidungen über [Requests](/de/developers/requests) nicht immer
+wieder neu treffen. OpenBot speichert sie in zwei Formen:
 
 | Form  | Sieht so aus                                                                                      | Wer sie prüft                    |
 | ----- | ------------------------------------------------------------------------------------------------- | -------------------------------- |
@@ -42,7 +42,7 @@ OpenBot setzt die aktiven Grants eines Bots in eine Policy, mit einer Regel für
 jeden Grant. Ein Deny-Grant gewinnt gegen jeden Allow-Grant, in jeder
 Reihenfolge. Wenn mehr als ein Allow-Grant einen Aufruf abdeckt, gibt der erste
 die Antwort. Ein `once`-Grant, der die Antwort gibt, ist danach verbraucht.
-Siehe [Berechtigungen](/de/docs/permissions#regeln).
+Siehe [Berechtigungen](/de/permissions#regeln).
 
 OpenBot erstellt Grants, wenn ein Entscheider einen Request beantwortet. Du
 kannst auch selbst einen erstellen:
@@ -79,8 +79,8 @@ Eine **Rule** ist ein Satz in normaler Sprache für einen Bot. Wenn kein Grant
 
 Eine Rule, die ein Bot geschrieben hat, zählt nur unter zwei Bedingungen: Dieser
 Bot steht in der
-[Besitzer-Kette](/de/docs/developers/requests#die-kette-der-entscheider) über
-dem Bot, und er darf die Fähigkeit selbst nutzen.
+[Besitzer-Kette](/de/developers/requests#die-kette-der-entscheider) über dem
+Bot, und er darf die Fähigkeit selbst nutzen.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -108,19 +108,19 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Du kannst auch eine Rule speichern, wenn du einen Request beantwortest: Schicke
 `rule` mit der Antwort. Siehe
-[Einen Request beantworten](/de/docs/developers/requests#einen-request-beantworten).
+[Einen Request beantworten](/de/developers/requests#einen-request-beantworten).
 
 ### Das Prüf-Modell
 
 Das Prüf-Modell nutzt das **Rules-Model**. Es ist `rulesModel` in den
-[Einstellungen der Organization](/de/docs/organization#einstellungen). Es hat
-keinen Standardwert. Wenn es `null` ist, gibt das Prüf-Modell keine Antwort.
-Dann entscheidet eine Person oder ein Bot. OpenBot speichert jede Antwort des
+[Einstellungen der Organization](/de/organization#einstellungen). Es hat keinen
+Standardwert. Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann
+entscheidet eine Person oder ein Bot. OpenBot speichert jede Antwort des
 Prüf-Modells für dieselben Rules und dieselbe Fähigkeit. So läuft das
 Prüf-Modell für dieselbe Frage nicht noch einmal.
 
 Das Rules-Model kann ein Language-Model oder ein
-[Decision-Model](/de/docs/models#decision-model) sein:
+[Decision-Model](/de/models#decision-model) sein:
 
 - Ein Language-Model schreibt die ganze Antwort. Es zitiert die Worte jeder
   Rule, die es nutzt, und nennt seinen Grund.

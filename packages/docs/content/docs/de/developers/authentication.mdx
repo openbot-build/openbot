@@ -7,7 +7,7 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Diese Seite zeigt, wie sich Menschen bei OpenBot anmelden und wie Programme die
 API aufrufen. Eine Person meldet sich einmal im Browser an. Danach erstellt sie
@@ -21,7 +21,7 @@ Es gibt zwei Wege, die fachlichen Routen unter `/v1` aufzurufen:
 | Session-Cookie | Ein Browser-Client auf dem OpenBot-Origin | Das Cookie `__Host-openbot-session` |
 
 Beide Wege brauchen für jeden Aufruf eine Berechtigung. Siehe
-[Berechtigungen](/de/docs/permissions).
+[Berechtigungen](/de/permissions).
 
 ---
 
@@ -36,7 +36,7 @@ ist. Es gibt zwei Arten von Anbietern:
   [Den Platform-Anbieter einrichten](#den-platform-anbieter-einrichten).
 - Eine **SSO-Verbindung** ist der Anbieter einer einzelnen Organisation. Sie
   meldet Menschen an, deren E-Mail zu den geprüften Domains dieser Organisation
-  gehört. Siehe [SSO und Domains](/de/docs/sso).
+  gehört. Siehe [SSO und Domains](/de/sso).
 
 Um eine Anmeldung zu starten, sendet dein Client diese Anfrage vom
 OpenBot-Origin:
@@ -89,7 +89,7 @@ Better Auth mit `403`.
 ### Den Platform-Anbieter einrichten
 
 Der Plattformbetrieb richtet den Anbieter ein. Siehe
-[Anmeldung einrichten](/de/docs/admin/sign-in).
+[Anmeldung einrichten](/de/admin/sign-in).
 
 ### Entwicklungskonto
 
@@ -97,7 +97,7 @@ Der Entwicklungsserver (`devenv shell -- pnpm dev`) nutzt ein lokales Testkonto
 und keinen Anbieter. Das Konto ist `developer@localhost.test`, und es ist ein
 Platform-Admin. Nur der Einstiegspunkt für die Entwicklung bietet das an. Das
 Produktionsprogramm tut das nie. Siehe
-[Konfiguration](/de/docs/configuration#entwicklung).
+[Konfiguration](/de/configuration#entwicklung).
 
 Dieser Befehl meldet dich an und speichert das Cookie in einer Datei:
 
@@ -134,10 +134,10 @@ Es braucht das Session-Cookie.
 }
 ```
 
-| Feld            | Was es ist                                                                                                              |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `memberships`   | Die Organisationen des Kontos, mit seinem Status und seinen Roles in jeder davon.                                       |
-| `platformAdmin` | `true`, wenn das Konto ein Platform-Admin ist. Dann kann es `/v1/platform` nutzen. Siehe [Platform](/de/docs/platform). |
+| Feld            | Was es ist                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `memberships`   | Die Organisationen des Kontos, mit seinem Status und seinen Roles in jeder davon.                                  |
+| `platformAdmin` | `true`, wenn das Konto ein Platform-Admin ist. Dann kann es `/v1/platform` nutzen. Siehe [Platform](/de/platform). |
 
 `POST /auth/sign-out` beendet die Anmeldung. Es ist eine Better-Auth-Route.
 Sende einen JSON-Body (`{}`) und den Header `Origin` (siehe unten). Die Antwort
@@ -158,12 +158,12 @@ vielen davon sein. Wenn sich ein Konto anmeldet, prüft OpenBot, wohin es gehör
 3. OpenBot erstellt nie eine Organisation für es. Ohne Organisation antworten
    Routen einer Organisation mit `403` und `MembershipRequired`. Das Konto kann
    trotzdem
-   [eine Organisation erstellen](/de/docs/organization#eine-organisation-erstellen)
+   [eine Organisation erstellen](/de/organization#eine-organisation-erstellen)
    oder
-   [eine Einladung annehmen](/de/docs/organization#auf-eine-einladung-antworten).
+   [eine Einladung annehmen](/de/organization#auf-eine-einladung-antworten).
 
 OpenBot macht diese Prüfungen auch bei jeder Anfrage mit dem Session-Cookie.
-Siehe [Organisation](/de/docs/organization#wer-beitreten-kann).
+Siehe [Organisation](/de/organization#wer-beitreten-kann).
 
 Ein gesperrtes Member bekommt `403` mit `MembershipRequired`, wenn es das Cookie
 nutzt. Seine Tokens funktionieren sofort nicht mehr und bekommen `401` mit
@@ -202,8 +202,8 @@ Ein Cookie geht mit jeder Anfrage des Browsers mit, auch von anderen Websites.
 Darum prüft OpenBot, woher ein Schreibzugriff kommt. Wenn du das Cookie nutzt,
 muss jede Anfrage mit `POST`, `PUT`, `PATCH` und `DELETE` einen Header `Origin`
 senden. Der Header muss genau gleich `publicOrigin` in den
-[Platform-Einstellungen](/de/docs/platform#einstellungen-der-platform) sein.
-Sonst antwortet OpenBot mit `403` und `ForbiddenOrigin`.
+[Platform-Einstellungen](/de/platform#einstellungen-der-platform) sein. Sonst
+antwortet OpenBot mit `403` und `ForbiddenOrigin`.
 
 ```sh
 curl -b cookies.txt \
@@ -221,7 +221,7 @@ Anfragen mit einem User-Token brauchen den Header `Origin` nicht.
 
 Mit einem User-Token kann ein Programm für dich handeln. Ein Token kann nie mehr
 tun als du. Es kann auch eine eigene Policy haben, damit es weniger tut. Siehe
-[Berechtigungen](/de/docs/permissions).
+[Berechtigungen](/de/permissions).
 
 Du kannst Tokens mit dem Session-Cookie verwalten oder mit einem Token, das
 `write` auf `Token` tun darf. Ein Token ohne Policy kann keine Tokens verwalten.
@@ -231,7 +231,7 @@ erstellt hat. Mit dem Cookie sendest du den Header `OpenBot-Organization`, um
 sie zu wählen. Siehe [Eine Organisation wählen](#eine-organisation-wählen).
 
 Die vollständigen Formen findest du in der
-[Referenz zu User-Tokens](/docs/api/operations/tags/user-tokens/).
+[Referenz zu User-Tokens](/api/operations/tags/user-tokens/).
 
 ### Ein Token erstellen
 

@@ -4,7 +4,7 @@ title: "Publish and check the project"
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
 For project contributors who change or publish OpenBot.
 
@@ -63,20 +63,22 @@ OpenBot. To use a published image with Compose, pull it and tag it as
 
 The workflow `.github/workflows/docs.yml` publishes the docs site to
 [GitHub Pages](https://docs.github.com/pages) at
-[openbot.build](https://openbot.build). It runs for each push to `main`. You can
-also start it by hand from the Actions tab.
+[docs.openbot.build](https://docs.openbot.build). It runs for each push to
+`main`. You can also start it by hand from the Actions tab.
 
 | Job      | What it does                                                                                                            |
 | -------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `build`  | Runs `pnpm --filter "@openbot-build/docs..." build` in `devenv shell`. This builds the docs and the packages they need. |
 | `deploy` | Sends `packages/docs/dist` to GitHub Pages.                                                                             |
 
-The `build` job sets `DOCS_URL` to `https://openbot.build`. Astro uses it for
-full page links, such as the sitemap. Only one deploy runs at a time.
+The `build` job sets `DOCS_URL` to `https://docs.openbot.build`. Astro uses it
+for full page links, such as the sitemap. Only one deploy runs at a time.
 
 The repository settings must use **GitHub Actions** as the Pages source, with
-`openbot.build` as the custom domain. The DNS for `openbot.build` must point to
-GitHub Pages. See
+`docs.openbot.build` as the custom domain. Set its DNS CNAME to
+`openbot-build.github.io`. This Actions workflow does not use a `CNAME` file in
+the source. The English manual starts at `/`, Chinese at `/zh-cn/`, and German
+at `/de/`. The generated API reference starts at `/api/`. See
 [Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
 
 ### Check the images

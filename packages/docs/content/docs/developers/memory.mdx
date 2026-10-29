@@ -6,15 +6,15 @@ description:
 
 For developers who connect a client to OpenBot or extend its server. The
 examples need the access stated on this page. Start with the
-[developer manual](/docs/developers).
+[developer manual](/developers).
 
-**Bot memory** is what one [Bot](/docs/developers/bots) learns over all its
-[Chats](/docs/developers/chats). Each Bot has one pool of entries. A **memory
-Bot** keeps the pool. It is a helper that belongs to the Bot. It reads active
-entries with proved source access rules, learns new entries, and adds what helps
-to the work of the Bot. Its learning work does not appear as a Chat. This page
-shows how Bot memory learns, who sees what, and how to read and change it with
-the API.
+**Bot memory** is what one [Bot](/developers/bots) learns over all its
+[Chats](/developers/chats). Each Bot has one pool of entries. A **memory Bot**
+keeps the pool. It is a helper that belongs to the Bot. It reads active entries
+with proved source access rules, learns new entries, and adds what helps to the
+work of the Bot. Its learning work does not appear as a Chat. This page shows
+how Bot memory learns, who sees what, and how to read and change it with the
+API.
 
 Bot memory is the only memory. A Chat keeps its history, but no separate list of
 facts. Older versions of OpenBot also kept learned memory for each Session. That
@@ -35,15 +35,15 @@ Each entry has a layer:
 **Tags** sort the entries. A tag with a colon belongs to OpenBot. The memory Bot
 cannot write these tags, so a model cannot change who sees an entry.
 
-| Tag                         | Meaning                                                                   |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `from:<userId>`             | A person who said or did what the entry is about.                         |
-| `for:person:<userId>`       | This person may see the entry.                                            |
-| `for:channel:<channelId>`   | The people of this [Channel](/docs/developers/channels) group may see it. |
-| `for:bot`                   | Everyone who uses the Bot may see it.                                     |
-| `org:<organizationId>`      | Where it happened. Only work in this organization sees it.                |
-| `chat:<id>`, `channel:<id>` | Where it comes from.                                                      |
-| `app:<tool>`                | A tool result from an App supports it.                                    |
+| Tag                         | Meaning                                                              |
+| --------------------------- | -------------------------------------------------------------------- |
+| `from:<userId>`             | A person who said or did what the entry is about.                    |
+| `for:person:<userId>`       | This person may see the entry.                                       |
+| `for:channel:<channelId>`   | The people of this [Channel](/developers/channels) group may see it. |
+| `for:bot`                   | Everyone who uses the Bot may see it.                                |
+| `org:<organizationId>`      | Where it happened. Only work in this organization sees it.           |
+| `chat:<id>`, `channel:<id>` | Where it comes from.                                                 |
+| `app:<tool>`                | A tool result from an App supports it.                               |
 
 Other tags, like `testing` or `trip-planning`, are **topics**. The memory Bot
 chooses them and keeps them tidy. A topic has lowercase letters, numbers and
@@ -115,12 +115,12 @@ decrypt and encrypt the old content again.
 
 The words of the Bot only show the memory Bot where to look. They never become
 memory themselves. A tool result from an App never becomes memory by itself. A
-[notice](/docs/developers/chats#notices) from OpenBot is never taken as the
-words of a person. A Bot that never confides learns nothing.
+[notice](/developers/chats#notices) from OpenBot is never taken as the words of
+a person. A Bot that never confides learns nothing.
 
 Review Chats have no `confide` tool. When `botMemory` is off in the
-[organization settings](/docs/organization#settings), the Bot still gets an
-answer, but nothing is learned.
+[organization settings](/organization#settings), the Bot still gets an answer,
+but nothing is learned.
 
 ---
 
@@ -158,8 +158,8 @@ saved answer invalid. A source that is no longer allowed makes it invalid.
 
 The memory Bot uses `botMemoryModel` from the organization settings. It has no
 default. When it is `null`, the memory Bot gives the fixed calm answer, and it
-adds and learns nothing. For a [shared Bot](/docs/developers/sharing), the model
-and the cost come from the organization of the Chat.
+adds and learns nothing. For a [shared Bot](/developers/sharing), the model and
+the cost come from the organization of the Chat.
 
 Read and change the settings of the memory Bot with `GET` and
 `PATCH /v1/bots/:botId/memory/bot`. You need `write` on a Bot that is not
@@ -254,9 +254,9 @@ tag. Observations that came from those entries have the same tag, so they go
 too. You need `write` on a Bot that is not linked. The answer is only the number
 of removed entries.
 
-When you
-[delete the history of a Chat](/docs/developers/chats#delete-the-history), the
-memory that the Bot learned from it stays. Purge `chat:<id>` to remove it too.
+When you [delete the history of a Chat](/developers/chats#delete-the-history),
+the memory that the Bot learned from it stays. Purge `chat:<id>` to remove it
+too.
 
 The same source access rule applies to old and new memory. If OpenBot cannot
 prove access to every source of an old entry, it keeps that entry hidden. It
@@ -273,8 +273,8 @@ not give a wider audience to old memory. A private pinned entry made with
 Two routes show what happened in one of your Chats:
 
 - `GET /v1/chats/:chatId/confessions` lists what the Bot confided, and the
-  answers. Read [Show confessions](/docs/client#show-confessions) before you
-  show them to people.
+  answers. Read [Show confessions](/client#show-confessions) before you show
+  them to people.
 - `GET /v1/chats/:chatId/enrichments` lists how the memory Bot wrote the input
   of each Turn again: the new `text`, the words of the person in `original`, and
   the entries that it used. Older records have no `original`.

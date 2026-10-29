@@ -7,7 +7,7 @@ description:
 
 Für Entwickler, die einen Client mit OpenBot verbinden oder den Server
 erweitern. Die Beispiele brauchen die auf dieser Seite genannten Rechte. Beginne
-mit dem [Entwicklerhandbuch](/de/docs/developers).
+mit dem [Entwicklerhandbuch](/de/developers).
 
 Ein **Vault** ist eine Sammlung von Geheimnissen, die ein Bot nutzen, aber nie
 sehen darf, zum Beispiel Logins und API-Schlüssel. Jedes Geheimnis in einem
@@ -15,10 +15,10 @@ Vault kann von einem anderen Ort kommen: von OpenBot selbst, von 1Password, von
 Bitwarden oder von HashiCorp Vault. So kann ein Vault die Geheimnisse eines
 Teams von allen Orten zusammenbringen, an denen das Team sie hält.
 
-Ein Bot nutzt die Geheimnisse nur in [Code Mode](/de/docs/developers/code-mode).
-Das Programm des Bots bekommt eine **Referenz**, nicht das Geheimnis. OpenBot
-setzt das Geheimnis erst dann an die Stelle der Referenz, wenn es einen Aufruf
-eines App-Tools sendet, und nur an die Tools, die du erlaubst.
+Ein Bot nutzt die Geheimnisse nur in [Code Mode](/de/developers/code-mode). Das
+Programm des Bots bekommt eine **Referenz**, nicht das Geheimnis. OpenBot setzt
+das Geheimnis erst dann an die Stelle der Referenz, wenn es einen Aufruf eines
+App-Tools sendet, und nur an die Tools, die du erlaubst.
 
 | Wort            | Bedeutung                                                                                                  |
 | --------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -42,8 +42,8 @@ eines App-Tools sendet, und nur an die Tools, die du erlaubst.
    erlaubt. Dann liest es den Wert und sendet den Aufruf. Das Programm sieht die
    Argumente mit dem Wert nicht.
 3. **Ein Entscheider sieht den Aufruf.** Ein Aufruf mit einer Referenz ist immer
-   eine [Anfrage](/de/docs/developers/requests), auch für ein Tool, das nur
-   liest. Der Entscheider sieht die Referenz und das Tool, nicht das Geheimnis.
+   eine [Anfrage](/de/developers/requests), auch für ein Tool, das nur liest.
+   Der Entscheider sieht die Referenz und das Tool, nicht das Geheimnis.
 4. **OpenBot nimmt das Geheimnis aus dem Ergebnis.** Bevor das Programm oder das
    Modell das App-Ergebnis sieht, setzt OpenBot `⟦hidden:github/token⟧` an die
    Stelle des Werts. Es nimmt den Wert auch in Base64-, Base64url-,
@@ -69,7 +69,7 @@ Anbieters führt zu `502 SecretProviderFailed`.
 
 ## Einen Secret-Provider hinzufügen
 
-Siehe [Secret-Provider](/de/docs/admin/secret-providers).
+Siehe [Secret-Provider](/de/admin/secret-providers).
 
 ## Einen Vault erstellen
 
@@ -173,7 +173,7 @@ zurückkämen.
 
 ## Berechtigungen
 
-`Vault` und `SecretProvider` sind [Ressourcen](/de/docs/permissions) mit je drei
+`Vault` und `SecretProvider` sind [Ressourcen](/de/permissions) mit je drei
 Aktionen:
 
 | Ressource        | Aktion  | Was sie erlaubt                                                                         |
@@ -188,6 +188,6 @@ Aktionen:
 Ein Mitglied hat jede Aktion auf seinen eigenen Vaults und Providern, und `read`
 und `use` auf geteilten. Ein Administrator darf geteilte auch `write`. Wer einen
 Vault oder Provider nicht lesen darf, bekommt `404`, als gäbe es ihn nicht. Das
-[Audit-Log](/de/docs/organization#audit-log) zeichnet jede Änderung auf, mit
+[Audit-Log](/de/organization#audit-log) zeichnet jede Änderung auf, mit
 `vault.created`, `vault.item.created`, `vault.granted`,
 `secret_provider.created` und den anderen Aktionen.
