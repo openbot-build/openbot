@@ -35,6 +35,9 @@ const publicRoutes = [
 	"POST /v1/hooks/computers/pairings/{pairingId}/poll",
 	"GET /v1/hooks/computers/connect",
 	"POST /auth/sign-in",
+	"GET /auth/options",
+	"POST /auth/email/send",
+	"POST /auth/email/verify",
 	"GET /",
 	"GET /health",
 ]
