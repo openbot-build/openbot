@@ -318,13 +318,14 @@ export const make = Effect.gen(function* () {
 			)
 				return yield* denied("domain")
 			if (bootstrap !== undefined || grant !== undefined) return
+			const trustedSso =
+				identity.providerId === "oidc"
+					? config.access.trusted
+					: identity.providerId !== "email" &&
+						policy.trustedSsoProviders.includes(identity.providerId)
 			const source = invited
 				? "invitations"
-				: (
-							identity.providerId === "oidc"
-								? config.access.trusted
-								: policy.trustedSsoProviders.includes(identity.providerId)
-					  )
+				: trustedSso
 					? "sso"
 					: "selfService"
 			const mode = policy[source]

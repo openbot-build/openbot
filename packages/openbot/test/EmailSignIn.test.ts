@@ -35,7 +35,13 @@ it.live(
 			const origin = "https://email.example.com"
 			const host = yield* BrowserHost.start({
 				publicOrigin: origin,
-				registration: { ...Model.defaults, emailSignIn: true },
+				registration: {
+					...Model.defaults,
+					emailSignIn: true,
+					// Email codes are never a trusted SSO provider, even in a stale config.
+					sso: "allow",
+					trustedSsoProviders: ["email"],
+				},
 				mailTransport: Layer.succeed(Transport, {
 					send: (_, message) =>
 						Ref.get(fail).pipe(
