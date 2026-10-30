@@ -67,38 +67,45 @@ platform admins. In the image, it is `/app/dist/app/Setup.mjs`. From the code,
 run `pnpm --filter @openbot-build/openbot setup`. The package also has the
 command `openbot-setup`.
 
-```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+Create a private `setup.json` file (mode `600`):
+
+```json
+{
+	"publicOrigin": "https://api.example.com",
+	"identityProvider": {
+		"issuer": "https://id.example.com",
+		"clientId": "openbot"
+	},
+	"adminEmails": ["alice@example.com"]
+}
 ```
 
-| Flag                   | Required     | What it does                                                                                                   |
-| ---------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`      | Yes          | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.          |
-| `--oidc-issuer`        | With the ID  | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                             |
-| `--oidc-client-id`     | With issuer  | The client ID at that provider.                                                                                |
-| `--oidc-client-secret` | No           | The client secret. Leave it out for a public client that uses PKCE.                                            |
-| `--admin-email`        | At least one | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people. |
-| `--force`              | No           | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.         |
+Run setup once. Every instance then reads these settings from the database. Do
+not pass shared product settings as server arguments.
 
-Set `--oidc-issuer` and `--oidc-client-id` together, or leave both out. Leave
-both out when people sign in only through the [SSO connections](/sso) of
-organizations.
+```sh
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs --config=/run/setup.json
+```
 
-A command line can show up in process lists. So you can give the client secret
-in the environment variable `OPENBOT_SETUP_OIDC_CLIENT_SECRET` instead of
-`--oidc-client-secret`. This is the better way.
+Use `--config` for the file path and `--force` only for recovery. The file
+requires `publicOrigin` and at least one `adminEmails` entry. `adminProvider`
+defaults to `oidc`; use `email` for email sign-in or an SSO connection ID. Omit
+`identityProvider` for organization SSO or email sign-in. A public PKCE client
+needs no `clientSecret`. Optional `registration` and `mail` use the settings API
+input format.
 
-Use `--admin-provider` to name the provider that must verify admin emails. The
-default is `oidc`. For recovery, use `email` or an SSO connection ID when that
-sign-in method is already set up.
+Optional `fileStorage` holds S3 settings: `endpoint`, `publicEndpoint` (null
+when not needed), `region`, `bucket`, `accessKeyId`, `forcePathStyle`, and
+`secretAccessKey`. Set `forcePathStyle` to true for MinIO or RustFS. Without
+`fileStorage`, a new platform has no file storage; recovery keeps the current
+storage. Change storage later through `PATCH /v1/platform/settings` under
+`files.storage`. Keep secrets in the private file. Setup encrypts them in the
+database.
 
-Set S3, SMTP and registration rules later through `PATCH /v1/platform/settings`.
-They are shared database settings, not setup or server arguments.
+Old setup flags for individual settings and `OPENBOT_SETUP_*` variables are no
+longer read. Move those values into the file.
 
 Setup also makes a random sign-in secret. Better Auth uses it to sign the
 sign-in cookies. OpenBot stores it encrypted, and you never see it.

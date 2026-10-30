@@ -70,39 +70,45 @@ der Platform und die ersten Admins der Platform. Im Image ist es
 `pnpm --filter @openbot-build/openbot setup` aus. Das Paket hat auch den Befehl
 `openbot-setup`.
 
-```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+Erstelle eine private Datei `setup.json` (Modus `600`):
+
+```json
+{
+	"publicOrigin": "https://api.example.com",
+	"identityProvider": {
+		"issuer": "https://id.example.com",
+		"clientId": "openbot"
+	},
+	"adminEmails": ["alice@example.com"]
+}
 ```
 
-| Flag                   | Pflicht          | Was es tut                                                                                                                          |
-| ---------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`      | Ja               | Der öffentliche HTTPS-Ursprung von OpenBot, zum Beispiel `https://api.example.com`. Kein Pfad und kein Schrägstrich am Ende.        |
-| `--oidc-issuer`        | Mit der ID       | Die HTTPS-Adresse des OpenID-Connect-Anbieters der Platform, ohne Schrägstrich am Ende.                                             |
-| `--oidc-client-id`     | Mit dem Issuer   | Die Client-ID bei diesem Anbieter.                                                                                                  |
-| `--oidc-client-secret` | Nein             | Das Client-Secret. Lass es weg für einen öffentlichen Client, der PKCE nutzt.                                                       |
-| `--admin-email`        | Mindestens einer | Eine Person mit dieser bestätigten E-Mail wird Admin der Platform, wenn sie sich anmeldet. Wiederhole das Flag für mehr Personen.   |
-| `--force`              | Nein             | Schreibt die Einstellungen, auch wenn es sie schon gibt. Nutze es nur zur Rettung, wenn sich kein Admin der Platform anmelden kann. |
+Führe Setup einmal aus. Alle Instanzen lesen diese Einstellungen danach aus der
+Datenbank. Gemeinsame Produkteinstellungen sind keine Server-Startargumente.
 
-Setze `--oidc-issuer` und `--oidc-client-id` zusammen, oder lass beide weg. Lass
-beide weg, wenn sich Menschen nur über die [SSO-Verbindungen](/de/sso) von
-Organizations anmelden.
+```sh
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs --config=/run/setup.json
+```
 
-Eine Befehlszeile kann in Prozess-Listen erscheinen. Darum kannst du das
-Client-Secret statt mit `--oidc-client-secret` in der Umgebungsvariable
-`OPENBOT_SETUP_OIDC_CLIENT_SECRET` angeben. Das ist der bessere Weg.
+`--config` gibt den Dateipfad an. Nutze `--force` nur zur Rettung. Die Datei
+braucht `publicOrigin` und mindestens einen Eintrag in `adminEmails`.
+`adminProvider` ist sonst `oidc`; nutze `email` für E-Mail oder die ID einer
+SSO-Verbindung. Lass `identityProvider` bei Organization-SSO oder E-Mail weg.
+Ein öffentlicher PKCE-Client braucht kein `clientSecret`. Die optionalen Felder
+`registration` und `mail` nutzen die Eingabeform der Settings-API.
 
-`--admin-provider` nennt den Anbieter, der Admin-E-Mails prüfen muss. Der
-Standard ist `oidc`. Nutze bei der Rettung `email` oder eine SSO-ID, wenn diese
-Anmeldung bereits eingerichtet ist.
+Das optionale Feld `fileStorage` enthält S3-Werte: `endpoint`, `publicEndpoint`
+(sonst null), `region`, `bucket`, `accessKeyId`, `forcePathStyle` und
+`secretAccessKey`. Nutze `forcePathStyle: true` für MinIO oder RustFS. Ohne
+`fileStorage` hat eine neue Platform keinen Dateispeicher; bei der Rettung
+bleibt der bisherige Speicher erhalten. Ändere ihn später mit
+`PATCH /v1/platform/settings` unter `files.storage`. Geheimnisse bleiben in der
+privaten Datei. Setup speichert sie verschlüsselt in der Datenbank.
 
-Setze S3, SMTP und Registrierungsregeln später mit
-`PATCH /v1/platform/settings`. Diese Werte sind gemeinsame
-Datenbank-Einstellungen, keine Setup- oder Serverargumente.
+Die alten einzelnen Setup-Flags und `OPENBOT_SETUP_*` werden nicht mehr gelesen.
+Trage diese Werte in die Datei ein.
 
 Das Setup erstellt auch ein zufälliges Anmelde-Geheimnis. Better Auth nutzt es,
 um die Anmelde-Cookies zu signieren. OpenBot speichert es verschlüsselt, und du

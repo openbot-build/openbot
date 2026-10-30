@@ -49,9 +49,9 @@ Vertrauen.
 Eine leere Domain-Liste erlaubt jede bestätigte E-Mail-Domain. Sonst gelten nur
 ganze Domains, ohne Beachtung der Großschreibung. `example.com` erlaubt nicht
 `a.example.com`. Die Liste gilt auch für vorab freigegebene Konten. Der
-Setup-Admin hat eine ausdrückliche Erstfreigabe. Nur Plattform-Admins können
-`allowExternalInvitations` einschalten. Eine gültige Einladung zur Organisation
-darf dann die Domain-Liste umgehen.
+Setup-Admin hat eine ausdrückliche Erstfreigabe und muss ebenfalls zur Liste
+passen. Nur Plattform-Admins können `allowExternalInvitations` einschalten. Eine
+gültige Einladung zur Organisation darf dann die Domain-Liste umgehen.
 
 Gib die ID einer Organisationseinladung als `invitation` an
 `POST /auth/sign-in`. OpenBot bindet sie an den geschützten OAuth-Zustand. Der
@@ -109,9 +109,12 @@ Routen brauchen einen Browseraufruf gleichen Ursprungs. Ein Code übernimmt kein
 OIDC-Konto. Ohne SMTP bleibt der Zugang geschlossen. Ein Versandfehler erstellt
 keine Sitzung.
 
-Nutze beim ersten Setup einen OIDC-Anbieter und die erste Admin-E-Mail. Der
-Admin setzt danach SMTP und `registration.emailSignIn` über die Plattform-API.
-Schalte E-Mail-Anmeldung erst mit echten SMTP-Werten ein.
+Nutze beim ersten Setup `openbot-setup --config=/private/access.json`. Setze
+`publicOrigin`, `adminProvider: "email"` und `adminEmails` in dieser Datei. Die
+Datei enthält `registration` wie oben und optional `mail` in der Form der
+Settings-API. Schalte `emailSignIn` erst mit echten SMTP-Werten ein. Schütze die
+Datei mit Modus `600`; sie kann das SMTP-Passwort enthalten. Es gibt keine neue
+Passwortanmeldung oder Passwort-Wiederherstellung.
 
 Einladungen und Freigaben werden unabhängig vom Mailversand gespeichert.
 Organisationseinladungen enthalten ihre ID. Bei Versandfehlern lässt sich der
@@ -155,11 +158,11 @@ IdP-Entzüge sind nicht enthalten. Sperre das Konto für sofortigen Entzug.
 ## Admin-Wiederherstellung
 
 Nutze für normale Änderungen die Plattform-API. Wenn kein Admin sich anmelden
-kann, stoppe die Server und sichere Datenbank und Schlüssel. Führe
-`openbot-setup --force` mit `--public-origin`, den OIDC-Argumenten,
-`--admin-provider` und `--admin-email` aus. Nutze `email` oder eine SSO-ID nur
-bei bereits eingerichteter Anmeldung. S3, SMTP und Registrierungsregeln bleiben
-in der Datenbank erhalten.
+kann, stoppe die Server und sichere Datenbank und Schlüssel. Führe im Server
+`openbot-setup --config=/private/setup.json --force` mit gleicher öffentlicher
+Adresse, echten Anbieterwerten, `adminProvider` und `adminEmails` in der
+`--config`-Datei aus. E-Mail-Anmeldung nutzt die private Zugangsdatei. Gib auch
+nötige Speicherwerte an: force schreibt die übergebenen Werte.
 
 Der Befehl stellt die angegebenen bestätigten Admin-Konten wieder her, entfernt
 ihre Sitzungen und persönlichen Token und schreibt `admin.recovered`. Der
@@ -167,3 +170,6 @@ Signaturschlüssel bleibt. Nur Serverzugang erlaubt diese Wiederherstellung.
 Starte den Server und melde dich neu an. `openbot-inspect` gibt Einstellungen
 ohne geheime Werte sowie Admin-Zustände als JSON für lokale Prüfungen aus. Halte
 diese Ausgabe privat.
+
+Das lokale Entwicklungskonto kann Testorganisationen anlegen. Das gilt nur für
+den Entwicklungsstart; in Produktion bleibt `platform_admins` gesetzt.

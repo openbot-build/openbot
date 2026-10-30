@@ -101,7 +101,7 @@ it.live(
 	"new accounts need an invite, a grant or the setup identity; old accounts can sign in",
 	() =>
 		Effect.gen(function* () {
-			const { access, sql, user, invite } = yield* fixture
+			const { access, sql, policy, user, invite } = yield* fixture
 			yield* denied(access.check(identity), "closed")
 			yield* user("first")
 			yield* access.check(identity)
@@ -124,6 +124,21 @@ it.live(
 				}),
 				"identity",
 			)
+			yield* Ref.set(policy, {
+				...Model.defaults,
+				allowedEmailDomains: ["company.example"],
+			})
+			yield* denied(
+				access.check({
+					...identity,
+					subject: "admin",
+					email: "admin@example.com",
+				}),
+				"domain",
+			)
+			// Existing accounts keep access when the list changes.
+			yield* access.check(identity)
+			yield* Ref.set(policy, Model.defaults)
 			yield* access.grant("new@example.com", "oidc", "admin")
 			yield* access.check({
 				...identity,

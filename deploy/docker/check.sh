@@ -32,6 +32,18 @@ compose run --rm --no-deps --quiet-pull migrate
 compose run --rm --no-deps --quiet-pull migrate
 compose run --rm --quiet-pull check
 
+# The operator can inspect policy without exposing stored secret values.
+compose exec -T openbot /usr/local/bin/node /app/dist/app/Inspect.mjs > "$report"
+node --input-type=module -e '
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const snapshot = JSON.parse(readFileSync(process.argv[1], "utf8"));
+assert.equal(snapshot.settings.registration.selfService, "closed");
+assert.equal(snapshot.settings.organizationCreation, "platform_admins");
+assert.equal(snapshot.admins[0].providerId, "oidc");
+assert.equal("authSecret" in snapshot.settings, false);
+' "$report"
+
 # Check each direction from the real server containers, with the mounted secret.
 compose exec -T openbot /usr/local/bin/node /check/check.mjs http://openbot-peer:3000
 compose exec -T openbot-peer /usr/local/bin/node /check/check.mjs http://openbot:3000

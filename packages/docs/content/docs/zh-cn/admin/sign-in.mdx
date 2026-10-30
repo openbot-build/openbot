@@ -10,8 +10,8 @@ title: "配置登录"
 `<publicOrigin>/auth/callback/oidc`。OpenBot 会请求 `openid profile email`
 这几个 scope（权限范围）。
 
-然后在初始化时用 `--oidc-issuer` 和 `--oidc-client-id` 指定提供方，通过
-`OPENBOT_SETUP_OIDC_CLIENT_SECRET` 环境变量提供密钥。之后通过
+然后在私有初始化 JSON 文件中设置 `identityProvider`，运行
+`openbot setup --config=setup.json`。之后，平台管理员通过
 `PATCH /v1/platform/settings` 修改。见[平台](/zh-cn/platform)。
 
 | 设置                            | 值                                                                        |

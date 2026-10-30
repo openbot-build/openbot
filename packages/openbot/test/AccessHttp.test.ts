@@ -131,3 +131,89 @@ it.live(
 		}).pipe(Effect.scoped, Effect.provide(BrowserHost.layerPlatform)),
 	{ timeout: 120000 },
 )
+
+it.live(
+	"signed group claims control mapping changes and a missing claim cannot reuse an old role",
+	() =>
+		Effect.gen(function* () {
+			// The native test IdP callback reads this value while signing its ID token.
+			let groups: unknown = ["employees"]
+			const host = yield* BrowserHost.start({
+				publicOrigin: "https://groups.example.com",
+				registration: {
+					...Model.defaults,
+					sso: "allow",
+					provider: {
+						...Model.providerDefaults,
+						trusted: true,
+						groupsClaim: "groups",
+						mappings: [
+							{
+								group: "employees",
+								organizationId: "group-org",
+								roles: ["member"],
+							},
+						],
+					},
+				},
+				groups: () => groups,
+			})
+			const sqlRun = <A>(
+				work: (
+					sql: PgClient.PgClient,
+				) => Effect.Effect<A, import("effect/sql").SqlError.SqlError>,
+			) => host.run(Effect.flatMap(PgClient.PgClient, work))
+			yield* sqlRun(
+				(sql) =>
+					sql`insert into openbot_organizations (id,name,status,created_at) values ('group-org','Group team','active',0)`,
+			)
+			const initial = yield* host.authenticate("staff")
+			assert.ok(
+				Option.isSome(Cookies.getValue(initial.cookies, AuthApi.SessionCookie)),
+			)
+			assert.strictEqual(
+				(yield* sqlRun((sql) => sql`select role from openbot_mapped_roles`))
+					.length,
+				1,
+			)
+			groups = []
+			const removed = yield* host.authenticate("staff")
+			assert.ok(
+				Option.isSome(Cookies.getValue(removed.cookies, AuthApi.SessionCookie)),
+			)
+			assert.strictEqual(
+				(yield* sqlRun((sql) => sql`select role from openbot_mapped_roles`))
+					.length,
+				0,
+			)
+			groups = ["employees"]
+			yield* host.authenticate("staff")
+			for (const malformed of [undefined, "employees", [3]]) {
+				groups = malformed
+				const denied = yield* host.authenticate("staff")
+				assert.strictEqual(
+					Option.getOrNull(Headers.get(denied.headers, "location")),
+					"https://groups.example.com/sign-in?reason=groups",
+				)
+				assert.ok(
+					Option.isNone(
+						Cookies.getValue(denied.cookies, AuthApi.SessionCookie),
+					),
+				)
+			}
+			groups = ["employees"]
+			yield* host.updatePlatform((p) => ({
+				...p,
+				registration: {
+					...p.registration!,
+					provider: { ...p.registration!.provider, groupsClaim: "new_groups" },
+				},
+			}))
+			const changed = yield* host.authenticate("staff")
+			assert.strictEqual(
+				Option.getOrNull(Headers.get(changed.headers, "location")),
+				"https://groups.example.com/sign-in?reason=groups",
+			)
+		}).pipe(Effect.scoped, Effect.provide(BrowserHost.layerPlatform)),
+	{ timeout: 120000 },
+)

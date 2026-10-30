@@ -151,17 +151,15 @@ actions.
 Run the setup program once, on a new database:
 
 ```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
   /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+  --config=/run/setup.json
 ```
 
-Setup writes the public origin, provider and first admins to the database. Give
-the client secret with `OPENBOT_SETUP_OIDC_CLIENT_SECRET`. See
-[Platform](/platform#setup) for the setup arguments.
+Create the private `setup.json` file as shown in [Platform](/platform#setup).
+Setup writes these shared settings and the first admins to the database. Keep
+client secrets in that file.
 
 You can also run setup after the server starts. Until then, every route except
 `/health` answers `503` with `SetupRequired`.
@@ -209,7 +207,7 @@ You can also run the programs with Node.js on the server:
 pnpm install --frozen-lockfile
 pnpm --filter-prod @openbot-build/openbot... build
 pnpm --filter @openbot-build/openbot migrate
-pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --oidc-issuer=https://id.example.com --oidc-client-id=openbot --admin-email=alice@example.com
+pnpm --filter @openbot-build/openbot setup --config=setup.json
 pnpm --filter @openbot-build/openbot start
 ```
 
@@ -305,11 +303,8 @@ Run the setup program once, after the first `up`:
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
-  run --rm openbot /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/app/Setup.mjs \
+  --config=/run/setup.json
 ```
 
 Until you do this, every route except `/health` answers `503` with

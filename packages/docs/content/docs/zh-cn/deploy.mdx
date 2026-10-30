@@ -123,17 +123,14 @@ docker run --rm --env-file openbot.env \
 在新数据库上运行一次设置程序：
 
 ```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
   /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+  --config=/run/setup.json
 ```
 
-初始化把公开地址、登录提供方和首批管理员写入数据库。客户端密钥通过
-`OPENBOT_SETUP_OIDC_CLIENT_SECRET`
-环境变量提供。参数见[平台](/zh-cn/platform#设置)。
+按[平台](/zh-cn/platform#设置)中的示例创建私有的
+`setup.json`。初始化把共享配置和首批管理员写入数据库，客户端密钥也放在该文件中。
 
 你也可以在服务器启动后再运行设置。在那之前，除 `/health` 外的每个路由都返回
 `503` 和 `SetupRequired`。
@@ -178,7 +175,7 @@ curl http://127.0.0.1:8080/health
 pnpm install --frozen-lockfile
 pnpm --filter-prod @openbot-build/openbot... build
 pnpm --filter @openbot-build/openbot migrate
-pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --oidc-issuer=https://id.example.com --oidc-client-id=openbot --admin-email=alice@example.com
+pnpm --filter @openbot-build/openbot setup --config=setup.json
 pnpm --filter @openbot-build/openbot start
 ```
 
@@ -273,11 +270,8 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
-  run --rm openbot /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+  run --rm -v "$PWD/setup.json:/run/setup.json:ro" openbot /app/dist/app/Setup.mjs \
+  --config=/run/setup.json
 ```
 
 在完成这一步之前，除 `/health` 外的每个路由都返回 `503` 和

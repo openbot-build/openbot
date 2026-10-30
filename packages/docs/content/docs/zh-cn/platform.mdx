@@ -57,37 +57,41 @@ curl -b cookies.txt \
 `/app/dist/app/Setup.mjs`。从源代码运行时，使用
 `pnpm --filter @openbot-build/openbot setup`。这个包还提供命令 `openbot-setup`。
 
-```sh
-docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
-  /app/dist/app/Setup.mjs \
-  --public-origin=https://api.example.com \
-  --oidc-issuer=https://id.example.com \
-  --oidc-client-id=openbot \
-  --admin-email=alice@example.com
+创建私有的 `setup.json` 文件（权限为 `600`）：
+
+```json
+{
+	"publicOrigin": "https://api.example.com",
+	"identityProvider": {
+		"issuer": "https://id.example.com",
+		"clientId": "openbot"
+	},
+	"adminEmails": ["alice@example.com"]
+}
 ```
 
-| 参数                   | 必需           | 作用                                                                              |
-| ---------------------- | -------------- | --------------------------------------------------------------------------------- |
-| `--public-origin`      | 是             | OpenBot 的公开 HTTPS 源，比如 `https://api.example.com`。不带路径，结尾不带斜杠。 |
-| `--oidc-issuer`        | 与 ID 一起     | 平台 OpenID Connect 提供方的 HTTPS 地址，结尾不带斜杠。                           |
-| `--oidc-client-id`     | 与 issuer 一起 | 在该提供方那里的客户端 ID。                                                       |
-| `--oidc-client-secret` | 否             | 客户端密钥。对于使用 PKCE 的公开客户端，不填。                                    |
-| `--admin-email`        | 至少一个       | 拥有这个已验证邮箱的人登录后会成为平台管理员。要添加更多人，就重复这个参数。      |
-| `--force`              | 否             | 即使设置已存在也写入。只在恢复时使用，也就是没有任何平台管理员能登录的时候。      |
+只运行一次初始化。所有实例随后从数据库读取这些配置。共享的产品配置不作为服务器启动参数。
 
-`--oidc-issuer` 和 `--oidc-client-id`
-要么一起设置，要么都不设置。当大家只通过各组织的
-[SSO 连接](/zh-cn/sso)登录时，两者都不设置。
+```sh
+docker run --rm --env-file openbot.env \
+  -v "$PWD/setup.json:/run/setup.json:ro" openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs --config=/run/setup.json
+```
 
-命令行可能会出现在进程列表中。所以，你可以改用环境变量
-`OPENBOT_SETUP_OIDC_CLIENT_SECRET` 提供客户端密钥，而不是
-`--oidc-client-secret`。这是更好的做法。
+`--config` 指定文件路径，`--force` 只用于恢复。文件必须包含 `publicOrigin`
+和至少一个 `adminEmails`。`adminProvider` 默认是 `oidc`；邮箱登录使用
+`email`，SSO 使用连接 ID。组织 SSO 或邮箱登录可省略
+`identityProvider`。公开 PKCE 客户端无需 `clientSecret`。可选的 `registration`
+和 `mail` 与设置 API 输入格式一致。
 
-`--admin-provider` 指定验证管理员邮箱的提供方，默认是
-`oidc`。恢复时，若相应登录方式已配置，可使用 `email` 或 SSO 连接 ID。
+可选的 `fileStorage`
+保存 S3 配置：`endpoint`、`publicEndpoint`（不需要时为 null）、`region`、`bucket`、`accessKeyId`、`forcePathStyle`
+和 `secretAccessKey`。MinIO 或 RustFS 的 `forcePathStyle` 设为 true。省略
+`fileStorage` 时，新平台不配置文件存储，恢复时保留原有存储。后续通过
+`PATCH /v1/platform/settings` 的 `files.storage`
+修改。密钥只放在私有文件中，初始化程序会加密保存到数据库。
 
-S3、SMTP 和注册规则在初始化后通过 `PATCH /v1/platform/settings`
-设置。这些是数据库中的共享配置，不作为初始化或服务器启动参数。
+不再读取旧的逐项设置参数及 `OPENBOT_SETUP_*` 环境变量，请把这些值移入文件。
 
 设置程序还会生成一个随机的登录密钥。Better
 Auth 用它来签名登录 cookie。OpenBot 加密保存它，你永远看不到它。

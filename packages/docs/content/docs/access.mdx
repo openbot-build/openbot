@@ -48,9 +48,9 @@ provider with `provider.trusted: true`, or an organization connection ID in
 An empty domain list permits any verified email domain. A list matches whole
 domains, ignoring email case; `example.com` does not include `a.example.com`. It
 applies to every new account, including admin email grants. The setup admin is
-an explicit first-account grant. Only a platform admin can turn on
-`allowExternalInvitations`. This permits a valid organization invitation to
-bypass the domain list.
+an explicit first-account grant and must also match this list. Only a platform
+admin can turn on `allowExternalInvitations`. This permits a valid organization
+invitation to bypass the domain list.
 
 Pass an organization invitation ID as `invitation` to `POST /auth/sign-in`.
 OpenBot binds it to protected OAuth state. It checks the invitation, email,
@@ -106,9 +106,12 @@ same-origin browser request. A valid code cannot take over an account held by
 OIDC. Missing SMTP keeps email sign-in closed. Failed delivery does not create a
 session.
 
-For first setup, use an OIDC provider and the first admin email. The admin then
-sets SMTP and `registration.emailSignIn` through the platform settings API. Set
-email sign-in to true only after real SMTP settings are supplied.
+For first setup, use `--config=/private/setup.json` with
+`adminProvider: "email"` and `adminEmails` in the file. The file contains
+`registration` as above and an optional `mail` object in the same shape as the
+settings API input. Set `emailSignIn` to true only after real SMTP settings are
+supplied. Protect this file with mode `600`; it may hold an SMTP password. No
+new password login or password reset method is added.
 
 Invitation and approval state is saved independently of email delivery.
 Organization invitation messages include an invitation ID. When mail fails, the
@@ -150,15 +153,18 @@ IdP removal. Suspend the account for immediate removal of access.
 
 ## Admin recovery
 
-Normal changes use the platform API. If no platform admin can sign in, stop the
-servers, back up the database and secret keys, then run `openbot-setup --force`
-with `--public-origin`, the OIDC provider arguments, `--admin-provider` and
-`--admin-email`. Use `email` or an SSO connection ID only when that sign-in
-method is already set up. Recovery keeps S3, SMTP and registration settings in
-the database.
+Normal changes use the platform API. If no platform admin can sign in, use a
+server shell: stop the servers, back up the database and secret keys, and run
+`openbot-setup --config=/private/setup.json --force` with the same public
+origin, real provider settings, `adminProvider` and `adminEmails` in the
+`--config` file. For email use the private access file. Keep needed storage
+settings too: force writes the supplied settings.
 
 The command restores the specified verified admin accounts, removes their
 sessions and personal tokens, and records `admin.recovered`. It preserves the
 signing secret. Only server access can run this recovery. Start the server and
 sign in again. `openbot-inspect` prints settings with secret values removed and
 admin state as JSON for local deployment checks. Keep its output private.
+
+The local development account can create test organizations. This applies only
+to the explicit development entry; production keeps `platform_admins`.

@@ -41,7 +41,7 @@ description: 控制新账号、审批、邮箱验证码与 SSO 组角色。
 
 空域名列表允许任意已验证邮箱域名。非空列表按完整域名匹配，邮箱大小写不影响匹配；
 `example.com` 不包含
-`a.example.com`。限制适用于所有新账号，包括管理员预授权。Setup 指定的首次管理员是明确的首次建号授权。只有平台管理员能开启
+`a.example.com`。限制适用于所有新账号，包括管理员预授权。Setup 指定的首次管理员是明确的首次建号授权，也必须符合域名列表。只有平台管理员能开启
 `allowExternalInvitations`，允许有效组织邀请绕过域名限制。
 
 向 `POST /auth/sign-in` 传入组织邀请 ID，字段名为
@@ -83,8 +83,11 @@ token，并在请求、实时输出及执行检查中拒绝该账号。恢复后
 `challenge`，与 `code` 一起提交给
 `POST /auth/email/verify`。验证码为八位数字，五分钟有效，最多尝试三次错误值，只能使用一次。发送按邮箱和客户端地址限流。两个接口都要求同源浏览器请求。有效验证码不能接管 OIDC 账号。未配置 SMTP 时入口关闭，发送失败不会创建会话。
 
-首次初始化使用 OIDC 提供方和首个管理员邮箱。管理员登录后，通过平台设置 API 配置 SMTP 和
-`registration.emailSignIn`。填好真实 SMTP 后再启用邮箱登录。
+首次初始化使用 `--config=/private/setup.json`，文件内设置
+`adminProvider: "email"` 和 `adminEmails`。文件包含上面的 `registration`
+和可选的 `mail` 对象，格式与设置 API 输入一致。只有填好真实 SMTP 后才启用
+`emailSignIn`。文件可能包含 SMTP 密码，权限应为
+`600`。本次不增加密码登录或密码重置方式。
 
 邀请及审批的持久化独立于邮件发送。组织邀请邮件包含邀请 ID。发送失败时仍可复制邀请链接，通过其他方式发送。
 
@@ -119,12 +122,15 @@ token，并在请求、实时输出及执行检查中拒绝该账号。恢复后
 
 ## 管理员恢复
 
-日常修改使用平台 API。若没有管理员能登录，停止服务并备份数据库和密钥，然后运行
-`openbot-setup --force`，指定 `--public-origin`、OIDC 提供方参数、
-`--admin-provider` 和 `--admin-email`。仅在对应登录方式已配置时使用 `email`
-或 SSO 连接 ID。恢复保留数据库中的 S3、SMTP 和注册规则。
+日常修改使用平台 API。若没有管理员能登录，在服务器上停止服务，备份数据库和密钥，运行
+`openbot-setup --config=/private/setup.json --force`，指定相同的公开地址、真实提供方设置、
+`adminProvider` 和
+`adminEmails`。邮箱登录使用私有配置文件。也保留所需存储设置：force 会写入提供的设置。
 
 命令恢复指定的已验证管理员账号，删除其会话和个人 token，记录
 `admin.recovered`，并保留签名密钥。恢复要求服务器权限。启动服务后重新登录。
 `openbot-inspect`
 输出不含密钥值的设置及管理员状态 JSON，供本地部署检查使用；输出仍应保密。
+
+本地开发账号可以创建测试组织。这只适用于显式启动的开发入口；生产环境仍使用
+`platform_admins`。

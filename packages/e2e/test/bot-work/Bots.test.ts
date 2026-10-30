@@ -1229,7 +1229,15 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					204,
 				)
 				yield* chat.turn("confirm directly")
-				assert.strictEqual(yield* host.toolCalls, before + 2)
+				// The accepted message may still be queued when the old completed view is read.
+				const calls = yield* until(
+					"the new allowed call completes",
+					Effect.map(
+						host.toolCalls,
+						Option.liftPredicate((count) => count === before + 2),
+					),
+				)
+				assert.strictEqual(calls, before + 2)
 			}),
 		120000,
 	)

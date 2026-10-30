@@ -295,6 +295,14 @@ export const layerFixed = (
 						// force: true replaces the settings, so SetupAlreadyDone cannot occur.
 						Effect.catchTag("SetupAlreadyDone", (error) => Effect.die(error)),
 					)
+					if (auth.mode === "development") {
+						// The local test account has no verified provider. Let it make test organizations.
+						const settings = yield* Settings
+						const platform = Option.getOrThrow(yield* settings.platform)
+						yield* settings.updatePlatform(platform.version, (document) =>
+							Effect.succeed({ ...document, organizationCreation: "anyone" }),
+						)
+					}
 				}),
 			).pipe(Layer.provide(PlatformAdminsPostgres.layer)),
 		),

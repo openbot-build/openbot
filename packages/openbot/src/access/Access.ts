@@ -63,9 +63,7 @@ interface Page<A> {
 export interface Service {
 	readonly registration: Effect.Effect<Model.Registration, Failure>
 	readonly loginOptions: Effect.Effect<typeof Model.LoginOptions.Type, Failure>
-	readonly provider: (
-		id: string,
-	) => Effect.Effect<
+	readonly provider: (id: string) => Effect.Effect<
 		{
 			readonly access: Model.ProviderAccess
 			readonly issuer: string
@@ -310,7 +308,6 @@ export const make = Effect.gen(function* () {
 			}
 			const [bootstrap] =
 				yield* sql`select email from openbot_platform_admins where email = ${email} and provider_id = ${identity.providerId} and user_id is null`
-			if (bootstrap !== undefined) return
 			const [grant] =
 				yield* sql`select email from openbot_user_grants where email = ${email} and provider_id = ${identity.providerId}`
 			const domain = Str.split(email, "@").at(-1) ?? ""
@@ -320,14 +317,15 @@ export const make = Effect.gen(function* () {
 				!(invited && policy.allowExternalInvitations)
 			)
 				return yield* denied("domain")
-			if (grant !== undefined) return
+			if (bootstrap !== undefined || grant !== undefined) return
+			const trustedSso =
+				identity.providerId === "oidc"
+					? config.access.trusted
+					: identity.providerId !== "email" &&
+						policy.trustedSsoProviders.includes(identity.providerId)
 			const source = invited
 				? "invitations"
-				: (
-							identity.providerId === "oidc"
-								? config.access.trusted
-								: policy.trustedSsoProviders.includes(identity.providerId)
-					  )
+				: trustedSso
 					? "sso"
 					: "selfService"
 			const mode = policy[source]
@@ -577,7 +575,7 @@ export const make = Effect.gen(function* () {
 			protect(
 				sql.withTransaction(
 					Effect.gen(function* () {
-						yield* provider(providerId)
+						if (!remove) yield* provider(providerId)
 						if (remove)
 							yield* sql`delete from openbot_user_grants where email=${Str.toLowerCase(email)} and provider_id=${providerId}`
 						else {
