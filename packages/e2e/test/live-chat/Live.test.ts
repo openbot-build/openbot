@@ -831,7 +831,10 @@ layer(
 					Organizations,
 					send(alice.session, "/v1/organizations"),
 				)
-				const first = Arr.head(listedOrganizations.items)
+				const first = Arr.findFirst(
+					listedOrganizations.items,
+					(item) => item.id === alice.identity.organizationId,
+				)
 				assert.ok(Option.isSome(first))
 				yield* text(
 					send(alice.session, "/v1/organizations", "POST", { name: "Second" }),

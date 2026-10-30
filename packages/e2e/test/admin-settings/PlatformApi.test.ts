@@ -109,7 +109,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					[],
 				)
 
-				// Without self-service, a new account gets no organization.
+				// Without self-service, a new account keeps only its personal space.
 				assert.strictEqual(
 					(yield* account(root.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: updated.version,
@@ -121,7 +121,9 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const dan = yield* host.login("dan", undefined, {
 					organization: false,
 				})
-				assert.ok(Arr.isReadonlyArrayEmpty(dan.memberships))
+				assert.strictEqual(dan.memberships.length, 1)
+				assert.strictEqual(dan.memberships[0]?.kind, "personal")
+				assert.strictEqual(dan.memberships[0]?.ownerUserId, dan.identity.userId)
 				const refused = yield* account(
 					dan.session,
 					"/v1/organizations",
@@ -158,7 +160,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(suspended.status, 200)
 				assert.strictEqual(
-					(yield* account(alice.session, "/v1/organization")).status,
+					(yield* HttpClient.get((yield* host.address) + "/v1/organization", {
+						headers: {
+							cookie: Caller.sessionCookie(alice.session),
+							[AuthApi.OrganizationHeader]: alice.identity.organizationId,
+						},
+					})).status,
 					403,
 				)
 

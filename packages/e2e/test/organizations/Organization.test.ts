@@ -60,10 +60,6 @@ const tagOf = (response: HttpClientResponse.HttpClientResponse) =>
 		(failure) => failure._tag,
 	)
 
-/** Reads the JSON body of an answer, as JSON with no schema. */
-const body = (call: Caller.Call) =>
-	Effect.flatMap(call, (response) => response.json)
-
 // The host is a real server with real time.
 layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 	it.effect(
@@ -184,7 +180,12 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					Organizations,
 					account(bob.session, "/v1/organizations"),
 				)
-				assert.strictEqual(listed.items.length, 2)
+				assert.strictEqual(listed.items.length, 3)
+				assert.strictEqual(
+					Arr.filter(listed.items, (item) => item.kind === "organization")
+						.length,
+					2,
+				)
 			}),
 		{ timeout: 60000 },
 	)
@@ -496,7 +497,20 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					})).status,
 					200,
 				)
-				const suspended = yield* account(carol.session, "/v1/chats")
+				// Her personal space remains usable; the suspended organization is denied.
+				assert.strictEqual(
+					(yield* account(carol.session, "/v1/chats")).status,
+					200,
+				)
+				const suspended = yield* HttpClient.get(
+					(yield* host.address) + "/v1/chats",
+					{
+						headers: {
+							cookie: Caller.sessionCookie(carol.session),
+							[AuthApi.OrganizationHeader]: carol.identity.organizationId,
+						},
+					},
+				)
 				assert.strictEqual(suspended.status, 403)
 				assert.strictEqual(yield* tagOf(suspended), "MembershipRequired")
 				// A token has no cookie to fall back on, so it gets the plain sign-in error.
@@ -566,6 +580,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.deepStrictEqual(
 					Arr.map(roles, (role) => role.id),
 					[
+						"billing",
 						"super_administrator",
 						"administrator",
 						"administrator_read_only",
@@ -578,7 +593,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 	)
 
 	it.effect(
-		"A new account has no organization, joins by invitation, and can leave",
+		"A new account keeps its personal space when it joins and leaves an organization",
 		() =>
 			Effect.gen(function* () {
 				const host = yield* BrowserHost.start({
@@ -597,16 +612,21 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					organization: false,
 				})
 
-				// OpenBot makes no organization at sign-in.
-				assert.deepStrictEqual(bob.memberships, [])
-				assert.deepStrictEqual(
-					yield* body(account(bob.session, "/v1/organizations")),
-					{ items: [] },
+				// Sign-in creates a private space, but no shared organization.
+				assert.strictEqual(bob.memberships.length, 1)
+				assert.strictEqual(bob.memberships[0]?.kind, "personal")
+				assert.strictEqual(bob.memberships[0]?.ownerUserId, bob.identity.userId)
+				const personalSpaces = yield* json(
+					Organizations,
+					account(bob.session, "/v1/organizations"),
 				)
-				assert.strictEqual(
-					(yield* account(bob.session, "/v1/organization")).status,
-					403,
+				assert.strictEqual(personalSpaces.items.length, 1)
+				assert.strictEqual(personalSpaces.items[0]?.kind, "personal")
+				const personal = yield* json(
+					OrganizationApi.Organization,
+					account(bob.session, "/v1/organization"),
 				)
+				assert.strictEqual(personal.id, bob.memberships[0]?.organizationId)
 
 				const invite = (email: string, roles?: ReadonlyArray<string>) =>
 					account(alice.session, "/v1/organization/invitations", "POST", {
@@ -705,7 +725,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					account(bob.session, "/v1/organizations"),
 				)
 				assert.deepStrictEqual(
-					Arr.map(joined.items, (item) => item.id),
+					Arr.map(
+						Arr.filter(joined.items, (item) => item.kind === "organization"),
+						(item) => item.id,
+					),
 					[alice.identity.organizationId],
 				)
 				const bobMember = yield* json(
@@ -823,8 +846,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					)
 				assert.strictEqual((yield* leave(bob.session)).status, 204)
 				assert.deepStrictEqual(
-					yield* body(account(bob.session, "/v1/organizations")),
-					{ items: [] },
+					Arr.map(
+						(yield* json(
+							Organizations,
+							account(bob.session, "/v1/organizations"),
+						)).items,
+						(item) => item.id,
+					),
+					[personal.id],
 				)
 				assert.strictEqual((yield* leave(alice.session)).status, 409)
 				const left = yield* json(

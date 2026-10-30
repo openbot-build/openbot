@@ -173,6 +173,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					"POST",
 					{
 						secret: "missing-invitation-secret",
+						organization: carol.identity.organizationId,
 					},
 				)
 				assert.strictEqual(missing.status, 404)
@@ -180,6 +181,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					_tag: "InvitationNotFound",
 				})
 				const linked = yield* accept(carol.session, {
+					organization: carol.identity.organizationId,
 					secret: Redacted.value(link.secret!),
 				})
 				assert.notStrictEqual(linked.id, guide.id)
@@ -194,6 +196,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				})
 				assert.strictEqual(
 					(yield* accept(carol.session, {
+						organization: carol.identity.organizationId,
 						secret: Redacted.value(link.secret!),
 					})).id,
 					linked.id,
@@ -389,11 +392,13 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(
 					(yield* send(carol.session, "/v1/bot-invitations/accept", "POST", {
+						organization: carol.identity.organizationId,
 						invitation: emailed.invitation.id,
 					})).status,
 					404,
 				)
 				const daveLinked = yield* accept(dave.session, {
+					organization: dave.identity.organizationId,
 					invitation: emailed.invitation.id,
 				})
 				assert.strictEqual(
@@ -426,6 +431,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(
 					(yield* send(dave.session, "/v1/bot-invitations/accept", "POST", {
+						organization: dave.identity.organizationId,
 						invitation: emailed.invitation.id,
 					})).status,
 					400,
@@ -477,6 +483,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const frank = yield* host.login("sharing-frank")
 				assert.strictEqual(
 					(yield* send(frank.session, "/v1/bot-invitations/accept", "POST", {
+						organization: frank.identity.organizationId,
 						secret: Redacted.value(link.secret!),
 					})).status,
 					400,
