@@ -5,6 +5,12 @@ import * as Execution from "./Execution.ts"
 export const Id = Schema.NonEmptyString.check(Schema.isMaxLength(256))
 export const Status = Schema.Literals(["waiting", "done", "cancelled"])
 export type Status = typeof Status.Type
+export interface ListInput {
+	readonly chatId?: Chat.Id
+	readonly status?: Status
+	readonly after?: string
+	readonly limit?: number
+}
 /** Done means the note was delivered to the Chat, not that its follow-up work finished. */
 export const Reminder = Schema.Struct({
 	id: Id,

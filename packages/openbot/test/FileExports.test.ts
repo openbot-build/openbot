@@ -50,7 +50,7 @@ const fixture = () => {
 			if (request.method === "PUT") {
 				puts++
 				if (request.body._tag !== "Uint8Array")
-					throw new Error("Expected file bytes")
+					assert.fail("Expected file bytes")
 				if (failure !== "before")
 					objects.set(request.url, {
 						bytes: request.body.body,

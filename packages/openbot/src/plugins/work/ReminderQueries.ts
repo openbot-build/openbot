@@ -5,7 +5,6 @@ import {
 	Reminders as Domain,
 } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option } from "effect"
-import type { RemindersApi } from "@openbot-build/api"
 import * as Check from "../../authorization/Check.ts"
 import { Commands } from "../../execution/Commands.ts"
 import { Reminders, type Reminder } from "./Reminders.ts"
@@ -41,7 +40,7 @@ export const make = Effect.gen(function* () {
 		})
 	return {
 		get,
-		list: (caller: Caller, query: RemindersApi.Query) =>
+		list: (caller: Caller, query: Domain.ListInput) =>
 			Effect.gen(function* () {
 				const limit = query.limit ?? 50
 				const rows = yield* reminders.list(caller.organizationId, {
