@@ -2,7 +2,7 @@ import { Redacted } from "effect"
 import { OrganizationApi, OpenBotApi } from "@openbot-build/api"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Account, type Caller, Identity } from "@openbot-build/domain"
-import { Array as Arr, Effect, Option, Schema } from "effect"
+import { Array as Arr, Clock, DateTime, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "../errors/Failures.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
@@ -18,6 +18,7 @@ import * as InvitationLinks from "./InvitationLinks.ts"
 import { shareable } from "./Sharing.ts"
 import * as Platform from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
+import { Mail } from "../mail/Mail.ts"
 
 export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 	Effect.gen(function* () {
@@ -33,6 +34,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 		const grants = yield* Grants
 		const audit = yield* AuditLog
 		const organization = yield* Organization
+		const mail = yield* Mail
 		const links = yield* InvitationLinks.make
 		/** A link secret that does not seal or open means a broken store. */
 		const sealed = <A>(effect: Effect.Effect<A, SecretStorageError>) =>
@@ -348,6 +350,19 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 							payload.email === undefined
 								? Option.some(yield* sealed(links.create))
 								: Option.none()
+						const owner =
+							payload.email === undefined
+								? Option.none()
+								: yield* organization
+										.get(caller.organizationId)
+										.pipe(
+											Failures.replace(
+												"OpenBot could not read the organization of the invitation.",
+												() => BotsApi.BotStorageUnavailable.make({}),
+											),
+										)
+						if (payload.email !== undefined && Option.isNone(owner))
+							return yield* BotsApi.BotStorageUnavailable.make({})
 						const invitation = yield* organization
 							.createBotInvitation({
 								organizationId: caller.organizationId,
@@ -381,10 +396,30 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 							onNone: () => null,
 							onSome: (made) => made.secret,
 						})
+						const delivery =
+							invitation.email !== null &&
+							invitation.expiresAt !== null &&
+							Option.isSome(owner)
+								? Option.some(
+										yield* mail.invitation({
+											id: invitation.id,
+											email: invitation.email,
+											organizationName: owner.value.name,
+											botName: bot.name,
+											expiresAt: DateTime.toEpochMillis(
+												DateTime.makeUnsafe(invitation.expiresAt),
+											),
+										}),
+									)
+								: Option.none()
 						return {
 							invitation,
 							secret: secret === null ? null : Redacted.make(secret),
 							url: InvitationLinks.urlOf(origin, invitation.path, secret),
+							...Option.match(delivery, {
+								onNone: () => ({}),
+								onSome: (delivery) => ({ delivery }),
+							}),
 						}
 					}),
 				{ uninterruptible: true },
@@ -427,6 +462,64 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 						),
 					}
 				}),
+			)
+			.handle(
+				"resendBotInvitation",
+				({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const bot = yield* access(caller, params.botId, "share")
+						if (!shareable(bot))
+							return yield* BotsApi.BotInvalid.make({
+								message:
+									"Only a lasting top Bot of this organization that is not archived can be shared.",
+							})
+						const { invitation } = yield* organization
+							.botInvitation(caller.organizationId, bot.id, params.invitationId)
+							.pipe(
+								Failures.replaceTag(
+									"OrganizationUnavailable",
+									"OpenBot could not read the invitation of a Bot.",
+									() => BotsApi.BotStorageUnavailable.make({}),
+								),
+							)
+						if (
+							invitation.email === null ||
+							invitation.expiresAt === null ||
+							invitation.status !== "pending"
+						)
+							return yield* OrganizationApi.InvitationInvalid.make({
+								message: "Only a pending email invitation can be sent.",
+							})
+						const expiresAt = DateTime.toEpochMillis(
+							DateTime.makeUnsafe(invitation.expiresAt),
+						)
+						if (expiresAt <= (yield* Clock.currentTimeMillis))
+							return yield* OrganizationApi.InvitationInvalid.make({
+								message: "This invitation has ended.",
+							})
+						const owner = yield* organization
+							.get(caller.organizationId)
+							.pipe(
+								Failures.replace(
+									"OpenBot could not read the organization of the invitation.",
+									() => BotsApi.BotStorageUnavailable.make({}),
+								),
+							)
+						if (Option.isNone(owner))
+							return yield* BotsApi.BotStorageUnavailable.make({})
+						yield* record(caller, "invitation.send_requested", bot, {
+							invitationId: invitation.id,
+						})
+						return yield* mail.invitation({
+							id: invitation.id,
+							email: invitation.email,
+							organizationName: owner.value.name,
+							botName: bot.name,
+							expiresAt,
+						})
+					}),
+				{ uninterruptible: true },
 			)
 			.handle(
 				"revokeBotInvitation",

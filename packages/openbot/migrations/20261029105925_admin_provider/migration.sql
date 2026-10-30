@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_platform_admins" ADD COLUMN "provider_id" text DEFAULT 'oidc' NOT NULL;

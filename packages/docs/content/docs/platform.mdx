@@ -5,6 +5,9 @@ description:
   model providers.
 ---
 
+See [account access](/access) for invitation-only upgrade defaults, email login,
+approvals, group roles and admin recovery.
+
 For platform operators. These tasks affect the whole deployment. Have server
 access or platform admin rights as the task requires. Start with the
 [administrator manual](/admin).
@@ -73,21 +76,14 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-| Flag                     | Required          | What it does                                                                                                    |
-| ------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`        | Yes               | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.           |
-| `--oidc-issuer`          | With the ID       | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                              |
-| `--oidc-client-id`       | With issuer       | The client ID at that provider.                                                                                 |
-| `--oidc-client-secret`   | No                | The client secret. Leave it out for a public client that uses PKCE.                                             |
-| `--admin-email`          | At least one      | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people.  |
-| `--s3-endpoint`          | With the bucket   | The address of the object storage for [files](/developers/files), such as `https://s3.us-east-1.amazonaws.com`. |
-| `--s3-public-endpoint`   | No                | The address where clients put files with a direct upload, when it is not `--s3-endpoint`.                       |
-| `--s3-region`            | No                | The region of the storage. The default is `us-east-1`.                                                          |
-| `--s3-bucket`            | With the endpoint | The bucket for files.                                                                                           |
-| `--s3-access-key-id`     | With the endpoint | The access key ID for the storage.                                                                              |
-| `--s3-secret-access-key` | With the endpoint | The secret key for the storage.                                                                                 |
-| `--s3-path-style`        | No                | Put the bucket in the path. MinIO and RustFS need it.                                                           |
-| `--force`                | No                | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.          |
+| Flag                   | Required     | What it does                                                                                                   |
+| ---------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| `--public-origin`      | Yes          | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.          |
+| `--oidc-issuer`        | With the ID  | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                             |
+| `--oidc-client-id`     | With issuer  | The client ID at that provider.                                                                                |
+| `--oidc-client-secret` | No           | The client secret. Leave it out for a public client that uses PKCE.                                            |
+| `--admin-email`        | At least one | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people. |
+| `--force`              | No           | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.         |
 
 Set `--oidc-issuer` and `--oidc-client-id` together, or leave both out. Leave
 both out when people sign in only through the [SSO connections](/sso) of
@@ -97,11 +93,12 @@ A command line can show up in process lists. So you can give the client secret
 in the environment variable `OPENBOT_SETUP_OIDC_CLIENT_SECRET` instead of
 `--oidc-client-secret`. This is the better way.
 
-Set the four storage flags `--s3-endpoint`, `--s3-bucket`, `--s3-access-key-id`
-and `--s3-secret-access-key` together, or leave all of them out. You can give
-the secret key in `OPENBOT_SETUP_S3_SECRET_ACCESS_KEY` instead. Without them,
-the platform has no storage until an admin sets `files` in the platform
-settings.
+Use `--admin-provider` to name the provider that must verify admin emails. The
+default is `oidc`. For recovery, use `email` or an SSO connection ID when that
+sign-in method is already set up.
+
+Set S3, SMTP and registration rules later through `PATCH /v1/platform/settings`.
+They are shared database settings, not setup or server arguments.
 
 Setup also makes a random sign-in secret. Better Auth uses it to sign the
 sign-in cookies. OpenBot stores it encrypted, and you never see it.
@@ -113,7 +110,7 @@ sign-in cookies. OpenBot stores it encrypted, and you never see it.
 - With other values, setup fails. It tells you to use
   `PATCH /v1/platform/settings` instead.
 - With `--force`, setup writes the new values. It keeps the current sign-in
-  secret, so nobody is signed out because of it.
+  secret. Recovery removes sessions and tokens of the specified admins.
 
 ---
 
@@ -139,7 +136,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"hint": "…k9Qz"
 		}
 	},
-	"organizationCreation": "anyone",
+	"organizationCreation": "platform_admins",
 	"ceiling": "{\"_tag\":\"Rules\",\"algorithm\":\"denyOverrides\",\"rules\":[]}",
 	"appRestrictions": [],
 	"codeMode": {
@@ -175,6 +172,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		],
 		"unusedMs": 86400000
 	},
+	"mail": null,
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -191,6 +189,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/usage#rate-limit).                      |
 | `tokenRate`            | The highest token rates of each scope. Organizations can only set lower ones. See [Token rate](/usage#token-rate).  |
 | `files`                | The object storage and the limits for [files](/developers/files#set-up-storage).                                    |
+| `mail`                 | The SMTP server for [email](#send-email), or `null` when email is off.                                              |
 | `updatedAt`            | When the settings last changed.                                                                                     |
 
 ### Secrets never come back
@@ -201,6 +200,8 @@ instead:
 - `set` is `true` when a secret is stored.
 - `hint` is `…` and the last 4 characters, so you can tell secrets apart. It is
   `null` for a secret shorter than 12 characters.
+
+The SMTP password always has `hint: null`. No part of that password comes back.
 
 ### Change the settings
 
@@ -260,6 +261,80 @@ most 100 rules.
 
 ---
 
+## Send email
+
+OpenBot can send organization and Bot invitations through SMTP, the protocol
+used by mail servers. Email is off until a platform admin sets `mail`. The
+settings live in the database and take effect on every instance at once.
+
+Read the current `version`, then send this body to
+`PATCH /v1/platform/settings`. Replace the example values with those of your
+mail server:
+
+```json
+{
+	"expectedVersion": 3,
+	"mail": {
+		"host": "smtp.example.com",
+		"port": 587,
+		"security": "starttls",
+		"from": "openbot@example.com",
+		"fromName": "OpenBot",
+		"username": "openbot",
+		"password": "replace-with-your-smtp-password",
+		"invitationUrl": null
+	}
+}
+```
+
+| Field           | What it does                                                                                                                             |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `host`          | One host name or IP address, without a port or URL.                                                                                      |
+| `port`          | The SMTP port. Usually `587` for STARTTLS or `465` for TLS.                                                                              |
+| `security`      | `tls` uses TLS from the start. `starttls` requires a TLS upgrade before sending a password or message. Neither falls back to plain text. |
+| `from`          | The sender email address allowed by your mail server.                                                                                    |
+| `fromName`      | The sender name, such as `OpenBot`.                                                                                                      |
+| `username`      | The SMTP login, or `null` if the server needs no login.                                                                                  |
+| `password`      | The SMTP password. OpenBot stores it encrypted. The API returns only `{ "set": true, "hint": null }`.                                    |
+| `invitationUrl` | Your client's invitation page, or `null` to use `publicOrigin`. It must use HTTPS; HTTP is allowed only on a loopback host.              |
+
+Leave `mail` out of a settings change to keep it. Send `mail: null` to turn
+email off. When changing a mail field, send the full mail object. You may leave
+out `password` to keep it only when `host`, `port`, `security` and `username`
+stay the same. A new server or login needs a new password. `username: null`
+removes the stored password and uses no SMTP login.
+
+The email button says **Open OpenBot**. It opens `invitationUrl`, or the public
+origin, without accepting the invitation. A client must use the invitation API
+to let the person review and accept it after sign-in. OpenBot does not add an
+invitation web page.
+
+Only a platform admin can send a test message:
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"alice@example.com"}' \
+  https://api.example.com/v1/platform/mail/test
+```
+
+The answer is `{ "status": "sent" }`, `disabled` or `failed`. `sent` means the
+SMTP server accepted the message. It does not prove delivery to the inbox.
+`disabled` means mail is off. `failed` means OpenBot could not confirm the send.
+It keeps the cause in its sealed error records and does not retry. If SMTP
+accepted the message but its reply was lost, an explicit resend may send a
+second copy.
+
+The HTML templates use React Email and the OpenBot design: gray fills, space,
+large round corners and pill buttons, with no borders or shadows. They use DM
+Sans and DM Mono when the mail client has those fonts, with common font
+fallbacks. Each message also has a plain text part.
+
+See [organization invitations](/organization#invitations) and
+[Bot invitations](/developers/sharing#invite-people) for sending and resending.
+
+---
+
 ## Organization creation
 
 `organizationCreation` decides who can call `POST /v1/organizations`. OpenBot
@@ -267,7 +342,7 @@ never makes an organization when an account signs in.
 
 | Value             | What happens                                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `anyone`          | The default. Anyone who signs in can create organizations.                                                       |
+| `anyone`          | Anyone who signs in can create organizations.                                                                    |
 | `platform_admins` | Only platform admins can create organizations. Other people join by invitation, by a verified domain, or by SSO. |
 
 See [Organization](/organization#who-can-join) for all the ways an account

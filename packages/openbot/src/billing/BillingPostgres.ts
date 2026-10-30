@@ -1,3 +1,8 @@
+const encodeAudit = (value: Schema.JsonObject) =>
+	Schema.encodeEffect(Schema.fromJsonString(Schema.JsonObject))(value).pipe(
+		Effect.orDie,
+	)
+import { organizationKey } from "../audit/Resources.ts"
 import { Model, Provider } from "@openbot-build/core"
 import {
 	Billing as BillingApi,
@@ -35,6 +40,7 @@ import {
 	String as Str,
 } from "effect"
 import {
+	auditLogs,
 	budgets,
 	creditGrants,
 	members,
@@ -1020,10 +1026,30 @@ export const make = Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
 					return yield* db.transaction((tx) =>
 						Effect.gen(function* () {
+							if (input.operationKey !== undefined) {
+								yield* tx.execute(
+									sql`select pg_advisory_xact_lock(hashtextextended(${input.operationKey}, 43))`,
+								)
+								const [prior] = yield* tx
+									.select()
+									.from(creditGrants)
+									.where(eq(creditGrants.operationKey, input.operationKey))
+								if (prior !== undefined) {
+									if (
+										prior.organizationId !== organizationId ||
+										prior.amountMicros !== input.amountMicros ||
+										prior.note !== input.note ||
+										prior.createdBy !== createdBy
+									)
+										return yield* BillingApi.CreditConflict.make({})
+									return grantView(prior)
+								}
+							}
 							const [grant] = yield* tx
 								.insert(creditGrants)
 								.values({
 									id: yield* newId("grant_"),
+									operationKey: input.operationKey ?? null,
 									organizationId,
 									amountMicros: input.amountMicros,
 									note: input.note,
@@ -1046,6 +1072,23 @@ export const make = Effect.gen(function* () {
 										updatedAt: now,
 									},
 								})
+							yield* tx.insert(auditLogs).values({
+								organizationId,
+								createdAt: now,
+								action: "credits.granted",
+								actorUserId: createdBy,
+								actor: yield* encodeAudit({
+									kind: "member",
+									userId: createdBy,
+									organizationId,
+								}),
+								resource: organizationKey(organizationId),
+								details: yield* encodeAudit({
+									grantId: grant!.id,
+									amountMicros: input.amountMicros,
+									note: input.note,
+								}),
+							})
 							return grantView(grant!)
 						}),
 					)

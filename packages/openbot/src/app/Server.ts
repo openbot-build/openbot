@@ -1,3 +1,6 @@
+import type { Etag, HttpPlatform } from "effect/http"
+import type { NodeServices } from "@effect/platform-node"
+import * as BillingHost from "./BillingHost.ts"
 import * as ComputerWorker from "../computers/Worker.ts"
 import * as Send from "../execution/Send.ts"
 import * as ResourceDirectory from "../resources/Directory.ts"
@@ -64,7 +67,15 @@ export interface AppOptions extends OpenBot.Options {
 	readonly routes?: Layer.Layer<
 		never,
 		never,
-		HttpRouter.HttpRouter | Auth | Settings
+		| HttpRouter.HttpRouter
+		| NodeServices.NodeServices
+		| Etag.Generator
+		| HttpPlatform.HttpPlatform
+		| Auth
+		| Settings
+		| BillingHost.Wallets
+		| PgClient.PgClient
+		| Layer.Services<typeof BillingHost.middleware>
 	>
 }
 
@@ -119,6 +130,7 @@ export const layerApp = (options: AppOptions) =>
 		options.startup ?? Layer.empty,
 	).pipe(
 		Layer.provideMerge(ExecutionLayers.layer),
+		Layer.provideMerge(BillingHost.layer),
 		Layer.provideMerge(OpenBot.layer(options)),
 		Layer.provideMerge(executionServices(options)),
 	)

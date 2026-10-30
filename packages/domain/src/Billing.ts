@@ -261,7 +261,14 @@ export const Credits = Schema.Struct({
 })
 export type Credits = typeof Credits.Type
 export const UpdateCreditsRequest = Schema.Struct({ enabled: Schema.Boolean })
+export class CreditConflict extends Schema.TaggedError<
+	CreditConflict,
+	{ readonly brand: unique symbol }
+>()("CreditConflict", {}) {}
 export const GrantCreditsRequest = Schema.Struct({
+	operationKey: Schema.optionalKey(
+		Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+	),
 	amountMicros: Micros.check(
 		Schema.makeFilter((value: number) =>
 			value === 0 ? "Expected an amount that is not 0" : undefined,

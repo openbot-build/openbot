@@ -13,6 +13,7 @@ import {
 	BudgetInvalid,
 } from "@openbot-build/domain/Billing"
 export {
+	CreditConflict,
 	UsageStatus,
 	UsageQueryInvalid,
 	Micros,

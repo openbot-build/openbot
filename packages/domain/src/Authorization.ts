@@ -247,6 +247,13 @@ export class Usage extends Resource.Class<Usage>()("Usage", {
 	path: (f) => ["org", f.organizationId],
 }) {}
 
+/** Wallet payments are separate from model usage and member management. */
+export class Wallet extends Resource.Class<Wallet>()("Wallet", {
+	actions: ["read", "write"],
+	fields: organizationFields,
+	path: (f) => ["org", f.organizationId],
+}) {}
+
 export class Budget extends Resource.Class<Budget>()("Budget", {
 	actions: ["read", "write"],
 	fields: organizationFields,
@@ -286,6 +293,7 @@ const resources = [
 	Sso,
 	AuditLog,
 	Usage,
+	Wallet,
 	Budget,
 	Platform,
 ] as const
@@ -450,6 +458,10 @@ const descriptions: {
 	AuditLog: { read: "Read the audit log." },
 	Usage: {
 		read: "Read the model usage and its cost, and the credits of the organization.",
+	},
+	Wallet: {
+		read: "Read the wallet and payment orders.",
+		write: "Add money to the wallet.",
 	},
 	Budget: {
 		read: "Read the budgets and how much of them is spent.",
@@ -662,6 +674,20 @@ const readSharedComputers = (_: Builder) =>
  * change. An organization can add custom roles. Their IDs start with `role_`.
  */
 export const builtinRoles = [
+	{
+		id: "billing",
+		name: "Billing",
+		description:
+			"Read the wallet and add money. No access to private work or member settings.",
+		policy: define(function* (_) {
+			yield* _.allow(["read", "write"], Wallet, {
+				when: ($) => $.under("org", $.principal("organizationId")),
+			})
+			yield* _.allow("read", Usage, {
+				when: ($) => $.under("org", $.principal("organizationId")),
+			})
+		}),
+	},
 	{
 		id: "super_administrator",
 		name: "Super Administrator",

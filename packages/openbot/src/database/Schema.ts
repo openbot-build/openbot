@@ -524,6 +524,9 @@ export const chatTurns = table(
 
 /** One platform has many organizations. Their settings are in `openbot_settings`. */
 export const organizations = table("openbot_organizations", {
+	personalOwnerUserId: text("personal_owner_user_id")
+		.unique()
+		.references(() => openbot_auth_user.id),
 	id: text().primaryKey(),
 	name: text().notNull(),
 	status: text().notNull(),
@@ -549,6 +552,7 @@ export const settings = table(
 
 /** A platform admin is known by a verified email. The user ID is set at the first sign-in. */
 export const platformAdmins = table("openbot_platform_admins", {
+	providerId: text("provider_id").notNull().default("oidc"),
 	email: text().primaryKey(),
 	userId: text("user_id")
 		.unique()
@@ -729,6 +733,11 @@ export const ssoConnections = table(
 		clientSecret: text("client_secret"),
 		clientSecretHint: text("client_secret_hint"),
 		domains: text().notNull(),
+		access: text()
+			.notNull()
+			.default(
+				'{"trusted":false,"scopes":[],"groupsClaim":null,"requiredGroups":[],"mappings":[]}',
+			),
 		enforce: boolean().notNull(),
 		version: integer().notNull(),
 		createdAt: bigint("created_at", { mode: "number" }).notNull(),
@@ -1518,6 +1527,11 @@ export const budgets = table(
 )
 
 /** The credits of an organization. Only a platform admin turns them on. */
+export const billingPolicy = table("openbot_billing_policy", {
+	id: text().primaryKey(),
+	prepaid: boolean().notNull(),
+})
+
 export const organizationCredits = table("openbot_organization_credits", {
 	organizationId: text("organization_id")
 		.primaryKey()
@@ -1531,6 +1545,7 @@ export const organizationCredits = table("openbot_organization_credits", {
 export const creditGrants = table(
 	"openbot_credit_grants",
 	{
+		operationKey: text("operation_key").unique(),
 		id: text().primaryKey(),
 		organizationId: text("organization_id")
 			.notNull()
@@ -1607,3 +1622,66 @@ export const fileRefs = table(
 export * from "./ResourceSchema.ts"
 
 export * from "./UpgradeSchema.ts"
+
+/** Platform account access, kept apart from the sign-in SDK tables. */
+export const accountStates = table("openbot_account_states", {
+	userId: text("user_id")
+		.primaryKey()
+		.references(() => openbot_auth_user.id, { onDelete: "cascade" }),
+	status: text().notNull().default("active"),
+	revokedAt: bigint("revoked_at", { mode: "number" }),
+})
+export const registrationRequests = table(
+	"openbot_registration_requests",
+	{
+		id: text().primaryKey(),
+		providerId: text("provider_id").notNull(),
+		issuer: text().notNull(),
+		subject: text().notNull(),
+		email: text().notNull(),
+		source: text().notNull(),
+		status: text().notNull(),
+		version: integer().notNull().default(1),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+	},
+	(t) => [
+		uniqueIndex("openbot_registration_identity").on(
+			t.providerId,
+			t.issuer,
+			t.subject,
+		),
+	],
+)
+export const userGrants = table(
+	"openbot_user_grants",
+	{
+		email: text().notNull(),
+		providerId: text("provider_id").notNull(),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.email, t.providerId] })],
+)
+export const accessEvents = table("openbot_access_events", {
+	id: text().primaryKey(),
+	action: text().notNull(),
+	actor: text().notNull(),
+	subject: text().notNull(),
+	createdAt: bigint("created_at", { mode: "number" }).notNull(),
+})
+/** Each provider owns only the roles that it granted. Member roles stay manual. */
+export const mappedRoles = table(
+	"openbot_mapped_roles",
+	{
+		providerId: text("provider_id").notNull(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => openbot_auth_user.id, { onDelete: "cascade" }),
+		role: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.providerId, t.organizationId, t.userId, t.role] }),
+	],
+)

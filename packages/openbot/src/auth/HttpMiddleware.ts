@@ -148,13 +148,19 @@ const chooseOrganization = (
 				? Effect.succeed(organizationId)
 				: Effect.fail(AuthApi.MembershipRequired.make({})),
 		onNone: () =>
-			Arr.match(active, {
-				onEmpty: () => Effect.fail(AuthApi.MembershipRequired.make({})),
-				onNonEmpty: (all) =>
-					all.length === 1
-						? Effect.succeed(all[0].organizationId)
-						: Effect.fail(AuthApi.OrganizationRequired.make({})),
-			}),
+			// Keep the old implicit organization when a private space is added.
+			Arr.match(
+				Arr.some(active, (m) => m.kind !== "personal")
+					? Arr.filter(active, (m) => m.kind !== "personal")
+					: active,
+				{
+					onEmpty: () => Effect.fail(AuthApi.MembershipRequired.make({})),
+					onNonEmpty: (all) =>
+						all.length === 1
+							? Effect.succeed(all[0].organizationId)
+							: Effect.fail(AuthApi.OrganizationRequired.make({})),
+				},
+			),
 	})
 }
 

@@ -1,3 +1,4 @@
+import { RoleId } from "@openbot-build/domain/Roles"
 import {
 	BotId,
 	BotSharing as BotSharingModel,
@@ -36,6 +37,8 @@ import {
 import { openbot_auth_user } from "../database/AuthSchema.ts"
 import {
 	invitations,
+	mappedRoles,
+	accountStates,
 	members,
 	organizationDomains,
 	organizations,
@@ -52,7 +55,7 @@ import {
 } from "./Organization.ts"
 import * as Db from "../database/Database.ts"
 
-const Roles = Schema.fromJsonString(OrganizationsModel.Roles)
+const Roles = Schema.fromJsonString(Schema.Array(RoleId))
 const PolicyJson = Authorization.PolicySchema
 const unavailable = (cause: unknown) => OrganizationUnavailable.make({ cause })
 /** A row that must be in the database is not there. */
@@ -89,11 +92,13 @@ const organizationView = (
 ): Effect.Effect<OrganizationsModel.Organization, OrganizationUnavailable> =>
 	Effect.map(decodeOrganizationStatus(row.status), (status) => ({
 		id: row.id,
+		kind: row.personalOwnerUserId === null ? "organization" : "personal",
+		ownerUserId: row.personalOwnerUserId,
 		name: row.name,
 		status,
 		createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
 	}))
-const memberView = (
+const memberViewBase = (
 	row: typeof members.$inferSelect,
 ): Effect.Effect<OrganizationsModel.Member, OrganizationUnavailable> =>
 	Effect.gen(function* () {
@@ -172,6 +177,58 @@ export const make: Effect.Effect<
 	PgClient.PgClient | AuditLog | Settings | Crypto.Crypto
 > = Effect.gen(function* () {
 	const db = yield* Db.make
+	const effectiveRoles = (
+		organizationId: string,
+		userId: string,
+		manual: string,
+	) =>
+		Effect.gen(function* () {
+			const roles = yield* decodeRoles(manual)
+			const mapped = yield* db
+				.select()
+				.from(mappedRoles)
+				.where(
+					and(
+						eq(mappedRoles.organizationId, organizationId),
+						eq(mappedRoles.userId, userId),
+					),
+				)
+				.pipe(Effect.mapError(unavailable))
+			const all = yield* Schema.decodeEffect(Schema.Array(RoleId))(
+				Arr.dedupe([...roles, ...Arr.map(mapped, (r) => r.role)]),
+			).pipe(Effect.mapError(unavailable))
+			return {
+				roles: all,
+				manualRoles: roles,
+				roleSources: Arr.map(mapped, (r) => ({
+					providerId: r.providerId,
+					role: r.role,
+				})),
+			}
+		})
+	const accountActive = (userId: string) =>
+		db
+			.select()
+			.from(accountStates)
+			.where(eq(accountStates.userId, userId))
+			.pipe(
+				Effect.map((rows) => rows[0]?.status !== "suspended"),
+				Effect.mapError(unavailable),
+			)
+	const memberView = (row: typeof members.$inferSelect) =>
+		Effect.gen(function* () {
+			const base = yield* memberViewBase(row)
+			const source = yield* effectiveRoles(
+				row.organizationId,
+				row.userId,
+				row.roles,
+			)
+			return {
+				...base,
+				...source,
+			}
+		})
+
 	type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 	const audit = yield* AuditLog
 	const settings = yield* Settings
@@ -192,6 +249,7 @@ export const make: Effect.Effect<
 		db
 			.select({
 				organizationId: organizations.id,
+				personalOwnerUserId: organizations.personalOwnerUserId,
 				name: organizations.name,
 				organizationStatus: organizations.status,
 				status: members.status,
@@ -215,13 +273,28 @@ export const make: Effect.Effect<
 							Effect.gen(function* () {
 								return {
 									organizationId: row.organizationId,
+									kind:
+										row.personalOwnerUserId === null
+											? "organization"
+											: "personal",
+									ownerUserId: row.personalOwnerUserId,
 									name: row.name,
 									// A suspended organization suspends every membership in it.
 									status:
-										row.organizationStatus === "active"
+										row.organizationStatus === "active" &&
+										(yield* accountActive(userId)) &&
+										(yield* effectiveRoles(
+											row.organizationId,
+											userId,
+											row.roles,
+										)).roles.length > 0
 											? yield* decodeStatus(row.status)
 											: "suspended",
-									roles: yield* decodeRoles(row.roles),
+									roles: (yield* effectiveRoles(
+										row.organizationId,
+										userId,
+										row.roles,
+									)).roles,
 								}
 							}),
 					),
@@ -275,6 +348,7 @@ export const make: Effect.Effect<
 			const now = yield* Clock.currentTimeMillis
 			const row = {
 				id: "org_" + (yield* newId),
+				personalOwnerUserId: null,
 				name: Str.trim(input.name),
 				status: "active",
 				createdAt: now,
@@ -512,9 +586,10 @@ export const make: Effect.Effect<
 					)
 				)
 					return Option.none()
+				if (!(yield* accountActive(userId))) return Option.none()
 				return Option.filter(
 					yield* findMember(organizationId, userId),
-					(member) => member.status === "active",
+					(member) => member.status === "active" && member.roles.length > 0,
 				)
 			}),
 		get: findOrganization,
@@ -540,6 +615,37 @@ export const make: Effect.Effect<
 						),
 					),
 				),
+
+		ensurePersonal: (account) =>
+			Effect.gen(function* () {
+				if (!(yield* accountActive(account.id)))
+					return yield* missing("The account is not active.")
+				const now = yield* Clock.currentTimeMillis
+				return yield* db
+					.transaction((tx) =>
+						Effect.gen(function* () {
+							yield* tx.execute(
+								sql`select pg_advisory_xact_lock(hashtextextended(${"personal:" + account.id}, 0))`,
+							)
+							const [existing] = yield* tx
+								.select()
+								.from(organizations)
+								.where(eq(organizations.personalOwnerUserId, account.id))
+							if (existing !== undefined) return existing.id
+							const id = "org_" + (yield* newId)
+							yield* tx.insert(organizations).values({
+								id,
+								name: "Personal",
+								status: "active",
+								personalOwnerUserId: account.id,
+								createdAt: now,
+							})
+							yield* join(tx, id, account, ["super_administrator"], now)
+							return id
+						}),
+					)
+					.pipe(Effect.mapError(unavailable))
+			}),
 		create,
 		update: (organizationId, patch) =>
 			patch.name === undefined
@@ -608,7 +714,15 @@ export const make: Effect.Effect<
 			const apply = (member: OrganizationsModel.Member) => ({
 				...member,
 				...(patch.status === undefined ? {} : { status: patch.status }),
-				...(patch.roles === undefined ? {} : { roles: patch.roles }),
+				...(patch.roles === undefined
+					? {}
+					: {
+							manualRoles: patch.roles,
+							roles: Arr.dedupe([
+								...patch.roles,
+								...Arr.map(member.roleSources ?? [], (s) => s.role as RoleId),
+							]),
+						}),
 				...(patch.policy === undefined ? {} : { policy: patch.policy }),
 			})
 			return updateMembers(
@@ -621,7 +735,9 @@ export const make: Effect.Effect<
 							.update(members)
 							.set({
 								status: next.status,
-								roles: yield* encodeRoles(next.roles),
+								...(patch.roles === undefined
+									? {}
+									: { roles: yield* encodeRoles(patch.roles) }),
 								policy: yield* encodePolicy(next.policy),
 							})
 							.where(memberWhere(organizationId, userId))
@@ -646,6 +762,14 @@ export const make: Effect.Effect<
 								and(
 									eq(tokens.organizationId, organizationId),
 									eq(tokens.userId, userId),
+								),
+							)
+						yield* tx
+							.delete(mappedRoles)
+							.where(
+								and(
+									eq(mappedRoles.organizationId, organizationId),
+									eq(mappedRoles.userId, userId),
 								),
 							)
 						yield* tx.delete(members).where(memberWhere(organizationId, userId))
@@ -1054,6 +1178,17 @@ export const make: Effect.Effect<
 			Effect.gen(function* () {
 				const current = yield* settings.organization(organizationId)
 				if (current.document.defaultRoles.includes(roleId)) return true
+				const mapped = yield* db
+					.select()
+					.from(mappedRoles)
+					.where(
+						and(
+							eq(mappedRoles.organizationId, organizationId),
+							eq(mappedRoles.role, roleId),
+						),
+					)
+					.limit(1)
+				if (mapped.length > 0) return true
 				// Role IDs are plain letters, digits and underscores, so they are safe in a pattern.
 				const rows = yield* db
 					.select({ userId: members.userId })

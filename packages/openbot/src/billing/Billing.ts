@@ -325,11 +325,15 @@ export class Billing extends Context.Service<
 		) => Effect.Effect<number, BillingStorageError>
 		readonly grantCredits: (
 			organizationId: string,
-			input: { readonly amountMicros: number; readonly note: string },
+			input: {
+				readonly amountMicros: number
+				readonly note: string
+				readonly operationKey?: string
+			},
 			createdBy: string,
 		) => Effect.Effect<
 			BillingApi.CreditGrant,
-			BillingStorageError | OrganizationMissing
+			BillingStorageError | OrganizationMissing | BillingApi.CreditConflict
 		>
 		readonly budgets: (
 			organizationId: string,

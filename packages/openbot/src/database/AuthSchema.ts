@@ -1,4 +1,11 @@
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core"
+import {
+	pgTable,
+	text,
+	timestamp,
+	boolean,
+	index,
+	uniqueIndex,
+} from "drizzle-orm/pg-core"
 
 export const openbot_auth_user = pgTable("openbot_auth_user", {
 	id: text("id").primaryKey(),
@@ -56,7 +63,13 @@ export const openbot_auth_account = pgTable(
 			.$onUpdate(() => /* @__PURE__ */ new Date())
 			.notNull(),
 	},
-	(table) => [index("openbot_auth_account_userId_idx").on(table.userId)],
+	(table) => [
+		index("openbot_auth_account_userId_idx").on(table.userId),
+		uniqueIndex("openbot_auth_account_identity").on(
+			table.providerId,
+			table.accountId,
+		),
+	],
 )
 
 export const openbot_auth_verification = pgTable(

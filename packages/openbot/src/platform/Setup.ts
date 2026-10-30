@@ -1,3 +1,4 @@
+import * as Access from "@openbot-build/domain/Access"
 import { type Settings as SettingsModel } from "@openbot-build/domain"
 
 import { Authorization } from "@openbot-build/domain"
@@ -9,7 +10,7 @@ import {
 	filesOf,
 	type PlatformDocument,
 } from "../settings/Documents.ts"
-import { bindings, changeFiles } from "../settings/Platform.ts"
+import { bindings, changeFiles, changeMail } from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 import { PlatformAdmins } from "./PlatformAdmins.ts"
 
@@ -25,6 +26,9 @@ export interface Input {
 	readonly adminEmails: ReadonlyArray<string>
 	/** Write the settings even when they exist. Use it only when no admin can sign in. */
 	readonly force: boolean
+	readonly registration?: Access.Registration
+	readonly adminProvider?: string
+	readonly mail?: SettingsModel.MailInput | null
 	/**
 	 * The sign-in secret to store. None means that a new platform gets a random
 	 * one, and an existing platform keeps its own.
@@ -156,14 +160,31 @@ export const run = (input: Input) =>
 			"publicOrigin" | "authSecret" | "identityProvider"
 		> = Option.match(current, {
 			onNone: () => ({
-				organizationCreation: "anyone",
+				organizationCreation: "platform_admins",
+				registration: Access.defaults,
 				ceiling: Authorization.emptyPolicy,
 				appRestrictions: [],
 			}),
 			onSome: ({ document }) => document,
 		})
+		const mail =
+			input.mail === undefined
+				? {}
+				: {
+						mail: yield* changeMail(
+							secrets,
+							Option.isSome(current)
+								? (current.value.document.mail ?? null)
+								: null,
+							input.mail,
+						),
+					}
 		const document: PlatformDocument = {
 			...kept,
+			...mail,
+			...(input.registration === undefined
+				? {}
+				: { registration: input.registration }),
 			...changedFiles,
 			publicOrigin: input.publicOrigin,
 			authSecret,
@@ -182,6 +203,7 @@ export const run = (input: Input) =>
 					? Effect.as(settings.replacePlatform(document), "replaced")
 					: Effect.succeed("unchanged"),
 		})
-		for (const email of input.adminEmails) yield* admins.add(email)
+		for (const email of input.adminEmails)
+			yield* admins.add(email, input.adminProvider ?? "oidc")
 		return outcome
 	})

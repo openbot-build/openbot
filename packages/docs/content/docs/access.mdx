@@ -1,0 +1,164 @@
+---
+title: Account access
+description: Control new accounts, approvals, email codes, and SSO group roles.
+---
+
+## Defaults and upgrades
+
+New and upgraded platforms use invitations for new accounts. Self-service and
+SSO account creation are closed. Existing accounts and memberships remain.
+Existing organization roles stay as manual grants. Only platform admins can
+create organizations by default.
+
+The migration adds tables and fields. Stop all servers, back up the database and
+secret keys, run `openbot-migrate`, then start the new server and client
+versions. The migration can run again. Old pending invitations follow the new
+invitation rule. An invitation never restores a suspended account.
+
+## Admission settings
+
+Read `GET /v1/platform/settings`. Change `registration` with
+`PATCH /v1/platform/settings` and the current `expectedVersion`. These are the
+defaults:
+
+```json
+{
+	"selfService": "closed",
+	"emailSignIn": false,
+	"invitations": "allow",
+	"sso": "closed",
+	"trustedSsoProviders": [],
+	"allowedEmailDomains": [],
+	"allowExternalInvitations": false,
+	"provider": {
+		"trusted": false,
+		"scopes": [],
+		"groupsClaim": null,
+		"requiredGroups": [],
+		"mappings": []
+	}
+}
+```
+
+Each of `selfService`, `invitations`, and `sso` accepts `closed`, `allow`, or
+`approval`. A normal platform OIDC login uses self-service. Only a platform
+provider with `provider.trusted: true`, or an organization connection ID in
+`trustedSsoProviders`, uses the SSO rule. Only platform admins set that trust.
+
+An empty domain list permits any verified email domain. A list matches whole
+domains, ignoring email case; `example.com` does not include `a.example.com`. It
+applies to every new account, including admin email grants. The setup admin is
+an explicit first-account grant. Only a platform admin can turn on
+`allowExternalInvitations`. This permits a valid organization invitation to
+bypass the domain list.
+
+Pass an organization invitation ID as `invitation` to `POST /auth/sign-in`.
+OpenBot binds it to protected OAuth state. It checks the invitation, email,
+expiry, revocation and organization again at the callback. An invalid explicit
+invitation cannot fall back to another source. Bot invitations and share links
+cannot create a platform account. Equal emails from different identity providers
+do not link accounts.
+
+`GET /auth/options` exposes only login methods and the self-service and
+invitation modes. It has no domain list, account lookup, or approval records. A
+client must use `canCreateOrganization` in the session to show an organization
+creation form. Platform admins need no organization to use platform routes.
+
+## Approvals and accounts
+
+Platform routes require a platform admin, with a session cookie or personal API
+token. A token with organization scope alone gives no platform admin right.
+
+| Route                                                 | Use                                                                               |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `GET /v1/platform/users`                              | List accounts and state.                                                          |
+| `PATCH /v1/platform/users/:userId`                    | Set `status` to `active` or `suspended`.                                          |
+| `GET /v1/platform/registration_requests`              | List requests.                                                                    |
+| `PATCH /v1/platform/registration_requests/:requestId` | Set `status` to `approved` or `rejected`, with `expectedVersion`.                 |
+| `GET, POST, DELETE /v1/platform/user_grants`          | List, grant or remove first-account access. Writes take `email` and `providerId`. |
+| `GET /v1/platform/access_events`                      | Read platform access audit events.                                                |
+
+Lists use `after`, `limit`, and a `next` cursor. Pending requests have no
+account, session or organization roles. OpenBot keeps one request per provider,
+issuer and stable subject. Approval takes effect at the next successful login;
+current domain, invitation and provider rules still apply. Rejected requests
+stay rejected until an admin processes them again. Version checks reject
+competing decisions.
+
+Suspending an account removes all sessions and personal API tokens. Requests,
+live output, and execution checks reject it. Restoring it needs a new login and
+new tokens. Suspending a member affects only that organization. Separate
+organization service identities keep working. The last active platform admin
+cannot be suspended or removed.
+
+## Email sign-in without an IdP
+
+Email codes are optional and off by default. Set SMTP in the platform settings
+and set `registration.emailSignIn: true`. For a small team, keep all three
+sources `closed` and grant each employee email with `providerId: "email"`. Codes
+prove mailbox control; they do not grant account access.
+
+`POST /auth/email/send` takes `email` and an optional `invitation`. Keep its
+`challenge` in the browser for `POST /auth/email/verify`, with `code`. The code
+has eight digits, lasts five minutes, permits three wrong attempts, and works
+once. Sending is limited per mailbox and client address. Both routes require the
+same-origin browser request. A valid code cannot take over an account held by
+OIDC. Missing SMTP keeps email sign-in closed. Failed delivery does not create a
+session.
+
+For first setup, use an OIDC provider and the first admin email. The admin then
+sets SMTP and `registration.emailSignIn` through the platform settings API. Set
+email sign-in to true only after real SMTP settings are supplied.
+
+Invitation and approval state is saved independently of email delivery.
+Organization invitation messages include an invitation ID. When mail fails, the
+caller can copy the invitation link and send it by another means.
+
+## SSO group roles
+
+Platform settings use `registration.provider`. Organization connections use
+their `access` field in the SSO API. For example:
+
+```json
+{
+	"trusted": false,
+	"scopes": ["groups"],
+	"groupsClaim": "groups",
+	"requiredGroups": ["employees"],
+	"mappings": [
+		{ "group": "employees", "organizationId": "org_team", "roles": ["member"] }
+	]
+}
+```
+
+Only the verified provider's signed ID token supplies groups. Values must be an
+array of exact strings. At least one `requiredGroups` value must match, when
+that list is not empty. A missing or malformed claim rejects login. A platform
+admin can map to several organizations. An organization connection can map only
+to its own organization and cannot mark itself trusted.
+
+Each successful SSO login replaces roles from that connection. Manual roles
+stay. `manualRoles` and `roleSources` in member replies show the sources. Use
+`roles: []` in a member update to remove all manual roles. Set `groupsClaim` to
+enable mapping even with an empty mapping list: OpenBot then adds no default
+role. No matching or manual role means no organization access. Neither account
+suspension nor manual member suspension is cleared by sync. Mappings cannot
+grant `super_administrator` or platform admin rights.
+
+Group changes are applied only at login. This release has no SCIM, LDAP or live
+IdP removal. Suspend the account for immediate removal of access.
+
+## Admin recovery
+
+Normal changes use the platform API. If no platform admin can sign in, stop the
+servers, back up the database and secret keys, then run `openbot-setup --force`
+with `--public-origin`, the OIDC provider arguments, `--admin-provider` and
+`--admin-email`. Use `email` or an SSO connection ID only when that sign-in
+method is already set up. Recovery keeps S3, SMTP and registration settings in
+the database.
+
+The command restores the specified verified admin accounts, removes their
+sessions and personal tokens, and records `admin.recovered`. It preserves the
+signing secret. Only server access can run this recovery. Start the server and
+sign in again. `openbot-inspect` prints settings with secret values removed and
+admin state as JSON for local deployment checks. Keep its output private.

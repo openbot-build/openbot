@@ -1,3 +1,4 @@
+import { Delivery } from "./Mail.ts"
 import {
 	BotId,
 	BotMember,
@@ -290,7 +291,7 @@ export class BotsApi extends HttpApiGroup.make("bots")
 			error: invitationBotErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Invites a person by email, or makes an invitation link, to use this Bot. It needs `bots.share`. Only a lasting top Bot can be shared.",
+			"Invites a person by email, or makes an invitation link, to use this Bot. It needs `bots.share`. Only a lasting top Bot can be shared. Email invitations return the mail delivery status when created. A failed send does not remove the invitation.",
 		),
 		HttpApiEndpoint.get("listBotInvitations", "/v1/bots/:botId/invitations", {
 			params: botParams,
@@ -309,6 +310,18 @@ export class BotsApi extends HttpApiGroup.make("bots")
 		).annotate(
 			OpenApi.Description,
 			"Reads the secret and the URL of an invitation link again, for example to print its QR code again.",
+		),
+		HttpApiEndpoint.post(
+			"resendBotInvitation",
+			"/v1/bots/:botId/invitations/:invitationId/resend",
+			{
+				params: { ...botParams, invitationId: InvitationId },
+				success: Delivery,
+				error: invitationBotErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Sends a pending email invitation again. It needs `bots.share`. The end time stays the same. Link invitations cannot be sent by email.",
 		),
 		HttpApiEndpoint.delete(
 			"revokeBotInvitation",

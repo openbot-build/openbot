@@ -328,6 +328,8 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 		organizationId: "local-organization",
 	}
 	const auth = Auth.Auth.of({
+		emailSend: () => Effect.die("Discovery must not send mail"),
+		emailVerify: () => Effect.die("Discovery must not verify mail"),
 		handle: () => Effect.die("Discovery must not call Better Auth routes"),
 		signInProvider: () => Effect.succeedNone,
 		startSignIn: () => Effect.die("Discovery must not start a sign-in"),
@@ -352,6 +354,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 						},
 					],
 					platformAdmin: false,
+					canCreateOrganization: false,
 					expiresAt: "2099-01-01T00:00:00.000Z",
 					setCookies: [],
 				}

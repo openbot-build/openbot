@@ -3,6 +3,9 @@ title: Betrieb
 description: Betreibe OpenBot auf deinem eigenen Server.
 ---
 
+Siehe [Kontozugang](/de/access) für neue Vorgaben, E-Mail-Anmeldung, Freigaben,
+Gruppenrollen und Admin-Wiederherstellung.
+
 Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
 brauchst je nach Aufgabe Serverzugriff oder Plattformrechte. Beginne mit dem
 [Administrationshandbuch](/de/admin).
@@ -164,10 +167,9 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-Es schreibt den öffentlichen Origin, den Anbieter der Plattform und die ersten
-Plattform-Admins in die Datenbank. Gib ein Client-Geheimnis mit
-`-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...` an, nicht auf der Befehlszeile. Alle
-Optionen findest du unter [Platform](/de/platform#setup).
+Setup schreibt Ursprung, Anbieter und erste Admins in die Datenbank. Gib das
+Client-Geheimnis mit `OPENBOT_SETUP_OIDC_CLIENT_SECRET` an. Siehe
+[Platform](/de/platform#setup) für die Setup-Argumente.
 
 Du kannst die Einrichtung auch nach dem Start des Servers ausführen. Bis dahin
 antwortet jede Route außer `/health` mit `503` und `SetupRequired`.
@@ -216,7 +218,7 @@ Du kannst die Programme auch mit Node.js auf dem Server ausführen:
 pnpm install --frozen-lockfile
 pnpm --filter-prod @openbot-build/openbot... build
 pnpm --filter @openbot-build/openbot migrate
-pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --admin-email=alice@example.com
+pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --oidc-issuer=https://id.example.com --oidc-client-id=openbot --admin-email=alice@example.com
 pnpm --filter @openbot-build/openbot start
 ```
 

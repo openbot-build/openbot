@@ -128,6 +128,7 @@ export default defineConfig({
 								"deploy",
 								"configuration",
 								"platform",
+								"access",
 								"admin/sign-in",
 								"admin/file-storage",
 								"admin/live-models",

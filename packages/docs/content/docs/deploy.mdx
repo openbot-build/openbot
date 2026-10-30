@@ -3,6 +3,9 @@ title: Deploy
 description: Run OpenBot on your own server.
 ---
 
+See [account access](/access) for invitation-only upgrade defaults, email login,
+approvals, group roles and admin recovery.
+
 For platform operators. These tasks affect the whole deployment. Have server
 access or platform admin rights as the task requires. Start with the
 [administrator manual](/admin).
@@ -156,10 +159,9 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-It writes the public origin, the platform provider, and the first platform
-admins to the database. Give a client secret with
-`-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...`, not on the command line. See
-[Platform](/platform#setup) for every flag.
+Setup writes the public origin, provider and first admins to the database. Give
+the client secret with `OPENBOT_SETUP_OIDC_CLIENT_SECRET`. See
+[Platform](/platform#setup) for the setup arguments.
 
 You can also run setup after the server starts. Until then, every route except
 `/health` answers `503` with `SetupRequired`.
@@ -207,7 +209,7 @@ You can also run the programs with Node.js on the server:
 pnpm install --frozen-lockfile
 pnpm --filter-prod @openbot-build/openbot... build
 pnpm --filter @openbot-build/openbot migrate
-pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --admin-email=alice@example.com
+pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --oidc-issuer=https://id.example.com --oidc-client-id=openbot --admin-email=alice@example.com
 pnpm --filter @openbot-build/openbot start
 ```
 

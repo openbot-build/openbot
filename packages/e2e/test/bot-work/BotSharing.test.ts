@@ -5,6 +5,7 @@ import { assert, layer } from "@effect/vitest"
 import {
 	BotMemory,
 	BotsApi,
+	Mail,
 	OrganizationApi,
 	RequestsApi,
 	UserTokensApi,
@@ -132,6 +133,14 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.strictEqual(link.invitation.email, null)
 				assert.strictEqual(link.invitation.expiresAt, null)
+				assert.strictEqual(link.delivery, undefined)
+				const resend = (id: string) =>
+					`/v1/bots/${guide.id}/invitations/${id}/resend`
+				assert.strictEqual(
+					(yield* send(alice.session, resend(link.invitation.id), "POST"))
+						.status,
+					400,
+				)
 				const again = yield* json(
 					BotsApi.BotInvitationSecret,
 					send(
@@ -338,6 +347,30 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					201,
 				)
 				assert.strictEqual(emailed.secret, null)
+				assert.deepStrictEqual(emailed.delivery, { status: "disabled" })
+				assert.deepStrictEqual(
+					yield* json(
+						Mail.Delivery,
+						send(alice.session, resend(emailed.invitation.id), "POST"),
+					),
+					{ status: "disabled" },
+				)
+				assert.strictEqual(
+					(yield* send(carol.session, resend(emailed.invitation.id), "POST"))
+						.status,
+					404,
+				)
+				const afterResend = yield* json(
+					Schema.Array(BotsApi.BotInvitation),
+					send(alice.session, `/v1/bots/${guide.id}/invitations`),
+				)
+				assert.deepStrictEqual(
+					Arr.findFirst(
+						afterResend,
+						(item) => item.id === emailed.invitation.id,
+					),
+					Option.some(emailed.invitation),
+				)
 				const mine = yield* json(
 					Schema.Struct({ items: Schema.Array(OrganizationApi.Invitation) }),
 					send(dave.session, "/v1/invitations"),
@@ -363,6 +396,34 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const daveLinked = yield* accept(dave.session, {
 					invitation: emailed.invitation.id,
 				})
+				assert.strictEqual(
+					(yield* send(alice.session, resend(emailed.invitation.id), "POST"))
+						.status,
+					400,
+				)
+				const revokedEmail = yield* json(
+					BotsApi.BotInvitationSecret,
+					send(alice.session, `/v1/bots/${guide.id}/invitations`, "POST", {
+						email: "sharing-unused@example.com",
+					}),
+					201,
+				)
+				assert.strictEqual(
+					(yield* send(
+						alice.session,
+						`/v1/bots/${guide.id}/invitations/${revokedEmail.invitation.id}`,
+						"DELETE",
+					)).status,
+					204,
+				)
+				assert.strictEqual(
+					(yield* send(
+						alice.session,
+						resend(revokedEmail.invitation.id),
+						"POST",
+					)).status,
+					400,
+				)
 				assert.strictEqual(
 					(yield* send(dave.session, "/v1/bot-invitations/accept", "POST", {
 						invitation: emailed.invitation.id,

@@ -96,6 +96,7 @@ const signIn = HttpApiBuilder.group(OpenBotApi, "signIn", (handlers) =>
 					return yield* AuthApi.SignInUnavailable.make({})
 				const started = yield* auth.startSignIn({
 					providerId: providerId.value,
+					invitation: payload.invitation,
 					returnTo: payload.returnTo,
 				})
 				yield* HttpMiddleware.setSessionCookies(started.setCookies)

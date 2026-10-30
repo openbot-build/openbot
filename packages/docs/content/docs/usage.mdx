@@ -421,8 +421,23 @@ on.
 50 grants. It needs `read` on `Usage`. A platform admin reads the same with
 `GET /v1/platform/organizations/:organizationId/credits`.
 
-OpenBot has no payments yet. A platform that sells credits records the payment
-in its own system, then gives the credits with the API.
+The personal space has its own balance. Money and model costs do not move
+between spaces. The built-in `billing` role can read a wallet and add money
+through a host's payment API. It gives no access to private Chats, keys, or
+member settings. These acts use `Wallet.read` and `Wallet.write` permissions.
+
+A credit grant may include an `operationKey`. The same key and the same input
+return the first grant without changing money again. Different input with the
+same key returns `409 CreditConflict`. The grant, balance, and audit record are
+saved in one transaction.
+
+A host can use the public `BillingHost` services to require prepaid credits.
+Enabling this mode keeps all balances, turns on credits for existing and new
+spaces, and prevents turning credits off. Self-hosted servers keep the current
+credit settings unless the host enables this mode.
+
+OpenBot stores credits, not payment card data. A host records payments in its
+own system and uses the credit grant API or public host service to add money.
 
 ---
 

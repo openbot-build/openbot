@@ -1,3 +1,4 @@
+import * as AccessModel from "@openbot-build/domain/Access"
 import { AuthApi } from "@openbot-build/api"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
@@ -55,9 +56,17 @@ import * as Db from "../src/database/Database.ts"
 import * as Drivers from "../src/computers/Drivers.ts"
 import type { LiveBackends } from "../src/models/LiveBackends.ts"
 import * as VaultReaders from "../src/vaults/Readers.ts"
+import {
+	Transport as MailTransport,
+	TransportError,
+} from "../src/mail/Transport.ts"
 
 /** How a test host starts. */
 export interface Options {
+	readonly registration?: AccessModel.Registration
+	readonly groups?: (subject: string) => unknown
+
+	readonly mailTransport?: Layer.Layer<MailTransport>
 	readonly publicOrigin: string
 	readonly port?: number
 	readonly model?: typeof LanguageModel.LanguageModel.Service
@@ -216,7 +225,7 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		)
 		const code = yield* Schema.decodeUnknownEffect(Code)(form.get("code"))
 		const token = yield* Effect.promise(() =>
-			new SignJWT({ nonce: code.nonce })
+			new SignJWT({ nonce: code.nonce, groups: options.groups?.(code.subject) })
 				.setProtectedHeader({ alg: "EdDSA", kid: "browser-test" })
 				.setIssuer(issuer)
 				.setAudience("browser-fixture")
@@ -396,6 +405,16 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		],
 	}
 	const configuration = {
+		mailTransport:
+			options.mailTransport ??
+			Layer.succeed(MailTransport, {
+				send: () =>
+					Effect.fail(
+						TransportError.make({
+							cause: "The test did not provide a mail transport.",
+						}),
+					),
+			}),
 		...(options.platformAdmins === undefined
 			? {}
 			: { platformAdmins: options.platformAdmins }),
@@ -533,6 +552,14 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 				)
 			}),
 		)
+	yield* updatePlatform((document) => ({
+		...document,
+		organizationCreation: "anyone",
+		registration: options.registration ?? {
+			...AccessModel.defaults,
+			selfService: "allow",
+		},
+	}))
 	if (options.appRestrictions !== undefined) {
 		const restrictions = options.appRestrictions
 		yield* updatePlatform((document) => ({
@@ -615,12 +642,8 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 	 * Signs in a test account through the OIDC flow of the server. A new
 	 * account makes its own organization, unless `organization` is false.
 	 */
-	const login = Effect.fn("BrowserHost.login")(
-		function* (
-			subject: string,
-			returnTo?: string,
-			loginOptions: { readonly organization?: boolean } = {},
-		) {
+	const authenticate = Effect.fn("BrowserHost.authenticate")(
+		function* (subject: string, returnTo?: string, invitation?: string) {
 			const current = yield* address
 			const started = yield* HttpClientRequest.post(
 				current + "/auth/sign-in/social",
@@ -630,6 +653,8 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 					provider: "oidc",
 					callbackURL: options.publicOrigin + (returnTo ?? "/"),
 					disableRedirect: true,
+					additionalData:
+						invitation === undefined ? {} : { openbotInvitation: invitation },
 				}),
 				Effect.flatMap(client.execute),
 			)
@@ -660,6 +685,17 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 						redirect: "manual",
 					}),
 				)
+			return callback
+		},
+		Effect.provideService(HttpClient.HttpClient, client),
+	)
+	const login = Effect.fn("BrowserHost.login")(
+		function* (
+			subject: string,
+			returnTo?: string,
+			loginOptions: { readonly organization?: boolean } = {},
+		) {
+			const callback = yield* authenticate(subject, returnTo)
 			const session = Redacted.make(
 				Option.getOrElse(
 					Cookies.getValue(callback.cookies, AuthApi.SessionCookie),
@@ -670,14 +706,19 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 				Effect.flatMap(Auth.Auth, (auth) => auth.resolveSession(session)),
 			)
 			const first = yield* resolve
-			// A new account has no organization. Like a person, it makes one for itself.
+			// These tests use a shared organization in addition to the private space.
 			const needsOrganization =
-				Arr.isReadonlyArrayEmpty(first.memberships) &&
-				loginOptions.organization !== false
+				Arr.every(
+					first.memberships,
+					(membership) => membership.kind === "personal",
+				) && loginOptions.organization !== false
 			if (needsOrganization) yield* makeOrganization(session, subject)
 			const info = needsOrganization ? yield* resolve : first
 			const organizationId = pipe(
-				Arr.head(info.memberships),
+				Arr.findFirst(
+					info.memberships,
+					(membership) => membership.kind !== "personal",
+				),
 				Option.map((membership) => membership.organizationId),
 				Option.getOrElse(() => ""),
 			)
@@ -718,6 +759,8 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 			Scope.close(current.scope, Exit.void).pipe(Effect.andThen(launch)),
 		),
 		login,
+		authenticate,
+		updatePlatform,
 		defaultBot,
 		/** How many times the ConfirmChange tool ran. */
 		toolCalls: Ref.get(toolCalls),

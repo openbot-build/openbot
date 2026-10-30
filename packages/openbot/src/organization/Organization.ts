@@ -54,6 +54,10 @@ export class Organization extends Context.Service<
 		 * an account can have no organization at all.
 		 * `only` limits joining to one organization, such as the owner of an SSO connection.
 		 */
+		/** Make the one private space of an active account. */
+		readonly ensurePersonal: (
+			account: Account,
+		) => Effect.Effect<string, OrganizationUnavailable>
 		readonly admit: (
 			account: Account,
 			only: Option.Option<string>,

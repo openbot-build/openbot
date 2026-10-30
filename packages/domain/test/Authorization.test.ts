@@ -105,3 +105,49 @@ it.effect("every built-in policy can be stored as text", () =>
 		}
 	}),
 )
+
+it.effect(
+	"billing roles can add credits but cannot read chats or manage members",
+	() =>
+		Effect.sync(() => {
+			const role = Arr.findFirst(
+				Authorization.builtinRoles,
+				(r) => r.id === "billing",
+			)
+			if (role._tag === "None")
+				return assert.fail("The billing role is missing.")
+			const wallet = Authorization.Wallet.make({ organizationId: "org_a" })
+			assert.equal(
+				Policy.decideSync(role.value.policy, {
+					principal,
+					resource: wallet,
+					action: "write",
+				})._tag,
+				"Allow",
+			)
+			assert.notEqual(
+				Policy.decideSync(role.value.policy, {
+					principal,
+					resource: Authorization.Wallet.make({ organizationId: "org_b" }),
+					action: "write",
+				})._tag,
+				"Allow",
+			)
+			assert.notEqual(
+				Policy.decideSync(role.value.policy, {
+					principal,
+					resource: chat,
+					action: "read",
+				})._tag,
+				"Allow",
+			)
+			assert.notEqual(
+				Policy.decideSync(role.value.policy, {
+					principal,
+					resource: Authorization.Member.make({ organizationId: "org_a" }),
+					action: "write",
+				})._tag,
+				"Allow",
+			)
+		}),
+)

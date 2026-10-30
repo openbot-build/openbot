@@ -1,0 +1,740 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "28e8a897-90a0-4693-8adb-837da8bbb6a8",
+	"prevIds": ["f4e957c5-b072-4acd-ba17-0055677eb0a1"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_access_events"],
+			"writes": [
+				"s|tbl|public.openbot_access_events",
+				"n|tbl|public.openbot_access_events",
+				"e|tbl|public.openbot_access_events",
+				"n|rel|public.openbot_access_events",
+				"n|type|public.openbot_access_events",
+				"n|rel|public.openbot_access_events_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_account_states"],
+			"writes": [
+				"s|tbl|public.openbot_account_states",
+				"n|tbl|public.openbot_account_states",
+				"e|tbl|public.openbot_account_states",
+				"n|rel|public.openbot_account_states",
+				"n|type|public.openbot_account_states",
+				"n|rel|public.openbot_account_states_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_mapped_roles"],
+			"writes": [
+				"s|tbl|public.openbot_mapped_roles",
+				"n|tbl|public.openbot_mapped_roles",
+				"e|tbl|public.openbot_mapped_roles",
+				"n|rel|public.openbot_mapped_roles",
+				"n|type|public.openbot_mapped_roles",
+				"n|rel|public.openbot_mapped_roles_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_registration_requests"],
+			"writes": [
+				"s|tbl|public.openbot_registration_requests",
+				"n|tbl|public.openbot_registration_requests",
+				"e|tbl|public.openbot_registration_requests",
+				"n|rel|public.openbot_registration_requests",
+				"n|type|public.openbot_registration_requests",
+				"n|rel|public.openbot_registration_requests_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_user_grants"],
+			"writes": [
+				"s|tbl|public.openbot_user_grants",
+				"n|tbl|public.openbot_user_grants",
+				"e|tbl|public.openbot_user_grants",
+				"n|rel|public.openbot_user_grants",
+				"n|type|public.openbot_user_grants",
+				"n|rel|public.openbot_user_grants_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_sso_connections",
+				"access"
+			],
+			"writes": [
+				"s|col|public.openbot_sso_connections.access",
+				"n|col|public.openbot_sso_connections.access",
+				"e|col|public.openbot_sso_connections.access"
+			],
+			"reads": ["n|tbl|public.openbot_sso_connections", "n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_registration_requests",
+				"openbot_registration_identity"
+			],
+			"writes": [
+				"s|idx|public.openbot_registration_identity",
+				"n|idx|public.openbot_registration_identity",
+				"e|idx|public.openbot_registration_identity",
+				"n|rel|public.openbot_registration_identity"
+			],
+			"reads": [
+				"n|tbl|public.openbot_registration_requests",
+				"n|sch|public",
+				"n|col|public.openbot_registration_requests.provider_id",
+				"n|col|public.openbot_registration_requests.issuer",
+				"n|col|public.openbot_registration_requests.subject"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_account_states"],
+			"writes": [
+				"s|fk|public.openbot_account_states.openbot_account_states_user_id_openbot_auth_user_id_fkey",
+				"n|fk|public.openbot_account_states.openbot_account_states_user_id_openbot_auth_user_id_fkey",
+				"e|fk|public.openbot_account_states.openbot_account_states_user_id_openbot_auth_user_id_fkey",
+				"n|con|public.openbot_account_states.openbot_account_states_user_id_openbot_auth_user_id_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_account_states",
+				"n|sch|public",
+				"n|tbl|public.openbot_auth_user",
+				"n|sch|public",
+				"n|col|public.openbot_account_states.user_id",
+				"n|col|public.openbot_auth_user.id",
+				"e|uniqueness|public.openbot_auth_user.id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_mapped_roles"],
+			"writes": [
+				"s|fk|public.openbot_mapped_roles.openbot_mapped_roles_Nil5hyZx7di8_fkey",
+				"n|fk|public.openbot_mapped_roles.openbot_mapped_roles_Nil5hyZx7di8_fkey",
+				"e|fk|public.openbot_mapped_roles.openbot_mapped_roles_Nil5hyZx7di8_fkey",
+				"n|con|public.openbot_mapped_roles.openbot_mapped_roles_Nil5hyZx7di8_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_mapped_roles",
+				"n|sch|public",
+				"n|tbl|public.openbot_organizations",
+				"n|sch|public",
+				"n|col|public.openbot_mapped_roles.organization_id",
+				"n|col|public.openbot_organizations.id",
+				"e|uniqueness|public.openbot_organizations.id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_mapped_roles"],
+			"writes": [
+				"s|fk|public.openbot_mapped_roles.openbot_mapped_roles_user_id_openbot_auth_user_id_fkey",
+				"n|fk|public.openbot_mapped_roles.openbot_mapped_roles_user_id_openbot_auth_user_id_fkey",
+				"e|fk|public.openbot_mapped_roles.openbot_mapped_roles_user_id_openbot_auth_user_id_fkey",
+				"n|con|public.openbot_mapped_roles.openbot_mapped_roles_user_id_openbot_auth_user_id_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_mapped_roles",
+				"n|sch|public",
+				"n|tbl|public.openbot_auth_user",
+				"n|sch|public",
+				"n|col|public.openbot_mapped_roles.user_id",
+				"n|col|public.openbot_auth_user.id",
+				"e|uniqueness|public.openbot_auth_user.id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_access_events",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_account_states",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_mapped_roles",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_registration_requests",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_user_grants",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_access_events",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_access_events",
+				"name": "action",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_access_events",
+				"name": "actor",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_access_events",
+				"name": "subject",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_access_events",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_account_states",
+				"name": "user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_account_states",
+				"name": "status",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "'active'",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_mapped_roles",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_mapped_roles",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_mapped_roles",
+				"name": "user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_mapped_roles",
+				"name": "role",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "issuer",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "subject",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "email",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "source",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "status",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "1",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_sso_connections",
+				"name": "access",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "'{\"trusted\":false,\"scopes\":[],\"groupsClaim\":null,\"requiredGroups\":[],\"mappings\":[]}'",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_user_grants",
+				"name": "email",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_user_grants",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_user_grants",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "openbot_registration_identity",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "provider_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "issuer",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "subject",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_account_states",
+				"name": "openbot_account_states_user_id_openbot_auth_user_id_fkey",
+				"nameExplicit": false,
+				"columns": ["user_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_auth_user",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_mapped_roles",
+				"name": "openbot_mapped_roles_Nil5hyZx7di8_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_organizations",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_mapped_roles",
+				"name": "openbot_mapped_roles_user_id_openbot_auth_user_id_fkey",
+				"nameExplicit": false,
+				"columns": ["user_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_auth_user",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_mapped_roles",
+				"name": "openbot_mapped_roles_pkey",
+				"columns": ["provider_id", "organization_id", "user_id", "role"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_user_grants",
+				"name": "openbot_user_grants_pkey",
+				"columns": ["email", "provider_id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_access_events",
+				"name": "openbot_access_events_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_account_states",
+				"name": "openbot_account_states_pkey",
+				"columns": ["user_id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_registration_requests",
+				"name": "openbot_registration_requests_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

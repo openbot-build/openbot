@@ -1,16 +1,29 @@
+import { AsyncLocalStorage } from "node:async_hooks"
+import * as AccessModel from "@openbot-build/domain/Access"
+import { Access, type Identity as AccessIdentity } from "../access/Access.ts"
 import { AuthApi } from "@openbot-build/api"
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import { betterAuth } from "better-auth/minimal"
-import { APIError } from "better-auth/api"
+import {
+	APIError,
+	createAuthMiddleware,
+	addOAuthServerContext,
+	getOAuthState,
+} from "better-auth/api"
 import { genericOAuth } from "better-auth/plugins/generic-oauth"
 import { DrizzleQueryError } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
-import { decodeJwt } from "jose"
+import { decodeJwt, SignJWT, jwtVerify } from "jose"
+import { emailOTP } from "better-auth/plugins/email-otp"
+import { Hex } from "effect/encoding"
+import { Mail } from "../mail/Mail.ts"
 import {
 	Array as Arr,
 	Cause,
+	Crypto,
+	String as Str,
 	Duration,
 	Effect,
 	Equal,
@@ -40,7 +53,11 @@ import {
 } from "../sso/Sso.ts"
 import { developmentLogin } from "./DevelopmentLogin.ts"
 import { ResolvedConfiguration } from "./Configuration.ts"
-import { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import {
+	AuthUnavailable,
+	CredentialRejected,
+	AuthConfigurationError,
+} from "./Model.ts"
 import * as Background from "../execution/Background.ts"
 import * as Failures from "../errors/Failures.ts"
 import * as Report from "../errors/Report.ts"
@@ -98,9 +115,22 @@ interface OidcProvider {
 	readonly issuer: string
 	readonly clientId: string
 	readonly clientSecret: Redacted.Redacted<string> | undefined
+	readonly access: AccessModel.ProviderAccess
 }
 
-const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
+const oidcConfig = (
+	provider: OidcProvider,
+	publicOrigin: string,
+	authorize: (
+		provider: OidcProvider,
+		tokens: { readonly idToken?: string | undefined },
+		profile: {
+			readonly sub?: unknown
+			readonly email?: unknown
+			readonly emailVerified?: unknown
+		},
+	) => Promise<string>,
+) => ({
 	providerId: provider.providerId,
 	clientId: provider.clientId,
 	clientSecret:
@@ -109,7 +139,7 @@ const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
 			: Redacted.value(provider.clientSecret),
 	discoveryUrl: provider.issuer + "/.well-known/openid-configuration",
 	redirectURI: publicOrigin + "/auth/callback/" + provider.providerId,
-	scopes: ["openid", "profile", "email"],
+	scopes: ["openid", "profile", "email", ...provider.access.scopes],
 	pkce: true,
 	requireIdTokenVerification: true,
 	accountSubject: ({
@@ -117,13 +147,12 @@ const oidcConfig = (provider: OidcProvider, publicOrigin: string) => ({
 		profile,
 	}: {
 		readonly tokens: { readonly idToken?: string | undefined }
-		readonly profile: { readonly sub?: unknown }
-	}) => {
-		if (tokens.idToken === undefined) return ""
-		// Generic OAuth checks the ID token before it finds the account subject.
-		const claims = decodeJwt(tokens.idToken)
-		return claims.sub === profile.sub ? (claims.sub ?? "") : ""
-	},
+		readonly profile: {
+			readonly sub?: unknown
+			readonly email?: unknown
+			readonly emailVerified?: unknown
+		}
+	}) => authorize(provider, tokens, profile),
 	tokenEndpointAuth: {
 		method:
 			provider.clientSecret === undefined
@@ -157,13 +186,33 @@ export const layer = (
 ): Layer.Layer<
 	Auth,
 	never,
-	Organization | PlatformAdmins | Sso | Settings | Secrets | Records
+	| Organization
+	| PlatformAdmins
+	| Sso
+	| Settings
+	| Secrets
+	| Records
+	| Access
+	| Mail
+	| Crypto.Crypto
 > =>
 	Layer.effect(
 		Auth,
 		Effect.gen(function* () {
 			/** A signed-in account joins organizations by the rules of each one. */
 			const organization = yield* Organization
+			const access = yield* Access
+			const mail = yield* Mail
+			const crypto = yield* Crypto.Crypto
+			// The SDK callbacks share only their own HTTP request state.
+			const requestState = new AsyncLocalStorage<{
+				identity?: AccessIdentity
+				deliveryFailed?: boolean
+				challenge?: string
+				email?: string
+				invitation?: string
+				reason?: AccessModel.AccessDenied["reason"]
+			}>()
 			const admins = yield* PlatformAdmins
 			const sso = yield* Sso
 			const settings = yield* Settings
@@ -173,6 +222,7 @@ export const layer = (
 			const context = yield* Effect.context<never>()
 			const callbacks = yield* FiberSet.make()
 			const run = yield* FiberSet.runtime(callbacks)<never>()
+			const runPromise = yield* FiberSet.runtimePromise(callbacks)<never>()
 			// Every instance uses this pool, so a new instance opens no new connections.
 			const pool = yield* Effect.acquireRelease(
 				Effect.sync(() => {
@@ -226,6 +276,7 @@ export const layer = (
 									issuer: connection.issuer,
 									clientId: connection.clientId,
 									clientSecret: Option.getOrUndefined(secret),
+									access: connection.access ?? AccessModel.providerDefaults,
 								}),
 							),
 					)
@@ -237,6 +288,7 @@ export const layer = (
 										issuer: config.issuer,
 										clientId: config.clientId,
 										clientSecret: config.clientSecret,
+										access: (yield* access.registration).provider,
 									},
 									...connectionProviders,
 								]
@@ -244,6 +296,102 @@ export const layer = (
 					return { connections, providers }
 				}).pipe(Effect.catch(unavailable("storage")))
 
+			// @effect-diagnostics-next-line asyncFunction:off -- Better Auth calls these Promise callbacks inside its native request context.
+			const checked = async <A>(
+				effect: Effect.Effect<
+					A,
+					| AccessModel.AccessDenied
+					| AccessModel.AccessConflict
+					| AccessModel.AccessUnavailable
+				>,
+			) => {
+				const result = await runPromise(effect.pipe(Effect.result))
+				if (result._tag === "Failure") {
+					const error = result.failure
+					const state = requestState.getStore()
+					if (error._tag === "AccessDenied" && state !== undefined)
+						state.reason = error.reason
+					rejectNative(
+						error._tag === "AccessUnavailable"
+							? "SERVICE_UNAVAILABLE"
+							: "FORBIDDEN",
+						{ message: "Sign-in is not allowed.", code: error._tag },
+					)
+				}
+				return result.success
+			}
+			// @effect-diagnostics-next-line asyncFunction:off -- Better Auth calls these Promise callbacks inside its native request context.
+			const authorize = async (
+				provider: OidcProvider,
+				tokens: { readonly idToken?: string | undefined },
+				profile: {
+					readonly sub?: unknown
+					readonly email?: unknown
+					readonly emailVerified?: unknown
+				},
+			) => {
+				const state = requestState.getStore()
+				if (
+					state === undefined ||
+					tokens.idToken === undefined ||
+					tokens.idToken === ""
+				)
+					rejectNative("FORBIDDEN", {
+						message: "A checked identity is required.",
+					})
+				// The SDK checks the signature, issuer, audience and nonce before this callback.
+				const claims = decodeJwt(tokens.idToken)
+				if (
+					claims.sub !== profile.sub ||
+					claims.sub === undefined ||
+					claims.sub === "" ||
+					claims.iss !== provider.issuer ||
+					typeof profile.email !== "string"
+				)
+					rejectNative("FORBIDDEN", {
+						message: "The identity does not match.",
+					})
+				const flow = await getOAuthState()
+				const invitation = flow?.serverContext?.["openbotInvitation"]
+				const identity: AccessIdentity = {
+					providerId: provider.providerId,
+					issuer: provider.issuer,
+					subject: claims.sub,
+					claims,
+					email: profile.email,
+					emailVerified: profile.emailVerified === true,
+					groups:
+						provider.access.groupsClaim === null
+							? undefined
+							: claims[provider.access.groupsClaim],
+					...(typeof invitation === "string" ? { invitation } : {}),
+				}
+				state.identity = identity
+				await checked(access.check(identity))
+				return claims.sub
+			}
+
+			// Called only by hooks that run after the SDK has consumed a valid email code.
+			// @effect-diagnostics-next-line asyncFunction:off -- The SDK owns this callback and requires a Promise.
+			const emailIdentity = async (origin: string) => {
+				const state = requestState.getStore()
+				if (state?.email === undefined || state.challenge === undefined)
+					rejectNative("FORBIDDEN", {
+						message: "A checked email code is required.",
+					})
+				state.identity = {
+					providerId: "email",
+					issuer: origin,
+					subject: state.email,
+					email: state.email,
+					emailVerified: true,
+					groups: undefined,
+					...(state.invitation === undefined
+						? {}
+						: { invitation: state.invitation }),
+				}
+				await checked(access.check(state.identity))
+			}
 			const make = (
 				config: ResolvedConfiguration,
 				providers: ReadonlyArray<OidcProvider>,
@@ -253,6 +401,82 @@ export const layer = (
 					basePath: "/auth",
 					secret: Redacted.value(config.secret),
 					database,
+					hooks: {
+						// @effect-diagnostics-next-line asyncFunction:off -- Better Auth calls these Promise callbacks inside its native request context.
+						before: createAuthMiddleware(async (ctx) => {
+							if (
+								ctx.path === "/sign-in/email-otp" ||
+								Str.startsWith("/email-otp/")(ctx.path ?? "")
+							) {
+								const state = requestState.getStore()
+								if (
+									state?.challenge === undefined ||
+									(ctx.path !== "/sign-in/email-otp" &&
+										ctx.path !== "/email-otp/send-verification-otp") ||
+									(ctx.path === "/email-otp/send-verification-otp" &&
+										ctx.body?.type !== "sign-in")
+								)
+									rejectNative("FORBIDDEN", {
+										message: "Use the email sign-in API.",
+									})
+								await checked(access.provider("email"))
+								if (ctx.path === "/sign-in/email-otp")
+									await checked(access.emailAccount(state.email ?? ""))
+							}
+							if (ctx.path === "/sign-in/social") {
+								const invitation: unknown =
+									ctx.body?.additionalData?.openbotInvitation
+								if (typeof invitation === "string")
+									await addOAuthServerContext({ openbotInvitation: invitation })
+							}
+						}),
+					},
+					databaseHooks: {
+						user: {
+							create: {
+								// @effect-diagnostics-next-line asyncFunction:off -- Better Auth calls these Promise callbacks inside its native request context.
+								before: async (_user, ctx) => {
+									if (ctx?.path === "/sign-in/email-otp")
+										await emailIdentity(config.publicOrigin)
+									if (options.development) return
+									const identity = requestState.getStore()?.identity
+									if (identity === undefined)
+										rejectNative("FORBIDDEN", {
+											message: "A checked identity is required.",
+										})
+									await checked(access.check(identity))
+								},
+								// @effect-diagnostics-next-line asyncFunction:off -- The SDK calls this hook after a checked email code creates an account.
+								after: async (user, ctx) => {
+									if (ctx?.path === "/sign-in/email-otp")
+										await checked(access.bindEmail(user.id, user.email))
+								},
+							},
+						},
+						session: {
+							create: {
+								// @effect-diagnostics-next-line asyncFunction:off -- Better Auth calls these Promise callbacks inside its native request context.
+								before: async (session, ctx) => {
+									if (ctx?.path === "/sign-in/email-otp")
+										await emailIdentity(config.publicOrigin)
+									if (
+										!(await checked(
+											access.active(
+												session.userId,
+												session.createdAt.getTime(),
+											),
+										))
+									)
+										rejectNative("FORBIDDEN", {
+											message: "This account is suspended.",
+										})
+									const identity = requestState.getStore()?.identity
+									if (identity !== undefined)
+										await checked(access.sync(session.userId, identity))
+								},
+							},
+						},
+					},
 					trustedOrigins: [config.publicOrigin],
 					// SDK messages can hold tokens or SQL values. Seal them before logging.
 					logger: {
@@ -300,13 +524,51 @@ export const layer = (
 						},
 					},
 					plugins: [
+						emailOTP({
+							otpLength: 8,
+							expiresIn: 300,
+							allowedAttempts: 3,
+							storeOTP: {
+								// @effect-diagnostics-next-line asyncFunction:off -- The SDK requires a Promise for its OTP hash callback.
+								hash: async (code) => {
+									const challenge = requestState.getStore()?.challenge
+									if (challenge === undefined)
+										rejectNative("FORBIDDEN", {
+											message: "A sign-in challenge is required.",
+										})
+									return Hex.encode(
+										await runPromise(
+											crypto
+												.digest(
+													"SHA-256",
+													new TextEncoder().encode(challenge + "." + code),
+												)
+												.pipe(Effect.orDie),
+										),
+									)
+								},
+							},
+							// @effect-diagnostics-next-line asyncFunction:off -- The SDK awaits this mail callback in its request scope.
+							sendVerificationOTP: async ({ email, otp, type }) => {
+								if (type !== "sign-in")
+									rejectNative("FORBIDDEN", { message: "Use a sign-in code." })
+								const result = await runPromise(mail.signInCode(email, otp))
+								if (result.status !== "sent") {
+									const state = requestState.getStore()
+									if (state !== undefined) state.deliveryFailed = true
+									rejectNative("SERVICE_UNAVAILABLE", {
+										message: "Email could not be sent.",
+									})
+								}
+							},
+						}),
 						...(config.mode === "development" ? [developmentLogin()] : []),
 						...(providers.length === 0
 							? []
 							: [
 									genericOAuth({
 										config: Arr.map(providers, (provider) =>
-											oidcConfig(provider, config.publicOrigin),
+											oidcConfig(provider, config.publicOrigin, authorize),
 										),
 									}),
 								]),
@@ -491,10 +753,158 @@ export const layer = (
 					return Option.none<string>()
 				})
 
+			const emailAttempt = <A>(
+				state: {
+					challenge: string
+					email: string
+					invitation?: string
+					reason?: AccessModel.AccessDenied["reason"]
+				},
+				work: () => Promise<A>,
+			) =>
+				Effect.tryPromise(() => requestState.run(state, work)).pipe(
+					Effect.catch(
+						({
+							cause,
+						}): Effect.Effect<
+							never,
+							AccessModel.AccessDenied | AuthUnavailable | CredentialRejected
+						> =>
+							state.reason !== undefined
+								? Effect.fail(
+										AccessModel.AccessDenied.make({ reason: state.reason }),
+									)
+								: cause instanceof APIError &&
+									  cause.status !== "SERVICE_UNAVAILABLE"
+									? Effect.fail(CredentialRejected.make({ kind: "session" }))
+									: Effect.fail(
+											AuthConfigurationError.make({
+												field: "configuration",
+												cause,
+											}),
+										).pipe(
+											Failures.replace("Email sign-in failed.", () =>
+												AuthUnavailable.make({ dependency: "provider" }),
+											),
+										),
+					),
+				)
+
 			return Auth.of({
+				emailSend: (input) =>
+					withCurrent((instance, current) =>
+						Effect.gen(function* () {
+							yield* access.provider("email")
+							yield* access.emailRate("send-ip:" + input.address, 10)
+							const email = Str.toLowerCase(Str.trim(input.email))
+							yield* access.emailRate("send-email:" + email, 1)
+							const id = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
+							const challenge = yield* Effect.promise(() =>
+								new SignJWT({
+									email,
+									...(input.invitation === undefined
+										? {}
+										: { invitation: input.invitation }),
+								})
+									.setProtectedHeader({ alg: "HS256" })
+									.setIssuer(instance.config.publicOrigin)
+									.setAudience("openbot-email-sign-in")
+									.setJti(id)
+									.setIssuedAt()
+									.setExpirationTime("5 minutes")
+									.sign(
+										new TextEncoder().encode(
+											Redacted.value(instance.config.secret),
+										),
+									),
+							)
+							const state = {
+								challenge,
+								email,
+								deliveryFailed: false,
+								...(input.invitation === undefined
+									? {}
+									: { invitation: input.invitation }),
+							}
+							yield* emailAttempt(state, () =>
+								current.sdk.api.sendVerificationOTP({
+									body: { email, type: "sign-in" },
+									headers: new Headers({
+										origin: instance.config.publicOrigin,
+									}),
+								}),
+							)
+							if (state.deliveryFailed)
+								return yield* AuthUnavailable.make({ dependency: "provider" })
+							return { challenge }
+						}),
+					),
+				emailVerify: (input) =>
+					withCurrent((instance, current) =>
+						Effect.gen(function* () {
+							yield* access.provider("email")
+							yield* access.emailRate("verify-ip:" + input.address, 30)
+							const claims = yield* Effect.tryPromise(() =>
+								jwtVerify(
+									input.challenge,
+									new TextEncoder().encode(
+										Redacted.value(instance.config.secret),
+									),
+									{
+										issuer: instance.config.publicOrigin,
+										audience: "openbot-email-sign-in",
+										algorithms: ["HS256"],
+									},
+								),
+							).pipe(
+								Failures.replace(
+									"The email sign-in challenge is invalid.",
+									() => CredentialRejected.make({ kind: "session" }),
+								),
+							)
+							const payload = yield* Schema.decodeUnknownEffect(
+								Schema.Struct({
+									email: Schema.NonEmptyString,
+									invitation: Schema.optionalKey(Schema.String),
+								}),
+							)(claims.payload).pipe(
+								Failures.replace(
+									"The email sign-in challenge is invalid.",
+									() => CredentialRejected.make({ kind: "session" }),
+								),
+							)
+							const result = yield* emailAttempt(
+								{ challenge: input.challenge, ...payload },
+								() =>
+									current.sdk.api.signInEmailOTP({
+										body: { email: payload.email, otp: input.code },
+										headers: new Headers({
+											origin: instance.config.publicOrigin,
+										}),
+										returnHeaders: true,
+									}),
+							)
+							return { setCookies: result.headers.getSetCookie() }
+						}),
+					),
 				handle: (request) =>
-					withCurrent((_, current) =>
-						Effect.promise(() => current.sdk.handler(request)),
+					withCurrent((instance, current) =>
+						Effect.promise(() =>
+							// @effect-diagnostics-next-line asyncFunction:off -- Better Auth calls these Promise callbacks inside its native request context.
+							requestState.run({}, async () => {
+								const response = await current.sdk.handler(request)
+								const reason = requestState.getStore()?.reason
+								return reason !== undefined
+									? Response.redirect(
+											new URL(
+												"/sign-in?reason=" + reason,
+												instance.config.publicOrigin,
+											).href,
+											302,
+										)
+									: response
+							}),
+						),
 					).pipe(
 						Effect.catchTag("AuthUnavailable", () =>
 							Effect.sync(() => HttpServerResponse.toWeb(unavailableResponse)),
@@ -509,6 +919,11 @@ export const layer = (
 										provider: input.providerId,
 										callbackURL: input.returnTo ?? "/",
 										disableRedirect: true,
+										errorCallbackURL: "/sign-in",
+										additionalData:
+											input.invitation !== undefined
+												? { openbotInvitation: input.invitation }
+												: {},
 									},
 									headers: new Headers({
 										origin: instance.config.publicOrigin,
@@ -544,13 +959,13 @@ export const layer = (
 							),
 						),
 					),
-				resolveSession: (credential, options) =>
+				resolveSession: (credential, sessionOptions) =>
 					withCurrent((instance, current) =>
 						attempt(
 							() =>
 								current.sdk.api.getSession({
 									headers: headers(instance.config, credential),
-									query: { disableRefresh: options?.refresh === false },
+									query: { disableRefresh: sessionOptions?.refresh === false },
 									returnHeaders: true,
 								}),
 							() => AuthUnavailable.make({ dependency: "storage" }),
@@ -558,6 +973,15 @@ export const layer = (
 							Effect.flatMap(({ response: result, headers }) =>
 								Effect.gen(function* () {
 									if (result === null)
+										return yield* CredentialRejected.make({ kind: "session" })
+									if (
+										!(yield* access
+											.active(
+												result.user.id,
+												result.session.createdAt.getTime(),
+											)
+											.pipe(Effect.catch(unavailable("storage"))))
+									)
 										return yield* CredentialRejected.make({ kind: "session" })
 									const ssoOrganization = yield* checkProvider(
 										current.connections,
@@ -569,10 +993,21 @@ export const layer = (
 										name: result.user.name,
 										emailVerified: result.user.emailVerified,
 									}
-									const memberships = yield* organization.admit(
-										account,
-										ssoOrganization,
-									)
+									const authProvider = yield* sso
+										.providerOf(account.id)
+										.pipe(Effect.catch(unavailable("storage")))
+									const providerAccess =
+										Option.isSome(authProvider) && !options.development
+											? yield* access
+													.provider(authProvider.value)
+													.pipe(Effect.catch(unavailable("provider")))
+											: undefined
+									yield* organization.ensurePersonal(account)
+									const memberships =
+										providerAccess?.access.groupsClaim !== null &&
+										providerAccess !== undefined
+											? yield* organization.memberships(account.id)
+											: yield* organization.admit(account, ssoOrganization)
 									const platformAdmin = yield* admins.check(account)
 									return {
 										userId: result.user.id,
@@ -583,6 +1018,14 @@ export const layer = (
 										},
 										memberships,
 										platformAdmin,
+										canCreateOrganization:
+											platformAdmin ||
+											Option.exists(
+												yield* settings.platform.pipe(
+													Effect.catch(unavailable("settings")),
+												),
+												(p) => p.document.organizationCreation === "anyone",
+											),
 										expiresAt: result.session.expiresAt.toISOString(),
 										setCookies: headers.getSetCookie(),
 									}
@@ -598,3 +1041,9 @@ export const layer = (
 			})
 		}),
 	)
+
+/** Better Auth uses thrown APIError values at the boundary of its Promise hooks. */
+function rejectNative(...args: ConstructorParameters<typeof APIError>): never {
+	// @effect-rules-next-line throw -- The SDK only accepts a thrown APIError from its native hooks.
+	throw new APIError(...args)
+}

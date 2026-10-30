@@ -7,6 +7,8 @@ export * as Auth from "./auth/index.ts"
 export * as HostTools from "./chats/HostTools.ts"
 export * as AppHost from "./apps/AppHost.ts"
 export * as AppTools from "./plugins/apps/AppTools.ts"
+export * as MailTransport from "./mail/Transport.ts"
+export * as MailSmtp from "./mail/Smtp.ts"
 
 export * as Configuration from "./configuration/Configuration.ts"
 
@@ -19,3 +21,7 @@ export * as BotMemory from "./plugins/memory/BotMemory.ts"
 export * as TimeLimiter from "./plugins/time-limiter/TimeLimiter.ts"
 export * as TokenLimiter from "./plugins/token-limiter/TokenLimiter.ts"
 export * as TurnLimiter from "./plugins/turn-limiter/TurnLimiter.ts"
+
+export * as Administration from "./platform/Administration.ts"
+
+export * as BillingHost from "./app/BillingHost.ts"

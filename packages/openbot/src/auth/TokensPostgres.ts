@@ -16,7 +16,7 @@ import {
 } from "effect"
 import { Base64Url, Hex } from "effect/encoding"
 import { and, count, eq, sql } from "drizzle-orm"
-import { tokens } from "../database/Schema.ts"
+import { tokens, accountStates } from "../database/Schema.ts"
 import { Tokens } from "./Tokens.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
 import * as Failures from "../errors/Failures.ts"
@@ -89,6 +89,15 @@ export const make: Effect.Effect<
 				const policy = input.policy ?? Authorization.defaultTokenPolicy
 				return yield* db.transaction((tx) =>
 					Effect.gen(function* () {
+						yield* tx.execute(
+							sql`SELECT pg_advisory_xact_lock(hashtextextended(${"openbot-access:" + owner.userId}, 0))`,
+						)
+						const [state] = yield* tx
+							.select()
+							.from(accountStates)
+							.where(eq(accountStates.userId, owner.userId))
+						if (state?.status === "suspended")
+							return yield* TokensModel.TokenStorageUnavailable.make({})
 						// Create tokens one at a time per member, so concurrent requests keep the limit.
 						const lockKey = yield* Schema.encodeEffect(LockKey)([
 							"tokens",

@@ -4,6 +4,8 @@ import { RoleId } from "./Roles.ts"
 /** One organization of the signed-in account. */
 export const Membership = Schema.Struct({
 	organizationId: Schema.String,
+	kind: Schema.optionalKey(Schema.Literals(["personal", "organization"])),
+	ownerUserId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	name: Schema.String,
 	status: Schema.Literals(["active", "suspended"]),
 	roles: Schema.Array(RoleId),
@@ -20,5 +22,6 @@ export const SessionInfo = Schema.Struct({
 	memberships: Schema.Array(Membership),
 	/** Whether the account may manage the platform. */
 	platformAdmin: Schema.Boolean,
+	canCreateOrganization: Schema.Boolean,
 	expiresAt: Schema.String,
 })

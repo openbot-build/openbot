@@ -2,18 +2,20 @@ import { Platform as PlatformModel } from "@openbot-build/domain"
 
 import { Array as Arr, Cause, Clock, DateTime, Effect, Layer } from "effect"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
-import { platformAdmins } from "../database/Schema.ts"
+import { platformAdmins, accountStates } from "../database/Schema.ts"
 import {
 	normalizeEmail,
 	PlatformAdmins,
 	PlatformAdminsUnavailable,
 } from "./PlatformAdmins.ts"
+import { openbot_auth_account } from "../database/AuthSchema.ts"
 import * as Db from "../database/Database.ts"
 
 const view = (
 	row: typeof platformAdmins.$inferSelect,
 ): PlatformModel.PlatformAdmin => ({
 	email: row.email,
+	providerId: row.providerId,
 	userId: row.userId,
 	addedAt: DateTime.formatIso(DateTime.makeUnsafe(row.addedAt)),
 })
@@ -33,13 +35,13 @@ export const make = Effect.gen(function* () {
 			.from(platformAdmins)
 			.orderBy(asc(platformAdmins.email))
 			.pipe(Effect.map(Arr.map(view)), Effect.mapError(unavailable)),
-		add: (input) =>
+		add: (input, providerId = "oidc") =>
 			Effect.gen(function* () {
 				const email = normalizeEmail(input)
 				const now = yield* Clock.currentTimeMillis
 				yield* db
 					.insert(platformAdmins)
-					.values({ email, userId: null, addedAt: now })
+					.values({ email, providerId, userId: null, addedAt: now })
 					.onConflictDoNothing()
 				const [row] = yield* db
 					.select()
@@ -67,7 +69,20 @@ export const make = Effect.gen(function* () {
 						const rows = yield* tx.select().from(platformAdmins)
 						if (!Arr.some(rows, (row) => row.email === email))
 							return yield* PlatformModel.PlatformAdminNotFound.make({ email })
-						if (rows.length === 1)
+						const states = yield* tx.select().from(accountStates)
+						const active = Arr.filter(
+							rows,
+							(row) =>
+								row.userId !== null &&
+								!Arr.some(
+									states,
+									(s) => s.userId === row.userId && s.status === "suspended",
+								),
+						)
+						if (
+							rows.length === 1 ||
+							(active.length === 1 && active[0]?.email === email)
+						)
 							return yield* PlatformModel.LastPlatformAdmin.make({})
 						yield* tx
 							.delete(platformAdmins)
@@ -81,6 +96,11 @@ export const make = Effect.gen(function* () {
 				),
 		check: (account) =>
 			Effect.gen(function* () {
+				const [state] = yield* db
+					.select()
+					.from(accountStates)
+					.where(eq(accountStates.userId, account.id))
+				if (state?.status === "suspended") return false
 				const [linked] = yield* db
 					.select({ email: platformAdmins.email })
 					.from(platformAdmins)
@@ -88,7 +108,21 @@ export const make = Effect.gen(function* () {
 				if (linked !== undefined) return true
 				if (account.email === undefined || account.emailVerified !== true)
 					return false
-				// Link the account on the first sign-in. Only a verified email can claim the row.
+				const [provider] = yield* db
+					.select({ providerId: openbot_auth_account.providerId })
+					.from(openbot_auth_account)
+					.innerJoin(
+						platformAdmins,
+						eq(platformAdmins.providerId, openbot_auth_account.providerId),
+					)
+					.where(
+						and(
+							eq(openbot_auth_account.userId, account.id),
+							eq(platformAdmins.email, normalizeEmail(account.email)),
+						),
+					)
+				if (provider === undefined) return false
+				// Setup binds its email to the platform provider, never to another connection.
 				const claimed = yield* db
 					.update(platformAdmins)
 					.set({ userId: account.id })
@@ -96,6 +130,7 @@ export const make = Effect.gen(function* () {
 						and(
 							eq(platformAdmins.email, normalizeEmail(account.email)),
 							isNull(platformAdmins.userId),
+							eq(platformAdmins.providerId, provider.providerId),
 						),
 					)
 					.returning({ email: platformAdmins.email })

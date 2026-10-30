@@ -356,7 +356,18 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 和最新的 50 次给出记录。它需要 `Usage` 上的 `read`。平台管理员用
 `GET /v1/platform/organizations/:organizationId/credits` 读取同样的内容。
 
-OpenBot 还没有支付功能。出售额度的平台在自己的系统中记录付款，然后用 API 给出额度。
+个人空间拥有独立余额。空间之间不转移余额或消费费用。内置 `billing`
+财务角色可通过托管平台的支付 API 查看钱包和充值，不获得私人聊天、密钥或成员管理权限。这些操作分别使用
+`Wallet.read` 和 `Wallet.write`。
+
+增加额度时可传入
+`operationKey`。相同键和相同参数重复提交会返回原记录，不会再次改变余额；相同键配合不同参数返回
+`409 CreditConflict`。额度记录、余额与审计日志在一个事务中保存。
+
+托管平台可通过公开的 `BillingHost`
+服务启用预付费模式。启用时保留现有余额，所有新旧空间都开启额度限制，并禁止关闭。自托管服务器在未启用该模式时保留原有设置。
+
+OpenBot 保存额度，不保存银行卡资料。托管平台在自己的系统中记录付款，再调用额度 API 或公开的托管服务入账。
 
 ---
 

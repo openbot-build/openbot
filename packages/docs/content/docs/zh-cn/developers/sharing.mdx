@@ -31,7 +31,14 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/invitations
 ```
 
-要创建邀请链接，请不填 `email`。很多人可以使用同一个链接。
+平台设置了
+[SMTP](/zh-cn/platform#发送邮件)时，OpenBot 会在保存邮箱邀请后发送邮件。创建响应的
+`delivery.status` 为 `sent`、`disabled` 或 `failed`。 `sent`
+表示 SMTP 服务器接受了邮件，不保证邮件已进入收件箱。发送失败会保留邀请，OpenBot 不会自动重试。未启用发送时，请你自己通知这个人。
+
+要创建邀请链接，请不填
+`email`。很多人可以使用同一个链接。链接邀请不会发送邮件，创建响应也没有
+`delivery`。
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -74,6 +81,17 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 `GET /v1/bots/:botId/invitations`
 列出邀请。`DELETE /v1/bots/:botId/invitations/:invitationId`
 撤销一个邀请。之后，没有人能接受它。之前已经接受它的人仍然是成员。
+
+`POST /v1/bots/:botId/invitations/:invitationId/resend`
+重发一封邮箱邀请。它需要与创建邀请相同的 `share` 权限，返回
+`{ "status": "sent" }`、 `{ "status": "disabled" }` 或
+`{ "status": "failed" }`。只有未过期且仍为 `pending`
+的邮箱邀请可以重发，链接邀请不能重发。重发不会改变邀请的有效期。如果上次发送已被服务器接收，但回复丢失，重发可能产生重复邮件。
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/bots/$BOT/invitations/inv_51c2/resend
+```
 
 ---
 

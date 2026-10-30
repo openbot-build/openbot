@@ -1,0 +1,229 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "e88089c6-5712-4d9c-9fb6-b048a2ef8d5a",
+	"prevIds": ["e4c68f5c-722a-4cd3-b194-ff20d4166b5d"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_billing_policy"],
+			"writes": [
+				"s|tbl|public.openbot_billing_policy",
+				"n|tbl|public.openbot_billing_policy",
+				"e|tbl|public.openbot_billing_policy",
+				"n|rel|public.openbot_billing_policy",
+				"n|type|public.openbot_billing_policy",
+				"n|rel|public.openbot_billing_policy_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_credit_grants",
+				"operation_key"
+			],
+			"writes": [
+				"s|col|public.openbot_credit_grants.operation_key",
+				"n|col|public.openbot_credit_grants.operation_key",
+				"e|col|public.openbot_credit_grants.operation_key"
+			],
+			"reads": ["n|tbl|public.openbot_credit_grants", "n|sch|public"]
+		},
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_organizations",
+				"personal_owner_user_id"
+			],
+			"writes": [
+				"s|col|public.openbot_organizations.personal_owner_user_id",
+				"n|col|public.openbot_organizations.personal_owner_user_id",
+				"e|col|public.openbot_organizations.personal_owner_user_id"
+			],
+			"reads": ["n|tbl|public.openbot_organizations", "n|sch|public"]
+		},
+		{
+			"statementType": "add_unique",
+			"statementTarget": ["table", "public", "openbot_credit_grants"],
+			"writes": [
+				"s|uq|public.openbot_credit_grants.openbot_credit_grants_operation_key_key",
+				"n|uq|public.openbot_credit_grants.openbot_credit_grants_operation_key_key",
+				"e|uq|public.openbot_credit_grants.openbot_credit_grants_operation_key_key",
+				"n|con|public.openbot_credit_grants.openbot_credit_grants_operation_key_key",
+				"n|rel|public.openbot_credit_grants_operation_key_key"
+			],
+			"reads": [
+				"n|tbl|public.openbot_credit_grants",
+				"n|sch|public",
+				"n|col|public.openbot_credit_grants.operation_key"
+			]
+		},
+		{
+			"statementType": "add_unique",
+			"statementTarget": ["table", "public", "openbot_organizations"],
+			"writes": [
+				"s|uq|public.openbot_organizations.openbot_organizations_personal_owner_user_id_key",
+				"n|uq|public.openbot_organizations.openbot_organizations_personal_owner_user_id_key",
+				"e|uq|public.openbot_organizations.openbot_organizations_personal_owner_user_id_key",
+				"n|con|public.openbot_organizations.openbot_organizations_personal_owner_user_id_key",
+				"n|rel|public.openbot_organizations_personal_owner_user_id_key"
+			],
+			"reads": [
+				"n|tbl|public.openbot_organizations",
+				"n|sch|public",
+				"n|col|public.openbot_organizations.personal_owner_user_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_organizations"],
+			"writes": [
+				"s|fk|public.openbot_organizations.openbot_organizations_jCdostMmFu4c_fkey",
+				"n|fk|public.openbot_organizations.openbot_organizations_jCdostMmFu4c_fkey",
+				"e|fk|public.openbot_organizations.openbot_organizations_jCdostMmFu4c_fkey",
+				"n|con|public.openbot_organizations.openbot_organizations_jCdostMmFu4c_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_organizations",
+				"n|sch|public",
+				"n|tbl|public.openbot_auth_user",
+				"n|sch|public",
+				"n|col|public.openbot_organizations.personal_owner_user_id",
+				"n|col|public.openbot_auth_user.id",
+				"e|uniqueness|public.openbot_auth_user.id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_billing_policy",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_billing_policy",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_billing_policy",
+				"name": "prepaid",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_credit_grants",
+				"name": "operation_key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_organizations",
+				"name": "personal_owner_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_organizations",
+				"name": "openbot_organizations_jCdostMmFu4c_fkey",
+				"nameExplicit": false,
+				"columns": ["personal_owner_user_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_auth_user",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_billing_policy",
+				"name": "openbot_billing_policy_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_credit_grants",
+				"name": "openbot_credit_grants_operation_key_key",
+				"nameExplicit": false,
+				"columns": ["operation_key"],
+				"nullsNotDistinct": false,
+				"entityType": "uniques"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_organizations",
+				"name": "openbot_organizations_personal_owner_user_id_key",
+				"nameExplicit": false,
+				"columns": ["personal_owner_user_id"],
+				"nullsNotDistinct": false,
+				"entityType": "uniques"
+			}
+		}
+	]
+}

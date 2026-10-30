@@ -141,6 +141,7 @@ export const layer = (
 	settings: Omit<Configuration.Settings, "outboundAllow"> & {
 		readonly auth: AuthConfiguration
 		/** The local object storage for files, such as RustFS from devenv. */
+		readonly routes?: Server.AppOptions["routes"]
 		readonly fileStorage?: Api.FileStorageInput | undefined
 	},
 ) =>
@@ -153,7 +154,8 @@ export const layer = (
 			return Server.layerFixed({
 				...settings,
 				builtinModels,
-				routes: Layer.merge(
+				routes: Layer.mergeAll(
+					settings.routes ?? Layer.empty,
 					DevelopmentAuthorization.layerRoutes,
 					DevelopmentProofs.layerRoutes,
 				).pipe(
@@ -252,47 +254,51 @@ const createBucket = (storage: Storage) =>
  * the `OPENBOT_DEV_S3_*` variables. It gives the server the Node services and
  * the fetch HTTP client.
  */
-export const launch = ErrorReporting.withStartup(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		// Only the development entry reads the origin from the environment.
-		// It has one instance, and it writes the platform settings itself.
-		const publicOrigin = yield* Config.schema(
-			Api.PublicOrigin,
-			"OPENBOT_DEV_PUBLIC_ORIGIN",
-		)
-		const storage = yield* fileStorage
-		return yield* Layer.launch(
-			Layer.effectDiscard(
-				Effect.logInfo(
-					`Development login: POST ${publicOrigin}/auth/development/sign-in`,
-				),
-			).pipe(
-				Layer.provideMerge(
-					layer({
-						...settings,
-						fileStorage: Option.getOrUndefined(storage),
-						auth: {
-							mode: "development",
-							publicOrigin,
-							secret: developmentSecret(settings.secretKeys),
-						},
-					}),
-				),
-				// The server starts at once. The bucket comes when RustFS is ready.
-				Layer.provideMerge(
-					Layer.effectDiscard(
-						Option.match(storage, {
-							onNone: () => Effect.void,
-							onSome: (target) => Effect.forkScoped(createBucket(target)),
+export const launchWith = (routes?: Server.AppOptions["routes"]) =>
+	ErrorReporting.withStartup(
+		Effect.gen(function* () {
+			const settings = yield* EnvironmentConfiguration.load
+			// Only the development entry reads the origin from the environment.
+			// It has one instance, and it writes the platform settings itself.
+			const publicOrigin = yield* Config.schema(
+				Api.PublicOrigin,
+				"OPENBOT_DEV_PUBLIC_ORIGIN",
+			)
+			const storage = yield* fileStorage
+			return yield* Layer.launch(
+				Layer.effectDiscard(
+					Effect.logInfo(
+						`Development login: POST ${publicOrigin}/auth/development/sign-in`,
+					),
+				).pipe(
+					Layer.provideMerge(
+						layer({
+							...settings,
+							routes,
+							fileStorage: Option.getOrUndefined(storage),
+							auth: {
+								mode: "development",
+								publicOrigin,
+								secret: developmentSecret(settings.secretKeys),
+							},
 						}),
 					),
+					// The server starts at once. The bucket comes when RustFS is ready.
+					Layer.provideMerge(
+						Layer.effectDiscard(
+							Option.match(storage, {
+								onNone: () => Effect.void,
+								onSome: (target) => Effect.forkScoped(createBucket(target)),
+							}),
+						),
+					),
+					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+					Layer.provide(
+						OutboundGuard.layer(allowStorage(settings.outboundAllow, storage)),
+					),
 				),
-				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
-				Layer.provide(
-					OutboundGuard.layer(allowStorage(settings.outboundAllow, storage)),
-				),
-			),
-		)
-	}),
-)
+			)
+		}),
+	)
+
+export const launch = launchWith()

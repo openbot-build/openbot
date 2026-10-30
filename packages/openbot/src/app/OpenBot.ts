@@ -1,3 +1,4 @@
+import * as Access from "../access/Access.ts"
 import * as ConnectionScopes from "../resources/ConnectionScopes.ts"
 import * as ErrorRecords from "../errors/Records.ts"
 import * as ConnectionCommands from "../apps/ConnectionCommands.ts"
@@ -73,10 +74,15 @@ import * as ModelProvidersPostgres from "../models/ModelProvidersPostgres.ts"
 import * as ModelsPostgres from "../models/ModelsPostgres.ts"
 import * as SsoPostgres from "../sso/SsoPostgres.ts"
 import * as DomainControl from "../apps/DomainControl.ts"
+import * as Mail from "../mail/Mail.ts"
+import * as MailSmtp from "../mail/Smtp.ts"
+import type { Transport as MailTransport } from "../mail/Transport.ts"
 
 /** The settings of OpenBot. They are plain values. */
 export interface Options {
 	readonly databaseUrl: Redacted.Redacted<string>
+	/** An outside mail service for tests or a host. The default uses SMTP. */
+	readonly mailTransport?: Layer.Layer<MailTransport>
 	/**
 	 * Use the local test account instead of a sign-in provider. The public
 	 * origin and the sign-in secret still come from the platform settings.
@@ -283,6 +289,10 @@ export const layer = (options: Options) =>
 		Layer.provideMerge(Governance.layer),
 		Layer.provideMerge(Files.layer.pipe(Layer.provideMerge(FileTasks.layer))),
 		Layer.provideMerge(layerAccounts),
+		Layer.provideMerge(Access.layer),
+		Layer.provideMerge(
+			Mail.layer.pipe(Layer.provide(options.mailTransport ?? MailSmtp.layer)),
+		),
 		Layer.provideMerge(layerModels(options)),
 		Layer.provideMerge(
 			Layer.mergeAll(

@@ -438,8 +438,24 @@ Credits an sind.
 50 Vergaben. Es braucht `read` auf `Usage`. Ein Platform-Admin liest dasselbe
 mit `GET /v1/platform/organizations/:organizationId/credits`.
 
-OpenBot hat noch keine Zahlungen. Eine Platform, die Credits verkauft, speichert
-die Zahlung in ihrem eigenen System. Dann gibt sie die Credits über die API.
+Der persönliche Bereich hat ein eigenes Guthaben. Geld und Kosten wechseln nicht
+zwischen Bereichen. Die Rolle `billing` darf mit `Wallet.read` und
+`Wallet.write` das Wallet lesen und über die Zahlungs-API des Hosts aufladen.
+Sie erlaubt keinen Zugriff auf private Chats, Schlüssel oder
+Mitgliederverwaltung.
+
+Eine Vergabe kann einen `operationKey` enthalten. Derselbe Schlüssel mit
+denselben Daten gibt die erste Vergabe zurück, ohne erneut Geld zu buchen.
+Andere Daten mit demselben Schlüssel ergeben `409 CreditConflict`. Vergabe,
+Guthaben und Prüfprotokoll werden in einer Transaktion gespeichert.
+
+Ein Host kann mit dem öffentlichen Dienst `BillingHost` Vorauszahlung verlangen.
+Bestehendes Guthaben bleibt erhalten. Die Begrenzung gilt für alte und neue
+Bereiche und kann nicht abgeschaltet werden. Selbst betriebene Server behalten
+ihre Einstellungen, bis der Host diesen Modus einschaltet.
+
+OpenBot speichert Guthaben, keine Kartendaten. Der Host speichert Zahlungen in
+seinem System und bucht Guthaben über die API oder den öffentlichen Dienst.
 
 ---
 

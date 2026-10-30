@@ -74,12 +74,12 @@ it.layer(database, { excludeTestServices: true })((it) => {
 				started_at: 1,
 				updated_at: 1,
 			})}`
-			yield* db.insert(Tables.organizations).values({
+			yield* sql`insert into openbot_organizations ${sql.insert({
 				id: "saved-organization",
 				name: "Saved group",
 				status: "active",
-				createdAt: 1,
-			})
+				created_at: 1,
+			})}`
 			yield* sql`insert into openbot_auth_user ${sql.insert({
 				id: "saved-user",
 				name: "Saved user",

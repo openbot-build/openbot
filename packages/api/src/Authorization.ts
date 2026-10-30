@@ -42,6 +42,7 @@ export {
 	Token,
 	Trigger,
 	Usage,
+	Wallet,
 	Vault,
 	builtinRoles,
 	defaultTokenPolicy,
@@ -117,6 +118,7 @@ type OrganizationKind =
 	| "Sso"
 	| "AuditLog"
 	| "Usage"
+	| "Wallet"
 	| "Budget"
 
 /**
