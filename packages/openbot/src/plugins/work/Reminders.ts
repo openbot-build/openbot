@@ -1,7 +1,7 @@
 import { Secrets } from "../../secrets/Secrets.ts"
 import * as Failures from "../../errors/Failures.ts"
 import { Chat, Turn } from "@openbot-build/core"
-import { Bots as BotsApi } from "@openbot-build/domain"
+import { Bots as BotsApi, Reminders as Domain } from "@openbot-build/domain"
 import { Execution } from "@openbot-build/domain"
 import {
 	Clock,
@@ -13,10 +13,10 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { BotRecords } from "../../bots/BotRecords.ts"
+import { BotRecords, type Filter } from "../../bots/BotRecords.ts"
 import { hash } from "../../capabilities/Capability.ts"
 
-export const ReminderStatus = Schema.Literals(["waiting", "done", "cancelled"])
+export const ReminderStatus = Domain.Status
 export type ReminderStatus = typeof ReminderStatus.Type
 
 /**
@@ -73,6 +73,14 @@ export class Reminders extends Context.Service<
 			from: ReminderStatus,
 			to: ReminderStatus,
 		) => Effect.Effect<Option.Option<Reminder>, BotsApi.BotStorageUnavailable>
+		/** Bounded owner-scoped pages, decoded with the same binding as normal reminder work. */
+		readonly list: (
+			organizationId: string,
+			filter: Filter<ReminderStatus> & {
+				readonly owner: string
+				readonly limit: number
+			},
+		) => Effect.Effect<ReadonlyArray<Reminder>, BotsApi.BotStorageUnavailable>
 		/** The open reminders of a Chat. */
 		readonly forChat: (
 			organizationId: string,
@@ -129,10 +137,7 @@ export const make: Effect.Effect<
 					}),
 				),
 			),
-		list: (
-			organizationId: string,
-			filter: { readonly scope: string; readonly status: ReminderStatus },
-		) =>
+		list: (organizationId: string, filter: Filter<ReminderStatus>) =>
 			rows
 				.list(organizationId, filter)
 				.pipe(
@@ -194,6 +199,7 @@ export const make: Effect.Effect<
 				)
 			}),
 		find: reminders.find,
+		list: reminders.list,
 		change: (organizationId, id, from, to) =>
 			records.transaction(
 				id,

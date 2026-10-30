@@ -1320,6 +1320,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				)
 				const disconnected = yield* Ref.make(false)
 				const online = yield* Deferred.make<void>()
+				const firstActivity = yield* Deferred.make<ComputersApi.ToConnector>()
+				const checkedActivity = yield* Deferred.make<ComputersApi.ToConnector>()
 				const ended = yield* Deferred.make<void>()
 				const encode = Schema.encodeEffect(
 					Schema.fromJsonString(ComputersApi.FromConnector),
@@ -1349,6 +1351,15 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								: new TextDecoder().decode(frame),
 						).pipe(Effect.orDie)
 						yield* Ref.update(sent, (all) => [...all, message])
+						if (message._tag === "Ping") {
+							yield* reply({ _tag: "Pong" })
+							yield* Deferred.succeed(
+								message.activityRequestId === "idle-check"
+									? checkedActivity
+									: firstActivity,
+								message,
+							)
+						}
 						if (
 							message._tag === "Call" &&
 							message.call.operation._tag === "Read"
@@ -1421,6 +1432,16 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					},
 				})
 				yield* Deferred.await(online)
+				const initial = yield* Deferred.await(firstActivity)
+				assert.equal(initial._tag, "Ping")
+				if (initial._tag === "Ping") assert.equal(initial.activity, "idle")
+				yield* reply({ _tag: "Pong", activityRequestId: "idle-check" })
+				const fresh = yield* Deferred.await(checkedActivity)
+				assert.equal(fresh._tag, "Ping")
+				if (fresh._tag === "Ping") {
+					assert.equal(fresh.activityRequestId, "idle-check")
+					assert.equal(fresh.activity, "idle")
+				}
 				assert.equal(
 					yield* remote.call(identity, id, {
 						_tag: "Read",
@@ -1436,7 +1457,11 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				assert.ok(Schema.is(Execution.Failure)(denied))
 				if (Schema.is(Execution.Failure)(denied))
 					assert.equal(denied.category, "forbidden")
-				assert.equal((yield* Ref.get(sent)).length, 1)
+				assert.equal(
+					Arr.filter(yield* Ref.get(sent), (message) => message._tag === "Call")
+						.length,
+					1,
+				)
 				yield* Ref.set(allowed, true)
 				const process = yield* remote.start(identity, id, {
 					command: "cat",

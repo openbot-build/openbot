@@ -126,6 +126,11 @@ failure report. The program checks counts, references, secrets and states before
 it marks the data version ready. A server cannot start before that check passes.
 Live servers hold a shared database lock; the data move needs the only lock.
 
+Once a data version is ready, later runs apply pending schema migrations and
+check the schema without repeating that version’s data move. New Chat history
+must not be compared with the old import snapshot. An unfinished or blocked move
+still resumes and checks its records before it can become ready.
+
 Keep resource IDs, history and pending decisions in the backup. An old outside
 action with no known result stays `outcome_unknown`. Work with no safe
 checkpoint is marked `interrupted` with its reason. A missing original token

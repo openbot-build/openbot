@@ -13,6 +13,7 @@ import {
 	Option,
 	Queue,
 	Ref,
+	Schedule,
 	Schema,
 	Scope,
 	Stream,
@@ -26,6 +27,7 @@ import { Transport, type Handler } from "../../resources/Transport.ts"
 import * as Resource from "../../resources/Resource.ts"
 import { Directory } from "../../resources/Directory.ts"
 import * as Access from "../Access.ts"
+import * as Activity from "../Activity.ts"
 import {
 	ComputerCallFailed,
 	ComputerGone,
@@ -36,6 +38,23 @@ import {
 import * as ProcessSink from "../Process.ts"
 
 export const pingEvery = Duration.seconds(20)
+/** An unavailable activity read must not authorize idle cleanup. */
+export const taskActivity = <E, R>(
+	work: Effect.Effect<boolean, E, R>,
+	background: Background.Work,
+) =>
+	work.pipe(
+		Effect.timeout("5 seconds"),
+		Effect.map((working) =>
+			working ? ("working" as const) : ("idle" as const),
+		),
+		Effect.catchCause((cause) =>
+			Effect.failCause(cause).pipe(
+				background.logFailure("Computer task activity could not be read."),
+				Effect.as("unknown" as const),
+			),
+		),
+	)
 const defaultWait = Duration.minutes(2)
 export const oldConnector =
 	"This openbot-computer is too old. Update it, and then connect again."
@@ -97,6 +116,7 @@ const sameOwner = (a: ExecutionIdentity, b: ExecutionIdentity) =>
 
 export const make = Effect.gen(function* () {
 	const background = yield* Background.make
+	const activity = yield* Activity.make
 	const crypto = yield* Crypto.Crypto
 	const transport = yield* Transport
 	const directory = yield* Directory
@@ -384,20 +404,38 @@ export const make = Effect.gen(function* () {
 								input.online(hello.hello),
 							)
 							if (Option.isNone(active)) return
+							const ping = (activityRequestId?: string) =>
+								taskActivity(
+									activity.work(input.organizationId, input.computerId),
+									background,
+								).pipe(
+									Effect.flatMap((activity) =>
+										send({
+											_tag: "Ping",
+											activity,
+											...(activityRequestId === undefined
+												? {}
+												: { activityRequestId }),
+										}),
+									),
+								)
 							const unanswered = yield* Ref.make(0)
 							const heartbeat = Ref.modify(unanswered, (count) =>
 								count >= 2 ? [false, count] : [true, count + 1],
 							).pipe(
-								Effect.tap((alive) =>
-									alive ? send({ _tag: "Ping" }) : Effect.void,
-								),
-								Effect.delay(pingEvery),
-								Effect.repeat({ while: (alive) => alive }),
+								Effect.tap((alive) => (alive ? ping() : Effect.void)),
+								Effect.repeat({
+									while: (alive) => alive,
+									schedule: Schedule.spaced(pingEvery),
+								}),
 							)
 							const onMessage = (message: ComputerData.FromConnector) =>
 								Effect.gen(function* () {
-									if (message._tag === "Pong") yield* Ref.set(unanswered, 0)
-									else if (message._tag === "Reply") {
+									if (message._tag === "Pong") {
+										yield* Ref.set(unanswered, 0)
+										if (message.activityRequestId !== undefined)
+											yield* ping(message.activityRequestId)
+									} else if (message._tag === "Reply") {
 										const done = HashMap.get(
 											yield* Ref.get(waiting),
 											message.reply.id,

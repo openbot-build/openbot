@@ -39,3 +39,32 @@ Ausführungen. Du kannst ihre Ereignisse erneut lesen, ohne die Aktion neu zu
 starten. Eine verlorene Provider-Antwort bleibt unbekannt, bis eine Person sie
 prüft. Ein Abbruch allein beweist nicht, dass die Sandbox stillsteht. Pausen bei
 Leerlauf und automatische Fortsetzungen folgen denselben Regeln.
+
+## Ergebnisse speichern
+
+Ein Bot speichert fertige Ergebnisse mit `openbot_computer_export_file` aus
+einem Computer, den er benutzen darf, in den Dateien des Mitglieds. Die
+Parameter sind `computer`, `path`, `name` und `mediaType`. Das Ergebnis enthält
+native `file`- Metadaten und eine `uri` wie `openbot-file:file_…`. Binäre Daten
+gelangen nicht in den Modellkontext. Clients können beim Werkzeugergebnis einen
+Download zeigen.
+
+Die Datei bleibt mit ihrem Chat verbunden, wenn der temporäre Computer endet.
+Dateirechte sowie Grenzen für Größe, Typ und Speicherplatz gelten weiter. Die
+Administration muss Objektspeicher einrichten und den Ausgabetyp erlauben, etwa
+PowerPoint. Ein fehlgeschlagener Export ist kein gespeichertes Ergebnis. Der Bot
+muss die Quelle behalten und den Fehler nennen. Erst nach erfolgreichem Export
+darf er die Quelle löschen oder den Computer freigeben.
+
+Erneutes Verbinden oder Wiederholen desselben dauerhaften Werkzeugaufrufs
+liefert dieselbe Datei. Nach einer verlorenen Speicherantwort wird der Upload
+geprüft. Hat sich die Quelle eines offenen Exports geändert, schlägt der Export
+fehl, statt bereits zugeordnete Bytes zu überschreiben.
+
+Eine bereits hochgeladene Datei lässt sich mit `POST /v1/chats/:chatId/files`
+und `{ fileId, requestId, expected }` an einen ruhenden Chat anhängen. Es
+entsteht ein Benutzeranhang im Verlauf, ohne Turn oder Modellaufruf. Nach einer
+verlorenen Antwort wird dieselbe Anfrage-ID verwendet. Laufende oder wartende
+Arbeit verhindert einen neuen Anhang. Spätere Modellaufrufe erhalten
+ausdrücklich nur einen Downloadverweis, keine Dateibytes. Normale Dateieingaben
+in Nachrichten behalten ihr bisheriges Verhalten.

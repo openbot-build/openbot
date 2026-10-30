@@ -127,7 +127,7 @@ const startup = Effect.scoped(Migrations.checkStartup)
 it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 	(it) => {
 		it.effect(
-			"the old database resumes a full data move and accepts new Chat input",
+			"the old database resumes its data move and upgrades again after new Chat input",
 			() =>
 				Effect.gen(function* () {
 					const sql = yield* PgClient.PgClient
@@ -198,6 +198,8 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 					yield* sql`update openbot_channel_inbox set event = ${yield* Fixture.encode(Fixture.event("100"))} where event_id = '100'`
 					yield* Migrations.upgrade
 					yield* startup
+					// Model a stop after all batches, before the ready marker was committed.
+					yield* sql`update openbot_data_upgrades set state = 'converting', checked_at = null where version = ${Progress.version}`
 					const [sealedVault] = yield* sql<{
 						values: string
 					}>`select values from openbot_vault_items where id = 'vault-item'`
@@ -529,6 +531,24 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 							"member",
 						)
 					}).pipe(Effect.provide(runtime))
+					// New native Items have no legacy import proof. A later release must
+					// keep them and the completed conversion ledger unchanged.
+					const currentData = Effect.all({
+						items: sql`select * from openbot_chat_items order by namespace, chat, seq`,
+						chats: sql`select * from openbot_chats order by namespace, id`,
+						executions: sql`select * from openbot_executions order by namespace, id`,
+						upgrade: sql`select * from openbot_data_upgrades order by version`,
+						proofs: sql`select * from openbot_data_upgrade_records order by version, collection, key`,
+						steps: sql`select * from openbot_data_upgrade_steps order by version, step`,
+					})
+					const [nativeItems] = yield* sql<{
+						count: number
+					}>`select count(*)::float8 as count from openbot_chat_items i where not exists (select 1 from openbot_data_upgrade_records p where p.version = ${Progress.version} and p.collection = 'chat-item' and p.key = json_build_array(i.namespace, i.chat, i.seq)::text)`
+					assert.isAbove(nativeItems?.count ?? 0, 0)
+					const beforeRelease = yield* currentData
+					yield* Migrations.upgrade
+					yield* startup
+					assert.deepEqual(yield* currentData, beforeRelease)
 				}),
 			90_000,
 		)

@@ -147,6 +147,8 @@ layer(Layer.merge(NodeSocket.layerWebSocketConstructorWS, NodeServices.layer), {
 
 				yield* connection.send({ _tag: "Ping" })
 				assert.deepStrictEqual(yield* connection.next, { _tag: "Pong" })
+				yield* connection.send({ _tag: "Ping", activity: "working" })
+				assert.deepStrictEqual(yield* connection.next, { _tag: "Pong" })
 
 				yield* connection.send({
 					_tag: "Call",

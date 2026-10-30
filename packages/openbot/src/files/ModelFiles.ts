@@ -1,5 +1,5 @@
 import type { Files as FilesApi } from "@openbot-build/domain"
-import { Array as Arr, Effect, Option, Predicate, Stream } from "effect"
+import { Array as Arr, Effect, Option, Predicate, Schema, Stream } from "effect"
 import { AiError, type LanguageModel, Prompt } from "effect/ai"
 import type { Files } from "./Files.ts"
 import { fileIdOf } from "./Refs.ts"
@@ -20,6 +20,13 @@ const fileOf = (
 		? Option.map(fileIdOf(part.data), (id) => ({ part, id }))
 		: Option.none()
 
+/** Only the server's attachment route sets this marker. Normal input files carry their bytes. */
+const attachmentOptions = Schema.is(
+	Schema.Struct({ delivery: Schema.Literal("attachment") }),
+)
+const isAttachment = (part: Prompt.FilePart) =>
+	attachmentOptions(part.options?.["openbot"])
+
 /** Puts the bytes of a named file in the part. A file that is gone becomes a short text. */
 const resolvePart =
 	(load: Load) =>
@@ -32,19 +39,25 @@ const resolvePart =
 		Option.match(fileOf(part), {
 			onNone: () => Effect.succeed(part),
 			onSome: ({ part: file, id }) =>
-				Effect.map(
-					load(id),
-					Option.match({
-						onNone: () =>
+				isAttachment(file)
+					? Effect.succeed(
 							Prompt.makePart("text", {
-								text: `[The file ${file.fileName ?? id} was deleted.]`,
+								text: `[Saved attachment: ${file.fileName ?? id} (${file.data}). This is a download reference; the file contents are not included in the model context.]`,
 							}),
-						onSome: (content): Prompt.FilePart => ({
-							...file,
-							data: content.bytes,
-						}),
-					}),
-				),
+						)
+					: Effect.map(
+							load(id),
+							Option.match({
+								onNone: () =>
+									Prompt.makePart("text", {
+										text: `[The file ${file.fileName ?? id} was deleted.]`,
+									}),
+								onSome: (content): Prompt.FilePart => ({
+									...file,
+									data: content.bytes,
+								}),
+							}),
+						),
 		})
 
 /** Only user and assistant messages can hold file parts. */

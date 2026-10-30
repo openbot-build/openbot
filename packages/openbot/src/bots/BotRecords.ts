@@ -20,6 +20,8 @@ export interface Filter<Status extends string = string> {
 	readonly owner?: string
 	readonly scope?: string
 	readonly status?: Status
+	readonly after?: string
+	readonly limit?: number
 }
 
 /** Typed JSON records of one kind. */
@@ -110,7 +112,7 @@ export const make: Effect.Effect<
 				sql<{
 					id: string
 					body: string
-				}>`SELECT id, body FROM openbot_bot_records WHERE kind = ${kind} AND organization_id = ${organizationId} AND (${filter.owner ?? null}::text IS NULL OR owner = ${filter.owner ?? null}) AND (${filter.scope ?? null}::text IS NULL OR scope = ${filter.scope ?? null}) AND (${filter.status ?? null}::text IS NULL OR status = ${filter.status ?? null}) ORDER BY id`.pipe(
+				}>`SELECT id, body FROM openbot_bot_records WHERE kind = ${kind} AND organization_id = ${organizationId} AND (${filter.owner ?? null}::text IS NULL OR owner = ${filter.owner ?? null}) AND (${filter.scope ?? null}::text IS NULL OR scope = ${filter.scope ?? null}) AND (${filter.status ?? null}::text IS NULL OR status = ${filter.status ?? null}) AND (${filter.after ?? null}::text IS NULL OR id > ${filter.after ?? null}) ORDER BY id LIMIT ${filter.limit ?? null}`.pipe(
 					storageUnavailable("The Bot records could not be listed."),
 					// A record that does not decode fails the list. The log names it.
 					Effect.flatMap((rows) =>

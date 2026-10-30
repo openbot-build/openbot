@@ -19,7 +19,7 @@ import * as BotMemory from "./BotMemory.ts"
 import { Authorize, GroupRequired, Required, own } from "./Authorization.ts"
 import { BotErrors, BotId } from "./BotsApi.ts"
 import { Delegation, DelegationErrors } from "./DelegationsApi.ts"
-import { FileInvalid } from "./FilesApi.ts"
+import { FileErrors, FileInvalid } from "./FilesApi.ts"
 import { PlanApproval } from "./PlanApproval.ts"
 import { Schema } from "effect"
 import { ChatTodos } from "@openbot-build/domain"
@@ -118,6 +118,7 @@ import {
 	ChatBranch,
 	CreateConversationRequest,
 	ForkChatRequest,
+	AttachChatFileRequest,
 } from "@openbot-build/domain/Chats"
 export {
 	ChatKind,
@@ -135,6 +136,7 @@ export type ChatStatus = typeof ChatStatus.Type
 export {
 	CreateConversationRequest,
 	ForkChatRequest,
+	AttachChatFileRequest,
 } from "@openbot-build/domain/Chats"
 
 export const ChatInfo = Schema.Struct({
@@ -269,6 +271,17 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			success: ChatView.pipe(HttpApiSchema.status(201)),
 			error: [...ChatOperationErrors, ...BotErrors],
 		}).annotate(Required, [own("write", "Chat")]),
+		HttpApiEndpoint.post("attachFile", "/v1/chats/:chatId/files", {
+			params: chatParams,
+			payload: AttachChatFileRequest,
+			success: ChatView,
+			error: [...ChatOperationErrors, ...FileErrors],
+		})
+			.annotate(Required, [own("write", "Chat", "chatId")])
+			.annotate(
+				OpenApi.Description,
+				"Attaches one ready file as a user history item without starting a Turn. The Chat must be idle with no queued input. Reuse requestId to recover the same attachment.",
+			),
 		HttpApiEndpoint.post("forkChat", "/v1/chats/:chatId/forks", {
 			params: chatParams,
 			payload: ForkChatRequest,

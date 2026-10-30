@@ -21,7 +21,8 @@ type QueryError = Effect.Error<
 				| "direct"
 				| "createLive"
 				| "createConversation"
-				| "fork"]
+				| "fork"
+				| "attachFile"]
 	  >
 >
 type MappedError = Extract<

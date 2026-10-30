@@ -415,7 +415,7 @@ export type SessionSignal = typeof SessionSignal.Type
 
 /**
  * A message from OpenBot to a connector. Each WebSocket text frame holds one message as JSON.
- * OpenBot sends `Ping` every 20 seconds. The connector answers with `Pong`.
+ * OpenBot sends `Ping` at connection and every 20 seconds. The connector answers with `Pong`.
  *
  * `Start` runs a command in a new session. The command runs with `bash -lc` in its own
  * process group. With `tty`, it gets a terminal (a PTY), and stdout and stderr come
@@ -425,7 +425,16 @@ export type SessionSignal = typeof SessionSignal.Type
  */
 export const ToConnector = Schema.TaggedUnion({
 	Call: { call: ConnectorCall },
-	Ping: {},
+	Ping: {
+		/** Saved work for Bots granted this Computer. Missing or unknown does not mean idle. */
+		activity: Schema.optionalKey(
+			Schema.Literals(["working", "idle", "unknown"]),
+		),
+		/** Matches the connector request for a fresh activity read before idle cleanup. */
+		activityRequestId: Schema.optionalKey(
+			Schema.NonEmptyString.check(Schema.isMaxLength(100)),
+		),
+	},
 	Start: {
 		session: ConnectorSessionId,
 		/** A shell command. It runs with `bash -lc`. */
@@ -468,7 +477,12 @@ export type ToConnector = typeof ToConnector.Type
 export const FromConnector = Schema.TaggedUnion({
 	Hello: { hello: ConnectorHello },
 	Reply: { reply: ConnectorReply },
-	Pong: {},
+	Pong: {
+		/** Ask for a new scoped activity read. The next matching Ping carries its result. */
+		activityRequestId: Schema.optionalKey(
+			Schema.NonEmptyString.check(Schema.isMaxLength(100)),
+		),
+	},
 	Output: {
 		session: ConnectorSessionId,
 		seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

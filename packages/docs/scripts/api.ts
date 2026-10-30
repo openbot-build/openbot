@@ -77,6 +77,11 @@ const groups = [
 		"Accept an invitation to use a Bot in your own organization.",
 	],
 	[
+		"reminders",
+		"Reminders",
+		"Read and cancel the notes that a Bot saved to send you later.",
+	],
+	[
 		"triggers",
 		"Triggers",
 		"Give a task to a Bot with a prompt, on a schedule or from a webhook.",

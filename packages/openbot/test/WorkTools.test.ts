@@ -3,15 +3,18 @@ import { assert, describe, it } from "@effect/vitest"
 import { Bot, Chat, ChatStore, Turn } from "@openbot-build/core"
 import {
 	Array as Arr,
+	Clock,
+	DateTime,
 	Effect,
 	Layer,
 	Predicate,
 	Option,
 	Ref,
+	Schema,
 	Record as Rec,
 	Stream,
 } from "effect"
-import { Prompt, type Tool, Toolkit } from "effect/ai"
+import { Prompt, Tool, Toolkit } from "effect/ai"
 import { Answer, Gate } from "../src/capabilities/Gate.ts"
 import { Work } from "../src/capabilities/Work.ts"
 import * as ChatHost from "../src/chats/ChatHost.ts"
@@ -208,6 +211,113 @@ describe("plan tool", () => {
 })
 
 describe("reminder tool", () => {
+	it.effect(
+		"reminder time fields survive omitted and nullable wire forms, and missing time is not a conflict",
+		() =>
+			Effect.gen(function* () {
+				const checks = yield* Ref.make<ReadonlyArray<string>>([])
+				const calls = yield* Ref.make<ReadonlyArray<number>>([])
+				const now = yield* Clock.currentTimeMillis
+				const absolute = DateTime.formatIso(
+					DateTime.makeUnsafe(now + 7_200_000),
+				)
+				const work = yield* makeWork
+				const unused = {
+					modifyEffect: () => Effect.die("No Chat save is expected."),
+				}
+				yield* inTurn(work, unused, (toolkit) =>
+					(
+						toolkit as unknown as Effect.Effect<
+							Toolkit.WithHandler<WorkTools.Tools>
+						>
+					).pipe(
+						Effect.flatMap((handled) =>
+							Effect.gen(function* () {
+								const schema = Tool.getJsonSchema(
+									handled.tools[WorkTools.names.remind]!,
+								)
+								assert.deepStrictEqual(schema["required"], [
+									"seconds",
+									"until",
+									"note",
+								])
+								const good = [
+									{ seconds: 1800, note: "relative" },
+									{ seconds: 1800, until: null, note: "nullable relative" },
+									{ until: absolute, note: "absolute" },
+									{ seconds: null, until: absolute, note: "nullable absolute" },
+								]
+								for (const [index, input] of Arr.map(
+									good,
+									(input, index) => [index, input] as const,
+								)) {
+									const results = yield* handled
+										.handle(WorkTools.names.remind, input, "valid-" + index)
+										.pipe(Effect.flatMap(Stream.runCollect))
+									const value = yield* Schema.decodeUnknownEffect(
+										Schema.Struct({
+											reminder: Schema.String,
+											at: Schema.String,
+										}),
+									)(results[0]!.result)
+									assert.strictEqual(value.reminder, "rem-valid-" + index)
+								}
+								for (const input of [
+									{ note: "missing" },
+									{ seconds: null, until: null, note: "nulls" },
+								]) {
+									const results = yield* handled
+										.handle(WorkTools.names.remind, input, "missing")
+										.pipe(Effect.flatMap(Stream.runCollect))
+									const value = yield* Schema.decodeUnknownEffect(
+										Schema.Struct({ error: Schema.String }),
+									)(results[0]!.result)
+									assert.include(value.error, "time is missing")
+								}
+								const both = yield* handled
+									.handle(
+										WorkTools.names.remind,
+										{ seconds: 1800, until: absolute, note: "ambiguous" },
+										"both",
+									)
+									.pipe(Effect.flatMap(Stream.runCollect))
+								const value = yield* Schema.decodeUnknownEffect(
+									Schema.Struct({ error: Schema.String }),
+								)(both[0]!.result)
+								assert.include(value.error, "only one reminder time")
+							}),
+						),
+					),
+				).pipe(
+					Effect.provide(
+						pluginWith(checks, {
+							start: (_fence, callId, note, dueAt) =>
+								Ref.update(calls, Arr.append(dueAt)).pipe(
+									Effect.as({
+										id: "rem-" + callId,
+										userId: "user_1",
+										author: "user_1",
+										chat,
+										turn,
+										toolCallId: callId,
+										note,
+										createdAt: now,
+										dueAt,
+										status: "waiting" as const,
+									}),
+								),
+						}),
+					),
+				)
+				assert.deepStrictEqual(yield* Ref.get(calls), [
+					now + 1_800_000,
+					now + 1_800_000,
+					now + 7_200_000,
+					now + 7_200_000,
+				])
+			}),
+	)
+
 	it.effect("a reminder past the range of a date is not kept", () =>
 		Effect.gen(function* () {
 			const checks = yield* Ref.make<ReadonlyArray<string>>([])

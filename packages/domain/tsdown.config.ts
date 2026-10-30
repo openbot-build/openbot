@@ -31,6 +31,7 @@ export default defineConfig({
 		AppIndex: "src/AppIndex.ts",
 		CodeRuns: "src/CodeRuns.ts",
 		Requests: "src/Requests.ts",
+		Reminders: "src/Reminders.ts",
 		Delegations: "src/Delegations.ts",
 		Billing: "src/Billing.ts",
 		Bots: "src/Bots.ts",

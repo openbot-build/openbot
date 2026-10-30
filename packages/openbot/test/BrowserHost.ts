@@ -340,6 +340,16 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 						message.role === "tool" &&
 						Arr.some(message.content, (part) => part.type === "tool-result"),
 				)
+				if (input === "Remind me in thirty minutes" && !answered)
+					return Stream.make(
+						Response.makePart("tool-call", {
+							id: "fixture-reminder-" + lastUser,
+							name: "openbot_remind",
+							params: { seconds: 1800, until: null, note: "Review the result" },
+							providerExecuted: false,
+						}),
+						Response.makePart("finish", { reason: "tool-calls", usage }),
+					)
 				if (Str.includes("approval")(Str.toLowerCase(input)) && !answered)
 					return Stream.make(
 						Response.makePart("tool-call", {
@@ -397,7 +407,9 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		],
 	}
 	const configuration = {
-		...(options.internalToken === undefined ? {} : { internalToken: Redacted.make(options.internalToken) }),
+		...(options.internalToken === undefined
+			? {}
+			: { internalToken: Redacted.make(options.internalToken) }),
 		...(options.platformAdmins === undefined
 			? {}
 			: { platformAdmins: options.platformAdmins }),

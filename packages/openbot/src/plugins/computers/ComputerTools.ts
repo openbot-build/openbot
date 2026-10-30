@@ -1,6 +1,10 @@
-import { Computers as ComputerData } from "@openbot-build/domain"
+import {
+	Files as FileData,
+	Computers as ComputerData,
+} from "@openbot-build/domain"
 import {
 	Execution,
+	Authorization,
 	executionCallers,
 	Bots as BotsApi,
 } from "@openbot-build/domain"
@@ -12,6 +16,7 @@ import {
 	Effect,
 	HashSet,
 	Layer,
+	Option,
 	pipe,
 	Record as Rec,
 	Schema,
@@ -26,15 +31,32 @@ import { checkFile, Computers } from "../../computers/Computers.ts"
 import { Sessions } from "../../computers/Sessions.ts"
 import * as ChatHost from "../../chats/ChatHost.ts"
 import { hasImage, imageKey } from "../../providers/ToolImages.ts"
-import type * as ToolEntry from "../ToolEntry.ts"
+import * as ToolEntry from "../ToolEntry.ts"
 import { toolJson } from "../ToolJson.ts"
 import * as Report from "../../errors/Report.ts"
+import * as Check from "../../authorization/Check.ts"
+import { CallContext } from "../../execution/CallContext.ts"
+import { Files } from "../../files/Files.ts"
+import { fileUrl } from "../../files/Refs.ts"
+import { Base64 } from "effect/encoding"
 
 /**
  * The Computer tools. Their parameters are JSON Schema, like App tools.
  * Each tool makes its JSON Schema from the Schema that reads its input.
  */
-export type Tools = ToolEntry.Tools
+export type Tools = Record<
+	string,
+	Tool.Tool<
+		string,
+		{
+			readonly parameters: typeof Schema.Unknown
+			readonly success: typeof Schema.Json
+			readonly failure: typeof Schema.Never | typeof Execution.Failure
+			readonly failureMode: "error"
+		},
+		CallContext
+	>
+>
 
 export const names = {
 	list: "openbot_computers_list",
@@ -46,6 +68,7 @@ export const names = {
 	exec: "openbot_computer_exec",
 	writeStdin: "openbot_computer_write_stdin",
 	read: "openbot_computer_read_file",
+	export: "openbot_computer_export_file",
 	write: "openbot_computer_write_file",
 	files: "openbot_computer_list_files",
 	remove: "openbot_computer_remove_file",
@@ -165,6 +188,12 @@ const foreground = HashSet.make<ReadonlyArray<string>>(
 	names.pause,
 	names.resume,
 )
+const ExportInput = Schema.Struct({
+	computer: ComputerRef,
+	path: ComputerData.FileContent.fields.path,
+	name: FileData.FileName,
+	mediaType: FileData.MediaType,
+})
 const ReadInput = Schema.Struct({
 	computer: ComputerRef,
 	path: Path,
@@ -273,6 +302,8 @@ export const make = Effect.gen(function* () {
 	const computers = yield* Computers
 	const sessions = yield* Sessions
 	const providers = yield* ComputerProviders
+	const files = yield* Files
+	const checks = yield* Check.make
 	const gate = yield* Gate
 	return ComputerTools.of({
 		register: (input) =>
@@ -423,6 +454,78 @@ export const make = Effect.gen(function* () {
 						)
 					return { definition: marked, run }
 				}
+
+				const fileOwner = { kind: "member" as const, ...current.identity.owner }
+				const exported = (file: FileData.FileObject) =>
+					json({ file, uri: fileUrl(file.id).toString() })
+				const fileRights = (action: "read" | "write", id = "") =>
+					Check.execution(checks, current.identity, {
+						action,
+						resource: Authorization.File.make({
+							organizationId: fileOwner.organizationId,
+							ownerUserId: fileOwner.userId,
+							id,
+						}),
+					})
+				const recoverExport = (id: Execution.CallId) =>
+					files.saved(fileOwner, id).pipe(
+						Effect.tap((file) =>
+							Option.isSome(file)
+								? fileRights("read", file.value.id)
+								: Effect.void,
+						),
+						Effect.map(Option.map(exported)),
+						Effect.catch((error) =>
+							report("A Computer export could not be recovered", error).pipe(
+								Effect.flatMap(Effect.fail),
+							),
+						),
+					)
+				const exportTool = Tool.dynamic(names.export, {
+					description:
+						"Save a completed file from a Computer to the member's Files. Returns a permanent file reference, not its bytes. Do this before the final answer and before removing the temporary file or releasing its Computer. On failure, keep the source and report that the file was not saved.",
+					parameters: Tool.getJsonSchemaFromSchema(ExportInput),
+					success: Schema.Json,
+					failure: Execution.Failure,
+				})
+					.annotate(Operation.Budget, "foreground")
+					.annotate(ToolEntry.Idempotent, true)
+					.annotate(ToolEntry.SavedResult, recoverExport)
+					.addDependency(CallContext)
+				const runExport = (raw: unknown) =>
+					Effect.gen(function* () {
+						const request = yield* Schema.decodeUnknownEffect(ExportInput)(raw)
+						const call = yield* CallContext
+						yield* held(request.computer)
+						yield* fileRights("write")
+						const prior = yield* files.saved(fileOwner, call.id)
+						if (Option.isSome(prior)) return exported(prior.value)
+						const source = yield* onMachine(request.computer, (machine) =>
+							computers.work(machine.shell.read(request.path, "base64")),
+						)
+						const bytes = yield* Effect.fromResult(
+							Base64.decode(source.content),
+						)
+						const file = yield* files.save(fileOwner, {
+							key: call.id,
+							content: {
+								bytes,
+								fileName: request.name,
+								mediaType: request.mediaType,
+							},
+							reference: { namespace: current.namespace, chat: current.chat },
+						})
+						return exported(file)
+					}).pipe(
+						Effect.catchIf(
+							(error): error is Exclude<typeof error, Execution.Failure> =>
+								!Schema.is(Execution.Failure)(error),
+							(error) =>
+								report("A Computer file export failed", error).pipe(
+									Effect.map((failure) => json({ error: failure })),
+								),
+						),
+					)
 
 				const toolsFor = (input: ForOwnerInput) => [
 					tool(
@@ -833,6 +936,10 @@ export const make = Effect.gen(function* () {
 						),
 					),
 				)
+				const exportOwn = Toolkit.make(exportTool)
+				const exportHandlers = yield* exportOwn.toHandlers({
+					[names.export]: runExport,
+				})
 				// The list only helps the Bot. The tools still work without it.
 				const mine = yield* computers
 					.list(current.identity, current.bot.id)
@@ -852,6 +959,7 @@ export const make = Effect.gen(function* () {
 							content: Arr.join(
 								[
 									`You can work on Computers: machines where you run commands, change files and use a desktop. Use ${names.list} to see them.`,
+									`Save completed deliverables with ${names.export} before your final answer. Link the returned openbot-file URI. Do not ask the user to rescue temporary files before the Computer expires. Never remove the source or release its Computer until export succeeds. If export fails, keep the source and explain that saving failed.`,
 									mine.length === 0
 										? "You may use no Computer yet."
 										: "Computers that you may use:\n" +
@@ -870,8 +978,8 @@ export const make = Effect.gen(function* () {
 					]),
 				)
 				return {
-					tools: own.tools,
-					handlers,
+					tools: { ...own.tools, ...exportOwn.tools },
+					handlers: Context.merge(handlers, exportHandlers),
 					instructions,
 					transformPrompt: (prompt) => Effect.succeed(keepNewestImage(prompt)),
 				}

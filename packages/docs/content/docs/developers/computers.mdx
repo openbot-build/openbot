@@ -224,3 +224,24 @@ own execution. Restarting a node does not reset another node's work. An unknown
 idle pause accepts only `stop` from a member with current write rights. Check
 the provider before a new command. Unknown pause results do not close a use
 record as though the sandbox had stopped.
+
+### Task activity on paired machines
+
+The connector receives a `Ping` as soon as the connection is ready and every 20
+seconds. It replies with `Pong`. The optional `activity` field is `working`,
+`idle` or `unknown`. `working` means saved, unfinished work in a Chat whose Bot
+has access to this Computer, including time spent waiting for a model, approval
+or an outside result. A private Computer only counts work of its owner; a shared
+Computer counts work in its organization. No Chat content is sent.
+
+A connector that clears temporary files after idle time can use this signal to
+keep them through long model calls. Its own running commands also count as work.
+A missing field or `unknown` is not evidence of idle time. Reading activity does
+not start or retry a task. Membership expiry and access revocation still apply.
+
+Before clearing an idle workspace, a connector sends `Pong` with a fresh
+`activityRequestId` and waits for a `Ping` with the same ID. This reply uses a
+new activity read, not the last heartbeat. Only a matching `idle` reply allows
+idle cleanup; timeout or `unknown` does not. Keep local commands and new-message
+admission fenced while committing cleanup. The fresh read is the idle decision
+point; work admitted later starts after that decision.

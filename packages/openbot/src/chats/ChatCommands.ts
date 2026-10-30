@@ -6,6 +6,7 @@ import {
 	Turn,
 	Item,
 	ChatState,
+	TurnState,
 } from "@openbot-build/core"
 import {
 	Authorization,
@@ -20,6 +21,7 @@ import {
 import type {
 	CreateConversationRequest,
 	ForkChatRequest,
+	AttachChatFileRequest,
 } from "@openbot-build/domain/Chats"
 import { ChatMemory, defaultChatMemory } from "@openbot-build/domain/Chats"
 import {
@@ -31,6 +33,13 @@ import {
 	String as Str,
 } from "effect"
 import { ownerKey } from "../apps/StoredConnections.ts"
+import { Prompt } from "effect/ai"
+import { and, eq } from "drizzle-orm"
+import { chatItems } from "../database/Schema.ts"
+import { Files } from "../files/Files.ts"
+import { fileIdsIn } from "../files/Refs.ts"
+import * as Failures from "../errors/Failures.ts"
+import { ChatStorageUnavailable } from "@openbot-build/domain"
 import * as Check from "../authorization/Check.ts"
 import { Bots } from "../bots/Bots.ts"
 import * as Db from "../database/Database.ts"
@@ -47,6 +56,7 @@ export const make = Effect.gen(function* () {
 	const bots = yield* Bots
 	const models = yield* ModelRegistry
 	const checks = yield* Check.make
+	const files = yield* Files
 	const definition = yield* Store.define({
 		stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore, ...Todos.stores },
 		schemaVersion: "chat/1",
@@ -399,6 +409,102 @@ export const make = Effect.gen(function* () {
 			return copied.result
 		}).pipe(Effect.scoped)
 
+	const attachFile = (
+		caller: Caller,
+		chat: Chat.Id,
+		input: AttachChatFileRequest,
+	) =>
+		Effect.gen(function* () {
+			yield* check(caller, chat, "write")
+			yield* checks.check(caller, {
+				action: "read",
+				resource: Authorization.File.make({
+					organizationId: caller.organizationId,
+					ownerUserId: caller.userId,
+					id: input.fileId,
+				}),
+			})
+			const store = yield* records(caller)
+			// Files.prompt checks ownership and ready state, and keeps the bytes out of history.
+			const source = yield* files.prompt(caller, [
+				{
+					role: "user",
+					content: [{ type: "input_file", file_id: input.fileId }],
+				},
+			])
+			const content = Prompt.fromMessages(
+				Arr.map(source.content, (message) =>
+					message.role !== "user"
+						? message
+						: {
+								...message,
+								content: Arr.map(message.content, (part) =>
+									part.type !== "file"
+										? part
+										: {
+												...part,
+												options: {
+													...part.options,
+													openbot: { delivery: "attachment" },
+												},
+											},
+								),
+							},
+				),
+			)
+			const id = Item.Id.make("attachment_" + input.requestId)
+			yield* store.modifyEffect({
+				chat,
+				update: (current) =>
+					Effect.gen(function* () {
+						const found = yield* db
+							.select({ value: chatItems.value })
+							.from(chatItems)
+							.where(
+								and(
+									eq(chatItems.namespace, ownerKey(caller)),
+									eq(chatItems.chat, chat),
+									eq(chatItems.id, id),
+								),
+							)
+							.pipe(
+								Failures.replace(
+									"Could not read a Chat attachment receipt",
+									() => ChatStorageUnavailable.make({}),
+								),
+							)
+						if (found[0] !== undefined) {
+							const ids = fileIdsIn(found[0].value)
+							if (ids.length !== 1 || ids[0] !== input.fileId)
+								return yield* ChatConflict.make({
+									message:
+										"This request ID already names a different attachment.",
+								})
+							return [undefined, Option.none()] as const
+						}
+						if (current.chat.revision !== input.expected)
+							return yield* ChatConflict.make({
+								message:
+									"The Chat changed. Read its current revision before attaching the file.",
+							})
+						if (
+							(current.chat.turn !== undefined &&
+								!Turn.isTerminal(current.chat.turn.status)) ||
+							current.chat.inbox.length > 0
+						)
+							return yield* ChatConflict.make({
+								message:
+									"Wait for the current and queued work to finish before attaching a file.",
+							})
+						return [
+							undefined,
+							Option.some(TurnState.append(current, [{ id, content }])),
+						] as const
+					}),
+			})
+			return yield* store.read(chat)
+		}).pipe(Effect.scoped)
+
 	const update = (caller: Caller, chat: Chat.Id, input: ChatSettingsChange) =>
 		Effect.gen(function* () {
 			yield* check(caller, chat, "write")
@@ -479,6 +585,7 @@ export const make = Effect.gen(function* () {
 			})
 		}).pipe(Effect.scoped)
 	return {
+		attachFile,
 		direct,
 		fork,
 		createConversation: (caller: Caller, input: CreateConversationRequest) =>

@@ -1,9 +1,14 @@
 import { Computers, Execution } from "@openbot-build/domain"
-import { and, eq, inArray, notInArray } from "drizzle-orm"
+import { and, eq, inArray, isNull, notInArray, or } from "drizzle-orm"
 import { Array as Arr, Clock, Effect, Option } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Db from "../database/Database.ts"
-import { computers, executions } from "../database/Schema.ts"
+import {
+	chats,
+	computerAccess,
+	computers,
+	executions,
+} from "../database/Schema.ts"
 import { transactionFailures } from "../execution/Store.ts"
 
 export const workflowName = "openbot.computer-lifecycle"
@@ -35,6 +40,59 @@ export const make = Effect.gen(function* () {
 			)
 			.limit(1)
 			.pipe(Effect.map(Arr.head))
+	/** Saved work can need the Computer after a long model call, before the next tool call. */
+	const work = (organizationId: string, id: string) =>
+		db
+			.select({ id: executions.id })
+			.from(executions)
+			.innerJoin(
+				chats,
+				and(
+					eq(chats.namespace, executions.namespace),
+					or(
+						and(
+							eq(executions.contextKind, "Chat"),
+							eq(executions.contextId, chats.id),
+						),
+						and(
+							eq(executions.resourceKind, "Chat"),
+							eq(executions.resourceId, chats.id),
+						),
+						and(
+							eq(executions.resourceKind, "Turn"),
+							eq(executions.resourceId, chats.turn),
+						),
+					),
+				),
+			)
+			.innerJoin(
+				computerAccess,
+				and(
+					eq(computerAccess.organizationId, executions.organizationId),
+					eq(computerAccess.bot, chats.bot),
+				),
+			)
+			.innerJoin(
+				computers,
+				and(
+					eq(computers.organizationId, computerAccess.organizationId),
+					eq(computers.id, computerAccess.computerId),
+				),
+			)
+			.where(
+				and(
+					where(organizationId, id),
+					or(
+						isNull(computers.ownerUserId),
+						eq(computers.ownerUserId, executions.userId),
+					),
+					notInArray(executions.status, terminal),
+					// A future reminder can wait for days without using this Computer.
+					notInArray(executions.resourceKind, ["Reminder"]),
+				),
+			)
+			.limit(1)
+			.pipe(Effect.map((rows) => rows.length > 0))
 	const ready = (organizationId: string, id: string) =>
 		Effect.gen(function* () {
 			const found = yield* row(organizationId, id, true)
@@ -60,5 +118,5 @@ export const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(transactionFailures)
-	return { row, active, ready, mark }
+	return { row, active, work, ready, mark }
 })

@@ -33,10 +33,16 @@ import * as Lifecycle from "../src/computers/Lifecycle.ts"
 import * as LifecycleWorkflow from "../src/computers/LifecycleWorkflow.ts"
 import * as Maintenance from "../src/computers/Maintenance.ts"
 import * as MaintenanceWorkflow from "../src/computers/MaintenanceWorkflow.ts"
-import { Connectors } from "../src/computers/connector/Connectors.ts"
+import {
+	Connectors,
+	taskActivity,
+} from "../src/computers/connector/Connectors.ts"
+import * as Background from "../src/execution/Background.ts"
 import * as Db from "../src/database/Database.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import {
+	chats,
+	computerAccess,
 	computerProviders,
 	computers,
 	computerUsage,
@@ -221,6 +227,142 @@ const create = (
 	})
 
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
+	it.effect(
+		"failed activity reads report unknown and preserve the failure",
+		() =>
+			Effect.gen(function* () {
+				const background = yield* Background.make
+				assert.equal(
+					yield* taskActivity(Effect.succeed(true), background),
+					"working",
+				)
+				assert.equal(
+					yield* taskActivity(Effect.succeed(false), background),
+					"idle",
+				)
+				assert.equal(
+					yield* taskActivity(
+						Effect.fail(Execution.Forbidden.make({})),
+						background,
+					),
+					"unknown",
+				)
+			}),
+	)
+	it.effect(
+		"connector activity follows saved work and the Computer grant and owner",
+		() =>
+			Effect.gen(function* () {
+				const { commands, identity, work } = yield* setup(
+					"computer-task-activity",
+				)
+				const store = yield* Store.Store
+				const receipt = yield* create(commands, identity)
+				const key = {
+					namespace: identity.owner.organizationId,
+					id: receipt.executionId,
+				}
+				yield* work(yield* store.takeOver(key))
+				const computerId = (yield* store.get(key)).resource.id
+				const organizationId = identity.owner.organizationId
+				const db = yield* Db.make
+				const activity = yield* Activity.make
+				const namespace = organizationId + ":member"
+				const chat = "computer-activity-chat"
+				const execution = "computer-activity-turn"
+				yield* db.insert(chats).values({
+					namespace,
+					id: chat,
+					body: "{}",
+					state: "{}",
+					bot: "task-bot",
+					kind: "task",
+					status: "Running",
+					turn: "turn-activity",
+					revision: 0,
+					inboxSize: 0,
+					createdAt: 0,
+					updatedAt: 0,
+				})
+				yield* db.insert(executions).values({
+					namespace,
+					id: execution,
+					workflow: "openbot.chat-input",
+					resourceKind: "Turn",
+					resourceId: "turn-activity",
+					contextKind: "Chat",
+					contextId: chat,
+					organizationId,
+					userId: identity.owner.userId,
+					identity: "sealed by fixture",
+					input: "sealed by fixture",
+					status: "running",
+					createdAt: 0,
+					updatedAt: 0,
+				})
+				const update = (values: Partial<typeof executions.$inferInsert>) =>
+					db.update(executions).set(values).where(eq(executions.id, execution))
+				// Unrelated Bots do not keep a Computer alive.
+				assert.equal(yield* activity.work(organizationId, computerId), false)
+				yield* db.insert(computerAccess).values({
+					organizationId,
+					computerId,
+					bot: "task-bot",
+					grantedBy: identity.owner.userId,
+					grantedAt: 0,
+				})
+				// Live and direct inputs use the same saved execution ownership.
+				for (const kind of ["live", "direct", "task"]) {
+					yield* db
+						.update(chats)
+						.set({ kind, inboxSize: 1 })
+						.where(eq(chats.id, chat))
+					assert.equal(yield* activity.work(organizationId, computerId), true)
+				}
+				yield* update({
+					resourceKind: "Reminder",
+					resourceId: "reminder",
+					status: "waiting",
+				})
+				assert.equal(yield* activity.work(organizationId, computerId), false)
+				yield* update({ resourceKind: "Turn", resourceId: "turn-activity" })
+				// Age alone never turns a saved model call, queued input or unknown result into idle time.
+				for (const status of [
+					"running",
+					"queued",
+					"waiting",
+					"outcome_unknown",
+				]) {
+					yield* update({ status })
+					assert.equal(yield* activity.work(organizationId, computerId), true)
+				}
+				for (const status of Activity.terminal) {
+					yield* update({ status })
+					assert.equal(yield* activity.work(organizationId, computerId), false)
+				}
+				yield* update({ status: "running", userId: "another-member" })
+				assert.equal(yield* activity.work(organizationId, computerId), false)
+				yield* db
+					.update(computers)
+					.set({ ownerUserId: null })
+					.where(Activity.where(organizationId, computerId))
+				assert.equal(yield* activity.work(organizationId, computerId), true)
+				yield* update({ organizationId: "another-organization" })
+				assert.equal(yield* activity.work(organizationId, computerId), false)
+				yield* update({
+					organizationId,
+					resourceKind: "Chat",
+					resourceId: chat,
+					contextKind: null,
+					contextId: null,
+				})
+				assert.equal(yield* activity.work(organizationId, computerId), true)
+				yield* db
+					.delete(computerAccess)
+					.where(eq(computerAccess.computerId, computerId))
+				assert.equal(yield* activity.work(organizationId, computerId), false)
+			}),
+	)
 	it.effect(
 		"one Computer command stores one result through replay and takeover",
 		() =>

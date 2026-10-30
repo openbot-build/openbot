@@ -104,6 +104,12 @@ const implementations = Effect.gen(function* () {
 				const view = yield* commands.createConversation(caller, payload)
 				return ChatViews.project(yield* queries.describe(caller, view))
 			}).pipe(ChatErrors.map),
+		attachFile: ({ params, payload }: Request<"attachFile">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const view = yield* commands.attachFile(caller, params.chatId, payload)
+				return ChatViews.project(yield* queries.describe(caller, view))
+			}).pipe(ChatErrors.map),
 		forkChat: ({ params, payload }: Request<"forkChat">) =>
 			Effect.gen(function* () {
 				const caller = yield* Identity

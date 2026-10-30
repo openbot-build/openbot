@@ -237,6 +237,13 @@ export const run = Effect.gen(function* () {
 			message:
 				"This database has an unknown data version. Do not start it or change its records.",
 		})
+	// This data version is converted only once. New native work cannot be
+	// compared with the old import snapshot during a later schema upgrade.
+	const ready = yield* Progress.checkReady.pipe(
+		Effect.as(true),
+		Effect.catchTag("DataUpgradeRequired", () => Effect.succeed(false)),
+	)
+	if (ready) return
 	yield* sql`update openbot_data_upgrades set state = 'converting', checked_at = null, updated_at = ${yield* Clock.currentTimeMillis} where version = ${Progress.version}`
 	yield* progress.phase("prepare", prepare)
 	yield* progress.phase("chats", Chats.run)

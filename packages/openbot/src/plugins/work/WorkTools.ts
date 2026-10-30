@@ -50,8 +50,10 @@ const PlanInput = Schema.Struct({
 	summary: Schema.String,
 })
 const RemindInput = Schema.Struct({
-	seconds: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
-	until: Schema.optionalKey(Schema.String),
+	seconds: Schema.optionalKey(
+		Schema.NullOr(Schema.Finite.check(Schema.isGreaterThan(0))),
+	),
+	until: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	note: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4000)),
 })
 const sameTodos = Schema.toEquivalence(Schema.Array(Todo))
@@ -61,14 +63,18 @@ const dueAt = (
 	input: typeof RemindInput.Type,
 	now: number,
 ): number | string => {
-	if ((input.seconds === undefined) === (input.until === undefined))
-		return "Give either seconds or until, not both."
-	if (input.seconds !== undefined) {
-		const at = now + input.seconds * 1000
+	const seconds = input.seconds ?? undefined
+	const until = input.until ?? undefined
+	if (seconds === undefined && until === undefined)
+		return "A reminder time is missing. Give seconds (for example 7200 for two hours) or until (an ISO 8601 date and time), and set the unused field to null."
+	if (seconds !== undefined && until !== undefined)
+		return "Give only one reminder time: seconds or until. Set the unused field to null."
+	if (seconds !== undefined) {
+		const at = now + seconds * 1000
 		// A time past the range of a date cannot be shown, so it is not kept.
 		return Option.isNone(DateTime.make(at)) ? "seconds is too large." : at
 	}
-	const at = Date.parse(input.until!)
+	const at = Date.parse(until!)
 	if (Number.isNaN(at))
 		return "until must be a date and time, such as 2026-10-23T09:00:00Z."
 	return Math.max(at, now)
@@ -79,7 +85,7 @@ type CallContext = ToolEntry.CallContext
 const text = { type: "string" } as const
 const json = toolJson
 
-const remindInstructions = `To come back to something later, call ${names.remind} with seconds, or with until and a date and time, and a note. Your Turn does not wait. At that time, OpenBot sends you the note as a message.`
+const remindInstructions = `To come back to something later, call ${names.remind} with seconds, or with until and an ISO 8601 date and time, and a note. Always include both time fields and set the unused one to null. For two hours, use seconds: 7200 and until: null. A note without a time does not create a reminder. Your Turn does not wait. At that time, OpenBot sends you the note as a message.`
 
 const todoInstructions = `Keep a todo list when work has more than one step. Call ${names.todos} with the whole list each time it changes: when you plan the steps, when you start a step, and when you finish one. Keep one item in_progress at a time. While an item is not done, you go on working. If an item is not needed any more, remove it and say why. When every item is done, the list becomes empty at the end of your answer.`
 
@@ -216,15 +222,26 @@ export const durable = (fence: Fence) =>
 						)
 					const remindEntry = entry(
 						names.remind,
-						"Get a message from OpenBot later. Give seconds, or until with a date and time, and the note that you want to read then. Your Turn does not wait.",
+						"Get a message from OpenBot later. Give seconds or until with an ISO 8601 date and time, and a note. Include both time fields; exactly one is a value and the other is null. For two hours use seconds: 7200, until: null. Your Turn does not wait.",
 						{
 							type: "object",
 							properties: {
-								seconds: { type: "number", exclusiveMinimum: 0 },
-								until: { type: "string", format: "date-time" },
-								note: text,
+								seconds: {
+									type: ["number", "null"],
+									exclusiveMinimum: 0,
+									description:
+										"Delay in seconds, for example 7200 for two hours. Set until to null. Use null here when choosing until.",
+								},
+								until: {
+									type: ["string", "null"],
+									format: "date-time",
+									description:
+										"ISO 8601 date and time. Set seconds to null. Use null here when choosing seconds.",
+								},
+								note: { ...text, minLength: 1, maxLength: 4000 },
 							},
-							required: ["note"],
+							required: ["seconds", "until", "note"],
+							additionalProperties: false,
 						},
 						(raw, context) =>
 							Effect.gen(function* () {

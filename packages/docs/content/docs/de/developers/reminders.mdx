@@ -1,0 +1,30 @@
+---
+title: Erinnerungen
+description: Gespeicherte Erinnerungen lesen und abbrechen.
+---
+
+`openbot_remind` speichert eine Nachricht für später im selben Chat. Die
+vorhandene Ausführungsengine erhält sie über einen Serverneustart. Eine
+Erinnerung ist kein wiederkehrender Trigger.
+
+`GET /v1/reminders` listet Ihre Erinnerungen in der aktuellen Organisation.
+Optionale Parameter sind `chatId`, `status`, `after` und `limit` (1–100,
+Standard 50). Die Antwort enthält `{ items, next }`. Ein Eintrag hat `id`,
+`chatId`, `turnId`, `executionId`, `note`, `dueAt` und `status`. Übergeben Sie
+`next` als `after`, auch wenn eine Seite wegen fehlender Chat-Rechte leer ist.
+Die Abfrage prüft aktuelle Rechte und gibt keine Notizen anderer Mitglieder aus.
+
+Der Status ist `waiting`, `done` oder `cancelled`. `done` bedeutet nur, dass die
+Nachricht im Chat angekommen ist. Die folgende Aufgabe kann noch laufen; ihren
+Abschluss zeigt ihre eigene Ausführung.
+
+`GET /v1/reminders/:reminderId` liest einen Eintrag. Zum Abbrechen senden Sie
+`POST /v1/reminders/:reminderId/cancel` mit `{ "commandKey": "cancel-1" }`. Die
+Antwort ist die bestehende Ausführungsbestätigung. Behalten Sie bei einer
+verlorenen Antwort denselben Schlüssel und prüfen Sie die Ausführung. Der
+Endpunkt verwendet den bestehenden Abbruch und aktuelle Rechte. Es gibt keinen
+zweiten Scheduler. Importierte Erinnerungen ohne Ausführungs-ID bleiben lesbar;
+ein Abbruch liefert einen Konflikt.
+
+Das SDK bietet `Reminders.list`, `get` und `cancel`. Der Abbruchhelfer behält
+seinen Befehlsschlüssel beim erneuten Senden.

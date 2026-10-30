@@ -1,15 +1,23 @@
-import { Execution, TokenId, restrictExecution } from "@openbot-build/domain"
+import {
+	Files as FileData,
+	Authorization,
+	Execution,
+	TokenId,
+	restrictExecution,
+} from "@openbot-build/domain"
 import { assert, describe, it } from "@effect/vitest"
 import { ComputersApi } from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
 import {
 	Array as Arr,
+	Context,
 	Effect,
 	Layer,
 	Predicate,
 	Option,
 	Record as Rec,
 	Ref,
+	Schema,
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
@@ -20,8 +28,12 @@ import type { Machine } from "../src/computers/Computer.ts"
 import { ComputerProviders } from "../src/computers/ComputerProviders.ts"
 import { Computers } from "../src/computers/Computers.ts"
 import { Sessions } from "../src/computers/Sessions.ts"
+import { Idempotent, SavedResult } from "../src/plugins/ToolEntry.ts"
 import * as ComputerTools from "../src/plugins/computers/ComputerTools.ts"
 import { bot } from "./BotFixture.ts"
+import { Authorizer, Policy } from "@nmnmcc/ability"
+import { CallContext } from "../src/execution/CallContext.ts"
+import { Files } from "../src/files/Files.ts"
 import { Records } from "../src/errors/Records.ts"
 
 const { names } = ComputerTools
@@ -35,6 +47,8 @@ interface Seen {
 }
 
 interface Fakes {
+	readonly fileWrites?: boolean
+	readonly files?: Partial<Files["Service"]>
 	readonly computers?: Partial<Computers["Service"]>
 	readonly providers?: Partial<ComputerProviders["Service"]>
 }
@@ -53,6 +67,16 @@ const pluginWith = (seen: Seen, fakes: Fakes) =>
 			),
 		),
 		Layer.provide([
+			Authorizer.layer(Authorization.Auth, {
+				policy: () =>
+					Effect.succeed(
+						Policy.define(Authorization.OpenBot)(function* (_) {
+							if (fakes.fileWrites === false) yield* _.allow("read", "File")
+							else yield* _.allow("*", "*")
+						}),
+					),
+			}),
+			Layer.mock(Files, fakes.files ?? {}),
 			Layer.mock(Records, {
 				record: (_cause, category) =>
 					Effect.succeed({
@@ -116,7 +140,7 @@ const inTurn = <A, E>(
 	work: Work["Service"],
 	use: (
 		toolkit: Toolkit.WithHandler<ComputerTools.Tools>,
-	) => Effect.Effect<A, E, Work | Chat.Approvals | Gate>,
+	) => Effect.Effect<A, E, Work | Chat.Approvals | Gate | CallContext>,
 ) =>
 	Effect.gen(function* () {
 		const registration = yield* (yield* ComputerTools.ComputerTools).register({
@@ -126,7 +150,18 @@ const inTurn = <A, E>(
 		return yield* Effect.flatMap(toolkit, use).pipe(
 			Effect.provideContext(registration.handlers),
 		)
-	}).pipe(Effect.provideService(Work, work), Effect.scoped)
+	}).pipe(
+		Effect.provideService(Work, work),
+		Effect.provideService(CallContext, {
+			id: Execution.CallId.make("export-call"),
+			fence: {
+				namespace: work.namespace,
+				id: Execution.Id.make("execution_1"),
+				generation: 1,
+			},
+		}),
+		Effect.scoped,
+	)
 
 /** Runs a test with the plugin, its fakes and a Turn of the test Bot. */
 const withPlugin = <A, E>(
@@ -135,7 +170,7 @@ const withPlugin = <A, E>(
 		readonly seen: Seen
 		readonly work: Work["Service"]
 		readonly toolkit: Toolkit.WithHandler<ComputerTools.Tools>
-	}) => Effect.Effect<A, E, Work | Chat.Approvals | Gate>,
+	}) => Effect.Effect<A, E, Work | Chat.Approvals | Gate | CallContext>,
 ) =>
 	Effect.gen(function* () {
 		const seen = yield* Effect.all({
@@ -206,6 +241,228 @@ const unavailable = () =>
 
 describe("Computer tools", () => {
 	it.effect(
+		"export requires the caller's File write right before reading its source",
+		() =>
+			withPlugin(
+				{
+					fileWrites: false,
+					files: {
+						saved: () =>
+							Effect.die("A denied export must not read file records"),
+						save: () => Effect.die("A denied export must not upload"),
+					},
+					computers: {
+						holds: () => Effect.succeed(true),
+						machine: () =>
+							Effect.die("A denied export must not read the Computer"),
+					},
+				},
+				({ toolkit }) =>
+					Effect.gen(function* () {
+						const output = yield* toolkit
+							.handle(
+								names.export,
+								{
+									computer: "cmp_1",
+									path: "/workspace/result",
+									name: "result.txt",
+									mediaType: "text/plain",
+								},
+								"export-denied",
+							)
+							.pipe(Effect.flatMap(Stream.runCollect))
+						assert.include(
+							yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+								output,
+							),
+							'"error"',
+						)
+					}),
+			),
+	)
+
+	it.effect(
+		"exports bytes to Files once and recovers metadata without reading a recycled Computer",
+		() =>
+			Effect.gen(function* () {
+				const file: FileData.FileObject = {
+					id: FileData.FileId.make("file_output"),
+					object: "file",
+					filename: "slides.pptx",
+					mediaType:
+						"application/vnd.openxmlformats-officedocument.presentationml.presentation",
+					bytes: 5,
+					status: "ready",
+					createdAt: 1,
+				}
+				let saved: Option.Option<FileData.FileObject> = Option.none()
+				let reads = 0
+				let writes = 0
+				yield* withPlugin(
+					{
+						files: {
+							saved: () => Effect.succeed(saved),
+							save: (owner, input) =>
+								Effect.sync(() => {
+									writes++
+									assert.deepStrictEqual(owner, {
+										kind: "member",
+										organizationId: "org_1",
+										userId: "user_1",
+									})
+									assert.strictEqual(input.key, "export-call")
+									assert.deepStrictEqual(input.reference, {
+										namespace: "org_1:user_1",
+										chat: "chat_1",
+									})
+									assert.deepStrictEqual(
+										[...input.content.bytes],
+										[0, 1, 2, 3, 4],
+									)
+									saved = Option.some(file)
+									return file
+								}),
+						},
+						computers: {
+							holds: () => Effect.succeed(true),
+							work: Effect.orDie,
+							machine: () =>
+								Effect.succeed({
+									computer: {} as ComputersApi.Computer,
+									machine: {
+										...({} as Machine),
+										shell: {
+											read: (path: string, encoding: string) =>
+												Effect.sync(() => {
+													reads++
+													assert.strictEqual(encoding, "base64")
+													return {
+														path,
+														encoding: "base64" as const,
+														content: "AAECAwQ=",
+													}
+												}),
+										},
+									} as unknown as Machine,
+								}),
+						},
+					},
+					({ toolkit }) =>
+						Effect.gen(function* () {
+							const input = {
+								computer: "cmp_1",
+								path: "/workspace/slides.pptx",
+								name: file.filename,
+								mediaType: file.mediaType,
+							}
+							const first = yield* toolkit
+								.handle(names.export, input, "tool-export")
+								.pipe(Effect.flatMap(Stream.runCollect))
+							const second = yield* toolkit
+								.handle(names.export, input, "tool-export")
+								.pipe(Effect.flatMap(Stream.runCollect))
+							assert.deepStrictEqual(first, second)
+							assert.include(
+								yield* Schema.encodeEffect(
+									Schema.fromJsonString(Schema.Unknown),
+								)(first),
+								"openbot-file:file_output",
+							)
+							assert.notInclude(
+								yield* Schema.encodeEffect(
+									Schema.fromJsonString(Schema.Unknown),
+								)(first),
+								"AAECAwQ=",
+							)
+							assert.strictEqual(reads, 1)
+							assert.strictEqual(writes, 1)
+							assert.strictEqual(
+								Context.get(
+									toolkit.tools[names.export]!.annotations,
+									Idempotent,
+								),
+								true,
+							)
+							const recover = Context.get(
+								toolkit.tools[names.export]!.annotations,
+								SavedResult,
+							)
+							assert.ok(recover)
+							assert.deepStrictEqual(
+								yield* recover(Execution.CallId.make("export-call"), input),
+								Option.some({ file, uri: "openbot-file:file_output" }),
+							)
+							assert.strictEqual(reads, 1)
+						}),
+				)
+			}),
+	)
+	it.effect(
+		"a failed export reports an error and does not advertise a saved attachment",
+		() =>
+			withPlugin(
+				{
+					files: {
+						saved: () => Effect.succeedNone,
+						save: () =>
+							Effect.fail(
+								FileData.FileQuotaExceeded.make({
+									message: "Full",
+									quotaBytes: 1,
+									usedBytes: 1,
+								}),
+							),
+					},
+					computers: {
+						holds: () => Effect.succeed(true),
+						work: Effect.orDie,
+						machine: () =>
+							Effect.succeed({
+								computer: {} as ComputersApi.Computer,
+								machine: {
+									shell: {
+										read: (path: string) =>
+											Effect.succeed({
+												path,
+												encoding: "base64" as const,
+												content: "AAECAwQ=",
+											}),
+									},
+								} as unknown as Machine,
+							}),
+					},
+				},
+				({ toolkit }) =>
+					Effect.gen(function* () {
+						const output = yield* toolkit
+							.handle(
+								names.export,
+								{
+									computer: "cmp_1",
+									path: "/workspace/result",
+									name: "result.txt",
+									mediaType: "text/plain",
+								},
+								"export-error",
+							)
+							.pipe(Effect.flatMap(Stream.runCollect))
+						assert.include(
+							yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+								output,
+							),
+							'"error"',
+						)
+						assert.notInclude(
+							yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+								output,
+							),
+							"openbot-file:",
+						)
+					}),
+			),
+	)
+
+	it.effect(
 		"held Computer tools check the task input token before using a machine or session",
 		() =>
 			Effect.gen(function* () {
@@ -236,7 +493,7 @@ describe("Computer tools", () => {
 							Effect.die("A denied token must not open the Computer."),
 					},
 				}
-				for (const name of [names.screenshot, names.writeStdin]) {
+				for (const name of [names.screenshot, names.writeStdin, names.export]) {
 					yield* inTurn(
 						{ ...work, identity: restrictExecution(work.identity, [caller]) },
 						(toolkit) =>
@@ -245,6 +502,9 @@ describe("Computer tools", () => {
 									name,
 									{
 										computer: "computer",
+										path: "/workspace/file.txt",
+										name: "file.txt",
+										mediaType: "text/plain",
 										session: "cse_one",
 										chars: "run\n",
 										rows: 24,
@@ -256,6 +516,7 @@ describe("Computer tools", () => {
 					).pipe(Effect.provide(pluginWith(seen, fakes)))
 				}
 				assert.deepStrictEqual(yield* Ref.get(checked), [
+					"narrow:computer:use",
 					"narrow:computer:use",
 					"narrow:computer:use",
 				])
@@ -365,7 +626,7 @@ describe("Computer tools", () => {
 						machine: () =>
 							Effect.succeed({
 								computer: {} as ComputersApi.Computer,
-								machine: {} as Machine,
+								machine: {} as unknown as Machine,
 							}),
 						work: Effect.orDie,
 					},

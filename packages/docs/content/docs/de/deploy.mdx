@@ -135,6 +135,12 @@ prüft Anzahl, Verweise, Geheimnisse und Zustände. Erst dann ist die Datenversi
 bereit und der Server darf starten. Laufende Server halten eine gemeinsame
 Datenbanksperre. Die Umstellung braucht eine alleinige Sperre.
 
+Ist eine Datenversion bereit, führen spätere Läufe nur noch offene
+Schema-Migrationen und die Schemaprüfung aus. Sie wiederholen die Umstellung
+dieser Datenversion nicht. Neue Chat-Einträge werden nicht mit dem alten
+Importstand verglichen. Ein offener oder blockierter Lauf muss weiterlaufen und
+seine Einträge prüfen, bevor er bereit ist.
+
 Die Sicherung behält Ressourcen-IDs, Verlauf und offene Entscheidungen. Alte
 externe Aktionen ohne bekanntes Ergebnis bleiben `outcome_unknown`. Arbeit ohne
 sicheren Prüfpunkt wird mit Grund als `interrupted` markiert. Ein fehlendes

@@ -24,6 +24,7 @@ import { BotInvitationsApi, BotsApi } from "./BotsApi.ts"
 import { RequestsApi } from "./RequestsApi.ts"
 import { MemberSettingsApi } from "./MemberSettingsApi.ts"
 import { TriggerHooksApi, TriggersApi } from "./TriggersApi.ts"
+import { RemindersApi } from "./RemindersApi.ts"
 import { FilesApi } from "./FilesApi.ts"
 import { ChannelHooksApi, ChannelLinksApi, ChannelsApi } from "./ChannelsApi.ts"
 import {
@@ -76,6 +77,7 @@ type Groups =
 	| typeof BotInvitationsApi
 	| typeof RequestsApi
 	| typeof MemberSettingsApi
+	| typeof RemindersApi
 	| typeof TriggersApi
 	| typeof TriggerHooksApi
 	| typeof ChannelsApi
@@ -130,6 +132,7 @@ const contract: HttpApi.HttpApi<"openbot-api", Groups> = HttpApi.make(
 		BotInvitationsApi,
 		RequestsApi,
 		MemberSettingsApi,
+		RemindersApi,
 		TriggersApi,
 		TriggerHooksApi,
 		ChannelsApi,

@@ -1,0 +1,22 @@
+---
+title: 提醒
+description: 查看和取消 Bot 为你保存的提醒。
+---
+
+`openbot_remind`
+会在同一对话中保存一条稍后发送的消息。它复用现有执行引擎，服务器重启后仍然有效。单次提醒与循环触发器是不同的对象。
+
+`GET /v1/reminders` 列出当前组织中属于你的提醒。可选查询参数为 `chatId`、
+`status`、`after` 和 `limit`（1–100，默认 50）。返回 `{ items, next }`。每项包含
+`id`、`chatId`、`turnId`、`executionId`、`note`、`dueAt` 和 `status`。将 `next`
+作为下一页的
+`after`；即使某页因权限过滤而没有条目，只要仍有游标就应继续。每次请求都会检查当前对话权限，不会返回其他成员的提醒。
+
+状态为 `waiting`、`done` 或 `cancelled`。`done`
+只表示消息已经送入对话，不代表后续任务已经完成；后续工作的结果应通过对应执行记录查询。
+
+`GET /v1/reminders/:reminderId` 读取单条提醒。
+`POST /v1/reminders/:reminderId/cancel` 接收
+`{ "commandKey": "cancel-1" }`，返回现有执行回执。响应丢失时保留同一个 key，并查询执行记录确认取消。该接口复用执行取消和当前权限检查，不建立新的调度器。缺少执行 ID 的导入提醒仍可查看，但取消会返回冲突。
+
+SDK 提供 `Reminders.list`、`get` 和 `cancel`，取消助手会保留重试所需的命令 key。

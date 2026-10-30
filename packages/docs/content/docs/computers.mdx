@@ -38,3 +38,30 @@ can reconnect to their events without starting the action again. A lost provider
 reply leaves an unknown result for a person to check. A cancel request alone
 does not mean the sandbox has stopped. Automatic idle pauses and resumes follow
 the same rules.
+
+## Keep the results
+
+A Bot saves completed deliverables with `openbot_computer_export_file`. It reads
+one file from a Computer it may use and saves it in the member's Files. The tool
+takes `computer`, `path`, `name` and `mediaType`. Its result has the native
+`file` metadata and a `uri` such as `openbot-file:file_…`; it does not put
+binary bytes in the model context. Clients can show a download next to the tool
+result.
+
+The file stays linked to its Chat when the temporary Computer stops. Normal file
+permissions, size, type and member quota limits apply. The administrator must
+configure object storage and allow the output type, such as a PowerPoint file.
+An export failure is not a saved deliverable. The Bot must keep the source,
+explain the failure, and must not delete or release it before export succeeds.
+
+Reconnecting or replaying the same durable tool call returns the same file. A
+lost storage reply is checked before another upload. If the source changed after
+a pending export started, that export fails instead of replacing its bytes.
+
+An already uploaded file can also be saved to an idle Chat with
+`POST /v1/chats/:chatId/files` and `{ fileId, requestId, expected }`. It creates
+a user attachment in history, without starting a Turn. Reuse the same request ID
+when checking a lost reply. Current or queued work blocks a new attachment. This
+saved attachment is a download reference. Future model calls receive an explicit
+reference note, not the file bytes. Files submitted as normal message input keep
+their existing content behavior.

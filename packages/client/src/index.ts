@@ -26,3 +26,5 @@ export * as DeveloperTests from "./DeveloperTests.ts"
 export * as Connections from "./Connections.ts"
 
 export * as Computers from "./Computers.ts"
+
+export * as Reminders from "./Reminders.ts"

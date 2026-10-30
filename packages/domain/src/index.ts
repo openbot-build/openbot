@@ -95,3 +95,5 @@ export * as Accounts from "./Accounts.ts"
 export * as BotSharing from "./BotSharing.ts"
 
 export * as Live from "./Live.ts"
+
+export * as Reminders from "./Reminders.ts"

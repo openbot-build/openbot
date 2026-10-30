@@ -58,6 +58,14 @@ export const ChatRequestId = Schema.String.check(
 	Schema.isPattern(/^[A-Za-z0-9_-]{1,96}$/),
 )
 
+/** Attaches an existing file to an idle Chat without starting a Turn. */
+export const AttachChatFileRequest = Schema.Struct({
+	fileId: FileId,
+	requestId: ChatRequestId,
+	expected: Chat.Revision,
+})
+export type AttachChatFileRequest = typeof AttachChatFileRequest.Type
+
 export const CreateConversationRequest = Schema.Struct({
 	botId: BotId,
 	requestId: ChatRequestId,

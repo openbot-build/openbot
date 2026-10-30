@@ -237,3 +237,27 @@ Pause hat eine eigene Ausführung. Ein Neustart setzt fremde Arbeit nicht zurüc
 Bei unbekanntem Ergebnis einer solchen Pause darf nur ein Mitglied mit aktuellen
 Schreibrechten `stop` senden. Ein unbekanntes Ergebnis beendet keinen
 Nutzungsnachweis wie eine bestätigte Pause.
+
+### Aufgaben auf gekoppelten Computern
+
+Sobald die Verbindung bereit ist und danach alle 20 Sekunden sendet der Server
+`Ping`. Der Connector antwortet mit `Pong`. Das optionale Feld `activity`
+enthält `working`, `idle` oder `unknown`. `working` bedeutet gespeicherte,
+offene Arbeit in einem Chat, dessen Bot Zugriff auf diesen Computer hat. Dazu
+gehört das Warten auf ein Modell, eine Freigabe oder ein externes Ergebnis.
+Private Computer zählen nur Arbeit ihres Eigentümers, geteilte Computer Arbeit
+ihrer Organisation. Die Nachricht enthält keinen Chat-Inhalt.
+
+Ein Connector kann damit temporäre Dateien während langer Modellaufrufe
+behalten. Eigene laufende Befehle zählen ebenfalls als Arbeit. Ein fehlendes
+Feld oder `unknown` bedeutet nicht, dass der Computer inaktiv ist. Die Abfrage
+startet keine Aufgabe und wiederholt keine Aktion. Ablaufende Mitgliedschaften
+und entzogene Rechte gelten weiterhin.
+
+Vor dem Leeren eines inaktiven Arbeitsbereichs sendet der Connector `Pong` mit
+einer neuen `activityRequestId`. Er wartet auf `Ping` mit derselben ID. Diese
+Antwort fragt den Status neu ab. Nur eine passende Antwort mit `idle` erlaubt
+die Bereinigung; ein Timeout oder `unknown` nicht. Laufende Befehle und neue
+Nachrichten müssen während der Bereinigung gesperrt bleiben. Die neue Abfrage
+ist der Zeitpunkt der Inaktivitätsentscheidung; später angenommene Arbeit
+beginnt nach dieser Entscheidung.
