@@ -202,6 +202,8 @@ export const durable = (fence: Fence) =>
 											commandKey: yield* commandKey(names.capture, call),
 											turnId: work.turn,
 										},
+										true,
+										fence,
 									)
 									return yield* artifacts.waitResult(identity.actor, receipt)
 								}),
@@ -289,6 +291,8 @@ export const durable = (fence: Fence) =>
 											commandKey: yield* commandKey(names.publish, call),
 										},
 										request.artifactId,
+										true,
+										fence,
 									)
 									return yield* artifacts.waitResult(identity.actor, receipt)
 								}),

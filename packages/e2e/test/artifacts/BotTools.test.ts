@@ -1,10 +1,11 @@
 import { assert, layer } from "@effect/vitest"
 import { ArtifactsApi, ChatItem, ExecutionsApi } from "@openbot-build/api"
-import { Artifacts } from "@openbot-build/domain"
+import { Artifacts, Execution } from "@openbot-build/domain"
 import { BrowserHost, Caller, Messages } from "@openbot-build/openbot/testing"
 import {
 	Array as Arr,
 	Effect,
+	HashSet,
 	Option,
 	Schema,
 	Stream,
@@ -30,6 +31,42 @@ const json = <S extends Schema.Constraint>(
 	call: Caller.Call,
 	status = 200,
 ) => Effect.flatMap(call, Caller.json(schema, status))
+const executionTree = (send: Messages.Send, root: Execution.Id) =>
+	Effect.gen(function* () {
+		let pending: ReadonlyArray<Execution.Id> = [root]
+		let seen = HashSet.empty<Execution.Id>()
+		let events: ReadonlyArray<Execution.Event> = []
+		while (pending.length > 0) {
+			const id = pending[0]!
+			pending = Arr.drop(pending, 1)
+			if (HashSet.has(seen, id)) continue
+			seen = HashSet.add(seen, id)
+			const record = yield* json(
+				Execution.Record,
+				send(`/v1/executions/${id}`, "GET"),
+			)
+			assert.strictEqual(record.status, "completed")
+			let after = 0
+			while (true) {
+				const page = yield* json(
+					ExecutionsApi.EventPage,
+					send(`/v1/executions/${id}/events?afterSequence=${after}`, "GET"),
+				)
+				events = [...events, ...page.events]
+				pending = [
+					...pending,
+					...Arr.flatMap(page.events, (event) =>
+						event.body._tag === "ChildExecution"
+							? [event.body.executionId]
+							: [],
+					),
+				]
+				if (page.events.length === 0 || page.afterSequence <= after) break
+				after = page.afterSequence
+			}
+		}
+		return events
+	})
 const resultsOf = (prompt: Prompt.Prompt) =>
 	Arr.flatMap(prompt.content, (message) =>
 		message.role === "tool"
@@ -231,12 +268,60 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				const before = yield* Messages.settled(send, first.chat)
 				assert.strictEqual(before.response?.status, "completed")
+				const firstTree = yield* executionTree(send, first.executionId)
+				const firstChildren = Arr.filter(
+					firstTree,
+					(event) => event.body._tag === "ChildExecution",
+				)
+				assert.strictEqual(firstChildren.length, 4)
+				assert.strictEqual(
+					HashSet.size(
+						HashSet.fromIterable(
+							Arr.flatMap(firstChildren, (event) =>
+								event.body._tag === "ChildExecution"
+									? [event.body.executionId]
+									: [],
+							),
+						),
+					),
+					4,
+				)
+				assert.strictEqual(
+					Arr.countBy(
+						firstTree,
+						(event) => event.body._tag === "SourceCaptured",
+					),
+					2,
+				)
+				assert.strictEqual(
+					Arr.countBy(
+						firstTree,
+						(event) =>
+							event.body._tag === "ArtifactPublished" &&
+							event.body.version === 1,
+					),
+					2,
+				)
 				const path = `/v1/chats/${first.chat}`
 				const sources = yield* json(
 					ArtifactsApi.SourcePage,
 					send(path + "/sources", "GET"),
 				)
 				assert.strictEqual(sources.items.length, 2)
+				assert.ok(
+					Arr.every(
+						firstTree,
+						(event) =>
+							event.body._tag !== "SourceCaptured" ||
+							(event.body.chatId === first.chat &&
+								Arr.some(
+									sources.items,
+									(source) =>
+										event.body._tag === "SourceCaptured" &&
+										source.id === event.body.sourceId,
+								)),
+					),
+				)
 				const annotations = Arr.flatMap(
 					before.response?.output ?? [],
 					(message) =>
@@ -250,6 +335,20 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					send(path + "/artifacts", "GET"),
 				)
 				assert.strictEqual(initial.items.length, 2)
+				assert.ok(
+					Arr.every(
+						firstTree,
+						(event) =>
+							event.body._tag !== "ArtifactPublished" ||
+							(event.body.chatId === first.chat &&
+								Arr.some(
+									initial.items,
+									(artifact) =>
+										event.body._tag === "ArtifactPublished" &&
+										artifact.id === event.body.artifactId,
+								)),
+					),
+				)
 				const second = yield* Messages.send(
 					send,
 					first.chat,
@@ -257,6 +356,23 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				const after = yield* Messages.settled(send, second.chat)
 				assert.strictEqual(after.response?.status, "completed")
+				const secondTree = yield* executionTree(send, second.executionId)
+				assert.strictEqual(
+					Arr.countBy(
+						secondTree,
+						(event) => event.body._tag === "ChildExecution",
+					),
+					2,
+				)
+				assert.strictEqual(
+					Arr.countBy(
+						secondTree,
+						(event) =>
+							event.body._tag === "ArtifactPublished" &&
+							event.body.version === 2,
+					),
+					2,
+				)
 				const updated = yield* json(
 					ArtifactsApi.ArtifactPage,
 					send(path + "/artifacts", "GET"),
@@ -267,6 +383,20 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 				assert.ok(
 					Arr.every(updated.items, (entry) => entry.latestVersion === 2),
+				)
+				assert.ok(
+					Arr.every(
+						secondTree,
+						(event) =>
+							event.body._tag !== "ArtifactPublished" ||
+							(event.body.chatId === second.chat &&
+								Arr.some(
+									updated.items,
+									(artifact) =>
+										event.body._tag === "ArtifactPublished" &&
+										artifact.id === event.body.artifactId,
+								)),
+					),
 				)
 				for (const artifact of updated.items) {
 					const detail = yield* json(

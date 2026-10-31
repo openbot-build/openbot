@@ -163,12 +163,14 @@ export interface Service {
 		request: Publish,
 		artifactId?: Data.ArtifactId,
 		trusted?: boolean,
+		parent?: Fence,
 	) => Effect.Effect<Execution.Receipt, Failure>
 	readonly captureFor: (
 		identity: ExecutionIdentity,
 		chat: Chat.Id,
 		request: ArtifactCommands.CaptureSourceRequest,
 		trusted?: boolean,
+		parent?: Fence,
 	) => Effect.Effect<Execution.Receipt, Failure>
 	readonly publish: (
 		caller: Caller,
@@ -590,6 +592,7 @@ const make = Effect.gen(function* () {
 		identity: ExecutionIdentity,
 		input: typeof Input.Type,
 		trusted: boolean,
+		parent?: Fence,
 	) =>
 		Effect.gen(function* () {
 			const access = yield* authorizeIdentity(identity, input.chat, "write")
@@ -638,67 +641,101 @@ const make = Effect.gen(function* () {
 				{ actor: identity.actor, body },
 				(allocate) =>
 					Effect.gen(function* () {
-						if (input._tag === "Publish" && input.expectedVersion > 0) {
-							const locked = (yield* db
-								.select()
-								.from(artifacts)
-								.where(eq(artifacts.id, input.artifactId))
-								.for("update"))[0]
-							if (
-								locked === undefined ||
-								locked.latestVersion !== input.expectedVersion
-							)
-								return yield* Data.ArtifactConflict.make({
-									message: "The artifact version is out of date.",
-								})
-							const active = yield* db
-								.select({ id: artifactJobs.executionId })
-								.from(artifactJobs)
-								.innerJoin(
-									executions,
-									eq(artifactJobs.executionId, executions.id),
+						const create = Effect.gen(function* () {
+							if (input._tag === "Publish" && input.expectedVersion > 0) {
+								const locked = (yield* db
+									.select()
+									.from(artifacts)
+									.where(eq(artifacts.id, input.artifactId))
+									.for("update"))[0]
+								if (
+									locked === undefined ||
+									locked.latestVersion !== input.expectedVersion
 								)
-								.where(
-									and(
-										eq(artifactJobs.resourceId, input.artifactId),
-										inArray(executions.status, [
-											"queued",
-											"running",
-											"waiting",
-											"cancelling",
-											"outcome_unknown",
-										]),
-									),
-								)
-							if (active.length > 0)
-								return yield* Data.ArtifactConflict.make({
-									message:
-										"This artifact already has a publication in progress.",
-								})
-						}
-						const key = yield* allocate({
-							workflow: workflowName,
-							identity,
-							resource: { kind: "Chat", id: input.chat },
-							context: { kind: "Chat", id: input.chat },
-							...(identity.parentExecutionId === undefined
-								? {}
-								: { ownerExecutionId: identity.parentExecutionId }),
-							input: json,
+									return yield* Data.ArtifactConflict.make({
+										message: "The artifact version is out of date.",
+									})
+								const active = yield* db
+									.select({ id: artifactJobs.executionId })
+									.from(artifactJobs)
+									.innerJoin(
+										executions,
+										eq(artifactJobs.executionId, executions.id),
+									)
+									.where(
+										and(
+											eq(artifactJobs.resourceId, input.artifactId),
+											inArray(executions.status, [
+												"queued",
+												"running",
+												"waiting",
+												"cancelling",
+												"outcome_unknown",
+											]),
+										),
+									)
+								if (active.length > 0)
+									return yield* Data.ArtifactConflict.make({
+										message:
+											"This artifact already has a publication in progress.",
+									})
+							}
+							const key = yield* allocate({
+								workflow: workflowName,
+								identity,
+								resource: { kind: "Chat", id: input.chat },
+								context: { kind: "Chat", id: input.chat },
+								...(identity.parentExecutionId === undefined
+									? {}
+									: { ownerExecutionId: identity.parentExecutionId }),
+								input: json,
+							})
+							yield* db.insert(artifactJobs).values({
+								executionId: key.id,
+								namespace: access.namespace,
+								chat: input.chat,
+								file: "file_" + Hex.encode(yield* crypto.randomBytes(16)),
+								resourceId:
+									input._tag === "Publish"
+										? input.artifactId
+										: input._tag === "Capture"
+											? input.sourceId
+											: input.request.itemId,
+							})
+							return { executionId: key.id, start: true }
 						})
-						yield* db.insert(artifactJobs).values({
-							executionId: key.id,
-							namespace: access.namespace,
-							chat: input.chat,
-							file: "file_" + Hex.encode(yield* crypto.randomBytes(16)),
-							resourceId:
-								input._tag === "Publish"
-									? input.artifactId
-									: input._tag === "Capture"
-										? input.sourceId
-										: input.request.itemId,
-						})
-						return { executionId: key.id, start: true }
+						if (parent === undefined) return yield* create
+						if (
+							parent.namespace !== access.namespace ||
+							identity.parentExecutionId !== parent.id
+						)
+							return yield* Execution.Forbidden.make({})
+						yield* calls.authorize(parent, "advance")
+						const owner = yield* store.loadMember(parent)
+						const position = yield* Schema.decodeUnknownEffect(
+							Schema.Struct({ chat: Chat.Id }),
+						)(owner.input)
+						if (
+							position.chat !== input.chat ||
+							owner.record.resource.kind !== "Turn" ||
+							input._tag === "Citations" ||
+							owner.record.resource.id !== input.request.turnId
+						)
+							return yield* Execution.Forbidden.make({})
+						// The child, its start command, and its parent link share one transaction.
+						return yield* store.commit(
+							parent,
+							{
+								events: (child) => [
+									{
+										_tag: "ChildExecution",
+										executionId: child.executionId,
+										step: "artifact:" + input.request.commandKey,
+									},
+								],
+							},
+							create,
+						)
 					}),
 			)
 		}).pipe(boundary)
@@ -710,6 +747,7 @@ const make = Effect.gen(function* () {
 			| ArtifactCommands.PublishVersionRequest,
 		artifactId?: Data.ArtifactId,
 		trusted = true,
+		parent?: Fence,
 	) =>
 		Effect.gen(function* () {
 			return yield* submit(
@@ -727,6 +765,7 @@ const make = Effect.gen(function* () {
 					request,
 				},
 				trusted,
+				parent,
 			)
 		}).pipe(boundary)
 	const captureFor = (
@@ -734,6 +773,7 @@ const make = Effect.gen(function* () {
 		chat: Chat.Id,
 		request: ArtifactCommands.CaptureSourceRequest,
 		trusted = true,
+		parent?: Fence,
 	) =>
 		Effect.gen(function* () {
 			return yield* submit(
@@ -747,6 +787,7 @@ const make = Effect.gen(function* () {
 					request,
 				},
 				trusted,
+				parent,
 			)
 		}).pipe(boundary)
 	const withCaller = <A, E>(

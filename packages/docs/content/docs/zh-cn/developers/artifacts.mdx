@@ -100,6 +100,10 @@ ID、文件名、媒体类型和字节数。历史 Item 增加 `citations` 和
 从现有执行流读取 `SourceCaptured`、`ArtifactPublished` 和
 `CitationRecorded`。文件事件提交时，发布文件即可查询。引用事件与实际消息 Item 一同提交。模型步骤事件本身不能证明文件已交付。
 
+Bot 捕获来源或发布文件时，其 Turn 会记录 `ChildExecution`
+关联。使用该执行 ID，通过常规执行事件 API 读取 `SourceCaptured` 或
+`ArtifactPublished`。客户端重连时，为每个执行保留各自的事件游标。
+
 Bot 可使用 `openbot_capture_source` 保存材料、`openbot_list_artifacts`
 查找成果、 `openbot_read_artifact` 读取固定版本，以及 `openbot_read_source`
 读取来源。 `openbot_publish_artifact`

@@ -131,6 +131,12 @@ und `CitationRecorded`. Beim Datei-Ereignis ist die feste Version abfragbar. Ein
 Verweis-Ereignis wird mit seinem echten Nachrichten-Item gespeichert. Ein
 Modellschritt allein beweist keine Dateilieferung.
 
+Wenn ein Bot eine Quelle erfasst oder eine Datei veröffentlicht, speichert sein
+Turn einen `ChildExecution`-Verweis. Folge dieser Ausführungs-ID über die
+normale API für Ausführungsereignisse, um `SourceCaptured` oder
+`ArtifactPublished` zu lesen. Halte bei einer neuen Verbindung für jede
+Ausführung einen eigenen Ereigniszeiger fest.
+
 Der Bot nutzt `openbot_capture_source` zum Speichern von Material,
 `openbot_list_artifacts` zum Finden von Ergebnissen, `openbot_read_artifact` zum
 Lesen einer festen Version und `openbot_read_source` zum Lesen einer Quelle.

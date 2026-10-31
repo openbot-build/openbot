@@ -128,6 +128,11 @@ and `CitationRecorded`. A published file is queryable when its event is
 committed. A citation event is committed with its actual message Item. A
 model-step event alone does not prove that a file was delivered.
 
+When a Bot captures a source or publishes a file, its Turn records a
+`ChildExecution` link. Follow that execution ID through the normal execution
+events API to read `SourceCaptured` or `ArtifactPublished`. Keep a separate
+event cursor for each execution when a client reconnects.
+
 The Bot can call `openbot_capture_source` to save material,
 `openbot_list_artifacts` to find results, `openbot_read_artifact` to read a
 fixed version, and `openbot_read_source` to read a source. It uses
