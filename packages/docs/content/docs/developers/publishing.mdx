@@ -59,6 +59,15 @@ The images go to the GitHub container registry, at
 OpenBot. To use a published image with Compose, pull it and tag it as
 `openbot:<tag>`.
 
+### Publish a client snapshot
+
+The workflow `.github/workflows/sdk-snapshot.yml` runs for pushes to
+`codex/artifact-citation-contract`. It builds the client and the packages it
+needs, checks the API and client, and packs only `@openbot-build/client`. After
+those checks pass, a second job uses the repository's `GITHUB_TOKEN` to publish
+the snapshot as `0.0.0-commit-<full-hash>` with a `sha-<full-hash>` tag. The
+`latest` tag and the server release stay on the main release path.
+
 ### Publish the docs site
 
 The workflow `.github/workflows/docs.yml` publishes the docs site to

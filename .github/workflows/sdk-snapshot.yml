@@ -1,0 +1,92 @@
+name: SDK snapshot
+
+on:
+  push:
+    branches: [codex/artifact-citation-contract]
+
+concurrency:
+  group: sdk-snapshot-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check and pack the client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          extra-conf: |
+            extra-substituters = https://devenv.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-flakehub: false
+          diagnostic-endpoint: ""
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/pnpm
+          key: pnpm-sdk-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-sdk-${{ runner.os }}-
+      - name: Install dependencies
+        run:
+          devenv shell -- pnpm install --frozen-lockfile --store-dir .cache/pnpm
+      - name: Build the client and its packages
+        run: devenv shell -- pnpm --filter '@openbot-build/client...' -r build
+      - name: Check the API and client
+        run:
+          devenv shell -- pnpm --filter @openbot-build/domain --filter
+          @openbot-build/api --filter @openbot-build/client -r test
+      - name: Check package versions
+        run: devenv shell -- pnpm test:packages
+      - name: Pack the client snapshot
+        run:
+          devenv shell -- pnpm --dir packages/client exec node
+          ../../scripts/packages.mjs pack ../../.release/sdk
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REF: ""
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sdk-${{ github.sha }}
+          path: .release/sdk/
+          include-hidden-files: true
+          retention-days: 7
+
+  publish:
+    name: Publish the checked client
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          extra-conf: |
+            extra-substituters = https://devenv.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: sdk-${{ github.sha }}
+          path: .release/sdk/
+      - name: Set registry access
+        run: devenv shell -- bash scripts/registry-auth.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the client snapshot
+        run: devenv shell -- node scripts/packages.mjs publish .release/sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

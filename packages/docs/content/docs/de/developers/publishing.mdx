@@ -61,6 +61,16 @@ Die Images landen in der GitHub Container Registry, unter
 in Betrieb. Wenn du ein veröffentlichtes Image mit Compose nutzen willst, lade
 es herunter und gib ihm den Tag `openbot:<tag>`.
 
+### Eine Client-Momentaufnahme veröffentlichen
+
+Der Workflow `.github/workflows/sdk-snapshot.yml` läuft bei Pushes auf
+`codex/artifact-citation-contract`. Er baut den Client und seine nötigen Pakete,
+prüft die API und den Client und packt nur `@openbot-build/client`. Nach diesen
+Prüfungen nutzt ein zweiter Job den `GITHUB_TOKEN` des Repositorys. Er
+veröffentlicht die Momentaufnahme als `0.0.0-commit-<voller-Hash>` mit dem Tag
+`sha-<voller-Hash>`. Der Tag `latest` und die Server-Veröffentlichung bleiben im
+Hauptablauf der Veröffentlichung.
+
 ### Die Doku-Seite veröffentlichen
 
 Der Workflow `.github/workflows/docs.yml` veröffentlicht die Doku-Seite auf

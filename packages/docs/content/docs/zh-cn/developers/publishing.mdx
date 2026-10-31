@@ -50,6 +50,15 @@ Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `d
 `ghcr.io/openbot-build/openbot/protocol-test`。工作流不会部署 OpenBot。要在 Compose 中使用已发布的镜像，请拉取它，并打上
 `openbot:<tag>` 标签。
 
+### 发布客户端快照
+
+工作流 `.github/workflows/sdk-snapshot.yml` 在推送到
+`codex/artifact-citation-contract`
+时运行。它构建客户端及其依赖包，检查 API 和客户端，只打包
+`@openbot-build/client`。检查通过后，第二个任务使用仓库的
+`GITHUB_TOKEN`，把快照发布为 `0.0.0-commit-<完整哈希>`，并加上 `sha-<完整哈希>`
+标签。`latest` 标签和服务端发布仍使用主发布流程。
+
 ### 发布文档网站
 
 工作流 `.github/workflows/docs.yml` 把文档网站发布到
