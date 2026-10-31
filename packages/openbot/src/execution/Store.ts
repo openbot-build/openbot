@@ -1,4 +1,5 @@
 import { Paused } from "./Admission.ts"
+import * as ToolActivity from "./ToolActivity.ts"
 import {
 	Caller,
 	Execution,
@@ -17,6 +18,7 @@ import {
 	gt,
 	inArray,
 	isNull,
+	like,
 	lte,
 	notInArray,
 } from "drizzle-orm"
@@ -1623,7 +1625,7 @@ const make = Effect.gen(function* () {
 				yield* append(
 					key,
 					execution.sequence + 1,
-					{ _tag: "StepStarted", step, attempt: call.attempt },
+					ToolActivity.started(call, execution),
 					yield* Clock.currentTimeMillis,
 				)
 				return call
@@ -1675,7 +1677,7 @@ const make = Effect.gen(function* () {
 				yield* append(
 					key,
 					execution.sequence + 1,
-					{ _tag: "StepStarted", step, attempt: 0 },
+					ToolActivity.started(call, execution),
 					yield* Clock.currentTimeMillis,
 				)
 				return call
@@ -1715,7 +1717,7 @@ const make = Effect.gen(function* () {
 				yield* append(
 					key,
 					execution.sequence + 1,
-					{ _tag: "StepStarted", step: created.step, attempt: created.attempt },
+					ToolActivity.started(created, execution),
 					yield* Clock.currentTimeMillis,
 				)
 				return created
@@ -1804,7 +1806,7 @@ const make = Effect.gen(function* () {
 					yield* append(
 						key,
 						++sequence,
-						{ _tag: "StepStarted", step: next.step, attempt: next.attempt },
+						ToolActivity.started(next, execution),
 						yield* Clock.currentTimeMillis,
 					)
 				return next
@@ -2307,6 +2309,36 @@ const make = Effect.gen(function* () {
 		incompleteRead,
 		latestCall,
 		calls,
+		/** Read the cursor and calls under one lock so reconnect cannot skip a change. */
+		activity: (key: Key) =>
+			sql
+				.withTransaction(
+					Effect.gen(function* () {
+						const record = yield* view(yield* row(key, "share"))
+						if (Execution.isTerminal(record.status))
+							return { record, calls: [] }
+						// Do not decrypt model prompts, results, or superseded attempts for a status read.
+						const latest = yield* db
+							.selectDistinctOn([executionCalls.step])
+							.from(executionCalls)
+							.where(
+								and(
+									eq(executionCalls.namespace, key.namespace),
+									eq(executionCalls.executionId, key.id),
+									like(executionCalls.step, "tool:%"),
+								),
+							)
+							.orderBy(asc(executionCalls.step), desc(executionCalls.attempt))
+						return {
+							record,
+							calls: yield* Effect.forEach(
+								Arr.filter(latest, (call) => call.status !== "completed"),
+								callView,
+							),
+						}
+					}),
+				)
+				.pipe(storage),
 	}
 })
 

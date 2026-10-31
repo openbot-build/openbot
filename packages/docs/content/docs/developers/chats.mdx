@@ -144,6 +144,24 @@ The saved terminal event can be read again after a lost connection. Closing
 observation does not cancel work. Use the explicit execution cancel command.
 `GET /v1/executions/:executionId/events` gives the same log in pages.
 
+### Foreground tool activity
+
+`GET /v1/chats/:chatId` includes optional `activeExecution` (`id`, `sequence`,
+`status`) and `activeTools`. Each active tool has `executionId`, `step`,
+`attempt`, `status`, and `tool` identity: `chatId`, `turnId`, `itemId`,
+`callId`, `name`, and an optional `computerId`. Arguments, commands, prompts,
+and unfinished results are not part of this view. The same Chat read permission
+applies.
+
+A foreground tool's `StepStarted` event can include the same `tool` identity.
+This records an intent before permission checks, so it means **queued**, not
+running. Read the Chat snapshot for the saved state: `queued`, `running`,
+`waiting`, `cancelling`, or `outcome_unknown`. After refresh, restore the
+snapshot and observe `activeExecution.id` after its saved `sequence`. A
+`StepCompleted` closes only its matching execution, step, and attempt; a `State`
+event calls for a new snapshot. Finished calls and terminal executions have no
+active tools. Never resend a tool to restore its activity display.
+
 ### Common errors
 
 | Status | Error                      | When                                                                                       |

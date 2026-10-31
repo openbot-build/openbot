@@ -157,11 +157,42 @@ export const Decision = Schema.Struct({
 })
 export type Decision = typeof Decision.Type
 
+/** Public tool identity. Arguments, prompts and results are never included. */
+export const ToolActivity = Schema.Struct({
+	chatId: Schema.String,
+	turnId: Schema.String,
+	itemId: Schema.String,
+	callId: Schema.String,
+	name: Schema.String,
+	computerId: Schema.optionalKey(Schema.String),
+})
+export type ToolActivity = typeof ToolActivity.Type
+
+export const ActiveTool = Schema.Struct({
+	executionId: Id,
+	step: Schema.String,
+	attempt: Schema.Natural,
+	tool: ToolActivity,
+	status: Schema.Literals([
+		"queued",
+		"running",
+		"waiting",
+		"cancelling",
+		"outcome_unknown",
+	]),
+})
+export type ActiveTool = typeof ActiveTool.Type
+
 /** Each model retry starts a new attempt. Text never crosses attempts. */
 export const EventBody = Schema.TaggedUnion({
 	Wake: { key: Schema.String },
 	State: { status: Status, failure: Schema.NullOr(Failure) },
-	StepStarted: { step: Schema.String, attempt: Schema.Natural },
+	/** A saved intent, before permission checks and sending. A tool is still queued. */
+	StepStarted: {
+		step: Schema.String,
+		attempt: Schema.Natural,
+		tool: Schema.optionalKey(ToolActivity),
+	},
 	Text: { step: Schema.String, attempt: Schema.Natural, text: Schema.String },
 	ToolOutput: {
 		step: Schema.String,

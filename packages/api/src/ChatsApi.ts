@@ -181,6 +181,16 @@ export const ChatView = Schema.Struct({
 	turn: Schema.NullOr(TurnInfo),
 	response: Schema.NullOr(ChatResponse),
 	executionId: Schema.NullOr(Execution.Id),
+	/** A saved cursor for reconnecting to the current Turn's execution. */
+	activeExecution: Schema.optionalKey(
+		Schema.Struct({
+			id: Execution.Id,
+			sequence: Execution.Sequence,
+			status: Execution.Status,
+		}),
+	),
+	/** Safe foreground tool activity; no arguments or unfinished results. */
+	activeTools: Schema.optionalKey(Schema.Array(Execution.ActiveTool)),
 	/** The number of inputs that wait for a Turn. */
 	inbox: Schema.Natural,
 	open: OpenWork,

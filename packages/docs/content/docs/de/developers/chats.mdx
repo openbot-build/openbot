@@ -149,6 +149,25 @@ Schließen des Stroms beendet die Arbeit nicht. Nutzen Sie den Befehl zum
 Abbrechen. `GET /v1/executions/:executionId/events` gibt dasselbe Log in Seiten
 zurück.
 
+### Werkzeuge im Vordergrund
+
+`GET /v1/chats/:chatId` enthält die optionalen Felder `activeExecution` (`id`,
+`sequence`, `status`) und `activeTools`. Ein aktives Werkzeug enthält
+`executionId`, `step`, `attempt`, `status` und seine `tool`-Identität: `chatId`,
+`turnId`, `itemId`, `callId`, `name` sowie optional `computerId`. Argumente,
+Befehle, Prompts und unfertige Ergebnisse bleiben privat. Es gilt dieselbe
+Leseberechtigung für den Chat.
+
+`StepStarted` kann diese `tool`-Identität tragen. Das Ereignis speichert die
+Absicht vor der Berechtigungsprüfung; es bedeutet **queued**, noch nicht
+running. Der Chat-Snapshot liefert den gespeicherten Zustand: `queued`,
+`running`, `waiting`, `cancelling` oder `outcome_unknown`. Nach einem Neuladen
+zuerst den Snapshot lesen, dann `activeExecution.id` ab seiner `sequence`
+beobachten. `StepCompleted` beendet nur den passenden Ausführungs-, Schritt- und
+Versuchseintrag. Bei `State` den Snapshot neu lesen. Abgeschlossene Aufrufe und
+beendete Ausführungen haben keine aktiven Werkzeuge. Zum Wiederherstellen der
+Anzeige darf kein Werkzeug erneut gesendet werden.
+
 ### Häufige Fehler
 
 | Status | Fehler                     | Wann                                                                                                       |

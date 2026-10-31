@@ -1,3 +1,5 @@
+import { Store as ExecutionStore } from "../execution/Store.ts"
+import * as ToolActivity from "../execution/ToolActivity.ts"
 import { ModelRegistry } from "../models/ModelRegistry.ts"
 import * as ChatHost from "./ChatHost.ts"
 import { Chat, type Item, type Turn } from "@openbot-build/core"
@@ -14,6 +16,7 @@ import * as Db from "../database/Database.ts"
 import { chats } from "../database/Schema.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import * as ChatRecords from "./ChatRecords.ts"
+import { databaseError } from "./ChatEncoding.ts"
 import * as StoredChats from "./StoredChats.ts"
 import { OpenWork } from "./OpenWork.ts"
 import * as Todos from "../plugins/work/Todos.ts"
@@ -21,6 +24,7 @@ import * as Todos from "../plugins/work/Todos.ts"
 /** Every entry point uses the caller's current read policy and saved records. */
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
+	const executions = yield* ExecutionStore
 	const models = yield* ModelRegistry
 	const records = yield* ChatRecords.make
 	const checks = yield* Check.make
@@ -43,13 +47,41 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const source = records(ownerKey(caller))
 			const turn = Chat.currentTurn(view.chat)
+			const executionId = yield* source.executionId(turn?.id, view.chat.id)
+			const activity =
+				executionId === null
+					? undefined
+					: yield* executions
+							.activity({
+								namespace: ownerKey(caller),
+								id: executionId,
+							})
+							.pipe(Effect.mapError(databaseError))
 			return {
 				view,
 				items:
 					turn === undefined
 						? []
 						: yield* source.turnLog(view.chat.id, turn.id),
-				executionId: yield* source.executionId(turn?.id, view.chat.id),
+				executionId,
+				...(activity === undefined
+					? {}
+					: {
+							activeExecution: {
+								id: activity.record.id,
+								sequence: activity.record.sequence,
+								status: activity.record.status,
+							},
+						}),
+				activeTools:
+					activity === undefined || turn === undefined
+						? []
+						: ToolActivity.active(
+								activity.record,
+								activity.calls,
+								view.chat.id,
+								turn.id,
+							),
 				open: yield* openWork.count(caller.organizationId, view.chat.id),
 			}
 		})

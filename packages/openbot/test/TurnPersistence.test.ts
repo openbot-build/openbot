@@ -36,6 +36,7 @@ import * as Db from "../src/database/Database.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Store from "../src/execution/Store.ts"
+import * as ToolActivity from "../src/execution/ToolActivity.ts"
 import * as StoredChats from "../src/chats/StoredChats.ts"
 import * as TurnPersistence from "../src/chats/TurnPersistence.ts"
 import { chatHostId, chatHostStore } from "../src/chats/ChatHost.ts"
@@ -590,7 +591,30 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				})
 				const handlers = toolkit.toLayer({
 					WriteNote: () =>
-						Ref.update(writes, (n) => n + 1).pipe(Effect.as("saved note")),
+						Effect.gen(function* () {
+							// Activity must be visible during external work, before its result exists.
+							const snapshot = yield* test.executions.activity(test.key)
+							const active = ToolActivity.active(
+								snapshot.record,
+								snapshot.calls,
+								test.chat,
+								test.turn,
+							)
+							assert.equal(active.length, 1)
+							assert.equal(active[0]?.status, "running")
+							assert.equal(active[0]?.tool.name, "WriteNote")
+							assert.equal(active[0]?.tool.callId, "write-call")
+							assert.isTrue(
+								Arr.some(
+									yield* test.executions.events(test.key, 0),
+									(event) =>
+										event.body._tag === "StepStarted" &&
+										event.body.tool?.name === "WriteNote",
+								),
+							)
+							yield* Ref.update(writes, (n) => n + 1)
+							return "saved note"
+						}).pipe(Effect.orDie),
 				})
 				yield* Effect.gen(function* () {
 					const models = yield* ModelSteps.ModelSteps
@@ -651,6 +675,16 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						(event) => event.body._tag === "ToolOutput",
 					)
 					assert.equal(outputs.length, 1)
+					const settled = yield* test.executions.activity(test.key)
+					assert.deepEqual(
+						ToolActivity.active(
+							settled.record,
+							settled.calls,
+							test.chat,
+							test.turn,
+						),
+						[],
+					)
 					const second = yield* test.executions.takeOver(test.key)
 					const resumed = yield* TurnRunner.make({
 						store: yield* test.owner(second),

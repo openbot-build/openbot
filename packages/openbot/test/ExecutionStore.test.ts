@@ -29,6 +29,7 @@ import * as Store from "../src/execution/Store.ts"
 import * as Observation from "../src/execution/Observation.ts"
 import * as Records from "../src/errors/Records.ts"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as ToolActivity from "../src/execution/ToolActivity.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
 	Layer.provideMerge(
@@ -58,6 +59,112 @@ const submission = {
 } satisfies Store.Submission
 
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
+	it.effect(
+		"foreground tool activity survives reads and clears after a retried call finishes",
+		() =>
+			Effect.gen(function* () {
+				const store = yield* Store.Store
+				const namespace = "foreground-activity"
+				const receipt = yield* store.submit(
+					namespace,
+					Execution.CommandKey.make("start"),
+					{
+						...submission,
+						resource: { kind: "Turn", id: "turn" },
+						context: { kind: "Chat", id: "chat" },
+					},
+				)
+				const key = { namespace, id: receipt.executionId }
+				const first = yield* store.takeOver(key)
+				const request = {
+					chat: "chat",
+					turn: "turn",
+					item: "item",
+					call: "call",
+					name: "openbot_computer_read_file",
+					params: { computer: "computer", path: "private" },
+				}
+				const call = yield* store.readAttempt(first, "tool:4:itemcall", request)
+				const queued = yield* store.activity(key)
+				assert.equal(
+					ToolActivity.active(queued.record, queued.calls, "chat", "turn")[0]
+						?.status,
+					"queued",
+				)
+				const start = Arr.findFirst(
+					yield* store.events(key, 0),
+					(event) => event.body._tag === "StepStarted",
+				)
+				assert.isTrue(Option.isSome(start))
+				if (Option.isNone(start) || start.value.body._tag !== "StepStarted")
+					return assert.fail("Missing start")
+				assert.deepEqual(start.value.body.tool, {
+					chatId: "chat",
+					turnId: "turn",
+					itemId: "item",
+					callId: "call",
+					name: request.name,
+					computerId: "computer",
+				})
+				yield* store.sending(first, call.id)
+				const running = yield* store.activity(key)
+				assert.equal(
+					ToolActivity.active(running.record, running.calls, "chat", "turn")[0]
+						?.status,
+					"running",
+				)
+				assert.deepEqual(
+					ToolActivity.active(
+						running.record,
+						running.calls,
+						"other-chat",
+						"turn",
+					),
+					[],
+				)
+				const denied = yield* store
+					.activity({ ...key, namespace: "another-owner" })
+					.pipe(Effect.flip)
+				assert.equal(denied._tag, "ExecutionNotFound")
+				const second = yield* store.takeOver(key)
+				const retry = yield* store.readAttempt(second, call.step, request)
+				assert.equal(retry.attempt, 1)
+				const resumed = yield* store.activity(key)
+				assert.deepEqual(
+					Arr.map(
+						ToolActivity.active(resumed.record, resumed.calls, "chat", "turn"),
+						(active) => [active.attempt, active.status],
+					),
+					[[1, "queued"]],
+				)
+				yield* store.sending(second, retry.id)
+				yield* store.finishCall(second, retry.id, { content: "private result" })
+				const completed = yield* store.activity(key)
+				assert.deepEqual(
+					ToolActivity.active(
+						completed.record,
+						completed.calls,
+						"chat",
+						"turn",
+					),
+					[],
+				)
+				const events = yield* store.events(key, resumed.record.sequence)
+				assert.isTrue(
+					Arr.some(
+						events,
+						(event) =>
+							event.body._tag === "StepCompleted" && event.body.attempt === 1,
+					),
+				)
+				assert.isTrue(completed.record.sequence > resumed.record.sequence)
+				assert.deepEqual(
+					yield* store.events(key, completed.record.sequence),
+					[],
+				)
+			}),
+	)
+
 	for (const damage of ["seal", "JSON", "identity"] as const) {
 		it.effect(
 			`a corrupt execution ${damage} is a storage failure, not a missing record`,

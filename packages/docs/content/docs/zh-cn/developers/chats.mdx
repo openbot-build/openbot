@@ -131,6 +131,21 @@ curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
 事件先保存，再发送。慢读者从事件日志补读。断线后也能重读保存的终态事件。关闭观察不会取消工作。取消须使用执行取消命令。
 `GET /v1/executions/:executionId/events` 分页返回同一日志。
 
+### 前台工具活动
+
+`GET /v1/chats/:chatId` 增加可选的
+`activeExecution`（`id`、`sequence`、`status`）和
+`activeTools`。每个活动工具包含 `executionId`、`step`、`attempt`、`status`，以及
+`tool` 身份：`chatId`、`turnId`、`itemId`、`callId`、`name` 和可选的
+`computerId`。其中不包含参数、命令、提示词或未完成结果，沿用当前 Chat 的读取权限。
+
+前台工具的 `StepStarted` 事件可以携带同样的 `tool`
+身份。该事件在权限检查前记录调用意图，只表示**排队**，不代表已经执行。读取 Chat 快照确认持久状态：`queued`、`running`、
+`waiting`、`cancelling` 或 `outcome_unknown`。刷新后先恢复快照，再从其
+`sequence` 观察 `activeExecution.id`。`StepCompleted`
+只结束相同执行、步骤和 attempt 的通知；收到 `State`
+后重新读取快照。已完成调用和终态执行不再显示活动工具。恢复显示时不能重新提交工具。
+
 ### 常见错误
 
 | 状态码 | 错误                       | 何时出现                                                                             |

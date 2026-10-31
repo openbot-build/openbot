@@ -35,6 +35,8 @@ export const project = (input: {
 	readonly items: ReadonlyArray<Item.Record>
 	readonly executionId: Execution.Id | null
 	readonly open: OpenWork
+	readonly activeExecution?: ChatView["activeExecution"]
+	readonly activeTools?: ChatView["activeTools"]
 }): ChatView => {
 	const ref = input.view.chat
 	const turn = Chat.currentTurn(ref)
@@ -46,6 +48,12 @@ export const project = (input: {
 		executionId: input.executionId,
 		inbox: ref.inbox.length,
 		open: input.open,
+		...(input.activeExecution === undefined
+			? {}
+			: { activeExecution: input.activeExecution }),
+		...(input.activeTools === undefined
+			? {}
+			: { activeTools: input.activeTools }),
 	}
 }
 export const summary = (
