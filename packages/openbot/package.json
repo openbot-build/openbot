@@ -66,6 +66,7 @@
 		"effect": "4.0.7",
 		"jose": "6.2.12",
 		"nodemailer": "10.3.0",
+		"parse5": "8.0.1",
 		"pg": "8.23.1",
 		"quickjs-emscripten-core": "0.32.0",
 		"react": "19.3.1",

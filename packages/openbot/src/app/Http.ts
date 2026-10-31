@@ -26,6 +26,7 @@ import * as SsoHandlers from "../sso/HttpHandlers.ts"
 import * as SettingsHandlers from "../settings/HttpHandlers.ts"
 import * as TriggerHandlers from "../triggers/HttpHandlers.ts"
 import * as FileHandlers from "../files/HttpHandlers.ts"
+import * as ArtifactHandlers from "../artifacts/HttpHandlers.ts"
 import * as ChannelHandlers from "../channels/HttpHandlers.ts"
 import * as ComputerHandlers from "../computers/HttpHandlers.ts"
 import * as VaultHandlers from "../vaults/HttpHandlers.ts"
@@ -63,6 +64,7 @@ export const layerPlatform = Layer.mergeAll(
 				SettingsHandlers.layerMember,
 				TriggerHandlers.layer,
 				FileHandlers.layer,
+				ArtifactHandlers.layer,
 				TriggerHandlers.layerHooks,
 				ChannelHandlers.layer,
 				ChannelHandlers.layerLinks,

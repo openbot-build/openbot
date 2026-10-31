@@ -1,0 +1,172 @@
+---
+title: "Artifacts and sources"
+description: "Publish fixed file versions and keep the material they cite."
+---
+
+For developers who connect a client to OpenBot or extend its server. Start with
+the [developer manual](/developers).
+
+An **artifact** is one result with a stable ID. Each **version** names a fixed
+file in object storage. A **source** is a saved copy of material. A
+**reference** links a message or file version to that source. This is a record
+of material, not proof that a conclusion is true.
+
+## Model
+
+Artifacts and sources belong to a Chat. An artifact has a title and a current
+version number. Each version records a File, a SHA-256 digest, its creating Turn
+and Item when present, and its source references. SHA-256 is a content digest:
+the server uses it to check that saved bytes have not changed.
+
+A source records its origin, capture time, saved text File, and digest. The
+origin is `PublicUrl`, `AppResult`, or `ComputerTextFile`. Only `PublicUrl`
+records an address that OpenBot itself read. `reportedUrl`, when present, is
+only an address supplied with the material.
+
+The platform needs file storage. Its media types, maximum file size, and member
+quota apply to all versions and source copies. Allow `text/plain` for source
+copies. Allow `text/markdown` and `text/csv` when tasks need these output types.
+
+## Capture a source
+
+Send `POST /v1/chats/:chatId/sources` with a command key and `from`:
+
+```json
+{
+	"commandKey": "source-one",
+	"from": {
+		"_tag": "PublicUrl",
+		"url": "https://docs.example.com/guide"
+	}
+}
+```
+
+`PublicUrl` reads public text, HTML, or JSON through the server's network
+policy. HTML becomes plain text; scripts, styles, and templates are left out.
+The server does not run page scripts, read PDFs, or perform OCR.
+
+For `AppResult`, give an `operationId` from a completed successful App call in
+this Chat. OpenBot copies the saved result as JSON text and does not call the
+App again. For `ComputerTextFile`, give `computerId` and `path`. OpenBot checks
+access to the Computer and reads a UTF-8 text copy.
+
+The answer is `202` with an execution receipt. Follow that execution until it
+ends. `SourceCaptured` names the saved source. List sources with
+`GET /v1/chats/:chatId/sources`; read metadata or bytes with
+`GET /v1/chats/:chatId/sources/:sourceId` and its `/content` route.
+
+## Publish a file
+
+Send `POST /v1/chats/:chatId/artifacts`:
+
+```json
+{
+	"commandKey": "report-one",
+	"title": "Work plan",
+	"filename": "plan.md",
+	"mediaType": "text/markdown",
+	"from": { "_tag": "Text", "text": "# Work plan\n\nUse the saved guide.\n" },
+	"citations": [{ "type": "source_reference", "source_id": "source_id" }]
+}
+```
+
+Use
+`from: { "_tag": "ComputerPath", "computerId": "computer_id", "path": "/workspace/plan.csv" }`
+to publish an existing Computer file. This does not turn a path into a public
+URL. The server reads and keeps the actual bytes.
+
+Publishing returns `202` with an execution receipt. `ArtifactPublished` means
+that the file and fixed version have been saved. Reuse the same command key and
+same body after a lost response. A different body with the same key is a
+conflict. Do not make a new key merely because the network reply was lost.
+
+List results with `GET /v1/chats/:chatId/artifacts`. Read one with
+`GET /v1/chats/:chatId/artifacts/:artifactId`. Download a fixed version with
+`GET /v1/chats/:chatId/artifacts/:artifactId/versions/:version/content`. Clients
+use these authenticated routes, not short-lived storage URLs.
+
+The download response uses the file's saved media type for `Content-Type` and
+its byte count for `Content-Length`. `Content-Disposition` gives the download
+file name. This name comes from that fixed version and can use UTF-8 text.
+
+## Add a version
+
+Send the same publication fields to
+`POST /v1/chats/:chatId/artifacts/:artifactId/versions` and add
+`expectedVersion`. It must be the current version. A successful publication
+creates a new File and advances the artifact's current version. An older message
+still names its original version.
+
+List history with `GET /v1/chats/:chatId/artifacts/:artifactId/versions` and
+read one version with its `/:version` route. Lists use `limit`, `after`, and
+`next`. Each artifact appears once in the artifact list, even after changes.
+
+When two callers change the same version, only one can publish against that
+expected version. The other gets a conflict. Re-read the artifact before making
+another change. Storage failure never advances the current version.
+
+## Read messages and events
+
+An `output_text` part may have annotations shaped as
+`{ "type": "source_reference", "source_id": "source_id", "quote": "saved words" }`.
+Quotes are optional. When present, they must occur in the saved source text
+after the same space rules are applied.
+
+An `output_file` part gives the artifact ID, fixed version, File ID, file name,
+media type, and byte count. History Items add `citations` and `artifacts` while
+the stored model prompt stays in its original format. Earlier Items with no such
+records return empty lists.
+
+`POST /v1/chats/:chatId/citations` adds references to an already saved assistant
+Item. Give `commandKey`, `itemId`, and `citations`. The Bot's
+`openbot_cite_sources` tool instead declares references for its next saved text
+message in the same Turn. Failed model attempts and later Turns do not take
+those references.
+
+Follow the existing execution stream for `SourceCaptured`, `ArtifactPublished`,
+and `CitationRecorded`. A published file is queryable when its event is
+committed. A citation event is committed with its actual message Item. A
+model-step event alone does not prove that a file was delivered.
+
+The Bot can call `openbot_capture_source` to save material,
+`openbot_list_artifacts` to find results, `openbot_read_artifact` to read a
+fixed version, and `openbot_read_source` to read a source. It uses
+`openbot_publish_artifact` to publish a new result or another version, and
+`openbot_cite_sources` to name sources for its next text message. Reading,
+source capture, and citation records work in plan mode. Publication needs build
+mode.
+
+## Access and retention
+
+Reading metadata or content needs read access to the Chat. Capturing sources,
+publishing versions, and adding references need write access. App and Computer
+access are checked too. Both API keys and same-origin session cookies use these
+rules. See [Authentication](/developers/authentication).
+
+Generated files do not bypass Chat access through the older File routes.
+Ordinary uploads stay private. Storage use is charged to the execution owner,
+including all historical versions and source copies.
+
+The Chat keeps these files from unused-file cleanup. An active publication also
+keeps its pending file. Deleting the Chat releases these references. An owner
+can explicitly delete file bytes through the File API after publication work has
+ended. An active publication returns a conflict; cancel it first.
+
+After content is deleted, old metadata remains with
+`availability: "unavailable"`. A content read returns `404`. A retry does not
+recreate deleted content.
+
+## Checks and upgrade
+
+Check downloaded bytes, source records, and fixed versions. Assistant text alone
+does not prove success. An interrupted publication keeps its command and saved
+digest. If it must read a Computer path again, changed bytes make the operation
+fail rather than publish a different result under the same command.
+
+Before release, also run this flow with a real model and configured research
+capabilities. This check is incomplete when those credentials are missing.
+
+Upgrade the server, API package, and client SDK together for these response and
+event types. Older clients that only accept empty annotations or a closed set of
+events must be updated. Existing saved messages are not given invented sources
+or artifacts during the upgrade.

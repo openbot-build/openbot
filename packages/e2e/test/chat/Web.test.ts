@@ -379,8 +379,10 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				assert.strictEqual(final.response?.status, "completed")
 				assert.strictEqual(final.turn?.settings.mode, "plan")
 				assert.strictEqual(final.chat.settings.mode, "plan")
+				const firstPart = final.response!.output[0]!.content[0]!
+				assert.strictEqual(firstPart.type, "output_text")
 				assert.match(
-					final.response!.output[0]!.content[0]!.text,
+					firstPart.type === "output_text" ? firstPart.text : "",
 					/Progress stays/,
 				)
 				// No other model call ran. Bot memory learns only after the Bot confides,
@@ -558,8 +560,10 @@ it.layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 								? "incomplete"
 								: "completed",
 						)
+						const part = current.response!.output[0]!.content[0]!
+						assert.strictEqual(part.type, "output_text")
 						assert.strictEqual(
-							current.response!.output[0]!.content[0]!.text,
+							part.type === "output_text" ? part.text : "",
 							input === "empty" ? "" : "héllo 🌍\né",
 						)
 					}

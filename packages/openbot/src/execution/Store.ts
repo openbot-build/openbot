@@ -606,68 +606,9 @@ export interface Service {
 		key: Fence,
 		id: Execution.CallId,
 		result: Schema.Json,
-		events?:
-			| readonly (
-					| {
-							readonly _tag: "CallRecorded"
-							readonly callId: Execution.CallId
-							readonly step: string
-							readonly attempt: number
-					  }
-					| {
-							readonly _tag: "Checkpoint"
-							readonly resource: Execution.Resource
-							readonly revision: number
-					  }
-					| {
-							readonly _tag: "ChildExecution"
-							readonly executionId: Execution.Id
-							readonly step: string
-					  }
-					| {
-							readonly _tag: "DecisionMade"
-							readonly decisionId: string
-							readonly answer: Execution.Answer
-					  }
-					| {
-							readonly _tag: "DecisionNeeded"
-							readonly decisionId: string
-							readonly choices: readonly [
-								Execution.Answer,
-								...Execution.Answer[],
-							]
-					  }
-					| {
-							readonly _tag: "InputMoved"
-							readonly executionId: Execution.Id
-							readonly items: readonly string[]
-					  }
-					| { readonly _tag: "Result"; readonly resource: Execution.Resource }
-					| {
-							readonly _tag: "StepCompleted"
-							readonly step: string
-							readonly attempt: number
-					  }
-					| {
-							readonly _tag: "StepStarted"
-							readonly step: string
-							readonly attempt: number
-					  }
-					| {
-							readonly _tag: "Text"
-							readonly step: string
-							readonly attempt: number
-							readonly text: string
-					  }
-					| {
-							readonly _tag: "ToolOutput"
-							readonly step: string
-							readonly attempt: number
-							readonly output: Schema.Json
-					  }
-					| { readonly _tag: "Wake"; readonly key: string }
-			  )[]
-			| undefined,
+		events?: ReadonlyArray<
+			Exclude<Execution.EventBody, { readonly _tag: "State" }>
+		>,
 		writes?: Effect.Effect<void, E, R> | undefined,
 	) => Effect.Effect<
 		boolean,

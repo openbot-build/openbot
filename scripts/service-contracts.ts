@@ -117,7 +117,8 @@ const inspect = (
 		if (
 			symbol.name !== "Service" ||
 			!Arr.some(symbol.declarations, (declaration) =>
-				/\/effect\/(?:src|dist)\/Context\.(?:d\.)?ts$/.test(declaration.path),
+				// TypeScript gives lower-case paths on a case-insensitive file system.
+				/\/effect\/(?:src|dist)\/Context\.(?:d\.)?ts$/i.test(declaration.path),
 			)
 		)
 			return []

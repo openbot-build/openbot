@@ -6,6 +6,7 @@ import type { Database } from "../database/Database.ts"
 import type { Fence, Store } from "../execution/Store.ts"
 import { databaseError } from "./ChatEncoding.ts"
 import * as StoredChats from "./StoredChats.ts"
+import * as Citations from "../artifacts/Citations.ts"
 
 /** A Turn may write only while it holds its execution and is current in its Chat. */
 export const make = (
@@ -36,6 +37,12 @@ export const make = (
 							execution.resource.id !== turn
 						)
 							return yield* conflict
+						const citationEvents = yield* Citations.bind(
+							db,
+							fence.namespace,
+							turn,
+							delta,
+						)
 						yield* executions.commit(
 							fence,
 							{
@@ -45,6 +52,7 @@ export const make = (
 										resource: { kind: "Chat", id: chat },
 										revision: delta.revision,
 									},
+									...citationEvents,
 								],
 							},
 							StoredChats.save(db, fence.namespace, delta, turn),

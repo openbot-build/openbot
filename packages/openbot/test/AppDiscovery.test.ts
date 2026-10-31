@@ -1,3 +1,4 @@
+import { Artifacts } from "../src/artifacts/Artifacts.ts"
 import * as ResetCommands from "../src/apps/ResetCommands.ts"
 import * as AuthorizationCommands from "../src/apps/AuthorizationCommands.ts"
 import * as GrantCleanup from "../src/apps/GrantCleanup.ts"
@@ -369,6 +370,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 	const services = yield* Layer.build(
 		HttpRouter.serve(Server.layerApi).pipe(
 			Layer.provide([
+				Layer.mock(Artifacts, {}),
 				Layer.mock(ExecutionCommands, {}),
 				Layer.mock(RequestCommands, {}),
 				Layer.mock(DelegationCommands, {}),

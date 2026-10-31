@@ -83,7 +83,7 @@ const remindInstructions = `To come back to something later, call ${names.remind
 
 const todoInstructions = `Keep a todo list when work has more than one step. Call ${names.todos} with the whole list each time it changes: when you plan the steps, when you start a step, and when you finish one. Keep one item in_progress at a time. While an item is not done, you go on working. If an item is not needed any more, remove it and say why. When every item is done, the list becomes empty at the end of your answer.`
 
-const planInstructions = `You are in plan mode. Look things up with your tools, but do not change anything yet. Only the tools that just read are open to you now. Write the steps of the work as a todo list. When the plan is ready, call ${names.submitPlan} with the list and a short summary, and then end your answer. When the plan is approved, a new Turn starts in build mode with all your tools. If it is not approved, you get the reason and stay in plan mode.`
+const planInstructions = `You are in plan mode. Look things up with your tools. You may save sources and cite them in your answer. Keep file publishing and other changes for build mode. Write the steps of the work as a todo list. When the plan is ready, call ${names.submitPlan} with the list and a short summary, and then end your answer. When the plan is approved, a new Turn starts in build mode with all your tools. If it is not approved, you get the reason and stay in plan mode.`
 
 /** The message that starts the work after a plan is approved. */
 export const approved =

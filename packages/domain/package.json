@@ -18,6 +18,8 @@
 		"./AppConnections": "./dist/AppConnections.js",
 		"./AppDiscovery": "./dist/AppDiscovery.js",
 		"./AppIndex": "./dist/AppIndex.js",
+		"./ArtifactCommands": "./dist/ArtifactCommands.js",
+		"./Artifacts": "./dist/Artifacts.js",
 		"./Authorization": "./dist/Authorization.js",
 		"./Billing": "./dist/Billing.js",
 		"./BotMemory": "./dist/BotMemory.js",

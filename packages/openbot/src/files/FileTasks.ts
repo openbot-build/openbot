@@ -7,12 +7,18 @@ import {
 	type Caller,
 	type ServiceIdentity,
 } from "@openbot-build/domain"
-import { and, eq, isNull, lt, notExists, or } from "drizzle-orm"
+import { and, eq, isNull, lt, notExists, notInArray, or } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Check from "../authorization/Check.ts"
 import * as Db from "../database/Database.ts"
-import { executions, files, fileRefs } from "../database/Schema.ts"
+import {
+	artifactFiles,
+	artifactJobs,
+	executions,
+	files,
+	fileRefs,
+} from "../database/Schema.ts"
 import {
 	Store,
 	transactionFailures,
@@ -194,6 +200,25 @@ const make = Effect.gen(function* () {
 						)
 						.for("update"))[0]
 					if (row === undefined) return yield* Files.FileNotFound.make({ id })
+					const publishing = yield* db
+						.select({ id: executions.id })
+						.from(artifactFiles)
+						.innerJoin(executions, eq(artifactFiles.executionId, executions.id))
+						.where(
+							and(
+								eq(artifactFiles.file, id),
+								notInArray(executions.status, [
+									"completed",
+									"failed",
+									"cancelled",
+									"interrupted",
+								]),
+							),
+						)
+					if (publishing.length > 0)
+						return yield* Execution.Conflict.make({
+							id: Execution.Id.make(publishing[0]!.id),
+						})
 					yield* enqueue(id)
 				}),
 			)
@@ -217,6 +242,26 @@ const make = Effect.gen(function* () {
 								and(
 									eq(files.status, "pending"),
 									lt(files.updatedAt, now - Files.pendingLifetimeMs),
+									notExists(
+										db
+											.select({ id: executions.id })
+											.from(artifactFiles)
+											.innerJoin(
+												executions,
+												eq(artifactFiles.executionId, executions.id),
+											)
+											.where(
+												and(
+													eq(artifactFiles.file, files.id),
+													notInArray(executions.status, [
+														"completed",
+														"failed",
+														"cancelled",
+														"interrupted",
+													]),
+												),
+											),
+									),
 								),
 								and(
 									eq(files.status, "ready"),
@@ -301,7 +346,13 @@ const make = Effect.gen(function* () {
 								{ _tag: "Result", resource: { kind: "File", id: ref.fileId } },
 							],
 						},
-						db.delete(files).where(eq(files.id, ref.fileId)),
+						Effect.gen(function* () {
+							yield* db.delete(files).where(eq(files.id, ref.fileId))
+							yield* db
+								.update(artifactJobs)
+								.set({ snapshot: null })
+								.where(eq(artifactJobs.file, ref.fileId))
+						}),
 					)
 				}),
 			)

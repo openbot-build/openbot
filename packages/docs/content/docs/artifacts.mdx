@@ -1,0 +1,48 @@
+---
+title: "Keep work results"
+description: "Read files, their versions, and the sources behind them."
+---
+
+An **artifact** is a result that a Bot makes for a Chat, such as a report or a
+CSV table. It keeps the same ID when the Bot changes it. Each version has its
+own saved file. Your client can show the result and let you download it.
+
+## Make a result
+
+Tell the Bot which files you need. It can publish text or a file from a
+[Computer](/computers) that it may use. A file is delivered only after its
+content and version are saved. Saying that a file is done does not publish it.
+
+The platform needs [file storage](/admin/file-storage). Its allowed file types,
+size limits, and storage allowance apply to these files too.
+
+## Read sources
+
+A **source** is a saved copy of material used in the work. It can come from a
+public web page, a completed App result, or a text file on a Computer. A
+reference in a message or file version names this saved source. It may also give
+a short quote from it.
+
+A source tells you which material was kept. It does not prove that every fact or
+conclusion is right. An address reported by an App or written in a file does not
+mean that OpenBot read that web page itself.
+
+## Change a result
+
+Ask the Bot to change the result and give the new needs. The result keeps its
+ID, and the new content becomes another version. Earlier messages still name
+their original versions. You can read the history or download a fixed version.
+
+Files already published stay in storage when a Computer stops. A path on that
+Computer alone is not a saved result.
+
+## Keep or remove content
+
+People who may read the Chat may read its results and sources. Publishing or
+changing them needs write access to the Chat. Ordinary uploaded [files](/files)
+stay private.
+
+All saved versions and source copies count toward storage use. The Chat keeps
+them from unused-file cleanup. Deleting the Chat releases those references. An
+owner can still delete file content. Its old version remains in the history as
+unavailable, and OpenBot does not make it again in the background.

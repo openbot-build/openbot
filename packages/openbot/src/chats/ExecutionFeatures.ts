@@ -21,6 +21,7 @@ import * as BotTools from "../plugins/bots/BotTools.ts"
 import * as ChannelTools from "../plugins/channels/ChannelTools.ts"
 import * as ComputerTools from "../plugins/computers/ComputerTools.ts"
 import * as WorkTools from "../plugins/work/WorkTools.ts"
+import * as ArtifactTools from "../plugins/artifacts/ArtifactTools.ts"
 import * as ChatFeatures from "./ChatFeatures.ts"
 
 /** Build the approval gate and every tool that holds it in one execution scope. */
@@ -33,12 +34,14 @@ const open = (fence: Fence, frame: Gate.Frame) =>
 			const work = yield* WorkTools.durable(fence)
 			const channels = yield* ChannelTools.durable(fence)
 			const computers = yield* ComputerTools.make
+			const artifacts = yield* ArtifactTools.durable(fence)
 			return yield* ChatFeatures.make.pipe(
 				Effect.provideService(AppTools.AppTools, apps),
 				Effect.provideService(BotTools.BotTools, bots),
 				Effect.provideService(WorkTools.WorkTools, work),
 				Effect.provideService(ChannelTools.ChannelTools, channels),
 				Effect.provideService(ComputerTools.ComputerTools, computers),
+				Effect.provideService(ArtifactTools.ArtifactTools, artifacts),
 				Effect.provideService(Chat.Approvals, Approvals.durable(gate)),
 			)
 		}).pipe(Effect.provideService(Gate.Gate, gate))

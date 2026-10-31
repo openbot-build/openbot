@@ -1,0 +1,178 @@
+---
+title: "Artefakte und Quellen"
+description: "Feste Dateiversionen veröffentlichen und ihr Material behalten."
+---
+
+Für Entwickler, die einen Client anbinden oder den Server erweitern. Beginne mit
+dem [Entwicklerhandbuch](/de/developers).
+
+Ein **Artefakt** ist ein Ergebnis mit einer festen ID. Jede **Version** nennt
+eine feste Datei im Objektspeicher. Eine **Quelle** ist eine gespeicherte Kopie
+von Material. Ein **Verweis** verbindet eine Nachricht oder Dateiversion mit der
+Quelle. Das ist ein Materialnachweis, kein Beweis für eine Folgerung.
+
+## Datenmodell
+
+Artefakte und Quellen gehören zu einem Chat. Ein Artefakt hat einen Titel und
+eine aktuelle Versionsnummer. Jede Version speichert eine File-Referenz, einen
+SHA-256-Wert, den erstellenden Turn, falls vorhanden das Item, und
+Quellenverweise. SHA-256 ist eine Prüfsumme für Inhalt. Der Server prüft damit
+die festen Bytes.
+
+Eine Quelle speichert Ursprung, Zeit, Textdatei und Prüfsumme. Der Ursprung ist
+`PublicUrl`, `AppResult` oder `ComputerTextFile`. Nur `PublicUrl` nennt eine
+Adresse, die OpenBot selbst las. `reportedUrl` ist, falls vorhanden, nur eine
+mit dem Material gelieferte Adresse.
+
+Die Plattform braucht Dateispeicher. Dateitypen, maximale Dateigröße und das
+Speicherkontingent gelten für alle Versionen und Quellenkopien. Erlaube
+`text/plain` für Quellenkopien. Erlaube `text/markdown` und `text/csv`, wenn
+Aufgaben diese Ausgaben brauchen.
+
+## Eine Quelle erfassen
+
+Sende einen Befehlsschlüssel und `from` an `POST /v1/chats/:chatId/sources`:
+
+```json
+{
+	"commandKey": "source-one",
+	"from": { "_tag": "PublicUrl", "url": "https://docs.example.com/guide" }
+}
+```
+
+`PublicUrl` liest öffentlichen Text, HTML oder JSON mit den Netzwerkregeln des
+Servers. HTML wird zu reinem Text. Skripte, Stile und Vorlagen werden entfernt.
+Der Server führt keine Seitenskripte aus und liest keine PDFs oder OCR-Inhalte.
+
+Für `AppResult` ist eine `operationId` eines erfolgreich beendeten App-Aufrufs
+in diesem Chat nötig. OpenBot kopiert das gespeicherte Ergebnis als JSON-Text
+und ruft die App nicht erneut auf. Für `ComputerTextFile` sind `computerId` und
+`path` nötig. OpenBot prüft den Computer-Zugriff und liest eine UTF-8-Kopie.
+
+Die Antwort ist `202` mit einem Ausführungsbeleg. Folge der Ausführung bis zum
+Ende. `SourceCaptured` nennt die Quelle. `GET /v1/chats/:chatId/sources` listet
+Quellen auf. `GET /v1/chats/:chatId/sources/:sourceId` und dessen `/content`
+geben Daten und Inhalt zurück.
+
+## Eine Datei veröffentlichen
+
+Sende an `POST /v1/chats/:chatId/artifacts`:
+
+```json
+{
+	"commandKey": "report-one",
+	"title": "Work plan",
+	"filename": "plan.md",
+	"mediaType": "text/markdown",
+	"from": { "_tag": "Text", "text": "# Work plan\n\nUse the saved guide.\n" },
+	"citations": [{ "type": "source_reference", "source_id": "source_id" }]
+}
+```
+
+Nutze
+`from: { "_tag": "ComputerPath", "computerId": "computer_id", "path": "/workspace/plan.csv" }`
+für eine vorhandene Computer-Datei. Ihr Pfad wird dadurch keine öffentliche URL.
+Der Server liest und speichert die echten Bytes.
+
+Die Veröffentlichung gibt `202` und einen Ausführungsbeleg zurück.
+`ArtifactPublished` heißt, dass Datei und feste Version gespeichert sind. Nach
+einer verlorenen Antwort verwende denselben Schlüssel und Inhalt erneut. Ein
+anderer Inhalt mit demselben Schlüssel ist ein Konflikt. Eine verlorene
+Netzwerkantwort ist kein Grund für einen neuen Schlüssel.
+
+Liste Ergebnisse mit `GET /v1/chats/:chatId/artifacts` auf. Lies eines mit
+`GET /v1/chats/:chatId/artifacts/:artifactId`. Lade eine feste Version mit
+`GET /v1/chats/:chatId/artifacts/:artifactId/versions/:version/content`
+herunter. Clients nutzen diese geschützten Routen, keine kurz gültigen
+Speicher-URLs.
+
+Die Download-Antwort nutzt den gespeicherten Medientyp der Datei für
+`Content-Type` und ihre Bytezahl für `Content-Length`. `Content-Disposition`
+nennt den Dateinamen für den Download. Der Name gehört zu dieser festen Version
+und kann UTF-8-Text enthalten.
+
+## Eine Version hinzufügen
+
+Sende dieselben Felder an
+`POST /v1/chats/:chatId/artifacts/:artifactId/versions` und ergänze
+`expectedVersion`. Dies muss die aktuelle Version sein. Ein Erfolg erstellt eine
+neue File und setzt die aktuelle Version. Frühere Nachrichten nennen weiter ihre
+ursprüngliche Version.
+
+Liste den Verlauf mit `GET /v1/chats/:chatId/artifacts/:artifactId/versions`
+auf. Dessen Route `/:version` liest eine Version. Listen nutzen `limit`, `after`
+und `next`. Ein Artefakt erscheint auch nach Änderungen nur einmal in der Liste.
+
+Wenn zwei Aufrufer dieselbe Version ändern, kann nur einer gegen diese erwartete
+Version veröffentlichen. Der andere erhält einen Konflikt. Lies das Artefakt vor
+einer neuen Änderung erneut. Ein Speicherfehler ändert die aktuelle Version
+nicht.
+
+## Nachrichten und Ereignisse lesen
+
+Ein `output_text` kann Anmerkungen wie
+`{ "type": "source_reference", "source_id": "source_id", "quote": "saved words" }`
+enthalten. Zitate sind optional. Mit denselben Leerraumregeln müssen sie im
+gespeicherten Quellentext vorkommen.
+
+Ein `output_file` gibt Artefakt-ID, feste Version, File-ID, Dateiname, Medientyp
+und Bytezahl zurück. Verlaufs-Items erhalten `citations` und `artifacts`. Der
+gespeicherte Modell-Prompt behält sein Format. Alte Items ohne solche Einträge
+geben leere Listen zurück.
+
+`POST /v1/chats/:chatId/citations` fügt Verweise zu einem gespeicherten
+Assistenten-Item hinzu. Gib `commandKey`, `itemId` und `citations` an. Das
+Bot-Werkzeug `openbot_cite_sources` erklärt dagegen Verweise für die nächste
+gespeicherte Textnachricht desselben Turns. Fehlversuche des Modells und spätere
+Turns erhalten diese Verweise nicht.
+
+Folge dem bestehenden Ausführungsstrom für `SourceCaptured`, `ArtifactPublished`
+und `CitationRecorded`. Beim Datei-Ereignis ist die feste Version abfragbar. Ein
+Verweis-Ereignis wird mit seinem echten Nachrichten-Item gespeichert. Ein
+Modellschritt allein beweist keine Dateilieferung.
+
+Der Bot nutzt `openbot_capture_source` zum Speichern von Material,
+`openbot_list_artifacts` zum Finden von Ergebnissen, `openbot_read_artifact` zum
+Lesen einer festen Version und `openbot_read_source` zum Lesen einer Quelle.
+`openbot_publish_artifact` erstellt ein Ergebnis oder eine neue Version.
+`openbot_cite_sources` nennt Quellen für die nächste Textnachricht. Lesen,
+Quellenerfassung und Verweise sind im Plan-Modus möglich. Veröffentlichen
+braucht den Build-Modus.
+
+## Zugriff und Aufbewahrung
+
+Das Lesen von Daten und Inhalt braucht Lesezugriff auf den Chat. Erfassen,
+Veröffentlichen und Hinzufügen von Verweisen brauchen Schreibzugriff. App- und
+Computer-Zugriff werden ebenfalls geprüft. API-Schlüssel und gleichursprüngliche
+Sitzungs-Cookies folgen denselben Regeln. Siehe
+[Authentifizierung](/de/developers/authentication).
+
+Erzeugte Dateien umgehen den Chat-Zugriff nicht über alte File-Routen. Normale
+Uploads bleiben privat. Alle Versionen und Quellenkopien zählen zum
+Speicherbedarf des Ausführungseigentümers.
+
+Der Chat schützt diese Dateien vor der Bereinigung ungenutzter Dateien. Eine
+aktive Veröffentlichung schützt auch ihre ausstehende Datei. Wird der Chat
+gelöscht, enden diese Verweise. Der Eigentümer kann den Inhalt über die File-API
+löschen, wenn die Veröffentlichung beendet ist. Aktive Arbeit gibt einen
+Konflikt zurück und muss zuerst abgebrochen werden.
+
+Nach dem Löschen bleiben alte Daten mit `availability: "unavailable"` erhalten.
+Inhaltsabrufe geben `404` zurück. Eine Wiederholung erstellt gelöschten Inhalt
+nicht erneut.
+
+## Prüfen und aktualisieren
+
+Prüfe heruntergeladene Bytes, Quellen und feste Versionen. Assistententext
+allein beweist keinen Erfolg. Eine unterbrochene Veröffentlichung behält Befehl
+und Prüfsumme. Muss sie einen Computer-Pfad erneut lesen, führen geänderte Bytes
+zum Fehler statt zu einem anderen Ergebnis unter demselben Befehl.
+
+Führe vor der Freigabe denselben Ablauf mit einem echten Modell und
+eingerichteten Recherchefähigkeiten aus. Ohne diese Zugangsdaten ist die Prüfung
+unvollständig.
+
+Aktualisiere Server, API-Paket und Client-SDK gemeinsam für diese Antworten und
+Ereignisse. Alte Clients, die nur leere Anmerkungen oder alte Ereignisse
+annehmen, müssen angepasst werden. Alte Nachrichten erhalten beim Update keine
+erfundenen Quellen oder Artefakte.

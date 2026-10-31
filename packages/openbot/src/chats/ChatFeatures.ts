@@ -18,6 +18,7 @@ import { AppTools } from "../plugins/apps/AppTools.ts"
 import { BotTools } from "../plugins/bots/BotTools.ts"
 import { ChannelTools } from "../plugins/channels/ChannelTools.ts"
 import { ComputerTools } from "../plugins/computers/ComputerTools.ts"
+import { ArtifactTools } from "../plugins/artifacts/ArtifactTools.ts"
 import { names as executionToolNames } from "./ToolControls.ts"
 import { WorkTools } from "../plugins/work/WorkTools.ts"
 import { operationsOf } from "../settings/Documents.ts"
@@ -107,6 +108,7 @@ export const make = Effect.gen(function* () {
 	const work = yield* WorkTools
 	const channels = yield* ChannelTools
 	const computers = yield* ComputerTools
+	const artifacts = yield* ArtifactTools
 	const files = yield* Files
 	const settings = yield* Settings
 	const report = yield* Report.make
@@ -150,6 +152,7 @@ export const make = Effect.gen(function* () {
 						workTools,
 					])
 					if (state.kind === "review") return common
+					const artifactTools = yield* artifacts.register({ read })
 					const channelTools = yield* channels.register({ read })
 					const computerTools = yield* computers.register({
 						notify: (chat, notice) =>
@@ -174,6 +177,7 @@ export const make = Effect.gen(function* () {
 						common,
 						channelTools,
 						computerTools,
+						artifactTools,
 					])
 					const occupied: Readonly<Record<string, Tool.Any>> = fixed.tools
 					const appTools = yield* apps.register(input.owner, [
@@ -188,6 +192,7 @@ export const make = Effect.gen(function* () {
 						workTools,
 						channelTools,
 						computerTools,
+						artifactTools,
 					])
 				}).pipe(Effect.provideService(Work, current))
 				return Registration.select(

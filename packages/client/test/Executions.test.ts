@@ -5,7 +5,8 @@ import {
 	SessionAuth,
 	AppViewsApi,
 } from "@openbot-build/api"
-import { Execution } from "@openbot-build/domain"
+import { Artifacts as ArtifactData, Execution } from "@openbot-build/domain"
+import { Chat } from "@openbot-build/core"
 import {
 	Array as Arr,
 	Crypto,
@@ -24,6 +25,7 @@ import * as Client from "../src/Client.ts"
 import * as Executions from "../src/Executions.ts"
 import * as Command from "../src/Command.ts"
 import * as AppViews from "../src/AppViews.ts"
+import * as Artifacts from "../src/Artifacts.ts"
 
 const event = (
 	id: string,
@@ -86,6 +88,88 @@ const streamResponse = (events: ReadonlyArray<Execution.Event>) =>
 		),
 		Effect.orDie,
 	)
+
+it.effect("the SDK reads saved source, file and citation events", () =>
+	Effect.gen(function* () {
+		const bodies: ReadonlyArray<Execution.EventBody> = [
+			{
+				_tag: "SourceCaptured",
+				chatId: "chat",
+				sourceId: ArtifactData.SourceId.make("source"),
+			},
+			{
+				_tag: "ArtifactPublished",
+				chatId: "chat",
+				artifactId: ArtifactData.ArtifactId.make("artifact"),
+				version: 2,
+			},
+			{
+				_tag: "CitationRecorded",
+				chatId: "chat",
+				itemId: "answer",
+				citations: [
+					{
+						type: "source_reference",
+						source_id: ArtifactData.SourceId.make("source"),
+					},
+				],
+			},
+		]
+		const entries = Arr.map(bodies, (body, index) =>
+			event("publish", index + 1, body),
+		)
+		const result = yield* Executions.observe(
+			Execution.Id.make("publish"),
+			0,
+		).pipe(
+			Stream.runCollect,
+			Effect.provide(layer(() => streamResponse(entries))),
+		)
+		assert.deepStrictEqual(
+			Arr.map(result, (entry) => entry.body),
+			bodies,
+		)
+	}),
+)
+
+it.effect("sending a publish command again keeps its key and receipt", () =>
+	Effect.gen(function* () {
+		const key = Execution.CommandKey.make("publish_one")
+		const paths = yield* Ref.make<ReadonlyArray<string>>([])
+		const client = layer((path) =>
+			Ref.update(paths, Arr.append(path)).pipe(
+				Effect.as(
+					Response.json(
+						{ executionId: "publish", commandKey: key, sequence: 1 },
+						{ status: 202 },
+					),
+				),
+			),
+		)
+		const command = yield* Artifacts.publish(Chat.Id.make("chat"), {
+			commandKey: key,
+			title: "Plan",
+			filename: "plan.md",
+			mediaType: "text/markdown",
+			from: { _tag: "Text", text: "Plan" },
+			citations: [],
+		}).pipe(Effect.provide(client))
+		assert.strictEqual(command.commandKey, key)
+		assert.deepStrictEqual(yield* command.send, yield* command.send)
+		assert.deepStrictEqual(yield* Ref.get(paths), [
+			"/v1/chats/chat/artifacts",
+			"/v1/chats/chat/artifacts",
+		])
+	}).pipe(
+		Effect.provideService(
+			Crypto.Crypto,
+			Crypto.make({
+				randomBytes: (size) => new Uint8Array(size),
+				digest: () => Effect.die("This test makes no digest."),
+			}),
+		),
+	),
+)
 
 it.effect(
 	"a child can finish after its parent stream ends, and each child has its own cursor",

@@ -70,7 +70,9 @@ const finish = Effect.fn("CloudflareE2E.finish")(function* (
 	assert.ok(view.response !== null)
 	const text = Arr.join(
 		Arr.flatMap(view.response.output, (item) =>
-			Arr.map(item.content, (part) => part.text),
+			Arr.flatMap(item.content, (part) =>
+				part.type === "output_text" ? [part.text] : [],
+			),
 		),
 		"",
 	)

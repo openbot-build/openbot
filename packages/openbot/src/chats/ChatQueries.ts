@@ -17,6 +17,9 @@ import * as ChatRecords from "./ChatRecords.ts"
 import * as StoredChats from "./StoredChats.ts"
 import { OpenWork } from "./OpenWork.ts"
 import * as Todos from "../plugins/work/Todos.ts"
+import * as History from "../artifacts/History.ts"
+import * as Failures from "../errors/Failures.ts"
+import { ChatStorageUnavailable } from "@openbot-build/domain"
 
 /** Every entry point uses the caller's current read policy and saved records. */
 export const make = Effect.gen(function* () {
@@ -26,6 +29,16 @@ export const make = Effect.gen(function* () {
 	const records = yield* ChatRecords.make
 	const checks = yield* Check.make
 	const openWork = yield* OpenWork
+	const linked = (
+		caller: Caller,
+		chat: Chat.Id,
+		items: ReadonlyArray<Item.Record>,
+	) =>
+		History.items(db, ownerKey(caller), chat, items).pipe(
+			Failures.replace("Could not read the links of Chat Items", () =>
+				ChatStorageUnavailable.make({}),
+			),
+		)
 	const check = (caller: Caller, id: Chat.Id) =>
 		checks.check(caller, {
 			action: "read",
@@ -49,7 +62,11 @@ export const make = Effect.gen(function* () {
 				items:
 					turn === undefined
 						? []
-						: yield* source.turnLog(view.chat.id, turn.id),
+						: yield* linked(
+								caller,
+								view.chat.id,
+								yield* source.turnLog(view.chat.id, turn.id),
+							),
 				executionId: yield* source.executionId(turn?.id),
 				open: yield* openWork.count(caller.organizationId, view.chat.id),
 			}
@@ -139,14 +156,28 @@ export const make = Effect.gen(function* () {
 			caller: Caller,
 			chat: Chat.Id,
 			input: { readonly before?: Item.Seq; readonly limit?: number },
-		) => use(caller, chat, records(ownerKey(caller)).items(chat, input)),
+		) =>
+			use(
+				caller,
+				chat,
+				Effect.gen(function* () {
+					const page = yield* records(ownerKey(caller)).items(chat, input)
+					return { ...page, items: yield* linked(caller, chat, page.items) }
+				}),
+			),
 		turn: (caller: Caller, chat: Chat.Id, turn: Turn.Id) =>
 			use(
 				caller,
 				chat,
-				Effect.all({
-					saved: records(ownerKey(caller)).turn(chat, turn),
-					items: records(ownerKey(caller)).turnLog(chat, turn),
+				Effect.gen(function* () {
+					return {
+						saved: yield* records(ownerKey(caller)).turn(chat, turn),
+						items: yield* linked(
+							caller,
+							chat,
+							yield* records(ownerKey(caller)).turnLog(chat, turn),
+						),
+					}
 				}),
 			),
 		turnItems: (
@@ -155,6 +186,17 @@ export const make = Effect.gen(function* () {
 			turn: Turn.Id,
 			input: { readonly after?: Item.Id; readonly limit?: number },
 		) =>
-			use(caller, chat, records(ownerKey(caller)).turnItems(chat, turn, input)),
+			use(
+				caller,
+				chat,
+				Effect.gen(function* () {
+					const page = yield* records(ownerKey(caller)).turnItems(
+						chat,
+						turn,
+						input,
+					)
+					return { ...page, items: yield* linked(caller, chat, page.items) }
+				}),
+			),
 	}
 })

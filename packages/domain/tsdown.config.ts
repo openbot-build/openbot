@@ -26,6 +26,8 @@ export default defineConfig({
 		AppAuthorizations: "src/AppAuthorizations.ts",
 		Developers: "src/Developers.ts",
 		Files: "src/Files.ts",
+		Artifacts: "src/Artifacts.ts",
+		ArtifactCommands: "src/ArtifactCommands.ts",
 		index: "src/index.ts",
 		Channels: "src/Channels.ts",
 		Computers: "src/Computers.ts",

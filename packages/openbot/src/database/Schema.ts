@@ -18,6 +18,7 @@ import { openbot_auth_user } from "./AuthSchema.ts"
 export * from "./ExecutionSchema.ts"
 export * from "./PermitSchema.ts"
 export * from "./TokenRateSchema.ts"
+export * from "./ArtifactSchema.ts"
 export * from "./AppGrantSchema.ts"
 
 const table = pgTable

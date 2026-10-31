@@ -808,7 +808,9 @@ it.layer(
 				assert.ok(denied.view.response !== null)
 				const deniedText = Arr.join(
 					Arr.flatMap(denied.view.response.output, (message) =>
-						Arr.map(message.content, (part) => part.text),
+						Arr.flatMap(message.content, (part) =>
+							part.type === "output_text" ? [part.text] : [],
+						),
 					),
 					"",
 				)

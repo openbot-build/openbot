@@ -1,0 +1,128 @@
+---
+title: "成果与来源"
+description: "发布固定的文件版本，并保留引用材料。"
+---
+
+本页面向连接客户端或扩展服务器的开发者。请先阅读[开发者手册](/zh-cn/developers)。
+
+**成果**是具有固定 ID 的工作结果。每个**版本**指向对象存储中的固定文件。**来源**是材料的保存副本。**引用**把消息或文件版本连接到来源。这是材料记录，不表示结论已经被证明。
+
+## 数据模型
+
+成果和来源属于 Chat。成果有标题和当前版本号。每个版本记录 File、SHA-256 摘要、创建它的 Turn、可用时的 Item，以及来源引用。SHA-256 是内容摘要，服务器用它检查保存的内容是否发生变化。
+
+来源记录出处、捕获时间、文本 File 和摘要。出处类型为 `PublicUrl`、`AppResult` 或
+`ComputerTextFile`。只有 `PublicUrl` 记录 OpenBot 自己读取过的地址。可选的
+`reportedUrl` 只是随材料给出的地址。
+
+平台需要文件存储。文件类型、最大大小和成员额度适用于所有版本及来源副本。来源副本需要允许
+`text/plain`。任务需要这些输出时，允许 `text/markdown` 和 `text/csv`。
+
+## 捕获来源
+
+向 `POST /v1/chats/:chatId/sources` 发送命令键和 `from`：
+
+```json
+{
+	"commandKey": "source-one",
+	"from": { "_tag": "PublicUrl", "url": "https://docs.example.com/guide" }
+}
+```
+
+`PublicUrl`
+按服务器网络规则读取公开文本、HTML 或 JSON。HTML 会转为纯文本，脚本、样式和模板内容会被排除。服务器不会运行网页脚本、读取 PDF 或进行 OCR。
+
+`AppResult` 需要本 Chat 中已完成且成功的 App 调用
+`operationId`。OpenBot 把保存的结果复制为 JSON 文本，不会再次调用 App。`ComputerTextFile`
+需要 `computerId` 和
+`path`。OpenBot 检查 Computer 权限后，读取一份 UTF-8 文本副本。
+
+响应为 `202`，含执行回执。跟随该执行直到结束。`SourceCaptured`
+指出已保存的来源。用 `GET /v1/chats/:chatId/sources` 列出来源；用
+`GET /v1/chats/:chatId/sources/:sourceId` 和其 `/content` 路由读取信息和内容。
+
+## 发布文件
+
+向 `POST /v1/chats/:chatId/artifacts` 发送：
+
+```json
+{
+	"commandKey": "report-one",
+	"title": "Work plan",
+	"filename": "plan.md",
+	"mediaType": "text/markdown",
+	"from": { "_tag": "Text", "text": "# Work plan\n\nUse the saved guide.\n" },
+	"citations": [{ "type": "source_reference", "source_id": "source_id" }]
+}
+```
+
+发布 Computer 上已有文件时，使用
+`from: { "_tag": "ComputerPath", "computerId": "computer_id", "path": "/workspace/plan.csv" }`。这不会把路径变为公开 URL。服务器会读取并保留实际内容。
+
+发布返回 `202` 和执行回执。`ArtifactPublished`
+表示文件和固定版本已保存。响应丢失后，重用相同命令键和请求体。同一键配不同请求体会产生冲突。不能仅因为网络响应丢失就换一个新键。
+
+用 `GET /v1/chats/:chatId/artifacts` 列出成果，用
+`GET /v1/chats/:chatId/artifacts/:artifactId` 读取详情。用
+`GET /v1/chats/:chatId/artifacts/:artifactId/versions/:version/content`
+下载固定版本。客户端使用这些需要鉴权的路由，不保存短期存储 URL。
+
+下载响应把该固定版本保存的媒体类型写入 `Content-Type`，把字节数写入
+`Content-Length`。`Content-Disposition`
+给出下载文件名。文件名来自该固定版本，可以使用 UTF-8 文本。
+
+## 添加版本
+
+向 `POST /v1/chats/:chatId/artifacts/:artifactId/versions`
+发送相同发布字段，并添加
+`expectedVersion`。它必须是当前版本。成功后会创建新的 File，并更新成果的当前版本。早先消息仍指向原来的版本。
+
+用 `GET /v1/chats/:chatId/artifacts/:artifactId/versions` 列出历史，用其
+`/:version` 路由读取一个版本。列表使用 `limit`、`after` 和
+`next`。修改后，成果列表中仍只出现一个成果。
+
+两个调用者同时修改同一版本时，只有一个能按该预期版本发布，另一个会得到冲突。再次修改前先重读成果。存储失败不会更新当前版本。
+
+## 读取消息和事件
+
+`output_text` 可以包含形如
+`{ "type": "source_reference", "source_id": "source_id", "quote": "saved words" }`
+的注释。原文摘录可以省略。给出时，在应用相同空白规则后，它必须存在于已保存的来源文本中。
+
+`output_file` 给出成果 ID、固定版本、File
+ID、文件名、媒体类型和字节数。历史 Item 增加 `citations` 和
+`artifacts`，存储的模型提示仍使用原格式。没有这些记录的旧 Item 返回空列表。
+
+`POST /v1/chats/:chatId/citations` 为已保存的助手 Item 添加引用。请求包含
+`commandKey`、`itemId` 和 `citations`。Bot 的 `openbot_cite_sources`
+工具则为同一 Turn 中下一条已保存的文本消息声明引用。失败的模型尝试和后续 Turn 不会使用这些引用。
+
+从现有执行流读取 `SourceCaptured`、`ArtifactPublished` 和
+`CitationRecorded`。文件事件提交时，发布文件即可查询。引用事件与实际消息 Item 一同提交。模型步骤事件本身不能证明文件已交付。
+
+Bot 可使用 `openbot_capture_source` 保存材料、`openbot_list_artifacts`
+查找成果、 `openbot_read_artifact` 读取固定版本，以及 `openbot_read_source`
+读取来源。 `openbot_publish_artifact`
+发布新成果或追加版本，`openbot_cite_sources`
+为下一条文本消息声明来源。读取、来源捕获和引用记账可用于 plan 模式，发布需要 build 模式。
+
+## 权限和保留
+
+读取信息或内容需要 Chat 的读权限。捕获来源、发布版本和添加引用需要写权限。App 和 Computer 权限也会检查。API
+key 和同源会话 cookie 使用相同规则。见[鉴权](/zh-cn/developers/authentication)。
+
+生成文件不能通过旧 File 路由绕过 Chat 权限。普通上传文件仍保持私有。所有历史版本和来源副本均计入执行所有者的存储用量。
+
+Chat 会保留这些文件，不让未使用文件清理任务移除。正在发布的任务也会保留待完成文件。删除 Chat 会解除引用。发布结束后，所有者可以通过 File
+API 明确删除内容。仍在发布时返回冲突，需要先取消执行。
+
+删除内容后，旧信息保留，并显示 `availability: "unavailable"`。读取内容返回
+`404`。重试不会重新生成已删除内容。
+
+## 检查和升级
+
+检查下载的实际内容、来源记录和固定版本。助手文字本身不能证明成功。中断的发布保留命令和摘要。如果必须再次读取 Computer 路径，而内容已改变，操作会失败，不会以同一命令发布不同结果。
+
+发布前，还要使用真实模型和已配置的研究能力运行同一流程。缺少这些凭证时，该检查仍未完成。
+
+服务器、API 包和客户端 SDK 需要一起升级，以支持这些响应和事件类型。只接受空注释或旧事件集合的客户端必须更新。升级不会为旧消息编造来源或成果。

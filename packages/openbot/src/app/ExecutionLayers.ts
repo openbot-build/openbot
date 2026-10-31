@@ -1,3 +1,6 @@
+import * as Artifacts from "../artifacts/Artifacts.ts"
+import * as ArtifactFiles from "../artifacts/ArtifactFiles.ts"
+import * as Materials from "../artifacts/Materials.ts"
 import * as ComputerLifecycleWorkflow from "../computers/LifecycleWorkflow.ts"
 import * as ComputerMaintenance from "../computers/Maintenance.ts"
 import * as ComputerMaintenanceWorkflow from "../computers/MaintenanceWorkflow.ts"
@@ -9,6 +12,7 @@ import * as TestWorkflow from "../apps/TestWorkflow.ts"
 import * as ResetWorkflow from "../apps/ResetWorkflow.ts"
 import * as AuthorizationWorkflow from "../apps/AuthorizationWorkflow.ts"
 import * as FileWorkflows from "../files/FileWorkflows.ts"
+import * as ArtifactWorkflow from "../artifacts/Workflow.ts"
 import * as ProofWorkflow from "../apps/ProofWorkflow.ts"
 import * as DeveloperMonitorWorkflow from "../apps/DeveloperMonitorWorkflow.ts"
 import * as IndexRequestWorkflow from "../apps/IndexRequestWorkflow.ts"
@@ -92,6 +96,12 @@ export const services = Layer.mergeAll(
 			LiveConnections.layer,
 		),
 	),
+	Layer.provideMerge(
+		Artifacts.layer.pipe(
+			Layer.provideMerge(Materials.layer),
+			Layer.provideMerge(ArtifactFiles.layer),
+		),
+	),
 	Layer.provideMerge(Layer.mergeAll(MemoryTasks.layer, MemoryLearning.layer)),
 	Layer.provideMerge(MemoryModels.layer),
 	Layer.provideMerge(
@@ -136,6 +146,7 @@ export const workflows = Layer.mergeAll(
 	ResetWorkflow.layer,
 	DeveloperMonitorWorkflow.layer,
 	FileWorkflows.layer,
+	ArtifactWorkflow.layer,
 	ProofWorkflow.layer,
 	IndexWorkflow.layer,
 	IndexRequestWorkflow.layer,
