@@ -14,7 +14,7 @@ import {
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Identity, type Caller } from "@openbot-build/domain"
 import type { Chat } from "@openbot-build/core"
-import { Array as Arr, Effect } from "effect"
+import { Array as Arr, Effect, Option } from "effect"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import * as ChatControl from "./ChatControl.ts"
 import * as DelegationQueries from "../bots/DelegationQueries.ts"
@@ -25,7 +25,7 @@ import * as TaskMessages from "./TaskMessages.ts"
 import { Store } from "../execution/Store.ts"
 import * as HttpErrors from "../execution/HttpErrors.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
-import { Turn } from "@openbot-build/core"
+import { Item, Turn } from "@openbot-build/core"
 import * as ChatHost from "./ChatHost.ts"
 
 type Request<K extends keyof typeof ChatsApi.endpoints> = Omit<
@@ -76,8 +76,29 @@ const send = (
 				queue: payload.queue ?? false,
 			})
 			.pipe(ChatErrors.map)
-		const saved = yield* store.get({ namespace, id: receipt.executionId })
-		return { ...receipt, chat, turn: Turn.Id.make(saved.resource.id) }
+		const key = { namespace, id: receipt.executionId }
+		const saved = yield* store.get(key)
+		const accepted = Option.getOrUndefined(
+			Arr.findFirst(
+				yield* store.events(
+					key,
+					receipt.sequence > 0 ? receipt.sequence - 1 : 0,
+				),
+				(event) => event.sequence === receipt.sequence,
+			),
+		)
+		const inputId =
+			accepted?.body._tag === "Checkpoint" &&
+			accepted.body.resource.kind === "Chat" &&
+			accepted.body.resource.id === chat
+				? accepted.body.inputId
+				: undefined
+		return {
+			...receipt,
+			chat,
+			turn: Turn.Id.make(saved.resource.id),
+			...(inputId === undefined ? {} : { inputId: Item.Id.make(inputId) }),
+		}
 	})
 const implementations = Effect.gen(function* () {
 	const control = yield* ChatControl.make

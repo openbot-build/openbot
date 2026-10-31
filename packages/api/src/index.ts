@@ -63,6 +63,7 @@ export {
 	ChatView,
 	ChatSummary,
 	ChatInfo,
+	QueuedChatInput,
 	ChatKind,
 	ChatParent,
 	ChatStatus,

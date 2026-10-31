@@ -194,7 +194,12 @@ export const EventBody = Schema.TaggedUnion({
 	InputMoved: { executionId: Id, items: Schema.Array(Schema.String) },
 	/** Follow this execution with its own cursor, steps, and attempts. */
 	ChildExecution: { executionId: Id, step: Schema.String },
-	Checkpoint: { resource: Resource, revision: Schema.Natural },
+	Checkpoint: {
+		resource: Resource,
+		revision: Schema.Natural,
+		/** A message command keeps this input ID when the client retries it. */
+		inputId: Schema.optionalKey(Schema.String),
+	},
 })
 export type EventBody = typeof EventBody.Type
 

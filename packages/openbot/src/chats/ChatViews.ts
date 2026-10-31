@@ -8,6 +8,7 @@ import type {
 } from "@openbot-build/api"
 import * as ChatHost from "./ChatHost.ts"
 import { response } from "./ResponseMapping.ts"
+import { Array as Arr } from "effect"
 
 export const info = (ref: Chat.Ref): ChatInfo => {
 	const state = ChatHost.hostState(ref)
@@ -42,6 +43,21 @@ export const project = (input: {
 		response: turn === undefined ? null : response(ref.id, turn, input.items),
 		executionId: input.executionId,
 		inbox: ref.inbox.length,
+		queuedInputs: Arr.flatMap(ref.inbox, (entry) =>
+			entry.kind === "action" ||
+			entry.action !== undefined ||
+			entry.notice !== undefined ||
+			entry.approved !== undefined
+				? []
+				: [
+						{
+							id: entry.id,
+							kind: entry.kind,
+							turn: entry.turn ?? null,
+							content: entry.content,
+						},
+					],
+		),
 		open: input.open,
 	}
 }

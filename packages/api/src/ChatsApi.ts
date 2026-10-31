@@ -47,6 +47,8 @@ export const ChatCommandReceipt = Schema.Struct({
 	...Execution.Receipt.fields,
 	chat: Chat.Id,
 	turn: Turn.Id,
+	/** The same input ID in the queue and in saved Chat Items. Older commands may have none. */
+	inputId: Schema.optionalKey(Item.Id),
 })
 export type ChatCommandReceipt = typeof ChatCommandReceipt.Type
 
@@ -163,6 +165,15 @@ export const TurnInfo = Schema.Struct({
 })
 export type TurnInfo = typeof TurnInfo.Type
 
+/** Saved input that waits for the Bot to read it. Its ID stays the same in history. */
+export const QueuedChatInput = Schema.Struct({
+	id: Item.Id,
+	kind: Schema.Literals(["message", "steer"]),
+	turn: Schema.NullOr(Turn.Id),
+	content: Chat.InboxEntry.fields.content,
+})
+export type QueuedChatInput = typeof QueuedChatInput.Type
+
 /** One Chat, its current Turn and its latest response. It holds no history. */
 export const ChatView = Schema.Struct({
 	chat: ChatInfo,
@@ -172,6 +183,8 @@ export const ChatView = Schema.Struct({
 	executionId: Schema.NullOr(Execution.Id),
 	/** The number of inputs that wait for a Turn. */
 	inbox: Schema.Natural,
+	/** Fixed input IDs let clients replace local pending rows with this saved queue. */
+	queuedInputs: Schema.optionalKey(Schema.Array(QueuedChatInput)),
 	open: OpenWork,
 })
 export type ChatView = typeof ChatView.Type

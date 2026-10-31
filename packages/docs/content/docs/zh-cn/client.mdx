@@ -73,6 +73,13 @@ const id = await Effect.runPromise(
 也会准备带稳定键的命令。这些辅助函数需要平台的 `Crypto`
 服务；上面的 Node.js 示例使用 `NodeCrypto.layer`。
 
+为了在页面重新加载后恢复，调用 `command.send`
+前应保存命令键、目标和完整输入。再次准备命令时，把原键作为 `commandKey`
+传入。新命令的有效消息回执包含 `inputId`。在 `ChatView.queuedInputs[].id`
+或已保存的 `ChatItem.id`
+中找到它后，再用服务端记录替换本地待发送副本。较早保存的命令可能没有这个字段。见
+[回答](/zh-cn/developers/chats#回答)。
+
 | 选项             | 必需 | 作用                                                                                                  |
 | ---------------- | ---- | ----------------------------------------------------------------------------------------------------- |
 | `baseUrl`        | 是   | OpenBot 的源，例如 `https://api.example.com`。                                                        |

@@ -78,6 +78,13 @@ observation does not cancel work. `Executions.cancel` and `Executions.decide`
 also prepare commands with stable keys. Give a platform `Crypto` service when
 using these helpers; this Node.js example uses `NodeCrypto.layer`.
 
+For a page reload, save the command key, target, and full input before calling
+`command.send`. Pass that key as `commandKey` when preparing the command again.
+A valid message receipt includes `inputId` for new commands. Match it to
+`ChatView.queuedInputs[].id` or a saved `ChatItem.id` before replacing a local
+pending copy. Old saved commands may omit the field. See
+[The answer](/developers/chats#the-answer).
+
 | Option           | Required | What it does                                                                                                      |
 | ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
 | `baseUrl`        | Yes      | The origin of OpenBot, such as `https://api.example.com`.                                                         |

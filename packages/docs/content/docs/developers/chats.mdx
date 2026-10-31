@@ -111,13 +111,27 @@ OpenBot returns `202` after it saves the command:
 	"commandKey": "trip-1",
 	"sequence": 2,
 	"chat": "chat_7d21…",
-	"turn": "t-19aa"
+	"turn": "t-19aa",
+	"inputId": "i-58bc"
 }
 ```
 
 The receipt names the saved execution and its Turn, also when the input must
 wait. The same command key and body return the same receipt. A changed body with
 the same key returns `409` with `ExecutionKeyConflict`.
+
+New message commands include `inputId`. It names one saved input in
+`ChatView.queuedInputs`, then the same `ChatItem.id` when the Bot reads it.
+Older saved commands may omit it. OpenBot does not invent input IDs for them.
+The message command's saved `Checkpoint` also holds this input ID.
+`receipt.sequence` is a position in the execution event log, not an Item number
+or a Chat revision.
+
+Before sending, save the command key, its Bot or Chat target, and the full
+input, including file IDs and `queue`. After a lost reply or a page reload, send
+that same command again. If the first Bot reply was lost, use the same Bot
+target again. There is no public route to look up a receipt by command key.
+After a valid receipt, stop sending and follow its execution.
 
 Use `GET /v1/executions/:executionId` for state. Read the saved answer with
 `GET /v1/chats/:chatId/turns/:turnId`. Sending a message does not wait for its
@@ -183,6 +197,16 @@ the work that it is about.
 A Turn that ends before it reads a steer message gives it back to the inbox, so
 no input is lost. The view of a Chat shows the number of inputs that wait in
 `inbox`.
+
+`queuedInputs` gives the saved inputs that still wait, including their `id`,
+`kind`, `turn`, and `content`. New servers return an empty list when none wait.
+This list only holds person messages and steers that can be shown as user input.
+It leaves out notices, approved calls, and host actions. `inbox` still counts
+all entries, so the counts can differ. A client can replace its local pending
+copy after it finds `receipt.inputId` in this list or as a saved `ChatItem.id`.
+Use the ID, not matching text or a count. A queued input can be cancelled before
+it becomes an Item. An idle Chat or a finished execution alone does not prove
+that the input is in history.
 
 ---
 

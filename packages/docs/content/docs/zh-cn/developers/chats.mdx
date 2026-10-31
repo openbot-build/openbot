@@ -102,12 +102,22 @@ OpenBot 保存命令后返回 `202`：
 	"commandKey": "trip-1",
 	"sequence": 2,
 	"chat": "chat_7d21…",
-	"turn": "t-19aa"
+	"turn": "t-19aa",
+	"inputId": "i-58bc"
 }
 ```
 
 回执包含已保存的执行和 Turn，即使输入仍需等待。相同的命令键和内容返回相同回执。相同键配上不同内容会返回
 `409` 和 `ExecutionKeyConflict`。
+
+新消息命令包含 `inputId`。它指向 `ChatView.queuedInputs`
+中的一条已保存输入；Bot 读到输入后，同一 ID 会成为
+`ChatItem.id`。较早保存的命令可能没有该字段，OpenBot 不会为它们补造输入 ID。消息命令保存的
+`Checkpoint` 也包含这个输入 ID。 `receipt.sequence`
+是执行事件日志中的位置，不是 Item 序号或 Chat 修订号。
+
+发送前，保存命令键、目标 Bot 或 Chat，以及完整输入，包括文件 ID 和
+`queue`。回复丢失或页面重新加载后，再发送同一命令。首次 Bot 请求的回复丢失时，仍使用原来的 Bot 目标。公开 API 没有按命令键查询回执的接口。取得有效回执后，停止重发，改为观察该执行。
 
 用 `GET /v1/executions/:executionId` 读取状态。用
 `GET /v1/chats/:chatId/turns/:turnId`
@@ -165,6 +175,12 @@ curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 如果一个 Turn 在读到 steer 消息之前就结束了，它会把这条消息放回收件箱，所以输入不会丢失。Chat 的视图在
 `inbox` 中显示等待的输入数量。
+
+`queuedInputs` 返回仍在等待的已保存输入，包括 `id`、`kind`、`turn` 和
+`content`。没有等待输入时，新服务端返回空数组。这个列表只包含应显示为用户输入的人类消息和 steer，不包含通知、已允许的工具调用或主机动作。`inbox`
+仍统计所有条目，因此两者数量可以不同。客户端在这个列表中找到
+`receipt.inputId`，或在已保存的历史中找到同 ID 的 `ChatItem`
+后，就可以用服务端记录替换本地待发送副本。应按 ID 判断，不能只匹配文字或数量。排队输入可能在成为 Item 前被取消。Chat 空闲或执行结束，本身不能证明输入已进入历史。
 
 ---
 

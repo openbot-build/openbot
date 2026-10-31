@@ -80,6 +80,14 @@ der Beobachtung bricht die Arbeit nicht ab. `Executions.cancel` und
 diesen Helfern einen `Crypto`-Dienst der Plattform. Das Node.js-Beispiel nutzt
 `NodeCrypto.layer`.
 
+Speichere für ein Neuladen den Befehlsschlüssel, das Ziel und die ganze Eingabe,
+bevor du `command.send` aufrufst. Gib beim erneuten Vorbereiten den alten
+Schlüssel als `commandKey` mit. Ein gültiger Nachrichtenbeleg enthält für neue
+Befehle `inputId`. Gleiche sie mit `ChatView.queuedInputs[].id` oder einer
+gespeicherten `ChatItem.id` ab, bevor du eine lokale wartende Kopie ersetzt.
+Ältere gespeicherte Befehle können das Feld weglassen. Siehe
+[Die Antwort](/de/developers/chats#die-antwort).
+
 | Option           | Pflicht | Was sie tut                                                                                                                 |
 | ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `baseUrl`        | Ja      | Der Origin von OpenBot, zum Beispiel `https://api.example.com`.                                                             |

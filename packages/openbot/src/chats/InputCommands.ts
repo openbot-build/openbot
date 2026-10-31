@@ -413,6 +413,7 @@ const make = Effect.gen(function* () {
 										_tag: "Checkpoint" as const,
 										resource: { kind: "Chat", id: input.chat },
 										revision: changed.view.chat.revision,
+										inputId: entry.id,
 									},
 								],
 							}
@@ -593,6 +594,7 @@ const make = Effect.gen(function* () {
 									_tag: "Checkpoint" as const,
 									resource: { kind: "Chat", id: input.chat },
 									revision: changed.view.chat.revision,
+									inputId: entry.id,
 								},
 							],
 						}

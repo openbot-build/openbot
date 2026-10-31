@@ -114,13 +114,28 @@ OpenBot gibt nach dem Speichern des Befehls `202` zurück:
 	"commandKey": "trip-1",
 	"sequence": 2,
 	"chat": "chat_7d21…",
-	"turn": "t-19aa"
+	"turn": "t-19aa",
+	"inputId": "i-58bc"
 }
 ```
 
 Der Beleg nennt die gespeicherte Ausführung und ihren Turn, auch wenn die
 Eingabe noch wartet. Gleicher Schlüssel und Inhalt geben denselben Beleg. Ein
 anderer Inhalt mit demselben Schlüssel gibt `409` mit `ExecutionKeyConflict`.
+
+Neue Nachrichtenbefehle enthalten `inputId`. Sie nennt eine gespeicherte Eingabe
+in `ChatView.queuedInputs`. Wenn der Bot sie liest, wird dieselbe ID zu
+`ChatItem.id`. Ältere gespeicherte Befehle können das Feld weglassen. OpenBot
+erfindet dafür keine Eingabe-IDs. Der gespeicherte `Checkpoint` des Befehls
+enthält diese Eingabe-ID ebenfalls. `receipt.sequence` ist eine Stelle im
+Ereignislog der Ausführung, keine Item-Nummer und keine Chat-Revision.
+
+Speichere vor dem Senden den Befehlsschlüssel, das Bot- oder Chat-Ziel und die
+ganze Eingabe mit Datei-IDs und `queue`. Sende nach einer verlorenen Antwort
+oder einem Neuladen denselben Befehl erneut. Ging die erste Bot-Antwort
+verloren, nutze wieder dasselbe Bot-Ziel. Es gibt keine öffentliche Route, die
+einen Beleg nach Befehlsschlüssel sucht. Sende nach einem gültigen Beleg nicht
+erneut, sondern folge seiner Ausführung.
 
 `GET /v1/executions/:executionId` liest den Zustand.
 `GET /v1/chats/:chatId/turns/:turnId` liest die gespeicherte Antwort. Das Senden
@@ -188,6 +203,17 @@ anderer Author. Eine Mitteilung hat den Author der Arbeit, um die es geht.
 Ein Turn, der endet, bevor er eine Steer-Nachricht liest, gibt sie an die Inbox
 zurück. So geht keine Eingabe verloren. Die Ansicht eines Chats zeigt in
 `inbox`, wie viele Eingaben warten.
+
+`queuedInputs` gibt die gespeicherten wartenden Eingaben mit `id`, `kind`,
+`turn` und `content` zurück. Neue Server geben eine leere Liste zurück, wenn
+keine Eingabe wartet. Die Liste enthält nur Nachrichten und Steers einer Person,
+die als Nutzereingabe sichtbar sein sollen. Sie lässt Mitteilungen, erlaubte
+Aufrufe und Host-Aktionen weg. `inbox` zählt weiter alle Einträge. Deshalb
+können die Zahlen verschieden sein. Ein Client kann seine lokale wartende Kopie
+ersetzen, wenn er `receipt.inputId` in dieser Liste oder als gespeicherte
+`ChatItem.id` findet. Nutze die ID, nicht gleichen Text oder eine Anzahl. Eine
+wartende Eingabe kann vor dem Speichern als Item abgebrochen werden. Ein freier
+Chat oder eine beendete Ausführung allein beweist keine Eingabe in der Historie.
 
 ---
 
