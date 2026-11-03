@@ -15,22 +15,30 @@ description: 用 TypeScript 调用 OpenBot，请求和错误都有类型。
 
 ## 安装
 
-包发布在 GitHub Packages：`https://npm.pkg.github.com`。在项目的 `.npmrc`
-中加入：
+正式版本发布在 npm。安装一个精确版本：
+
+```sh
+pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.0.7
+```
+
+预发布版本在各自的渠道下，例如
+`@openbot-build/client@beta`。锁文件会保存标签对应的精确版本。
+
+`main` 上的每个提交也会发布到 GitHub Packages，版本为
+`0.0.0-commit-<完整提交哈希>`，标签为
+`sha-<完整提交哈希>`。要安装某个提交，在项目的 `.npmrc` 中加入：
 
 ```ini
 @openbot-build:registry=https://npm.pkg.github.com
 ```
 
-使用具有 `read:packages` 权限的 GitHub classic PAT。运行
+加入后，所有 `@openbot-build` 包都从 GitHub Packages 安装。即使是公开包，GitHub
+Packages 也需要具有 `read:packages` 权限的 GitHub classic PAT。运行
 `npm login --scope=@openbot-build --registry=https://npm.pkg.github.com --auth-type=legacy`
-将令牌存入用户 npm 设置。不要把令牌放入 Git。
-
-安装精确版本，或用 `sha-<完整提交哈希>`
-选择已发布的提交。锁文件会保存标签对应的精确版本：
+将令牌存入用户 npm 设置。不要把令牌放入 Git。然后安装这个提交：
 
 ```sh
-pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.0.7
+pnpm add --save-exact @openbot-build/client@sha-<完整提交哈希> effect@4.0.7
 ```
 
 客户端包含共用的 OpenBot 代码和类型，采用 MIT 许可。安装时不需要 OpenBot 源码。其他 OpenBot 包保留各自的许可证。

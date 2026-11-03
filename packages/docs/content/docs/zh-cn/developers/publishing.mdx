@@ -8,15 +8,17 @@ title: "发布和检查项目"
 
 ## GitHub Actions
 
-工作流 `.github/workflows/ci.yml`
-有两个作业。第一个作业通过后，第二个作业才会运行。
+工作流 `.github/workflows/ci.yml` 在拉取请求、推送到 `main` 以及 `v1.2.3` 或
+`v1.2.3-beta.0` 这样的标签时运行。`check` 通过后，其他作业才会运行。
 
-| 作业     | 做什么                                                                      |
-| -------- | --------------------------------------------------------------------------- |
-| `check`  | 在 `devenv shell` 中运行 `pnpm build`、`pnpm typecheck` 和 `pnpm -r test`。 |
-| `images` | 构建、检查、扫描并发布 Docker 镜像。                                        |
+| 作业              | 何时       | 做什么                                                                                                              |
+| ----------------- | ---------- | ------------------------------------------------------------------------------------------------------------------- |
+| `check`           | 总是       | 在 `devenv shell` 中运行 `pnpm build`、`pnpm typecheck`、`pnpm -r test` 和 `pnpm test:packages`，并打包所有公开包。 |
+| `github-packages` | 推送和标签 | 把打好的包发布到 GitHub Packages。                                                                                  |
+| `npm`             | 标签       | 用可信发布把打好的包发布到 npm。                                                                                    |
+| `images`          | 总是       | 构建、检查、扫描并发布 Docker 镜像。                                                                                |
 
-两个作业都在 `ubuntu-latest` 上运行。它们先用 Determinate
+所有作业都在 `ubuntu-latest` 上运行。它们先用 Determinate
 Nix 安装器安装 Nix，再安装 devenv
 2.4.0。[Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action)
 把 Nix 的构建结果存进 GitHub
@@ -50,6 +52,59 @@ Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `d
 `ghcr.io/openbot-build/openbot/protocol-test`。工作流不会部署 OpenBot。要在 Compose 中使用已发布的镜像，请拉取它，并打上
 `openbot:<tag>` 标签。
 
+### 发布包
+
+所有公开包使用同一个版本一起发布。`pnpm packages:pack`
+把这个版本写入每个公开包，把包之间的依赖固定到这个版本，打包到 `.release/`，并在
+`.release/release.json`
+中记录每个文件的哈希。发布作业只发布这些文件，不会再构建一次。
+
+| 事件                       | 版本                      | npm 标签                | 发布到                 |
+| -------------------------- | ------------------------- | ----------------------- | ---------------------- |
+| 推送到 `main`              | `0.0.0-commit-<完整哈希>` | `sha-<完整哈希>`        | GitHub Packages        |
+| `v1.2.3-beta.0` 这样的标签 | `1.2.3-beta.0`            | `alpha`、`beta` 或 `rc` | GitHub Packages 和 npm |
+| `v1.2.3` 这样的标签        | `1.2.3`                   | `latest`                | GitHub Packages 和 npm |
+
+预发布标签写明渠道 `alpha`、`beta` 或 `rc`，后面跟一个数字。它的包不会成为
+`latest`。标签不会退回到更旧的版本：晚到的旧版本会发布在 `backport`
+下；预发布版本则发布在 `alpha-backport`、`beta-backport` 或 `rc-backport` 下。
+
+每个注册表有自己的作业并发组 `publish-github-packages` 或
+`publish-npm`，并设置了
+`queue: max`，所以两次运行不会同时向同一个注册表发布。重新运行时，内容相同的已有版本会被跳过；内容不同则停止。手动发布前，先等该注册表排队中的发布作业全部结束。
+
+仓库的 `.npmrc` 把 `@openbot-build` 作用域指向 GitHub
+Packages。发布脚本也会设置这个作用域的注册表，所以总是发布到你指定的注册表。
+
+发布一个版本：
+
+1. 确认 `main` 通过 CI。
+2. 给提交打标签并推送标签，正式版本如 `v1.2.3`，预发布版本如 `v1.2.3-beta.0`：
+
+   ```sh
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. 如果 `npm` 环境需要审批，`npm` 作业会等待审批，然后发布。
+
+`npm`
+作业使用 npm 的[可信发布](https://docs.npmjs.com/trusted-publishers)：npm 接受工作流运行的 OIDC 令牌而不是访问令牌，并为每个包添加来源证明。仓库中不存放任何密钥。每个包都信任
+`openbot-build/openbot` 在 `npm` 环境中的 `ci.yml` 工作流：
+
+```sh
+npm trust github @openbot-build/client --file ci.yml --repo openbot-build/openbot --env npm --allow-publish
+npm trust list @openbot-build/client
+```
+
+npm 只能信任已经存在的包。因此新包由维护者用 CI 打好的文件先发布一次，之后再设置信任：
+
+```sh
+gh run download <run id> --name packages-<commit hash> --dir .release
+npm login
+devenv shell -- pnpm packages:publish npm
+```
+
 ### 发布客户端快照
 
 工作流 `.github/workflows/sdk-snapshot.yml` 在推送到
@@ -58,6 +113,7 @@ Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `d
 `@openbot-build/client`。检查通过后，第二个任务使用仓库的
 `GITHUB_TOKEN`，把快照发布为 `0.0.0-commit-<完整哈希>`，并加上 `sha-<完整哈希>`
 标签。`latest` 标签和服务端发布仍使用主发布流程。
+
 
 ### 发布文档网站
 
