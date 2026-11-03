@@ -133,8 +133,9 @@ The workflow `.github/workflows/sdk-snapshot.yml` runs for pushes to
 needs, checks the API and client, and packs only `@openbot-build/client`. After
 those checks pass, a second job uses the repository's `GITHUB_TOKEN` to publish
 the snapshot as `0.0.0-commit-<full-hash>` with a `sha-<full-hash>` tag. The
-`latest` tag and the server release stay on the main release path.
-
+`latest` tag and the server release stay on the main release path. The
+publishing job waits in the same `publish-github-packages` queue as the main
+workflow.
 
 ### Publish the docs site
 

@@ -61,6 +61,11 @@ jobs:
           retention-days: 7
 
   publish:
+    # Shares the main workflow's GitHub Packages queue.
+    concurrency:
+      group: publish-github-packages
+      cancel-in-progress: false
+      queue: max
     name: Publish the checked client
     needs: check
     runs-on: ubuntu-latest
@@ -82,11 +87,8 @@ jobs:
         with:
           name: sdk-${{ github.sha }}
           path: .release/sdk/
-      - name: Set registry access
-        run: devenv shell -- bash scripts/registry-auth.sh
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the client snapshot
-        run: devenv shell -- node scripts/packages.mjs publish .release/sdk
+        run:
+          devenv shell -- node scripts/packages.mjs publish github .release/sdk
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -112,8 +112,8 @@ devenv shell -- pnpm packages:publish npm
 时运行。它构建客户端及其依赖包，检查 API 和客户端，只打包
 `@openbot-build/client`。检查通过后，第二个任务使用仓库的
 `GITHUB_TOKEN`，把快照发布为 `0.0.0-commit-<完整哈希>`，并加上 `sha-<完整哈希>`
-标签。`latest` 标签和服务端发布仍使用主发布流程。
-
+标签。`latest` 标签和服务端发布仍使用主发布流程。发布作业与主工作流共用
+`publish-github-packages` 队列。
 
 ### 发布文档网站
 

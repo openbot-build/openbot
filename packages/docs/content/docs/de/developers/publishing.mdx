@@ -139,8 +139,8 @@ prüft die API und den Client und packt nur `@openbot-build/client`. Nach diesen
 Prüfungen nutzt ein zweiter Job den `GITHUB_TOKEN` des Repositorys. Er
 veröffentlicht die Momentaufnahme als `0.0.0-commit-<voller-Hash>` mit dem Tag
 `sha-<voller-Hash>`. Der Tag `latest` und die Server-Veröffentlichung bleiben im
-Hauptablauf der Veröffentlichung.
-
+Hauptablauf der Veröffentlichung. Der Job zum Veröffentlichen wartet in
+derselben Warteschlange `publish-github-packages` wie der Haupt-Workflow.
 
 ### Die Doku-Seite veröffentlichen
 
