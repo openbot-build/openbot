@@ -10,15 +10,18 @@ For project contributors who change or publish OpenBot.
 
 ## GitHub Actions
 
-The workflow `.github/workflows/ci.yml` has two jobs. The second job runs only
-when the first one passes.
+The workflow `.github/workflows/ci.yml` runs for pull requests, pushes to
+`main`, and tags like `v1.2.3` or `v1.2.3-beta.0`. The other jobs run only when
+`check` passes.
 
-| Job      | What it does                                                               |
-| -------- | -------------------------------------------------------------------------- |
-| `check`  | Runs `pnpm build`, `pnpm typecheck`, and `pnpm -r test` in `devenv shell`. |
-| `images` | Builds, checks, scans, and publishes the Docker images.                    |
+| Job               | When            | What it does                                                                                                                     |
+| ----------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `check`           | Always          | Runs `pnpm build`, `pnpm typecheck`, `pnpm -r test`, and `pnpm test:packages` in `devenv shell`, and packs every public package. |
+| `github-packages` | Pushes and tags | Publishes the packed packages to GitHub Packages.                                                                                |
+| `npm`             | Tags            | Publishes the packed packages to npm with trusted publishing.                                                                    |
+| `images`          | Always          | Builds, checks, scans, and publishes the Docker images.                                                                          |
 
-Both jobs run on `ubuntu-latest`. They install Nix with the Determinate Nix
+All jobs run on `ubuntu-latest`. They install Nix with the Determinate Nix
 installer, and then devenv 2.4.0.
 [Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action)
 keeps Nix build results in the GitHub Actions cache, so later runs do not build
@@ -58,6 +61,70 @@ The images go to the GitHub container registry, at
 `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy
 OpenBot. To use a published image with Compose, pull it and tag it as
 `openbot:<tag>`.
+
+### Publish packages
+
+All public packages are released together with one version. `pnpm packages:pack`
+sets that version in every public package, pins the dependencies between them to
+it, packs them into `.release/`, and records each file's hash in
+`.release/release.json`. The publishing jobs publish exactly these files and
+never build again.
+
+| Event                      | Version                    | npm tag                  | Published to            |
+| -------------------------- | -------------------------- | ------------------------ | ----------------------- |
+| A push to `main`           | `0.0.0-commit-<full hash>` | `sha-<full hash>`        | GitHub Packages         |
+| A tag like `v1.2.3-beta.0` | `1.2.3-beta.0`             | `alpha`, `beta`, or `rc` | GitHub Packages and npm |
+| A tag like `v1.2.3`        | `1.2.3`                    | `latest`                 | GitHub Packages and npm |
+
+A prerelease tag names its channel, `alpha`, `beta`, or `rc`, followed by a
+number. Its packages never become `latest`. No tag moves back to an older
+version: a late upload of an older version is published under `backport`, or
+under `alpha-backport`, `beta-backport`, or `rc-backport` for a prerelease.
+
+Each registry has its own job concurrency group, `publish-github-packages` or
+`publish-npm`, with `queue: max`, so two runs never publish to the same registry
+at once. A rerun skips a version that already exists with the same contents, and
+stops if the contents differ. Before you publish by hand, wait until the queued
+publishing jobs for that registry finish.
+
+The repository's `.npmrc` sends the `@openbot-build` scope to GitHub Packages.
+The release script sets the scope's registry too, so it always publishes to the
+registry you name.
+
+To release a version:
+
+1. Make sure `main` passes CI.
+2. Tag the commit and push the tag, such as `v1.2.3` for a stable release or
+   `v1.2.3-beta.0` for a prerelease:
+
+   ```sh
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. The `npm` job waits for the `npm` environment, if it requires approval, and
+   then publishes.
+
+The `npm` job uses npm's
+[trusted publishing](https://docs.npmjs.com/trusted-publishers): npm accepts the
+workflow run's OIDC token instead of an access token, and adds a provenance
+statement to every package. No secret is stored in the repository. Each package
+trusts the `ci.yml` workflow of `openbot-build/openbot` in the `npm`
+environment:
+
+```sh
+npm trust github @openbot-build/client --file ci.yml --repo openbot-build/openbot --env npm --allow-publish
+npm trust list @openbot-build/client
+```
+
+npm can only trust a package that exists. A maintainer therefore publishes a new
+package once from the files CI packed, and trusts it afterwards:
+
+```sh
+gh run download <run id> --name packages-<commit hash> --dir .release
+npm login
+devenv shell -- pnpm packages:publish npm
+```
 
 ### Publish the docs site
 
