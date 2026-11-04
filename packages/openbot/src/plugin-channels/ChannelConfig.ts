@@ -22,7 +22,7 @@ import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Db from "../server-database/Database.ts"
 import { channels as rows } from "../server-database/Schema.ts"
 import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
@@ -35,7 +35,10 @@ import type { Authorize } from "../server-execution/execution/Engine.ts"
 import type { End } from "../server-execution/execution/Program.ts"
 import * as Platform from "../server-kernel/settings/Platform.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
-import { Channels, Credentials } from "./Channels.ts"
+import {
+	Channels,
+	Credentials,
+} from "../conversation-contract/channels/Channels.ts"
 import { fromInput } from "./ChannelInput.ts"
 
 export const workflowName = "openbot.channel-configuration"

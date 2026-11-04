@@ -1,17 +1,10 @@
 import { MemoryLogs } from "./MemoryLogs.ts"
-import { type Chat } from "@openbot-build/core"
 import { BotMemory as Api, Bots as BotsApi } from "@openbot-build/domain"
-import {
-	Array as Arr,
-	Context,
-	Effect,
-	Layer,
-	Option,
-	Order,
-	Schema,
-} from "effect"
-import type { Home } from "./BotMemories.ts"
-import { BotRecords } from "./BotRecords.ts"
+import { Array as Arr, Effect, Layer, Option, Order, Schema } from "effect"
+import type { Home } from "../conversation-contract/bots/BotMemories.ts"
+import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
+import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
+export { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
 
 /** The name of the tool that the Bot uses to confide. The Bot knows it only as a place to talk. */
 export const confideTool = "confide"
@@ -34,36 +27,6 @@ export class MemoryBudgetSpent extends Schema.TaggedError<
 
 /** The id that the usage of the memory Bot of one pool has. Budgets count by it. */
 export const memoryBotId = (home: Home) => home.bot + "/memory"
-
-export class MemoryBot extends Context.Service<
-	MemoryBot,
-	{
-		readonly settings: (
-			home: Home,
-		) => Effect.Effect<Api.MemoryBotSettings, BotsApi.BotStorageUnavailable>
-		readonly update: (
-			home: Home,
-			request: Api.UpdateMemoryBotRequest,
-		) => Effect.Effect<
-			Api.MemoryBotSettings,
-			BotsApi.BotConflict | BotsApi.BotStorageUnavailable
-		>
-		readonly confessions: (
-			organizationId: string,
-			chat: Chat.Id,
-		) => Effect.Effect<
-			ReadonlyArray<Api.Confession>,
-			BotsApi.BotStorageUnavailable
-		>
-		readonly enrichments: (
-			organizationId: string,
-			chat: Chat.Id,
-		) => Effect.Effect<
-			ReadonlyArray<Api.Enrichment>,
-			BotsApi.BotStorageUnavailable
-		>
-	}
->()("@openbot-build/openbot/plugin-bots/MemoryBot") {}
 
 /** Settings and saved logs. Execution belongs to MemoryTasks and MemoryLearning. */
 export const make = Effect.gen(function* () {

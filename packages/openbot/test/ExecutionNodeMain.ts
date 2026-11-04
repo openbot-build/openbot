@@ -1,4 +1,4 @@
-import { Delegations } from "../src/plugin-bots/Delegations.ts"
+import { Delegations } from "../src/conversation-contract/bots/Delegations.ts"
 import * as PrivateRpc from "../src/server-execution/transport/PrivateRpc.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 /** This entry point is run in two separate processes by ExecutionCluster.test.ts. */
@@ -37,7 +37,7 @@ import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 
 import * as TurnClusterFixture from "./TurnClusterFixture.ts"
 

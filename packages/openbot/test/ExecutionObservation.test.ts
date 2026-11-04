@@ -18,7 +18,7 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"

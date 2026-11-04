@@ -14,7 +14,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
-import { AppCommands } from "../plugin-apps/AppCommands.ts"
+import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
 import { Records } from "../server-kernel/errors/Records.ts"
 import * as Recovery from "../server-execution/execution/Recovery.ts"
 import { Calls } from "../server-execution/execution/Calls.ts"
@@ -25,7 +25,8 @@ import {
 	type Key,
 } from "../server-execution/execution/Store.ts"
 import * as VaultCode from "../apps-contract/vaults/CodeMode.ts"
-import { CodeCommands, programStep } from "./CodeCommands.ts"
+import { CodeCommands } from "../apps-contract/code/CodeCommands.ts"
+import { programStep } from "./CodeCommands.ts"
 import { Sandbox } from "./Sandbox.ts"
 import type { Call } from "../apps-contract/code/Protocol.ts"
 

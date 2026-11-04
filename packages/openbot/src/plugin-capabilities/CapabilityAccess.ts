@@ -23,18 +23,18 @@ import {
 	pipe,
 } from "effect"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import {
 	type Capability,
 	describe,
 	memberTarget,
 } from "../conversation-contract/capabilities/Capability.ts"
-import type { Attempt } from "./Gate.ts"
-import { Grants } from "./Grants.ts"
+import type { Attempt } from "../conversation-contract/capabilities/Gate.ts"
+import { Grants } from "../conversation-contract/capabilities/Grants.ts"
 import { Judge } from "./Judge.ts"
 import { chatOf } from "./Requests.ts"
-import { Rules } from "./Rules.ts"
-import type { Work } from "./Work.ts"
+import { Rules } from "../conversation-contract/capabilities/Rules.ts"
+import type { Work } from "../conversation-contract/capabilities/Work.ts"
 
 /** The policy result does not create a request or own any execution. */
 export type Decision = Data.TaggedEnum<{

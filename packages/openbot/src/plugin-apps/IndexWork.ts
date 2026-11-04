@@ -1,8 +1,6 @@
 import {
-	type PlatformError,
 	Array as Arr,
 	Clock,
-	Context,
 	Effect,
 	Layer,
 	Match,
@@ -10,9 +8,7 @@ import {
 	Schema,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
 import {
-	type ServiceExecution,
 	Store,
 	commandActor,
 	storage,
@@ -39,39 +35,50 @@ import * as Db from "../server-database/Database.ts"
 import { Governance } from "./Governance.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import { CheckJson } from "./IndexStore.ts"
+import {
+	CheckInput,
+	CheckResult,
+	IndexWork,
+} from "../apps-contract/apps/IndexWork.ts"
+export {
+	CheckInput,
+	CheckResult,
+	IndexWork,
+} from "../apps-contract/apps/IndexWork.ts"
+export type { Service } from "../apps-contract/apps/IndexWork.ts"
 
 export const workflowName = "openbot.index-watch"
+
 export const serviceId = ServiceId.make("public-index")
+
 export const identity: ServiceIdentity = {
 	owner: { kind: "platform" },
 	actor: { kind: "service", serviceId },
 }
+
 export const nextSignal = (generation: string) => `next:${generation}`
+
 export interface Options {
 	readonly intervalMs?: number
 	readonly retryMs?: number
 }
+
 export const Job = AppIndex.Job
+
 export type Job = AppIndex.Job
+
 const sourcesCodec = Schema.fromJsonString(Schema.Array(Discovery.Source))
+
 const entryCodec = Schema.fromJsonString(Index.Entry)
+
 const Reference = Schema.Struct({
 	indexNamespace: Schema.String,
 	cardUrl: Schema.String,
 })
-export const CheckInput = Schema.Struct({
-	cardUrl: Schema.String,
-	sources: Schema.Array(Discovery.Source),
-	previous: Schema.NullOr(Index.Entry),
-})
-export type CheckInput = typeof CheckInput.Type
-export const CheckResult = Schema.TaggedUnion({
-	Checked: { result: Indexing.SyncResult },
-	Failed: { failure: Execution.Failure },
-})
-export type CheckResult = typeof CheckResult.Type
+
 const jobWhere = (namespace: string, cardUrl: string) =>
 	and(eq(appIndexJobs.namespace, namespace), eq(appIndexJobs.cardUrl, cardUrl))
+
 const toJob = (row: typeof appIndexJobs.$inferSelect) =>
 	Effect.gen(function* () {
 		const completed = row.generation === row.completedGeneration
@@ -90,114 +97,6 @@ const toJob = (row: typeof appIndexJobs.$inferSelect) =>
 					: null,
 		} satisfies Job
 	})
-
-/** The Index owns checks and results. The shared engine owns all scheduling. */
-export interface Service {
-	readonly request: (
-		cardUrl: string,
-		sources: readonly Discovery.Source[],
-	) => Effect.Effect<
-		{
-			job: {
-				cardUrl: string
-				generation: string
-				requestedAt: number
-				status: AppIndex.JobStatus
-				check: AppIndex.Check | null
-			}
-			execution: { namespace: string; id: Execution.Id }
-		},
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.KeyConflict
-		| Execution.NotFound
-		| PlatformError.PlatformError
-		| Schema.SchemaError
-		| Execution.StorageError
-	>
-	readonly job: (
-		cardUrl: string,
-		generation?: string | undefined,
-	) => Effect.Effect<
-		Option.Option<AppIndex.Job>,
-		Schema.SchemaError | Execution.StorageError
-	>
-	readonly load: (
-		key: Key,
-		lock?: boolean,
-	) => Effect.Effect<
-		{
-			saved: ServiceExecution
-			row: typeof appIndexJobs.$inferSelect
-		},
-		| Execution.Forbidden
-		| Execution.NotFound
-		| Schema.SchemaError
-		| Execution.StorageError
-	>
-	readonly authorize: (
-		key: Key,
-	) => Effect.Effect<
-		void,
-		Execution.Forbidden | Execution.NotFound | Execution.StorageError
-	>
-	readonly begin: (fence: Fence) => Effect.Effect<
-		{
-			generation: string
-			input: {
-				cardUrl: string
-				sources: readonly Discovery.Source[]
-				previous: Index.Entry | null
-			}
-		},
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.NotFound
-		| PlatformError.PlatformError
-		| Schema.SchemaError
-		| SecretStorageError
-		| Execution.StorageError
-	>
-	readonly restriction: (
-		cardUrl: string,
-	) => Effect.Effect<
-		Option.Option<AppIndex.Restriction>,
-		Execution.StorageError
-	>
-	readonly inspect: (
-		input: CheckInput,
-		restriction: Option.Option<AppIndex.Restriction>,
-	) => Effect.Effect<
-		| {
-				readonly _tag: "Unconfirmed"
-				readonly stages: readonly Indexing.InspectionStage[]
-				readonly cardUrl: string
-				readonly reason: string
-				readonly url: string
-				readonly issue: string
-		  }
-		| { _tag: "Indexed"; entry: Index.Entry }
-		| { _tag: "Excluded" | "Withdrawn"; cardUrl: string; reason: string },
-		Indexing.IndexingError | Execution.StorageError
-	>
-	readonly complete: (
-		fence: Fence,
-		generation: string,
-		outcome: CheckResult,
-	) => Effect.Effect<
-		undefined,
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.NotFound
-		| Schema.SchemaError
-		| SecretStorageError
-		| Execution.StorageError
-	>
-}
-
-export class IndexWork extends Context.Service<IndexWork, Service>()(
-	"@openbot-build/openbot/plugin-apps/IndexWork",
-) {}
 
 const make = (options: Options) =>
 	Effect.gen(function* () {

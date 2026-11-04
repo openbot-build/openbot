@@ -6,10 +6,10 @@ import {
 	Delegations as Domain,
 } from "@openbot-build/domain"
 import { Effect, Option, Schema } from "effect"
-import { Delegations } from "../../plugin-bots/Delegations.ts"
+import { Delegations } from "../bots/Delegations.ts"
 import * as CallFrame from "../chats/CallFrame.ts"
 import * as ChatHost from "../chats/ChatHost.ts"
-import { TurnAccess } from "../../plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "../chats/TurnAccess.ts"
 import {
 	Store,
 	storage,

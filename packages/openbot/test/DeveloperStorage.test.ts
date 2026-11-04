@@ -13,8 +13,8 @@ import {
 	developerTestFlows,
 	developerTests,
 } from "../src/server-database/Schema.ts"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
-import * as Rows from "../src/plugin-apps/DeveloperRows.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
+import * as Rows from "../src/apps-contract/apps/DeveloperRows.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Db from "../src/server-database/Database.ts"
 

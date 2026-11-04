@@ -26,7 +26,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { AppNetwork } from "./AppHost.ts"
+import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 import { capabilityLists, pages } from "./Capabilities.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Probe } from "./Probe.ts"

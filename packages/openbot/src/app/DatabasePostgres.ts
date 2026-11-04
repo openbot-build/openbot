@@ -1,5 +1,5 @@
 import { PgClient } from "@effect/sql-pg"
-import * as StorageMigration from "./Migrations.ts"
+import * as StorageMigration from "../server-upgrade/Migrations.ts"
 import { type Redacted } from "effect"
 
 export const layer = (options: {

@@ -16,7 +16,10 @@ import {
 	organizationKey,
 	segment,
 } from "../identity-contract/audit/Resources.ts"
-import { Channels, type StoredChannel } from "./Channels.ts"
+import {
+	Channels,
+	type StoredChannel,
+} from "../conversation-contract/channels/Channels.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 import * as Platform from "../server-kernel/settings/Platform.ts"

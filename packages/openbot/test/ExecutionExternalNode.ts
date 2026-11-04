@@ -22,7 +22,7 @@ import {
 } from "effect"
 import { RunnerAddress, ShardingConfig } from "effect/cluster"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as CallRecovery from "../src/server-execution/execution/CallRecovery.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"

@@ -56,6 +56,8 @@ const rules = {
 		"A feature must not import the application entry points or layer assembly.",
 	"public-entry":
 		"Use the public entry of another package, not its source files.",
+	"virtual-boundary":
+		"A server folder may import only the folders of lower packages, and a plugin folder must not import another plugin folder. Put shared types and service tags in a contract folder.",
 	parse: "The rules could not read this file.",
 } as const
 
@@ -357,6 +359,78 @@ const httpAdapters = [
 	"plugin-authorization/Layer.ts",
 ] as const
 
+/**
+ * The folders of packages/openbot/src are the packages that they will become.
+ * A folder may import only folders with a lower number. Each plugin-* folder
+ * has the plugin number, and plugins must not import each other.
+ */
+const serverLayers: Readonly<Record<string, number>> = {
+	"server-database": 1,
+	"server-kernel": 2,
+	"identity-contract": 3,
+	"server-billing": 4,
+	"server-execution": 5,
+	"tools-contract": 6,
+	"models-contract": 7,
+	"apps-contract": 8,
+	"conversation-contract": 9,
+	"model-providers": 10,
+	"server-plugin": 11,
+	plugin: 12,
+	"server-upgrade": 13,
+	app: 14,
+	"server-development": 15,
+}
+
+/**
+ * The Chat features still build the tools of the other features by name. The
+ * bot features of the next step take their place, and then this list goes.
+ */
+const virtualExceptions: ReadonlyArray<readonly [string, string]> = Arr.flatMap(
+	["plugin-chats/ChatFeatures.ts", "plugin-chats/ExecutionFeatures.ts"],
+	(from) =>
+		Arr.map(
+			[
+				"plugin-apps/AppTools.ts",
+				"plugin-bots/BotTools.ts",
+				"plugin-bots/WorkflowTools.ts",
+				"plugin-channels/ChannelTools.ts",
+				"plugin-computers/ComputerTools.ts",
+				"plugin-work/WorkTools.ts",
+			],
+			(to) => [from, to] as const,
+		),
+)
+
+const serverFolder = (file: string): Option.Option<string> => {
+	const local = Str.replace("packages/openbot/src/", "")(file)
+	if (local === file || !Str.includes("/")(local)) return Option.none()
+	return Arr.head(Str.split(local, "/"))
+}
+
+const breaksLayers = (file: string, resolved: string): boolean => {
+	const from = serverFolder(file)
+	const to = serverFolder(resolved)
+	if (Option.isNone(from) || Option.isNone(to) || from.value === to.value)
+		return false
+	const layer = (folder: string) =>
+		Str.startsWith("plugin-")(folder)
+			? serverLayers["plugin"]
+			: serverLayers[folder]
+	const low = layer(from.value)
+	const high = layer(to.value)
+	if (low === undefined || high === undefined) return true
+	const local = (path: string) => Str.replace("packages/openbot/src/", "")(path)
+	if (
+		Arr.some(
+			virtualExceptions,
+			([a, b]) => a === local(file) && b === local(resolved),
+		)
+	)
+		return false
+	return high >= low
+}
+
 const usesHttpContract = (file: string): boolean => {
 	const local = Str.replace("packages/openbot/src/", "")(file)
 	return (
@@ -459,6 +533,9 @@ const boundaries = (
 				!Str.startsWith("packages/openbot/src/server-development/")(file) &&
 				Str.startsWith("packages/openbot/src/app/")(resolved)
 					? ["assembly-boundary" as const]
+					: []),
+				...(relative && breaksLayers(file, resolved)
+					? ["virtual-boundary" as const]
 					: []),
 				...((relative &&
 					/^packages\//.test(resolved) &&

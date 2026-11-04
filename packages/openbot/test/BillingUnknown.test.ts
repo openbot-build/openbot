@@ -9,7 +9,7 @@ import {
 	type Tokens,
 } from "../src/server-billing/billing/Billing.ts"
 import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const call: Call = {

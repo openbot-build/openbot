@@ -18,7 +18,10 @@ import {
 	Semaphore,
 } from "effect"
 import { TestClock } from "effect/testing"
-import { BotRecords, type Keys } from "../src/plugin-bots/BotRecords.ts"
+import {
+	BotRecords,
+	type Keys,
+} from "../src/conversation-contract/bots/BotRecords.ts"
 import * as Grants from "../src/plugin-capabilities/Grants.ts"
 import * as Requests from "../src/plugin-capabilities/Requests.ts"
 import * as Rules from "../src/plugin-capabilities/Rules.ts"

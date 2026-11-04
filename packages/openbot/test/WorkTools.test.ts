@@ -12,8 +12,8 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, type Tool, Toolkit } from "effect/ai"
-import { Answer, Gate } from "../src/plugin-capabilities/Gate.ts"
-import { Work } from "../src/plugin-capabilities/Work.ts"
+import { Answer, Gate } from "../src/conversation-contract/capabilities/Gate.ts"
+import { Work } from "../src/conversation-contract/capabilities/Work.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import { OpenWork } from "../src/conversation-contract/chats/OpenWork.ts"
 import { ReminderCommands } from "../src/plugin-work/ReminderCommands.ts"

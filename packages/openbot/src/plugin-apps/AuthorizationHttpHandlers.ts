@@ -7,7 +7,7 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Authorizations } from "./Authorizations.ts"
 import { ownersOf } from "../apps-contract/apps/StoredConnections.ts"
 import { Auth } from "../identity-contract/auth/Auth.ts"
-import * as HttpMiddleware from "../plugin-auth/HttpMiddleware.ts"
+import * as HttpMiddleware from "../identity-contract/auth/SessionHttp.ts"
 import * as Platform from "../server-kernel/settings/Platform.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
 

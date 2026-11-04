@@ -2,7 +2,7 @@ import type { Chat, Turn } from "@openbot-build/core"
 import type { Bots as BotsApi } from "@openbot-build/domain"
 import type { ExecutionIdentity } from "@openbot-build/domain"
 import { Context } from "effect"
-import type { Chain } from "../conversation-contract/chats/ChatHost.ts"
+import type { Chain } from "../chats/ChatHost.ts"
 
 /**
  * The Bot that runs the current Turn, and who it works for.
@@ -22,4 +22,4 @@ export class Work extends Context.Service<
 		readonly chat: Chat.Id
 		readonly turn: Turn.Id
 	}
->()("@openbot-build/openbot/plugin-capabilities/Work") {}
+>()("@openbot-build/openbot/conversation-contract/capabilities/Work") {}

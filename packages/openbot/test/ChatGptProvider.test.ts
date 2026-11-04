@@ -7,7 +7,7 @@ import {
 } from "../src/models-contract/models/ModelProviders.ts"
 import { Models } from "../src/models-contract/models/Models.ts"
 import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
-import * as ModelRegistry from "../src/models-contract/models/ModelRegistry.ts"
+import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
 import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
 import {
 	Billing,

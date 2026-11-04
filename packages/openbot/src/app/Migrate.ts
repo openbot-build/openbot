@@ -3,8 +3,8 @@ import { Command } from "effect/cli"
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 
 import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
-import * as DatabasePostgres from "../server-kernel/database/DatabasePostgres.ts"
-import * as DataMigration from "../server-kernel/database/Migrations.ts"
+import * as DatabasePostgres from "./DatabasePostgres.ts"
+import * as DataMigration from "../server-upgrade/Migrations.ts"
 import * as Secrets from "../server-kernel/secrets/Secrets.ts"
 import * as Store from "../server-execution/execution/Store.ts"
 

@@ -14,7 +14,7 @@ import {
 	String as Str,
 } from "effect"
 import { Tool, type Toolkit } from "effect/ai"
-import { CodeCommands } from "../../plugin-code/CodeCommands.ts"
+import { CodeCommands } from "../code/CodeCommands.ts"
 import { name, type Binding } from "../code/Bindings.ts"
 import { declarations } from "../code/Declarations.ts"
 import { ApiInput, RunInput, names } from "../code/ToolSchema.ts"
@@ -24,7 +24,7 @@ import * as Recovery from "../../server-execution/execution/Recovery.ts"
 import { type Fence } from "../../server-execution/execution/Store.ts"
 import { InputState, Local } from "../../tools-contract/plugins/ToolEntry.ts"
 import * as VaultCode from "../vaults/CodeMode.ts"
-import { AppCommands } from "../../plugin-apps/AppCommands.ts"
+import { AppCommands } from "./AppCommands.ts"
 import { json } from "./AppResults.ts"
 
 export type Tools = Record<

@@ -11,7 +11,7 @@ import {
 	String as Str,
 	pipe,
 } from "effect"
-import { AppNetwork } from "../plugin-apps/AppHost.ts"
+import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 import * as Probe from "../plugin-apps/Probe.ts"
 import { Authorization } from "./DevelopmentAuthorization.ts"
 import { Mode, Scenarios } from "./DevelopmentScenarios.ts"

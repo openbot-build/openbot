@@ -10,7 +10,8 @@ import {
 import { fileIdsIn } from "../../apps-contract/files/Refs.ts"
 import * as Db from "../../server-database/Database.ts"
 import { chatHostId } from "./ChatHost.ts"
-import { databaseError, decode } from "./ChatEncoding.ts"
+import { databaseError } from "../../server-kernel/database/DatabaseError.ts"
+import { decode } from "./ChatEncoding.ts"
 
 /** The Chats of each namespace, kept in Postgres. */
 type Database = Db.Database

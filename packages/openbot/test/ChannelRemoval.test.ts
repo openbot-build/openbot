@@ -3,7 +3,7 @@ import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Network } from "@openbot-build/protocol"
 import { HttpClient } from "effect/http"
-import { AppNetwork } from "../src/plugin-apps/AppHost.ts"
+import { AppNetwork } from "../src/apps-contract/apps/AppNetwork.ts"
 import * as ChannelRegistry from "../src/plugin-channels/ChannelRegistry.ts"
 import { Chat } from "@openbot-build/core"
 import { Authorization, BotId, Execution } from "@openbot-build/domain"
@@ -31,7 +31,7 @@ import * as Removal from "../src/plugin-channels/ChannelRemoval.ts"
 import * as ChannelWatch from "../src/plugin-channels/ChannelWatch.ts"
 import * as Channels from "../src/plugin-channels/Channels.ts"
 import * as Db from "../src/server-database/Database.ts"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import {
 	channelInbox,
 	channelDeliveries,

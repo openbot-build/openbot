@@ -24,9 +24,9 @@ import {
 } from "../server-execution/execution/Store.ts"
 import * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { ToolCommands } from "./ToolCommands.ts"
-import * as ToolResults from "./ToolResults.ts"
-import { outputCodec } from "./ToolSteps.ts"
+import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
+import * as ToolResults from "../conversation-contract/chats/ToolResults.ts"
+import { outputCodec } from "../conversation-contract/chats/ToolSteps.ts"
 
 export const names = {
 	status: "openbot_execution_status",

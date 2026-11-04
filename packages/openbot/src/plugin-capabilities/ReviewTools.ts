@@ -3,7 +3,6 @@ import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
-	Context,
 	Effect,
 	Layer,
 	Schema,
@@ -23,26 +22,32 @@ import {
 import * as BotDecisions from "./BotDecisions.ts"
 import * as CapabilityAccess from "./CapabilityAccess.ts"
 import * as Judge from "./Judge.ts"
+import {
+	names,
+	ReviewTools,
+} from "../conversation-contract/capabilities/ReviewTools.ts"
+export {
+	names,
+	ReviewTools,
+} from "../conversation-contract/capabilities/ReviewTools.ts"
+export type { Service } from "../conversation-contract/capabilities/ReviewTools.ts"
 
-export const names = {
-	approve: "openbot_approve",
-	deny: "openbot_deny",
-	ask: "openbot_ask",
-	escalate: "openbot_escalate",
-	proposeRule: "openbot_propose_rule",
-} as const
 const Scope = Schema.Literals(["once", "chat", "lifetime"])
+
 const Approve = Schema.Struct({
 	scope: Scope,
 	reason: BotDecisions.Decision.fields.reason,
 })
+
 const Deny = Schema.Struct({
 	reason: Schema.String.check(Schema.isMaxLength(2000)),
 	scope: Schema.optionalKey(Scope),
 })
+
 const Ask = Schema.Struct({
 	question: Schema.String.check(Schema.isMaxLength(4000)),
 })
+
 const Escalate = Schema.Struct({
 	note: Schema.String.check(Schema.isMaxLength(2000)),
 })
@@ -240,204 +245,6 @@ const scoped = (fence: Fence) =>
 			Effect.provideService(BotDecisions.BotDecisions, decisions),
 		)
 	})
-export interface Service {
-	readonly register: (fence: Fence) => Effect.Effect<
-		{
-			tools: {
-				readonly openbot_approve: Tool.Tool<
-					"openbot_approve",
-					{
-						readonly parameters: Schema.Struct<{
-							readonly scope: Schema.Literals<
-								readonly ["once", "chat", "lifetime"]
-							>
-							readonly reason: Schema.optionalKey<Schema.String>
-						}>
-						readonly success: Schema.Codec<
-							Schema.Json,
-							Schema.Json,
-							never,
-							never
-						>
-						readonly failure: Schema.Never
-						readonly failureMode: "error"
-					},
-					CallContext
-				>
-				readonly openbot_ask: Tool.Tool<
-					"openbot_ask",
-					{
-						readonly parameters: Schema.Struct<{
-							readonly question: Schema.String
-						}>
-						readonly success: Schema.Codec<
-							Schema.Json,
-							Schema.Json,
-							never,
-							never
-						>
-						readonly failure: Schema.Never
-						readonly failureMode: "error"
-					},
-					CallContext
-				>
-				readonly openbot_deny: Tool.Tool<
-					"openbot_deny",
-					{
-						readonly parameters: Schema.Struct<{
-							readonly reason: Schema.String
-							readonly scope: Schema.optionalKey<
-								Schema.Literals<readonly ["once", "chat", "lifetime"]>
-							>
-						}>
-						readonly success: Schema.Codec<
-							Schema.Json,
-							Schema.Json,
-							never,
-							never
-						>
-						readonly failure: Schema.Never
-						readonly failureMode: "error"
-					},
-					CallContext
-				>
-				readonly openbot_escalate: Tool.Tool<
-					"openbot_escalate",
-					{
-						readonly parameters: Schema.Struct<{ readonly note: Schema.String }>
-						readonly success: Schema.Codec<
-							Schema.Json,
-							Schema.Json,
-							never,
-							never
-						>
-						readonly failure: Schema.Never
-						readonly failureMode: "error"
-					},
-					CallContext
-				>
-				readonly openbot_propose_rule: Tool.Tool<
-					"openbot_propose_rule",
-					{
-						readonly parameters: Schema.Struct<{ readonly text: Schema.String }>
-						readonly success: Schema.Codec<
-							Schema.Json,
-							Schema.Json,
-							never,
-							never
-						>
-						readonly failure: Schema.Never
-						readonly failureMode: "error"
-					},
-					CallContext
-				>
-			}
-			handlers: Context.Context<
-				Tool.HandlersFor<{
-					readonly openbot_approve: Tool.Tool<
-						"openbot_approve",
-						{
-							readonly parameters: Schema.Struct<{
-								readonly scope: Schema.Literals<
-									readonly ["once", "chat", "lifetime"]
-								>
-								readonly reason: Schema.optionalKey<Schema.String>
-							}>
-							readonly success: Schema.Codec<
-								Schema.Json,
-								Schema.Json,
-								never,
-								never
-							>
-							readonly failure: Schema.Never
-							readonly failureMode: "error"
-						},
-						CallContext
-					>
-					readonly openbot_ask: Tool.Tool<
-						"openbot_ask",
-						{
-							readonly parameters: Schema.Struct<{
-								readonly question: Schema.String
-							}>
-							readonly success: Schema.Codec<
-								Schema.Json,
-								Schema.Json,
-								never,
-								never
-							>
-							readonly failure: Schema.Never
-							readonly failureMode: "error"
-						},
-						CallContext
-					>
-					readonly openbot_deny: Tool.Tool<
-						"openbot_deny",
-						{
-							readonly parameters: Schema.Struct<{
-								readonly reason: Schema.String
-								readonly scope: Schema.optionalKey<
-									Schema.Literals<readonly ["once", "chat", "lifetime"]>
-								>
-							}>
-							readonly success: Schema.Codec<
-								Schema.Json,
-								Schema.Json,
-								never,
-								never
-							>
-							readonly failure: Schema.Never
-							readonly failureMode: "error"
-						},
-						CallContext
-					>
-					readonly openbot_escalate: Tool.Tool<
-						"openbot_escalate",
-						{
-							readonly parameters: Schema.Struct<{
-								readonly note: Schema.String
-							}>
-							readonly success: Schema.Codec<
-								Schema.Json,
-								Schema.Json,
-								never,
-								never
-							>
-							readonly failure: Schema.Never
-							readonly failureMode: "error"
-						},
-						CallContext
-					>
-					readonly openbot_propose_rule: Tool.Tool<
-						"openbot_propose_rule",
-						{
-							readonly parameters: Schema.Struct<{
-								readonly text: Schema.String
-							}>
-							readonly success: Schema.Codec<
-								Schema.Json,
-								Schema.Json,
-								never,
-								never
-							>
-							readonly failure: Schema.Never
-							readonly failureMode: "error"
-						},
-						CallContext
-					>
-				}>
-			>
-		},
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.NotFound
-		| Execution.StorageError
-	>
-}
-
-export class ReviewTools extends Context.Service<ReviewTools, Service>()(
-	"@openbot-build/openbot/plugin-capabilities/ReviewTools",
-) {}
 
 const make = Effect.gen(function* () {
 	const services =

@@ -1,5 +1,6 @@
 import * as Resolve from "../src/conversation-contract/capabilities/Resolve.ts"
 import * as DelegationsModule from "../src/plugin-bots/Delegations.ts"
+import * as ImportedWorkflow from "../src/plugin-imported/ImportedWorkflow.ts"
 import * as GrantUse from "../src/plugin-capabilities/GrantUse.ts"
 import { ChatModelInvalid } from "@openbot-build/domain"
 import * as DevelopmentModel from "../src/server-development/DevelopmentModel.ts"
@@ -53,7 +54,8 @@ import {
 } from "effect"
 import * as Audit from "../src/plugin-audit/AuditLogPostgres.ts"
 import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
-import * as Gate from "../src/plugin-capabilities/Gate.ts"
+import * as Gate from "../src/conversation-contract/capabilities/Gate.ts"
+import * as Gates from "../src/plugin-capabilities/Gates.ts"
 import * as Approvals from "../src/conversation-contract/capabilities/Approvals.ts"
 import * as Grants from "../src/plugin-capabilities/Grants.ts"
 import * as Requests from "../src/plugin-capabilities/Requests.ts"
@@ -74,19 +76,19 @@ import { Store as ProtocolStore } from "@openbot-build/protocol"
 import * as Reviews from "../src/plugin-capabilities/RequestReviews.ts"
 import * as RequestWorkflow from "../src/plugin-capabilities/RequestWorkflow.ts"
 import * as Inputs from "../src/plugin-chats/InputCommands.ts"
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import * as Runner from "../src/server-execution/execution/Runner.ts"
 import * as RunScope from "../src/server-execution/execution/RunScope.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 
 import { Prompt, Response, Toolkit } from "effect/ai"
-import { TurnContext } from "../src/plugin-chats/TurnContext.ts"
+import { TurnContext } from "../src/conversation-contract/chats/TurnContext.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
 import * as Db from "../src/server-database/Database.ts"
 import * as BotFixture from "./BotFixture.ts"
-import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Commands from "../src/server-execution/execution/Commands.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
 import { WorkflowEngine } from "effect/workflow"
@@ -1355,15 +1357,21 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					host: ChatHost.hostState(view.chat),
 				})
 				const build = (fence: Store.Fence) =>
-					Gate.durable(fence, current).pipe(
+					Effect.flatMap(Effect.service(Gate.Gates), (gates) =>
+						gates.durable(fence, current),
+					).pipe(
 						Effect.provide(
-							Layer.mergeAll(
-								Layer.mock(Bots, {}),
-								Layer.mock(Billing, {}),
-								Layer.mock(Calls.Calls, {
-									authorize: () => Effect.void,
-									ready: () => Effect.void,
-								}),
+							Gates.layer.pipe(
+								Layer.provide(
+									Layer.mergeAll(
+										Layer.mock(Bots, {}),
+										Layer.mock(Billing, {}),
+										Layer.mock(Calls.Calls, {
+											authorize: () => Effect.void,
+											ready: () => Effect.void,
+										}),
+									),
+								),
 							),
 						),
 					)
@@ -2823,7 +2831,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					{ person: true },
 					{ owner: "channel-account" },
 				)
-				const resolution = yield* Resolve.make
+				const resolution = yield* Resolve.make.pipe(
+					Effect.provide(ImportedWorkflow.layerRecords),
+				)
 				const id = test.stored.request.id
 				assert.strictEqual(
 					(yield* resolution.view(actor, id)).executionId,
@@ -2878,7 +2888,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					})
 				})
 				yield* Effect.gen(function* () {
-					const resolution = yield* Resolve.make
+					const resolution = yield* Resolve.make.pipe(
+						Effect.provide(ImportedWorkflow.layerRecords),
+					)
 					const list = yield* resolution.list(actor, "pending")
 					assert.deepStrictEqual(
 						Arr.map(list, (request) => request.id),
@@ -2905,7 +2917,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		() =>
 			Effect.gen(function* () {
 				const test = yield* setup("request-rollback")
-				const resolution = yield* Resolve.make
+				const resolution = yield* Resolve.make.pipe(
+					Effect.provide(ImportedWorkflow.layerRecords),
+				)
 				const decide = (
 					input: typeof test.input & {
 						readonly details: typeof Decisions.Details.Type

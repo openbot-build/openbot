@@ -18,8 +18,9 @@ import {
 	type Key,
 } from "../server-execution/execution/Store.ts"
 import { stepId } from "./ToolSteps.ts"
-import { InputCommands } from "./InputCommands.ts"
-import { ToolCommands, noticeWorkflowName } from "./ToolCommands.ts"
+import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
+import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
+import { noticeWorkflowName } from "./ToolCommands.ts"
 
 const Input = Schema.Struct({ toolExecutionId: Execution.Id })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)

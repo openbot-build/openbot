@@ -1,5 +1,7 @@
 import * as ResetCommands from "../src/plugin-apps/ResetCommands.ts"
 import * as AuthorizationCommands from "../src/plugin-apps/AuthorizationCommands.ts"
+import { ImportedRecords } from "../src/server-execution/imported/ImportedRecords.ts"
+import { DelegationQueries } from "../src/conversation-contract/bots/DelegationQueries.ts"
 import * as GrantCleanup from "../src/plugin-apps/GrantCleanup.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
@@ -11,12 +13,12 @@ import { ConnectionCommands } from "../src/plugin-apps/ConnectionCommands.ts"
 import { Transport } from "../src/server-execution/resources/Transport.ts"
 import { ChannelConfig } from "../src/plugin-channels/ChannelConfig.ts"
 import { ChannelQueue } from "../src/plugin-channels/ChannelQueue.ts"
-import { AppCommands } from "../src/plugin-apps/AppCommands.ts"
-import { CodeCommands } from "../src/plugin-code/CodeCommands.ts"
-import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
+import { AppCommands } from "../src/apps-contract/apps/AppCommands.ts"
+import { CodeCommands } from "../src/apps-contract/code/CodeCommands.ts"
+import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import { DelegationCommands } from "../src/plugin-bots/DelegationCommands.ts"
-import { RequestCommands } from "../src/plugin-capabilities/RequestCommands.ts"
-import { InputCommands } from "../src/plugin-chats/InputCommands.ts"
+import { RequestCommands } from "../src/conversation-contract/capabilities/RequestCommands.ts"
+import { InputCommands } from "../src/conversation-contract/chats/InputCommands.ts"
 import { Store as ExecutionStore } from "../src/server-execution/execution/Store.ts"
 import { LiveConnections } from "../src/plugin-chats/live/LiveConnections.ts"
 import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
@@ -32,13 +34,13 @@ import { Drivers } from "../src/plugin-computers/Drivers.ts"
 import { Pairings } from "../src/plugin-computers/Pairings.ts"
 import { Sessions } from "../src/plugin-computers/Sessions.ts"
 import { SecretProviders } from "../src/plugin-vaults/SecretProviders.ts"
-import { Vaults } from "../src/plugin-vaults/Vaults.ts"
-import { Files } from "../src/plugin-files/Files.ts"
+import { Vaults } from "../src/apps-contract/vaults/Vaults.ts"
+import { Files } from "../src/apps-contract/files/Files.ts"
 import * as ChannelRegistry from "../src/plugin-channels/ChannelRegistry.ts"
 import * as DeveloperLayers from "../src/plugin-apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/plugin-apps/Experience.ts"
 import * as Views from "../src/plugin-apps/Views.ts"
-import { ToolCommands } from "../src/plugin-chats/ToolCommands.ts"
+import { ToolCommands } from "../src/conversation-contract/chats/ToolCommands.ts"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
@@ -374,6 +376,8 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 		HttpRouter.serve(Server.layerApi).pipe(
 			Layer.provide([
 				Layer.mock(ExecutionCommands, {}),
+				Layer.mock(ImportedRecords, {}),
+				Layer.mock(DelegationQueries, {}),
 				Layer.mock(RequestCommands, {}),
 				Layer.mock(DelegationCommands, {}),
 				Layer.mock(InputCommands, {}),

@@ -14,7 +14,10 @@ import {
 	Semaphore,
 	String as Str,
 } from "effect"
-import { BotRecords, type Keys } from "../src/plugin-bots/BotRecords.ts"
+import {
+	BotRecords,
+	type Keys,
+} from "../src/conversation-contract/bots/BotRecords.ts"
 import * as Reminders from "../src/plugin-work/Reminders.ts"
 
 const organizationId = "org_1"

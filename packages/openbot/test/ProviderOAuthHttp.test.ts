@@ -24,10 +24,10 @@ import {
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/http"
 import { HttpApi, HttpApiBuilder } from "effect/http-api"
 import { Auth } from "../src/identity-contract/auth/Auth.ts"
+import { layerNoStore } from "../src/identity-contract/auth/SessionHttp.ts"
 import {
 	layerBotAuth,
 	layerAccountAuth,
-	layerNoStore,
 } from "../src/plugin-auth/HttpMiddleware.ts"
 import { CredentialRejected } from "../src/server-kernel/auth/Model.ts"
 import { Tokens } from "../src/identity-contract/auth/Tokens.ts"

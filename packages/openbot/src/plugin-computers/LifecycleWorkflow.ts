@@ -1,6 +1,6 @@
 import { Computers as ComputerData } from "@openbot-build/domain"
 import { Effect, Layer, Option, Schema } from "effect"
-import { WorkAdmission } from "../plugin-chats/WorkAdmission.ts"
+import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
 import * as Program from "../server-execution/execution/Program.ts"

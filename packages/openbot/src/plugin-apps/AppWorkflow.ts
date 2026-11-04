@@ -1,11 +1,12 @@
 import { Effect, Layer, Option, Stream } from "effect"
-import { workflowName as requestWorkflow } from "../plugin-capabilities/RequestCommands.ts"
+import { workflowName as requestWorkflow } from "../conversation-contract/capabilities/RequestCommands.ts"
 import * as Children from "../server-execution/execution/Children.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import * as Program from "../server-execution/execution/Program.ts"
 import type { Fence, Key } from "../server-execution/execution/Store.ts"
-import { AppCommands, inputDecision, workflowName } from "./AppCommands.ts"
+import { AppCommands, workflowName } from "../apps-contract/apps/AppCommands.ts"
+import { inputDecision } from "./AppCommands.ts"
 import { AppSession } from "./AppSession.ts"
 
 export const workflow = Engine.define(workflowName)

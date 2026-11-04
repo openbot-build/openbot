@@ -14,9 +14,12 @@ import * as Engine from "../server-execution/execution/Engine.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import * as Program from "../server-execution/execution/Program.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
-import { InputCommands, workflowName } from "./InputCommands.ts"
-import { ToolCommands } from "./ToolCommands.ts"
-import { TurnAccess } from "./TurnAccess.ts"
+import {
+	InputCommands,
+	workflowName,
+} from "../conversation-contract/chats/InputCommands.ts"
+import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
+import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import { TurnSession } from "./TurnSession.ts"
 
 export const workflow = Engine.define(workflowName)

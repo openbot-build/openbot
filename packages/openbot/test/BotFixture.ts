@@ -1,7 +1,7 @@
 import { BotsApi } from "@openbot-build/api"
 import { Effect, Layer } from "effect"
 import { Billing } from "../src/server-billing/billing/Billing.ts"
-import * as BotLayers from "../src/plugin-bots/BotLayers.ts"
+import * as BotLayers from "../src/app/BotLayers.ts"
 import * as Judge from "../src/plugin-capabilities/Judge.ts"
 
 /** A Bot for tests that use Chats without the Bot services. */

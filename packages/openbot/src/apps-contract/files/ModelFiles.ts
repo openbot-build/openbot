@@ -1,7 +1,7 @@
 import type { Files as FilesApi } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Predicate, Stream } from "effect"
 import { AiError, type LanguageModel, Prompt } from "effect/ai"
-import type { Files } from "../../plugin-files/Files.ts"
+import type { Files } from "./Files.ts"
 import { fileIdOf } from "./Refs.ts"
 import {
 	type Methods,

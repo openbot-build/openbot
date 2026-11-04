@@ -13,11 +13,11 @@ import {
 } from "effect"
 import { Digest } from "effect/crypto"
 import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { workflowName as turnWorkflow } from "../plugin-chats/InputCommands.ts"
-import { TurnAccess } from "../plugin-chats/TurnAccess.ts"
+import { workflowName as turnWorkflow } from "../conversation-contract/chats/InputCommands.ts"
+import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as Db from "../server-database/Database.ts"
 import {
 	Store,
@@ -27,9 +27,14 @@ import {
 } from "../server-execution/execution/Store.ts"
 import { hash } from "../conversation-contract/capabilities/Capability.ts"
 import { CapabilityAccess } from "./CapabilityAccess.ts"
-import { RequestCommands, decisionId, workflowName } from "./RequestCommands.ts"
-import { Rules } from "./Rules.ts"
-import { Requests, chatOf } from "./Requests.ts"
+import {
+	RequestCommands,
+	workflowName,
+} from "../conversation-contract/capabilities/RequestCommands.ts"
+import { decisionId } from "./RequestCommands.ts"
+import { Rules } from "../conversation-contract/capabilities/Rules.ts"
+import { Requests } from "../conversation-contract/capabilities/Requests.ts"
+import { chatOf } from "./Requests.ts"
 
 export const Decision = Schema.Struct({
 	allow: Schema.Boolean,

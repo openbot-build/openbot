@@ -9,9 +9,9 @@ import { SqlClient } from "effect/sql"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { botResource } from "../identity-contract/authorization/Resources.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import * as DeveloperAccess from "../plugin-apps/DeveloperAccess.ts"
+import * as DeveloperAccess from "../apps-contract/apps/DeveloperAuthorization.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
 import {
 	Store,
@@ -19,6 +19,7 @@ import {
 	type Key,
 } from "../server-execution/execution/Store.ts"
 import * as Imported from "../server-execution/imported/Executions.ts"
+import { ImportedRecords } from "../server-execution/imported/ImportedRecords.ts"
 
 export const workflow = Engine.define(Imported.workflowName)
 
@@ -256,4 +257,10 @@ export const layer = Layer.unwrap(
 				),
 			)
 	}),
+)
+
+/** Gives `ImportedRecords` to the features that show imported history. */
+export const layerRecords = Layer.effect(
+	ImportedRecords,
+	Effect.map(make, (commands) => ImportedRecords.of({ read: commands.read })),
 )

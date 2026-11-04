@@ -11,9 +11,9 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
-import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Convert from "../src/server-upgrade/Convert.ts"
 import * as Checks from "../src/server-upgrade/Checks.ts"
 import * as Resources from "../src/server-upgrade/Resources.ts"

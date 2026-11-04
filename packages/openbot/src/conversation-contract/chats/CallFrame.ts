@@ -10,7 +10,7 @@ import {
 import * as ChatHost from "./ChatHost.ts"
 import * as StoredChats from "./StoredChats.ts"
 import * as ToolOrigins from "./ToolOrigins.ts"
-import { TurnAccess } from "../../plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "./TurnAccess.ts"
 
 /** The saved source of a main or nested call. A child keeps its main call's frame. */
 export const make = Effect.gen(function* () {

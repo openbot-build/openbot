@@ -12,7 +12,7 @@ import {
 	String as Str,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
 import {
 	files,

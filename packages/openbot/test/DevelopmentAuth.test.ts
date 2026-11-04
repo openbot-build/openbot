@@ -32,7 +32,8 @@ import {
 	OpenApi,
 } from "effect/http-api"
 // OrganizationFixture uses the source files, so the Auth layer must come from them too.
-import * as Auth from "../src/identity-contract/auth/index.ts"
+import * as Auth from "../src/plugin-auth/index.ts"
+import * as AuthorizationLayer from "../src/plugin-authorization/Layer.ts"
 import * as HttpBoundary from "../src/server-kernel/errors/HttpBoundary.ts"
 import { Records } from "../src/server-kernel/errors/Records.ts"
 import { Execution } from "@openbot-build/domain"
@@ -185,6 +186,7 @@ it.live(
 				Layer.provide(handlers),
 				Layer.provide(
 					Auth.HttpHandlers.layer.pipe(
+						Layer.provideMerge(AuthorizationLayer.layer),
 						Layer.provide(OrganizationFixture.layerSettings({ publicOrigin })),
 					),
 				),

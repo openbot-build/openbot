@@ -30,10 +30,11 @@ import {
 	storage,
 	type Fence,
 } from "../server-execution/execution/Store.ts"
-import * as ToolResults from "./ToolResults.ts"
+import * as ToolResults from "../conversation-contract/chats/ToolResults.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { ToolCommands } from "./ToolCommands.ts"
-import { ToolSteps, beforeSend, outputCodec, stepId } from "./ToolSteps.ts"
+import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
+import { outputCodec } from "../conversation-contract/chats/ToolSteps.ts"
+import { ToolSteps, beforeSend, stepId } from "./ToolSteps.ts"
 
 type Part = Response.StreamPart<Record<string, Tool.Any>>
 const outputPart = (output: typeof outputCodec.Type): Part =>

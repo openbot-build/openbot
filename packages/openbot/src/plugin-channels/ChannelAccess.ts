@@ -3,7 +3,7 @@ import { Effect, Option, Schema } from "effect"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { Store, storage } from "../server-execution/execution/Store.ts"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
-import { Channels } from "./Channels.ts"
+import { Channels } from "../conversation-contract/channels/Channels.ts"
 
 const sameCaller = Schema.toEquivalence(Caller)
 const Reference = Schema.Struct({ channelId: Schema.String })

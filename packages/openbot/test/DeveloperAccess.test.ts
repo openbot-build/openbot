@@ -23,8 +23,8 @@ import {
 	String as Str,
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
-import * as Migration from "../src/server-kernel/database/Migrations.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
+import * as Migration from "../src/server-upgrade/Migrations.ts"
 import * as Rows from "../src/plugin-apps/DeveloperRows.ts"
 import * as AccessLayer from "../src/plugin-apps/DeveloperAccess.ts"
 import { DeveloperAccess } from "../src/plugin-apps/DeveloperAccess.ts"

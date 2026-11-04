@@ -1,5 +1,6 @@
 import { DurableClock } from "effect/workflow"
-import { MemoryBot, MemoryBudgetSpent } from "./MemoryBot.ts"
+import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
+import { MemoryBudgetSpent } from "./MemoryBot.ts"
 import type { Fence } from "../server-execution/execution/Store.ts"
 import { Clock, DateTime, Effect, Layer, Result, Schema } from "effect"
 import * as Engine from "../server-execution/execution/Engine.ts"

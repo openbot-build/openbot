@@ -17,10 +17,10 @@ import type { Chat } from "@openbot-build/core"
 import { Array as Arr, Effect } from "effect"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import * as ChatControl from "./ChatControl.ts"
-import * as DelegationQueries from "../plugin-bots/DelegationQueries.ts"
-import { Delegations } from "../plugin-bots/Delegations.ts"
-import { MemoryBot } from "../plugin-bots/MemoryBot.ts"
-import { Files } from "../plugin-files/Files.ts"
+import { DelegationQueries } from "../conversation-contract/bots/DelegationQueries.ts"
+import { Delegations } from "../conversation-contract/bots/Delegations.ts"
+import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
+import { Files } from "../apps-contract/files/Files.ts"
 import * as TaskMessages from "../conversation-contract/chats/TaskMessages.ts"
 import { Store } from "../server-execution/execution/Store.ts"
 import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
@@ -83,7 +83,7 @@ const implementations = Effect.gen(function* () {
 	const control = yield* ChatControl.make
 	const queries = yield* ChatQueries.make
 	const delegations = yield* Delegations
-	const delegationQueries = yield* DelegationQueries.make
+	const delegationQueries = yield* DelegationQueries
 	const memoryBot = yield* MemoryBot
 	const files = yield* Files
 	const commands = yield* ChatCommands.make

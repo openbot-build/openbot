@@ -1,7 +1,5 @@
 import { Settings as SettingsApi } from "@openbot-build/api"
-
 import { AuthApi } from "@openbot-build/api"
-
 import {
 	Account,
 	type AccountCaller,
@@ -14,16 +12,9 @@ import {
 	Layer,
 	Match,
 	Option,
-	Redacted,
 	String as Str,
 } from "effect"
-import {
-	Cookies,
-	HttpEffect,
-	HttpMethod,
-	HttpServerRequest,
-	HttpServerResponse,
-} from "effect/http"
+import { HttpMethod, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { Tokens } from "../identity-contract/auth/Tokens.ts"
 import { Auth } from "../identity-contract/auth/Auth.ts"
 import {
@@ -35,6 +26,12 @@ import { Organization } from "../identity-contract/organization/Organization.ts"
 import { RateLimiter } from "../server-billing/billing/RateLimit.ts"
 import * as Platform from "../server-kernel/settings/Platform.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
+import { setSessionCookies } from "../identity-contract/auth/SessionHttp.ts"
+export {
+	setSessionCookies,
+	optionalSession,
+	layerNoStore,
+} from "../identity-contract/auth/SessionHttp.ts"
 
 /** The public error for a credential that failed to resolve. */
 const publicError = (error: AuthUnavailable | CredentialRejected) =>
@@ -47,36 +44,6 @@ const publicError = (error: AuthUnavailable | CredentialRejected) =>
 					: AuthApi.AuthenticationRequired.make({}),
 		}),
 	)
-
-export const setSessionCookies = (setCookies: ReadonlyArray<string>) =>
-	HttpEffect.appendPreResponseHandler((_, response) =>
-		Effect.succeed(
-			HttpServerResponse.mergeCookies(
-				response,
-				Cookies.fromSetCookie(setCookies),
-			),
-		),
-	)
-
-/**
- * The session of the session cookie, if the request has one. A rejected cookie
- * counts as no cookie, so the caller must log in first.
- */
-export const optionalSession = (auth: typeof Auth.Service) =>
-	Effect.gen(function* () {
-		const request = yield* HttpServerRequest.HttpServerRequest
-		return yield* Effect.transposeOption(
-			Option.map(
-				Option.fromNullishOr(request.cookies[AuthApi.SessionCookie]),
-				(cookie) =>
-					auth
-						.resolveSession(Redacted.make(cookie))
-						.pipe(
-							Effect.tap(({ setCookies }) => setSessionCookies(setCookies)),
-						),
-			),
-		).pipe(Effect.catchTag("CredentialRejected", () => Effect.succeedNone))
-	})
 
 /** A request must come from the current public origin of the platform. */
 export const layerOrigin = Layer.effect(
@@ -94,16 +61,6 @@ export const layerOrigin = Layer.effect(
 				return yield* httpEffect
 			})
 	}),
-)
-
-export const layerNoStore = Layer.succeed(AuthApi.NoStore, (httpEffect) =>
-	httpEffect.pipe(
-		HttpEffect.withPreResponseHandler((_, response) =>
-			Effect.succeed(
-				HttpServerResponse.setHeader(response, "cache-control", "no-store"),
-			),
-		),
-	),
 )
 
 export const layerSessionAuth = Layer.effect(

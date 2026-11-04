@@ -31,7 +31,7 @@ import {
 	Scope,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import { AppNetwork } from "./AppHost.ts"
+import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 import { PgClient } from "@effect/sql-pg"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"

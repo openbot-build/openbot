@@ -16,7 +16,8 @@ import { Calls } from "../server-execution/execution/Calls.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
 import * as Program from "../server-execution/execution/Program.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
-import { AppHost, AppNetwork } from "./AppHost.ts"
+import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
+import { AppHost } from "./AppHost.ts"
 import {
 	AuthorizationCommands,
 	preparationCodec,

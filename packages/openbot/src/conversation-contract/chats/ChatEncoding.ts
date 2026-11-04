@@ -3,6 +3,7 @@ import { Bots, Execution } from "@openbot-build/domain"
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import { Array as Arr, Cause, Effect, Schema } from "effect"
 import { SqlError } from "effect/sql"
+export { databaseError } from "../../server-kernel/database/DatabaseError.ts"
 
 /** Keep database failures retryable at the execution boundary. Codec errors stay failures. */
 export const inExecution = <A, E, R>(work: Effect.Effect<A, E, R>) =>
@@ -60,15 +61,6 @@ export const inExecution = <A, E, R>(work: Effect.Effect<A, E, R>) =>
 		),
 	)
 
-/** Keeps a ChatStoreError. Any other database failure becomes `storage-failed` and keeps its cause. */
-export const databaseError = (error: unknown): ChatStore.ChatStoreError =>
-	Schema.is(ChatStore.ChatStoreError)(error)
-		? error
-		: ChatStore.ChatStoreError.make({
-				reason: "storage-failed",
-				message: "Chat storage is unavailable",
-				cause: error,
-			})
 /** Decodes stored Chat data. A failure names the Chat when the caller knows it. */
 export const decode =
 	<S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>

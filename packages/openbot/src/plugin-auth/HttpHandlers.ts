@@ -12,7 +12,6 @@ import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
 import { userKey } from "../identity-contract/audit/Resources.ts"
-import * as AuthorizationLayer from "../plugin-authorization/Layer.ts"
 import { Tokens } from "../identity-contract/auth/Tokens.ts"
 import { Auth } from "../identity-contract/auth/Auth.ts"
 import * as HttpMiddleware from "./HttpMiddleware.ts"
@@ -116,7 +115,6 @@ export const layer = Layer.mergeAll(account, userTokens, signIn).pipe(
 		Layer.mergeAll(
 			HttpMiddleware.layerBotAuth,
 			HttpMiddleware.layerAccountAuth,
-			AuthorizationLayer.layer,
 			HttpMiddleware.layerSessionAuth,
 			HttpMiddleware.layerOrigin,
 			HttpMiddleware.layerNoStore,

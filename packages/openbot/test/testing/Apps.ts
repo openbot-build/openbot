@@ -24,7 +24,8 @@ import { SqlClient } from "effect/sql"
 import * as Assistance from "../../src/plugin-apps/Assistance.ts"
 import * as Report from "../../src/server-kernel/errors/Report.ts"
 import { Settings } from "../../src/server-kernel/settings/Settings.ts"
-import { Readers, VaultReadFailed } from "../../src/plugin-vaults/Readers.ts"
+import { VaultReadFailed } from "../../src/apps-contract/vaults/Readers.ts"
+import { Readers } from "../../src/plugin-vaults/Readers.ts"
 import type * as BrowserHost from "../BrowserHost.ts"
 
 type Host = Effect.Success<ReturnType<typeof BrowserHost.start>>

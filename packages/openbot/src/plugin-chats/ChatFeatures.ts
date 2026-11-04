@@ -12,7 +12,7 @@ import {
 import { Prompt, type LanguageModel, type Tool } from "effect/ai"
 import * as Background from "../server-kernel/execution/Background.ts"
 import * as Report from "../server-kernel/errors/Report.ts"
-import { Files } from "../plugin-files/Files.ts"
+import { Files } from "../apps-contract/files/Files.ts"
 import { withFiles } from "../apps-contract/files/ModelFiles.ts"
 import { AppTools } from "../plugin-apps/AppTools.ts"
 import { BotTools } from "../plugin-bots/BotTools.ts"
@@ -23,10 +23,13 @@ import { WorkTools } from "../plugin-work/WorkTools.ts"
 import { operationsOf } from "../server-kernel/settings/Documents.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import type { InputCommands, Input } from "./InputCommands.ts"
-import { Work } from "../plugin-capabilities/Work.ts"
+import type {
+	InputCommands,
+	Input,
+} from "../conversation-contract/chats/InputCommands.ts"
+import { Work } from "../conversation-contract/capabilities/Work.ts"
 import * as Registration from "../tools-contract/plugins/Registration.ts"
-import { TurnContext } from "./TurnContext.ts"
+import { TurnContext } from "../conversation-contract/chats/TurnContext.ts"
 
 export type Tools = Record<string, Tool.Any>
 

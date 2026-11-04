@@ -15,14 +15,14 @@ import {
 	CodeHistory,
 } from "../../server-execution/imported/AppHistory.ts"
 import * as Imported from "../../server-execution/imported/Executions.ts"
-import * as ImportedWorkflow from "../../plugin-imported/ImportedWorkflow.ts"
+import { ImportedRecords } from "../../server-execution/imported/ImportedRecords.ts"
 import { storage, type Key } from "../../server-execution/execution/Store.ts"
 import { ownerKey } from "./StoredConnections.ts"
 
 /** Old history is read through the same current policy as its execution log. */
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const imported = yield* ImportedWorkflow.make
+	const imported = yield* ImportedRecords
 	const app = Effect.fn("ImportedAppHistory.read")(function* (
 		key: Key,
 		caller: Caller,

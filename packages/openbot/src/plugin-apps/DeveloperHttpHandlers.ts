@@ -6,7 +6,7 @@ import { DeveloperApi as Api, OpenBotApi } from "@openbot-build/api"
 
 import { Identity } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
-import * as HttpMiddleware from "../plugin-auth/HttpMiddleware.ts"
+import * as HttpMiddleware from "../identity-contract/auth/SessionHttp.ts"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { AppInspections } from "./AppInspections.ts"

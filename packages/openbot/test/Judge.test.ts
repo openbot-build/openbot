@@ -15,7 +15,7 @@ import {
 } from "effect"
 import { DecisionModel } from "effect/ai"
 import { TestClock } from "effect/testing"
-import { BotRecords } from "../src/plugin-bots/BotRecords.ts"
+import { BotRecords } from "../src/conversation-contract/bots/BotRecords.ts"
 import * as Judge from "../src/plugin-capabilities/Judge.ts"
 import { AnyModel } from "../src/models-contract/models/ModelRegistry.ts"
 import { Records } from "../src/server-kernel/errors/Records.ts"

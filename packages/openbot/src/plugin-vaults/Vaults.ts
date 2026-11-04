@@ -7,7 +7,6 @@ import { and, eq, inArray } from "drizzle-orm"
 import {
 	Array as Arr,
 	Clock,
-	Context,
 	Effect,
 	Layer,
 	Option,
@@ -19,37 +18,29 @@ import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { vaultResource } from "../identity-contract/authorization/Resources.ts"
 import { toWhere } from "../identity-contract/authorization/Sql.ts"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Db from "../server-database/Database.ts"
 import { vaultAccess, vaultItems, vaults } from "../server-database/Schema.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import { Readers, VaultReadFailed } from "./Readers.ts"
+import { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
+import { Readers } from "./Readers.ts"
 import { SecretProviders } from "./SecretProviders.ts"
+import {
+	type Vault,
+	type Item,
+	Vaults,
+} from "../apps-contract/vaults/Vaults.ts"
+export { Vaults } from "../apps-contract/vaults/Vaults.ts"
+export type { Failure, Usable } from "../apps-contract/vaults/Vaults.ts"
 
-type Vault = VaultsModel.Vault
-type Item = VaultsModel.VaultItem
 type Source = VaultsModel.VaultItemSource
 
-export type Failure =
-	| VaultsModel.SecretProviderInUse
-	| VaultsModel.SecretProviderFailed
-	| VaultsModel.VaultNotFound
-	| VaultsModel.VaultItemNotFound
-	| VaultsModel.SecretProviderNotFound
-	| VaultsModel.VaultConflict
-	| VaultsModel.VaultInvalid
-	| VaultsModel.VaultsUnavailable
-	| Check.Errors
-
-/** What a Bot may know about an item it may use. It has no values. */
-export interface Usable {
-	readonly item: Item
-	readonly vaultName: string
-}
-
 export const unavailable = () => VaultsModel.VaultsUnavailable.make({})
+
 const invalid = (message: string) => VaultsModel.VaultInvalid.make({ message })
+
 const notFound = (id: string) => VaultsModel.VaultNotFound.make({ id })
+
 const itemNotFound = (id: string) => VaultsModel.VaultItemNotFound.make({ id })
 
 const valuesBinding = (id: string) => `openbot_vault_items:${id}:values`
@@ -71,27 +62,39 @@ const providerOf = (source: Source) =>
 const ValuesJson = Schema.fromJsonString(
 	Schema.Record(Schema.String, Schema.String),
 )
+
 const decodeValues = Schema.decodeUnknownEffect(ValuesJson)
+
 /** The source, fields and exits columns hold JSON that only this file writes. */
 const SourceJson = Schema.fromJsonString(VaultsModel.VaultItemSource)
+
 const FieldsJson = Schema.fromJsonString(
 	Schema.Array(VaultsModel.VaultFieldName),
 )
+
 const ExitsJson = Schema.fromJsonString(Schema.Array(VaultsModel.VaultExit))
+
 const decodeSource = Schema.decodeUnknownEffect(SourceJson)
+
 const decodeFields = Schema.decodeUnknownEffect(FieldsJson)
+
 const decodeExits = Schema.decodeUnknownEffect(ExitsJson)
+
 /** These values passed the request schema or came from the store, so they always encode. */
 const encodeValues = (values: Readonly<Record<string, string>>) =>
 	Schema.encodeEffect(ValuesJson)(values).pipe(Effect.orDie)
+
 const encodeSource = (source: Source) =>
 	Schema.encodeEffect(SourceJson)(source).pipe(Effect.orDie)
+
 const encodeFields = (fields: ReadonlyArray<string>) =>
 	Schema.encodeEffect(FieldsJson)(fields).pipe(Effect.orDie)
+
 const encodeExits = (exits: ReadonlyArray<VaultsModel.VaultExit>) =>
 	Schema.encodeEffect(ExitsJson)(exits).pipe(Effect.orDie)
 
 type VaultRow = typeof vaults.$inferSelect
+
 type ItemRow = typeof vaultItems.$inferSelect
 
 const fromRow = (row: VaultRow): Vault => ({
@@ -124,88 +127,6 @@ const fromItemRow = (
 			updatedAt: row.updatedAt,
 		} satisfies Item
 	}).pipe(Failures.replace("A stored Vault item has a bad value", unavailable))
-
-/**
- * The Vaults of an organization, their items, and the rights of Bots to use them.
- * A Vault is only a collection: each item says where its values are. Values never
- * come out of the API. Only Code Mode reads them, with `reveal`.
- */
-export class Vaults extends Context.Service<
-	Vaults,
-	{
-		readonly list: (
-			caller: Caller,
-		) => Effect.Effect<ReadonlyArray<Vault>, Failure>
-		readonly get: (
-			caller: Caller,
-			id: string,
-			action?: "read" | "use" | "write",
-		) => Effect.Effect<Vault, Failure>
-		readonly create: (
-			caller: Caller,
-			input: VaultsModel.CreateVaultRequest,
-		) => Effect.Effect<Vault, Failure>
-		readonly update: (
-			caller: Caller,
-			id: string,
-			input: VaultsModel.UpdateVaultRequest,
-		) => Effect.Effect<Vault, Failure>
-		readonly remove: (
-			caller: Caller,
-			id: string,
-		) => Effect.Effect<void, Failure>
-		readonly items: (
-			caller: Caller,
-			vaultId: string,
-		) => Effect.Effect<ReadonlyArray<Item>, Failure>
-		readonly item: (
-			caller: Caller,
-			vaultId: string,
-			itemId: string,
-		) => Effect.Effect<Item, Failure>
-		readonly createItem: (
-			caller: Caller,
-			vaultId: string,
-			input: VaultsModel.CreateVaultItemRequest,
-		) => Effect.Effect<Item, Failure>
-		readonly updateItem: (
-			caller: Caller,
-			vaultId: string,
-			itemId: string,
-			input: VaultsModel.UpdateVaultItemRequest,
-		) => Effect.Effect<Item, Failure>
-		readonly removeItem: (
-			caller: Caller,
-			vaultId: string,
-			itemId: string,
-		) => Effect.Effect<void, Failure>
-		readonly bots: (
-			caller: Caller,
-			vaultId: string,
-		) => Effect.Effect<ReadonlyArray<VaultsModel.VaultAccess>, Failure>
-		readonly grant: (
-			caller: Caller,
-			vaultId: string,
-			bot: BotsModel.BotId,
-		) => Effect.Effect<VaultsModel.VaultAccess, Failure>
-		readonly revoke: (
-			caller: Caller,
-			vaultId: string,
-			bot: BotsModel.BotId,
-		) => Effect.Effect<void, Failure>
-		/** The items of the Vaults that a Bot has the right to use. It checks no permission. An archived Bot has none. */
-		readonly usable: (
-			organizationId: string,
-			bot: string,
-		) => Effect.Effect<ReadonlyArray<Usable>, VaultsModel.VaultsUnavailable>
-		/** The values of fields of an item, for Code Mode only. It checks no permission. */
-		readonly reveal: (
-			organizationId: string,
-			itemId: string,
-			fields: ReadonlyArray<string>,
-		) => Effect.Effect<ReadonlyMap<string, string>, VaultReadFailed>
-	}
->()("@openbot-build/openbot/plugin-vaults/Vaults") {}
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make

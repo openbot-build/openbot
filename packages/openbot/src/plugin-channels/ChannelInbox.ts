@@ -16,7 +16,7 @@ import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as Db from "../server-database/Database.ts"
 import { channelInbox } from "../server-database/Schema.ts"
 import { ChannelEventSchema, type ChannelEvent } from "./Channel.ts"
-import { Channels } from "./Channels.ts"
+import { Channels } from "../conversation-contract/channels/Channels.ts"
 
 export const workflowName = "openbot.channel-input"
 export const Input = Schema.Struct({

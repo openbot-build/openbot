@@ -8,7 +8,7 @@ import {
 import { Client } from "@openbot-build/protocol"
 import { Array as Arr, Effect, HashMap, Option, Redacted, Schema } from "effect"
 import * as References from "./CodeMode.ts"
-import { Vaults } from "../../plugin-vaults/Vaults.ts"
+import { Vaults } from "./Vaults.ts"
 
 /** Only this phase holds values. Saved inputs hold fixed item IDs and field names. */
 export const make = Effect.gen(function* () {

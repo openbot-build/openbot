@@ -11,11 +11,11 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
-import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
+import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Progress from "../src/server-kernel/imported/Progress.ts"
 import * as Legacy from "../src/server-kernel/imported/LegacyV1.ts"
-import * as Upgrade from "../src/server-upgrade/GrantUses.ts"
+import * as Upgrade from "../src/server-kernel/imported/GrantUses.ts"
 import * as Grants from "../src/apps-contract/apps/GrantUses.ts"
 import * as Connections from "../src/apps-contract/apps/StoredConnections.ts"
 import { privateStateCodec } from "../src/plugin-apps/DeveloperTestStores.ts"

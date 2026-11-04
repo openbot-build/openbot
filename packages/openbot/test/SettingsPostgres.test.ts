@@ -16,7 +16,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import {
 	organizationScope,
 	type Scope,

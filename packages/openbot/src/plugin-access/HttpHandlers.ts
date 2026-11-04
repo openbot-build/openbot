@@ -4,7 +4,7 @@ import type {
 	CredentialRejected,
 } from "../server-kernel/auth/Model.ts"
 import { Auth } from "../identity-contract/auth/Auth.ts"
-import * as Middleware from "../plugin-auth/HttpMiddleware.ts"
+import * as Middleware from "../identity-contract/auth/SessionHttp.ts"
 import { HttpServerRequest } from "effect/http"
 import { Option } from "effect"
 import * as Failures from "../server-kernel/errors/Failures.ts"

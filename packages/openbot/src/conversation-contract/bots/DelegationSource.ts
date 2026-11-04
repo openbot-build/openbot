@@ -15,7 +15,7 @@ import {
 	storage,
 	type Key,
 } from "../../server-execution/execution/Store.ts"
-import { Delegations } from "../../plugin-bots/Delegations.ts"
+import { Delegations } from "./Delegations.ts"
 
 export const workflowName = "openbot.delegation"
 export const noticeWorkflowName = "openbot.delegation-notice"

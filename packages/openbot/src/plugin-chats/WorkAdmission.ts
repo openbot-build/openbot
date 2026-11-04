@@ -4,7 +4,6 @@ import { and, eq } from "drizzle-orm"
 import {
 	Array as Arr,
 	Clock,
-	Context,
 	Effect,
 	HashSet,
 	Layer,
@@ -13,8 +12,11 @@ import {
 	Struct,
 } from "effect"
 import * as DelegationUsage from "../conversation-contract/bots/DelegationUsage.ts"
-import { Delegations, noUsage } from "../plugin-bots/Delegations.ts"
-import { Requests } from "../plugin-capabilities/Requests.ts"
+import {
+	Delegations,
+	noUsage,
+} from "../conversation-contract/bots/Delegations.ts"
+import { Requests } from "../conversation-contract/capabilities/Requests.ts"
 import * as Db from "../server-database/Database.ts"
 import { executions } from "../server-database/ExecutionSchema.ts"
 import * as Admission from "../server-execution/execution/Admission.ts"
@@ -25,29 +27,26 @@ import {
 } from "../server-execution/execution/Store.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
+import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
+export { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
+export type { Service } from "../conversation-contract/chats/WorkAdmission.ts"
 
 const TurnReference = Schema.Struct({
 	chat: Chat.Id,
 	host: Schema.optionalKey(ChatHost.ChatHostState),
 })
+
 const RequestReference = Schema.Struct({
 	source: Execution.Id,
 	control: Schema.optionalKey(Domain.LimitControl),
 })
+
 const sameCaller = Schema.toEquivalence(Caller)
+
 type Permit = {
 	readonly source: Execution.Id
 	readonly control: Domain.LimitControl
 }
-
-/** Pauses control new work. They do not replace access checks or block saved results. */
-export interface Service {
-	readonly check: Admission.Check
-}
-
-export class WorkAdmission extends Context.Service<WorkAdmission, Service>()(
-	"@openbot-build/openbot/plugin-chats/WorkAdmission",
-) {}
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make

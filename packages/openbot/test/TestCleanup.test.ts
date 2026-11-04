@@ -21,7 +21,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"

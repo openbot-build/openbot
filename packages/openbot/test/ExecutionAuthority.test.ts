@@ -13,12 +13,12 @@ import {
 	type Caller,
 } from "@openbot-build/domain"
 import { Effect, Layer, Ref, Option, Schema } from "effect"
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import * as CapabilityAccess from "../src/plugin-capabilities/CapabilityAccess.ts"
-import { Grants } from "../src/plugin-capabilities/Grants.ts"
+import { Grants } from "../src/conversation-contract/capabilities/Grants.ts"
 import { Judge } from "../src/plugin-capabilities/Judge.ts"
-import { Rules } from "../src/plugin-capabilities/Rules.ts"
-import { Work } from "../src/plugin-capabilities/Work.ts"
+import { Rules } from "../src/conversation-contract/capabilities/Rules.ts"
+import { Work } from "../src/conversation-contract/capabilities/Work.ts"
 import { bot } from "./BotFixture.ts"
 
 const member: Caller = {

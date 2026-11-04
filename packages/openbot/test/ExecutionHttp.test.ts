@@ -29,7 +29,7 @@ import {
 	HttpRouter,
 } from "effect/http"
 import { HttpApi, HttpApiBuilder, HttpApiMiddleware } from "effect/http-api"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Commands from "../src/server-execution/execution/Commands.ts"

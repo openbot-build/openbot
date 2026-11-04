@@ -19,7 +19,7 @@ import {
 import type { Paused } from "../server-execution/execution/Admission.ts"
 import type { Pending } from "@nmnmcc/ability/Authorizer"
 import { type Unavailable, ConnectionSessions } from "./ConnectionSessions.ts"
-import type { VaultReadFailed } from "../plugin-vaults/Readers.ts"
+import type { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
 import {
 	type Scope,
 	Context,
@@ -31,13 +31,14 @@ import {
 	Schema,
 } from "effect"
 import { Calls } from "../server-execution/execution/Calls.ts"
-import * as Gate from "../plugin-capabilities/Gate.ts"
-import { RequestCommands } from "../plugin-capabilities/RequestCommands.ts"
+import * as Gate from "../conversation-contract/capabilities/Gate.ts"
+import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
 import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
 import { type Fence } from "../server-execution/execution/Store.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import * as AppCall from "../apps-contract/apps/AppCall.ts"
-import { AppCommands, continuation } from "./AppCommands.ts"
+import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
+import { continuation } from "./AppCommands.ts"
 import { json } from "../apps-contract/apps/AppResults.ts"
 import {
 	ownerKey,
@@ -70,7 +71,7 @@ const open = (fence: Fence) =>
 		const vault = yield* AppSecrets.make
 		const saved = yield* commands.load(fence)
 		const frame = yield* frames.read(fence, saved.input.site)
-		const gate = yield* Gate.durable(
+		const gate = yield* (yield* Gate.Gates).durable(
 			fence,
 			{
 				identity: frame.identity,

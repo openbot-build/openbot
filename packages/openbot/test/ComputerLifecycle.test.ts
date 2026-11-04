@@ -20,7 +20,7 @@ import {
 } from "effect"
 import { WorkflowEngine } from "effect/workflow"
 import { AuditLog } from "../src/identity-contract/audit/AuditLog.ts"
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import * as Activity from "../src/plugin-computers/Activity.ts"
 import {
 	Machine,
@@ -35,7 +35,7 @@ import * as Maintenance from "../src/plugin-computers/Maintenance.ts"
 import * as MaintenanceWorkflow from "../src/plugin-computers/MaintenanceWorkflow.ts"
 import { Connectors } from "../src/plugin-computers/connector/Connectors.ts"
 import * as Db from "../src/server-database/Database.ts"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import {
 	computerProviders,
 	computers,

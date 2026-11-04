@@ -25,7 +25,7 @@ import {
 	Option,
 	Schema,
 } from "effect"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Db from "../server-database/Database.ts"
 import {
 	computerAccess,

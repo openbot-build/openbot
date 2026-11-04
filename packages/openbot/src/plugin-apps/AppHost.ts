@@ -34,6 +34,8 @@ import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as HostApp from "./HostApp.ts"
 import { Probe } from "./Probe.ts"
 import * as Db from "../server-database/Database.ts"
+import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
+export { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 
 type AuthorizationError =
 	| Authorization.AuthorizationError
@@ -41,6 +43,7 @@ type AuthorizationError =
 	| Schema.SchemaError
 	| Store.StoreError
 	| App.AppError
+
 export type Protection =
 	| { readonly requiresAuthorization: false }
 	| {
@@ -49,6 +52,7 @@ export type Protection =
 			readonly scopes: ReadonlyArray<string>
 			readonly resourceMetadataUrl?: string
 	  }
+
 export type BoundApp = Omit<HostApp.Service, "add"> & {
 	/** A restricted App and a configuration that the App does not accept keep their own errors. */
 	readonly add: (
@@ -68,15 +72,7 @@ export type BoundApp = Omit<HostApp.Service, "add"> & {
 		AuthorizationError | ConnectionDomain.ConnectionConfigurationInvalid
 	>
 }
-export class AppNetwork extends Context.Service<
-	AppNetwork,
-	{
-		readonly layer: (
-			owner: string,
-			origins: ReadonlyArray<string>,
-		) => Layer.Layer<Network.Network>
-	}
->()("@openbot-build/openbot/plugin-apps/AppHost/AppNetwork") {}
+
 export const layerNetwork = Layer.effect(
 	AppNetwork,
 	Effect.gen(function* () {
@@ -347,4 +343,5 @@ export const make: Effect.Effect<
 		},
 	})
 })
+
 export const layer = Layer.effect(AppHost, make)

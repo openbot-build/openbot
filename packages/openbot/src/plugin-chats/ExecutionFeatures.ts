@@ -12,8 +12,8 @@ import {
 	Scope,
 } from "effect"
 import * as Approvals from "../conversation-contract/capabilities/Approvals.ts"
-import * as Gate from "../plugin-capabilities/Gate.ts"
-import { Work } from "../plugin-capabilities/Work.ts"
+import * as Gate from "../conversation-contract/capabilities/Gate.ts"
+import { Work } from "../conversation-contract/capabilities/Work.ts"
 import * as Registration from "../tools-contract/plugins/Registration.ts"
 import type { Fence } from "../server-execution/execution/Store.ts"
 import * as AppTools from "../plugin-apps/AppTools.ts"
@@ -26,7 +26,7 @@ import * as ChatFeatures from "./ChatFeatures.ts"
 /** Build the approval gate and every tool that holds it in one execution scope. */
 const open = (fence: Fence, frame: Gate.Frame) =>
 	Effect.gen(function* () {
-		const gate = yield* Gate.durable(fence, frame)
+		const gate = yield* (yield* Gate.Gates).durable(fence, frame)
 		return yield* Effect.gen(function* () {
 			const apps = yield* AppTools.durable(fence)
 			const bots = yield* BotTools.durable(fence)
@@ -77,7 +77,7 @@ const restoreTool = (
 			!input.policy.review &&
 			Arr.contains(Rec.values(ComputerTools.names), input.name)
 		) {
-			const gate = yield* Gate.durable(fence, frame)
+			const gate = yield* (yield* Gate.Gates).durable(fence, frame)
 			const registration = yield* Effect.gen(function* () {
 				const computers = yield* ComputerTools.make
 				return yield* computers.restore(input, input.name, frame)

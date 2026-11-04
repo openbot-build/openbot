@@ -21,13 +21,14 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt } from "effect/ai"
-import { AppCommands } from "../src/plugin-apps/AppCommands.ts"
+import { AppCommands } from "../src/apps-contract/apps/AppCommands.ts"
+import * as ImportedWorkflow from "../src/plugin-imported/ImportedWorkflow.ts"
 import * as AppQueries from "../src/plugin-apps/AppQueries.ts"
-import { Bots } from "../src/plugin-bots/Bots.ts"
-import { CodeCommands } from "../src/plugin-code/CodeCommands.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
+import { CodeCommands } from "../src/apps-contract/code/CodeCommands.ts"
 import * as CodeQueries from "../src/plugin-code/CodeQueries.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
-import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
+import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Apps from "../src/server-upgrade/Apps.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
@@ -189,8 +190,12 @@ it.layer(database, { excludeTestServices: true })((it) => {
 						),
 				})
 				const queries = yield* Effect.all({
-					apps: AppQueries.make,
-					code: CodeQueries.make,
+					apps: AppQueries.make.pipe(
+						Effect.provide(ImportedWorkflow.layerRecords),
+					),
+					code: CodeQueries.make.pipe(
+						Effect.provide(ImportedWorkflow.layerRecords),
+					),
 				}).pipe(
 					Effect.provide(
 						Layer.mergeAll(

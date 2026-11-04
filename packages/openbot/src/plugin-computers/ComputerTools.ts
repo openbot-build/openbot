@@ -18,8 +18,8 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Answer, Gate } from "../plugin-capabilities/Gate.ts"
-import { Work } from "../plugin-capabilities/Work.ts"
+import { Answer, Gate } from "../conversation-contract/capabilities/Gate.ts"
+import { Work } from "../conversation-contract/capabilities/Work.ts"
 import type { Machine } from "./Computer.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
 import { checkFile, Computers } from "./Computers.ts"

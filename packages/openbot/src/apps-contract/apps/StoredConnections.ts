@@ -1,6 +1,6 @@
 import * as GrantUses from "./GrantUses.ts"
 import * as Models from "./ConnectionModels.ts"
-import type { IndexWork } from "../../plugin-apps/IndexWork.ts"
+import type { IndexWork } from "./IndexWork.ts"
 import {
 	AppConnections,
 	ExperienceNotFound,

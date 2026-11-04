@@ -1,87 +1,34 @@
-import {
-	Execution,
-	ExecutionIdentity,
-	type AppCalls,
-} from "@openbot-build/domain"
-import type {
-	Bots as BotsApi,
-	Computers as ComputersApi,
-} from "@openbot-build/domain"
-import { CodeRuns as CodeDomain } from "@openbot-build/domain"
+import { Execution, ExecutionIdentity } from "@openbot-build/domain"
 import {
 	Cause,
 	Context,
-	Schema,
-	Data,
 	Effect,
 	HashMap,
+	Layer,
 	Option,
 	Ref,
+	Schema,
 } from "effect"
 import { Digest } from "effect/crypto"
-import { type Capability } from "../conversation-contract/capabilities/Capability.ts"
-import * as CapabilityPolicy from "./CapabilityAccess.ts"
-import * as Judge from "./Judge.ts"
-import type { Ask } from "./Requests.ts"
-import { Work } from "./Work.ts"
 import * as Hex from "effect/encoding/Hex"
+import {
+	Answer,
+	Gate,
+	Gates,
+	type Frame,
+} from "../conversation-contract/capabilities/Gate.ts"
 import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
-import { TurnContext } from "../plugin-chats/TurnContext.ts"
+import {
+	RequestCommands,
+	type Input,
+} from "../conversation-contract/capabilities/RequestCommands.ts"
+import type { Stored } from "../conversation-contract/capabilities/Requests.ts"
+import { TurnContext } from "../conversation-contract/chats/TurnContext.ts"
 import { type Fence } from "../server-execution/execution/Store.ts"
 import * as Recovery from "../server-execution/execution/Recovery.ts"
 import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
-import { RequestCommands, type Input } from "./RequestCommands.ts"
-import type { Stored } from "./Requests.ts"
-
-/**
- * What a tool call does after the check. `Allow` runs it now. `Deny` does not run it,
- * and the Bot gets the reason. `Pending` waits for a decider: the Bot goes on at once,
- * and the answer comes back to its Chat later.
- */
-export type Answer = Data.TaggedEnum<{
-	Allow: {}
-	Deny: { readonly request?: string; readonly reason: string }
-	Pending: { readonly request: string; readonly executionId?: Execution.Id }
-}>
-export const Answer = Data.taggedEnum<Answer>()
-
-export interface Attempt {
-	readonly capability: Capability
-	/** Why the Bot wants it, in its own words. */
-	readonly reason: string
-	readonly site: Execution.CallSite
-	/** The target Bot, for actions on a Bot. */
-	readonly target?: BotsApi.Bot
-	/** The owner of the target Computer or Computer provider, for actions on Computers. */
-	readonly computerOwner?: ComputersApi.ComputerOwner
-	/** The deployment owner allows this without asking, for example a read-only App tool. */
-	readonly implicit?: boolean
-	readonly app?: AppCalls.Invocation
-	/** The Code Mode program that makes the call. Deciders see it with the request. */
-	readonly code?: CodeDomain.RequestCode
-	/** How the request waits, when the attempt needs one. */
-	readonly ask?: Ask
-}
-
-/**
- * Checks each attempt of a Bot to use a capability. Bots have no limits that they know of.
- * The steps are: the policy of the member, Grants, Rules with the judge, and then a request
- * to the decider above the Bot. The Grants of a Bot are an ability policy, see `Policy.ts`.
- */
-export class Gate extends Context.Service<
-	Gate,
-	{
-		/**
-		 * A failed check denies the call. If its answer cannot be kept, the current
-		 * scope stops, so approval cannot fall back to another policy.
-		 */
-		readonly check: (attempt: Attempt) => Effect.Effect<Answer>
-		/** Keep a tool's own denial for the approval callback of this call. */
-		readonly remember: (callId: string, answer: Answer) => Effect.Effect<void>
-		/** Read only the answer for the current saved call occurrence. */
-		readonly answer: (callId: string) => Effect.Effect<Option.Option<Answer>>
-	}
->()("@openbot-build/openbot/plugin-capabilities/Gate") {}
+import * as CapabilityPolicy from "./CapabilityAccess.ts"
+import * as Judge from "./Judge.ts"
 
 /** A saved request keeps the call. Its workflow delivers any later result. */
 const requestAnswer = (stored: Stored, executionId: Execution.Id): Answer =>
@@ -92,9 +39,7 @@ const requestAnswer = (stored: Stored, executionId: Execution.Id): Answer =>
 			})
 		: Answer.Pending({ request: stored.request.id, executionId })
 
-/** Bound before tool approval checks, so a model cannot choose an execution or actor. */
-export type Frame = Pick<typeof Work.Service, "identity" | "chat" | "turn">
-export const durable = (
+const durable = (
 	fence: Fence,
 	work: Frame,
 	continuation?: "chat" | "workflow",
@@ -272,3 +217,26 @@ export const durable = (
 			)
 		return Gate.of({ check, remember, answer })
 	})
+
+/** The services that the Gate of one execution needs. */
+type Needs = Effect.Services<ReturnType<typeof durable>>
+
+/**
+ * Gives `Gates`. It keeps the services of the Gates when it is built. A service
+ * that the caller has, such as a fake in a test, wins over the kept one, as it
+ * did when callers made each Gate with their own services.
+ */
+export const layer = Layer.effect(
+	Gates,
+	Effect.gen(function* () {
+		const kept = yield* Effect.context<Needs>()
+		return Gates.of({
+			durable: (fence, work, continuation, control) =>
+				Effect.flatMap(Effect.context<never>(), (current) =>
+					durable(fence, work, continuation, control).pipe(
+						Effect.provideContext(Context.merge(kept, current)),
+					),
+				),
+		})
+	}),
+)

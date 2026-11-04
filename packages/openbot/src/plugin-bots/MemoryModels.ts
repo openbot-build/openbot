@@ -24,8 +24,9 @@ import * as Permits from "../server-execution/execution/Permits.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
 import * as ModelCalls from "../models-contract/models/ModelCalls.ts"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
-import { MemoryBot, MemoryBudgetSpent, memoryBotId } from "./MemoryBot.ts"
-import type { Home } from "./BotMemories.ts"
+import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
+import { MemoryBudgetSpent, memoryBotId } from "./MemoryBot.ts"
+import type { Home } from "../conversation-contract/bots/BotMemories.ts"
 
 const Request = Schema.Struct({
 	selection: Config.Selection,

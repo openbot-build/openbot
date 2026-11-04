@@ -27,7 +27,7 @@ import {
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const call: Call = {

@@ -24,19 +24,20 @@ import { Prompt } from "effect/ai"
 import { WorkflowEngine } from "effect/workflow"
 import { Billing } from "../src/server-billing/billing/Billing.ts"
 import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import * as Delegations from "../src/plugin-bots/Delegations.ts"
-import * as Gate from "../src/plugin-capabilities/Gate.ts"
+import * as Gate from "../src/conversation-contract/capabilities/Gate.ts"
+import * as Gates from "../src/plugin-capabilities/Gates.ts"
 import * as Grants from "../src/plugin-capabilities/Grants.ts"
 import * as RequestCommands from "../src/plugin-capabilities/RequestCommands.ts"
 import * as Requests from "../src/plugin-capabilities/Requests.ts"
 import * as Rules from "../src/plugin-capabilities/Rules.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
-import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
-import { TurnContext } from "../src/plugin-chats/TurnContext.ts"
+import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
+import { TurnContext } from "../src/conversation-contract/chats/TurnContext.ts"
 import * as Db from "../src/server-database/Database.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
@@ -69,7 +70,8 @@ const registry = Layer.effectDiscard(
 )
 
 /** These tests use the real request, execution, Grant, and sealed error stores. */
-export const services = Layer.merge(RequestCommands.layer, Calls.layer).pipe(
+export const services = Gates.layer.pipe(
+	Layer.provideMerge(Layer.merge(RequestCommands.layer, Calls.layer)),
 	Layer.provideMerge(Requests.layer),
 	Layer.provideMerge(
 		Layer.mergeAll(Grants.layer, Rules.layer, Delegations.layer),
@@ -227,7 +229,10 @@ export const setup = Effect.fn("GateFixture.setup")(function* (
 			reason: "The Bot wants to search.",
 			site: Execution.mainCall(call.id),
 		},
-		build: (owner: Store.Fence = fence) => Gate.durable(owner, frame),
+		build: (owner: Store.Fence = fence) =>
+			Effect.flatMap(Effect.service(Gate.Gates), (gates) =>
+				gates.durable(owner, frame),
+			),
 		approval: { chat, turn, approvalId: "approval", toolCall: call },
 	}
 })

@@ -1,53 +1,44 @@
-import { type AppCalls } from "@openbot-build/domain"
 import { Settings } from "../server-kernel/settings/Settings.ts"
-import type { Chat, Turn } from "@openbot-build/core"
+import type { Chat } from "@openbot-build/core"
 import { Requests as RequestDomain } from "@openbot-build/domain"
-import { CodeRuns as CodeDomain } from "@openbot-build/domain"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Cause,
 	Clock,
-	Context,
 	Effect,
 	Layer,
 	Option,
 	pipe,
-	Schema,
 	String as Str,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { BotRecords } from "../plugin-bots/BotRecords.ts"
+import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
 import { Chain } from "../conversation-contract/chats/ChatHost.ts"
-import { Grants } from "./Grants.ts"
-import { Rules, deciderKey } from "./Rules.ts"
+import { Grants } from "../conversation-contract/capabilities/Grants.ts"
+import {
+	Rules,
+	deciderKey,
+} from "../conversation-contract/capabilities/Rules.ts"
 import * as Report from "../server-kernel/errors/Report.ts"
 import type { Records } from "../server-kernel/errors/Records.ts"
+import {
+	type Request,
+	Stored,
+	type Decision,
+	Requests,
+} from "../conversation-contract/capabilities/Requests.ts"
+export {
+	Stored,
+	Requests,
+} from "../conversation-contract/capabilities/Requests.ts"
+export type {
+	Decision,
+	Ask,
+	Outcome,
+} from "../conversation-contract/capabilities/Requests.ts"
 
-type Request = RequestDomain.CapabilityRequest
 type Approver = Request["approver"]
-
-/**
- * A request as it is stored: the public record and the delegation chain it came through.
- * The deciders are the owner chain in `request.chain`.
- * `call` is the tool call that waits for the request. When the request is allowed,
- * OpenBot gives it back to the Chat, and the call runs then.
- */
-export const Stored = Schema.Struct({
-	request: RequestDomain.CapabilityRequest,
-	chain: Chain,
-	/** The Grant kept for the exact call that this request allows. */
-	approvalGrant: Schema.optionalKey(BotsApi.GrantId),
-	call: Schema.optionalKey(
-		Schema.Struct({
-			name: Schema.String,
-			params: Schema.Json,
-			/** The source of a host action, such as an action of an App view. */
-			source: Schema.optionalKey(Schema.JsonObject),
-		}),
-	),
-})
-export type Stored = typeof Stored.Type
 
 /**
  * The decider above a Bot in its owner chain: the Bot before it,
@@ -99,114 +90,6 @@ export const chatOf = ({
 		Option.map(([, chat]) => chat),
 		Option.getOrElse(() => current),
 	)
-
-export interface Decision {
-	readonly by: BotsApi.Decider
-	readonly allow: boolean
-	readonly scope?: BotsApi.GrantScope
-	readonly reason?: string
-	readonly question?: string
-	readonly expected?: number
-	/** For an allow by a Bot: true when the Bot holds the capability itself. */
-	readonly holds?: boolean
-	/** Keep the decision as a Rule for the requesting Bot. */
-	readonly rule?: string
-}
-
-/**
- * How one request waits. `person` sends it to the person at once, not to the Bot above.
- * `timeoutMs` replaces the timeout of the organization. `onExpire` says what happens when
- * nobody answers in time. Without it, the request is denied.
- */
-export interface Ask {
-	readonly person?: boolean
-	readonly timeoutMs?: number
-	readonly onExpire?: "allow" | "deny"
-}
-
-/** The result of a decision: the request is final, or it went up to the next decider. */
-export type Outcome =
-	| { readonly _tag: "Final"; readonly stored: Stored }
-	| { readonly _tag: "Escalated"; readonly stored: Stored }
-
-/**
- * Requests of Bots for capabilities. A request waits for one decider at a time.
- * This service only keeps records. The coordinator starts reviews and lets the work go on.
- */
-export class Requests extends Context.Service<
-	Requests,
-	{
-		readonly create: (
-			organizationId: string,
-			input: {
-				readonly bot: BotsApi.BotId
-				readonly chain: Chain
-				/** The owner chain of the Bot, from the top, ending with the Bot. */
-				readonly deciders: ReadonlyArray<BotsApi.BotId>
-				readonly capability: BotsApi.Capability
-				readonly reason: string
-				readonly chat: Chat.Id
-				readonly turn: Turn.Id
-				readonly toolCallId: string
-				readonly app?: AppCalls.Invocation
-				readonly code?: CodeDomain.RequestCode
-				readonly ask?: Ask
-				readonly call?: NonNullable<Stored["call"]>
-				/** A request that is decided at once, for example by a Grant or by policy. */
-				readonly decided?: {
-					readonly allow: boolean
-					readonly by: BotsApi.Decider
-					readonly reason?: string
-				}
-			},
-		) => Effect.Effect<Stored, BotsApi.BotStorageUnavailable>
-		readonly find: (
-			organizationId: string,
-			id: string,
-		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
-		/** The requests that wait for a person, or that the person decided. */
-		readonly forPerson: (
-			organizationId: string,
-			userId: string,
-			status?: Request["status"],
-		) => Effect.Effect<ReadonlyArray<Request>, BotsApi.BotStorageUnavailable>
-		/** The requests of one Chat. */
-		readonly forChat: (
-			organizationId: string,
-			chat: Chat.Id,
-		) => Effect.Effect<ReadonlyArray<Stored>, BotsApi.BotStorageUnavailable>
-		readonly decide: (
-			organizationId: string,
-			id: string,
-			decision: Decision,
-		) => Effect.Effect<
-			Outcome,
-			| RequestDomain.RequestNotFound
-			| RequestDomain.RequestConflict
-			| BotsApi.BotStorageUnavailable
-		>
-		/**
-		 * Sends a pending request to the next decider without support, for example when a
-		 * review ended without a decision.
-		 */
-		readonly pass: (
-			organizationId: string,
-			id: string,
-			from: BotsApi.BotId,
-		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
-		/** Closes one pending request when its time is over. */
-		readonly expireOne: (
-			organizationId: string,
-			id: string,
-		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
-		/** Closes one request after its execution releases its resources. */
-		readonly cancelOne: (
-			organizationId: string,
-			id: string,
-			reason?: string,
-		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
-	}
->()("@openbot-build/openbot/plugin-capabilities/Requests") {}
 
 /** How long a request waits before it is denied, when the settings cannot be read. */
 export const defaultTimeout = 24 * 60 * 60 * 1000
@@ -605,4 +488,5 @@ export const make: Effect.Effect<
 			closePending(organizationId, id, "cancelled", reason),
 	})
 })
+
 export const layer = Layer.effect(Requests, make)

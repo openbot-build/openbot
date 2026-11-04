@@ -1,12 +1,15 @@
 import { Execution } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
-import { workflowName as appWorkflow } from "../plugin-apps/AppCommands.ts"
+import { workflowName as appWorkflow } from "../apps-contract/apps/AppCommands.ts"
 import * as Children from "../server-execution/execution/Children.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
 import { Runner } from "../server-execution/execution/Runner.ts"
 import { RunScope } from "../server-execution/execution/RunScope.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
-import { CodeCommands, workflowName } from "./CodeCommands.ts"
+import {
+	CodeCommands,
+	workflowName,
+} from "../apps-contract/code/CodeCommands.ts"
 import { CodeProgram } from "./CodeProgram.ts"
 
 export const workflow = Engine.define(workflowName)

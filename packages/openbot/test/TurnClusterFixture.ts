@@ -1,6 +1,6 @@
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import { LiveConnections } from "../src/plugin-chats/live/LiveConnections.ts"
-import { ReviewTools } from "../src/plugin-capabilities/ReviewTools.ts"
+import { ReviewTools } from "../src/conversation-contract/capabilities/ReviewTools.ts"
 import { Billing } from "../src/server-billing/billing/Billing.ts"
 import { PgClient } from "@effect/sql-pg"
 import {
@@ -25,7 +25,7 @@ import * as TurnSession from "../src/plugin-chats/TurnSession.ts"
 import * as TurnWorkflow from "../src/plugin-chats/TurnWorkflow.ts"
 import * as ExecutionFeatures from "../src/plugin-chats/ExecutionFeatures.ts"
 import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
-import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
 
 /** Kill the first owner after its model result, before its Chat checkpoint. */

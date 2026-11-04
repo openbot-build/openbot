@@ -2,11 +2,12 @@ import type { Chat } from "@openbot-build/core"
 import { Bots as Domain } from "@openbot-build/domain"
 import { Array as Arr, Effect, HashSet } from "effect"
 import { SqlClient } from "effect/sql"
-import { Requests } from "../plugin-capabilities/Requests.ts"
+import { Requests } from "../conversation-contract/capabilities/Requests.ts"
 import * as Imported from "../server-execution/imported/Executions.ts"
 import * as Failures from "../server-kernel/errors/Failures.ts"
-import { Reminders } from "../plugin-work/Reminders.ts"
-import { Delegations, isOpen } from "./Delegations.ts"
+import { Reminders } from "../conversation-contract/work/Reminders.ts"
+import { Delegations } from "../conversation-contract/bots/Delegations.ts"
+import { isOpen } from "./Delegations.ts"
 
 /** The Chat count and the model prompt read the same work that can still return. */
 export const make = Effect.gen(function* () {

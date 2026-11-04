@@ -3,7 +3,7 @@ import { BotMemory, Bots } from "@openbot-build/domain"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import * as Failures from "../server-kernel/errors/Failures.ts"
-import type { Keys } from "./BotRecords.ts"
+import type { Keys } from "../conversation-contract/bots/BotRecords.ts"
 
 const unavailable = Failures.replace(
 	"The memory log could not be read or written.",

@@ -3,11 +3,14 @@ import { Execution, ExecutionIdentity } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { AppApprovals } from "../plugin-apps/AppApprovals.ts"
+import { AppApprovals } from "../apps-contract/apps/AppApprovals.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import { InputCommands, type Input } from "../plugin-chats/InputCommands.ts"
+import {
+	InputCommands,
+	type Input,
+} from "../conversation-contract/chats/InputCommands.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { TurnAccess } from "../plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as Db from "../server-database/Database.ts"
 import { type Authorize } from "../server-execution/execution/Engine.ts"
 import {
@@ -19,8 +22,9 @@ import {
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import { approvedCallId } from "../conversation-contract/capabilities/Approvals.ts"
 import { describe } from "../conversation-contract/capabilities/Capability.ts"
-import { RequestCommands, noticeWorkflowName } from "./RequestCommands.ts"
-import { type Stored } from "./Requests.ts"
+import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
+import { noticeWorkflowName } from "./RequestCommands.ts"
+import { type Stored } from "../conversation-contract/capabilities/Requests.ts"
 
 const Reference = Schema.Struct({ requestExecutionId: Execution.Id })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)

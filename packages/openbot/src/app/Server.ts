@@ -29,6 +29,7 @@ import type { SecureRandom } from "effect/crypto"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import * as OpenBot from "./OpenBot.ts"
 import * as AuthHttpHandlers from "../plugin-auth/HttpHandlers.ts"
+import * as AuthorizationLayer from "../plugin-authorization/Layer.ts"
 import * as ErrorReporting from "../server-kernel/errors/Reporting.ts"
 import * as Report from "../server-kernel/errors/Report.ts"
 import * as PlatformAdminsPostgres from "../plugin-platform/PlatformAdminsPostgres.ts"
@@ -37,7 +38,7 @@ import type { Auth } from "../identity-contract/auth/Auth.ts"
 import * as AuthConfiguration from "../server-kernel/auth/Configuration.ts"
 import type { Configuration } from "../server-kernel/auth/Model.ts"
 import * as HostTools from "../tools-contract/chats/HostTools.ts"
-import type { IndexWork } from "../plugin-apps/IndexWork.ts"
+import type { IndexWork } from "../apps-contract/apps/IndexWork.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
 
 /** The OpenBot routes, with error logs for failed requests. */
@@ -46,7 +47,10 @@ export const layerApi = Layer.mergeAll(
 	ErrorReporting.layerHttp,
 	AuthHttpHandlers.layerBetterAuth,
 ).pipe(
-	Layer.provide(AuthHttpHandlers.layer),
+	// The authorization middleware stays open to the other groups, as before.
+	Layer.provide(
+		AuthHttpHandlers.layer.pipe(Layer.provideMerge(AuthorizationLayer.layer)),
+	),
 	Layer.provide(HttpFailureBoundary.layer),
 )
 

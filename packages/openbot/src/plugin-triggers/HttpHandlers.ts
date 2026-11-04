@@ -9,7 +9,7 @@ import {
 import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, type Schema, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as DefaultBot from "../conversation-contract/bots/DefaultBot.ts"
 import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
 import { triggerKey } from "../identity-contract/audit/Resources.ts"

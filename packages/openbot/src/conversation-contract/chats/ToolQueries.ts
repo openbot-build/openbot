@@ -5,7 +5,7 @@ import { Array as Arr, Effect, Option, Order, Schema } from "effect"
 import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
 import * as Db from "../../server-database/Database.ts"
 import * as Imported from "../../server-execution/imported/Executions.ts"
-import * as ImportedWorkflow from "../../plugin-imported/ImportedWorkflow.ts"
+import { ImportedRecords } from "../../server-execution/imported/ImportedRecords.ts"
 import * as Legacy from "../../server-execution/imported/LegacyChats.ts"
 import {
 	executions,
@@ -16,9 +16,9 @@ import {
 	transactionFailures,
 } from "../../server-execution/execution/Store.ts"
 import * as ChatQueries from "./ChatQueries.ts"
-import { ToolCommands } from "../../plugin-chats/ToolCommands.ts"
-import * as ToolResults from "../../plugin-chats/ToolResults.ts"
-import { outputCodec } from "../../plugin-chats/ToolSteps.ts"
+import { ToolCommands } from "./ToolCommands.ts"
+import * as ToolResults from "./ToolResults.ts"
+import { outputCodec } from "./ToolSteps.ts"
 
 /** Query rights apply to the Chat and to each saved tool source. */
 export const make = Effect.gen(function* () {
@@ -26,7 +26,7 @@ export const make = Effect.gen(function* () {
 	const chats = yield* ChatQueries.make
 	const tools = yield* ToolCommands
 	const store = yield* Store
-	const imported = yield* ImportedWorkflow.make
+	const imported = yield* ImportedRecords
 	const historyRows = (
 		namespace: string,
 		chat: Chat.Id,

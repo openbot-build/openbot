@@ -26,7 +26,7 @@ import {
 	organizationKey,
 	platformKey,
 } from "../identity-contract/audit/Resources.ts"
-import { checkUnused } from "../plugin-models/HttpHandlers.ts"
+import { checkUnused } from "../models-contract/models/ProviderUseHttp.ts"
 import {
 	ModelProviders,
 	platformOwner,

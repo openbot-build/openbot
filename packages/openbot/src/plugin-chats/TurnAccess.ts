@@ -1,4 +1,3 @@
-import type { Check as CheckType } from "../server-execution/execution/Admission.ts"
 import { triggerResource } from "../identity-contract/authorization/Resources.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as DelegationSource from "../conversation-contract/bots/DelegationSource.ts"
@@ -19,7 +18,6 @@ import {
 	Array as Arr,
 	Cause,
 	Clock,
-	Context,
 	DateTime,
 	Effect,
 	HashSet,
@@ -29,20 +27,27 @@ import {
 } from "effect"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { Tokens } from "../identity-contract/auth/Tokens.ts"
-import { Bots } from "../plugin-bots/Bots.ts"
-import { Delegations } from "../plugin-bots/Delegations.ts"
-import { Requests } from "../plugin-capabilities/Requests.ts"
-import { Channels } from "../plugin-channels/Channels.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Delegations } from "../conversation-contract/bots/Delegations.ts"
+import { Requests } from "../conversation-contract/capabilities/Requests.ts"
+import { Channels } from "../conversation-contract/channels/Channels.ts"
 import * as Db from "../server-database/Database.ts"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import { Store, type Key } from "../server-execution/execution/Store.ts"
 import { Organization } from "../identity-contract/organization/Organization.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
+import {
+	type Failure,
+	TurnAccess,
+} from "../conversation-contract/chats/TurnAccess.ts"
+export { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+export type { Service } from "../conversation-contract/chats/TurnAccess.ts"
 
 const sameCaller = Schema.toEquivalence(Caller)
+
 const payload = Schema.Struct({ chat: Chat.Id })
-type Failure = Execution.Forbidden | Execution.NotFound | Execution.StorageError
+
 const failures = <A, E, R>(
 	effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, Failure, R> =>
@@ -71,32 +76,6 @@ const failures = <A, E, R>(
 			return Effect.fail(Execution.StorageError.make({ cause }))
 		}),
 	)
-
-/** Turn commands and restored steps use the same current resource policy. */
-export interface Service {
-	readonly admit: CheckType
-	readonly input: (
-		chat: Chat.Ref,
-		identity: ExecutionIdentity,
-	) => Effect.Effect<void, Failure>
-	readonly command: (
-		chat: Chat.Ref,
-		caller: Caller,
-	) => Effect.Effect<void, Failure>
-	readonly authorize: Authorize
-	readonly model: (
-		key: Key,
-		selection: Config.Selection,
-	) => Effect.Effect<void, Failure>
-	readonly notice: (
-		chat: Chat.Ref,
-		identity: ExecutionIdentity,
-	) => Effect.Effect<boolean, Failure>
-}
-
-export class TurnAccess extends Context.Service<TurnAccess, Service>()(
-	"@openbot-build/openbot/plugin-chats/TurnAccess",
-) {}
 
 const make = Effect.gen(function* () {
 	const admission = yield* WorkAdmission.make

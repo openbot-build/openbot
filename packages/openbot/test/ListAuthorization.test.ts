@@ -47,7 +47,7 @@ import * as StoredConnections from "../src/apps-contract/apps/StoredConnections.
 import { ConnectionCommands } from "../src/plugin-apps/ConnectionCommands.ts"
 import { AuthorizationCommands } from "../src/plugin-apps/AuthorizationCommands.ts"
 import * as Governance from "../src/plugin-apps/Governance.ts"
-import { IndexWork } from "../src/plugin-apps/IndexWork.ts"
+import { IndexWork } from "../src/apps-contract/apps/IndexWork.ts"
 import { Probe } from "../src/plugin-apps/Probe.ts"
 import * as Channels from "../src/plugin-channels/Channels.ts"
 import * as ChannelHandlers from "../src/plugin-channels/HttpHandlers.ts"
@@ -56,7 +56,7 @@ import { ChannelRemoval } from "../src/plugin-channels/ChannelRemoval.ts"
 import * as Files from "../src/plugin-files/Files.ts"
 import * as FileHandlers from "../src/plugin-files/HttpHandlers.ts"
 import { FileTasks } from "../src/plugin-files/FileTasks.ts"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
 import {
 	appConnections,

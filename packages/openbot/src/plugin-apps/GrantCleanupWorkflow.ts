@@ -7,7 +7,7 @@ import * as Program from "../server-execution/execution/Program.ts"
 import * as RetryingCall from "../server-execution/execution/RetryingCall.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
-import { AppNetwork } from "./AppHost.ts"
+import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 import {
 	GrantCleanup,
 	scopeOf,

@@ -10,7 +10,7 @@ import {
 	String as Str,
 } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Setup from "../src/plugin-platform/Setup.ts"
 import * as PlatformAdminsPostgres from "../src/plugin-platform/PlatformAdminsPostgres.ts"
 import { Settings } from "../src/server-kernel/settings/Settings.ts"

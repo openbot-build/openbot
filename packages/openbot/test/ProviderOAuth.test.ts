@@ -24,8 +24,8 @@ import {
 	String as Str,
 } from "effect"
 import * as Db from "../src/server-database/Database.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
-import * as ProviderOAuth from "../src/models-contract/models/ProviderOAuth.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
+import * as ProviderOAuth from "../src/plugin-models/ProviderOAuth.ts"
 import {
 	ChatGptOAuth,
 	Credentials,

@@ -14,7 +14,8 @@ import {
 	vaultKey,
 } from "../identity-contract/audit/Resources.ts"
 import { SecretProviders } from "./SecretProviders.ts"
-import { unavailable, Vaults } from "./Vaults.ts"
+import { Vaults } from "../apps-contract/vaults/Vaults.ts"
+import { unavailable } from "./Vaults.ts"
 
 /** Runs a call of a service as the caller of the request. */
 const as = <A, E>(work: (caller: Caller) => Effect.Effect<A, E>) =>

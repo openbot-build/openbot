@@ -15,7 +15,7 @@ import {
 } from "effect"
 import { WorkflowEngine } from "effect/workflow"
 import { Billing } from "../src/server-billing/billing/Billing.ts"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"

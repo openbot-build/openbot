@@ -7,7 +7,7 @@ import {
 } from "../server-execution/execution/Engine.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
-import { Channels } from "./Channels.ts"
+import { Channels } from "../conversation-contract/channels/Channels.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 import * as ChannelSend from "./ChannelSend.ts"
 import * as ChannelAccess from "./ChannelAccess.ts"

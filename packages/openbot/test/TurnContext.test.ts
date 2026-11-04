@@ -12,7 +12,7 @@ import {
 	type ExecutionIdentity,
 } from "@openbot-build/domain"
 import { Effect, Layer, Schema } from "effect"
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import * as TurnContext from "../src/plugin-chats/TurnContext.ts"
 import { Organization } from "../src/identity-contract/organization/Organization.ts"

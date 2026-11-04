@@ -4,7 +4,11 @@ import * as Engine from "../server-execution/execution/Engine.ts"
 import { Runner } from "../server-execution/execution/Runner.ts"
 import { RunScope } from "../server-execution/execution/RunScope.ts"
 import { type Fence } from "../server-execution/execution/Store.ts"
-import { RequestCommands, decisionId, workflowName } from "./RequestCommands.ts"
+import {
+	RequestCommands,
+	workflowName,
+} from "../conversation-contract/capabilities/RequestCommands.ts"
+import { decisionId } from "./RequestCommands.ts"
 import { RequestReviews } from "./RequestReviews.ts"
 
 export const workflow = Engine.define(workflowName)

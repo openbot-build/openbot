@@ -41,7 +41,7 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Toolkit } from "effect/ai"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
@@ -59,13 +59,13 @@ import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
 import {
 	Delegations,
 	type Stored as StoredDelegation,
-} from "../src/plugin-bots/Delegations.ts"
+} from "../src/conversation-contract/bots/Delegations.ts"
 import {
 	Requests,
 	type Stored as StoredRequest,
-} from "../src/plugin-capabilities/Requests.ts"
-import { Bots } from "../src/plugin-bots/Bots.ts"
-import { Channels } from "../src/plugin-channels/Channels.ts"
+} from "../src/conversation-contract/capabilities/Requests.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
+import { Channels } from "../src/conversation-contract/channels/Channels.ts"
 import {
 	Organization,
 	OrganizationUnavailable,

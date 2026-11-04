@@ -14,7 +14,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Admission from "../src/server-execution/execution/Admission.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
 import * as RunScope from "../src/server-execution/execution/RunScope.ts"

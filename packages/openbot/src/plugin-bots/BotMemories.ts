@@ -18,18 +18,14 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
-import { BotRecords } from "./BotRecords.ts"
+import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
 import * as MemoryRecords from "./MemoryRecords.ts"
+import type { Home } from "../conversation-contract/bots/BotMemories.ts"
+export type { Home } from "../conversation-contract/bots/BotMemories.ts"
 
 /** A linked Bot uses the memory of its source. */
 export const homeOf = (organizationId: string, bot: BotsApi.Bot): Home =>
 	bot.source ?? { organizationId, bot: bot.id }
-
-/** One memory pool: the Bot and its organization. */
-export interface Home {
-	readonly organizationId: string
-	readonly bot: BotsApi.BotId
-}
 
 export interface LearningContext {
 	readonly topics: ReadonlyArray<{

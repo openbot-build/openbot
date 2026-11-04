@@ -23,7 +23,7 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import { eq } from "drizzle-orm"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
 import {
 	appConnections,

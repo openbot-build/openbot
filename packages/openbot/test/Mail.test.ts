@@ -9,7 +9,7 @@ import {
 	Ref,
 	String as Str,
 } from "effect"
-import * as Mail from "../src/identity-contract/mail/Mail.ts"
+import * as Mail from "../src/plugin-mail/Mail.ts"
 import {
 	Transport,
 	TransportError,

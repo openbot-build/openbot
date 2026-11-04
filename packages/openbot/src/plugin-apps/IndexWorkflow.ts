@@ -21,10 +21,8 @@ import {
 	CheckInput,
 	CheckResult,
 	IndexWork,
-	nextSignal,
-	serviceId,
-	workflowName,
-} from "./IndexWork.ts"
+} from "../apps-contract/apps/IndexWork.ts"
+import { nextSignal, serviceId, workflowName } from "./IndexWork.ts"
 
 export const workflow = Engine.define(workflowName)
 const inputCodec = Schema.toCodecJson(CheckInput)

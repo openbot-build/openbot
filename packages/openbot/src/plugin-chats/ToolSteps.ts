@@ -21,24 +21,20 @@ import {
 import { CallContext } from "../server-execution/execution/CallContext.ts"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import {
+	outputCodec,
+	stepId,
+} from "../conversation-contract/chats/ToolSteps.ts"
+export {
+	outputCodec,
+	stepId,
+} from "../conversation-contract/chats/ToolSteps.ts"
 
 /** A tool stream must give a final result before it can be saved as complete. */
 export class Incomplete extends Schema.TaggedError<
 	Incomplete,
 	{ readonly brand: unique symbol }
 >()("ToolResultIncomplete", {}) {}
-
-const Output = Schema.Struct({
-	id: Schema.String,
-	name: Schema.String,
-	result: Schema.optionalKey(Schema.Json),
-	isFailure: Schema.Boolean,
-	preliminary: Schema.Boolean,
-	modelOutput: Schema.optionalKey(Schema.Array(Prompt.ToolModelOutputPart)),
-})
-export const outputCodec = Schema.toCodecJson(Output)
-export const stepId = (item: string, call: string) =>
-	`tool:${item.length}:${item}${call}`
 
 type Failure =
 	| Paused

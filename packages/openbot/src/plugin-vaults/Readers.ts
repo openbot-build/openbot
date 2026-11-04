@@ -14,19 +14,8 @@ import {
 	String as Str,
 } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
-
-/**
- * The secret provider did not answer, refused the token, or has no such item or field.
- * Callers show the message. The cause stays inside OpenBot.
- */
-export class VaultReadFailed extends Schema.TaggedError<
-	VaultReadFailed,
-	{ readonly brand: unique symbol }
->()("VaultReadFailed", {
-	message: Schema.String,
-	retry: Schema.Boolean,
-	cause: Schema.optional(Schema.Defect()),
-}) {}
+import { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
+export { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
 
 /** The credentials of a secret provider. */
 export type Remote = VaultsModel.SecretProviderCredentials
@@ -49,7 +38,9 @@ export class Readers extends Context.Service<
 >()("@openbot-build/openbot/plugin-vaults/Readers") {}
 
 const timeoutMs = 15_000
+
 const decoder = new TextDecoder()
+
 const decodeJson = Schema.decodeUnknownEffect(
 	Schema.fromJsonString(Schema.Unknown),
 )
@@ -112,8 +103,10 @@ const field = (value: unknown, key: string): unknown =>
 	Predicate.isObject(value)
 		? (value as Record<string, unknown>)[key]
 		: undefined
+
 const list = (value: unknown): ReadonlyArray<unknown> =>
 	Arr.isArray(value) ? value : []
+
 const string = (value: unknown): string | undefined =>
 	Predicate.isString(value) ? value : undefined
 

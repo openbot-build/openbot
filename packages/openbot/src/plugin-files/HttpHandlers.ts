@@ -4,7 +4,7 @@ import { OpenBotApi } from "@openbot-build/api"
 import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { Files } from "./Files.ts"
+import { Files } from "../apps-contract/files/Files.ts"
 
 export const layer = HttpApiBuilder.group(OpenBotApi, "files", (handlers) =>
 	Effect.gen(function* () {

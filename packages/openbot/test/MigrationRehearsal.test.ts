@@ -18,8 +18,8 @@ import {
 } from "effect"
 import { Prompt } from "effect/ai"
 import { WorkflowEngine } from "effect/workflow"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
-import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
+import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Convert from "../src/server-upgrade/Convert.ts"
 import * as Progress from "../src/server-kernel/imported/Progress.ts"
 import * as Imported from "../src/server-execution/imported/Executions.ts"
@@ -468,7 +468,9 @@ it.layer(database, { excludeTestServices: true, timeout: "90 seconds" })(
 							Option.getOrThrow(yield* channels.get("org", "channel"))
 								.needsAuthorization,
 						)
-						const history = yield* ImportedHistory.make
+						const history = yield* ImportedHistory.make.pipe(
+							Effect.provide(ImportedWorkflow.layerRecords),
+						)
 						assert.deepEqual(
 							(yield* history.app(keyOf(record("AppCall", "c")), actor)).view
 								.result,

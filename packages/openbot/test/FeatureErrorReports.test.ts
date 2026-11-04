@@ -27,7 +27,7 @@ import {
 	String as Str,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Report from "../src/server-kernel/errors/Report.ts"
 import * as Failures from "../src/server-kernel/errors/Failures.ts"

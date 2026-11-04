@@ -2,9 +2,12 @@ import type { Channels as ChannelsApi } from "@openbot-build/domain"
 import { Context, Data, Effect, Layer, RcMap, Scope } from "effect"
 import { Digest } from "effect/crypto"
 import { HttpClient } from "effect/http"
-import { AppNetwork } from "../plugin-apps/AppHost.ts"
+import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 import type { Channel } from "./Channel.ts"
-import { Channels, type Credentials } from "./Channels.ts"
+import {
+	Channels,
+	type Credentials,
+} from "../conversation-contract/channels/Channels.ts"
 import * as CustomChannel from "./custom/CustomChannel.ts"
 import * as Http from "./Http.ts"
 import * as LarkChannel from "./lark/LarkChannel.ts"

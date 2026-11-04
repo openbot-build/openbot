@@ -24,9 +24,9 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt } from "effect/ai"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
-import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Chats from "../src/server-upgrade/Chats.ts"
 import * as Imported from "../src/server-execution/imported/Executions.ts"
 import * as Legacy from "../src/server-execution/imported/LegacyChats.ts"
@@ -35,21 +35,21 @@ import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as ImportedWorkflow from "../src/plugin-imported/ImportedWorkflow.ts"
 import * as Inputs from "../src/plugin-chats/InputCommands.ts"
-import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import * as ToolQueries from "../src/conversation-contract/chats/ToolQueries.ts"
-import { ToolCommands } from "../src/plugin-chats/ToolCommands.ts"
+import { ToolCommands } from "../src/conversation-contract/chats/ToolCommands.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
 import * as OpenWork from "../src/conversation-contract/chats/OpenWork.ts"
 import * as ChatWork from "../src/plugin-bots/ChatWork.ts"
-import { Reminders } from "../src/plugin-work/Reminders.ts"
+import { Reminders } from "../src/conversation-contract/work/Reminders.ts"
 import * as Delegations from "../src/plugin-bots/Delegations.ts"
 import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
 import * as DelegationQueries from "../src/plugin-bots/DelegationQueries.ts"
 import { DelegationCommands } from "../src/plugin-bots/DelegationCommands.ts"
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import { Commands } from "../src/server-execution/execution/Commands.ts"
 import * as Requests from "../src/plugin-capabilities/Requests.ts"
-import { RequestCommands } from "../src/plugin-capabilities/RequestCommands.ts"
+import { RequestCommands } from "../src/conversation-contract/capabilities/RequestCommands.ts"
 import * as Resolve from "../src/conversation-contract/capabilities/Resolve.ts"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
@@ -469,9 +469,15 @@ it.layer(database(), { excludeTestServices: true })((it) => {
 					Layer.provideMerge(auth),
 				)
 				yield* Effect.gen(function* () {
-					const tools = yield* ToolQueries.make
-					const delegations = yield* DelegationQueries.make
-					const approvals = yield* Resolve.make
+					const tools = yield* ToolQueries.make.pipe(
+						Effect.provide(ImportedWorkflow.layerRecords),
+					)
+					const delegations = yield* DelegationQueries.make.pipe(
+						Effect.provide(ImportedWorkflow.layerRecords),
+					)
+					const approvals = yield* Resolve.make.pipe(
+						Effect.provide(ImportedWorkflow.layerRecords),
+					)
 					const inputs = yield* Inputs.InputCommands
 					const currentWork = yield* ChatWork.make
 					assert.deepStrictEqual(

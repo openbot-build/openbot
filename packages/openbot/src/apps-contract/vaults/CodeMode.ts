@@ -18,7 +18,7 @@ import {
 	String as Str,
 } from "effect"
 import { Base64, Base64Url, Hex } from "effect/encoding"
-import type { Usable } from "../../plugin-vaults/Vaults.ts"
+import type { Usable } from "./Vaults.ts"
 
 /** An item with the name that programs use, such as `github`. */
 export interface Entry {

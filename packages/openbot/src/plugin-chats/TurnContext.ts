@@ -1,44 +1,18 @@
-import type { Chat, Turn } from "@openbot-build/core"
-import {
-	Bots as BotDomain,
-	Execution,
-	type ExecutionIdentity,
-} from "@openbot-build/domain"
-import { Context, Effect, Layer, Option, Schema } from "effect"
-import { Bots } from "../plugin-bots/Bots.ts"
-import { Work } from "../plugin-capabilities/Work.ts"
-import {
-	Organization,
-	type OrganizationUnavailable,
-} from "../identity-contract/organization/Organization.ts"
+import { Bots as BotDomain, Execution } from "@openbot-build/domain"
+import { Effect, Layer, Option } from "effect"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Work } from "../conversation-contract/capabilities/Work.ts"
+import { Organization } from "../identity-contract/organization/Organization.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-
-/** The owner or actor of a Turn is no longer an active member. */
-export class MemberInactive extends Schema.TaggedError<
+import {
 	MemberInactive,
-	{ readonly brand: unique symbol }
->()("TurnContext.MemberInactive", { userId: Schema.String }) {}
-
-export type Failure =
-	| BotDomain.BotNotFound
-	| BotDomain.BotStorageUnavailable
-	| OrganizationUnavailable
-	| MemberInactive
-	| Execution.Forbidden
-
-/** Builds Work from an accepted Turn or tool frame. Its caller checks the execution fence. */
-export class TurnContext extends Context.Service<
 	TurnContext,
-	{
-		readonly prepare: (input: {
-			readonly identity: ExecutionIdentity
-			readonly namespace: string
-			readonly chat: Chat.Id
-			readonly host: ChatHost.ChatHostState
-			readonly turn: Turn.Id
-		}) => Effect.Effect<typeof Work.Service, Failure>
-	}
->()("@openbot-build/openbot/plugin-chats/TurnContext") {}
+} from "../conversation-contract/chats/TurnContext.ts"
+export {
+	MemberInactive,
+	TurnContext,
+} from "../conversation-contract/chats/TurnContext.ts"
+export type { Failure } from "../conversation-contract/chats/TurnContext.ts"
 
 export const layer = Layer.effect(
 	TurnContext,

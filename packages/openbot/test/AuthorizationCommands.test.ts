@@ -1,6 +1,6 @@
 import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
 import * as CleanupWorkflow from "../src/plugin-apps/GrantCleanupWorkflow.ts"
-import { AppNetwork } from "../src/plugin-apps/AppHost.ts"
+import { AppNetwork } from "../src/apps-contract/apps/AppNetwork.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Runner from "../src/server-execution/execution/Runner.ts"
@@ -33,7 +33,7 @@ import {
 	String as Str,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Db from "../src/server-database/Database.ts"
 import {
 	appAuthorizations,

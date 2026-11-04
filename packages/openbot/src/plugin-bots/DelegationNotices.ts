@@ -2,7 +2,7 @@ import { Execution, ExecutionIdentity } from "@openbot-build/domain"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { InputCommands } from "../plugin-chats/InputCommands.ts"
+import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import {
 	Store,

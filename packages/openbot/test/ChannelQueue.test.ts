@@ -8,7 +8,7 @@ import * as ChannelQueue from "../src/plugin-channels/ChannelQueue.ts"
 import * as ChannelInbox from "../src/plugin-channels/ChannelInbox.ts"
 import * as Channels from "../src/plugin-channels/Channels.ts"
 import * as Db from "../src/server-database/Database.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import {
 	channelInbox,
 	channelDeliveries,

@@ -1,7 +1,6 @@
 import { ProviderOAuth } from "../models-contract/models/ProviderOAuth.ts"
 import { Model, Provider } from "@openbot-build/core"
 import { ModelProvidersApi, OpenBotApi } from "@openbot-build/api"
-
 import { Authorization } from "@openbot-build/domain"
 import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option } from "effect"
@@ -20,36 +19,8 @@ import {
 } from "../models-contract/models/ModelProviders.ts"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
 import { Models, view as modelView } from "../models-contract/models/Models.ts"
-
-/**
- * A provider cannot go while a setting still names it, or the setting would
- * point at nothing.
- */
-export const checkUnused = (
-	settings: typeof Settings.Service,
-	input: {
-		readonly providerId: string
-		readonly organizationIds: ReadonlyArray<string>
-	},
-) =>
-	Effect.gen(function* () {
-		for (const organizationId of input.organizationIds) {
-			const current = yield* settings
-				.organization(organizationId)
-				.pipe(
-					Failures.replace("Could not read the organization settings", () =>
-						ModelProvidersApi.ModelProvidersUnavailable.make({}),
-					),
-				)
-			if (
-				current.document.rulesModel?.provider === input.providerId ||
-				current.document.botMemoryModel?.provider === input.providerId
-			)
-				return yield* ModelProvidersApi.ModelProviderInUse.make({
-					providerId: Provider.Id.make(input.providerId),
-				})
-		}
-	})
+import { checkUnused } from "../models-contract/models/ProviderUseHttp.ts"
+export { checkUnused } from "../models-contract/models/ProviderUseHttp.ts"
 
 export const layer = HttpApiBuilder.group(
 	OpenBotApi,

@@ -66,6 +66,8 @@ import * as Calls from "../server-execution/execution/Calls.ts"
 import * as Runner from "../server-execution/execution/Runner.ts"
 import * as RunScope from "../server-execution/execution/RunScope.ts"
 import * as ActionPolicy from "../plugin-apps/ActionPolicy.ts"
+import * as Gates from "../plugin-capabilities/Gates.ts"
+import * as DelegationQueries from "../plugin-bots/DelegationQueries.ts"
 
 /** One set of command services is shared by every product workflow. */
 export const services = Layer.mergeAll(
@@ -83,6 +85,7 @@ export const services = Layer.mergeAll(
 	RequestNotices.layer,
 	DelegationNotices.layer,
 ).pipe(
+	Layer.provideMerge(DelegationQueries.layer),
 	Layer.provideMerge(
 		Layer.mergeAll(
 			ExecutionFeatures.layer,
@@ -92,6 +95,7 @@ export const services = Layer.mergeAll(
 			LiveConnections.layer,
 		),
 	),
+	Layer.provideMerge(Gates.layer),
 	Layer.provideMerge(Layer.mergeAll(MemoryTasks.layer, MemoryLearning.layer)),
 	Layer.provideMerge(MemoryModels.layer),
 	Layer.provideMerge(
@@ -120,6 +124,7 @@ export const services = Layer.mergeAll(
 			RunScope.layer,
 		),
 	),
+	Layer.provideMerge(ImportedWorkflow.layerRecords),
 	Layer.provide(Layer.merge(Sandbox.layer, ActionPolicy.layer)),
 )
 

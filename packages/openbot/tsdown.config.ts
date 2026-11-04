@@ -5,8 +5,7 @@ export default defineConfig({
 	...config,
 	entry: {
 		index: "src/index.ts",
-		"server-kernel/database/Migrations":
-			"src/server-kernel/database/Migrations.ts",
+		"server-upgrade/Migrations": "src/server-upgrade/Migrations.ts",
 		Main: "src/app/Main.ts",
 		Development: "src/server-development/Development.ts",
 		DevelopmentMain: "src/server-development/DevelopmentMain.ts",

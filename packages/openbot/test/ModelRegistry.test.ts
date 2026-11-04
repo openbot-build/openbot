@@ -13,7 +13,7 @@ import {
 	organizationOwner,
 	type Stored,
 } from "../src/models-contract/models/ModelProviders.ts"
-import * as ModelRegistry from "../src/models-contract/models/ModelRegistry.ts"
+import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
 import {
 	Models,
 	type StoredModel,

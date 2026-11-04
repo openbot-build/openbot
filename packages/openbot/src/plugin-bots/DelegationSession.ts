@@ -6,10 +6,10 @@ import {
 import type { Chat, ChatStore, Config } from "@openbot-build/core"
 import { type Schema, Context, Effect, Layer } from "effect"
 import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
-import { type Failure, Bots } from "./Bots.ts"
+import { type Failure, Bots } from "../conversation-contract/bots/Bots.ts"
 import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
-import * as Gate from "../plugin-capabilities/Gate.ts"
-import { RequestCommands } from "../plugin-capabilities/RequestCommands.ts"
+import * as Gate from "../conversation-contract/capabilities/Gate.ts"
+import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
 import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
 import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import type { Fence } from "../server-execution/execution/Store.ts"
@@ -42,7 +42,7 @@ const advance = (fence: Fence) =>
 			"delegate",
 		)
 		if (target.archived) return yield* Execution.Forbidden.make({})
-		const gate = yield* Gate.durable(
+		const gate = yield* (yield* Gate.Gates).durable(
 			fence,
 			{
 				identity: frame.identity,
@@ -120,7 +120,7 @@ const continueWork = (fence: Fence) =>
 		const origin = yield* origins.read(fence, site, control)
 		// The execution runs the policy check while the task itself stays paused.
 		yield* commands.phase(fence, "running")
-		const gate = yield* Gate.durable(
+		const gate = yield* (yield* Gate.Gates).durable(
 			fence,
 			{
 				identity: origin.identity,

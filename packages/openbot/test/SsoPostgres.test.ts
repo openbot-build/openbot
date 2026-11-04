@@ -13,7 +13,7 @@ import {
 	String as Str,
 } from "effect"
 import { DomainControl } from "../src/server-kernel/apps/DomainControl.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import { Sso } from "../src/identity-contract/sso/Sso.ts"

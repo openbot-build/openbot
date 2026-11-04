@@ -8,7 +8,7 @@ import { AuthorizationCommands } from "../src/plugin-apps/AuthorizationCommands.
 import { Connections } from "../src/plugin-apps/Connections.ts"
 import * as ResetCommands from "../src/plugin-apps/ResetCommands.ts"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Policies from "./Policies.ts"

@@ -10,7 +10,7 @@ import {
 import { and, eq } from "drizzle-orm"
 import { Effect, Option } from "effect"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import { Bots } from "../plugin-bots/Bots.ts"
+import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Db from "../server-database/Database.ts"
 import { computerAccess, computers } from "../server-database/Schema.ts"
 

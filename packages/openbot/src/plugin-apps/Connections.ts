@@ -34,7 +34,7 @@ import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import { appConnections, appDrafts } from "../server-database/Schema.ts"
-import { IndexWork } from "./IndexWork.ts"
+import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import {
 	ownerKey,

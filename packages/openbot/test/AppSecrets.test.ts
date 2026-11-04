@@ -20,7 +20,7 @@ import {
 	String as Str,
 } from "effect"
 import * as AppSecrets from "../src/apps-contract/vaults/AppSecrets.ts"
-import { type Usable, Vaults } from "../src/plugin-vaults/Vaults.ts"
+import { type Usable, Vaults } from "../src/apps-contract/vaults/Vaults.ts"
 
 const secret = "private-value/42"
 const identity: ExecutionIdentity = {

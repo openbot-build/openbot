@@ -11,17 +11,14 @@ import * as Db from "../../server-database/Database.ts"
 import * as Check from "../../identity-contract/authorization/Check.ts"
 import { toWhere } from "../../identity-contract/authorization/Sql.ts"
 import { botRecords } from "../../server-database/Schema.ts"
-import { deciderKey } from "../../plugin-capabilities/Rules.ts"
+import { deciderKey } from "./Rules.ts"
 import { executions } from "../../server-database/ExecutionSchema.ts"
 import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
 import * as Imported from "../../server-execution/imported/Executions.ts"
-import * as ImportedWorkflow from "../../plugin-imported/ImportedWorkflow.ts"
+import { ImportedRecords } from "../../server-execution/imported/ImportedRecords.ts"
 import { Store, storage } from "../../server-execution/execution/Store.ts"
-import {
-	RequestCommands,
-	workflowName,
-} from "../../plugin-capabilities/RequestCommands.ts"
-import { Requests } from "../../plugin-capabilities/Requests.ts"
+import { RequestCommands, workflowName } from "./RequestCommands.ts"
+import { Requests } from "./Requests.ts"
 
 /** HTTP and Channel decisions use the same saved command and current rights. */
 export const make = Effect.gen(function* () {
@@ -29,7 +26,7 @@ export const make = Effect.gen(function* () {
 	const commands = yield* RequestCommands
 	const db = yield* Db.make
 	const checks = yield* Check.make
-	const imported = yield* ImportedWorkflow.make
+	const imported = yield* ImportedRecords
 	const store = yield* Store
 	const visible = (caller: Caller, id: string) =>
 		requests.find(caller.organizationId, id).pipe(

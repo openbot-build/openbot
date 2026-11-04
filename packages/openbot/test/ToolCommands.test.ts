@@ -9,6 +9,7 @@ import * as Admission from "../src/server-execution/execution/Admission.ts"
 import * as PolicyOrigin from "../src/conversation-contract/capabilities/PolicyOrigin.ts"
 import * as DelegationSessionModule from "../src/plugin-bots/DelegationSession.ts"
 import * as RequestCommandsModule from "../src/plugin-capabilities/RequestCommands.ts"
+import * as Gates from "../src/plugin-capabilities/Gates.ts"
 import * as RequestsModule from "../src/plugin-capabilities/Requests.ts"
 import * as GrantsModule from "../src/plugin-capabilities/Grants.ts"
 import * as RulesModule from "../src/plugin-capabilities/Rules.ts"
@@ -27,7 +28,7 @@ import { Vaults as VaultDomain } from "@openbot-build/domain"
 import * as WorkflowTools from "../src/apps-contract/apps/WorkflowTools.ts"
 import { InputState } from "../src/tools-contract/plugins/ToolEntry.ts"
 import { names as codeNames } from "../src/apps-contract/code/ToolSchema.ts"
-import * as ToolResults from "../src/plugin-chats/ToolResults.ts"
+import * as ToolResults from "../src/conversation-contract/chats/ToolResults.ts"
 import * as CodeCommands from "../src/plugin-code/CodeCommands.ts"
 import * as CodeProgram from "../src/plugin-code/CodeProgram.ts"
 import * as CodeWorkflow from "../src/plugin-code/CodeWorkflow.ts"
@@ -35,7 +36,7 @@ import * as SandboxModule from "../src/plugin-code/Sandbox.ts"
 import { Settings as SettingsService } from "../src/server-kernel/settings/Settings.ts"
 import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
 import { Settings as SettingsApi } from "@openbot-build/api"
-import { Vaults } from "../src/plugin-vaults/Vaults.ts"
+import { Vaults } from "../src/apps-contract/vaults/Vaults.ts"
 import * as AppSessionModule from "../src/plugin-apps/AppSession.ts"
 import { ConnectionSessions } from "../src/plugin-apps/ConnectionSessions.ts"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -43,12 +44,12 @@ import { Authorization } from "@openbot-build/domain"
 import * as StoredConnections from "../src/apps-contract/apps/StoredConnections.ts"
 import { appConnections, usageEvents } from "../src/server-database/Schema.ts"
 import { Store as ProtocolStore } from "@openbot-build/protocol"
-import { Grants } from "../src/plugin-capabilities/Grants.ts"
-import { Rules } from "../src/plugin-capabilities/Rules.ts"
+import { Grants } from "../src/conversation-contract/capabilities/Grants.ts"
+import { Rules } from "../src/conversation-contract/capabilities/Rules.ts"
 import {
 	RequestCommands,
 	workflowName as requestWorkflowName,
-} from "../src/plugin-capabilities/RequestCommands.ts"
+} from "../src/conversation-contract/capabilities/RequestCommands.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
 import * as AppWorkflow from "../src/plugin-apps/AppWorkflow.ts"
 import { AppSession } from "../src/plugin-apps/AppSession.ts"
@@ -98,11 +99,11 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import { Calls } from "../src/server-execution/execution/Calls.ts"
-import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import * as BotFixture from "./BotFixture.ts"
 import * as Db from "../src/server-database/Database.ts"
@@ -128,11 +129,11 @@ import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
 import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
 import { ExecutionFeatures } from "../src/plugin-chats/ExecutionFeatures.ts"
 import * as TurnContext from "../src/plugin-chats/TurnContext.ts"
-import { InputCommands } from "../src/plugin-chats/InputCommands.ts"
+import { InputCommands } from "../src/conversation-contract/chats/InputCommands.ts"
 import * as InputCommandsModule from "../src/plugin-chats/InputCommands.ts"
 import * as ToolNotices from "../src/plugin-chats/ToolNotices.ts"
 import * as ToolNoticeWorkflow from "../src/plugin-chats/ToolNoticeWorkflow.ts"
-import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import { layerEveryoneAdministrator } from "./OrganizationFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
@@ -1847,6 +1848,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			yield* _.allow("*", "*")
 		})
 		return Layer.merge(DelegationSessionModule.layer, WorkAdmission.layer).pipe(
+			Layer.provideMerge(Gates.layer),
 			Layer.provideMerge(RequestCommandsModule.layer),
 			Layer.provideMerge(RequestsModule.layer),
 			Layer.provideMerge(
@@ -3498,6 +3500,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 					)
 					const sessionLayer = AppSessionModule.layer.pipe(
+						Layer.provideMerge(Gates.layer),
 						Layer.provideMerge(appsLayer),
 						Layer.provideMerge(base),
 						Layer.provide(

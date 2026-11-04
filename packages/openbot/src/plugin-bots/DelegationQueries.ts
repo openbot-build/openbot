@@ -1,12 +1,13 @@
 import { type Caller, Delegations as Domain } from "@openbot-build/domain"
-import { Effect, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Imported from "../server-execution/imported/Executions.ts"
-import * as ImportedWorkflow from "../plugin-imported/ImportedWorkflow.ts"
+import { ImportedRecords } from "../server-execution/imported/ImportedRecords.ts"
 import { Store } from "../server-execution/execution/Store.ts"
 import { Commands } from "../server-execution/execution/Commands.ts"
 import { DelegationCommands } from "./DelegationCommands.ts"
-import { Delegations } from "./Delegations.ts"
+import { Delegations } from "../conversation-contract/bots/Delegations.ts"
+import { DelegationQueries } from "../conversation-contract/bots/DelegationQueries.ts"
 
 /** Saved business records and execution records have one permission check. */
 export const make = Effect.gen(function* () {
@@ -14,7 +15,7 @@ export const make = Effect.gen(function* () {
 	const work = yield* DelegationCommands
 	const commands = yield* Commands
 	const store = yield* Store
-	const imported = yield* ImportedWorkflow.make
+	const imported = yield* ImportedRecords
 	const locate = Effect.fn("DelegationQueries.locate")(function* (
 		caller: Caller,
 		id: Domain.DelegationId,
@@ -93,3 +94,9 @@ export const make = Effect.gen(function* () {
 	})
 	return { read, cancel }
 })
+
+/** Gives `DelegationQueries` to the features that show delegated work. */
+export const layer = Layer.effect(
+	DelegationQueries,
+	Effect.map(make, (queries) => DelegationQueries.of({ read: queries.read })),
+)

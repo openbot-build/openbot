@@ -1,5 +1,4 @@
 import {
-	type ChatStore,
 	Chat,
 	ChatStoreRepository,
 	Item,
@@ -7,14 +6,10 @@ import {
 	Turn,
 	TurnState,
 } from "@openbot-build/core"
-import { type SqlError, SqlClient } from "effect/sql"
-import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import { SqlClient } from "effect/sql"
 import * as Imported from "../server-execution/imported/Executions.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
 import {
-	Caller,
 	executionCallers,
 	restrictExecution,
 	Execution,
@@ -22,15 +17,7 @@ import {
 	ToolExecution,
 } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
-import {
-	Array as Arr,
-	Clock,
-	Context,
-	Effect,
-	Layer,
-	Option,
-	Schema,
-} from "effect"
+import { Array as Arr, Clock, Effect, Layer, Option, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import * as Db from "../server-database/Database.ts"
 import {
@@ -42,137 +29,32 @@ import {
 	type Fence,
 } from "../server-execution/execution/Store.ts"
 import * as DelegationSource from "../conversation-contract/bots/DelegationSource.ts"
-import { TurnAccess } from "./TurnAccess.ts"
+import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as TurnEnd from "./TurnEnd.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
+import { databaseError } from "../server-kernel/database/DatabaseError.ts"
+import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import {
-	databaseError,
-	inExecution,
-} from "../conversation-contract/chats/ChatEncoding.ts"
+	Input,
+	Message,
+	workflowName,
+	InputCommands,
+} from "../conversation-contract/chats/InputCommands.ts"
+export {
+	Input,
+	Message,
+	workflowName,
+	InputCommands,
+} from "../conversation-contract/chats/InputCommands.ts"
+export type { Service } from "../conversation-contract/chats/InputCommands.ts"
 
-export const Input = Schema.Struct({
-	chat: Chat.Id,
-	identity: ExecutionIdentity,
-	content: Chat.InboxEntry.fields.content,
-	queue: Schema.Boolean,
-	action: Schema.optionalKey(Turn.Action),
-	actionDefinition: Schema.optionalKey(Definition),
-	notice: Schema.optionalKey(Item.Notice),
-	approved: Schema.optionalKey(Chat.ApprovedCall),
-})
-export type Input = typeof Input.Type
-/** The caller comes from authentication. The request never chooses an execution identity. */
-export const Message = Schema.Struct({
-	chat: Chat.Id,
-	caller: Caller,
-	notice: Schema.optionalKey(Item.Notice),
-	content: Chat.InboxEntry.fields.content,
-	queue: Schema.Boolean,
-	action: Schema.optionalKey(Turn.Action),
-	actionDefinition: Schema.optionalKey(Definition),
-})
-export type Message = typeof Message.Type
 const messageCodec = Schema.toCodecJson(Message)
+
 const codec = Schema.toCodecJson(Input)
+
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
-export const workflowName = "openbot.chat-turn"
-
-export interface Service {
-	readonly submit: (
-		namespace: string,
-		key: Execution.CommandKey,
-		input: Input,
-	) => Effect.Effect<
-		Execution.Receipt,
-		| Chat.ChatNotFound
-		| ChatStore.ChatStoreError
-		| Chat.Conflict
-		| Execution.Conflict
-		| Execution.KeyConflict
-		| Schema.SchemaError
-		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
-	>
-	readonly notify: (
-		namespace: string,
-		key: Execution.CommandKey,
-		input: Input,
-		source: {
-			readonly executionId: Execution.Id
-			readonly turn: Turn.Id
-			readonly step: number
-		},
-	) => Effect.Effect<
-		Execution.Receipt,
-		| Chat.ChatNotFound
-		| ChatStore.ChatStoreError
-		| Chat.Conflict
-		| Execution.Conflict
-		| Execution.KeyConflict
-		| Schema.SchemaError
-		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
-	>
-	readonly drain: (
-		namespace: string,
-		chat: Chat.Id,
-	) => Effect.Effect<
-		Option.None<Execution.Id> | Option.Some<Execution.Id>,
-		| Chat.ChatNotFound
-		| ChatStore.ChatStoreError
-		| Chat.Conflict
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.NotFound
-		| Schema.SchemaError
-		| SqlError.SqlError
-		| Execution.StorageError
-	>
-	readonly finish: (
-		fence: Fence,
-		chat: Chat.Id,
-		outcome:
-			| { readonly status: "completed" }
-			| { readonly status: "cancelled"; readonly epoch: number }
-			| {
-					readonly status: "failed" | "interrupted"
-					readonly failure: Execution.Failure
-			  },
-	) => Effect.Effect<
-		Option.None<Execution.Id> | Option.Some<Execution.Id>,
-		| Chat.ChatNotFound
-		| ChatStore.ChatStoreError
-		| Turn.Conflict
-		| Chat.Conflict
-		| Execution.Conflict
-		| EffectDrizzleQueryError
-		| Execution.Forbidden
-		| Execution.KeyConflict
-		| Execution.NotFound
-		| Schema.SchemaError
-		| SecretStorageError
-		| SqlError.SqlError
-		| Execution.StorageError
-	>
-	readonly message: (
-		namespace: string,
-		key: Execution.CommandKey,
-		input: Message,
-	) => Effect.Effect<
-		Execution.Receipt,
-		| Chat.ChatNotFound
-		| ChatStore.ChatStoreError
-		| Chat.Conflict
-		| Execution.Conflict
-		| Execution.KeyConflict
-		| Schema.SchemaError
-		| (Execution.Forbidden | Execution.NotFound | Execution.StorageError)
-	>
-}
-
-export class InputCommands extends Context.Service<InputCommands, Service>()(
-	"@openbot-build/openbot/plugin-chats/InputCommands",
-) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make

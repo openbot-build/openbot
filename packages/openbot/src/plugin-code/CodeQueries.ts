@@ -1,6 +1,6 @@
 import * as Imported from "../server-execution/imported/Executions.ts"
 import * as ImportedHistory from "../apps-contract/apps/ImportedHistory.ts"
-import { AppCommands } from "../plugin-apps/AppCommands.ts"
+import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
 import { CallInput, Submitted } from "./CodeCall.ts"
 import { type Chat } from "@openbot-build/core"
 import {
@@ -32,7 +32,7 @@ import {
 	transactionFailures,
 } from "../server-execution/execution/Store.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { CodeCommands } from "./CodeCommands.ts"
+import { CodeCommands } from "../apps-contract/code/CodeCommands.ts"
 
 /** Lists and single reads use the same saved source Chat and current rights. */
 export const make = Effect.gen(function* () {

@@ -1,5 +1,5 @@
 import { Array as Arr, Cause, Effect, Layer, Option, Stream } from "effect"
-import { WorkAdmission } from "../plugin-chats/WorkAdmission.ts"
+import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import { Records } from "../server-kernel/errors/Records.ts"
 import * as Children from "../server-execution/execution/Children.ts"

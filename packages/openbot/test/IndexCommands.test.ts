@@ -23,11 +23,11 @@ import {
 	String as Str,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
-import { IndexWork } from "../src/plugin-apps/IndexWork.ts"
+import { IndexWork } from "../src/apps-contract/apps/IndexWork.ts"
 import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
 import * as Postgres from "./PostgresTest.ts"
 

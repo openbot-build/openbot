@@ -1,6 +1,9 @@
 import type { Paused } from "../server-execution/execution/Admission.ts"
 import { type Developers, Execution } from "@openbot-build/domain"
-import { type Failure, TurnContext } from "./TurnContext.ts"
+import {
+	type Failure,
+	TurnContext,
+} from "../conversation-contract/chats/TurnContext.ts"
 import {
 	type Scope,
 	Context,
@@ -14,16 +17,16 @@ import { Digest } from "effect/crypto"
 import { Bot, Chat } from "@openbot-build/core"
 import { Prompt, Toolkit, type Tool } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
-import { Work } from "../plugin-capabilities/Work.ts"
+import { Work } from "../conversation-contract/capabilities/Work.ts"
 import * as Db from "../server-database/Database.ts"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import * as Background from "../server-kernel/execution/Background.ts"
 import { type Fence } from "../server-execution/execution/Store.ts"
 import { ExecutionFeatures } from "./ExecutionFeatures.ts"
 import { HostTools } from "../tools-contract/chats/HostTools.ts"
-import { InputCommands } from "./InputCommands.ts"
+import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { ToolCommands } from "./ToolCommands.ts"
+import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
 import { ToolSteps, beforeSend } from "./ToolSteps.ts"
 
 export interface Service {

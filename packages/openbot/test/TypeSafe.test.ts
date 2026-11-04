@@ -16,7 +16,7 @@ import { Config, Model, Provider } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Billing, type Tokens } from "../src/server-billing/billing/Billing.ts"
 import { TokenThrottle } from "../src/server-billing/billing/TokenThrottle.ts"
-import * as ModelRegistry from "../src/models-contract/models/ModelRegistry.ts"
+import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
 import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
 import {
 	ModelProviders,

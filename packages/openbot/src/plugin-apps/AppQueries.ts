@@ -19,7 +19,7 @@ import {
 } from "../server-database/ExecutionSchema.ts"
 import { transactionFailures } from "../server-execution/execution/Store.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { AppCommands } from "./AppCommands.ts"
+import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
 
 /** Lists and single reads use the same saved source Chat and current rights. */
 export const make = Effect.gen(function* () {

@@ -34,7 +34,7 @@ import { Hex } from "effect/encoding"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
 
-import { TurnAccess } from "./TurnAccess.ts"
+import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 
 const CallRetry = Context.Reference<"read_only" | "never">(
 	"@openbot-build/openbot/chats/ModelSteps/CallRetry",

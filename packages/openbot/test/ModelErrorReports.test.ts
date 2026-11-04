@@ -23,7 +23,7 @@ import {
 	meter,
 } from "../src/server-billing/billing/MeteredModel.ts"
 import { Unavailable } from "../src/server-billing/billing/TokenThrottle.ts"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Report from "../src/server-kernel/errors/Report.ts"
 import * as Realtime from "../src/model-providers/providers/openai/OpenAiRealtime.ts"

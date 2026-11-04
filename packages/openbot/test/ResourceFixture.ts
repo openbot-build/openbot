@@ -24,7 +24,7 @@ import {
 } from "effect/cluster"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { SqlClient } from "effect/sql"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Directory from "../src/server-execution/resources/Directory.ts"

@@ -2,7 +2,7 @@ import { Channels as Domain } from "@openbot-build/domain"
 import { Effect, Redacted } from "effect"
 import type { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
-import type { Credentials } from "./Channels.ts"
+import type { Credentials } from "../conversation-contract/channels/Channels.ts"
 
 /** The input credentials, with the secrets that OpenBot makes itself. */
 export const fromInput = (

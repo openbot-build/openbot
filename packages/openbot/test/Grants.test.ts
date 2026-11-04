@@ -12,8 +12,12 @@ import {
 	Semaphore,
 	pipe,
 } from "effect"
-import { BotRecords, type Keys } from "../src/plugin-bots/BotRecords.ts"
-import { Grants, make } from "../src/plugin-capabilities/Grants.ts"
+import {
+	BotRecords,
+	type Keys,
+} from "../src/conversation-contract/bots/BotRecords.ts"
+import { Grants } from "../src/conversation-contract/capabilities/Grants.ts"
+import { make } from "../src/plugin-capabilities/Grants.ts"
 import { decidingGrant } from "../src/conversation-contract/capabilities/Policy.ts"
 
 const bot = BotsApi.BotId.make("bot_1")

@@ -8,7 +8,7 @@ import * as ChatHost from "../../src/conversation-contract/chats/ChatHost.ts"
 import * as Todos from "../../src/tools-contract/plugins/work/Todos.ts"
 import * as ChatCommands from "../../src/conversation-contract/chats/ChatCommands.ts"
 import * as ChatQueries from "../../src/conversation-contract/chats/ChatQueries.ts"
-import { InputCommands } from "../../src/plugin-chats/InputCommands.ts"
+import { InputCommands } from "../../src/conversation-contract/chats/InputCommands.ts"
 import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
 
 /** Makes an empty Chat without starting a model or tool. */

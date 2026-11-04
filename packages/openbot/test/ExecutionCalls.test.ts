@@ -61,7 +61,7 @@ import {
 	Tool,
 	Toolkit,
 } from "effect/ai"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Report from "../src/server-kernel/errors/Report.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
@@ -74,7 +74,7 @@ import * as Engine from "../src/server-execution/execution/Engine.ts"
 import { DurableDeferred, WorkflowEngine } from "effect/workflow"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
-import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import * as ModelSteps from "../src/plugin-chats/ModelSteps.ts"
 import {
 	Billing,

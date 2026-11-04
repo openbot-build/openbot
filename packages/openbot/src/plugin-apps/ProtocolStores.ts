@@ -17,7 +17,7 @@ import {
 	appConnections,
 	appSecrets,
 } from "../server-database/Schema.ts"
-import { IndexWork } from "./IndexWork.ts"
+import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import * as Db from "../server-database/Database.ts"

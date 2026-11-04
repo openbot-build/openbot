@@ -6,12 +6,15 @@ import * as Connections from "../apps-contract/apps/StoredConnections.ts"
 import { privateStateCodec } from "../plugin-apps/DeveloperTestStores.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import * as Progress from "../server-kernel/imported/Progress.ts"
+import { version, checkReady } from "../server-kernel/imported/GrantUses.ts"
+export { version, checkReady } from "../server-kernel/imported/GrantUses.ts"
 
-export const version = "app-grants/1"
 const json = Schema.fromJsonString(Schema.Json)
+
 const credentialCodec = Schema.fromJsonString(
 	Schema.toCodecJson(Protocol.Credential),
 )
+
 const callInput = Schema.Struct({ grantScope: Grants.Scope })
 
 /** Existing App data needs a checked grant index before a server can use it. */
@@ -52,8 +55,6 @@ export const establish = Effect.gen(function* () {
 		}),
 	)
 })
-
-export const checkReady = Progress.checkReadyFor(version)
 
 interface Use {
 	readonly namespace: string

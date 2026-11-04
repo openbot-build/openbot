@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import type { Calls } from "../server-execution/execution/Calls.ts"
 import type { Database } from "../server-database/Database.ts"
 import type { Fence, Store } from "../server-execution/execution/Store.ts"
-import { databaseError } from "../conversation-contract/chats/ChatEncoding.ts"
+import { databaseError } from "../server-kernel/database/DatabaseError.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 
 /** A Turn may write only while it holds its execution and is current in its Chat. */

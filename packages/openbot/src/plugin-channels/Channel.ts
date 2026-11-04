@@ -1,9 +1,7 @@
 import type { Channels as ChannelsApi } from "@openbot-build/domain"
 import { Data, type Effect, Schema } from "effect"
-
-/** A chat with one person, or a group chat. */
-export const ConversationKind = Schema.Literals(["direct", "group"])
-export type ConversationKind = typeof ConversationKind.Type
+import { ConversationKind } from "../conversation-contract/channels/Channel.ts"
+export { ConversationKind } from "../conversation-contract/channels/Channel.ts"
 
 /** One chat on a platform. Each chat of a Channel is one Chat. */
 export const Conversation = Schema.Struct({
@@ -12,6 +10,7 @@ export const Conversation = Schema.Struct({
 	kind: ConversationKind,
 	title: Schema.optionalKey(Schema.String),
 })
+
 export type Conversation = typeof Conversation.Type
 
 /** The person on the platform who sent an event. */
@@ -19,6 +18,7 @@ export const Sender = Schema.Struct({
 	externalId: Schema.String,
 	displayName: Schema.String,
 })
+
 export type Sender = typeof Sender.Type
 
 /**
@@ -44,7 +44,9 @@ export const ChannelEventSchema = Schema.Union([
 		receipt: Schema.optionalKey(Schema.String),
 	}),
 ])
+
 export type ChannelEvent = typeof ChannelEventSchema.Type
+
 export const ChannelEvent = Data.taggedEnum<ChannelEvent>()
 
 export const Button = Schema.Struct({
@@ -52,6 +54,7 @@ export const Button = Schema.Struct({
 	value: Schema.String,
 	style: Schema.optionalKey(Schema.Literals(["primary", "danger"])),
 })
+
 export type Button = typeof Button.Type
 
 /** A message from the bot. The text is Markdown. Each Channel turns it into its own format. */
@@ -59,6 +62,7 @@ export const OutboundMessage = Schema.Struct({
 	markdown: Schema.String,
 	buttons: Schema.optionalKey(Schema.Array(Button)),
 })
+
 export type OutboundMessage = typeof OutboundMessage.Type
 
 /**
@@ -73,7 +77,9 @@ export const TargetSchema = Schema.Union([
 	}),
 	Schema.TaggedStruct("Person", { person: Schema.String }),
 ])
+
 export type Target = typeof TargetSchema.Type
+
 export const Target = Data.taggedEnum<Target>()
 
 /** A message that the bot sent. The Channel can change it later with this ref. */
@@ -81,6 +87,7 @@ export const MessageRef = Schema.Struct({
 	conversation: Schema.String,
 	id: Schema.String,
 })
+
 export type MessageRef = typeof MessageRef.Type
 
 export interface Features {

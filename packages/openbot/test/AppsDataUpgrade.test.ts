@@ -11,8 +11,8 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
-import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
+import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Apps from "../src/server-upgrade/Apps.ts"
 import * as Imported from "../src/server-execution/imported/Executions.ts"
 import * as Legacy from "../src/server-execution/imported/LegacyApps.ts"

@@ -1,11 +1,4 @@
-import {
-	type TokenId,
-	type BotId,
-	type DelegationId,
-	Execution,
-	ToolExecution,
-} from "@openbot-build/domain"
-import type { Check } from "../server-execution/execution/Admission.ts"
+import { Execution, ToolExecution } from "@openbot-build/domain"
 import * as DecisionWait from "../server-execution/execution/DecisionWait.ts"
 import { type Definition } from "../tools-contract/chats/ToolDefinitions.ts"
 import * as ToolRecords from "../conversation-contract/chats/ToolRecords.ts"
@@ -14,7 +7,7 @@ import {
 	codec,
 	workflowName,
 } from "../conversation-contract/chats/ToolRecords.ts"
-import { latestCall } from "./ToolResults.ts"
+import { latestCall } from "../conversation-contract/chats/ToolResults.ts"
 import {
 	Chat,
 	Operation,
@@ -26,7 +19,6 @@ import { and, asc, eq, notInArray } from "drizzle-orm"
 import {
 	Array as Arr,
 	Clock,
-	Context,
 	Duration,
 	Effect,
 	Layer,
@@ -50,140 +42,25 @@ import {
 	type Fence,
 	type Key,
 } from "../server-execution/execution/Store.ts"
-import { TurnAccess } from "./TurnAccess.ts"
+import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import { stepId } from "./ToolSteps.ts"
+import {
+	End,
+	ToolCommands,
+} from "../conversation-contract/chats/ToolCommands.ts"
+export {
+	End,
+	ToolCommands,
+} from "../conversation-contract/chats/ToolCommands.ts"
+export type { Service } from "../conversation-contract/chats/ToolCommands.ts"
 
 export { workflowName } from "../conversation-contract/chats/ToolRecords.ts"
+
 export const noticeWorkflowName = "openbot.tool-notice"
-export const End = Schema.Union([
-	Schema.Struct({ status: Schema.Literal("completed") }),
-	Schema.Struct({
-		status: Schema.Literal("failed"),
-		failure: Execution.Failure,
-	}),
-	Schema.Struct({ status: Schema.Literal("interrupted") }),
-	Schema.Struct({ status: Schema.Literal("cancelled"), epoch: Schema.Natural }),
-])
-export type End = typeof End.Type
+
 const terminal = ["completed", "failed", "cancelled", "interrupted"]
-
-export interface Service {
-	readonly submit: (
-		parent: Fence,
-		position: ToolExecution.Position,
-		call: Prompt.ToolCallPart,
-		settings: Operations.Settings,
-		budget?: "foreground" | Duration.Input | undefined,
-		definition?: Definition | undefined,
-	) => Effect.Effect<
-		ToolExecution.Record,
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.KeyConflict
-		| Execution.NotFound
-		| Execution.StorageError
-	>
-	readonly load: (key: Key) => Effect.Effect<
-		{
-			record: ToolExecution.Record
-			input: ToolRecords.Input
-			identity: {
-				readonly owner: {
-					readonly organizationId: string
-					readonly userId: string
-				}
-				readonly actor:
-					| {
-							readonly kind: "member"
-							readonly userId: string
-							readonly organizationId: string
-							readonly tokenId?: never
-					  }
-					| {
-							readonly kind: "user_token"
-							readonly userId: string
-							readonly organizationId: string
-							readonly tokenId: TokenId
-					  }
-				readonly constraints?: readonly (
-					| {
-							readonly kind: "member"
-							readonly userId: string
-							readonly organizationId: string
-							readonly tokenId?: never
-					  }
-					| {
-							readonly kind: "user_token"
-							readonly userId: string
-							readonly organizationId: string
-							readonly tokenId: TokenId
-					  }
-				)[]
-				readonly channel?: {
-					readonly id: string
-					readonly externalUserId: string
-				}
-				readonly botId?: BotId
-				readonly delegationId?: DelegationId
-				readonly parentExecutionId?: Execution.Id
-			}
-		},
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.NotFound
-		| Execution.StorageError
-	>
-	readonly detach: (
-		parent: Fence,
-		child: Execution.Id,
-		waiting?: DecisionWait.Waiting | undefined,
-	) => Effect.Effect<
-		ToolExecution.Record,
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.NotFound
-		| Execution.StorageError
-	>
-	readonly list: (
-		namespace: string,
-		chat: Chat.Id,
-	) => Effect.Effect<
-		ToolExecution.Record[],
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.NotFound
-		| Execution.StorageError
-	>
-	readonly authorize: Authorize
-	readonly finish: (
-		fence: Fence,
-		end: End,
-	) => Effect.Effect<
-		ToolExecution.Record,
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.KeyConflict
-		| Execution.NotFound
-		| Execution.StorageError
-	>
-	readonly stopAttached: (
-		parent: Fence,
-	) => Effect.Effect<
-		ToolExecution.Record[],
-		| Execution.Conflict
-		| Execution.Forbidden
-		| Execution.KeyConflict
-		| Execution.NotFound
-		| Execution.StorageError
-	>
-	readonly admit: Check
-}
-
-export class ToolCommands extends Context.Service<ToolCommands, Service>()(
-	"@openbot-build/openbot/plugin-chats/ToolCommands",
-) {}
 
 const make = Effect.gen(function* () {
 	const db = yield* Db.make

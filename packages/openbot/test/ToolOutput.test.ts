@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { Prompt } from "effect/ai"
-import { outputCodec } from "../src/plugin-chats/ToolSteps.ts"
+import { outputCodec } from "../src/conversation-contract/chats/ToolSteps.ts"
 
 it.effect("saved tool output keeps text and image bytes", () =>
 	Effect.gen(function* () {

@@ -34,9 +34,9 @@ import {
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import * as Rows from "./DeveloperRows.ts"
+import * as Rows from "../apps-contract/apps/DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import { IndexWork } from "./IndexWork.ts"
+import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
 import { Governance } from "./Governance.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 

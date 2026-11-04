@@ -40,20 +40,20 @@ import {
 } from "effect"
 import { Digest } from "effect/crypto"
 import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
-import { type Failure, Bots } from "./Bots.ts"
+import { type Failure, Bots } from "../conversation-contract/bots/Bots.ts"
 import { type SqlError, SqlClient } from "effect/sql"
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
 import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
-import { Requests } from "../plugin-capabilities/Requests.ts"
+import { Requests } from "../conversation-contract/capabilities/Requests.ts"
 import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
 import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as ChatModels from "../conversation-contract/chats/ChatModels.ts"
-import { InputCommands } from "../plugin-chats/InputCommands.ts"
+import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
-import { TurnAccess } from "../plugin-chats/TurnAccess.ts"
+import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as Db from "../server-database/Database.ts"
 import type { Authorize, Decide } from "../server-execution/execution/Engine.ts"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
@@ -61,7 +61,10 @@ import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import { delegationTimeLimitOf } from "../server-kernel/settings/Documents.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
 import * as DelegationUsage from "../conversation-contract/bots/DelegationUsage.ts"
-import { Delegations, noUsage } from "./Delegations.ts"
+import {
+	Delegations,
+	noUsage,
+} from "../conversation-contract/bots/Delegations.ts"
 
 export {
 	workflowName,

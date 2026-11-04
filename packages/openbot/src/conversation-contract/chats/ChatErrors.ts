@@ -5,7 +5,7 @@ import {
 } from "@openbot-build/domain"
 import { Effect } from "effect"
 import * as Failures from "../../server-kernel/errors/Failures.ts"
-import type { InputCommands } from "../../plugin-chats/InputCommands.ts"
+import type { InputCommands } from "./InputCommands.ts"
 import type * as ChatCommands from "./ChatCommands.ts"
 import type * as ChatQueries from "./ChatQueries.ts"
 import type * as ToolQueries from "./ToolQueries.ts"
