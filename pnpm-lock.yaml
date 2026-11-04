@@ -5,8 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  "@graftland/graft": 0.3.2
-  "@graftland/loader": 0.3.2
+  "@graftland/graft": 0.3.3
+  "@graftland/loader": 0.3.3
 
 importers:
   .:
@@ -291,11 +291,11 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.2
-        version: 0.3.2(effect@4.1.2)
+        specifier: 0.3.3
+        version: 0.3.3(effect@4.1.2)
       "@graftland/loader":
-        specifier: 0.3.2
-        version: 0.3.2(effect@4.1.2)
+        specifier: 0.3.3
+        version: 0.3.3(effect@4.1.2)
       "@jitl/quickjs-singlefile-mjs-release-sync":
         specifier: 0.32.0
         version: 0.32.0
@@ -1368,19 +1368,19 @@ packages:
         integrity: sha512-SNI7EgUSiADqbqUzzMbj1ZeC/r2pa5eg3KyFOGAd3a7EsIA4qzjXQLp+ODWQtHVDKFCdGs4J3ovSJUqvKIK96g==,
       }
 
-  "@graftland/graft@0.3.2":
+  "@graftland/graft@0.3.3":
     resolution:
       {
-        integrity: sha512-pDbZTup56lgEmXod8XFmaf7svfCogrR/9KUJ3TFTO6EOfjd71royRTN5jdpFJBB++Ldko+W8wFLdR/2HzApzJg==,
+        integrity: sha512-CMIUaIyG/ETIMmw8btHEEhDgBvIGb4VnmdyzDSxUJcY4dCB3yTdKFL8lE/0BXpptNl/WBW4RmUAmLuBXJSYY7w==,
       }
     engines: { node: ">=22.19.0" }
     peerDependencies:
       effect: 4.1.*
 
-  "@graftland/loader@0.3.2":
+  "@graftland/loader@0.3.3":
     resolution:
       {
-        integrity: sha512-bVrOEr+n6ExTwE7DbdHN14z+ivcndsiMiyAZQlB9zuGZn53WHwPsCG2n1hktzrGrv1r6aQ6jWIO1lm7nkorpCg==,
+        integrity: sha512-w89HyhokgSSNmtTAAA2qqVutKrRdfL09H7RhgYE7ufODwMFLLfooGTOlqyADaIpkvCwigvbEtMjYYuOvcARogQ==,
       }
     engines: { node: ">=22.19.0" }
     peerDependencies:
@@ -7342,13 +7342,13 @@ snapshots:
     dependencies:
       "@expressive-code/core": 0.44.2
 
-  "@graftland/graft@0.3.2(effect@4.1.2)":
+  "@graftland/graft@0.3.3(effect@4.1.2)":
     dependencies:
       effect: 4.1.2
 
-  "@graftland/loader@0.3.2(effect@4.1.2)":
+  "@graftland/loader@0.3.3(effect@4.1.2)":
     dependencies:
-      "@graftland/graft": 0.3.2(effect@4.1.2)
+      "@graftland/graft": 0.3.3(effect@4.1.2)
       effect: 4.1.2
       yaml: 2.9.1
 
