@@ -234,6 +234,7 @@ const modelLayer = (
 	apiKey: ApiKey,
 	selection: Config.Selection,
 	upstreamModel: string,
+	modelReadRetryRoutes: Options["modelReadRetryRoutes"],
 ) =>
 	Effect.gen(function* () {
 		const client = clientOptions(provider, apiKey)
@@ -269,7 +270,15 @@ const modelLayer = (
 					selection,
 				)
 				return model.pipe(
-					Layer.provide(OpenAiCompatProvider.layerClient(client)),
+					Layer.provide(
+						OpenAiCompatProvider.layerClient({
+							...client,
+							modelReadRetryRoutes: Arr.filter(
+								modelReadRetryRoutes ?? [],
+								(route) => route.providerId === provider.id,
+							),
+						}),
+					),
 				)
 			}
 			case "typesafe":
@@ -312,7 +321,15 @@ interface LanguageInput {
 	readonly upstream: string
 }
 
-export const make = (options: { readonly builtin?: Builtin } = {}) =>
+interface ModelReadRetryRoute extends OpenAiCompatProvider.ModelReadRetryRoute {
+	/** The stored provider that owns this route and its credentials. */
+	readonly providerId: string
+}
+export interface Options {
+	readonly builtin?: Builtin | undefined
+	readonly modelReadRetryRoutes?: ReadonlyArray<ModelReadRetryRoute> | undefined
+}
+export const make = (options: Options = {}) =>
 	Effect.gen(function* () {
 		const providers = yield* ModelProviders
 		const models = yield* Models
@@ -408,6 +425,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					apiKey,
 					key.input.selection,
 					key.input.upstream,
+					options.modelReadRetryRoutes,
 				).pipe(
 					// The provider cannot make this model, for example for a bad option.
 					Failures.replaceTag(
@@ -856,5 +874,5 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		})
 	})
 
-export const layer = (options: { readonly builtin?: Builtin } = {}) =>
+export const layer = (options: Options = {}) =>
 	Layer.effect(ModelRegistry, make(options))

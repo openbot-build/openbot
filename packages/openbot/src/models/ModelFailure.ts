@@ -1,6 +1,34 @@
 import { Execution } from "@openbot-build/domain"
-import { Cause, Option, Schema } from "effect"
+import { Cause, Context, Effect, Option, type Ref, Schema } from "effect"
 import { AiError } from "effect/ai"
+
+export type ModelReadFailureReason =
+	"socket_reset" | "body_timeout" | "gateway_timeout"
+
+/** Kept only in the model step that observed the failure, never in the event log. */
+export interface ModelReadRequest {
+	readonly url: string
+	readonly body: string
+}
+export const CurrentModelReadFailure = Context.Reference<
+	| ((
+			reason: ModelReadFailureReason,
+			request: ModelReadRequest,
+	  ) => Effect.Effect<void>)
+	| undefined
+>("@openbot-build/openbot/models/CurrentModelReadFailure", {
+	defaultValue: () => undefined,
+})
+export const FinalModelRead = Context.Reference<
+	| {
+			readonly request: ModelReadRequest
+			readonly failure: Execution.Failure
+			readonly sent: Ref.Ref<boolean>
+	  }
+	| undefined
+>("@openbot-build/openbot/models/FinalModelRead", {
+	defaultValue: () => undefined,
+})
 
 /** Only an adapter that proved no request was sent may set this outcome. */
 const Metadata = Schema.Struct({

@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_execution_calls" ADD COLUMN "read_retry_failure" text;

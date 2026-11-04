@@ -18,7 +18,7 @@ import {
 	confirmed,
 } from "../billing/MeteredModel.ts"
 import { Calls } from "../execution/Calls.ts"
-import { Store, type Fence } from "../execution/Store.ts"
+import { Store, type Fence, type ReadAttempt } from "../execution/Store.ts"
 
 /** A saved model result distinguishes an answer from a call that was not sent. */
 export const resultCodec = <A>(value: Schema.Codec<A, Schema.Json>) =>
@@ -54,16 +54,21 @@ export const make = Effect.gen(function* () {
 		options: {
 			readonly codec: Schema.Codec<A, Schema.Json>
 			readonly retry?: "read_only" | "never"
+			readonly retryFrom?: Execution.CallId | undefined
+			readonly lastReadRetry?:
+				((id: Execution.CallId) => Effect.Effect<boolean>) | undefined
 			readonly send: (call: Execution.Call) => Effect.Effect<A, E, R>
 			readonly usage: (value: A) => Response.Usage
 			readonly beforeSend: Effect.Effect<void, BeforeE, BeforeR>
 		},
 	) {
 		yield* calls.authorize(fence, "replay")
-		const call = yield* options.retry === "never"
+		const call: ReadAttempt = yield* options.retry === "never"
 			? store.writeAttempt(fence, step, input, "never")
-			: store.readAttempt(fence, step, input)
+			: store.readAttempt(fence, step, input, options.retryFrom)
 		const output = resultCodec(options.codec)
+		if (call.exhaustedReadRetry !== undefined)
+			return yield* Effect.fail(call.exhaustedReadRetry)
 		const usage = yield* Ref.make(Option.none<Response.Usage>())
 		const beforeSend = options.beforeSend.pipe(
 			Effect.provide(yield* Effect.context<BeforeR>()),
@@ -72,6 +77,7 @@ export const make = Effect.gen(function* () {
 			fence,
 			{
 				...call,
+				lastReadRetry: options.lastReadRetry,
 				onResult: (callId, saved) =>
 					Schema.decodeUnknownEffect(output)(saved).pipe(
 						Effect.flatMap((result) =>

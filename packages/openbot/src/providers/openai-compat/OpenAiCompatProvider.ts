@@ -1,5 +1,12 @@
+import { FinalModelRead, notSent } from "../../models/ModelFailure.ts"
+import { observeResponse, type ModelReadRetryRoute } from "./ModelReadRetry.ts"
+export type { ModelReadRetryRoute } from "./ModelReadRetry.ts"
 import { dual } from "effect/Function"
-import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai-compat"
+import {
+	OpenAiClient,
+	OpenAiConfig,
+	OpenAiLanguageModel,
+} from "@effect/ai-openai-compat"
 import { Provider as CoreProvider, Model } from "@openbot-build/core"
 import { type AiError } from "effect/ai"
 import {
@@ -10,6 +17,7 @@ import {
 	Predicate,
 	Schema,
 	Record as Rec,
+	Ref,
 } from "effect"
 
 export type Defaults = Omit<typeof OpenAiLanguageModel.Config.Service, "model">
@@ -98,24 +106,65 @@ function cloudflareMessages(messages: unknown): unknown {
 }
 
 /** The host owns the client Layer, endpoint and credentials. */
-export const layerClient = (options: OpenAiClient.Options) =>
+export const layerClient = ({
+	modelReadRetryRoutes = [],
+	...options
+}: OpenAiClient.Options & {
+	readonly modelReadRetryRoutes?: ReadonlyArray<ModelReadRetryRoute> | undefined
+}) =>
 	Layer.effect(
 		OpenAiClient.OpenAiClient,
-		Effect.map(OpenAiClient.make(options), (client) =>
-			!isCloudflare(options.apiUrl)
-				? client
-				: OpenAiClient.OpenAiClient.of({
-						...client,
-						createResponse: (request) =>
-							client.createResponse({
-								...request,
-								messages: cloudflareMessages(request.messages),
-							}),
-						createResponseStream: (request) =>
-							client.createResponseStream({
-								...request,
-								messages: cloudflareMessages(request["messages"]),
-							}),
-					}),
+		Effect.map(
+			OpenAiClient.make({
+				...options,
+				// A custom client can change the request or repeat the call itself.
+				transformClient:
+					options.transformClient ??
+					(modelReadRetryRoutes.length === 0
+						? undefined
+						: observeResponse(modelReadRetryRoutes)),
+			}),
+			(client) => {
+				const cloudflare = isCloudflare(options.apiUrl)
+				if (!cloudflare && modelReadRetryRoutes.length === 0) return client
+				return OpenAiClient.OpenAiClient.of({
+					...client,
+					createResponse: (request) =>
+						client.createResponse(
+							cloudflare
+								? { ...request, messages: cloudflareMessages(request.messages) }
+								: request,
+						),
+					createResponseStream: (request) =>
+						Effect.gen(function* () {
+							const final = yield* FinalModelRead
+							if (
+								final !== undefined &&
+								(options.transformClient !== undefined ||
+									(yield* OpenAiConfig.OpenAiConfig.getOrUndefined)
+										?.transformClient !== undefined)
+							)
+								return yield* notSent(final.failure)
+							const send = client.createResponseStream(
+								cloudflare
+									? {
+											...request,
+											messages: cloudflareMessages(request["messages"]),
+										}
+									: request,
+							)
+							if (final === undefined) return yield* send
+							return yield* send.pipe(
+								Effect.catch((error) =>
+									Effect.gen(function* () {
+										return yield* (yield* Ref.get(final.sent))
+											? error
+											: notSent(final.failure)
+									}),
+								),
+							)
+						}),
+				})
+			},
 		),
 	)
