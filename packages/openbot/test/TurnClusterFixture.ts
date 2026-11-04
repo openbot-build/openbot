@@ -24,6 +24,7 @@ import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
 import * as TurnSession from "../src/plugin-chats/TurnSession.ts"
 import * as TurnWorkflow from "../src/plugin-chats/TurnWorkflow.ts"
 import * as ExecutionFeatures from "../src/plugin-chats/ExecutionFeatures.ts"
+import * as BotFeatures from "../src/conversation-contract/chats/BotFeatures.ts"
 import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
 import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
@@ -113,6 +114,7 @@ export const layer = Layer.unwrap(
 			Layer.provide(
 				Layer.mergeAll(
 					ExecutionFeatures.none,
+					BotFeatures.layer,
 					Layer.mock(LiveConnections, {}),
 					Layer.mock(ReviewTools, {
 						register: () => Effect.die("This test has no review Chat."),

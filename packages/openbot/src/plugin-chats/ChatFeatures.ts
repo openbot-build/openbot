@@ -1,11 +1,13 @@
 import { Bot, Chat, type ChatStore, Operations } from "@openbot-build/core"
 import type { Identity, ExecutionIdentity } from "@openbot-build/domain"
 import {
+	Array as Arr,
 	Cause,
 	Context,
 	Duration,
 	Effect,
 	Layer,
+	Option,
 	Record as Rec,
 	type Scope,
 } from "effect"
@@ -14,12 +16,12 @@ import * as Background from "../server-kernel/execution/Background.ts"
 import * as Report from "../server-kernel/errors/Report.ts"
 import { Files } from "../apps-contract/files/Files.ts"
 import { withFiles } from "../apps-contract/files/ModelFiles.ts"
-import { AppTools } from "../plugin-apps/AppTools.ts"
-import { BotTools } from "../plugin-bots/BotTools.ts"
-import { ChannelTools } from "../plugin-channels/ChannelTools.ts"
-import { ComputerTools } from "../plugin-computers/ComputerTools.ts"
+import type { Entry } from "../apps-contract/apps/WorkflowTools.ts"
+import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
+import type { Fence } from "../server-execution/execution/Store.ts"
+import type { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
+import * as Assembly from "./Assembly.ts"
 import { names as executionToolNames } from "./ToolControls.ts"
-import { WorkTools } from "../plugin-work/WorkTools.ts"
 import { operationsOf } from "../server-kernel/settings/Documents.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
@@ -57,8 +59,9 @@ export interface TurnInput {
 /**
  * What each execution gets from OpenBot: the tools of
  * its Turn, the decisions on tool calls that ask for approval, the files in
- * model calls, and the limits of background tool calls. The server gives all
- * of them with `layer`. A test of the Chats alone gives `none`.
+ * model calls, and the limits of background tool calls. `ExecutionFeatures`
+ * makes them for each Turn phase from the features that the Turn holds. A
+ * test of the Chats alone gives `none`.
  */
 export class ChatFeatures extends Context.Service<
 	ChatFeatures,
@@ -79,6 +82,8 @@ export class ChatFeatures extends Context.Service<
 		readonly operationSettings: (
 			organizationId: string,
 		) => Effect.Effect<Operations.Settings>
+		/** Gives back a saved tool from its definition, through the features of this Turn. */
+		readonly restore: (definition: Definition) => Option.Option<Entry>
 	}
 >()("@openbot-build/openbot/plugin-chats/ChatFeatures") {}
 
@@ -96,138 +101,145 @@ export const none = Layer.succeed(
 		}),
 		withFiles: (model) => model,
 		operationSettings: () => Effect.succeed(Operations.defaultSettings),
+		restore: () => Option.none(),
 	}),
 )
 
+/** A feature that a Turn holds, with its tools for the fence of this phase. */
+export interface Prepared {
+	readonly contribution: BotFeatures.Contribution
+	readonly feature: BotFeatures.Feature
+}
+
 /**
- * Every feature of a server: Apps, Bots, work, Channels and Computers, the
- * capability gate for tool calls that ask for approval, and files.
+ * The features of one Turn phase, in merge order, the capability gate for
+ * tool calls that ask for approval, and files.
  */
-export const make = Effect.gen(function* () {
-	const background = yield* Background.make
-	const apps = yield* AppTools
-	const bots = yield* BotTools
-	const work = yield* WorkTools
-	const channels = yield* ChannelTools
-	const computers = yield* ComputerTools
-	const files = yield* Files
-	const settings = yield* Settings
-	const report = yield* Report.make
-	const approvals = yield* Chat.Approvals
-	const turns = yield* TurnContext
-	return ChatFeatures.of({
-		approvals,
-		register: (input, host, identity) =>
-			Effect.gen(function* () {
-				const context = yield* Bot.Context
-				const at = yield* context.at
-				const turn = yield* context.turn
-				const view = yield* input.store.read(at.chat)
-				if (view.chat.turn?.id !== turn)
-					return yield* Chat.ChatError.make({
-						reason: "state-conflict",
-						message: "The Turn is not current.",
+export const make = (fence: Fence, prepared: ReadonlyArray<Prepared>) =>
+	Effect.gen(function* () {
+		const background = yield* Background.make
+		const files = yield* Files
+		const settings = yield* Settings
+		const report = yield* Report.make
+		const approvals = yield* Chat.Approvals
+		const turns = yield* TurnContext
+		return ChatFeatures.of({
+			approvals,
+			register: (input, host, identity) =>
+				Effect.gen(function* () {
+					const context = yield* Bot.Context
+					const at = yield* context.at
+					const turn = yield* context.turn
+					const view = yield* input.store.read(at.chat)
+					if (view.chat.turn?.id !== turn)
+						return yield* Chat.ChatError.make({
+							reason: "state-conflict",
+							message: "The Turn is not current.",
+						})
+					const current = yield* turns.prepare({
+						identity,
+						namespace: input.namespace,
+						chat: view.chat.id,
+						host: ChatHost.hostState(view.chat),
+						turn,
 					})
-				const current = yield* turns.prepare({
-					identity,
-					namespace: input.namespace,
-					chat: view.chat.id,
-					host: ChatHost.hostState(view.chat),
-					turn,
-				})
-				const state = ChatHost.hostState(view.chat)
-				const read = (chat: Chat.Id) => input.store.read(chat)
-				const registration = yield* Effect.gen(function* () {
-					const botTools = yield* bots.register({
+					const state = ChatHost.hostState(view.chat)
+					const read = (chat: Chat.Id) => input.store.read(chat)
+					const review = state.kind === "review"
+					const notify: BotFeatures.Notify = (chat, notice) =>
+						input
+							.deliver(
+								{
+									chat,
+									content: Prompt.make(notice.text),
+									identity,
+									queue: true,
+									notice: { kind: "computer_session", ref: notice.ref },
+								},
+								`computer:${notice.ref}`,
+							)
+							.pipe(
+								background.logFailure(
+									"The end of a command session could not reach its Chat",
+								),
+							)
+					const base = {
 						owner: input.owner,
 						namespace: input.namespace,
 						read,
-						items: (chat, query) => input.store.items(chat, query),
-					})
-					const controls = yield* input.controls
-					const workTools = yield* work.register({ read, store: input.store })
-					const common = Registration.merge([
-						host,
-						botTools,
-						controls,
-						workTools,
-					])
-					if (state.kind === "review") return common
-					const channelTools = yield* channels.register({ read })
-					const computerTools = yield* computers.register({
-						notify: (chat, notice) =>
-							input
-								.deliver(
-									{
-										chat,
-										content: Prompt.make(notice.text),
-										identity,
-										queue: true,
-										notice: { kind: "computer_session", ref: notice.ref },
-									},
-									`computer:${notice.ref}`,
-								)
-								.pipe(
-									background.logFailure(
-										"The end of a command session could not reach its Chat",
-									),
-								),
-					})
-					const fixed = Registration.merge([
-						common,
-						channelTools,
-						computerTools,
-					])
-					const occupied: Readonly<Record<string, Tool.Any>> = fixed.tools
-					const appTools = yield* apps.register(input.owner, [
-						...Rec.keys(occupied),
-						...Rec.values(executionToolNames),
-					])
-					return Registration.merge([
-						host,
-						appTools,
-						botTools,
-						controls,
-						workTools,
-						channelTools,
-						computerTools,
-					])
-				}).pipe(Effect.provideService(Work, current))
-				return Registration.select(
-					{
-						...registration,
-						handlers: Context.add(registration.handlers, Work, current),
-					},
-					{
-						review: state.kind === "review",
-						plan:
-							(view.chat.turn?.id === turn
-								? view.chat.turn.settings
-								: view.chat.settings
-							).mode === "plan",
-					},
-				)
-			}).pipe(Effect.orDie),
-		withFiles: (model) => withFiles(model, files.load),
-		operationSettings: (organizationId) =>
-			settings.organization(organizationId).pipe(
-				Effect.map((snapshot) => {
-					const limits = operationsOf(snapshot.document)
-					return {
-						budget: Duration.millis(limits.toolForegroundBudgetMs),
-						maxDuration: Duration.millis(limits.toolMaxDurationMs),
-						limit: limits.maxBackgroundOperations,
+						items: (chat: Chat.Id, query: ChatStore.ItemQuery) =>
+							input.store.items(chat, query),
+						store: input.store,
+						notify,
 					}
-				}),
-				Effect.tapCauseIf(Cause.hasFails, (cause) =>
-					report(
-						"OpenBot could not read the limits of background tool calls. It uses the default limits.",
-						cause,
+					const controls: Assembly.Part<Bot.Context | Work | Scope.Scope> = {
+						order: 30,
+						builtIn: true,
+						id: "controls",
+						build: "normal",
+						register: () => input.controls,
+					}
+					const features = Arr.map(
+						Arr.filter(
+							prepared,
+							({ contribution }) => !review || contribution.review,
+						),
+						({
+							contribution,
+							feature,
+						}): Assembly.Part<Bot.Context | Work | Scope.Scope> => ({
+							order: contribution.order,
+							builtIn: false,
+							id: contribution.id,
+							build: contribution.build,
+							register: (occupied) => feature.register({ ...base, occupied }),
+						}),
+					)
+					const registration = yield* Assembly.assemble(
+						host,
+						[controls, ...features],
+						Rec.values(executionToolNames),
+					).pipe(Effect.provideService(Work, current))
+					return Registration.select(
+						{
+							...registration,
+							handlers: Context.add(registration.handlers, Work, current),
+						},
+						{
+							review: state.kind === "review",
+							plan:
+								(view.chat.turn?.id === turn
+									? view.chat.turn.settings
+									: view.chat.settings
+								).mode === "plan",
+						},
+					)
+				}).pipe(Effect.orDie),
+			withFiles: (model) => withFiles(model, files.load),
+			operationSettings: (organizationId) =>
+				settings.organization(organizationId).pipe(
+					Effect.map((snapshot) => {
+						const limits = operationsOf(snapshot.document)
+						return {
+							budget: Duration.millis(limits.toolForegroundBudgetMs),
+							maxDuration: Duration.millis(limits.toolMaxDurationMs),
+							limit: limits.maxBackgroundOperations,
+						}
+					}),
+					Effect.tapCauseIf(Cause.hasFails, (cause) =>
+						report(
+							"OpenBot could not read the limits of background tool calls. It uses the default limits.",
+							cause,
+						),
 					),
+					Effect.orElseSucceed(() => Operations.defaultSettings),
 				),
-				Effect.orElseSucceed(() => Operations.defaultSettings),
-			),
+			// The first feature in merge order with an entry wins: Apps, then Bots.
+			restore: (definition) =>
+				Arr.findFirst(prepared, ({ contribution }) =>
+					contribution.restore === undefined
+						? Option.none()
+						: contribution.restore(fence, definition),
+				),
+		})
 	})
-})
-
-export const layer = Layer.effect(ChatFeatures, make)

@@ -71,7 +71,7 @@ const make = Effect.gen(function* () {
 		const restored =
 			saved.input.definition === undefined
 				? Option.none()
-				: featureScopes.restore(fence, saved.input.definition)
+				: yield* featureScopes.restore(fence, saved.input.definition)
 		if (Option.isSome(restored)) {
 			const entry = restored.value
 			const toolkit = Toolkit.make(entry.tool)

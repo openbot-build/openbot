@@ -89,6 +89,15 @@ diese Schleife. Die Funktionen behalten Kindarbeit, Zeitgrenzen und
 Geschäftstransaktionen. `Runner` hält Übernahme und Speicherwiederholungen;
 `RunScope` hält Phasenressourcen und Signale.
 
+Funktionen geben ihre Bot-Werkzeuge über `BotFeatures` an einen Turn. Jede
+Funktion hat eine feste ID, eine Version und eine Reihenfolge beim
+Zusammenfügen. Die erste Phase eines Turns speichert die Liste der Funktionen
+mit Versionen und Einstellungen im Workflow-Protokoll. Jede spätere Phase und
+jede Wiederholung nutzt diese Liste. Eine Funktion mit neuer Version stoppt
+einen alten Turn mit einem Konflikt. Fehlt eine Funktion der Liste, wartet der
+Turn und hält dabei nichts. Eine neue Funktion nutzen nur neue Turns. Zwei
+Funktionen mit derselben ID stoppen den Serverstart.
+
 Jede Arbeitsphase läuft in einer `Activity`. Ihr Name enthält die gespeicherte
 Phase und Generation. Die Engine speichert nur ein sicheres Phasenergebnis, etwa
 eine Fehler-ID oder einen Verweis auf eine Pause. Eingaben, externe Ergebnisse

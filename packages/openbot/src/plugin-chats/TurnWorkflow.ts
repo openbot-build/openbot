@@ -9,6 +9,11 @@ import {
 	Schema,
 	Stream,
 } from "effect"
+import { Activity } from "effect/workflow"
+import {
+	BotFeatures,
+	Pins,
+} from "../conversation-contract/chats/BotFeatures.ts"
 import { Records } from "../server-kernel/errors/Records.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
 import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
@@ -35,6 +40,16 @@ export const contribute = Effect.gen(function* () {
 	const observation = yield* Observation
 	const workflows = yield* Workflows
 	const access = yield* TurnAccess
+	const features = yield* BotFeatures
+	/**
+	 * The first phase keeps the features of the Turn in the journal. Every later
+	 * phase, and a replay on another node, reads the same list back.
+	 */
+	const pinned = Activity.make({
+		name: "openbot/features",
+		success: Pins,
+		execute: features.snapshot,
+	})
 	const chatOf = (fence: Fence) =>
 		store.loadMember(fence).pipe(
 			Effect.flatMap((saved) =>
@@ -68,6 +83,7 @@ export const contribute = Effect.gen(function* () {
 		fence,
 	}: Program.Current) {
 		const chat = yield* chatOf(fence)
+		const pins = yield* pinned
 		const latest = yield* store.latestCalls(fence)
 		// A decision or a late result changes this phase, while call IDs stay stable.
 		const phase = Arr.join(
@@ -78,7 +94,7 @@ export const contribute = Effect.gen(function* () {
 			_tag: "Phase" as const,
 			name: `turn:${phase}`,
 			work: session
-				.run(fence)
+				.run(fence, pins)
 				.pipe(Effect.catchTag("ExecutionOutcomeUnknown", () => Effect.void)),
 			options: undefined,
 			after: Effect.gen(function* () {

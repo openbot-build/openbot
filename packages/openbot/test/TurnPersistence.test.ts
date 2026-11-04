@@ -63,10 +63,15 @@ import * as ToolControls from "../src/plugin-chats/ToolControls.ts"
 import * as ToolCommands from "../src/plugin-chats/ToolCommands.ts"
 import * as InputCommands from "../src/plugin-chats/InputCommands.ts"
 import * as ExecutionFeatures from "../src/plugin-chats/ExecutionFeatures.ts"
+import * as BotFeatures from "../src/conversation-contract/chats/BotFeatures.ts"
 import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
+import { Gates } from "../src/conversation-contract/capabilities/Gate.ts"
+import { Files } from "../src/apps-contract/files/Files.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { TurnContext } from "../src/conversation-contract/chats/TurnContext.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
 	Layer.provideMerge(
@@ -205,6 +210,103 @@ const setup = (namespace: string) =>
 		}
 	})
 
+/** Gives the Turn a model, so it does not read the Bot. */
+const useModel = (test: Effect.Success<ReturnType<typeof setup>>) =>
+	test.chats.modifyEffect({
+		chat: test.chat,
+		update: (view) =>
+			Effect.succeed([
+				undefined,
+				Option.some({
+					chat: {
+						turn: {
+							...view.chat.turn!,
+							settings: {
+								...view.chat.settings,
+								model: Config.Selection.make({
+									provider: Provider.Id.make("test"),
+									model: Model.Id.make("test"),
+								}),
+							},
+						},
+					},
+				}),
+			] as const),
+	})
+
+/** A model that gives one short answer. */
+const answer = LanguageModel.make({
+	generateText: () => Effect.die("This test uses a stream."),
+	streamText: () =>
+		Stream.make(
+			Response.makePart("text-start", { id: "text" }),
+			Response.makePart("text-delta", { id: "text", delta: "answer" }),
+			Response.makePart("text-end", { id: "text" }),
+			Response.makePart("finish", {
+				reason: "stop",
+				usage: {
+					inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
+					outputTokens: { total: 1, text: 1, reasoning: 0 },
+				},
+			}),
+		),
+})
+
+/** The Turn workflow with the memory engine, a fixed model, and the given features. */
+const turnLayer = (options: {
+	readonly store: typeof Store.Store.Service
+	readonly model: typeof LanguageModel.LanguageModel.Service
+	readonly features?: Layer.Layer<
+		ExecutionFeatures.ExecutionFeatures | BotFeatures.BotFeatures,
+		never,
+		Records.Records
+	>
+}) =>
+	EngineHost.layerHandlers.pipe(
+		Layer.provideMerge(TurnWorkflow.layer),
+		Layer.provideMerge(
+			Layer.mergeAll(
+				TurnSession.layer.pipe(Layer.provide(Layer.mock(LiveConnections, {}))),
+				Runner.layer,
+				RunScope.layer,
+				Workflows.layer,
+			),
+		),
+		Layer.provide(Layer.mergeAll(TurnTools.layer, ToolControls.layer)),
+		Layer.provide(
+			Layer.mergeAll(
+				ToolCommands.layer,
+				InputCommands.layer.pipe(Layer.provide(Layer.mock(Delegations, {}))),
+				Observation.layer,
+			),
+		),
+		Layer.provide(Layer.succeed(Store.Store, options.store)),
+		Layer.provideMerge(WorkflowEngine.layerMemory),
+		Layer.provide(
+			Layer.mergeAll(
+				options.features ??
+					Layer.merge(ExecutionFeatures.none, BotFeatures.layer),
+				Layer.mock(ReviewTools, {
+					register: () => Effect.die("This test has no review Chat."),
+				}),
+				HostTools.none,
+				Layer.mock(Bots, {}),
+				Layer.mock(TurnAccess, {
+					admit: () => Effect.void,
+					model: () => Effect.void,
+					authorize: () => Effect.void,
+					input: () => Effect.void,
+					notice: () => Effect.succeed(true),
+				}),
+				Layer.mock(ModelRegistry, {
+					defaultModel: Option.none(),
+					catalog: () => Effect.succeed({ providers: [], models: [] }),
+					resolve: () => Effect.succeed(options.model),
+				}),
+			),
+		),
+	)
+
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 	for (const mode of ["complete", "checkpoint", "cancel"] as const)
 		it.effect(`a Turn workflow closes its scope after ${mode}`, () =>
@@ -293,53 +395,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							return yield* test.executions.commit(fence, change, writes)
 						}),
 				})
-				const application = EngineHost.layerHandlers.pipe(
-					Layer.provideMerge(TurnWorkflow.layer),
-					Layer.provideMerge(
-						Layer.mergeAll(
-							TurnSession.layer.pipe(
-								Layer.provide(Layer.mock(LiveConnections, {})),
-							),
-							Runner.layer,
-							RunScope.layer,
-							Workflows.layer,
-						),
-					),
-					Layer.provide(Layer.mergeAll(TurnTools.layer, ToolControls.layer)),
-					Layer.provide(
-						Layer.mergeAll(
-							ToolCommands.layer,
-							InputCommands.layer.pipe(
-								Layer.provide(Layer.mock(Delegations, {})),
-							),
-							Observation.layer,
-						),
-					),
-					Layer.provide(Layer.succeed(Store.Store, flaky)),
-					Layer.provideMerge(WorkflowEngine.layerMemory),
-					Layer.provide(
-						Layer.mergeAll(
-							ExecutionFeatures.none,
-							Layer.mock(ReviewTools, {
-								register: () => Effect.die("This test has no review Chat."),
-							}),
-							HostTools.none,
-							Layer.mock(Bots, {}),
-							Layer.mock(TurnAccess, {
-								admit: () => Effect.void,
-								model: () => Effect.void,
-								authorize: () => Effect.void,
-								input: () => Effect.void,
-								notice: () => Effect.succeed(true),
-							}),
-							Layer.mock(ModelRegistry, {
-								defaultModel: Option.none(),
-								catalog: () => Effect.succeed({ providers: [], models: [] }),
-								resolve: () => Effect.succeed(model),
-							}),
-						),
-					),
-				)
+				const application = turnLayer({ store: flaky, model })
 				yield* Effect.gen(function* () {
 					if (mode === "cancel") {
 						const running = yield* TurnWorkflow.workflow
@@ -379,6 +435,157 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				}).pipe(Effect.provide(application))
 			}),
 		)
+
+	it.effect(
+		"the first phase saves the bot features of the Turn, and a replay reads them back",
+		() =>
+			Effect.gen(function* () {
+				const test = yield* setup("turn-features-pin")
+				yield* useModel(test)
+				const snapshots = yield* Ref.make(0)
+				const opened = yield* Ref.make<
+					ReadonlyArray<ReadonlyArray<BotFeatures.Pin>>
+				>([])
+				const failed = yield* Ref.make(false)
+				// The checkpoint write fails once, so the work of the Turn runs again.
+				const flaky = Store.Store.of({
+					...test.executions,
+					commit: (fence, change, writes) =>
+						Effect.gen(function* () {
+							if (
+								typeof change.events !== "function" &&
+								Arr.some(
+									change.events ?? [],
+									(event) => event._tag === "Checkpoint",
+								) &&
+								!(yield* Ref.getAndSet(failed, true))
+							)
+								return yield* Execution.StorageError.make({
+									cause: "The checkpoint write failed once.",
+								})
+							return yield* test.executions.commit(fence, change, writes)
+						}),
+				})
+				// Each snapshot has a new version, so a second snapshot would show.
+				const features = Layer.mock(BotFeatures.BotFeatures, {
+					snapshot: Effect.map(
+						Ref.updateAndGet(snapshots, (count) => count + 1),
+						(version) => [{ id: "tools", version, settings: null }],
+					),
+				})
+				const execution = Layer.effect(
+					ExecutionFeatures.ExecutionFeatures,
+					Effect.map(ExecutionFeatures.ExecutionFeatures, (base) =>
+						ExecutionFeatures.ExecutionFeatures.of({
+							...base,
+							open: (fence, frame, pins) =>
+								Effect.andThen(
+									Ref.update(opened, Arr.append(pins)),
+									base.open(fence, frame, pins),
+								),
+						}),
+					),
+				).pipe(Layer.provide(ExecutionFeatures.none))
+				yield* TurnWorkflow.workflow.execute(test.key).pipe(
+					Effect.provide(
+						turnLayer({
+							store: flaky,
+							model: yield* answer,
+							features: Layer.merge(execution, features),
+						}),
+					),
+				)
+				assert.isTrue(yield* Ref.get(failed))
+				assert.equal(yield* Ref.get(snapshots), 1)
+				const pins = yield* Ref.get(opened)
+				assert.isAtLeast(pins.length, 2)
+				assert.ok(
+					Arr.every(
+						pins,
+						(pinned) =>
+							Schema.is(Schema.Array(BotFeatures.Pin))(pinned) &&
+							pinned.length === 1 &&
+							pinned[0]?.version === 1,
+					),
+				)
+				assert.equal((yield* test.executions.get(test.key)).status, "completed")
+			}),
+	)
+
+	it.effect(
+		"a Turn fails with a conflict when a pinned bot feature has a new version",
+		() =>
+			Effect.gen(function* () {
+				const test = yield* setup("turn-features-version")
+				yield* useModel(test)
+				const sent = yield* Ref.make(0)
+				// The journal kept version 1, and the server now has version 2.
+				const features = Layer.effect(
+					BotFeatures.BotFeatures,
+					Effect.gen(function* () {
+						const present = yield* BotFeatures.make({ drain: "0 millis" })
+						yield* present
+							.contribute({
+								id: "tools",
+								version: 2,
+								order: 10,
+								build: "normal",
+								review: true,
+								restores: [],
+								settings: Effect.succeed(null),
+								prepare: () =>
+									Effect.die("A feature with a new version must not be built."),
+							})
+							.pipe(Effect.orDie)
+						return BotFeatures.BotFeatures.of({
+							...present,
+							snapshot: Effect.succeed([
+								{ id: "tools", version: 1, settings: null },
+							]),
+						})
+					}),
+				)
+				const execution = ExecutionFeatures.layer.pipe(
+					Layer.provide(
+						Layer.mergeAll(
+							Layer.mock(Gates, {
+								durable: () =>
+									Effect.die("A Turn with a conflict must not build a Gate."),
+							}),
+							Layer.mock(Files, {}),
+							Layer.mock(Settings, {}),
+							Layer.mock(TurnContext, {}),
+						),
+					),
+					Layer.provideMerge(features),
+				)
+				yield* TurnWorkflow.workflow.execute(test.key).pipe(
+					Effect.exit,
+					Effect.provide(
+						turnLayer({
+							store: test.executions,
+							model: yield* LanguageModel.make({
+								generateText: () => Effect.die("This test uses a stream."),
+								streamText: () =>
+									Stream.fromEffect(
+										Ref.update(sent, (count) => count + 1),
+									).pipe(
+										Stream.flatMap(() => Stream.die("The model must not run.")),
+									),
+							}),
+							features: execution,
+						}),
+					),
+				)
+				assert.equal(yield* Ref.get(sent), 0)
+				const record = yield* test.executions.get(test.key)
+				assert.equal(record.status, "failed")
+				assert.equal(
+					(yield* test.chats.read(test.chat)).chat.turn?.status._tag,
+					"Failed",
+				)
+			}),
+	)
 
 	it.effect(
 		"a Turn owner cannot write after takeover even with the latest Chat revision",

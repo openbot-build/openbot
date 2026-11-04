@@ -70,6 +70,21 @@ import * as RunScope from "../server-execution/execution/RunScope.ts"
 import * as ActionPolicy from "../plugin-apps/ActionPolicy.ts"
 import * as Gates from "../plugin-capabilities/Gates.ts"
 import * as DelegationQueries from "../plugin-bots/DelegationQueries.ts"
+import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
+import * as AppFeature from "../plugin-apps/AppFeature.ts"
+import * as BotFeature from "../plugin-bots/BotFeature.ts"
+import * as WorkFeature from "../plugin-work/WorkFeature.ts"
+import * as ChannelFeature from "../plugin-channels/ChannelFeature.ts"
+import * as ComputerFeature from "../plugin-computers/ComputerFeature.ts"
+
+/** Each feature gives its Bot tools to the Turns. A duplicate id is a broken build, so it stops the start. */
+export const botFeatures = Layer.mergeAll(
+	AppFeature.layer,
+	BotFeature.layer,
+	WorkFeature.layer,
+	ChannelFeature.layer,
+	ComputerFeature.layer,
+).pipe(Layer.orDie)
 
 /** One set of command services is shared by every product workflow. */
 export const services = Layer.mergeAll(
@@ -91,6 +106,7 @@ export const services = Layer.mergeAll(
 	Layer.provideMerge(
 		Layer.mergeAll(
 			ExecutionFeatures.layer,
+			botFeatures,
 			TurnTools.layer,
 			ToolControls.layer,
 			ReviewTools.layer,
@@ -127,6 +143,8 @@ export const services = Layer.mergeAll(
 		),
 	),
 	Layer.provideMerge(ImportedWorkflow.layerRecords),
+	// Built first and closed last, so the features of a Turn outlive it.
+	Layer.provideMerge(BotFeatures.layer),
 	Layer.provide(Layer.merge(Sandbox.layer, ActionPolicy.layer)),
 )
 

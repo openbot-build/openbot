@@ -382,26 +382,6 @@ const serverLayers: Readonly<Record<string, number>> = {
 	"server-development": 15,
 }
 
-/**
- * The Chat features still build the tools of the other features by name. The
- * bot features of the next step take their place, and then this list goes.
- */
-const virtualExceptions: ReadonlyArray<readonly [string, string]> = Arr.flatMap(
-	["plugin-chats/ChatFeatures.ts", "plugin-chats/ExecutionFeatures.ts"],
-	(from) =>
-		Arr.map(
-			[
-				"plugin-apps/AppTools.ts",
-				"plugin-bots/BotTools.ts",
-				"plugin-bots/WorkflowTools.ts",
-				"plugin-channels/ChannelTools.ts",
-				"plugin-computers/ComputerTools.ts",
-				"plugin-work/WorkTools.ts",
-			],
-			(to) => [from, to] as const,
-		),
-)
-
 const serverFolder = (file: string): Option.Option<string> => {
 	const local = Str.replace("packages/openbot/src/", "")(file)
 	if (local === file || !Str.includes("/")(local)) return Option.none()
@@ -420,14 +400,6 @@ const breaksLayers = (file: string, resolved: string): boolean => {
 	const low = layer(from.value)
 	const high = layer(to.value)
 	if (low === undefined || high === undefined) return true
-	const local = (path: string) => Str.replace("packages/openbot/src/", "")(path)
-	if (
-		Arr.some(
-			virtualExceptions,
-			([a, b]) => a === local(file) && b === local(resolved),
-		)
-	)
-		return false
 	return high >= low
 }
 

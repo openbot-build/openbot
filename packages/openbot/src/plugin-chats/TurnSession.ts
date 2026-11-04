@@ -51,6 +51,7 @@ import { Store, type Fence } from "../server-execution/execution/Store.ts"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import { ExecutionFeatures } from "./ExecutionFeatures.ts"
+import type * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import * as Compaction from "./Compaction.ts"
@@ -70,8 +71,10 @@ const Reference = Schema.Struct({
 })
 
 export interface Service {
+	/** Runs one phase of a Turn with the features that the Turn pinned. */
 	readonly run: (
 		fence: Fence,
+		pins: ReadonlyArray<BotFeatures.Pin>,
 	) => Effect.Effect<
 		undefined,
 		| BotDomain.BotNotFound
@@ -127,7 +130,10 @@ const make = Effect.gen(function* () {
 		stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore, ...Todos.stores },
 		schemaVersion: "chat/1",
 	})
-	const run = Effect.fn("TurnSession.run")(function* (fence: Fence) {
+	const run = Effect.fn("TurnSession.run")(function* (
+		fence: Fence,
+		pins: ReadonlyArray<BotFeatures.Pin>,
+	) {
 		yield* calls.authorize(fence, "replay")
 		const saved = yield* executions.loadMember(fence)
 		if (
@@ -157,11 +163,12 @@ const make = Effect.gen(function* () {
 		const isLive = ChatHost.hostState(view.chat).kind === "live"
 		if (isLive) yield* live.wait(fence, chat, record.settings.model)
 		yield* calls.ready(fence)
-		const features = yield* featureScopes.open(fence, {
-			identity: saved.identity,
-			chat,
-			turn,
-		})
+		// The phase scope holds the pinned features until the phase ends.
+		const features = yield* featureScopes.open(
+			fence,
+			{ identity: saved.identity, chat, turn },
+			pins,
+		)
 		const selected =
 			record.activeAction === undefined
 				? record.input
@@ -278,7 +285,7 @@ const make = Effect.gen(function* () {
 			)
 			let fixed = registered
 			if (actionDefinition !== undefined) {
-				const restored = featureScopes.restore(fence, actionDefinition)
+				const restored = features.restore(actionDefinition)
 				if (Option.isNone(restored))
 					return yield* Execution.Conflict.make({ id: fence.id })
 				const entry = restored.value

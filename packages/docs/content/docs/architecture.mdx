@@ -82,6 +82,14 @@ Turn, Tool, App, and Delegation use this loop, as do simple workflows. Features
 keep their child work, time limits, and business transactions. `Runner` owns
 takeover and storage retries; `RunScope` owns phase resources and signals.
 
+Features give their Bot tools to a Turn through `BotFeatures`. Each feature has
+a fixed id, a version, and a merge order. The first phase of a Turn saves the
+list of features, with their versions and settings, in the workflow journal.
+Every later phase and every replay uses that list. A feature with a new version
+stops an old Turn with a conflict. A Turn waits, and holds nothing, while a
+feature in its list is absent. A new feature is used only by new Turns. Two
+features with the same id stop the server start.
+
 Each work phase runs in an `Activity` named by its saved phase and generation.
 The engine stores only a safe phase result, such as an error ID or a pause
 reference. Inputs, outside results, and full failures stay in sealed records. A

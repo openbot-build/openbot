@@ -5461,7 +5461,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				)
 				const featureLayer = Layer.mock(ExecutionFeatures, {
 					open: () => Effect.die("A saved tool must not build the tool list."),
-					restore: () => Option.none(),
+					restore: () => Effect.succeedNone,
 					restoreTool: (fence, frame, { host: register, policy }) =>
 						Effect.gen(function* () {
 							const host = yield* register
@@ -7439,7 +7439,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 													open: () => Effect.die("Must restore the saved tool"),
 													restoreTool: () =>
 														Effect.die("Must use the saved App or Code tool."),
-													restore: workflows.restore,
+													restore: (fence, definition) =>
+														Effect.succeed(
+															workflows.restore(fence, definition),
+														),
 												}),
 												Layer.mock(TurnContext.TurnContext, {}),
 												HostTools.none,
