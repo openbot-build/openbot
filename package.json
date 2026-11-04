@@ -34,8 +34,8 @@
 	},
 	"pnpm": {
 		"overrides": {
-			"@graftland/graft": "0.2.0-beta.1",
-			"@graftland/loader": "0.2.0-beta.1"
+			"@graftland/graft": "0.3.2",
+			"@graftland/loader": "0.3.2"
 		}
 	}
 }

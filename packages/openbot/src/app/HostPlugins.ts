@@ -38,7 +38,7 @@ export const loader = (store: Loader.Store) =>
 	})
 
 /**
- * The published types of `Loader.start` in @graftland/loader 0.2.0-beta.1
+ * The published types of `Loader.start` in @graftland/loader 0.3.2
  * are `Effect<void, unknown, unknown>`: the build of the package lost the
  * types of its source. The source needs only graft and a scope. It fails only
  * when the entries are not valid or when its key is published already.
