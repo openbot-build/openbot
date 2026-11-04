@@ -1,6 +1,7 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
-import { WorkflowEngine } from "effect/workflow"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Chat, Turn } from "@openbot-build/core"
@@ -195,14 +196,14 @@ it.effect(
 	"a service cannot use member work and a member cannot use service work",
 	() =>
 		Effect.gen(function* () {
-			const registry = yield* Engine.Registry
+			const registry = yield* Workflows.Workflows
 			const service = ServiceId.make("index")
 			const key = { namespace: "test", id: Execution.Id.make("work") }
 			const memberWork = Engine.define("member-test")
 			const serviceWork = Engine.define("service-test")
 			const allowed = yield* Ref.make(true)
-			yield* registry.register(memberWork, () => Effect.void)
-			yield* registry.registerService(serviceWork, service, () =>
+			yield* WorkflowsFixture.register(memberWork, () => Effect.void)
+			yield* WorkflowsFixture.registerService(serviceWork, service, () =>
 				Ref.get(allowed).pipe(
 					Effect.flatMap((value) =>
 						value ? Effect.void : Effect.fail(Execution.Forbidden.make({})),
@@ -231,9 +232,5 @@ it.effect(
 					yield* second.authorize(key, actor, "replay").pipe(Effect.flip),
 				),
 			)
-		}).pipe(
-			Effect.provide(
-				Engine.layerRegistry.pipe(Layer.provide(WorkflowEngine.layerMemory)),
-			),
-		),
+		}).pipe(Effect.provide(Workflows.layer)),
 )

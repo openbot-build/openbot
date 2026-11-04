@@ -33,6 +33,8 @@ import * as ImportedWorkflow from "../src/plugin-imported/ImportedWorkflow.ts"
 import * as Legacy from "../src/server-kernel/imported/LegacyV1.ts"
 import * as Commands from "../src/server-execution/execution/Commands.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
@@ -187,15 +189,24 @@ const setup = Effect.fn(function* (
 		),
 	)
 	const context = yield* Layer.build(
-		Layer.merge(Commands.layer, ImportedWorkflow.layer).pipe(
-			Layer.provideMerge(Engine.layerRegistry),
-			Layer.provide(WorkflowEngine.layerMemory),
+		Layer.merge(
+			Commands.layer,
+			EngineHost.layerHandlers.pipe(Layer.provideMerge(ImportedWorkflow.layer)),
+		).pipe(
+			Layer.provideMerge(Workflows.layer),
+			Layer.provideMerge(WorkflowEngine.layerMemory),
 			Layer.provide(policy),
 			Layer.provide(Layer.mock(Bots, { find: () => Effect.succeedNone })),
 		),
 	)
 	const commands = Context.get(context, Commands.Commands)
-	const registry = Context.get(context, Engine.Registry)
+	const registry = Context.get(context, Workflows.Workflows)
+	const engine = Context.get(context, WorkflowEngine.WorkflowEngine)
+	/** Sends a decision signal to the engine, as the outbox does. */
+	const signal = (id: string) =>
+		Engine.transport(ImportedWorkflow.workflow)
+			.signal(key, id)
+			.pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine))
 	const calls = yield* store.calls(key)
 	const decision = (
 		index: number,
@@ -218,6 +229,7 @@ const setup = Effect.fn(function* (
 		decision,
 		commands,
 		registry,
+		signal,
 		store,
 		sql,
 	}
@@ -502,10 +514,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						)).events.length,
 						0,
 					)
-					const registration = Option.getOrThrow(
-						yield* test.registry.get(Imported.workflowName),
-					)
-					yield* registration.signal(test.key, "old-decision")
+					yield* test.signal("old-decision")
 					assert.deepEqual(
 						yield* test.commands.get(test.key.id, test.actor),
 						first,

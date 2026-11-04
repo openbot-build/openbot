@@ -33,7 +33,7 @@ import {
 import { LanguageModel, Response } from "effect/ai"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
 import * as LiveConnections from "../src/plugin-chats/live/LiveConnections.ts"
-import { Registry } from "../src/server-execution/execution/Engine.ts"
+import { Workflows } from "../src/server-execution/execution/Workflows.ts"
 import * as Send from "../src/server-execution/execution/Send.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import { Directory } from "../src/server-execution/resources/Directory.ts"
@@ -55,12 +55,9 @@ const auth = Authorizer.layer(Authorization.Auth, {
 })
 const services = Send.layer.pipe(
 	Layer.provideMerge(
-		Layer.mock(Registry, {
+		Layer.mock(Workflows, {
 			get: () =>
 				Effect.succeedSome({
-					start: () => Effect.void,
-					cancel: () => Effect.void,
-					signal: () => Effect.void,
 					authorize: () => Effect.void,
 				}),
 		}),

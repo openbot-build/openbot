@@ -299,6 +299,8 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 服务时，必须为每个新节点配置独立主机名。`compose.check.yaml`
 中的两个节点展示了这种配置。
 
+所有节点运行同一个 OpenBot 版本。如果某个节点没有某个工作流，发给它的消息会继续等待，不会失败。之后由拥有该工作流的节点处理。
+
 所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/configuration#修改如何到达每个实例)。迁移程序和设置程序只运行一次，不要在每个实例上都运行。
 
 ---

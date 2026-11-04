@@ -1,7 +1,8 @@
 import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
 import * as CleanupWorkflow from "../src/plugin-apps/GrantCleanupWorkflow.ts"
 import { AppNetwork } from "../src/apps-contract/apps/AppNetwork.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Runner from "../src/server-execution/execution/Runner.ts"
 import * as RunScope from "../src/server-execution/execution/RunScope.ts"
@@ -582,11 +583,12 @@ layer(services, { excludeTestServices: true })((it) => {
 						lateKey.id,
 					)
 					const requests = yield* Ref.make(0)
-					const runtime = CleanupWorkflow.layer.pipe(
+					const runtime = EngineHost.layerHandlers.pipe(
+						Layer.provideMerge(CleanupWorkflow.layer),
 						Layer.provideMerge(
 							Layer.mergeAll(Calls.layer, Runner.layer, RunScope.layer),
 						),
-						Layer.provideMerge(Engine.layerRegistry),
+						Layer.provideMerge(Workflows.layer),
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 						Layer.provide(
 							Layer.mock(Billing, {

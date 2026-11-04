@@ -9,6 +9,8 @@ import * as PrivateRpc from "../server-execution/transport/PrivateRpc.ts"
 import * as ExecutionLayers from "./ExecutionLayers.ts"
 import { NetAddress } from "effect/net"
 import * as ExecutionEngine from "../server-execution/execution/Engine.ts"
+import * as EngineHost from "../server-execution/execution/EngineHost.ts"
+import * as Workflows from "../server-execution/execution/Workflows.ts"
 import * as ExecutionStore from "../server-execution/execution/Store.ts"
 import * as ExecutionCommands from "../server-execution/execution/Commands.ts"
 import * as ExecutionObservation from "../server-execution/execution/Observation.ts"
@@ -108,20 +110,19 @@ const executionServices = (options: AppOptions) => {
 		ExecutionCommands.layer,
 		Send.layer,
 		ResourceTransport.layer.pipe(
-			Layer.provideMerge(ResourceDirectory.layer),
+			Layer.provideMerge(
+				ResourceDirectory.layer.pipe(
+					Layer.provide(ExecutionEngine.layerRunnerList),
+				),
+			),
 			Layer.provide(NodeHttpClient.layerUndici),
 		),
 	).pipe(
-		Layer.provideMerge(ExecutionEngine.layerRegistry),
+		Layer.provideMerge(Layer.merge(Workflows.layer, EngineHost.layerRpc)),
 		Layer.provideMerge(ExecutionObservation.layer),
 		Layer.provideMerge(Layer.merge(ExecutionStore.layer, ErrorRecords.layer)),
-		Layer.provideMerge(
-			ExecutionEngine.layer.pipe(
-				// Private RPC uses its own client. The App network still has its public-address guard.
-				Layer.provide(NodeHttpClient.layerUndici),
-			),
-		),
-		Layer.provide(config),
+		// The engine generation in ExecutionLayers reads the same config.
+		Layer.provideMerge(config),
 		Layer.provideMerge(Layer.succeed(PrivateRpc.Secret, options.clusterSecret)),
 	)
 }
@@ -131,9 +132,8 @@ export const layerApp = (options: AppOptions) =>
 	Layer.mergeAll(
 		ComputerWorker.layer,
 		layerApi,
-		ExecutionEngine.layerRoutes,
+		EngineHost.layerRoutes,
 		ResourceTransport.layerRoutes,
-		ExecutionEngine.layerOutbox,
 		options.routes ?? Layer.empty,
 		options.startup ?? Layer.empty,
 	).pipe(

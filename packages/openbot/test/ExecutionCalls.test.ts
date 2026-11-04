@@ -1,4 +1,6 @@
 import * as ModelFailure from "../src/models-contract/models/ModelFailure.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import * as Send from "../src/server-execution/execution/Send.ts"
 import * as Admission from "../src/server-execution/execution/Admission.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
@@ -86,7 +88,6 @@ import {
 	meterDecision,
 	CurrentCallIdentity,
 } from "../src/server-billing/billing/MeteredModel.ts"
-import { Registry } from "../src/server-execution/execution/Engine.ts"
 import * as Judge from "../src/plugin-capabilities/Judge.ts"
 import {
 	ModelRegistry,
@@ -107,20 +108,15 @@ class DecisionAllowed extends Context.Service<
 	Ref.Ref<boolean>
 >()("@openbot-build/openbot/test/ExecutionCalls.test/DecisionAllowed") {}
 const registry = Layer.effect(
-	Registry,
+	Workflows.Workflows,
 	Effect.gen(function* () {
 		const allowed = yield* Allowed
 		const advance = yield* AdvanceAllowed
 		const decide = yield* DecisionAllowed
-		return Registry.of({
-			register: () => Effect.void,
-			registerService: () => Effect.void,
+		return WorkflowsFixture.stub({
 			names: Effect.succeed(["calls"]),
 			get: () =>
 				Effect.succeedSome({
-					start: () => Effect.void,
-					cancel: () => Effect.void,
-					signal: () => Effect.void,
 					authorize: (_, __, mode) =>
 						Effect.gen(function* () {
 							if (
@@ -952,8 +948,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					const failures = yield* Ref.make(0)
 					const reserved = yield* Ref.make(0)
 					const sends = yield* Ref.make(0)
-					const registry = yield* Registry
-					const guarded = Registry.of({
+					const registry = yield* Workflows.Workflows
+					const guarded = Workflows.Workflows.of({
 						...registry,
 						get: (name) =>
 							registry.get(name).pipe(
@@ -1071,7 +1067,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							Layer.mergeAll(
 								billing,
 								Calls.layer.pipe(
-									Layer.provide(Layer.succeed(Registry, guarded)),
+									Layer.provide(Layer.succeed(Workflows.Workflows, guarded)),
 									Layer.fresh,
 								),
 							),
@@ -1901,7 +1897,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 		it.effect(`a paused send releases its phase before ${end}`, () =>
 			Effect.gen(function* () {
 				const store = yield* Store.Store
-				const entries = yield* Registry
+				const entries = yield* Workflows.Workflows
 				const owner = yield* start(`pause-owner-${end}`)
 				const child = yield* start(`pause-child-${end}`)
 				const paused = yield* Ref.make(false)
@@ -1911,8 +1907,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const caught = yield* Ref.make(false)
 				const released = yield* Deferred.make<void>()
 				const admitted = Layer.succeed(
-					Registry,
-					Registry.of({
+					Workflows.Workflows,
+					Workflows.Workflows.of({
 						...entries,
 						get: (name) =>
 							entries.get(name).pipe(

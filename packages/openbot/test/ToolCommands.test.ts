@@ -112,8 +112,10 @@ import * as CallFrame from "../src/conversation-contract/chats/CallFrame.ts"
 import * as ToolOrigins from "../src/conversation-contract/chats/ToolOrigins.ts"
 import * as ToolCommands from "../src/plugin-chats/ToolCommands.ts"
 import * as CallsModule from "../src/server-execution/execution/Calls.ts"
-import { Registry } from "../src/server-execution/execution/Engine.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import * as Runner from "../src/server-execution/execution/Runner.ts"
 import * as RunScope from "../src/server-execution/execution/RunScope.ts"
 import * as ToolWorkflow from "../src/plugin-chats/ToolWorkflow.ts"
@@ -2500,12 +2502,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				yield* test.store.sending(task, call.id)
 				const commits = yield* Ref.make(0)
 				const sends = yield* Ref.make(0)
-				const registry = Layer.mock(Registry, {
+				const registry = WorkflowsFixture.layerStub({
 					get: () =>
 						Effect.succeedSome({
-							start: () => Effect.void,
-							cancel: () => Effect.void,
-							signal: () => Effect.void,
 							authorize: () => Effect.void,
 							admit: admission.check,
 						}),
@@ -2619,12 +2618,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						.set({ status: "confirmed", costMicros: 100 })
 						.where(eq(usageEvents.id, `${task.id}:model:0`))
 					assert.deepEqual(yield* test.store.events(owner, cursor), [])
-					const registry = Layer.mock(Registry, {
+					const registry = WorkflowsFixture.layerStub({
 						get: () =>
 							Effect.succeedSome({
-								start: () => Effect.void,
-								cancel: () => Effect.void,
-								signal: () => Effect.void,
 								authorize: () => Effect.void,
 								admit: admission.check,
 							}),
@@ -2725,7 +2721,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				),
 			),
 		).pipe(
-			Layer.provideMerge(Engine.layerRegistry),
+			Layer.provideMerge(Workflows.layer),
 			Layer.provideMerge(
 				Records.layer.pipe(
 					Layer.provide(
@@ -2735,7 +2731,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			),
 			Layer.provideMerge(WorkflowEngine.layerMemory),
 		)
-		const runtime = DelegationWorkflow.layer.pipe(
+		const runtime = EngineHost.layerHandlers.pipe(
+			Layer.provideMerge(DelegationWorkflow.layer),
 			Layer.provide(
 				Layer.mock(WorkAdmission.WorkAdmission, { check: () => Effect.void }),
 			),
@@ -2873,7 +2870,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 						),
 					).pipe(
-						Layer.provideMerge(Engine.layerRegistry),
+						Layer.provideMerge(Workflows.layer),
 						Layer.provideMerge(
 							Records.layer.pipe(
 								Layer.provide(
@@ -2883,7 +2880,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 					)
-					const runtime = DelegationWorkflow.layer.pipe(
+					const runtime = EngineHost.layerHandlers.pipe(
+						Layer.provideMerge(DelegationWorkflow.layer),
 						Layer.provide(
 							Layer.mock(WorkAdmission.WorkAdmission, {
 								check: () => Effect.void,
@@ -2947,10 +2945,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								Execution.CommandKey.make("stop"),
 								saved.identity.actor,
 							)
-							const registration = Option.getOrThrow(
-								yield* (yield* Registry).get(DelegationCommands.workflowName),
-							)
-							yield* registration.cancel(
+							yield* Engine.transport(DelegationWorkflow.workflow).cancel(
 								key,
 								(yield* test.store.loadMember(key)).cancelEpoch,
 							)
@@ -3496,7 +3491,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					const appsLayer = AppCommands.layer.pipe(Layer.provide(appPolicy))
 					const base = CallsModule.layer.pipe(
 						Layer.provideMerge(Records.layer),
-						Layer.provideMerge(Engine.layerRegistry),
+						Layer.provideMerge(Workflows.layer),
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 					)
 					const sessionLayer = AppSessionModule.layer.pipe(
@@ -3618,7 +3613,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							input,
 						)
 						const key = { namespace: source.namespace, id: receipt.executionId }
-						yield* (yield* Registry).register(
+						yield* WorkflowsFixture.register(
 							AppWorkflow.workflow,
 							apps.authorize,
 							apps.decide,
@@ -3903,7 +3898,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 						),
 					).pipe(
-						Layer.provideMerge(Engine.layerRegistry),
+						Layer.provideMerge(Workflows.layer),
 						Layer.provideMerge(
 							Records.layer.pipe(
 								Layer.provide(
@@ -3913,7 +3908,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 					)
-					const runtime = AppWorkflow.layer.pipe(
+					const runtime = EngineHost.layerHandlers.pipe(
+						Layer.provideMerge(AppWorkflow.layer),
 						Layer.provide(
 							Layer.succeed(AppCommands.AppCommands, {
 								...apps,
@@ -3934,9 +3930,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Layer.provideMerge(session.pipe(Layer.provideMerge(base))),
 					)
 					yield* Effect.gen(function* () {
-						const registered = Option.getOrThrow(
-							yield* (yield* Registry).get(AppCommands.workflowName),
-						)
+						const registered = Engine.transport(AppWorkflow.workflow)
 						const observation = yield* Observation.Observation
 						yield* AppWorkflow.workflow.execute(key, { discard: true })
 						if (Option.isSome(approval)) {
@@ -4799,7 +4793,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Layer.provide(Observation.layer),
 						Layer.provideMerge(
 							CallsModule.layer.pipe(
-								Layer.provideMerge(Engine.layerRegistry),
+								Layer.provideMerge(Workflows.layer),
 								Layer.provide(
 									Records.layer.pipe(
 										Layer.provide(
@@ -4813,12 +4807,14 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 					)
 					yield* Effect.gen(function* () {
-						const registry = yield* Registry
-						yield* registry.register(
+						yield* WorkflowsFixture.register(
 							Engine.define("openbot.chat-turn"),
 							() => Effect.void,
 						)
-						yield* registry.register(ToolWorkflow.workflow, () => Effect.void)
+						yield* WorkflowsFixture.register(
+							ToolWorkflow.workflow,
+							() => Effect.void,
+						)
 						const tools = yield* TurnTools.TurnTools
 						const steps = yield* ToolSteps.ToolSteps
 						const parts = yield* Ref.make<
@@ -5339,7 +5335,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					),
 					RunScope.layer.pipe(Layer.provide(Observation.layer)),
 				).pipe(
-					Layer.provideMerge(Engine.layerRegistry),
+					Layer.provideMerge(Workflows.layer),
 					Layer.provideMerge(
 						Records.layer.pipe(
 							Layer.provide(
@@ -5349,7 +5345,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					),
 					Layer.provideMerge(WorkflowEngine.layerMemory),
 				)
-				const services = ToolWorkflow.layer.pipe(
+				const services = EngineHost.layerHandlers.pipe(
+					Layer.provideMerge(ToolWorkflow.layer),
 					Layer.provide(
 						Layer.succeed(ToolCommands.ToolCommands, {
 							...test.tools,
@@ -5359,7 +5356,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					Layer.provideMerge(mockSession.pipe(Layer.provideMerge(base))),
 				)
 				yield* Effect.gen(function* () {
-					const registry = yield* Registry
+					const registry = yield* Workflows.Workflows
 					const registered = yield* registry.get(ToolCommands.workflowName)
 					assert.ok(Option.isSome(registered))
 					yield* ToolWorkflow.workflow.execute(key, { discard: true })
@@ -5371,7 +5368,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							userId: "speaker",
 						})
 						const state = yield* test.store.loadMember(key)
-						yield* registered.value.cancel(key, state.cancelEpoch)
+						yield* Engine.transport(ToolWorkflow.workflow).cancel(
+							key,
+							state.cancelEpoch,
+						)
 					}
 					if (mode !== "complete") {
 						const call = yield* Effect.gen(function* () {
@@ -5414,7 +5414,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								mode === "retry" ? "retry" : "stop",
 								{ kind: "member", organizationId: "org", userId: "speaker" },
 							)
-							yield* registered.value.signal(key, decisionId)
+							yield* Engine.transport(ToolWorkflow.workflow).signal(
+								key,
+								decisionId,
+							)
 						}
 					}
 					yield* ToolWorkflow.workflow
@@ -5513,7 +5516,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				})
 				const realCalls = CallsModule.layer.pipe(
 					Layer.provide(
-						Layer.mock(Registry, {
+						WorkflowsFixture.layerStub({
 							get: () =>
 								Effect.succeedSome({
 									authorize: () =>
@@ -5524,9 +5527,6 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 													: Effect.fail(Execution.Forbidden.make({})),
 											),
 										),
-									start: () => Effect.void,
-									cancel: () => Effect.void,
-									signal: () => Effect.void,
 								}),
 						}),
 					),
@@ -5721,10 +5721,13 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 						),
 					),
-					Layer.provideMerge(Engine.layerRegistry),
+					Layer.provideMerge(Workflows.layer),
 					Layer.provideMerge(WorkflowEngine.layerMemory),
 				)
-				const services = ToolNoticeWorkflow.layer.pipe(Layer.provideMerge(base))
+				const services = EngineHost.layerHandlers.pipe(
+					Layer.provideMerge(ToolNoticeWorkflow.layer),
+					Layer.provideMerge(base),
+				)
 				yield* Effect.gen(function* () {
 					const notices = yield* ToolNotices.ToolNotices
 					if (mode === "deliver") {
@@ -6364,7 +6367,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					}),
 				),
 				Layer.provideMerge(Layer.merge(CallsModule.layer, Observation.layer)),
-				Layer.provideMerge(Engine.layerRegistry),
+				Layer.provideMerge(Workflows.layer),
 				Layer.provideMerge(Records.layer),
 				Layer.provideMerge(WorkflowEngine.layerMemory),
 				Layer.provide(SandboxModule.layer),
@@ -6375,7 +6378,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			yield* Effect.gen(function* () {
 				const code = yield* CodeCommands.CodeCommands
 				const runner = yield* CodeProgram.CodeProgram
-				yield* (yield* Registry).register(
+				yield* WorkflowsFixture.register(
 					CodeWorkflow.workflow,
 					code.authorize,
 					code.decide,
@@ -6545,7 +6548,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					),
 				)
 				const base = Layer.mergeAll(CallsModule.layer, Observation.layer).pipe(
-					Layer.provideMerge(Engine.layerRegistry),
+					Layer.provideMerge(Workflows.layer),
 					Layer.provideMerge(Records.layer),
 					Layer.provideMerge(WorkflowEngine.layerMemory),
 				)
@@ -6561,13 +6564,12 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				yield* Effect.gen(function* () {
 					const code = yield* CodeCommands.CodeCommands
 					const apps = yield* AppCommands.AppCommands
-					const registry = yield* Registry
-					yield* registry.register(
+					yield* WorkflowsFixture.register(
 						CodeWorkflow.workflow,
 						code.authorize,
 						code.decide,
 					)
-					yield* registry.register(
+					yield* WorkflowsFixture.register(
 						AppWorkflow.workflow,
 						apps.authorize,
 						apps.decide,
@@ -6813,11 +6815,12 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 					),
 				).pipe(
-					Layer.provideMerge(Engine.layerRegistry),
+					Layer.provideMerge(Workflows.layer),
 					Layer.provideMerge(Records.layer),
 					Layer.provideMerge(WorkflowEngine.layerMemory),
 				)
-				const runtime = CodeWorkflow.layer.pipe(
+				const runtime = EngineHost.layerHandlers.pipe(
+					Layer.provideMerge(CodeWorkflow.layer),
 					Layer.provideMerge(
 						CodeProgram.layer.pipe(Layer.provide(Layer.mock(Vaults, {}))),
 					),
@@ -6831,8 +6834,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				yield* Effect.gen(function* () {
 					const code = yield* CodeCommands.CodeCommands
 					const apps = yield* AppCommands.AppCommands
-					const registry = yield* Registry
-					yield* registry.register(
+					yield* WorkflowsFixture.register(
 						AppWorkflow.workflow,
 						apps.authorize,
 						apps.decide,
@@ -6900,9 +6902,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								Execution.CommandKey.make("stop-code"),
 								record.identity.actor,
 							)
-							yield* Option.getOrThrow(
-								yield* registry.get(CodeCommands.workflowName),
-							).cancel(key, (yield* test.store.loadMember(key)).cancelEpoch)
+							yield* Engine.transport(CodeWorkflow.workflow).cancel(
+								key,
+								(yield* test.store.loadMember(key)).cancelEpoch,
+							)
 						}
 						yield* observation.observe(child, 0).pipe(
 							Stream.filter(
@@ -7070,11 +7073,12 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 						),
 					).pipe(
-						Layer.provideMerge(Engine.layerRegistry),
+						Layer.provideMerge(Workflows.layer),
 						Layer.provideMerge(Records.layer),
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 					)
-					const runtime = ToolWorkflow.layer.pipe(
+					const runtime = EngineHost.layerHandlers.pipe(
+						Layer.provideMerge(ToolWorkflow.layer),
 						Layer.provide(
 							Layer.succeed(ToolCommands.ToolCommands, {
 								...test.tools,
@@ -7097,9 +7101,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 								Execution.CommandKey.make("stop"),
 								(yield* test.store.loadMember(key)).identity.actor,
 							)
-							yield* Option.getOrThrow(
-								yield* (yield* Registry).get(ToolCommands.workflowName),
-							).cancel(key, (yield* test.store.loadMember(key)).cancelEpoch)
+							yield* Engine.transport(ToolWorkflow.workflow).cancel(
+								key,
+								(yield* test.store.loadMember(key)).cancelEpoch,
+							)
 						}
 						const observation = yield* Observation.Observation
 						yield* observation.observe(child, 0).pipe(
@@ -7166,7 +7171,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Layer.provideMerge(
 							Layer.merge(CallsModule.layer, Observation.layer),
 						),
-						Layer.provideMerge(Engine.layerRegistry),
+						Layer.provideMerge(Workflows.layer),
 						Layer.provideMerge(Records.layer),
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 						Layer.provide(
@@ -7174,7 +7179,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						),
 					)
 					yield* Effect.gen(function* () {
-						yield* (yield* Registry).register(
+						yield* WorkflowsFixture.register(
 							Engine.define("openbot.chat-turn"),
 							() => Effect.void,
 						)
@@ -7262,7 +7267,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Layer.provideMerge(
 							Layer.merge(CallsModule.layer, Observation.layer),
 						),
-						Layer.provideMerge(Engine.layerRegistry),
+						Layer.provideMerge(Workflows.layer),
 						Layer.provideMerge(Records.layer),
 						Layer.provideMerge(WorkflowEngine.layerMemory),
 					)
@@ -7275,18 +7280,20 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						const workflows = yield* WorkflowTools.make
 						const code = yield* CodeCommands.CodeCommands
 						const apps = yield* AppCommands.AppCommands
-						const registry = yield* Registry
-						yield* registry.register(
+						yield* WorkflowsFixture.register(
 							Engine.define("openbot.chat-turn"),
 							() => Effect.void,
 						)
-						yield* registry.register(ToolWorkflow.workflow, () => Effect.void)
-						yield* registry.register(
+						yield* WorkflowsFixture.register(
+							ToolWorkflow.workflow,
+							() => Effect.void,
+						)
+						yield* WorkflowsFixture.register(
 							AppWorkflow.workflow,
 							apps.authorize,
 							apps.decide,
 						)
-						yield* registry.register(
+						yield* WorkflowsFixture.register(
 							CodeWorkflow.workflow,
 							code.authorize,
 							code.decide,

@@ -1,4 +1,6 @@
 import { PgClient } from "@effect/sql-pg"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
@@ -46,7 +48,6 @@ import * as Db from "../src/server-database/Database.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
-import { Registry } from "../src/server-execution/execution/Engine.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import { CallContext } from "../src/server-execution/execution/CallContext.ts"
 import * as ToolControls from "../src/plugin-chats/ToolControls.ts"
@@ -459,21 +460,16 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					Layer.provideMerge(Calls.layer),
 					Layer.provide(
 						Layer.effect(
-							Registry,
+							Workflows.Workflows,
 							Effect.map(TurnAccess.TurnAccess, (access) =>
-								Registry.of({
+								WorkflowsFixture.stub({
 									names: Effect.succeed(["openbot.chat-turn"]),
-									register: () => Effect.void,
-									registerService: () => Effect.void,
 									get: () =>
 										Effect.succeedSome({
 											authorize: (key, actor, mode) =>
 												actor.kind === "service"
 													? Effect.fail(Execution.Forbidden.make({}))
 													: access.authorize(key, actor, mode),
-											start: () => Effect.void,
-											cancel: () => Effect.void,
-											signal: () => Effect.void,
 										}),
 								}),
 							),
@@ -1080,12 +1076,9 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						Effect.provide(
 							Calls.layer.pipe(
 								Layer.provide(
-									Layer.mock(Registry, {
+									WorkflowsFixture.layerStub({
 										get: () =>
 											Effect.succeedSome({
-												start: () => Effect.void,
-												cancel: () => Effect.void,
-												signal: () => Effect.void,
 												authorize: (key, actor, mode) =>
 													actor.kind === "service"
 														? Effect.fail(Execution.Forbidden.make({}))

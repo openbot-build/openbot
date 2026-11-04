@@ -1,7 +1,7 @@
 import type { Paused } from "./Admission.ts"
 import { Execution, ExecutionIdentity } from "@openbot-build/domain"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { Registry } from "./Engine.ts"
+import { Workflows } from "./Workflows.ts"
 import { Store } from "./Store.ts"
 
 /** A remote adapter reads the saved identity from this call before sending. */
@@ -53,7 +53,7 @@ export class Access extends Context.Service<Access, Service>()(
 
 const make = Effect.gen(function* () {
 	const store = yield* Store
-	const registry = yield* Registry
+	const registry = yield* Workflows
 	const resolve = Effect.fn("SendAccess.resolve")(function* (
 		authority: Authority,
 	) {

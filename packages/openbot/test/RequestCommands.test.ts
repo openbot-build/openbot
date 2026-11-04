@@ -91,6 +91,9 @@ import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Commands from "../src/server-execution/execution/Commands.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { WorkflowEngine } from "effect/workflow"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
@@ -141,16 +144,15 @@ const source = Layer.unwrap(
 )
 const registry = Layer.effectDiscard(
 	Effect.gen(function* () {
-		const registry = yield* Engine.Registry
 		const decisions = yield* Decisions.RequestCommands
-		yield* registry.register(
+		yield* WorkflowsFixture.register(
 			Engine.define(Decisions.workflowName),
 			decisions.authorize,
 			decisions.decide,
 		)
 	}),
 ).pipe(
-	Layer.provideMerge(Engine.layerRegistry),
+	Layer.provideMerge(Workflows.layer),
 	Layer.provideMerge(Decisions.layer),
 	Layer.provide(WorkflowEngine.layerMemory),
 )
@@ -2573,14 +2575,15 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 						),
 					),
-					Layer.provideMerge(Engine.layerRegistry),
+					// The shared test layer already put a policy-only entry for
+					// this workflow in its registry. A nested provide reuses that
+					// registry, so this test makes a fresh one. There, the real
+					// contribution of RequestWorkflow.layer is the only entry.
+					Layer.provideMerge(Layer.fresh(Workflows.layer)),
 					Layer.provideMerge(WorkflowEngine.layerMemory),
 				)
 				yield* Effect.gen(function* () {
-					const registry = yield* Engine.Registry
-					const registered = Option.getOrThrow(
-						yield* registry.get(Decisions.workflowName),
-					)
+					const registered = Engine.transport(RequestWorkflow.workflow)
 					yield* RequestWorkflow.workflow.execute(test.key, { discard: true })
 					const child = yield* Effect.gen(function* () {
 						while (true) {
@@ -2680,7 +2683,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					assert.isTrue(ChatHost.hostState(Option.getOrThrow(view)).closed)
 				}).pipe(
 					Effect.provide(
-						RequestWorkflow.layer.pipe(
+						EngineHost.layerHandlers.pipe(
+							Layer.provideMerge(RequestWorkflow.layer),
 							Layer.provideMerge(base),
 							Layer.provideMerge(Inputs.layer),
 						),
@@ -2716,10 +2720,15 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 						),
 					),
-					Layer.provideMerge(Engine.layerRegistry),
+					// The shared test layer already put a policy-only entry for
+					// this workflow in its registry. A nested provide reuses that
+					// registry, so this test makes a fresh one. There, the real
+					// contribution of RequestWorkflow.layer is the only entry.
+					Layer.provideMerge(Layer.fresh(Workflows.layer)),
 					Layer.provideMerge(WorkflowEngine.layerMemory),
 				)
-				const services = RequestWorkflow.layer.pipe(
+				const services = EngineHost.layerHandlers.pipe(
+					Layer.provideMerge(RequestWorkflow.layer),
 					Layer.provideMerge(base),
 					Layer.provide(
 						Layer.mock(Reviews.RequestReviews, {
@@ -2732,10 +2741,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					),
 				)
 				yield* Effect.gen(function* () {
-					const registry = yield* Engine.Registry
-					const registered = Option.getOrThrow(
-						yield* registry.get(Decisions.workflowName),
-					)
+					const registered = Engine.transport(RequestWorkflow.workflow)
 					const workflowId = yield* RequestWorkflow.workflow.execute(test.key, {
 						discard: true,
 					})

@@ -1,7 +1,8 @@
 import { type Caller, Execution } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Option, Stream } from "effect"
 import { Store } from "./Store.ts"
-import { Registry, type Access } from "./Engine.ts"
+import type { Access } from "./Engine.ts"
+import { Workflows, type Unavailable } from "./Workflows.ts"
 import { Observation } from "./Observation.ts"
 
 export interface Service {
@@ -10,7 +11,10 @@ export interface Service {
 		actor: Caller,
 	) => Effect.Effect<
 		Execution.Record,
-		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| Unavailable
 	>
 	readonly events: (
 		id: Execution.Id,
@@ -27,7 +31,10 @@ export interface Service {
 			afterSequence: number
 			terminal: boolean
 		},
-		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| Unavailable
 	>
 	readonly observe: (
 		id: Execution.Id,
@@ -41,7 +48,10 @@ export interface Service {
 				createdAt: number
 				body: Execution.EventBody
 		  },
-		Execution.Forbidden | Execution.NotFound | Execution.StorageError
+		| Execution.Forbidden
+		| Execution.NotFound
+		| Execution.StorageError
+		| Unavailable
 	>
 	readonly cancel: (
 		id: Execution.Id,
@@ -54,6 +64,7 @@ export interface Service {
 		| Execution.KeyConflict
 		| Execution.NotFound
 		| Execution.StorageError
+		| Unavailable
 	>
 	readonly decide: (
 		id: Execution.Id,
@@ -70,6 +81,7 @@ export interface Service {
 		| Execution.KeyConflict
 		| Execution.NotFound
 		| Execution.StorageError
+		| Unavailable
 	>
 }
 
@@ -79,7 +91,7 @@ export class Commands extends Context.Service<Commands, Service>()(
 
 const make = Effect.gen(function* () {
 	const store = yield* Store
-	const registry = yield* Registry
+	const workflows = yield* Workflows
 	const observation = yield* Observation
 	/** Every entry point uses the feature's current resource and permission checks. */
 	const check = Effect.fn("ExecutionCommands.check")(function* (
@@ -89,9 +101,8 @@ const make = Effect.gen(function* () {
 	) {
 		const key = yield* store.locate(id, actor.organizationId)
 		const execution = yield* store.load(key)
-		const feature = yield* registry.get(execution.workflow)
-		if (Option.isNone(feature)) return yield* Execution.Forbidden.make({})
-		yield* feature.value.authorize(key, actor, access)
+		const feature = yield* workflows.require(execution.workflow)
+		yield* feature.authorize(key, actor, access)
 		return key
 	})
 	const get = Effect.fn("ExecutionCommands.get")(function* (
@@ -149,9 +160,8 @@ const make = Effect.gen(function* () {
 	) {
 		const key = yield* check(id, actor, "decide")
 		const execution = yield* store.load(key)
-		const feature = yield* registry.get(execution.workflow)
-		if (Option.isNone(feature)) return yield* Execution.Forbidden.make({})
-		return yield* feature.value.decide === undefined
+		const feature = yield* workflows.require(execution.workflow)
+		return yield* feature.decide === undefined
 			? store.decide(
 					key,
 					input.commandKey,
@@ -159,7 +169,7 @@ const make = Effect.gen(function* () {
 					input.answer,
 					actor,
 				)
-			: feature.value.decide(key, actor, input)
+			: feature.decide(key, actor, input)
 	})
 	return Commands.of({ get, events, observe, cancel, decide })
 })

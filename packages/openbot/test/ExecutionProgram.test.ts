@@ -19,6 +19,7 @@ import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
+import { Workflows } from "../src/server-execution/execution/Workflows.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Program from "../src/server-execution/execution/Program.ts"
 import * as Runner from "../src/server-execution/execution/Runner.ts"
@@ -36,12 +37,9 @@ const database = Layer.effectDiscard(Database.migrate).pipe(
 		),
 	),
 )
-const registry = Layer.mock(Engine.Registry, {
+const registry = Layer.mock(Workflows, {
 	get: () =>
 		Effect.succeedSome({
-			start: () => Effect.void,
-			cancel: () => Effect.void,
-			signal: () => Effect.void,
 			authorize: () => Effect.void,
 		}),
 })

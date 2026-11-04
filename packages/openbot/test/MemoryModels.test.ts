@@ -39,7 +39,7 @@ import * as MemoryLogs from "../src/plugin-bots/MemoryLogs.ts"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
-import { Registry } from "../src/server-execution/execution/Engine.ts"
+import { Workflows } from "../src/server-execution/execution/Workflows.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
@@ -78,12 +78,9 @@ const services = Layer.mergeAll(
 		),
 	),
 	Layer.provideMerge(
-		Layer.mock(Registry, {
+		Layer.mock(Workflows, {
 			get: () =>
 				Effect.succeedSome({
-					start: () => Effect.void,
-					cancel: () => Effect.void,
-					signal: () => Effect.void,
 					authorize: () => Effect.void,
 				}),
 		}),

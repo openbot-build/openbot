@@ -72,9 +72,14 @@ Zustand des neuen Besitzers nicht fortsetzen.
 
 Effect `Workflow`, `Activity`, `DurableDeferred`, `DurableClock` und
 `ClusterWorkflowEngine` liefern gespeicherte Schritte, Signale, Timer,
-Nachrichten und Knotenzuweisung. Funktionen melden ihre eigenen Workflows an.
-Die Engine hat keine Bot-, Freigabe- oder Computer-Zweige. Der eigenständige
-Core hat einen Speicher-Host ohne Wiederherstellung nach Prozessende.
+Nachrichten und Knotenzuweisung. Jede Funktion gibt ihre Workflows und deren
+Zugriffsregeln an den Dienst `Workflows`. Die Engine startet einmal, nachdem
+jede Funktion ihre Workflows gegeben hat, und sie stoppt vor ihnen. Die Engine
+hat keine Bot-, Freigabe- oder Computer-Zweige. Wenn keine geladene Funktion den
+Workflow einer Ausführung besitzt, antworten die Ausführungsrouten mit `503` und
+`FeatureUnavailable`. Der Server speichert für diese Antwort keinen
+Fehlereintrag. Der eigenständige Core hat einen Speicher-Host ohne
+Wiederherstellung nach Prozessende.
 
 `Program` hält eine Schleife für Wiederherstellung, Besitzerprüfung, Abbruch und
 Phasenfehler. Jede Funktion gibt `next` für die nächste Phase und `end` für
@@ -374,7 +379,7 @@ entfallen Referenzzähler, `keepOpen`, `current`, Methodenproxies und der
 Chat-Heartbeat-Scan. Die alte Speicher-Jobwarteschlange und der alte
 Hilfsmodellpfad sind ebenfalls weg. Turn-, Werkzeug-, Freigabe-, Delegations-,
 App-, Code-Mode-, Channel-, Trigger-, Erinnerungs- und Speicherworkflows werden
-über gemeinsame Anwendungs-Layers registriert.
+über gemeinsame Anwendungs-Layers an `Workflows` gegeben.
 
 Die alten App-Dienste `Operations` und `Invocations` sowie der Code-Mode-Runner
 mit eigenen Laufzeitrechten sind entfernt. Die App-Suche gibt Beschreibungen

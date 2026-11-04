@@ -13,6 +13,7 @@ import * as DeveloperAccess from "../apps-contract/apps/DeveloperAuthorization.t
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
+import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
 import {
 	Store,
 	storage,
@@ -236,28 +237,25 @@ export const make = Effect.gen(function* () {
 	return { authorize, decide, read }
 })
 
-export const layer = Layer.unwrap(
-	Effect.gen(function* () {
-		const registry = yield* Engine.Registry
-		const commands = yield* make
-		return workflow
-			.toLayer(() => Effect.void)
-			.pipe(
-				Layer.provideMerge(
-					Layer.effectDiscard(
-						registry.registerService(
-							workflow,
-							Imported.serviceId,
-							() => Effect.fail(Execution.Forbidden.make({})),
-							undefined,
-							commands.authorize,
-							commands,
-						),
-					),
-				),
-			)
-	}),
-)
+/** Adds the workflow and its access rules. When the scope closes, they go. */
+export const contribute = Effect.gen(function* () {
+	const workflows = yield* Workflows
+	const commands = yield* make
+	yield* workflows.contribute({
+		workflow,
+		plugin: "imported",
+		journal: 1,
+		run: () => Effect.void,
+		policy: Policy.Service({
+			serviceId: Imported.serviceId,
+			authorize: () => Effect.fail(Execution.Forbidden.make({})),
+			publicRead: commands.authorize,
+			publicDecision: commands,
+		}),
+	})
+})
+
+export const layer = Layer.effectDiscard(contribute)
 
 /** Gives `ImportedRecords` to the features that show imported history. */
 export const layerRecords = Layer.effect(

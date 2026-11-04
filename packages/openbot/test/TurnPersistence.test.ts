@@ -1,4 +1,5 @@
 import { Delegations } from "../src/conversation-contract/bots/Delegations.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import { LiveConnections } from "../src/plugin-chats/live/LiveConnections.ts"
 import { ReviewTools } from "../src/conversation-contract/capabilities/ReviewTools.ts"
@@ -46,12 +47,13 @@ import * as BotFixture from "./BotFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
-import { Registry } from "../src/server-execution/execution/Engine.ts"
 import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
 import * as ModelSteps from "../src/plugin-chats/ModelSteps.ts"
 import { Billing } from "../src/server-billing/billing/Billing.ts"
 import { WorkflowEngine } from "effect/workflow"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
 import * as Runner from "../src/server-execution/execution/Runner.ts"
 import * as RunScope from "../src/server-execution/execution/RunScope.ts"
 import * as TurnWorkflow from "../src/plugin-chats/TurnWorkflow.ts"
@@ -96,13 +98,10 @@ const services = ToolSteps.layer.pipe(
 		}),
 	),
 	Layer.provide(
-		Layer.mock(Registry, {
+		WorkflowsFixture.layerStub({
 			get: () =>
 				Effect.succeedSome({
 					authorize: () => Effect.void,
-					start: () => Effect.void,
-					cancel: () => Effect.void,
-					signal: () => Effect.void,
 				}),
 		}),
 	),
@@ -294,7 +293,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							return yield* test.executions.commit(fence, change, writes)
 						}),
 				})
-				const application = TurnWorkflow.layer.pipe(
+				const application = EngineHost.layerHandlers.pipe(
+					Layer.provideMerge(TurnWorkflow.layer),
 					Layer.provideMerge(
 						Layer.mergeAll(
 							TurnSession.layer.pipe(
@@ -302,7 +302,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							),
 							Runner.layer,
 							RunScope.layer,
-							Engine.layerRegistry,
+							Workflows.layer,
 						),
 					),
 					Layer.provide(Layer.mergeAll(TurnTools.layer, ToolControls.layer)),
@@ -352,12 +352,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							Execution.CommandKey.make("cancel"),
 							before.identity.actor,
 						)
-						const feature = yield* (yield* Engine.Registry).get(
-							"openbot.chat-turn",
-						)
-						if (Option.isNone(feature))
-							return yield* Effect.die("The Turn workflow is missing.")
-						yield* feature.value.cancel(
+						yield* Engine.transport(TurnWorkflow.workflow).cancel(
 							test.key,
 							(yield* test.executions.loadMember(test.key)).cancelEpoch,
 						)

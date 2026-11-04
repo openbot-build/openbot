@@ -1,11 +1,21 @@
-import { ExecutionsApi, OpenBotApi } from "@openbot-build/api"
+import { ExecutionsApi, FailureApi, OpenBotApi } from "@openbot-build/api"
 
 import { Execution, Identity } from "@openbot-build/domain"
-import { Array as Arr, Cause, Context, Effect, Filter, Result } from "effect"
+import {
+	Array as Arr,
+	Cause,
+	Context,
+	Effect,
+	Filter,
+	Result,
+	Schema,
+} from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Commands } from "./Commands.ts"
 import { Records } from "../../server-kernel/errors/Records.ts"
 import * as HttpEvents from "./HttpEvents.ts"
+import * as Failures from "../../server-kernel/errors/Failures.ts"
+import { Unavailable } from "./Workflows.ts"
 
 type Errors =
 	| Execution.NotFound
@@ -13,6 +23,7 @@ type Errors =
 	| Execution.Conflict
 	| Execution.KeyConflict
 	| Execution.StorageError
+	| Unavailable
 const storageCause = Filter.make((cause: Cause.Cause<Errors>) => {
 	const rest = Arr.reduce(
 		cause.reasons,
@@ -51,17 +62,22 @@ export const layer = HttpApiBuilder.group(
 						Effect.fail(ExecutionsApi.ExecutionUnavailable.make({ errorId })),
 					),
 				)
-			const safe = <A, R>(
-				effect: Effect.Effect<
-					A,
-					| Execution.NotFound
-					| Execution.Forbidden
-					| Execution.Conflict
-					| Execution.KeyConflict
-					| Execution.StorageError,
-					R
-				>,
-			) => effect.pipe(Effect.catchCauseFilter(storageCause, unavailable))
+			const safe = <A, R>(effect: Effect.Effect<A, Errors, R>) =>
+				effect.pipe(
+					Effect.catchCauseFilter(storageCause, unavailable),
+					// No loaded feature owns this execution. Nothing failed, so it keeps no error record.
+					Failures.map(
+						"The feature of this execution is not loaded.",
+						(
+							error:
+								| Exclude<Errors, Execution.StorageError>
+								| ExecutionsApi.ExecutionUnavailable,
+						) =>
+							Schema.is(Unavailable)(error)
+								? FailureApi.FeatureUnavailable.make({ feature: error.feature })
+								: error,
+					),
+				)
 			return handlers
 				.handle("get", ({ params }) =>
 					Effect.gen(function* () {

@@ -1,10 +1,8 @@
 import { Execution } from "@openbot-build/domain"
 import { Effect, Option, Stream } from "effect"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
-import {
-	Registry,
-	type Authorize,
-} from "../server-execution/execution/Engine.ts"
+import type { Authorize } from "../server-execution/execution/Engine.ts"
+import { Workflows } from "../server-execution/execution/Workflows.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { Channels } from "../conversation-contract/channels/Channels.ts"
@@ -19,7 +17,7 @@ export const make = Effect.gen(function* () {
 	const registry = yield* ChannelRegistry
 	const sends = yield* ChannelSend.make
 	const store = yield* Store
-	const workflows = yield* Registry
+	const workflows = yield* Workflows
 	const observation = yield* Observation
 	const access = yield* ChannelAccess.make
 	const authorize: Authorize = (key, actor, mode) =>

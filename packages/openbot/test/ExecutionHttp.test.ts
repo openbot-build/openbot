@@ -4,7 +4,7 @@ import * as HttpFailureBoundary from "../src/server-kernel/errors/HttpBoundary.t
 import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
-import { AuthApi, ExecutionsApi } from "@openbot-build/api"
+import { AuthApi, ExecutionsApi, FailureApi } from "@openbot-build/api"
 import {
 	Authorization,
 	Billing,
@@ -15,6 +15,7 @@ import {
 	Array as Arr,
 	Context,
 	Effect,
+	HashMap,
 	Layer,
 	Option,
 	Redacted,
@@ -29,13 +30,18 @@ import {
 	HttpRouter,
 } from "effect/http"
 import { HttpApi, HttpApiBuilder, HttpApiMiddleware } from "effect/http-api"
+import { SqlClient } from "effect/sql"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Commands from "../src/server-execution/execution/Commands.ts"
 import * as Handlers from "../src/server-execution/execution/HttpHandlers.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
-import { Registry } from "../src/server-execution/execution/Engine.ts"
+import {
+	type Registered,
+	Unavailable,
+	Workflows,
+} from "../src/server-execution/execution/Workflows.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import { Auth } from "../src/identity-contract/auth/Auth.ts"
 import { Tokens } from "../src/identity-contract/auth/Tokens.ts"
@@ -122,40 +128,47 @@ const policy = Layer.unwrap(
 	),
 )
 const registry = Layer.effect(
-	Registry,
+	Workflows,
 	Effect.gen(function* () {
 		const store = yield* Store.Store
 		const checks = yield* Check.make
-		return Registry.of({
-			register: () => Effect.void,
-			registerService: () => Effect.void,
+		const registered: Registered = {
+			authorize: Effect.fn(function* (key, caller, access) {
+				if (caller.kind === "service")
+					return yield* Execution.Forbidden.make({})
+				const execution = yield* store.loadMember(key)
+				const allowed = yield* checks
+					.allows(caller, {
+						action: access === "read" ? "read" : "write",
+						resource: Authorization.Chat.make({
+							organizationId: execution.identity.owner.organizationId,
+							ownerUserId: execution.identity.owner.userId,
+							id: execution.record.resource.id,
+						}),
+					})
+					.pipe(
+						Effect.mapError((cause) => Execution.StorageError.make({ cause })),
+					)
+				if (!allowed) return yield* Execution.Forbidden.make({})
+			}),
+		}
+		// Only "http-test" has access rules. Any other workflow belongs to a feature that is not loaded.
+		return Workflows.of({
+			contribute: () => Effect.void,
 			names: Effect.succeed(["http-test"]),
-			get: () =>
-				Effect.succeedSome({
-					start: () => Effect.void,
-					cancel: () => Effect.void,
-					signal: () => Effect.void,
-					authorize: Effect.fn(function* (key, caller, access) {
-						if (caller.kind === "service")
-							return yield* Execution.Forbidden.make({})
-						const execution = yield* store.loadMember(key)
-						const allowed = yield* checks
-							.allows(caller, {
-								action: access === "read" ? "read" : "write",
-								resource: Authorization.Chat.make({
-									organizationId: execution.identity.owner.organizationId,
-									ownerUserId: execution.identity.owner.userId,
-									id: execution.record.resource.id,
-								}),
-							})
-							.pipe(
-								Effect.mapError((cause) =>
-									Execution.StorageError.make({ cause }),
-								),
-							)
-						if (!allowed) return yield* Execution.Forbidden.make({})
-					}),
-				}),
+			current: Effect.succeed(HashMap.empty()),
+			seal: Effect.succeed(HashMap.empty()),
+			hold: () => Effect.void,
+			get: (name) =>
+				Effect.succeed(
+					name === "http-test" ? Option.some(registered) : Option.none(),
+				),
+			require: (name) =>
+				name === "http-test"
+					? Effect.succeed(registered)
+					: Effect.fail(
+							Unavailable.make({ workflow: name, feature: "unloaded" }),
+						),
 		})
 	}),
 )
@@ -210,13 +223,13 @@ const services = HttpRouter.serve(
 	Layer.provideMerge(NodeHttpServer.layerTest),
 	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
-const submit = Effect.fn(function* (name: string) {
+const submit = Effect.fn(function* (name: string, workflow = "http-test") {
 	const store = yield* Store.Store
 	const receipt = yield* store.submit(
 		name,
 		Execution.CommandKey.make("start"),
 		{
-			workflow: "http-test",
+			workflow,
 			resource: { kind: "Chat", id: name },
 			identity: { owner: actor, actor },
 			input: null,
@@ -257,6 +270,37 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						}),
 					() => Ref.set(limited, false),
 				)
+			}),
+	)
+
+	it.effect(
+		"an execution whose workflow has no policy answers 503 FeatureUnavailable",
+		() =>
+			Effect.gen(function* () {
+				const key = yield* submit("unloaded", "http-unloaded")
+				const client = yield* HttpClient.HttpClient
+				const sql = yield* SqlClient.SqlClient
+				const count = sql<{
+					readonly count: string
+				}>`select count(*)::text as count from openbot_execution_failures`
+				const before = yield* count
+				for (const credential of [token("token"), cookie]) {
+					const response = yield* client.execute(
+						HttpClientRequest.get(`/v1/executions/${key.id}`).pipe(credential),
+					)
+					assert.strictEqual(response.status, 503)
+					assert.strictEqual(response.headers["retry-after"], "5")
+					assert.strictEqual(
+						response.headers[FailureApi.featureHeader],
+						"unloaded",
+					)
+					assert.deepEqual(yield* response.json, {
+						_tag: "FeatureUnavailable",
+						feature: "unloaded",
+					})
+				}
+				// Nothing failed, so the server keeps no error record.
+				assert.deepStrictEqual(yield* count, before)
 			}),
 	)
 

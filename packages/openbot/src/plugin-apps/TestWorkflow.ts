@@ -8,6 +8,7 @@ import {
 import { Effect, Layer, Schema } from "effect"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
+import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
 import * as Program from "../server-execution/execution/Program.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
 import { DeveloperTestRuntime } from "./DeveloperTestRuntime.ts"
@@ -142,17 +143,18 @@ export const make = Effect.gen(function* () {
 		})
 	return (key: Parameters<typeof run>[0]) => run(key, work, commands.finish)
 })
-export const layer = Layer.unwrap(
-	Effect.gen(function* () {
-		const run = yield* make
-		const commands = yield* TestCommands
-		const registry = yield* Engine.Registry
-		return workflow
-			.toLayer(run)
-			.pipe(
-				Layer.provideMerge(
-					Layer.effectDiscard(registry.register(workflow, commands.authorize)),
-				),
-			)
-	}),
-)
+/** Adds the workflow and its access rules. When the scope closes, they go. */
+export const contribute = Effect.gen(function* () {
+	const run = yield* make
+	const commands = yield* TestCommands
+	const workflows = yield* Workflows
+	yield* workflows.contribute({
+		workflow,
+		plugin: "apps",
+		journal: 1,
+		run: run,
+		policy: Policy.Public({ authorize: commands.authorize }),
+	})
+})
+
+export const layer = Layer.effectDiscard(contribute)

@@ -1,37 +1,21 @@
-import type * as Admission from "./Admission.ts"
+import { type Caller, Execution } from "@openbot-build/domain"
+import { Array as Arr, Duration, Effect, Layer, Schema } from "effect"
 import {
-	type Caller,
-	type ServiceCaller,
-	type ServiceId,
-	Execution,
-} from "@openbot-build/domain"
-import {
-	Array as Arr,
-	Cause,
-	Context,
-	Effect,
-	HashMap,
-	Layer,
-	Option,
-	Ref,
-	Schedule,
-	Schema,
-} from "effect"
-import {
+	ClusterError,
 	ClusterWorkflowEngine,
 	HttpRunner,
 	RunnerHealth,
+	RunnerStorage,
 	Runners,
 	Sharding,
+	ShardingConfig,
 	SqlMessageStorage,
 	SqlRunnerStorage,
 } from "effect/cluster"
-import { HttpRouter } from "effect/http"
+import { SqlClient } from "effect/sql"
 import { RpcSerialization } from "effect/rpc"
-import { DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow"
-import { Records } from "../../server-kernel/errors/Records.ts"
-import * as Background from "../../server-kernel/execution/Background.ts"
-import { Store, type Key } from "./Store.ts"
+import { DurableDeferred, Workflow } from "effect/workflow"
+import type { Key } from "./Store.ts"
 import * as PrivateRpc from "../transport/PrivateRpc.ts"
 
 export const path = "/internal/executions/rpc"
@@ -57,14 +41,42 @@ export const layer = ClusterWorkflowEngine.layer.pipe(
 	Layer.provide(RpcSerialization.layerNdjson),
 )
 
-export const layerRoutes = Layer.effectDiscard(
+/**
+ * A runner store that can only list the runners. Directory uses it for that.
+ * The SQL runner store of the cluster takes a pool connection for shard locks
+ * when it is built, and keeps it for its whole life. This store takes none. It
+ * runs the same runner query on the shared pool. Only the engine generation
+ * changes runners and shard locks, so every other operation here is a defect.
+ */
+export const layerRunnerList = Layer.effect(
+	RunnerStorage.RunnerStorage,
 	Effect.gen(function* () {
-		const router = yield* HttpRouter.HttpRouter
-		const gate = yield* PrivateRpc.make
-		const rpc = yield* HttpRunner.toHttpEffect
-		yield* router.add("POST", path, gate.protect(rpc))
+		const sql = yield* SqlClient.SqlClient
+		const config = yield* ShardingConfig.ShardingConfig
+		const seconds = Math.ceil(
+			Duration.toSeconds(Duration.fromInputUnsafe(config.shardLockExpiration)),
+		)
+		const listOnly = Effect.die("This runner store can only list the runners.")
+		return RunnerStorage.makeEncoded({
+			getRunners: sql<{
+				readonly runner: string
+				readonly healthy: boolean
+			}>`SELECT runner, healthy FROM openbot_cluster_runners WHERE last_heartbeat > NOW() - make_interval(secs => ${seconds})`.pipe(
+				Effect.map(Arr.map((row) => [row.runner, row.healthy] as const)),
+				Effect.mapError((cause) =>
+					ClusterError.PersistenceError.make({ cause }),
+				),
+			),
+			register: () => listOnly,
+			unregister: () => listOnly,
+			setRunnerHealth: () => listOnly,
+			acquire: () => listOnly,
+			refresh: () => listOnly,
+			release: () => listOnly,
+			releaseAll: () => listOnly,
+		})
 	}),
-).pipe(Layer.provide(RpcSerialization.layerNdjson))
+)
 
 /** Engine messages hold references. A feature opens its sealed input from Store. */
 export const define = <const Name extends string>(name: Name) =>
@@ -109,229 +121,41 @@ export type Decide = (
 	| Execution.KeyConflict
 	| Execution.StorageError
 >
-interface Registered {
-	readonly admit?: Admission.Check
-	readonly decide?: Decide
-
-	readonly authorize: (
-		key: Key,
-		actor: Caller | ServiceCaller,
-		access: Access,
-	) => ReturnType<Authorize>
-	readonly start: (key: Key) => Effect.Effect<void>
-	readonly cancel: (key: Key, epoch: number) => Effect.Effect<void>
-	readonly signal: (key: Key, decisionId: string) => Effect.Effect<void>
-}
-export interface Service {
-	readonly register: (
-		workflow: ReturnType<typeof define>,
-		authorize: Authorize,
-		decide?: Decide,
-		admit?: Admission.Check,
-	) => Effect.Effect<void, never>
-	readonly registerService: (
-		workflow: ReturnType<typeof define>,
-		serviceId: ServiceId,
-		authorize: (key: Key, access: Access) => ReturnType<Authorize>,
-		admit?: Admission.Check,
-		publicRead?: Authorize,
-		publicDecision?: { readonly authorize: Authorize; readonly decide: Decide },
-	) => Effect.Effect<void, never>
-	readonly get: (
-		name: string,
-	) => Effect.Effect<Option.Option<Registered>, never>
-	readonly names: Effect.Effect<string[], never>
-}
-
-export class Registry extends Context.Service<Registry, Service>()(
-	"@openbot-build/openbot/server-execution/execution/Engine/Registry",
-) {}
-
-const makeRegistry = Effect.gen(function* () {
-	const entries = yield* Ref.make(HashMap.empty<string, Registered>())
-	const engine = yield* WorkflowEngine.WorkflowEngine
-	const install = Effect.fn("ExecutionEngine.install")(function* (
-		workflow: ReturnType<typeof define>,
-		authorize: Registered["authorize"],
-		decide?: Decide,
-		admit?: Admission.Check,
-	) {
-		const run: Registered = {
-			...(admit === undefined ? {} : { admit }),
-			authorize,
-			...(decide === undefined ? {} : { decide }),
-			start: (key) =>
-				workflow
-					.execute(key, { discard: true, detached: true })
-					.pipe(
-						Effect.asVoid,
-						Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
-					),
-			// Delivery stores only a signal. The workflow owns release and the final state.
-			cancel: (key, epoch) =>
-				Effect.gen(function* () {
-					const executionId = yield* workflow.execute(key, {
-						discard: true,
-						detached: true,
-					})
-					const signal = cancelSignal(epoch)
-					yield* DurableDeferred.succeed(signal, {
-						token: DurableDeferred.tokenFromExecutionId(signal, {
-							workflow,
-							executionId,
-						}),
-						value: undefined,
-					})
-				}).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
-			signal: (key, id) =>
-				Effect.gen(function* () {
-					const executionId = yield* workflow.execute(key, {
-						discard: true,
-						detached: true,
-					})
-					const named = signal(id)
-					yield* DurableDeferred.succeed(named, {
-						token: DurableDeferred.tokenFromExecutionId(named, {
-							workflow,
-							executionId,
-						}),
-						value: undefined,
-					})
-				}).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
-		}
-		yield* Ref.update(entries, HashMap.set(workflow._tag, run))
-	})
-	/** Public callers and saved service callers have separate authorization paths. */
-	const register = (
-		workflow: ReturnType<typeof define>,
-		authorize: Authorize,
-		decide?: Decide,
-		admit?: Admission.Check,
-	) =>
-		install(
-			workflow,
-			(key, actor, access) =>
-				actor.kind === "service"
-					? Effect.fail(Execution.Forbidden.make({}))
-					: authorize(key, actor, access),
-			decide,
-			admit,
-		)
-	const registerService = (
-		workflow: ReturnType<typeof define>,
-		serviceId: ServiceId,
-		authorize: (key: Key, access: Access) => ReturnType<Authorize>,
-		admit?: Admission.Check,
-		publicRead?: Authorize,
-		publicDecision?: {
-			readonly authorize: Authorize
-			readonly decide: Decide
-		},
-	) =>
-		install(
-			workflow,
-			(key, actor, access) =>
-				actor.kind !== "service"
-					? publicRead !== undefined && access === "read"
-						? publicRead(key, actor, access)
-						: publicDecision !== undefined && access === "decide"
-							? publicDecision.authorize(key, actor, access)
-							: Effect.fail(Execution.Forbidden.make({}))
-					: actor.serviceId !== serviceId
-						? Effect.fail(Execution.Forbidden.make({}))
-						: authorize(key, access),
-			publicDecision?.decide,
-			admit,
-		)
-	const get = (name: string) =>
-		Ref.get(entries).pipe(Effect.map(HashMap.get(name)))
-	const names = Ref.get(entries).pipe(
-		Effect.map((entries) => Arr.fromIterable(HashMap.keys(entries))),
-	)
-	return Registry.of({ register, registerService, get, names })
+/** Sends engine commands for one workflow. It reads the engine from context. */
+export const transport = (workflow: ReturnType<typeof define>) => ({
+	start: (key: Key) =>
+		workflow
+			.execute(key, { discard: true, detached: true })
+			.pipe(Effect.asVoid),
+	// Delivery stores only a signal. The workflow owns release and the final state.
+	cancel: (key: Key, epoch: number) =>
+		Effect.gen(function* () {
+			const executionId = yield* workflow.execute(key, {
+				discard: true,
+				detached: true,
+			})
+			const named = cancelSignal(epoch)
+			yield* DurableDeferred.succeed(named, {
+				token: DurableDeferred.tokenFromExecutionId(named, {
+					workflow,
+					executionId,
+				}),
+				value: undefined,
+			})
+		}),
+	signal: (key: Key, id: string) =>
+		Effect.gen(function* () {
+			const executionId = yield* workflow.execute(key, {
+				discard: true,
+				detached: true,
+			})
+			const named = signal(id)
+			yield* DurableDeferred.succeed(named, {
+				token: DurableDeferred.tokenFromExecutionId(named, {
+					workflow,
+					executionId,
+				}),
+				value: undefined,
+			})
+		}),
 })
-
-export const layerRegistry = Layer.effect(Registry, makeRegistry)
-
-/** No database lock is held while the engine stores a command. Redelivery is safe. */
-export const layerOutbox = Layer.effectDiscard(
-	Effect.gen(function* () {
-		const background = yield* Background.make
-		const store = yield* Store
-		const registry = yield* Registry
-		const errors = yield* Records
-		const dispatch = Effect.gen(function* () {
-			const batch = yield* store.pending(yield* registry.names)
-			yield* Effect.forEach(
-				batch,
-				(message) =>
-					Effect.gen(function* () {
-						const key = {
-							namespace: message.namespace,
-							id: yield* Schema.decodeEffect(Execution.Id)(message.executionId),
-						}
-						const execution = yield* store.load(key)
-						const registered = yield* registry.get(execution.workflow)
-						if (Option.isNone(registered)) return
-						const command = yield* store.command(
-							key.namespace,
-							message.commandId,
-						)
-						if (Option.isNone(command))
-							return yield* Execution.NotFound.make({ id: key.id })
-						switch (command.value.kind) {
-							case "start":
-								yield* registered.value.start(key)
-								break
-							case "cancel":
-								if (command.value.cancelEpoch === null)
-									return yield* Execution.Conflict.make({ id: key.id })
-								yield* registered.value.cancel(key, command.value.cancelEpoch)
-								break
-							case "signal":
-								const signal = yield* Schema.decodeUnknownEffect(
-									Schema.Union([
-										Schema.Struct({
-											kind: Schema.Literal("decision"),
-											decisionId: Execution.DecisionId,
-										}),
-										Schema.Struct({
-											kind: Schema.Literal("notify"),
-											signalId: Schema.String,
-										}),
-									]),
-								)(command.value.body)
-								yield* registered.value.signal(
-									key,
-									signal.kind === "decision"
-										? signal.decisionId
-										: signal.signalId,
-								)
-								break
-							default:
-								return yield* Execution.Conflict.make({ id: key.id })
-						}
-						yield* store.acknowledge(key.namespace, message.commandId)
-					}).pipe(
-						Effect.catchCause((cause) =>
-							Effect.gen(function* () {
-								if (Cause.hasInterruptsOnly(cause))
-									return yield* Effect.failCause(
-										Cause.fromReasons<never>(
-											Arr.filter(cause.reasons, Cause.isInterruptReason),
-										),
-									)
-								yield* store.defer(message.namespace, message.commandId)
-								yield* errors.record(cause, "unavailable")
-							}),
-						),
-					),
-				{ concurrency: 8, discard: true },
-			)
-		})
-		yield* background.repeat(dispatch, {
-			schedule: Schedule.spaced("500 millis"),
-			message: "Execution commands could not be sent.",
-		})
-	}),
-)

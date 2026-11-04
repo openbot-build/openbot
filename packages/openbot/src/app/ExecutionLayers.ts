@@ -29,6 +29,8 @@ import * as ReminderWorkflow from "../plugin-work/ReminderWorkflow.ts"
 import * as Views from "../plugin-apps/Views.ts"
 import * as LiveConnections from "../plugin-chats/live/LiveConnections.ts"
 import { Layer } from "effect"
+import { NodeHttpClient } from "@effect/platform-node"
+import * as EngineHost from "../server-execution/execution/EngineHost.ts"
 import * as TurnWorkflow from "../plugin-chats/TurnWorkflow.ts"
 import * as ToolWorkflow from "../plugin-chats/ToolWorkflow.ts"
 import * as ToolNoticeWorkflow from "../plugin-chats/ToolNoticeWorkflow.ts"
@@ -128,7 +130,7 @@ export const services = Layer.mergeAll(
 	Layer.provide(Layer.merge(Sandbox.layer, ActionPolicy.layer)),
 )
 
-/** Registration is complete before the server accepts an execution command. */
+/** Each workflow adds itself to Workflows. A duplicate name is a broken build, so it stops the start. */
 export const workflows = Layer.mergeAll(
 	ComputerLifecycleWorkflow.layer,
 	ComputerMaintenanceWorkflow.layer,
@@ -160,6 +162,12 @@ export const workflows = Layer.mergeAll(
 	RequestNoticeWorkflow.layer,
 	DelegationWorkflow.layer,
 	DelegationNoticeWorkflow.layer,
-)
+).pipe(Layer.orDie)
 
-export const layer = workflows.pipe(Layer.provideMerge(services))
+/** The one engine generation starts after every workflow is in. It closes before them. */
+export const layer = EngineHost.layer.pipe(
+	// Private RPC uses its own client. The App network keeps its public-address guard.
+	Layer.provide(NodeHttpClient.layerUndici),
+	Layer.provide(workflows),
+	Layer.provideMerge(services),
+)

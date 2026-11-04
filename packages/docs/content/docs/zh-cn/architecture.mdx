@@ -47,7 +47,11 @@ runtime。每个 Turn 或子阶段持有自己的模型和工具。账户连接�
 
 Effect 的 `Workflow`、`Activity`、`DurableDeferred`、`DurableClock` 和
 `ClusterWorkflowEngine`
-提供持久步骤、信号、定时器、消息和节点分配。各功能注册自己的工作流，引擎没有 Bot、审批或 Computer 分支。独立使用的 core 提供内存宿主，不保证进程停止后的恢复。
+提供持久步骤、信号、定时器、消息和节点分配。每个功能把自己的工作流和访问规则交给
+`Workflows`
+服务。所有功能都交出工作流后，引擎才启动一次；引擎在这些功能之前停止。引擎没有 Bot、审批或 Computer 分支。如果没有已加载的功能拥有某个执行的工作流，执行路由会以
+`503` 和 `FeatureUnavailable`
+回答。服务器不为这个回答保存错误记录。独立使用的 core 提供内存宿主，不保证进程停止后的恢复。
 
 `Program` 用同一个循环处理恢复、持有者检查、取消和阶段失败。各功能提供 `next`
 选择下一阶段，用 `end` 保存自己的结束状态。阶段的 `after`
@@ -183,7 +187,7 @@ migration，再按批次转换数据并保存进度。不能修改基线迁移�
 已删除成员 runtime 包装：`BackendLayers`、`Backend`、`ManagedChats`、`Chats`、`Coordinator`
 和旧 `LiveSessions`
 map。引用计数、`keepOpen`、`current`、逐方法代理和 Chat 心跳扫描随之删除。旧记忆任务队列和辅助模型调用路径也已删除。Turn、工具、审批、委派、App、Code
-Mode、Channel、触发器、提醒和记忆工作流通过共同应用 Layer 注册。
+Mode、Channel、触发器、提醒和记忆工作流通过共同应用 Layer 交给 `Workflows`。
 
 旧 App `Operations`、`Invocations` 服务和 Code
 Mode 租约执行器已删除。App 发现只返回描述，不再持有动作回调。调用和程序只通过共同工作流执行。服务器启动不再重置旧 App 调用、扫描旧委派或写入 Chat 执行器心跳。旧 PostgreSQL

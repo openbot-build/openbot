@@ -3,6 +3,7 @@ import { Effect, Layer, Option, Schema } from "effect"
 import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
+import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
 import * as Program from "../server-execution/execution/Program.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
 import { workflowName } from "./Activity.ts"
@@ -129,26 +130,23 @@ export const make = Effect.gen(function* () {
 		})
 	return work
 })
-export const layer = Layer.unwrap(
-	Effect.gen(function* () {
-		const work = yield* make
-		const lifecycle = yield* Lifecycle
-		const registry = yield* Engine.Registry
-		const admission = yield* WorkAdmission
-		const run = yield* Program.make
-		return workflow
-			.toLayer((key) => run(key, work, lifecycle.finish))
-			.pipe(
-				Layer.provideMerge(
-					Layer.effectDiscard(
-						registry.register(
-							workflow,
-							lifecycle.authorize,
-							undefined,
-							admission.check,
-						),
-					),
-				),
-			)
-	}),
-)
+/** Adds the workflow and its access rules. When the scope closes, they go. */
+export const contribute = Effect.gen(function* () {
+	const work = yield* make
+	const lifecycle = yield* Lifecycle
+	const workflows = yield* Workflows
+	const admission = yield* WorkAdmission
+	const run = yield* Program.make
+	yield* workflows.contribute({
+		workflow,
+		plugin: "computers",
+		journal: 1,
+		run: (key) => run(key, work, lifecycle.finish),
+		policy: Policy.Public({
+			authorize: lifecycle.authorize,
+			admit: admission.check,
+		}),
+	})
+})
+
+export const layer = Layer.effectDiscard(contribute)

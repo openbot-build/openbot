@@ -1,6 +1,7 @@
 import { Clock, Effect, Layer, Option, Schema, Stream } from "effect"
 import { DurableClock, DurableDeferred } from "effect/workflow"
 import * as Engine from "../server-execution/execution/Engine.ts"
+import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
 import * as Program from "../server-execution/execution/Program.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
@@ -62,25 +63,22 @@ export const make = Effect.gen(function* () {
 	return (key: Parameters<typeof run>[0]) =>
 		run(key, work).pipe(Effect.provideService(Clock.Clock, clock))
 })
-export const layer = Layer.unwrap(
-	Effect.gen(function* () {
-		const execute = yield* make
-		const cleanup = yield* TestCleanup
-		const registry = yield* Engine.Registry
-		return workflow
-			.toLayer(execute)
-			.pipe(
-				Layer.provideMerge(
-					Layer.effectDiscard(
-						registry.registerService(
-							workflow,
-							serviceId,
-							cleanup.serviceAuthorize,
-							undefined,
-							cleanup.authorize,
-						),
-					),
-				),
-			)
-	}),
-)
+/** Adds the workflow and its access rules. When the scope closes, they go. */
+export const contribute = Effect.gen(function* () {
+	const execute = yield* make
+	const cleanup = yield* TestCleanup
+	const workflows = yield* Workflows
+	yield* workflows.contribute({
+		workflow,
+		plugin: "apps",
+		journal: 1,
+		run: execute,
+		policy: Policy.Service({
+			serviceId: serviceId,
+			authorize: cleanup.serviceAuthorize,
+			publicRead: cleanup.authorize,
+		}),
+	})
+})
+
+export const layer = Layer.effectDiscard(contribute)

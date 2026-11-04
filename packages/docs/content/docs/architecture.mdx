@@ -67,9 +67,13 @@ save a late outside result. It cannot advance the new owner's state.
 
 Effect `Workflow`, `Activity`, `DurableDeferred`, `DurableClock`, and
 `ClusterWorkflowEngine` provide stored steps, signals, timers, messages, and
-node assignment. Features register their own workflows. The engine has no Bot,
-approval, or Computer branches. The standalone core has an in-memory host. It
-does not promise recovery after its process stops.
+node assignment. Each feature gives its workflows and their access rules to the
+`Workflows` service. The engine starts once, after every feature has given its
+workflows, and it stops before them. The engine has no Bot, approval, or
+Computer branches. When no loaded feature owns the workflow of an execution, the
+execution routes answer `503` with `FeatureUnavailable`. The server keeps no
+error record for this answer. The standalone core has an in-memory host. It does
+not promise recovery after its process stops.
 
 `Program` owns one loop for recovery, owner checks, cancellation, and phase
 failures. Each feature gives `next` to choose its next phase and `end` to save
@@ -336,7 +340,7 @@ The member runtime wrappers are removed: `BackendLayers`, `Backend`,
 reference counts, `keepOpen`, `current`, method proxies, and Chat heartbeat
 sweep are gone. The old memory job queue and helper model path are also gone.
 Turn, tool, approval, delegation, App, Code Mode, Channel, trigger, reminder,
-and memory workflows are registered through the shared application Layers.
+and memory workflows go to `Workflows` through the shared application Layers.
 
 The old App `Operations` and `Invocations` services and the Code Mode lease
 runner are removed. App discovery returns descriptions with no action callbacks.

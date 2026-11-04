@@ -13,7 +13,7 @@ import {
 	Schema,
 } from "effect"
 import { Records } from "../../server-kernel/errors/Records.ts"
-import { Registry } from "./Engine.ts"
+import { Workflows } from "./Workflows.ts"
 import * as Recovery from "./Recovery.ts"
 import { Store, transactionFailures, type Fence, type Key } from "./Store.ts"
 
@@ -141,7 +141,7 @@ export class Calls extends Context.Service<Calls, Service>()(
 const make = Effect.gen(function* () {
 	const client = yield* SqlClient.SqlClient
 	const store = yield* Store
-	const registry = yield* Registry
+	const registry = yield* Workflows
 	const errors = yield* Records
 	const recovery = yield* Recovery.Recovery
 	const authorize = Effect.fn("ExecutionCalls.authorize")(function* (

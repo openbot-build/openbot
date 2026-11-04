@@ -43,7 +43,8 @@ import {
 	executions,
 } from "../src/server-database/Schema.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
@@ -151,7 +152,7 @@ const services = Layer.merge(Lifecycle.layer, Maintenance.layer).pipe(
 	Layer.provideMerge(Calls.layer),
 	Layer.provideMerge(Observation.layer),
 	Layer.provideMerge(
-		Layer.mergeAll(Store.layer, Records.layer, Engine.layerRegistry),
+		Layer.mergeAll(Store.layer, Records.layer, Workflows.layer),
 	),
 	Layer.provideMerge(WorkflowEngine.layerMemory),
 	Layer.provideMerge(
@@ -180,14 +181,16 @@ const setup = Effect.fn(function* (organizationId: string) {
 	})
 	const commands = yield* Lifecycle.Lifecycle
 	const maintenance = yield* Maintenance.Maintenance
-	const registry = yield* Engine.Registry
-	yield* registry.register(LifecycleWorkflow.workflow, commands.authorize)
-	yield* registry.registerService(
+	yield* WorkflowsFixture.register(
+		LifecycleWorkflow.workflow,
+		commands.authorize,
+	)
+	yield* WorkflowsFixture.registerService(
 		MaintenanceWorkflow.sweep,
 		Maintenance.serviceId,
 		(key) => maintenance.loadSweep(key).pipe(Effect.asVoid),
 	)
-	yield* registry.registerService(
+	yield* WorkflowsFixture.registerService(
 		MaintenanceWorkflow.pause,
 		Maintenance.serviceId,
 		maintenance.authorizePause,

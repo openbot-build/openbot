@@ -29,7 +29,8 @@ import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Cleanup from "../src/plugin-apps/TestCleanup.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
-import { WorkflowEngine } from "effect/workflow"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { developerTests } from "../src/server-database/Schema.ts"
 import { eq } from "drizzle-orm"
 import * as Rows from "../src/plugin-apps/DeveloperRows.ts"
@@ -209,8 +210,8 @@ layer(services, { excludeTestServices: true })((it) => {
 						"_tag",
 						"DeveloperNotFound",
 					)
-					const registry = yield* Engine.Registry
-					yield* registry.registerService(
+					const registry = yield* Workflows.Workflows
+					yield* WorkflowsFixture.registerService(
 						Engine.define(Cleanup.workflowName),
 						Cleanup.serviceId,
 						cleanup.serviceAuthorize,
@@ -427,11 +428,7 @@ layer(services, { excludeTestServices: true })((it) => {
 						Cleanup.layer.pipe(
 							Layer.provideMerge(GrantCleanup.layer),
 							Layer.provideMerge(TestStores.layer),
-							Layer.provideMerge(
-								Engine.layerRegistry.pipe(
-									Layer.provide(WorkflowEngine.layerMemory),
-								),
-							),
+							Layer.provideMerge(Workflows.layer),
 							Layer.provide(auth),
 							Layer.provide(
 								Layer.mock(DeveloperAccess, {

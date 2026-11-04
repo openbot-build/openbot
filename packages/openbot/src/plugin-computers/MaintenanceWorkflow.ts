@@ -2,6 +2,7 @@ import { Clock, Effect, Layer, Schema } from "effect"
 import { DurableClock } from "effect/workflow"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import * as Engine from "../server-execution/execution/Engine.ts"
+import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
 import * as Program from "../server-execution/execution/Program.ts"
 import { Store } from "../server-execution/execution/Store.ts"
 import { pauseWorkflowName } from "./Activity.ts"
@@ -9,14 +10,22 @@ import { Maintenance, serviceId, sweepWorkflowName } from "./Maintenance.ts"
 
 export const sweep = Engine.define(sweepWorkflowName)
 export const pause = Engine.define(pauseWorkflowName)
-export const layer = Layer.unwrap(
-	Effect.gen(function* () {
-		const maintenance = yield* Maintenance
-		const registry = yield* Engine.Registry
-		const store = yield* Store
-		const calls = yield* Calls
-		const run = yield* Program.make
-		const sweeps = sweep.toLayer((key) =>
+/** Adds both workflows and their access rules. When the scope closes, they go. */
+export const contribute = Effect.gen(function* () {
+	const maintenance = yield* Maintenance
+	const workflows = yield* Workflows
+	const store = yield* Store
+	const calls = yield* Calls
+	const run = yield* Program.make
+	yield* workflows.contribute({
+		workflow: sweep,
+		plugin: "computers",
+		journal: 1,
+		policy: Policy.Service({
+			serviceId,
+			authorize: (key) => maintenance.loadSweep(key).pipe(Effect.asVoid),
+		}),
+		run: (key) =>
 			run(
 				key,
 				(fence) =>
@@ -37,8 +46,21 @@ export const layer = Layer.unwrap(
 					}),
 				maintenance.finishSweep,
 			),
-		)
-		const pauses = pause.toLayer((key) =>
+	})
+	yield* workflows.contribute({
+		workflow: pause,
+		plugin: "computers",
+		journal: 1,
+		policy: Policy.Service({
+			serviceId,
+			authorize: maintenance.authorizePause,
+			publicRead: maintenance.publicAccess,
+			publicDecision: {
+				authorize: maintenance.publicAccess,
+				decide: maintenance.decide,
+			},
+		}),
+		run: (key) =>
 			run(
 				key,
 				(fence) =>
@@ -68,28 +90,7 @@ export const layer = Layer.unwrap(
 					}),
 				maintenance.finish,
 			),
-		)
-		return Layer.merge(sweeps, pauses).pipe(
-			Layer.provideMerge(
-				Layer.effectDiscard(
-					Effect.gen(function* () {
-						yield* registry.registerService(sweep, serviceId, (key) =>
-							maintenance.loadSweep(key).pipe(Effect.asVoid),
-						)
-						yield* registry.registerService(
-							pause,
-							serviceId,
-							maintenance.authorizePause,
-							undefined,
-							maintenance.publicAccess,
-							{
-								authorize: maintenance.publicAccess,
-								decide: maintenance.decide,
-							},
-						)
-					}),
-				),
-			),
-		)
-	}),
-)
+	})
+})
+
+export const layer = Layer.effectDiscard(contribute)

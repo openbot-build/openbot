@@ -4,7 +4,7 @@ import type { Directory } from "../src/server-execution/resources/Directory.ts"
 import type { Access } from "../src/server-execution/execution/Send.ts"
 import type { Transport } from "../src/server-execution/resources/Transport.ts"
 import type { Records } from "../src/server-kernel/errors/Records.ts"
-import type { Registry } from "../src/server-execution/execution/Engine.ts"
+import type { Workflows } from "../src/server-execution/execution/Workflows.ts"
 import type { SqlClient } from "effect/sql"
 import { assert, it } from "@effect/vitest"
 import type { PgClient } from "@effect/sql-pg"
@@ -22,7 +22,7 @@ type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 
 /** The services that `OpenBot.layerShared` gives. */
 type ExecutionServices =
-	Access | Transport | Directory | Store | Observation | Registry
+	Access | Transport | Directory | Store | Observation | Workflows
 
 type Shared =
 	PgClient.PgClient | SqlClient.SqlClient | Settings | Secrets | Records

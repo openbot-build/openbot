@@ -6,7 +6,8 @@ import { DeveloperTestRuntime } from "../src/plugin-apps/DeveloperTestRuntime.ts
 import { Authorization, Execution } from "@openbot-build/domain"
 import * as TestCommands from "../src/plugin-apps/TestCommands.ts"
 import * as TestWorkflow from "../src/plugin-apps/TestWorkflow.ts"
-import * as ExecutionEngine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Runner from "../src/server-execution/execution/Runner.ts"
 import * as RunScope from "../src/server-execution/execution/RunScope.ts"
@@ -325,14 +326,16 @@ it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 					databaseUrl: Redacted.make(database.url),
 				})
 				yield* Effect.provide(Database.migrate, databaseLayer)
-				const layer = Layer.mergeAll(
-					TestWorkflow.layer,
-					TestCleanupWorkflow.layer,
-					GrantCleanupWorkflow.layer,
-					ExecutionEngine.layerOutbox.pipe(
-						Layer.provide(Layer.succeed(Clock.Clock, liveClock)),
+				// The outbox starts after every workflow is in, so it is built on top of them.
+				const layer = EngineHost.layerLocal.pipe(
+					Layer.provide(Layer.succeed(Clock.Clock, liveClock)),
+					Layer.provideMerge(
+						Layer.mergeAll(
+							TestWorkflow.layer,
+							TestCleanupWorkflow.layer,
+							GrantCleanupWorkflow.layer,
+						),
 					),
-				).pipe(
 					Layer.provideMerge(
 						DeveloperLayers.services.pipe(
 							Layer.provide(AppConnections.layerConnectionScopes),
@@ -342,7 +345,7 @@ it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
 					Layer.provideMerge(
 						Layer.mergeAll(Calls.layer, Runner.layer, RunScope.layer),
 					),
-					Layer.provideMerge(ExecutionEngine.layerRegistry),
+					Layer.provideMerge(Workflows.layer),
 					Layer.provideMerge(WorkflowEngine.layerMemory),
 					Layer.provide(
 						Layer.mock(Billing, {

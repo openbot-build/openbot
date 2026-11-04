@@ -4,7 +4,7 @@ import { Array as Arr, Effect, Option, Ref, Schema, Stream } from "effect"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import { Requests } from "../conversation-contract/capabilities/Requests.ts"
 import * as ChatRecords from "../conversation-contract/chats/ChatRecords.ts"
-import { Registry } from "../server-execution/execution/Engine.ts"
+import { Workflows } from "../server-execution/execution/Workflows.ts"
 import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import { Store, type Fence } from "../server-execution/execution/Store.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
@@ -31,7 +31,7 @@ export const make = Effect.gen(function* () {
 	const requests = yield* Requests
 	const bots = yield* Bots
 	const organization = yield* Organization
-	const workflows = yield* Registry
+	const workflows = yield* Workflows
 	const channelAccess = yield* ChannelAccess.make
 	const authorize: Authorize = (key, actor, mode) =>
 		channelAccess(key, actor, mode).pipe(

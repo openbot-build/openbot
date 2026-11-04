@@ -21,7 +21,6 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt } from "effect/ai"
-import { WorkflowEngine } from "effect/workflow"
 import { Billing } from "../src/server-billing/billing/Billing.ts"
 import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
 import { Bots } from "../src/conversation-contract/bots/Bots.ts"
@@ -41,6 +40,8 @@ import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
@@ -58,16 +59,11 @@ const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
 	),
 )
 const registry = Layer.effectDiscard(
-	Effect.gen(function* () {
-		yield* (yield* Engine.Registry).register(
-			Engine.define("openbot.chat-turn"),
-			() => Effect.void,
-		)
-	}),
-).pipe(
-	Layer.provideMerge(Engine.layerRegistry),
-	Layer.provide(WorkflowEngine.layerMemory),
-)
+	WorkflowsFixture.register(
+		Engine.define("openbot.chat-turn"),
+		() => Effect.void,
+	),
+).pipe(Layer.provideMerge(Workflows.layer))
 
 /** These tests use the real request, execution, Grant, and sealed error stores. */
 export const services = Gates.layer.pipe(

@@ -17,7 +17,6 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt } from "effect/ai"
-import { WorkflowEngine } from "effect/workflow"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Convert from "../src/server-upgrade/Convert.ts"
@@ -32,7 +31,7 @@ import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Commands from "../src/server-execution/execution/Commands.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Workflows from "../src/server-execution/execution/Workflows.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as InputCommands from "../src/plugin-chats/InputCommands.ts"
 import * as TurnAccess from "../src/plugin-chats/TurnAccess.ts"
@@ -111,8 +110,7 @@ const runtime = Layer.mergeAll(
 	Layer.provideMerge(
 		Layer.mergeAll(AuditLogPostgres.layer, SettingsPostgres.layer),
 	),
-	Layer.provideMerge(Engine.layerRegistry),
-	Layer.provide(WorkflowEngine.layerMemory),
+	Layer.provideMerge(Workflows.layer),
 )
 const actor: Caller = {
 	kind: "member",

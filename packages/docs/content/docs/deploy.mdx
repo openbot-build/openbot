@@ -333,6 +333,10 @@ Use a private address for each node, not the load balancer address. Do not scale
 the Compose `openbot` service without giving each new node its own host. The two
 nodes in `compose.check.yaml` show this setup.
 
+Run the same OpenBot version on every node. A node that does not have a workflow
+keeps the messages for it waiting. They do not fail. A node with that workflow
+takes them later.
+
 All shared settings live in the database. When an admin changes them, every
 instance uses the change at once. See
 [Configuration](/configuration#how-a-change-reaches-every-instance). Run the

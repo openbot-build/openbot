@@ -39,10 +39,8 @@ import {
 	computerAccess,
 } from "../server-database/Schema.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
-import {
-	Registry,
-	type Access as ExecutionAccess,
-} from "../server-execution/execution/Engine.ts"
+import type { Access as ExecutionAccess } from "../server-execution/execution/Engine.ts"
+import { Workflows } from "../server-execution/execution/Workflows.ts"
 import { type End } from "../server-execution/execution/Program.ts"
 import * as Send from "../server-execution/execution/Send.ts"
 import * as Access from "./Access.ts"
@@ -171,7 +169,7 @@ export const make = Effect.gen(function* () {
 	const checks = yield* Check.make
 	const rights = yield* Access.make
 	const providers = yield* ComputerProviders
-	const registry = yield* Registry
+	const registry = yield* Workflows
 	const audit = yield* AuditLog
 	const activity = yield* Activity.make
 	const authorizeInput = (

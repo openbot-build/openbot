@@ -33,7 +33,7 @@ import * as Check from "../../identity-contract/authorization/Check.ts"
 import { Records, category } from "../../server-kernel/errors/Records.ts"
 import * as Recovery from "../../server-execution/execution/Recovery.ts"
 import * as Send from "../../server-execution/execution/Send.ts"
-import { Registry } from "../../server-execution/execution/Engine.ts"
+import { Workflows } from "../../server-execution/execution/Workflows.ts"
 import {
 	Store,
 	type Fence,
@@ -158,7 +158,7 @@ const make = Effect.gen(function* () {
 	const directory = yield* Directory
 	const access = yield* Send.Access
 	const store = yield* Store
-	const registry = yield* Registry
+	const registry = yield* Workflows
 	const checks = yield* Check.make
 	const errors = yield* Records
 	const recovery = yield* Recovery.make

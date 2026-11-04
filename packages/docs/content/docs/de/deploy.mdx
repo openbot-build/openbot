@@ -346,6 +346,10 @@ Vergrößere den Compose-Dienst `openbot` nur, wenn jeder neue Knoten seinen
 eigenen Host bekommt. Die zwei Knoten in `compose.check.yaml` zeigen diese
 Einrichtung.
 
+Betreibe auf jedem Knoten dieselbe OpenBot-Version. Ein Knoten ohne einen
+Workflow lässt die Nachrichten dafür warten. Sie schlagen nicht fehl. Ein Knoten
+mit diesem Workflow nimmt sie später.
+
 Alle gemeinsamen Einstellungen liegen in der Datenbank. Wenn ein Admin sie
 ändert, nutzt jede Instanz die Änderung sofort. Siehe
 [Konfiguration](/de/configuration#wie-eine-änderung-jede-instanz-erreicht).
