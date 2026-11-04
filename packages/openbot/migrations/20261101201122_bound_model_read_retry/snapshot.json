@@ -1,0 +1,42 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "5b56d958-be96-433c-863e-0fa280465571",
+	"prevIds": ["e88089c6-5712-4d9c-9fb6-b048a2ef8d5a"],
+	"footprints": [
+		{
+			"statementType": "add_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_execution_calls",
+				"read_retry_failure"
+			],
+			"writes": [
+				"s|col|public.openbot_execution_calls.read_retry_failure",
+				"n|col|public.openbot_execution_calls.read_retry_failure",
+				"e|col|public.openbot_execution_calls.read_retry_failure"
+			],
+			"reads": ["n|tbl|public.openbot_execution_calls", "n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_execution_calls",
+				"name": "read_retry_failure",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		}
+	]
+}

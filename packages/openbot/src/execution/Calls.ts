@@ -23,6 +23,9 @@ export const Outcome = Schema.TaggedUnion({
 })
 export type Outcome = typeof Outcome.Type
 export interface Input<E = never, R = never> {
+	/** A marked read gets at most one further send, including after a worker change. */
+	readonly lastReadRetry?:
+		((id: Execution.CallId) => Effect.Effect<boolean>) | undefined
 	/** Read a committed command receipt. This must not start or change work. */
 	readonly savedResult?: (
 		callId: Execution.CallId,
@@ -378,8 +381,16 @@ const make = Effect.gen(function* () {
 									input.retry === "never" ? "outcome_unknown" : "external",
 									fence.id,
 								)
-								if (input.retry === "read_only")
-									yield* store.incompleteRead(fence, call.id)
+								if (input.retry === "read_only") {
+									const bounded =
+										input.lastReadRetry !== undefined &&
+										(yield* input.lastReadRetry(call.id))
+									yield* store.incompleteRead(
+										fence,
+										call.id,
+										bounded ? failure : undefined,
+									)
+								}
 								if (input.retry !== "never") return yield* Effect.fail(failure)
 								yield* store.uncertain(fence, call.id)
 								return Option.none<Schema.Json>()

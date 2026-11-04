@@ -13,7 +13,20 @@ import {
 	SavedResult,
 } from "../src/plugins/ToolEntry.ts"
 import * as ModelCalls from "../src/models/ModelCalls.ts"
-import { NodeServices } from "@effect/platform-node"
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Reset a real TCP socket after a model delta is saved.
+import { createServer } from "node:http"
+import {
+	NodeHttpServer,
+	NodeHttpServerRequest,
+	NodeServices,
+} from "@effect/platform-node"
+import {
+	FetchHttpClient,
+	HttpServerRequest,
+	HttpServerResponse,
+} from "effect/http"
+import * as Compatible from "../src/providers/openai-compat/OpenAiCompatProvider.ts"
+import * as Wait from "./Wait.ts"
 import { assert, layer } from "@effect/vitest"
 import {
 	Chat,
@@ -25,9 +38,11 @@ import {
 	ContextCompaction,
 	ContextWindow,
 	ChatStoreRepository,
+	ChatState,
 	MemoryPersistence,
 	Store as CoreStore,
 	TurnRunner,
+	TurnState,
 } from "@openbot-build/core"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import {
@@ -67,7 +82,7 @@ import * as Report from "../src/errors/Report.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Calls from "../src/execution/Calls.ts"
 import * as CallRecovery from "../src/execution/CallRecovery.ts"
-import { SqlError } from "effect/sql"
+import { SqlClient, SqlError } from "effect/sql"
 import * as Runner from "../src/execution/Runner.ts"
 import * as RunScope from "../src/execution/RunScope.ts"
 import * as Engine from "../src/execution/Engine.ts"
@@ -86,6 +101,7 @@ import {
 import { Registry } from "../src/execution/Engine.ts"
 import * as Judge from "../src/capabilities/Judge.ts"
 import { ModelRegistry, AnyModel } from "../src/models/ModelRegistry.ts"
+import * as BillingPostgres from "../src/billing/BillingPostgres.ts"
 import * as BotFixture from "./BotFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
@@ -174,7 +190,11 @@ const services = ToolSteps.layer.pipe(
 	Layer.provideMerge(NodeServices.layer),
 )
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
-const start = Effect.fn(function* (namespace: string) {
+const start = Effect.fn(function* (
+	namespace: string,
+	organizationId: string = actor.organizationId,
+) {
+	const owner = { ...actor, organizationId }
 	const store = yield* Store.Store
 	const receipt = yield* store.submit(
 		namespace,
@@ -182,7 +202,7 @@ const start = Effect.fn(function* (namespace: string) {
 		{
 			workflow: "calls",
 			resource: { kind: "Chat", id: namespace },
-			identity: { owner: actor, actor },
+			identity: { owner, actor: owner },
 			input: null,
 		},
 	)
@@ -194,7 +214,373 @@ const input = {
 	retry: "never",
 	input: { text: "private input" },
 } as const
+type ReadPolicy =
+	| "enabled"
+	| "off"
+	| "provider tool"
+	| "provider-defined tool"
+	| "redirect"
+	| "fails again"
+	| "budget blocked"
+const modelReadFault = Effect.fnUntraced(function* (
+	fault: "HTTP 504" | "socket reset",
+	policy: ReadPolicy,
+) {
+	const namespace = `model-read-${fault}-${policy}`
+	const fence = yield* start(namespace, namespace)
+	const billing = yield* BillingPostgres.make
+	const usageOwner = {
+		organizationId: namespace,
+		providerId: "provider-" + fence.id,
+		providerOwner: "organization" as const,
+		modelId: selection.model,
+	}
+	const sql = yield* SqlClient.SqlClient
+	yield* sql`insert into openbot_organizations (id, name, status, created_at) values (${usageOwner.organizationId}, 'Test', 'active', 0)`
+	yield* sql`insert into openbot_model_providers (id, owner_kind, owner_id, kind, name, api_key, version, created_at, updated_at)
+        values (${usageOwner.providerId}, 'organization', ${usageOwner.organizationId}, 'openai-compat', 'Test model', 'unused', 1, 0, 0)`
+	const store = yield* Store.Store
+	const local = { host: "127.0.0.1", port: 0 }
+	const server = yield* NodeHttpServer.make(createServer, local)
+	if (server.address._tag === "UnixPathAddress")
+		return yield* Effect.die("Expected a TCP server.")
+	const apiUrl = `http://127.0.0.1:${server.address.port}/v1`
+	const requests = yield* Ref.make<ReadonlyArray<Schema.JsonObject>>([])
+	const reads = yield* Ref.make(0)
+	const resetAfterSave = yield* Ref.make(false)
+	const redirectTargets = yield* Ref.make(0)
+	const receipt = "The draft exists."
+	// A single delta large enough to flush without a timer.
+	const partial = Str.repeat(24)("A partial reply. ")
+	const texts = Effect.map(store.events(fence, 0), (events) =>
+		Arr.flatMap(events, ({ body }) =>
+			body._tag === "Text" ? [[body.attempt, body.text] as const] : [],
+		),
+	)
+	const frame = (delta: Schema.JsonObject, finish: string | null) => {
+		const choices = [{ index: 0, delta, finish_reason: finish }]
+		const usage =
+			finish === null
+				? undefined
+				: { prompt_tokens: 4, completion_tokens: 1, total_tokens: 5 }
+		return `data: ${JSON.stringify({ id: "test", model: selection.model, created: 1, choices, usage })}\n\n`
+	}
+	const read = { name: "Read", arguments: "{}" }
+	const call = { index: 0, id: "read-1", type: "function", function: read }
+	const first = frame({ tool_calls: [call] }, "tool_calls")
+	const last = frame({ content: "Done." }, "stop")
+	const interrupted = frame({ content: partial }, null)
+	const headers = { "content-type": "text/event-stream" }
+	const ended = (chunk: string) =>
+		HttpServerResponse.text(chunk + "data: [DONE]\n\n", { headers })
+	yield* server.serve(
+		Effect.gen(function* () {
+			const req = yield* HttpServerRequest.HttpServerRequest
+			if (req.url === "/unexpected") {
+				yield* Ref.update(redirectTargets, (n) => n + 1)
+				return ended(last)
+			}
+			const payload = yield* req.json.pipe(
+				Effect.flatMap(Schema.decodeUnknownEffect(Schema.JsonObject)),
+				Effect.orDie,
+			)
+			const seen = yield* Ref.updateAndGet(requests, Arr.append(payload))
+			if (seen.length === 1) return ended(first)
+			if (seen.length === 3 && policy === "redirect")
+				return HttpServerResponse.empty({
+					status: 307,
+					headers: { location: "/unexpected" },
+				})
+			if (seen.length === 3 && policy !== "fails again") return ended(last)
+			if (seen.length > 3) return HttpServerResponse.empty({ status: 500 })
+			if (policy === "budget blocked")
+				yield* billing
+					.createBudget(usageOwner.organizationId, {
+						scope: "organization",
+						period: "day",
+						mode: "hard",
+						limitMicros: 0,
+					})
+					.pipe(Effect.orDie)
+			if (fault === "HTTP 504") return HttpServerResponse.empty({ status: 504 })
+			const socket = NodeHttpServerRequest.toIncomingMessage(req).socket
+			const reset = Wait.untilTrue("partial model text saved", texts, (rows) =>
+				Arr.some(rows, (row) => row[1] === partial),
+			).pipe(
+				Effect.orDie,
+				Effect.andThen(Effect.sync(() => socket.resetAndDestroy())),
+				Effect.andThen(Ref.set(resetAfterSave, true)),
+			)
+			return HttpServerResponse.stream(
+				Stream.concat(
+					Stream.make(new TextEncoder().encode(interrupted)),
+					Stream.fromEffectDrain(reset),
+				),
+				{ headers },
+			)
+		}),
+	)
+	const chatStore = yield* ChatStoreRepository.make({
+		definition: yield* CoreStore.define({
+			stores: {},
+			schemaVersion: "chat/1",
+		}),
+		persistence: yield* MemoryPersistence.make,
+	})
+	const { chat } = yield* chatStore.create({})
+	const turn = Turn.Id.make("turn")
+	const item = {
+		id: Item.Id.make("input"),
+		content: Prompt.make("Read the draft"),
+		origin: { chat: chat.id, turn, step: 0 },
+	}
+	const { view } = yield* chatStore.modifyEffect({
+		chat: chat.id,
+		update: (current) =>
+			TurnState.start(current, {
+				turn,
+				selected: [{ id: item.id, content: item.content, kind: "message" }],
+				items: [item],
+				startedAt: 0,
+			}).pipe(
+				Effect.map((change) => [undefined, Option.some(change)] as const),
+			),
+	})
+	const readTool = Tool.make("Read", {
+		parameters: Schema.Struct({}),
+		success: Schema.String,
+	}).annotate(Tool.Readonly, true)
+	const hosted = Tool.providerDefined({
+		id: "test.remote",
+		customName: "remote",
+		providerName: "remote",
+		args: Schema.Struct({}),
+		parameters: Schema.Struct({}),
+		success: Schema.String,
+	})({})
+	const toolkit = Toolkit.make(
+		readTool,
+		...(policy === "provider-defined tool" ? [hosted] : []),
+	)
+	const client = Compatible.layerClient({
+		apiUrl,
+		...(policy === "off"
+			? {}
+			: {
+					modelReadRetryRoutes: [
+						{
+							completionUrl: apiUrl + "/chat/completions",
+							model: selection.model,
+						},
+					],
+				}),
+	}).pipe(Layer.provide(FetchHttpClient.layer))
+	const provider = Compatible.make(
+		policy === "provider tool" ? { web_search_options: {} } : {},
+	)
+	const rawModel = (yield* provider.model(selection)).pipe(
+		Layer.provide(client),
+	)
+	const report = yield* Report.make
+	const model = Layer.effect(
+		LanguageModel.LanguageModel,
+		Effect.map(LanguageModel.LanguageModel, (raw) =>
+			meter(raw, usageOwner, {
+				billing,
+				report,
+				throttle: {
+					scopes: () => Effect.succeed([]),
+					take: () => Effect.void,
+					charge: () => Effect.succeed(0),
+				},
+			}),
+		),
+	).pipe(Layer.provide(rawModel))
+	const handlers = toolkit.toLayer({
+		Read: () => Ref.update(reads, (n) => n + 1).pipe(Effect.as(receipt)),
+	})
+	const exit = yield* Effect.gen(function* () {
+		const runner = yield* TurnRunner.make({
+			store: chatStore,
+			bot: { toolkit },
+			...(yield* ModelSteps.makeExecutors(fence, selection)),
+			executeTool: (yield* ToolSteps.ToolSteps).executor(fence),
+		})
+		return yield* runner
+			.run({ view, turn, item: item.id, prompt: item.content })
+			.pipe(Stream.runDrain)
+	}).pipe(
+		Effect.provide(Layer.merge(model, handlers)),
+		Effect.provideService(Billing, billing),
+		Effect.exit,
+	)
+	const retried =
+		policy === "enabled" || policy === "fails again" || policy === "redirect"
+	const sent = yield* Ref.get(requests)
+	assert.lengthOf(sent, retried ? 3 : 2)
+	const messages = yield* Schema.decodeUnknownEffect(
+		Schema.Array(Schema.JsonObject),
+	)(sent[1]!["messages"])
+	assert.ok(
+		Arr.some(
+			messages,
+			(message) => message["role"] === "tool" && message["content"] === receipt,
+		),
+	)
+	if (retried) {
+		assert.deepStrictEqual(sent[2]!["messages"], sent[1]!["messages"])
+		assert.deepStrictEqual(sent[2]!["tools"], sent[1]!["tools"])
+	}
+	if (policy === "provider tool")
+		assert.deepStrictEqual(sent[1]!["web_search_options"], {})
+	if (policy === "provider-defined tool") {
+		// The saved tool definition reaches the wire as a function; its origin still rules out a retry.
+		const wireTools = yield* Schema.decodeUnknownEffect(
+			Schema.Array(
+				Schema.Struct({
+					type: Schema.String,
+					function: Schema.Struct({ name: Schema.String }),
+				}),
+			),
+		)(sent[1]!["tools"])
+		assert.ok(
+			Arr.some(
+				wireTools,
+				(tool) => tool.type === "function" && tool.function.name === "remote",
+			),
+		)
+	}
+	assert.strictEqual(yield* Ref.get(reads), 1)
+	assert.strictEqual(yield* Ref.get(redirectTargets), 0)
+	assert.strictEqual(yield* Ref.get(resetAfterSave), fault === "socket reset")
+	const calls = yield* store.calls(fence)
+	const [initial, tool, failed, retry] = calls
+	assert.ok(initial && tool && failed)
+	assert.strictEqual(initial.status, "completed")
+	assert.strictEqual(tool.status, "completed")
+	assert.strictEqual(failed.status, "outcome_unknown")
+	assert.strictEqual(failed.attempt, 0)
+	const usage = (yield* billing.events(
+		usageOwner.organizationId,
+		{ from: 0, to: (yield* Clock.currentTimeMillis) + 1 },
+		{ limit: 10 },
+	)).items
+	const original = Arr.findFirst(usage, (row) => row.id === failed.id)
+	assert.ok(Option.isSome(original))
+	assert.strictEqual(original.value.status, "unknown")
+	assert.isNull(original.value.costMicros)
+	assert.lengthOf(calls, retried || policy === "budget blocked" ? 4 : 3)
+	if (retry !== undefined) {
+		assert.strictEqual(retry.step, failed.step)
+		assert.strictEqual(retry.attempt, 1)
+		assert.notStrictEqual(retry.id, failed.id)
+		const second = Arr.findFirst(usage, (row) => row.id === retry.id)
+		if (policy === "budget blocked") assert.ok(Option.isNone(second))
+		else {
+			assert.ok(Option.isSome(second))
+			assert.strictEqual(
+				second.value.status,
+				policy === "enabled" ? "confirmed" : "unknown",
+			)
+		}
+	}
+	const before: Array<readonly [number, string]> =
+		fault === "socket reset" ? [[0, partial]] : []
+	if (policy === "enabled") {
+		assert.ok(Exit.isSuccess(exit))
+		assert.strictEqual(
+			(yield* chatStore.read(chat.id)).chat.turn?.status._tag,
+			"Completed",
+		)
+		const history = ChatState.promptOf(yield* chatStore.items(chat.id))
+		const answer = Arr.flatMap(history.content, (message) =>
+			message.role === "assistant"
+				? Arr.flatMap(message.content, (p) =>
+						p.type === "text" ? [p.text] : [],
+					)
+				: [],
+		)
+		assert.deepStrictEqual(answer, ["Done."])
+		assert.deepStrictEqual(yield* texts, [...before, [1, "Done."]])
+	} else {
+		assert.ok(Exit.isFailure(exit))
+		const error = Cause.findErrorOption(exit.cause)
+		assert.ok(Option.isSome(error) && Schema.is(Execution.Failure)(error.value))
+		assert.strictEqual(
+			error.value.category,
+			policy === "budget blocked" ? "forbidden" : "external",
+		)
+		assert.deepStrictEqual(yield* texts, before)
+	}
+})
+
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
+	for (const [fault, policy] of [
+		["HTTP 504", "enabled"],
+		["socket reset", "enabled"],
+		["HTTP 504", "off"],
+		["HTTP 504", "provider tool"],
+		["HTTP 504", "provider-defined tool"],
+		["HTTP 504", "redirect"],
+		["HTTP 504", "fails again"],
+		["HTTP 504", "budget blocked"],
+	] as const) {
+		it.effect(
+			`a model read after a saved tool result: ${fault}, ${policy}`,
+			() => modelReadFault(fault, policy).pipe(Effect.scoped),
+		)
+	}
+
+	for (const boundary of [
+		"after the first failure",
+		"before the final send",
+		"after the final send",
+	] as const) {
+		it.effect(`a new worker cannot repeat the model read ${boundary}`, () =>
+			Effect.gen(function* () {
+				const store = yield* Store.Store
+				const models = yield* ModelCalls.make
+				const sender = yield* start(`final-model-read-${boundary}`)
+				const step = "model:item"
+				const first = yield* store.readAttempt(sender, step, null)
+				yield* store.sending(sender, first.id)
+				const failure = {
+					errorId: Execution.ErrorId.make("model-read-failed"),
+					category: "external" as const,
+				}
+				yield* store.incompleteRead(sender, first.id, failure)
+				if (boundary !== "after the first failure") {
+					const final = yield* store.readAttempt(sender, step, null, first.id)
+					assert.strictEqual(final.attempt, 1)
+					assert.deepStrictEqual(
+						yield* store.latestCall(sender, step),
+						Option.some(final),
+					)
+					if (boundary === "after the final send")
+						yield* store.sending(sender, final.id)
+				}
+				const owner = yield* store.takeOver(sender)
+				const before = yield* store.calls(owner)
+				const result = yield* models
+					.run(owner, step, null, {
+						codec: Schema.String,
+						beforeSend: Effect.void,
+						send: () =>
+							Effect.die("A new worker must not send this model request."),
+						usage: () => assert.fail("There is no confirmed usage."),
+					})
+					.pipe(Effect.flip)
+				assert.deepStrictEqual(result, failure)
+				const after = yield* store.calls(owner)
+				assert.deepStrictEqual(
+					Arr.map(after, (call) => call.id),
+					Arr.map(before, (call) => call.id),
+				)
+				assert.ok(Arr.every(after, (call) => call.result === null))
+			}),
+		)
+	}
+
 	for (const outcome of ["not_sent", "not_sent_retry", "unknown"] as const) {
 		it.effect(`a Live model keeps a ${outcome} outcome through takeover`, () =>
 			Effect.gen(function* () {

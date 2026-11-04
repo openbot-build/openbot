@@ -13,6 +13,11 @@ import { Execution } from "@openbot-build/domain"
 import { CurrentAttribution } from "../billing/MeteredModel.ts"
 import * as ModelCalls from "../models/ModelCalls.ts"
 import {
+	CurrentModelReadFailure,
+	FinalModelRead,
+	type ModelReadRequest,
+} from "../models/ModelFailure.ts"
+import {
 	Array as Arr,
 	Clock,
 	Crypto,
@@ -183,65 +188,130 @@ const make = Effect.gen(function* () {
 			),
 		)
 
-		return yield* modelCalls.run(fence, step, savedInput, {
-			codec: resultCodec,
-			retry,
-			usage: (result) => result.usage,
-			beforeSend: access.model(fence, selection),
-			send: (call) =>
-				Effect.gen(function* () {
-					const attribution = yield* CurrentAttribution
-					const pending = yield* Ref.make("")
-					const lastFlush = yield* Ref.make(yield* Clock.currentTimeMillis)
-					const flush = Effect.gen(function* () {
-						const text = yield* Ref.getAndSet(pending, "")
-						if (text.length === 0) return
-						yield* store.commit(
-							fence,
-							{ events: [{ _tag: "Text", step, attempt: call.attempt, text }] },
-							Effect.void,
-						)
-						yield* Ref.set(lastFlush, yield* Clock.currentTimeMillis)
-					})
-					const result = yield* ModelStep.run<
-						typeof toolkit.tools,
-						Effect.Error<typeof flush>,
-						never
-					>({ ...input, toolkit }, (part) =>
-						Effect.gen(function* () {
-							if (purpose === "compaction" || part.type !== "text-delta")
-								return yield* onPart(
-									part as Response.StreamPart<Tools, "deferred">,
-								)
-							const text = yield* Ref.updateAndGet(
-								pending,
-								(text) => text + part.delta,
-							)
-							if (
-								text.length >= 256 ||
-								(yield* Clock.currentTimeMillis) -
-									(yield* Ref.get(lastFlush)) >=
-									50
-							)
-								yield* flush
-							yield* onPart(part as Response.StreamPart<Tools, "deferred">)
-						}),
-					).pipe(
-						Effect.provideService(LanguageModel.LanguageModel, model),
-						Effect.provideService(
-							CurrentAttribution,
-							purpose === "compaction"
-								? Effect.map(attribution, (current) => ({
-										...current,
-										source: "compaction" as const,
-									}))
-								: attribution,
+		type BrokenRead = { id: Execution.CallId; request: ModelReadRequest }
+		const failedRead = yield* Ref.make(Option.none<BrokenRead>())
+		const hostOnly = !Arr.some(
+			Rec.values(input.toolkit.tools),
+			Tool.isProviderDefined,
+		)
+		const attempt = (prior?: BrokenRead & { failure: Execution.Failure }) =>
+			modelCalls.run(fence, step, savedInput, {
+				retryFrom: prior?.id,
+				lastReadRetry: (id) =>
+					Ref.get(failedRead).pipe(
+						Effect.map(
+							(broken) => Option.isSome(broken) && broken.value.id === id,
 						),
-						Effect.onExit(() => flush),
+					),
+				codec: resultCodec,
+				retry,
+				usage: (result) => result.usage,
+				beforeSend: access.model(fence, selection),
+				send: (call) =>
+					Effect.gen(function* () {
+						const attribution = yield* CurrentAttribution
+						const pending = yield* Ref.make("")
+						const sendGuard =
+							prior === undefined
+								? undefined
+								: { ...prior, sent: yield* Ref.make(false) }
+						const providerAction = yield* Ref.make(false)
+						const lastFlush = yield* Ref.make(yield* Clock.currentTimeMillis)
+						const flush = Effect.gen(function* () {
+							const text = yield* Ref.getAndSet(pending, "")
+							if (text.length === 0) return
+							yield* store.commit(
+								fence,
+								{
+									events: [{ _tag: "Text", step, attempt: call.attempt, text }],
+								},
+								Effect.void,
+							)
+							yield* Ref.set(lastFlush, yield* Clock.currentTimeMillis)
+						})
+						const result = yield* ModelStep.run<
+							typeof toolkit.tools,
+							Effect.Error<typeof flush>,
+							never
+						>({ ...input, toolkit }, (part) =>
+							Effect.gen(function* () {
+								if (
+									"providerExecuted" in part &&
+									part.providerExecuted === true
+								) {
+									yield* Ref.set(providerAction, true)
+									yield* Ref.set(failedRead, Option.none())
+								}
+								if (purpose === "compaction" || part.type !== "text-delta")
+									return yield* onPart(
+										part as Response.StreamPart<Tools, "deferred">,
+									)
+								const text = yield* Ref.updateAndGet(
+									pending,
+									(text) => text + part.delta,
+								)
+								if (
+									text.length >= 256 ||
+									(yield* Clock.currentTimeMillis) -
+										(yield* Ref.get(lastFlush)) >=
+										50
+								)
+									yield* flush
+								yield* onPart(part as Response.StreamPart<Tools, "deferred">)
+							}),
+						).pipe(
+							Effect.provideService(LanguageModel.LanguageModel, model),
+							Effect.provideService(FinalModelRead, sendGuard),
+							Effect.provideService(
+								CurrentModelReadFailure,
+								purpose === "turn" &&
+									retry === "read_only" &&
+									hostOnly &&
+									call.attempt === 0
+									? (_reason, request) =>
+											Effect.gen(function* () {
+												if (!(yield* Ref.get(providerAction)))
+													yield* Ref.set(
+														failedRead,
+														Option.some({ id: call.id, request }),
+													)
+											})
+									: undefined,
+							),
+							Effect.provideService(
+								CurrentAttribution,
+								purpose === "compaction"
+									? Effect.map(attribution, (current) => ({
+											...current,
+											source: "compaction" as const,
+										}))
+									: attribution,
+							),
+							Effect.onExit(() => flush),
+						)
+						return result
+					}),
+			})
+		return yield* attempt().pipe(
+			Effect.catchIf(Schema.is(Execution.Failure), (failure) =>
+				Effect.gen(function* () {
+					const broken = yield* Ref.get(failedRead)
+					if (failure.category !== "external" || Option.isNone(broken))
+						return yield* Effect.fail(failure)
+					const latest = yield* store.latestCall(fence, step)
+					if (
+						Option.isNone(latest) ||
+						latest.value.id !== broken.value.id ||
+						latest.value.retry !== "read_only" ||
+						latest.value.attempt !== 0 ||
+						latest.value.status !== "outcome_unknown"
 					)
-					return result
+						return yield* Effect.fail(failure)
+					// A new call checks access and reserves its own usage. The first call keeps its unknown cost.
+					return yield* attempt({ ...broken.value, failure })
 				}),
-		})
+			),
+		)
 	})
 	/** A summary uses the same saved calls, attempts and usage as a normal model step. */
 	const summarize = (

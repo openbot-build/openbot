@@ -142,6 +142,45 @@ sendet dafür eine leere Zeichenfolge. So kann der nächste Model-Aufruf das
 Tool-Ergebnis lesen. Dies gilt nur für diese Cloudflare-Adresse. Nachrichten an
 andere Anbieter bleiben gleich.
 
+### Nach einer unterbrochenen Antwort erneut anfragen
+
+Für einen gespeicherten `openai-compat`-Anbieter können Sie
+`modelReadRetryRoutes` in den Optionen für `Server.layerLive` setzen. Die Liste
+ist anfangs leer. Jeder Eintrag enthält die ID eines gespeicherten Anbieters,
+die vollständige Chat-Completions-URL und den Modellnamen, **der an diese URL
+gesendet wird**. Beispiel:
+
+```ts
+Server.layerLive({
+	...settings,
+	modelReadRetryRoutes: [
+		{
+			providerId: provider.id,
+			completionUrl: "https://model.example/v1/chat/completions",
+			model: "text-small",
+		},
+	],
+})
+```
+
+Geben Sie die Ziel-URL an. Anfragen, die erneut gesendet werden dürfen, folgen
+keiner Weiterleitung. Aktivieren Sie dies nur für Anbieter, die selbst keine
+Aktionen ausführen. Bei HTTP 504 oder einem Abbruch des Antwortstreams kann ein
+normaler Chat denselben Modellschritt einmal erneut versuchen. OpenBot nutzt
+gespeicherte Tool-Ergebnisse. OpenBot wiederholt keine Anfrage, die ein Tool
+beim Anbieter ausführen kann, eine unbekannte Option enthält oder den
+HTTP-Client durch eigenen Code anpasst. Für jeden Versuch prüft OpenBot Rechte
+und Budget neu. Beide Anfragen können Modell-Tokens verbraucht haben.
+
+Nur der Worker, der den Fehler erhält, darf die Anfrage wiederholen. Stoppt
+dieser Worker, sendet sein Nachfolger diese Anfrage nicht erneut. Für andere
+offene Schritte gelten die
+[bisherigen Regeln](/de/developers/chats#wenn-ein-server-stoppt).
+
+Ein Client, der [Ausführungsereignisse](/de/developers/chats) liest, sollte
+anstelle der unvollständigen Antwort den Text des neuen Versuchs anzeigen. Der
+alte Text bleibt mit seiner Versuchsnummer im Verlauf.
+
 ## Models für die Entwicklung
 
 Der Server für die Entwicklung (`devenv shell -- pnpm dev`) ruft kein echtes

@@ -235,6 +235,8 @@ export const executionCalls = pgTable(
 		status: text().notNull(),
 		input: text().notNull(),
 		result: text(),
+		/** Sealed cause of the first failed read. The next attempt is the last one. */
+		readRetryFailure: text("read_retry_failure"),
 		completionSequence: integer(),
 		createdAt: time("created_at").notNull(),
 		updatedAt: time("updated_at").notNull(),

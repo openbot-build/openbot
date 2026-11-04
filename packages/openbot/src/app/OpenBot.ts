@@ -97,6 +97,8 @@ export interface Options {
 	 * models come from the model providers that the API stores.
 	 */
 	readonly builtinModels?: ModelRegistry.Builtin
+	/** Model routes that may retry once after a dropped stream or HTTP 504. Empty by default. */
+	readonly modelReadRetryRoutes?: ModelRegistry.Options["modelReadRetryRoutes"]
 }
 
 /**
@@ -240,11 +242,10 @@ const layerAccounts = AuthorizationLayer.layer.pipe(
  * spending services come before it.
  */
 const layerModels = (options: Options) =>
-	ModelRegistry.layer(
-		options.builtinModels === undefined
-			? {}
-			: { builtin: options.builtinModels },
-	).pipe(
+	ModelRegistry.layer({
+		builtin: options.builtinModels,
+		modelReadRetryRoutes: options.modelReadRetryRoutes,
+	}).pipe(
 		Layer.provideMerge(
 			ProviderOAuth.layer.pipe(Layer.provide(ChatGptOAuth.layer)),
 		),

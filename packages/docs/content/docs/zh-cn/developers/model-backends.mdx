@@ -130,6 +130,32 @@ compaction）会把很长的历史变短，让它能放进模型的上下文窗�
 AI 不接受工具调用助手消息中的 `null`
 文本。OpenBot 将这条消息的文本设为空字符串，让下一次模型调用能够读取工具结果。此处理仅用于这个 Cloudflare 地址。其他提供方的消息保持原样。
 
+### 模型回复中断后重试
+
+对于已保存的 `openai-compat` 提供方，可以在传给 `Server.layerLive` 的选项中设置
+`modelReadRetryRoutes`。列表默认为空。每一项指定一个已保存的提供方 ID、完整的 Chat
+Completions URL，以及**实际发给该地址的模型名称**。例如：
+
+```ts
+Server.layerLive({
+	...settings,
+	modelReadRetryRoutes: [
+		{
+			providerId: provider.id,
+			completionUrl: "https://model.example/v1/chat/completions",
+			model: "text-small",
+		},
+	],
+})
+```
+
+请填写最终地址：符合重试条件的请求不会跟随重定向。只为不会自行执行操作的提供方启用重试。如果网关返回 HTTP
+504 或回复流中断，普通 Chat 可以再尝试同一个模型步骤一次。OpenBot 复用已保存的工具结果。如果请求允许提供方执行工具、含有无法识别的选项，或自定义了 HTTP 客户端转换，就不会重试。每次尝试都要检查权限和预算；两次请求都可能已经消耗模型用量。
+
+只有遇到这次故障的服务器可以补发。如果它停止，接手的服务器不会再次发送这个请求。其他未完成的步骤仍按[原有规则](/zh-cn/developers/chats#服务器停止时)恢复。
+
+读取[执行事件](/zh-cn/developers/chats)的客户端应在原处显示新尝试的回复，替换上一次留下的部分文本。旧文本仍保留在事件历史中，可用尝试编号区分。
+
 ## 开发用模型
 
 开发服务器（`devenv shell -- pnpm dev`）不会调用真实的模型。它改用测试模型。它们每次都给出同样的回答，所以你可以零成本地测试客户端。

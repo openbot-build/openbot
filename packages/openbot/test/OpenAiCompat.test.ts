@@ -1,5 +1,7 @@
 import {
 	Array as Arr,
+	Cause,
+	Option,
 	Match,
 	Context,
 	Deferred,
@@ -12,6 +14,14 @@ import {
 	Stream,
 } from "effect"
 import { assert, it } from "@effect/vitest"
+import { OpenAiClient, OpenAiConfig } from "@effect/ai-openai-compat"
+import { Execution } from "@openbot-build/domain"
+import {
+	CurrentModelReadFailure,
+	FinalModelRead,
+	fromCause,
+	type ModelReadFailureReason,
+} from "../src/models/ModelFailure.ts"
 
 import {
 	LanguageModel,
@@ -311,6 +321,150 @@ it.effect(
 				),
 			)
 		}),
+)
+
+const apiUrl = "https://model.test/v1"
+const completionUrl = apiUrl + "/chat/completions"
+
+it.effect(
+	"an exact model route reports only gateway and network failures",
+	() =>
+		Effect.gen(function* () {
+			for (const [mode, bodyError, expected] of [
+				["504", null, "gateway_timeout"],
+				["other model", null, null],
+				["other URL", null, null],
+				["redirect", null, null],
+				["custom client", null, null],
+				["scoped client", null, null],
+				["socket reset", { code: "ECONNRESET" }, "socket_reset"],
+				["body timeout", { code: "UND_ERR_BODY_TIMEOUT" }, "body_timeout"],
+				["different MIME", { code: "ECONNRESET" }, null],
+				["unknown error", { code: "OTHER" }, null],
+				["abort", { code: "ABORT_ERR" }, null],
+				["caller timeout", { name: "TimeoutError" }, null],
+			] as const) {
+				const http = Layer.succeed(
+					HttpClient.HttpClient,
+					HttpClient.make((request) =>
+						Effect.sync(() => {
+							const body =
+								bodyError === null
+									? null
+									: new ReadableStream<Uint8Array>({
+											start(controller) {
+												controller.error(
+													Object.assign(new Error("Read failed"), bodyError),
+												)
+											},
+										})
+							const response = new globalThis.Response(body, {
+								status: bodyError === null ? 504 : 200,
+								headers: {
+									"content-type":
+										mode === "different MIME"
+											? "application/json"
+											: "text/event-stream",
+								},
+							})
+							if (mode === "redirect")
+								Object.defineProperty(response, "url", {
+									value: "https://other.test/chat/completions",
+								})
+							return HttpClientResponse.fromWeb(request, response)
+						}),
+					),
+				)
+				const pass = (client: HttpClient.HttpClient) => client
+				const client = OpenAiCompatProvider.layerClient({
+					apiUrl,
+					modelReadRetryRoutes: [
+						{
+							completionUrl:
+								mode === "other URL"
+									? "https://other.test/chat/completions"
+									: completionUrl,
+							model: mode === "other model" ? "other" : selection.model,
+						},
+					],
+					...(mode === "custom client" ? { transformClient: pass } : {}),
+				}).pipe(Layer.provide(http))
+				const reasons = yield* Ref.make<ReadonlyArray<ModelReadFailureReason>>(
+					[],
+				)
+				const read = Effect.gen(function* () {
+					const api = yield* OpenAiClient.OpenAiClient
+					const [, stream] = yield* api.createResponseStream({
+						model: selection.model,
+						messages: [],
+					})
+					return yield* Stream.runDrain(stream)
+				})
+				yield* (
+					mode === "scoped client"
+						? OpenAiConfig.withClientTransform(read, pass)
+						: read
+				).pipe(
+					Effect.provide(client),
+					Effect.provideService(CurrentModelReadFailure, (reason) =>
+						Ref.update(reasons, Arr.append(reason)),
+					),
+					Effect.flip,
+				)
+				assert.deepStrictEqual(
+					yield* Ref.get(reasons),
+					expected === null ? [] : [expected],
+					mode,
+				)
+			}
+		}),
+)
+
+it.effect("a change to the retry request is reported as not sent", () =>
+	Effect.gen(function* () {
+		const dispatches = yield* Ref.make(0)
+		const sent = yield* Ref.make(false)
+		const http = Layer.succeed(
+			HttpClient.HttpClient,
+			HttpClient.make((request) =>
+				Ref.update(dispatches, (n) => n + 1).pipe(
+					Effect.as(
+						HttpClientResponse.fromWeb(
+							request,
+							new globalThis.Response(null, { status: 504 }),
+						),
+					),
+				),
+			),
+		)
+		const client = OpenAiCompatProvider.layerClient({
+			apiUrl,
+			modelReadRetryRoutes: [{ completionUrl, model: selection.model }],
+		}).pipe(Layer.provide(http))
+		const failure = {
+			errorId: Execution.ErrorId.make("first-read"),
+			category: "external" as const,
+		}
+		const error = yield* Effect.gen(function* () {
+			const api = yield* OpenAiClient.OpenAiClient
+			const [, stream] = yield* api.createResponseStream({
+				model: selection.model,
+				messages: [],
+			})
+			return yield* Stream.runDrain(stream)
+		}).pipe(
+			Effect.provide(client),
+			Effect.provideService(FinalModelRead, {
+				request: { url: completionUrl, body: '{"messages":["different"]}' },
+				sent,
+				failure,
+			}),
+			Effect.flip,
+		)
+		assert.deepStrictEqual(fromCause(Cause.fail(error)), Option.some(failure))
+		assert.strictEqual(yield* Ref.get(dispatches), 0)
+		assert.strictEqual(yield* Ref.get(sent), false)
+	}),
 )
 
 it.effect("HTTP errors stay model errors", () =>

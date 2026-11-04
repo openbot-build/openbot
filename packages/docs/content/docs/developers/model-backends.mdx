@@ -137,6 +137,42 @@ OpenBot sends an empty string for that message, so the next model call can read
 the tool result. This change applies only to this Cloudflare endpoint. Other
 providers keep the same messages.
 
+### Retry an interrupted model reply
+
+For a stored `openai-compat` provider, you can set `modelReadRetryRoutes` in the
+options you pass to `Server.layerLive`. The list is empty by default. Each entry
+names one stored provider ID, the full Chat Completions URL and the model name
+**sent to that URL**. For example:
+
+```ts
+Server.layerLive({
+	...settings,
+	modelReadRetryRoutes: [
+		{
+			providerId: provider.id,
+			completionUrl: "https://model.example/v1/chat/completions",
+			model: "text-small",
+		},
+	],
+})
+```
+
+Use the final URL: requests that qualify for retry do not follow redirects.
+Enable a route only if the provider does not take actions on its own. A regular
+Chat can then try the same model step once more if the gateway sends HTTP 504 or
+the response stream breaks. OpenBot reuses saved tool results. It does not retry
+a request that lets the provider run a tool, uses an unknown request option or
+uses a custom HTTP client transform. Each attempt needs its own permission and
+budget check; either may have used model tokens.
+
+Only the worker handling the failure may send the retry. If that worker stops,
+its replacement does not send this model request again. Other unfinished steps
+keep their [normal recovery rules](/developers/chats#when-a-server-stops).
+
+A client that reads [execution events](/developers/chats) should show the text
+of the new attempt in place of the partial reply. The old text stays in the
+event history with its own attempt number.
+
 ## Development models
 
 The development server (`devenv shell -- pnpm dev`) does not call a real model.
