@@ -1,0 +1,298 @@
+---
+title: Plugins
+description:
+  Schalte Plugins von OpenBot mit einer Plugin-Datei aus, die nur gelesen wird.
+---
+
+Für den Plattformbetrieb. Diese Aufgaben betreffen die ganze Installation. Du
+brauchst je nach Aufgabe Serverzugriff. Beginne mit dem
+[Administrationshandbuch](/de/admin).
+
+OpenBot ist eine Gruppe von Plugins auf einem Plugin-Host. Diese Seite nennt die
+Plugins. Sie zeigt, wie du einige davon mit der Plugin-Datei ausschaltest und
+wie du prüfst, dass jeder Server dieselben Plugins hat.
+
+---
+
+## Was ein Plugin ist
+
+Ein Plugin ist eine Funktion von OpenBot, zum Beispiel Bots, Chats oder Trigger.
+Jedes Plugin hat eine feste ID, zum Beispiel `triggers`. Ein Plugin gibt anderen
+Plugins Dienste, und es gibt Routen der API. Siehe den Plugin-Host im
+[Ausführungsdesign](/de/architecture#plugin-host).
+
+Wenn ein Plugin aus ist, sind seine Routen noch in der API. Sie antworten aber
+mit `503` und diesem Inhalt:
+
+```json
+{ "_tag": "FeatureUnavailable", "feature": "triggers" }
+```
+
+Der Header `openbot-unavailable-feature` nennt die API-Gruppe der Route. Ein
+Plugin kann mehr als eine Gruppe haben. Die Routen des Plugins `triggers` sind
+zum Beispiel in den Gruppen `triggers` und `triggerHooks` (die Webhooks).
+
+Das OpenAPI-Dokument unter `/openapi.json` ändert sich nicht, wenn ein Plugin
+aus ist. Clients sehen auf jedem Server denselben Vertrag.
+
+---
+
+## Die Plugins von OpenBot
+
+OpenBot hat 23 Plugins. Die sechs Plugins mit „Ja“ in der Spalte „Nötig“ können
+nie aus sein. Die Spalte „Braucht“ nennt die anderen Plugins, die ein Plugin
+nutzt. Ein Plugin startet erst, wenn jedes Plugin an ist, das es braucht.
+
+| Plugin          | Was es gibt                                                                  | Nötig | Braucht                                                                                                         |
+| --------------- | ---------------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------- |
+| `audit`         | Das Audit-Log jeder Organisation.                                            | Ja    |                                                                                                                 |
+| `mail`          | Mails der Plattform, mit den SMTP-Einstellungen der Plattform.               |       |                                                                                                                 |
+| `platform`      | Die Plattform-Admins und die Plattform-Einstellungen.                        | Ja    | `access`, `audit`, `auth`, `authorization`, `mail`, `models`, `organization`                                    |
+| `organization`  | Organisationen, ihre Mitglieder und Einladungen.                             | Ja    | `audit`, `auth`, `authorization`, `mail`, `models`, `platform`                                                  |
+| `access`        | Wer der Plattform beitreten darf, und wie.                                   | Ja    | `auth`, `authorization`                                                                                         |
+| `sso`           | Die Anmelde-Verbindungen der Organisationen.                                 |       | `access`, `audit`, `auth`, `authorization`                                                                      |
+| `auth`          | Anmeldung, Nutzer-Tokens und die Prüfung jedes Aufrufers.                    | Ja    | `access`, `audit`, `authorization`, `mail`, `organization`, `platform`, `sso`                                   |
+| `authorization` | Rollen und die Prüfung der Rechte jedes Aufrufers.                           | Ja    | `auth`, `organization`, `platform`                                                                              |
+| `models`        | Modell-Anbieter, Modelle und das Modell-Register.                            |       | `audit`, `auth`, `authorization`                                                                                |
+| `files`         | Gespeicherte Dateien und ihre Arbeit.                                        |       | `auth`, `authorization`                                                                                         |
+| `bots`          | Bots, ihr Gedächtnis und die Delegationen zwischen ihnen.                    |       | `audit`, `auth`, `authorization`, `capabilities`, `chats`, `imported`, `mail`, `models`, `organization`, `work` |
+| `capabilities`  | Grants, Rules, Anfragen und ihre Prüfung.                                    |       | `apps`, `audit`, `auth`, `authorization`, `bots`, `chats`, `imported`, `models`                                 |
+| `work`          | Erinnerungen und die Arbeits-Werkzeuge der Bots.                             |       | `bots`, `chats`                                                                                                 |
+| `imported`      | Ausführungen, die in einem anderen Programm begonnen haben.                  |       | `authorization`, `bots`                                                                                         |
+| `chats`         | Chats, Turns, Werkzeuge und Live-Verbindungen.                               |       | `auth`, `authorization`, `bots`, `capabilities`, `channels`, `files`, `imported`, `models`, `organization`      |
+| `channels`      | Channels, ihre Nachrichten und die Channel-Werkzeuge der Bots.               |       | `audit`, `auth`, `authorization`, `bots`, `capabilities`, `chats`, `imported`, `models`, `organization`         |
+| `apps`          | App-Verbindungen, der App Index und die App-Werkzeuge der Bots.              |       | `auth`, `authorization`, `bots`, `capabilities`, `chats`, `code`, `imported`, `models`, `vaults`                |
+| `code`          | Code-Läufe der Bots in einer Sandbox.                                        |       | `apps`, `auth`, `authorization`, `chats`, `imported`, `vaults`                                                  |
+| `vaults`        | Vaults und die Anbieter von Geheimnissen, die sie lesen.                     |       | `audit`, `auth`, `authorization`, `bots`                                                                        |
+| `computers`     | Computer, ihre Kopplungen und Sitzungen und die Computer-Werkzeuge der Bots. |       | `audit`, `auth`, `authorization`, `bots`, `chats`                                                               |
+| `triggers`      | Trigger, die Turns starten, und ihre Webhooks.                               |       | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                                     |
+| `billing`       | Die Wallets der Organisationen, die Nutzung und Budgets.                     |       | `audit`, `auth`, `authorization`, `organization`                                                                |
+| `settings`      | Die Einstellungen jedes Mitglieds.                                           |       | `auth`, `authorization`, `bots`                                                                                 |
+
+Ein Plugin nutzt ein anderes Plugin erst in einem späteren Schritt seines
+Starts. Darum können zwei Plugins einander brauchen, zum Beispiel `bots` und
+`chats`.
+
+Was das für dich heißt:
+
+- Du kannst `computers`, `triggers`, `billing` und `settings` einzeln
+  ausschalten. Kein anderes Plugin braucht sie.
+- Du kannst `mail`, `sso` und `models` nicht ausschalten. Ein nötiges Plugin
+  nutzt sie, also startet OpenBot ohne sie nicht.
+- Die anderen Plugins brauchen einander. Wenn du eines davon ausschaltest, musst
+  du auch jedes Plugin ausschalten, das dieses Plugin braucht.
+
+Wenn ein Plugin aus ist und ein Plugin, das an ist, es braucht, scheitert der
+Start mit `PluginsInactive`. Der Fehler nennt die Plugins, die warten, und die
+Dienste, auf die sie warten.
+
+---
+
+## Die Plugin-Datei
+
+Setze `OPENBOT_PLUGINS_FILE` auf den Pfad einer YAML-Datei. YAML ist ein
+einfaches Textformat für Daten. Die Datei ist eine Liste von Einträgen. Jeder
+Eintrag ändert ein Plugin. Eine leere Datei oder die Liste `[]` ändert nichts.
+
+```yaml
+# /etc/openbot/plugins.yml
+- id: triggers
+  disabled: true
+- id: billing
+  disabled: true
+```
+
+Ohne `OPENBOT_PLUGINS_FILE` ist jedes Plugin an.
+
+### Ein Plugin ausschalten
+
+Gib die ID des Plugins und `disabled: true` an. `disabled: false` lässt das
+Plugin an, wie ohne Eintrag.
+
+### Einem Plugin Konfiguration geben
+
+Ein Eintrag kann `config` haben, die Einstellungen eines Plugins. Heute nimmt
+kein Plugin von OpenBot Konfiguration an. Darum ist `config` an einem Plugin von
+OpenBot ein Fehler, und der Start endet mit „This plugin takes no config.“ So
+sieht ein Wert, den kein Plugin liest, nicht so aus, als würde er wirken.
+
+### Werte aus der Umgebung
+
+Ein Wert kann mit dem Tag `!env` aus einer Umgebungsvariable kommen:
+
+```yaml
+- id: some-plugin
+  config:
+    token: !env SOME_TOKEN
+```
+
+Die Datei enthält nur den Namen der Variable. Der Wert wird gelesen, wenn das
+Plugin startet, und er geht nur an dieses Plugin. OpenBot schreibt ihn nie ins
+Log, `openbot-inspect plugins` gibt ihn nie aus, und er ist nicht im
+Manifest-Hash. Wie jede andere Variable kann er auch aus der Datei
+`/run/secrets/<NAME>` kommen. Siehe
+[Geheimnisse als Dateien](/de/configuration#geheimnisse-als-dateien).
+
+Die Datei wird einmal gelesen, aber der Wert wird bei jedem Start des Plugins
+neu gelesen. Schreibe Geheimnisse nur mit `!env`, nie als einfachen Text in die
+Datei.
+
+### Regeln
+
+OpenBot prüft die ganze Datei vor dem Start. Es nennt alle Probleme auf einmal,
+mit der Stelle in der Datei.
+
+| Der Eintrag                                                                | Was passiert                                                       |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| ist keine Zuordnung oder hat keine `id`                                    | Fehler. Jeder Eintrag braucht eine `id`.                           |
+| hat ein Feld, das nicht `id`, `name`, `disabled` oder `config` ist         | Fehler. Gruppen und andere Felder des Loaders sind nicht erlaubt.  |
+| hat ein `disabled`, das nicht `true` oder `false` ist                      | Fehler.                                                            |
+| hat eine ID, die mehr als einmal in der Datei steht                        | Fehler.                                                            |
+| gibt einem Plugin von OpenBot einen anderen `name`                         | Fehler. Der Name eines Plugins von OpenBot kann sich nicht ändern. |
+| schaltet ein nötiges Plugin aus                                            | Fehler. „This plugin is needed, so it can not be turned off.“      |
+| gibt einem Plugin von OpenBot `config`                                     | Fehler. „This plugin takes no config.“                             |
+| hat eine neue ID ohne `name`                                               | Fehler. Ein neuer Eintrag braucht einen Namen.                     |
+| hat eine neue ID und einen Namen, der nicht mit OpenBot kommt              | Fehler. Nur Plugins, die mit OpenBot kommen, können laufen.        |
+| hat eine neue ID und einen Namen, der schon als anderer Eintrag läuft      | Fehler. Ändere stattdessen diesen Eintrag.                         |
+| nutzt `!env` mit einem Namen, der kein Name einer Umgebungsvariable ist    | Fehler. Nutze Großbuchstaben, Ziffern und `_`.                     |
+| hat YAML, das nicht gültig ist, oder ein YAML-Tag, das OpenBot nicht kennt | Fehler, mit Zeile und Spalte.                                      |
+
+Jedes Plugin, das laufen kann, ist im Image. OpenBot lädt nie ein Plugin von
+außen. Alle Plugins, die mit OpenBot kommen, laufen schon als Einträge. Darum
+ist ein neuer Eintrag heute immer ein Fehler.
+
+---
+
+## Wann die Datei gelesen wird
+
+Der Server liest die Datei einmal, wenn er startet. Er schreibt die Datei nie,
+und er sieht keine Änderung, während er läuft. Um eine geänderte Datei zu
+nutzen, starte jeden Server neu.
+
+Wenn die Datei gut ist, schreibt der Server `OpenBot read the plugins file.` ins
+Log, mit dem Pfad, den IDs, die aus sind, den neuen IDs und dem Manifest-Hash.
+Er schreibt nie Konfiguration ins Log.
+
+Wenn die Datei nicht gut ist, startet der Server nicht. Er schreibt vorher eine
+dieser Zeilen:
+
+- `The plugins file is not valid.` mit dem Pfad und der Liste der Probleme. Ein
+  Problem hat die Stelle und die ID, nie einen Wert der Datei.
+- `OpenBot could not read the plugins file.` mit dem Pfad und dem Grund, zum
+  Beispiel `NotFound` oder `PermissionDenied`.
+
+Eine Änderung über den Plugin-Host, während der Server läuft, zum Beispiel ein
+Plugin, das neu startet, kann nie ein nötiges Plugin ausschalten. Sie ändert nur
+den Speicher dieses Servers, nie die Datei.
+
+---
+
+## Die Plugins prüfen
+
+`openbot-inspect plugins` gibt die Einträge der Plugins nach der Plugin-Datei
+als JSON aus. Es liest `--file <path>`, sonst `OPENBOT_PLUGINS_FILE`. Es braucht
+keine Datenbank und kein Cluster-Geheimnis, und es startet keinen Server.
+
+```sh
+openbot-inspect plugins --file /etc/openbot/plugins.yml
+```
+
+```json
+{
+	"file": "/etc/openbot/plugins.yml",
+	"manifestHash": "sha256:4f1c…",
+	"entries": [
+		{
+			"id": "audit",
+			"name": "@openbot-build/plugin-audit",
+			"disabled": false,
+			"source": "preset",
+			"changed": []
+		},
+		{
+			"id": "triggers",
+			"name": "@openbot-build/plugin-triggers",
+			"disabled": true,
+			"source": "preset",
+			"changed": ["disabled"]
+		}
+	]
+}
+```
+
+- `source` ist `preset` für ein Plugin von OpenBot und `file` für einen neuen
+  Eintrag.
+- `changed` sagt, was die Datei geändert hat: `disabled`, `config` oder beides.
+- `config` ist nur da, wenn ein Eintrag Konfiguration hat. Ein Wert mit `!env`
+  erscheint als `{ "env": "NAME" }`. Jeder andere Text erscheint als
+  `"<redacted>"`.
+- `file` ist `null`, wenn keine Datei gesetzt ist.
+
+Im Docker-Image startest du
+`/usr/local/bin/node /app/dist/app/Inspect.mjs plugins`. Wenn die Datei nicht
+gut ist, gibt das Programm die Probleme aus und endet mit dem Exit-Code 1.
+
+---
+
+## Viele Server
+
+Gib jedem Server dieselbe Plugin-Datei und dasselbe Image. Ein Workflow, den ein
+Server nicht hat, wartet, bis ein Server mit diesem Workflow ihn übernimmt.
+
+Jeder Server schreibt eine Zeile in die Tabelle `openbot_execution_runners`,
+wenn er startet, und danach alle 30 Sekunden. Die Zeile hat die Runner-Adresse,
+die Einträge der Plugins ohne Konfiguration und zwei Hashes:
+
+- den **Manifest-Hash**, den SHA-256 der Einträge der Plugins. Es ist derselbe
+  Hash, den `openbot-inspect plugins` ausgibt. Dieselbe Datei gibt denselben
+  Hash.
+- den **aktiven Hash**, den SHA-256 dessen, was läuft: die aktiven Teile der
+  Plugins, die Workflows und die Bot-Funktionen mit ihren Versionen. Er ändert
+  sich, wenn sich das Image ändert.
+
+Ein Server ist live, wenn er seine Zeile in den letzten 90 Sekunden geschrieben
+hat. Jeder Server löscht Zeilen, die älter als 10 Minuten sind, und seine eigene
+Zeile, wenn er stoppt.
+
+Wenn ein Server einen anderen live Server mit anderen Hashes sieht, schreibt er
+diese Warnung und einen Fehlereintrag mit derselben `errorId`:
+
+```
+The plugins of this runner are not the same as on other runners. Give every runner the same plugins file and the same image.
+```
+
+Die Warnung nennt die Adresse dieses Servers, seine Hashes und die Adressen der
+anderen Server. Ein anderer Manifest-Hash gibt die Warnung sofort. Ein anderer
+aktiver Hash bei denselben Einträgen gibt die Warnung, wenn er 30 Sekunden
+später noch da ist. Jeder Server gibt eine Warnung für jeden neuen Unterschied,
+nicht eine für jede Zeile, die er schreibt.
+
+Die Warnung stoppt nie einen Server. Wenn du die Datei oder das Image auf deinen
+Servern einen nach dem anderen änderst, schreibt jeder Server, alt und neu, eine
+Warnung und einen Fehlereintrag. Das ist erwartet. Wenn alle Server die Änderung
+haben, kommt keine neue Warnung.
+
+---
+
+## Mit Compose
+
+`deploy/docker/compose.production.yaml` bindet `deploy/docker/plugins.yml` nur
+zum Lesen unter `/etc/openbot/plugins.yml` ein und setzt `OPENBOT_PLUGINS_FILE`
+auf diesen Pfad. Die Datei im Repository ändert nichts.
+
+```yaml
+environment:
+  OPENBOT_PLUGINS_FILE: /etc/openbot/plugins.yml
+volumes:
+  - type: bind
+    source: ./plugins.yml
+    target: /etc/openbot/plugins.yml
+    read_only: true
+    bind:
+      create_host_path: false
+```
+
+Mit `create_host_path: false` stoppt Compose mit einem klaren Fehler, wenn die
+Datei fehlt. Es legt keinen Ordner an ihrer Stelle an. Der Server im Image läuft
+nicht als root. Darum muss die Datei für alle lesbar sein (Modus `0644`). Siehe
+[Plugins ausschalten](/de/deploy#plugins-ausschalten).

@@ -84,6 +84,7 @@ Anmelde-Optionen.
 | `secretKeys`    | `Redacted<string>` | Pflicht. Die Liste der geheimen Schlüssel. Siehe [Geheime Schlüssel](/de/configuration#geheime-schlüssel). |
 | `clusterSecret` | `Redacted<string>` | Erforderlich. Mindestens 32 Zeichen. Alle Knoten nutzen dasselbe Geheimnis für private RPC.                |
 | `clusterHost`   | `string`           | Optional. Die von anderen Knoten erreichbare Adresse. Standard ist die gebundene HTTP-Adresse.             |
+| `pluginsFile`   | `string`           | Optional. Der Pfad der Plugin-Datei. Siehe [Plugins](/de/plugins) und [Der Plugin-Host](#der-plugin-host). |
 
 ### Anmeldung
 
@@ -280,6 +281,11 @@ Fehlereinträgen.
 Die Dienste, die diese Layer deinem Programm geben, sind die Dienste der Plugins
 zur Zeit des Starts. Wenn ein Plugin später neu startet, ändert sich deine Kopie
 nicht.
+
+Wegen dieser Kopie brauchen `Host.layer` und `Host.layerApp` jedes Plugin. Wenn
+`pluginsFile` ein Plugin ausschaltet, endet der Layer mit `CaptureMissing`. Das
+Programm `openbot-server` führt denselben Server ohne die Kopie aus. Dort kann
+die Plugin-Datei also Plugins ausschalten. Siehe [Plugins](/de/plugins).
 
 ---
 

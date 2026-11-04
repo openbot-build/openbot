@@ -12,7 +12,16 @@ import { Graft, type Plugin as GraftPlugin } from "@graftland/graft"
 import { type Entry, Loader, ModuleResolver } from "@graftland/loader"
 import { NodeHttpClient, type NodeServices } from "@effect/platform-node"
 import type { PgClient } from "@effect/sql-pg"
-import { Context, Effect, Layer, Option, type Redacted, Stream } from "effect"
+import {
+	Context,
+	Effect,
+	Layer,
+	Option,
+	PrimaryKey,
+	Record as Rec,
+	type Redacted,
+	Stream,
+} from "effect"
 import { RunnerAddress, ShardingConfig } from "effect/cluster"
 import type { SecureRandom } from "effect/crypto"
 import {
@@ -24,14 +33,14 @@ import {
 } from "effect/http"
 import { NetAddress } from "effect/net"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import type { IndexWork as IndexWorkService } from "../apps-contract/apps/IndexWork.ts"
+import { IndexWork as IndexWorkService } from "../apps-contract/apps/IndexWork.ts"
 import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
-import type { Auth } from "../identity-contract/auth/Auth.ts"
-import type { Tokens } from "../identity-contract/auth/Tokens.ts"
-import type { Roles } from "../identity-contract/authorization/Roles.ts"
+import { Auth } from "../identity-contract/auth/Auth.ts"
+import { Tokens } from "../identity-contract/auth/Tokens.ts"
+import { Roles } from "../identity-contract/authorization/Roles.ts"
 import type { Transport as MailTransport } from "../identity-contract/mail/Transport.ts"
-import type { Organization } from "../identity-contract/organization/Organization.ts"
-import type { PlatformAdmins } from "../identity-contract/platform/PlatformAdmins.ts"
+import { Organization } from "../identity-contract/organization/Organization.ts"
+import { PlatformAdmins } from "../identity-contract/platform/PlatformAdmins.ts"
 import type * as AppIndex from "../plugin-apps/Index.ts"
 import type * as IndexWork from "../plugin-apps/IndexWork.ts"
 import * as AppWiring from "../plugin-apps/Wiring.ts"
@@ -39,7 +48,7 @@ import * as MailSmtp from "../plugin-mail/Smtp.ts"
 import type * as ModelRegistry from "../plugin-models/ModelRegistry.ts"
 import * as ModelWiring from "../plugin-models/Wiring.ts"
 import * as BillingPostgres from "../server-billing/billing/BillingPostgres.ts"
-import type { Wallets } from "../server-billing/billing/Host.ts"
+import { Wallets } from "../server-billing/billing/Host.ts"
 import * as RateLimit from "../server-billing/billing/RateLimit.ts"
 import * as TokenThrottle from "../server-billing/billing/TokenThrottle.ts"
 import * as Calls from "../server-execution/execution/Calls.ts"
@@ -66,8 +75,11 @@ import * as Capture from "./Capture.ts"
 import * as Composition from "./Composition.ts"
 import * as HostPlugins from "./HostPlugins.ts"
 import * as Http from "./Http.ts"
+import * as Manifest from "./Manifest.ts"
 import * as PluginFailures from "./PluginFailures.ts"
 import * as PluginLogs from "./PluginLogs.ts"
+import * as PluginsFile from "./PluginsFile.ts"
+import * as Preset from "./Preset.ts"
 import * as PresetPlugins from "./PresetPlugins.ts"
 import * as Serving from "./Serving.ts"
 
@@ -101,6 +113,12 @@ export interface Options {
 	 * The plugins of `PresetPlugins.plugins` win over them.
 	 */
 	readonly plugins?: Readonly<Record<string, GraftPlugin.Plugin>> | undefined
+	/**
+	 * The path of the plugins file (`OPENBOT_PLUGINS_FILE`). The host reads it
+	 * one time, when it starts, and changes the entries with it. It never
+	 * writes the file.
+	 */
+	readonly pluginsFile?: string | undefined
 }
 
 /**
@@ -160,6 +178,7 @@ const layerSettings = (options: Options) =>
 		Layer.succeed(InstanceSettings, {
 			databaseUrl: options.databaseUrl,
 			development: options.development === true,
+			pluginsFile: Option.fromUndefinedOr(options.pluginsFile),
 		}),
 		Layer.succeed(AppWiring.IndexSources, options.indexSources),
 		Layer.succeed(AppWiring.IndexWorkOptions, options.indexWork ?? {}),
@@ -168,12 +187,18 @@ const layerSettings = (options: Options) =>
 		options.mailTransport ?? MailSmtp.layer,
 	)
 
+/** Every plugin that an entry can name, by module name. No other plugin can run. */
+const modules = (options: Options) => ({
+	...options.plugins,
+	...PresetPlugins.plugins,
+})
+
 /**
  * The loader finds the plugins of the entries here. Graft's ambient context
  * holds it, but the host does not give it to callers.
  */
 const resolver = (options: Options) =>
-	ModuleResolver.fromRecord({ ...options.plugins, ...PresetPlugins.plugins })
+	ModuleResolver.fromRecord(modules(options))
 
 /**
  * The services that the host builds for every plugin. A plugin reads them
@@ -209,22 +234,58 @@ export type StartError =
 	| PresetPlugins.RequiredPluginMissing
 	| Composition.PluginsInactive
 	| Capture.CaptureMissing
+	| PluginsFile.PluginsFileInvalid
+	| PluginsFile.PluginsFileUnreadable
+
+/**
+ * The entries of the loader: the entries of the options, or the preset,
+ * changed by the plugins file when the settings name one.
+ */
+const loadEntries = (known: PluginsFile.Known) =>
+	Effect.gen(function* () {
+		const settings = yield* InstanceSettings
+		if (Option.isNone(settings.pluginsFile)) return known.base
+		const file = settings.pluginsFile.value
+		const entries = yield* PluginsFile.load(file, known).pipe(
+			Effect.tapError(PluginsFile.logFailure),
+		)
+		const changes = PluginsFile.changes(known, entries)
+		// No config goes into the log: it can hold a value from the file.
+		yield* Effect.logInfo("OpenBot read the plugins file.").pipe(
+			Effect.annotateLogs({
+				file,
+				off: changes.off,
+				added: changes.added,
+				manifestHash: yield* PluginsFile.manifestHash(entries),
+			}),
+		)
+		return entries
+	})
 
 /**
  * Starts the host in the current scope:
  *
- * 1. checks that the entries hold every required plugin;
+ * 1. reads the plugins file, and checks that the entries hold every required
+ *    plugin;
  * 2. mounts the routes that the host owns;
  * 3. saves the failures of plugins from now on;
  * 4. loads the routes of executions and the loader;
  * 5. waits until every fork below them is active;
- * 6. opens the first engine generation.
+ * 6. opens the first engine generation;
+ * 7. writes the manifest of this runner now and on a timer, and warns when
+ *    another live runner runs other plugins. This never stops the start.
  *
  * The scope closes these in the reverse order.
  */
 export const start = (options: Options) =>
 	Effect.gen(function* () {
-		const entries = options.entries ?? PresetPlugins.entries
+		const known: PluginsFile.Known = {
+			base: options.entries ?? PresetPlugins.entries,
+			bundled: Rec.keys(modules(options)),
+			required: Preset.required,
+			configurable: PluginsFile.configurable,
+		}
+		const entries = yield* loadEntries(known)
 		yield* PresetPlugins.check(entries)
 		const host = yield* HttpHost.HttpHost
 		yield* Effect.all(
@@ -242,7 +303,7 @@ export const start = (options: Options) =>
 		yield* failures.watch
 		const executions = yield* Graft.plugin(HostPlugins.executions)
 		const loaderFork = yield* Graft.plugin(
-			HostPlugins.loader(yield* PresetPlugins.store(entries)),
+			HostPlugins.loader(yield* PresetPlugins.store(entries, known)),
 		)
 		const loader = Context.get(
 			yield* Capture.context("openbot/loader-capture", [Loader.Loader]),
@@ -270,6 +331,19 @@ export const start = (options: Options) =>
 				Context.get(undici, HttpClient.HttpClient),
 			),
 		)
+		// The heartbeat comes after the engine, so it stops first and deletes its row.
+		const address = Option.match(
+			(yield* ShardingConfig.ShardingConfig).runnerAddress,
+			{
+				onNone: () => Effect.die("The host has no runner address."),
+				onSome: (runner) => Effect.succeed(PrimaryKey.value(runner)),
+			},
+		)
+		yield* Manifest.heartbeat({
+			address: yield* address,
+			entries: loader.entries,
+			roots: [executions.id, loaderFork.id],
+		}).pipe(Effect.provideService(Graft.Graft, graft))
 		return Composition.Composition.of({
 			loader,
 			forks: Graft.forks.pipe(Stream.provideService(Graft.Graft, graft)),
@@ -290,19 +364,19 @@ export const layer = (options: Options) =>
 	)
 
 /**
- * The host, and a snapshot of every service that the plugins publish, as they
- * are when the host has started. The capture fork holds them until the layer
- * closes, so it closes before the plugins. Graft stays inside. It works only
- * with every plugin of the preset.
+ * The host, and a snapshot of these services of the plugins, as they are when
+ * the host has started. The capture fork holds them until the layer closes,
+ * so it closes before the plugins. Graft stays inside. A key of a plugin that
+ * is off is never published, so the start fails with `CaptureMissing`.
  */
-const exposed = (options: Options) =>
+const exposed = <const Keys extends ReadonlyArray<Context.Key<any, any>>>(
+	options: Options,
+	keys: Keys,
+) =>
 	Layer.effectContext(
 		Effect.gen(function* () {
 			const composition = yield* start(options)
-			const published = yield* Capture.context(
-				"openbot/expose",
-				PresetPlugins.published,
-			)
+			const published = yield* Capture.context("openbot/expose", keys)
 			return Context.add(published, Composition.Composition, composition)
 		}),
 	).pipe(
@@ -372,17 +446,48 @@ const layerRoutes = (options: AppOptions) =>
 		),
 	)
 
+const layerAppWith = <const Keys extends ReadonlyArray<Context.Key<any, any>>>(
+	options: AppOptions,
+	keys: Keys,
+) =>
+	Layer.mergeAll(layerRoutes(options), options.startup ?? Layer.empty).pipe(
+		Layer.provideMerge(exposed(options, keys)),
+		Layer.orDie,
+	)
+
 /**
  * The routes and services of OpenBot on the plugin host, with the routes and
  * startup work of the options. It gives a snapshot of every service that the
- * plugins publish. A failed start is a defect, so the process stops. It needs
- * what `layerKernel` needs.
+ * plugins publish, so every plugin must be on: with a plugin that the plugins
+ * file turns off, the start fails with `CaptureMissing`. A failed start is a
+ * defect, so the process stops. It needs what `layerKernel` needs.
  */
 export const layerApp = (options: AppOptions) =>
-	Layer.mergeAll(layerRoutes(options), options.startup ?? Layer.empty).pipe(
-		Layer.provideMerge(exposed(options)),
-		Layer.orDie,
-	)
+	layerAppWith(options, PresetPlugins.published)
+
+/** The services of plugins in `RouteServices`. */
+const routeKeys = [
+	Wallets,
+	Auth,
+	Organization,
+	Tokens,
+	Roles,
+	PlatformAdmins,
+] as const
+
+/** The services of plugins in `StartupServices`. */
+const startupKeys = [IndexWorkService] as const
+
+/**
+ * The services of plugins that the routes and the startup work of the options
+ * use, and only when the options have routes or startup work. The type names
+ * every key, but nothing reads a key of routes or startup work that is not
+ * there.
+ */
+const neededKeys = (options: AppOptions) => [
+	...(options.routes === undefined ? [] : routeKeys),
+	...(options.startup === undefined ? [] : startupKeys),
+]
 
 /** The options of a server with its own Node.js HTTP server. */
 export interface ServerOptions
@@ -390,6 +495,26 @@ export interface ServerOptions
 		Omit<AppOptions, "development">,
 		Serving.Listen,
 		Partial<Serving.Fixed> {}
+
+const serverWith = <const Keys extends ReadonlyArray<Context.Key<any, any>>>(
+	options: ServerOptions,
+	keys: (app: AppOptions) => Keys,
+) => {
+	const auth = options.auth
+	const before: Layer.Layer<
+		never,
+		Layer.Error<ReturnType<typeof Serving.fixed>>,
+		| Layer.Services<ReturnType<typeof Serving.fixed>>
+		| Layer.Services<typeof Serving.warnBeforeSetup>
+	> = auth === undefined
+		? Serving.warnBeforeSetup
+		: Serving.fixed({ ...options, auth })
+	const app = { ...options, development: auth?.mode === "development" }
+	return Serving.serve(layerAppWith(app, keys(app))).pipe(
+		Layer.provide(before),
+		Layer.provideMerge(Serving.nodeServer(options)),
+	)
+}
 
 /**
  * Serves `layerApp` with its own Node.js HTTP server. Every route except
@@ -400,20 +525,20 @@ export interface ServerOptions
  * sign-in configuration into the platform settings. Its development mode uses
  * the local test account.
  *
+ * It gives a snapshot of every service that the plugins publish, so every
+ * plugin must be on, as for `layerApp`.
+ *
  * It needs the shared services, the services from outside, the tools of the
  * host, and the platform services.
  */
-export const layerServer = (options: ServerOptions) => {
-	const auth = options.auth
-	const before: Layer.Layer<
-		never,
-		Layer.Error<ReturnType<typeof Serving.fixed>>,
-		| Layer.Services<ReturnType<typeof Serving.fixed>>
-		| Layer.Services<typeof Serving.warnBeforeSetup>
-	> = auth === undefined
-		? Serving.warnBeforeSetup
-		: Serving.fixed({ ...options, auth })
-	return Serving.serve(
-		layerApp({ ...options, development: auth?.mode === "development" }),
-	).pipe(Layer.provide(before), Layer.provideMerge(Serving.nodeServer(options)))
-}
+export const layerServer = (options: ServerOptions) =>
+	serverWith(options, () => PresetPlugins.published)
+
+/**
+ * The same server as `layerServer`, for a program that does not use the
+ * services of the plugins, such as `openbot-server`. It gives no snapshot. It
+ * waits only for the services that the routes and the startup work of the
+ * options need, so a plugin that the plugins file turns off does not stop it.
+ */
+export const layerProgram = (options: ServerOptions) =>
+	serverWith(options, neededKeys)

@@ -100,6 +100,13 @@ OpenBot nodes and the protocol test service are healthy. It checks that:
 - the protocol test Catalog has the right public origin,
 - MCP discovery on the protocol test service works.
 
+Both nodes mount `check.plugins.yml` read only as their plugins file. It turns
+`triggers` off. The script checks that the routes of triggers answer `503` with
+`FeatureUnavailable` on both nodes, that the OpenAPI document still has them,
+and that a write to the file fails with `EROFS`. It runs
+`openbot-inspect plugins`, and checks that both nodes wrote the same manifest
+hash to `openbot_execution_runners` and gave no warning about other plugins.
+
 The script also checks an empty database, a repeated migration, both registered
 runner addresses, and refusal to migrate while servers are active. Each run uses
 its own Compose project. At the end, it removes that project and its test

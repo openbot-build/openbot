@@ -4,8 +4,10 @@ import type * as OutboundPolicy from "../network/OutboundPolicy.ts"
 /**
  * The configuration of one instance. Only values that belong to this instance
  * alone live here. Every value that all instances share lives in the database,
- * and the API changes it. The one exception is `secretKeys`: all instances need
- * the same keys, but the keys protect the database, so they cannot live in it.
+ * and the API changes it. There are two exceptions. All instances need the same
+ * `secretKeys`, but the keys protect the database, so they cannot live in it.
+ * All instances need the same plugins file, but the server reads it before it
+ * has any plugin, so it is a file.
  */
 export interface Settings {
 	readonly clusterSecret: Redacted.Redacted<string>
@@ -17,5 +19,7 @@ export interface Settings {
 	readonly secretKeys: Redacted.Redacted<string>
 	/** `OPENBOT_OUTBOUND_ALLOW`: the private targets that outbound connections may reach. */
 	readonly outboundAllow: OutboundPolicy.Allow
+	/** `OPENBOT_PLUGINS_FILE`: the path of a YAML file that changes the plugin entries. */
+	readonly pluginsFile?: string | undefined
 }
 export type Load = Config.Config<Settings>

@@ -20,7 +20,15 @@
  * child first, then the services of the fork.
  */
 import { Graft, Plugin as GraftPlugin } from "@graftland/graft"
-import { Array as Arr, Context, Effect, Layer, Schedule } from "effect"
+import {
+	Array as Arr,
+	Context,
+	Effect,
+	Equal,
+	Layer,
+	Predicate,
+	Schedule,
+} from "effect"
 
 /** The keys that a stage or the start waits for. graft's optional keys are not allowed. */
 export type Inject = ReadonlyArray<Context.Key<any, any>>
@@ -138,6 +146,43 @@ interface Step {
 	readonly publishes: ReadonlyArray<Context.Key<any, any>>
 }
 
+const KeysId = Symbol.for("openbot/Feature/keys")
+
+/** Every key that the stages and the start of a feature wait for, and every key that it publishes. */
+export interface Keys {
+	readonly inject: Inject
+	readonly publishes: ReadonlyArray<Context.Key<any, any>>
+}
+
+/**
+ * Gives the plugin of the first step, with the keys of every step on it, so
+ * that `keys` can read them. graft reads only the first step.
+ */
+const withKeys = (steps: Arr.NonEmptyReadonlyArray<Step>): GraftPlugin.Plugin =>
+	// A new object with one more field. It compares by reference, like the plugins of graft.
+	Equal.byReference({
+		...chain(steps, Context.empty()),
+		[KeysId]: {
+			inject: Arr.flatMap(steps, (step) => step.inject),
+			publishes: Arr.flatMap(steps, (step) => step.publishes),
+		} satisfies Keys,
+	})
+
+/**
+ * The keys of every stage and of the start of a feature. graft sees only the
+ * `inject` list of the first stage, because each stage loads the next one.
+ * For a plugin that this kit did not make, it gives the `inject` list of the
+ * plugin and no published keys.
+ */
+export const keys = (plugin: GraftPlugin.Plugin): Keys =>
+	Predicate.hasProperty(plugin, KeysId)
+		? // Only `withKeys` sets this field, with a `Keys` value.
+			(plugin[KeysId] as Keys)
+		: {
+				inject: Arr.filter(plugin.inject, Context.isKey),
+				publishes: [],
+			}
+
 /**
  * The plugin of the first step. Its fork builds the step, publishes its
  * keys in one transaction, and then loads the plugin of the next step with
@@ -199,7 +244,7 @@ const builder = (
 			},
 		]) as never,
 	start: (start) =>
-		chain(
+		withKeys(
 			Arr.append(steps, {
 				name: Arr.isReadonlyArrayEmpty(steps) ? name : `${name}#start`,
 				inject: start.inject,
@@ -207,10 +252,9 @@ const builder = (
 				layer: start.layer as Layer.Layer<unknown, unknown, unknown>,
 				publishes: [],
 			}),
-			Context.empty(),
 		) as never,
 	done: () =>
-		chain(
+		withKeys(
 			Arr.isReadonlyArrayNonEmpty(steps)
 				? steps
 				: Arr.of<Step>({
@@ -220,7 +264,6 @@ const builder = (
 						layer: Layer.empty as never,
 						publishes: [],
 					}),
-			Context.empty(),
 		) as never,
 })
 

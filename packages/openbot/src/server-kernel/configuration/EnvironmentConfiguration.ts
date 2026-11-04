@@ -17,6 +17,10 @@ export const load: Configuration.Load = Config.all({
 	port: Config.Port("OPENBOT_PORT").pipe(Config.withDefault(3000)),
 	databaseUrl: Config.Redacted("OPENBOT_DATABASE_URL"),
 	secretKeys: Config.Redacted("OPENBOT_SECRET_KEYS"),
+	pluginsFile: Config.NonEmptyString("OPENBOT_PLUGINS_FILE").pipe(
+		Config.option,
+		Config.map(Option.getOrUndefined),
+	),
 	outboundAllow: Config.String("OPENBOT_OUTBOUND_ALLOW").pipe(
 		Config.withDefault(""),
 		Config.flatMap((input) =>

@@ -84,19 +84,27 @@ ist, antworten seine Routen mit `503` und `FeatureUnavailable`.
 
 Das **Preset** ist die Liste der 23 Plugins von OpenBot. Sechs davon sind nötig:
 `audit`, `platform`, `organization`, `access`, `auth` und `authorization`. Die
+Plugin-Datei kann andere Plugins ausschalten. Siehe [Plugins](/de/plugins). Die
 Route `/health` und die Routen der Ausführungen gehören dem Host selbst. Darum
 kann niemand sie ausschalten.
 
 ### Start
 
-1. Der Host prüft, dass die Liste jedes nötige Plugin hat und dass jedes an ist.
+1. Der Host liest die Plugin-Datei einmal, wenn `OPENBOT_PLUGINS_FILE` eine
+   nennt, und ändert die Liste damit. Er prüft, dass die Liste jedes nötige
+   Plugin hat und dass jedes an ist.
 2. Er bindet seine eigenen Routen ein.
 3. Er lädt die Plugins der Liste.
-4. Er wartet, bis jedes Plugin aktiv ist.
+4. Er wartet, bis jedes Plugin aktiv ist, das an ist.
 5. Er öffnet die erste Engine-Generation.
+6. Er schreibt das Manifest dieses Runners in `openbot_execution_runners`, und
+   danach alle 30 Sekunden. Wenn ein anderer live Runner andere Plugins hat,
+   schreibt er eine Warnung und einen Fehlereintrag. Das stoppt den Start nie.
+   Siehe [Viele Server](/de/plugins#viele-server).
 
-Der Start ist streng. Wenn ein nötiges Plugin fehlt oder aus ist, schlägt der
-Start mit `RequiredPluginMissing` fehl. Wenn ein Plugin nicht aktiv wird,
+Der Start ist streng. Eine Plugin-Datei, die nicht gültig ist, stoppt den Start
+mit `PluginsFileInvalid`. Wenn ein nötiges Plugin fehlt oder aus ist, schlägt
+der Start mit `RequiredPluginMissing` fehl. Wenn ein Plugin nicht aktiv wird,
 schlägt der Start mit `PluginsInactive` fehl. Dieser Fehler nennt jedes Plugin,
 seinen Zustand, die Dienste, auf die es wartet, und die Fehler-ID seines
 Fehlers. Die volle Ursache eines Plugin-Fehlers kommt in die Fehlereinträge,

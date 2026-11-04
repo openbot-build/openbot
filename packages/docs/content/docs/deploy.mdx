@@ -239,9 +239,11 @@ even if you only use OpenBot.
 
 Compose gives `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`
 and `OPENBOT_CLUSTER_SECRET` as files in `/run/secrets`. Their values come from
-`.env.production`. The `openbot` service also gets `OPENBOT_OUTBOUND_ALLOW` and
-`OPENBOT_CLUSTER_HOST`. Product settings live in the database. The `migrate`
-service needs `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`.
+`.env.production`. The `openbot` service also gets `OPENBOT_OUTBOUND_ALLOW`,
+`OPENBOT_CLUSTER_HOST`, and `OPENBOT_PLUGINS_FILE`. Compose mounts
+`deploy/docker/plugins.yml` read only at `/etc/openbot/plugins.yml`. Product
+settings live in the database. The `migrate` service needs
+`OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`.
 
 In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set
 the password only once.
@@ -318,6 +320,25 @@ Stop every OpenBot instance, back up the database and the object key list, then
 run `up -d --wait` again. `migrate` runs again before the new OpenBot starts.
 Never delete the `postgres` volume. It holds all your data.
 
+### Turn plugins off
+
+To turn off a plugin, such as `triggers`, edit `deploy/docker/plugins.yml`:
+
+```yaml
+- id: triggers
+  disabled: true
+```
+
+Then start every OpenBot server again:
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml up -d --wait --force-recreate openbot
+```
+
+The server reads the file only when it starts. Keep the file open for all to
+read (mode `0644`). The log line `OpenBot read the plugins file.` names the
+plugins that are off. See [Plugins](/plugins).
+
 ## Many instances
 
 You can run many OpenBot instances behind one load balancer. Give every
@@ -328,6 +349,8 @@ instance:
 - a distinct `OPENBOT_CLUSTER_HOST` that every other node can reach,
 - the same `OPENBOT_OUTBOUND_ALLOW`, if you set it. See
   [Outbound connections](/configuration#outbound-connections).
+- the same plugins file, if you set `OPENBOT_PLUGINS_FILE`. See
+  [Many servers](/plugins#many-servers).
 
 Use a private address for each node, not the load balancer address. Do not scale
 the Compose `openbot` service without giving each new node its own host. The two
@@ -335,7 +358,8 @@ nodes in `compose.check.yaml` show this setup.
 
 Run the same OpenBot version on every node. A node that does not have a workflow
 keeps the messages for it waiting. They do not fail. A node with that workflow
-takes them later.
+takes them later. When a node sees another node with other plugins, it logs a
+warning. See [Many servers](/plugins#many-servers).
 
 All shared settings live in the database. When an admin changes them, every
 instance uses the change at once. See

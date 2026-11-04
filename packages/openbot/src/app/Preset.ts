@@ -1,6 +1,7 @@
 /**
- * The preset: the plugins that OpenBot runs. Every entry point of `Host` runs
- * all of them. A plugin in `required` cannot be turned off.
+ * The preset: the plugins that OpenBot runs. The entry points of `Host` run
+ * all of them, except those that the plugins file turns off. A plugin in
+ * `required` cannot be turned off.
  */
 import type * as PresetPlugins from "./PresetPlugins.ts"
 

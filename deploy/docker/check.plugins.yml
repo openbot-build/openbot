@@ -1,0 +1,3 @@
+# The image check turns triggers off to check the plugins file.
+- id: triggers
+  disabled: true

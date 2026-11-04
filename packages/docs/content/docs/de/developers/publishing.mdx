@@ -105,6 +105,14 @@ OpenBot-Knoten und der Protokolltest-Dienst gesund sind. Er prüft, dass:
 - der Catalog des Protokolltests den richtigen öffentlichen Origin hat,
 - die MCP-Erkennung auf dem Protokolltest-Dienst funktioniert.
 
+Beide Knoten binden `check.plugins.yml` nur zum Lesen als ihre Plugin-Datei ein.
+Sie schaltet `triggers` aus. Das Skript prüft, dass die Routen von triggers auf
+beiden Knoten mit `503` und `FeatureUnavailable` antworten, dass das
+OpenAPI-Dokument sie noch hat und dass ein Schreiben in die Datei mit `EROFS`
+scheitert. Es startet `openbot-inspect plugins` und prüft, dass beide Knoten
+denselben Manifest-Hash in `openbot_execution_runners` geschrieben und keine
+Warnung über andere Plugins gegeben haben.
+
 Das Skript prüft auch eine leere Datenbank, eine wiederholte Migration, beide
 Runner-Adressen und die Sperre gegen Migration bei laufenden Servern. Jeder Lauf
 nutzt ein eigenes Compose-Projekt und entfernt es mit der Test-Datenbank am

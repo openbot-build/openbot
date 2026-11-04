@@ -74,14 +74,15 @@ options.
 
 ### Instance options
 
-| Option          | Type               | What it is                                                                          |
-| --------------- | ------------------ | ----------------------------------------------------------------------------------- |
-| `host`          | `string`           | Required. The address to listen on, such as `127.0.0.1`.                            |
-| `port`          | `number`           | Required. The port to listen on, such as `3000`.                                    |
-| `databaseUrl`   | `Redacted<string>` | Required. The PostgreSQL URL.                                                       |
-| `secretKeys`    | `Redacted<string>` | Required. The secret key list. See [Secret keys](/configuration#secret-keys).       |
-| `clusterSecret` | `Redacted<string>` | Required. At least 32 characters. All nodes use the same secret for private RPC.    |
-| `clusterHost`   | `string`           | Optional. The address other nodes can reach. It defaults to the bound HTTP address. |
+| Option          | Type               | What it is                                                                                               |
+| --------------- | ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `host`          | `string`           | Required. The address to listen on, such as `127.0.0.1`.                                                 |
+| `port`          | `number`           | Required. The port to listen on, such as `3000`.                                                         |
+| `databaseUrl`   | `Redacted<string>` | Required. The PostgreSQL URL.                                                                            |
+| `secretKeys`    | `Redacted<string>` | Required. The secret key list. See [Secret keys](/configuration#secret-keys).                            |
+| `clusterSecret` | `Redacted<string>` | Required. At least 32 characters. All nodes use the same secret for private RPC.                         |
+| `clusterHost`   | `string`           | Optional. The address other nodes can reach. It defaults to the bound HTTP address.                      |
+| `pluginsFile`   | `string`           | Optional. The path of the plugins file. See [Plugins](/plugins) and [The plugin host](#the-plugin-host). |
 
 ### Sign-in
 
@@ -269,6 +270,11 @@ are not active. The full cause of a plugin failure is in the error records.
 The services that these Layers give to your program are the services of the
 plugins at the time of the start. When a plugin starts again later, your copy
 does not change.
+
+Because of this copy, `Host.layer` and `Host.layerApp` need every plugin on.
+When `pluginsFile` turns a plugin off, the Layer dies with `CaptureMissing`. The
+`openbot-server` program runs the same server without the copy, so the plugins
+file can turn plugins off there. See [Plugins](/plugins).
 
 ---
 

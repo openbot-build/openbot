@@ -53,6 +53,16 @@ services:
     environment:
       OPENBOT_CLUSTER_HOST: openbot
       OPENBOT_OUTBOUND_ALLOW: ${OPENBOT_OUTBOUND_ALLOW:-}
+      OPENBOT_PLUGINS_FILE: /etc/openbot/plugins.yml
+    volumes:
+      # Read only: OpenBot never writes this file. Compose stops when the
+      # file is missing, so Docker does not make a folder in its place.
+      - type: bind
+        source: ./plugins.yml
+        target: /etc/openbot/plugins.yml
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "127.0.0.1:${OPENBOT_PUBLISHED_PORT:-8080}:3000"
     depends_on:

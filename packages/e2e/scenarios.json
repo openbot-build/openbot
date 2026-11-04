@@ -13343,7 +13343,10 @@
 		},
 		"triggers": {
 			"folder": "packages/e2e/test/triggers",
-			"files": ["packages/e2e/test/triggers/Triggers.test.ts"],
+			"files": [
+				"packages/e2e/test/triggers/Triggers.test.ts",
+				"packages/e2e/test/triggers/PluginsFile.test.ts"
+			],
 			"coverage": {
 				"NORMAL": [
 					{
@@ -13741,6 +13744,58 @@
 								"line": 444
 							}
 						]
+					},
+					{
+						"behavior": "A plugins file turns triggers off in the built server. The trigger routes answer 503 FeatureUnavailable with the header of their API group (triggers, triggerHooks). The OpenAPI document is the same as the contract and its snapshot. Other routes still work. Inspect prints the same manifest hash that the runner writes, and the file stays the same.",
+						"evidence": [
+							{
+								"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+								"testTitle": "the plugins file turns triggers off in the built server: its routes answer 503 and the OpenAPI document does not change",
+								"searchText": "assert.strictEqual(list.status, 503)",
+								"line": 217
+							},
+							{
+								"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+								"testTitle": "the plugins file turns triggers off in the built server: its routes answer 503 and the OpenAPI document does not change",
+								"searchText": "\"triggerHooks\",",
+								"line": 235
+							},
+							{
+								"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+								"testTitle": "the plugins file turns triggers off in the built server: its routes answer 503 and the OpenAPI document does not change",
+								"searchText": "assert.strictEqual(document, snapshot)",
+								"line": 259
+							},
+							{
+								"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+								"testTitle": "the plugins file turns triggers off in the built server: its routes answer 503 and the OpenAPI document does not change",
+								"searchText": "assert.strictEqual(chats.status, 401)",
+								"line": 263
+							},
+							{
+								"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+								"testTitle": "the plugins file turns triggers off in the built server: its routes answer 503 and the OpenAPI document does not change",
+								"searchText": "[report.manifestHash],",
+								"line": 298
+							},
+							{
+								"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+								"testTitle": "the plugins file turns triggers off in the built server: its routes answer 503 and the OpenAPI document does not change",
+								"searchText": "assert.deepStrictEqual(yield* fs.readFile(pluginsFile), before)",
+								"line": 301
+							}
+						]
+					},
+					{
+						"behavior": "A plugins file that turns off a needed plugin stops the start of the built server, with the line \"The plugins file is not valid.\" and the problem.",
+						"evidence": [
+							{
+								"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+								"testTitle": "the plugins file turns triggers off in the built server: its routes answer 503 and the OpenAPI document does not change",
+								"searchText": "\"This plugin is needed, so it can not be turned off.\",",
+								"line": 140
+							}
+						]
 					}
 				],
 				"EXTREME": [
@@ -13900,6 +13955,12 @@
 					"file": "packages/e2e/test/triggers/Triggers.test.ts",
 					"condition": {
 						"condition": "Extreme coverage here means recovery or accepted-work lifetime. It does not establish load or size limits."
+					}
+				},
+				{
+					"file": "packages/e2e/test/triggers/PluginsFile.test.ts",
+					"condition": {
+						"condition": "Runs the built migrate, setup, server, and inspect programs as child processes on a disposable PostgreSQL server. The plugins file is a temporary file. The real clock is used."
 					}
 				}
 			],

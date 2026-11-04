@@ -3,13 +3,11 @@
  * host with every plugin of the preset, and gives a snapshot of the services
  * that the plugins publish.
  */
-import { Layer, type Redacted } from "effect"
-import type { HttpClient } from "effect/http"
-import type * as ErrorRecords from "../server-kernel/errors/Records.ts"
-import * as HostTools from "../tools-contract/chats/HostTools.ts"
+import type { Layer, Redacted } from "effect"
+import type * as HostTools from "../tools-contract/chats/HostTools.ts"
 import * as Assembly from "./Assembly.ts"
-import * as Outside_ from "./Outside.ts"
-import * as Shared from "./Shared.ts"
+import { provide } from "./HostServices.ts"
+import type * as Outside_ from "./Outside.ts"
 
 /**
  * The services from outside of OpenBot: the drivers of the Computer
@@ -62,25 +60,15 @@ export interface Options<E = never, R = never>
 		AppOptions<E, R>,
 		Omit<Assembly.ServerOptions, keyof Assembly.AppOptions> {}
 
-/** The services from outside, the tools of the host, and the shared services. */
-const provide = <OE, OR>(options: AppOptions<OE, OR>) => {
-	const outside: Layer.Layer<
-		Outside,
-		OE,
-		OR | HttpClient.HttpClient | ErrorRecords.Records
-	> = options.outside ?? Outside_.layer
-	return <A, E, R>(app: Layer.Layer<A, E, R>) =>
-		app.pipe(
-			Layer.provide(Layer.merge(outside, options.hostTools ?? HostTools.none)),
-			Layer.provideMerge(Shared.layer(options)),
-		)
-}
-
 /**
  * Serves OpenBot with its own Node.js HTTP server. Every route except
  * `/health` answers with SetupRequired while the platform has no settings.
- * The `openbot-server` program runs `Launch.main(Host.layer)`. It needs only
- * the platform services (`Launch.Platform`).
+ * It gives a snapshot of the services that the plugins publish, so every
+ * plugin must be on: with a plugin that the plugins file
+ * (`OPENBOT_PLUGINS_FILE`) turns off, the start fails with `CaptureMissing`.
+ * The `openbot-server` program runs the same server without the snapshot, so
+ * the plugins file can turn plugins off there. It needs only the platform
+ * services (`Launch.Platform`).
  */
 export const layer = <E = never, R = never>(options: Options<E, R>) =>
 	provide(options)(Assembly.layerServer(options))
@@ -88,8 +76,9 @@ export const layer = <E = never, R = never>(options: Options<E, R>) =>
 /**
  * The routes and services of OpenBot, for a caller that serves them with its
  * own HTTP server, such as `HttpRouter.serve(Host.layerApp(options))`. It has
- * no check of the platform settings. It needs the platform services, the HTTP
- * server and the router.
+ * no check of the platform settings. It gives a snapshot of the services that
+ * the plugins publish, so it needs every plugin on. It needs the platform
+ * services, the HTTP server and the router.
  */
 export const layerApp = <E = never, R = never>(options: AppOptions<E, R>) =>
 	provide(options)(Assembly.layerApp(options))

@@ -133,11 +133,13 @@ export const layerOutside = (fakes: Outside = {}) =>
 /**
  * The bare plugin host on its own HTTP server, with the real services from
  * outside, no tools of the host, and the shared services. It takes a changed
- * list of entries and more plugins, and its start errors stay typed. It gives
+ * list of entries, more plugins and a plugins file, and its start errors stay
+ * typed. It gives
  * no service of a plugin. Give it `layerPlatform`.
  */
 export const layer = (
-	options: Settings & Pick<Assembly.Options, "entries" | "plugins">,
+	options: Settings &
+		Pick<Assembly.Options, "entries" | "plugins" | "pluginsFile">,
 ) =>
 	HttpRouter.serve(Assembly.layer(options), {
 		disableLogger: true,

@@ -26,6 +26,13 @@ services:
     ports: !reset []
     volumes:
       - ./check.mjs:/check/check.mjs:ro
+      # This file turns triggers off. It takes the place of plugins.yml.
+      - type: bind
+        source: ./check.plugins.yml
+        target: /etc/openbot/plugins.yml
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -40,6 +47,13 @@ services:
       OPENBOT_CLUSTER_HOST: openbot-peer
     volumes:
       - ./check.mjs:/check/check.mjs:ro
+      # This file turns triggers off. It takes the place of plugins.yml.
+      - type: bind
+        source: ./check.plugins.yml
+        target: /etc/openbot/plugins.yml
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       setup:
         condition: service_completed_successfully

@@ -36,7 +36,8 @@ import * as TriggersPlugin from "../plugin-triggers/Plugin.ts"
 import * as VaultsPlugin from "../plugin-vaults/Plugin.ts"
 import * as WorkPlugin from "../plugin-work/Plugin.ts"
 
-import { ids, nameOf, required } from "./Preset.ts"
+import * as PluginsFile from "./PluginsFile.ts"
+import { nameOf, required } from "./Preset.ts"
 
 /** The modules of the plugins, in the order of `ids`. */
 export const modules = [
@@ -75,11 +76,7 @@ export const plugins: Readonly<Record<string, GraftPlugin.Plugin>> =
 	)
 
 /** One entry for each plugin, in the order of `ids`. */
-export const entries: ReadonlyArray<Entry.Entry> = Arr.flatMap(
-	ids,
-	(id): ReadonlyArray<Entry.Entry> =>
-		Rec.has(plugins, nameOf(id)) ? [{ id, name: nameOf(id) }] : [],
-)
+export const entries: ReadonlyArray<Entry.Entry> = PluginsFile.presetEntries
 
 /** An entry of a required plugin is missing or turned off. */
 export class RequiredPluginMissing extends Schema.TaggedError<
@@ -106,11 +103,17 @@ export const check = (
 }
 
 /**
- * Keeps the entries in memory. An edit that would remove or turn off a
+ * Keeps the entries in memory only. It never reads or writes a file, and it
+ * sees no change from outside. An edit that would remove or turn off a
  * required plugin fails with a `StoreError` whose cause is
- * `RequiredPluginMissing`.
+ * `RequiredPluginMissing`. An edit that breaks another rule of
+ * `PluginsFile.checkEntries`, such as a new name for a preset plugin, fails
+ * with a `StoreError` whose cause is `EntriesInvalid`.
  */
-export const store = (initial: ReadonlyArray<Entry.Entry>) =>
+export const store = (
+	initial: ReadonlyArray<Entry.Entry>,
+	known: PluginsFile.Known,
+) =>
 	Effect.map(Ref.make(initial), (current): Loader.Store => ({
 		initial,
 		apply: (op) =>
@@ -121,6 +124,16 @@ export const store = (initial: ReadonlyArray<Entry.Entry>) =>
 						Effect.mapError((cause) => Loader.StoreError.make({ cause })),
 					),
 				),
+				Effect.tap((next) => {
+					const problems = PluginsFile.checkEntries(known, next)
+					return Arr.isReadonlyArrayNonEmpty(problems)
+						? Effect.fail(
+								Loader.StoreError.make({
+									cause: PluginsFile.EntriesInvalid.make({ problems }),
+								}),
+							)
+						: Effect.void
+				}),
 				Effect.tap((next) => Ref.set(current, next)),
 			),
 		refresh: Effect.succeedNone,

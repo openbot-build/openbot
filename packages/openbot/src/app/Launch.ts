@@ -68,6 +68,7 @@ export const main = <ROut, E>(
 							"  OPENBOT_HOST            The address to listen on. The default is 127.0.0.1.",
 							"  OPENBOT_PORT            The port to listen on. The default is 3000.",
 							"  OPENBOT_OUTBOUND_ALLOW  The private addresses that OpenBot may connect to.",
+							"  OPENBOT_PLUGINS_FILE    A YAML file that turns plugins off. It is read one time, at start.",
 							"A variable can also come from the file /run/secrets/<NAME>.",
 						],
 						// Effect CLI indents only the first line of a description, so the other lines get the indent here.

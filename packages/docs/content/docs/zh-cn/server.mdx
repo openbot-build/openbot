@@ -66,14 +66,15 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 
 ### 实例选项
 
-| 选项            | 类型               | 是什么                                                      |
-| --------------- | ------------------ | ----------------------------------------------------------- |
-| `host`          | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                        |
-| `port`          | `number`           | 必需。监听的端口，例如 `3000`。                             |
-| `databaseUrl`   | `Redacted<string>` | 必需。PostgreSQL URL。                                      |
-| `secretKeys`    | `Redacted<string>` | 必需。密钥列表。请看[密钥](/zh-cn/configuration#机密密钥)。 |
-| `clusterSecret` | `Redacted<string>` | 必填。至少 32 个字符。所有节点使用相同机密认证私有 RPC。    |
-| `clusterHost`   | `string`           | 可选。其他节点能访问的地址。默认使用绑定的 HTTP 地址。      |
+| 选项            | 类型               | 是什么                                                                    |
+| --------------- | ------------------ | ------------------------------------------------------------------------- |
+| `host`          | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                                      |
+| `port`          | `number`           | 必需。监听的端口，例如 `3000`。                                           |
+| `databaseUrl`   | `Redacted<string>` | 必需。PostgreSQL URL。                                                    |
+| `secretKeys`    | `Redacted<string>` | 必需。密钥列表。请看[密钥](/zh-cn/configuration#机密密钥)。               |
+| `clusterSecret` | `Redacted<string>` | 必填。至少 32 个字符。所有节点使用相同机密认证私有 RPC。                  |
+| `clusterHost`   | `string`           | 可选。其他节点能访问的地址。默认使用绑定的 HTTP 地址。                    |
+| `pluginsFile`   | `string`           | 可选。插件文件的路径。参见[插件](/zh-cn/plugins)和[插件宿主](#插件宿主)。 |
 
 ### 登录
 
@@ -237,6 +238,10 @@ OpenBot 用一个单独的路由器来服务这些路由。这个 Layer 里的�
 `PluginsInactive`。错误列出没有处于活动状态的插件。插件失败的完整原因在错误记录中。
 
 这些 Layer 交给你的程序的服务，是启动时各插件的服务。插件之后重新启动时，你手中的副本不会改变。
+
+因为有这个副本，`Host.layer` 和 `Host.layerApp` 需要每个插件都打开。当
+`pluginsFile` 关闭一个插件时，Layer 以 `CaptureMissing` 终止。`openbot-server`
+程序运行同样的服务器但没有这个副本，所以插件文件可以在那里关闭插件。参见[插件](/zh-cn/plugins)。
 
 ---
 

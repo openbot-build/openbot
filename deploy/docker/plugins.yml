@@ -1,0 +1,7 @@
+# The plugins file of OpenBot. The server reads it once when it starts.
+# Give every server the same file. See the Plugins page in the docs.
+# The file must be open for all to read (mode 0644).
+# To turn a plugin off, put an entry like this in the list:
+# - id: triggers
+#   disabled: true
+[]

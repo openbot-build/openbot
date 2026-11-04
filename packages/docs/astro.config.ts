@@ -127,6 +127,7 @@ export default defineConfig({
 							items: [
 								"deploy",
 								"configuration",
+								"plugins",
 								"platform",
 								"access",
 								"admin/sign-in",

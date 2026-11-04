@@ -1,0 +1,253 @@
+---
+title: 插件
+description: 用只读的插件文件关闭 OpenBot 的插件。
+---
+
+面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限。从[管理员手册](/zh-cn/admin)开始。
+
+OpenBot 是一个插件宿主上的一组插件。本页列出这些插件。它说明怎样用插件文件关闭其中一些插件，以及怎样检查每台服务器运行相同的插件。
+
+---
+
+## 插件是什么
+
+一个插件是 OpenBot 的一个功能，例如 Bots、Chats 或触发器。每个插件都有固定的 id，例如
+`triggers`。插件把服务给其他插件，也提供 API 的路由。请看[执行设计](/zh-cn/architecture#插件宿主)中的插件宿主。
+
+插件关闭时，它的路由仍在 API 中，但会以 `503` 和下面的正文回答：
+
+```json
+{ "_tag": "FeatureUnavailable", "feature": "triggers" }
+```
+
+响应头 `openbot-unavailable-feature`
+写出路由所在的 API 组。一个插件可以有多个组。例如，`triggers` 插件的路由在
+`triggers` 组和 `triggerHooks` 组（webhook）中。
+
+插件关闭时，`/openapi.json`
+上的 OpenAPI 文档不会改变。客户端在每台服务器上看到相同的契约。
+
+---
+
+## OpenBot 的插件
+
+OpenBot 有 23 个插件。“必需”一列为“是”的六个插件永远不能关闭。“需要”一列列出一个插件使用的其他插件。只有当一个插件需要的每个插件都打开时，它才会启动。
+
+| 插件            | 它提供什么                                                | 必需 | 需要                                                                                                            |
+| --------------- | --------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------- |
+| `audit`         | 每个组织的审计日志。                                      | 是   |                                                                                                                 |
+| `mail`          | 平台发出的邮件，使用平台的 SMTP 设置。                    |      |                                                                                                                 |
+| `platform`      | 平台管理员和平台设置。                                    | 是   | `access`、`audit`、`auth`、`authorization`、`mail`、`models`、`organization`                                    |
+| `organization`  | 组织、组织成员和邀请。                                    | 是   | `audit`、`auth`、`authorization`、`mail`、`models`、`platform`                                                  |
+| `access`        | 谁可以加入平台，以及怎样加入。                            | 是   | `auth`、`authorization`                                                                                         |
+| `sso`           | 组织的登录连接。                                          |      | `access`、`audit`、`auth`、`authorization`                                                                      |
+| `auth`          | 登录、用户令牌，以及对每个调用方的检查。                  | 是   | `access`、`audit`、`authorization`、`mail`、`organization`、`platform`、`sso`                                   |
+| `authorization` | 角色，以及对每个调用方权限的检查。                        | 是   | `auth`、`organization`、`platform`                                                                              |
+| `models`        | 模型提供方、模型和模型注册表。                            |      | `audit`、`auth`、`authorization`                                                                                |
+| `files`         | 存储的文件和它们的工作。                                  |      | `auth`、`authorization`                                                                                         |
+| `bots`          | Bots、它们的记忆，以及它们之间的委托。                    |      | `audit`、`auth`、`authorization`、`capabilities`、`chats`、`imported`、`mail`、`models`、`organization`、`work` |
+| `capabilities`  | Grants、Rules、请求，以及对它们的检查。                   |      | `apps`、`audit`、`auth`、`authorization`、`bots`、`chats`、`imported`、`models`                                 |
+| `work`          | 提醒，以及 Bots 的工作工具。                              |      | `bots`、`chats`                                                                                                 |
+| `imported`      | 在另一个程序中开始的执行。                                |      | `authorization`、`bots`                                                                                         |
+| `chats`         | Chats、Turns、工具和 Live 连接。                          |      | `auth`、`authorization`、`bots`、`capabilities`、`channels`、`files`、`imported`、`models`、`organization`      |
+| `channels`      | Channels、它们的消息，以及 Bots 的 Channel 工具。         |      | `audit`、`auth`、`authorization`、`bots`、`capabilities`、`chats`、`imported`、`models`、`organization`         |
+| `apps`          | App 连接、App Index，以及 Bots 的 App 工具。              |      | `auth`、`authorization`、`bots`、`capabilities`、`chats`、`code`、`imported`、`models`、`vaults`                |
+| `code`          | Bots 在沙箱中运行代码。                                   |      | `apps`、`auth`、`authorization`、`chats`、`imported`、`vaults`                                                  |
+| `vaults`        | Vaults，以及它们读取的机密提供方。                        |      | `audit`、`auth`、`authorization`、`bots`                                                                        |
+| `computers`     | Computers、它们的配对和会话，以及 Bots 的 Computer 工具。 |      | `audit`、`auth`、`authorization`、`bots`、`chats`                                                               |
+| `triggers`      | 启动 Turns 的触发器，以及它们的 webhook。                 |      | `audit`、`auth`、`authorization`、`bots`、`chats`、`models`                                                     |
+| `billing`       | 组织的钱包、用量和预算。                                  |      | `audit`、`auth`、`authorization`、`organization`                                                                |
+| `settings`      | 每个成员的设置。                                          |      | `auth`、`authorization`、`bots`                                                                                 |
+
+一个插件在启动的后面步骤中才使用另一个插件。所以两个插件可以互相需要，例如
+`bots` 和 `chats`。
+
+这对你意味着：
+
+- 你可以逐个关闭 `computers`、`triggers`、`billing` 和
+  `settings`。没有其他插件需要它们。
+- 你不能关闭 `mail`、`sso` 或
+  `models`。必需插件使用它们，所以没有它们 OpenBot 不会启动。
+- 其他插件互相需要。要关闭其中一个，你也必须关闭需要它的每个插件。
+
+当一个插件关闭而一个打开的插件需要它时，启动以 `PluginsInactive`
+失败。这个错误写出正在等待的插件，以及它们等待的服务。
+
+---
+
+## 插件文件
+
+把 `OPENBOT_PLUGINS_FILE`
+设为一个 YAML 文件的路径。YAML 是一种纯文本数据格式。这个文件是一个条目列表。每个条目改变一个插件。空文件或列表
+`[]` 不改变任何东西。
+
+```yaml
+# /etc/openbot/plugins.yml
+- id: triggers
+  disabled: true
+- id: billing
+  disabled: true
+```
+
+没有 `OPENBOT_PLUGINS_FILE` 时，每个插件都打开。
+
+### 关闭一个插件
+
+写出插件的 id 和 `disabled: true`。`disabled: false`
+让插件保持打开，和没有条目一样。
+
+### 给插件配置
+
+一个条目可以有
+`config`，也就是一个插件的设置。现在 OpenBot 没有插件接受配置。所以给 OpenBot 的插件写
+`config` 是错误，启动会以 “This plugin takes no
+config.” 停止。这样，没有插件读取的值不会看起来像是生效了。
+
+### 来自环境的值
+
+一个值可以用 `!env` 标签来自环境变量：
+
+```yaml
+- id: some-plugin
+  config:
+    token: !env SOME_TOKEN
+```
+
+文件中只有变量的名字。插件启动时才读取这个值，而且只交给这个插件。OpenBot 从不把它写进日志，`openbot-inspect plugins`
+从不打印它，它也不在清单哈希中。和其他变量一样，它也可以来自文件
+`/run/secrets/<NAME>`。请看[以文件形式提供机密](/zh-cn/configuration#以文件形式提供机密)。
+
+文件只读取一次，但插件每次启动时都会再次读取这个值。机密只能放在 `!env`
+中，永远不要以纯文本写在文件里。
+
+### 规则
+
+OpenBot 在启动前检查整个文件。它一次给出所有问题，并写出它们在文件中的位置。
+
+| 条目                                             | 结果                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------- |
+| 不是映射，或没有 `id`                            | 错误。每个条目都需要 `id`。                                 |
+| 有 `id`、`name`、`disabled`、`config` 之外的字段 | 错误。不允许组和加载器的其他字段。                          |
+| `disabled` 不是 `true` 或 `false`                | 错误。                                                      |
+| 同一个 id 在文件中出现多次                       | 错误。                                                      |
+| 给 OpenBot 的插件另一个 `name`                   | 错误。OpenBot 插件的名字不能改变。                          |
+| 关闭一个必需插件                                 | 错误。“This plugin is needed, so it can not be turned off.” |
+| 给 OpenBot 的插件 `config`                       | 错误。“This plugin takes no config.”                        |
+| 有新的 id 但没有 `name`                          | 错误。新条目需要名字。                                      |
+| 有新的 id，名字不是 OpenBot 自带的插件           | 错误。只有 OpenBot 自带的插件可以运行。                     |
+| 有新的 id，名字已经作为另一个条目运行            | 错误。请改那个条目。                                        |
+| `!env` 后面不是环境变量的名字                    | 错误。请用大写字母、数字和 `_`。                            |
+| YAML 无效，或有 OpenBot 不认识的 YAML 标签       | 错误，并写出行和列。                                        |
+
+每个可以运行的插件都在镜像中。OpenBot 从不从外部加载插件。OpenBot 自带的所有插件都已经作为条目运行，所以现在新条目总是错误。
+
+---
+
+## 何时读取文件
+
+服务器启动时读取文件一次。它从不写这个文件，运行时也看不到文件的修改。要使用修改后的文件，请重新启动每台服务器。
+
+文件正确时，服务器在日志中写
+`OpenBot read the plugins file.`，带有路径、关闭的 id、新的 id 和清单哈希。它从不把配置写进日志。
+
+文件不正确时，服务器不启动。它先写下面其中一行：
+
+- `The plugins file is not valid.`，带有路径和问题列表。问题写出位置和 id，从不写出文件中的值。
+- `OpenBot could not read the plugins file.`，带有路径和原因，例如 `NotFound` 或
+  `PermissionDenied`。
+
+服务器运行时通过插件宿主做的修改，例如插件重新启动，永远不能关闭必需插件。它只改变这台服务器的内存，从不改变文件。
+
+---
+
+## 检查插件
+
+`openbot-inspect plugins` 以 JSON 打印应用插件文件之后的插件条目。它读取
+`--file <path>`，否则读取
+`OPENBOT_PLUGINS_FILE`。它不需要数据库，也不需要集群密钥，并且不启动服务器。
+
+```sh
+openbot-inspect plugins --file /etc/openbot/plugins.yml
+```
+
+```json
+{
+	"file": "/etc/openbot/plugins.yml",
+	"manifestHash": "sha256:4f1c…",
+	"entries": [
+		{
+			"id": "audit",
+			"name": "@openbot-build/plugin-audit",
+			"disabled": false,
+			"source": "preset",
+			"changed": []
+		},
+		{
+			"id": "triggers",
+			"name": "@openbot-build/plugin-triggers",
+			"disabled": true,
+			"source": "preset",
+			"changed": ["disabled"]
+		}
+	]
+}
+```
+
+- `source` 对 OpenBot 的插件是 `preset`，对新条目是 `file`。
+- `changed` 写出文件改变了什么：`disabled`、`config`，或两者。
+- 只有条目有配置时才有 `config`。`!env` 的值显示为
+  `{ "env": "NAME" }`。其他每个文本值显示为 `"<redacted>"`。
+- 没有设置文件时，`file` 为 `null`。
+
+在 Docker 镜像中，运行
+`/usr/local/bin/node /app/dist/app/Inspect.mjs plugins`。文件不正确时，程序打印问题，并以退出码 1 结束。
+
+---
+
+## 多台服务器
+
+给每台服务器相同的插件文件和相同的镜像。一台服务器没有的工作流会等待，直到有这个工作流的服务器处理它。
+
+每台服务器在启动时，以及之后每 30 秒，在表 `openbot_execution_runners`
+中写一行。这一行有 runner 地址、不含配置的插件条目，以及两个哈希：
+
+- **清单哈希**，插件条目的 SHA-256。它和 `openbot-inspect plugins`
+  打印的哈希相同。相同的文件给出相同的哈希。
+- **活动哈希**，正在运行的内容的 SHA-256：活动的插件部分、工作流，以及带版本的 Bot 功能。镜像改变时它会改变。
+
+一台服务器在最近 90 秒内写过它的行时，就是活动的。每台服务器删除超过 10 分钟的行，停止时删除自己的行。
+
+当一台服务器看到另一台活动的服务器有不同的哈希时，它写下这个警告，以及一条有相同
+`errorId` 的错误记录：
+
+```
+The plugins of this runner are not the same as on other runners. Give every runner the same plugins file and the same image.
+```
+
+警告写出这台服务器的地址、它的哈希，以及其他服务器的地址。清单哈希不同时，警告立刻出现。条目相同而活动哈希不同时，如果 30 秒后差别仍在，才出现警告。每台服务器对每个新的差别只给一次警告，而不是每写一行就给一次。
+
+警告从不停止服务器。当你逐台修改服务器上的文件或镜像时，每台服务器，无论新旧，都会写一次警告和一条错误记录。这是预期的。所有服务器都完成修改后，不会再有新的警告。
+
+---
+
+## 使用 Compose
+
+`deploy/docker/compose.production.yaml` 把 `deploy/docker/plugins.yml`
+以只读方式挂载到 `/etc/openbot/plugins.yml`，并把 `OPENBOT_PLUGINS_FILE`
+设为这个路径。仓库中的这个文件不改变任何东西。
+
+```yaml
+environment:
+  OPENBOT_PLUGINS_FILE: /etc/openbot/plugins.yml
+volumes:
+  - type: bind
+    source: ./plugins.yml
+    target: /etc/openbot/plugins.yml
+    read_only: true
+    bind:
+      create_host_path: false
+```
+
+有了
+`create_host_path: false`，文件缺失时 Compose 会以清楚的错误停止，而不会在那里建一个文件夹。镜像中的服务器不以 root 运行，所以文件必须对所有人可读（模式
+`0644`）。请看[关闭插件](/zh-cn/deploy#关闭插件)。

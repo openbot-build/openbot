@@ -249,8 +249,10 @@ Siehe [Protokolltest](/de/protocol-test). Die Datei braucht
 Compose gibt `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`
 und `OPENBOT_CLUSTER_SECRET` als Dateien in `/run/secrets` weiter. Die Werte
 kommen aus `.env.production`. Der Dienst `openbot` bekommt auch
-`OPENBOT_OUTBOUND_ALLOW` und `OPENBOT_CLUSTER_HOST`. Die Produkteinstellungen
-liegen in der Datenbank. Der Dienst `migrate` braucht `OPENBOT_DATABASE_URL` und
+`OPENBOT_OUTBOUND_ALLOW`, `OPENBOT_CLUSTER_HOST` und `OPENBOT_PLUGINS_FILE`.
+Compose bindet `deploy/docker/plugins.yml` nur zum Lesen unter
+`/etc/openbot/plugins.yml` ein. Die Produkteinstellungen liegen in der
+Datenbank. Der Dienst `migrate` braucht `OPENBOT_DATABASE_URL` und
 `OPENBOT_SECRET_KEYS`.
 
 In der Vorlage nutzt `OPENBOT_DATABASE_URL` den Wert `${POSTGRES_PASSWORD}`. So
@@ -330,6 +332,26 @@ Objektschlüsselliste. Führe dann `up -d --wait` erneut aus. `migrate` läuft v
 dem neuen OpenBot. Lösche nie das Volume `postgres`. Es enthält alle deine
 Daten.
 
+### Plugins ausschalten
+
+Um ein Plugin auszuschalten, zum Beispiel `triggers`, ändere
+`deploy/docker/plugins.yml`:
+
+```yaml
+- id: triggers
+  disabled: true
+```
+
+Starte dann jeden OpenBot-Server neu:
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml up -d --wait --force-recreate openbot
+```
+
+Der Server liest die Datei nur beim Start. Lass die Datei für alle lesbar (Modus
+`0644`). Die Log-Zeile `OpenBot read the plugins file.` nennt die Plugins, die
+aus sind. Siehe [Plugins](/de/plugins).
+
 ## Viele Instanzen
 
 Du kannst viele OpenBot-Instanzen hinter einem Load Balancer betreiben. Gib
@@ -340,6 +362,8 @@ jeder Instanz:
 - einen eigenen `OPENBOT_CLUSTER_HOST`, den alle anderen Knoten erreichen,
 - dieselbe `OPENBOT_OUTBOUND_ALLOW`, wenn du sie setzt. Siehe
   [Ausgehende Verbindungen](/de/configuration#ausgehende-verbindungen).
+- dieselbe Plugin-Datei, wenn du `OPENBOT_PLUGINS_FILE` setzt. Siehe
+  [Viele Server](/de/plugins#viele-server).
 
 Nutze die private Adresse jedes Knotens, nicht die Adresse des Load Balancers.
 Vergrößere den Compose-Dienst `openbot` nur, wenn jeder neue Knoten seinen
@@ -348,7 +372,9 @@ Einrichtung.
 
 Betreibe auf jedem Knoten dieselbe OpenBot-Version. Ein Knoten ohne einen
 Workflow lässt die Nachrichten dafür warten. Sie schlagen nicht fehl. Ein Knoten
-mit diesem Workflow nimmt sie später.
+mit diesem Workflow nimmt sie später. Wenn ein Knoten einen anderen Knoten mit
+anderen Plugins sieht, schreibt er eine Warnung. Siehe
+[Viele Server](/de/plugins#viele-server).
 
 Alle gemeinsamen Einstellungen liegen in der Datenbank. Wenn ein Admin sie
 ändert, nutzt jede Instanz die Änderung sofort. Siehe

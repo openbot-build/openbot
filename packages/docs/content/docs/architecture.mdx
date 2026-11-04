@@ -80,25 +80,32 @@ again when the services come back. While a plugin is off, its routes answer
 
 The **preset** is the list of the 23 plugins of OpenBot. Six of them are
 required: `audit`, `platform`, `organization`, `access`, `auth`, and
-`authorization`. The host itself owns the `/health` route and the routes of
+`authorization`. The plugins file can turn other plugins off. See
+[Plugins](/plugins). The host itself owns the `/health` route and the routes of
 executions, so nobody can turn them off.
 
 ### Startup
 
-1. The host checks that the list has every required plugin, and that each one is
-   on.
+1. The host reads the plugins file once, when `OPENBOT_PLUGINS_FILE` names one,
+   and changes the list with it. It checks that the list has every required
+   plugin, and that each one is on.
 2. It mounts its own routes.
 3. It loads the plugins of the list.
-4. It waits until every plugin is active.
+4. It waits until every plugin that is on is active.
 5. It opens the first engine generation.
+6. It writes the manifest of this runner to `openbot_execution_runners`, and
+   again every 30 seconds. When another live runner has other plugins, it logs a
+   warning and writes an error record. This never stops the start. See
+   [Many servers](/plugins#many-servers).
 
-Startup is strict. When a required plugin is missing or off, startup fails with
-`RequiredPluginMissing`. When a plugin does not become active, startup fails
-with `PluginsInactive`. This error names each plugin, its state, the services
-that it waits for, and the error ID of its failure. The full cause of a plugin
-failure goes to the error records, not to the logs. This is true for every
-failure that the plugin host or the loader logs: the log line has only the error
-ID. A change to the list while the server runs cannot turn off a required
+Startup is strict. A plugins file that is not valid stops the start with
+`PluginsFileInvalid`. When a required plugin is missing or off, startup fails
+with `RequiredPluginMissing`. When a plugin does not become active, startup
+fails with `PluginsInactive`. This error names each plugin, its state, the
+services that it waits for, and the error ID of its failure. The full cause of a
+plugin failure goes to the error records, not to the logs. This is true for
+every failure that the plugin host or the loader logs: the log line has only the
+error ID. A change to the list while the server runs cannot turn off a required
 plugin.
 
 ### Engine generations

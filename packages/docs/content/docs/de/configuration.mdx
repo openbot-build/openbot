@@ -27,10 +27,12 @@ Es gibt zwei Arten von Einstellungen:
   PostgreSQL. Du änderst sie über die API, und jede Instanz nutzt die Änderung
   sofort.
 
-Es gibt zwei Ausnahmen: `OPENBOT_SECRET_KEYS` und `OPENBOT_CLUSTER_SECRET`. Alle
-Knoten brauchen dieselben Werte. Sie schützen gespeicherte Daten und private
-Nachrichten zwischen Knoten. Jeder Knoten liest sie aus seiner Umgebung oder aus
-Dateien mit Geheimnissen.
+Es gibt drei Ausnahmen: `OPENBOT_SECRET_KEYS`, `OPENBOT_CLUSTER_SECRET` und die
+Plugin-Datei in `OPENBOT_PLUGINS_FILE`. Alle Knoten brauchen dieselben Werte.
+Die Schlüssel schützen gespeicherte Daten und private Nachrichten zwischen
+Knoten. Jeder Knoten liest sie aus seiner Umgebung oder aus Dateien mit
+Geheimnissen. Die Plugin-Datei sagt, welche Plugins laufen. Sie ist eine Datei
+auf jedem Knoten, kein Wert in der Datenbank.
 
 Wenn ein nötiger Wert fehlt oder falsch ist, startet OpenBot nicht. Es schreibt
 einen Fehler zur Konfiguration ins Log.
@@ -50,6 +52,7 @@ Das ist die vollständige Liste der Umgebungsvariablen, die der Server liest.
 | `OPENBOT_DATABASE_URL`   | Ja      |                   | Eine URL für die Verbindung zu PostgreSQL.                                         |
 | `OPENBOT_SECRET_KEYS`    | Ja      |                   | Die Schlüssel, die Geheimnisse in der Datenbank verschlüsseln. Siehe unten.        |
 | `OPENBOT_OUTBOUND_ALLOW` | Nein    |                   | Private Hosts und IP-Bereiche, mit denen OpenBot sich verbinden darf. Siehe unten. |
+| `OPENBOT_PLUGINS_FILE`   | Nein    |                   | Eine YAML-Datei, die Plugins ausschaltet. Siehe [Plugins](/de/plugins).            |
 
 Das Docker-Image setzt `OPENBOT_HOST=0.0.0.0` und `OPENBOT_PORT=3000`. So kann
 der Server Verkehr von außerhalb des Containers annehmen.
@@ -124,6 +127,16 @@ OPENBOT_OUTBOUND_ALLOW=localhost,10.20.0.0/16
 
 Wenn OpenBot eine Verbindung sperrt, nennen der Fehler und das Log den Host und
 `OPENBOT_OUTBOUND_ALLOW`.
+
+### Plugins
+
+OpenBot ist eine Gruppe von Plugins. Ohne `OPENBOT_PLUGINS_FILE` ist jedes
+Plugin an. Um ein Plugin auszuschalten, zum Beispiel `triggers`, schreibe es in
+eine YAML-Datei und setze `OPENBOT_PLUGINS_FILE` auf ihren Pfad.
+
+Der Server liest die Datei einmal, wenn er startet, und schreibt sie nie. Eine
+Datei, die nicht gültig ist, stoppt den Start. Gib jeder Instanz dieselbe Datei.
+Siehe [Plugins](/de/plugins).
 
 ---
 
@@ -293,8 +306,8 @@ Requests und Turns gehen weiter.
 ## Compose für den Betrieb
 
 Die Compose-Datei `deploy/docker/compose.production.yaml` liest diese Variablen.
-Nur `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS` und `OPENBOT_OUTBOUND_ALLOW`
-kommen bei OpenBot an.
+Von ihnen kommen nur `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS` und
+`OPENBOT_OUTBOUND_ALLOW` bei OpenBot an.
 
 | Variable                        | Pflicht | Standard                      | Bedeutung                                                                                        |
 | ------------------------------- | ------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -309,9 +322,11 @@ kommen bei OpenBot an.
 
 Die Compose-Datei gibt `OPENBOT_DATABASE_URL` und `OPENBOT_SECRET_KEYS` als
 Dateien in `/run/secrets` an OpenBot. `OPENBOT_OUTBOUND_ALLOW` gibt sie als
-Umgebungsvariable. Der Dienst `openbot` hat keine anderen Umgebungsvariablen.
-Siehe [Deploy](/de/deploy#mit-compose-starten). Eine vollständige Vorlage liegt
-in `deploy/docker/production.env.example`.
+Umgebungsvariable. Sie bindet auch `deploy/docker/plugins.yml` nur zum Lesen
+unter `/etc/openbot/plugins.yml` ein und setzt `OPENBOT_PLUGINS_FILE` auf diesen
+Pfad. Siehe [Plugins](/de/plugins#mit-compose). Siehe
+[Deploy](/de/deploy#mit-compose-starten). Eine vollständige Vorlage liegt in
+`deploy/docker/production.env.example`.
 
 ---
 

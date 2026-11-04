@@ -16,6 +16,7 @@ import {
 	uniqueIndex,
 	unique,
 	check,
+	jsonb,
 } from "drizzle-orm/pg-core"
 
 const time = (name: string) => bigint(name, { mode: "number" })
@@ -355,6 +356,49 @@ export const clusterLocks = pgTable("openbot_cluster_locks", {
 	address: varchar({ length: 255 }).notNull(),
 	acquiredAt: timestamp("acquired_at").notNull(),
 })
+
+/**
+ * One row for each running OpenBot server: the plugins that it runs. Each
+ * server writes its row again on a timer. Rows that nobody writes for a time
+ * go away. The times come from the clock of the database, so the clocks of
+ * the servers do not matter.
+ */
+export const executionRunners = pgTable(
+	"openbot_execution_runners",
+	{
+		/** The private address of the server, as `host:port`. */
+		runnerAddress: text("runner_address").primaryKey(),
+		/** The process that wrote the row. Only this process deletes it. */
+		processId: uuid("process_id").notNull(),
+		/** `sha256:<hex>` of the plugin entries, as `openbot-inspect plugins` prints it. */
+		manifestHash: text("manifest_hash").notNull(),
+		/** `sha256:<hex>` of the active plugins, workflows and bot features. */
+		activeHash: text("active_hash").notNull(),
+		/** The plugin entries: id, name and disabled. Config never goes here. */
+		plugins: jsonb()
+			.$type<
+				ReadonlyArray<{
+					readonly id: string
+					readonly name: string
+					readonly disabled: boolean
+				}>
+			>()
+			.notNull(),
+		/** The names of the active plugin forks, sorted. */
+		forks: jsonb().$type<ReadonlyArray<string>>().notNull(),
+		/** The names of the workflows, sorted. */
+		workflows: jsonb().$type<ReadonlyArray<string>>().notNull(),
+		/** The bot features as `{ id, version }`, sorted by id. */
+		features: jsonb()
+			.$type<ReadonlyArray<{ readonly id: string; readonly version: number }>>()
+			.notNull(),
+		startedAt: timestamp("started_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+		seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => [index("openbot_execution_runners_seen").on(t.seenAt)],
+)
 
 /** The one saved tool call that used a one-use Grant. The command seals its input. */
 export const grantUses = pgTable(

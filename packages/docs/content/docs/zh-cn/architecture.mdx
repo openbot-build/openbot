@@ -52,18 +52,23 @@ runtime。每个 Turn 或子阶段持有自己的模型和工具。账户连接�
 `503` 和 `FeatureUnavailable` 回答。
 
 **预设**是 OpenBot 的 23 个插件的列表。其中六个是必需的：`audit`、`platform`、`organization`、`access`、`auth`
-和 `authorization`。`/health`
+和
+`authorization`。插件文件可以关闭其他插件。参见[插件](/zh-cn/plugins)。`/health`
 路由和执行的路由属于宿主本身，所以没有人能关闭它们。
 
 ### 启动
 
-1. 宿主检查列表中有每个必需插件，并且每个都已打开。
+1. 当 `OPENBOT_PLUGINS_FILE`
+   指定插件文件时，宿主读取它一次，并用它修改列表。宿主检查列表中有每个必需插件，并且每个都已打开。
 2. 它挂载自己的路由。
 3. 它加载列表中的插件。
-4. 它等到每个插件都处于活动状态。
+4. 它等到每个打开的插件都处于活动状态。
 5. 它打开第一个引擎代次。
+6. 它把这个 runner 的清单写入
+   `openbot_execution_runners`，之后每 30 秒再写一次。当另一个活动的 runner 有不同的插件时，它写一条警告和一条错误记录。这从不停止启动。参见[多台服务器](/zh-cn/plugins#多台服务器)。
 
-启动是严格的。必需插件缺失或关闭时，启动以 `RequiredPluginMissing`
+启动是严格的。无效的插件文件以 `PluginsFileInvalid`
+停止启动。必需插件缺失或关闭时，启动以 `RequiredPluginMissing`
 失败。某个插件没有变为活动状态时，启动以 `PluginsInactive`
 失败。这个错误列出每个插件、它的状态、它等待的服务，以及它失败的错误ID。插件失败的完整原因写入错误记录，不写入日志。插件宿主或加载器记录的每个失败都是这样：日志行只有错误ID。服务器运行时对列表的修改不能关闭必需插件。
 

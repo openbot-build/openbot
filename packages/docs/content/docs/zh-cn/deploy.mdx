@@ -206,8 +206,9 @@ Protocol 的公开测试服务。请看[协议测试](/zh-cn/protocol-test)。�
 Compose 以 `/run/secrets` 中文件的形式提供 `POSTGRES_PASSWORD`、
 `OPENBOT_DATABASE_URL`、`OPENBOT_SECRET_KEYS` 和
 `OPENBOT_CLUSTER_SECRET`。这些值来自 `.env.production`。`openbot` 服务还接收
-`OPENBOT_OUTBOUND_ALLOW` 和
-`OPENBOT_CLUSTER_HOST`。产品设置保存在数据库中。`migrate` 服务需要
+`OPENBOT_OUTBOUND_ALLOW`、`OPENBOT_CLUSTER_HOST` 和
+`OPENBOT_PLUGINS_FILE`。Compose 把 `deploy/docker/plugins.yml` 以只读方式挂载到
+`/etc/openbot/plugins.yml`。产品设置保存在数据库中。`migrate` 服务需要
 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。
 
 在模板中，`OPENBOT_DATABASE_URL` 使用
@@ -285,6 +286,24 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 `up -d --wait`。新的 OpenBot 启动前，`migrate` 会再次运行。不要删除 `postgres`
 卷。它保存着你的全部数据。
 
+### 关闭插件
+
+要关闭一个插件，例如 `triggers`，请编辑 `deploy/docker/plugins.yml`：
+
+```yaml
+- id: triggers
+  disabled: true
+```
+
+然后重新启动每台 OpenBot 服务器：
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml up -d --wait --force-recreate openbot
+```
+
+服务器只在启动时读取这个文件。让文件对所有人可读（模式 `0644`）。日志行
+`OpenBot read the plugins file.` 会写出关闭的插件。请看[插件](/zh-cn/plugins)。
+
 ## 多个实例
 
 你可以在一个负载均衡器后面运行多个 OpenBot 实例。给每个实例：
@@ -294,12 +313,14 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 - 各不相同、且其他节点都能访问的 `OPENBOT_CLUSTER_HOST`，
 - 相同的
   `OPENBOT_OUTBOUND_ALLOW`（如果你设置了它）。参见[出站连接](/zh-cn/configuration#出站连接)。
+- 相同的插件文件（如果你设置了
+  `OPENBOT_PLUGINS_FILE`）。参见[多台服务器](/zh-cn/plugins#多台服务器)。
 
 每个节点使用自己的私有地址，不要使用负载均衡器的地址。扩容 Compose 的 `openbot`
 服务时，必须为每个新节点配置独立主机名。`compose.check.yaml`
 中的两个节点展示了这种配置。
 
-所有节点运行同一个 OpenBot 版本。如果某个节点没有某个工作流，发给它的消息会继续等待，不会失败。之后由拥有该工作流的节点处理。
+所有节点运行同一个 OpenBot 版本。如果某个节点没有某个工作流，发给它的消息会继续等待，不会失败。之后由拥有该工作流的节点处理。当一个节点看到另一个节点有不同的插件时，它会写一条警告。参见[多台服务器](/zh-cn/plugins#多台服务器)。
 
 所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/configuration#修改如何到达每个实例)。迁移程序和设置程序只运行一次，不要在每个实例上都运行。
 

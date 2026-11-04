@@ -1,6 +1,6 @@
 import { expectTypeOf, it } from "@effect/vitest"
 import { Discovery } from "@openbot-build/protocol"
-import { Host } from "@openbot-build/openbot"
+import { Host } from "../src/index.ts"
 import * as Outside from "../src/app/Outside.ts"
 import { Context, Effect, Layer, Redacted, Schema } from "effect"
 

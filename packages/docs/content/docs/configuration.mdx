@@ -26,9 +26,11 @@ There are two kinds of settings:
   PostgreSQL. You change them through the API, and every instance uses the
   change at once.
 
-There are two exceptions: `OPENBOT_SECRET_KEYS` and `OPENBOT_CLUSTER_SECRET`.
-Every node needs the same values. They protect stored data and private node
-messages, so each node reads them from its environment or secret files.
+There are three exceptions: `OPENBOT_SECRET_KEYS`, `OPENBOT_CLUSTER_SECRET`, and
+the plugins file in `OPENBOT_PLUGINS_FILE`. Every node needs the same values.
+The keys protect stored data and private node messages, so each node reads them
+from its environment or secret files. The plugins file says which plugins run.
+It is a file on each node, not a value in the database.
 
 If a required value is missing or wrong, OpenBot does not start. It writes a
 configuration error to the log.
@@ -48,6 +50,7 @@ This is the complete list of environment variables that the server reads.
 | `OPENBOT_DATABASE_URL`   | Yes      |               | A PostgreSQL connection URL.                                        |
 | `OPENBOT_SECRET_KEYS`    | Yes      |               | The keys that encrypt secrets in the database. See below.           |
 | `OPENBOT_OUTBOUND_ALLOW` | No       |               | Private hosts and IP ranges that OpenBot may connect to. See below. |
+| `OPENBOT_PLUGINS_FILE`   | No       |               | A YAML file that turns plugins off. See [Plugins](/plugins).        |
 
 The Docker image sets `OPENBOT_HOST=0.0.0.0` and `OPENBOT_PORT=3000`, so the
 server can take traffic from outside the container.
@@ -117,6 +120,16 @@ OPENBOT_OUTBOUND_ALLOW=localhost,10.20.0.0/16
 
 When OpenBot blocks a connection, the error and the log name the host and
 `OPENBOT_OUTBOUND_ALLOW`.
+
+### Plugins
+
+OpenBot is a set of plugins. Without `OPENBOT_PLUGINS_FILE`, every plugin is on.
+To turn a plugin off, such as `triggers`, list it in a YAML file and set
+`OPENBOT_PLUGINS_FILE` to its path.
+
+The server reads the file once, when it starts, and never writes it. A file that
+is not valid stops the start. Give every instance the same file. See
+[Plugins](/plugins).
 
 ---
 
@@ -278,7 +291,7 @@ starts again: requests and Turns that are running go on.
 
 The Compose file `deploy/docker/compose.production.yaml` reads these variables.
 Only `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`, and `OPENBOT_OUTBOUND_ALLOW`
-reach OpenBot.
+reach OpenBot from them.
 
 | Variable                        | Required | Default                       | Meaning                                                                     |
 | ------------------------------- | -------- | ----------------------------- | --------------------------------------------------------------------------- |
@@ -293,9 +306,10 @@ reach OpenBot.
 
 The Compose file gives `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS` to
 OpenBot as files in `/run/secrets`. It gives `OPENBOT_OUTBOUND_ALLOW` as an
-environment variable. The `openbot` service has no other environment variables.
-See [Deploy](/deploy#run-with-compose). A full template is in
-`deploy/docker/production.env.example`.
+environment variable. It also mounts `deploy/docker/plugins.yml` read only at
+`/etc/openbot/plugins.yml` and sets `OPENBOT_PLUGINS_FILE` to that path. See
+[Plugins](/plugins#with-compose). See [Deploy](/deploy#run-with-compose). A full
+template is in `deploy/docker/production.env.example`.
 
 ---
 
