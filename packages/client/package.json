@@ -6,7 +6,9 @@
 	"description": "Typed client for the OpenBot API",
 	"sideEffects": false,
 	"exports": {
-		".": "./dist/index.js"
+		".": "./dist/index.js",
+		"./Api": "./dist/Api.js",
+		"./Core": "./dist/Core.js"
 	},
 	"files": [
 		"dist",
