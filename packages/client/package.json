@@ -19,6 +19,7 @@
 		"postpack": "pnpm build"
 	},
 	"dependencies": {
+		"@nmnmcc/ability": "3.1.0",
 		"effect": "4.0.6",
 		"@modelcontextprotocol/client": "2.3.1"
 	},
