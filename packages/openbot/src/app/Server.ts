@@ -1,25 +1,9 @@
 import type { Etag, HttpPlatform } from "effect/http"
 import type { NodeServices } from "@effect/platform-node"
 import * as BillingHost from "./BillingHost.ts"
-import * as ComputerWorker from "../plugin-computers/Worker.ts"
-import * as Send from "../server-execution/execution/Send.ts"
-import * as ResourceDirectory from "../server-execution/resources/Directory.ts"
-import * as ResourceTransport from "../server-execution/resources/Transport.ts"
-import * as PrivateRpc from "../server-execution/transport/PrivateRpc.ts"
-import * as ExecutionLayers from "./ExecutionLayers.ts"
-import { NetAddress } from "effect/net"
-import * as ExecutionEngine from "../server-execution/execution/Engine.ts"
-import * as EngineHost from "../server-execution/execution/EngineHost.ts"
-import * as Workflows from "../server-execution/execution/Workflows.ts"
-import * as ExecutionStore from "../server-execution/execution/Store.ts"
-import * as ExecutionCommands from "../server-execution/execution/Commands.ts"
-import * as ExecutionObservation from "../server-execution/execution/Observation.ts"
 import * as ErrorRecords from "../server-kernel/errors/Records.ts"
 import * as HttpFailureBoundary from "../server-kernel/errors/HttpBoundary.ts"
 import * as HttpHost from "../server-kernel/errors/HttpHost.ts"
-import { RunnerAddress, ShardingConfig } from "effect/cluster"
-import { NodeHttpClient } from "@effect/platform-node"
-import { HttpServer } from "effect/http"
 import type { PgClient } from "@effect/sql-pg"
 import { Settings as Api } from "@openbot-build/api"
 
@@ -27,6 +11,7 @@ import { Settings as Api } from "@openbot-build/api"
 import { createServer } from "node:http"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Http from "./Http.ts"
+import * as Host from "./Host.ts"
 import { Effect, Layer, Option, Redacted, Result } from "effect"
 import type { SecureRandom } from "effect/crypto"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -93,58 +78,14 @@ export interface AppOptions extends OpenBot.Options {
 	>
 }
 
-/** The bound port also works when a test asks for a free port with port 0. */
-const executionServices = (options: AppOptions) => {
-	const config = Layer.unwrap(
-		Effect.gen(function* () {
-			const server = yield* HttpServer.HttpServer
-			if (server.address._tag === "UnixPathAddress")
-				return yield* Effect.die("Cluster RPC needs a TCP server.")
-			return ShardingConfig.layer({
-				runnerAddress: Option.some(
-					RunnerAddress.make(
-						options.clusterHost ?? NetAddress.formatHost(server.address),
-						server.address.port,
-					),
-				),
-			})
-		}),
-	)
-	return Layer.mergeAll(
-		ExecutionCommands.layer,
-		Send.layer,
-		ResourceTransport.layer.pipe(
-			Layer.provideMerge(
-				ResourceDirectory.layer.pipe(
-					Layer.provide(ExecutionEngine.layerRunnerList),
-				),
-			),
-			Layer.provide(NodeHttpClient.layerUndici),
-		),
-	).pipe(
-		Layer.provideMerge(Layer.merge(Workflows.layer, EngineHost.layerRpc)),
-		Layer.provideMerge(ExecutionObservation.layer),
-		Layer.provideMerge(Layer.merge(ExecutionStore.layer, ErrorRecords.layer)),
-		// The engine generation in ExecutionLayers reads the same config.
-		Layer.provideMerge(config),
-		Layer.provideMerge(Layer.succeed(PrivateRpc.Secret, options.clusterSecret)),
-	)
-}
-
 /**
- * The private RPC routes of the cluster and the routes of the options. The
- * routes of the options come last, so they cannot take a route of OpenBot. At
- * shutdown these mounts close before the engine generation. In that gap a peer
- * would get 404 for the execution RPC, not the 503 that it retries. The server
- * stops taking requests before the mounts close, so no peer sees the gap. Keep
- * this order if the shutdown changes.
+ * The routes of the options. They come last, so they cannot take a route of
+ * OpenBot.
  */
 const layerRoutes = (options: AppOptions) =>
 	Layer.effectDiscard(
 		Effect.gen(function* () {
 			const host = yield* HttpHost.HttpHost
-			yield* host.mountRoutes("execution-rpc", EngineHost.layerRoutes)
-			yield* host.mountRoutes("resource-rpc", ResourceTransport.layerRoutes)
 			if (options.routes !== undefined)
 				yield* host.mountRoutes("routes", options.routes, { last: true })
 		}).pipe(
@@ -153,19 +94,17 @@ const layerRoutes = (options: AppOptions) =>
 		),
 	)
 
-/** The routes and services of OpenBot. It needs the same services as `OpenBot.layer`. */
+/**
+ * The routes and services of OpenBot, on the plugin host. The host mounts the
+ * private RPC routes of the cluster itself, before it opens the engine
+ * generation, so at shutdown they close after the generation. It needs the
+ * same services as `Host.layerKernel`.
+ */
 export const layerApp = (options: AppOptions) =>
-	Layer.mergeAll(
-		ComputerWorker.layer,
-		layerRoutes(options),
-		options.startup ?? Layer.empty,
-	).pipe(
-		// Built first, so Better Auth is the oldest mount of routes outside the contract.
-		Layer.provideMerge(layerApi),
-		Layer.provideMerge(ExecutionLayers.layer),
-		Layer.provideMerge(BillingHost.layer),
-		Layer.provideMerge(OpenBot.layer(options)),
-		Layer.provideMerge(executionServices(options)),
+	Layer.mergeAll(layerRoutes(options), options.startup ?? Layer.empty).pipe(
+		Layer.provideMerge(Host.layerExposed(options)),
+		// A startup failure stops the process, as before.
+		Layer.orDie,
 	)
 
 /** The answer of every route except `/health` while the platform has no settings. */

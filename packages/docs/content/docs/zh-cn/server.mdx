@@ -233,6 +233,19 @@ OpenBot 用一个单独的路由器来服务这些路由。这个 Layer 里的�
 如何只构建一次应用，并在设置之前用 `SetupRequired` 回答，请读
 `packages/openbot/src/app/Server.ts`。把登录密钥放在平台设置中，不要放在你自己的环境变量里。每个实例都必须使用同一个登录密钥。
 
+## 插件宿主
+
+`Server.layerApp` 在插件宿主上运行 OpenBot，`Server.layer`、`Server.layerLive`
+和 `Server.layerFixed`
+也是如此。每个功能都是一个插件。插件宿主见[执行设计](/zh-cn/architecture)。
+
+每个插件都处于活动状态后，这个 Layer 才就绪。启动失败会像以前一样停止进程：Layer 带着错误终止，例如
+`RequiredPluginMissing` 或
+`PluginsInactive`。错误列出没有处于活动状态的插件。插件失败的完整原因在错误记录中。
+
+这些 Layer 交给你的程序的服务，是启动时各插件的服务。插件之后重新启动时，你手中的副本不会改变。`Server.layerApi`
+只提供路由，不运行插件宿主。
+
 ---
 
 ## 迁移数据库

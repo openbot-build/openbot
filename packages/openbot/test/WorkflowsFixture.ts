@@ -1,5 +1,5 @@
 import type { ServiceId } from "@openbot-build/domain"
-import { Effect, HashMap, Layer, Option } from "effect"
+import { Effect, HashMap, Layer, Option, Stream } from "effect"
 import type * as Admission from "../src/server-execution/execution/Admission.ts"
 import type * as Engine from "../src/server-execution/execution/Engine.ts"
 import type { Key } from "../src/server-execution/execution/Store.ts"
@@ -87,6 +87,8 @@ export const stub = (input: {
 		current: Effect.succeed(HashMap.empty()),
 		seal: Effect.succeed(HashMap.empty()),
 		hold: () => Effect.void,
+		changes: Stream.make(HashMap.empty()),
+		acquire: Effect.succeed(HashMap.empty()),
 	})
 
 /** A layer of `stub`. */

@@ -33,3 +33,11 @@ export const layer = Layer.mergeAll(
 		Authorization.PlatformAuth,
 	),
 ).pipe(Layer.provideMerge(Layer.mergeAll(layerAuth, layerPlatformAuth)))
+
+/** The keys of `layer`, which the authorization plugin publishes for other plugins. */
+export const published = [
+	HttpAuthorization.Authorize,
+	HttpAuthorization.PlatformAuthorize,
+	Authorization.Auth,
+	Authorization.PlatformAuth,
+] as const

@@ -31,5 +31,11 @@
 		"packages:pack": "node scripts/packages.mjs pack",
 		"packages:publish": "node scripts/packages.mjs publish",
 		"test:packages": "node --test scripts/packages.test.mjs"
+	},
+	"pnpm": {
+		"overrides": {
+			"@graftland/graft": "0.2.0-beta.1",
+			"@graftland/loader": "0.2.0-beta.1"
+		}
 	}
 }

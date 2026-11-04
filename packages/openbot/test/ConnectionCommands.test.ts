@@ -33,6 +33,7 @@ import {
 import { executions } from "../src/server-database/ExecutionSchema.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Commands from "../src/plugin-apps/ConnectionCommands.ts"
 import * as Stored from "../src/apps-contract/apps/StoredConnections.ts"
@@ -53,7 +54,9 @@ const database = Layer.effectDiscard(Database.migrate).pipe(
 		),
 	),
 )
-const services = Layer.merge(Store.layer, Records.layer).pipe(
+// GrantCleanup reads the execution observation of the host.
+const services = Observation.layer.pipe(
+	Layer.provideMerge(Layer.merge(Store.layer, Records.layer)),
 	Layer.provideMerge(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),

@@ -282,3 +282,12 @@ export const layerAccountAuth = Layer.effect(
 		}
 	}),
 )
+
+/** The keys of the middleware that the auth plugin publishes for other plugins. */
+export const published = [
+	AuthApi.AccountAuth,
+	AuthApi.BotAuth,
+	AuthApi.NoStore,
+	AuthApi.OriginCheck,
+	AuthApi.SessionAuth,
+] as const

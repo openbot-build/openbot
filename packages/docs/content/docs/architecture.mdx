@@ -55,6 +55,68 @@ The server builds no Chat runtime for a member. Each Turn or child phase owns
 its model and tools. Account connections may share a cache by connection ID and
 version. That cache does not own Chat state or execution.
 
+## Plugin host
+
+The server runs its features as plugins on one plugin host. The host uses graft,
+a small library for plugins. A plugin is one feature, such as Bots, Chats, or
+billing. Each plugin has a fixed id, such as `bots`.
+
+The **kernel** is the part that every plugin shares: the database pool, the
+settings, the secret keys, the error records, the HTTP host, and the services of
+the execution engine. The host builds the kernel first. No plugin may publish a
+service of the kernel.
+
+A plugin is a chain of **stages** and one **start**. A stage builds some
+services and publishes all of them in one step. A later stage can wait for a
+service of another plugin, and the services of the stages before it stay
+published. The start builds the work of the feature in this order: Bot features,
+workflows, workers, and HTTP routes. It closes in the reverse order. A stage or
+a start that fails tries again: fast at first, then every 30 seconds.
+
+A plugin waits until every service that it needs is published. When a plugin
+stops or starts again, the plugins that use its services stop first. They start
+again when the services come back. While a plugin is off, its routes answer
+`503` with `FeatureUnavailable`.
+
+The **preset** is the list of the 23 plugins of OpenBot. Six of them are
+required: `audit`, `platform`, `organization`, `access`, `auth`, and
+`authorization`. The host itself owns the `/health` route and the routes of
+executions, so nobody can turn them off.
+
+### Startup
+
+1. The host checks that the list has every required plugin, and that each one is
+   on.
+2. It mounts its own routes.
+3. It loads the plugins of the list.
+4. It waits until every plugin is active.
+5. It opens the first engine generation.
+
+Startup is strict. When a required plugin is missing or off, startup fails with
+`RequiredPluginMissing`. When a plugin does not become active, startup fails
+with `PluginsInactive`. This error names each plugin, its state, the services
+that it waits for, and the error ID of its failure. The full cause of a plugin
+failure goes to the error records, not to the logs. This is true for every
+failure that the plugin host or the loader logs: the log line has only the error
+ID. A change to the list while the server runs cannot turn off a required
+plugin.
+
+### Engine generations
+
+An **engine generation** is one open execution engine with a fixed set of
+workflows. It is not the generation of an execution owner.
+
+When a plugin takes a workflow away, the host closes the engine generation at
+once. The executions on this node then wait. When a plugin gives a new workflow,
+the host waits until no plugin is loading, then one second, then again until no
+plugin is loading. Then it closes the old engine generation and opens a new one.
+The old one always closes before the new one opens. The executions go on from
+their saved steps in the new engine generation.
+
+When a plugin stays loading for more than 120 seconds, the executions of the
+node stay paused. The host then logs one warning that names each plugin that is
+still loading.
+
 ## Execution
 
 An **execution** is stored work with a stable ID. A business resource keeps its
@@ -68,12 +130,13 @@ save a late outside result. It cannot advance the new owner's state.
 Effect `Workflow`, `Activity`, `DurableDeferred`, `DurableClock`, and
 `ClusterWorkflowEngine` provide stored steps, signals, timers, messages, and
 node assignment. Each feature gives its workflows and their access rules to the
-`Workflows` service. The engine starts once, after every feature has given its
-workflows, and it stops before them. The engine has no Bot, approval, or
-Computer branches. When no loaded feature owns the workflow of an execution, the
-execution routes answer `503` with `FeatureUnavailable`. The server keeps no
-error record for this answer. The standalone core has an in-memory host. It does
-not promise recovery after its process stops.
+`Workflows` service. The engine opens after every plugin is active. It closes
+before a plugin that gives a workflow stops, as the plugin host section says.
+The engine has no Bot, approval, or Computer branches. When no loaded feature
+owns the workflow of an execution, the execution routes answer `503` with
+`FeatureUnavailable`. The server keeps no error record for this answer. The
+standalone core has an in-memory host. It does not promise recovery after its
+process stops.
 
 `Program` owns one loop for recovery, owner checks, cancellation, and phase
 failures. Each feature gives `next` to choose its next phase and `end` to save

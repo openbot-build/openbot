@@ -729,6 +729,4 @@ const make = Effect.gen(function* () {
 	})
 })
 
-export const layer = Layer.effect(GrantCleanup, make).pipe(
-	Layer.provide(Observation.layer),
-)
+export const layer = Layer.effect(GrantCleanup, make)

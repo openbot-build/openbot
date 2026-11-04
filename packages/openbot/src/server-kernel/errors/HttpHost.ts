@@ -50,10 +50,13 @@ type Platform =
 	Etag.Generator | HttpPlatform.HttpPlatform | FileSystem.FileSystem | Path.Path
 /**
  * What a mount needs from its caller. The host gives the router and the
- * platform. The route markers stay, so `HttpRouter.serve` asks for the services
- * of each request as it does for its own routes.
+ * platform. A route marker (`HttpRouter.Request`) is not a service, so it goes
+ * away. A `Requires` marker becomes a plain need: the routes take that service
+ * from the context of their build, which is the context of the caller.
  */
-type Needs<R> = Exclude<R, HttpRouter.HttpRouter | Platform>
+type Needs<R> =
+	| Exclude<HttpRouter.Request.Without<R>, HttpRouter.HttpRouter | Platform>
+	| HttpRouter.Request.Only<"Requires", R>
 /** A failure that a route does not handle. The server turns it into an answer. */
 type RouteFailure = Types.unhandled
 /** The routes of one mount, as one handler. */
@@ -192,7 +195,7 @@ const make = Effect.gen(function* () {
 				).layer,
 			)
 			const router = yield* HttpRouter.make
-			yield* Layer.build(Layer.fresh(routes)).pipe(
+			const build = Layer.build(Layer.fresh(routes)).pipe(
 				Effect.provideContext(
 					Context.add(
 						Context.merge(platform, track),
@@ -202,6 +205,14 @@ const make = Effect.gen(function* () {
 				),
 				withoutRequestOwned,
 			)
+			// A route marker is a type only; the build reads no service for it. The
+			// services behind `Requires` markers come from the caller's context.
+			// @effect-diagnostics-next-line unsafeEffectTypeAssertion:off -- Needs<R> holds every service the build reads.
+			yield* build as Effect.Effect<
+				Context.Context<never>,
+				E,
+				Needs<R> | Scope.Scope
+			>
 			// Finalizers run in reverse order: the drain runs before the routes close.
 			yield* Effect.addFinalizer(() =>
 				Effect.andThen(Ref.set(closing, true), drain(requests)),

@@ -11,7 +11,11 @@ import type { PgClient } from "@effect/sql-pg"
 import { Effect, type Layer, Redacted, String as Str } from "effect"
 import type { Digest, SecureRandom } from "effect/crypto"
 import type { HttpClient } from "effect/http"
+import * as BillingHost from "../src/app/BillingHost.ts"
+import * as ExecutionLayers from "../src/app/ExecutionLayers.ts"
+import type * as Host from "../src/app/Host.ts"
 import * as OpenBot from "../src/app/OpenBot.ts"
+import type * as Preset from "../src/app/Preset.ts"
 import * as Server from "../src/app/Server.ts"
 import type { HostTools } from "../src/tools-contract/chats/HostTools.ts"
 import type { Secrets } from "../src/server-kernel/secrets/Secrets.ts"
@@ -90,5 +94,32 @@ it.effect(
 				never
 			> = true
 			assert.deepStrictEqual([needs, customNeeds], [true, true])
+		}),
+)
+
+/** The services of the static assembly that the kernel does not give. */
+type StaticServices = Exclude<
+	| Layer.Success<ReturnType<typeof OpenBot.layer>>
+	| Layer.Success<typeof ExecutionLayers.layer>
+	| Layer.Success<typeof BillingHost.layer>,
+	Host.Kernel
+>
+
+it.effect(
+	"the plugins publish every service of the static assembly, and no service of the kernel",
+	() =>
+		Effect.sync(() => {
+			const covered: [StaticServices] extends [Preset.Published]
+				? true
+				: false = true
+			const apart: [Extract<Preset.Published, Host.Kernel>] extends [never]
+				? true
+				: false = true
+			// The wrappers give a snapshot of the published services, so their callers keep them.
+			const exposed = Server.layerApp(options)
+			const wrappers: [StaticServices] extends [Layer.Success<typeof exposed>]
+				? true
+				: false = true
+			assert.deepStrictEqual([covered, apart, wrappers], [true, true, true])
 		}),
 )

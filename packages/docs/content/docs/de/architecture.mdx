@@ -57,6 +57,70 @@ hält sein Modell und seine Werkzeuge. Verbindungen dürfen einen Cache nach
 Verbindungs-ID und Version teilen. Dieser Cache besitzt weder den Chat-Zustand
 noch die Ausführung.
 
+## Plugin-Host
+
+Der Server führt seine Funktionen als Plugins auf einem Plugin-Host aus. Der
+Host nutzt graft, eine kleine Bibliothek für Plugins. Ein Plugin ist eine
+Funktion, zum Beispiel Bots, Chats oder Abrechnung. Jedes Plugin hat eine feste
+ID, zum Beispiel `bots`.
+
+Der **Kernel** ist der Teil, den alle Plugins teilen: der Datenbank-Pool, die
+Einstellungen, die geheimen Schlüssel, die Fehlereinträge, der HTTP-Host und die
+Dienste der Ausführungsengine. Der Host baut den Kernel zuerst. Kein Plugin darf
+einen Dienst des Kernels veröffentlichen.
+
+Ein Plugin ist eine Kette von **Stufen** und ein **Start**. Eine Stufe baut
+einige Dienste und veröffentlicht alle in einem Schritt. Eine spätere Stufe kann
+auf einen Dienst eines anderen Plugins warten. Die Dienste der Stufen davor
+bleiben dabei veröffentlicht. Der Start baut die Arbeit der Funktion in dieser
+Reihenfolge: Bot-Funktionen, Workflows, Worker und HTTP-Routen. Er schließt in
+der umgekehrten Reihenfolge. Eine Stufe oder ein Start mit Fehler versucht es
+wieder: zuerst schnell, dann alle 30 Sekunden.
+
+Ein Plugin wartet, bis jeder Dienst veröffentlicht ist, den es braucht. Wenn ein
+Plugin stoppt oder neu startet, stoppen die Plugins zuerst, die seine Dienste
+nutzen. Sie starten wieder, wenn die Dienste zurück sind. Solange ein Plugin aus
+ist, antworten seine Routen mit `503` und `FeatureUnavailable`.
+
+Das **Preset** ist die Liste der 23 Plugins von OpenBot. Sechs davon sind nötig:
+`audit`, `platform`, `organization`, `access`, `auth` und `authorization`. Die
+Route `/health` und die Routen der Ausführungen gehören dem Host selbst. Darum
+kann niemand sie ausschalten.
+
+### Start
+
+1. Der Host prüft, dass die Liste jedes nötige Plugin hat und dass jedes an ist.
+2. Er bindet seine eigenen Routen ein.
+3. Er lädt die Plugins der Liste.
+4. Er wartet, bis jedes Plugin aktiv ist.
+5. Er öffnet die erste Engine-Generation.
+
+Der Start ist streng. Wenn ein nötiges Plugin fehlt oder aus ist, schlägt der
+Start mit `RequiredPluginMissing` fehl. Wenn ein Plugin nicht aktiv wird,
+schlägt der Start mit `PluginsInactive` fehl. Dieser Fehler nennt jedes Plugin,
+seinen Zustand, die Dienste, auf die es wartet, und die Fehler-ID seines
+Fehlers. Die volle Ursache eines Plugin-Fehlers kommt in die Fehlereinträge,
+nicht in die Logs. Das gilt für jeden Fehler, den der Plugin-Host oder der
+Loader loggt: Die Logzeile hat nur die Fehler-ID. Eine Änderung der Liste
+während des Betriebs kann kein nötiges Plugin ausschalten.
+
+### Engine-Generationen
+
+Eine **Engine-Generation** ist eine offene Ausführungsengine mit einer festen
+Menge von Workflows. Sie ist nicht die Generation eines Ausführungsbesitzers.
+
+Wenn ein Plugin einen Workflow wegnimmt, schließt der Host die Engine-Generation
+sofort. Die Ausführungen auf diesem Knoten warten dann. Wenn ein Plugin einen
+neuen Workflow gibt, wartet der Host, bis kein Plugin mehr lädt, dann eine
+Sekunde, dann wieder, bis kein Plugin mehr lädt. Dann schließt er die alte
+Engine-Generation und öffnet eine neue. Die alte schließt immer, bevor die neue
+öffnet. Die Ausführungen laufen in der neuen Engine-Generation von ihren
+gespeicherten Schritten weiter.
+
+Wenn ein Plugin länger als 120 Sekunden lädt, bleiben die Ausführungen des
+Knotens angehalten. Der Host schreibt dann eine Warnung, die jedes Plugin nennt,
+das noch lädt.
+
 ## Ausführung
 
 Eine **Ausführung** ist gespeicherte Arbeit mit einer festen ID. Eine
@@ -73,13 +137,13 @@ Zustand des neuen Besitzers nicht fortsetzen.
 Effect `Workflow`, `Activity`, `DurableDeferred`, `DurableClock` und
 `ClusterWorkflowEngine` liefern gespeicherte Schritte, Signale, Timer,
 Nachrichten und Knotenzuweisung. Jede Funktion gibt ihre Workflows und deren
-Zugriffsregeln an den Dienst `Workflows`. Die Engine startet einmal, nachdem
-jede Funktion ihre Workflows gegeben hat, und sie stoppt vor ihnen. Die Engine
-hat keine Bot-, Freigabe- oder Computer-Zweige. Wenn keine geladene Funktion den
-Workflow einer Ausführung besitzt, antworten die Ausführungsrouten mit `503` und
-`FeatureUnavailable`. Der Server speichert für diese Antwort keinen
-Fehlereintrag. Der eigenständige Core hat einen Speicher-Host ohne
-Wiederherstellung nach Prozessende.
+Zugriffsregeln an den Dienst `Workflows`. Die Engine öffnet, wenn jedes Plugin
+aktiv ist. Sie schließt, bevor ein Plugin mit einem Workflow stoppt, wie der
+Abschnitt zum Plugin-Host sagt. Die Engine hat keine Bot-, Freigabe- oder
+Computer-Zweige. Wenn keine geladene Funktion den Workflow einer Ausführung
+besitzt, antworten die Ausführungsrouten mit `503` und `FeatureUnavailable`. Der
+Server speichert für diese Antwort keinen Fehlereintrag. Der eigenständige Core
+hat einen Speicher-Host ohne Wiederherstellung nach Prozessende.
 
 `Program` hält eine Schleife für Wiederherstellung, Besitzerprüfung, Abbruch und
 Phasenfehler. Jede Funktion gibt `next` für die nächste Phase und `end` für

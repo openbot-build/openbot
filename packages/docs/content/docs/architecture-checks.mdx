@@ -171,6 +171,13 @@ runs these rules. They check imports; they do not by themselves detect every
 second execution engine or recovery loop. Review new workers, timers, locks, and
 RPC handlers against the shared design.
 
+Two more rules guard the plugin host. `graft-boundary` lets only the plugin kit,
+the `Plugin.ts` file of each plugin folder, the app, the development server, and
+the tests import graft. It also asks for the name `GraftPlugin` for the `Plugin`
+of graft. `feature-lookup` does not let server code look for a feature with
+`Effect.serviceOption` or `Plugin.optional`. Code lists the services that it
+needs instead.
+
 ## Data move checks
 
 The [deployment guide](/deploy) gives the maintenance order and secret-key

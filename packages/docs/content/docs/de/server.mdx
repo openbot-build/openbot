@@ -269,6 +269,23 @@ zu sehen, wie `Server.layer` die App einmal baut und vor der Einrichtung mit
 Plattform-Einstellungen auf, nicht in deiner eigenen Umgebungsvariable. Jede
 Instanz muss dasselbe nutzen.
 
+## Der Plugin-Host
+
+`Server.layerApp` führt OpenBot auf dem Plugin-Host aus, und ebenso
+`Server.layer`, `Server.layerLive` und `Server.layerFixed`. Jede Funktion ist
+ein Plugin. Zum Plugin-Host siehe [Ausführungsdesign](/de/architecture).
+
+Der Layer ist bereit, wenn jedes Plugin aktiv ist. Ein fehlgeschlagener Start
+stoppt den Prozess wie bisher: Der Layer endet mit dem Fehler, zum Beispiel
+`RequiredPluginMissing` oder `PluginsInactive`. Der Fehler nennt die Plugins,
+die nicht aktiv sind. Die volle Ursache eines Plugin-Fehlers steht in den
+Fehlereinträgen.
+
+Die Dienste, die diese Layer deinem Programm geben, sind die Dienste der Plugins
+zur Zeit des Starts. Wenn ein Plugin später neu startet, ändert sich deine Kopie
+nicht. `Server.layerApi` gibt nur die Routen. Es führt den Plugin-Host nicht
+aus.
+
 ---
 
 ## Die Datenbank migrieren

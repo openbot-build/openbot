@@ -21,6 +21,7 @@ import {
 	Redacted,
 	Ref,
 	Schema,
+	Stream,
 	String as Str,
 } from "effect"
 import {
@@ -159,6 +160,8 @@ const registry = Layer.effect(
 			current: Effect.succeed(HashMap.empty()),
 			seal: Effect.succeed(HashMap.empty()),
 			hold: () => Effect.void,
+			changes: Stream.make(HashMap.empty()),
+			acquire: Effect.succeed(HashMap.empty()),
 			get: (name) =>
 				Effect.succeed(
 					name === "http-test" ? Option.some(registered) : Option.none(),

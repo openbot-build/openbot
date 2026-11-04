@@ -182,6 +182,13 @@ führt diese Regeln aus. Sie prüfen Importe. Allein finden sie nicht jede zweit
 Ausführungsengine oder Wiederaufnahmeschleife. Prüfen Sie neue Worker, Timer,
 Sperren und RPC-Handler gegen das gemeinsame Design.
 
+Zwei weitere Regeln schützen den Plugin-Host. `graft-boundary` lässt nur das
+Plugin-Kit, die Datei `Plugin.ts` jedes Plugin-Ordners, die App, den
+Entwicklungsserver und die Tests graft importieren. Sie verlangt auch den Namen
+`GraftPlugin` für das `Plugin` von graft. `feature-lookup` verbietet
+Server-Code, eine Funktion mit `Effect.serviceOption` oder `Plugin.optional` zu
+suchen. Der Code nennt stattdessen die Dienste, die er braucht.
+
 ## Prüfungen des Datenumzugs
 
 Die [Betriebsanleitung](/de/deploy) nennt die Wartungsreihenfolge und

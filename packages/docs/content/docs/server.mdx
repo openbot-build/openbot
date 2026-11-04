@@ -261,6 +261,22 @@ same parts yourself. Read `packages/openbot/src/app/Server.ts` for how
 before setup. Keep the sign-in secret in the platform settings, not in your own
 environment variable. Every instance must use the same one.
 
+## The plugin host
+
+`Server.layerApp` runs OpenBot on the plugin host, and so do `Server.layer`,
+`Server.layerLive`, and `Server.layerFixed`. Each feature is a plugin. See the
+plugin host in [Execution design](/architecture).
+
+The Layer is ready when every plugin is active. A failed start stops the
+process, as before: the Layer dies with the error, such as
+`RequiredPluginMissing` or `PluginsInactive`. The error names the plugins that
+are not active. The full cause of a plugin failure is in the error records.
+
+The services that these Layers give to your program are the services of the
+plugins at the time of the start. When a plugin starts again later, your copy
+does not change. `Server.layerApi` gives only the routes. It does not run the
+plugin host.
+
 ---
 
 ## Migrate the database

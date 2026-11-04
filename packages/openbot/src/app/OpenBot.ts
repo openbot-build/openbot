@@ -1,50 +1,29 @@
+import * as AppLayers from "../plugin-apps/Layers.ts"
+import * as AppWiring from "../plugin-apps/Wiring.ts"
+import * as ChannelLayers from "../plugin-channels/Layers.ts"
+import * as ComputerLayers from "../plugin-computers/Layers.ts"
+import * as ModelLayers from "../plugin-models/Layers.ts"
+import * as ModelWiring from "../plugin-models/Wiring.ts"
 import * as Access from "../identity-contract/access/Access.ts"
 import * as ConnectionScopes from "../server-execution/resources/ConnectionScopes.ts"
 import * as ErrorRecords from "../server-kernel/errors/Records.ts"
-import * as ConnectionCommands from "../plugin-apps/ConnectionCommands.ts"
-import * as GrantCleanup from "../plugin-apps/GrantCleanup.ts"
 import * as ResetCommands from "../plugin-apps/ResetCommands.ts"
-import * as AuthorizationCommands from "../plugin-apps/AuthorizationCommands.ts"
-import * as ChannelInbox from "../plugin-channels/ChannelInbox.ts"
-import * as ChannelWatch from "../plugin-channels/ChannelWatch.ts"
 import * as DeveloperLayers from "../plugin-apps/DeveloperLayers.ts"
 import * as AppExperience from "../plugin-apps/Experience.ts"
 import * as AppIndex from "../plugin-apps/Index.ts"
-import * as Connections from "../plugin-apps/Connections.ts"
-import * as Lifecycle from "../plugin-apps/Lifecycle.ts"
-import * as ConnectionSessions from "../plugin-apps/ConnectionSessions.ts"
 import * as AppDiscovery from "../plugin-apps/Discovery.ts"
-import * as ActionPolicy from "../plugin-apps/ActionPolicy.ts"
 import * as Secrets from "../server-kernel/secrets/Secrets.ts"
 import * as SettingsPostgres from "../server-kernel/settings/SettingsPostgres.ts"
 import * as AppProbe from "../plugin-apps/Probe.ts"
 import * as AppHost from "../plugin-apps/AppHost.ts"
-import * as Authorizations from "../plugin-apps/Authorizations.ts"
-import * as ProtocolStores from "../plugin-apps/ProtocolStores.ts"
-import {
-	CatalogDiscovery,
-	type Discovery,
-	PublicIndexing,
-	RobotsPolicy,
-	type Network,
-} from "@openbot-build/protocol"
+import { type Discovery, type Network } from "@openbot-build/protocol"
 import * as OutboundPolicy from "../server-kernel/network/OutboundPolicy.ts"
 import * as IndexWork from "../plugin-apps/IndexWork.ts"
 import * as Governance from "../plugin-apps/Governance.ts"
-import * as IndexStore from "../plugin-apps/IndexStore.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import * as BotLayers from "./BotLayers.ts"
 import * as Triggers from "../plugin-triggers/Triggers.ts"
-import * as Channels from "../plugin-channels/Channels.ts"
-import * as ChannelQueue from "../plugin-channels/ChannelQueue.ts"
-import * as ChannelRegistry from "../plugin-channels/ChannelRegistry.ts"
-import * as ComputerProviders from "../plugin-computers/ComputerProviders.ts"
-import * as Computers from "../plugin-computers/Computers.ts"
-import * as Connectors from "../plugin-computers/connector/Connectors.ts"
-import * as ComputerSessions from "../plugin-computers/Sessions.ts"
 import * as Drivers from "../plugin-computers/Drivers.ts"
-import * as Pairings from "../plugin-computers/Pairings.ts"
-import * as ComputerLifecycle from "../plugin-computers/Lifecycle.ts"
 import * as Files from "../plugin-files/Files.ts"
 import * as FileTasks from "../plugin-files/FileTasks.ts"
 import * as VaultReaders from "../plugin-vaults/Readers.ts"
@@ -63,15 +42,11 @@ import * as PlatformAdminsPostgres from "../plugin-platform/PlatformAdminsPostgr
 import * as AuthorizationLayer from "../plugin-authorization/Layer.ts"
 import * as RolesPostgres from "../plugin-authorization/RolesPostgres.ts"
 import * as ModelRegistry from "../plugin-models/ModelRegistry.ts"
-import * as ProviderOAuth from "../plugin-models/ProviderOAuth.ts"
-import * as ChatGptOAuth from "../model-providers/providers/chatgpt/OAuth.ts"
 import * as LiveBackends from "../models-contract/models/LiveBackends.ts"
 import * as OpenAiRealtime from "../model-providers/providers/openai/OpenAiRealtime.ts"
 import * as BillingPostgres from "../server-billing/billing/BillingPostgres.ts"
 import * as RateLimit from "../server-billing/billing/RateLimit.ts"
 import * as TokenThrottle from "../server-billing/billing/TokenThrottle.ts"
-import * as ModelProvidersPostgres from "../plugin-models/ModelProvidersPostgres.ts"
-import * as ModelsPostgres from "../plugin-models/ModelsPostgres.ts"
 import * as SsoPostgres from "../plugin-sso/SsoPostgres.ts"
 import * as DomainControl from "../server-kernel/apps/DomainControl.ts"
 import * as Mail from "../plugin-mail/Mail.ts"
@@ -159,38 +134,9 @@ export const layerShared = (options: {
 		),
 	)
 
-/**
- * App connections and authorization. ExecutionLayers adds their workflows.
- */
-const layerApps = Layer.mergeAll(Lifecycle.layer, Authorizations.layer).pipe(
-	Layer.provideMerge(Connections.layer),
-	Layer.provideMerge(ConnectionSessions.layer),
-	Layer.provideMerge(AuthorizationCommands.layer),
-	Layer.provideMerge(ConnectionCommands.layer),
-	Layer.provideMerge(GrantCleanup.layer),
-	Layer.provideMerge(AppHost.layer),
-	Layer.provide(CatalogDiscovery.layerRules),
+/** App connections and authorization. ExecutionLayers adds their workflows. */
+const layerApps = AppLayers.layerApps.pipe(
 	Layer.provideMerge(ConnectionScopes.layer),
-	Layer.provide(Layer.merge(ProtocolStores.layer, ActionPolicy.layer)),
-)
-
-/**
- * Channels and their connections. A custom Channel calls an
- * address that an administrator chose, so it uses the network of Apps.
- */
-const layerChannels = ChannelRegistry.layer.pipe(
-	Layer.provideMerge(ChannelQueue.layer),
-	Layer.provideMerge(Layer.merge(ChannelInbox.layer, ChannelWatch.layer)),
-	Layer.provideMerge(Channels.layer),
-)
-
-/** Computers, their providers, pairings and command sessions. */
-const layerComputers = ComputerSessions.layer.pipe(
-	Layer.provideMerge(Pairings.layer),
-	Layer.provideMerge(Computers.layer),
-	Layer.provideMerge(ComputerLifecycle.layer),
-	Layer.provideMerge(Connectors.layer),
-	Layer.provideMerge(ComputerProviders.layer),
 )
 
 /** Vaults and the secret providers that they read. */
@@ -200,22 +146,15 @@ const layerVaults = Vaults.layer.pipe(Layer.provideMerge(SecretProviders.layer))
 const layerBots = BotLayers.layer
 
 /** The App Index, the work that reads App Catalogs into it, and its store. */
-const layerIndex = (options: Options) => {
-	const indexing = PublicIndexing.layerInspection.pipe(
-		Layer.provide(CatalogDiscovery.layerRules),
-		Layer.provide(RobotsPolicy.layer),
+const layerIndex = (options: Options) =>
+	AppLayers.layerIndex.pipe(
+		Layer.provide(
+			Layer.merge(
+				Layer.succeed(AppWiring.IndexSources, options.indexSources),
+				Layer.succeed(AppWiring.IndexWorkOptions, options.indexWork ?? {}),
+			),
+		),
 	)
-	const work = IndexWork.layer(options.indexWork).pipe(Layer.provide(indexing))
-	return Layer.merge(
-		AppIndex.layer({
-			simulated: options.indexNamespace === "development",
-			...(options.indexSources === undefined
-				? {}
-				: { providers: options.indexSources }),
-		}),
-		work,
-	).pipe(Layer.provideMerge(IndexStore.layer))
-}
 
 /**
  * Members, organizations, tokens, roles, platform admins, single sign-on, the
@@ -240,21 +179,14 @@ const layerAccounts = AuthorizationLayer.layer.pipe(
  * spending services come before it.
  */
 const layerModels = (options: Options) =>
-	ModelRegistry.layer(
-		options.builtinModels === undefined
-			? {}
-			: { builtin: options.builtinModels },
-	).pipe(
-		Layer.provideMerge(
-			ProviderOAuth.layer.pipe(Layer.provide(ChatGptOAuth.layer)),
-		),
-		Layer.provideMerge(
-			Layer.merge(ModelProvidersPostgres.layer, ModelsPostgres.layer),
+	ModelLayers.layerModels.pipe(
+		Layer.provide(
+			Layer.succeed(ModelWiring.BuiltinModels, options.builtinModels),
 		),
 	)
 
 /** Spending: the bills, the rate limits and the token limits. */
-const layerSpending = Layer.mergeAll(
+export const layerSpending = Layer.mergeAll(
 	BillingPostgres.layer,
 	RateLimit.layer,
 	TokenThrottle.layer,
@@ -282,7 +214,11 @@ export const layer = (options: Options) =>
 		Layer.provideMerge(ResetCommands.layer.pipe(Layer.provideMerge(layerApps))),
 		Layer.provideMerge(Triggers.layer),
 		Layer.provideMerge(
-			Layer.mergeAll(layerChannels, layerComputers, layerVaults),
+			Layer.mergeAll(
+				ChannelLayers.layerChannels,
+				ComputerLayers.layerComputers,
+				layerVaults,
+			),
 		),
 		Layer.provideMerge(layerBots),
 		Layer.provideMerge(layerIndex(options)),

@@ -435,7 +435,11 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 						ResetCommands.layer.pipe(
 							Layer.provideMerge(
 								AuthorizationCommands.layer.pipe(
-									Layer.provideMerge(GrantCleanup.layer),
+									Layer.provideMerge(
+										GrantCleanup.layer.pipe(
+											Layer.provide(ExecutionObservation.layer),
+										),
+									),
 								),
 							),
 							Layer.provide(ExecutionStorage.layer),

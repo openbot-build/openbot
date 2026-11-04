@@ -133,6 +133,11 @@ API 用例，不计入 566 个历史声明。Pairing 等待持久删除结果；
 运行这些规则。它们检查导入关系，本身不能找出所有第二套执行器或恢复循环。新增 worker、计时器、锁和 RPC
 handler 仍需按统一设计审查。
 
+另外两条规则保护插件宿主。`graft-boundary` 只允许插件工具包、每个插件目录中的
+`Plugin.ts` 文件、应用、开发服务器和测试导入 graft。它还要求把 graft 的 `Plugin`
+命名为 `GraftPlugin`。`feature-lookup` 不允许服务器代码用 `Effect.serviceOption`
+或 `Plugin.optional` 查找功能。代码应列出它需要的服务。
+
 ## 数据迁移检查
 
 [部署指南](/zh-cn/deploy)说明维护顺序和密钥配置。 `S/DataUpgrade.test.ts`

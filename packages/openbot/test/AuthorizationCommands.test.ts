@@ -57,7 +57,9 @@ const database = Layer.effectDiscard(Database.migrate).pipe(
 		),
 	),
 )
-const services = Layer.merge(Store.layer, ErrorRecords.layer).pipe(
+// GrantCleanup reads the execution observation of the host.
+const services = Observation.layer.pipe(
+	Layer.provideMerge(Layer.merge(Store.layer, ErrorRecords.layer)),
 	Layer.provideMerge(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("21"))),
 	),

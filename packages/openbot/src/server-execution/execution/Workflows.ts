@@ -14,9 +14,10 @@ import {
 	HashMap,
 	Layer,
 	Option,
-	Ref,
 	Schema,
 	type Scope,
+	Stream,
+	SubscriptionRef,
 } from "effect"
 import type { WorkflowEngine } from "effect/workflow"
 import type { Access, Authorize, Decide, define } from "./Engine.ts"
@@ -115,12 +116,27 @@ export interface Service {
 	readonly names: Effect.Effect<ReadonlyArray<string>>
 	/** Every workflow that is in now. It does not seal. */
 	readonly current: Effect.Effect<HashMap.HashMap<string, Contribution>>
+	/**
+	 * The workflows that are in now, followed by each change to them. A change
+	 * gives a new map; the same contribution keeps the same object.
+	 */
+	readonly changes: Stream.Stream<HashMap.HashMap<string, Contribution>>
 	/** The engine takes the full set once. A contribution after this is a defect. */
 	readonly seal: Effect.Effect<HashMap.HashMap<string, Contribution>>
 	/** The engine holds these names while its scope is open. */
 	readonly hold: (
 		names: Iterable<string>,
 	) => Effect.Effect<void, never, Scope.Scope>
+	/**
+	 * Takes every workflow that is in now and holds it while the scope is
+	 * open, in one step. A removal that comes after this step waits for the
+	 * scope. A removal that comes before it is not in the result.
+	 */
+	readonly acquire: Effect.Effect<
+		HashMap.HashMap<string, Contribution>,
+		never,
+		Scope.Scope
+	>
 }
 
 export class Workflows extends Context.Service<Workflows, Service>()(
@@ -170,7 +186,7 @@ const toRegistered = (policy: Policy): Registered =>
 	})
 
 const make = Effect.gen(function* () {
-	const state = yield* Ref.make<State>({
+	const state = yield* SubscriptionRef.make<State>({
 		entries: HashMap.empty(),
 		owners: HashMap.empty(),
 		live: HashMap.empty(),
@@ -178,7 +194,7 @@ const make = Effect.gen(function* () {
 	})
 	const add = (contribution: Contribution) =>
 		Effect.flatten(
-			Ref.modify(
+			SubscriptionRef.modify(
 				state,
 				(current): readonly [Effect.Effect<void, Duplicate>, State] => {
 					const name = contribution.workflow._tag
@@ -215,7 +231,7 @@ const make = Effect.gen(function* () {
 		)
 	/** The access rules go first. Then the release waits for the engine to let go. */
 	const remove = (name: string) =>
-		Ref.modify(state, (current) => [
+		SubscriptionRef.modify(state, (current) => [
 			HashMap.get(current.live, name),
 			{ ...current, entries: HashMap.remove(current.entries, name) },
 		]).pipe(
@@ -231,14 +247,14 @@ const make = Effect.gen(function* () {
 			remove(contribution.workflow._tag),
 		)
 	const get = (name: string) =>
-		Effect.map(Ref.get(state), (current) =>
+		Effect.map(SubscriptionRef.get(state), (current) =>
 			Option.map(
 				HashMap.get(current.entries, name),
 				(entry) => entry.registered,
 			),
 		)
 	const require = (name: string) =>
-		Effect.flatMap(Ref.get(state), (current) =>
+		Effect.flatMap(SubscriptionRef.get(state), (current) =>
 			Option.match(HashMap.get(current.entries, name), {
 				onNone: () =>
 					Effect.fail(
@@ -253,55 +269,83 @@ const make = Effect.gen(function* () {
 				onSome: (entry) => Effect.succeed(entry.registered),
 			}),
 		)
-	const names = Effect.map(Ref.get(state), (current) =>
+	const names = Effect.map(SubscriptionRef.get(state), (current) =>
 		Arr.fromIterable(HashMap.keys(current.entries)),
 	)
-	const current = Effect.map(Ref.get(state), (saved) =>
-		HashMap.map(saved.entries, (entry) => entry.contribution),
+	const contributions = (saved: State) =>
+		HashMap.map(saved.entries, (entry) => entry.contribution)
+	const current = Effect.map(SubscriptionRef.get(state), contributions)
+	// A change to `live` keeps the same `entries`, so it gives no new value.
+	const changes = SubscriptionRef.changes(state).pipe(
+		Stream.map((saved) => saved.entries),
+		Stream.changesWith((before, after) => before === after),
+		Stream.map((entries) =>
+			HashMap.map(entries, (entry) => entry.contribution),
+		),
 	)
-	const seal = Ref.modify(state, (current) => [
-		HashMap.map(current.entries, (entry) => entry.contribution),
+	const seal = SubscriptionRef.modify(state, (current) => [
+		contributions(current),
 		{ ...current, sealed: true },
 	])
+	const holding = (
+		live: HashMap.HashMap<string, Deferred.Deferred<void>>,
+		list: ReadonlyArray<string>,
+		done: Deferred.Deferred<void>,
+	) => Arr.reduce(list, live, (next, name) => HashMap.set(next, name, done))
+	/** Ends one hold. A removal that waits on it goes on. */
+	const release = (
+		list: ReadonlyArray<string>,
+		done: Deferred.Deferred<void>,
+	) =>
+		Deferred.succeed(done, undefined).pipe(
+			Effect.andThen(
+				SubscriptionRef.update(state, (current) => ({
+					...current,
+					live: Arr.reduce(list, current.live, (live, name) =>
+						Option.exists(HashMap.get(live, name), (found) => found === done)
+							? HashMap.remove(live, name)
+							: live,
+					),
+				})),
+			),
+		)
 	const hold = (held: Iterable<string>) => {
 		const list = Arr.fromIterable(held)
 		return Effect.acquireRelease(
 			Deferred.make<void>().pipe(
 				Effect.tap((done) =>
-					Ref.update(state, (current) => ({
+					SubscriptionRef.update(state, (current) => ({
 						...current,
-						live: Arr.reduce(list, current.live, (live, name) =>
-							HashMap.set(live, name, done),
-						),
+						live: holding(current.live, list, done),
 					})),
 				),
 			),
-			(done) =>
-				Deferred.succeed(done, undefined).pipe(
-					Effect.andThen(
-						Ref.update(state, (current) => ({
-							...current,
-							live: Arr.reduce(list, current.live, (live, name) =>
-								Option.exists(
-									HashMap.get(live, name),
-									(found) => found === done,
-								)
-									? HashMap.remove(live, name)
-									: live,
-							),
-						})),
-					),
-				),
+			(done) => release(list, done),
 		).pipe(Effect.asVoid)
 	}
+	const acquire = Effect.acquireRelease(
+		Effect.flatMap(Deferred.make<void>(), (done) =>
+			SubscriptionRef.modify(state, (current) => {
+				const hosted = contributions(current)
+				const list = Arr.fromIterable(HashMap.keys(hosted))
+				return [
+					{ hosted, list, done },
+					{ ...current, live: holding(current.live, list, done) },
+				]
+			}),
+		),
+		({ list, done }) => release(list, done),
+	).pipe(Effect.map(({ hosted }) => hosted))
 	return Workflows.of({
 		contribute,
 		get,
 		require,
 		names,
 		current,
+		changes,
 		seal,
 		hold,
+		acquire,
 	})
 })
 

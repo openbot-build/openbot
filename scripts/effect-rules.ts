@@ -58,6 +58,10 @@ const rules = {
 		"Use the public entry of another package, not its source files.",
 	"virtual-boundary":
 		"A server folder may import only the folders of lower packages, and a plugin folder must not import another plugin folder. Put shared types and service tags in a contract folder.",
+	"graft-boundary":
+		"Only the plugin kit (`server-plugin`), the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
+	"feature-lookup":
+		"Do not look for a feature with `Effect.serviceOption` or `Plugin.optional`. List the services that the code needs, so the layer or the plugin asks for them.",
 	parse: "The rules could not read this file.",
 } as const
 
@@ -237,12 +241,31 @@ const memberParts = (node: Node): ReadonlyArray<string> => {
 	return key === undefined ? [] : [...memberParts(node.object), key]
 }
 
+/**
+ * These files read a value of the current request, such as the context window
+ * of a model call. They do not look for a feature.
+ */
+const lookupFiles = [
+	"packages/openbot/src/model-providers/providers/openai/Request.ts",
+] as const
+
+/** True for `Effect.serviceOption`, `Plugin.optional` and `GraftPlugin.optional`. */
+const isLookup = (parts: ReadonlyArray<string>): boolean => {
+	const name = Arr.join(parts, ".")
+	return (
+		name === "Effect.serviceOption" ||
+		name === "Plugin.optional" ||
+		name === "GraftPlugin.optional"
+	)
+}
+
 const check = (file: string, program: Node) => {
 	const main = Str.endsWith("Main.ts")(file)
 	const server = Str.startsWith("packages/openbot/src/")(file)
 	const domain = Str.startsWith("packages/domain/src/")(file)
 	const core = coreImports(program)
 	const blind = isBlind(blindNames(program))
+	const lookups = server && !Arr.contains(lookupFiles, file)
 	return (node: Node): ReadonlyArray<Rule> => {
 		if (server || domain) {
 			const [head, ...tail] = memberParts(node)
@@ -265,6 +288,7 @@ const check = (file: string, program: Node) => {
 		}
 		if (node.type === "ThrowStatement") return ["throw"]
 		if (node.type !== "CallExpression") return []
+		if (lookups && isLookup(memberParts(node.callee))) return ["feature-lookup"]
 		const name = propertyName(node.callee)
 		if (Option.isNone(name)) return []
 		if (name.value === "mapError" || name.value === "orElseFail")
@@ -521,6 +545,68 @@ const boundaries = (
 	)
 }
 
+/** The places of OpenBot that may import graft. */
+const graftPlaces = [
+	/^packages\/openbot\/src\/server-plugin\//,
+	/^packages\/openbot\/src\/plugin-[^/]+\/Plugin\.ts$/,
+	/^packages\/openbot\/src\/app\//,
+	/^packages\/openbot\/src\/server-development\//,
+	/^packages\/openbot\/test\//,
+] as const
+
+/**
+ * Checks each import of graft: the file must be in a place that may use it,
+ * and graft's `Plugin` must have the name `GraftPlugin`. It reads the source
+ * with comments taken out, so type imports count too.
+ */
+const graftImports = (
+	file: string,
+	code: string,
+): ReadonlyArray<Omit<Finding, "file">> => {
+	const allowed = Arr.some(graftPlaces, (place) => place.test(file))
+	const comments: Array<Acorn.Comment> = []
+	Arr.fromIterable(
+		Acorn.tokenizer(code, {
+			ecmaVersion: "latest",
+			sourceType: "module",
+			onComment: comments,
+		}),
+	)
+	// Blank out each comment with the same length, so the places stay right.
+	const scan = Arr.reduce(
+		comments,
+		code,
+		(text, comment) =>
+			Str.slice(0, comment.start)(text) +
+			Str.repeat(comment.end - comment.start)(" ") +
+			Str.slice(comment.end)(text),
+	)
+	const imports = Arr.fromIterable(
+		Str.matchAll(
+			/\b(?:import|export)\b\s*(?:type\b\s*)?([^;]*?)\s*\bfrom\s*["'](@graftland\/[^"']+)["']|\bimport\s*\(\s*["'](@graftland\/[^"']+)["']/g,
+		)(scan),
+	)
+	return Arr.flatMap(imports, (match): ReadonlyArray<Omit<Finding, "file">> => {
+		// matchAll always gives an index. Effect types it as optional.
+		const line = Str.split(Str.slice(0, match.index!)(code), "\n").length
+		const target = match[2] ?? match[3] ?? ""
+		const named = /\{([^}]*)\}/.exec(match[1] ?? "")
+		const misnamed =
+			target === "@graftland/graft" &&
+			named !== null &&
+			Arr.some(Str.split(named[1]!, ","), (specifier) => {
+				const parts = Arr.filter(
+					Str.split(Str.trim(specifier), /\s+/),
+					(part) => part !== "type",
+				)
+				return parts[0] === "Plugin" && parts[2] !== "GraftPlugin"
+			})
+		return !allowed || misnamed
+			? [{ line, rule: "graft-boundary", detail: target }]
+			: []
+	})
+}
+
 const checkFile = Effect.fn("EffectRules.checkFile")(function* (file: string) {
 	const fs = yield* FileSystem.FileSystem
 	const path = yield* Path.Path
@@ -571,7 +657,12 @@ const checkFile = Effect.fn("EffectRules.checkFile")(function* (file: string) {
 		})),
 	)
 	return Arr.map(
-		[...found, ...unreasoned, ...boundaries(file, code, path)],
+		[
+			...found,
+			...unreasoned,
+			...boundaries(file, code, path),
+			...graftImports(file, code),
+		],
 		(finding): Finding => ({
 			file,
 			...finding,
