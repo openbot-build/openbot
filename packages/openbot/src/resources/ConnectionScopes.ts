@@ -1,5 +1,6 @@
 import { App } from "@openbot-build/protocol"
-import { Crypto, Effect, Exit, Layer, Schema, Scope, Stream } from "effect"
+import { Effect, Exit, Layer, Schema, Scope, Stream } from "effect"
+import { SecureRandom } from "effect/crypto"
 import * as Background from "../execution/Background.ts"
 import { Transport } from "./Transport.ts"
 
@@ -12,7 +13,7 @@ const make = (kind: string) =>
 	Effect.gen(function* () {
 		const background = yield* Background.make
 		const transport = yield* Transport
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const owner = yield* Scope.Scope
 		const group = (key: {
 			readonly owner: string
@@ -28,7 +29,7 @@ const make = (kind: string) =>
 					const release = yield* Effect.cached(Scope.close(scope, Exit.void))
 					const resource = {
 						...(yield* group(key)),
-						id: yield* crypto.randomUUIDv7().pipe(Effect.orDie),
+						id: yield* crypto.uuidV7().pipe(Effect.orDie),
 					}
 					const held = yield* transport
 						.register(resource, () => Stream.empty, { release })

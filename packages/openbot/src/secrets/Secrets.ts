@@ -3,7 +3,6 @@ import { createCipheriv, createDecipheriv } from "node:crypto"
 import {
 	Array as Arr,
 	Context,
-	Crypto,
 	Effect,
 	HashMap,
 	Layer,
@@ -13,6 +12,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 
 export class SecretStorageError extends Schema.TaggedError<
 	SecretStorageError,
@@ -120,7 +120,7 @@ export const parseKeys = (
 /** A sealed value is `<key id>.<base64 of nonce, tag and cipher text>`. */
 export const make = (secret: Redacted.Redacted<string>) =>
 	Effect.gen(function* () {
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const { current, keys } = yield* parseKeys(Redacted.value(secret))
 		return Secrets.of({
 			seal: (value, binding) =>

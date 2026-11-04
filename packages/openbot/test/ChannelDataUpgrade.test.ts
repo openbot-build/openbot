@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { Authorization, Execution, TokenId } from "@openbot-build/domain"
@@ -11,13 +11,13 @@ import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import {
 	Array as Arr,
 	Effect,
-	Crypto,
 	Layer,
 	Option,
 	Redacted,
 	Schema,
 	String as Str,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as Db from "../src/database/Database.ts"
@@ -39,7 +39,7 @@ const database = Layer.unwrap(
 			Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 		),
 	),
-).pipe(Layer.provideMerge(NodeServices.layer))
+).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)))
 
 const auth = Authorizer.layer(Authorization.Auth, {
 	policy: () =>
@@ -146,8 +146,8 @@ it.layer(Store.layer.pipe(Layer.provideMerge(database)), {
 					prompt: "private prompt",
 					schedule_cron: "0 * * * *",
 					hook_secret_hash: Hex.encode(
-						yield* (yield* Crypto.Crypto).digest(
-							"SHA-256",
+						yield* (yield* Digest.Digest).digest(
+							Digest.sha256,
 							new TextEncoder().encode("old trigger key"),
 						),
 					),

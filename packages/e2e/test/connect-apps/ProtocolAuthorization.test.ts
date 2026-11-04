@@ -1,6 +1,5 @@
 import {
 	Array as Arr,
-	Crypto,
 	Option,
 	HashMap,
 	Effect,
@@ -12,6 +11,7 @@ import {
 	Scope,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import {
 	App,
 	CatalogDiscovery,
@@ -51,7 +51,8 @@ it.live(
 			let businessRequests = 0
 			let requested: ReadonlyArray<string> = []
 			let codes = HashMap.empty<string, URLSearchParams>()
-			const crypto = yield* Crypto.Crypto
+			const crypto = yield* SecureRandom.SecureRandom
+			const hashes = yield* Digest.Digest
 			const fixture = yield* Fixture.serveChecked(
 				Effect.gen(function* () {
 					const request = yield* HttpServerRequest.HttpServerRequest
@@ -107,7 +108,7 @@ it.live(
 							url.searchParams.get("client_id"),
 							origin + "/client.json",
 						)
-						const code = yield* crypto.randomUUIDv4()
+						const code = yield* crypto.uuidV4()
 						codes = HashMap.set(codes, code, url.searchParams)
 						const callback = new URL(url.searchParams.get("redirect_uri") ?? "")
 						callback.searchParams.set(
@@ -139,8 +140,8 @@ it.live(
 								form.get("redirect_uri"),
 								params.get("redirect_uri"),
 							)
-							const digest = yield* crypto.digest(
-								"SHA-256",
+							const digest = yield* hashes.digest(
+								Digest.sha256,
 								new TextEncoder().encode(form.get("code_verifier") ?? ""),
 							)
 							assert.strictEqual(
@@ -530,5 +531,5 @@ it.live(
 					layer.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
 				),
 			)
-		}).pipe(Effect.provide(NodeServices.layer)),
+		}).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 )

@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {
 	ConfigProvider,
@@ -25,7 +25,7 @@ const folder = Layer.effect(
 			prefix: "openbot-computer-config-",
 		})
 	}),
-).pipe(Layer.provideMerge(NodeServices.layer))
+).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)))
 
 layer(folder)((it) => {
 	it.effect("the config file is in XDG_CONFIG_HOME when it is set", () =>

@@ -32,13 +32,13 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 	Struct,
 } from "effect"
+import { Digest } from "effect/crypto"
 import type { SecretStorageError } from "../secrets/Secrets.ts"
 import { type Failure, Bots } from "./Bots.ts"
 import { type SqlError, SqlClient } from "effect/sql"
@@ -453,7 +453,7 @@ const make = Effect.gen(function* () {
 	const models = yield* ModelRegistry
 
 	const settings = yield* Settings
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const definition = yield* CoreStore.define({
 		stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore, ...Todos.stores },
 		schemaVersion: "chat/1",
@@ -491,7 +491,7 @@ const make = Effect.gen(function* () {
 			if (Option.isNone(origin)) return yield* Execution.Forbidden.make({})
 			const hash = Hex.encode(
 				yield* crypto.digest(
-					"SHA-256",
+					Digest.sha256,
 					new TextEncoder().encode(
 						yield* Schema.encodeEffect(
 							Schema.fromJsonString(Schema.Array(Schema.String)),

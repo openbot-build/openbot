@@ -4,7 +4,6 @@ import { Client } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Cause,
-	Crypto,
 	Effect,
 	Match,
 	Option,
@@ -14,6 +13,7 @@ import {
 	pipe,
 	type JsonSchema,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { json } from "./AppResults.ts"
 import type { Binding } from "../code/Bindings.ts"
@@ -33,16 +33,16 @@ export interface DiscoveryServices {
 	readonly secrets: typeof Secrets.Service
 	readonly sessions: typeof ConnectionSessions.Service
 	readonly policy: typeof ActionPolicy.Service
-	readonly crypto: Crypto.Crypto
+	readonly crypto: Digest.Digest["Service"]
 	readonly report: Report.Report
 }
 
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
-const hash = (crypto: Crypto.Crypto, value: unknown) =>
+const hash = (crypto: Digest.Digest["Service"], value: unknown) =>
 	Effect.gen(function* () {
 		const text = yield* encodeJson(value)
 		const digest = yield* crypto.digest(
-			"SHA-256",
+			Digest.sha256,
 			new TextEncoder().encode(text),
 		)
 		return pipe(Hex.encode(digest), Str.slice(0, 40))

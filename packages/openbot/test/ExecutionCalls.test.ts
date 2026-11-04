@@ -13,7 +13,7 @@ import {
 	SavedResult,
 } from "../src/plugins/ToolEntry.ts"
 import * as ModelCalls from "../src/models/ModelCalls.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {
 	Chat,
@@ -171,7 +171,7 @@ const services = ToolSteps.layer.pipe(
 	Layer.provideMerge(Layer.effect(DecisionAllowed, Ref.make(true))),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 const start = Effect.fn(function* (namespace: string) {

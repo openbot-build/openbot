@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	Chat,
 	ChatStoreRepository,
@@ -113,7 +113,7 @@ export const services = Layer.merge(RequestCommands.layer, Calls.layer).pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 
 export const actor = {

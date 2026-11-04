@@ -1,4 +1,4 @@
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { AuthApi, ExecutionsApi, FailureApi } from "@openbot-build/api"
 import { Execution, Identity } from "@openbot-build/domain"
@@ -117,7 +117,7 @@ const check = (
 			]),
 		),
 		Layer.provideMerge(NodeHttpServer.layerTest),
-		Layer.provide(NodeServices.layer),
+		Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	)
 	return Effect.gen(function* () {
 		const request = HttpClient.get(`/v1/executions/${id}/observe`, {

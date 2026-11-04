@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
@@ -46,7 +46,7 @@ const tables = Layer.effectDiscard(
 const services = Fixture.services.pipe(
 	Layer.provideMerge(tables),
 	Layer.provideMerge(Layer.effect(Database, PostgresTest.start)),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 
 interface Work {

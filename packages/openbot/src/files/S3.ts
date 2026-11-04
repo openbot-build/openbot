@@ -1,6 +1,5 @@
 import {
 	Array as Arr,
-	Crypto,
 	DateTime,
 	Effect,
 	Option,
@@ -12,6 +11,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import {
 	HttpClientRequest,
@@ -57,9 +57,9 @@ const bytes = (value: string | Uint8Array) =>
 
 const digest = (value: string | Uint8Array) =>
 	Effect.gen(function* () {
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* Digest.Digest
 		// A platform without SHA-256 is broken, so a failure here is a defect.
-		return yield* crypto.digest("SHA-256", bytes(value)).pipe(Effect.orDie)
+		return yield* crypto.digest(Digest.sha256, bytes(value)).pipe(Effect.orDie)
 	})
 
 const sha256 = (value: string | Uint8Array) =>
@@ -73,7 +73,7 @@ const concat = (a: Uint8Array, b: Uint8Array) => {
 }
 
 /**
- * HMAC-SHA256 from RFC 2104, made from the digest of the Crypto service,
+ * HMAC-SHA256 from RFC 2104, made from the digest of the Digest service,
  * because that service has no HMAC of its own.
  */
 const hmac = (key: string | Uint8Array, value: string) =>
@@ -216,7 +216,7 @@ export const presign = Effect.fnUntraced(function* (input: {
 	readonly headers?: Readonly<Record<string, string>>
 	readonly expiresSeconds: number
 	readonly now: number
-}): Effect.fn.Return<string, never, Crypto.Crypto> {
+}): Effect.fn.Return<string, never, Digest.Digest> {
 	const url = objectUrl(input.target, input.key, input.endpoint)
 	const { amzDate, dateStamp } = stamps(input.now)
 	const headers = { ...input.headers, host: url.host }
@@ -334,7 +334,7 @@ const send = (
 	request: Effect.Effect<
 		HttpClientRequest.HttpClientRequest,
 		never,
-		Crypto.Crypto
+		Digest.Digest
 	>,
 	what: string,
 ) =>
@@ -374,7 +374,7 @@ export const put = (
 	key: string,
 	body: { readonly bytes: Uint8Array; readonly contentType: string },
 	now: number,
-): Effect.Effect<void, StorageError, Crypto.Crypto> =>
+): Effect.Effect<void, StorageError, Digest.Digest> =>
 	Effect.flatMap(
 		send(
 			client,
@@ -393,7 +393,7 @@ export const get = (
 	target: Target,
 	key: string,
 	now: number,
-): Effect.Effect<Option.Option<Uint8Array>, StorageError, Crypto.Crypto> =>
+): Effect.Effect<Option.Option<Uint8Array>, StorageError, Digest.Digest> =>
 	Effect.flatMap(
 		send(
 			client,
@@ -420,7 +420,7 @@ export const getStream = Effect.fnUntraced(function* (
 ): Effect.fn.Return<
 	Option.Option<Stream.Stream<Uint8Array, StorageError>>,
 	StorageError,
-	Crypto.Crypto
+	Digest.Digest
 > {
 	const what = "read the file"
 	const signed = yield* signedRequest({ target, method: "GET", key, now })
@@ -444,7 +444,7 @@ export const head = (
 	target: Target,
 	key: string,
 	now: number,
-): Effect.Effect<Option.Option<Head>, StorageError, Crypto.Crypto> =>
+): Effect.Effect<Option.Option<Head>, StorageError, Digest.Digest> =>
 	Effect.flatMap(
 		send(
 			client,
@@ -476,7 +476,7 @@ export const remove = (
 	target: Target,
 	key: string,
 	now: number,
-): Effect.Effect<void, StorageError, Crypto.Crypto> =>
+): Effect.Effect<void, StorageError, Digest.Digest> =>
 	Effect.flatMap(
 		send(
 			client,
@@ -494,7 +494,7 @@ export const createBucket = (
 	client: HttpClient.HttpClient,
 	target: Target,
 	now: number,
-): Effect.Effect<void, StorageError, Crypto.Crypto> =>
+): Effect.Effect<void, StorageError, Digest.Digest> =>
 	Effect.flatMap(
 		send(
 			client,

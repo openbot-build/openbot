@@ -7,7 +7,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	HashMap,
 	HashSet,
@@ -17,6 +16,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { BotRecords } from "./BotRecords.ts"
 import * as MemoryRecords from "./MemoryRecords.ts"
@@ -49,8 +49,8 @@ export interface Learning {
 }
 
 /** Makes the id of a new memory entry. */
-export const newId = (crypto: Crypto.Crypto) =>
-	crypto.randomUUIDv7({ format: "bytes" }).pipe(
+export const newId = (crypto: SecureRandom.SecureRandom["Service"]) =>
+	crypto.uuidV7({ format: "bytes" }).pipe(
 		// A platform without secure random numbers is broken.
 		Effect.orDie,
 		Effect.map((uuid) => "mem_" + Hex.encode(uuid)),
@@ -130,7 +130,7 @@ export class BotMemories extends Context.Service<BotMemories, Service>()(
 
 export const make = Effect.gen(function* () {
 	const records = yield* BotRecords
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const data = yield* MemoryRecords.make
 	const { changes: logs } = yield* MemoryLogs
 	const versions = records.collection(

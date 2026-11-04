@@ -10,7 +10,7 @@ import * as Db from "../src/database/Database.ts"
 import { developerApps } from "../src/database/Schema.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -44,7 +44,7 @@ const services = IndexCommandsFixture.layer.pipe(
 	Layer.provideMerge(Layer.merge(Store.layer, ErrorRecords.layer)),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 layer(services, { excludeTestServices: true })((it) => {
 	it.effect(

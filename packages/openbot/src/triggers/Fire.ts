@@ -1,5 +1,6 @@
 import { Delegations as Domain, Execution } from "@openbot-build/domain"
-import { Crypto, Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import { Bots } from "../bots/Bots.ts"
@@ -39,7 +40,7 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const access = yield* TurnAccess
 	const settings = yield* Settings
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const audit = yield* AuditLog
 	return Effect.fn("TriggerFire.submit")(
 		function* (input: Input) {
@@ -109,7 +110,7 @@ export const make = Effect.gen(function* () {
 										Schema.fromJsonString(Schema.Json),
 									)(input.data))
 						const id = Domain.DelegationId.make(
-							"dlg_" + (yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
+							"dlg_" + (yield* crypto.uuidV7().pipe(Effect.orDie)),
 						)
 						const limits = {
 							timeMs: delegationTimeLimitOf(

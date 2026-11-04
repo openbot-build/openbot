@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Network } from "@openbot-build/protocol"
@@ -59,7 +59,7 @@ const services = Layer.merge(ChannelQueue.layer, ChannelWatch.layer).pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("45"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const caller = {
 	kind: "member",

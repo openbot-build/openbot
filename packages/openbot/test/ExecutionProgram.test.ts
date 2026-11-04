@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
 import {
@@ -53,7 +53,7 @@ const services = Layer.mergeAll(Calls.layer, Runner.layer, RunScope.layer).pipe(
 	),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const workflow = Engine.define("test-program")
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const

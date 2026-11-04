@@ -28,7 +28,6 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	DateTime,
 	Effect,
 	HashMap,
@@ -39,6 +38,7 @@ import {
 	SchemaTransformation,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import {
 	auditLogs,
 	budgets,
@@ -270,10 +270,10 @@ const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const client = yield* PgClient.PgClient
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const newId = (prefix: string) =>
 		Effect.map(
-			Effect.orDie(crypto.randomUUIDv7()),
+			Effect.orDie(crypto.uuidV7()),
 			(uuid) => prefix + Str.replaceAll("-", "")(uuid),
 		)
 	/** The price of a model that applies at a time. */

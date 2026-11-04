@@ -3,13 +3,8 @@ import {
 	type Triggers as Domain,
 	type DelegationId,
 } from "@openbot-build/domain"
-import {
-	Crypto,
-	Effect,
-	type PlatformError,
-	Redacted,
-	type Schema,
-} from "effect"
+import { Effect, type PlatformError, Redacted, type Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
 import { prepare, type Command } from "./Command.ts"
 
@@ -27,7 +22,7 @@ export const fire = Effect.fn("Triggers.fire")(function* (
 		ClientError
 	>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(

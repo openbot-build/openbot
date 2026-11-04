@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import {
@@ -158,7 +158,7 @@ const services = Layer.merge(Lifecycle.layer, Maintenance.layer).pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("56"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const caller = (organizationId: string) =>
 	({ kind: "member", organizationId, userId: "owner" }) as const

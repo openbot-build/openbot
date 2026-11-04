@@ -14,7 +14,6 @@ import { Network } from "@openbot-build/protocol/Network"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -26,6 +25,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { AppHost } from "@openbot-build/openbot"
 import {
@@ -784,9 +784,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					verificationToken: "lark-token",
 					encryptKey,
 				})
-				const crypto = yield* Crypto.Crypto
-				const larkKey = yield* crypto.digest(
-					"SHA-256",
+				const crypto = yield* SecureRandom.SecureRandom
+				const hashes = yield* Digest.Digest
+				const larkKey = yield* hashes.digest(
+					Digest.sha256,
 					new TextEncoder().encode(encryptKey),
 				)
 				const encrypt = (value: unknown) =>

@@ -1,4 +1,4 @@
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Config, Effect, Layer, Schedule } from "effect"
@@ -117,7 +117,7 @@ const services = Fixture.services.pipe(
 			),
 		),
 	),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 
 main.pipe(Effect.provide(services), Effect.scoped, NodeRuntime.runMain)

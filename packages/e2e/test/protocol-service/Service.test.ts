@@ -2,7 +2,6 @@ import { assert, layer } from "@effect/vitest"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	Deferred,
 	Effect,
 	Exit,
@@ -15,6 +14,7 @@ import {
 	Scope,
 	String as Str,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Base64, Base64Url } from "effect/encoding"
 import {
 	FetchHttpClient,
@@ -22,7 +22,7 @@ import {
 	HttpClientRequest,
 	HttpClientResponse,
 } from "effect/http"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	CatalogDiscovery,
 	Discovery,
@@ -87,7 +87,7 @@ const headerScenarios = [
  * scope closes.
  */
 const fixture = Effect.fn(function* (clock?: Clock.Clock) {
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const handle = yield* Testing.serve(origin, clock)
 	const http = (yield* HttpClient.HttpClient).pipe(
 		HttpClient.transformResponse(
@@ -188,7 +188,7 @@ const fixture = Effect.fn(function* (clock?: Clock.Clock) {
 		const verifier = pipe("v", Str.repeat(64))
 		const resource = origin + "/mcp/oauth-" + mode
 		const challenge = yield* crypto
-			.digest("SHA-256", new TextEncoder().encode(verifier))
+			.digest(Digest.sha256, new TextEncoder().encode(verifier))
 			.pipe(Effect.map(Base64Url.encode))
 		const response = yield* request("/oauth/" + mode + "/authorize", {
 			urlParams: {
@@ -250,9 +250,12 @@ const fixture = Effect.fn(function* (clock?: Clock.Clock) {
 })
 
 // The service in each test runs with real time, as it does in production.
-layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
-	excludeTestServices: true,
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"serves discovery documents, public indexing fixtures, cache validators and CORS",
 		() =>

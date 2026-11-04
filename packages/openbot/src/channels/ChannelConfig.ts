@@ -17,15 +17,8 @@ import {
 import type { SecretStorageError } from "../secrets/Secrets.ts"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { and, eq } from "drizzle-orm"
-import {
-	Context,
-	Crypto,
-	Effect,
-	Layer,
-	Option,
-	Redacted,
-	Schema,
-} from "effect"
+import { Context, Effect, Layer, Option, Redacted, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import * as Check from "../authorization/Check.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
@@ -197,7 +190,7 @@ const make = Effect.gen(function* () {
 	const admit = yield* ChannelAdmission.make
 	const channels = yield* Channels
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const checks = yield* Check.make
 	const bots = yield* Bots
 	const audit = yield* AuditLog

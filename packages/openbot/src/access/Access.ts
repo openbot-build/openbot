@@ -6,13 +6,13 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Settings } from "../settings/Settings.ts"
 import * as Failures from "../errors/Failures.ts"
 
@@ -133,8 +133,8 @@ export interface Service {
 export const make = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
 	const settings = yield* Settings
-	const crypto = yield* Crypto.Crypto
-	const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
+	const crypto = yield* SecureRandom.SecureRandom
+	const newId = crypto.uuidV7().pipe(Effect.orDie)
 	const registration = settings.platform.pipe(
 		Effect.flatMap((p) =>
 			Option.isSome(p)

@@ -1,5 +1,5 @@
 import * as Children from "../src/execution/Children.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -45,7 +45,7 @@ const services = Observation.layer.pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const submission = {
 	workflow: "test",

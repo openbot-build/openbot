@@ -1,6 +1,6 @@
 import { changed, finished } from "./Commands.ts"
 import { Execution } from "@openbot-build/domain"
-import { NodeSocket } from "@effect/platform-node"
+import { NodeWS } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import {
 	AuthApi,
@@ -10,7 +10,6 @@ import {
 } from "@openbot-build/api"
 import {
 	Array as Arr,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -21,6 +20,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 import { Base64 } from "effect/encoding"
 import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/http"
@@ -188,10 +188,7 @@ const client = (host: BrowserHost.Host) => {
 }
 
 it.layer(
-	Layer.merge(
-		BrowserHost.layerPlatform,
-		NodeSocket.layerWebSocketConstructorWS,
-	),
+	Layer.merge(BrowserHost.layerPlatform, NodeWS.layerWebSocketConstructor),
 	{ excludeTestServices: true },
 )((it) => {
 	it.effect(
@@ -242,7 +239,7 @@ it.layer(
 					send,
 					alice.session,
 					send(alice.session, "/v1/computers", "POST", {
-						commandKey: yield* (yield* Crypto.Crypto).randomUUIDv4(),
+						commandKey: yield* (yield* SecureRandom.SecureRandom).uuidV4(),
 						name: "Box",
 						source: { _tag: "Provider", provider: provider.id, template: null },
 						desktop: true,
@@ -293,7 +290,7 @@ it.layer(
 					send,
 					alice.session,
 					send(alice.session, "/v1/computers", "POST", {
-						commandKey: yield* (yield* Crypto.Crypto).randomUUIDv4(),
+						commandKey: yield* (yield* SecureRandom.SecureRandom).uuidV4(),
 						name: "Other",
 						source: { _tag: "Connector" },
 					}),
@@ -502,7 +499,7 @@ it.layer(
 					send,
 					alice.session,
 					send(alice.session, "/v1/computers", "POST", {
-						commandKey: yield* (yield* Crypto.Crypto).randomUUIDv4(),
+						commandKey: yield* (yield* SecureRandom.SecureRandom).uuidV4(),
 						name: "Box",
 						source: { _tag: "Provider", provider: provider.id, template: null },
 					}),
@@ -788,7 +785,7 @@ it.layer(
 					send,
 					alice.session,
 					send(alice.session, "/v1/computers", "POST", {
-						commandKey: yield* (yield* Crypto.Crypto).randomUUIDv4(),
+						commandKey: yield* (yield* SecureRandom.SecureRandom).uuidV4(),
 						name: "Box",
 						source: { _tag: "Provider", provider: provider.id, template: null },
 					}),
@@ -941,7 +938,7 @@ it.layer(
 					send,
 					alice.session,
 					send(alice.session, "/v1/computers", "POST", {
-						commandKey: yield* (yield* Crypto.Crypto).randomUUIDv4(),
+						commandKey: yield* (yield* SecureRandom.SecureRandom).uuidV4(),
 						name: "Private box",
 						source: { _tag: "Provider", provider: provider.id, template: null },
 					}),

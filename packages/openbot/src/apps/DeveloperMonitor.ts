@@ -3,13 +3,13 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	HashSet,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import type { SecretStorageError } from "../secrets/Secrets.ts"
 import * as Models from "./DeveloperModels.ts"
 import { Developers, Execution } from "@openbot-build/domain"
@@ -117,7 +117,7 @@ const make = Effect.gen(function* () {
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
 	const inspections = yield* AppInspections
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const store = yield* Store
 	const watches = yield* DeveloperWatches
 	const notices = yield* DeveloperNotices.make
@@ -241,7 +241,7 @@ const make = Effect.gen(function* () {
 									(issue) => ({ issue, kind: "IssueResolved" as const }),
 								),
 							]
-							const reportId = yield* crypto.randomUUIDv7()
+							const reportId = yield* crypto.uuidV7()
 							yield* Rows.saveReport(db, namespace, null, {
 								id: reportId,
 								cardUrl,

@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Context, Effect, Exit, Layer, Redacted, Schema } from "effect"
 import { Billing as Model } from "@openbot-build/domain"
@@ -80,7 +80,10 @@ it.live(
 				owner: string | null
 			}>`select personal_owner_user_id as owner from openbot_organizations where id='old_personal'`
 			assert.equal(old?.owner, null)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -133,7 +136,10 @@ it.live(
 				(yield* wallets.credits("old_personal")).balanceMicros,
 				20_000_000,
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -160,7 +166,10 @@ it.live(
 			assert.equal((yield* wallets.credits(personal)).balanceMicros, 0)
 			yield* sql`update openbot_organization_credits set enabled=false where organization_id=${personal}`
 			assert.isTrue((yield* wallets.credits(personal)).enabled)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -246,6 +255,9 @@ it.live(
 			)
 			yield* billing.record(own.id, tokens)
 			assert.equal((yield* wallets.credits(personal)).balanceMicros, -500)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )

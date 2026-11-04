@@ -13,7 +13,7 @@ title: "添加错误日志记录器"
 来保留其他日志器。在服务器外部提供它，这样它会一直保持打开，直到服务器关闭。
 
 ```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -35,7 +35,13 @@ NodeRuntime.runMain(
 		const settings = yield* EnvironmentConfiguration.load
 		return yield* Layer.launch(
 			Server.layerLive(settings).pipe(
-				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+				Layer.provide(
+					Layer.mergeAll(
+						NodeServices.layer,
+						NodeCrypto.layer,
+						FetchHttpClient.layer,
+					),
+				),
 			),
 		)
 	}).pipe(Effect.provide(alerts)),

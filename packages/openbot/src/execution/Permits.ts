@@ -1,14 +1,7 @@
 import { Execution } from "@openbot-build/domain"
 import { and, eq, gt, lte } from "drizzle-orm"
-import {
-	Array as Arr,
-	Crypto,
-	Duration,
-	Effect,
-	Option,
-	Schema,
-	Stream,
-} from "effect"
+import { Array as Arr, Duration, Effect, Option, Schema, Stream } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import * as Db from "../database/Database.ts"
 import { executions } from "../database/ExecutionSchema.ts"
@@ -33,7 +26,7 @@ export const make = Effect.gen(function* () {
 	const sql = yield* SqlClient.SqlClient
 	const store = yield* Store
 	const observation = yield* Observation
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const recovery = yield* Recovery.make
 	// The database clock sets every deadline. Runner clocks need not agree.
 	const now = sql<{
@@ -91,7 +84,7 @@ export const make = Effect.gen(function* () {
 		Effect.scoped(
 			Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
-					const id = yield* crypto.randomUUIDv7().pipe(storage)
+					const id = yield* crypto.uuidV7().pipe(storage)
 					const duration = Duration.toMillis(
 						Duration.fromInputUnsafe(options.duration),
 					)

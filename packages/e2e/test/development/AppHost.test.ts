@@ -1,5 +1,5 @@
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Client } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -23,9 +23,12 @@ import {
 } from "@openbot-build/openbot/testing"
 import { FetchHttpClient } from "effect/http"
 
-layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
-	excludeTestServices: true,
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"the development host serves a saved, owner-bound App service through the real MCP client",
 		() =>
@@ -50,7 +53,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 				yield* Database.migrate.pipe(
 					Effect.provide(
 						Database.layer(configuration).pipe(
-							Layer.provide(NodeServices.layer),
+							Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 						),
 					),
 				)

@@ -1,11 +1,11 @@
 import { Redacted } from "effect"
+import { Digest } from "effect/crypto"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API for the AES cipher of Lark events.
 import { createDecipheriv } from "node:crypto"
 import type { Channels as ChannelsApi } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	Effect,
 	Option,
 	pipe,
@@ -40,8 +40,10 @@ const origins: Record<ChannelsApi.LarkDomain, string> = {
 }
 
 /** A platform without SHA-256 cannot check Lark events, so a failure here is a defect. */
-const sha256 = (crypto: Crypto.Crypto, value: string) =>
-	crypto.digest("SHA-256", new TextEncoder().encode(value)).pipe(Effect.orDie)
+const sha256 = (crypto: Digest.Digest["Service"], value: string) =>
+	crypto
+		.digest(Digest.sha256, new TextEncoder().encode(value))
+		.pipe(Effect.orDie)
 
 /**
  * Lark encrypts each event with AES-256-CBC. The key is the SHA-256 of the encrypt key,
@@ -84,7 +86,7 @@ const card = (message: OutboundMessage) => ({
  */
 const read = (
 	secrets: Secrets,
-	crypto: Crypto.Crypto,
+	crypto: Digest.Digest["Service"],
 	request: Parameters<Channel["receive"]>[0],
 ) =>
 	Effect.gen(function* () {
@@ -190,9 +192,9 @@ const read = (
 export const make = (
 	secrets: Secrets,
 	call: Call,
-): Effect.Effect<Channel, never, Crypto.Crypto> =>
+): Effect.Effect<Channel, never, Digest.Digest> =>
 	Effect.gen(function* () {
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* Digest.Digest
 		const origin = origins[secrets.domain]
 		// The tenant token lasts about two hours. One token serves every message until then.
 		// Concurrent callers wait for one request of a new token, and do not each send one.

@@ -1,6 +1,6 @@
 import { Array as Arr, Config, Effect, Layer } from "effect"
 import { Command } from "effect/cli"
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 
 import * as SecretFiles from "../configuration/SecretFiles.ts"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
@@ -54,6 +54,6 @@ const command = Command.make("openbot migrate").pipe(
 NodeRuntime.runMain(
 	Command.run(command, { version: "0.1.0" }).pipe(
 		// @effect-diagnostics-next-line strictEffectProvide:off -- This program owns the whole application Layer scope.
-		Effect.provide(NodeServices.layer),
+		Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	),
 )

@@ -18,7 +18,7 @@ import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
 import * as ExecutionStorage from "../src/execution/Store.ts"
 import * as ExecutionObservation from "../src/execution/Observation.ts"
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import {
 	AppConnections,
@@ -30,7 +30,6 @@ import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,
 	Cause,
-	Crypto,
 	Clock,
 	Deferred,
 	Effect,
@@ -45,6 +44,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { eq } from "drizzle-orm"
 import { TestClock } from "effect/testing"
@@ -105,14 +105,16 @@ const usedContent = (methods: ReadonlyArray<string>) =>
 		Arr.contains(["tools/call", "resources/read", "prompts/get"], method),
 	)
 
-it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
+it.layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
+	excludeTestServices: true,
+})((it) => {
 	// The App fixture and the database are real servers, so the test uses the
 	// real clock. The Developer services run on their own test clock.
 	it.effect(
 		"independent HTTPS developer tests apply rules for complete pages, optional capabilities, cancellation and owner-only cleanup",
 		() =>
 			Effect.gen(function* () {
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* SecureRandom.SecureRandom
 				const liveClock = yield* Clock.Clock
 				const mode = yield* Ref.make<Mode>("normal")
 				const origin = yield* Deferred.make<string>()
@@ -403,7 +405,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 									userId: "alice",
 								},
 								id,
-								Execution.CommandKey.make(yield* crypto.randomUUIDv4()),
+								Execution.CommandKey.make(yield* crypto.uuidV4()),
 							)
 							yield* TestWorkflow.workflow.execute(
 								{ namespace: owner, id: receipt.executionId },
@@ -414,7 +416,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 
 					const create = Effect.fn("DeveloperConnectionTests.create")(
 						function* (remoteIndex: number = 0) {
-							const id = yield* crypto.randomUUIDv4()
+							const id = yield* crypto.uuidV4()
 							return yield* run(
 								Effect.flatMap(DeveloperTests, (tests) =>
 									tests.create(owner, { id, cardUrl, remoteIndex }),
@@ -770,7 +772,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 								const db = yield* Db.make
 								const record = yield* Rows.getTest(db, "public", exchanging.id)
 								const authorization: Api.TestAuthorization = {
-									flowId: yield* crypto.randomUUIDv4(),
+									flowId: yield* crypto.uuidV4(),
 									status: "Received",
 									issuer: fixture.ipOrigin,
 									resource: fixture.ipOrigin + "/mcp",

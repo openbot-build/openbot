@@ -6,7 +6,6 @@ import {
 	Array as Arr,
 	Cause,
 	Clock,
-	Crypto,
 	DateTime,
 	Effect,
 	Layer,
@@ -15,6 +14,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import { SqlError } from "effect/sql"
 import { and, asc, eq, isNotNull, ne } from "drizzle-orm"
@@ -95,10 +95,10 @@ export const make = Effect.gen(function* () {
 	const control = yield* DomainControl
 	const settings = yield* Settings
 	const report = yield* Report.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	// A platform without secure random numbers is broken.
 	const newId = crypto
-		.randomUUIDv7()
+		.uuidV7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const randomBytes = (size: number) =>
 		crypto.randomBytes(size).pipe(Effect.orDie)

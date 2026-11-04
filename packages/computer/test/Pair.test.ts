@@ -1,6 +1,6 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.make needs a function that makes a Node HTTP server.
 import { createServer } from "node:http"
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { ComputersApi } from "@openbot-build/api"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -40,7 +40,9 @@ const folder = Layer.effect(
 		})
 	}),
 ).pipe(
-	Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+	Layer.provideMerge(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	),
 )
 
 /**

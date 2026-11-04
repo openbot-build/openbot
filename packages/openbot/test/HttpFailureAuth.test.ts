@@ -1,4 +1,4 @@
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { AuthApi, FailureApi } from "@openbot-build/api"
 import {
@@ -143,7 +143,7 @@ it.live(
 		}).pipe(
 			Layer.provide(records),
 			Layer.provideMerge(NodeHttpServer.layerTest),
-			Layer.provide(NodeServices.layer),
+			Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 		)
 		const cookie = (value: string) => ({
 			cookie: `${AuthApi.SessionCookie}=${value}`,

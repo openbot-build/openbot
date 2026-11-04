@@ -6,13 +6,13 @@ import { and, desc, eq, lt, or, type SQL } from "drizzle-orm"
 import {
 	Array as Arr,
 	Context,
-	Crypto,
 	Effect,
 	Equivalence,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { developerReports } from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
@@ -86,14 +86,17 @@ const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
 export const make: Effect.Effect<
 	typeof DeveloperReports.Service,
 	never,
-	DeveloperAccess | PgClient.PgClient | AppInspections | Crypto.Crypto
+	| DeveloperAccess
+	| PgClient.PgClient
+	| AppInspections
+	| SecureRandom.SecureRandom
 > = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const inspections = yield* AppInspections
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const reportWhere = (id: string) =>
 		and(eq(developerReports.namespace, namespace), eq(developerReports.id, id))
 	const read = Effect.fn("DeveloperReports.read")(function* (id: string) {
@@ -179,7 +182,7 @@ export const make: Effect.Effect<
 					const app = yield* Rows.getApp(db, namespace, cardUrl, true)
 					yield* access.authorize(owner, cardUrl, true)
 					const value: Models.SavedReport = {
-						id: yield* crypto.randomUUIDv7().pipe(Effect.orDie),
+						id: yield* crypto.uuidV7().pipe(Effect.orDie),
 						cardUrl,
 						createdBy: owner,
 						report,

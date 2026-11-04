@@ -1,6 +1,7 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer needs the native server factory.
 import { createServer } from "node:http"
 import {
+	NodeCrypto,
 	NodeHttpClient,
 	NodeHttpServer,
 	NodeRuntime,
@@ -174,6 +175,6 @@ const app = Layer.unwrap(
 		)
 	}),
 )
-Layer.launch(app.pipe(Layer.provide(NodeServices.layer))).pipe(
-	NodeRuntime.runMain,
-)
+Layer.launch(
+	app.pipe(Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
+).pipe(NodeRuntime.runMain)

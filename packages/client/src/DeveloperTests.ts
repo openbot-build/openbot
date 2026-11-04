@@ -1,5 +1,6 @@
 import type { Execution } from "@openbot-build/domain"
-import { Crypto, Effect, type PlatformError } from "effect"
+import { Effect, type PlatformError } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
 import { prepare, type Command } from "./Command.ts"
 
@@ -10,7 +11,7 @@ export const run = Effect.fn("DeveloperTests.run")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -31,7 +32,7 @@ export const authorize = Effect.fn("DeveloperTests.authorize")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -53,7 +54,7 @@ export const completeAuthorization = Effect.fn(
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -73,7 +74,7 @@ export const cancel = Effect.fn("DeveloperTests.cancel")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -93,7 +94,7 @@ export const cleanup = Effect.fn("DeveloperTests.cleanup")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -113,7 +114,7 @@ export const remove = Effect.fn("DeveloperTests.remove")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(

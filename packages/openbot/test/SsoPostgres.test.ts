@@ -1,6 +1,6 @@
 import * as AccountAccess from "../src/access/Access.ts"
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Settings as SettingsApi } from "@openbot-build/api"
 import {
@@ -92,6 +92,9 @@ it.live(
 			yield* sso.removeDomain(organizationId, domain)
 			assert.deepStrictEqual(yield* sso.listConnections(organizationId), [])
 			assert.deepStrictEqual(yield* sso.listDomains(organizationId), [])
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )

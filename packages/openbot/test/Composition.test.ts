@@ -8,13 +8,8 @@ import type { Registry } from "../src/execution/Engine.ts"
 import type { SqlClient } from "effect/sql"
 import { assert, it } from "@effect/vitest"
 import type { PgClient } from "@effect/sql-pg"
-import {
-	type Crypto,
-	Effect,
-	type Layer,
-	Redacted,
-	String as Str,
-} from "effect"
+import { Effect, type Layer, Redacted, String as Str } from "effect"
+import type { Digest, SecureRandom } from "effect/crypto"
 import type { HttpClient } from "effect/http"
 import * as OpenBot from "../src/app/OpenBot.ts"
 import * as Server from "../src/app/Server.ts"
@@ -32,8 +27,12 @@ type ExecutionServices =
 type Shared =
 	PgClient.PgClient | SqlClient.SqlClient | Settings | Secrets | Records
 
-/** The platform services, such as those of `NodeServices.layer` and `FetchHttpClient.layer`. */
-type Platform = Crypto.Crypto | HttpClient.HttpClient
+/**
+ * The platform services, such as those of `NodeCrypto.layer` and
+ * `FetchHttpClient.layer`.
+ */
+type Platform =
+	SecureRandom.SecureRandom | Digest.Digest | HttpClient.HttpClient
 
 const options = {
 	databaseUrl: Redacted.make("postgresql://unused"),
@@ -80,21 +79,13 @@ it.effect(
 	() =>
 		Effect.sync(() => {
 			const server = Server.layerLive(options)
-			const needs: Same<
-				Layer.Services<typeof server>,
-				Crypto.Crypto | HttpClient.HttpClient
-			> = true
+			const needs: Same<Layer.Services<typeof server>, Platform> = true
 			const custom = Server.layer(options)
 			// The server of `layer` gets the shared services and the services from outside from its caller.
 			const customNeeds: Same<
 				Exclude<
 					Layer.Services<typeof custom>,
-					| OpenBot.Outside
-					| HostTools
-					| Shared
-					| HttpClient.HttpClient
-					| Crypto.Crypto
-					| SqlClient.SqlClient
+					OpenBot.Outside | HostTools | Shared | Platform | SqlClient.SqlClient
 				>,
 				never
 			> = true

@@ -264,10 +264,13 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 								headers,
 							)
 							// setHeaders merges headers, so build a clean request for a cross-origin GET.
+							// The check above lets only GET and HEAD go to another origin.
 							if (new URL(checked).origin !== new URL(url).origin)
-								next = HttpClientRequest.make(request.method)(checked, {
-									headers,
-								})
+								next = (
+									request.method === "HEAD"
+										? HttpClientRequest.head
+										: HttpClientRequest.get
+								)(checked, { headers })
 							return yield* follow(next, hop + 1)
 						}
 						let body = response.stream.pipe(

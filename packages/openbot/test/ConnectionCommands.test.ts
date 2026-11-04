@@ -1,5 +1,5 @@
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import {
 	Authorization,
@@ -58,7 +58,7 @@ const services = Layer.merge(Store.layer, Records.layer).pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const actor = {
 	kind: "user_token",

@@ -21,7 +21,6 @@ import {
 	Cause,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Match,
@@ -31,6 +30,7 @@ import {
 	Redacted,
 	Scope,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { AppNetwork } from "./AppHost.ts"
 import { PgClient } from "@effect/sql-pg"
 import * as Rows from "./DeveloperRows.ts"
@@ -107,7 +107,8 @@ export const make: Effect.Effect<
 	| DeveloperTestStores
 	| PgClient.PgClient
 	| AppNetwork
-	| Crypto.Crypto
+	| SecureRandom.SecureRandom
+	| Digest.Digest
 	| App.ConnectionScopes
 	| DeveloperAccess
 	| Settings
@@ -119,7 +120,8 @@ export const make: Effect.Effect<
 	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
 	const network = yield* AppNetwork
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const active = yield* App.ConnectionScopes
 	const access = yield* DeveloperAccess
 	const withNetwork = <A, E, R>(
@@ -136,7 +138,8 @@ export const make: Effect.Effect<
 			| Authorization.FlowStore
 			| App.ConnectionScopes
 			| Client.InvocationPolicy
-			| Crypto.Crypto
+			| SecureRandom.SecureRandom
+			| Digest.Digest
 		>,
 		check: Effect.Effect<void, Developers.Failure> = Effect.void,
 	): Effect.Effect<
@@ -150,7 +153,8 @@ export const make: Effect.Effect<
 				| Authorization.FlowStore
 				| App.ConnectionScopes
 				| Client.InvocationPolicy
-				| Crypto.Crypto
+				| SecureRandom.SecureRandom
+				| Digest.Digest
 		  >
 		| Scope.Scope
 	> =>
@@ -220,7 +224,8 @@ export const make: Effect.Effect<
 								},
 							}),
 						),
-						Context.add(Crypto.Crypto, crypto),
+						Context.add(SecureRandom.SecureRandom, crypto),
+						Context.add(Digest.Digest, hashes),
 					),
 				),
 			)

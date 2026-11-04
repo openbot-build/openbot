@@ -33,7 +33,7 @@ Install an exact release, or use `sha-<full-commit-hash>` to select a published
 commit. The lockfile saves the exact version behind the tag:
 
 ```sh
-pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.0.7
+pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
 ```
 
 The client includes its shared OpenBot code and types under MIT. It needs no
@@ -75,8 +75,8 @@ is retried after a lost reply. `Chats.message` does the same for an existing
 Chat. The receipt names an execution; observe it through
 `client.api.executions.observe` with the last saved `afterSequence`. Closing
 observation does not cancel work. `Executions.cancel` and `Executions.decide`
-also prepare commands with stable keys. Give a platform `Crypto` service when
-using these helpers; this Node.js example uses `NodeCrypto.layer`.
+also prepare commands with stable keys. Give a platform `SecureRandom` service
+when using these helpers; this Node.js example uses `NodeCrypto.layer`.
 
 | Option           | Required | What it does                                                                                                      |
 | ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |

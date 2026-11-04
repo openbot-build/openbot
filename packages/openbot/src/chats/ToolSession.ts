@@ -4,13 +4,13 @@ import { type Failure, TurnContext } from "./TurnContext.ts"
 import {
 	type Scope,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Record as Rec,
 	Schema,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Bot, Chat } from "@openbot-build/core"
 import { Prompt, Toolkit, type Tool } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
@@ -56,7 +56,7 @@ const make = Effect.gen(function* () {
 	const turns = yield* TurnContext
 	const featureScopes = yield* ExecutionFeatures
 	const host = yield* HostTools
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	/** Only a workflow phase owns this scope. No member runtime or parent fiber is held. */
 	const run = Effect.fn("ToolSession.run")(function* (fence: Fence) {
 		yield* calls.authorize(fence, "replay")
@@ -121,7 +121,7 @@ const make = Effect.gen(function* () {
 					Schema.fromJsonString(Schema.Array(Schema.String)),
 				)([fence.id, chat, notice.ref])
 				const key = Hex.encode(
-					yield* crypto.digest("SHA-256", new TextEncoder().encode(name)),
+					yield* crypto.digest(Digest.sha256, new TextEncoder().encode(name)),
 				)
 				yield* inputs.submit(
 					fence.namespace,

@@ -23,7 +23,7 @@ import {
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse,
-	type HttpMethod,
+	HttpMethod,
 	HttpServerRequest,
 	HttpServerResponse,
 } from "effect/http"
@@ -61,18 +61,18 @@ const manualRedirects = Effect.provideService(FetchHttpClient.RequestInit, {
 const proxyTo = (address: Effect.Effect<string>) =>
 	Effect.gen(function* () {
 		const request = yield* HttpServerRequest.HttpServerRequest
+		const method = request.method
+		if (!HttpMethod.isHttpMethod(method))
+			return yield* Effect.die(`The proxy got an unknown method: ${method}`)
 		const body = new Uint8Array(yield* request.arrayBuffer)
 		const response = yield* HttpClient.execute(
-			HttpClientRequest.make(request.method)(
-				new URL(request.url, yield* address),
-				{
-					headers: without(request.headers, connectionHeaders),
-					body:
-						body.length === 0
-							? HttpBody.empty
-							: HttpBody.uint8Array(body, request.headers["content-type"]),
-				},
-			),
+			HttpClientRequest.make(method)(new URL(request.url, yield* address), {
+				headers: without(request.headers, connectionHeaders),
+				body:
+					body.length === 0
+						? HttpBody.empty
+						: HttpBody.uint8Array(body, request.headers["content-type"]),
+			}),
 		).pipe(manualRedirects)
 		return HttpServerResponse.stream(response.stream, {
 			status: response.status,

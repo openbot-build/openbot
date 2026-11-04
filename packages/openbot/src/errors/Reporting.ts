@@ -1,12 +1,5 @@
-import {
-	Cause,
-	Context,
-	Crypto,
-	Effect,
-	Option,
-	Redacted,
-	type Types,
-} from "effect"
+import { Cause, Context, Effect, Option, Redacted, type Types } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Records } from "./Records.ts"
 import { errorIdHeader } from "./HttpBoundary.ts"
 import {
@@ -24,13 +17,13 @@ const startup = (cause: Cause.Cause<unknown>) =>
 
 /**
  * Watch both failed Effects and server errors that are already mapped to responses.
- * It makes the request ids with the `Crypto` service of the program. Every log
+ * It makes the request ids with the `SecureRandom` service of the program. Every log
  * of the request carries the request id of its error log, so the inside
  * failures that a request logs can be found from its error log.
  */
 export const layerHttp = HttpRouter.middleware(
 	Effect.gen(function* () {
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const records = yield* Records
 		return (
 			httpEffect: Effect.Effect<
@@ -41,7 +34,7 @@ export const layerHttp = HttpRouter.middleware(
 			Effect.gen(function* () {
 				const request = yield* HttpServerRequest.HttpServerRequest
 				// A platform without secure random numbers is broken, so this failure is a defect.
-				const requestId = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
+				const requestId = yield* crypto.uuidV4().pipe(Effect.orDie)
 				// The scoped form changes the context of the request in place, the
 				// same way the router adds the route context. `Effect.annotateLogs`
 				// puts the old context back when the handler ends, and that also

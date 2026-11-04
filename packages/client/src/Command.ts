@@ -1,5 +1,6 @@
 import { Execution } from "@openbot-build/domain"
-import { Crypto, Effect, Schedule } from "effect"
+import { Effect, Schedule } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { HttpClientError } from "effect/http"
 
 /** Keep this value when an application retries a command after a lost reply. */
@@ -13,7 +14,9 @@ export const prepare = Effect.fn("Command.prepare")(function* <A, E>(
 ) {
 	const key =
 		supplied ??
-		Execution.CommandKey.make(yield* (yield* Crypto.Crypto).randomUUIDv7())
+		Execution.CommandKey.make(
+			yield* (yield* SecureRandom.SecureRandom).uuidV7(),
+		)
 	return {
 		commandKey: key,
 		send: send(key).pipe(

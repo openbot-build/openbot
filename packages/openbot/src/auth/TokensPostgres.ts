@@ -5,7 +5,6 @@ import type { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	DateTime,
 	Effect,
 	Layer,
@@ -14,6 +13,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
 import { and, count, eq, sql } from "drizzle-orm"
 import { tokens, accountStates } from "../database/Schema.ts"
@@ -64,14 +64,15 @@ const view = (
 export const make: Effect.Effect<
 	typeof Tokens.Service,
 	never,
-	PgClient.PgClient | Crypto.Crypto
+	PgClient.PgClient | SecureRandom.SecureRandom | Digest.Digest
 > = Effect.gen(function* () {
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	/** The SHA-256 hash of a secret, in hex. Only the hash goes into the database. */
 	const hash = (secret: string) =>
-		crypto
-			.digest("SHA-256", new TextEncoder().encode(secret))
+		hashes
+			.digest(Digest.sha256, new TextEncoder().encode(secret))
 			.pipe(Effect.orDie, Effect.map(Hex.encode))
 	const owned = (owner: {
 		readonly organizationId: string
@@ -120,7 +121,7 @@ export const make: Effect.Effect<
 							TokensModel.SecretPrefix +
 							Base64Url.encode(yield* Effect.orDie(crypto.randomBytes(32)))
 						const row = {
-							id: yield* Effect.orDie(crypto.randomUUIDv7()),
+							id: yield* Effect.orDie(crypto.uuidV7()),
 							organizationId: owner.organizationId,
 							userId: owner.userId,
 							name: Str.trim(input.name),

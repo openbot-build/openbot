@@ -19,13 +19,13 @@ import {
 	Array as Arr,
 	Cause,
 	Context,
-	Crypto,
 	Effect,
 	Option,
 	Record as Rec,
 	Schema,
 	type Scope,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import * as Bindings from "../../apps/Bindings.ts"
 import * as Assistance from "./Assistance.ts"
@@ -155,7 +155,7 @@ export const durable = (fence: Fence) =>
 			report,
 			sessions: yield* ConnectionSessions,
 			policy: yield* ActionPolicy,
-			crypto: yield* Crypto.Crypto,
+			crypto: yield* Digest.Digest,
 		}
 		return AppTools.of({
 			register: (identity, occupied) =>

@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Chat } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
@@ -25,7 +25,7 @@ const services = Store.layer.pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const identity = {
 	owner: { organizationId: "org", userId: "user" },

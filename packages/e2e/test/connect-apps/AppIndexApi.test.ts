@@ -2,14 +2,18 @@ import { assert, layer } from "@effect/vitest"
 import { AppIndexApi as Api } from "@openbot-build/api"
 import { Document, Index } from "@openbot-build/protocol"
 import { Array as Arr, Context, Effect, Layer, Redacted, Schema } from "effect"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { HostTools, OpenBot, Server } from "@openbot-build/openbot"
 import { AppIndex, PostgresTest } from "@openbot-build/openbot/testing"
 import { FetchHttpClient, HttpClient, HttpServer } from "effect/http"
 import * as Client from "@openbot-build/client"
 
 /** The Node services for the test database, and an HTTP client to call the server. */
-const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
+const platform = Layer.mergeAll(
+	NodeServices.layer,
+	NodeCrypto.layer,
+	FetchHttpClient.layer,
+)
 
 const entry = (path: string, name = "example.test/documents") =>
 	Index.Entry.decode({

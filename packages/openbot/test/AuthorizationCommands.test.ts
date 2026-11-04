@@ -12,7 +12,7 @@ import { WorkflowEngine } from "effect/workflow"
 import * as Cleanup from "../src/apps/GrantCleanup.ts"
 import * as GrantUses from "../src/apps/GrantUses.ts"
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Authorization, Execution, TokenId } from "@openbot-build/domain"
 import {
@@ -61,7 +61,7 @@ const services = Layer.merge(Store.layer, ErrorRecords.layer).pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("21"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const original = {
 	kind: "user_token",

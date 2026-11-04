@@ -1,6 +1,6 @@
 import { Model } from "@openbot-build/core"
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Clock, Context, Effect, Layer, Redacted } from "effect"
 import { Billing, type Call, type Tokens } from "../src/billing/Billing.ts"
@@ -125,7 +125,10 @@ it.live(
 				.reserve(call, { source: "other" }, tokens(1))
 				.pipe(Effect.flip)
 			assert.equal(spent._tag, "SpendingBlocked")
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -178,7 +181,10 @@ it.live(
 				(yield* billing.credits(call.organizationId)).balanceMicros,
 				0,
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -206,7 +212,10 @@ it.live(
 				.reserve(call, { source: "other" }, tokens(1))
 				.pipe(Effect.flip)
 			assert.equal(denied._tag, "SpendingBlocked")
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -266,7 +275,10 @@ for (const limit of ["budget", "credits"] as const) {
 						(yield* billing.credits(call.organizationId)).balanceMicros,
 						0,
 					)
-			}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+			}).pipe(
+				Effect.scoped,
+				Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+			),
 		{ timeout: 60000 },
 	)
 }
@@ -341,7 +353,10 @@ it.live(
 			assert.equal(denied._tag, "SpendingBlocked")
 			if (denied._tag === "SpendingBlocked")
 				assert.equal(denied.budgetId, ana.id)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -398,7 +413,10 @@ it.live(
 				(yield* billing.credits(call.organizationId)).balanceMicros,
 				0,
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -438,7 +456,10 @@ it.live(
 				tokens(1000),
 			)
 			yield* billing.record(next.id, tokens(1000))
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -519,6 +540,9 @@ it.live(
 				tokens(1000),
 			)
 			yield* billing.record(next.id, tokens(1000))
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )

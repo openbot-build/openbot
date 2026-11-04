@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
@@ -36,7 +36,7 @@ const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
 )
 const services = Fixture.services.pipe(
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {

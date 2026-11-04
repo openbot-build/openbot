@@ -1,6 +1,6 @@
 import { Execution } from "@openbot-build/domain"
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import * as Client from "@openbot-build/client"
 import {
 	AccountAuth,
@@ -11,7 +11,6 @@ import {
 } from "@openbot-build/api"
 import {
 	Array as Arr,
-	Crypto,
 	Effect,
 	Fiber,
 	Formatter,
@@ -23,6 +22,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { PgClient } from "@effect/sql-pg"
 import {
 	FetchHttpClient,
@@ -71,14 +71,17 @@ const manualRedirect = Effect.provideService(FetchHttpClient.RequestInit, {
 })
 
 // The test talks to real servers, so it uses the real clock.
-it.layer(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer), {
-	excludeTestServices: true,
-})((it) => {
+it.layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"standard developer clients finish publication, proof, history, test OAuth, indexing, notifications and cleanup",
 		() =>
 			Effect.gen(function* () {
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* SecureRandom.SecureRandom
 				const database = yield* Postgres.start
 				const options = {
 					host: "127.0.0.1",
@@ -368,7 +371,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer), {
 							yield* publication("published")
 							const plain = yield* api.developer.createTest({
 								payload: {
-									id: yield* crypto.randomUUIDv4(),
+									id: yield* crypto.uuidV4(),
 									cardUrl,
 									remoteIndex: 0,
 								},
@@ -421,16 +424,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer), {
 							)
 							const protectedTest = yield* api.developer.createTest({
 								payload: {
-									id: yield* crypto.randomUUIDv4(),
+									id: yield* crypto.uuidV4(),
 									cardUrl,
 									remoteIndex: 1,
 								},
 							})
 							yield* api.developer.runTest({
 								payload: {
-									commandKey: Execution.CommandKey.make(
-										yield* crypto.randomUUIDv4(),
-									),
+									commandKey: Execution.CommandKey.make(yield* crypto.uuidV4()),
 								},
 								params: { id: protectedTest.id },
 							})
@@ -605,9 +606,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer), {
 
 							yield* api.developer.runTest({
 								payload: {
-									commandKey: Execution.CommandKey.make(
-										yield* crypto.randomUUIDv4(),
-									),
+									commandKey: Execution.CommandKey.make(yield* crypto.uuidV4()),
 								},
 								params: { id: protectedTest.id },
 							})

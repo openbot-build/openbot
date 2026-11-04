@@ -1,6 +1,6 @@
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	AppAuthorizationApi,
 	AppExperienceApi,
@@ -13,7 +13,6 @@ import { Turn } from "@openbot-build/core"
 import {
 	Array as Arr,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -22,6 +21,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import {
 	FetchHttpClient,
 	Headers,
@@ -44,7 +44,11 @@ const { signIn } = DevelopmentLogin
 const { bot, message, model, settled } = Messages
 
 /** Files, programs and an HTTP client for the test. */
-const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
+const platform = Layer.mergeAll(
+	NodeServices.layer,
+	NodeCrypto.layer,
+	FetchHttpClient.layer,
+)
 
 /** Gives a value as JSON text. */
 const toJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
@@ -122,10 +126,10 @@ layer(platform, { excludeTestServices: true })((it) => {
 						kind: "verify" | "revalidate",
 						payload: Schema.JsonObject = {},
 					) {
-						const crypto = yield* Crypto.Crypto
+						const crypto = yield* SecureRandom.SecureRandom
 						const receipt = yield* post(path + "/" + kind, {
 							...payload,
-							commandKey: yield* crypto.randomUUIDv4(),
+							commandKey: yield* crypto.uuidV4(),
 						}).pipe(Effect.flatMap(Caller.json(Execution.Receipt, 202)))
 						const result = yield* poll(
 							request(`${path}/executions/${receipt.executionId}`, "GET").pipe(

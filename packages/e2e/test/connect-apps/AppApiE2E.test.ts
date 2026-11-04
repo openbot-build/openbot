@@ -14,7 +14,6 @@ import {
 	UserTokensApi,
 } from "@openbot-build/api"
 import {
-	Crypto,
 	Deferred,
 	Ref,
 	Array as Arr,
@@ -26,6 +25,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { LanguageModel, Response } from "effect/ai"
 import { Sse } from "effect/encoding"
 import {
@@ -524,7 +524,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 		"tokens and cookies prove App control, share reports, run connection tests and clear their saved state",
 		() =>
 			Effect.gen(function* () {
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* SecureRandom.SecureRandom
 				const app = yield* Fixture.start({ capabilities: true })
 				const publisher = yield* proofPublisher(app)
 				const host = yield* BrowserHost.start({
@@ -642,7 +642,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 						"maintainer",
 					)
 					const input = {
-						id: yield* crypto.randomUUIDv4(),
+						id: yield* crypto.uuidV4(),
 						cardUrl: publisher.cardUrl,
 						remoteIndex: 0,
 					}

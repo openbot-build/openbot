@@ -1,4 +1,4 @@
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Console, Effect, Layer } from "effect"
 import { Command } from "effect/cli"
 import * as Administration from "../platform/Administration.ts"
@@ -24,6 +24,6 @@ const program = Command.make("openbot inspect").pipe(
 NodeRuntime.runMain(
 	Command.run(program, { version: "0.1.0" }).pipe(
 		// @effect-diagnostics-next-line strictEffectProvide:off -- This command owns its platform Layer scope.
-		Effect.provide(NodeServices.layer),
+		Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	),
 )

@@ -12,6 +12,7 @@ import {
 	Record as Rec,
 	Result,
 	Option,
+	Predicate,
 } from "effect"
 import {
 	AiError,
@@ -19,7 +20,7 @@ import {
 	Response,
 	type LanguageModel,
 	type DecisionModel,
-	type Decision,
+	Decision,
 	Telemetry,
 } from "effect/ai"
 import {
@@ -562,15 +563,17 @@ export const meterDecision = (
 	>(
 		method: string,
 		input: Effect.Effect<Schema.Json, Schema.SchemaError, InputR>,
-		images: number,
 		send: Effect.Effect<A, E, R>,
 	) =>
 		Effect.uninterruptibleMask((restore) =>
 			Effect.gen(function* () {
-				const encoded = yield* restore(
+				const { text: encoded, images } = yield* restore(
 					input.pipe(
-						Effect.flatMap(
-							Schema.encodeEffect(Schema.fromJsonString(Schema.Json)),
+						Effect.map(withoutImages),
+						Effect.flatMap(({ value, images }) =>
+							Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(
+								value,
+							).pipe(Effect.map((text) => ({ text, images }))),
 						),
 						Effect.mapError((error) =>
 							AiError.make({
@@ -608,7 +611,6 @@ export const meterDecision = (
 		run(
 			"decideSettled",
 			Schema.encodeEffect(Schema.toCodecJson(definition.input))(options.input),
-			options.images?.length ?? 0,
 			model.decideSettled(definition, options),
 		)
 	return {
@@ -625,6 +627,33 @@ export const meterDecision = (
 			),
 		decideSettled: settled,
 	}
+}
+
+/**
+ * Takes the images out of an encoded decision input. Effect sends each image
+ * apart from the text, so the text estimate counts a short reference for each
+ * image, and each image has its own fixed estimate.
+ */
+const withoutImages = (
+	input: Schema.Json,
+): { readonly value: Schema.Json; readonly images: number } => {
+	let images = 0
+	const isList = (
+		value: Schema.JsonArray | Schema.JsonObject,
+	): value is Schema.JsonArray => Arr.isArray(value)
+	const walk = (value: Schema.Json): Schema.Json => {
+		if (value === null || typeof value !== "object") return value
+		if (isList(value)) return Arr.map(value, walk)
+		if (
+			Rec.size(value) === 1 &&
+			Predicate.hasProperty(value, Decision.ImageKey)
+		) {
+			images++
+			return "image"
+		}
+		return Rec.map(value, walk)
+	}
+	return { value: walk(input), images }
 }
 
 /**

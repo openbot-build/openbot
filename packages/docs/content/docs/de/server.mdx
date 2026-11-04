@@ -34,7 +34,7 @@ Es sperrt ausgehende Verbindungen zu privaten Adressen und schreibt einen
 fehlgeschlagenen Start ins Log. Dann führt es den Layer aus, den du ihm gibst,
 bis der Prozess endet. Es gibt diesem Layer die Node.js-Dienste und den
 Fetch-HTTP-Client. `Launch.server` ist dasselbe Programm als Effect, wenn du es
-selbst ausführst. Gib ihm `NodeServices.layer`.
+selbst ausführst. Gib ihm `NodeServices.layer` und `NodeCrypto.layer`.
 
 `EnvironmentConfiguration.load` gibt dieselben Einstellungen zurück: `host`,
 `port`, `databaseUrl`, `secretKeys`, `clusterSecret`, `clusterHost` und
@@ -135,12 +135,12 @@ die von außerhalb von OpenBot kommen. Sie brauchen sie, und dein Programm gibt
 sie als Layers. So kann ein Test Fälschungen geben, und dein Programm kann
 eigene geben.
 
-| Dienste                               | Was sie sind                                                                                                                                                                                                              | Layer für einen echten Server                    |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Gemeinsame Dienste                    | Der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen.                                                                                                                                             | `OpenBot.layerShared(options)`                   |
-| Dienste von außen (`OpenBot.Outside`) | Die Treiber der Computer-Anbieter, die Live-Backends, die Leser der Passwort-Manager, das Netzwerk und die Prüfung der Apps, die DNS-Prüfung von Domains, das öffentliche Netzwerk des App Index und das Finden von Apps. | `OpenBot.layerOutside`                           |
-| Werkzeuge des Hosts (`HostTools`)     | Die Werkzeuge, die dein Programm jedem Chat gibt.                                                                                                                                                                         | `HostTools.none`                                 |
-| Plattform-Dienste                     | Dateien, Pfade, Zufallszahlen und der HTTP-Client.                                                                                                                                                                        | `NodeServices.layer` und `FetchHttpClient.layer` |
+| Dienste                               | Was sie sind                                                                                                                                                                                                              | Layer für einen echten Server                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Gemeinsame Dienste                    | Der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen.                                                                                                                                             | `OpenBot.layerShared(options)`                                       |
+| Dienste von außen (`OpenBot.Outside`) | Die Treiber der Computer-Anbieter, die Live-Backends, die Leser der Passwort-Manager, das Netzwerk und die Prüfung der Apps, die DNS-Prüfung von Domains, das öffentliche Netzwerk des App Index und das Finden von Apps. | `OpenBot.layerOutside`                                               |
+| Werkzeuge des Hosts (`HostTools`)     | Die Werkzeuge, die dein Programm jedem Chat gibt.                                                                                                                                                                         | `HostTools.none`                                                     |
+| Plattform-Dienste                     | Dateien, Pfade, Zufallszahlen, Hashwerte und der HTTP-Client.                                                                                                                                                             | `NodeServices.layer`, `NodeCrypto.layer` und `FetchHttpClient.layer` |
 
 `Server.layerLive` gibt alle davon außer den Plattform-Diensten. `Launch.main`
 gibt die Plattform-Dienste. Dieses Programm macht dasselbe wie
@@ -297,7 +297,7 @@ NodeRuntime.runMain(Development.launch)
 `OPENBOT_DEV_PUBLIC_ORIGIN`. Wenn die Variablen `OPENBOT_DEV_S3_*` gesetzt sind,
 nutzt es diesen lokalen Objektspeicher für Dateien und legt seinen Bucket an.
 `Development.layer` ist der Server ohne diese Schritte. Er braucht die
-Plattform-Dienste, zum Beispiel `NodeServices.layer` und
+Plattform-Dienste, zum Beispiel `NodeServices.layer`, `NodeCrypto.layer` und
 `FetchHttpClient.layer`, und `Development.launch` gibt sie ihm. Er schreibt die
 Plattform-Einstellungen selbst. Darum braucht er kein Einrichtungsprogramm.
 `Development.developmentSecret` macht das Anmelde-Geheimnis aus dem ersten

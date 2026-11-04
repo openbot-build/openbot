@@ -1,7 +1,7 @@
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { SqlClient } from "effect/sql"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	BillingApi,
 	ChatCommandReceipt,
@@ -100,9 +100,12 @@ const finish = Effect.fn("CloudflareE2E.finish")(function* (
 })
 
 // The database, servers, and provider use real time. This test makes paid model calls.
-layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
-	excludeTestServices: true,
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"real model calls work through the built API with a cookie and a user token",
 		(context) =>

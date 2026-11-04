@@ -1,6 +1,6 @@
 import { Execution } from "@openbot-build/domain"
 import * as Failures from "../src/errors/Failures.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -35,7 +35,7 @@ const services = Records.layer.pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 	for (const phase of ["seal", "write"] as const)

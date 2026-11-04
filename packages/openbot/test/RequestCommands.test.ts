@@ -10,7 +10,7 @@ import { ModelRegistry } from "../src/models/ModelRegistry.ts"
 import * as ReviewTools from "../src/capabilities/ReviewTools.ts"
 import { CallContext } from "../src/execution/CallContext.ts"
 import { Billing } from "../src/billing/Billing.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -216,7 +216,7 @@ const services = Commands.layer.pipe(
 			defaultModel: Option.some(DevelopmentModel.selection),
 		}),
 	),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 const setup = Effect.fn(function* (

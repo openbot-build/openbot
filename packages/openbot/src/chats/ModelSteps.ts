@@ -15,7 +15,6 @@ import * as ModelCalls from "../models/ModelCalls.ts"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	Cause,
 	Context,
 	Effect,
@@ -25,6 +24,7 @@ import {
 	Option,
 	Schema,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { LanguageModel, Prompt, Tool, Toolkit, type Response } from "effect/ai"
 import { Records, category } from "../errors/Records.ts"
 import { Hex } from "effect/encoding"
@@ -115,7 +115,7 @@ const make = Effect.gen(function* () {
 	const store = yield* Store
 	const calls = yield* Calls
 	const modelCalls = yield* ModelCalls.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const errors = yield* Records
 	const run = Effect.fn("ModelSteps.run")(function* <
 		Tools extends Record<string, Tool.Any>,
@@ -262,7 +262,7 @@ const make = Effect.gen(function* () {
 				prompt: yield* Schema.encodeEffect(promptCodec)(prepared.prompt),
 			})
 			const hash = yield* crypto
-				.digest("SHA-256", new TextEncoder().encode(encoded))
+				.digest(Digest.sha256, new TextEncoder().encode(encoded))
 				.pipe(Effect.map(Hex.encode))
 			const saved = yield* run(
 				fence,
@@ -348,10 +348,10 @@ export const makeExecutors = (
 ) =>
 	Effect.gen(function* () {
 		const services = yield* Effect.context<
-			Store | Calls | Billing | Crypto.Crypto | Records | TurnAccess
+			Store | Calls | Billing | Digest.Digest | Records | TurnAccess
 		>().pipe(
 			Effect.map(
-				Context.pick(Store, Calls, Billing, Crypto.Crypto, Records, TurnAccess),
+				Context.pick(Store, Calls, Billing, Digest.Digest, Records, TurnAccess),
 			),
 		)
 		const selected = make.pipe(

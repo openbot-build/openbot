@@ -3,7 +3,6 @@ import {
 	Cause,
 	Clock,
 	Context,
-	Crypto,
 	Duration,
 	Effect,
 	Layer,
@@ -13,6 +12,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import {
 	Network,
@@ -203,7 +203,8 @@ export const layer = (origin: string) =>
 	Layer.effect(
 		Authorization,
 		Effect.gen(function* () {
-			const crypto = yield* Crypto.Crypto
+			const crypto = yield* SecureRandom.SecureRandom
+			const hashes = yield* Digest.Digest
 			const network = yield* Network.Network
 			const clients = yield* Temporary.make<Client>(lifetimes.client)
 			const pending = yield* Temporary.make<Pending>(Duration.minutes(10))
@@ -556,8 +557,8 @@ export const layer = (origin: string) =>
 											"The PKCE verifier is not valid.",
 										)
 									// A platform without SHA-256 is broken.
-									const challenge = yield* crypto
-										.digest("SHA-256", new TextEncoder().encode(verifier))
+									const challenge = yield* hashes
+										.digest(Digest.sha256, new TextEncoder().encode(verifier))
 										.pipe(Effect.map(Base64Url.encode), Effect.orDie)
 									if (challenge !== code.challenge)
 										return yield* fail(

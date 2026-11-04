@@ -1,12 +1,5 @@
-import {
-	Array as Arr,
-	Cause,
-	Clock,
-	Crypto,
-	Effect,
-	Option,
-	Schema,
-} from "effect"
+import { Array as Arr, Cause, Clock, Effect, Option, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { DurableClock } from "effect/workflow"
 import { Base64Url } from "effect/encoding"
 import { Execution } from "@openbot-build/domain"
@@ -43,7 +36,7 @@ export const make = Effect.gen(function* () {
 	const store = yield* Store
 	const calls = yield* Calls
 	const errors = yield* Records
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	/** A known rejection is a saved result. An unclear write still needs a decision. */
 	const invoke = (
 		fence: Fence,
@@ -59,7 +52,7 @@ export const make = Effect.gen(function* () {
 			const key = Base64Url.encode(
 				yield* crypto
 					.digest(
-						"SHA-256",
+						Digest.sha256,
 						new TextEncoder().encode(
 							yield* Schema.encodeEffect(
 								Schema.fromJsonString(Schema.Array(Schema.String)),

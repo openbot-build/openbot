@@ -23,13 +23,13 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Duration,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { SqlClient } from "effect/sql"
@@ -179,7 +179,8 @@ const make = Effect.gen(function* () {
 	const store = yield* Store
 	const calls = yield* Calls
 	const access = yield* TurnAccess
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const { row, load, parent: parentOf } = yield* ToolRecords.make
 
 	/** A repeat of a saved step has one child, even across owners and servers. */
@@ -230,7 +231,7 @@ const make = Effect.gen(function* () {
 			Schema.fromJsonString(Schema.Array(Schema.String)),
 		)([parent.id, position.item, call.id])
 		const hash = Hex.encode(
-			yield* crypto.digest("SHA-256", new TextEncoder().encode(name)),
+			yield* hashes.digest(Digest.sha256, new TextEncoder().encode(name)),
 		)
 		const receipt = yield* store.accept(
 			parent.namespace,
@@ -288,7 +289,7 @@ const make = Effect.gen(function* () {
 								)
 							)
 								return yield* Execution.Conflict.make({ id: parent.id })
-							const id = ToolExecution.Id.make(yield* crypto.randomUUIDv7())
+							const id = ToolExecution.Id.make(yield* crypto.uuidV7())
 							const child = yield* create({
 								workflow: workflowName,
 								context: { kind: "Chat", id: position.chat },
@@ -521,7 +522,7 @@ const make = Effect.gen(function* () {
 			Schema.fromJsonString(Schema.Array(Schema.String)),
 		)([fence.id, phase])
 		const hash = Hex.encode(
-			yield* crypto.digest("SHA-256", new TextEncoder().encode(name)),
+			yield* hashes.digest(Digest.sha256, new TextEncoder().encode(name)),
 		)
 		const body = yield* Schema.encodeEffect(Schema.toCodecJson(End))(end)
 		yield* store.accept(

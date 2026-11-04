@@ -6,12 +6,12 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Bots } from "../bots/Bots.ts"
 import * as ChatHost from "../chats/ChatHost.ts"
@@ -115,7 +115,7 @@ export class BotDecisions extends Context.Service<BotDecisions, Service>()(
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const store = yield* Store
-	const crypto = yield* Crypto.Crypto
+	const hashes = yield* Digest.Digest
 	const commands = yield* RequestCommands
 	const requests = yield* Requests
 	const rules = yield* Rules
@@ -293,7 +293,7 @@ export const make = Effect.gen(function* () {
 					? yield* capabilities.holding(before.holdingInput)
 					: Option.none()
 			const answerKey = Execution.CommandKey.make(
-				`review-answer:${yield* hash(crypto, [review.id, commandKey])}`,
+				`review-answer:${yield* hash(hashes, [review.id, commandKey])}`,
 			)
 			const receipt = yield* store.accept(
 				review.namespace,

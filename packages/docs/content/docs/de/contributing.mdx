@@ -234,7 +234,7 @@ darf nur einen Pfadparameter nennen, den ihr Endpunkt hat. Ein Test in
 
 Der Code für die Autorisierung kommt aus der Bibliothek
 [ability](https://github.com/nmnmcc/ability), dem npm-Paket `@nmnmcc/ability`.
-Version 3.1.0 steht fest in `package.json`. HTTP und Speicherung nutzen
+Version 3.2.0 steht fest in `package.json`. HTTP und Speicherung nutzen
 JSON-Text für Policies. Diese Version exportiert die Fehlerklassen direkt in den
 Typdeklarationen. So kann TypeScript die Deklarationen von OpenBot ohne lokalen
 Patch erzeugen.
@@ -256,7 +256,7 @@ einem Kommentar direkt am Code.
 
 Eine UUID ist eine ID mit 16 Bytes. Nutze UUID v7, wenn die Zeitfolge
 gespeicherten Einträgen oder Indizes hilft. Erzeuge sie mit
-`Crypto.randomUUIDv7()` aus Effect. Nutze das Format `bytes`, wenn der nächste
+`SecureRandom.uuidV7()` aus Effect. Nutze das Format `bytes`, wenn der nächste
 Schritt Bytes braucht. Behalte UUID v4 für zufällige Geheimnisse und für kurze
 Zeit genutzte IDs, denen eine Zeitfolge nicht hilft.
 
@@ -339,7 +339,7 @@ Fehler, also hält `tsc` bei ihnen an. Unter anderem verlangen sie:
 
 - die Module `Array`, `String` und `Record` von Effect statt der nativen
   Methoden, importiert als `Arr`, `Str` und `Rec`;
-- `Clock` und `DateTime` für Zeit, die Dienste `Random` und `Crypto` für
+- `Clock` und `DateTime` für Zeit, die Dienste `Random` und `SecureRandom` für
   Zufallswerte und IDs und `Config` für Umgebungsvariablen;
 - `HttpClient` statt `fetch` und die Dienste `FileSystem`, `Path` und
   `ChildProcess` statt der Node.js-Module;

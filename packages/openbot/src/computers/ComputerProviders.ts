@@ -1,4 +1,5 @@
 import { Redacted } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Computers as ComputerData } from "@openbot-build/domain"
 
 import { type Caller, type ExecutionIdentity } from "@openbot-build/domain"
@@ -7,7 +8,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -167,7 +167,7 @@ export class ComputerProviders extends Context.Service<
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const checks = yield* Check.make
 	const { check, guard } = checks
 	const stored = Failures.replace("The Computer provider store failed", () =>

@@ -10,7 +10,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	HashMap,
 	Layer,
@@ -18,6 +17,7 @@ import {
 	Schema,
 	Stream,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import type { SecretStorageError } from "../secrets/Secrets.ts"
 import { and, eq } from "drizzle-orm"
 import { developerIndexRequests } from "../database/Schema.ts"
@@ -194,7 +194,7 @@ const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
 export const make = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const checks = yield* Check.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
 	const store = yield* Store
@@ -334,7 +334,7 @@ export const make = Effect.gen(function* () {
 						})
 					const app = yield* Rows.getApp(db, namespace, cardUrl)
 					const watch = yield* index.request(cardUrl, app.candidate.sources)
-					const id = yield* crypto.randomUUIDv7()
+					const id = yield* crypto.uuidV7()
 					const key = yield* create({
 						workflow: workflowName,
 						identity: {

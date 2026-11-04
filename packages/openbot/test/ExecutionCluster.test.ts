@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import { Execution, ServiceId, type WorkIdentity } from "@openbot-build/domain"
@@ -17,7 +17,9 @@ import * as Store from "../src/execution/Store.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
-layer(NodeServices.layer, { excludeTestServices: true })((it) => {
+layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
+	excludeTestServices: true,
+})((it) => {
 	for (const kind of ["member", "service"] as const)
 		it.effect(
 			`another process takes over ${kind} work from a saved step`,

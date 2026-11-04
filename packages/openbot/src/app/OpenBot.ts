@@ -51,7 +51,7 @@ import * as VaultReaders from "../vaults/Readers.ts"
 import * as SecretProviders from "../vaults/SecretProviders.ts"
 import * as Vaults from "../vaults/Vaults.ts"
 import * as HostTools from "../chats/HostTools.ts"
-import { NodeSocket } from "@effect/platform-node"
+import { NodeWS } from "@effect/platform-node"
 import { Effect, Layer, type Redacted } from "effect"
 import type { HttpClient } from "effect/http"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
@@ -119,7 +119,7 @@ export type Outside =
 /** The Live backends of a real server. The `ws` package can send the key in a header. */
 export const layerLiveBackends = Layer.unwrap(
 	Effect.map(OpenAiRealtime.backend, (openai) => LiveBackends.layer([openai])),
-).pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
+).pipe(Layer.provide(NodeWS.layerWebSocketConstructor))
 
 /**
  * The real services from outside of OpenBot. They use the network of the

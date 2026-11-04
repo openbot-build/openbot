@@ -6,13 +6,13 @@ import { Execution } from "@openbot-build/domain"
 import {
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 	String as Str,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { BotRecords } from "../../bots/BotRecords.ts"
 import { hash } from "../../capabilities/Capability.ts"
 
@@ -84,11 +84,11 @@ export class Reminders extends Context.Service<
 export const make: Effect.Effect<
 	typeof Reminders.Service,
 	never,
-	BotRecords | Crypto.Crypto | Secrets
+	BotRecords | Digest.Digest | Secrets
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const hashes = yield* Digest.Digest
 	const rows = records.collection(
 		"reminder",
 		Schema.Struct({ id: Schema.String, sealed: Schema.String }),
@@ -176,7 +176,7 @@ export const make: Effect.Effect<
 						Str.slice(
 							0,
 							32,
-						)(yield* hash(crypto, [input.chat, input.turn, input.toolCallId]))
+						)(yield* hash(hashes, [input.chat, input.turn, input.toolCallId]))
 				return yield* records.transaction(
 					id,
 					Effect.gen(function* () {

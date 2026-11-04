@@ -6,12 +6,12 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Check from "../authorization/Check.ts"
 import { botResource, rootOf } from "../authorization/Resources.ts"
@@ -140,12 +140,12 @@ const keys = (organizationId: string, bot: Bot): Keys<RecordStatus> => ({
 export const make: Effect.Effect<
 	typeof Bots.Service,
 	never,
-	BotRecords | Crypto.Crypto | Check.Services
+	BotRecords | SecureRandom.SecureRandom | Check.Services
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const { check, filter, guard } = yield* Check.make
-	const newId = crypto.randomUUIDv7({ format: "bytes" }).pipe(
+	const newId = crypto.uuidV7({ format: "bytes" }).pipe(
 		// A platform without secure random numbers is broken.
 		Effect.orDie,
 		Effect.map((uuid) => BotsApi.BotId.make("bot_" + Hex.encode(uuid))),

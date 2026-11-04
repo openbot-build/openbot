@@ -29,7 +29,7 @@ title: "模型后端"
 这个示例提供一个 Anthropic 模型，密钥来自你程序的环境：
 
 ```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	AnthropicProvider,
@@ -87,7 +87,13 @@ NodeRuntime.runMain(
 			}
 			return yield* Layer.launch(
 				Server.layerLive({ ...settings, builtinModels }).pipe(
-					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+					Layer.provide(
+						Layer.mergeAll(
+							NodeServices.layer,
+							NodeCrypto.layer,
+							FetchHttpClient.layer,
+						),
+					),
 				),
 			)
 		}),

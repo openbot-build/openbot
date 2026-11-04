@@ -22,7 +22,6 @@ import { Mail } from "../mail/Mail.ts"
 import {
 	Array as Arr,
 	Cause,
-	Crypto,
 	String as Str,
 	Duration,
 	Effect,
@@ -38,6 +37,7 @@ import {
 	Schedule,
 	Stream,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { HttpServerResponse } from "effect/http"
 import * as tables from "../database/AuthSchema.ts"
 import { Auth } from "./Auth.ts"
@@ -194,7 +194,8 @@ export const layer = (
 	| Records
 	| Access
 	| Mail
-	| Crypto.Crypto
+	| SecureRandom.SecureRandom
+	| Digest.Digest
 > =>
 	Layer.effect(
 		Auth,
@@ -203,7 +204,8 @@ export const layer = (
 			const organization = yield* Organization
 			const access = yield* Access
 			const mail = yield* Mail
-			const crypto = yield* Crypto.Crypto
+			const crypto = yield* SecureRandom.SecureRandom
+			const hashes = yield* Digest.Digest
 			// The SDK callbacks share only their own HTTP request state.
 			const requestState = new AsyncLocalStorage<{
 				identity?: AccessIdentity
@@ -538,9 +540,9 @@ export const layer = (
 										})
 									return Hex.encode(
 										await runPromise(
-											crypto
+											hashes
 												.digest(
-													"SHA-256",
+													Digest.sha256,
 													new TextEncoder().encode(challenge + "." + code),
 												)
 												.pipe(Effect.orDie),
@@ -798,7 +800,7 @@ export const layer = (
 							yield* access.emailRate("send-ip:" + input.address, 10)
 							const email = Str.toLowerCase(Str.trim(input.email))
 							yield* access.emailRate("send-email:" + email, 1)
-							const id = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
+							const id = yield* crypto.uuidV7().pipe(Effect.orDie)
 							const challenge = yield* Effect.promise(() =>
 								new SignJWT({
 									email,

@@ -9,7 +9,6 @@ import {
 	Cause,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -17,6 +16,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { BotRecords } from "../bots/BotRecords.ts"
 import { Chain } from "../chats/ChatHost.ts"
 import { Grants } from "./Grants.ts"
@@ -214,14 +214,14 @@ export const defaultTimeout = 24 * 60 * 60 * 1000
 export const make: Effect.Effect<
 	typeof Requests.Service,
 	never,
-	BotRecords | Grants | Rules | Settings | Crypto.Crypto | Records
+	BotRecords | Grants | Rules | Settings | SecureRandom.SecureRandom | Records
 > = Effect.gen(function* () {
 	const settings = yield* Settings
 	const report = yield* Report.make
 	const records = yield* BotRecords
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const newId = crypto
-		.randomUUIDv7()
+		.uuidV7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const grants = yield* Grants
 	const rules = yield* Rules

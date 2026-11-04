@@ -1,6 +1,5 @@
 import { homedir } from "node:os"
 import {
-	Crypto,
 	Effect,
 	Config as EffectConfig,
 	FileSystem,
@@ -10,6 +9,7 @@ import {
 	Predicate,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 
 /** A failure that the person can read and act on. */
@@ -191,10 +191,13 @@ export const write = (
 	}).pipe(Effect.mapError(cannot("write", file)))
 
 /** A new random machine ID: 32 hex characters. */
-export const makeMachineId: Effect.Effect<string, never, Crypto.Crypto> =
-	Effect.gen(function* () {
-		const crypto = yield* Crypto.Crypto
-		// A machine with no secure random numbers cannot pair, so this is a defect.
-		const bytes = yield* crypto.randomBytes(16).pipe(Effect.orDie)
-		return Hex.encode(bytes)
-	})
+export const makeMachineId: Effect.Effect<
+	string,
+	never,
+	SecureRandom.SecureRandom
+> = Effect.gen(function* () {
+	const crypto = yield* SecureRandom.SecureRandom
+	// A machine with no secure random numbers cannot pair, so this is a defect.
+	const bytes = yield* crypto.randomBytes(16).pipe(Effect.orDie)
+	return Hex.encode(bytes)
+})

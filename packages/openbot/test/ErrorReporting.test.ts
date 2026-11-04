@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import {
 	Array as Arr,
 	Cause,
@@ -63,8 +63,8 @@ it.live(
 			Layer.provide(collector),
 			Layer.provide(records),
 			Layer.provideMerge(NodeHttpServer.layerTest),
-			// The error logs make their request ids with the Crypto service.
-			Layer.provide(NodeServices.layer),
+			// The error logs make their request ids with the SecureRandom service.
+			Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 		)
 		const status = (path: string) =>
 			Effect.map(HttpClient.get(path), (response) => response.status)
@@ -130,8 +130,8 @@ it.live(
 			Layer.provide(collector),
 			Layer.provide(records),
 			Layer.provideMerge(NodeHttpServer.layerTest),
-			// The error logs make their request ids with the Crypto service.
-			Layer.provide(NodeServices.layer),
+			// The error logs make their request ids with the SecureRandom service.
+			Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 		)
 		return Effect.gen(function* () {
 			assert.strictEqual((yield* HttpClient.get("/unavailable")).status, 503)
@@ -198,7 +198,9 @@ it.live("database startup failure is reported without a working database", () =>
 			Effect.provide(
 				DatabasePostgres.layer({
 					databaseUrl: Redacted.make("postgres://127.0.0.1:1/unavailable"),
-				}).pipe(Layer.provide(NodeServices.layer)),
+				}).pipe(
+					Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+				),
 			),
 		)
 		const exit = yield* ErrorReporting.withStartup(program).pipe(

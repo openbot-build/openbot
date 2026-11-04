@@ -16,11 +16,11 @@ import {
 	type PlatformError,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import type { SecretStorageError } from "../secrets/Secrets.ts"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Channels as Domain, Execution } from "@openbot-build/domain"
@@ -167,7 +167,8 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const store = yield* Store
 	const sql = yield* SqlClient.SqlClient
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const inbox = yield* ChannelInbox
 	const admit = yield* ChannelAdmission.make
 	const submit = (
@@ -193,8 +194,8 @@ const make = Effect.gen(function* () {
 			const commandKey = Execution.CommandKey.make(
 				"channel-send:" +
 					Hex.encode(
-						yield* crypto.digest(
-							"SHA-256",
+						yield* hashes.digest(
+							Digest.sha256,
 							new TextEncoder().encode(source.id + ":" + step),
 						),
 					),
@@ -239,8 +240,7 @@ const make = Effect.gen(function* () {
 											organizationId,
 										)
 							const id =
-								previous?.id ??
-								(yield* crypto.randomUUIDv7().pipe(Effect.orDie))
+								previous?.id ?? (yield* crypto.uuidV7().pipe(Effect.orDie))
 							const payload = {
 								channelId: input.channelId,
 								deliveryId: id,

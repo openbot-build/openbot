@@ -15,7 +15,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	HashMap,
 	Layer,
@@ -24,6 +23,7 @@ import {
 	Redacted,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import type { PgClient } from "@effect/sql-pg"
 import { sql } from "drizzle-orm"
 import * as Check from "../authorization/Check.ts"
@@ -85,12 +85,12 @@ export const make: Effect.Effect<
 	| Probe
 	| Governance
 	| IndexWork
-	| Crypto.Crypto
+	| SecureRandom.SecureRandom
 	| Authorization.Auth
 > = Effect.gen(function* () {
 	const checks = yield* Check.make
 	const governance = yield* Governance
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const index = yield* IndexWork
@@ -242,7 +242,7 @@ export const make: Effect.Effect<
 			)
 			return yield* StoredConnections.saveDraft(db, yield* owner, {
 				// A platform without secure random numbers is broken.
-				id: yield* crypto.randomUUIDv7().pipe(Effect.orDie),
+				id: yield* crypto.uuidV7().pipe(Effect.orDie),
 				revision: 0,
 				input,
 				discovery: result,

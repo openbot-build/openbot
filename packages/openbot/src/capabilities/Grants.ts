@@ -4,12 +4,12 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { BotRecords } from "../bots/BotRecords.ts"
 import { decidingGrant } from "./Policy.ts"
 
@@ -69,12 +69,12 @@ export class Grants extends Context.Service<
 export const make: Effect.Effect<
 	typeof Grants.Service,
 	never,
-	BotRecords | Crypto.Crypto
+	BotRecords | SecureRandom.SecureRandom
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const newId = crypto
-		.randomUUIDv7()
+		.uuidV7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const grants = records.collection("grant", BotsApi.Grant, BotsApi.GrantStatus)
 	const put = (organizationId: string, grant: Grant) =>

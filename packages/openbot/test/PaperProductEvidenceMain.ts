@@ -1,4 +1,4 @@
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Chat, Item, Model } from "@openbot-build/core"
 import { Bots } from "@openbot-build/domain"
@@ -315,6 +315,6 @@ const main = Effect.gen(function* () {
 
 main.pipe(
 	Effect.scoped,
-	Effect.provide(NodeServices.layer),
+	Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	NodeRuntime.runMain,
 )

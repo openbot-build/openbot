@@ -1,4 +1,5 @@
 import { Redacted } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no API to compare secrets in constant time.
 import { timingSafeEqual } from "node:crypto"
 import { Computers as ComputerData } from "@openbot-build/domain"
@@ -10,7 +11,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	pipe,
@@ -90,17 +90,18 @@ export const make = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
 	const secrets = yield* Secrets
 	const computers = yield* Computers
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const stored = Failures.replace("The pairing store failed", () =>
 		ComputerData.ComputersUnavailable.make({}),
 	)
 	// OpenBot needs secure random numbers and SHA-256 to run, so a failure here is a defect.
 	const randomBytes = (size: number) =>
 		crypto.randomBytes(size).pipe(Effect.orDie)
-	const sha = (value: string) => hashToken(crypto, value)
+	const sha = (value: string) => hashToken(hashes, value)
 	/** A code like `KDTW-7Q3M`. */
 	const newCode = crypto
-		.randomIntBetween(0, alphabet.length, { halfOpen: true })
+		.intBetween(0, alphabet.length, { halfOpen: true })
 		.pipe(
 			Effect.replicateEffect(8),
 			Effect.map((picks) =>

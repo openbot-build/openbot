@@ -1,11 +1,6 @@
 import { Execution } from "@openbot-build/domain"
-import {
-	Array as Arr,
-	Crypto,
-	Effect,
-	type PlatformError,
-	Stream,
-} from "effect"
+import { Array as Arr, Effect, type PlatformError, Stream } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { prepare, type Command } from "./Command.ts"
 export type { Command } from "./Command.ts"
 import { Client, type ClientError } from "./Client.ts"
@@ -17,7 +12,7 @@ export const cancel = Effect.fn("Executions.cancel")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -41,7 +36,7 @@ export const decide = Effect.fn("Executions.decide")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(

@@ -10,12 +10,12 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Redacted,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import * as Db from "../database/Database.ts"
 import { executionFailures } from "../database/ExecutionSchema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
@@ -89,7 +89,7 @@ export class Records extends Context.Service<Records, Service>()(
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const record = Effect.fn("ErrorRecords.record")(
 		function* (
 			cause: Cause.Cause<unknown>,
@@ -104,7 +104,7 @@ const make = Effect.gen(function* () {
 				Schema.is(Execution.Failure)(reason.error)
 			)
 				return { errorId: reason.error.errorId, category }
-			const errorId = Execution.ErrorId.make(yield* crypto.randomUUIDv7())
+			const errorId = Execution.ErrorId.make(yield* crypto.uuidV7())
 			const saved = yield* secrets.seal(
 				yield* cause.pipe(snapshot, Schema.encodeEffect(codec)),
 				`failure:${errorId}`,

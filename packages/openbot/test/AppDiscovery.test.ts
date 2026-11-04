@@ -64,9 +64,9 @@ import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.layer needs a function that makes a Node HTTP server.
 import { createServer } from "node:http"
 import {
+	NodeCrypto,
 	NodeHttpServer as PlatformHttpServer,
 	NodeServices,
-	NodeCrypto,
 } from "@effect/platform-node"
 import {
 	FetchHttpClient,
@@ -109,7 +109,11 @@ import * as PublicIndex from "../src/apps/Index.ts"
 import * as IndexStore from "../src/apps/IndexStore.ts"
 
 /** The Node services for the test servers, and an HTTP client to call them. */
-const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
+const platform = Layer.mergeAll(
+	NodeServices.layer,
+	NodeCrypto.layer,
+	FetchHttpClient.layer,
+)
 
 /** A body given as text, with the JSON content type. */
 const jsonText = (body: string, status = 200) =>
@@ -319,7 +323,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 		Effect.provide(
 			DatabasePostgres.layer({
 				databaseUrl: Redacted.make(database.url),
-			}).pipe(Layer.provide(NodeServices.layer)),
+			}).pipe(Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 		),
 	)
 	const authCalls = yield* Ref.make<ReadonlyArray<string>>([])
@@ -531,7 +535,9 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 			Layer.provideMerge(
 				DatabasePostgres.layer({
 					databaseUrl: Redacted.make(database.url),
-				}).pipe(Layer.provide(NodeServices.layer)),
+				}).pipe(
+					Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+				),
 			),
 			Layer.provideMerge(
 				PlatformHttpServer.layer(createServer, { host: "127.0.0.1", port: 0 }),

@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	Client,
 	Document,
@@ -16,7 +16,6 @@ import {
 } from "@openbot-build/domain"
 import {
 	Cause,
-	Crypto,
 	Effect,
 	Layer,
 	Logger,
@@ -27,6 +26,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as Records from "../src/errors/Records.ts"
 import * as Report from "../src/errors/Report.ts"
@@ -60,7 +60,7 @@ const services = Records.layer.pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const encode = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 const collect = () => {
@@ -100,9 +100,10 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 				const sql = yield* PgClient.PgClient
 				const db = yield* Db.make
 				const secrets = yield* Secrets.Secrets
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* SecureRandom.SecureRandom
+				const hashes = yield* Digest.Digest
 				const report = yield* Report.make
-				const id = ConnectionId.make(yield* crypto.randomUUIDv4())
+				const id = ConnectionId.make(yield* crypto.uuidV4())
 				const owner = StoredConnections.ownerKey({
 					organizationId: "app-org",
 					userId: id,
@@ -190,7 +191,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					{
 						db,
 						secrets,
-						crypto,
+						crypto: hashes,
 						report,
 						sessions: ConnectionSessions.of({
 							open: () =>
@@ -235,11 +236,12 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 			return Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
 				const secrets = yield* Secrets.Secrets
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* SecureRandom.SecureRandom
+				const hashes = yield* Digest.Digest
 				const db = yield* Db.make
 				const report = yield* Report.make
 				const owner = "test-binding-owner"
-				const id = yield* crypto.randomUUIDv4()
+				const id = yield* crypto.uuidV4()
 				const body = yield* secrets.seal(
 					'{"private-app-record":',
 					yield* encode(["connection", owner, id]),
@@ -249,7 +251,7 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 					{
 						db,
 						secrets,
-						crypto,
+						crypto: hashes,
 						report,
 						sessions: ConnectionSessions.of({
 							open: () => Effect.die("A broken connection must not be opened."),

@@ -11,7 +11,6 @@ import {
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,
-	Crypto,
 	Effect,
 	Layer,
 	type Redacted,
@@ -19,6 +18,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { HttpClientResponse, type HttpMethod } from "effect/http"
 import { SqlClient } from "effect/sql"
 
@@ -41,8 +41,8 @@ const browser =
 			const input = lifecycle
 				? {
 						...(Schema.is(Schema.JsonObject)(payload) ? payload : {}),
-						commandKey: yield* Crypto.Crypto.pipe(
-							Effect.flatMap((crypto) => crypto.randomUUIDv4()),
+						commandKey: yield* SecureRandom.SecureRandom.pipe(
+							Effect.flatMap((crypto) => crypto.uuidV4()),
 						),
 					}
 				: payload
@@ -357,9 +357,9 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const alice = yield* host.login("manual-alice")
 				const bob = yield* host.login("manual-bob")
 				const send = browser(host, alice.session)
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* SecureRandom.SecureRandom
 				const input = {
-					id: yield* crypto.randomUUIDv4(),
+					id: yield* crypto.uuidV4(),
 					name: "Manual documents",
 					transport: "streamable-http",
 					url: publisher.origin + "/mcp",

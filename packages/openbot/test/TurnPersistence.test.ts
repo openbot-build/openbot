@@ -2,7 +2,7 @@ import { Delegations } from "../src/bots/Delegations.ts"
 import { Bots } from "../src/bots/Bots.ts"
 import { LiveConnections } from "../src/chats/live/LiveConnections.ts"
 import { ReviewTools } from "../src/capabilities/ReviewTools.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -105,7 +105,7 @@ const services = ToolSteps.layer.pipe(
 	),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 
 const setup = (namespace: string) =>

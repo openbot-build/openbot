@@ -1,5 +1,5 @@
 import { changed } from "./Commands.ts"
-import { NodeSocket } from "@effect/platform-node"
+import { NodeWS } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { ComputersApi } from "@openbot-build/api"
 import {
@@ -35,10 +35,7 @@ class TimedOut extends Schema.TaggedError<
 }
 
 it.layer(
-	Layer.merge(
-		BrowserHost.layerPlatform,
-		NodeSocket.layerWebSocketConstructorWS,
-	),
+	Layer.merge(BrowserHost.layerPlatform, NodeWS.layerWebSocketConstructor),
 	{ excludeTestServices: true },
 )((it) => {
 	it.effect(

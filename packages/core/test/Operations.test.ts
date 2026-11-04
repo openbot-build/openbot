@@ -2,7 +2,6 @@ import { assert, it } from "@effect/vitest"
 import {
 	Array as Arr,
 	Cause,
-	Crypto,
 	Deferred,
 	Effect,
 	Exit,
@@ -13,8 +12,9 @@ import {
 	Stream,
 	type Duration,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { AiError, Response, Tool, Toolkit } from "effect/ai"
-import { TestClock, TestCrypto } from "effect/testing"
+import { TestClock } from "effect/testing"
 import {
 	Chat,
 	type ChatStore,
@@ -60,20 +60,20 @@ const model = (tool: string, count = 1) => {
 }
 
 /**
- * Operations need random ids. TestCrypto gives the same ids on each run.
- * These tests make no digests.
+ * Operations need random ids. This source gives the same ids on each run: each
+ * call fills its bytes from a counter. These tests make no digests.
  */
-const crypto = TestCrypto.layer("operations").pipe(
-	Layer.provide(
-		Layer.succeed(
-			Crypto.Crypto,
-			Crypto.make({
-				randomBytes: (size) => new Uint8Array(size),
-				digest: () => Effect.die("The Operations tests make no digests."),
-			}),
-		),
-	),
-)
+const crypto = Layer.sync(SecureRandom.SecureRandom, () => {
+	let next = 0
+	return SecureRandom.make((size) => {
+		const bytes = new Uint8Array(size)
+		for (let index = 0; index < size; index++) {
+			next = (next + 1) % 256
+			bytes[index] = next
+		}
+		return bytes
+	})
+})
 
 const operations = (settings: Partial<Operations.Settings> = {}) =>
 	Layer.effect(

@@ -10,7 +10,6 @@ import {
 	Context,
 	Option,
 	HashMap,
-	Crypto,
 	Effect,
 	Exit,
 	Layer,
@@ -21,8 +20,9 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { assert, layer, vi } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	HostTools,
 	OpenBot,
@@ -50,7 +50,11 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose"
 const { settled } = Messages
 
 /** The services of the login test: the Node services and the fetch HTTP client. */
-const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
+const platform = Layer.mergeAll(
+	NodeServices.layer,
+	NodeCrypto.layer,
+	FetchHttpClient.layer,
+)
 
 const SignInStart = Schema.Struct({ url: Schema.String })
 const ModelMissing = Schema.Struct({ reason: Schema.String })
@@ -66,7 +70,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 		"signed OIDC login, session lifecycle, member isolation and PostgreSQL restart",
 		() =>
 			Effect.gen(function* () {
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* Digest.Digest
 				const database = yield* PostgresTest.start
 				const issuer = "https://id.example.com"
 				const publicOrigin = "https://e.example.com"
@@ -147,7 +151,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 					assert.ok(transaction)
 					const challenge = yield* crypto
 						.digest(
-							"SHA-256",
+							Digest.sha256,
 							new TextEncoder().encode(form.get("code_verifier") ?? ""),
 						)
 						.pipe(Effect.orDie)
@@ -273,7 +277,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				})
 				const migration = yield* Layer.build(
 					DatabasePostgres.layer(options).pipe(
-						Layer.provide(NodeServices.layer),
+						Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 					),
 				)
 				/** Runs SQL on the test database, past the server. */

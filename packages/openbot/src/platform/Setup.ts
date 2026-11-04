@@ -2,7 +2,8 @@ import * as Access from "@openbot-build/domain/Access"
 import { type Settings as SettingsModel } from "@openbot-build/domain"
 
 import { Authorization } from "@openbot-build/domain"
-import { Crypto, Effect, Option, Redacted, Schema } from "effect"
+import { Effect, Option, Redacted, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import {
@@ -63,7 +64,7 @@ export const run = (input: Input) =>
 		const settings = yield* Settings
 		const secrets = yield* Secrets
 		const admins = yield* PlatformAdmins
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		if (input.adminEmails.length === 0)
 			return yield* SetupInvalid.make({
 				message: "Name at least one platform admin email.",

@@ -4,7 +4,7 @@ import * as Records from "../src/errors/Records.ts"
 import * as Store from "../src/execution/Store.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import {
 	Discovery,
@@ -73,7 +73,9 @@ const candidate = Discovery.Candidate.make({
 })
 
 // The test uses a real PostgreSQL server, so it runs in real time.
-layer(NodeServices.layer, { excludeTestServices: true })((it) => {
+layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
+	excludeTestServices: true,
+})((it) => {
 	it.effect(
 		"developer proofs, members and report history stay saved without sharing account capabilities",
 		() =>

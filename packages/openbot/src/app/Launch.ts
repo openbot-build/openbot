@@ -1,5 +1,6 @@
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Array as Arr, Effect, Layer } from "effect"
+import type { Digest, SecureRandom } from "effect/crypto"
 import { Command } from "effect/cli"
 import { FetchHttpClient, type HttpClient } from "effect/http"
 import type * as Configuration from "../configuration/Configuration.ts"
@@ -10,16 +11,21 @@ import * as ErrorReporting from "../errors/Reporting.ts"
 
 /**
  * The platform services that a server of `server` and `main` can use: the Node
- * services and the HTTP client.
+ * services, secure random values, digests, and the HTTP client.
  */
-export type Platform = NodeServices.NodeServices | HttpClient.HttpClient
+export type Platform =
+	| NodeServices.NodeServices
+	| SecureRandom.SecureRandom
+	| Digest.Digest
+	| HttpClient.HttpClient
 
 /**
  * Runs a server as the `openbot-server` program does. It reads the settings from
  * the environment and from secret files, blocks outbound connections to private
  * addresses, and logs a failed start. `make` gives the server, such as
  * `Server.layerLive`. It runs until the process stops. It gives the server the
- * fetch HTTP client, and needs the Node services (`NodeServices.layer`).
+ * fetch HTTP client, and needs the Node services (`NodeServices.layer` and
+ * `NodeCrypto.layer`).
  */
 export const server = <ROut, E>(
 	make: (settings: Configuration.Settings) => Layer.Layer<ROut, E, Platform>,
@@ -73,7 +79,7 @@ export const main = <ROut, E>(
 			{ version: "0.1.0" },
 		).pipe(
 			// @effect-diagnostics-next-line strictEffectProvide:off -- This program owns the whole application Layer scope.
-			Effect.provide(NodeServices.layer),
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 		),
 		// `server` logs a failed start with its annotations, and the command line
 		// prints its own errors. The default report of runMain would log the same

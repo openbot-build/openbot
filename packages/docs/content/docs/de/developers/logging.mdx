@@ -16,7 +16,7 @@ Stelle ihn außerhalb des Servers bereit. So bleibt er offen, bis der Server
 geschlossen ist.
 
 ```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -38,7 +38,13 @@ NodeRuntime.runMain(
 		const settings = yield* EnvironmentConfiguration.load
 		return yield* Layer.launch(
 			Server.layerLive(settings).pipe(
-				Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+				Layer.provide(
+					Layer.mergeAll(
+						NodeServices.layer,
+						NodeCrypto.layer,
+						FetchHttpClient.layer,
+					),
+				),
 			),
 		)
 	}).pipe(Effect.provide(alerts)),

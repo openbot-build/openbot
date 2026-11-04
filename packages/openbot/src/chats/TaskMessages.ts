@@ -5,7 +5,8 @@ import {
 	executionCallers,
 	restrictExecution,
 } from "@openbot-build/domain"
-import { Clock, Crypto, Effect, Option, Schema } from "effect"
+import { Clock, Effect, Option, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import * as Db from "../database/Database.ts"
 import { Store } from "../execution/Store.ts"
 import { Delegations } from "../bots/Delegations.ts"
@@ -27,7 +28,7 @@ export const make = Effect.gen(function* () {
 	const sources = yield* DelegationSource.make
 	const delegations = yield* Delegations
 	const usage = yield* DelegationUsage.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const definition = yield* CoreStore.define({
 		stores: { [ChatHost.chatHostId]: ChatHost.chatHostStore, ...Todos.stores },
 		schemaVersion: "chat/1",
@@ -67,7 +68,7 @@ export const make = Effect.gen(function* () {
 						return yield* Execution.Forbidden.make({})
 					// Use another command key inside this transaction. The public key still names the returned Turn.
 					const inputKey = Execution.CommandKey.make(
-						yield* crypto.randomUUIDv7().pipe(Effect.orDie),
+						yield* crypto.uuidV7().pipe(Effect.orDie),
 					)
 					if (!Execution.isTerminal(previous.execution.record.status)) {
 						const receipt = yield* inputs.message(namespace, inputKey, message)
@@ -84,7 +85,7 @@ export const make = Effect.gen(function* () {
 						parentExecutionId: previous.origin.key.id,
 					})
 					const id = Domain.DelegationId.make(
-						"dlg_" + (yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
+						"dlg_" + (yield* crypto.uuidV7().pipe(Effect.orDie)),
 					)
 					// A new person command owns this round. It is not a child of the old, ended round.
 					const receipt = yield* store.submit(

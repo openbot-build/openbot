@@ -1,5 +1,6 @@
 import { Developers } from "@openbot-build/domain"
-import { Crypto, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Db from "../database/Database.ts"
 import * as Rows from "./DeveloperRows.ts"
@@ -11,7 +12,7 @@ const NoticeIdentity = Schema.fromJsonString(
 /** The caller commits a notice with the state that caused it. */
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const namespace = yield* IndexNamespace
 	/** Post a notice once. The same owner and identity always give the same notice ID. */
 	const emit = Effect.fn("DeveloperNotices.emit")(function* (
@@ -24,7 +25,7 @@ export const make = Effect.gen(function* () {
 			...identity,
 		]).pipe(Effect.orDie)
 		const digest = yield* crypto
-			.digest("SHA-256", new TextEncoder().encode(text))
+			.digest(Digest.sha256, new TextEncoder().encode(text))
 			.pipe(Effect.orDie)
 		yield* Rows.postNotice(db, namespace, owner, {
 			...value,

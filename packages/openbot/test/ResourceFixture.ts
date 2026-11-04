@@ -1,12 +1,12 @@
 import { PgClient } from "@effect/sql-pg"
 import {
+	NodeCrypto,
 	NodeHttpClient,
 	NodeHttpServer,
 	NodeServices,
 } from "@effect/platform-node"
 import {
 	Context,
-	Crypto,
 	Effect,
 	Exit,
 	Layer,
@@ -15,6 +15,7 @@ import {
 	Scope,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import {
 	Runner,
 	RunnerAddress,
@@ -45,7 +46,7 @@ export const services = Records.layer.pipe(
 	Layer.provideMerge(database),
 	Layer.provideMerge(RunnerStorage.layerMemory),
 	Layer.provideMerge(NodeHttpClient.layerUndici),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const secret = Layer.succeed(PrivateRpc.Secret, Redacted.make("private-test"))
 export const start = (options?: {
@@ -60,7 +61,8 @@ export const start = (options?: {
 		const shared = yield* Effect.context<
 			| Records.Records
 			| PgClient.PgClient
-			| Crypto.Crypto
+			| SecureRandom.SecureRandom
+			| Digest.Digest
 			| RunnerStorage.RunnerStorage
 			| HttpClient.HttpClient
 			| SqlClient.SqlClient

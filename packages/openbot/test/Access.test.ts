@@ -1,5 +1,5 @@
 import { Array as Arr } from "effect"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { Authorization } from "@openbot-build/domain"
@@ -156,7 +156,10 @@ it.live(
 				access.check({ ...identity, invitation: "missing" }),
 				"invitation",
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -230,7 +233,10 @@ it.live(
 				0,
 			)
 			assert.ok((yield* access.audit(undefined, 100)).items.length >= 9)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -271,7 +277,10 @@ it.live(
 			yield* access.check(guest)
 			yield* sql`update openbot_invitations set status='revoked' where id='outside'`
 			yield* denied(access.check(guest), "invitation")
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -340,7 +349,10 @@ it.live(
 					.pipe(Effect.result))._tag,
 				"Failure",
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -373,6 +385,9 @@ it.live(
 				(yield* sql`select id from openbot_auth_session`).length,
 				0,
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )

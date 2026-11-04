@@ -2,15 +2,8 @@ import { Developers } from "@openbot-build/domain"
 
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import {
-	Array as Arr,
-	Clock,
-	Context,
-	Crypto,
-	Effect,
-	Layer,
-	Schema,
-} from "effect"
+import { Array as Arr, Clock, Context, Effect, Layer, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import {
 	developerInvitations,
@@ -79,14 +72,14 @@ const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
 export const make: Effect.Effect<
 	typeof DeveloperMembers.Service,
 	never,
-	PgClient.PgClient | DeveloperAccess | Crypto.Crypto
+	PgClient.PgClient | DeveloperAccess | SecureRandom.SecureRandom
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
-	const crypto = yield* Crypto.Crypto
-	const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
+	const crypto = yield* SecureRandom.SecureRandom
+	const newId = crypto.uuidV7().pipe(Effect.orDie)
 	const conflict = (reason: string) =>
 		Developers.DeveloperConflict.make({ reason })
 	const admin = Effect.fn("DeveloperMembers.admin")(function* (

@@ -1,11 +1,12 @@
 import { Channels as Domain } from "@openbot-build/domain"
-import { type Crypto, Effect, Redacted } from "effect"
+import { Effect, Redacted } from "effect"
+import type { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import type { Credentials } from "./Channels.ts"
 
 /** The input credentials, with the secrets that OpenBot makes itself. */
 export const fromInput = (
-	crypto: Crypto.Crypto,
+	crypto: SecureRandom.SecureRandom["Service"],
 	value: Domain.CredentialsInput,
 	current?: Credentials,
 ): Effect.Effect<Credentials> =>

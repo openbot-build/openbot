@@ -10,7 +10,8 @@ import type { Discovery } from "@openbot-build/protocol"
 import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey } from "./StoredConnections.ts"
 
-import { Array as Arr, Context, Crypto, Effect, Layer } from "effect"
+import { Array as Arr, Context, Effect, Layer } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Connections, type Error as ConnectionsError } from "./Connections.ts"
 import * as Db from "../database/Database.ts"
 import * as Failures from "../errors/Failures.ts"
@@ -114,7 +115,7 @@ export class Experience extends Context.Service<Experience, Service>()(
 export const make = Effect.gen(function* () {
 	const connections = yield* Connections
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	return Experience.of({
 		export: (identity: typeof Identity.Service) =>
 			connections.listConnections.pipe(
@@ -137,7 +138,7 @@ export const make = Effect.gen(function* () {
 				connections.prepareConnection(entry.cardUrl).pipe(
 					Effect.provideService(Identity, identity),
 					Effect.flatMap((draft) =>
-						crypto.randomUUIDv7().pipe(
+						crypto.uuidV7().pipe(
 							Effect.orDie,
 							Effect.flatMap((id) =>
 								StoredConnections.saveDraft(db, ownerKey(identity), {

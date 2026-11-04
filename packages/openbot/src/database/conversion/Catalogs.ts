@@ -1,5 +1,6 @@
 import { Execution } from "@openbot-build/domain"
-import { Array as Arr, Crypto, Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import * as DeveloperWatches from "../../apps/DeveloperWatches.ts"
@@ -52,12 +53,12 @@ export const make = Effect.gen(function* () {
 	const sql = yield* SqlClient.SqlClient
 	const store = yield* Store
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const progress = yield* Progress.make
 	const imported = yield* Imported.make
 	const digest = (value: string) =>
 		crypto
-			.digest("SHA-256", new TextEncoder().encode(value))
+			.digest(Digest.sha256, new TextEncoder().encode(value))
 			.pipe(Effect.map(Hex.encode))
 	const ownerOf = (value: string) =>
 		Schema.decodeEffect(Version.Owner)(value).pipe(

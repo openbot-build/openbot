@@ -10,7 +10,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -19,6 +18,7 @@ import {
 	Redacted,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
 import * as Failures from "../errors/Failures.ts"
 import { ConversationKind } from "./Channel.ts"
@@ -93,8 +93,10 @@ const binding = (id: string) => `openbot_channels:${id}:credentials`
  * Secure random bytes. A platform without secure random numbers cannot keep
  * secrets, so a failure here is a defect.
  */
-const randomBytes = (crypto: Crypto.Crypto, size: number) =>
-	Effect.orDie(crypto.randomBytes(size))
+const randomBytes = (
+	crypto: SecureRandom.SecureRandom["Service"],
+	size: number,
+) => Effect.orDie(crypto.randomBytes(size))
 
 const state = (
 	hints: Readonly<Record<string, string | null>>,
@@ -366,7 +368,8 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const checks = yield* Check.make
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	/** A failure of the database or of the secrets is `ChannelsUnavailable`. The log keeps the cause. */
 	const stored = Failures.replace(
 		"OpenBot could not read or write a Channel.",
@@ -374,7 +377,7 @@ export const make = Effect.gen(function* () {
 	)
 	/** The SHA-256 of a link code, as hex. Only this hash is stored. */
 	const hashOf = (code: string) =>
-		crypto.digest("SHA-256", new TextEncoder().encode(code)).pipe(
+		hashes.digest(Digest.sha256, new TextEncoder().encode(code)).pipe(
 			// SHA-256 is always there on a working platform, so a failure here is a defect.
 			Effect.orDie,
 			Effect.map(Hex.encode),

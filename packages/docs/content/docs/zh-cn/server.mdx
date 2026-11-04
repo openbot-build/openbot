@@ -27,7 +27,8 @@ Launch.main(Server.layerLive)
 `Launch.main` 先读取命令行。带 `--help`
 时它显示帮助后停止，这时不需要任何设置。然后它从环境变量或机密文件中读取[配置](/zh-cn/configuration)中的变量。它会阻止到私有地址的出站连接，并在启动失败时写入日志。然后它运行你给它的 Layer，直到进程停止。它把 Node.js 服务和 fetch
 HTTP 客户端交给这个 Layer。`Launch.server`
-是同一个程序的 Effect 形式，供你自己运行。请把 `NodeServices.layer` 交给它。
+是同一个程序的 Effect 形式，供你自己运行。请把 `NodeServices.layer` 和
+`NodeCrypto.layer` 交给它。
 
 `EnvironmentConfiguration.load`
 给出同样的设置：`host`、`port`、`databaseUrl`、`secretKeys`、`clusterSecret`、`clusterHost`
@@ -114,12 +115,12 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 `OpenBot.layer`、`Server.layer` 和 `Server.layerFixed`
 不会构建来自 OpenBot 外部的服务。它们需要这些服务，由你的程序以 Layer 的形式交给它们。这样测试可以交给它们假的服务，你的程序也可以交给它们自己的服务。
 
-| 服务                          | 是什么                                                                                                                           | 真实服务器使用的 Layer                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| 共享服务                      | 数据库连接池、密钥和共享设置。                                                                                                   | `OpenBot.layerShared(options)`                  |
-| 外部服务（`OpenBot.Outside`） | Computer 提供方的驱动、Live 后端、密码管理器的读取器、App 的网络和检查、域名的 DNS 检查、App Index 的公共网络，以及 App 的发现。 | `OpenBot.layerOutside`                          |
-| 宿主工具（`HostTools`）       | 你的程序交给每个 Chat 的工具。                                                                                                   | `HostTools.none`                                |
-| 平台服务                      | 文件、路径、随机数和 HTTP 客户端。                                                                                               | `NodeServices.layer` 和 `FetchHttpClient.layer` |
+| 服务                          | 是什么                                                                                                                           | 真实服务器使用的 Layer                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 共享服务                      | 数据库连接池、密钥和共享设置。                                                                                                   | `OpenBot.layerShared(options)`                                      |
+| 外部服务（`OpenBot.Outside`） | Computer 提供方的驱动、Live 后端、密码管理器的读取器、App 的网络和检查、域名的 DNS 检查、App Index 的公共网络，以及 App 的发现。 | `OpenBot.layerOutside`                                              |
+| 宿主工具（`HostTools`）       | 你的程序交给每个 Chat 的工具。                                                                                                   | `HostTools.none`                                                    |
+| 平台服务                      | 文件、路径、随机数、摘要和 HTTP 客户端。                                                                                         | `NodeServices.layer`、`NodeCrypto.layer` 和 `FetchHttpClient.layer` |
 
 `Server.layerLive` 提供除平台服务以外的全部服务。`Launch.main`
 提供平台服务。下面的程序和 `Launch.main(Server.layerLive)`
@@ -259,7 +260,8 @@ NodeRuntime.runMain(Development.launch)
 `Development.launch` 读取与 `Launch.main` 相同的设置，以及
 `OPENBOT_DEV_PUBLIC_ORIGIN`。设置了 `OPENBOT_DEV_S3_*`
 变量时，它会把这个本地对象存储用于文件，并创建存储桶。`Development.layer`
-是没有这些步骤的服务器。它需要平台服务，例如 `NodeServices.layer` 和
+是没有这些步骤的服务器。它需要平台服务，例如
+`NodeServices.layer`、`NodeCrypto.layer` 和
 `FetchHttpClient.layer`，`Development.launch`
 会提供它们。它自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret`
 用第一个机密密钥生成登录密钥，所以重启后它保持不变。永远不要在生产环境中使用开发服务器。任何能访问它的人都可以登录。

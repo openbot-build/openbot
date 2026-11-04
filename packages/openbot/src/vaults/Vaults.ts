@@ -1,4 +1,5 @@
 import { Redacted } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Vaults as VaultsModel } from "@openbot-build/domain"
 import { Bots as BotsModel } from "@openbot-build/domain"
 import { type Caller } from "@openbot-build/domain"
@@ -7,7 +8,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -213,7 +213,7 @@ export const make = Effect.gen(function* () {
 	const readers = yield* Readers
 	const providers = yield* SecretProviders
 	const botsService = yield* Bots
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const { check, filter, guard } = yield* Check.make
 	/** A platform without secure random numbers is broken. */
 	const newId = (prefix: string) =>

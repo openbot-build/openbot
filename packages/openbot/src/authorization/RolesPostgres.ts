@@ -7,13 +7,13 @@ import { Authorization } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { and, asc, eq } from "drizzle-orm"
 import { roles } from "../database/Schema.ts"
 import { builtin, Roles, RolesUnavailable } from "./Roles.ts"
@@ -41,7 +41,7 @@ const view = (
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const where = (organizationId: string, roleId: string) =>
 		and(eq(roles.organizationId, organizationId), eq(roles.id, roleId))
 	const readOnly = (roleId: string) =>
@@ -79,7 +79,7 @@ export const make = Effect.gen(function* () {
 		create: (organizationId, input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const uuid = yield* Effect.orDie(crypto.randomUUIDv7())
+				const uuid = yield* Effect.orDie(crypto.uuidV7())
 				const row = {
 					organizationId,
 					id: "role_" + Str.replaceAll("-", "")(uuid),

@@ -31,13 +31,13 @@ import {
 	Clock,
 	Context,
 	Cron,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Result,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
 import * as Failures from "../errors/Failures.ts"
 import * as Check from "../authorization/Check.ts"
@@ -230,13 +230,14 @@ export const make = Effect.gen(function* () {
 				Domain.TriggerStorageUnavailable.make({}),
 			),
 		)
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const { check: checkAct, filter, guard } = yield* Check.make
 	// OpenBot needs secure random numbers and SHA-256 to run, so a failure here is a defect.
 	const randomBytes = (size: number) =>
 		crypto.randomBytes(size).pipe(Effect.orDie)
 	const sha = (value: string) =>
-		crypto.digest("SHA-256", encoder.encode(value)).pipe(Effect.orDie)
+		hashes.digest(Digest.sha256, encoder.encode(value)).pipe(Effect.orDie)
 	const stored = (message: string) =>
 		Failures.replace(message, () => Domain.TriggerStorageUnavailable.make({}))
 	const where = (organizationId: string, id: string) =>

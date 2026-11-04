@@ -3,12 +3,12 @@ import {
 	Array as Arr,
 	Cause,
 	Clock,
-	Crypto,
 	Effect,
 	Record as Rec,
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import * as Tables from "../Schema.ts"
 import * as Auth from "../AuthSchema.ts"
@@ -156,11 +156,11 @@ export const makeFor = (dataVersion: string) =>
 	Effect.gen(function* () {
 		const sql = yield* SqlClient.SqlClient
 		const secrets = yield* Secrets
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const report = (step: string, cause: Cause.Cause<unknown>) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const errorId = yield* crypto.randomUUIDv7()
+				const errorId = yield* crypto.uuidV7()
 				const sealed = yield* secrets.seal(
 					yield* cause.pipe(snapshot, Schema.encodeEffect(codec)),
 					`data-upgrade-failure:${errorId}`,

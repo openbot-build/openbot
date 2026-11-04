@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
@@ -34,7 +34,7 @@ const database = Store.layer.pipe(
 			),
 		),
 	),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const owner = '["org","person"]'
 const scope = { issuer: "https://issuer.example", clientId: "client" }

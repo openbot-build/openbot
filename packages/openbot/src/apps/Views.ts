@@ -18,7 +18,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Match,
@@ -27,6 +26,7 @@ import {
 	Schema,
 	type Scope,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Chat, Item, Turn } from "@openbot-build/core"
 
 import * as AppQueries from "./AppQueries.ts"
@@ -247,8 +247,9 @@ export const make = Effect.gen(function* () {
 	const sessions = yield* ConnectionSessions
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
-	const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
+	const newId = crypto.uuidV7().pipe(Effect.orDie)
 	const read = (owner: string, kind: string, id: string) =>
 		db
 			.select()
@@ -736,8 +737,8 @@ export const make = Effect.gen(function* () {
 					const name =
 						"openbot_ui_" +
 						Hex.encode(
-							yield* crypto.digest(
-								"SHA-256",
+							yield* hashes.digest(
+								Digest.sha256,
 								new TextEncoder().encode(
 									yield* Schema.encodeEffect(
 										Schema.fromJsonString(Schema.Array(Schema.String)),

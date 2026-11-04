@@ -11,7 +11,6 @@ import {
 	Chunk,
 	Clock,
 	Context,
-	Crypto,
 	Deferred,
 	Duration,
 	Effect,
@@ -28,6 +27,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import * as Background from "../execution/Background.ts"
 import * as Send from "../execution/Send.ts"
 import { Records } from "../errors/Records.ts"
@@ -223,7 +223,7 @@ export class Sessions extends Context.Service<Sessions, Service>()(
 
 export const make = Effect.gen(function* () {
 	const background = yield* Background.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const scope = yield* Scope.Scope
 	const transport = yield* Transport
 	const access = yield* Send.Access
@@ -453,7 +453,7 @@ export const make = Effect.gen(function* () {
 							Str.replaceAll(
 								"-",
 								"",
-							)(yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
+							)(yield* crypto.uuidV7().pipe(Effect.orDie)),
 					)
 					// The registration has its own scope. Ending the process must not cancel its final RPC reply.
 					const held = yield* transport

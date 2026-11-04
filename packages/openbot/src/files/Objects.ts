@@ -1,5 +1,6 @@
 import { Files } from "@openbot-build/domain"
-import { Crypto, Effect, Option, Redacted } from "effect"
+import { Effect, Option, Redacted } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { HttpClient } from "effect/http"
 import { Secrets } from "../secrets/Secrets.ts"
 import {
@@ -16,7 +17,7 @@ export const make = Effect.gen(function* () {
 	const settings = yield* Settings
 	const secrets = yield* Secrets
 	const client = yield* HttpClient.HttpClient
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const config = settings.platform.pipe(
 		Effect.map(
 			Option.match({
@@ -53,7 +54,7 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const location = yield* target(yield* config)
 			yield* S3.remove(client, location.target, objectKey, now).pipe(
-				Effect.provideService(Crypto.Crypto, crypto),
+				Effect.provideService(SecureRandom.SecureRandom, crypto),
 			)
 		})
 	return { config, target, remove }

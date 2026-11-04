@@ -1,4 +1,4 @@
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
@@ -36,7 +36,9 @@ const cases = [
 	{ point: "before_send", retry: "idempotent", action: "revoke" },
 ] as const
 
-layer(NodeServices.layer, { excludeTestServices: true })((it) => {
+layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
+	excludeTestServices: true,
+})((it) => {
 	for (const { point, retry, action } of cases)
 		it.effect(
 			`a second process takes over ${retry} HTTP work at ${point} with ${action}`,

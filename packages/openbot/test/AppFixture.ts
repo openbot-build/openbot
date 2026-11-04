@@ -4,7 +4,6 @@ import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { NodeHttpServerRequest } from "@effect/platform-node"
 import {
 	Array as Arr,
-	Crypto,
 	Deferred,
 	Duration,
 	Effect,
@@ -18,6 +17,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { Fixture } from "@openbot-build/protocol/testing"
@@ -203,8 +203,9 @@ const listing = (request: RpcRequest, account: string, capabilities: boolean) =>
 export const start = Effect.fn("AppFixture.start")(function* (
 	options: Options = {},
 ) {
-	const crypto = yield* Crypto.Crypto
-	const uuid = crypto.randomUUIDv4().pipe(Effect.orDie)
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
+	const uuid = crypto.uuidV4().pipe(Effect.orDie)
 	/** The origin of the server. It is known when the server listens. */
 	const origin = yield* Deferred.make<string>()
 	const revision = yield* Ref.make(0)
@@ -329,8 +330,8 @@ export const start = Effect.fn("AppFixture.start")(function* (
 
 	/** The S256 code challenge of a PKCE code verifier. */
 	const challenge = (verifier: string) =>
-		crypto
-			.digest("SHA-256", new TextEncoder().encode(verifier))
+		hashes
+			.digest(Digest.sha256, new TextEncoder().encode(verifier))
 			.pipe(Effect.map(Base64Url.encode), Effect.orDie)
 
 	/** Checks a token request against its grant. */

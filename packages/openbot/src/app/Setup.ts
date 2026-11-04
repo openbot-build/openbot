@@ -1,5 +1,5 @@
 import { PgClient } from "@effect/sql-pg"
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 
 import {
 	Config,
@@ -118,6 +118,6 @@ const program = Command.run(setup, { version: "0.1.0" })
 NodeRuntime.runMain(
 	program.pipe(
 		// @effect-diagnostics-next-line strictEffectProvide:off -- This program owns the whole application Layer scope.
-		Effect.provide(NodeServices.layer),
+		Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	),
 )

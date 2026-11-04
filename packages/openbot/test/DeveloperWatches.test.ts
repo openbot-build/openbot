@@ -1,5 +1,5 @@
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -31,7 +31,7 @@ const services = Watches.layer.pipe(
 	Layer.provideMerge(Store.layer),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 
 layer(services, { excludeTestServices: true })((it) => {

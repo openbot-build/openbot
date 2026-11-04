@@ -4,7 +4,8 @@ import {
 	type ChatCommandReceipt,
 	type BotsApi,
 } from "@openbot-build/api"
-import { Crypto, Effect, type PlatformError } from "effect"
+import { Effect, type PlatformError } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
 import { prepare, type Command } from "./Command.ts"
 
@@ -18,7 +19,7 @@ export const message = Effect.fn("Chats.message")(function* (
 ): Effect.fn.Return<
 	Command<ChatCommandReceipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -38,7 +39,7 @@ export const botMessage = Effect.fn("Chats.botMessage")(function* (
 ): Effect.fn.Return<
 	Command<ChatCommandReceipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -61,7 +62,7 @@ export const interrupt = Effect.fn("Chats.interrupt")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -81,7 +82,7 @@ export const remove = Effect.fn("Chats.remove")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(

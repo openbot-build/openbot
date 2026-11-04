@@ -7,7 +7,6 @@ import {
 	Array as Arr,
 	Cause,
 	Context,
-	Crypto,
 	Deferred,
 	Duration,
 	Effect,
@@ -20,6 +19,7 @@ import {
 	Scope,
 	Stream,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
 import { Records } from "../../errors/Records.ts"
@@ -131,13 +131,13 @@ export class Connectors extends Context.Service<Connectors, Service>()(
 
 export const make = Effect.gen(function* () {
 	const background = yield* Background.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const transport = yield* Transport
 	const directory = yield* Directory
 	const access = yield* Access.make
 	const sendAccess = yield* Send.Access
 	const errors = yield* Records
-	const uuid = crypto.randomUUIDv4().pipe(Effect.orDie)
+	const uuid = crypto.uuidV4().pipe(Effect.orDie)
 	const safe = <A, E, R>(
 		effect: Effect.Effect<A, E, R>,
 	): Effect.Effect<A, ComputerFailure, R> =>

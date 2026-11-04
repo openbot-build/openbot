@@ -27,12 +27,12 @@ import {
 	Clock,
 	Cause,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { SqlClient, SqlError } from "effect/sql"
 import * as Db from "../database/Database.ts"
 import {
@@ -719,7 +719,7 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const where = (key: Key) =>
 		and(eq(executions.namespace, key.namespace), eq(executions.id, key.id))
 	const binding = (key: Key, field: string) =>
@@ -881,7 +881,7 @@ const make = Effect.gen(function* () {
 		notify: boolean = true,
 		cancelEpoch: number | null = null,
 	) {
-		const id = yield* crypto.randomUUIDv7()
+		const id = yield* crypto.uuidV7()
 		const encoded = yield* Schema.encodeEffect(json)(body)
 		yield* db.insert(executionCommands).values({
 			namespace: key.namespace,
@@ -929,9 +929,7 @@ const make = Effect.gen(function* () {
 			if (Execution.isTerminal((yield* view(owner.value)).status))
 				return yield* Execution.Conflict.make({ id: input.ownerExecutionId })
 		}
-		const id = yield* Schema.decodeEffect(Execution.Id)(
-			yield* crypto.randomUUIDv7(),
-		)
+		const id = yield* Schema.decodeEffect(Execution.Id)(yield* crypto.uuidV7())
 		const key = { namespace, id }
 		const now = yield* Clock.currentTimeMillis
 		const identity = yield* Schema.encodeEffect(identityCodec)(input.identity)
@@ -2040,7 +2038,7 @@ const make = Effect.gen(function* () {
 					return call
 				}
 				const id = yield* Schema.decodeEffect(Execution.CallId)(
-					yield* crypto.randomUUIDv7(),
+					yield* crypto.uuidV7(),
 				)
 				const now = yield* Clock.currentTimeMillis
 				yield* db.insert(executionCalls).values({

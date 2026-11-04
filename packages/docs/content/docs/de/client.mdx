@@ -33,7 +33,7 @@ Installiere eine genaue Version. Mit `sha-<vollständiger-Commit-Hash>` wählst 
 einen veröffentlichten Commit. Die Lockdatei hält die genaue Version fest:
 
 ```sh
-pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.0.7
+pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
 ```
 
 Der Client enthält gemeinsamen OpenBot-Code und Typen unter MIT. Du brauchst
@@ -77,8 +77,8 @@ bestehenden Chat. Der Beleg nennt die Ausführung. Beobachten Sie sie über
 `client.api.executions.observe` mit der letzten `afterSequence`. Das Schließen
 der Beobachtung bricht die Arbeit nicht ab. `Executions.cancel` und
 `Executions.decide` bereiten auch Befehle mit festen Schlüsseln vor. Geben Sie
-diesen Helfern einen `Crypto`-Dienst der Plattform. Das Node.js-Beispiel nutzt
-`NodeCrypto.layer`.
+diesen Helfern einen `SecureRandom`-Dienst der Plattform. Das Node.js-Beispiel
+nutzt `NodeCrypto.layer`.
 
 | Option           | Pflicht | Was sie tut                                                                                                                 |
 | ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |

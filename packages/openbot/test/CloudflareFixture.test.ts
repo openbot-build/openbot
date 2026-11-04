@@ -1,7 +1,7 @@
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { SqlClient } from "effect/sql"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Effect, Layer, Redacted, Result, String as Str } from "effect"
 import { FetchHttpClient } from "effect/http"
 import * as PostgresTest from "./PostgresTest.ts"
@@ -16,9 +16,12 @@ import {
 } from "./testing/Cloudflare.ts"
 
 // The database and servers use real time.
-layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
-	excludeTestServices: true,
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect("a failed private request keeps only scrubbed cause text", () =>
 		Effect.gen(function* () {
 			const key = "private-test-key"

@@ -5,7 +5,6 @@ import {
 	Array as Arr,
 	Cause,
 	Context,
-	Crypto,
 	Deferred,
 	Effect,
 	Exit,
@@ -19,6 +18,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/http"
 import {
 	Rpc,
@@ -169,7 +169,7 @@ const make = Effect.gen(function* () {
 	const http = yield* HttpClient.HttpClient
 	const serialization = yield* RpcSerialization.RpcSerialization
 	const errors = yield* Records
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const locals = yield* Ref.make(HashMap.empty<string, Local>())
 	const pendingCloses = yield* Ref.make(
 		HashMap.empty<string, Effect.Effect<void, Resource.Error>>(),
@@ -196,7 +196,7 @@ const make = Effect.gen(function* () {
 								),
 							)
 						const errorId = Execution.ErrorId.make(
-							yield* crypto.randomUUIDv4().pipe(Effect.orDie),
+							yield* crypto.uuidV4().pipe(Effect.orDie),
 						)
 						// Records keeps both causes in its StorageError when it cannot seal them.
 						yield* Effect.logError(

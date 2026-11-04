@@ -3,13 +3,13 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Match,
 	Option,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import type { SecretStorageError } from "../secrets/Secrets.ts"
 import {
 	type ServiceExecution,
@@ -207,7 +207,8 @@ const make = (options: Options) =>
 		const namespace = yield* IndexNamespace
 		const inspection = yield* Indexing.PublicationInspection
 		const governance = yield* Governance
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
+		const hashes = yield* Digest.Digest
 		const executionNamespace = `index:${namespace}`
 		const where = (cardUrl: string) => jobWhere(namespace, cardUrl)
 		const row = (cardUrl: string, lock = false) => {
@@ -274,11 +275,11 @@ const make = (options: Options) =>
 						current.generation !== current.completedGeneration
 					const generation = pending
 						? current.generation
-						: yield* crypto.randomUUIDv7()
+						: yield* crypto.uuidV7()
 					if (executionId === null) {
 						const resourceId = Hex.encode(
-							yield* crypto.digest(
-								"SHA-256",
+							yield* hashes.digest(
+								Digest.sha256,
 								new TextEncoder().encode(cardUrl),
 							),
 						)
@@ -364,7 +365,7 @@ const make = (options: Options) =>
 						current.row.generation !== current.row.completedGeneration
 					const generation = pending
 						? current.row.generation
-						: yield* crypto.randomUUIDv7()
+						: yield* crypto.uuidV7()
 					return yield* store.commit(
 						fence,
 						current.saved.record.status === "waiting"

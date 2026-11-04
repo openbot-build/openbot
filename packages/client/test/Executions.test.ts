@@ -8,7 +8,6 @@ import {
 import { Execution } from "@openbot-build/domain"
 import {
 	Array as Arr,
-	Crypto,
 	Effect,
 	Layer,
 	Result,
@@ -17,6 +16,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { HttpApiMiddleware } from "effect/http-api"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
@@ -293,11 +293,8 @@ for (const status of ["completed", "failed"] as const)
 					Effect.provide(client),
 					Effect.result,
 					Effect.provideService(
-						Crypto.Crypto,
-						Crypto.make({
-							randomBytes: (size) => new Uint8Array(size),
-							digest: () => Effect.die("This test makes no digest."),
-						}),
+						SecureRandom.SecureRandom,
+						SecureRandom.make((size) => new Uint8Array(size)),
 					),
 				)
 				if (status === "completed") {
@@ -341,11 +338,8 @@ it.effect(
 			assert.strictEqual(yield* supplied.send, old)
 		}).pipe(
 			Effect.provideService(
-				Crypto.Crypto,
-				Crypto.make({
-					randomBytes: (size) => new Uint8Array(size),
-					digest: () => Effect.die("This test makes no digest."),
-				}),
+				SecureRandom.SecureRandom,
+				SecureRandom.make((size) => new Uint8Array(size)),
 			),
 		),
 )

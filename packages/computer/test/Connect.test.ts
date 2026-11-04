@@ -1,8 +1,4 @@
-import {
-	NodeServices,
-	NodeSocket,
-	NodeSocketServer,
-} from "@effect/platform-node"
+import { NodeServices, NodeSocketServer, NodeWS } from "@effect/platform-node"
 import { ComputersApi } from "@openbot-build/api"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -112,7 +108,7 @@ const start = Effect.fnUntraced(function* (
 	)
 })
 
-layer(Layer.merge(NodeSocket.layerWebSocketConstructorWS, NodeServices.layer), {
+layer(Layer.merge(NodeWS.layerWebSocketConstructor, NodeServices.layer), {
 	excludeTestServices: true,
 })((it) => {
 	it.effect("the WebSocket address comes from the OpenBot address", () =>

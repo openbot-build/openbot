@@ -8,7 +8,8 @@ import {
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Execution } from "@openbot-build/domain"
 import { and, desc, eq } from "drizzle-orm"
-import { Clock, Context, Crypto, Effect, Layer, Option, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import { ownerKey } from "../apps/StoredConnections.ts"
@@ -71,7 +72,7 @@ export class ChannelInbox extends Context.Service<ChannelInbox, Service>()(
 const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const store = yield* Store
 	const channels = yield* Channels
 	const admit = yield* ChannelAdmission.make
@@ -149,7 +150,7 @@ const make = Effect.gen(function* () {
 								"channel-input:" +
 									Hex.encode(
 										yield* crypto.digest(
-											"SHA-256",
+											Digest.sha256,
 											new TextEncoder().encode(
 												channelId.length + ":" + channelId + event.eventId,
 											),

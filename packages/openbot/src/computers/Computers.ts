@@ -9,7 +9,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Duration,
 	Effect,
 	Layer,
@@ -17,6 +16,7 @@ import {
 	Schema,
 	Schedule,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import { Base64, Base64Url, Hex } from "effect/encoding"
 import * as Background from "../execution/Background.ts"
@@ -65,13 +65,13 @@ type Row = typeof computers.$inferSelect
 const encoder = new TextEncoder()
 
 // OpenBot needs secure random numbers and SHA-256 to run, so a failure of these is a defect.
-export const hashToken = (crypto: Crypto.Crypto, token: string) =>
+export const hashToken = (crypto: Digest.Digest["Service"], token: string) =>
 	crypto
-		.digest("SHA-256", encoder.encode(token))
+		.digest(Digest.sha256, encoder.encode(token))
 		.pipe(Effect.map(Hex.encode), Effect.orDie)
 
 /** A new connector token. Only its hash is stored. */
-export const newToken = (crypto: Crypto.Crypto) =>
+export const newToken = (crypto: SecureRandom.SecureRandom["Service"]) =>
 	crypto.randomBytes(32).pipe(
 		Effect.map((bytes) => "oct_" + Base64Url.encode(bytes)),
 		Effect.orDie,
@@ -310,7 +310,8 @@ export const make = Effect.gen(function* () {
 	const drivers = yield* Drivers
 	const connectors = yield* Connectors
 	const botsService = yield* Bots
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const checks = yield* Check.make
 	const { check } = checks
 	const rights = yield* Access.make
@@ -802,7 +803,7 @@ export const make = Effect.gen(function* () {
 						message: "Only a connector Computer has a token.",
 					})
 				const token = yield* newToken(crypto)
-				const tokenHash = yield* hashToken(crypto, token)
+				const tokenHash = yield* hashToken(hashes, token)
 				yield* stored(
 					db
 						.update(computers)
@@ -814,7 +815,7 @@ export const make = Effect.gen(function* () {
 				return token
 			}),
 		byToken: (token) =>
-			Effect.flatMap(hashToken(crypto, token), (tokenHash) =>
+			Effect.flatMap(hashToken(hashes, token), (tokenHash) =>
 				stored(
 					db
 						.select({
@@ -854,7 +855,7 @@ export const make = Effect.gen(function* () {
 		pair: (caller, input) =>
 			Effect.gen(function* () {
 				const token = yield* newToken(crypto)
-				const tokenHash = yield* hashToken(crypto, token)
+				const tokenHash = yield* hashToken(hashes, token)
 				const existing = (yield* stored(
 					db
 						.select()

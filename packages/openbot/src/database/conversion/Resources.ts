@@ -4,7 +4,8 @@ import {
 	Organizations,
 	Roles,
 } from "@openbot-build/domain"
-import { Array as Arr, Crypto, Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import * as Documents from "../../settings/Documents.ts"
@@ -117,7 +118,7 @@ export const run = Effect.gen(function* () {
 export const verify = Effect.gen(function* () {
 	const sql = yield* SqlClient.SqlClient
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const progress = yield* Progress.make
 	const table = <S extends Schema.Decoder<unknown>, E>(
 		name: string,
@@ -276,7 +277,10 @@ export const verify = Effect.gen(function* () {
 						`bot_invitation:${row.secret_hash}`,
 					)
 					const hash = Hex.encode(
-						yield* crypto.digest("SHA-256", new TextEncoder().encode(value)),
+						yield* crypto.digest(
+							Digest.sha256,
+							new TextEncoder().encode(value),
+						),
 					)
 					if (hash !== row.secret_hash)
 						return yield* fail("An invitation secret does not match its hash.")

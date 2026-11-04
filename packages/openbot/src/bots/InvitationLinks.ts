@@ -1,6 +1,7 @@
 import { BotSharing as BotsApi } from "@openbot-build/domain"
 
-import { Crypto, Effect, String as Str } from "effect"
+import { Effect, String as Str } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
 import type { LinkSecret } from "../organization/Organization.ts"
 import { Secrets } from "../secrets/Secrets.ts"
@@ -14,10 +15,11 @@ const binding = (hash: string) => "bot_invitation:" + hash
  */
 export const make = Effect.gen(function* () {
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	/** OpenBot finds an invitation link by the SHA-256 hash of its secret. */
 	const hashOf = (secret: string) =>
-		crypto.digest("SHA-256", new TextEncoder().encode(secret)).pipe(
+		hashes.digest(Digest.sha256, new TextEncoder().encode(secret)).pipe(
 			// A platform without SHA-256 is broken.
 			Effect.orDie,
 			Effect.map(Hex.encode),

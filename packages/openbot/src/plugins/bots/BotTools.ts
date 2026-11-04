@@ -18,7 +18,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	DateTime,
 	Effect,
 	type JsonSchema,
@@ -28,6 +27,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import { Settings } from "../../settings/Settings.ts"
 import { describe } from "../../capabilities/Capability.ts"
@@ -226,14 +226,14 @@ const makeWith = (memoryWork: {
 		const gate = yield* Gate
 		const requests = yield* Requests
 		const organization = yield* Organization
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const report = yield* Report.make
 		const records = yield* Records
 		/** The ID of a tool call, or a new one when the call has none. */
 		const callIdOf = (context: CallContext) =>
 			context.toolCallId === undefined
 				? // A machine with no secure random numbers cannot make IDs, so this is a defect.
-					crypto.randomUUIDv7().pipe(Effect.orDie)
+					crypto.uuidV7().pipe(Effect.orDie)
 				: Effect.succeed(context.toolCallId)
 		const entry = <E>(
 			name: string,

@@ -2,7 +2,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Duration,
 	Effect,
 	HashMap,
@@ -13,6 +12,7 @@ import {
 	Semaphore,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import { McpSchema, McpServer } from "effect/ai"
 import {
@@ -85,7 +85,7 @@ export const register = (options: {
 	Effect.gen(function* () {
 		const { scenario, origin } = options
 		const server = yield* McpServer.McpServer
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const lock = yield* Semaphore.make(1)
 		const workspaces = yield* Temporary.make<Workspace>(
 			lifetimes.workspace,

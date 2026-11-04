@@ -1,6 +1,6 @@
 import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Authorization, Store } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -16,7 +16,9 @@ import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 
-layer(NodeServices.layer, { excludeTestServices: true })((it) => {
+layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
+	excludeTestServices: true,
+})((it) => {
 	it.effect(
 		"encrypted credentials and one-time PKCE flows survive a restart and check their full owner binding",
 		() =>
@@ -29,7 +31,7 @@ layer(NodeServices.layer, { excludeTestServices: true })((it) => {
 						Layer.provideMerge(
 							Database.layer({ databaseUrl: Redacted.make(database.url) }),
 						),
-						Layer.provide(NodeServices.layer),
+						Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 					)
 				/**
 				 * Runs an Effect on new layers, as one server start does, so nothing

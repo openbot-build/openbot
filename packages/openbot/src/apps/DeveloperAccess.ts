@@ -13,7 +13,6 @@ import {
 	Cause,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	HashSet,
@@ -23,6 +22,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import {
 	developerApps,
@@ -311,7 +311,8 @@ export const make: Effect.Effect<
 	| Network.PublicNetwork
 	| Robots.Robots
 	| AppInspections
-	| Crypto.Crypto
+	| SecureRandom.SecureRandom
+	| Digest.Digest
 	| DeveloperWatches
 	| Records
 > = Effect.gen(function* () {
@@ -325,9 +326,9 @@ export const make: Effect.Effect<
 	const network = yield* Network.PublicNetwork
 	const robots = yield* Robots.Robots
 	const inspections = yield* AppInspections
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const { grants, authorize, allows } = yield* authorization
-	const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
+	const newId = crypto.uuidV7().pipe(Effect.orDie)
 	const conflict = (reason: string) =>
 		Developers.DeveloperConflict.make({ reason })
 	const proofWhere = (id: string) =>

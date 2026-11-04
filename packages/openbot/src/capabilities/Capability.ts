@@ -3,7 +3,8 @@ import { type Bots as BotsApi } from "@openbot-build/domain"
 import { Authorization } from "@openbot-build/domain"
 import { type ExecutionIdentity } from "@openbot-build/domain"
 import type { Authorizer } from "@nmnmcc/ability"
-import { Crypto, Effect, Schema, String as Str } from "effect"
+import { Effect, Schema, String as Str } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import {
 	botResource,
@@ -26,11 +27,11 @@ export const describe = (capability: Capability) =>
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 
 /** A short and stable SHA-256 text of a JSON value, for IDs and cache keys. */
-export const hash = (crypto: Crypto.Crypto, value: unknown) =>
+export const hash = (crypto: Digest.Digest["Service"], value: unknown) =>
 	Effect.gen(function* () {
 		const text = yield* encodeJson(value)
 		const digest = yield* crypto.digest(
-			"SHA-256",
+			Digest.sha256,
 			new TextEncoder().encode(text),
 		)
 		return Str.slice(0, 40)(Hex.encode(digest))

@@ -11,15 +11,8 @@ import {
 	ExecutionIdentity,
 	ToolExecution,
 } from "@openbot-build/domain"
-import {
-	Array as Arr,
-	Context,
-	Crypto,
-	Effect,
-	Layer,
-	Option,
-	Schema,
-} from "effect"
+import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
 import { type Authorize } from "../../execution/Engine.ts"
@@ -114,7 +107,7 @@ export class ReminderCommands extends Context.Service<
 const make = Effect.gen(function* () {
 	const store = yield* Store
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const access = yield* TurnAccess
 	const reminders = yield* Reminders
 	const inputs = yield* InputCommands
@@ -194,7 +187,7 @@ const make = Effect.gen(function* () {
 			Schema.fromJsonString(Schema.Array(Schema.String)),
 		)([parent.id, step.item, callId])
 		const hash = Hex.encode(
-			yield* crypto.digest("SHA-256", new TextEncoder().encode(name)),
+			yield* crypto.digest(Digest.sha256, new TextEncoder().encode(name)),
 		)
 		const id = "rem_" + hash
 		const receipt = yield* store.accept(

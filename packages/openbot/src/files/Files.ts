@@ -10,7 +10,6 @@ import {
 	Cause,
 	Clock,
 	Context,
-	Crypto,
 	Duration,
 	Effect,
 	Exit,
@@ -23,6 +22,7 @@ import {
 	String as Str,
 	pipe,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
 import { HttpClient, Multipart } from "effect/http"
@@ -191,7 +191,8 @@ export const make = Effect.gen(function* () {
 	const objects = yield* Objects.make
 	const tasks = yield* FileTasks
 	const client = yield* HttpClient.HttpClient
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const stored = Failures.replace("A file query failed", () =>
 		FilesApi.FilesUnavailable.make({}),
 	)
@@ -212,10 +213,10 @@ export const make = Effect.gen(function* () {
 				),
 			)
 	const logged = <A>(
-		effect: Effect.Effect<A, S3.StorageError, Crypto.Crypto>,
+		effect: Effect.Effect<A, S3.StorageError, Digest.Digest>,
 	) =>
 		effect.pipe(
-			Effect.provideService(Crypto.Crypto, crypto),
+			Effect.provideService(Digest.Digest, hashes),
 			Failures.replace("The file storage failed", () =>
 				FilesApi.FilesUnavailable.make({}),
 			),

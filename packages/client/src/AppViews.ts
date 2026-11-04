@@ -8,13 +8,13 @@ import type { UiClient } from "@openbot-build/protocol/McpApps"
 import { decodeStandard } from "@openbot-build/protocol/McpClient"
 import {
 	Cause,
-	Crypto,
 	Effect,
 	Option,
 	Schema,
 	Stream,
 	type PlatformError,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
 import { AppViews, AppCalls, Execution } from "@openbot-build/domain"
 import { prepare, type Command } from "./Command.ts"
@@ -105,10 +105,10 @@ export const make = Effect.fn("AppViews.make")(function* (
 	onChange: () => void = () => {},
 ) {
 	const { api } = yield* Client
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	/** A new ID for each action, made when the action runs. */
 	const newCommandKey = crypto
-		.randomUUIDv7()
+		.uuidV7()
 		.pipe(Effect.map(Execution.CommandKey.make), Effect.orDie)
 	const params = { viewId: opened.id }
 	const key = { owner, connectionId: opened.source.connectionId }
@@ -288,7 +288,7 @@ export const act = Effect.fn("AppViews.act")(function* (
 ): Effect.fn.Return<
 	Command<AppViews.ActionTicket, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -311,7 +311,7 @@ export const message = Effect.fn("AppViews.message")(function* (
 ): Effect.fn.Return<
 	Command<AppViews.ActionTicket, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(

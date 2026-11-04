@@ -23,15 +23,8 @@ import type { Chat, Config } from "@openbot-build/core"
 import type { Prompt } from "effect/ai"
 import { Client, McpClient } from "@openbot-build/protocol"
 import { and, eq } from "drizzle-orm"
-import {
-	Array as Arr,
-	Context,
-	Crypto,
-	Effect,
-	Layer,
-	Option,
-	Schema,
-} from "effect"
+import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import * as CallFrame from "../chats/CallFrame.ts"
@@ -350,7 +343,8 @@ const make = Effect.gen(function* () {
 	const origins = yield* ToolOrigins.make
 	const actions = yield* ActionPolicy
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const where = (key: Key) =>
 		and(
 			eq(appExecutions.namespace, key.namespace),
@@ -402,7 +396,7 @@ const make = Effect.gen(function* () {
 			Schema.fromJsonString(Schema.Array(Schema.String)),
 		)([found.value.toolKey.id, site.main, ...site.path])
 		const hash = Hex.encode(
-			yield* crypto.digest("SHA-256", new TextEncoder().encode(path)),
+			yield* hashes.digest(Digest.sha256, new TextEncoder().encode(path)),
 		)
 		return yield* store.accept(
 			source.namespace,
@@ -431,9 +425,7 @@ const make = Effect.gen(function* () {
 							],
 						},
 						Effect.gen(function* () {
-							const id = AppCalls.AppOperationId.make(
-								yield* crypto.randomUUIDv7(),
-							)
+							const id = AppCalls.AppOperationId.make(yield* crypto.uuidV7())
 							const readOnly = yield* actions.isRead({
 								organizationId: origin.identity.owner.organizationId,
 								source: input.source,

@@ -1,7 +1,7 @@
 import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
 import { IndexWork } from "../src/apps/IndexWork.ts"
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { ConnectionsApi as Api, Identity } from "@openbot-build/api"
 import type { Caller } from "@openbot-build/domain"
 import { Tokens } from "../src/auth/Tokens.ts"
@@ -109,7 +109,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				Layer.provideMerge(
 					Database.layer({ databaseUrl: Redacted.make(database.url) }),
 				),
-				Layer.provide(NodeServices.layer),
+				Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 			)
 			yield* Effect.gen(function* () {
 				yield* Database.migrate
@@ -153,7 +153,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const storage = Layer.merge(
 					Secrets.layer(encryptionKey),
 					Database.layer({ databaseUrl: Redacted.make(database.url) }),
-				).pipe(Layer.provide(NodeServices.layer))
+				).pipe(Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)))
 				const app = Connections.layer.pipe(
 					Layer.provide(
 						OrganizationFixture.layerAuthorization.pipe(
@@ -169,7 +169,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 							Layer.provide(OrganizationFixture.layerDefaultSettings),
 						),
 					),
-					Layer.provide(NodeServices.layer),
+					Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 					Layer.provideMerge(storage),
 				)
 				const id = yield* Effect.gen(function* () {
@@ -427,7 +427,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 								Database.layer({ databaseUrl: Redacted.make(database.url) }),
 							),
 						),
-						Layer.provide(NodeServices.layer),
+						Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 					)
 				// Each build has its own database pool.
 				const first = yield* Layer.build(storage())

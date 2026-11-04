@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Settings as Api } from "@openbot-build/api"
 
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
@@ -133,7 +133,7 @@ export const developmentSecret = (secretKeys: Redacted.Redacted<string>) =>
 
 /**
  * Assemble simulated discovery and models with the normal configured identity and storage.
- * It needs the platform services, such as `NodeServices.layer` and
+ * It needs the platform services, such as `NodeServices.layer`, `NodeCrypto.layer` and
  * `FetchHttpClient.layer`. The entry point sets the outbound guard, because it
  * changes the whole process.
  */
@@ -292,7 +292,13 @@ export const launchWith = (routes?: Server.AppOptions["routes"]) =>
 							}),
 						),
 					),
-					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+					Layer.provide(
+						Layer.mergeAll(
+							NodeServices.layer,
+							NodeCrypto.layer,
+							FetchHttpClient.layer,
+						),
+					),
 					Layer.provide(
 						OutboundGuard.layer(allowStorage(settings.outboundAllow, storage)),
 					),

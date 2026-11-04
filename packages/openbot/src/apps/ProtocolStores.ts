@@ -3,7 +3,6 @@ import * as GrantUses from "./GrantUses.ts"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Match,
@@ -11,6 +10,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { and, eq } from "drizzle-orm"
 import {
 	appAuthorizations,
@@ -80,12 +80,12 @@ const flowCodec = Schema.fromJsonString(Schema.toCodecJson(Authorization.Flow))
 export const make: Effect.Effect<
 	typeof ProtocolStores.Service,
 	never,
-	PgClient.PgClient | Secrets | Crypto.Crypto | IndexWork
+	PgClient.PgClient | Secrets | SecureRandom.SecureRandom | IndexWork
 > = Effect.gen(function* () {
 	const index = yield* IndexWork
 	const secrets = yield* Secrets
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const uses = GrantUses.makeWith(db, secrets)
 	return ProtocolStores.of({
 		bind: (owner) => {
@@ -219,7 +219,7 @@ export const make: Effect.Effect<
 			const credentials = Store.CredentialStore.of({
 				put: Effect.fn("AppCredentials.put")(function* (credential) {
 					yield* owned(credential.binding)
-					const id = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
+					const id = yield* crypto.uuidV7().pipe(Effect.orDie)
 					const encoded = yield* Schema.encodeEffect(credentialCodec)(
 						credential,
 					).pipe(unavailable("Could not encode an App credential."))

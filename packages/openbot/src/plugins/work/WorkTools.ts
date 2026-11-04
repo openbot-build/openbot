@@ -13,7 +13,6 @@ import {
 	Array as Arr,
 	Cause,
 	Context,
-	Crypto,
 	DateTime,
 	Effect,
 	type JsonSchema,
@@ -21,6 +20,7 @@ import {
 	Record as Rec,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import * as Background from "../../execution/Background.ts"
 import { Answer, Gate } from "../../capabilities/Gate.ts"
@@ -139,8 +139,8 @@ export const durable = (fence: Fence) =>
 		const gate = yield* Gate
 		const settings = yield* Settings
 		const openWork = yield* OpenWork
-		const crypto = yield* Crypto.Crypto
-		const newId = crypto.randomUUIDv7().pipe(Effect.orDie)
+		const crypto = yield* SecureRandom.SecureRandom
+		const newId = crypto.uuidV7().pipe(Effect.orDie)
 		const newItemId = Effect.map(newId, (id) => Item.Id.make(id))
 		/** The ID of a tool call, or a new one when the call has none. */
 		const callIdOf = (context: CallContext) =>

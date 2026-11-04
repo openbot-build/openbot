@@ -1,6 +1,6 @@
 import * as ToolDefinitions from "../src/chats/ToolDefinitions.ts"
 import { Delegations } from "../src/bots/Delegations.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -61,7 +61,7 @@ const services = InputCommands.layer.pipe(
 	Layer.provideMerge(Store.layer),
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const setup = Effect.fn(function* (namespace: string) {
 	const db = yield* Db.make

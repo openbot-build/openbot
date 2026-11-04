@@ -14,13 +14,13 @@ import { OutboundPolicy } from "../network/OutboundPolicy.ts"
 import {
 	Array as Arr,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Match,
 	Schema,
 	Scope,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { ProtocolStores, toStoreError } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { Secrets } from "../secrets/Secrets.ts"
@@ -113,7 +113,7 @@ export const make: Effect.Effect<
 	| Discovery.Rules
 	| App.ConnectionScopes
 	| AppNetwork
-	| Crypto.Crypto
+	| SecureRandom.SecureRandom
 	| Probe
 	| Governance
 > = Effect.gen(function* () {
@@ -125,7 +125,7 @@ export const make: Effect.Effect<
 	const rules = yield* Discovery.Rules
 	const active = yield* App.ConnectionScopes
 	const network = yield* AppNetwork
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const probe = yield* Probe
 	return AppHost.of({
 		bind: (owner, policy) => {
@@ -159,7 +159,7 @@ export const make: Effect.Effect<
 							Effect.andThen(policy.check(invocation)),
 						),
 				}),
-				Context.add(Crypto.Crypto, crypto),
+				Context.add(SecureRandom.SecureRandom, crypto),
 			)
 			const keyChecked = (key: Store.ConnectionKey) =>
 				key.owner === owner

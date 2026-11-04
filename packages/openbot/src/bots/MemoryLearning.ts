@@ -29,7 +29,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	HashSet,
 	Layer,
@@ -37,6 +36,7 @@ import {
 	Schema,
 	Stream,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import type { Errors } from "../authorization/Check.ts"
 import { inExecution } from "../chats/ChatEncoding.ts"
 import { and, asc, eq, gt, lte, max } from "drizzle-orm"
@@ -147,7 +147,7 @@ const make = Effect.gen(function* () {
 	const models = yield* MemoryModels
 	const bots = yield* Bots
 	const settings = yield* Settings
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const observation = yield* Observation
 	const cursors = records.collection(
 		"memory_cursor",

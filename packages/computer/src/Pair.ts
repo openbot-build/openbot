@@ -2,7 +2,6 @@ import { ComputersApi } from "@openbot-build/api"
 import {
 	Cause,
 	Clock,
-	type Crypto,
 	Effect,
 	type FileSystem,
 	Option,
@@ -10,6 +9,7 @@ import {
 	Redacted,
 	type Schema,
 } from "effect"
+import type { SecureRandom } from "effect/crypto"
 import { HttpClient, type HttpClientError } from "effect/http"
 import { HttpApi, HttpApiClient } from "effect/http-api"
 import * as Config from "./Config.ts"
@@ -82,7 +82,10 @@ export const pair = (options: {
 		readonly config: Config.ComputerConfig
 	},
 	Config.ComputerError,
-	HttpClient.HttpClient | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+	| HttpClient.HttpClient
+	| FileSystem.FileSystem
+	| Path.Path
+	| SecureRandom.SecureRandom
 > =>
 	Effect.gen(function* () {
 		const url = yield* Config.parseOrigin(options.url)

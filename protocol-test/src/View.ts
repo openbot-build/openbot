@@ -1,13 +1,6 @@
 import { App } from "@modelcontextprotocol/ext-apps"
-import {
-	Crypto,
-	Effect,
-	Layer,
-	ManagedRuntime,
-	Option,
-	PlatformError,
-	Schema,
-} from "effect"
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 
 const app = new App({ name: "Protocol Test workspace", version: "0.1.0" }, {})
 /** The page build in `tsdown.config.ts` writes each element, so a missing one is a broken build. */
@@ -30,26 +23,9 @@ const Output = Schema.Struct({
 })
 
 // No Effect platform package runs in the browser here, so this runtime makes
-// the Crypto service from the Web Crypto API of the browser.
+// the random and digest services from the Web Crypto API of the browser.
 const runtime = ManagedRuntime.make(
-	Layer.succeed(
-		Crypto.Crypto,
-		Crypto.make({
-			randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-			digest: (algorithm, data) =>
-				Effect.tryPromise({
-					try: () => crypto.subtle.digest(algorithm, new Uint8Array(data)),
-					catch: (cause) =>
-						PlatformError.systemError({
-							_tag: "Unknown",
-							module: "Crypto",
-							method: "digest",
-							description: "Could not compute digest",
-							cause,
-						}),
-				}).pipe(Effect.map((digest) => new Uint8Array(digest))),
-		}),
-	),
+	Layer.merge(SecureRandom.layerWebCrypto, Digest.layerWebCrypto),
 )
 
 class HostRequestFailed extends Schema.TaggedError<
@@ -169,7 +145,11 @@ const main = Effect.gen(function* () {
 		)
 	})
 	const start = (
-		action: Effect.Effect<unknown, HostRequestFailed, Crypto.Crypto>,
+		action: Effect.Effect<
+			unknown,
+			HostRequestFailed,
+			SecureRandom.SecureRandom
+		>,
 	) => {
 		runtime.runFork(run(action))
 	}
@@ -192,8 +172,8 @@ const main = Effect.gen(function* () {
 		event.preventDefault()
 		start(
 			Effect.gen(function* () {
-				const crypto = yield* Crypto.Crypto
-				const idempotencyKey = yield* Effect.orDie(crypto.randomUUIDv4())
+				const crypto = yield* SecureRandom.SecureRandom
+				const idempotencyKey = yield* Effect.orDie(crypto.uuidV4())
 				const value = yield* request(() =>
 					app.callServerTool({
 						name: "write_note",

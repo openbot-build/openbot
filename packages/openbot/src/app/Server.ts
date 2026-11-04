@@ -24,7 +24,8 @@ import { Settings as Api } from "@openbot-build/api"
 import { createServer } from "node:http"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Http from "./Http.ts"
-import { type Crypto, Effect, Layer, Option, Redacted, Result } from "effect"
+import { Effect, Layer, Option, Redacted, Result } from "effect"
+import type { SecureRandom } from "effect/crypto"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import * as OpenBot from "./OpenBot.ts"
 import * as AuthHttpHandlers from "../auth/HttpHandlers.ts"
@@ -58,7 +59,10 @@ export interface AppOptions extends OpenBot.Options {
 	readonly startup?: Layer.Layer<
 		never,
 		never,
-		IndexWork | PgClient.PgClient | Crypto.Crypto | ErrorRecords.Records
+		| IndexWork
+		| PgClient.PgClient
+		| SecureRandom.SecureRandom
+		| ErrorRecords.Records
 	>
 	/**
 	 * More routes, such as the routes of the development tools. They can use the

@@ -1,5 +1,6 @@
 import type { Channels as ChannelsApi } from "@openbot-build/domain"
-import { Context, Crypto, Data, Effect, Layer, RcMap, Scope } from "effect"
+import { Context, Data, Effect, Layer, RcMap, Scope } from "effect"
+import { Digest } from "effect/crypto"
 import { HttpClient } from "effect/http"
 import { AppNetwork } from "../apps/AppHost.ts"
 import type { Channel } from "./Channel.ts"
@@ -41,7 +42,7 @@ export const make = Effect.gen(function* () {
 	const channels = yield* Channels
 	const client = yield* HttpClient.HttpClient
 	const network = yield* AppNetwork
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const platform = Http.fromClient(client)
 	const build = (
 		id: string,
@@ -52,7 +53,7 @@ export const make = Effect.gen(function* () {
 				return Effect.succeed(SlackChannel.make(credentials, platform))
 			case "lark":
 				return LarkChannel.make(credentials, platform).pipe(
-					Effect.provideService(Crypto.Crypto, crypto),
+					Effect.provideService(Digest.Digest, crypto),
 				)
 			case "telegram":
 				return Effect.succeed(TelegramChannel.make(credentials, platform))

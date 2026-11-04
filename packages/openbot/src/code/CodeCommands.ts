@@ -25,12 +25,12 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import * as CallFrame from "../chats/CallFrame.ts"
@@ -291,7 +291,8 @@ const make = Effect.gen(function* () {
 	const frames = yield* CallFrame.make
 	const origins = yield* ToolOrigins.make
 	const settings = yield* Settings
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const enabled = Effect.gen(function* () {
 		const platform = yield* settings.platform
 		if (Option.isNone(platform)) return yield* Execution.Forbidden.make({})
@@ -362,7 +363,7 @@ const make = Effect.gen(function* () {
 			Schema.fromJsonString(Schema.Array(Schema.String)),
 		)([origin.value.toolKey.id, site.main, ...site.path])
 		const hash = Hex.encode(
-			yield* crypto.digest("SHA-256", new TextEncoder().encode(path)),
+			yield* hashes.digest(Digest.sha256, new TextEncoder().encode(path)),
 		)
 		return yield* store.accept(
 			source.namespace,
@@ -392,7 +393,7 @@ const make = Effect.gen(function* () {
 						},
 						Effect.gen(function* () {
 							const limits = yield* enabled
-							const id = CodeRuns.CodeRunId.make(yield* crypto.randomUUIDv7())
+							const id = CodeRuns.CodeRunId.make(yield* crypto.uuidV7())
 							const key = yield* create({
 								workflow: workflowName,
 								...(yield* store.ownership(source)),
@@ -402,7 +403,7 @@ const make = Effect.gen(function* () {
 									...input,
 									site,
 									limits,
-									seed: yield* crypto.randomIntBetween(0, 2 ** 31, {
+									seed: yield* crypto.intBetween(0, 2 ** 31, {
 										halfOpen: true,
 									}),
 									clock: yield* Clock.currentTimeMillis,

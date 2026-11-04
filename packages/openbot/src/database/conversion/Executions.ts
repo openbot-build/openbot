@@ -1,5 +1,6 @@
 import { Execution, ServiceId, ServiceIdentity } from "@openbot-build/domain"
-import { Array as Arr, Cause, Crypto, Effect, Schema } from "effect"
+import { Array as Arr, Cause, Effect, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import { Secrets } from "../../secrets/Secrets.ts"
@@ -55,14 +56,14 @@ export class InvalidImport extends Schema.TaggedError<
 export const make = Effect.gen(function* () {
 	const sql = yield* SqlClient.SqlClient
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const progress = yield* Progress.make
 	const stable = (parts: ReadonlyArray<string>) =>
 		Effect.gen(function* () {
 			const bytes = new TextEncoder().encode(
 				yield* Schema.encodeEffect(json)(parts),
 			)
-			return Hex.encode(yield* crypto.digest("SHA-256", bytes))
+			return Hex.encode(yield* crypto.digest(Digest.sha256, bytes))
 		})
 	const write = (input: RecordInput) =>
 		Effect.gen(function* () {

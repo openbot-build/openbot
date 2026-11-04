@@ -1,5 +1,6 @@
 import type { Computers as Domain, Execution } from "@openbot-build/domain"
-import { Crypto, Effect, type PlatformError } from "effect"
+import { Effect, type PlatformError } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
 import { prepare, type Command } from "./Command.ts"
 
@@ -9,7 +10,7 @@ export const create = Effect.fn("Computers.create")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -25,7 +26,7 @@ export const pause = Effect.fn("Computers.pause")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -44,7 +45,7 @@ export const resume = Effect.fn("Computers.resume")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -63,7 +64,7 @@ export const remove = Effect.fn("Computers.remove")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(

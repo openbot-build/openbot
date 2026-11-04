@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Model } from "@openbot-build/core"
 import {
@@ -333,7 +333,10 @@ it.live(
 				))._tag,
 				"Failure",
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 )
 
 it.live(
@@ -385,7 +388,10 @@ it.live(
 				new URL(attempt.url).searchParams.get("client_id"),
 				"oaiapp_test",
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 )
 
 it.live(
@@ -505,7 +511,10 @@ it.live(
 					.length,
 				0,
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 )
 
 it.live("ChatGPT uses ordinary provider owners, keys, and model links", () =>
@@ -568,7 +577,10 @@ it.live("ChatGPT uses ordinary provider owners, keys, and model links", () =>
 				(yield* state.providers.create(owner, input).pipe(Effect.flip))._tag,
 				"ModelProviderInvalid",
 			)
-	}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+	}).pipe(
+		Effect.scoped,
+		Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+	),
 )
 
 it.live("the provider OAuth migration keeps old API keys", () =>
@@ -596,7 +608,10 @@ it.live("the provider OAuth migration keeps old API keys", () =>
 				0,
 			)
 		}).pipe(Effect.provide(databaseLayer))
-	}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+	}).pipe(
+		Effect.scoped,
+		Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+	),
 )
 
 it.live(
@@ -647,7 +662,10 @@ it.live(
 				(yield* state.accounts.accessToken(provider.id).pipe(Effect.flip))._tag,
 				"ModelProviderLoginRequired",
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 )
 
 it.live(
@@ -694,7 +712,10 @@ it.live(
 				0,
 			)
 			assert.strictEqual(yield* Ref.get(state.exchanges), 0)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 )
 
 it.live(
@@ -727,5 +748,8 @@ it.live(
 			const unchanged = yield* state.providers.get(owner, provider.id)
 			assert.ok(Option.isSome(unchanged))
 			assert.strictEqual(unchanged.value.version, saved.value.version)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 )

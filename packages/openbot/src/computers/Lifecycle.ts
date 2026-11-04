@@ -21,13 +21,13 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 	Stream,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Check from "../authorization/Check.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
@@ -163,7 +163,7 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const store = yield* Store
 	const observation = yield* Observation
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const checks = yield* Check.make
 	const rights = yield* Access.make
 	const providers = yield* ComputerProviders
@@ -423,7 +423,7 @@ export const make = Effect.gen(function* () {
 			)
 		} else
 			commandKey = Execution.CommandKey.make(
-				yield* crypto.randomUUIDv7().pipe(Effect.orDie),
+				yield* crypto.uuidV7().pipe(Effect.orDie),
 			)
 		const receipt = yield* submit(
 			identity,

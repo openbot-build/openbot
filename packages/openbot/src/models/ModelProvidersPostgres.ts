@@ -4,7 +4,6 @@ import { Models as ModelsModel } from "@openbot-build/domain"
 import {
 	Array as Arr,
 	Clock,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -12,6 +11,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { and, asc, eq, inArray, or } from "drizzle-orm"
 import * as Failures from "../errors/Failures.ts"
 import { modelProviders, models, providerModels } from "../database/Schema.ts"
@@ -194,8 +194,8 @@ const isKnown = Schema.is(Known)
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
-	const newId = crypto.randomUUIDv7().pipe(
+	const crypto = yield* SecureRandom.SecureRandom
+	const newId = crypto.uuidV7().pipe(
 		Effect.orDie,
 		Effect.map((uuid) => "prov_" + Str.replaceAll("-", "")(uuid)),
 	)

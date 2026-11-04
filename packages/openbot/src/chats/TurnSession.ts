@@ -22,13 +22,13 @@ import {
 	type Scope,
 	Array as Arr,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 	Stream,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Definition } from "./ToolDefinitions.ts"
 import { ReviewTools } from "../capabilities/ReviewTools.ts"
 import * as Registration from "../plugins/Registration.ts"
@@ -108,12 +108,12 @@ const make = Effect.gen(function* () {
 
 	const bots = yield* Bots
 	const live = yield* LiveConnections
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const modelServices = yield* Effect.context<
-		Store | Calls | Billing | Crypto.Crypto | Records | TurnAccess
+		Store | Calls | Billing | Digest.Digest | Records | TurnAccess
 	>().pipe(
 		Effect.map(
-			Context.pick(Store, Calls, Billing, Crypto.Crypto, Records, TurnAccess),
+			Context.pick(Store, Calls, Billing, Digest.Digest, Records, TurnAccess),
 		),
 	)
 	const definition = yield* CoreStore.define({
@@ -253,7 +253,7 @@ const make = Effect.gen(function* () {
 							)([fence.id, input.chat, source])
 							const key = Hex.encode(
 								yield* crypto
-									.digest("SHA-256", new TextEncoder().encode(text))
+									.digest(Digest.sha256, new TextEncoder().encode(text))
 									.pipe(Effect.orDie),
 							)
 							return yield* inputs.submit(

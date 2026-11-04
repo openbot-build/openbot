@@ -22,12 +22,12 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import * as Check from "../authorization/Check.ts"
 import * as Db from "../database/Database.ts"
@@ -177,7 +177,7 @@ export class TestCleanup extends Context.Service<TestCleanup, Service>()(
 ) {}
 
 const make = Effect.gen(function* () {
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
 	const namespace = yield* IndexNamespace
@@ -224,7 +224,7 @@ const make = Effect.gen(function* () {
 			const receipt = yield* store.submit(
 				record.owner,
 				Execution.CommandKey.make(
-					`test-expiry:${yield* crypto.randomUUIDv7().pipe(Effect.orDie)}`,
+					`test-expiry:${yield* crypto.uuidV7().pipe(Effect.orDie)}`,
 				),
 				yield* submission(
 					namespace,

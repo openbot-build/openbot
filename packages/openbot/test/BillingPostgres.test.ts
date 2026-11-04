@@ -2,7 +2,7 @@ import { Model } from "@openbot-build/core"
 import { BillingApi } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
@@ -199,7 +199,10 @@ it.live(
 			assert.strictEqual(final.total.calls, 2)
 			assert.strictEqual(final.total.unknownCalls, 0)
 			assert.strictEqual(final.total.costMicros, 1000)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -380,7 +383,10 @@ it.live(
 				.reserve(paying, attribution, tokens, currentCall)
 				.pipe(Effect.flip)
 			assert.isTrue(Schema.is(BillingStorageError)(ended))
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )
 
@@ -445,6 +451,9 @@ it.live(
 				),
 				{ late: 2000, early: 1000 },
 			)
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )

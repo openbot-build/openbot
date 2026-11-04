@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorization, BotId, Execution } from "@openbot-build/domain"
 import { and, asc, eq } from "drizzle-orm"
@@ -38,7 +38,7 @@ const services = ChannelQueue.layer.pipe(
 		Secrets.layer(Redacted.make("test:" + Str.repeat(32)("12"))),
 	),
 	Layer.provideMerge(database),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const caller = {
 	kind: "member",

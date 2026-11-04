@@ -240,8 +240,9 @@ export const make = Effect.gen(function* () {
 				yield* sql`update openbot_bot_memories set layer = ${entry.layer}, sources = ${sources}, confidence = ${entry.confidence ?? null}, status = ${entry.status}, updated_at = ${entry.updatedAt}, invalidated_at = ${entry.invalidatedAt ?? null} where organization_id = ${home.organizationId} and home_bot = ${home.bot} and id = ${entry.id}`
 			}
 			yield* sql`delete from openbot_bot_memory_tags where organization_id = ${home.organizationId} and home_bot = ${home.bot} and memory_id = ${entry.id}`
-			if (entry.tags.length > 0)
-				yield* sql`insert into openbot_bot_memory_tags ${sql.insert(Arr.map(Arr.dedupe(entry.tags), (tag) => ({ organization_id: home.organizationId, home_bot: home.bot, memory_id: entry.id, tag })))}`
+			const tags = Arr.dedupe(entry.tags)
+			if (Arr.isArrayNonEmpty(tags))
+				yield* sql`insert into openbot_bot_memory_tags ${sql.insert(Arr.map(tags, (tag) => ({ organization_id: home.organizationId, home_bot: home.bot, memory_id: entry.id, tag })))}`
 			if (entry.sourcePolicies === undefined)
 				yield* sql`delete from openbot_bot_records where kind = 'memory_source_policy' and organization_id = ${home.organizationId} and id = ${policyId(home, entry.id)}`
 			else {

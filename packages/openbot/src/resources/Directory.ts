@@ -14,12 +14,12 @@ import {
 	Stream,
 	Cause,
 	Ref,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { RunnerStorage, ShardingConfig } from "effect/cluster"
 import * as Db from "../database/Database.ts"
 import { resourceLeases, resourceOwners } from "../database/ResourceSchema.ts"
@@ -130,13 +130,13 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* PgClient.PgClient
 	const transactions = yield* SqlClient.SqlClient
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const runners = yield* RunnerStorage.RunnerStorage
 	const config = yield* ShardingConfig.ShardingConfig
 	if (Option.isNone(config.runnerAddress))
 		return yield* Effect.die("Physical resources need a runner address.")
 	const own = config.runnerAddress.value
-	const node = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
+	const node = yield* crypto.uuidV7().pipe(Effect.orDie)
 	const where = (ref: Resource.Ref) =>
 		and(
 			eq(resourceOwners.namespace, ref.namespace),
@@ -243,7 +243,7 @@ const make = Effect.gen(function* () {
 	)
 	const prepare = (ref: Resource.Ref) =>
 		Effect.map(
-			crypto.randomUUIDv7().pipe(Effect.orDie),
+			crypto.uuidV7().pipe(Effect.orDie),
 			(lease): Resource.Address => ({
 				...ref,
 				lease,

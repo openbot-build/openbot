@@ -1,6 +1,7 @@
 import { type Execution } from "@openbot-build/domain"
 import { type ChannelsApi } from "@openbot-build/api"
-import { Crypto, Effect, type PlatformError } from "effect"
+import { Effect, type PlatformError } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Client, type ClientError } from "./Client.ts"
 import { prepare, type Command } from "./Command.ts"
 
@@ -13,7 +14,7 @@ export const create = Effect.fn("Channels.create")(function* (
 ): Effect.fn.Return<
 	Command<ChannelsApi.Channel, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -28,7 +29,7 @@ export const update = Effect.fn("Channels.update")(function* (
 ): Effect.fn.Return<
 	Command<ChannelsApi.Channel, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -50,7 +51,7 @@ export const rotateSecret = Effect.fn("Channels.rotateSecret")(function* (
 ): Effect.fn.Return<
 	Command<ChannelsApi.ChannelSecret, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(
@@ -70,7 +71,7 @@ export const remove = Effect.fn("Channels.remove")(function* (
 ): Effect.fn.Return<
 	Command<Execution.Receipt, ClientError>,
 	PlatformError.PlatformError,
-	Client | Crypto.Crypto
+	Client | SecureRandom.SecureRandom
 > {
 	const { api } = yield* Client
 	return yield* prepare(

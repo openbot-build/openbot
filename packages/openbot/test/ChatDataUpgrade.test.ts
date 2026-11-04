@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { Chat, ChatState, Item } from "@openbot-build/core"
@@ -68,7 +68,7 @@ const database = () =>
 				),
 			),
 		),
-		Layer.provideMerge(NodeServices.layer),
+		Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	)
 const json = Schema.fromJsonString(Schema.Json)
 const encode = Schema.encodeEffect(json)

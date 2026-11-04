@@ -198,7 +198,7 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 
 授权代码来自 [ability](https://github.com/nmnmcc/ability) 库，也就是 npm 包
 `@nmnmcc/ability`。`package.json`
-固定使用 3.1.0。HTTP 和存储边界使用 JSON 文本表示策略。这个版本在类型声明中直接导出错误类，让 TypeScript 无需本地补丁就能生成 OpenBot 的声明文件。
+固定使用 3.2.0。HTTP 和存储边界使用 JSON 文本表示策略。这个版本在类型声明中直接导出错误类，让 TypeScript 无需本地补丁就能生成 OpenBot 的声明文件。
 
 ### 调用方与数据的变更
 
@@ -213,7 +213,7 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 ### UUID
 
 UUID 是一个 16 字节的 ID。当时间顺序有利于已存记录或索引时，使用 UUID
-v7。用 Effect 的 `Crypto.randomUUIDv7()` 生成。如果下一步需要字节，使用 `bytes`
+v7。用 Effect 的 `SecureRandom.uuidV7()` 生成。如果下一步需要字节，使用 `bytes`
 格式。随机密钥，以及无法从时间顺序获益的短期 ID，保留 UUID v4。
 
 UUID
@@ -273,7 +273,7 @@ OpenBot 用 [Effect](https://effect.website)
 
 - 用 Effect 的 `Array`、`String` 和 `Record` 模块代替原生方法，导入名分别是
   `Arr`、`Str` 和 `Rec`；
-- 时间用 `Clock` 和 `DateTime`，随机值和 ID 用 `Random` 和 `Crypto`
+- 时间用 `Clock` 和 `DateTime`，随机值和 ID 用 `Random` 和 `SecureRandom`
   服务，环境变量用 `Config`；
 - 用 `HttpClient` 代替 `fetch`，用 `FileSystem`、`Path` 和 `ChildProcess`
   服务代替 Node.js 模块；

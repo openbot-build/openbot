@@ -14,6 +14,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
 import {
@@ -21,7 +22,7 @@ import {
 	Execution,
 	type ExecutionIdentity,
 } from "@openbot-build/domain"
-import { Crypto, FiberMap } from "effect"
+import { FiberMap } from "effect"
 import { Prompt, type LanguageModel } from "effect/ai"
 import { ownerKey } from "../../apps/StoredConnections.ts"
 import * as Check from "../../authorization/Check.ts"
@@ -114,7 +115,7 @@ export const make = Effect.gen(function* () {
 					),
 				)
 			: save(operation, cause)
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const run = (input: {
 		readonly socket: Socket.Socket
 		readonly chat: Chat.Id
@@ -129,8 +130,8 @@ export const make = Effect.gen(function* () {
 				const namespace = ownerKey(identity.owner)
 				const chats = records(namespace)
 				const capabilities = live.model.capabilities
-				const connectionId = yield* crypto.randomUUIDv7()
-				const key = Effect.map(crypto.randomUUIDv7(), Execution.CommandKey.make)
+				const connectionId = yield* crypto.uuidV7()
+				const key = Effect.map(crypto.uuidV7(), Execution.CommandKey.make)
 				const allowed = Effect.gen(function* () {
 					const resource = Authorization.Chat.make({
 						...identity.owner,

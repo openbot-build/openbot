@@ -13,7 +13,6 @@ import {
 	Array as Arr,
 	Cause,
 	Clock,
-	Crypto,
 	DateTime,
 	Effect,
 	Layer,
@@ -22,6 +21,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import {
 	and,
 	asc,
@@ -174,7 +174,7 @@ const botInvitationView = (
 export const make: Effect.Effect<
 	typeof Organization.Service,
 	never,
-	PgClient.PgClient | AuditLog | Settings | Crypto.Crypto
+	PgClient.PgClient | AuditLog | Settings | SecureRandom.SecureRandom
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const effectiveRoles = (
@@ -232,9 +232,9 @@ export const make: Effect.Effect<
 	type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 	const audit = yield* AuditLog
 	const settings = yield* Settings
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const newId = crypto
-		.randomUUIDv7()
+		.uuidV7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 
 	/** Run one change to the members of an organization at a time, so the Super Administrator check stays true. */

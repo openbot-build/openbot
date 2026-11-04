@@ -6,12 +6,12 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
 	Schema,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { developerTestFlows, developerTests } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as Rows from "./DeveloperRows.ts"
@@ -45,13 +45,13 @@ export class DeveloperTestStores extends Context.Service<
 export const make: Effect.Effect<
 	typeof DeveloperTestStores.Service,
 	never,
-	PgClient.PgClient | Secrets | Crypto.Crypto
+	PgClient.PgClient | Secrets | SecureRandom.SecureRandom
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const uses = GrantUses.makeWith(db, secrets)
 	const codec = privateStateCodec
 	const flowCodec = Schema.fromJsonString(
@@ -232,9 +232,7 @@ export const make: Effect.Effect<
 									credential.binding.resource !== connection.endpoint
 								)
 									return yield* missing()
-								const reference = yield* crypto
-									.randomUUIDv4()
-									.pipe(Effect.orDie)
+								const reference = yield* crypto.uuidV4().pipe(Effect.orDie)
 								const current = yield* read
 								yield* write({
 									...current,

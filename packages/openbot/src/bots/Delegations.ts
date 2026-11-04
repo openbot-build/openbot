@@ -6,7 +6,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Crypto,
 	Effect,
 	Layer,
 	Option,
@@ -14,6 +13,7 @@ import {
 	pipe,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { hash } from "../capabilities/Capability.ts"
 import { Chain } from "../chats/ChatHost.ts"
@@ -154,10 +154,11 @@ const byCreation = Order.mapInput(
 export const make: Effect.Effect<
 	typeof Delegations.Service,
 	never,
-	BotRecords | Crypto.Crypto
+	BotRecords | SecureRandom.SecureRandom | Digest.Digest
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const delegations = records.collection(
 		"delegation",
 		Stored,
@@ -180,13 +181,13 @@ export const make: Effect.Effect<
 		input.id !== undefined
 			? Effect.succeed(input.id)
 			: input.parent.toolCallId === undefined
-				? crypto.randomUUIDv7({ format: "bytes" }).pipe(
+				? crypto.uuidV7({ format: "bytes" }).pipe(
 						// A platform without secure random numbers is broken.
 						Effect.orDie,
 						Effect.map((uuid) => "dlg_" + Hex.encode(uuid)),
 					)
 				: Effect.map(
-						hash(crypto, [input.parent.chat, input.parent.toolCallId]),
+						hash(hashes, [input.parent.chat, input.parent.toolCallId]),
 						(value) => "dlg_" + value,
 					)
 	return Delegations.of({

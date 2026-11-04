@@ -14,7 +14,8 @@ import {
 	type ChatSettingsChange,
 	type ChatTodoChange,
 } from "@openbot-build/domain"
-import { Crypto, Effect, Option, String as Str } from "effect"
+import { Effect, Option, String as Str } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import * as Check from "../authorization/Check.ts"
 import { Bots } from "../bots/Bots.ts"
@@ -28,7 +29,7 @@ import * as StoredChats from "./StoredChats.ts"
 /** Chat records have no runtime. Only a submitted Turn opens models and tools. */
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const bots = yield* Bots
 	const models = yield* ModelRegistry
 
@@ -73,10 +74,7 @@ export const make = Effect.gen(function* () {
 				})
 			const id = Chat.Id.make(
 				"chat_" +
-					Str.replaceAll(
-						"-",
-						"",
-					)(yield* crypto.randomUUIDv7().pipe(Effect.orDie)),
+					Str.replaceAll("-", "")(yield* crypto.uuidV7().pipe(Effect.orDie)),
 			)
 			yield* check(caller, id, "write")
 			yield* check(caller, id, "run")

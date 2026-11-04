@@ -1,13 +1,6 @@
 import { Bots as BotsApi } from "@openbot-build/domain"
-import {
-	Clock,
-	Context,
-	Crypto,
-	Effect,
-	Layer,
-	Option,
-	String as Str,
-} from "effect"
+import { Clock, Context, Effect, Layer, Option, String as Str } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { BotRecords } from "../bots/BotRecords.ts"
 
 type Rule = BotsApi.Rule
@@ -52,12 +45,12 @@ export class Rules extends Context.Service<
 export const make: Effect.Effect<
 	typeof Rules.Service,
 	never,
-	BotRecords | Crypto.Crypto
+	BotRecords | SecureRandom.SecureRandom
 > = Effect.gen(function* () {
 	const records = yield* BotRecords
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const newId = crypto
-		.randomUUIDv7()
+		.uuidV7()
 		.pipe(Effect.orDie, Effect.map(Str.replaceAll("-", "")))
 	const rules = records.collection("rule", BotsApi.Rule, BotsApi.RuleStatus)
 	const put = (organizationId: string, rule: Rule) =>

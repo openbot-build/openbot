@@ -2,7 +2,6 @@ import { Network } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Context,
-	Crypto,
 	Effect,
 	HashMap,
 	HashSet,
@@ -13,6 +12,7 @@ import {
 	String as Str,
 	pipe,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import {
 	HttpRouter,
@@ -112,7 +112,8 @@ export const layer = Layer.effect(
 	Effect.gen(function* () {
 		const settings = yield* Settings
 		const scenarios = yield* Scenarios
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
+		const hashes = yield* Digest.Digest
 		/** The public origin of OpenBot and its client metadata, as they are now. */
 		const client = Platform.publicOriginOr(settings, () =>
 			Network.NetworkError.make({
@@ -128,10 +129,10 @@ export const layer = Layer.effect(
 			),
 		)
 		// A platform without secure random numbers or SHA-256 is broken, so these failures are defects.
-		const randomId = () => crypto.randomUUIDv4().pipe(Effect.orDie)
+		const randomId = () => crypto.uuidV4().pipe(Effect.orDie)
 		const challenge = (verifier: string) =>
-			crypto
-				.digest("SHA-256", new TextEncoder().encode(verifier))
+			hashes
+				.digest(Digest.sha256, new TextEncoder().encode(verifier))
 				.pipe(Effect.map(Base64Url.encode), Effect.orDie)
 		const codes = yield* Ref.make(
 			HashMap.empty<

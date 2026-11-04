@@ -1,5 +1,5 @@
 import { assert, layer } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	Effect,
 	Layer,
@@ -36,7 +36,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				yield* DatabasePostgres.migrate.pipe(
 					Effect.provide(
 						DatabasePostgres.layer(options).pipe(
-							Layer.provide(NodeServices.layer),
+							Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 						),
 					),
 				)
@@ -48,8 +48,10 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 					return yield* Layer.buildWithMemoMap(
 						PlatformAdminsPostgres.layer.pipe(
 							Layer.provideMerge(OpenBot.layerShared(options)),
-							// Setup makes a new sign-in secret with the Crypto service.
-							Layer.provideMerge(NodeServices.layer),
+							// Setup makes a new sign-in secret with the SecureRandom service.
+							Layer.provideMerge(
+								Layer.merge(NodeServices.layer, NodeCrypto.layer),
+							),
 						),
 						yield* Layer.makeMemoMap,
 						yield* Effect.scope,

@@ -1,5 +1,5 @@
 import { Delegations } from "../src/bots/Delegations.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -35,7 +35,9 @@ import * as StoredChats from "../src/chats/StoredChats.ts"
 import * as BotFixture from "./BotFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
-layer(NodeServices.layer, { excludeTestServices: true })((it) => {
+layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {
+	excludeTestServices: true,
+})((it) => {
 	it.effect(
 		"another process completes a Turn from its saved model result",
 		() =>

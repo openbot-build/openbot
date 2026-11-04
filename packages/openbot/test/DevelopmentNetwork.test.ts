@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Document, Network } from "@openbot-build/protocol"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
@@ -30,7 +30,7 @@ const app = (mode: Mode) =>
 			),
 		),
 		Layer.provide(DevelopmentBusiness.layer),
-		Layer.provide(NodeServices.layer),
+		Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	)
 
 /** Sends one JSON-RPC request to the simulated App, and gives the result. */

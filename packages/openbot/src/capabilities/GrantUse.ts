@@ -3,7 +3,8 @@ import { BotRecords } from "../bots/BotRecords.ts"
 import { Requests } from "./Requests.ts"
 import { Bots as BotDomain, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
-import { Array as Arr, Crypto, Effect, Option, Schema } from "effect"
+import { Array as Arr, Effect, Option, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import * as Hex from "effect/encoding/Hex"
 import * as StoredChats from "../chats/StoredChats.ts"
 import * as PolicyOrigin from "./PolicyOrigin.ts"
@@ -26,7 +27,7 @@ export const make = Effect.gen(function* () {
 	const grants = yield* Grants
 	const requests = yield* Requests
 	const records = yield* BotRecords
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const { read: source } = yield* PolicyOrigin.make
 	const check = Effect.fn("GrantUse.check")(function* (
 		fence: Fence,
@@ -38,7 +39,7 @@ export const make = Effect.gen(function* () {
 		const organizationId = origin.identity.owner.organizationId
 		const callKey = Hex.encode(
 			yield* crypto.digest(
-				"SHA-256",
+				Digest.sha256,
 				new TextEncoder().encode(
 					yield* Schema.encodeEffect(
 						Schema.fromJsonString(Schema.Array(Schema.String)),

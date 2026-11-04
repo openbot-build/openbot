@@ -16,15 +16,8 @@ import type { SecretStorageError } from "../secrets/Secrets.ts"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import { type SqlError, SqlClient } from "effect/sql"
 import { and, eq } from "drizzle-orm"
-import {
-	Array as Arr,
-	Context,
-	Crypto,
-	Effect,
-	Layer,
-	Option,
-	Schema,
-} from "effect"
+import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Db from "../database/Database.ts"
 import { developerWatches } from "../database/Schema.ts"
@@ -117,7 +110,8 @@ const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const sql = yield* SqlClient.SqlClient
 	const store = yield* Store
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const namespace = yield* IndexNamespace
 	const executionNamespace = `developer-monitor:${namespace}`
 	const where = (ref: Reference) =>
@@ -158,11 +152,11 @@ const make = Effect.gen(function* () {
 					}
 					if (!Execution.isTerminal((yield* store.get(key)).status)) return key
 				}
-				const token = yield* crypto.randomUUIDv7().pipe(Effect.orDie)
+				const token = yield* crypto.uuidV7().pipe(Effect.orDie)
 				const resource = Hex.encode(
-					yield* crypto
+					yield* hashes
 						.digest(
-							"SHA-256",
+							Digest.sha256,
 							new TextEncoder().encode(`${ref.kind}:${ref.id}`),
 						)
 						.pipe(Effect.orDie),
@@ -218,7 +212,7 @@ const make = Effect.gen(function* () {
 				yield* store.notify(
 					key,
 					Execution.CommandKey.make(
-						`check:${yield* crypto.randomUUIDv7().pipe(Effect.orDie)}`,
+						`check:${yield* crypto.uuidV7().pipe(Effect.orDie)}`,
 					),
 					commandActor(identity),
 					nextSignal(current.row.revision),

@@ -1,5 +1,5 @@
 import { assert, layer, vi } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import {
 	DatabasePostgres,
 	HostTools,
@@ -11,7 +11,6 @@ import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	Clock,
 	Context,
-	Crypto,
 	Duration,
 	Effect,
 	Exit,
@@ -24,6 +23,7 @@ import {
 	String as Str,
 	SynchronizedRef,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { LanguageModel, Response as ModelResponse } from "effect/ai"
 import {
 	Cookies,
@@ -77,14 +77,17 @@ const cookieHeader = (cookie: Cookies.Cookie) =>
 	cookie.name + "=" + cookie.valueEncoded
 
 // The servers here are real, so the test needs the real clock.
-layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
-	excludeTestServices: true,
-})((it) => {
+layer(
+	Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	{
+		excludeTestServices: true,
+	},
+)((it) => {
 	it.effect(
 		"local login keeps normal sign-in sessions and Chats across a restart",
 		() =>
 			Effect.gen(function* () {
-				const crypto = yield* Crypto.Crypto
+				const crypto = yield* SecureRandom.SecureRandom
 				const database = yield* PostgresTest.start
 				yield* Effect.acquireRelease(
 					Effect.sync(() => {
@@ -169,7 +172,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 				yield* DatabasePostgres.migrate.pipe(
 					Effect.provide(
 						DatabasePostgres.layer(options).pipe(
-							Layer.provide(NodeServices.layer),
+							Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 						),
 					),
 				)
@@ -400,7 +403,7 @@ layer(Layer.merge(NodeServices.layer, FetchHttpClient.layer), {
 				}
 				vi.advanceTimersByTime(2 * 86400000)
 				const missing = yield* request(
-					"/v1/chats/" + (yield* crypto.randomUUIDv4()),
+					"/v1/chats/" + (yield* crypto.uuidV4()),
 					{ headers: accountHeaders },
 				)
 				assert.strictEqual(missing.status, 404)

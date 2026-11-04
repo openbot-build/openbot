@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Config, Item, Model, Provider } from "@openbot-build/core"
 import { DatabasePostgres } from "@openbot-build/openbot"
 import { DevelopmentLogin, Messages } from "@openbot-build/openbot/testing"
@@ -40,8 +40,12 @@ export const settings = (databaseUrl: string) => ({
 		secret: Redacted.make("DevelopmentAssemblySecretMustRemainStable123456"),
 	},
 })
-/** Files, programs and an HTTP client for the tests. */
-export const platform = Layer.merge(NodeServices.layer, FetchHttpClient.layer)
+/** Files, programs, crypto and an HTTP client for the tests. */
+export const platform = Layer.mergeAll(
+	NodeServices.layer,
+	NodeCrypto.layer,
+	FetchHttpClient.layer,
+)
 /** A page of the Items of a Chat, as the API gives it. */
 export const ItemPage = Schema.Struct({
 	items: Schema.Array(Item.Record),

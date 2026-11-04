@@ -3,7 +3,6 @@ import {
 	Option,
 	HashMap,
 	Clock,
-	Crypto,
 	Effect,
 	Equal,
 	HashSet,
@@ -17,6 +16,7 @@ import {
 	String as Str,
 	pipe,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import * as Sdk from "../network/Sdk.ts"
 import * as AppConnections from "./AppConnections.ts"
 import * as Mcp from "@modelcontextprotocol/client"
@@ -404,7 +404,8 @@ export const prepare = Effect.fn("Authorization.prepare")(function* (options: {
 			Predicate.isNotUndefined,
 		),
 	})
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	// A platform without secure random bytes or SHA-256 is a defect, not a failure a caller can act on.
 	const flowId = Base64Url.encode(
 		yield* crypto.randomBytes(32).pipe(Effect.orDie),
@@ -413,8 +414,8 @@ export const prepare = Effect.fn("Authorization.prepare")(function* (options: {
 		yield* crypto.randomBytes(32).pipe(Effect.orDie),
 	)
 	const challenge = Base64Url.encode(
-		yield* crypto
-			.digest("SHA-256", new TextEncoder().encode(verifier))
+		yield* hashes
+			.digest(Digest.sha256, new TextEncoder().encode(verifier))
 			.pipe(Effect.orDie),
 	)
 	const url = new URL(metadata.authorization_endpoint)

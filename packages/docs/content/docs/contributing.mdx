@@ -224,7 +224,7 @@ requirement may only name a path parameter that its endpoint has. A test in
 
 The authorization code comes from the
 [ability](https://github.com/nmnmcc/ability) library, the npm package
-`@nmnmcc/ability`. Version 3.1.0 is fixed in `package.json`. Policies use JSON
+`@nmnmcc/ability`. Version 3.2.0 is fixed in `package.json`. Policies use JSON
 text at HTTP and storage boundaries. This version makes the error classes public
 in its type declarations, so TypeScript can emit OpenBot declarations without a
 local patch.
@@ -245,7 +245,7 @@ comment next to the code.
 ### UUIDs
 
 A UUID is a 16-byte ID. Use UUID v7 when its time order helps stored records or
-indexes. Generate it with `Crypto.randomUUIDv7()` from Effect. Use the `bytes`
+indexes. Generate it with `SecureRandom.uuidV7()` from Effect. Use the `bytes`
 format when the next step needs bytes. Keep UUID v4 for random secrets and for
 short-lived IDs that gain nothing from time order.
 
@@ -321,8 +321,8 @@ on them. Among other things, they ask for:
 
 - the `Array`, `String` and `Record` modules of Effect in place of the native
   methods, imported as `Arr`, `Str` and `Rec`;
-- `Clock` and `DateTime` for time, the `Random` and `Crypto` services for random
-  values and IDs, and `Config` for environment variables;
+- `Clock` and `DateTime` for time, the `Random` and `SecureRandom` services for
+  random values and IDs, and `Config` for environment variables;
 - `HttpClient` in place of `fetch`, and the `FileSystem`, `Path` and
   `ChildProcess` services in place of the Node.js modules;
 - Effect Schema for JSON and for outside data, decoded through Effect and not

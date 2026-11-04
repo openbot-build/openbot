@@ -33,7 +33,7 @@ This example gives one Anthropic model with a key from the environment of your
 program:
 
 ```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	AnthropicProvider,
@@ -91,7 +91,13 @@ NodeRuntime.runMain(
 			}
 			return yield* Layer.launch(
 				Server.layerLive({ ...settings, builtinModels }).pipe(
-					Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+					Layer.provide(
+						Layer.mergeAll(
+							NodeServices.layer,
+							NodeCrypto.layer,
+							FetchHttpClient.layer,
+						),
+					),
 				),
 			)
 		}),

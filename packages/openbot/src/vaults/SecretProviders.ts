@@ -1,9 +1,10 @@
 import { Redacted } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Vaults as VaultsModel } from "@openbot-build/domain"
 
 import { type Caller } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
-import { Clock, Context, Crypto, Effect, Layer, Option, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Hex } from "effect/encoding"
 import * as Failures from "../errors/Failures.ts"
 import * as Check from "../authorization/Check.ts"
@@ -145,7 +146,7 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const readers = yield* Readers
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
 	const { check, filter, guard } = yield* Check.make
 	const stored = (message: string) => Failures.replace(message, unavailable)
 	const where = (organizationId: string, id: string) =>

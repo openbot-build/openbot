@@ -1,7 +1,7 @@
 import * as ClientSdk from "@openbot-build/client"
 import * as ErrorReporting from "../src/errors/Reporting.ts"
 import * as HttpFailureBoundary from "../src/errors/HttpBoundary.ts"
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { AuthApi, ExecutionsApi } from "@openbot-build/api"
@@ -208,7 +208,7 @@ const services = HttpRouter.serve(
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
 	Layer.provideMerge(NodeHttpServer.layerTest),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const submit = Effect.fn(function* (name: string) {
 	const store = yield* Store.Store

@@ -1,8 +1,9 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
-import { Crypto, Effect, Layer, Redacted, Schema } from "effect"
+import { Effect, Layer, Redacted, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as Db from "../src/database/Database.ts"
 import * as Tables from "../src/database/Schema.ts"
@@ -14,7 +15,7 @@ const database = Layer.unwrap(
 	Effect.map(PostgresTest.start, (database) =>
 		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
 	),
-).pipe(Layer.provideMerge(NodeServices.layer))
+).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)))
 
 const columns = [
 	["openbot_developer_claims", "id"],
@@ -42,7 +43,7 @@ it.layer(database, { excludeTestServices: true })((it) => {
 		Effect.gen(function* () {
 			const sql = yield* PgClient.PgClient
 			const db = yield* Db.make
-			const crypto = yield* Crypto.Crypto
+			const crypto = yield* SecureRandom.SecureRandom
 			const before = yield* MigrationTest.migrationsWhere(
 				(name) => name < ownMigration,
 			)
@@ -208,7 +209,7 @@ it.layer(database, { excludeTestServices: true })((it) => {
 			yield* write(oldId)
 			yield* migrate(db, { migrationsFolder: through })
 			yield* migrate(db, { migrationsFolder: through })
-			const newId = yield* crypto.randomUUIDv7()
+			const newId = yield* crypto.uuidV7()
 			assert.isTrue(Schema.is(Schema.String.check(Schema.isUUID(7)))(newId))
 			// The server starts with a new pool after the schema change.
 			yield* write(newId).pipe(Effect.provide(PgClient.layer(sql.config)))
@@ -243,7 +244,7 @@ it.layer(database, { excludeTestServices: true })((it) => {
 				{ id: oldId, execution: executionId, body: "sealed command" },
 				{ id: newId, execution: executionId, body: "sealed command" },
 			])
-			const missingId = yield* crypto.randomUUIDv7()
+			const missingId = yield* crypto.uuidV7()
 			const error =
 				yield* sql`insert into openbot_execution_outbox ${sql.insert({
 					namespace: "uuid-storage",

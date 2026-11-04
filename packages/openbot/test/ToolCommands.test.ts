@@ -58,7 +58,7 @@ import * as AppCall from "../src/apps/AppCall.ts"
 import { ActionPolicy } from "../src/apps/ActionPolicy.ts"
 import { AppCalls, ConnectionId } from "@openbot-build/domain"
 import { Billing } from "../src/billing/Billing.ts"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -191,7 +191,7 @@ const services = ToolCommands.layer.pipe(
 	Layer.provide(Secrets.layer(Redacted.make("test:" + Str.repeat(32)("11")))),
 	Layer.provideMerge(database),
 	Layer.provideMerge(policy),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const settings = {
 	budget: "0 millis",

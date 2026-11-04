@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Network } from "@openbot-build/protocol"
 import { Clock, Effect, FileSystem, Layer, Path, Schema } from "effect"
 import { HttpRouter } from "effect/http"
@@ -49,7 +49,7 @@ export const serve = Effect.fn("ProtocolTest.serve")(function* (
 	})
 	const routes = Service.layer(settings).pipe(
 		Layer.provide(Authorization.layer(origin).pipe(Layer.provide(network))),
-		Layer.provide(NodeServices.layer),
+		Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 		Layer.provideMerge(
 			clock === undefined ? Layer.empty : Layer.succeed(Clock.Clock, clock),
 		),

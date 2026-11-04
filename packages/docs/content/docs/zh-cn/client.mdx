@@ -30,7 +30,7 @@ description: 用 TypeScript 调用 OpenBot，请求和错误都有类型。
 选择已发布的提交。锁文件会保存标签对应的精确版本：
 
 ```sh
-pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.0.7
+pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
 ```
 
 客户端包含共用的 OpenBot 代码和类型，采用 MIT 许可。安装时不需要 OpenBot 源码。其他 OpenBot 包保留各自的许可证。
@@ -70,7 +70,7 @@ const id = await Effect.runPromise(
 保持不变。`Chats.message` 用同样方式向已有 Chat 发送消息。回执包含执行 ID；用
 `client.api.executions.observe` 和上次保存的 `afterSequence`
 观察执行。关闭观察不会取消工作。`Executions.cancel` 和 `Executions.decide`
-也会准备带稳定键的命令。这些辅助函数需要平台的 `Crypto`
+也会准备带稳定键的命令。这些辅助函数需要平台的 `SecureRandom`
 服务；上面的 Node.js 示例使用 `NodeCrypto.layer`。
 
 | 选项             | 必需 | 作用                                                                                                  |

@@ -5,6 +5,7 @@ import * as Observation from "../src/execution/Observation.ts"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer needs the native server factory.
 import { createServer } from "node:http"
 import {
+	NodeCrypto,
 	NodeHttpClient,
 	NodeHttpServer,
 	NodeRuntime,
@@ -486,6 +487,6 @@ Layer.launch(
 		Layer.provide(
 			NodeHttpServer.layer(createServer, { host: "127.0.0.1", port: 0 }),
 		),
-		Layer.provide(NodeServices.layer),
+		Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 	),
 ).pipe(NodeRuntime.runMain)

@@ -1,6 +1,6 @@
 import { Settings } from "../src/settings/Settings.ts"
 import { Option } from "effect"
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Config, Effect, Layer, Redacted, Stream, String as Str } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/http"
@@ -95,6 +95,10 @@ const main = Effect.gen(function* () {
 		}),
 	).pipe(Layer.provideMerge(OpenBot.layerShared(options)))
 	return yield* Layer.launch(app)
-}).pipe(Effect.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)))
+}).pipe(
+	Effect.provide(
+		Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+	),
+)
 
 NodeRuntime.runMain(main)

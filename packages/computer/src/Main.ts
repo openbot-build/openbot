@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-import { NodeRuntime, NodeServices, NodeSocket } from "@effect/platform-node"
+import {
+	NodeCrypto,
+	NodeRuntime,
+	NodeServices,
+	NodeWS,
+} from "@effect/platform-node"
 import { Array as Arr, Console, DateTime, Effect, Layer, Option } from "effect"
 import { Command, Flag } from "effect/cli"
 import { FetchHttpClient } from "effect/http"
@@ -145,8 +150,9 @@ NodeRuntime.runMain(
 		Effect.provide(
 			Layer.mergeAll(
 				NodeServices.layer,
+				NodeCrypto.layer,
 				FetchHttpClient.layer,
-				NodeSocket.layerWebSocketConstructorWS,
+				NodeWS.layerWebSocketConstructor,
 			),
 		),
 	),

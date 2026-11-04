@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -57,7 +57,7 @@ const database = Store.layer.pipe(
 			),
 		),
 	),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const readPolicy = Policy.define(Authorization.OpenBot)(function* (_) {
 	yield* _.allow("read", Authorization.Chat)

@@ -1,5 +1,5 @@
 import { assert, layer } from "@effect/vitest"
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { eq } from "drizzle-orm"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
@@ -246,7 +246,7 @@ const services = HttpRouter.serve(routes, {
 	),
 	Layer.provideMerge(database),
 	Layer.provideMerge(NodeHttpServer.layerTest),
-	Layer.provideMerge(NodeServices.layer),
+	Layer.provideMerge(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 )
 const encodeConnection = Schema.encodeEffect(
 	Schema.fromJsonString(Schema.toCodecJson(StoredConnections.StoredConnection)),

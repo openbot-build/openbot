@@ -1,13 +1,7 @@
 import { getTableName } from "drizzle-orm"
 import { Execution } from "@openbot-build/domain"
-import {
-	Array as Arr,
-	Crypto,
-	Effect,
-	HashMap,
-	Record as Rec,
-	Schema,
-} from "effect"
+import { Array as Arr, Effect, HashMap, Record as Rec, Schema } from "effect"
+import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
 import * as ExecutionTables from "../ExecutionSchema.ts"
@@ -81,10 +75,10 @@ export const counts = Effect.gen(function* () {
 export const maintenance = Effect.gen(function* () {
 	const sql = yield* SqlClient.SqlClient
 	const store = yield* Store
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* Digest.Digest
 	const digest = (value: string) =>
 		crypto
-			.digest("SHA-256", new TextEncoder().encode(value))
+			.digest(Digest.sha256, new TextEncoder().encode(value))
 			.pipe(Effect.map(Hex.encode))
 	const progress = yield* Progress.make
 	yield* progress.verify({

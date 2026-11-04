@@ -3,7 +3,6 @@ import {
 	Cause,
 	Clock,
 	Context,
-	Crypto,
 	Deferred,
 	Duration,
 	Effect,
@@ -17,6 +16,7 @@ import {
 	Stream,
 	type Scope,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { AiError } from "effect/ai"
 import * as Operation from "./Operation.ts"
 import type * as ChatIdentity from "./ChatIdentity.ts"
@@ -134,11 +134,11 @@ export const make = (
 ): Effect.Effect<
 	typeof Operations.Service,
 	never,
-	Scope.Scope | Crypto.Crypto
+	Scope.Scope | SecureRandom.SecureRandom
 > =>
 	Effect.gen(function* () {
 		const store = options.store
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const settingsOf =
 			options.settings ?? (() => Effect.succeed(defaultSettings))
 		const scope = yield* Effect.scope
@@ -193,9 +193,7 @@ export const make = (
 				)
 				if (budget === "foreground") return yield* foreground
 
-				const id = Operation.Id.make(
-					yield* crypto.randomUUIDv7().pipe(Effect.orDie),
-				)
+				const id = Operation.Id.make(yield* crypto.uuidV7().pipe(Effect.orDie))
 				const startedAt = yield* Clock.currentTimeMillis
 				const record: Operation.Record = {
 					id,

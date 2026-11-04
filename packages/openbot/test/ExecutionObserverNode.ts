@@ -1,5 +1,5 @@
 import * as ErrorRecords from "../src/errors/Records.ts"
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Execution } from "@openbot-build/domain"
 import {
@@ -59,6 +59,6 @@ const main = Effect.gen(function* () {
 		)(events)
 		yield* sql`update observation_process_reads set events = ${encoded}::jsonb where node = ${node}`
 	}).pipe(Effect.provide(services))
-}).pipe(Effect.provide(NodeServices.layer))
+}).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)))
 
 NodeRuntime.runMain(main)

@@ -5,7 +5,6 @@ import { and, eq } from "drizzle-orm"
 import {
 	Clock,
 	Context,
-	Crypto,
 	DateTime,
 	Effect,
 	Layer,
@@ -13,6 +12,7 @@ import {
 	Result,
 	Schema,
 } from "effect"
+import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import * as Db from "../database/Database.ts"
 import {
@@ -124,7 +124,8 @@ const ownerWhere = (owner: Owner, id: string) => {
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const crypto = yield* Crypto.Crypto
+	const crypto = yield* SecureRandom.SecureRandom
+	const hashes = yield* Digest.Digest
 	const oauth = yield* ChatGptOAuth
 	const random = crypto
 		.randomBytes(32)
@@ -163,7 +164,7 @@ export const make = Effect.gen(function* () {
 			.insert(providerOAuthHosts)
 			.values({
 				id: "chatgpt",
-				hostId: "urn:uuid:" + (yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+				hostId: "urn:uuid:" + (yield* crypto.uuidV4().pipe(Effect.orDie)),
 			})
 			.onConflictDoNothing()
 		const [host] = yield* db
@@ -188,8 +189,8 @@ export const make = Effect.gen(function* () {
 		const nonce = yield* random
 		const host = yield* hostId
 		const challenge = Base64Url.encode(
-			yield* crypto
-				.digest("SHA-256", new TextEncoder().encode(verifier))
+			yield* hashes
+				.digest(Digest.sha256, new TextEncoder().encode(verifier))
 				.pipe(Effect.orDie),
 		)
 		const now = yield* Clock.currentTimeMillis

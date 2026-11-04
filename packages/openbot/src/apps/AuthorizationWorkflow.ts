@@ -10,15 +10,8 @@ import {
 	Network,
 	OAuthAuthorization,
 } from "@openbot-build/protocol"
-import {
-	Array as Arr,
-	Effect,
-	Crypto,
-	Layer,
-	Option,
-	Redacted,
-	Schema,
-} from "effect"
+import { Array as Arr, Effect, Layer, Option, Redacted, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { Calls } from "../execution/Calls.ts"
 import * as Engine from "../execution/Engine.ts"
 import * as Program from "../execution/Program.ts"
@@ -39,7 +32,7 @@ export const layer = Layer.unwrap(
 		const cleanup = yield* GrantCleanup
 		const factory = yield* AppHost
 		const settings = yield* Settings
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const network = yield* AppNetwork
 		const active = yield* App.ConnectionScopes
 		const calls = yield* Calls
@@ -146,7 +139,9 @@ export const layer = Layer.unwrap(
 											: {
 													resourceMetadataUrl: protection.resourceMetadataUrl,
 												}),
-									}).pipe(Effect.provideService(Crypto.Crypto, crypto)),
+									}).pipe(
+										Effect.provideService(SecureRandom.SecureRandom, crypto),
+									),
 								)
 								return {
 									result: {

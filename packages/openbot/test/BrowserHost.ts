@@ -1,6 +1,6 @@
 import * as AccessModel from "@openbot-build/domain/Access"
 import { AuthApi } from "@openbot-build/api"
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	Auth,
@@ -141,9 +141,10 @@ export class LoginFailed extends Schema.TaggedError<
 	{ readonly brand: unique symbol }
 >()("LoginFailed", { subject: Schema.String, message: Schema.String }) {}
 
-/** The services that `start` needs: the Node services and the fetch HTTP client. */
-export const layerPlatform = Layer.merge(
+/** The services that `start` needs: the Node services, crypto and the fetch HTTP client. */
+export const layerPlatform = Layer.mergeAll(
 	NodeServices.layer,
+	NodeCrypto.layer,
 	FetchHttpClient.layer,
 )
 
@@ -459,7 +460,7 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 	yield* DatabasePostgres.migrate.pipe(
 		Effect.provide(
 			DatabasePostgres.layer(configuration).pipe(
-				Layer.provide(NodeServices.layer),
+				Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
 			),
 		),
 	)
@@ -493,6 +494,8 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 			),
 		),
 		Layer.provideMerge(OpenBot.layerShared(configuration)),
+		// `run` gives a test the crypto services too, as the Node services did before Effect 4.1.
+		Layer.provideMerge(NodeCrypto.layer),
 		// The HTTP calls of the server go to the test identity provider or to `platformFetch`.
 		Layer.provide(FetchHttpClient.layer),
 		Layer.provide(

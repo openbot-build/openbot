@@ -1,6 +1,5 @@
 import {
 	Context,
-	Crypto,
 	Effect,
 	HashMap,
 	Layer,
@@ -9,6 +8,7 @@ import {
 	Schema,
 	SchemaIssue,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 
 export const readTool = {
 	name: "read_document",
@@ -55,7 +55,7 @@ export class Business extends Context.Service<
 export const layer = Layer.effect(
 	Business,
 	Effect.gen(function* () {
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* SecureRandom.SecureRandom
 		const calls = yield* Ref.make(HashMap.empty<string, number>())
 		// HashMap compares the [owner, id] keys by value.
 		const documents = yield* Ref.make(
@@ -100,7 +100,7 @@ export const layer = Layer.effect(
 					if (continuation !== undefined) {
 						if (continuation.requestState === undefined) {
 							// A platform without secure random numbers is broken, so this failure is a defect.
-							const state = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
+							const state = yield* crypto.uuidV4().pipe(Effect.orDie)
 							yield* Ref.update(inputs, (values) =>
 								HashMap.set(values, state, { owner, id }),
 							)

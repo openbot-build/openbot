@@ -11,7 +11,6 @@ import { CodeRuns as CodeDomain } from "@openbot-build/domain"
 import {
 	Cause,
 	Context,
-	Crypto,
 	Schema,
 	Data,
 	Effect,
@@ -19,6 +18,7 @@ import {
 	Option,
 	Ref,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { type Capability } from "./Capability.ts"
 import * as CapabilityPolicy from "./CapabilityAccess.ts"
 import * as Judge from "./Judge.ts"
@@ -122,7 +122,7 @@ export const durable = (
 		)
 		const requests = yield* RequestCommands
 		const turns = yield* TurnContext
-		const crypto = yield* Crypto.Crypto
+		const crypto = yield* Digest.Digest
 		const recovery = yield* Recovery.make
 		const sameIdentity = Schema.toEquivalence(ExecutionIdentity)
 		const answers = yield* Ref.make(HashMap.empty<string, Answer>())
@@ -187,7 +187,7 @@ export const durable = (
 				})
 				const hash = Hex.encode(
 					yield* crypto.digest(
-						"SHA-256",
+						Digest.sha256,
 						new TextEncoder().encode(
 							yield* Schema.encodeEffect(
 								Schema.fromJsonString(Schema.Array(Schema.String)),

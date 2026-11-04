@@ -13,6 +13,7 @@ import {
 } from "effect"
 import { HttpRouter, HttpServerError } from "effect/http"
 import {
+	NodeCrypto,
 	NodeHttpServer,
 	NodeRuntime,
 	NodeServices,
@@ -114,6 +115,6 @@ const application = Layer.unwrap(
 				}),
 		}).pipe(Layer.provide(server))
 	}),
-).pipe(Layer.provide(NodeServices.layer))
+).pipe(Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)))
 
 NodeRuntime.runMain(Layer.launch(application))

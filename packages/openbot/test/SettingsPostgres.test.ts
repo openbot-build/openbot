@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
@@ -132,7 +132,10 @@ it.live("a missed settings notice does not keep old rights", () =>
 			(yield* second.settings.organization("silent")).document.botMemory,
 			false,
 		)
-	}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+	}).pipe(
+		Effect.scoped,
+		Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+	),
 )
 
 // The database is real, so the tests use real time.
@@ -240,7 +243,9 @@ it.live(
 			assert.strictEqual(seen.document.botMemory, false)
 		}).pipe(
 			Effect.scoped,
-			Effect.provide(Layer.merge(NodeServices.layer, logs)),
+			Effect.provide(
+				Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, logs),
+			),
 		)
 	},
 	{ timeout: 60000 },
@@ -297,7 +302,9 @@ it.live(
 			)
 		}).pipe(
 			Effect.scoped,
-			Effect.provide(Layer.merge(NodeServices.layer, logs)),
+			Effect.provide(
+				Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, logs),
+			),
 		)
 	},
 	{ timeout: 60000 },
@@ -339,6 +346,9 @@ it.live(
 			assert.ok(received.length <= SettingsPostgres.changesCapacity + 1)
 			assert.ok(!Arr.some(received, isOrganization("org_1")))
 			assert.ok(Arr.some(received, isOrganization("org_" + total)))
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
+		),
 	{ timeout: 60000 },
 )

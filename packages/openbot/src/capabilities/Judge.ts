@@ -6,7 +6,6 @@ import {
 	Array as Arr,
 	Cause,
 	Context,
-	Crypto,
 	Duration,
 	Effect,
 	Layer,
@@ -16,6 +15,7 @@ import {
 	String as Str,
 	pipe,
 } from "effect"
+import { Digest } from "effect/crypto"
 import { Decision, LanguageModel, Prompt, Response } from "effect/ai"
 import { type Capability, hash } from "./Capability.ts"
 import { attribute, decisionUsage } from "../billing/MeteredModel.ts"
@@ -326,7 +326,7 @@ export const durable = (
 		const calls = yield* Calls
 		const store = yield* Store
 		const checks = yield* Check.make
-		const crypto = yield* Crypto.Crypto
+		const hashes = yield* Digest.Digest
 		const errors = yield* Records
 		return Judge.of({
 			decide: (input) =>
@@ -355,7 +355,7 @@ export const durable = (
 							author: rule.author,
 						})),
 					}
-					const step = `judge:${yield* hash(crypto, context === undefined ? [request] : [request, context.key])}`
+					const step = `judge:${yield* hash(hashes, context === undefined ? [request] : [request, context.key])}`
 					return (yield* modelCalls.run(fence, step, request, {
 						codec: answerCodec,
 						usage: (result) => result.usage,
