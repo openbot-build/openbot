@@ -219,6 +219,9 @@ Server.layerLive({ ...settings, routes })
 
 不要使用 `/auth/` 或 `/v1/` 下的路径。它们属于 OpenBot。
 
+OpenBot 用一个单独的路由器来服务这些路由。这个 Layer 里的路由器中间件，包括全局中间件，只作用于这些路由。当 OpenBot 的一个路由和你的一个路由匹配同一个请求时，OpenBot 的路由优先。通配符路由也是这样，例如
+`/*`。它只会收到 OpenBot 的路由不处理的请求，`HEAD` 请求也一样。
+
 ## 使用你自己的 HTTP 服务器
 
 `Server.layerApp(options)` 提供 OpenBot 的路由和服务。它需要和 `Server.layer`

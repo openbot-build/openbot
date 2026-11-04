@@ -48,7 +48,9 @@ import {
 	Context,
 	Deferred,
 	Effect,
+	HashSet,
 	Layer,
+	Order,
 	Result,
 	Redacted,
 	Ref,
@@ -104,7 +106,10 @@ import {
 	DeveloperApi,
 	AppDiscoveryFailed,
 	AppDiscoveryResult,
+	OpenBotApi,
 } from "@openbot-build/api"
+import { HttpApi } from "effect/http-api"
+import * as HttpHost from "../src/server-kernel/errors/HttpHost.ts"
 import * as AppDiscovery from "../src/plugin-apps/Discovery.ts"
 import * as Governance from "../src/plugin-apps/Governance.ts"
 import * as PublicIndex from "../src/plugin-apps/Index.ts"
@@ -558,12 +563,32 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 		sql: (statement: string) => sql.unsafe(statement),
 		/** Every session that the server asked Auth to resolve. */
 		authCalls: Ref.get(authCalls),
+		host: Context.get(services, HttpHost.HttpHost),
 		request: (payload: unknown, headers: Record<string, string> = {}) =>
 			postJson(address + "/v1/apps/discover", payload, headers),
 	}
 })
 
 layer(platform, { excludeTestServices: true })((it) => {
+	it.effect("Server.layerApi mounts every group of the contract", () =>
+		Effect.gen(function* () {
+			const publisher = yield* fixture()
+			const api = yield* startApi(publisher.layer)
+			let groups = HashSet.empty<string>()
+			HttpApi.reflect(OpenBotApi, {
+				onGroup: ({ group }) => {
+					groups = HashSet.add(groups, group.identifier)
+				},
+				onEndpoint: () => undefined,
+			})
+			assert.strictEqual(HashSet.size(groups), 45)
+			assert.deepStrictEqual(
+				Arr.sort(Arr.fromIterable(yield* api.host.mounted), Order.String),
+				Arr.sort(Arr.fromIterable(groups), Order.String),
+			)
+		}),
+	)
+
 	it.effect(
 		"known-address discovery keeps protocol candidates, configuration and sources from local HTTPS",
 		() =>

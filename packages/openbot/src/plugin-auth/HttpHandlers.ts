@@ -109,22 +109,24 @@ const signIn = HttpApiBuilder.group(OpenBotApi, "signIn", (handlers) =>
 		)
 	}),
 )
-/** Better Auth serves its own routes. OpenBot adds the session and user token routes. */
-export const layer = Layer.mergeAll(account, userTokens, signIn).pipe(
-	Layer.provideMerge(
-		Layer.mergeAll(
-			HttpMiddleware.layerBotAuth,
-			HttpMiddleware.layerAccountAuth,
-			HttpMiddleware.layerSessionAuth,
-			HttpMiddleware.layerOrigin,
-			HttpMiddleware.layerNoStore,
-		),
-	),
+/** The middleware of the protected groups. */
+export const layerMiddleware = Layer.mergeAll(
+	HttpMiddleware.layerBotAuth,
+	HttpMiddleware.layerAccountAuth,
+	HttpMiddleware.layerSessionAuth,
+	HttpMiddleware.layerOrigin,
+	HttpMiddleware.layerNoStore,
 )
+
+/** The session, user token and sign-in groups. Better Auth serves its own routes. */
+export const layerGroups = Layer.mergeAll(account, userTokens, signIn)
+
+/** The groups of `layerGroups` together with `layerMiddleware`, for callers that build their own API. */
+export const layer = layerGroups.pipe(Layer.provideMerge(layerMiddleware))
 
 /**
  * Mounts the Better Auth handler, as the Better Auth Effect guide shows.
- * Routes in the OpenBot contract, such as `/auth/session`, are exact paths, so they win over this wildcard.
+ * Routes in the OpenBot contract, such as `/auth/session`, always win over this wildcard.
  * Sign-in responses carry cookies, so no cache may keep them.
  */
 export const layerBetterAuth = Layer.unwrap(

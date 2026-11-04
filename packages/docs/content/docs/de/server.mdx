@@ -249,6 +249,12 @@ Server.layerLive({ ...settings, routes })
 
 Nutze keine Pfade unter `/auth/` oder `/v1/`. Sie gehören OpenBot.
 
+OpenBot bedient diese Routen mit einem eigenen Router. Router-Middleware in
+diesem Layer, auch globale Middleware, wirkt nur auf diese Routen. Wenn eine
+Route von OpenBot und eine deiner Routen auf dieselbe Anfrage passen, gewinnt
+die Route von OpenBot. Das gilt auch für eine Wildcard-Route, wie `/*`. Sie
+bekommt nur die Anfragen, die keine Route von OpenBot nimmt, auch bei `HEAD`.
+
 ## Deinen eigenen HTTP-Server nutzen
 
 `Server.layerApp(options)` gibt die OpenBot-Routen und -Dienste. Es braucht

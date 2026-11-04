@@ -5,7 +5,9 @@ import * as AppExperienceHandlers from "../plugin-apps/ExperienceHttpHandlers.ts
 import { OpenBotApi, service } from "@openbot-build/api"
 
 import { Effect, Layer } from "effect"
-import { HttpApiBuilder, HttpApiScalar } from "effect/http-api"
+import { HttpApiBuilder } from "effect/http-api"
+import * as HttpHost from "../server-kernel/errors/HttpHost.ts"
+import * as AuthHandlers from "../plugin-auth/HttpHandlers.ts"
 import * as AppViewHandlers from "../plugin-apps/ViewHttpHandlers.ts"
 import * as AppHandlers from "../plugin-apps/HttpHandlers.ts"
 import * as AppToolHandlers from "../plugin-apps/OperationHttpHandlers.ts"
@@ -36,50 +38,114 @@ const health = HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
 		.handle("getService", () => Effect.succeed(service))
 		.handle("getHealth", () => Effect.succeed({ status: "ok" })),
 )
-/** The OpenBot API and its documentation page. */
-export const layerPlatform = Layer.mergeAll(
-	HttpApiBuilder.layer(OpenBotApi, { openapiPath: service.openapi }).pipe(
-		Layer.provide(
-			Layer.mergeAll(
-				health,
-				DeveloperHandlers.layerPublic,
-				DeveloperHandlers.layer,
-				AppHandlers.layer,
-				AppToolHandlers.layer,
-				CodeRunHandlers.layer,
-				AppViewHandlers.layer,
-				AppExperienceHandlers.layer,
-				IndexHandlers.layer,
-				AppAuthorizationHandlers.layer,
-				ConnectionHandlers.layer,
-				ChatHandlers.layerPlatform,
-				ToolHandlers.layer,
-				ExecutionHandlers.layer,
-				LiveHandlers.layer,
-				DelegationHandlers.layerPlatform,
-				BotHandlers.layer,
-				BotHandlers.layerInvitations,
-				RequestHandlers.layer,
-				SettingsHandlers.layerMember,
-				TriggerHandlers.layer,
-				FileHandlers.layer,
-				TriggerHandlers.layerHooks,
-				ChannelHandlers.layer,
-				ChannelHandlers.layerLinks,
-				ChannelHandlers.layerHooks,
-				ComputerHandlers.layerProviders,
-				ComputerHandlers.layer,
-				ComputerHandlers.layerHooks,
-				VaultHandlers.layerProviders,
-				VaultHandlers.layer,
-				BillingHandlers.layer,
-				OrganizationHandlers.layer,
-				ModelProviderHandlers.layer,
-				PlatformHandlers.layer,
-				AccessHandlers.layer,
-				SsoHandlers.layer,
-			),
-		),
+/** Mounts every group of the contract for the life of the server. The mounts follow the future plugins. */
+export const layerGroups = Layer.effectDiscard(
+	Effect.gen(function* () {
+		const host = yield* HttpHost.HttpHost
+		yield* Effect.all(
+			[
+				host.mount(["health"], health),
+				host.mount(["executions"], ExecutionHandlers.layer),
+				host.mount(
+					["account", "userTokens", "signIn"],
+					AuthHandlers.layerGroups,
+				),
+				host.mount(
+					["access", "loginOptions", "emailSignIn"],
+					AccessHandlers.layer,
+				),
+				host.mount(
+					[
+						"developerPublic",
+						"developer",
+						"apps",
+						"appOperations",
+						"appViews",
+						"appExperience",
+						"appIndex",
+						"appAuthorization",
+						"appAuthorizationPublic",
+						"connections",
+					],
+					Layer.mergeAll(
+						DeveloperHandlers.layerPublic,
+						DeveloperHandlers.layer,
+						AppHandlers.layer,
+						AppToolHandlers.layer,
+						AppViewHandlers.layer,
+						AppExperienceHandlers.layer,
+						IndexHandlers.layer,
+						AppAuthorizationHandlers.layer,
+						ConnectionHandlers.layer,
+					),
+				),
+				host.mount(["codeRuns"], CodeRunHandlers.layer),
+				host.mount(
+					["chats", "toolCalls", "live"],
+					Layer.mergeAll(
+						ChatHandlers.layerPlatform,
+						ToolHandlers.layer,
+						LiveHandlers.layer,
+					),
+				),
+				host.mount(
+					["bots", "botInvitations", "delegations"],
+					Layer.mergeAll(
+						BotHandlers.layer,
+						BotHandlers.layerInvitations,
+						DelegationHandlers.layerPlatform,
+					),
+				),
+				host.mount(["requests"], RequestHandlers.layer),
+				host.mount(["memberSettings"], SettingsHandlers.layerMember),
+				host.mount(
+					["triggers", "triggerHooks"],
+					Layer.merge(TriggerHandlers.layer, TriggerHandlers.layerHooks),
+				),
+				host.mount(["files"], FileHandlers.layer),
+				host.mount(
+					["channels", "channelLinks", "channelHooks"],
+					Layer.mergeAll(
+						ChannelHandlers.layer,
+						ChannelHandlers.layerLinks,
+						ChannelHandlers.layerHooks,
+					),
+				),
+				host.mount(
+					["computerProviders", "computers", "computerHooks"],
+					Layer.mergeAll(
+						ComputerHandlers.layerProviders,
+						ComputerHandlers.layer,
+						ComputerHandlers.layerHooks,
+					),
+				),
+				host.mount(
+					["secretProviders", "vaults"],
+					Layer.merge(VaultHandlers.layerProviders, VaultHandlers.layer),
+				),
+				host.mount(["usage", "budgets"], BillingHandlers.layer),
+				host.mount(
+					["organization", "organizations"],
+					OrganizationHandlers.layer,
+				),
+				host.mount(["modelProviders"], ModelProviderHandlers.layer),
+				host.mount(["platform"], PlatformHandlers.layer),
+				host.mount(["sso"], SsoHandlers.layer),
+			],
+			{ concurrency: "unbounded", discard: true },
+		).pipe(
+			// Each group has one mount in this list, so a conflict is a broken rule of the code.
+			Effect.catchTag("MountConflict", Effect.die),
+		)
+	}),
+)
+
+/** Better Auth serves its own routes under `/auth`. A contract route always wins over them. */
+export const layerBetterAuth = Layer.effectDiscard(
+	Effect.flatMap(HttpHost.HttpHost, (host) =>
+		host.mountRoutes("better-auth", AuthHandlers.layerBetterAuth),
+	).pipe(
+		// No other mount has this name, so a conflict is a broken rule of the code.
+		Effect.catchTag("MountConflict", Effect.die),
 	),
-	HttpApiScalar.layer(OpenBotApi, { path: service.documentation }),
 )

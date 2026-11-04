@@ -16,6 +16,7 @@ import * as ExecutionCommands from "../server-execution/execution/Commands.ts"
 import * as ExecutionObservation from "../server-execution/execution/Observation.ts"
 import * as ErrorRecords from "../server-kernel/errors/Records.ts"
 import * as HttpFailureBoundary from "../server-kernel/errors/HttpBoundary.ts"
+import * as HttpHost from "../server-kernel/errors/HttpHost.ts"
 import { RunnerAddress, ShardingConfig } from "effect/cluster"
 import { NodeHttpClient } from "@effect/platform-node"
 import { HttpServer } from "effect/http"
@@ -45,15 +46,18 @@ import { Settings } from "../server-kernel/settings/Settings.ts"
 
 /** The OpenBot routes, with error logs for failed requests. */
 export const layerApi = Layer.mergeAll(
-	Http.layerPlatform,
+	Http.layerGroups,
+	Http.layerBetterAuth,
 	ErrorReporting.layerHttp,
-	AuthHttpHandlers.layerBetterAuth,
 ).pipe(
 	// The authorization middleware stays open to the other groups, as before.
 	Layer.provide(
-		AuthHttpHandlers.layer.pipe(Layer.provideMerge(AuthorizationLayer.layer)),
+		AuthHttpHandlers.layerMiddleware.pipe(
+			Layer.provideMerge(AuthorizationLayer.layer),
+		),
 	),
 	Layer.provide(HttpFailureBoundary.layer),
+	Layer.provideMerge(HttpHost.layer),
 )
 
 export interface AppOptions extends OpenBot.Options {
@@ -127,16 +131,37 @@ const executionServices = (options: AppOptions) => {
 	)
 }
 
+/**
+ * The private RPC routes of the cluster and the routes of the options. The
+ * routes of the options come last, so they cannot take a route of OpenBot. At
+ * shutdown these mounts close before the engine generation. In that gap a peer
+ * would get 404 for the execution RPC, not the 503 that it retries. The server
+ * stops taking requests before the mounts close, so no peer sees the gap. Keep
+ * this order if the shutdown changes.
+ */
+const layerRoutes = (options: AppOptions) =>
+	Layer.effectDiscard(
+		Effect.gen(function* () {
+			const host = yield* HttpHost.HttpHost
+			yield* host.mountRoutes("execution-rpc", EngineHost.layerRoutes)
+			yield* host.mountRoutes("resource-rpc", ResourceTransport.layerRoutes)
+			if (options.routes !== undefined)
+				yield* host.mountRoutes("routes", options.routes, { last: true })
+		}).pipe(
+			// Each name has one mount, so a conflict is a broken rule of the code.
+			Effect.catchTag("MountConflict", Effect.die),
+		),
+	)
+
 /** The routes and services of OpenBot. It needs the same services as `OpenBot.layer`. */
 export const layerApp = (options: AppOptions) =>
 	Layer.mergeAll(
 		ComputerWorker.layer,
-		layerApi,
-		EngineHost.layerRoutes,
-		ResourceTransport.layerRoutes,
-		options.routes ?? Layer.empty,
+		layerRoutes(options),
 		options.startup ?? Layer.empty,
 	).pipe(
+		// Built first, so Better Auth is the oldest mount of routes outside the contract.
+		Layer.provideMerge(layerApi),
 		Layer.provideMerge(ExecutionLayers.layer),
 		Layer.provideMerge(BillingHost.layer),
 		Layer.provideMerge(OpenBot.layer(options)),
