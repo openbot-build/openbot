@@ -28,6 +28,14 @@ Normale Fehler bei Requests, wie `400`, `401`, `404` oder `409`, werden nicht
 als Fehler protokolliert. Arbeit, die eine Person absichtlich unterbricht, wird
 auch nicht protokolliert.
 
+Ein `503` mit dem Fehler `FeatureUnavailable` wird auch nicht protokolliert. Er
+bedeutet, dass die Funktion des Requests auf diesem Server gerade nicht geladen
+ist. Zum Beispiel hat ein Betreiber die Funktion ausgeschaltet, oder sie wartet
+auf eine andere Funktion, die sie braucht. Der Header
+`openbot-unavailable-feature` nennt die Funktion. Der Header `retry-after` gibt
+die Zahl der Sekunden an, die der Client warten soll, bevor er es noch einmal
+versucht.
+
 Jedes Fehler-Log hat die Nachricht `OpenBot operation failed` und diese
 Annotationen. Eine Annotation ist ein benannter Wert, der an einer Log-Zeile
 hängt.

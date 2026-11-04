@@ -60,6 +60,9 @@ class Api extends HttpApi.make("FailureBoundaryTest")
 					HttpApiSchema.status(503),
 				),
 			}),
+			HttpApiEndpoint.get("feature", "/feature", {
+				success: Schema.String,
+			}),
 			HttpApiEndpoint.post("input", "/input", {
 				payload: Schema.Struct({ value: Schema.Finite }),
 				success: Schema.String,
@@ -110,6 +113,11 @@ it.live(
 				.handle("saved", () =>
 					Effect.fail(
 						ExecutionsApi.ExecutionUnavailable.make({ errorId: known }),
+					),
+				)
+				.handle("feature", () =>
+					Effect.fail(
+						FailureApi.FeatureUnavailable.make({ feature: "triggers" }),
 					),
 				)
 				.handle("input", () => Effect.succeed("ok")),
@@ -178,6 +186,17 @@ it.live(
 			assert.isTrue(Cause.hasDies(mixed))
 			const prior = yield* HttpClient.get("/saved")
 			assert.strictEqual(prior.headers[Boundary.errorIdHeader], known)
+			const feature = yield* HttpClient.get("/feature")
+			assert.strictEqual(feature.status, 503)
+			assert.deepStrictEqual(
+				yield* Schema.decodeUnknownEffect(FailureApi.FeatureUnavailable)(
+					yield* feature.json,
+				),
+				FailureApi.FeatureUnavailable.make({ feature: "triggers" }),
+			)
+			assert.strictEqual(feature.headers[FailureApi.featureHeader], "triggers")
+			assert.strictEqual(feature.headers["retry-after"], "5")
+			assert.strictEqual(feature.headers[Boundary.errorIdHeader], undefined)
 			const invalid = yield* HttpClient.post("/input")
 			assert.strictEqual(invalid.status, 400)
 			const client = yield* HttpClient.HttpClient

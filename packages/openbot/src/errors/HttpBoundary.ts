@@ -6,6 +6,28 @@ import { Records, category } from "./Records.ts"
 
 export const errorIdHeader = "openbot-error-id"
 
+/** Names the feature of a `FeatureUnavailable` answer. */
+export const featureHeader = FailureApi.featureHeader
+
+/** A client should wait this many seconds before it asks for a feature again. */
+const retryAfterSeconds = 5
+
+/**
+ * The answer when the feature of a request is not loaded. It is not a fault, so
+ * it has no error record and the error log does not report it.
+ */
+export const featureUnavailable = (feature: string) =>
+	HttpServerResponse.schemaJson(FailureApi.FeatureUnavailable)(
+		FailureApi.FeatureUnavailable.make({ feature }),
+		{
+			status: 503,
+			headers: {
+				"retry-after": String(retryAfterSeconds),
+				[featureHeader]: feature,
+			},
+		},
+	).pipe(Effect.orDie)
+
 /** Save server faults before the API encoder replaces their typed errors. */
 export const layer = Layer.effect(
 	FailureApi.FailureBoundary,
@@ -33,6 +55,8 @@ export const layer = Layer.effect(
 						const reason = cause.reasons[0]
 						if (cause.reasons.length === 1 && reason?._tag === "Fail") {
 							const error = reason.error
+							if (Schema.is(FailureApi.FeatureUnavailable)(error))
+								return yield* featureUnavailable(error.feature)
 							if (
 								HttpApiError.HttpApiPayloadTooLarge.is(error) ||
 								(HttpApiError.HttpApiSchemaError.is(error) &&

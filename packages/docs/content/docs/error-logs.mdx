@@ -26,6 +26,12 @@ with an Effect logger.
 Normal request errors, such as `400`, `401`, `404`, or `409`, are not logged as
 errors. Work that a person interrupts on purpose is not logged either.
 
+A `503` with the error `FeatureUnavailable` is not logged either. It means that
+the feature of the request is not loaded on this server now. For example, an
+operator turned the feature off, or it waits for another feature that it needs.
+The `openbot-unavailable-feature` header names the feature. The `retry-after`
+header gives the number of seconds to wait before the client tries again.
+
 Each error log has the message `OpenBot operation failed` and these annotations.
 An annotation is a named value that is attached to a log line.
 

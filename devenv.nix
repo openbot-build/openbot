@@ -157,6 +157,8 @@
       projectRootFile = "devenv.nix";
       settings.global.excludes = [
         "references/**"
+        # Test snapshots are written by the tests. A formatter must not change them.
+        "**/test/snapshots/**"
       ];
       programs = {
         prettier.enable = true;

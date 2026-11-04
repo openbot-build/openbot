@@ -1,7 +1,7 @@
 import { Cause, Context, Effect, Option, Redacted, type Types } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Records } from "./Records.ts"
-import { errorIdHeader } from "./HttpBoundary.ts"
+import { errorIdHeader, featureHeader } from "./HttpBoundary.ts"
 import {
 	HttpEffect,
 	HttpRouter,
@@ -49,6 +49,7 @@ export const layerHttp = HttpRouter.middleware(
 					if (
 						errorId !== undefined ||
 						response.headers[errorIdHeader] !== undefined ||
+						response.headers[featureHeader] !== undefined ||
 						response.status < 500 ||
 						(cause !== undefined && Cause.hasInterruptsOnly(cause))
 					)

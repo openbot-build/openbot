@@ -1,5 +1,10 @@
 export * as FailureApi from "./FailureApi.ts"
-export { FailureBoundary, RequestFailed } from "./FailureApi.ts"
+export {
+	FailureBoundary,
+	FeatureUnavailable,
+	featureHeader,
+	RequestFailed,
+} from "./FailureApi.ts"
 export { Health, HealthApi, Service, service } from "./HealthApi.ts"
 export { OpenBotApi } from "./OpenBotApi.ts"
 export * as ExecutionsApi from "./ExecutionsApi.ts"
