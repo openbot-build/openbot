@@ -6319,7 +6319,7 @@
 				{
 					"file": "packages/e2e/test/connect-apps/AppIndexApi.test.ts",
 					"condition": {
-						"condition": "Server.layerFixed starts the application HTTP server on 127.0.0.1 with port 0, the test database, fixed secrets, OpenBot.layerOutside, OpenBot.layerShared, and HostTools.none."
+						"condition": "Host.layer starts the application HTTP server on 127.0.0.1 with port 0, the test database, fixed secrets, the real services from outside, the shared services, and no host tools."
 					}
 				},
 				{

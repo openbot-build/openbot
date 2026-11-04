@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node"
 import { Context, Effect, Layer, Option, Redacted, String as Str } from "effect"
 import { HttpServer } from "effect/http"
 import * as DatabasePostgres from "../../src/app/DatabasePostgres.ts"
-import { Server } from "../../src/index.ts"
+import { Host } from "../../src/index.ts"
 import * as Setup from "../../src/plugin-platform/Setup.ts"
 import * as PostgresTest from "../PostgresTest.ts"
 
@@ -25,7 +25,7 @@ export const startUnconfiguredPlatform = Effect.fn(
 		),
 	)
 	const server = yield* Layer.build(
-		Server.layerLive({ ...options, host: "127.0.0.1", port: 0 }),
+		Host.layer({ ...options, host: "127.0.0.1", port: 0 }),
 	)
 	return {
 		address: HttpServer.formatAddress(

@@ -94,6 +94,43 @@ terminal. Protocol checks use independent clients and local servers. Unit and
 component checks stay in the `core`, `domain`, `api`, `client`, `openbot`,
 `cli`, `computer`, `protocol`, and `protocol-test` packages.
 
+## Test servers in code
+
+The subpath `@openbot-build/openbot/testing` gives the test helpers of OpenBot.
+It is TypeScript source, not built code, so only a test that runs TypeScript can
+use it. Its parts can change in any version.
+
+| Helper                          | What it does                                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestHost.makeSettings`         | Starts a new PostgreSQL database that stops with the scope. It gives the settings of a server on it: fixed secrets, the address `127.0.0.1`, and a free port. |
+| `TestHost.migrate(settings)`    | Makes the tables of a new database.                                                                                                                           |
+| `TestHost.layerPlatform`        | The platform services of a test server: the Node.js services, crypto, and the fetch HTTP client.                                                              |
+| `TestHost.layerOutside(fakes)`  | The services from outside. Each fake that the test gives takes the place of one real service. Give it to `Host.layer` as the `outside` option.                |
+| `TestHost.layer(settings)`      | The bare plugin host on its own HTTP server. It takes a changed list of plugin entries, and its start errors stay typed. It gives no service of a plugin.     |
+| `TestHost.launch(server)`       | Starts a server in a scope of its own. The test can stop it and start it again on the same database.                                                          |
+| `TestHost.layerShared(options)` | Only the shared services: the database pool, the secret keys, the shared settings, and the error records.                                                     |
+| `TestHost.layerApi`             | Every group of the contract with its sign-in and permission middleware, but no plugin host. The test gives the services of the groups, often as fakes.        |
+| `BrowserHost.start(options)`    | A full server with a test identity provider, simulated models, and test accounts that are signed in.                                                          |
+| `PostgresTest.start`            | A short-lived PostgreSQL database.                                                                                                                            |
+
+For a server with a fixed sign-in configuration, use the public `Host.layer`
+with the `auth` option. See [Sign-in](/server#sign-in).
+
+This test starts the bare plugin host, and starts it again on the same database:
+
+```ts
+import { TestHost } from "@openbot-build/openbot/testing"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const settings = yield* TestHost.makeSettings
+	yield* TestHost.migrate(settings)
+	const server = yield* TestHost.launch(TestHost.layer(settings))
+	yield* server.restart
+	return yield* server.address
+}).pipe(Effect.scoped, Effect.provide(TestHost.layerPlatform))
+```
+
 ## Real model check
 
 The real model check runs only when `OPENBOT_E2E_LIVE=true` is set. The default
@@ -101,11 +138,11 @@ run skips it. It needs a Cloudflare account and API token with Workers AI
 access. It makes paid service calls when the account's free allowance is used
 up. Keep credentials outside tracked files.
 
-The test makes a session with `Server.layerFixed`, then starts the built
-production entry to call the real model. Session setup must leave no index work
-or failures. It checks cookie and API-token calls, streamed replies, saved
-history, repeated commands, usage, and token revocation. It makes no claim about
-model quality from these small tasks.
+The test makes a session with `Host.layer` and a fixed `auth` option, then
+starts the built production entry to call the real model. Session setup must
+leave no index work or failures. It checks cookie and API-token calls, streamed
+replies, saved history, repeated commands, usage, and token revocation. It makes
+no claim about model quality from these small tasks.
 
 Set these variables in a local shell or secret store. Do not put the key in a
 command argument or a tracked file.

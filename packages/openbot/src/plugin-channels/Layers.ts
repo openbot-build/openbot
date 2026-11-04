@@ -7,8 +7,8 @@ import * as ChannelWatch from "./ChannelWatch.ts"
 
 /**
  * Channels and their connections. A custom Channel calls an address that an
- * administrator chose, so it uses the network of Apps. The static assembly
- * and the channels plugin both use it.
+ * administrator chose, so it uses the network of Apps. The channels plugin
+ * uses it.
  */
 export const layerChannels = ChannelRegistry.layer.pipe(
 	Layer.provideMerge(ChannelQueue.layer),

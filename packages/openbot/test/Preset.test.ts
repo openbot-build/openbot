@@ -1,4 +1,5 @@
 import { assert, layer } from "@effect/vitest"
+import { OpenBotApi } from "@openbot-build/api"
 import {
 	Array as Arr,
 	Duration,
@@ -10,23 +11,15 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
-import { HttpRouter } from "effect/http"
+import { HttpApi } from "effect/http-api"
 import type { Fork } from "@graftland/graft"
-import * as BillingHost from "../src/app/BillingHost.ts"
 import * as Composition from "../src/app/Composition.ts"
-import * as ExecutionLayers from "../src/app/ExecutionLayers.ts"
-import * as ComputerWorker from "../src/plugin-computers/Worker.ts"
-import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
-import * as ResourceTransport from "../src/server-execution/resources/Transport.ts"
-import * as Host from "../src/app/Host.ts"
-import * as OpenBot from "../src/app/OpenBot.ts"
 import * as Preset from "../src/app/Preset.ts"
-import * as Server from "../src/app/Server.ts"
+import * as PresetPlugins from "../src/app/PresetPlugins.ts"
 import { BotFeatures } from "../src/conversation-contract/chats/BotFeatures.ts"
 import { Workflows } from "../src/server-execution/execution/Workflows.ts"
 import { HttpHost } from "../src/server-kernel/errors/HttpHost.ts"
-import * as BrowserHost from "./BrowserHost.ts"
-import * as HostFixture from "./HostFixture.ts"
+import * as TestHost from "./TestHost.ts"
 
 /** What one assembly gives: its workflows, its bot features and its groups. */
 interface Parts {
@@ -59,36 +52,64 @@ const inScope = <A, E, R, B, E2, R2>(
 	)
 
 /**
- * The static assembly, as `Server.layerApp` built it before the plugin host:
- * `OpenBot.layer`, `ExecutionLayers` and `Http`. Stage 7b removes it.
+ * The workflows and the bot features that the preset gives. A new plugin must
+ * add its names here.
  */
-const staticApp = (options: HostFixture.Settings) =>
-	Layer.mergeAll(
-		ComputerWorker.layer,
-		Layer.effectDiscard(
-			Effect.gen(function* () {
-				const host = yield* HttpHost
-				yield* host.mountRoutes("execution-rpc", EngineHost.layerRoutes)
-				yield* host.mountRoutes("resource-rpc", ResourceTransport.layerRoutes)
-			}).pipe(Effect.catchTag("MountConflict", Effect.die)),
-		),
-	).pipe(
-		Layer.provideMerge(Server.layerApi),
-		Layer.provideMerge(ExecutionLayers.layer),
-		Layer.provideMerge(BillingHost.layer),
-		Layer.provideMerge(OpenBot.layer(options)),
-		Layer.provideMerge(Host.executionServices(options)),
-	)
+const presetWorkflows: ReadonlyArray<string> = [
+	"openbot.app-authorization",
+	"openbot.app-call",
+	"openbot.app-connection",
+	"openbot.app-grant-cleanup",
+	"openbot.app-reset",
+	"openbot.capability-request",
+	"openbot.channel-configuration",
+	"openbot.channel-delivery",
+	"openbot.channel-input",
+	"openbot.channel-removal",
+	"openbot.channel-watch",
+	"openbot.chat-control",
+	"openbot.chat-turn",
+	"openbot.code",
+	"openbot.computer-idle-pause",
+	"openbot.computer-lifecycle",
+	"openbot.computer-maintenance",
+	"openbot.delegation",
+	"openbot.delegation-notice",
+	"openbot.developer-test",
+	"openbot.developer-test-cleanup",
+	"openbot.developer-watch",
+	"openbot.file-cleanup",
+	"openbot.file-retention",
+	"openbot.imported-record",
+	"openbot.index-request",
+	"openbot.index-watch",
+	"openbot.memory-learning",
+	"openbot.proof-verification",
+	"openbot.reminder",
+	"openbot.request-notice",
+	"openbot.tool-call",
+	"openbot.tool-notice",
+	"openbot.trigger-schedule",
+]
+const presetFeatures: ReadonlyArray<string> = [
+	"@openbot-build/plugin-apps",
+	"@openbot-build/plugin-bots",
+	"@openbot-build/plugin-work",
+	"@openbot-build/plugin-channels",
+	"@openbot-build/plugin-computers",
+]
 
-/** The static assembly on its own database and its own HTTP server. */
-const staticParts = Effect.gen(function* () {
-	const options = yield* HostFixture.configure
-	yield* HostFixture.migrate(options)
-	const app = HostFixture.outside(options)(
-		HttpRouter.serve(staticApp(options), { disableLogger: true }),
-	).pipe(Layer.provideMerge(HostFixture.serverOf(options)))
-	return yield* inScope(app, partsOf)
-})
+/** Every group of the contract, in name order. */
+const contractGroups = (): ReadonlyArray<string> => {
+	let groups = HashSet.empty<string>()
+	HttpApi.reflect(OpenBotApi, {
+		onGroup: ({ group }) => {
+			groups = HashSet.add(groups, group.identifier)
+		},
+		onEndpoint: () => undefined,
+	})
+	return Arr.sort(Arr.fromIterable(groups), Order.String)
+}
 
 /**
  * Every fork, parents first, with its state. Its name has two spaces for each
@@ -123,10 +144,10 @@ const forkStates = Effect.gen(function* () {
 
 /** The host with the preset, on its own database and its own HTTP server. */
 const hostParts = Effect.gen(function* () {
-	const options = yield* HostFixture.configure
-	yield* HostFixture.migrate(options)
+	const options = yield* TestHost.makeSettings
+	yield* TestHost.migrate(options)
 	return yield* inScope(
-		HostFixture.host(options),
+		TestHost.layer(options),
 		Effect.gen(function* () {
 			const before = yield* forkStates
 			const parts = yield* partsOf
@@ -151,13 +172,17 @@ const hostParts = Effect.gen(function* () {
 	)
 })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
 	it.effect(
-		"the preset starts every plugin and gives the same parts as the static assembly",
+		"the preset starts every plugin and gives the recorded parts",
 		() =>
 			Effect.gen(function* () {
 				const host = yield* hostParts
-				const expected = yield* staticParts
+				const expected: Parts = {
+					workflows: presetWorkflows,
+					features: presetFeatures,
+					groups: contractGroups(),
+				}
 
 				assert.deepStrictEqual(
 					Arr.filter(host.before, (fork) => fork.state !== "Active"),
@@ -188,7 +213,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				)
 
 				// No plugin publishes a key of the kernel.
-				const published = Arr.map(Preset.published, (key) => key.key)
+				const published = Arr.map(PresetPlugins.published, (key) => key.key)
 				assert.deepStrictEqual(
 					Arr.filter(published, (key) => HashSet.has(host.kernelKeys, key)),
 					[],
@@ -198,19 +223,19 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 	)
 })
 
-layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
+layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
 	it.effect("the preset has one entry for each id, in the same order", () =>
 		Effect.sync(() => {
 			assert.deepStrictEqual(
-				Arr.map(Preset.modules, (module) => module.id),
+				Arr.map(PresetPlugins.modules, (module) => module.id),
 				[...Preset.ids],
 			)
 			assert.deepStrictEqual(
-				Arr.map(Preset.entries, (entry) => entry.id),
+				Arr.map(PresetPlugins.entries, (entry) => entry.id),
 				[...Preset.ids],
 			)
 			assert.deepStrictEqual(
-				Arr.map(Preset.entries, (entry) => entry.name),
+				Arr.map(PresetPlugins.entries, (entry) => entry.name),
 				Arr.map(Preset.ids, Preset.nameOf),
 			)
 		}),

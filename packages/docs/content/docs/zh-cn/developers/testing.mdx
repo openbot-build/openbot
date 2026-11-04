@@ -72,14 +72,50 @@ CLI 检查会启动构建出的命令。计算机检查包含真实终端。协�
 `core`、`domain`、`api`、`client`、`openbot`、`cli`、`computer`、`protocol` 和
 `protocol-test` 包中。
 
+## 在代码中测试服务器
+
+子路径 `@openbot-build/openbot/testing`
+提供 OpenBot 的测试辅助工具。它是 TypeScript 源码，不是构建后的代码，所以只有运行 TypeScript 的测试才能使用它。它的各个部分在任何版本中都可能改变。
+
+| 辅助工具                        | 作用                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestHost.makeSettings`         | 启动一个新的 PostgreSQL 数据库，它随作用域一起停止。它给出这个数据库上一个服务器的设置：固定的密钥、地址 `127.0.0.1` 和一个空闲端口。 |
+| `TestHost.migrate(settings)`    | 在新数据库中创建表。                                                                                                                  |
+| `TestHost.layerPlatform`        | 测试服务器的平台服务：Node.js 服务、加密和 fetch HTTP 客户端。                                                                        |
+| `TestHost.layerOutside(fakes)`  | 外部服务。测试给出的每个假服务代替一个真实服务。把它作为 `outside` 选项交给 `Host.layer`。                                            |
+| `TestHost.layer(settings)`      | 带有自己 HTTP 服务器的裸插件宿主。它接受修改过的插件条目列表，它的启动错误保持类型化。它不提供插件的服务。                            |
+| `TestHost.launch(server)`       | 在一个单独的作用域中启动服务器。测试可以停止它，并在同一个数据库上再次启动它。                                                        |
+| `TestHost.layerShared(options)` | 只有共享服务：数据库连接池、密钥、共享设置和错误记录。                                                                                |
+| `TestHost.layerApi`             | 契约的每个分组以及它的登录和权限中间件，但没有插件宿主。测试给出分组的服务，常常是假的服务。                                          |
+| `BrowserHost.start(options)`    | 一个完整的服务器，带有测试身份提供方、模拟的模型和已经登录的测试账户。                                                                |
+| `PostgresTest.start`            | 一个短期使用的 PostgreSQL 数据库。                                                                                                    |
+
+要使用固定登录配置的服务器，请使用公开的 `Host.layer` 和 `auth`
+选项。请看[登录](/zh-cn/server#登录)。
+
+下面的测试启动裸插件宿主，并在同一个数据库上再次启动它：
+
+```ts
+import { TestHost } from "@openbot-build/openbot/testing"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const settings = yield* TestHost.makeSettings
+	yield* TestHost.migrate(settings)
+	const server = yield* TestHost.launch(TestHost.layer(settings))
+	yield* server.restart
+	return yield* server.address
+}).pipe(Effect.scoped, Effect.provide(TestHost.layerPlatform))
+```
+
 ## 真实模型检查
 
 只有设置
 `OPENBOT_E2E_LIVE=true`，才会运行真实模型检查。默认运行会跳过它。它需要 Cloudflare 账户和具有 Workers
 AI 访问权限的 API 令牌。账户的免费额度用完后，服务调用会产生费用。请把凭据放在版本控制以外。
 
-测试用 `Server.layerFixed`
-创建会话，再启动构建出的生产入口调用真实模型。会话设置不得留下索引任务或失败记录。测试检查 cookie 和 API 令牌调用、流式回复、保存的历史、重复命令、用量和令牌撤销。这些小任务不能用于判断模型质量。
+测试用 `Host.layer` 和固定的 `auth`
+选项创建会话，再启动构建出的生产入口调用真实模型。会话设置不得留下索引任务或失败记录。测试检查 cookie 和 API 令牌调用、流式回复、保存的历史、重复命令、用量和令牌撤销。这些小任务不能用于判断模型质量。
 
 在本地 shell 或机密存储中设置以下变量。不要把密钥放在命令参数或纳入版本控制的文件中。
 

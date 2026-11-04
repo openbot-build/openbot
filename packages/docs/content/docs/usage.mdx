@@ -431,10 +431,10 @@ return the first grant without changing money again. Different input with the
 same key returns `409 CreditConflict`. The grant, balance, and audit record are
 saved in one transaction.
 
-A host can use the public `BillingHost` services to require prepaid credits.
-Enabling this mode keeps all balances, turns on credits for existing and new
-spaces, and prevents turning credits off. Self-hosted servers keep the current
-credit settings unless the host enables this mode.
+A host can use the public `Wallets` service to require prepaid credits. Enabling
+this mode keeps all balances, turns on credits for existing and new spaces, and
+prevents turning credits off. Self-hosted servers keep the current credit
+settings unless the host enables this mode.
 
 OpenBot stores credits, not payment card data. A host records payments in its
 own system and uses the credit grant API or public host service to add money.

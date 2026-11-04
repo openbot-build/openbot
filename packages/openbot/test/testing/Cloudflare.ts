@@ -3,7 +3,7 @@ import { Settings } from "../../src/server-kernel/settings/Settings.ts"
 import { assert } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import { SqlClient } from "effect/sql"
-import { HostTools, OpenBot, Server } from "@openbot-build/openbot"
+import { Host } from "../../src/index.ts"
 import {
 	Array as Arr,
 	Cause,
@@ -145,12 +145,7 @@ export const seedSession = (env: ReturnType<typeof environment>) =>
 				},
 			}
 			// DevelopmentMain starts App work in its own namespace. Main cannot run that work.
-			const services = yield* Layer.build(
-				Server.layerFixed(options).pipe(
-					Layer.provide(Layer.merge(OpenBot.layerOutside, HostTools.none)),
-					Layer.provideMerge(OpenBot.layerShared(options)),
-				),
-			)
+			const services = yield* Layer.build(Host.layer(options))
 			const address = HttpServer.formatAddress(
 				Context.get(services, HttpServer.HttpServer).address,
 			)

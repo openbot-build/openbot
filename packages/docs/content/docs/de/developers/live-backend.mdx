@@ -15,17 +15,17 @@ Ein **Live-Backend** verbindet OpenBot mit einer Art von Live-Dienst. Alles
 andere im Live-Modus arbeitet mit jedem Backend. So fügst du eines hinzu:
 
 1. Schreib ein Modul, das ein `LiveBackend` aus
-   `packages/openbot/src/models/LiveBackends.ts` gibt. Sein `make` gibt ein
-   `LiveModel` aus `@openbot-build/core/Live`.
+   `packages/openbot/src/models-contract/models/LiveBackends.ts` gibt. Sein
+   `make` gibt ein `LiveModel` aus `@openbot-build/core/Live`.
 2. Sag in `capabilities`, was der Dienst kann. OpenBot schickt nie eine Eingabe,
    die das Backend nicht kann.
 3. Bilde die Werte von `Live.Input` auf die Nachrichten des Dienstes ab, und die
    Nachrichten des Dienstes auf Werte von `Live.Event`.
 4. Füge das Backend zu `layerLiveBackends` in
-   `packages/openbot/src/app/OpenBot.ts` hinzu.
+   `packages/openbot/src/app/Outside.ts` hinzu.
 
-`packages/openbot/src/providers/openai/OpenAiRealtime.ts` ist das Backend für
-die OpenAI Realtime API. Nimm es als Beispiel.
+`packages/openbot/src/model-providers/providers/openai/OpenAiRealtime.ts` ist
+das Backend für die OpenAI Realtime API. Nimm es als Beispiel.
 
 Ein Dienst, der den Text der Sprache nicht gibt, kann den Verlauf des Chats
 nicht halten. OpenBot öffnet mit so einem Model noch keine Session.

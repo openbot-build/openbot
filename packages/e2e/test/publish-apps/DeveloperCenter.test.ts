@@ -34,7 +34,7 @@ import {
 } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
 import * as Development from "@openbot-build/openbot/Development"
-import { DatabasePostgres as Database, OpenBot } from "@openbot-build/openbot"
+import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import { Index } from "@openbot-build/protocol"
 import {
 	Caller,
@@ -42,6 +42,7 @@ import {
 	DevelopmentTesting,
 	DeveloperTesting,
 	PostgresTest as Postgres,
+	TestHost,
 	Wait,
 } from "@openbot-build/openbot/testing"
 
@@ -1023,7 +1024,7 @@ it.layer(
 				}
 				// The platform owns App restrictions. Write them while OpenBot is stopped.
 				yield* DeveloperTesting.writeRestrictions([restriction]).pipe(
-					Effect.provide(OpenBot.layerShared(options)),
+					Effect.provide(TestHost.layerShared(options)),
 				)
 
 				yield* Effect.scoped(

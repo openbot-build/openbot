@@ -21,8 +21,10 @@ import type * as Configuration from "../server-kernel/configuration/Configuratio
 import type { Configuration as AuthConfiguration } from "../server-kernel/auth/Model.ts"
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no HMAC API, so the development secret uses node:crypto.
 import { createHmac } from "node:crypto"
-import * as Server from "../app/Server.ts"
-import * as OpenBot from "../app/OpenBot.ts"
+import * as Assembly from "../app/Assembly.ts"
+import type * as Host from "../app/Host.ts"
+import * as Outside from "../app/Outside.ts"
+import * as Shared from "../app/Shared.ts"
 import * as Drivers from "../plugin-computers/Drivers.ts"
 import * as VaultReaders from "../plugin-vaults/Readers.ts"
 import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
@@ -113,7 +115,7 @@ const layerOutside = Layer.mergeAll(
 	DevelopmentApps.layerPublicNetwork,
 	DevelopmentProofs.layerDomainControl,
 	Drivers.layer,
-	OpenBot.layerLiveBackends,
+	Outside.layerLiveBackends,
 	VaultReaders.layer,
 )
 
@@ -140,8 +142,9 @@ export const developmentSecret = (secretKeys: Redacted.Redacted<string>) =>
 export const layer = (
 	settings: Omit<Configuration.Settings, "outboundAllow"> & {
 		readonly auth: AuthConfiguration
+		/** More routes, such as those of a test. */
+		readonly routes?: Host.AppOptions["routes"]
 		/** The local object storage for files, such as RustFS from devenv. */
-		readonly routes?: Server.AppOptions["routes"]
 		readonly fileStorage?: Api.FileStorageInput | undefined
 	},
 ) =>
@@ -151,7 +154,7 @@ export const layer = (
 			const authorization = yield* DevelopmentAuthorization.Authorization
 			const proofs = yield* DevelopmentProofs.Proofs
 			// The development entry owns its platform, so each start writes its origin again.
-			return Server.layerFixed({
+			return Assembly.layerServer({
 				...settings,
 				builtinModels,
 				routes: Layer.mergeAll(
@@ -193,7 +196,7 @@ export const layer = (
 		Layer.provideMerge(DevelopmentAuthorization.layer),
 		Layer.provideMerge(DevelopmentScenarios.layer),
 		Layer.provideMerge(DevelopmentBusiness.layer),
-		Layer.provideMerge(OpenBot.layerShared(settings)),
+		Layer.provideMerge(Shared.layer(settings)),
 	)
 
 /** The local object storage. Its secret key is always set. */
@@ -254,7 +257,7 @@ const createBucket = (storage: Storage) =>
  * the `OPENBOT_DEV_S3_*` variables. It gives the server the Node services and
  * the fetch HTTP client.
  */
-export const launchWith = (routes?: Server.AppOptions["routes"]) =>
+export const launchWith = (routes?: Host.AppOptions["routes"]) =>
 	ErrorReporting.withStartup(
 		Effect.gen(function* () {
 			const settings = yield* EnvironmentConfiguration.load

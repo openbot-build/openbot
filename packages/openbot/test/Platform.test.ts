@@ -15,7 +15,7 @@ import * as Setup from "../src/plugin-platform/Setup.ts"
 import * as PlatformAdminsPostgres from "../src/plugin-platform/PlatformAdminsPostgres.ts"
 import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import { OpenBot } from "../src/index.ts"
+import * as TestHost from "./TestHost.ts"
 
 const publicOrigin = "https://api.example.com"
 
@@ -47,7 +47,7 @@ layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 				const instance = Effect.gen(function* () {
 					return yield* Layer.buildWithMemoMap(
 						PlatformAdminsPostgres.layer.pipe(
-							Layer.provideMerge(OpenBot.layerShared(options)),
+							Layer.provideMerge(TestHost.layerShared(options)),
 							// Setup makes a new sign-in secret with the SecureRandom service.
 							Layer.provideMerge(
 								Layer.merge(NodeServices.layer, NodeCrypto.layer),

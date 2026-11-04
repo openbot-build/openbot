@@ -14,7 +14,7 @@ title: "添加错误日志记录器"
 
 ```ts
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
+import { EnvironmentConfiguration, Host } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 import { FetchHttpClient } from "effect/http"
 
@@ -34,7 +34,7 @@ NodeRuntime.runMain(
 	Effect.gen(function* () {
 		const settings = yield* EnvironmentConfiguration.load
 		return yield* Layer.launch(
-			Server.layerLive(settings).pipe(
+			Host.layer(settings).pipe(
 				Layer.provide(
 					Layer.mergeAll(
 						NodeServices.layer,

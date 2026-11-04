@@ -23,7 +23,7 @@ export type Platform =
  * Runs a server as the `openbot-server` program does. It reads the settings from
  * the environment and from secret files, blocks outbound connections to private
  * addresses, and logs a failed start. `make` gives the server, such as
- * `Server.layerLive`. It runs until the process stops. It gives the server the
+ * `Host.layer`. It runs until the process stops. It gives the server the
  * fetch HTTP client, and needs the Node services (`NodeServices.layer` and
  * `NodeCrypto.layer`).
  */

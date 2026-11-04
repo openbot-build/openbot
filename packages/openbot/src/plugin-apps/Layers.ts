@@ -1,6 +1,5 @@
 /**
- * The compositions of the App services. The static assembly and the apps
- * plugin both use them, so the two cannot drift.
+ * The compositions of the App services. The apps plugin uses them.
  */
 import {
 	CatalogDiscovery,

@@ -1,5 +1,5 @@
 import { Chat } from "@openbot-build/core"
-import { HostTools, OpenBot, Server } from "@openbot-build/openbot"
+import { Host, HostTools } from "../../src/index.ts"
 import { Effect, HashMap, Layer, Option, Ref } from "effect"
 import * as DevelopmentModel from "../../src/server-development/DevelopmentModel.ts"
 import {
@@ -37,35 +37,29 @@ export const searchPublicApps = Effect.flatMap(PublicIndex, (index) =>
 
 /** Build a server whose confirmation tool counts calls for each Chat. */
 export const layerWithConfirmation = (
-	options: Parameters<typeof Server.layerFixed>[0] &
-		Parameters<typeof OpenBot.layerShared>[0],
+	options: Host.Options,
 	calls: Ref.Ref<HashMap.HashMap<Chat.Id, number>>,
 ) =>
 	Layer.unwrap(
 		Effect.gen(function* () {
 			const { builtinModels } = yield* DevelopmentModel.make
-			return Server.layerFixed({ ...options, builtinModels }).pipe(
-				Layer.provide(
-					Layer.merge(
-						OpenBot.layerOutside,
-						HostTools.layer({
-							toolkit: DevelopmentModel.toolkit,
-							handlers: (chat) =>
-								DevelopmentModel.toolkit.toLayer({
-									DevelopmentConfirmation: ({ description }) =>
-										Ref.update(calls, (current) =>
-											HashMap.set(
-												current,
-												chat,
-												Option.getOrElse(HashMap.get(current, chat), () => 0) +
-													1,
-											),
-										).pipe(Effect.as({ confirmed: `${chat}: ${description}` })),
-								}),
+			return Host.layer({
+				...options,
+				builtinModels,
+				hostTools: HostTools.layer({
+					toolkit: DevelopmentModel.toolkit,
+					handlers: (chat) =>
+						DevelopmentModel.toolkit.toLayer({
+							DevelopmentConfirmation: ({ description }) =>
+								Ref.update(calls, (current) =>
+									HashMap.set(
+										current,
+										chat,
+										Option.getOrElse(HashMap.get(current, chat), () => 0) + 1,
+									),
+								).pipe(Effect.as({ confirmed: `${chat}: ${description}` })),
 						}),
-					),
-				),
-				Layer.provideMerge(OpenBot.layerShared(options)),
-			)
+				}),
+			})
 		}),
 	)

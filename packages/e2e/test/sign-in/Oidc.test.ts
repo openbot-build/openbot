@@ -23,12 +23,7 @@ import {
 import { Digest } from "effect/crypto"
 import { assert, layer, vi } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import {
-	HostTools,
-	OpenBot,
-	Server,
-	DatabasePostgres,
-} from "@openbot-build/openbot"
+import { Host, DatabasePostgres } from "@openbot-build/openbot"
 import { Config, Model, Provider } from "@openbot-build/core"
 import { AuthApi, BotsApi, ChatCommandReceipt } from "@openbot-build/api"
 
@@ -238,7 +233,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 					},
 				}
 				const server = () =>
-					Server.layerFixed({
+					Host.layer({
 						...options,
 						auth: publicClient
 							? {
@@ -249,8 +244,6 @@ layer(platform, { excludeTestServices: true })((it) => {
 								}
 							: options.auth,
 					}).pipe(
-						Layer.provide(Layer.merge(OpenBot.layerOutside, HostTools.none)),
-						Layer.provideMerge(OpenBot.layerShared(options)),
 						// The HTTP calls of the server go to the test identity provider.
 						Layer.provide(FetchHttpClient.layer),
 						Layer.provide(Layer.succeed(FetchHttpClient.Fetch, providerFetch)),

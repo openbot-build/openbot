@@ -1,4 +1,4 @@
+import * as Host from "./Host.ts"
 import * as Launch from "./Launch.ts"
-import * as Server from "./Server.ts"
 
-Launch.main(Server.layerLive)
+Launch.main(Host.layer)

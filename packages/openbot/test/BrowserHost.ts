@@ -1,20 +1,13 @@
 import * as AccessModel from "@openbot-build/domain/Access"
 import { AuthApi } from "@openbot-build/api"
-import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeRuntime } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
-import {
-	Auth,
-	DatabasePostgres,
-	HostTools,
-	OpenBot,
-	Server,
-} from "../src/index.ts"
+// This file exports its own `Host` type, so the server namespace has another name here.
+import { Auth, Host as ServerHost, HostTools } from "../src/index.ts"
 import {
 	Array as Arr,
 	Console,
-	Context,
 	Effect,
-	Exit,
 	HashMap,
 	HashSet,
 	Layer,
@@ -23,10 +16,8 @@ import {
 	Redacted,
 	Ref,
 	Schema,
-	Scope,
 	Stream,
 	String as Str,
-	SynchronizedRef,
 } from "effect"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import {
@@ -36,33 +27,24 @@ import {
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse,
-	HttpServer,
 } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import * as Caller from "./Caller.ts"
 import * as DefaultBot from "./DefaultBot.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import type { Discovery, Network } from "@openbot-build/protocol"
+import * as TestHost from "./TestHost.ts"
 import type { AppIndexApi, Settings as SettingsApi } from "@openbot-build/api"
-import * as Probe from "../src/plugin-apps/Probe.ts"
-import * as AppHost from "../src/plugin-apps/AppHost.ts"
-import * as DomainControl from "../src/server-kernel/apps/DomainControl.ts"
-import * as AppDiscovery from "../src/plugin-apps/Discovery.ts"
-import * as OutboundPolicy from "../src/server-kernel/network/OutboundPolicy.ts"
 import { organizationDomains } from "../src/server-database/Schema.ts"
 import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import type { PlatformDocument } from "../src/server-kernel/settings/Documents.ts"
 import * as Db from "../src/server-database/Database.ts"
-import * as Drivers from "../src/plugin-computers/Drivers.ts"
-import type { LiveBackends } from "../src/models-contract/models/LiveBackends.ts"
-import * as VaultReaders from "../src/plugin-vaults/Readers.ts"
 import {
 	Transport as MailTransport,
 	TransportError,
 } from "../src/identity-contract/mail/Transport.ts"
 
-/** How a test host starts. */
-export interface Options {
+/** How a test host starts. Fakes for the services from outside are optional. */
+export interface Options extends TestHost.Outside {
 	readonly registration?: AccessModel.Registration
 	readonly groups?: (subject: string) => unknown
 
@@ -72,10 +54,6 @@ export interface Options {
 	readonly model?: typeof LanguageModel.LanguageModel.Service
 	readonly contextWindow?: number
 	readonly hostTools?: Layer.Layer<HostTools.HostTools>
-	readonly discovery?: Layer.Layer<Discovery.Discovery>
-	readonly appProbe?: Layer.Layer<Probe.Probe>
-	readonly appNetwork?: Layer.Layer<AppHost.AppNetwork>
-	readonly indexPublicNetwork?: Layer.Layer<Network.PublicNetwork>
 	readonly appReadRules?: ReadonlyArray<{
 		readonly cardUrl: string
 		readonly tool: string
@@ -89,7 +67,6 @@ export interface Options {
 	 * account joins it. Set false to give each account its own organization.
 	 */
 	readonly sharedDomain?: boolean
-	readonly domainControl?: Layer.Layer<DomainControl.DomainControl>
 	/** People with these emails are platform admins. */
 	readonly platformAdmins?: ReadonlyArray<string>
 	/**
@@ -113,11 +90,6 @@ export interface Options {
 	readonly platformFetch?: (
 		request: globalThis.Request,
 	) => Effect.Effect<globalThis.Response>
-	/** The drivers of the Computer providers. */
-	readonly computerDrivers?: Layer.Layer<Drivers.Drivers>
-	/** The Live backends. */
-	readonly liveBackends?: Layer.Layer<LiveBackends>
-	readonly vaultReaders?: Layer.Layer<VaultReaders.Readers>
 	/** Organization settings for the Bots of each new organization. */
 	readonly bots?: {
 		readonly memory?: boolean
@@ -142,11 +114,7 @@ export class LoginFailed extends Schema.TaggedError<
 >()("LoginFailed", { subject: Schema.String, message: Schema.String }) {}
 
 /** The services that `start` needs: the Node services, crypto and the fetch HTTP client. */
-export const layerPlatform = Layer.mergeAll(
-	NodeServices.layer,
-	NodeCrypto.layer,
-	FetchHttpClient.layer,
-)
+export const layerPlatform = TestHost.layerPlatform
 
 const issuer = "https://id.example.com"
 
@@ -456,44 +424,25 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 					},
 				}),
 	}
-	// The migration has its own database pool. It closes after the migration.
-	yield* DatabasePostgres.migrate.pipe(
-		Effect.provide(
-			DatabasePostgres.layer(configuration).pipe(
-				Layer.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer)),
-			),
-		),
-	)
+	yield* TestHost.migrate(configuration)
 	const platformFetch = options.platformFetch
-	/** The services from outside of OpenBot: the fakes of the test, or the real ones. */
-	const outside = Layer.mergeAll(
-		options.computerDrivers ?? Drivers.layer,
-		options.liveBackends ?? OpenBot.layerLiveBackends,
-		options.vaultReaders ?? VaultReaders.layer,
-		options.appProbe ?? Probe.layer,
-		options.appNetwork ?? AppHost.layerNetwork,
-		options.domainControl ?? DomainControl.layer,
-		options.indexPublicNetwork ?? OutboundPolicy.layerPublicNetwork,
-		options.discovery ?? AppDiscovery.layerPublic,
-	)
-	const serverLayer = Server.layerFixed(configuration).pipe(
-		Layer.provide(
-			Layer.merge(
-				outside,
-				options.hostTools ??
-					HostTools.layer({
-						toolkit,
-						handlers: () => handlers,
-						instructions: Prompt.make([
-							{
-								role: "system",
-								content: "The host tools belong to this test server.",
-							},
-						]),
-					}),
-			),
-		),
-		Layer.provideMerge(OpenBot.layerShared(configuration)),
+	const serverLayer = ServerHost.layer({
+		...configuration,
+		// The services from outside of OpenBot: the fakes of the test, or the real ones.
+		outside: TestHost.layerOutside(options),
+		hostTools:
+			options.hostTools ??
+			HostTools.layer({
+				toolkit,
+				handlers: () => handlers,
+				instructions: Prompt.make([
+					{
+						role: "system",
+						content: "The host tools belong to this test server.",
+					},
+				]),
+			}),
+	}).pipe(
 		// `run` gives a test the crypto services too, as the Node services did before Effect 4.1.
 		Layer.provideMerge(NodeCrypto.layer),
 		// The HTTP calls of the server go to the test identity provider or to `platformFetch`.
@@ -509,38 +458,10 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 			),
 		),
 	)
-	const scope = yield* Effect.scope
-	/**
-	 * Starts the server in its own scope, so that a restart can stop it alone.
-	 * A new memo map builds every layer again, as in a new process.
-	 */
-	const launch = Effect.gen(function* () {
-		const serverScope = yield* Scope.fork(scope)
-		const services = yield* Layer.buildWithMemoMap(
-			serverLayer,
-			yield* Layer.makeMemoMap,
-			serverScope,
-		)
-		return {
-			scope: serverScope,
-			services,
-			address: HttpServer.formatAddress(
-				Context.get(services, HttpServer.HttpServer).address,
-			),
-		}
-	})
-	const server = yield* SynchronizedRef.make(yield* launch)
+	const server = yield* TestHost.launch(serverLayer)
 	/** Runs an Effect with the services of the running server. */
-	const run = <A, E>(
-		effect: Effect.Effect<A, E, Layer.Success<typeof serverLayer>>,
-	) =>
-		Effect.flatMap(SynchronizedRef.get(server), (current) =>
-			Effect.provideContext(effect, current.services),
-		)
-	const address = Effect.map(
-		SynchronizedRef.get(server),
-		(current) => current.address,
-	)
+	const run = server.run
+	const address = server.address
 	/** Changes the platform settings, when the platform has them. */
 	const updatePlatform = (
 		change: (document: PlatformDocument) => PlatformDocument,
@@ -758,9 +679,7 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		address,
 		run,
 		/** Stops the server and starts a new one on the same database. */
-		restart: SynchronizedRef.updateEffect(server, (current) =>
-			Scope.close(current.scope, Exit.void).pipe(Effect.andThen(launch)),
-		),
+		restart: server.restart,
 		login,
 		authenticate,
 		updatePlatform,

@@ -1,11 +1,6 @@
 import { assert, layer, vi } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import {
-	DatabasePostgres,
-	HostTools,
-	OpenBot,
-	Server,
-} from "@openbot-build/openbot"
+import { DatabasePostgres, Host } from "@openbot-build/openbot"
 import { AuthApi } from "@openbot-build/api"
 import { Config, Model, Provider } from "@openbot-build/core"
 import {
@@ -184,10 +179,7 @@ layer(
 				const launch = Effect.gen(function* () {
 					const serverScope = yield* Scope.fork(scope)
 					const services = yield* Layer.buildWithMemoMap(
-						Server.layerFixed(options).pipe(
-							Layer.provide(Layer.merge(OpenBot.layerOutside, HostTools.none)),
-							Layer.provideMerge(OpenBot.layerShared(options)),
-						),
+						Host.layer(options),
 						yield* Layer.makeMemoMap,
 						serverScope,
 					)

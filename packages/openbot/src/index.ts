@@ -1,6 +1,6 @@
-export * as Server from "./app/Server.ts"
+export * as Host from "./app/Host.ts"
+export * as Preset from "./app/Preset.ts"
 export * as Launch from "./app/Launch.ts"
-export * as OpenBot from "./app/OpenBot.ts"
 export * as DatabasePostgres from "./app/DatabasePostgres.ts"
 export * as EnvironmentConfiguration from "./server-kernel/configuration/EnvironmentConfiguration.ts"
 export * as Auth from "./plugin-auth/index.ts"
@@ -24,4 +24,4 @@ export * as TurnLimiter from "./plugin-limiters/turn-limiter/TurnLimiter.ts"
 
 export * as Administration from "./plugin-platform/Administration.ts"
 
-export * as BillingHost from "./app/BillingHost.ts"
+export * as Wallets from "./app/Wallets.ts"

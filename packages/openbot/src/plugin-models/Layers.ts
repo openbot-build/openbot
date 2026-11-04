@@ -9,8 +9,8 @@ import { BuiltinModels } from "./Wiring.ts"
 /**
  * The models: the stored providers and models, and the model registry. The
  * registry meters each model call, so it needs the spending services. It
- * reads the built-in models from the `BuiltinModels` reference. The static
- * assembly and the models plugin both use it.
+ * reads the built-in models from the `BuiltinModels` reference. The models
+ * plugin uses it.
  */
 export const layerModels = Layer.unwrap(
 	Effect.map(BuiltinModels, (builtin) =>

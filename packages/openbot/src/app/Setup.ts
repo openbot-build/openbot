@@ -14,7 +14,7 @@ import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
 import * as PlatformAdminsPostgres from "../plugin-platform/PlatformAdminsPostgres.ts"
 import * as Setup from "../plugin-platform/Setup.ts"
 import { read } from "../plugin-platform/SetupFile.ts"
-import * as OpenBot from "./OpenBot.ts"
+import * as Shared from "./Shared.ts"
 
 const force = Flag.Boolean("force").pipe(
 	Flag.withDefault(false),
@@ -31,7 +31,7 @@ const services = Layer.unwrap(
 		}),
 		(instance) =>
 			PlatformAdminsPostgres.layer.pipe(
-				Layer.provideMerge(OpenBot.layerShared(instance)),
+				Layer.provideMerge(Shared.layer(instance)),
 			),
 	),
 )

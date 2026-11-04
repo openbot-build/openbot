@@ -3,7 +3,7 @@ import { AppIndexApi as Api } from "@openbot-build/api"
 import { Document, Index } from "@openbot-build/protocol"
 import { Array as Arr, Context, Effect, Layer, Redacted, Schema } from "effect"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { HostTools, OpenBot, Server } from "@openbot-build/openbot"
+import { Host } from "@openbot-build/openbot"
 import { AppIndex, PostgresTest } from "@openbot-build/openbot/testing"
 import { FetchHttpClient, HttpClient, HttpServer } from "effect/http"
 import * as Client from "@openbot-build/client"
@@ -120,12 +120,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 						),
 					},
 				}
-				const server = yield* Layer.build(
-					Server.layerFixed(configuration).pipe(
-						Layer.provide(Layer.merge(OpenBot.layerOutside, HostTools.none)),
-						Layer.provideMerge(OpenBot.layerShared(configuration)),
-					),
-				)
+				const server = yield* Layer.build(Host.layer(configuration))
 				const address = HttpServer.formatAddress(
 					Context.get(server, HttpServer.HttpServer).address,
 				)

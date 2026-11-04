@@ -1,4 +1,5 @@
 export * as BrowserHost from "./BrowserHost.ts"
+export * as TestHost from "./TestHost.ts"
 export * as AppFixture from "./AppFixture.ts"
 export * as BotFixture from "./BotFixture.ts"
 export * as OrganizationFixture from "./OrganizationFixture.ts"

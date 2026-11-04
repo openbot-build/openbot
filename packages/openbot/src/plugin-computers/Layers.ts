@@ -7,8 +7,8 @@ import * as Pairings from "./Pairings.ts"
 import * as Sessions from "./Sessions.ts"
 
 /**
- * Computers, their providers, pairings and command sessions. The static
- * assembly and the computers plugin both use it.
+ * Computers, their providers, pairings and command sessions. The computers
+ * plugin uses it.
  */
 export const layerComputers = Sessions.layer.pipe(
 	Layer.provideMerge(Pairings.layer),

@@ -5,8 +5,9 @@ import { PgClient } from "@effect/sql-pg"
 import { Config, Effect, Layer, Redacted, Stream, String as Str } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/http"
 import * as DevelopmentModel from "../src/server-development/DevelopmentModel.ts"
-import * as OpenBot from "../src/app/OpenBot.ts"
-import * as Server from "../src/app/Server.ts"
+import * as Assembly from "../src/app/Assembly.ts"
+import * as Outside from "../src/app/Outside.ts"
+import * as Shared from "../src/app/Shared.ts"
 import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
 import { CurrentCallIdentity } from "../src/server-billing/billing/MeteredModel.ts"
 import {
@@ -37,7 +38,7 @@ const main = Effect.gen(function* () {
 			const sql = yield* PgClient.PgClient
 			const settings = yield* Settings
 			const { builtinModels } = yield* DevelopmentModel.make
-			const server = Server.layerFixed({
+			const server = Assembly.layerServer({
 				...options,
 				builtinModels: {
 					...builtinModels,
@@ -68,7 +69,7 @@ const main = Effect.gen(function* () {
 						),
 				},
 			}).pipe(
-				Layer.provide(OpenBot.layerOutside),
+				Layer.provide(Outside.layer),
 				Layer.provide(
 					HostTools.layer({
 						toolkit: DevelopmentModel.toolkit,
@@ -96,7 +97,7 @@ const main = Effect.gen(function* () {
 				}),
 			).pipe(Layer.provideMerge(server))
 		}),
-	).pipe(Layer.provideMerge(OpenBot.layerShared(options)))
+	).pipe(Layer.provideMerge(Shared.layer(options)))
 	return yield* Layer.launch(app)
 }).pipe(
 	Effect.provide(

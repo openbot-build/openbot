@@ -16,14 +16,14 @@ import {
 import { FetchHttpClient, HttpClient, HttpServer } from "effect/http"
 import { SqlClient } from "effect/sql"
 import * as Composition from "../src/app/Composition.ts"
-import * as Preset from "../src/app/Preset.ts"
+import * as PresetPlugins from "../src/app/PresetPlugins.ts"
 import * as Engine from "../src/server-execution/execution/Engine.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Workflows from "../src/server-execution/execution/Workflows.ts"
 import * as Feature from "../src/server-plugin/Feature.ts"
 import * as TurnWorkflow from "../src/plugin-chats/TurnWorkflow.ts"
 import * as BrowserHost from "./BrowserHost.ts"
-import * as HostFixture from "./HostFixture.ts"
+import * as TestHost from "./TestHost.ts"
 
 /** The service that the provider of the test publishes. */
 class Probe extends Context.Service<Probe, { readonly name: string }>()(
@@ -82,7 +82,7 @@ const probes = (
 
 /** The preset with the two plugins of the test at the end. */
 const entries = [
-	...Preset.entries,
+	...PresetPlugins.entries,
 	{ id: "test-provider", name: providerName },
 	{ id: "test-consumer", name: consumerName },
 ]
@@ -141,10 +141,10 @@ layer(BrowserHost.layerPlatform, {
 				const events = yield* Ref.make<ReadonlyArray<string>>([])
 				const note = (event: string) => Ref.update(events, Arr.append(event))
 				const release = yield* Deferred.make<void>()
-				const options = yield* HostFixture.configure
-				yield* HostFixture.migrate(options)
+				const options = yield* TestHost.makeSettings
+				yield* TestHost.migrate(options)
 				const context = yield* Layer.build(
-					HostFixture.host({
+					TestHost.layer({
 						...options,
 						entries,
 						plugins: probes(note, release),
@@ -190,9 +190,9 @@ layer(BrowserHost.layerPlatform, {
 
 	it.effect("turning a plugin off and on again makes every fork active", () =>
 		Effect.gen(function* () {
-			const options = yield* HostFixture.configure
-			yield* HostFixture.migrate(options)
-			const context = yield* Layer.build(HostFixture.host(options))
+			const options = yield* TestHost.makeSettings
+			yield* TestHost.migrate(options)
+			const context = yield* Layer.build(TestHost.layer(options))
 			yield* Effect.gen(function* () {
 				const composition = yield* Composition.Composition
 				const workflows = yield* Workflows.Workflows
@@ -214,9 +214,9 @@ layer(BrowserHost.layerPlatform, {
 		"the routes of a plugin that is off answer 503, and the OpenAPI document stays the same",
 		() =>
 			Effect.gen(function* () {
-				const options = yield* HostFixture.configure
-				yield* HostFixture.migrate(options)
-				const context = yield* Layer.build(HostFixture.host(options))
+				const options = yield* TestHost.makeSettings
+				yield* TestHost.migrate(options)
+				const context = yield* Layer.build(TestHost.layer(options))
 				yield* Effect.gen(function* () {
 					const composition = yield* Composition.Composition
 					const address = HttpServer.formatAddress(
@@ -286,9 +286,9 @@ layer(BrowserHost.layerPlatform, {
 					}
 					if (message === "Shutdown complete") open -= 1
 				})
-				const options = yield* HostFixture.configure
-				yield* HostFixture.migrate(options)
-				const context = yield* Layer.build(HostFixture.host(options)).pipe(
+				const options = yield* TestHost.makeSettings
+				yield* TestHost.migrate(options)
+				const context = yield* Layer.build(TestHost.layer(options)).pipe(
 					Effect.provide(Logger.layer([counter])),
 					Effect.provideService(References.MinimumLogLevel, "Debug"),
 				)
@@ -315,19 +315,19 @@ layer(BrowserHost.layerPlatform, {
 
 	it.effect("the host does not start without a required plugin", () =>
 		Effect.gen(function* () {
-			const options = yield* HostFixture.configure
-			yield* HostFixture.migrate(options)
+			const options = yield* TestHost.makeSettings
+			yield* TestHost.migrate(options)
 			const error = yield* Layer.build(
-				HostFixture.host({
+				TestHost.layer({
 					...options,
-					entries: Arr.map(Preset.entries, (entry) =>
+					entries: Arr.map(PresetPlugins.entries, (entry) =>
 						entry.id === "auth" ? { ...entry, disabled: true } : entry,
 					),
 				}),
 			).pipe(Effect.flip)
 			assert.deepStrictEqual(
 				error,
-				Preset.RequiredPluginMissing.make({ ids: ["auth"] }),
+				PresetPlugins.RequiredPluginMissing.make({ ids: ["auth"] }),
 			)
 		}).pipe(Effect.scoped),
 	)
@@ -336,13 +336,16 @@ layer(BrowserHost.layerPlatform, {
 		"the host does not start when a plugin fails, and it saves the failure",
 		() =>
 			Effect.gen(function* () {
-				const options = yield* HostFixture.configure
-				yield* HostFixture.migrate(options)
+				const options = yield* TestHost.makeSettings
+				yield* TestHost.migrate(options)
 				const missing = "@openbot-build/plugin-missing"
 				const error = yield* Layer.build(
-					HostFixture.host({
+					TestHost.layer({
 						...options,
-						entries: [...Preset.entries, { id: "missing", name: missing }],
+						entries: [
+							...PresetPlugins.entries,
+							{ id: "missing", name: missing },
+						],
 					}),
 				).pipe(Effect.scoped, Effect.flip)
 				assert.strictEqual(error._tag, "PluginsInactive")
@@ -360,16 +363,16 @@ layer(BrowserHost.layerPlatform, {
 						sql<{
 							readonly id: string
 						}>`select id from openbot_execution_failures where id = ${errorId}`,
-				).pipe(Effect.provide(HostFixture.outside(options)(Layer.empty)))
+				).pipe(Effect.provide(TestHost.layerShared(options)))
 				assert.strictEqual(rows.length, 1)
 			}),
 	)
 
 	it.effect("a runtime edit cannot turn off a required plugin", () =>
 		Effect.gen(function* () {
-			const options = yield* HostFixture.configure
-			yield* HostFixture.migrate(options)
-			const context = yield* Layer.build(HostFixture.host(options))
+			const options = yield* TestHost.makeSettings
+			yield* TestHost.migrate(options)
+			const context = yield* Layer.build(TestHost.layer(options))
 			const composition = Context.get(context, Composition.Composition)
 			const error = yield* composition.loader
 				.update("auth", { disabled: true })
@@ -377,7 +380,7 @@ layer(BrowserHost.layerPlatform, {
 			assert.strictEqual(error._tag, "StoreError")
 			assert.deepStrictEqual(
 				error._tag === "StoreError" ? error.cause : undefined,
-				Preset.RequiredPluginMissing.make({ ids: ["auth"] }),
+				PresetPlugins.RequiredPluginMissing.make({ ids: ["auth"] }),
 			)
 		}).pipe(Effect.scoped),
 	)

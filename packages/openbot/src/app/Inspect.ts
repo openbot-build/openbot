@@ -4,10 +4,10 @@ import { Command } from "effect/cli"
 import * as Administration from "../plugin-platform/Administration.ts"
 import * as EnvironmentConfiguration from "../server-kernel/configuration/EnvironmentConfiguration.ts"
 import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
-import * as OpenBot from "./OpenBot.ts"
+import * as Shared from "./Shared.ts"
 
 const services = Layer.unwrap(
-	Effect.map(EnvironmentConfiguration.load, OpenBot.layerShared),
+	Effect.map(EnvironmentConfiguration.load, Shared.layer),
 ).pipe(Layer.provide(SecretFiles.layer()))
 const program = Command.make("openbot inspect").pipe(
 	Command.withDescription(

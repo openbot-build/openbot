@@ -83,7 +83,8 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import * as Client from "@openbot-build/client"
-import { Server, Auth, DatabasePostgres } from "../src/index.ts"
+import { Auth, DatabasePostgres } from "../src/index.ts"
+import * as TestHost from "./TestHost.ts"
 // The migrations come through the entry point of the package, so the test checks that export too.
 import * as Migration from "@openbot-build/openbot/StorageMigration"
 import * as Connections from "../src/plugin-apps/Connections.ts"
@@ -378,7 +379,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 		Layer.provide(NodeCrypto.layer),
 	)
 	const services = yield* Layer.build(
-		HttpRouter.serve(Server.layerApi).pipe(
+		HttpRouter.serve(TestHost.layerApi).pipe(
 			Layer.provide([
 				Layer.mock(ExecutionCommands, {}),
 				Layer.mock(ImportedRecords, {}),
@@ -574,7 +575,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 })
 
 layer(platform, { excludeTestServices: true })((it) => {
-	it.effect("Server.layerApi mounts every group of the contract", () =>
+	it.effect("TestHost.layerApi mounts every group of the contract", () =>
 		Effect.gen(function* () {
 			const publisher = yield* fixture()
 			const api = yield* startApi(publisher.layer)

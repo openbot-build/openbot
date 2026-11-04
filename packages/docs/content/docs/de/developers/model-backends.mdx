@@ -39,7 +39,7 @@ import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	AnthropicProvider,
 	EnvironmentConfiguration,
-	Server,
+	Host,
 } from "@openbot-build/openbot"
 import { Context, Effect, Layer, Redacted } from "effect"
 import { LanguageModel } from "effect/ai"
@@ -91,7 +91,7 @@ NodeRuntime.runMain(
 							),
 			}
 			return yield* Layer.launch(
-				Server.layerLive({ ...settings, builtinModels }).pipe(
+				Host.layer({ ...settings, builtinModels }).pipe(
 					Layer.provide(
 						Layer.mergeAll(
 							NodeServices.layer,
@@ -109,7 +109,7 @@ NodeRuntime.runMain(
 Wenn `resolve` fehlschlägt, gibt das Starten eines Turn `503` zurück. Der
 Einstiegspunkt für die Entwicklung nutzt `builtinModels` für seine Test-Modelle.
 Ein vollständiges Beispiel findest du in
-`packages/openbot/src/app/DevelopmentModel.ts`.
+`packages/openbot/src/server-development/DevelopmentModel.ts`.
 
 ### Anbieter-Module
 

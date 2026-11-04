@@ -1,6 +1,7 @@
 import { expectTypeOf, it } from "@effect/vitest"
 import { Discovery } from "@openbot-build/protocol"
-import { Server } from "@openbot-build/openbot"
+import { Host } from "@openbot-build/openbot"
+import * as Outside from "../src/app/Outside.ts"
 import { Context, Effect, Layer, Redacted, Schema } from "effect"
 
 const settings = (databaseUrl: string) => ({
@@ -41,9 +42,10 @@ it.effect(
 					return yield* DiscoveryStartupFailed.make({})
 				}),
 			)
-			const server = Server.layerFixed(settings("postgresql://unused")).pipe(
-				Layer.provide(injected),
-			)
+			const server = Host.layer({
+				...settings("postgresql://unused"),
+				outside: Layer.merge(Outside.layer, injected),
+			})
 			expectTypeOf<DiscoveryConfiguration>().toExtend<
 				Layer.Services<typeof server>
 			>()

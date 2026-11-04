@@ -23,6 +23,7 @@
 		"test/Organizations.ts",
 		"test/Policies.ts",
 		"test/PostgresTest.ts",
+		"test/TestHost.ts",
 		"test/Wait.ts",
 		"test/testing"
 	],

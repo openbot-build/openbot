@@ -104,6 +104,45 @@ Server. Einheiten- und Komponentenprüfungen bleiben in den Paketen `core`,
 `domain`, `api`, `client`, `openbot`, `cli`, `computer`, `protocol` und
 `protocol-test`.
 
+## Testserver im Code
+
+Der Unterpfad `@openbot-build/openbot/testing` gibt die Test-Helfer von OpenBot.
+Er ist TypeScript-Quelltext, kein gebauter Code. Darum kann ihn nur ein Test
+nutzen, der TypeScript ausführt. Seine Teile können sich in jeder Version
+ändern.
+
+| Helfer                          | Was er tut                                                                                                                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestHost.makeSettings`         | Startet eine neue PostgreSQL-Datenbank, die mit dem Scope endet. Er gibt die Einstellungen eines Servers auf ihr: feste Geheimnisse, die Adresse `127.0.0.1` und einen freien Port. |
+| `TestHost.migrate(settings)`    | Legt die Tabellen einer neuen Datenbank an.                                                                                                                                         |
+| `TestHost.layerPlatform`        | Die Plattform-Dienste eines Testservers: die Node.js-Dienste, Kryptografie und der Fetch-HTTP-Client.                                                                               |
+| `TestHost.layerOutside(fakes)`  | Die Dienste von außen. Jede Fälschung, die der Test gibt, tritt an die Stelle eines echten Dienstes. Gib es `Host.layer` als Option `outside`.                                      |
+| `TestHost.layer(settings)`      | Der bloße Plugin-Host mit eigenem HTTP-Server. Er nimmt eine geänderte Liste von Plugin-Einträgen, und seine Startfehler behalten ihren Typ. Er gibt keinen Dienst eines Plugins.   |
+| `TestHost.launch(server)`       | Startet einen Server in einem eigenen Scope. Der Test kann ihn stoppen und auf derselben Datenbank wieder starten.                                                                  |
+| `TestHost.layerShared(options)` | Nur die gemeinsamen Dienste: der Datenbank-Pool, die geheimen Schlüssel, die gemeinsamen Einstellungen und die Fehlereinträge.                                                      |
+| `TestHost.layerApi`             | Jede Gruppe des Vertrags mit ihrer Middleware für Anmeldung und Berechtigungen, aber ohne Plugin-Host. Der Test gibt die Dienste der Gruppen, oft als Fälschungen.                  |
+| `BrowserHost.start(options)`    | Ein voller Server mit einem Test-Identitätsanbieter, simulierten Models und angemeldeten Testkonten.                                                                                |
+| `PostgresTest.start`            | Eine kurzlebige PostgreSQL-Datenbank.                                                                                                                                               |
+
+Für einen Server mit einer festen Anmelde-Konfiguration nutze das öffentliche
+`Host.layer` mit der Option `auth`. Siehe [Anmeldung](/de/server#anmeldung).
+
+Dieser Test startet den bloßen Plugin-Host und startet ihn auf derselben
+Datenbank wieder:
+
+```ts
+import { TestHost } from "@openbot-build/openbot/testing"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const settings = yield* TestHost.makeSettings
+	yield* TestHost.migrate(settings)
+	const server = yield* TestHost.launch(TestHost.layer(settings))
+	yield* server.restart
+	return yield* server.address
+}).pipe(Effect.scoped, Effect.provide(TestHost.layerPlatform))
+```
+
 ## Prüfung mit einem echten Model
 
 Die Prüfung mit einem echten Model läuft nur mit `OPENBOT_E2E_LIVE=true`. Der
@@ -112,12 +151,13 @@ mit Zugriff auf Workers AI. Wenn das kostenlose Kontingent des Kontos
 aufgebraucht ist, kosten die Aufrufe Geld. Halte Zugangsdaten außerhalb der
 Versionsverwaltung.
 
-Der Test erstellt eine Session mit `Server.layerFixed`. Dann startet er den
-gebauten Produktionseinstieg, um das echte Model aufzurufen. Die Einrichtung der
-Session darf keine Index-Arbeit oder Fehler zurücklassen. Der Test prüft Aufrufe
-mit Cookie und API-Token, gestreamte Antworten, gespeicherte Verläufe,
-wiederholte Befehle, Verbrauch und den Widerruf von Tokens. Diese kleinen
-Aufgaben erlauben keine Aussage über die Qualität des Models.
+Der Test erstellt eine Session mit `Host.layer` und einer festen Option `auth`.
+Dann startet er den gebauten Produktionseinstieg, um das echte Model aufzurufen.
+Die Einrichtung der Session darf keine Index-Arbeit oder Fehler zurücklassen.
+Der Test prüft Aufrufe mit Cookie und API-Token, gestreamte Antworten,
+gespeicherte Verläufe, wiederholte Befehle, Verbrauch und den Widerruf von
+Tokens. Diese kleinen Aufgaben erlauben keine Aussage über die Qualität des
+Models.
 
 Setze diese Variablen in einer lokalen Shell oder einem Secret-Speicher. Lege
 den Schlüssel nicht in einem Befehlsargument oder einer versionierten Datei ab.

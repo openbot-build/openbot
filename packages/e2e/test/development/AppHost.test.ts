@@ -12,9 +12,7 @@ import {
 import {
 	AppHost,
 	DatabasePostgres as Database,
-	HostTools,
-	OpenBot,
-	Server,
+	Host,
 } from "@openbot-build/openbot"
 import * as Development from "@openbot-build/openbot/Development"
 import {
@@ -109,15 +107,7 @@ layer(
 				)
 				assert.deepStrictEqual(
 					yield* DevelopmentTesting.searchPublicApps.pipe(
-						Effect.provide(
-							Server.layerFixed(configuration).pipe(
-								Layer.provide(
-									Layer.merge(OpenBot.layerOutside, HostTools.none),
-								),
-								Layer.provideMerge(OpenBot.layerShared(configuration)),
-							),
-							{ local: true },
-						),
+						Effect.provide(Host.layer(configuration), { local: true }),
 					),
 					{ apps: [], issues: [], nextCursor: null },
 				)

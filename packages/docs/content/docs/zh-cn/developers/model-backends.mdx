@@ -34,7 +34,7 @@ import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	AnthropicProvider,
 	EnvironmentConfiguration,
-	Server,
+	Host,
 } from "@openbot-build/openbot"
 import { Context, Effect, Layer, Redacted } from "effect"
 import { LanguageModel } from "effect/ai"
@@ -86,7 +86,7 @@ NodeRuntime.runMain(
 							),
 			}
 			return yield* Layer.launch(
-				Server.layerLive({ ...settings, builtinModels }).pipe(
+				Host.layer({ ...settings, builtinModels }).pipe(
 					Layer.provide(
 						Layer.mergeAll(
 							NodeServices.layer,
@@ -102,7 +102,8 @@ NodeRuntime.runMain(
 ```
 
 当 `resolve` 失败时，启动 Turn 会返回 `503`。开发入口用 `builtinModels`
-提供它的测试模型。完整示例参见 `packages/openbot/src/app/DevelopmentModel.ts`。
+提供它的测试模型。完整示例参见
+`packages/openbot/src/server-development/DevelopmentModel.ts`。
 
 ### 提供方模块
 
