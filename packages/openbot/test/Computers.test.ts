@@ -4,7 +4,7 @@ import { Prompt } from "effect/ai"
 import {
 	keepNewestImage,
 	names,
-} from "../src/plugins/computers/ComputerTools.ts"
+} from "../src/plugin-computers/ComputerTools.ts"
 
 it.effect("the model sees only the newest screenshot", () =>
 	Effect.sync(() => {

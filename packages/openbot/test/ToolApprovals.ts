@@ -1,7 +1,7 @@
 import { Chat } from "@openbot-build/core"
 import { Effect, HashMap, Layer, Ref } from "effect"
-import * as Approvals from "../src/capabilities/Approvals.ts"
-import { Answer, Gate, type Attempt } from "../src/capabilities/Gate.ts"
+import * as Approvals from "../src/conversation-contract/capabilities/Approvals.ts"
+import { Answer, Gate, type Attempt } from "../src/plugin-capabilities/Gate.ts"
 
 /** Plugin tests keep answers in one explicit Gate. Database replay has its own tests. */
 export const layer = (check: (attempt: Attempt) => Effect.Effect<Answer>) => {

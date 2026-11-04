@@ -32,9 +32,9 @@ import {
 	OpenApi,
 } from "effect/http-api"
 // OrganizationFixture uses the source files, so the Auth layer must come from them too.
-import * as Auth from "../src/auth/index.ts"
-import * as HttpBoundary from "../src/errors/HttpBoundary.ts"
-import { Records } from "../src/errors/Records.ts"
+import * as Auth from "../src/identity-contract/auth/index.ts"
+import * as HttpBoundary from "../src/server-kernel/errors/HttpBoundary.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
 import { Execution } from "@openbot-build/domain"
 
 import * as Development from "../dist/Development.js"

@@ -14,15 +14,15 @@ import {
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import * as ToolApprovals from "./ToolApprovals.ts"
-import { Answer, Gate } from "../src/capabilities/Gate.ts"
-import { Work } from "../src/capabilities/Work.ts"
-import type { Machine } from "../src/computers/Computer.ts"
-import { ComputerProviders } from "../src/computers/ComputerProviders.ts"
-import { Computers } from "../src/computers/Computers.ts"
-import { Sessions } from "../src/computers/Sessions.ts"
-import * as ComputerTools from "../src/plugins/computers/ComputerTools.ts"
+import { Answer, Gate } from "../src/plugin-capabilities/Gate.ts"
+import { Work } from "../src/plugin-capabilities/Work.ts"
+import type { Machine } from "../src/plugin-computers/Computer.ts"
+import { ComputerProviders } from "../src/plugin-computers/ComputerProviders.ts"
+import { Computers } from "../src/plugin-computers/Computers.ts"
+import { Sessions } from "../src/plugin-computers/Sessions.ts"
+import * as ComputerTools from "../src/plugin-computers/ComputerTools.ts"
 import { bot } from "./BotFixture.ts"
-import { Records } from "../src/errors/Records.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
 
 const { names } = ComputerTools
 

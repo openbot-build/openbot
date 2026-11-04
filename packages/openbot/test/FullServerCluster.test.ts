@@ -20,7 +20,7 @@ import {
 } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 import * as Caller from "./Caller.ts"
 import * as DevelopmentLogin from "./DevelopmentLogin.ts"
 import * as Messages from "./Messages.ts"

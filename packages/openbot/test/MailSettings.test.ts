@@ -2,10 +2,10 @@ import { assert, it } from "@effect/vitest"
 import { NodeCrypto } from "@effect/platform-node"
 import { Authorization, Settings as Model } from "@openbot-build/domain"
 import { Effect, Redacted, Schema, String as Str } from "effect"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import { PlatformDocument } from "../src/settings/Documents.ts"
-import { bindings, changeMail } from "../src/settings/Platform.ts"
-import * as Views from "../src/settings/Views.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import { PlatformDocument } from "../src/server-kernel/settings/Documents.ts"
+import { bindings, changeMail } from "../src/server-kernel/settings/Platform.ts"
+import * as Views from "../src/server-kernel/settings/Views.ts"
 
 const fields = {
 	host: "smtp.example.com",

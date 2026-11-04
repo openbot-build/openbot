@@ -13,8 +13,8 @@ import {
 	Redacted,
 	Schema,
 } from "effect"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Db from "../src/database/Database.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Db from "../src/server-database/Database.ts"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

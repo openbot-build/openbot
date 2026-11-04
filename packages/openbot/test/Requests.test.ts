@@ -18,11 +18,11 @@ import {
 	Semaphore,
 } from "effect"
 import { TestClock } from "effect/testing"
-import { BotRecords, type Keys } from "../src/bots/BotRecords.ts"
-import * as Grants from "../src/capabilities/Grants.ts"
-import * as Requests from "../src/capabilities/Requests.ts"
-import * as Rules from "../src/capabilities/Rules.ts"
-import { Settings } from "../src/settings/Settings.ts"
+import { BotRecords, type Keys } from "../src/plugin-bots/BotRecords.ts"
+import * as Grants from "../src/plugin-capabilities/Grants.ts"
+import * as Requests from "../src/plugin-capabilities/Requests.ts"
+import * as Rules from "../src/plugin-capabilities/Rules.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
 
 const organizationId = "org_1"
 const userId = "user_1"

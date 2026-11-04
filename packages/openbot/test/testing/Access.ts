@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
 import { Context, Effect, Layer, Option, Redacted, String as Str } from "effect"
 import { HttpServer } from "effect/http"
-import * as DatabasePostgres from "../../src/database/DatabasePostgres.ts"
+import * as DatabasePostgres from "../../src/server-kernel/database/DatabasePostgres.ts"
 import { Server } from "../../src/index.ts"
-import * as Setup from "../../src/platform/Setup.ts"
+import * as Setup from "../../src/plugin-platform/Setup.ts"
 import * as PostgresTest from "../PostgresTest.ts"
 
 /** Start a real platform with no settings. Keep setup in the same server. */

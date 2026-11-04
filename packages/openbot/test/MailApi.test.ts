@@ -18,7 +18,7 @@ import {
 	TransportError,
 	type Connection,
 	type Message,
-} from "../src/mail/Transport.ts"
+} from "../src/identity-contract/mail/Transport.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as Caller from "./Caller.ts"
 import * as Policies from "./Policies.ts"

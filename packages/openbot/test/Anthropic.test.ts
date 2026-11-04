@@ -21,7 +21,7 @@ import {
 } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config, Model, Provider } from "@openbot-build/core"
-import * as AnthropicProvider from "../src/providers/anthropic/AnthropicProvider.ts"
+import * as AnthropicProvider from "../src/model-providers/providers/anthropic/AnthropicProvider.ts"
 
 const selection = Config.Selection.make({
 	provider: Provider.Id.make("anthropic"),

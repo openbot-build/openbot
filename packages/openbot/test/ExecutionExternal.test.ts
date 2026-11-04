@@ -20,9 +20,9 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const

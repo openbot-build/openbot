@@ -1,5 +1,9 @@
 import { assert, it } from "@effect/vitest"
-import { chunk, slackMrkdwn, telegramHtml } from "../src/channels/Text.ts"
+import {
+	chunk,
+	slackMrkdwn,
+	telegramHtml,
+} from "../src/plugin-channels/Text.ts"
 
 it("Markdown turns into the format of each platform, and long text splits at words", () => {
 	assert.strictEqual(

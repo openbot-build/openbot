@@ -5,15 +5,16 @@ export default defineConfig({
 	...config,
 	entry: {
 		index: "src/index.ts",
-		"database/Migrations": "src/database/Migrations.ts",
+		"server-kernel/database/Migrations":
+			"src/server-kernel/database/Migrations.ts",
 		Main: "src/app/Main.ts",
-		Development: "src/app/Development.ts",
-		DevelopmentMain: "src/app/DevelopmentMain.ts",
+		Development: "src/server-development/Development.ts",
+		DevelopmentMain: "src/server-development/DevelopmentMain.ts",
 		Migrate: "src/app/Migrate.ts",
 		Setup: "src/app/Setup.ts",
 		Inspect: "src/app/Inspect.ts",
 		// The Code Mode worker. Nothing imports it, so it needs its own entry.
-		"code/Worker": "src/code/Worker.ts",
+		"plugin-code/Worker": "src/plugin-code/Worker.ts",
 	},
 	exports: {
 		...config.exports,
@@ -23,7 +24,7 @@ export default defineConfig({
 			"Migrate",
 			"Setup",
 			"DevelopmentMain",
-			"code/Worker",
+			"plugin-code/Worker",
 		],
 		customExports(exports) {
 			return {

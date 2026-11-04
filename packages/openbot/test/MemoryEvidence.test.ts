@@ -3,8 +3,8 @@ import { Chat, Item, Turn } from "@openbot-build/core"
 import { Bots, type ExecutionIdentity } from "@openbot-build/domain"
 import { HashSet } from "effect"
 import { Prompt } from "effect/ai"
-import * as Evidence from "../src/bots/MemoryEvidence.ts"
-import { chatHostId } from "../src/chats/ChatHost.ts"
+import * as Evidence from "../src/plugin-bots/MemoryEvidence.ts"
+import { chatHostId } from "../src/conversation-contract/chats/ChatHost.ts"
 
 const identity: ExecutionIdentity = {
 	owner: { organizationId: "org", userId: "owner" },

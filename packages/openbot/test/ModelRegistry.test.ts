@@ -1,23 +1,26 @@
-import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
+import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, describe, it } from "@effect/vitest"
 import { ModelProvidersApi } from "@openbot-build/api"
 import { Config, Live, Model, Provider } from "@openbot-build/core"
 import { Cause, Effect, Layer, Logger, Redacted, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
-import { Billing } from "../src/billing/Billing.ts"
-import { TokenThrottle } from "../src/billing/TokenThrottle.ts"
-import * as LiveBackends from "../src/models/LiveBackends.ts"
+import { Billing } from "../src/server-billing/billing/Billing.ts"
+import { TokenThrottle } from "../src/server-billing/billing/TokenThrottle.ts"
+import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
 import {
 	ModelProviders,
 	organizationOwner,
 	type Stored,
-} from "../src/models/ModelProviders.ts"
-import * as ModelRegistry from "../src/models/ModelRegistry.ts"
-import { Models, type StoredModel } from "../src/models/Models.ts"
-import { organizationDefaults } from "../src/settings/Documents.ts"
-import { Settings } from "../src/settings/Settings.ts"
-import { codec, snapshot } from "../src/errors/Snapshot.ts"
+} from "../src/models-contract/models/ModelProviders.ts"
+import * as ModelRegistry from "../src/models-contract/models/ModelRegistry.ts"
+import {
+	Models,
+	type StoredModel,
+} from "../src/models-contract/models/Models.ts"
+import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
 
 const organizationId = "org_a"
 

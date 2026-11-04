@@ -14,17 +14,17 @@ import {
 	Ref,
 	Schema,
 } from "effect"
-import { Connections } from "../../src/apps/Connections.ts"
-import { PublicIndex } from "../../src/apps/Index.ts"
-import { ownerKey } from "../../src/apps/StoredConnections.ts"
-import * as Db from "../../src/database/Database.ts"
-import { appSecrets, chatItems } from "../../src/database/Schema.ts"
-import * as StoredViews from "../../src/apps/StoredViews.ts"
+import { Connections } from "../../src/plugin-apps/Connections.ts"
+import { PublicIndex } from "../../src/plugin-apps/Index.ts"
+import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
+import * as Db from "../../src/server-database/Database.ts"
+import { appSecrets, chatItems } from "../../src/server-database/Schema.ts"
+import * as StoredViews from "../../src/plugin-apps/StoredViews.ts"
 import { SqlClient } from "effect/sql"
-import * as Assistance from "../../src/plugins/apps/Assistance.ts"
-import * as Report from "../../src/errors/Report.ts"
-import { Settings } from "../../src/settings/Settings.ts"
-import { Readers, VaultReadFailed } from "../../src/vaults/Readers.ts"
+import * as Assistance from "../../src/plugin-apps/Assistance.ts"
+import * as Report from "../../src/server-kernel/errors/Report.ts"
+import { Settings } from "../../src/server-kernel/settings/Settings.ts"
+import { Readers, VaultReadFailed } from "../../src/plugin-vaults/Readers.ts"
 import type * as BrowserHost from "../BrowserHost.ts"
 
 type Host = Effect.Success<ReturnType<typeof BrowserHost.start>>

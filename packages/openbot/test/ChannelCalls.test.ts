@@ -11,11 +11,11 @@ import {
 	String as Str,
 } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
-import { Target } from "../src/channels/Channel.ts"
-import * as CustomChannel from "../src/channels/custom/CustomChannel.ts"
-import * as Http from "../src/channels/Http.ts"
-import * as LarkChannel from "../src/channels/lark/LarkChannel.ts"
-import { hmacHex } from "../src/channels/Text.ts"
+import { Target } from "../src/plugin-channels/Channel.ts"
+import * as CustomChannel from "../src/plugin-channels/custom/CustomChannel.ts"
+import * as Http from "../src/plugin-channels/Http.ts"
+import * as LarkChannel from "../src/plugin-channels/lark/LarkChannel.ts"
+import { hmacHex } from "../src/plugin-channels/Text.ts"
 
 /** A guarded network that fails each request with this failure. */
 const failingNetwork = (failure: NetworkError | Schema.SchemaError) =>

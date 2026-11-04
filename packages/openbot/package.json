@@ -34,8 +34,8 @@
 	},
 	"exports": {
 		".": "./dist/index.js",
-		"./StorageMigration": "./dist/database/Migrations.js",
 		"./Development": "./dist/Development.js",
+		"./StorageMigration": "./dist/server-kernel/database/Migrations.js",
 		"./testing": "./test/Testing.ts"
 	},
 	"scripts": {

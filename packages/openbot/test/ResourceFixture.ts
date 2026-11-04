@@ -24,12 +24,12 @@ import {
 } from "effect/cluster"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { SqlClient } from "effect/sql"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Records from "../src/errors/Records.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as Directory from "../src/resources/Directory.ts"
-import * as Transport from "../src/resources/Transport.ts"
-import * as PrivateRpc from "../src/transport/PrivateRpc.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Directory from "../src/server-execution/resources/Directory.ts"
+import * as Transport from "../src/server-execution/resources/Transport.ts"
+import * as PrivateRpc from "../src/server-execution/transport/PrivateRpc.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

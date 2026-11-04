@@ -9,18 +9,18 @@ import {
 	Ref,
 	String as Str,
 } from "effect"
-import * as Mail from "../src/mail/Mail.ts"
+import * as Mail from "../src/identity-contract/mail/Mail.ts"
 import {
 	Transport,
 	TransportError,
 	type Connection,
 	type Message,
-} from "../src/mail/Transport.ts"
-import { Settings } from "../src/settings/Settings.ts"
-import type { PlatformDocument } from "../src/settings/Documents.ts"
-import { Secrets } from "../src/secrets/Secrets.ts"
-import { bindings } from "../src/settings/Platform.ts"
-import { Records } from "../src/errors/Records.ts"
+} from "../src/identity-contract/mail/Transport.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import type { PlatformDocument } from "../src/server-kernel/settings/Documents.ts"
+import { Secrets } from "../src/server-kernel/secrets/Secrets.ts"
+import { bindings } from "../src/server-kernel/settings/Platform.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
 
 const document: PlatformDocument = {
 	publicOrigin: "https://openbot.example.com",

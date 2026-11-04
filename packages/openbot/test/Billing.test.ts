@@ -1,7 +1,11 @@
 import { assert, it } from "@effect/vitest"
 import { BillingApi } from "@openbot-build/api"
 import { Response as ModelResponse } from "effect/ai"
-import { costOf, ratesOf, tokensOf } from "../src/billing/Billing.ts"
+import {
+	costOf,
+	ratesOf,
+	tokensOf,
+} from "../src/server-billing/billing/Billing.ts"
 
 /** Micro-USD for one million tokens. */
 const price = {

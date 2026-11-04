@@ -9,7 +9,7 @@ import {
 	Path,
 	Redacted,
 } from "effect"
-import * as SecretFiles from "../src/configuration/SecretFiles.ts"
+import * as SecretFiles from "../src/server-kernel/configuration/SecretFiles.ts"
 
 layer(NodeServices.layer)((it) => {
 	it.effect(

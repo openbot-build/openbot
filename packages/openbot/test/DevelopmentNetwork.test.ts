@@ -3,11 +3,11 @@ import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Document, Network } from "@openbot-build/protocol"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { AppNetwork } from "../src/apps/AppHost.ts"
-import * as DevelopmentApps from "../src/app/DevelopmentApps.ts"
-import { Authorization } from "../src/app/DevelopmentAuthorization.ts"
-import * as DevelopmentBusiness from "../src/app/DevelopmentBusiness.ts"
-import type { Mode } from "../src/app/DevelopmentScenarios.ts"
+import { AppNetwork } from "../src/plugin-apps/AppHost.ts"
+import * as DevelopmentApps from "../src/server-development/DevelopmentApps.ts"
+import { Authorization } from "../src/server-development/DevelopmentAuthorization.ts"
+import * as DevelopmentBusiness from "../src/server-development/DevelopmentBusiness.ts"
+import type { Mode } from "../src/server-development/DevelopmentScenarios.ts"
 
 const Reply = Schema.fromJsonString(
 	Schema.Struct({ result: Schema.Record(Schema.String, Schema.Unknown) }),

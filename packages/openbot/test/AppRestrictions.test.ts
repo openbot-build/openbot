@@ -2,8 +2,8 @@ import { assert, it } from "@effect/vitest"
 import { Settings as Api } from "@openbot-build/api"
 import { AppIndex } from "@openbot-build/domain"
 import { Effect, HashMap, Layer, Option, Ref } from "effect"
-import * as Governance from "../src/apps/Governance.ts"
-import { Settings } from "../src/settings/Settings.ts"
+import * as Governance from "../src/plugin-apps/Governance.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 
 it.effect(

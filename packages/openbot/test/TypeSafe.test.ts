@@ -1,4 +1,4 @@
-import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
+import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import {
@@ -14,19 +14,22 @@ import { Decision, DecisionModel } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config, Model, Provider } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
-import { Billing, type Tokens } from "../src/billing/Billing.ts"
-import { TokenThrottle } from "../src/billing/TokenThrottle.ts"
-import * as ModelRegistry from "../src/models/ModelRegistry.ts"
-import * as LiveBackends from "../src/models/LiveBackends.ts"
+import { Billing, type Tokens } from "../src/server-billing/billing/Billing.ts"
+import { TokenThrottle } from "../src/server-billing/billing/TokenThrottle.ts"
+import * as ModelRegistry from "../src/models-contract/models/ModelRegistry.ts"
+import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
 import {
 	ModelProviders,
 	organizationOwner,
 	type Stored,
-} from "../src/models/ModelProviders.ts"
-import { Models, type StoredModel } from "../src/models/Models.ts"
-import * as TypeSafeProvider from "../src/providers/typesafe/TypeSafeProvider.ts"
-import { organizationDefaults } from "../src/settings/Documents.ts"
-import { Settings } from "../src/settings/Settings.ts"
+} from "../src/models-contract/models/ModelProviders.ts"
+import {
+	Models,
+	type StoredModel,
+} from "../src/models-contract/models/Models.ts"
+import * as TypeSafeProvider from "../src/model-providers/providers/typesafe/TypeSafeProvider.ts"
+import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
 
 const SentBody = Schema.Struct({
 	model: Schema.String,

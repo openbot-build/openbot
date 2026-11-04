@@ -15,13 +15,13 @@ import {
 	String as Str,
 } from "effect"
 import { Statement } from "effect/sql"
-import * as BotMemories from "../src/bots/BotMemories.ts"
-import * as BotRecords from "../src/bots/BotRecords.ts"
-import * as MemoryLogs from "../src/bots/MemoryLogs.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Audience from "../src/plugins/memory/Audience.ts"
-import * as Memory from "../src/plugins/memory/BotMemory.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as BotMemories from "../src/plugin-bots/BotMemories.ts"
+import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
+import * as MemoryLogs from "../src/plugin-bots/MemoryLogs.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Audience from "../src/plugin-bots/memory/Audience.ts"
+import * as Memory from "../src/plugin-bots/memory/BotMemory.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

@@ -14,13 +14,13 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Admission from "../src/execution/Admission.ts"
-import * as Engine from "../src/execution/Engine.ts"
-import * as RunScope from "../src/execution/RunScope.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Admission from "../src/server-execution/execution/Admission.ts"
+import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as RunScope from "../src/server-execution/execution/RunScope.ts"
 import { WorkflowEngine } from "effect/workflow"
-import * as Permits from "../src/execution/Permits.ts"
-import * as Store from "../src/execution/Store.ts"
+import * as Permits from "../src/server-execution/execution/Permits.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 

@@ -11,9 +11,9 @@ import {
 	String as Str,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as Database from "../src/database/DatabasePostgres.ts"
+import * as ProtocolStores from "../src/plugin-apps/ProtocolStores.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 
 layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {

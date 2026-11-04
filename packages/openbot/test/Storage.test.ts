@@ -15,14 +15,17 @@ import { SqlClient } from "effect/sql"
 import { ChatStoreRepository, Item, Store } from "@openbot-build/core"
 import { Prompt } from "effect/ai"
 import { getTableName, is, Table } from "drizzle-orm"
-import * as Migration from "../src/database/Migrations.ts"
-import * as AuthSchema from "../src/database/AuthSchema.ts"
-import * as DatabaseSchema from "../src/database/Schema.ts"
-import * as StoredChats from "../src/chats/StoredChats.ts"
-import { chatHostId, chatHostStore } from "../src/chats/ChatHost.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import * as Migration from "../src/server-kernel/database/Migrations.ts"
+import * as AuthSchema from "../src/server-database/AuthSchema.ts"
+import * as DatabaseSchema from "../src/server-database/Schema.ts"
+import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
+import {
+	chatHostId,
+	chatHostStore,
+} from "../src/conversation-contract/chats/ChatHost.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as Db from "../src/database/Database.ts"
+import * as Db from "../src/server-database/Database.ts"
 import * as BotFixture from "./BotFixture.ts"
 
 /** The tables that the Drizzle schema defines. The migrations must make the same tables. */

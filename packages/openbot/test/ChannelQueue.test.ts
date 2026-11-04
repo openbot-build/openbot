@@ -3,21 +3,21 @@ import { assert, layer } from "@effect/vitest"
 import { Authorization, BotId, Execution } from "@openbot-build/domain"
 import { and, asc, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Layer, Redacted, String as Str } from "effect"
-import { ChannelEvent, Target } from "../src/channels/Channel.ts"
-import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
-import * as ChannelInbox from "../src/channels/ChannelInbox.ts"
-import * as Channels from "../src/channels/Channels.ts"
-import * as Db from "../src/database/Database.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import { ChannelEvent, Target } from "../src/plugin-channels/Channel.ts"
+import * as ChannelQueue from "../src/plugin-channels/ChannelQueue.ts"
+import * as ChannelInbox from "../src/plugin-channels/ChannelInbox.ts"
+import * as Channels from "../src/plugin-channels/Channels.ts"
+import * as Db from "../src/server-database/Database.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 import {
 	channelInbox,
 	channelDeliveries,
 	executions,
-} from "../src/database/Schema.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+} from "../src/server-database/Schema.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import { ownerKey } from "../src/apps/StoredConnections.ts"
+import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
 	Layer.provideMerge(

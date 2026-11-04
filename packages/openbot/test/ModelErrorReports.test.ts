@@ -14,14 +14,20 @@ import {
 	String as Str,
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
-import { Billing, BillingStorageError } from "../src/billing/Billing.ts"
-import { CurrentCallIdentity, meter } from "../src/billing/MeteredModel.ts"
-import { Unavailable } from "../src/billing/TokenThrottle.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Records from "../src/errors/Records.ts"
-import * as Report from "../src/errors/Report.ts"
-import * as Realtime from "../src/providers/openai/OpenAiRealtime.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+import {
+	Billing,
+	BillingStorageError,
+} from "../src/server-billing/billing/Billing.ts"
+import {
+	CurrentCallIdentity,
+	meter,
+} from "../src/server-billing/billing/MeteredModel.ts"
+import { Unavailable } from "../src/server-billing/billing/TokenThrottle.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Report from "../src/server-kernel/errors/Report.ts"
+import * as Realtime from "../src/model-providers/providers/openai/OpenAiRealtime.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

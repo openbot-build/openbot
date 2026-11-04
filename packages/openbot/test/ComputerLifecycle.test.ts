@@ -19,35 +19,35 @@ import {
 	String as Str,
 } from "effect"
 import { WorkflowEngine } from "effect/workflow"
-import { AuditLog } from "../src/audit/AuditLog.ts"
-import { Bots } from "../src/bots/Bots.ts"
-import * as Activity from "../src/computers/Activity.ts"
+import { AuditLog } from "../src/identity-contract/audit/AuditLog.ts"
+import { Bots } from "../src/plugin-bots/Bots.ts"
+import * as Activity from "../src/plugin-computers/Activity.ts"
 import {
 	Machine,
 	Provider,
 	ComputerCallFailed,
-} from "../src/computers/Computer.ts"
-import { ComputerProviders } from "../src/computers/ComputerProviders.ts"
-import { Drivers } from "../src/computers/Drivers.ts"
-import * as Lifecycle from "../src/computers/Lifecycle.ts"
-import * as LifecycleWorkflow from "../src/computers/LifecycleWorkflow.ts"
-import * as Maintenance from "../src/computers/Maintenance.ts"
-import * as MaintenanceWorkflow from "../src/computers/MaintenanceWorkflow.ts"
-import { Connectors } from "../src/computers/connector/Connectors.ts"
-import * as Db from "../src/database/Database.ts"
-import * as Database from "../src/database/DatabasePostgres.ts"
+} from "../src/plugin-computers/Computer.ts"
+import { ComputerProviders } from "../src/plugin-computers/ComputerProviders.ts"
+import { Drivers } from "../src/plugin-computers/Drivers.ts"
+import * as Lifecycle from "../src/plugin-computers/Lifecycle.ts"
+import * as LifecycleWorkflow from "../src/plugin-computers/LifecycleWorkflow.ts"
+import * as Maintenance from "../src/plugin-computers/Maintenance.ts"
+import * as MaintenanceWorkflow from "../src/plugin-computers/MaintenanceWorkflow.ts"
+import { Connectors } from "../src/plugin-computers/connector/Connectors.ts"
+import * as Db from "../src/server-database/Database.ts"
+import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
 import {
 	computerProviders,
 	computers,
 	computerUsage,
 	executions,
-} from "../src/database/Schema.ts"
-import * as Calls from "../src/execution/Calls.ts"
-import * as Engine from "../src/execution/Engine.ts"
-import * as Observation from "../src/execution/Observation.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Records from "../src/errors/Records.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+} from "../src/server-database/Schema.ts"
+import * as Calls from "../src/server-execution/execution/Calls.ts"
+import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Observation from "../src/server-execution/execution/Observation.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Postgres from "./PostgresTest.ts"
 
 class Allowed extends Context.Service<Allowed, Ref.Ref<boolean>>()(

@@ -1,5 +1,5 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import { Records } from "../src/errors/Records.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
 import { NodeFileSystem } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { ConnectionsApi } from "@openbot-build/api"
@@ -13,11 +13,14 @@ import {
 	Ref,
 	String as Str,
 } from "effect"
-import type { Binding } from "../src/code/Bindings.ts"
-import { name } from "../src/code/Bindings.ts"
-import { declarations } from "../src/code/Declarations.ts"
-import type { Call } from "../src/code/Protocol.ts"
-import { make as makeSandbox, type Program } from "../src/code/Sandbox.ts"
+import type { Binding } from "../src/apps-contract/code/Bindings.ts"
+import { name } from "../src/apps-contract/code/Bindings.ts"
+import { declarations } from "../src/apps-contract/code/Declarations.ts"
+import type { Call } from "../src/apps-contract/code/Protocol.ts"
+import {
+	make as makeSandbox,
+	type Program,
+} from "../src/plugin-code/Sandbox.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 
 const limits = {

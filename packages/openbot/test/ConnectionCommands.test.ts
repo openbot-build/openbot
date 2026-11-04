@@ -23,25 +23,25 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import { eq } from "drizzle-orm"
-import * as Database from "../src/database/DatabasePostgres.ts"
-import * as Db from "../src/database/Database.ts"
+import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Db from "../src/server-database/Database.ts"
 import {
 	appConnections,
 	appRecords,
 	appSecrets,
-} from "../src/database/Schema.ts"
-import { executions } from "../src/database/ExecutionSchema.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as Records from "../src/errors/Records.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Commands from "../src/apps/ConnectionCommands.ts"
-import * as Stored from "../src/apps/StoredConnections.ts"
-import { Governance } from "../src/apps/Governance.ts"
+} from "../src/server-database/Schema.ts"
+import { executions } from "../src/server-database/ExecutionSchema.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Commands from "../src/plugin-apps/ConnectionCommands.ts"
+import * as Stored from "../src/apps-contract/apps/StoredConnections.ts"
+import { Governance } from "../src/plugin-apps/Governance.ts"
 import {
 	GrantCleanup,
 	layer as cleanupLayer,
-} from "../src/apps/GrantCleanup.ts"
-import * as ManualConnection from "../src/apps/ManualConnection.ts"
+} from "../src/plugin-apps/GrantCleanup.ts"
+import * as ManualConnection from "../src/plugin-apps/ManualConnection.ts"
 import * as Postgres from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(Database.migrate).pipe(

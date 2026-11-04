@@ -11,16 +11,16 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Migrations from "../src/database/Migrations.ts"
-import * as Progress from "../src/database/conversion/Progress.ts"
-import * as Legacy from "../src/database/conversion/LegacyV1.ts"
-import * as Upgrade from "../src/database/conversion/GrantUses.ts"
-import * as Grants from "../src/apps/GrantUses.ts"
-import * as Connections from "../src/apps/StoredConnections.ts"
-import { privateStateCodec } from "../src/apps/DeveloperTestStores.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as Progress from "../src/server-kernel/imported/Progress.ts"
+import * as Legacy from "../src/server-kernel/imported/LegacyV1.ts"
+import * as Upgrade from "../src/server-upgrade/GrantUses.ts"
+import * as Grants from "../src/apps-contract/apps/GrantUses.ts"
+import * as Connections from "../src/apps-contract/apps/StoredConnections.ts"
+import { privateStateCodec } from "../src/plugin-apps/DeveloperTestStores.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Store.layer.pipe(

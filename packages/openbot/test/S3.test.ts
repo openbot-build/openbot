@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { NodeCrypto } from "@effect/platform-node"
 import { Effect, Option, Redacted, Stream } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
-import * as S3 from "../src/files/S3.ts"
+import * as S3 from "../src/plugin-files/S3.ts"
 
 // The example from the AWS guide "Authenticating Requests: Using Query
 // Parameters (AWS Signature Version 4)".

@@ -1,7 +1,7 @@
 import { type Caller, Execution } from "@openbot-build/domain"
 import { Effect } from "effect"
-import { ownerKey } from "../../src/apps/StoredConnections.ts"
-import { Store } from "../../src/execution/Store.ts"
+import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
+import { Store } from "../../src/server-execution/execution/Store.ts"
 import type { Host } from "../BrowserHost.ts"
 
 /** Reads the saved receipt for one completed task notice. */

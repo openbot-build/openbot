@@ -10,7 +10,7 @@ const entries = [
 	["Migrate", "src/app/Migrate.ts"],
 	["Setup", "src/app/Setup.ts"],
 	["Inspect", "src/app/Inspect.ts"],
-	["CodeWorker", "src/code/Worker.ts"],
+	["CodeWorker", "src/plugin-code/Worker.ts"],
 ] as const
 
 export default defineConfig(

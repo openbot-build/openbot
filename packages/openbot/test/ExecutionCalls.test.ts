@@ -1,18 +1,18 @@
-import * as ModelFailure from "../src/models/ModelFailure.ts"
-import * as Send from "../src/execution/Send.ts"
-import * as Admission from "../src/execution/Admission.ts"
-import * as Observation from "../src/execution/Observation.ts"
-import * as AppCall from "../src/apps/AppCall.ts"
+import * as ModelFailure from "../src/models-contract/models/ModelFailure.ts"
+import * as Send from "../src/server-execution/execution/Send.ts"
+import * as Admission from "../src/server-execution/execution/Admission.ts"
+import * as Observation from "../src/server-execution/execution/Observation.ts"
+import * as AppCall from "../src/apps-contract/apps/AppCall.ts"
 import { Client } from "@openbot-build/protocol"
 import { ConnectionId } from "@openbot-build/domain"
-import { CallContext } from "../src/execution/CallContext.ts"
+import { CallContext } from "../src/server-execution/execution/CallContext.ts"
 import {
 	entry,
 	Idempotent,
 	Local,
 	SavedResult,
-} from "../src/plugins/ToolEntry.ts"
-import * as ModelCalls from "../src/models/ModelCalls.ts"
+} from "../src/tools-contract/plugins/ToolEntry.ts"
+import * as ModelCalls from "../src/models-contract/models/ModelCalls.ts"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -61,31 +61,37 @@ import {
 	Tool,
 	Toolkit,
 } from "effect/ai"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Records from "../src/errors/Records.ts"
-import * as Report from "../src/errors/Report.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as Calls from "../src/execution/Calls.ts"
-import * as CallRecovery from "../src/execution/CallRecovery.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Report from "../src/server-kernel/errors/Report.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Calls from "../src/server-execution/execution/Calls.ts"
+import * as CallRecovery from "../src/server-execution/execution/CallRecovery.ts"
 import { SqlError } from "effect/sql"
-import * as Runner from "../src/execution/Runner.ts"
-import * as RunScope from "../src/execution/RunScope.ts"
-import * as Engine from "../src/execution/Engine.ts"
+import * as Runner from "../src/server-execution/execution/Runner.ts"
+import * as RunScope from "../src/server-execution/execution/RunScope.ts"
+import * as Engine from "../src/server-execution/execution/Engine.ts"
 import { DurableDeferred, WorkflowEngine } from "effect/workflow"
-import * as Store from "../src/execution/Store.ts"
-import * as ToolSteps from "../src/chats/ToolSteps.ts"
-import { TurnAccess } from "../src/chats/TurnAccess.ts"
-import * as ModelSteps from "../src/chats/ModelSteps.ts"
-import { Billing, BillingStorageError } from "../src/billing/Billing.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
+import { TurnAccess } from "../src/plugin-chats/TurnAccess.ts"
+import * as ModelSteps from "../src/plugin-chats/ModelSteps.ts"
+import {
+	Billing,
+	BillingStorageError,
+} from "../src/server-billing/billing/Billing.ts"
 import {
 	CurrentAttribution,
 	meter,
 	meterDecision,
 	CurrentCallIdentity,
-} from "../src/billing/MeteredModel.ts"
-import { Registry } from "../src/execution/Engine.ts"
-import * as Judge from "../src/capabilities/Judge.ts"
-import { ModelRegistry, AnyModel } from "../src/models/ModelRegistry.ts"
+} from "../src/server-billing/billing/MeteredModel.ts"
+import { Registry } from "../src/server-execution/execution/Engine.ts"
+import * as Judge from "../src/plugin-capabilities/Judge.ts"
+import {
+	ModelRegistry,
+	AnyModel,
+} from "../src/models-contract/models/ModelRegistry.ts"
 import * as BotFixture from "./BotFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

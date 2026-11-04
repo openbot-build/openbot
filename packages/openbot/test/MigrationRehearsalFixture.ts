@@ -4,16 +4,16 @@ import { Authorization } from "@openbot-build/domain"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { Effect, Schema, String as Str } from "effect"
 import { Prompt } from "effect/ai"
-import * as Db from "../src/database/Database.ts"
-import * as Legacy from "../src/database/conversion/LegacyChats.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as Db from "../src/server-database/Database.ts"
+import * as Legacy from "../src/server-execution/imported/LegacyChats.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as MigrationTest from "./MigrationTest.ts"
 
 /** These values use the stored shapes at 2a123ff, before execution records. */
 export const namespace = '["org","person"]'
 const owner = namespace
 export const encode = Schema.encodeEffect(Schema.fromJsonString(Schema.Json))
-import * as LegacyApps from "../src/database/conversion/LegacyApps.ts"
+import * as LegacyApps from "../src/server-execution/imported/LegacyApps.ts"
 const chain = {
 	organizationId: "org",
 	userId: "person",

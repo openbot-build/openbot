@@ -1,26 +1,26 @@
-import { Access } from "../src/access/Access.ts"
+import { Access } from "../src/identity-contract/access/Access.ts"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Effect, HashMap, Layer, Stream, Option } from "effect"
-import { Organization } from "../src/organization/Organization.ts"
-import { AuditLog } from "../src/audit/AuditLog.ts"
-import * as AuthorizationLayer from "../src/authorization/Layer.ts"
-import { Roles, builtin } from "../src/authorization/Roles.ts"
-import { Settings } from "../src/settings/Settings.ts"
+import { Organization } from "../src/identity-contract/organization/Organization.ts"
+import { AuditLog } from "../src/identity-contract/audit/AuditLog.ts"
+import * as AuthorizationLayer from "../src/plugin-authorization/Layer.ts"
+import { Roles, builtin } from "../src/identity-contract/authorization/Roles.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import {
 	type OrganizationDocument,
 	memberDefaults,
 	organizationDefaults,
-} from "../src/settings/Documents.ts"
+} from "../src/server-kernel/settings/Documents.ts"
 import { type AppIndexApi, Authorization } from "@openbot-build/api"
-import { PlatformAdmins } from "../src/platform/PlatformAdmins.ts"
-import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
-import { ModelProviders } from "../src/models/ModelProviders.ts"
-import { Models } from "../src/models/Models.ts"
-import { ModelRegistry } from "../src/models/ModelRegistry.ts"
-import { Sso } from "../src/sso/Sso.ts"
-import { Billing } from "../src/billing/Billing.ts"
-import { RateLimiter } from "../src/billing/RateLimit.ts"
-import { Mail } from "../src/mail/Mail.ts"
+import { PlatformAdmins } from "../src/identity-contract/platform/PlatformAdmins.ts"
+import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
+import { ModelProviders } from "../src/models-contract/models/ModelProviders.ts"
+import { Models } from "../src/models-contract/models/Models.ts"
+import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
+import { Sso } from "../src/identity-contract/sso/Sso.ts"
+import { Billing } from "../src/server-billing/billing/Billing.ts"
+import { RateLimiter } from "../src/server-billing/billing/RateLimit.ts"
+import { Mail } from "../src/identity-contract/mail/Mail.ts"
 
 /**
  * An organization where every account is an active Super Administrator.

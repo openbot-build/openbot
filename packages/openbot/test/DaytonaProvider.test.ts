@@ -1,6 +1,6 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import { Records } from "../src/errors/Records.ts"
-import { ComputerCallFailed } from "../src/computers/Computer.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
+import { ComputerCallFailed } from "../src/plugin-computers/Computer.ts"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
@@ -25,8 +25,8 @@ import {
 	type HttpClientRequest,
 	HttpServerResponse,
 } from "effect/http"
-import type { Process } from "../src/computers/Computer.ts"
-import * as DaytonaProvider from "../src/computers/daytona/DaytonaProvider.ts"
+import type { Process } from "../src/plugin-computers/Computer.ts"
+import * as DaytonaProvider from "../src/plugin-computers/daytona/DaytonaProvider.ts"
 
 interface Seen {
 	readonly method: string

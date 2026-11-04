@@ -1,5 +1,5 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import { ComputerCallFailed } from "../src/computers/Computer.ts"
+import { ComputerCallFailed } from "../src/plugin-computers/Computer.ts"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
@@ -17,10 +17,14 @@ import {
 	type HttpClientRequest,
 	HttpClientResponse,
 } from "effect/http"
-import type { Machine, Process, Provider } from "../src/computers/Computer.ts"
-import * as Desktop from "../src/computers/e2b/Desktop.ts"
-import * as E2bProvider from "../src/computers/e2b/E2bProvider.ts"
-import { envelope } from "../src/computers/e2b/Envd.ts"
+import type {
+	Machine,
+	Process,
+	Provider,
+} from "../src/plugin-computers/Computer.ts"
+import * as Desktop from "../src/plugin-computers/e2b/Desktop.ts"
+import * as E2bProvider from "../src/plugin-computers/e2b/E2bProvider.ts"
+import { envelope } from "../src/plugin-computers/e2b/Envd.ts"
 
 interface Seen {
 	readonly method: string

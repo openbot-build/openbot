@@ -28,11 +28,11 @@ import {
 	SqlRunnerStorage,
 } from "effect/cluster"
 import { HttpRouter, HttpServerResponse } from "effect/http"
-import * as Directory from "../src/resources/Directory.ts"
-import * as Transport from "../src/resources/Transport.ts"
-import * as Records from "../src/errors/Records.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as PrivateRpc from "../src/transport/PrivateRpc.ts"
+import * as Directory from "../src/server-execution/resources/Directory.ts"
+import * as Transport from "../src/server-execution/resources/Transport.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as PrivateRpc from "../src/server-execution/transport/PrivateRpc.ts"
 
 const ref = { namespace: "process-test", kind: "socket", id: "one" }
 const app = Layer.unwrap(

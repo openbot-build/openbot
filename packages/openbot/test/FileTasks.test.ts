@@ -12,12 +12,16 @@ import {
 	String as Str,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Database from "../src/database/DatabasePostgres.ts"
-import * as Db from "../src/database/Database.ts"
-import { files, fileRefs, organizations } from "../src/database/Schema.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Tasks from "../src/files/FileTasks.ts"
+import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Db from "../src/server-database/Database.ts"
+import {
+	files,
+	fileRefs,
+	organizations,
+} from "../src/server-database/Schema.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Tasks from "../src/plugin-files/FileTasks.ts"
 import * as Fixture from "./OrganizationFixture.ts"
 import * as Postgres from "./PostgresTest.ts"
 

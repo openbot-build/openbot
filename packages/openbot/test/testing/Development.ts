@@ -1,11 +1,14 @@
 import { Chat } from "@openbot-build/core"
 import { HostTools, OpenBot, Server } from "@openbot-build/openbot"
 import { Effect, HashMap, Layer, Option, Ref } from "effect"
-import * as DevelopmentModel from "../../src/app/DevelopmentModel.ts"
-import { Scenarios, type Mode } from "../../src/app/DevelopmentScenarios.ts"
-import { Business } from "../../src/app/DevelopmentBusiness.ts"
-import { ownerKey } from "../../src/apps/StoredConnections.ts"
-import { PublicIndex } from "../../src/apps/Index.ts"
+import * as DevelopmentModel from "../../src/server-development/DevelopmentModel.ts"
+import {
+	Scenarios,
+	type Mode,
+} from "../../src/server-development/DevelopmentScenarios.ts"
+import { Business } from "../../src/server-development/DevelopmentBusiness.ts"
+import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
+import { PublicIndex } from "../../src/plugin-apps/Index.ts"
 
 /** Set a failure of the simulated App for the next request. */
 export const setScenario = (mode: Mode) =>

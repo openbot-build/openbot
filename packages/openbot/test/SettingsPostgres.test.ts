@@ -16,14 +16,17 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import { organizationScope, type Scope } from "../src/settings/Documents.ts"
-import { Settings } from "../src/settings/Settings.ts"
-import * as SettingsPostgres from "../src/settings/SettingsPostgres.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import {
+	organizationScope,
+	type Scope,
+} from "../src/server-kernel/settings/Documents.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import * as SettingsPostgres from "../src/server-kernel/settings/SettingsPostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as ErrorRecords from "../src/errors/Records.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import { codec, snapshot } from "../src/errors/Snapshot.ts"
+import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
 
 /** Starts a new database, and gives the layer of a connection pool to it. */
 const startDatabase = Effect.gen(function* () {

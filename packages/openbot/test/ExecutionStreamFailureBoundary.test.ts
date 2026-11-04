@@ -21,13 +21,13 @@ import {
 	HttpApiClient,
 	HttpApiMiddleware,
 } from "effect/http-api"
-import * as Boundary from "../src/errors/HttpBoundary.ts"
-import { Records } from "../src/errors/Records.ts"
-import * as Reporting from "../src/errors/Reporting.ts"
-import { codec, snapshot } from "../src/errors/Snapshot.ts"
-import { Commands } from "../src/execution/Commands.ts"
-import * as Handlers from "../src/execution/HttpHandlers.ts"
-import * as HttpEvents from "../src/execution/HttpEvents.ts"
+import * as Boundary from "../src/server-kernel/errors/HttpBoundary.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
+import * as Reporting from "../src/server-kernel/errors/Reporting.ts"
+import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
+import { Commands } from "../src/server-execution/execution/Commands.ts"
+import * as Handlers from "../src/server-execution/execution/HttpHandlers.ts"
+import * as HttpEvents from "../src/server-execution/execution/HttpEvents.ts"
 
 const id = Execution.Id.make("stream-failure-test")
 const errorId = Execution.ErrorId.make("stream-error-test")

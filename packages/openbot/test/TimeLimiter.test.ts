@@ -11,7 +11,7 @@ import { assert, it, layer } from "@effect/vitest"
 import { TestClock } from "effect/testing"
 import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as TimeLimiter from "../src/plugins/time-limiter/TimeLimiter.ts"
+import * as TimeLimiter from "../src/plugin-limiters/time-limiter/TimeLimiter.ts"
 import { ChatTest } from "./ChatTest.ts"
 
 const usage = Response.Usage.make({

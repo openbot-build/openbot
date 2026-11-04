@@ -2,11 +2,11 @@ import type { Live, Model, Provider } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { eq } from "drizzle-orm"
 import { Array as Arr, Effect } from "effect"
-import * as Db from "../../src/database/Database.ts"
-import { fileRefs, files } from "../../src/database/Schema.ts"
-import { Store } from "../../src/execution/Store.ts"
-import { FileTasks } from "../../src/files/FileTasks.ts"
-import * as LiveBackends from "../../src/models/LiveBackends.ts"
+import * as Db from "../../src/server-database/Database.ts"
+import { fileRefs, files } from "../../src/server-database/Schema.ts"
+import { Store } from "../../src/server-execution/execution/Store.ts"
+import { FileTasks } from "../../src/plugin-files/FileTasks.ts"
+import * as LiveBackends from "../../src/models-contract/models/LiveBackends.ts"
 
 /** Gives the host a controlled Live provider at its outside boundary. */
 export const liveBackend = (

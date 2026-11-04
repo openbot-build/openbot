@@ -7,8 +7,8 @@ import {
 } from "@openbot-build/api"
 import { Client, Store } from "@openbot-build/protocol"
 import { Effect } from "effect"
-import { failed } from "../src/apps/AppResults.ts"
-import { toStoreError } from "../src/apps/ProtocolStores.ts"
+import { failed } from "../src/apps-contract/apps/AppResults.ts"
+import { toStoreError } from "../src/plugin-apps/ProtocolStores.ts"
 
 const source: AppExecution.Source = {
 	connectionId: ConnectionsApi.ConnectionId.make("connection-1"),

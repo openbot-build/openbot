@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest"
 import { NodeCrypto } from "@effect/platform-node"
 import { EnvironmentConfiguration } from "@openbot-build/openbot"
 
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 
 it.effect("an instance reads only its own settings and the secret keys", () =>
 	Effect.gen(function* () {

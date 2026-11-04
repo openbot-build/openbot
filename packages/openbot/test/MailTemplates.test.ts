@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import { Effect } from "effect"
-import * as Templates from "../src/mail/Templates.ts"
+import * as Templates from "../src/plugin-mail/Templates.ts"
 
 const invitation: Templates.InvitationProps = {
 	organizationName: "North Team",

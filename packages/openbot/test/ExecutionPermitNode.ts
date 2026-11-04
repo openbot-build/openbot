@@ -2,9 +2,9 @@ import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Config, Effect, Layer, Schedule } from "effect"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Permits from "../src/execution/Permits.ts"
-import * as Recovery from "../src/execution/Recovery.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Permits from "../src/server-execution/execution/Permits.ts"
+import * as Recovery from "../src/server-execution/execution/Recovery.ts"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 
 /** A process with its own permit service and scope. The parent sets each fence. */

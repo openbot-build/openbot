@@ -10,10 +10,10 @@ import {
 	String as Str,
 } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Setup from "../src/platform/Setup.ts"
-import * as PlatformAdminsPostgres from "../src/platform/PlatformAdminsPostgres.ts"
-import { Settings } from "../src/settings/Settings.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Setup from "../src/plugin-platform/Setup.ts"
+import * as PlatformAdminsPostgres from "../src/plugin-platform/PlatformAdminsPostgres.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import { OpenBot } from "../src/index.ts"
 

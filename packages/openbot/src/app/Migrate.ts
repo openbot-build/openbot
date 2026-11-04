@@ -2,11 +2,11 @@ import { Array as Arr, Config, Effect, Layer } from "effect"
 import { Command } from "effect/cli"
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 
-import * as SecretFiles from "../configuration/SecretFiles.ts"
-import * as DatabasePostgres from "../database/DatabasePostgres.ts"
-import * as DataMigration from "../database/Migrations.ts"
-import * as Secrets from "../secrets/Secrets.ts"
-import * as Store from "../execution/Store.ts"
+import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
+import * as DatabasePostgres from "../server-kernel/database/DatabasePostgres.ts"
+import * as DataMigration from "../server-kernel/database/Migrations.ts"
+import * as Secrets from "../server-kernel/secrets/Secrets.ts"
+import * as Store from "../server-execution/execution/Store.ts"
 
 const migrate = DataMigration.upgrade.pipe(
 	// @effect-diagnostics-next-line strictEffectProvide:off -- This program owns the whole application Layer scope.

@@ -1,4 +1,4 @@
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Chat, Turn } from "@openbot-build/core"
@@ -14,8 +14,8 @@ import {
 	Semaphore,
 	String as Str,
 } from "effect"
-import { BotRecords, type Keys } from "../src/bots/BotRecords.ts"
-import * as Reminders from "../src/plugins/work/Reminders.ts"
+import { BotRecords, type Keys } from "../src/plugin-bots/BotRecords.ts"
+import * as Reminders from "../src/plugin-work/Reminders.ts"
 
 const organizationId = "org_1"
 

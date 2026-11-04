@@ -11,11 +11,11 @@ import {
 	HttpApiGroup,
 	HttpApiSchema,
 } from "effect/http-api"
-import * as Failures from "../src/errors/Failures.ts"
-import * as Boundary from "../src/errors/HttpBoundary.ts"
-import * as Reporting from "../src/errors/Reporting.ts"
-import { Records } from "../src/errors/Records.ts"
-import { codec, snapshot } from "../src/errors/Snapshot.ts"
+import * as Failures from "../src/server-kernel/errors/Failures.ts"
+import * as Boundary from "../src/server-kernel/errors/HttpBoundary.ts"
+import * as Reporting from "../src/server-kernel/errors/Reporting.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
+import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
 
 class Inside extends Schema.TaggedError<
 	Inside,

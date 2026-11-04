@@ -1,6 +1,6 @@
 import { Layer } from "effect"
-import { DomainControl } from "../../src/apps/DomainControl.ts"
-import { Readers } from "../../src/vaults/Readers.ts"
+import { DomainControl } from "../../src/server-kernel/apps/DomainControl.ts"
+import { Readers } from "../../src/plugin-vaults/Readers.ts"
 
 /** Gives a test host the TXT records of each domain. */
 export const domainControl = (service: typeof DomainControl.Service) =>

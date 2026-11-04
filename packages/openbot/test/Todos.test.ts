@@ -10,7 +10,7 @@ import {
 } from "@openbot-build/core"
 import { Array as Arr, Effect, Option, Ref, Schema } from "effect"
 import { Prompt } from "effect/ai"
-import * as Todos from "../src/plugins/work/Todos.ts"
+import * as Todos from "../src/tools-contract/plugins/work/Todos.ts"
 
 it.effect("todo reminders survive a new store and commit with their keys", () =>
 	Effect.gen(function* () {

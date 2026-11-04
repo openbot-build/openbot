@@ -1,4 +1,4 @@
-import * as Children from "../src/execution/Children.ts"
+import * as Children from "../src/server-execution/execution/Children.ts"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -23,11 +23,11 @@ import {
 	String as Str,
 } from "effect"
 import { SqlError } from "effect/sql"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Observation from "../src/execution/Observation.ts"
-import * as Records from "../src/errors/Records.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Observation from "../src/server-execution/execution/Observation.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

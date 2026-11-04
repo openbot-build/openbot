@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Logger, Schema } from "effect"
-import * as Failures from "../src/errors/Failures.ts"
-import { codec, snapshot } from "../src/errors/Snapshot.ts"
+import * as Failures from "../src/server-kernel/errors/Failures.ts"
+import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
 
 class Inside extends Schema.TaggedError<
 	Inside,

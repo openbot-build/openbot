@@ -1,9 +1,9 @@
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Console, Effect, Layer } from "effect"
 import { Command } from "effect/cli"
-import * as Administration from "../platform/Administration.ts"
-import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
-import * as SecretFiles from "../configuration/SecretFiles.ts"
+import * as Administration from "../plugin-platform/Administration.ts"
+import * as EnvironmentConfiguration from "../server-kernel/configuration/EnvironmentConfiguration.ts"
+import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
 import * as OpenBot from "./OpenBot.ts"
 
 const services = Layer.unwrap(

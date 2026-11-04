@@ -1,12 +1,12 @@
 import { Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option } from "effect"
-import { ChannelEvent } from "../../src/channels/Channel.ts"
-import { ChannelQueue } from "../../src/channels/ChannelQueue.ts"
-import { Channels } from "../../src/channels/Channels.ts"
-import * as Db from "../../src/database/Database.ts"
-import { executions } from "../../src/database/Schema.ts"
-import { Store } from "../../src/execution/Store.ts"
+import { ChannelEvent } from "../../src/plugin-channels/Channel.ts"
+import { ChannelQueue } from "../../src/plugin-channels/ChannelQueue.ts"
+import { Channels } from "../../src/plugin-channels/Channels.ts"
+import * as Db from "../../src/server-database/Database.ts"
+import { executions } from "../../src/server-database/Schema.ts"
+import { Store } from "../../src/server-execution/execution/Store.ts"
 
 /** Reads the saved caller after a Channel is made through the API. */
 export const authority = (organizationId: string, channelId: string) =>

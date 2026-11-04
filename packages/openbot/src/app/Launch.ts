@@ -3,11 +3,11 @@ import { Array as Arr, Effect, Layer } from "effect"
 import type { Digest, SecureRandom } from "effect/crypto"
 import { Command } from "effect/cli"
 import { FetchHttpClient, type HttpClient } from "effect/http"
-import type * as Configuration from "../configuration/Configuration.ts"
-import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
-import * as SecretFiles from "../configuration/SecretFiles.ts"
-import * as OutboundGuard from "../network/OutboundGuard.ts"
-import * as ErrorReporting from "../errors/Reporting.ts"
+import type * as Configuration from "../server-kernel/configuration/Configuration.ts"
+import * as EnvironmentConfiguration from "../server-kernel/configuration/EnvironmentConfiguration.ts"
+import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
+import * as OutboundGuard from "../server-kernel/network/OutboundGuard.ts"
+import * as ErrorReporting from "../server-kernel/errors/Reporting.ts"
 
 /**
  * The platform services that a server of `server` and `main` can use: the Node

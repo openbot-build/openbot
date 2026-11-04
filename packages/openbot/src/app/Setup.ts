@@ -10,10 +10,10 @@ import {
 	String as Str,
 } from "effect"
 import { Command, Flag } from "effect/cli"
-import * as SecretFiles from "../configuration/SecretFiles.ts"
-import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
-import * as Setup from "../platform/Setup.ts"
-import { read } from "../platform/SetupFile.ts"
+import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
+import * as PlatformAdminsPostgres from "../plugin-platform/PlatformAdminsPostgres.ts"
+import * as Setup from "../plugin-platform/Setup.ts"
+import { read } from "../plugin-platform/SetupFile.ts"
 import * as OpenBot from "./OpenBot.ts"
 
 const force = Flag.Boolean("force").pipe(

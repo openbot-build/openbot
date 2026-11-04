@@ -7,8 +7,8 @@ import {
 	platformOwner,
 	ModelProviders,
 	view,
-} from "../src/models/ModelProviders.ts"
-import * as ModelProvidersPostgres from "../src/models/ModelProvidersPostgres.ts"
+} from "../src/models-contract/models/ModelProviders.ts"
+import * as ModelProvidersPostgres from "../src/plugin-models/ModelProvidersPostgres.ts"
 import * as Accounts from "@openbot-build/domain/ProviderOAuth"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import {
@@ -23,11 +23,14 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as Db from "../src/database/Database.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as ProviderOAuth from "../src/models/ProviderOAuth.ts"
-import { ChatGptOAuth, Credentials } from "../src/providers/chatgpt/OAuth.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as Db from "../src/server-database/Database.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as ProviderOAuth from "../src/models-contract/models/ProviderOAuth.ts"
+import {
+	ChatGptOAuth,
+	Credentials,
+} from "../src/model-providers/providers/chatgpt/OAuth.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

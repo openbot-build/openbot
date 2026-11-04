@@ -23,12 +23,12 @@ import {
 	Schema,
 } from "effect"
 import { Prompt } from "effect/ai"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Db from "../src/database/Database.ts"
-import * as StoredChats from "../src/chats/StoredChats.ts"
-import * as ChatHost from "../src/chats/ChatHost.ts"
-import * as Todos from "../src/plugins/work/Todos.ts"
-import { Stored as StoredRequest } from "../src/capabilities/Requests.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Db from "../src/server-database/Database.ts"
+import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
+import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
+import * as Todos from "../src/tools-contract/plugins/work/Todos.ts"
+import { Stored as StoredRequest } from "../src/plugin-capabilities/Requests.ts"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

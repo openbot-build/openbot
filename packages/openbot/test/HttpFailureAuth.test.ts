@@ -16,16 +16,19 @@ import {
 	HttpApiEndpoint,
 	HttpApiGroup,
 } from "effect/http-api"
-import { Auth } from "../src/auth/Auth.ts"
-import { layerBotAuth } from "../src/auth/HttpMiddleware.ts"
-import { AuthUnavailable, CredentialRejected } from "../src/auth/Model.ts"
-import { Tokens } from "../src/auth/Tokens.ts"
-import { RateLimiter } from "../src/billing/RateLimit.ts"
-import * as Boundary from "../src/errors/HttpBoundary.ts"
-import * as Failures from "../src/errors/Failures.ts"
-import { Records } from "../src/errors/Records.ts"
-import * as Reporting from "../src/errors/Reporting.ts"
-import { codec, snapshot } from "../src/errors/Snapshot.ts"
+import { Auth } from "../src/identity-contract/auth/Auth.ts"
+import { layerBotAuth } from "../src/plugin-auth/HttpMiddleware.ts"
+import {
+	AuthUnavailable,
+	CredentialRejected,
+} from "../src/server-kernel/auth/Model.ts"
+import { Tokens } from "../src/identity-contract/auth/Tokens.ts"
+import { RateLimiter } from "../src/server-billing/billing/RateLimit.ts"
+import * as Boundary from "../src/server-kernel/errors/HttpBoundary.ts"
+import * as Failures from "../src/server-kernel/errors/Failures.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
+import * as Reporting from "../src/server-kernel/errors/Reporting.ts"
+import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 
 const origin = "https://openbot.example.com"

@@ -16,8 +16,11 @@ import {
 	String as Str,
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as Smtp from "../src/mail/Smtp.ts"
-import { Transport, type Message } from "../src/mail/Transport.ts"
+import * as Smtp from "../src/plugin-mail/Smtp.ts"
+import {
+	Transport,
+	type Message,
+} from "../src/identity-contract/mail/Transport.ts"
 
 const message: Message = {
 	from: { address: "openbot@example.com", name: "OpenBot" },

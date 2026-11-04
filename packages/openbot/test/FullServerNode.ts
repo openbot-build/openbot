@@ -1,15 +1,18 @@
-import { Settings } from "../src/settings/Settings.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import { Option } from "effect"
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Config, Effect, Layer, Redacted, Stream, String as Str } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/http"
-import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
+import * as DevelopmentModel from "../src/server-development/DevelopmentModel.ts"
 import * as OpenBot from "../src/app/OpenBot.ts"
 import * as Server from "../src/app/Server.ts"
-import * as HostTools from "../src/chats/HostTools.ts"
-import { CurrentCallIdentity } from "../src/billing/MeteredModel.ts"
-import { methodsOf, withMethods } from "../src/models/ModelMethods.ts"
+import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
+import { CurrentCallIdentity } from "../src/server-billing/billing/MeteredModel.ts"
+import {
+	methodsOf,
+	withMethods,
+} from "../src/server-billing/models/ModelMethods.ts"
 
 /** This is the full server assembly. Only model and host tool results are fixed. */
 const main = Effect.gen(function* () {

@@ -7,8 +7,8 @@ import {
 } from "@openbot-build/api"
 import { Discovery } from "@openbot-build/protocol"
 import { Effect, Layer } from "effect"
-import { Connections } from "../src/apps/Connections.ts"
-import * as Experience from "../src/apps/Experience.ts"
+import { Connections } from "../src/plugin-apps/Connections.ts"
+import * as Experience from "../src/plugin-apps/Experience.ts"
 
 const alice = {
 	kind: "member" as const,

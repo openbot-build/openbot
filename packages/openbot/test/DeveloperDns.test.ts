@@ -3,7 +3,10 @@ import { createSocket } from "node:dgram"
 import { getServers, setServers } from "node:dns/promises"
 import { syncBuiltinESMExports } from "node:module"
 import { Array as Arr, Effect } from "effect"
-import { DomainControl, layer } from "../src/apps/DomainControl.ts"
+import {
+	DomainControl,
+	layer,
+} from "../src/server-kernel/apps/DomainControl.ts"
 
 // The test talks to a real UDP server, so it uses the real clock.
 it.layer(layer, { excludeTestServices: true })((it) => {

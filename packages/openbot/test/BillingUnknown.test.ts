@@ -3,9 +3,13 @@ import { assert, it } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Clock, Context, Effect, Layer, Redacted } from "effect"
-import { Billing, type Call, type Tokens } from "../src/billing/Billing.ts"
-import * as BillingPostgres from "../src/billing/BillingPostgres.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import {
+	Billing,
+	type Call,
+	type Tokens,
+} from "../src/server-billing/billing/Billing.ts"
+import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const call: Call = {

@@ -22,7 +22,7 @@ import {
 	Transport,
 	TransportError,
 	type Message,
-} from "../src/mail/Transport.ts"
+} from "../src/identity-contract/mail/Transport.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as Caller from "./Caller.ts"
 

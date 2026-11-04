@@ -4,13 +4,16 @@ import { Config, Model, Provider } from "@openbot-build/core"
 import { Authorization, Bots as BotDomain } from "@openbot-build/domain"
 import { Array as Arr, Effect, Layer, Option, Ref, Schema } from "effect"
 import { DecisionModel } from "effect/ai"
-import { Bots } from "../src/bots/Bots.ts"
-import { Grants } from "../src/capabilities/Grants.ts"
-import { Requests } from "../src/capabilities/Requests.ts"
-import { Rules } from "../src/capabilities/Rules.ts"
-import { Store } from "../src/execution/Store.ts"
-import { AnyModel, ModelRegistry } from "../src/models/ModelRegistry.ts"
-import { Secrets } from "../src/secrets/Secrets.ts"
+import { Bots } from "../src/plugin-bots/Bots.ts"
+import { Grants } from "../src/plugin-capabilities/Grants.ts"
+import { Requests } from "../src/plugin-capabilities/Requests.ts"
+import { Rules } from "../src/plugin-capabilities/Rules.ts"
+import { Store } from "../src/server-execution/execution/Store.ts"
+import {
+	AnyModel,
+	ModelRegistry,
+} from "../src/models-contract/models/ModelRegistry.ts"
+import { Secrets } from "../src/server-kernel/secrets/Secrets.ts"
 import { bot } from "./BotFixture.ts"
 import * as Fixture from "./GateFixture.ts"
 

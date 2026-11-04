@@ -1,4 +1,4 @@
-import { Access } from "../src/access/Access.ts"
+import { Access } from "../src/identity-contract/access/Access.ts"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -23,34 +23,34 @@ import {
 } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/http"
 import { HttpApi, HttpApiBuilder } from "effect/http-api"
-import { Auth } from "../src/auth/Auth.ts"
+import { Auth } from "../src/identity-contract/auth/Auth.ts"
 import {
 	layerBotAuth,
 	layerAccountAuth,
 	layerNoStore,
-} from "../src/auth/HttpMiddleware.ts"
-import { CredentialRejected } from "../src/auth/Model.ts"
-import { Tokens } from "../src/auth/Tokens.ts"
-import { RateLimiter } from "../src/billing/RateLimit.ts"
-import * as Failures from "../src/errors/Failures.ts"
-import * as Boundary from "../src/errors/HttpBoundary.ts"
-import { Records } from "../src/errors/Records.ts"
-import * as PlatformHandlers from "../src/platform/HttpHandlers.ts"
-import { PlatformAdmins } from "../src/platform/PlatformAdmins.ts"
-import { Secrets } from "../src/secrets/Secrets.ts"
-import * as Handlers from "../src/models/HttpHandlers.ts"
-import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
+} from "../src/plugin-auth/HttpMiddleware.ts"
+import { CredentialRejected } from "../src/server-kernel/auth/Model.ts"
+import { Tokens } from "../src/identity-contract/auth/Tokens.ts"
+import { RateLimiter } from "../src/server-billing/billing/RateLimit.ts"
+import * as Failures from "../src/server-kernel/errors/Failures.ts"
+import * as Boundary from "../src/server-kernel/errors/HttpBoundary.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
+import * as PlatformHandlers from "../src/plugin-platform/HttpHandlers.ts"
+import { PlatformAdmins } from "../src/identity-contract/platform/PlatformAdmins.ts"
+import { Secrets } from "../src/server-kernel/secrets/Secrets.ts"
+import * as Handlers from "../src/plugin-models/HttpHandlers.ts"
+import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
 import {
 	ModelProviders,
 	type Stored,
 	organizationOwner,
 	platformOwner,
-} from "../src/models/ModelProviders.ts"
-import { Models } from "../src/models/Models.ts"
-import { ModelRegistry } from "../src/models/ModelRegistry.ts"
-import { Billing } from "../src/billing/Billing.ts"
+} from "../src/models-contract/models/ModelProviders.ts"
+import { Models } from "../src/models-contract/models/Models.ts"
+import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
+import { Billing } from "../src/server-billing/billing/Billing.ts"
 import * as Fixture from "./OrganizationFixture.ts"
-import { Mail } from "../src/mail/Mail.ts"
+import { Mail } from "../src/identity-contract/mail/Mail.ts"
 
 const origin = "https://openbot.example.com"
 const redirectUri = "http://127.0.0.1:1455/auth/callback"

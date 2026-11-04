@@ -19,8 +19,8 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as AppSecrets from "../src/vaults/AppSecrets.ts"
-import { type Usable, Vaults } from "../src/vaults/Vaults.ts"
+import * as AppSecrets from "../src/apps-contract/vaults/AppSecrets.ts"
+import { type Usable, Vaults } from "../src/plugin-vaults/Vaults.ts"
 
 const secret = "private-value/42"
 const identity: ExecutionIdentity = {

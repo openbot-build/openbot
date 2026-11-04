@@ -11,8 +11,8 @@ import {
 	Schedule,
 } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Store from "../src/execution/Store.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

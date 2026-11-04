@@ -1,8 +1,8 @@
 import { assert, it } from "@effect/vitest"
 import { Authorization } from "@openbot-build/api"
 import { Effect, RcMap, Ref } from "effect"
-import type { PlatformDocument } from "../src/settings/Documents.ts"
-import * as Platform from "../src/settings/Platform.ts"
+import type { PlatformDocument } from "../src/server-kernel/settings/Documents.ts"
+import * as Platform from "../src/server-kernel/settings/Platform.ts"
 
 const document: PlatformDocument = {
 	publicOrigin: "https://api.example.com",

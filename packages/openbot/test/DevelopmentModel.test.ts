@@ -17,7 +17,7 @@ import {
 } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
 import { TestClock } from "effect/testing"
-import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
+import * as DevelopmentModel from "../src/server-development/DevelopmentModel.ts"
 
 it.effect(
 	"the default directory runs, rejects unknown choices and labels synthetic usage",

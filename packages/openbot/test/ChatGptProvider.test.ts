@@ -4,21 +4,21 @@ import {
 	organizationOwner,
 	platformOwner,
 	type Stored,
-} from "../src/models/ModelProviders.ts"
-import { Models } from "../src/models/Models.ts"
-import { ProviderOAuth } from "../src/models/ProviderOAuth.ts"
-import * as ModelRegistry from "../src/models/ModelRegistry.ts"
-import * as LiveBackends from "../src/models/LiveBackends.ts"
+} from "../src/models-contract/models/ModelProviders.ts"
+import { Models } from "../src/models-contract/models/Models.ts"
+import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
+import * as ModelRegistry from "../src/models-contract/models/ModelRegistry.ts"
+import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
 import {
 	Billing,
 	SpendingBlocked,
 	type Call,
 	type Tokens,
-} from "../src/billing/Billing.ts"
-import { attribute } from "../src/billing/MeteredModel.ts"
-import { TokenThrottle } from "../src/billing/TokenThrottle.ts"
-import { Settings } from "../src/settings/Settings.ts"
-import { organizationDefaults } from "../src/settings/Documents.ts"
+} from "../src/server-billing/billing/Billing.ts"
+import { attribute } from "../src/server-billing/billing/MeteredModel.ts"
+import { TokenThrottle } from "../src/server-billing/billing/TokenThrottle.ts"
+import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import { Config, ContextWindow, Model, Provider } from "@openbot-build/core"
@@ -35,7 +35,7 @@ import {
 } from "effect"
 import { LanguageModel, Prompt, Tool, Toolkit } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import * as ChatGptProvider from "../src/providers/chatgpt/ChatGptProvider.ts"
+import * as ChatGptProvider from "../src/model-providers/providers/chatgpt/ChatGptProvider.ts"
 
 const selection = Config.Selection.make({
 	provider: Provider.Id.make("prov_chatgpt"),

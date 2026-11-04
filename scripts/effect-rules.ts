@@ -347,17 +347,21 @@ const placeOf = Schema.decodeUnknownOption(
 )
 
 /** These files only map an application result to the HTTP contract. */
-const httpViews = ["chats/ChatViews.ts", "chats/ResponseMapping.ts"] as const
+const httpViews = [
+	"plugin-chats/ChatViews.ts",
+	"plugin-chats/ResponseMapping.ts",
+] as const
 const httpAdapters = [
 	...httpViews,
-	"auth/BetterAuth.ts",
-	"authorization/Layer.ts",
+	"plugin-auth/BetterAuth.ts",
+	"plugin-authorization/Layer.ts",
 ] as const
 
 const usesHttpContract = (file: string): boolean => {
 	const local = Str.replace("packages/openbot/src/", "")(file)
 	return (
 		Str.startsWith("app/")(local) ||
+		Str.startsWith("server-development/")(local) ||
 		/(?:Http[^/]*|Handlers?)\.ts$/.test(local) ||
 		Arr.some(httpAdapters, (adapter) => local === adapter)
 	)
@@ -446,14 +450,13 @@ const boundaries = (
 					: []),
 				...(owner === "openbot" &&
 				/^effect\/(?:cluster|rpc)(?:\/|$)/.test(target) &&
-				!/^packages\/openbot\/src\/(?:execution|resources|transport|app)\//.test(
-					file,
-				)
+				!/^packages\/openbot\/src\/(?:server-execution|app)\//.test(file)
 					? ["execution-boundary" as const]
 					: []),
 				...(owner === "openbot" &&
 				/^packages\/openbot\/src\/[^/]+\//.test(file) &&
 				!Str.startsWith("packages/openbot/src/app/")(file) &&
+				!Str.startsWith("packages/openbot/src/server-development/")(file) &&
 				Str.startsWith("packages/openbot/src/app/")(resolved)
 					? ["assembly-boundary" as const]
 					: []),

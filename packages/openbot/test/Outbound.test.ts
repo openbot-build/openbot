@@ -20,9 +20,9 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import { fetch as undiciFetch, getGlobalDispatcher } from "undici"
-import * as EnvironmentConfiguration from "../src/configuration/EnvironmentConfiguration.ts"
-import * as OutboundGuard from "../src/network/OutboundGuard.ts"
-import * as OutboundPolicy from "../src/network/OutboundPolicy.ts"
+import * as EnvironmentConfiguration from "../src/server-kernel/configuration/EnvironmentConfiguration.ts"
+import * as OutboundGuard from "../src/server-kernel/network/OutboundGuard.ts"
+import * as OutboundPolicy from "../src/server-kernel/network/OutboundPolicy.ts"
 
 /**
  * Starts a test HTTP server on 127.0.0.1. It counts the requests that reach

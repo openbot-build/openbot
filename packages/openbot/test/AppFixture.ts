@@ -1,4 +1,4 @@
-import { html } from "../src/app/DevelopmentAppUi.ts"
+import { html } from "../src/server-development/DevelopmentAppUi.ts"
 import { CatalogDiscovery, Document, Network } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { NodeHttpServerRequest } from "@effect/platform-node"
@@ -21,8 +21,8 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { Fixture } from "@openbot-build/protocol/testing"
-import * as Probe from "../src/apps/Probe.ts"
-import type { PublicationMode } from "../src/app/DevelopmentApps.ts"
+import * as Probe from "../src/plugin-apps/Probe.ts"
+import type { PublicationMode } from "../src/server-development/DevelopmentApps.ts"
 
 const RpcRequest = Schema.fromJsonString(
 	Schema.Struct({

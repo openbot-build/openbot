@@ -3,9 +3,9 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { assert, it, layer } from "@effect/vitest"
 import { VaultsApi } from "@openbot-build/api"
 import { Array as Arr, Effect, Layer, String as Str } from "effect"
-import { make } from "../src/code/Sandbox.ts"
-import * as VaultCode from "../src/vaults/CodeMode.ts"
-import type { Usable } from "../src/vaults/Vaults.ts"
+import { make } from "../src/plugin-code/Sandbox.ts"
+import * as VaultCode from "../src/apps-contract/vaults/CodeMode.ts"
+import type { Usable } from "../src/plugin-vaults/Vaults.ts"
 
 const secret = "ghp_s3cret-Value/42"
 

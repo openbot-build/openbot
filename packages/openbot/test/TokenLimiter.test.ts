@@ -2,7 +2,7 @@ import { Array as Arr, Effect, Ref, Schema, Stream } from "effect"
 import { assert, it, layer } from "@effect/vitest"
 import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as TokenLimiter from "../src/plugins/token-limiter/TokenLimiter.ts"
+import * as TokenLimiter from "../src/plugin-limiters/token-limiter/TokenLimiter.ts"
 import { ChatTest } from "./ChatTest.ts"
 
 // Each model step uses 3 input tokens and 2 output tokens.

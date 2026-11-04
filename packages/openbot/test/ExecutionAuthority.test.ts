@@ -1,5 +1,5 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import * as Engine from "../src/execution/Engine.ts"
+import * as Engine from "../src/server-execution/execution/Engine.ts"
 import { WorkflowEngine } from "effect/workflow"
 import { assert, it } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
@@ -13,12 +13,12 @@ import {
 	type Caller,
 } from "@openbot-build/domain"
 import { Effect, Layer, Ref, Option, Schema } from "effect"
-import { Bots } from "../src/bots/Bots.ts"
-import * as CapabilityAccess from "../src/capabilities/CapabilityAccess.ts"
-import { Grants } from "../src/capabilities/Grants.ts"
-import { Judge } from "../src/capabilities/Judge.ts"
-import { Rules } from "../src/capabilities/Rules.ts"
-import { Work } from "../src/capabilities/Work.ts"
+import { Bots } from "../src/plugin-bots/Bots.ts"
+import * as CapabilityAccess from "../src/plugin-capabilities/CapabilityAccess.ts"
+import { Grants } from "../src/plugin-capabilities/Grants.ts"
+import { Judge } from "../src/plugin-capabilities/Judge.ts"
+import { Rules } from "../src/plugin-capabilities/Rules.ts"
+import { Work } from "../src/plugin-capabilities/Work.ts"
 import { bot } from "./BotFixture.ts"
 
 const member: Caller = {

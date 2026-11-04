@@ -14,7 +14,7 @@ import {
 } from "effect"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as Db from "../src/database/Database.ts"
+import * as Db from "../src/server-database/Database.ts"
 
 /** The first migration after the Workflows. */
 const firstMigration = "20261022111338_drop_workflows"

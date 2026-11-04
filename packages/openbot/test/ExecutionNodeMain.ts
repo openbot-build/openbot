@@ -1,6 +1,6 @@
-import { Delegations } from "../src/bots/Delegations.ts"
-import * as PrivateRpc from "../src/transport/PrivateRpc.ts"
-import * as Observation from "../src/execution/Observation.ts"
+import { Delegations } from "../src/plugin-bots/Delegations.ts"
+import * as PrivateRpc from "../src/server-execution/transport/PrivateRpc.ts"
+import * as Observation from "../src/server-execution/execution/Observation.ts"
 /** This entry point is run in two separate processes by ExecutionCluster.test.ts. */
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer needs the native server factory.
 import { createServer } from "node:http"
@@ -12,8 +12,8 @@ import {
 	NodeServices,
 } from "@effect/platform-node"
 import { Execution, ServiceId } from "@openbot-build/domain"
-import { Billing } from "../src/billing/Billing.ts"
-import * as BillingPostgres from "../src/billing/BillingPostgres.ts"
+import { Billing } from "../src/server-billing/billing/Billing.ts"
+import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Config,
@@ -29,15 +29,15 @@ import {
 import { ClusterSchema, RunnerAddress, ShardingConfig } from "effect/cluster"
 import { HttpRouter, HttpServer } from "effect/http"
 import { Activity, DurableClock, DurableDeferred } from "effect/workflow"
-import * as Runner from "../src/execution/Runner.ts"
-import * as RunScope from "../src/execution/RunScope.ts"
-import * as Calls from "../src/execution/Calls.ts"
-import * as CallRecovery from "../src/execution/CallRecovery.ts"
-import * as Records from "../src/errors/Records.ts"
-import * as Engine from "../src/execution/Engine.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import * as Runner from "../src/server-execution/execution/Runner.ts"
+import * as RunScope from "../src/server-execution/execution/RunScope.ts"
+import * as Calls from "../src/server-execution/execution/Calls.ts"
+import * as CallRecovery from "../src/server-execution/execution/CallRecovery.ts"
+import * as Records from "../src/server-kernel/errors/Records.ts"
+import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 
 import * as TurnClusterFixture from "./TurnClusterFixture.ts"
 

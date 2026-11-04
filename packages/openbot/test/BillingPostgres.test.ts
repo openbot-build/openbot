@@ -23,11 +23,11 @@ import {
 	BillingStorageError,
 	type Call,
 	SpendingBlocked,
-} from "../src/billing/Billing.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as BillingPostgres from "../src/billing/BillingPostgres.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+} from "../src/server-billing/billing/Billing.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const call: Call = {

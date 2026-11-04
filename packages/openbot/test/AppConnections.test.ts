@@ -1,10 +1,10 @@
 import * as IndexCommandsFixture from "./IndexCommandsFixture.ts"
-import { IndexWork } from "../src/apps/IndexWork.ts"
+import { IndexWork } from "../src/plugin-apps/IndexWork.ts"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { ConnectionsApi as Api, Identity } from "@openbot-build/api"
 import type { Caller } from "@openbot-build/domain"
-import { Tokens } from "../src/auth/Tokens.ts"
+import { Tokens } from "../src/identity-contract/auth/Tokens.ts"
 import {
 	AppConnections,
 	CatalogDiscovery,
@@ -27,22 +27,22 @@ import {
 	String as Str,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Governance from "../src/apps/Governance.ts"
+import * as Governance from "../src/plugin-apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
-import * as Connections from "../src/apps/Connections.ts"
-import * as AppHost from "../src/apps/AppHost.ts"
-import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
-import { Probe } from "../src/apps/Probe.ts"
+import * as Connections from "../src/plugin-apps/Connections.ts"
+import * as AppHost from "../src/plugin-apps/AppHost.ts"
+import * as ProtocolStores from "../src/plugin-apps/ProtocolStores.ts"
+import { Probe } from "../src/plugin-apps/Probe.ts"
 import { eq } from "drizzle-orm"
-import { appRecords } from "../src/database/Schema.ts"
-import * as StoredConnections from "../src/apps/StoredConnections.ts"
-import { ownerKey } from "../src/apps/StoredConnections.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
-import * as Database from "../src/database/DatabasePostgres.ts"
+import { appRecords } from "../src/server-database/Schema.ts"
+import * as StoredConnections from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Database from "../src/server-kernel/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
-import * as Db from "../src/database/Database.ts"
+import * as Db from "../src/server-database/Database.ts"
 
 const encryptionKey = Redacted.make("test:" + Str.repeat(32)("11"))
 const alice: Caller = {

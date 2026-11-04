@@ -4,9 +4,9 @@ import { PgClient } from "@effect/sql-pg"
 import { Condition, Domain, Resource } from "@nmnmcc/ability"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
 import { Array as Arr, Effect, Redacted, Schema, String as Str } from "effect"
-import { toWhere } from "../src/authorization/Sql.ts"
-import * as Db from "../src/database/Database.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import { toWhere } from "../src/identity-contract/authorization/Sql.ts"
+import * as Db from "../src/server-database/Database.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const resources = pgTable("authorization_test_resources", {

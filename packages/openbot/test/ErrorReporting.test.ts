@@ -14,10 +14,10 @@ import {
 } from "effect"
 import { HttpClient, HttpRouter, HttpServerResponse } from "effect/http"
 import { Execution } from "@openbot-build/domain"
-import { Records } from "../src/errors/Records.ts"
-import * as ErrorReporting from "../src/errors/Reporting.ts"
-import * as EnvironmentConfiguration from "../src/configuration/EnvironmentConfiguration.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
+import * as ErrorReporting from "../src/server-kernel/errors/Reporting.ts"
+import * as EnvironmentConfiguration from "../src/server-kernel/configuration/EnvironmentConfiguration.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
 
 const records = Layer.succeed(Records, {
 	record: (_cause, category) =>

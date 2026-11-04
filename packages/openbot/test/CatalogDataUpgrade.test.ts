@@ -11,17 +11,17 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DeveloperWatches from "../src/apps/DeveloperWatches.ts"
-import { Governance } from "../src/apps/Governance.ts"
-import * as IndexWork from "../src/apps/IndexWork.ts"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Migrations from "../src/database/Migrations.ts"
-import * as Catalogs from "../src/database/conversion/Catalogs.ts"
-import * as Imported from "../src/database/conversion/Executions.ts"
-import * as Legacy from "../src/database/conversion/LegacyCatalogs.ts"
-import * as Progress from "../src/database/conversion/Progress.ts"
-import * as Store from "../src/execution/Store.ts"
-import * as Secrets from "../src/secrets/Secrets.ts"
+import * as DeveloperWatches from "../src/plugin-apps/DeveloperWatches.ts"
+import { Governance } from "../src/plugin-apps/Governance.ts"
+import * as IndexWork from "../src/plugin-apps/IndexWork.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Migrations from "../src/server-kernel/database/Migrations.ts"
+import * as Catalogs from "../src/server-upgrade/Catalogs.ts"
+import * as Imported from "../src/server-execution/imported/Executions.ts"
+import * as Legacy from "../src/server-upgrade/LegacyCatalogs.ts"
+import * as Progress from "../src/server-kernel/imported/Progress.ts"
+import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const owner = '["org","person"]'

@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import { Effect, Option, Redacted, Schema, String as Str } from "effect"
-import { decode } from "../src/platform/SetupFile.ts"
+import { decode } from "../src/plugin-platform/SetupFile.ts"
 
 const encode = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))
 

@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { OpenAiClient } from "@effect/ai-openai-compat"
 import { Array as Arr, Effect, Layer, Ref, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import * as Provider from "../src/providers/openai-compat/OpenAiCompatProvider.ts"
+import * as Provider from "../src/model-providers/providers/openai-compat/OpenAiCompatProvider.ts"
 
 const call = {
 	id: "call-test",

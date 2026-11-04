@@ -12,8 +12,8 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
-import * as Resource from "../src/resources/Resource.ts"
+import * as DatabasePostgres from "../src/server-kernel/database/DatabasePostgres.ts"
+import * as Resource from "../src/server-execution/resources/Resource.ts"
 import * as Network from "./ResourceNetwork.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

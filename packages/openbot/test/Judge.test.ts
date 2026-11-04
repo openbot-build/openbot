@@ -15,10 +15,10 @@ import {
 } from "effect"
 import { DecisionModel } from "effect/ai"
 import { TestClock } from "effect/testing"
-import { BotRecords } from "../src/bots/BotRecords.ts"
-import * as Judge from "../src/capabilities/Judge.ts"
-import { AnyModel } from "../src/models/ModelRegistry.ts"
-import { Records } from "../src/errors/Records.ts"
+import { BotRecords } from "../src/plugin-bots/BotRecords.ts"
+import * as Judge from "../src/plugin-capabilities/Judge.ts"
+import { AnyModel } from "../src/models-contract/models/ModelRegistry.ts"
+import { Records } from "../src/server-kernel/errors/Records.ts"
 import { bot } from "./BotFixture.ts"
 
 const rule = (id: string, text: string): BotsApi.Rule => ({

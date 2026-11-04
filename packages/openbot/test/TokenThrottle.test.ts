@@ -18,9 +18,9 @@ import {
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { meter } from "../src/billing/MeteredModel.ts"
-import { Billing } from "../src/billing/Billing.ts"
-import * as TokenThrottle from "../src/billing/TokenThrottle.ts"
+import { meter } from "../src/server-billing/billing/MeteredModel.ts"
+import { Billing } from "../src/server-billing/billing/Billing.ts"
+import * as TokenThrottle from "../src/server-billing/billing/TokenThrottle.ts"
 import * as Fixture from "./TokenThrottleFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
