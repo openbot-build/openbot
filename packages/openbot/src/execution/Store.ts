@@ -2219,6 +2219,20 @@ const make = Effect.gen(function* () {
 			)
 			.pipe(transactionFailures)
 	})
+	const latestCall = Effect.fn("ExecutionStore.latestCall")(function* (
+		key: Key,
+		step: string,
+	) {
+		const rows = yield* db.select().from(executionCalls).where(and(
+			eq(executionCalls.namespace, key.namespace),
+			eq(executionCalls.executionId, key.id),
+			eq(executionCalls.step, step),
+		)).orderBy(desc(executionCalls.attempt)).limit(1)
+		return yield* Option.match(Arr.head(rows), {
+			onNone: () => Effect.succeed(Option.none<Execution.Call>()),
+			onSome: (row) => callView(row).pipe(Effect.asSome),
+		})
+	}, storage)
 	const calls = Effect.fn("ExecutionStore.calls")(function* (key: Key) {
 		return yield* db
 			.select()
@@ -2291,6 +2305,7 @@ const make = Effect.gen(function* () {
 		finishCall,
 		uncertain,
 		incompleteRead,
+		latestCall,
 		calls,
 	}
 })

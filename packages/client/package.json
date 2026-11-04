@@ -1,7 +1,7 @@
 {
 	"name": "@openbot-build/client",
 	"version": "0.1.0",
-	"license": "AGPL-3.0-only",
+	"license": "MIT",
 	"type": "module",
 	"description": "Typed client for the OpenBot API",
 	"sideEffects": false,
@@ -10,22 +10,24 @@
 	},
 	"files": [
 		"dist",
-		"src",
-		"README.md"
+		"LICENSE"
 	],
 	"scripts": {
 		"build": "tsdown",
-		"test": "tsc -p tsconfig.test.json && vitest run"
+		"test": "tsc -p tsconfig.test.json && vitest run",
+		"prepack": "tsdown --config tsdown.bundle.config.ts",
+		"postpack": "pnpm build"
 	},
 	"dependencies": {
-		"@openbot-build/api": "workspace:*",
 		"effect": "4.0.6",
-		"@openbot-build/protocol": "workspace:*",
-		"@modelcontextprotocol/client": "2.3.1",
-		"@openbot-build/domain": "workspace:*"
+		"@modelcontextprotocol/client": "2.3.1"
 	},
 	"devDependencies": {
 		"@effect/vitest": "4.0.6",
-		"vitest": "5.0.5"
+		"vitest": "5.0.5",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/domain": "workspace:*"
 	}
 }
