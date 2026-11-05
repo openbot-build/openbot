@@ -18,7 +18,7 @@ import {
 	modelProviders,
 	models,
 	providerModels,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
 import {
 	linkedOwner,
@@ -29,7 +29,7 @@ import {
 	type Stored,
 	usableBy,
 } from "../models-contract/models/ModelProviders.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))
 const AvailabilityJson = Schema.fromJsonString(ModelsModel.Availability)

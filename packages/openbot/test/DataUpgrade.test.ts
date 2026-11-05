@@ -12,7 +12,7 @@ import {
 	String as Str,
 } from "effect"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Convert from "../src/server-upgrade/Convert.ts"
 import * as Checks from "../src/server-upgrade/Checks.ts"

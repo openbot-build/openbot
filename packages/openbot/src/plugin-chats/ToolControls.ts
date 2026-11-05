@@ -11,7 +11,7 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { Records, category } from "../server-kernel/errors/Records.ts"
 import { CallContext } from "../server-execution/execution/CallContext.ts"
 import { Calls } from "../server-execution/execution/Calls.ts"

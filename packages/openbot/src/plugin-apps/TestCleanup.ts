@@ -30,13 +30,13 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	developerTestFlows,
 	developerTests,
 	executionCalls,
 	executions,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"

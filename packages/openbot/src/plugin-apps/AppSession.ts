@@ -45,7 +45,7 @@ import {
 	get as connection,
 } from "../apps-contract/apps/StoredConnections.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import * as AppSecrets from "../apps-contract/vaults/AppSecrets.ts"
 import * as VaultCode from "../apps-contract/vaults/CodeMode.ts"

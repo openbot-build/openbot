@@ -2,14 +2,17 @@ import { Platform as PlatformModel } from "@openbot-build/domain"
 
 import { Array as Arr, Cause, Clock, DateTime, Effect, Layer } from "effect"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
-import { platformAdmins, accountStates } from "../server-database/Schema.ts"
+import {
+	platformAdmins,
+	accountStates,
+} from "@openbot-build/server-database/Schema"
 import {
 	normalizeEmail,
 	PlatformAdmins,
 	PlatformAdminsUnavailable,
 } from "../identity-contract/platform/PlatformAdmins.ts"
-import { openbot_auth_account } from "../server-database/AuthSchema.ts"
-import * as Db from "../server-database/Database.ts"
+import { openbot_auth_account } from "@openbot-build/server-database/AuthSchema"
+import * as Db from "@openbot-build/server-database/Database"
 
 const view = (
 	row: typeof platformAdmins.$inferSelect,

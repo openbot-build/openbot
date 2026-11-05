@@ -2,7 +2,7 @@ import { Developers } from "@openbot-build/domain"
 import { Effect, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 

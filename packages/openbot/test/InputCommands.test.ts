@@ -30,7 +30,7 @@ import {
 } from "effect"
 import { Prompt, Response } from "effect/ai"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"

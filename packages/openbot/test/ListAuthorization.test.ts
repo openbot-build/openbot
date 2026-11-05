@@ -3,7 +3,7 @@ import { NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { eq } from "drizzle-orm"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
-import { fileURLToPath } from "node:url"
+import { migrationsFolder } from "@openbot-build/server-database/MigrationsFolder"
 import * as AbilityHttpApi from "@nmnmcc/ability/HttpApi"
 import {
 	AuthApi,
@@ -57,13 +57,13 @@ import * as Files from "../src/plugin-files/Files.ts"
 import * as FileHandlers from "../src/plugin-files/HttpHandlers.ts"
 import { FileTasks } from "../src/plugin-files/FileTasks.ts"
 import * as Database from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	appConnections,
 	appRecords,
 	files,
 	organizations,
-} from "../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as HttpBoundary from "../src/server-kernel/errors/HttpBoundary.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
@@ -171,9 +171,7 @@ const database = Layer.effectDiscard(
 	Effect.gen(function* () {
 		const db = yield* Db.make
 		yield* migrate(db, {
-			migrationsFolder: fileURLToPath(
-				new URL("../migrations", import.meta.url),
-			),
+			migrationsFolder,
 		})
 	}),
 ).pipe(

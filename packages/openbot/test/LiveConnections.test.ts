@@ -1,4 +1,4 @@
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import * as ModelFailure from "../src/models-contract/models/ModelFailure.ts"

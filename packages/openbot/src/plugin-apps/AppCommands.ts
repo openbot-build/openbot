@@ -15,12 +15,12 @@ import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	appExecutions,
 	appInputs,
 	executions,
-} from "../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 import {
 	type Authorize,
 	type Decide,

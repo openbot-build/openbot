@@ -15,9 +15,9 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { appSecrets } from "../server-database/Schema.ts"
+import { appSecrets } from "@openbot-build/server-database/Schema"
 import type { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 
 /** The open App views, their actions and their confirmed interaction state, kept sealed in Postgres. */

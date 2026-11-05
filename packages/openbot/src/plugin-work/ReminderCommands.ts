@@ -19,7 +19,7 @@ import { type Authorize } from "../server-execution/execution/Engine.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import { Chat, ToolStep, Turn } from "@openbot-build/core"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
 import { Reminders } from "../conversation-contract/work/Reminders.ts"
 

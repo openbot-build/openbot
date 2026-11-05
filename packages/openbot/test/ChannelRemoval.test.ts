@@ -30,12 +30,12 @@ import * as ChannelQueue from "../src/plugin-channels/ChannelQueue.ts"
 import * as Removal from "../src/plugin-channels/ChannelRemoval.ts"
 import * as ChannelWatch from "../src/plugin-channels/ChannelWatch.ts"
 import * as Channels from "../src/plugin-channels/Channels.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Database from "../src/app/DatabasePostgres.ts"
 import {
 	channelInbox,
 	channelDeliveries,
-} from "../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"

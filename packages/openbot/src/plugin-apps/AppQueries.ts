@@ -11,12 +11,12 @@ import {
 import { and, asc, eq, or } from "drizzle-orm"
 import { Array as Arr, Effect, Option, type Schema } from "effect"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	executions,
 	toolOrigins,
 	toolExecutions,
-} from "../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 import { transactionFailures } from "../server-execution/execution/Store.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import { AppCommands } from "../apps-contract/apps/AppCommands.ts"

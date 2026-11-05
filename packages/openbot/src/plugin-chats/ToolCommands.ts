@@ -29,11 +29,11 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { SqlClient } from "effect/sql"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	executions,
 	toolExecutions,
-} from "../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import { type Authorize } from "../server-execution/execution/Engine.ts"
 import {

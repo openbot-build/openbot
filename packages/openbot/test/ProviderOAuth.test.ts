@@ -23,7 +23,7 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as ProviderOAuth from "../src/plugin-models/ProviderOAuth.ts"
 import {

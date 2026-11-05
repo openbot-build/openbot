@@ -13,7 +13,7 @@ import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import { Array as Arr, Context, Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Connections, type Error as ConnectionsError } from "./Connections.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 
 /**

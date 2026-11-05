@@ -20,8 +20,8 @@ import {
 import { SecureRandom } from "effect/crypto"
 import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
 import { and, eq } from "drizzle-orm"
-import { developerIndexRequests } from "../server-database/Schema.ts"
-import * as Db from "../server-database/Database.ts"
+import { developerIndexRequests } from "@openbot-build/server-database/Schema"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import {

@@ -4,7 +4,7 @@ import { assert, it } from "@effect/vitest"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { Array as Arr, Effect, Layer, Redacted } from "effect"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

@@ -49,11 +49,11 @@ import {
 	organizations,
 	tokens,
 	usageEvents,
-} from "../../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import {
 	executions,
 	executionCalls,
-} from "../../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 import {
 	type Attribution,
 	Billing,
@@ -68,7 +68,7 @@ import {
 	SpendingBlocked,
 } from "./Billing.ts"
 import { PgClient } from "@effect/sql-pg"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 /**

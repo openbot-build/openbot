@@ -27,8 +27,8 @@ import { HttpClient, Multipart } from "effect/http"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { toWhere } from "../identity-contract/authorization/Sql.ts"
-import * as Db from "../server-database/Database.ts"
-import { files } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { files } from "@openbot-build/server-database/Schema"
 import {
 	type FilesDocument,
 	quotaOf,

@@ -6,8 +6,8 @@
  */
 import { and, eq, gt, lt, ne, sql } from "drizzle-orm"
 import { Array as Arr, Duration, Effect, Option, Order, Schema } from "effect"
-import * as Db from "../../server-database/Database.ts"
-import { executionRunners } from "../../server-database/ExecutionSchema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { executionRunners } from "@openbot-build/server-database/ExecutionSchema"
 
 /** One plugin entry as the row keeps it. No config. */
 export const Plugin = Schema.Struct({

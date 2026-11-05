@@ -11,8 +11,12 @@ import { and, eq, isNull, lt, notExists, or } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
-import { executions, files, fileRefs } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import {
+	executions,
+	files,
+	fileRefs,
+} from "@openbot-build/server-database/Schema"
 import {
 	Store,
 	transactionFailures,

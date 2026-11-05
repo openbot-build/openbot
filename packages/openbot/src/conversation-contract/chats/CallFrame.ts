@@ -1,7 +1,7 @@
 import { Chat, ToolStep, Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Schema } from "effect"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	Store,
 	storage,

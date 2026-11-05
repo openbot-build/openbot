@@ -12,9 +12,9 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as ChatHost from "../chats/ChatHost.ts"
-import * as Db from "../../server-database/Database.ts"
-import { delegationPeriods } from "../../server-database/ExecutionSchema.ts"
-import { usageEvents } from "../../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { delegationPeriods } from "@openbot-build/server-database/ExecutionSchema"
+import { usageEvents } from "@openbot-build/server-database/Schema"
 import {
 	Store,
 	storage,

@@ -2,8 +2,11 @@ import { Developers } from "@openbot-build/domain"
 import { Discovery } from "@openbot-build/protocol"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
-import { developerApps, developerProofs } from "../../server-database/Schema.ts"
-import * as Db from "../../server-database/Database.ts"
+import {
+	developerApps,
+	developerProofs,
+} from "@openbot-build/server-database/Schema"
+import * as Db from "@openbot-build/server-database/Database"
 import { transactionFailures } from "../../server-execution/execution/Store.ts"
 
 /**

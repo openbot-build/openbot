@@ -34,14 +34,14 @@ import * as LifecycleWorkflow from "../src/plugin-computers/LifecycleWorkflow.ts
 import * as Maintenance from "../src/plugin-computers/Maintenance.ts"
 import * as MaintenanceWorkflow from "../src/plugin-computers/MaintenanceWorkflow.ts"
 import { Connectors } from "../src/plugin-computers/connector/Connectors.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Database from "../src/app/DatabasePostgres.ts"
 import {
 	computerProviders,
 	computers,
 	computerUsage,
 	executions,
-} from "../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Calls from "../src/server-execution/execution/Calls.ts"
 import * as Workflows from "../src/server-execution/execution/Workflows.ts"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"

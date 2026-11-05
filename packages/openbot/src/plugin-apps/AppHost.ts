@@ -33,7 +33,7 @@ import type {
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as HostApp from "./HostApp.ts"
 import { Probe } from "./Probe.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 export { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 

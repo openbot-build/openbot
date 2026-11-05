@@ -32,9 +32,12 @@ import * as Lifecycle from "../src/plugin-apps/Lifecycle.ts"
 import * as ManualConnection from "../src/plugin-apps/ManualConnection.ts"
 import { Probe } from "../src/plugin-apps/Probe.ts"
 import * as Stored from "../src/apps-contract/apps/StoredConnections.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Database from "../src/app/DatabasePostgres.ts"
-import { appConnections, appRecords } from "../src/server-database/Schema.ts"
+import {
+	appConnections,
+	appRecords,
+} from "@openbot-build/server-database/Schema"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as HttpErrors from "../src/server-execution/execution/HttpErrors.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"

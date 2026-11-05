@@ -32,12 +32,12 @@ import { Hex } from "effect/encoding"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
 import { computerKey } from "../identity-contract/audit/Resources.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	computers,
 	computerUsage,
 	computerAccess,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import type { Access as ExecutionAccess } from "../server-execution/execution/Engine.ts"
 import { Workflows } from "../server-execution/execution/Workflows.ts"

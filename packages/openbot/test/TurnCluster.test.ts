@@ -23,7 +23,7 @@ import {
 import { Prompt } from "effect/ai"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"

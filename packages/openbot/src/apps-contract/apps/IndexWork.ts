@@ -7,7 +7,7 @@ import {
 } from "../../server-execution/execution/Store.ts"
 import { AppIndex, Execution } from "@openbot-build/domain"
 import { Discovery, Index, Indexing } from "@openbot-build/protocol"
-import { appIndexJobs } from "../../server-database/Schema.ts"
+import { appIndexJobs } from "@openbot-build/server-database/Schema"
 
 export const CheckInput = Schema.Struct({
 	cardUrl: Schema.String,

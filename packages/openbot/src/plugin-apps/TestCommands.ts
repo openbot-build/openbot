@@ -10,7 +10,7 @@ import {
 	Secrets,
 } from "../server-kernel/secrets/Secrets.ts"
 import { and, eq } from "drizzle-orm"
-import { developerTests } from "../server-database/Schema.ts"
+import { developerTests } from "@openbot-build/server-database/Schema"
 import * as GrantCleanup from "./GrantCleanup.ts"
 import {
 	Authorization as OAuth,
@@ -39,7 +39,7 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import type { End } from "../server-execution/execution/Program.ts"

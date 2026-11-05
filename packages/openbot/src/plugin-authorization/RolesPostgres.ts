@@ -15,13 +15,13 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { and, asc, eq } from "drizzle-orm"
-import { roles } from "../server-database/Schema.ts"
+import { roles } from "@openbot-build/server-database/Schema"
 import {
 	builtin,
 	Roles,
 	RolesUnavailable,
 } from "../identity-contract/authorization/Roles.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const PolicyJson = Authorization.PolicySchema
 /** The policy column holds JSON that only this file writes, from a checked policy. */

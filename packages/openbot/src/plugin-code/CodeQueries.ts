@@ -21,12 +21,12 @@ import {
 	Number as Num,
 } from "effect"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	executions,
 	toolOrigins,
 	toolExecutions,
-} from "../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 import {
 	Store,
 	transactionFailures,

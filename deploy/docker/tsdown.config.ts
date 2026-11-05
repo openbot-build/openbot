@@ -18,6 +18,8 @@ export default defineConfig(
 		defineConfig({
 			cwd: path("../../packages/openbot"),
 			entry: { [name]: file },
+			// The server finds the migrations two folders up from this folder, in
+			// /app/migrations. Keep the depth.
 			outDir: path("../../.devenv/openbot/dist/app"),
 			clean: false,
 			format: "esm",

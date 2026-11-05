@@ -12,12 +12,12 @@ import {
 } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Schema } from "effect"
 import { and, asc, eq, inArray } from "drizzle-orm"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	appConnections,
 	appDrafts,
 	appSecrets,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import { AuthorizationCommands } from "./AuthorizationCommands.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"

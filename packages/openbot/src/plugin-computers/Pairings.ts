@@ -19,8 +19,8 @@ import {
 } from "effect"
 import { Base64Url, Hex } from "effect/encoding"
 import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Db from "../server-database/Database.ts"
-import { computerPairings } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { computerPairings } from "@openbot-build/server-database/Schema"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import { Computers, type Failure, hashToken } from "./Computers.ts"
 

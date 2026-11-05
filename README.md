@@ -72,17 +72,18 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 
 ## Packages
 
-| Package                        | What it is                                           |
-| ------------------------------ | ---------------------------------------------------- |
-| `@openbot-build/openbot`       | The server, all its plugins, and its model providers |
-| `@openbot-build/api`           | The typed HTTP contract                              |
-| `@openbot-build/client`        | The TypeScript client                                |
-| `@openbot-build/core`          | The Bot core                                         |
-| `@openbot-build/protocol`      | The OpenBot App Protocol library                     |
-| `@openbot-build/protocol-test` | A public test service for the App Protocol           |
-| `@openbot-build/cli`           | The `openbot` command                                |
-| `@openbot-build/computer`      | Pairs and connects your own machine as a Computer    |
-| `@openbot-build/docs`          | The docs site                                        |
+| Package                          | What it is                                           |
+| -------------------------------- | ---------------------------------------------------- |
+| `@openbot-build/openbot`         | The server, all its plugins, and its model providers |
+| `@openbot-build/server-database` | The server database tables and migrations            |
+| `@openbot-build/api`             | The typed HTTP contract                              |
+| `@openbot-build/client`          | The TypeScript client                                |
+| `@openbot-build/core`            | The Bot core                                         |
+| `@openbot-build/protocol`        | The OpenBot App Protocol library                     |
+| `@openbot-build/protocol-test`   | A public test service for the App Protocol           |
+| `@openbot-build/cli`             | The `openbot` command                                |
+| `@openbot-build/computer`        | Pairs and connects your own machine as a Computer    |
+| `@openbot-build/docs`            | The docs site                                        |
 
 ## Work on the code
 

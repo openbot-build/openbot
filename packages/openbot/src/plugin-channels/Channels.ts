@@ -25,9 +25,9 @@ import {
 	channelIdentities,
 	channelLinks,
 	channels,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { toWhere } from "../identity-contract/authorization/Sql.ts"
 import {

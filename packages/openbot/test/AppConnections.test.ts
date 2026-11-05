@@ -34,7 +34,7 @@ import * as AppHost from "../src/plugin-apps/AppHost.ts"
 import * as ProtocolStores from "../src/plugin-apps/ProtocolStores.ts"
 import { Probe } from "../src/plugin-apps/Probe.ts"
 import { eq } from "drizzle-orm"
-import { appRecords } from "../src/server-database/Schema.ts"
+import { appRecords } from "@openbot-build/server-database/Schema"
 import * as StoredConnections from "../src/apps-contract/apps/StoredConnections.ts"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
@@ -42,7 +42,7 @@ import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const encryptionKey = Redacted.make("test:" + Str.repeat(32)("11"))
 const alice: Caller = {

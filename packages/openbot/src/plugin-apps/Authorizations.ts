@@ -25,12 +25,15 @@ import {
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import { appAuthorizations, appConnections } from "../server-database/Schema.ts"
+import {
+	appAuthorizations,
+	appConnections,
+} from "@openbot-build/server-database/Schema"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import { ProtocolStores } from "./ProtocolStores.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as ClientMetadata from "./ClientMetadata.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Platform from "../server-kernel/settings/Platform.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"

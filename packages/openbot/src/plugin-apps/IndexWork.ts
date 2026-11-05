@@ -30,8 +30,8 @@ import {
 	appIndexEntries,
 	appIndexJobs,
 	appIndexResults,
-} from "../server-database/Schema.ts"
-import * as Db from "../server-database/Database.ts"
+} from "@openbot-build/server-database/Schema"
+import * as Db from "@openbot-build/server-database/Database"
 import { Governance } from "./Governance.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import { CheckJson } from "./IndexStore.ts"

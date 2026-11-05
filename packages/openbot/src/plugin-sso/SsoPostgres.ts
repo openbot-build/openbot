@@ -21,11 +21,11 @@ import { and, asc, eq, isNotNull, ne } from "drizzle-orm"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Report from "../server-kernel/errors/Report.ts"
 import { DomainControl } from "../server-kernel/apps/DomainControl.ts"
-import { openbot_auth_account } from "../server-database/AuthSchema.ts"
+import { openbot_auth_account } from "@openbot-build/server-database/AuthSchema"
 import {
 	organizationDomains,
 	ssoConnections,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
 import { signInScope } from "../server-kernel/settings/Documents.ts"
 import { Settings } from "../server-kernel/settings/Settings.ts"
@@ -34,7 +34,7 @@ import {
 	recordName,
 	Sso,
 } from "../identity-contract/sso/Sso.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const AccessJson = Schema.fromJsonString(Access.ProviderAccess)
 const Domains = Schema.fromJsonString(Schema.Array(Schema.String))

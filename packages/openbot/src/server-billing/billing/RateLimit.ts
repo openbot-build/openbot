@@ -2,10 +2,10 @@ import { Billing, type Caller } from "@openbot-build/domain"
 import { lt, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Effect, Layer, Option, Schedule } from "effect"
 import * as Background from "../../server-kernel/execution/Background.ts"
-import { rateWindows } from "../../server-database/Schema.ts"
+import { rateWindows } from "@openbot-build/server-database/Schema"
 import { rateLimitOf } from "../../server-kernel/settings/Documents.ts"
 import { Settings } from "../../server-kernel/settings/Settings.ts"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Report from "../../server-kernel/errors/Report.ts"
 
 const windowMs = 60_000

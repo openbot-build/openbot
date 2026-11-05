@@ -13,12 +13,12 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Database from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	files,
 	fileRefs,
 	organizations,
-} from "../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Tasks from "../src/plugin-files/FileTasks.ts"

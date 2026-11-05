@@ -5,14 +5,13 @@ import {
 } from "drizzle-orm/effect-postgres"
 import type { Effect } from "effect"
 import type { PgClient } from "@effect/sql-pg"
-import * as AuthSchema from "./AuthSchema.ts"
-import * as Schema from "./Schema.ts"
+import * as Tables from "./folders/Tables.ts"
 
 /**
  * The Drizzle relations of every table. They follow the foreign keys in the
  * schema, so relational queries (`db.query`) can join the tables.
  */
-export const relations = defineRelations({ ...Schema, ...AuthSchema }, (r) => ({
+export const relations = defineRelations({ ...Tables }, (r) => ({
 	organizations: {
 		roles: r.many.roles(),
 		domains: r.many.organizationDomains(),

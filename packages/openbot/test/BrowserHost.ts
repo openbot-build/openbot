@@ -34,10 +34,10 @@ import * as DefaultBot from "./DefaultBot.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as TestHost from "./TestHost.ts"
 import type { AppIndexApi, Settings as SettingsApi } from "@openbot-build/api"
-import { organizationDomains } from "../src/server-database/Schema.ts"
+import { organizationDomains } from "@openbot-build/server-database/Schema"
 import { Settings } from "../src/server-kernel/settings/Settings.ts"
 import type { PlatformDocument } from "../src/server-kernel/settings/Documents.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	Transport as MailTransport,
 	TransportError,

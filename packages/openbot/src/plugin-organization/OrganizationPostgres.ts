@@ -34,7 +34,7 @@ import {
 	sql,
 	type SQL,
 } from "drizzle-orm"
-import { openbot_auth_user } from "../server-database/AuthSchema.ts"
+import { openbot_auth_user } from "@openbot-build/server-database/AuthSchema"
 import {
 	invitations,
 	mappedRoles,
@@ -43,7 +43,7 @@ import {
 	organizationDomains,
 	organizations,
 	tokens,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
 import {
 	organizationKey,
@@ -56,7 +56,7 @@ import {
 	Organization,
 	OrganizationUnavailable,
 } from "../identity-contract/organization/Organization.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const Roles = Schema.fromJsonString(Schema.Array(RoleId))
 const PolicyJson = Authorization.PolicySchema

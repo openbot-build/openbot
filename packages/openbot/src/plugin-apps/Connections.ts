@@ -33,14 +33,17 @@ import * as ManualConnection from "./ManualConnection.ts"
 import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import { appConnections, appDrafts } from "../server-database/Schema.ts"
+import {
+	appConnections,
+	appDrafts,
+} from "@openbot-build/server-database/Schema"
 import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import {
 	ownerKey,
 	type StoredConnection,
 } from "../apps-contract/apps/StoredConnections.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 
 export type Error =

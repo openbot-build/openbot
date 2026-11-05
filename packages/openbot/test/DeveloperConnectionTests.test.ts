@@ -65,10 +65,10 @@ import * as Rows from "../src/plugin-apps/DeveloperRows.ts"
 import {
 	developerProofs,
 	developerTests,
-} from "../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const Wire = Schema.Struct({
 	id: Schema.Union([Schema.Finite, Schema.String]),

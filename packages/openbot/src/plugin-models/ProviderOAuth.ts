@@ -13,13 +13,13 @@ import {
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	modelProviders,
 	providerOAuth,
 	providerOAuthAuthorizations,
 	providerOAuthHosts,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import {

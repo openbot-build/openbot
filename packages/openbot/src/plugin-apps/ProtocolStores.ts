@@ -16,11 +16,11 @@ import {
 	appAuthorizations,
 	appConnections,
 	appSecrets,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 
 export interface OwnedStores {

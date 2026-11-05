@@ -19,8 +19,12 @@ import * as Check from "../identity-contract/authorization/Check.ts"
 import { vaultResource } from "../identity-contract/authorization/Resources.ts"
 import { toWhere } from "../identity-contract/authorization/Sql.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as Db from "../server-database/Database.ts"
-import { vaultAccess, vaultItems, vaults } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import {
+	vaultAccess,
+	vaultItems,
+	vaults,
+} from "@openbot-build/server-database/Schema"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
 import { Readers } from "./Readers.ts"

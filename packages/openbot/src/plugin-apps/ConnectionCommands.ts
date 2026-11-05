@@ -35,14 +35,14 @@ import {
 import { SqlClient } from "effect/sql"
 import { and, eq, inArray } from "drizzle-orm"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	appAuthorizations,
 	appConnections,
 	appDrafts,
 	appRecords,
 	appSecrets,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import type { End } from "../server-execution/execution/Program.ts"
 import { Governance } from "./Governance.ts"

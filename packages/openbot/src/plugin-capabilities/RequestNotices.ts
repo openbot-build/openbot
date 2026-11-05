@@ -11,7 +11,7 @@ import {
 } from "../conversation-contract/chats/InputCommands.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { type Authorize } from "../server-execution/execution/Engine.ts"
 import {
 	Store,

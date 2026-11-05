@@ -15,13 +15,13 @@ import { IndexNamespace } from "../../src/apps-contract/apps/IndexNamespace.ts"
 import * as Rows from "../../src/plugin-apps/DeveloperRows.ts"
 import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
 import * as Database from "../../src/app/DatabasePostgres.ts"
-import * as Db from "../../src/server-database/Database.ts"
-import { executionFailures } from "../../src/server-database/ExecutionSchema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { executionFailures } from "@openbot-build/server-database/ExecutionSchema"
 import {
 	developerNotices,
 	developerProofs,
 	developerSubscriptions,
-} from "../../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Secrets from "../../src/server-kernel/secrets/Secrets.ts"
 import * as Wait from "../Wait.ts"
 

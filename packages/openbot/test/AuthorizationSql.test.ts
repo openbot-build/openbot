@@ -5,7 +5,7 @@ import { Condition, Domain, Resource } from "@nmnmcc/ability"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
 import { Array as Arr, Effect, Redacted, Schema, String as Str } from "effect"
 import { toWhere } from "../src/identity-contract/authorization/Sql.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

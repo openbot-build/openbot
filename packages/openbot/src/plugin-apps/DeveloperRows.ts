@@ -9,7 +9,7 @@ import {
 	developerReports,
 	developerTestFlows,
 	developerTests,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { transactionFailures } from "../server-execution/execution/Store.ts"
 import {
 	type Database,

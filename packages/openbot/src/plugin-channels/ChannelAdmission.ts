@@ -1,8 +1,8 @@
 import { Channels as Domain, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
-import * as Db from "../server-database/Database.ts"
-import { channels, executions } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { channels, executions } from "@openbot-build/server-database/Schema"
 import {
 	storage,
 	transactionFailures,

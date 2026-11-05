@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm"
-import { executions } from "../server-database/ExecutionSchema.ts"
+import { executions } from "@openbot-build/server-database/ExecutionSchema"
 import { Chat } from "@openbot-build/core"
 import { Bots as BotDomain, Caller, Execution } from "@openbot-build/domain"
 import {
@@ -18,7 +18,7 @@ import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { workflowName as turnWorkflow } from "../conversation-contract/chats/InputCommands.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	Store,
 	storage,

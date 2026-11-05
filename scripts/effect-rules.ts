@@ -55,9 +55,9 @@ const rules = {
 	"assembly-boundary":
 		"A feature must not import the application entry points or layer assembly.",
 	"public-entry":
-		"Use the public entry of another package, not its source files.",
+		"Use the public entry of another package, not its source files. An entry of a server package must be a key of `exports` in its package.json.",
 	"virtual-boundary":
-		"A server folder may import only the folders of lower packages, and a plugin folder must not import another plugin folder. Put shared types and service tags in a contract folder.",
+		"A server folder or server package may import only lower folders and packages, and a plugin folder must not import another plugin folder. The database package imports no other OpenBot server code. Put shared types and service tags in a contract folder.",
 	"graft-boundary":
 		"Only the plugin kit (`server-plugin`), the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
 	"feature-lookup":
@@ -261,7 +261,7 @@ const isLookup = (parts: ReadonlyArray<string>): boolean => {
 
 const check = (file: string, program: Node) => {
 	const main = Str.endsWith("Main.ts")(file)
-	const server = Str.startsWith("packages/openbot/src/")(file)
+	const server = /^packages\/(?:openbot|server-database)\/src\//.test(file)
 	const domain = Str.startsWith("packages/domain/src/")(file)
 	const core = coreImports(program)
 	const blind = isBlind(blindNames(program))
@@ -385,8 +385,10 @@ const httpAdapters = [
 
 /**
  * The folders of packages/openbot/src are the packages that they will become.
- * A folder may import only folders with a lower number. Each plugin-* folder
- * has the plugin number, and plugins must not import each other.
+ * A server package that has left packages/openbot keeps its number here. A
+ * folder or a server package may import only folders and packages with a
+ * lower number. Each plugin-* folder has the plugin number, and plugins must
+ * not import each other.
  */
 const serverLayers: Readonly<Record<string, number>> = {
 	"server-database": 1,
@@ -406,15 +408,39 @@ const serverLayers: Readonly<Record<string, number>> = {
 	"server-development": 15,
 }
 
-const serverFolder = (file: string): Option.Option<string> => {
+/** Server packages that left packages/openbot. Other packages use only their entry points. */
+const serverPackages = ["server-database"] as const
+const isServerPackage = (name: string) =>
+	Arr.some(serverPackages, (server) => server === name)
+
+/** The server unit of a file: a folder of packages/openbot/src, or a server package. */
+const serverUnit = (file: string): Option.Option<string> => {
+	const own = /^packages\/([^/]+)\//.exec(file)
+	if (own !== null && isServerPackage(own[1]!)) return Option.some(own[1]!)
 	const local = Str.replace("packages/openbot/src/", "")(file)
 	if (local === file || !Str.includes("/")(local)) return Option.none()
 	return Arr.head(Str.split(local, "/"))
 }
 
-const breaksLayers = (file: string, resolved: string): boolean => {
-	const from = serverFolder(file)
-	const to = serverFolder(resolved)
+/** The server unit that an import names: a relative path, or the entry of a server package. */
+const targetUnit = (
+	target: string,
+	resolved: string,
+): Option.Option<string> => {
+	if (Str.startsWith(".")(target)) return serverUnit(resolved)
+	const entry = /^@openbot-build\/([^/]+)(?:\/|$)/.exec(target)
+	return entry !== null && isServerPackage(entry[1]!)
+		? Option.some(entry[1]!)
+		: Option.none()
+}
+
+const breaksLayers = (
+	file: string,
+	target: string,
+	resolved: string,
+): boolean => {
+	const from = serverUnit(file)
+	const to = targetUnit(target, resolved)
 	if (Option.isNone(from) || Option.isNone(to) || from.value === to.value)
 		return false
 	const layer = (folder: string) =>
@@ -429,6 +455,7 @@ const breaksLayers = (file: string, resolved: string): boolean => {
 
 const usesHttpContract = (file: string): boolean => {
 	const local = Str.replace("packages/openbot/src/", "")(file)
+	if (local === file) return false
 	return (
 		Str.startsWith("app/")(local) ||
 		Str.startsWith("server-development/")(local) ||
@@ -437,15 +464,13 @@ const usesHttpContract = (file: string): boolean => {
 	)
 }
 
-/** Check type imports too: Node removes them before the Effect rules parse the file. */
-const boundaries = (
-	file: string,
-	code: string,
-	path: Path.Path,
-): ReadonlyArray<Omit<Finding, "file">> => {
-	const source = /^packages\/([^/]+)\/src\//.exec(file)
-	if (source === null) return []
-	const owner = source[1]
+interface Reference {
+	readonly target: string
+	readonly line: number
+}
+
+/** Every import and export path of a file, type imports too: Node removes them before the Effect rules parse the file. */
+const referencesOf = (code: string): ReadonlyArray<Reference> => {
 	// Node removes comments and strings inside type imports. Tokenize the original
 	// source so those imports have the same checks as value imports.
 	const comments: Array<Acorn.Comment> = []
@@ -468,25 +493,112 @@ const boundaries = (
 			Str.repeat(comment.end - comment.start)(" ") +
 			Str.slice(comment.end)(text),
 	)
-	const references = Arr.fromIterable(
+	const matches = Arr.fromIterable(
 		Str.matchAll(
 			/\b(?:(?:import|export)\b\s*(?:type\b\s*)?(?:[\w$]+\s*,\s*)?(?:\{[^}]*\}|\*(?:\s+as\s+[\w$]+)?|[\w$]+)\s*\bfrom\s*|import\s*(?:\(\s*)?)["']([^"']+)["']/g,
 		)(scan),
 	)
-	return Arr.flatMap(
-		references,
-		(match): ReadonlyArray<Omit<Finding, "file">> => {
-			// matchAll always gives an index. Effect types it as optional.
-			const index = match.index!
-			if (
-				Arr.some(
-					[...comments, ...quoted],
-					(node) => index >= node.start && index < node.end,
-				)
+	return Arr.flatMap(matches, (match): ReadonlyArray<Reference> => {
+		// matchAll always gives an index. Effect types it as optional.
+		const index = match.index!
+		if (
+			Arr.some(
+				[...comments, ...quoted],
+				(node) => index >= node.start && index < node.end,
 			)
-				return []
-			const target = match[1]!
-			const line = Str.split(Str.slice(0, index)(code), "\n").length
+		)
+			return []
+		return [
+			{
+				target: match[1]!,
+				line: Str.split(Str.slice(0, index)(code), "\n").length,
+			},
+		]
+	})
+}
+
+/** A path inside a package that is not its public entry. */
+const inside = /^@openbot-build\/[^/]+\/(?:src|dist|migrations)(?:\/|$)/
+
+/** The keys of `exports` in the package.json of each server package, such as `./Schema`. */
+type Entries = Readonly<Record<string, ReadonlyArray<string>>>
+
+const PackageExports = Schema.fromJsonString(
+	Schema.Struct({
+		exports: Schema.Record(Schema.String, Schema.Unknown),
+	}),
+)
+
+/** Reads the `exports` keys of every server package. */
+const readEntries = Effect.fn("EffectRules.readEntries")(function* () {
+	const fs = yield* FileSystem.FileSystem
+	const pairs = yield* Effect.forEach(serverPackages, (name) =>
+		fs.readFileString(`packages/${name}/package.json`).pipe(
+			Effect.flatMap(Schema.decodeUnknownEffect(PackageExports)),
+			Effect.map((manifest) => [name, Rec.keys(manifest.exports)] as const),
+		),
+	)
+	return Rec.fromEntries(pairs) satisfies Entries
+})
+
+/**
+ * True when an import names a subpath of a server package that is not a key
+ * of its `exports`.
+ */
+const unknownEntry = (target: string, served: Entries): boolean => {
+	const entry = /^@openbot-build\/([^/]+)(\/.*)?$/.exec(target)
+	if (entry === null || !isServerPackage(entry[1]!)) return false
+	const key = entry[2] === undefined ? "." : `.${entry[2]}`
+	return !Arr.contains(served[entry[1]!] ?? [], key)
+}
+
+/** The products that the database package may use: pure types and rules. */
+const databaseImports = /^@openbot-build\/(?:core|domain)(?:\/|$)/
+
+/**
+ * The tests and other files of a package outside `src`. They may use the
+ * source of other packages for test helpers, but a server package only
+ * through its public entry.
+ */
+const entries = (
+	file: string,
+	code: string,
+	path: Path.Path,
+	served: Entries,
+): ReadonlyArray<Omit<Finding, "file">> => {
+	const source = /^packages\/([^/]+)\//.exec(file)
+	if (source === null) return []
+	const owner = source[1]!
+	return Arr.flatMap(
+		referencesOf(code),
+		({ target, line }): ReadonlyArray<Omit<Finding, "file">> => {
+			const resolved = path.normalize(path.join(path.dirname(file), target))
+			const into = /^packages\/([^/]+)\//.exec(resolved)
+			return (Str.startsWith(".")(target) &&
+				into !== null &&
+				into[1] !== owner &&
+				isServerPackage(into[1]!)) ||
+				inside.test(target) ||
+				unknownEntry(target, served)
+				? [{ line, rule: "public-entry", detail: target }]
+				: []
+		},
+	)
+}
+
+const boundaries = (
+	file: string,
+	code: string,
+	path: Path.Path,
+	served: Entries,
+): ReadonlyArray<Omit<Finding, "file">> => {
+	const source = /^packages\/([^/]+)\/src\//.exec(file)
+	if (source === null) return entries(file, code, path, served)
+	const owner = source[1]!
+	const server = owner === "openbot" || isServerPackage(owner)
+	return Arr.flatMap(
+		referencesOf(code),
+		({ target, line }): ReadonlyArray<Omit<Finding, "file">> => {
 			const relative = Str.startsWith(".")(target)
 			const resolved = relative
 				? path.normalize(path.join(path.dirname(file), target))
@@ -503,7 +615,7 @@ const boundaries = (
 					))
 					? ["domain-boundary" as const]
 					: []),
-				...(owner === "openbot" &&
+				...(server &&
 				!usesHttpContract(file) &&
 				(target === "@openbot-build/api" ||
 					Str.startsWith("@openbot-build/api/")(target) ||
@@ -518,7 +630,7 @@ const boundaries = (
 				...((owner === "core" || owner === "protocol") && product && !core
 					? ["standalone-boundary" as const]
 					: []),
-				...(owner === "openbot" &&
+				...(server &&
 				/^effect\/(?:cluster|rpc)(?:\/|$)/.test(target) &&
 				!/^packages\/openbot\/src\/(?:server-execution|app)\//.test(file)
 					? ["execution-boundary" as const]
@@ -530,13 +642,17 @@ const boundaries = (
 				Str.startsWith("packages/openbot/src/app/")(resolved)
 					? ["assembly-boundary" as const]
 					: []),
-				...(relative && breaksLayers(file, resolved)
+				...(breaksLayers(file, target, resolved) ||
+				(owner === "server-database" &&
+					product &&
+					!databaseImports.test(target))
 					? ["virtual-boundary" as const]
 					: []),
 				...((relative &&
 					/^packages\//.test(resolved) &&
 					!Str.startsWith(`packages/${owner}/`)(resolved)) ||
-				/^@openbot-build\/[^/]+\/(?:src|dist)(?:\/|$)/.test(target)
+				inside.test(target) ||
+				unknownEntry(target, served)
 					? ["public-entry" as const]
 					: []),
 			]
@@ -607,7 +723,10 @@ const graftImports = (
 	})
 }
 
-const checkFile = Effect.fn("EffectRules.checkFile")(function* (file: string) {
+const checkFile = Effect.fn("EffectRules.checkFile")(function* (
+	file: string,
+	served: Entries,
+) {
 	const fs = yield* FileSystem.FileSystem
 	const path = yield* Path.Path
 	const code = yield* fs.readFileString(file)
@@ -660,7 +779,7 @@ const checkFile = Effect.fn("EffectRules.checkFile")(function* (file: string) {
 		[
 			...found,
 			...unreasoned,
-			...boundaries(file, code, path),
+			...boundaries(file, code, path, served),
 			...graftImports(file, code),
 		],
 		(finding): Finding => ({
@@ -690,9 +809,12 @@ const program = Effect.gen(function* () {
 			),
 		),
 	).pipe(Effect.map(Arr.flatten))
-	const codeFindings = yield* Effect.forEach(files, checkFile, {
-		concurrency: 16,
-	}).pipe(Effect.map(Arr.flatten))
+	const served = yield* readEntries()
+	const codeFindings = yield* Effect.forEach(
+		files,
+		(file) => checkFile(file, served),
+		{ concurrency: 16 },
+	).pipe(Effect.map(Arr.flatten))
 	const findings: ReadonlyArray<Finding> = [
 		...codeFindings,
 		...(yield* ServiceContracts.check(

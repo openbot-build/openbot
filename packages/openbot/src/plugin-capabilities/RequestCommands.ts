@@ -16,7 +16,7 @@ import {
 } from "@openbot-build/domain"
 import { Clock, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { TurnContext } from "../conversation-contract/chats/TurnContext.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"

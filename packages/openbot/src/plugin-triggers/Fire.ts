@@ -9,7 +9,7 @@ import * as DelegationSource from "../conversation-contract/bots/DelegationSourc
 import * as ChatCommands from "../conversation-contract/chats/ChatCommands.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	Store,
 	storage,

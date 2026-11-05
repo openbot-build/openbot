@@ -22,7 +22,7 @@ import {
 	Stream,
 } from "effect"
 import { Response, type Prompt, type Tool } from "effect/ai"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { Calls } from "../server-execution/execution/Calls.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import {

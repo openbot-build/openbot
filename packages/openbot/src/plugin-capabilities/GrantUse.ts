@@ -9,8 +9,8 @@ import * as Hex from "effect/encoding/Hex"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
-import * as Db from "../server-database/Database.ts"
-import { grantUses } from "../server-database/ExecutionSchema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { grantUses } from "@openbot-build/server-database/ExecutionSchema"
 import {
 	Store,
 	storage,

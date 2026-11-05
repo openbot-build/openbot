@@ -41,7 +41,7 @@ import {
 } from "../../server-execution/execution/Store.ts"
 import { Directory } from "../../server-execution/resources/Directory.ts"
 import * as Resource from "../../server-execution/resources/Resource.ts"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as StoredChats from "../../conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../../conversation-contract/chats/ChatHost.ts"
 import { Transport } from "../../server-execution/resources/Transport.ts"

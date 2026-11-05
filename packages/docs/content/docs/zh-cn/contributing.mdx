@@ -204,8 +204,9 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 
 变更需要处理旧调用方、客户端或已有数据时，先询问用户。不要自行决定采用破坏性变更还是保留旧行为。
 
-不要修改基线迁移。每次数据库结构变更，都通过
-`devenv shell -- drizzle-kit generate --name <change>`
+不要修改 `packages/server-database/migrations`
+中的基线迁移。每次数据库结构变更，都通过
+`devenv shell -- drizzle-kit generate --config packages/server-database/drizzle.config.ts --name <change>`
 添加新迁移，让已有数据库可以升级。
 
 绕过外部包或工具的缺陷时，在相关代码旁用注释解释缺陷。

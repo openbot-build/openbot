@@ -12,12 +12,12 @@ import * as ProcessSink from "../../src/plugin-computers/Process.ts"
 import { Drivers } from "../../src/plugin-computers/Drivers.ts"
 import { Computers } from "../../src/plugin-computers/Computers.ts"
 import { ComputerProviders } from "../../src/plugin-computers/ComputerProviders.ts"
-import * as Db from "../../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	computerAccess,
 	computerProviders,
 	computers,
-} from "../../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 
 /** A provider that keeps its sandboxes in memory, and writes down what happened. */
 export const fakeProvider = Effect.gen(function* () {

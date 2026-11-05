@@ -15,11 +15,11 @@ import { SecureRandom } from "effect/crypto"
 import {
 	developerTestFlows,
 	developerTests,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const PrivateState = Schema.Struct({
 	connection: Schema.NullOr(Store.UserConnection),

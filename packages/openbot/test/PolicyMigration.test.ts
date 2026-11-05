@@ -14,7 +14,7 @@ import {
 	Schema,
 } from "effect"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

@@ -1,7 +1,10 @@
 import { AppCalls } from "@openbot-build/domain"
 import { Effect, Layer, Schema } from "effect"
-import { appConnections, appInvocations } from "../server-database/Schema.ts"
-import * as Db from "../server-database/Database.ts"
+import {
+	appConnections,
+	appInvocations,
+} from "@openbot-build/server-database/Schema"
+import * as Db from "@openbot-build/server-database/Database"
 import { storage } from "../server-execution/execution/Store.ts"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"

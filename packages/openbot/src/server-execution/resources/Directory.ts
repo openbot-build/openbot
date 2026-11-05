@@ -21,11 +21,11 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { RunnerStorage, ShardingConfig } from "effect/cluster"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	resourceLeases,
 	resourceOwners,
-} from "../../server-database/ResourceSchema.ts"
+} from "@openbot-build/server-database/ResourceSchema"
 import { storage, transactionFailures } from "../execution/Store.ts"
 import * as Background from "../../server-kernel/execution/Background.ts"
 import * as Resource from "./Resource.ts"

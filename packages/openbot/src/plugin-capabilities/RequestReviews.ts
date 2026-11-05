@@ -32,14 +32,14 @@ import { and, eq, inArray } from "drizzle-orm"
 import {
 	executions,
 	toolExecutions,
-} from "../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { Observation } from "../server-execution/execution/Observation.ts"
 import {
 	Store,

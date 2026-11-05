@@ -23,7 +23,7 @@ import type { ActionPolicy } from "./ActionPolicy.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import { organizationOf } from "../apps-contract/apps/StoredConnections.ts"
 import type { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import type * as Report from "../server-kernel/errors/Report.ts"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import * as Database from "../../src/server-database/Database.ts"
-import { executionFailures } from "../../src/server-database/ExecutionSchema.ts"
+import * as Database from "@openbot-build/server-database/Database"
+import { executionFailures } from "@openbot-build/server-database/ExecutionSchema"
 
 /** The saved failure rows let tests check that one failed Turn is saved once. */
 export const read = Effect.flatMap(Database.make, (database) =>

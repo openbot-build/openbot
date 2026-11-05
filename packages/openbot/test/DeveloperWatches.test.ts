@@ -16,7 +16,7 @@ import * as Store from "../src/server-execution/execution/Store.ts"
 import * as Watches from "../src/plugin-apps/DeveloperWatches.ts"
 import * as Rows from "../src/plugin-apps/DeveloperRows.ts"
 import * as Postgres from "./PostgresTest.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const database = Layer.effectDiscard(Database.migrate).pipe(
 	Layer.provideMerge(

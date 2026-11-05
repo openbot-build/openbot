@@ -31,14 +31,14 @@ import {
 	segment,
 } from "../identity-contract/audit/Resources.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	channels,
 	channelInbox,
 	channelDeliveries,
 	channelConversations,
 	executions,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import type { Authorize } from "../server-execution/execution/Engine.ts"
 import { Observation } from "../server-execution/execution/Observation.ts"

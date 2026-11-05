@@ -71,7 +71,7 @@ import * as StoredConnections from "../src/apps-contract/apps/StoredConnections.
 import {
 	appConnections,
 	appInvocations,
-} from "../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { Store as ProtocolStore } from "@openbot-build/protocol"
 import * as Reviews from "../src/plugin-capabilities/RequestReviews.ts"
 import * as RequestWorkflow from "../src/plugin-capabilities/RequestWorkflow.ts"
@@ -85,7 +85,7 @@ import { Prompt, Response, Toolkit } from "effect/ai"
 import { TurnContext } from "../src/conversation-contract/chats/TurnContext.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as BotFixture from "./BotFixture.ts"
 import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"

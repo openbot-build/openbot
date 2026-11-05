@@ -37,7 +37,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { SqlClient, SqlError } from "effect/sql"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	executions,
 	executionEvents,
@@ -45,7 +45,7 @@ import {
 	executionOutbox,
 	executionCalls,
 	executionDecisions,
-} from "../../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 
 export const Submission = Schema.Struct({
 	workflow: Schema.String,

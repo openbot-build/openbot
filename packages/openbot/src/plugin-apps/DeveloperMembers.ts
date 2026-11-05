@@ -9,12 +9,12 @@ import {
 	developerInvitations,
 	developerMembers,
 	developerProofs,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 export class DeveloperMembers extends Context.Service<
 	DeveloperMembers,

@@ -1,13 +1,13 @@
 import { Effect, Record as Rec } from "effect"
 import * as Shared from "./DatabaseError.ts"
-import * as Tables from "../../server-database/Schema.ts"
+import * as Tables from "@openbot-build/server-database/Schema"
 import {
 	openbot_auth_user,
 	openbot_auth_session,
 	openbot_auth_account,
 	openbot_auth_verification,
-} from "../../server-database/AuthSchema.ts"
-import * as Db from "../../server-database/Database.ts"
+} from "@openbot-build/server-database/AuthSchema"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Progress from "../imported/Progress.ts"
 import * as GrantUses from "../imported/GrantUses.ts"
 

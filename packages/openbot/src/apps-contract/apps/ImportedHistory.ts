@@ -7,9 +7,9 @@ import {
 } from "@openbot-build/domain"
 import { and, asc, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
-import * as Db from "../../server-database/Database.ts"
-import { executions } from "../../server-database/ExecutionSchema.ts"
-import { chatItems } from "../../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { executions } from "@openbot-build/server-database/ExecutionSchema"
+import { chatItems } from "@openbot-build/server-database/Schema"
 import {
 	AppHistory,
 	CodeHistory,

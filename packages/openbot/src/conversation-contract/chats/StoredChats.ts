@@ -6,9 +6,9 @@ import {
 	chatItems,
 	chatTurns,
 	fileRefs,
-} from "../../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { fileIdsIn } from "../../apps-contract/files/Refs.ts"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import { chatHostId } from "./ChatHost.ts"
 import { databaseError } from "../../server-kernel/database/DatabaseError.ts"
 import { decode } from "./ChatEncoding.ts"

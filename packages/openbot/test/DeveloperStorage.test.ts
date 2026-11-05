@@ -12,11 +12,11 @@ import {
 	developerProofs,
 	developerTestFlows,
 	developerTests,
-} from "../src/server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Rows from "../src/apps-contract/apps/DeveloperRows.ts"
 import * as Postgres from "./PostgresTest.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 /** A new PostgreSQL server for one test, with the OpenBot database layer on it. */
 const freshDatabase = Layer.unwrap(

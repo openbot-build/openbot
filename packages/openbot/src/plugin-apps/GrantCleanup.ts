@@ -34,8 +34,11 @@ import {
 } from "effect"
 import { and, eq } from "drizzle-orm"
 import { SqlClient } from "effect/sql"
-import * as Db from "../server-database/Database.ts"
-import { appConnections, developerTests } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import {
+	appConnections,
+	developerTests,
+} from "@openbot-build/server-database/Schema"
 import type { End } from "../server-execution/execution/Program.ts"
 import * as Observation from "../server-execution/execution/Observation.ts"
 import * as Connections from "../apps-contract/apps/StoredConnections.ts"

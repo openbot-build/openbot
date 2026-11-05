@@ -16,14 +16,14 @@ import {
 import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
 import { and, count, eq, sql } from "drizzle-orm"
-import { tokens, accountStates } from "../server-database/Schema.ts"
+import { tokens, accountStates } from "@openbot-build/server-database/Schema"
 import { Tokens } from "../identity-contract/auth/Tokens.ts"
 import {
 	AuthUnavailable,
 	CredentialRejected,
 } from "../server-kernel/auth/Model.ts"
 import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const isUuid = Schema.is(Schema.String.check(Schema.isUUID()))
 

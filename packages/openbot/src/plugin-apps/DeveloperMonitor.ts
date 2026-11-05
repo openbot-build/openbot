@@ -18,9 +18,9 @@ import {
 	developerProofs,
 	developerMembers,
 	developerSubscriptions,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { SqlClient } from "effect/sql"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	Store,
 	transactionFailures,

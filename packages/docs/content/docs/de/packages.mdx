@@ -18,17 +18,18 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 
 ## Überblick
 
-| Paket           | Wofür es da ist                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------------------ |
-| `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/server).                   |
-| `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                         |
-| `client`        | Der TypeScript-Client. Siehe [Client](/de/client).                                                           |
-| `core`          | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                              |
-| `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                            |
-| `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/protocol-test).                  |
-| `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                                    |
-| `computer`      | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/developers/computers). |
-| `docs`          | Diese Doku-Seite.                                                                                            |
+| Paket             | Wofür es da ist                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| `openbot`         | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/server).                   |
+| `server-database` | Die Tabellen der Server-Datenbank, die Drizzle-Datenbank und die SQL-Migrationen. Nur der Server nutzt es.   |
+| `api`             | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                         |
+| `client`          | Der TypeScript-Client. Siehe [Client](/de/client).                                                           |
+| `core`            | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                              |
+| `protocol`        | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                            |
+| `protocol-test`   | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/protocol-test).                  |
+| `cli`             | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                                    |
+| `computer`        | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/developers/computers). |
+| `docs`            | Diese Doku-Seite.                                                                                            |
 
 Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen
 `LanguageModel`-Layer an, zum Beispiel von einem

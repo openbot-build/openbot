@@ -235,9 +235,10 @@ Ask the user first when a change needs work for old callers, clients, or stored
 data. Do not choose between a breaking change and keeping old behavior on your
 own.
 
-Never change the baseline migration. For each database schema change, add a new
-migration with `devenv shell -- drizzle-kit generate --name <change>`. Existing
-databases must be able to upgrade.
+Never change the baseline migration in `packages/server-database/migrations`.
+For each database schema change, add a new migration with
+`devenv shell -- drizzle-kit generate --config packages/server-database/drizzle.config.ts --name <change>`.
+Existing databases must be able to upgrade.
 
 When you work around a bug in an outside package or tool, explain that bug in a
 comment next to the code.

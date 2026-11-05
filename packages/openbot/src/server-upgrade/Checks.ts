@@ -4,10 +4,13 @@ import { Array as Arr, Effect, HashMap, Record as Rec, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
-import * as ExecutionTables from "../server-database/ExecutionSchema.ts"
-import * as PermitTables from "../server-database/PermitSchema.ts"
-import * as ResourceTables from "../server-database/ResourceSchema.ts"
-import { appGrantUses, developerWatches } from "../server-database/Schema.ts"
+import * as ExecutionTables from "@openbot-build/server-database/ExecutionSchema"
+import * as PermitTables from "@openbot-build/server-database/PermitSchema"
+import * as ResourceTables from "@openbot-build/server-database/ResourceSchema"
+import {
+	appGrantUses,
+	developerWatches,
+} from "@openbot-build/server-database/Schema"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import { Store } from "../server-execution/execution/Store.ts"
 import * as TestCleanup from "../plugin-apps/TestCleanup.ts"

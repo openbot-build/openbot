@@ -5,10 +5,10 @@ import { Array as Arr, Clock, Effect, Match } from "effect"
 import {
 	developerMembers,
 	developerProofs,
-} from "../../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 /** A proof in these states still gives access. */
 const usableStatus = [

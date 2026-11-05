@@ -28,13 +28,13 @@ import {
 	developerClaims,
 	developerMembers,
 	developerProofs,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { AppInspections } from "./AppInspections.ts"
 import * as Rows from "./DeveloperRows.ts"
 import type { ProofRecord } from "../apps-contract/apps/DeveloperRows.ts"
 import { DomainControl } from "../server-kernel/apps/DomainControl.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import {
 	usableStatus,

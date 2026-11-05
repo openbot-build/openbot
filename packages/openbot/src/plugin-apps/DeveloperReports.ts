@@ -13,12 +13,12 @@ import {
 	Schema,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { developerReports } from "../server-database/Schema.ts"
+import { developerReports } from "@openbot-build/server-database/Schema"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { AppInspections } from "./AppInspections.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 export class DeveloperReports extends Context.Service<
 	DeveloperReports,

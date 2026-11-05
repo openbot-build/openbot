@@ -24,7 +24,7 @@ import type {
 	Error as StorageError,
 	StoredConnection,
 } from "../apps-contract/apps/StoredConnections.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 export class Unavailable extends Schema.TaggedError<
 	Unavailable,

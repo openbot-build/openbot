@@ -1,8 +1,8 @@
 import { Execution } from "@openbot-build/domain"
 import { eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, String as Str } from "effect"
-import * as Db from "../../src/server-database/Database.ts"
-import { executions } from "../../src/server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { executions } from "@openbot-build/server-database/Schema"
 import { Store as ExecutionStore } from "../../src/server-execution/execution/Store.ts"
 
 /** Reads the saved people and Channel of work that came from a Turn. */

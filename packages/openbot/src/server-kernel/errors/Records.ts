@@ -16,8 +16,8 @@ import {
 	Schema,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import * as Db from "../../server-database/Database.ts"
-import { executionFailures } from "../../server-database/ExecutionSchema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { executionFailures } from "@openbot-build/server-database/ExecutionSchema"
 import { Secrets } from "../secrets/Secrets.ts"
 
 import { codec, snapshot } from "./Snapshot.ts"

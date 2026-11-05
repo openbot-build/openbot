@@ -39,7 +39,7 @@ import {
 } from "../src/server-kernel/apps/DomainControl.ts"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const alice = ownerKey({
 	organizationId: "alice-organization",

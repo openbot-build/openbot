@@ -44,14 +44,14 @@ import { SqlClient } from "effect/sql"
 import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Capabilities from "./Capabilities.ts"
 import { ConnectionSessions, type Opened } from "./ConnectionSessions.ts"
-import { appSecrets } from "../server-database/Schema.ts"
+import { appSecrets } from "@openbot-build/server-database/Schema"
 import { Secrets } from "../server-kernel/secrets/Secrets.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as StoredViews from "./StoredViews.ts"
 import { type View } from "./StoredViews.ts"
 import { json, jsonObject } from "../apps-contract/apps/AppResults.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 /** The error of a view that can not go on. The text and the result of its operation stay. */
 const viewUnavailable = (reason: AppViews.AppViewUnavailable["reason"]) =>

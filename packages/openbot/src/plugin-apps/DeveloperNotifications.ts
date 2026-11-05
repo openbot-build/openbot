@@ -14,11 +14,11 @@ import {
 import {
 	developerNotices,
 	developerSubscriptions,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const pageSize = 50
 export class DeveloperNotifications extends Context.Service<

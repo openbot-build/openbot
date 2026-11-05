@@ -24,13 +24,13 @@ import {
 import { SqlClient } from "effect/sql"
 import { eq } from "drizzle-orm"
 import * as Database from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	appConnections,
 	appRecords,
 	appSecrets,
-} from "../src/server-database/Schema.ts"
-import { executions } from "../src/server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/Schema"
+import { executions } from "@openbot-build/server-database/ExecutionSchema"
 import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
 import * as Records from "../src/server-kernel/errors/Records.ts"
 import * as Observation from "../src/server-execution/execution/Observation.ts"

@@ -3,14 +3,14 @@ import { type Caller, Execution, ToolExecution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Order, Schema } from "effect"
 import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Imported from "../../server-execution/imported/Executions.ts"
 import { ImportedRecords } from "../../server-execution/imported/ImportedRecords.ts"
 import * as Legacy from "../../server-execution/imported/LegacyChats.ts"
 import {
 	executions,
 	toolExecutions,
-} from "../../server-database/ExecutionSchema.ts"
+} from "@openbot-build/server-database/ExecutionSchema"
 import {
 	Store,
 	transactionFailures,

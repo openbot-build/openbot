@@ -47,8 +47,8 @@ import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { triggerResource } from "../identity-contract/authorization/Resources.ts"
 import { toWhere } from "../identity-contract/authorization/Sql.ts"
-import { triggers } from "../server-database/Schema.ts"
-import * as Db from "../server-database/Database.ts"
+import { triggers } from "@openbot-build/server-database/Schema"
+import * as Db from "@openbot-build/server-database/Database"
 
 type Trigger = Domain.Trigger
 type Row = typeof triggers.$inferSelect

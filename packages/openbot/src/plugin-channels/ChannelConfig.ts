@@ -23,8 +23,8 @@ import { Base64Url } from "effect/encoding"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as Db from "../server-database/Database.ts"
-import { channels as rows } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { channels as rows } from "@openbot-build/server-database/Schema"
 import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
 import {
 	organizationKey,

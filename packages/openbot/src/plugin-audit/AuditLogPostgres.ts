@@ -4,12 +4,12 @@ import { Caller } from "@openbot-build/domain"
 import type { PgClient } from "@effect/sql-pg"
 import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { and, desc, eq, lt } from "drizzle-orm"
-import { auditLogs } from "../server-database/Schema.ts"
+import { auditLogs } from "@openbot-build/server-database/Schema"
 import {
 	AuditLog,
 	AuditUnavailable,
 } from "../identity-contract/audit/AuditLog.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const ActorJson = Schema.fromJsonString(Caller)
 const DetailsJson = Schema.fromJsonString(Schema.JsonObject)

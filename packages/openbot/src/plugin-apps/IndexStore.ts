@@ -3,9 +3,12 @@ import { AppIndex } from "@openbot-build/domain"
 import { Index } from "@openbot-build/protocol"
 import { Effect, HashMap, Layer, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
-import { appIndexEntries, appIndexJobs } from "../server-database/Schema.ts"
+import {
+	appIndexEntries,
+	appIndexJobs,
+} from "@openbot-build/server-database/Schema"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 const EntryJson = Schema.fromJsonString(Index.Entry)
 /** The JSON text of the last check of a job, in `app_index_jobs.check` and `app_index_results.check`. */

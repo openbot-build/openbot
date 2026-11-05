@@ -26,13 +26,13 @@ import {
 	Schema,
 } from "effect"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import {
 	computerAccess,
 	computerPairings,
 	computers,
 	computerUsage,
-} from "../server-database/Schema.ts"
+} from "@openbot-build/server-database/Schema"
 import {
 	type Access as ExecutionAccess,
 	type DecisionCommand,

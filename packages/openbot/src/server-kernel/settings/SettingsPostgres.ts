@@ -17,7 +17,7 @@ import {
 import { and, eq, sql } from "drizzle-orm"
 import * as Background from "../execution/Background.ts"
 import * as Failures from "../errors/Failures.ts"
-import { settings } from "../../server-database/Schema.ts"
+import { settings } from "@openbot-build/server-database/Schema"
 import {
 	MemberDocument,
 	memberDefaults,
@@ -34,7 +34,7 @@ import {
 	type Snapshot,
 } from "./Documents.ts"
 import { Settings } from "./Settings.ts"
-import * as Db from "../../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 /** Every instance listens on this channel. The payload is the key of the scope that changed. */
 export const channel = "openbot_settings"

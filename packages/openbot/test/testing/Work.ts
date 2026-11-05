@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import { Effect } from "effect"
-import * as Db from "../../src/server-database/Database.ts"
-import { botRecords } from "../../src/server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { botRecords } from "@openbot-build/server-database/Schema"
 import type * as BrowserHost from "../BrowserHost.ts"
 
 /** Reads saved reminder bodies so a test can check that their notes are sealed. */

@@ -245,8 +245,9 @@ Frage zuerst den Nutzer, wenn eine Änderung Arbeit für alte Aufrufer, Clients
 oder gespeicherte Daten braucht. Wähle nicht selbst zwischen einem Bruch und dem
 Behalten des alten Verhaltens.
 
-Ändere nie die Basismigration. Erstelle für jede Änderung am Datenbankschema
-eine neue Migration mit `devenv shell -- drizzle-kit generate --name <change>`.
+Ändere nie die Basismigration in `packages/server-database/migrations`. Erstelle
+für jede Änderung am Datenbankschema eine neue Migration mit
+`devenv shell -- drizzle-kit generate --config packages/server-database/drizzle.config.ts --name <change>`.
 Bestehende Datenbanken müssen aktualisiert werden können.
 
 Erkläre eine Umgehung für einen Fehler in einem externen Paket oder Werkzeug mit

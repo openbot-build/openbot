@@ -35,7 +35,7 @@ import { ConnectionSessions } from "./ConnectionSessions.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import { Work } from "../conversation-contract/capabilities/Work.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import * as Db from "../server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as Report from "../server-kernel/errors/Report.ts"
 
 export type Tools = Record<

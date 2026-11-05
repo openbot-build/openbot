@@ -1,10 +1,8 @@
+import { migrationsFolder } from "@openbot-build/server-database/MigrationsFolder"
 import { Array as Arr, Effect, FileSystem, Path, type Predicate } from "effect"
 
-/** The folder with every migration of OpenBot. */
-export const folder = Effect.gen(function* () {
-	const path = yield* Path.Path
-	return yield* path.fromFileUrl(new URL("../migrations", import.meta.url))
-})
+/** The folder with every migration of OpenBot. It comes from the database package. */
+export const folder = Effect.succeed(migrationsFolder)
 
 /** Copies the migrations with the names that `keep` takes into a new folder. The folder goes away at the end of the test. */
 export const migrationsWhere = Effect.fn("MigrationTest.migrationsWhere")(

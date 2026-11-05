@@ -18,8 +18,11 @@ import * as Failures from "../server-kernel/errors/Failures.ts"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { computerProviderResource } from "../identity-contract/authorization/Resources.ts"
 import { toWhere } from "../identity-contract/authorization/Sql.ts"
-import * as Db from "../server-database/Database.ts"
-import { computerProviders, computers } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import {
+	computerProviders,
+	computers,
+} from "@openbot-build/server-database/Schema"
 import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
 
 type ComputerProvider = ComputerData.ComputerProvider

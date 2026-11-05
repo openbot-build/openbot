@@ -7,7 +7,7 @@ import { Array as Arr, Effect, Redacted, Schema } from "effect"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 
 /** A later migration gives every organization the default plan approval. */
 const planApproval = {

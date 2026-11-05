@@ -11,8 +11,11 @@ import { and, eq } from "drizzle-orm"
 import { Effect, Option } from "effect"
 import * as Check from "../identity-contract/authorization/Check.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as Db from "../server-database/Database.ts"
-import { computerAccess, computers } from "../server-database/Schema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import {
+	computerAccess,
+	computers,
+} from "@openbot-build/server-database/Schema"
 
 /** Queries and rights do not depend on a driver or a physical connection. */
 export const make = Effect.gen(function* () {

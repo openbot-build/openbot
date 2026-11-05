@@ -17,8 +17,8 @@ import {
 	noUsage,
 } from "../conversation-contract/bots/Delegations.ts"
 import { Requests } from "../conversation-contract/capabilities/Requests.ts"
-import * as Db from "../server-database/Database.ts"
-import { executions } from "../server-database/ExecutionSchema.ts"
+import * as Db from "@openbot-build/server-database/Database"
+import { executions } from "@openbot-build/server-database/ExecutionSchema"
 import * as Admission from "../server-execution/execution/Admission.ts"
 import {
 	Store,

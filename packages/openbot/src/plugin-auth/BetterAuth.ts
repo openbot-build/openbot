@@ -42,7 +42,7 @@ import {
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { HttpServerResponse } from "effect/http"
-import * as tables from "../server-database/AuthSchema.ts"
+import * as tables from "@openbot-build/server-database/AuthSchema"
 import { Auth } from "../identity-contract/auth/Auth.ts"
 import { Organization } from "../identity-contract/organization/Organization.ts"
 import { PlatformAdmins } from "../identity-contract/platform/PlatformAdmins.ts"

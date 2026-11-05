@@ -1,0 +1,45 @@
+{
+	"name": "@openbot-build/server-database",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The database tables, the Drizzle database, and the SQL migrations of the OpenBot server",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"migrations"
+	],
+	"exports": {
+		"./AuthSchema": "./dist/AuthSchema.js",
+		"./Database": "./dist/Database.js",
+		"./ExecutionSchema": "./dist/ExecutionSchema.js",
+		"./MigrationsFolder": "./dist/folders/MigrationsFolder.js",
+		"./PermitSchema": "./dist/PermitSchema.js",
+		"./ResourceSchema": "./dist/ResourceSchema.js",
+		"./Schema": "./dist/Schema.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@openbot-build/domain": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/server-database"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

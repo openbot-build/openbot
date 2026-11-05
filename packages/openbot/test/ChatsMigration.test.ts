@@ -24,7 +24,7 @@ import {
 } from "effect"
 import { Prompt } from "effect/ai"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Db from "../src/server-database/Database.ts"
+import * as Db from "@openbot-build/server-database/Database"
 import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
 import * as Todos from "../src/tools-contract/plugins/work/Todos.ts"
