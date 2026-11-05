@@ -83,13 +83,28 @@
 			"path": "./packages/plugin-work"
 		},
 		{
+			"path": "./packages/plugin-imported"
+		},
+		{
 			"path": "./packages/plugin-chats"
+		},
+		{
+			"path": "./packages/plugin-channels"
+		},
+		{
+			"path": "./packages/plugin-apps"
 		},
 		{
 			"path": "./packages/plugin-code"
 		},
 		{
 			"path": "./packages/plugin-vaults"
+		},
+		{
+			"path": "./packages/plugin-computers"
+		},
+		{
+			"path": "./packages/plugin-triggers"
 		},
 		{
 			"path": "./packages/plugin-billing"

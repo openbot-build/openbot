@@ -21,19 +21,19 @@ import {
 import { WorkflowEngine } from "effect/workflow"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
-import * as Activity from "../src/plugin-computers/Activity.ts"
+import * as Activity from "@openbot-build/plugin-computers/Activity"
 import {
 	Machine,
 	Provider,
 	ComputerCallFailed,
-} from "../src/plugin-computers/Computer.ts"
-import { ComputerProviders } from "../src/plugin-computers/ComputerProviders.ts"
-import { Drivers } from "../src/plugin-computers/Drivers.ts"
-import * as Lifecycle from "../src/plugin-computers/Lifecycle.ts"
-import * as LifecycleWorkflow from "../src/plugin-computers/LifecycleWorkflow.ts"
-import * as Maintenance from "../src/plugin-computers/Maintenance.ts"
-import * as MaintenanceWorkflow from "../src/plugin-computers/MaintenanceWorkflow.ts"
-import { Connectors } from "../src/plugin-computers/connector/Connectors.ts"
+} from "@openbot-build/plugin-computers/Computer"
+import { ComputerProviders } from "@openbot-build/plugin-computers/ComputerProviders"
+import { Drivers } from "@openbot-build/plugin-computers/Drivers"
+import * as Lifecycle from "@openbot-build/plugin-computers/Lifecycle"
+import * as LifecycleWorkflow from "@openbot-build/plugin-computers/LifecycleWorkflow"
+import * as Maintenance from "@openbot-build/plugin-computers/Maintenance"
+import * as MaintenanceWorkflow from "@openbot-build/plugin-computers/MaintenanceWorkflow"
+import { Connectors } from "@openbot-build/plugin-computers/connector/Connectors"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Database from "../src/app/DatabasePostgres.ts"
 import {

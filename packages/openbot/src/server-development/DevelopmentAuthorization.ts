@@ -20,7 +20,7 @@ import {
 	HttpServerResponse,
 	UrlParams,
 } from "effect/http"
-import * as ClientMetadata from "../plugin-apps/ClientMetadata.ts"
+import * as ClientMetadata from "@openbot-build/plugin-apps/ClientMetadata"
 import * as Platform from "@openbot-build/server-kernel/settings/Platform"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { Scenarios, type Mode } from "./DevelopmentScenarios.ts"

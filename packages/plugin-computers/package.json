@@ -1,0 +1,68 @@
+{
+	"name": "@openbot-build/plugin-computers",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The computers plugin of the OpenBot server: Computers, their pairings and sessions, and the Computer tools of Bots",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./Activity": "./dist/Activity.js",
+		"./Computer": "./dist/Computer.js",
+		"./ComputerProviders": "./dist/ComputerProviders.js",
+		"./ComputerTools": "./dist/ComputerTools.js",
+		"./Computers": "./dist/Computers.js",
+		"./Drivers": "./dist/Drivers.js",
+		"./HttpMounts": "./dist/HttpMounts.js",
+		"./Lifecycle": "./dist/Lifecycle.js",
+		"./LifecycleWorkflow": "./dist/LifecycleWorkflow.js",
+		"./Maintenance": "./dist/Maintenance.js",
+		"./MaintenanceWorkflow": "./dist/MaintenanceWorkflow.js",
+		"./Pairings": "./dist/Pairings.js",
+		"./Process": "./dist/Process.js",
+		"./Sessions": "./dist/Sessions.js",
+		"./connector/Connectors": "./dist/connector/Connectors.js",
+		"./daytona/DaytonaProvider": "./dist/daytona/DaytonaProvider.js",
+		"./e2b/Desktop": "./dist/e2b/Desktop.js",
+		"./e2b/E2bProvider": "./dist/e2b/E2bProvider.js",
+		"./e2b/Envd": "./dist/e2b/Envd.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@graftland/graft": "0.3.3",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/model-providers": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/plugin-computers"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

@@ -7,11 +7,11 @@ import {
 	Machine,
 	type Process,
 	Provider,
-} from "../../src/plugin-computers/Computer.ts"
-import * as ProcessSink from "../../src/plugin-computers/Process.ts"
-import { Drivers } from "../../src/plugin-computers/Drivers.ts"
-import { Computers } from "../../src/plugin-computers/Computers.ts"
-import { ComputerProviders } from "../../src/plugin-computers/ComputerProviders.ts"
+} from "@openbot-build/plugin-computers/Computer"
+import * as ProcessSink from "@openbot-build/plugin-computers/Process"
+import { Drivers } from "@openbot-build/plugin-computers/Drivers"
+import { Computers } from "@openbot-build/plugin-computers/Computers"
+import { ComputerProviders } from "@openbot-build/plugin-computers/ComputerProviders"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	computerAccess,

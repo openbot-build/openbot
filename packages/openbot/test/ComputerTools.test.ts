@@ -19,11 +19,11 @@ import {
 	Gate,
 } from "@openbot-build/conversation-contract/capabilities/Gate"
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
-import type { Machine } from "../src/plugin-computers/Computer.ts"
-import { ComputerProviders } from "../src/plugin-computers/ComputerProviders.ts"
-import { Computers } from "../src/plugin-computers/Computers.ts"
-import { Sessions } from "../src/plugin-computers/Sessions.ts"
-import * as ComputerTools from "../src/plugin-computers/ComputerTools.ts"
+import type { Machine } from "@openbot-build/plugin-computers/Computer"
+import { ComputerProviders } from "@openbot-build/plugin-computers/ComputerProviders"
+import { Computers } from "@openbot-build/plugin-computers/Computers"
+import { Sessions } from "@openbot-build/plugin-computers/Sessions"
+import * as ComputerTools from "@openbot-build/plugin-computers/ComputerTools"
 import { bot } from "./BotFixture.ts"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 

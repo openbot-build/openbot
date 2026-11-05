@@ -17,7 +17,7 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 
 | 包                      | 用途                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `openbot`               | 服务器和插件宿主，以及没有自己包的插件。它会再次导出模型提供方。请看[从代码中运行](/zh-cn/server)。              |
+| `openbot`               | 服务器和插件宿主，以及 Turn 限制插件。它会再次导出模型提供方。请看[从代码中运行](/zh-cn/server)。                |
 | `server-database`       | 服务器数据库的表、Drizzle 数据库和 SQL 迁移。只有服务器使用它。                                                  |
 | `server-kernel`         | 所有插件共用的服务器部分：错误、密钥、设置、配置、网络规则和 HTTP 宿主。只有服务器使用它。                       |
 | `identity-contract`     | 登录、访问、角色、组织、邮件、SSO 和审计日志共用的服务标签与类型。只有服务器使用它。                             |
@@ -42,9 +42,14 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 | `plugin-bots`           | `bots` 插件：Bots、它们的记忆，以及它们之间的委托。`openbot` 会以 `BotMemory` 的名字再次导出它的记忆帮助函数。   |
 | `plugin-capabilities`   | `capabilities` 插件：Grants、Rules、请求，以及对它们的检查。只有服务器使用它。                                   |
 | `plugin-work`           | `work` 插件：提醒，以及 Bots 的工作工具。只有服务器使用它。                                                      |
+| `plugin-imported`       | `imported` 插件：在另一个程序中开始的执行。只有服务器使用它。                                                    |
 | `plugin-chats`          | `chats` 插件：Chats、Turns、工具和 Live 连接。只有服务器使用它。                                                 |
+| `plugin-channels`       | `channels` 插件：Channels、它们的消息，以及 Bots 的 Channel 工具。只有服务器使用它。                             |
+| `plugin-apps`           | `apps` 插件：App 连接、App Index，以及 Bots 的 App 工具。`openbot` 会再次导出它的 `AppHost` 和 `AppTools`。      |
 | `plugin-code`           | `code` 插件：Bots 在沙箱中运行代码。只有服务器使用它。                                                           |
 | `plugin-vaults`         | `vaults` 插件：Vaults，以及它们读取的机密提供方。只有服务器使用它。                                              |
+| `plugin-computers`      | `computers` 插件：Computers、它们的配对和会话，以及 Bots 的 Computer 工具。只有服务器使用它。                    |
+| `plugin-triggers`       | `triggers` 插件：启动 Turns 的触发器，以及它们的 webhook。只有服务器使用它。                                     |
 | `plugin-billing`        | `billing` 插件：组织的钱包、用量和预算。只有服务器使用它。                                                       |
 | `plugin-settings`       | `settings` 插件：每个成员的设置。只有服务器使用它。                                                              |
 | `api`                   | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                                                          |
@@ -247,9 +252,8 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 
 ## openbot 中的插件
 
-`@openbot-build/openbot`
-包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用它的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。你也可以在自己的
-`ChatRuntime` 中使用 Turn 限制插件。
+服务器在每个 Turn 中都使用 OpenBot 的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。`@openbot-build/openbot`
+包含 Turn 限制插件。你也可以在自己的 `ChatRuntime` 中使用它们。
 
 `Auth.handle(request)` 返回包含响应的 Effect。`Chats.wait` 的超时接受
 `Duration.Input`，例如 `"30 seconds"`。HTTP 路由仍通过 `timeoutMs` 接受毫秒数。

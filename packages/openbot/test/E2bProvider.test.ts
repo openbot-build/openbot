@@ -1,5 +1,5 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import { ComputerCallFailed } from "../src/plugin-computers/Computer.ts"
+import { ComputerCallFailed } from "@openbot-build/plugin-computers/Computer"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
@@ -21,10 +21,10 @@ import type {
 	Machine,
 	Process,
 	Provider,
-} from "../src/plugin-computers/Computer.ts"
-import * as Desktop from "../src/plugin-computers/e2b/Desktop.ts"
-import * as E2bProvider from "../src/plugin-computers/e2b/E2bProvider.ts"
-import { envelope } from "../src/plugin-computers/e2b/Envd.ts"
+} from "@openbot-build/plugin-computers/Computer"
+import * as Desktop from "@openbot-build/plugin-computers/e2b/Desktop"
+import * as E2bProvider from "@openbot-build/plugin-computers/e2b/E2bProvider"
+import { envelope } from "@openbot-build/plugin-computers/e2b/Envd"
 
 interface Seen {
 	readonly method: string

@@ -12,7 +12,7 @@ import { AuthApi, DeveloperApi as Api } from "@openbot-build/api"
 
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
-import { scopeKey } from "../plugin-apps/DeveloperAccess.ts"
+import { scopeKey } from "@openbot-build/plugin-apps/DeveloperAccess"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import * as Platform from "@openbot-build/server-kernel/settings/Platform"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"

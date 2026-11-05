@@ -35,14 +35,14 @@ import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Records from "@openbot-build/server-kernel/errors/Records"
 import * as Observation from "@openbot-build/server-execution/execution/Observation"
 import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as Commands from "../src/plugin-apps/ConnectionCommands.ts"
+import * as Commands from "@openbot-build/plugin-apps/ConnectionCommands"
 import * as Stored from "@openbot-build/apps-contract/apps/StoredConnections"
-import { Governance } from "../src/plugin-apps/Governance.ts"
+import { Governance } from "@openbot-build/plugin-apps/Governance"
 import {
 	GrantCleanup,
 	layer as cleanupLayer,
-} from "../src/plugin-apps/GrantCleanup.ts"
-import * as ManualConnection from "../src/plugin-apps/ManualConnection.ts"
+} from "@openbot-build/plugin-apps/GrantCleanup"
+import * as ManualConnection from "@openbot-build/plugin-apps/ManualConnection"
 import * as Postgres from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(Database.migrate).pipe(

@@ -1,5 +1,5 @@
 import { Execution } from "@openbot-build/domain"
-import * as TestCleanup from "../plugin-apps/TestCleanup.ts"
+import * as TestCleanup from "@openbot-build/plugin-apps/TestCleanup"
 import * as Store from "@openbot-build/server-execution/execution/Store"
 import { Array as Arr, Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"

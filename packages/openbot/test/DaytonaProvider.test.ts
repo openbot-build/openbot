@@ -1,6 +1,6 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
-import { ComputerCallFailed } from "../src/plugin-computers/Computer.ts"
+import { ComputerCallFailed } from "@openbot-build/plugin-computers/Computer"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import {
@@ -25,8 +25,8 @@ import {
 	type HttpClientRequest,
 	HttpServerResponse,
 } from "effect/http"
-import type { Process } from "../src/plugin-computers/Computer.ts"
-import * as DaytonaProvider from "../src/plugin-computers/daytona/DaytonaProvider.ts"
+import type { Process } from "@openbot-build/plugin-computers/Computer"
+import * as DaytonaProvider from "@openbot-build/plugin-computers/daytona/DaytonaProvider"
 
 interface Seen {
 	readonly method: string

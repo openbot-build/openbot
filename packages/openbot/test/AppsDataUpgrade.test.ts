@@ -2,7 +2,7 @@ import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, it } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
-import * as TestCleanup from "../src/plugin-apps/TestCleanup.ts"
+import * as TestCleanup from "@openbot-build/plugin-apps/TestCleanup"
 import {
 	Array as Arr,
 	Effect,

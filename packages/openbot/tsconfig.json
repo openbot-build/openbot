@@ -34,6 +34,9 @@
 			"path": "../plugin-access"
 		},
 		{
+			"path": "../plugin-apps"
+		},
+		{
 			"path": "../plugin-audit"
 		},
 		{
@@ -52,13 +55,22 @@
 			"path": "../plugin-capabilities"
 		},
 		{
+			"path": "../plugin-channels"
+		},
+		{
 			"path": "../plugin-chats"
 		},
 		{
 			"path": "../plugin-code"
 		},
 		{
+			"path": "../plugin-computers"
+		},
+		{
 			"path": "../plugin-files"
+		},
+		{
+			"path": "../plugin-imported"
 		},
 		{
 			"path": "../plugin-mail"
@@ -77,6 +89,9 @@
 		},
 		{
 			"path": "../plugin-sso"
+		},
+		{
+			"path": "../plugin-triggers"
 		},
 		{
 			"path": "../plugin-vaults"

@@ -11,9 +11,9 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import * as DeveloperWatches from "../src/plugin-apps/DeveloperWatches.ts"
-import { Governance } from "../src/plugin-apps/Governance.ts"
-import * as IndexWork from "../src/plugin-apps/IndexWork.ts"
+import * as DeveloperWatches from "@openbot-build/plugin-apps/DeveloperWatches"
+import { Governance } from "@openbot-build/plugin-apps/Governance"
+import * as IndexWork from "@openbot-build/plugin-apps/IndexWork"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Catalogs from "../src/server-upgrade/Catalogs.ts"

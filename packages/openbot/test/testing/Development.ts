@@ -8,7 +8,7 @@ import {
 } from "../../src/server-development/DevelopmentScenarios.ts"
 import { Business } from "../../src/server-development/DevelopmentBusiness.ts"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import { PublicIndex } from "../../src/plugin-apps/Index.ts"
+import { PublicIndex } from "@openbot-build/plugin-apps/AppIndex"
 
 /** Set a failure of the simulated App for the next request. */
 export const setScenario = (mode: Mode) =>

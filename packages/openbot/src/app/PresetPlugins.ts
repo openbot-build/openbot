@@ -5,21 +5,26 @@
 import type { Plugin as GraftPlugin } from "@graftland/graft"
 import { type Entry, Loader, Tree } from "@graftland/loader"
 import AccessPlugin from "@openbot-build/plugin-access"
+import AppsPlugin from "@openbot-build/plugin-apps"
 import AuditPlugin from "@openbot-build/plugin-audit"
 import AuthPlugin from "@openbot-build/plugin-auth"
 import AuthorizationPlugin from "@openbot-build/plugin-authorization"
 import BillingPlugin from "@openbot-build/plugin-billing"
 import BotsPlugin from "@openbot-build/plugin-bots"
 import CapabilitiesPlugin from "@openbot-build/plugin-capabilities"
+import ChannelsPlugin from "@openbot-build/plugin-channels"
 import ChatsPlugin from "@openbot-build/plugin-chats"
 import CodePlugin from "@openbot-build/plugin-code"
+import ComputersPlugin from "@openbot-build/plugin-computers"
 import FilesPlugin from "@openbot-build/plugin-files"
+import ImportedPlugin from "@openbot-build/plugin-imported"
 import MailPlugin from "@openbot-build/plugin-mail"
 import ModelsPlugin from "@openbot-build/plugin-models"
 import OrganizationPlugin from "@openbot-build/plugin-organization"
 import PlatformPlugin from "@openbot-build/plugin-platform"
 import SettingsPlugin from "@openbot-build/plugin-settings"
 import SsoPlugin from "@openbot-build/plugin-sso"
+import TriggersPlugin from "@openbot-build/plugin-triggers"
 import VaultsPlugin from "@openbot-build/plugin-vaults"
 import WorkPlugin from "@openbot-build/plugin-work"
 import {
@@ -30,11 +35,6 @@ import {
 	Schema,
 	Stream,
 } from "effect"
-import * as AppsPlugin from "../plugin-apps/Plugin.ts"
-import * as ChannelsPlugin from "../plugin-channels/Plugin.ts"
-import * as ComputersPlugin from "../plugin-computers/Plugin.ts"
-import * as ImportedPlugin from "../plugin-imported/Plugin.ts"
-import * as TriggersPlugin from "../plugin-triggers/Plugin.ts"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as PluginsFile from "./PluginsFile.ts"
 import { type Id, ids, nameOf, required } from "./Preset.ts"
@@ -54,14 +54,14 @@ export const byId = {
 	bots: BotsPlugin,
 	capabilities: CapabilitiesPlugin,
 	work: WorkPlugin,
-	imported: ImportedPlugin.default,
+	imported: ImportedPlugin,
 	chats: ChatsPlugin,
-	channels: ChannelsPlugin.default,
-	apps: AppsPlugin.default,
+	channels: ChannelsPlugin,
+	apps: AppsPlugin,
 	code: CodePlugin,
 	vaults: VaultsPlugin,
-	computers: ComputersPlugin.default,
-	triggers: TriggersPlugin.default,
+	computers: ComputersPlugin,
+	triggers: TriggersPlugin,
 	billing: BillingPlugin,
 	settings: SettingsPlugin,
 } as const satisfies Record<Id, GraftPlugin.Plugin>

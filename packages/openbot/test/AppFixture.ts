@@ -21,7 +21,7 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { Fixture } from "@openbot-build/protocol/testing"
-import * as Probe from "../src/plugin-apps/Probe.ts"
+import * as Probe from "@openbot-build/plugin-apps/Probe"
 import type { PublicationMode } from "../src/server-development/DevelopmentApps.ts"
 
 const RpcRequest = Schema.fromJsonString(

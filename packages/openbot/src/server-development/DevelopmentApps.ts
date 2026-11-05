@@ -12,7 +12,7 @@ import {
 	pipe,
 } from "effect"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
-import * as Probe from "../plugin-apps/Probe.ts"
+import * as Probe from "@openbot-build/plugin-apps/Probe"
 import { Authorization } from "./DevelopmentAuthorization.ts"
 import { Mode, Scenarios } from "./DevelopmentScenarios.ts"
 import { Business, readTool, writeTool } from "./DevelopmentBusiness.ts"

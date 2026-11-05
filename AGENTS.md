@@ -16,8 +16,9 @@
 - Build the docs site with Astro and Starlight only. Do not use Next.js or
   another web framework.
 - Add a new feature to the HTTP contract in `@openbot-build/api` first. Then
-  write the handler in `@openbot-build/openbot`. Make sure it works with an API
-  key and with the same-origin session cookie.
+  write the handler in the plugin package of the feature,
+  `@openbot-build/plugin-<id>`. Make sure it works with an API key and with the
+  same-origin session cookie.
 - OpenBot provides model usage records, prices, credits, quotas, budgets, and
   rate limits. The server checks and applies these rules through the public API.
 - Describe OpenBot on its own. Keep docs and project rules about its features
@@ -67,8 +68,9 @@
 
 - Use Effect immutable data structures first. Use mutable JavaScript structures
   only when you really need them.
-- Put code in the folder of the feature it belongs to. Packages use each other
-  only through their public entry points.
+- Put code in the package of the feature it belongs to, such as
+  `packages/plugin-chats` for Chats. Packages use each other only through their
+  public entry points.
 - Only the plugin kit (`server-plugin`), the plugins, and the host import
   `@graftland/*`. A plugin package does not import another plugin package. A
   plugin does not publish a service of the kernel.

@@ -60,7 +60,7 @@ const rules = {
 	"virtual-boundary":
 		"A server folder or server package may import only lower folders and packages. The database package imports no other OpenBot server code. Put shared types and service tags in a contract package.",
 	"graft-boundary":
-		"Only the plugin kit (the `server-plugin` package), the `src/index.ts` file of a plugin package, the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
+		"Only the plugin kit (the `server-plugin` package), the `src/index.ts` file of a plugin package, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
 	"plugin-boundary":
 		"A plugin must not import another plugin, in its code or in its tests. Put shared service tags and types in a contract package. The host connects the plugins through graft.",
 	"plugin-entry":
@@ -442,9 +442,14 @@ const serverPackages = [
 	"plugin-bots",
 	"plugin-capabilities",
 	"plugin-work",
+	"plugin-imported",
 	"plugin-chats",
+	"plugin-channels",
+	"plugin-apps",
 	"plugin-code",
 	"plugin-vaults",
+	"plugin-computers",
+	"plugin-triggers",
 	"plugin-billing",
 	"plugin-settings",
 ] as const
@@ -751,7 +756,6 @@ const boundaries = (
 const graftPlaces = [
 	/^packages\/server-plugin\/(?:src|test)\//,
 	/^packages\/plugin-[^/]+\/src\/index\.ts$/,
-	/^packages\/openbot\/src\/plugin-[^/]+\/Plugin\.ts$/,
 	/^packages\/openbot\/src\/app\//,
 	/^packages\/openbot\/src\/server-development\//,
 	/^packages\/openbot\/test\//,

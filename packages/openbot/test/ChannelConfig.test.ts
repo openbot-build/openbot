@@ -4,7 +4,7 @@ import { HttpClient } from "effect/http"
 import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { assert, layer } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref } from "effect"
-import * as ChannelRegistry from "../src/plugin-channels/ChannelRegistry.ts"
+import * as ChannelRegistry from "@openbot-build/plugin-channels/ChannelRegistry"
 import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import * as BrowserHost from "./BrowserHost.ts"
 

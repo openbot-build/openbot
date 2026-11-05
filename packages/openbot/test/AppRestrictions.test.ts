@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { Settings as Api } from "@openbot-build/api"
 import { AppIndex } from "@openbot-build/domain"
 import { Effect, HashMap, Layer, Option, Ref } from "effect"
-import * as Governance from "../src/plugin-apps/Governance.ts"
+import * as Governance from "@openbot-build/plugin-apps/Governance"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 

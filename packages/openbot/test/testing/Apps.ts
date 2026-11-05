@@ -14,14 +14,14 @@ import {
 	Ref,
 	Schema,
 } from "effect"
-import { Connections } from "../../src/plugin-apps/Connections.ts"
-import { PublicIndex } from "../../src/plugin-apps/Index.ts"
+import { Connections } from "@openbot-build/plugin-apps/Connections"
+import { PublicIndex } from "@openbot-build/plugin-apps/AppIndex"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
 import { appSecrets, chatItems } from "@openbot-build/server-database/Schema"
-import * as StoredViews from "../../src/plugin-apps/StoredViews.ts"
+import * as StoredViews from "@openbot-build/plugin-apps/StoredViews"
 import { SqlClient } from "effect/sql"
-import * as Assistance from "../../src/plugin-apps/Assistance.ts"
+import * as Assistance from "@openbot-build/plugin-apps/Assistance"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"

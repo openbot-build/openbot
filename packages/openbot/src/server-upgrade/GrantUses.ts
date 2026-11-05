@@ -3,7 +3,7 @@ import { Array as Arr, Clock, Effect, Option, Schema } from "effect"
 import { SqlClient, type SqlError } from "effect/sql"
 import * as Grants from "@openbot-build/apps-contract/apps/GrantUses"
 import * as Connections from "@openbot-build/apps-contract/apps/StoredConnections"
-import { privateStateCodec } from "../plugin-apps/DeveloperTestStores.ts"
+import { privateStateCodec } from "@openbot-build/plugin-apps/DeveloperTestStores"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Progress from "@openbot-build/server-kernel/imported/Progress"
 import {

@@ -72,46 +72,51 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 
 ## Packages
 
-| Package                                | What it is                                        |
-| -------------------------------------- | ------------------------------------------------- |
-| `@openbot-build/openbot`               | The server, its plugin host, and some plugins     |
-| `@openbot-build/server-database`       | The server database tables and migrations         |
-| `@openbot-build/server-kernel`         | The shared parts of the server                    |
-| `@openbot-build/identity-contract`     | Shared tags and types for sign-in and access      |
-| `@openbot-build/server-billing`        | Billing and limits of the server                  |
-| `@openbot-build/server-execution`      | The execution engine of the server                |
-| `@openbot-build/tools-contract`        | Shared tags and types for tools                   |
-| `@openbot-build/models-contract`       | Shared tags and types for models                  |
-| `@openbot-build/apps-contract`         | Shared tags and types for Apps, files, and vaults |
-| `@openbot-build/conversation-contract` | Shared tags and types for Bots and Chats          |
-| `@openbot-build/model-providers`       | The model providers of the server                 |
-| `@openbot-build/server-plugin`         | The plugin kit of the server                      |
-| `@openbot-build/plugin-audit`          | The `audit` plugin of the server                  |
-| `@openbot-build/plugin-mail`           | The `mail` plugin of the server                   |
-| `@openbot-build/plugin-platform`       | The `platform` plugin of the server               |
-| `@openbot-build/plugin-organization`   | The `organization` plugin of the server           |
-| `@openbot-build/plugin-access`         | The `access` plugin of the server                 |
-| `@openbot-build/plugin-sso`            | The `sso` plugin of the server                    |
-| `@openbot-build/plugin-auth`           | The `auth` plugin of the server                   |
-| `@openbot-build/plugin-authorization`  | The `authorization` plugin of the server          |
-| `@openbot-build/plugin-models`         | The `models` plugin of the server                 |
-| `@openbot-build/plugin-files`          | The `files` plugin of the server                  |
-| `@openbot-build/plugin-bots`           | The `bots` plugin of the server                   |
-| `@openbot-build/plugin-capabilities`   | The `capabilities` plugin of the server           |
-| `@openbot-build/plugin-work`           | The `work` plugin of the server                   |
-| `@openbot-build/plugin-chats`          | The `chats` plugin of the server                  |
-| `@openbot-build/plugin-code`           | The `code` plugin of the server                   |
-| `@openbot-build/plugin-vaults`         | The `vaults` plugin of the server                 |
-| `@openbot-build/plugin-billing`        | The `billing` plugin of the server                |
-| `@openbot-build/plugin-settings`       | The `settings` plugin of the server               |
-| `@openbot-build/api`                   | The typed HTTP contract                           |
-| `@openbot-build/client`                | The TypeScript client                             |
-| `@openbot-build/core`                  | The Bot core                                      |
-| `@openbot-build/protocol`              | The OpenBot App Protocol library                  |
-| `@openbot-build/protocol-test`         | A public test service for the App Protocol        |
-| `@openbot-build/cli`                   | The `openbot` command                             |
-| `@openbot-build/computer`              | Pairs and connects your own machine as a Computer |
-| `@openbot-build/docs`                  | The docs site                                     |
+| Package                                | What it is                                              |
+| -------------------------------------- | ------------------------------------------------------- |
+| `@openbot-build/openbot`               | The server, its plugin host, and the Turn limit plugins |
+| `@openbot-build/server-database`       | The server database tables and migrations               |
+| `@openbot-build/server-kernel`         | The shared parts of the server                          |
+| `@openbot-build/identity-contract`     | Shared tags and types for sign-in and access            |
+| `@openbot-build/server-billing`        | Billing and limits of the server                        |
+| `@openbot-build/server-execution`      | The execution engine of the server                      |
+| `@openbot-build/tools-contract`        | Shared tags and types for tools                         |
+| `@openbot-build/models-contract`       | Shared tags and types for models                        |
+| `@openbot-build/apps-contract`         | Shared tags and types for Apps, files, and vaults       |
+| `@openbot-build/conversation-contract` | Shared tags and types for Bots and Chats                |
+| `@openbot-build/model-providers`       | The model providers of the server                       |
+| `@openbot-build/server-plugin`         | The plugin kit of the server                            |
+| `@openbot-build/plugin-audit`          | The `audit` plugin of the server                        |
+| `@openbot-build/plugin-mail`           | The `mail` plugin of the server                         |
+| `@openbot-build/plugin-platform`       | The `platform` plugin of the server                     |
+| `@openbot-build/plugin-organization`   | The `organization` plugin of the server                 |
+| `@openbot-build/plugin-access`         | The `access` plugin of the server                       |
+| `@openbot-build/plugin-sso`            | The `sso` plugin of the server                          |
+| `@openbot-build/plugin-auth`           | The `auth` plugin of the server                         |
+| `@openbot-build/plugin-authorization`  | The `authorization` plugin of the server                |
+| `@openbot-build/plugin-models`         | The `models` plugin of the server                       |
+| `@openbot-build/plugin-files`          | The `files` plugin of the server                        |
+| `@openbot-build/plugin-bots`           | The `bots` plugin of the server                         |
+| `@openbot-build/plugin-capabilities`   | The `capabilities` plugin of the server                 |
+| `@openbot-build/plugin-work`           | The `work` plugin of the server                         |
+| `@openbot-build/plugin-imported`       | The `imported` plugin of the server                     |
+| `@openbot-build/plugin-chats`          | The `chats` plugin of the server                        |
+| `@openbot-build/plugin-channels`       | The `channels` plugin of the server                     |
+| `@openbot-build/plugin-apps`           | The `apps` plugin of the server                         |
+| `@openbot-build/plugin-code`           | The `code` plugin of the server                         |
+| `@openbot-build/plugin-vaults`         | The `vaults` plugin of the server                       |
+| `@openbot-build/plugin-computers`      | The `computers` plugin of the server                    |
+| `@openbot-build/plugin-triggers`       | The `triggers` plugin of the server                     |
+| `@openbot-build/plugin-billing`        | The `billing` plugin of the server                      |
+| `@openbot-build/plugin-settings`       | The `settings` plugin of the server                     |
+| `@openbot-build/api`                   | The typed HTTP contract                                 |
+| `@openbot-build/client`                | The TypeScript client                                   |
+| `@openbot-build/core`                  | The Bot core                                            |
+| `@openbot-build/protocol`              | The OpenBot App Protocol library                        |
+| `@openbot-build/protocol-test`         | A public test service for the App Protocol              |
+| `@openbot-build/cli`                   | The `openbot` command                                   |
+| `@openbot-build/computer`              | Pairs and connects your own machine as a Computer       |
+| `@openbot-build/docs`                  | The docs site                                           |
 
 ## Work on the code
 
