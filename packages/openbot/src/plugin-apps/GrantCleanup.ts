@@ -15,8 +15,8 @@ import {
 	ServiceId,
 } from "@openbot-build/domain"
 import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as GrantUses from "../apps-contract/apps/GrantUses.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import * as Rows from "./DeveloperRows.ts"
 import {
 	Authorization,
@@ -41,7 +41,7 @@ import {
 } from "@openbot-build/server-database/Schema"
 import type { End } from "@openbot-build/server-execution/execution/Program"
 import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as Connections from "../apps-contract/apps/StoredConnections.ts"
+import * as Connections from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.app-grant-cleanup"
 export const serviceId = ServiceId.make("app-grant-cleanup")

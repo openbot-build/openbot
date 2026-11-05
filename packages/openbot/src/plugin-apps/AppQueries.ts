@@ -1,5 +1,5 @@
 import * as Imported from "@openbot-build/server-execution/imported/Executions"
-import * as ImportedHistory from "../apps-contract/apps/ImportedHistory.ts"
+import * as ImportedHistory from "@openbot-build/apps-contract/apps/ImportedHistory"
 import { type Chat } from "@openbot-build/core"
 import {
 	Authorization,
@@ -18,8 +18,8 @@ import {
 	toolExecutions,
 } from "@openbot-build/server-database/ExecutionSchema"
 import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
+import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
 
 /** Lists and single reads use the same saved source Chat and current rights. */
 export const make = Effect.gen(function* () {

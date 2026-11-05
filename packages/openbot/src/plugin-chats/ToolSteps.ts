@@ -1,6 +1,6 @@
 import { type Developers, Execution } from "@openbot-build/domain"
 import type { Paused } from "@openbot-build/server-execution/execution/Admission"
-import type { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
+import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
 import { ChatState, type ModelStep, ToolStep } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -17,7 +17,7 @@ import {
 	Idempotent,
 	Local,
 	SavedResult,
-} from "../tools-contract/plugins/ToolEntry.ts"
+} from "@openbot-build/tools-contract/plugins/ToolEntry"
 import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
 import { Calls } from "@openbot-build/server-execution/execution/Calls"
 import {
@@ -27,11 +27,11 @@ import {
 import {
 	outputCodec,
 	stepId,
-} from "../conversation-contract/chats/ToolSteps.ts"
+} from "@openbot-build/conversation-contract/chats/ToolSteps"
 export {
 	outputCodec,
 	stepId,
-} from "../conversation-contract/chats/ToolSteps.ts"
+} from "@openbot-build/conversation-contract/chats/ToolSteps"
 
 /** A tool stream must give a final result before it can be saved as complete. */
 export class Incomplete extends Schema.TaggedError<

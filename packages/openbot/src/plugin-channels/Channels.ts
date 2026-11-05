@@ -19,7 +19,7 @@ import {
 import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import { ConversationKind } from "../conversation-contract/channels/Channel.ts"
+import { ConversationKind } from "@openbot-build/conversation-contract/channels/Channel"
 import {
 	channelConversations,
 	channelIdentities,
@@ -36,15 +36,15 @@ import {
 	type Conversation,
 	type Failure,
 	Channels,
-} from "../conversation-contract/channels/Channels.ts"
+} from "@openbot-build/conversation-contract/channels/Channels"
 export {
 	Credentials,
 	Channels,
-} from "../conversation-contract/channels/Channels.ts"
+} from "@openbot-build/conversation-contract/channels/Channels"
 export type {
 	StoredChannel,
 	Conversation,
-} from "../conversation-contract/channels/Channels.ts"
+} from "@openbot-build/conversation-contract/channels/Channels"
 
 const CredentialsJson = Schema.fromJsonString(
 	Schema.Struct({ credentials: Credentials, caller: Schema.NullOr(Caller) }),

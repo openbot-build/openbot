@@ -1,5 +1,5 @@
 import { Authorization, Store } from "@openbot-build/protocol"
-import * as GrantUses from "../apps-contract/apps/GrantUses.ts"
+import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
 import {
@@ -18,7 +18,7 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import * as Db from "@openbot-build/server-database/Database"
 
 const PrivateState = Schema.Struct({

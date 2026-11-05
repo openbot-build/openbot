@@ -14,7 +14,7 @@ import {
 	developerTests,
 } from "@openbot-build/server-database/Schema"
 import * as Database from "../src/app/DatabasePostgres.ts"
-import * as Rows from "../src/apps-contract/apps/DeveloperRows.ts"
+import * as Rows from "@openbot-build/apps-contract/apps/DeveloperRows"
 import * as Postgres from "./PostgresTest.ts"
 import * as Db from "@openbot-build/server-database/Database"
 

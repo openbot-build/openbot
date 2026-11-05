@@ -5,7 +5,7 @@
 import { Layer } from "effect"
 import type { HttpClient } from "effect/http"
 import type * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
-import * as HostTools from "../tools-contract/chats/HostTools.ts"
+import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
 import type { AppOptions, Outside } from "./Host.ts"
 import * as Outside_ from "./Outside.ts"
 import * as Shared from "./Shared.ts"

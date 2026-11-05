@@ -14,7 +14,7 @@ import type * as Shared from "../src/app/Shared.ts"
 import type * as Authentication from "../src/plugin-auth/HttpMiddleware.ts"
 import type * as Authorization from "../src/plugin-authorization/Layer.ts"
 import type { Wallets } from "@openbot-build/server-billing/billing/Host"
-import type { HostTools } from "../src/tools-contract/chats/HostTools.ts"
+import type { HostTools } from "@openbot-build/tools-contract/chats/HostTools"
 import type { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import type { PgClient } from "@effect/sql-pg"
 

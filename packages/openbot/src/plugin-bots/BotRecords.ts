@@ -5,13 +5,13 @@ import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import {
 	type Collection,
 	BotRecords,
-} from "../conversation-contract/bots/BotRecords.ts"
-export { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
+} from "@openbot-build/conversation-contract/bots/BotRecords"
+export { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 export type {
 	Keys,
 	Filter,
 	Collection,
-} from "../conversation-contract/bots/BotRecords.ts"
+} from "@openbot-build/conversation-contract/bots/BotRecords"
 
 /** Fails with `BotStorageUnavailable` in place of a storage failure, and logs the failure. */
 const storageUnavailable = (message: string) =>

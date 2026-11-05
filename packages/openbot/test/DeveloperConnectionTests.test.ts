@@ -56,7 +56,7 @@ import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as IndexStore from "../src/plugin-apps/IndexStore.ts"
 import * as Governance from "../src/plugin-apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
-import { AppNetwork } from "../src/apps-contract/apps/AppNetwork.ts"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import * as DomainControl from "@openbot-build/server-kernel/apps/DomainControl"
 import { DeveloperAccess } from "../src/plugin-apps/DeveloperAccess.ts"
 import { DeveloperTests } from "../src/plugin-apps/DeveloperTests.ts"
@@ -66,7 +66,7 @@ import {
 	developerProofs,
 	developerTests,
 } from "@openbot-build/server-database/Schema"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Postgres from "./PostgresTest.ts"
 import * as Db from "@openbot-build/server-database/Database"
 

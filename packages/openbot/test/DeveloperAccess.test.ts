@@ -37,7 +37,7 @@ import {
 	DomainControl,
 	DomainControlUnavailable,
 } from "@openbot-build/server-kernel/apps/DomainControl"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Postgres from "./PostgresTest.ts"
 import * as Db from "@openbot-build/server-database/Database"
 

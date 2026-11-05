@@ -6,7 +6,7 @@ import { Authorizer, Policy } from "@nmnmcc/ability"
 import * as RuntimeChannels from "../src/plugin-channels/Channels.ts"
 import * as RuntimeTriggers from "../src/plugin-triggers/Triggers.ts"
 import * as Admission from "../src/plugin-channels/ChannelAdmission.ts"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import {
 	Array as Arr,

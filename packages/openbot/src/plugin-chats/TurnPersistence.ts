@@ -8,7 +8,7 @@ import type {
 	Store,
 } from "@openbot-build/server-execution/execution/Store"
 import { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 
 /** A Turn may write only while it holds its execution and is current in its Chat. */
 export const make = (

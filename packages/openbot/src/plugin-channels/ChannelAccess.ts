@@ -3,7 +3,7 @@ import { Effect, Option, Schema } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Store, storage } from "@openbot-build/server-execution/execution/Store"
 import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
-import { Channels } from "../conversation-contract/channels/Channels.ts"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 
 const sameCaller = Schema.toEquivalence(Caller)
 const Reference = Schema.Struct({ channelId: Schema.String })

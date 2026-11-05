@@ -21,7 +21,7 @@ import {
 import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import { AuthorizationCommands } from "./AuthorizationCommands.ts"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.app-reset"
 const Input = Schema.Struct({ connections: Schema.Array(ConnectionId) })

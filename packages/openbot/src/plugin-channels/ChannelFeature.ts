@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Scope } from "effect"
-import type { Gate } from "../conversation-contract/capabilities/Gate.ts"
-import { BotFeatures } from "../conversation-contract/chats/BotFeatures.ts"
+import type { Gate } from "@openbot-build/conversation-contract/capabilities/Gate"
+import { BotFeatures } from "@openbot-build/conversation-contract/chats/BotFeatures"
 import * as ChannelTools from "./ChannelTools.ts"
 
 /** The id that Turn journals keep. Never change it. */

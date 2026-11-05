@@ -12,7 +12,7 @@ import {
 import {
 	BotRecords,
 	type Keys,
-} from "../conversation-contract/bots/BotRecords.ts"
+} from "@openbot-build/conversation-contract/bots/BotRecords"
 import {
 	type Bot,
 	type BotId,
@@ -20,13 +20,13 @@ import {
 	type Action,
 	type Subject,
 	Bots,
-} from "../conversation-contract/bots/Bots.ts"
-export { Bots } from "../conversation-contract/bots/Bots.ts"
+} from "@openbot-build/conversation-contract/bots/Bots"
+export { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 export type {
 	Failure,
 	Action,
 	Subject,
-} from "../conversation-contract/bots/Bots.ts"
+} from "@openbot-build/conversation-contract/bots/Bots"
 
 /** A person who uses a shared Bot, with the shared Bot. */
 const Membership = Schema.Struct({

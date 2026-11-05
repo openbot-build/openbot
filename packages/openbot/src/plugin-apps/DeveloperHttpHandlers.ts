@@ -13,7 +13,10 @@ import { AppInspections } from "./AppInspections.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { DeveloperMembers } from "./DeveloperMembers.ts"
 import { DeveloperReports } from "./DeveloperReports.ts"
-import { ownerKey, ownersOf } from "../apps-contract/apps/StoredConnections.ts"
+import {
+	ownerKey,
+	ownersOf,
+} from "@openbot-build/apps-contract/apps/StoredConnections"
 import { DeveloperTests } from "./DeveloperTests.ts"
 import { DeveloperIndexing } from "./DeveloperIndexing.ts"
 import { DeveloperNotifications } from "./DeveloperNotifications.ts"

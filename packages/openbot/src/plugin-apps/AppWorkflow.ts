@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Stream } from "effect"
-import { workflowName as requestWorkflow } from "../conversation-contract/capabilities/RequestCommands.ts"
+import { workflowName as requestWorkflow } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import * as Children from "@openbot-build/server-execution/execution/Children"
 import * as Engine from "@openbot-build/server-execution/execution/Engine"
 import {
@@ -12,7 +12,10 @@ import type {
 	Fence,
 	Key,
 } from "@openbot-build/server-execution/execution/Store"
-import { AppCommands, workflowName } from "../apps-contract/apps/AppCommands.ts"
+import {
+	AppCommands,
+	workflowName,
+} from "@openbot-build/apps-contract/apps/AppCommands"
 import { inputDecision } from "./AppCommands.ts"
 import { AppSession } from "./AppSession.ts"
 

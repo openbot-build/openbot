@@ -11,7 +11,7 @@ import { type Fence } from "@openbot-build/server-execution/execution/Store"
 import {
 	RequestCommands,
 	workflowName,
-} from "../conversation-contract/capabilities/RequestCommands.ts"
+} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import { decisionId } from "./RequestCommands.ts"
 import { RequestReviews } from "./RequestReviews.ts"
 

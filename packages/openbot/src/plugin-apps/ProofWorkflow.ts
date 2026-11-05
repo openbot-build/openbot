@@ -20,7 +20,7 @@ import {
 	Reference,
 	workflowName,
 } from "./ProofCommands.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflow = Engine.define(workflowName)
 const checkedCodec = Schema.toCodecJson(Checked)

@@ -1,7 +1,7 @@
 import type { Bot, Chat, ChatStore } from "@openbot-build/core"
 import { Array as Arr, Effect, Option, Order, Record as Rec } from "effect"
 import type { Tool } from "effect/ai"
-import * as Registration from "../tools-contract/plugins/Registration.ts"
+import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
 
 /** One part of the tools of a Turn: a feature, or a part that the Chats own. */
 export interface Part<R = never> {

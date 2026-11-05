@@ -20,7 +20,7 @@ import {
 } from "effect"
 import { WorkflowEngine } from "effect/workflow"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { Bots } from "../src/conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as Activity from "../src/plugin-computers/Activity.ts"
 import {
 	Machine,

@@ -14,24 +14,24 @@ import {
 import { Prompt, type LanguageModel, type Tool } from "effect/ai"
 import * as Background from "@openbot-build/server-kernel/execution/Background"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
-import { Files } from "../apps-contract/files/Files.ts"
-import { withFiles } from "../apps-contract/files/ModelFiles.ts"
-import type { Entry } from "../apps-contract/apps/WorkflowTools.ts"
-import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
+import { Files } from "@openbot-build/apps-contract/files/Files"
+import { withFiles } from "@openbot-build/apps-contract/files/ModelFiles"
+import type { Entry } from "@openbot-build/apps-contract/apps/WorkflowTools"
+import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import type { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
+import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
 import * as Assembly from "./Assembly.ts"
 import { names as executionToolNames } from "./ToolControls.ts"
 import { operationsOf } from "@openbot-build/server-kernel/settings/Documents"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import type {
 	InputCommands,
 	Input,
-} from "../conversation-contract/chats/InputCommands.ts"
-import { Work } from "../conversation-contract/capabilities/Work.ts"
-import * as Registration from "../tools-contract/plugins/Registration.ts"
-import { TurnContext } from "../conversation-contract/chats/TurnContext.ts"
+} from "@openbot-build/conversation-contract/chats/InputCommands"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
+import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 
 export type Tools = Record<string, Tool.Any>
 

@@ -24,13 +24,13 @@ import {
 } from "@openbot-build/domain"
 import { FiberMap } from "effect"
 import { Prompt, type LanguageModel } from "effect/ai"
-import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Commands } from "@openbot-build/server-execution/execution/Commands"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
-import { InputCommands } from "../../conversation-contract/chats/InputCommands.ts"
-import * as ChatRecords from "../../conversation-contract/chats/ChatRecords.ts"
-import type { ResolvedLive } from "../../models-contract/models/ModelRegistry.ts"
+import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
+import * as ChatRecords from "@openbot-build/conversation-contract/chats/ChatRecords"
+import type { ResolvedLive } from "@openbot-build/models-contract/models/ModelRegistry"
 import { LiveConnections } from "./LiveConnections.ts"
 
 /**

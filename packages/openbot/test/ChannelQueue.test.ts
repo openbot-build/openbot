@@ -17,7 +17,7 @@ import {
 import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(
 	Layer.provideMerge(

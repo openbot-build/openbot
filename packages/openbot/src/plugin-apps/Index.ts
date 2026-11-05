@@ -23,7 +23,7 @@ import {
 import { eq } from "drizzle-orm"
 import type { PgClient } from "@effect/sql-pg"
 import { appIndexEntries } from "@openbot-build/server-database/Schema"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import * as IndexStore from "./IndexStore.ts"
 import { Governance } from "./Governance.ts"
 import * as Db from "@openbot-build/server-database/Database"

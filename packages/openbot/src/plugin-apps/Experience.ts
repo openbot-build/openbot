@@ -7,8 +7,8 @@ import {
 	Identity,
 } from "@openbot-build/domain"
 import type { Discovery } from "@openbot-build/protocol"
-import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 import { Array as Arr, Context, Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"

@@ -31,10 +31,10 @@ import {
 	Scope,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { PgClient } from "@effect/sql-pg"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { capabilityLists, pages } from "./Capabilities.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"

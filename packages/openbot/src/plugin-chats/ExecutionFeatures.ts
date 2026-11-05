@@ -1,5 +1,5 @@
-import type * as WorkflowTools from "../apps-contract/apps/WorkflowTools.ts"
-import type { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
+import type * as WorkflowTools from "@openbot-build/apps-contract/apps/WorkflowTools"
+import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
 import { Bot, Chat } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import {
@@ -11,11 +11,11 @@ import {
 	Record as Rec,
 	Scope,
 } from "effect"
-import * as Approvals from "../conversation-contract/capabilities/Approvals.ts"
-import * as Gate from "../conversation-contract/capabilities/Gate.ts"
-import type { Work } from "../conversation-contract/capabilities/Work.ts"
-import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
-import * as Registration from "../tools-contract/plugins/Registration.ts"
+import * as Approvals from "@openbot-build/conversation-contract/capabilities/Approvals"
+import * as Gate from "@openbot-build/conversation-contract/capabilities/Gate"
+import type { Work } from "@openbot-build/conversation-contract/capabilities/Work"
+import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
+import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import * as ChatFeatures from "./ChatFeatures.ts"
 

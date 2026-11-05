@@ -1,5 +1,5 @@
 /** The settings plugin: the settings of each member. */
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as HttpMounts from "./HttpMounts.ts"

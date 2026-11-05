@@ -20,7 +20,7 @@ import { Decision, LanguageModel, Prompt, Response } from "effect/ai"
 import {
 	type Capability,
 	hash,
-} from "../conversation-contract/capabilities/Capability.ts"
+} from "@openbot-build/conversation-contract/capabilities/Capability"
 import {
 	attribute,
 	decisionUsage,
@@ -28,8 +28,8 @@ import {
 import {
 	AnyModel,
 	ModelRegistry,
-} from "../models-contract/models/ModelRegistry.ts"
-import * as ModelCalls from "../models-contract/models/ModelCalls.ts"
+} from "@openbot-build/models-contract/models/ModelRegistry"
+import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import {
 	Store,

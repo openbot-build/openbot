@@ -19,7 +19,7 @@ import {
 } from "@openbot-build/server-execution/execution/Store"
 import { Records, category } from "@openbot-build/server-kernel/errors/Records"
 import type { Bots } from "@openbot-build/domain"
-import { type Home } from "../conversation-contract/bots/BotMemories.ts"
+import { type Home } from "@openbot-build/conversation-contract/bots/BotMemories"
 import { BotMemories } from "./BotMemories.ts"
 import { MemoryLogs } from "./MemoryLogs.ts"
 import { fallbackReply } from "./MemoryBot.ts"

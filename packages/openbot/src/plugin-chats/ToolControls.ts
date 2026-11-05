@@ -22,11 +22,11 @@ import {
 	storage,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
-import * as ToolResults from "../conversation-contract/chats/ToolResults.ts"
-import { outputCodec } from "../conversation-contract/chats/ToolSteps.ts"
+import * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
+import * as ToolResults from "@openbot-build/conversation-contract/chats/ToolResults"
+import { outputCodec } from "@openbot-build/conversation-contract/chats/ToolSteps"
 
 export const names = {
 	status: "openbot_execution_status",

@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect"
-import * as ChatGptOAuth from "../model-providers/providers/chatgpt/OAuth.ts"
+import * as ChatGptOAuth from "@openbot-build/model-providers/providers/chatgpt/OAuth"
 import * as ModelProvidersPostgres from "./ModelProvidersPostgres.ts"
 import * as ModelRegistry from "./ModelRegistry.ts"
 import * as ModelsPostgres from "./ModelsPostgres.ts"

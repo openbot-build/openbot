@@ -13,7 +13,7 @@ import { HttpApi, HttpApiBuilder } from "effect/http-api"
 import {
 	Delegations,
 	type Stored,
-} from "../src/conversation-contract/bots/Delegations.ts"
+} from "@openbot-build/conversation-contract/bots/Delegations"
 import { DelegationCommands } from "../src/plugin-bots/DelegationCommands.ts"
 import * as DelegationHandlers from "../src/plugin-bots/DelegationHandlers.ts"
 import { Commands } from "@openbot-build/server-execution/execution/Commands"

@@ -36,7 +36,7 @@ import * as Records from "@openbot-build/server-kernel/errors/Records"
 import * as Observation from "@openbot-build/server-execution/execution/Observation"
 import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as Commands from "../src/plugin-apps/ConnectionCommands.ts"
-import * as Stored from "../src/apps-contract/apps/StoredConnections.ts"
+import * as Stored from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Governance } from "../src/plugin-apps/Governance.ts"
 import {
 	GrantCleanup,

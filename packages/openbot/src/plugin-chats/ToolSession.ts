@@ -3,7 +3,7 @@ import { type Developers, Execution } from "@openbot-build/domain"
 import {
 	type Failure,
 	TurnContext,
-} from "../conversation-contract/chats/TurnContext.ts"
+} from "@openbot-build/conversation-contract/chats/TurnContext"
 import {
 	type Scope,
 	Context,
@@ -17,16 +17,16 @@ import { Digest } from "effect/crypto"
 import { Bot, Chat } from "@openbot-build/core"
 import { Prompt, Toolkit, type Tool } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
-import { Work } from "../conversation-contract/capabilities/Work.ts"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import * as Db from "@openbot-build/server-database/Database"
 import { Calls } from "@openbot-build/server-execution/execution/Calls"
 import * as Background from "@openbot-build/server-kernel/execution/Background"
 import { type Fence } from "@openbot-build/server-execution/execution/Store"
 import { ExecutionFeatures } from "./ExecutionFeatures.ts"
-import { HostTools } from "../tools-contract/chats/HostTools.ts"
-import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
+import { HostTools } from "@openbot-build/tools-contract/chats/HostTools"
+import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
 import { ToolSteps, beforeSend } from "./ToolSteps.ts"
 
 export interface Service {

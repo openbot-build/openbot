@@ -31,17 +31,17 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { AppInspections } from "./AppInspections.ts"
 import * as Rows from "./DeveloperRows.ts"
-import type { ProofRecord } from "../apps-contract/apps/DeveloperRows.ts"
+import type { ProofRecord } from "@openbot-build/apps-contract/apps/DeveloperRows"
 import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import {
 	usableStatus,
 	covers,
 	authorization,
-} from "../apps-contract/apps/DeveloperAuthorization.ts"
-export { authorization } from "../apps-contract/apps/DeveloperAuthorization.ts"
+} from "@openbot-build/apps-contract/apps/DeveloperAuthorization"
+export { authorization } from "@openbot-build/apps-contract/apps/DeveloperAuthorization"
 
 export const scopeKey = (scope: Developers.ManagementScope): string =>
 	Match.value(scope).pipe(

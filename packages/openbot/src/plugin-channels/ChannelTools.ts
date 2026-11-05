@@ -13,17 +13,21 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Answer, Gate } from "../conversation-contract/capabilities/Gate.ts"
-import { Work } from "../conversation-contract/capabilities/Work.ts"
+import {
+	Answer,
+	Gate,
+} from "@openbot-build/conversation-contract/capabilities/Gate"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import { Target } from "./Channel.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
-import { Channels } from "../conversation-contract/channels/Channels.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
 
 /** The Channel tools. Their parameters are JSON Schema, like App tools. */
-export type Tools = import("../tools-contract/plugins/ToolEntry.ts").Tools
+export type Tools =
+	import("@openbot-build/tools-contract/plugins/ToolEntry").Tools
 
 export const names = { send: "openbot_channel_send" } as const
 

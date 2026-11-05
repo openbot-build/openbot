@@ -1,6 +1,6 @@
-import { workflowName as appWorkflow } from "../apps-contract/apps/AppCommands.ts"
-import { workflowName as codeWorkflow } from "../apps-contract/code/CodeCommands.ts"
-import { workflowName as requestWorkflow } from "../conversation-contract/capabilities/RequestCommands.ts"
+import { workflowName as appWorkflow } from "@openbot-build/apps-contract/apps/AppCommands"
+import { workflowName as codeWorkflow } from "@openbot-build/apps-contract/code/CodeCommands"
+import { workflowName as requestWorkflow } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import * as Children from "@openbot-build/server-execution/execution/Children"
 import { Clock, Effect, Layer, Option } from "effect"
 import * as Engine from "@openbot-build/server-execution/execution/Engine"
@@ -13,7 +13,7 @@ import {
 	Store,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
+import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
 import { workflowName } from "./ToolCommands.ts"
 import { stepId } from "./ToolSteps.ts"
 import { ToolSession } from "./ToolSession.ts"

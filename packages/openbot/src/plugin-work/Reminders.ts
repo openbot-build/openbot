@@ -3,18 +3,18 @@ import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Clock, Effect, Layer, Option, Schema, String as Str } from "effect"
 import { Digest } from "effect/crypto"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
-import { hash } from "../conversation-contract/capabilities/Capability.ts"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
+import { hash } from "@openbot-build/conversation-contract/capabilities/Capability"
 import {
 	ReminderStatus,
 	Reminder,
 	Reminders,
-} from "../conversation-contract/work/Reminders.ts"
+} from "@openbot-build/conversation-contract/work/Reminders"
 export {
 	ReminderStatus,
 	Reminder,
 	Reminders,
-} from "../conversation-contract/work/Reminders.ts"
+} from "@openbot-build/conversation-contract/work/Reminders"
 
 export const make: Effect.Effect<
 	typeof Reminders.Service,

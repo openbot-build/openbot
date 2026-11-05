@@ -1,7 +1,7 @@
 import type { Channels as ChannelsApi } from "@openbot-build/domain"
 import { Data, type Effect, Schema } from "effect"
-import { ConversationKind } from "../conversation-contract/channels/Channel.ts"
-export { ConversationKind } from "../conversation-contract/channels/Channel.ts"
+import { ConversationKind } from "@openbot-build/conversation-contract/channels/Channel"
+export { ConversationKind } from "@openbot-build/conversation-contract/channels/Channel"
 
 /** One chat on a platform. Each chat of a Channel is one Chat. */
 export const Conversation = Schema.Struct({

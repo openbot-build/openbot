@@ -10,7 +10,7 @@ import {
 import { and, eq } from "drizzle-orm"
 import { Effect, Option } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	computerAccess,

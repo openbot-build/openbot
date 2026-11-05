@@ -8,11 +8,11 @@ import type { Authorize } from "@openbot-build/server-execution/execution/Engine
 import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
 import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import { ChannelQueue } from "./ChannelQueue.ts"
-import { Channels } from "../conversation-contract/channels/Channels.ts"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 import * as ChannelSend from "./ChannelSend.ts"
 import * as ChannelAccess from "./ChannelAccess.ts"
-import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
+import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
 
 export const make = Effect.gen(function* () {
 	const queue = yield* ChannelQueue

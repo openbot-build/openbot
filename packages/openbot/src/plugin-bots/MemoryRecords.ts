@@ -11,7 +11,7 @@ import {
 import type * as Audience from "./memory/Audience.ts"
 import * as Memory from "./memory/BotMemory.ts"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import type { Home } from "../conversation-contract/bots/BotMemories.ts"
+import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
 
 const Sources = Schema.fromJsonString(Schema.Array(Memory.Source))
 const Policy = Schema.fromJsonString(

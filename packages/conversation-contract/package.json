@@ -1,0 +1,93 @@
+{
+	"name": "@openbot-build/conversation-contract",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The shared service tags and types of Bots, Chats, capabilities, channels, and work in the OpenBot server",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./bots/BotMemories": "./dist/bots/BotMemories.js",
+		"./bots/BotRecords": "./dist/bots/BotRecords.js",
+		"./bots/Bots": "./dist/bots/Bots.js",
+		"./bots/DefaultBot": "./dist/bots/DefaultBot.js",
+		"./bots/DelegationQueries": "./dist/bots/DelegationQueries.js",
+		"./bots/DelegationSource": "./dist/bots/DelegationSource.js",
+		"./bots/DelegationUsage": "./dist/bots/DelegationUsage.js",
+		"./bots/Delegations": "./dist/bots/Delegations.js",
+		"./bots/MemoryBot": "./dist/bots/MemoryBot.js",
+		"./capabilities/Approvals": "./dist/capabilities/Approvals.js",
+		"./capabilities/Capability": "./dist/capabilities/Capability.js",
+		"./capabilities/Gate": "./dist/capabilities/Gate.js",
+		"./capabilities/Grants": "./dist/capabilities/Grants.js",
+		"./capabilities/Policy": "./dist/capabilities/Policy.js",
+		"./capabilities/PolicyOrigin": "./dist/capabilities/PolicyOrigin.js",
+		"./capabilities/RequestCommands": "./dist/capabilities/RequestCommands.js",
+		"./capabilities/Requests": "./dist/capabilities/Requests.js",
+		"./capabilities/Resolve": "./dist/capabilities/Resolve.js",
+		"./capabilities/ReviewTools": "./dist/capabilities/ReviewTools.js",
+		"./capabilities/Rules": "./dist/capabilities/Rules.js",
+		"./capabilities/Work": "./dist/capabilities/Work.js",
+		"./channels/Channel": "./dist/channels/Channel.js",
+		"./channels/Channels": "./dist/channels/Channels.js",
+		"./chats/BotFeatures": "./dist/chats/BotFeatures.js",
+		"./chats/CallFrame": "./dist/chats/CallFrame.js",
+		"./chats/ChatCommands": "./dist/chats/ChatCommands.js",
+		"./chats/ChatEncoding": "./dist/chats/ChatEncoding.js",
+		"./chats/ChatErrors": "./dist/chats/ChatErrors.js",
+		"./chats/ChatHost": "./dist/chats/ChatHost.js",
+		"./chats/ChatModels": "./dist/chats/ChatModels.js",
+		"./chats/ChatQueries": "./dist/chats/ChatQueries.js",
+		"./chats/ChatRecords": "./dist/chats/ChatRecords.js",
+		"./chats/InputCommands": "./dist/chats/InputCommands.js",
+		"./chats/OpenWork": "./dist/chats/OpenWork.js",
+		"./chats/StoredChats": "./dist/chats/StoredChats.js",
+		"./chats/TaskMessages": "./dist/chats/TaskMessages.js",
+		"./chats/ToolCommands": "./dist/chats/ToolCommands.js",
+		"./chats/ToolOrigins": "./dist/chats/ToolOrigins.js",
+		"./chats/ToolQueries": "./dist/chats/ToolQueries.js",
+		"./chats/ToolRecords": "./dist/chats/ToolRecords.js",
+		"./chats/ToolResults": "./dist/chats/ToolResults.js",
+		"./chats/ToolSteps": "./dist/chats/ToolSteps.js",
+		"./chats/TurnAccess": "./dist/chats/TurnAccess.js",
+		"./chats/TurnContext": "./dist/chats/TurnContext.js",
+		"./chats/WorkAdmission": "./dist/chats/WorkAdmission.js",
+		"./work/Reminders": "./dist/work/Reminders.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/models-contract": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/conversation-contract"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

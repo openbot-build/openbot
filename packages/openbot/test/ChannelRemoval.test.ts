@@ -3,7 +3,7 @@ import { assert, layer } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"
 import { Network } from "@openbot-build/protocol"
 import { HttpClient } from "effect/http"
-import { AppNetwork } from "../src/apps-contract/apps/AppNetwork.ts"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import * as ChannelRegistry from "../src/plugin-channels/ChannelRegistry.ts"
 import { Chat } from "@openbot-build/core"
 import { Authorization, BotId, Execution } from "@openbot-build/domain"
@@ -22,7 +22,7 @@ import {
 	AuditLog,
 	type Entry,
 } from "@openbot-build/identity-contract/audit/AuditLog"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { ChannelEvent, Target } from "../src/plugin-channels/Channel.ts"
 import * as Admission from "../src/plugin-channels/ChannelAdmission.ts"
 import * as ChannelInbox from "../src/plugin-channels/ChannelInbox.ts"

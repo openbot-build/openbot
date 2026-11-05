@@ -1,10 +1,10 @@
 import { MemoryLogs } from "./MemoryLogs.ts"
 import { BotMemory as Api, Bots as BotsApi } from "@openbot-build/domain"
 import { Array as Arr, Effect, Layer, Option, Order, Schema } from "effect"
-import type { Home } from "../conversation-contract/bots/BotMemories.ts"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
-import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
-export { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
+import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
+import { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
+export { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
 
 /** The name of the tool that the Bot uses to confide. The Bot knows it only as a place to talk. */
 export const confideTool = "confide"

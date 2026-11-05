@@ -12,8 +12,8 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
 
 export class DeveloperMembers extends Context.Service<

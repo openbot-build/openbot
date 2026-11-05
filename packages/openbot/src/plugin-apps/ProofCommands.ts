@@ -17,7 +17,7 @@ import { SqlClient } from "effect/sql"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import type * as Models from "./DeveloperModels.ts"
 
 export const workflowName = "openbot.proof-verification"

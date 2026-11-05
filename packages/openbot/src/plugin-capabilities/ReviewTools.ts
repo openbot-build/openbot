@@ -18,19 +18,19 @@ import {
 	Local,
 	ReviewAllowed,
 	SavedResult,
-} from "../tools-contract/plugins/ToolEntry.ts"
+} from "@openbot-build/tools-contract/plugins/ToolEntry"
 import * as BotDecisions from "./BotDecisions.ts"
 import * as CapabilityAccess from "./CapabilityAccess.ts"
 import * as Judge from "./Judge.ts"
 import {
 	names,
 	ReviewTools,
-} from "../conversation-contract/capabilities/ReviewTools.ts"
+} from "@openbot-build/conversation-contract/capabilities/ReviewTools"
 export {
 	names,
 	ReviewTools,
-} from "../conversation-contract/capabilities/ReviewTools.ts"
-export type { Service } from "../conversation-contract/capabilities/ReviewTools.ts"
+} from "@openbot-build/conversation-contract/capabilities/ReviewTools"
+export type { Service } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
 
 const Scope = Schema.Literals(["once", "chat", "lifetime"])
 

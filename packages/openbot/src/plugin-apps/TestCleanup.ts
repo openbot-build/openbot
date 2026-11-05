@@ -41,8 +41,8 @@ import type { Authorize } from "@openbot-build/server-execution/execution/Engine
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.developer-test-cleanup"
 export const serviceId = ServiceId.make("developer-test-cleanup")

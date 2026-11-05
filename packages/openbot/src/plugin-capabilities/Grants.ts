@@ -8,13 +8,13 @@ import {
 	String as Str,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
-import { decidingGrant } from "../conversation-contract/capabilities/Policy.ts"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
+import { decidingGrant } from "@openbot-build/conversation-contract/capabilities/Policy"
 import {
 	type Grant,
 	Grants,
-} from "../conversation-contract/capabilities/Grants.ts"
-export { Grants } from "../conversation-contract/capabilities/Grants.ts"
+} from "@openbot-build/conversation-contract/capabilities/Grants"
+export { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 
 export const make: Effect.Effect<
 	typeof Grants.Service,

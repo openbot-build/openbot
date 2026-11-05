@@ -7,7 +7,7 @@ import {
 } from "@openbot-build/api"
 import { Client, Store } from "@openbot-build/protocol"
 import { Effect } from "effect"
-import { failed } from "../src/apps-contract/apps/AppResults.ts"
+import { failed } from "@openbot-build/apps-contract/apps/AppResults"
 import { toStoreError } from "../src/plugin-apps/ProtocolStores.ts"
 
 const source: AppExecution.Source = {

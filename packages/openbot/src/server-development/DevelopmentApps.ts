@@ -11,7 +11,7 @@ import {
 	String as Str,
 	pipe,
 } from "effect"
-import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import * as Probe from "../plugin-apps/Probe.ts"
 import { Authorization } from "./DevelopmentAuthorization.ts"
 import { Mode, Scenarios } from "./DevelopmentScenarios.ts"

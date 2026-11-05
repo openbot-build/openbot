@@ -22,8 +22,11 @@ import {
 	ownerOf,
 	type Owner,
 	usableBy,
-} from "../models-contract/models/ModelProviders.ts"
-import { Models, type StoredModel } from "../models-contract/models/Models.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
+import {
+	Models,
+	type StoredModel,
+} from "@openbot-build/models-contract/models/Models"
 import * as Db from "@openbot-build/server-database/Database"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))

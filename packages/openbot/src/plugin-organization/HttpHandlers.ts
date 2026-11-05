@@ -26,7 +26,7 @@ import {
 	userKey,
 } from "@openbot-build/identity-contract/audit/Resources"
 import { Roles } from "@openbot-build/identity-contract/authorization/Roles"
-import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
+import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as Views from "@openbot-build/server-kernel/settings/Views"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"

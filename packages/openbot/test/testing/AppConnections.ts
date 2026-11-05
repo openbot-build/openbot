@@ -2,7 +2,7 @@ import { Client } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { Effect, Scope } from "effect"
 import { AppHost } from "../../src/plugin-apps/AppHost.ts"
-import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Probe from "../../src/plugin-apps/Probe.ts"
 import type * as BrowserHost from "../BrowserHost.ts"
 

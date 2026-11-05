@@ -13,10 +13,22 @@
 			"path": "../api"
 		},
 		{
+			"path": "../apps-contract"
+		},
+		{
+			"path": "../conversation-contract"
+		},
+		{
 			"path": "../core"
 		},
 		{
 			"path": "../identity-contract"
+		},
+		{
+			"path": "../model-providers"
+		},
+		{
+			"path": "../models-contract"
 		},
 		{
 			"path": "../server-billing"
@@ -32,6 +44,9 @@
 		},
 		{
 			"path": "../server-plugin"
+		},
+		{
+			"path": "../tools-contract"
 		}
 	]
 }

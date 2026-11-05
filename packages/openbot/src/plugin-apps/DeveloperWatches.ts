@@ -21,7 +21,7 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Db from "@openbot-build/server-database/Database"
 import { developerWatches } from "@openbot-build/server-database/Schema"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 
 export const workflowName = "openbot.developer-watch"
 export const serviceId = ServiceId.make("developer-monitor")

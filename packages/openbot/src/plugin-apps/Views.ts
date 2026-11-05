@@ -30,9 +30,9 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Chat, Item, Turn } from "@openbot-build/core"
 
 import * as AppQueries from "./AppQueries.ts"
-import * as ChatQueries from "../conversation-contract/chats/ChatQueries.ts"
-import * as ChatErrors from "../conversation-contract/chats/ChatErrors.ts"
-import * as TaskMessages from "../conversation-contract/chats/TaskMessages.ts"
+import * as ChatQueries from "@openbot-build/conversation-contract/chats/ChatQueries"
+import * as ChatErrors from "@openbot-build/conversation-contract/chats/ChatErrors"
+import * as TaskMessages from "@openbot-build/conversation-contract/chats/TaskMessages"
 import {
 	Store,
 	transactionFailures,
@@ -46,11 +46,11 @@ import * as Capabilities from "./Capabilities.ts"
 import { ConnectionSessions, type Opened } from "./ConnectionSessions.ts"
 import { appSecrets } from "@openbot-build/server-database/Schema"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as StoredViews from "./StoredViews.ts"
 import { type View } from "./StoredViews.ts"
-import { json, jsonObject } from "../apps-contract/apps/AppResults.ts"
+import { json, jsonObject } from "@openbot-build/apps-contract/apps/AppResults"
 import * as Db from "@openbot-build/server-database/Database"
 
 /** The error of a view that can not go on. The text and the result of its operation stay. */

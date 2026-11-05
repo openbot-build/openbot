@@ -4,7 +4,7 @@ import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"
-import * as DefaultBot from "../conversation-contract/bots/DefaultBot.ts"
+import * as DefaultBot from "@openbot-build/conversation-contract/bots/DefaultBot"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as Views from "@openbot-build/server-kernel/settings/Views"
 

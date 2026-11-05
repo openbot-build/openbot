@@ -19,7 +19,7 @@ import {
 import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import type { Pending } from "@nmnmcc/ability/Authorizer"
 import { type Unavailable, ConnectionSessions } from "./ConnectionSessions.ts"
-import type { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
+import type { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"
 import {
 	type Scope,
 	Context,
@@ -31,24 +31,24 @@ import {
 	Schema,
 } from "effect"
 import { Calls } from "@openbot-build/server-execution/execution/Calls"
-import * as Gate from "../conversation-contract/capabilities/Gate.ts"
-import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
-import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
+import * as Gate from "@openbot-build/conversation-contract/capabilities/Gate"
+import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
+import * as CallFrame from "@openbot-build/conversation-contract/chats/CallFrame"
 import { type Fence } from "@openbot-build/server-execution/execution/Store"
 import { ActionPolicy } from "./ActionPolicy.ts"
-import * as AppCall from "../apps-contract/apps/AppCall.ts"
-import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
+import * as AppCall from "@openbot-build/apps-contract/apps/AppCall"
+import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
 import { continuation } from "./AppCommands.ts"
-import { json } from "../apps-contract/apps/AppResults.ts"
+import { json } from "@openbot-build/apps-contract/apps/AppResults"
 import {
 	ownerKey,
 	get as connection,
-} from "../apps-contract/apps/StoredConnections.ts"
+} from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as AppSecrets from "../apps-contract/vaults/AppSecrets.ts"
-import * as VaultCode from "../apps-contract/vaults/CodeMode.ts"
+import * as AppSecrets from "@openbot-build/apps-contract/vaults/AppSecrets"
+import * as VaultCode from "@openbot-build/apps-contract/vaults/CodeMode"
 
 const sameJson = Schema.toEquivalence(Schema.Json)
 const strings = Schema.decodeUnknownEffect(

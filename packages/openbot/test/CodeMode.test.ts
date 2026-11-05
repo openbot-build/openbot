@@ -13,10 +13,10 @@ import {
 	Ref,
 	String as Str,
 } from "effect"
-import type { Binding } from "../src/apps-contract/code/Bindings.ts"
-import { name } from "../src/apps-contract/code/Bindings.ts"
-import { declarations } from "../src/apps-contract/code/Declarations.ts"
-import type { Call } from "../src/apps-contract/code/Protocol.ts"
+import type { Binding } from "@openbot-build/apps-contract/code/Bindings"
+import { name } from "@openbot-build/apps-contract/code/Bindings"
+import { declarations } from "@openbot-build/apps-contract/code/Declarations"
+import type { Call } from "@openbot-build/apps-contract/code/Protocol"
 import {
 	make as makeSandbox,
 	type Program,

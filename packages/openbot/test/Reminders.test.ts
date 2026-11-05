@@ -17,7 +17,7 @@ import {
 import {
 	BotRecords,
 	type Keys,
-} from "../src/conversation-contract/bots/BotRecords.ts"
+} from "@openbot-build/conversation-contract/bots/BotRecords"
 import * as Reminders from "../src/plugin-work/Reminders.ts"
 
 const organizationId = "org_1"

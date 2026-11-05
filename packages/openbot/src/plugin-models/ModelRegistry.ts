@@ -1,6 +1,6 @@
 import { AiError } from "effect/ai"
-import { ProviderOAuth } from "../models-contract/models/ProviderOAuth.ts"
-import * as ChatGptProvider from "../model-providers/providers/chatgpt/ChatGptProvider.ts"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+import * as ChatGptProvider from "@openbot-build/model-providers/providers/chatgpt/ChatGptProvider"
 import {
 	Config,
 	Model as CoreModel,
@@ -27,10 +27,10 @@ import { DecisionModel, LanguageModel, Telemetry } from "effect/ai"
 import { HttpClient } from "effect/http"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
-import * as AnthropicProvider from "../model-providers/providers/anthropic/AnthropicProvider.ts"
-import * as OpenAiCompatProvider from "../model-providers/providers/openai-compat/OpenAiCompatProvider.ts"
-import * as OpenAiProvider from "../model-providers/providers/openai/OpenAiProvider.ts"
-import * as TypeSafeProvider from "../model-providers/providers/typesafe/TypeSafeProvider.ts"
+import * as AnthropicProvider from "@openbot-build/model-providers/providers/anthropic/AnthropicProvider"
+import * as OpenAiCompatProvider from "@openbot-build/model-providers/providers/openai-compat/OpenAiCompatProvider"
+import * as OpenAiProvider from "@openbot-build/model-providers/providers/openai/OpenAiProvider"
+import * as TypeSafeProvider from "@openbot-build/model-providers/providers/typesafe/TypeSafeProvider"
 import { Billing } from "@openbot-build/server-billing/billing/Billing"
 import {
 	meter,
@@ -42,27 +42,27 @@ import {
 	linkedOwner,
 	ModelProviders,
 	type Stored,
-} from "../models-contract/models/ModelProviders.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
 import {
 	type Effective,
 	effective,
 	Models,
 	modelKey,
-} from "../models-contract/models/Models.ts"
-import * as ToolImages from "../model-providers/providers/ToolImages.ts"
-import * as LiveBackends from "../models-contract/models/LiveBackends.ts"
+} from "@openbot-build/models-contract/models/Models"
+import * as ToolImages from "@openbot-build/model-providers/providers/ToolImages"
+import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
 import {
 	AnyModel,
 	ModelRegistry,
-} from "../models-contract/models/ModelRegistry.ts"
+} from "@openbot-build/models-contract/models/ModelRegistry"
 export {
 	AnyModel,
 	ModelRegistry,
-} from "../models-contract/models/ModelRegistry.ts"
+} from "@openbot-build/models-contract/models/ModelRegistry"
 export type {
 	Catalog,
 	ResolvedLive,
-} from "../models-contract/models/ModelRegistry.ts"
+} from "@openbot-build/models-contract/models/ModelRegistry"
 
 /**
  * Models that the program itself gives, such as the simulated model of the

@@ -1,6 +1,6 @@
-import { Bots } from "../src/conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import { LiveConnections } from "../src/plugin-chats/live/LiveConnections.ts"
-import { ReviewTools } from "../src/conversation-contract/capabilities/ReviewTools.ts"
+import { ReviewTools } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
 import { Billing } from "@openbot-build/server-billing/billing/Billing"
 import { PgClient } from "@effect/sql-pg"
 import {
@@ -24,10 +24,10 @@ import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
 import * as TurnSession from "../src/plugin-chats/TurnSession.ts"
 import * as TurnWorkflow from "../src/plugin-chats/TurnWorkflow.ts"
 import * as ExecutionFeatures from "../src/plugin-chats/ExecutionFeatures.ts"
-import * as BotFeatures from "../src/conversation-contract/chats/BotFeatures.ts"
-import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
-import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
-import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
+import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
+import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
+import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
 
 /** Kill the first owner after its model result, before its Chat checkpoint. */
 export const layer = Layer.unwrap(

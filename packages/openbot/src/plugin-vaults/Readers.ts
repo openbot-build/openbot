@@ -14,8 +14,8 @@ import {
 	String as Str,
 } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
-import { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
-export { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
+import { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"
+export { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"
 
 /** The credentials of a secret provider. */
 export type Remote = VaultsModel.SecretProviderCredentials

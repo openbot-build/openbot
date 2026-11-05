@@ -32,9 +32,9 @@ import {
 	HttpServer,
 } from "effect/http"
 import { NetAddress } from "effect/net"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import { IndexWork as IndexWorkService } from "../apps-contract/apps/IndexWork.ts"
-import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { IndexWork as IndexWorkService } from "@openbot-build/apps-contract/apps/IndexWork"
+import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import { Roles } from "@openbot-build/identity-contract/authorization/Roles"

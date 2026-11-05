@@ -6,8 +6,8 @@ import { ImportedRecords } from "@openbot-build/server-execution/imported/Import
 import { Store } from "@openbot-build/server-execution/execution/Store"
 import { Commands } from "@openbot-build/server-execution/execution/Commands"
 import { DelegationCommands } from "./DelegationCommands.ts"
-import { Delegations } from "../conversation-contract/bots/Delegations.ts"
-import { DelegationQueries } from "../conversation-contract/bots/DelegationQueries.ts"
+import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
+import { DelegationQueries } from "@openbot-build/conversation-contract/bots/DelegationQueries"
 
 /** Saved business records and execution records have one permission check. */
 export const make = Effect.gen(function* () {

@@ -1,11 +1,11 @@
 import { Network } from "@openbot-build/protocol"
 import { NodeCrypto } from "@effect/platform-node"
 import { HttpClient } from "effect/http"
-import { AppNetwork } from "../src/apps-contract/apps/AppNetwork.ts"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import { assert, layer } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref } from "effect"
 import * as ChannelRegistry from "../src/plugin-channels/ChannelRegistry.ts"
-import { Channels } from "../src/conversation-contract/channels/Channels.ts"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import * as BrowserHost from "./BrowserHost.ts"
 
 const publicOrigin = "https://channel-config.example.com"

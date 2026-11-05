@@ -21,7 +21,7 @@ import { TestClock } from "effect/testing"
 import {
 	BotRecords,
 	type Keys,
-} from "../src/conversation-contract/bots/BotRecords.ts"
+} from "@openbot-build/conversation-contract/bots/BotRecords"
 import * as Grants from "../src/plugin-capabilities/Grants.ts"
 import * as Requests from "../src/plugin-capabilities/Requests.ts"
 import * as Rules from "../src/plugin-capabilities/Rules.ts"

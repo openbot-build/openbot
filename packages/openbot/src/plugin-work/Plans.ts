@@ -2,7 +2,7 @@ import { PlanApproval } from "@openbot-build/domain"
 import type { Bots as BotsApi } from "@openbot-build/domain"
 import { Effect } from "effect"
 import type { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import type * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import type * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 
 /**
  * How a plan in this Chat is approved. The most specific setting wins:

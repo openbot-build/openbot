@@ -1,14 +1,17 @@
 import { Bots, Delegations, Execution } from "@openbot-build/domain"
 import { Cause, Effect, Option, Schema } from "effect"
 import { Tool } from "effect/ai"
-import type { Entry } from "../apps-contract/apps/WorkflowTools.ts"
-import type { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
+import type { Entry } from "@openbot-build/apps-contract/apps/WorkflowTools"
+import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
 import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
 import { Records, category } from "@openbot-build/server-kernel/errors/Records"
-import { InputState, Local } from "../tools-contract/plugins/ToolEntry.ts"
-import { json } from "../apps-contract/apps/AppResults.ts"
+import {
+	InputState,
+	Local,
+} from "@openbot-build/tools-contract/plugins/ToolEntry"
+import { json } from "@openbot-build/apps-contract/apps/AppResults"
 import { DelegationCommands } from "./DelegationCommands.ts"
 
 export const names = {

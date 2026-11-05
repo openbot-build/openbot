@@ -10,10 +10,10 @@ import { Array as Arr, Clock, Effect, Layer, Option, Schema } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
-import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+import * as CallFrame from "@openbot-build/conversation-contract/chats/CallFrame"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as Db from "@openbot-build/server-database/Database"
 import { codeExecutions } from "@openbot-build/server-database/ExecutionSchema"
 import {
@@ -27,13 +27,13 @@ import {
 	Input,
 	Saved,
 	CodeCommands,
-} from "../apps-contract/code/CodeCommands.ts"
+} from "@openbot-build/apps-contract/code/CodeCommands"
 export {
 	workflowName,
 	Input,
 	CodeCommands,
-} from "../apps-contract/code/CodeCommands.ts"
-export type { Service } from "../apps-contract/code/CodeCommands.ts"
+} from "@openbot-build/apps-contract/code/CodeCommands"
+export type { Service } from "@openbot-build/apps-contract/code/CodeCommands"
 
 export const programStep = "program"
 

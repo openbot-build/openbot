@@ -23,7 +23,7 @@ import {
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
 import { discover } from "./Discovery.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import * as IndexStore from "./IndexStore.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"

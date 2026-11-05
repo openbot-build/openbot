@@ -15,10 +15,10 @@ import {
 import {
 	BotRecords,
 	type Keys,
-} from "../src/conversation-contract/bots/BotRecords.ts"
-import { Grants } from "../src/conversation-contract/capabilities/Grants.ts"
+} from "@openbot-build/conversation-contract/bots/BotRecords"
+import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 import { make } from "../src/plugin-capabilities/Grants.ts"
-import { decidingGrant } from "../src/conversation-contract/capabilities/Policy.ts"
+import { decidingGrant } from "@openbot-build/conversation-contract/capabilities/Policy"
 
 const bot = BotsApi.BotId.make("bot_1")
 const here = Chat.Id.make("chat_here")

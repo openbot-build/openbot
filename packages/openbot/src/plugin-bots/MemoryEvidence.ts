@@ -2,7 +2,7 @@ import type { Chat, Item } from "@openbot-build/core"
 import type { ExecutionIdentity } from "@openbot-build/domain"
 import { Array as Arr, HashSet, String as Str } from "effect"
 import type { Prompt } from "effect/ai"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as Audience from "./memory/Audience.ts"
 import type * as Memory from "./memory/BotMemory.ts"
 

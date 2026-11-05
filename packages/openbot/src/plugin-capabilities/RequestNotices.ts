@@ -3,14 +3,14 @@ import { Execution, ExecutionIdentity } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { AppApprovals } from "../apps-contract/apps/AppApprovals.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import { AppApprovals } from "@openbot-build/apps-contract/apps/AppApprovals"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import {
 	InputCommands,
 	type Input,
-} from "../conversation-contract/chats/InputCommands.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+} from "@openbot-build/conversation-contract/chats/InputCommands"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as Db from "@openbot-build/server-database/Database"
 import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
 import {
@@ -19,12 +19,12 @@ import {
 	type Fence,
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
-import * as Todos from "../tools-contract/plugins/work/Todos.ts"
-import { approvedCallId } from "../conversation-contract/capabilities/Approvals.ts"
-import { describe } from "../conversation-contract/capabilities/Capability.ts"
-import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
+import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import { approvedCallId } from "@openbot-build/conversation-contract/capabilities/Approvals"
+import { describe } from "@openbot-build/conversation-contract/capabilities/Capability"
+import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import { noticeWorkflowName } from "./RequestCommands.ts"
-import { type Stored } from "../conversation-contract/capabilities/Requests.ts"
+import { type Stored } from "@openbot-build/conversation-contract/capabilities/Requests"
 
 const Reference = Schema.Struct({ requestExecutionId: Execution.Id })
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)

@@ -7,11 +7,11 @@ import {
 import * as Db from "@openbot-build/server-database/Database"
 import { storage } from "@openbot-build/server-execution/execution/Store"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
-import * as StoredInvocations from "../apps-contract/apps/StoredInvocations.ts"
-import { AppApprovals } from "../apps-contract/apps/AppApprovals.ts"
-export { AppApprovals } from "../apps-contract/apps/AppApprovals.ts"
-export type { Service } from "../apps-contract/apps/AppApprovals.ts"
+import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
+import * as StoredInvocations from "@openbot-build/apps-contract/apps/StoredInvocations"
+import { AppApprovals } from "@openbot-build/apps-contract/apps/AppApprovals"
+export { AppApprovals } from "@openbot-build/apps-contract/apps/AppApprovals"
+export type { Service } from "@openbot-build/apps-contract/apps/AppApprovals"
 
 const sameSource = Schema.toEquivalence(AppCalls.Source)
 

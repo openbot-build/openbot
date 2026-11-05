@@ -6,12 +6,15 @@ import {
 import type { Chat, ChatStore, Config } from "@openbot-build/core"
 import { type Schema, Context, Effect, Layer } from "effect"
 import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
-import { type Failure, Bots } from "../conversation-contract/bots/Bots.ts"
-import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
-import * as Gate from "../conversation-contract/capabilities/Gate.ts"
-import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
-import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
-import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
+import {
+	type Failure,
+	Bots,
+} from "@openbot-build/conversation-contract/bots/Bots"
+import * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
+import * as Gate from "@openbot-build/conversation-contract/capabilities/Gate"
+import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
+import * as CallFrame from "@openbot-build/conversation-contract/chats/CallFrame"
+import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import { DelegationCommands } from "./DelegationCommands.ts"
 

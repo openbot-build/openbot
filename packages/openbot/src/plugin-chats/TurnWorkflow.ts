@@ -13,7 +13,7 @@ import { Activity } from "effect/workflow"
 import {
 	BotFeatures,
 	Pins,
-} from "../conversation-contract/chats/BotFeatures.ts"
+} from "@openbot-build/conversation-contract/chats/BotFeatures"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 import * as Engine from "@openbot-build/server-execution/execution/Engine"
 import {
@@ -29,9 +29,9 @@ import {
 import {
 	InputCommands,
 	workflowName,
-} from "../conversation-contract/chats/InputCommands.ts"
-import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+} from "@openbot-build/conversation-contract/chats/InputCommands"
+import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import { TurnSession } from "./TurnSession.ts"
 
 export const workflow = Engine.define(workflowName)

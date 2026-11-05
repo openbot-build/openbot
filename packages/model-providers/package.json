@@ -1,0 +1,54 @@
+{
+	"name": "@openbot-build/model-providers",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The model providers of the OpenBot server: OpenAI, OpenAI-compatible services, Anthropic, ChatGPT, and TypeSafe",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./providers/ToolImages": "./dist/providers/ToolImages.js",
+		"./providers/anthropic/AnthropicProvider": "./dist/providers/anthropic/AnthropicProvider.js",
+		"./providers/chatgpt/ChatGptProvider": "./dist/providers/chatgpt/ChatGptProvider.js",
+		"./providers/chatgpt/OAuth": "./dist/providers/chatgpt/OAuth.js",
+		"./providers/openai-compat/OpenAiCompatProvider": "./dist/providers/openai-compat/OpenAiCompatProvider.js",
+		"./providers/openai/OpenAiProvider": "./dist/providers/openai/OpenAiProvider.js",
+		"./providers/openai/OpenAiRealtime": "./dist/providers/openai/OpenAiRealtime.js",
+		"./providers/openai/Request": "./dist/providers/openai/Request.js",
+		"./providers/openai/ResponsesCompaction": "./dist/providers/openai/ResponsesCompaction.js",
+		"./providers/typesafe/TypeSafeProvider": "./dist/providers/typesafe/TypeSafeProvider.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/ai-anthropic": "4.1.2",
+		"@effect/ai-openai": "4.1.2",
+		"@effect/ai-openai-compat": "4.1.2",
+		"@effect/ai-typesafe": "4.1.2",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/models-contract": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"effect": "4.1.2",
+		"jose": "6.2.12"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"@openbot-build/server-billing": "workspace:*",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/model-providers"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

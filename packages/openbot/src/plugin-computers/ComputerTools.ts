@@ -18,16 +18,22 @@ import {
 	String as Str,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Answer, Gate } from "../conversation-contract/capabilities/Gate.ts"
-import { Work } from "../conversation-contract/capabilities/Work.ts"
+import {
+	Answer,
+	Gate,
+} from "@openbot-build/conversation-contract/capabilities/Gate"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import type { Machine } from "./Computer.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"
 import { checkFile, Computers } from "./Computers.ts"
 import { Sessions } from "./Sessions.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import { hasImage, imageKey } from "../model-providers/providers/ToolImages.ts"
-import type * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
-import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import {
+	hasImage,
+	imageKey,
+} from "@openbot-build/model-providers/providers/ToolImages"
+import type * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
+import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
 
 /**

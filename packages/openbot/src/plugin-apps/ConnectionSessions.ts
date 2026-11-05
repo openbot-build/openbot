@@ -19,11 +19,11 @@ import type { PgClient } from "@effect/sql-pg"
 import { AppHost } from "./AppHost.ts"
 import { Governance } from "./Governance.ts"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
+import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import type {
 	Error as StorageError,
 	StoredConnection,
-} from "../apps-contract/apps/StoredConnections.ts"
+} from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
 
 export class Unavailable extends Schema.TaggedError<

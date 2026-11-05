@@ -26,14 +26,14 @@ import {
 	authorizeUrl,
 	ChatGptOAuth,
 	Credentials,
-} from "../model-providers/providers/chatgpt/OAuth.ts"
+} from "@openbot-build/model-providers/providers/chatgpt/OAuth"
 import {
 	type Owner,
 	ownerColumns,
-} from "../models-contract/models/ModelProviders.ts"
-import { ProviderOAuth } from "../models-contract/models/ProviderOAuth.ts"
-export { ProviderOAuth } from "../models-contract/models/ProviderOAuth.ts"
-export type { Errors } from "../models-contract/models/ProviderOAuth.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+export { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
+export type { Errors } from "@openbot-build/models-contract/models/ProviderOAuth"
 
 const Pending = Schema.Struct({
 	redirectUri: Schema.String,

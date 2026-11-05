@@ -10,11 +10,11 @@ import {
 	Console,
 	Effect,
 	FileSystem,
-	flow,
 	HashSet,
 	Option,
 	Path,
 	pipe,
+	type PlatformError,
 	Predicate,
 	Record as Rec,
 	Result,
@@ -57,7 +57,7 @@ const rules = {
 	"public-entry":
 		"Use the public entry of another package, not its source files. An entry of a server package must be a key of `exports` in its package.json.",
 	"virtual-boundary":
-		"A server folder or server package may import only lower folders and packages, and a plugin folder must not import another plugin folder. The database package imports no other OpenBot server code. Put shared types and service tags in a contract folder.",
+		"A server folder or server package may import only lower folders and packages, and a plugin folder must not import another plugin folder. The database package imports no other OpenBot server code. Put shared types and service tags in a contract package.",
 	"graft-boundary":
 		"Only the plugin kit (the `server-plugin` package), the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
 	"feature-lookup":
@@ -246,7 +246,7 @@ const memberParts = (node: Node): ReadonlyArray<string> => {
  * of a model call. They do not look for a feature.
  */
 const lookupFiles = [
-	"packages/openbot/src/model-providers/providers/openai/Request.ts",
+	"packages/model-providers/src/providers/openai/Request.ts",
 ] as const
 
 /** True for `Effect.serviceOption`, `Plugin.optional` and `GraftPlugin.optional`. */
@@ -417,6 +417,11 @@ const serverPackages = [
 	"identity-contract",
 	"server-billing",
 	"server-execution",
+	"tools-contract",
+	"models-contract",
+	"apps-contract",
+	"conversation-contract",
+	"model-providers",
 	"server-plugin",
 ] as const
 const isServerPackage = (name: string) =>
@@ -815,26 +820,50 @@ const checkFile = Effect.fn("EffectRules.checkFile")(function* (
 	)
 })
 
+/**
+ * Lists the TypeScript files under a folder, one folder at a time. It does not
+ * go into a skipped folder. A recursive `readDirectory` goes into
+ * node_modules first and follows its links to other packages, and their
+ * node_modules again. With many packages that list gets too large for memory.
+ */
+const sourceFiles = (
+	folder: string,
+): Effect.Effect<
+	ReadonlyArray<string>,
+	PlatformError.PlatformError,
+	FileSystem.FileSystem | Path.Path
+> =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem
+		const path = yield* Path.Path
+		const names = yield* fs.readDirectory(folder)
+		const lists = yield* Effect.forEach(
+			Arr.filter(names, (name) => !Arr.contains(skipped, name)),
+			(name) => {
+				const file = path.join(folder, name)
+				return fs
+					.stat(file)
+					.pipe(
+						Effect.flatMap((info) =>
+							info.type === "Directory"
+								? sourceFiles(file)
+								: Effect.succeed(
+										Str.endsWith(".ts")(name) && !Str.endsWith(".d.ts")(name)
+											? [file]
+											: [],
+									),
+						),
+					)
+			},
+		)
+		return Arr.flatten(lists)
+	})
+
 const program = Effect.gen(function* () {
-	const fs = yield* FileSystem.FileSystem
 	const path = yield* Path.Path
-	const files = yield* Effect.forEach(roots, (root) =>
-		fs.readDirectory(root, { recursive: true }).pipe(
-			Effect.map(
-				flow(
-					Arr.filter(
-						(entry) =>
-							Str.endsWith(".ts")(entry) &&
-							!Str.endsWith(".d.ts")(entry) &&
-							!Arr.some(Str.split(entry, path.sep), (part) =>
-								Arr.contains(skipped, part),
-							),
-					),
-					Arr.map((entry) => path.join(root, entry)),
-				),
-			),
-		),
-	).pipe(Effect.map(Arr.flatten))
+	const files = yield* Effect.forEach(roots, sourceFiles).pipe(
+		Effect.map(Arr.flatten),
+	)
 	const served = yield* readEntries()
 	const codeFindings = yield* Effect.forEach(
 		files,

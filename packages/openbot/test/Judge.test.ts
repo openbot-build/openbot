@@ -15,9 +15,9 @@ import {
 } from "effect"
 import { DecisionModel } from "effect/ai"
 import { TestClock } from "effect/testing"
-import { BotRecords } from "../src/conversation-contract/bots/BotRecords.ts"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import * as Judge from "../src/plugin-capabilities/Judge.ts"
-import { AnyModel } from "../src/models-contract/models/ModelRegistry.ts"
+import { AnyModel } from "@openbot-build/models-contract/models/ModelRegistry"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { bot } from "./BotFixture.ts"
 

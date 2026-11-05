@@ -33,19 +33,19 @@ import {
 } from "@openbot-build/server-database/Schema"
 import * as Db from "@openbot-build/server-database/Database"
 import { Governance } from "./Governance.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import { CheckJson } from "./IndexStore.ts"
 import {
 	CheckInput,
 	CheckResult,
 	IndexWork,
-} from "../apps-contract/apps/IndexWork.ts"
+} from "@openbot-build/apps-contract/apps/IndexWork"
 export {
 	CheckInput,
 	CheckResult,
 	IndexWork,
-} from "../apps-contract/apps/IndexWork.ts"
-export type { Service } from "../apps-contract/apps/IndexWork.ts"
+} from "@openbot-build/apps-contract/apps/IndexWork"
+export type { Service } from "@openbot-build/apps-contract/apps/IndexWork"
 
 export const workflowName = "openbot.index-watch"
 

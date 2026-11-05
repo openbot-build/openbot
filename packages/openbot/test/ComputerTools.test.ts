@@ -14,8 +14,11 @@ import {
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import * as ToolApprovals from "./ToolApprovals.ts"
-import { Answer, Gate } from "../src/conversation-contract/capabilities/Gate.ts"
-import { Work } from "../src/conversation-contract/capabilities/Work.ts"
+import {
+	Answer,
+	Gate,
+} from "@openbot-build/conversation-contract/capabilities/Gate"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import type { Machine } from "../src/plugin-computers/Computer.ts"
 import { ComputerProviders } from "../src/plugin-computers/ComputerProviders.ts"
 import { Computers } from "../src/plugin-computers/Computers.ts"

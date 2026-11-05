@@ -1,4 +1,4 @@
-import { ProviderOAuth } from "../models-contract/models/ProviderOAuth.ts"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
 import { Model, Provider } from "@openbot-build/core"
 import { ModelProvidersApi, OpenBotApi } from "@openbot-build/api"
 import { Authorization } from "@openbot-build/domain"
@@ -16,11 +16,14 @@ import {
 	organizationOwner,
 	type Owner,
 	view,
-} from "../models-contract/models/ModelProviders.ts"
-import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
-import { Models, view as modelView } from "../models-contract/models/Models.ts"
-import { checkUnused } from "../models-contract/models/ProviderUseHttp.ts"
-export { checkUnused } from "../models-contract/models/ProviderUseHttp.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
+import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import {
+	Models,
+	view as modelView,
+} from "@openbot-build/models-contract/models/Models"
+import { checkUnused } from "@openbot-build/models-contract/models/ProviderUseHttp"
+export { checkUnused } from "@openbot-build/models-contract/models/ProviderUseHttp"
 
 export const layer = HttpApiBuilder.group(
 	OpenBotApi,

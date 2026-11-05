@@ -18,7 +18,7 @@ import {
 	decodeRow,
 	ProofRow,
 	AppRow,
-} from "../apps-contract/apps/DeveloperRows.ts"
+} from "@openbot-build/apps-contract/apps/DeveloperRows"
 export {
 	stored,
 	Json,
@@ -28,11 +28,11 @@ export {
 	decodeApp,
 	findApp,
 	getApp,
-} from "../apps-contract/apps/DeveloperRows.ts"
+} from "@openbot-build/apps-contract/apps/DeveloperRows"
 export type {
 	Database,
 	ProofRecord,
-} from "../apps-contract/apps/DeveloperRows.ts"
+} from "@openbot-build/apps-contract/apps/DeveloperRows"
 
 /** Drizzle queries join this transaction. A nested call uses a savepoint. */
 export const transaction =

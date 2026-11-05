@@ -14,7 +14,7 @@ import {
 	Stream,
 } from "effect"
 import { type ChatStore, Chat, Config } from "@openbot-build/core"
-import * as ModelFailure from "../../models-contract/models/ModelFailure.ts"
+import * as ModelFailure from "@openbot-build/models-contract/models/ModelFailure"
 import {
 	Authorization,
 	Execution,
@@ -28,7 +28,7 @@ import {
 	Tool,
 	Toolkit,
 } from "effect/ai"
-import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Records, category } from "@openbot-build/server-kernel/errors/Records"
 import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
@@ -42,8 +42,8 @@ import {
 import { Directory } from "@openbot-build/server-execution/resources/Directory"
 import * as Resource from "@openbot-build/server-execution/resources/Resource"
 import * as Db from "@openbot-build/server-database/Database"
-import * as StoredChats from "../../conversation-contract/chats/StoredChats.ts"
-import * as ChatHost from "../../conversation-contract/chats/ChatHost.ts"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { Transport } from "@openbot-build/server-execution/resources/Transport"
 
 const ToolDefinition = Schema.Struct({

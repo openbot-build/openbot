@@ -19,7 +19,7 @@ import {
 import {
 	Channels,
 	type StoredChannel,
-} from "../conversation-contract/channels/Channels.ts"
+} from "@openbot-build/conversation-contract/channels/Channels"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 import * as Platform from "@openbot-build/server-kernel/settings/Platform"

@@ -4,7 +4,7 @@ import { Bots, type ExecutionIdentity } from "@openbot-build/domain"
 import { HashSet } from "effect"
 import { Prompt } from "effect/ai"
 import * as Evidence from "../src/plugin-bots/MemoryEvidence.ts"
-import { chatHostId } from "../src/conversation-contract/chats/ChatHost.ts"
+import { chatHostId } from "@openbot-build/conversation-contract/chats/ChatHost"
 
 const identity: ExecutionIdentity = {
 	owner: { organizationId: "org", userId: "owner" },

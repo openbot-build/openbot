@@ -1,4 +1,4 @@
-import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import {
@@ -20,17 +20,17 @@ import {
 } from "@openbot-build/server-billing/billing/Billing"
 import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
 import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
-import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
+import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
 import {
 	ModelProviders,
 	organizationOwner,
 	type Stored,
-} from "../src/models-contract/models/ModelProviders.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
 import {
 	Models,
 	type StoredModel,
-} from "../src/models-contract/models/Models.ts"
-import * as TypeSafeProvider from "../src/model-providers/providers/typesafe/TypeSafeProvider.ts"
+} from "@openbot-build/models-contract/models/Models"
+import * as TypeSafeProvider from "@openbot-build/model-providers/providers/typesafe/TypeSafeProvider"
 import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 

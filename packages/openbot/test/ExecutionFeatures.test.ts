@@ -13,16 +13,19 @@ import {
 	type Scope,
 } from "effect"
 import { Prompt, Tool } from "effect/ai"
-import { Files } from "../src/apps-contract/files/Files.ts"
-import type { Entry } from "../src/apps-contract/apps/WorkflowTools.ts"
-import { Gate, Gates } from "../src/conversation-contract/capabilities/Gate.ts"
-import type { Work } from "../src/conversation-contract/capabilities/Work.ts"
-import * as BotFeatures from "../src/conversation-contract/chats/BotFeatures.ts"
-import { TurnContext } from "../src/conversation-contract/chats/TurnContext.ts"
+import { Files } from "@openbot-build/apps-contract/files/Files"
+import type { Entry } from "@openbot-build/apps-contract/apps/WorkflowTools"
+import {
+	Gate,
+	Gates,
+} from "@openbot-build/conversation-contract/capabilities/Gate"
+import type { Work } from "@openbot-build/conversation-contract/capabilities/Work"
+import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
+import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 import * as ExecutionFeatures from "../src/plugin-chats/ExecutionFeatures.ts"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import type { Definition } from "../src/tools-contract/chats/ToolDefinitions.ts"
+import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
 import * as BotFixture from "./BotFixture.ts"
 
 const fence = {

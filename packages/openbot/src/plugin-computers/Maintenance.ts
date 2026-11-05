@@ -25,7 +25,7 @@ import {
 	Option,
 	Schema,
 } from "effect"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	computerAccess,

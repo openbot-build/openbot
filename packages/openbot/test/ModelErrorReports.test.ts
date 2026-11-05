@@ -26,7 +26,7 @@ import { Unavailable } from "@openbot-build/server-billing/billing/TokenThrottle
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Records from "@openbot-build/server-kernel/errors/Records"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
-import * as Realtime from "../src/model-providers/providers/openai/OpenAiRealtime.ts"
+import * as Realtime from "@openbot-build/model-providers/providers/openai/OpenAiRealtime"
 import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 

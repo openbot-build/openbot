@@ -1,0 +1,44 @@
+{
+	"name": "@openbot-build/tools-contract",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The shared service tags and types of tools in the OpenBot server: tool entries, tool definitions, host tools, and the todo list",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./chats/HostTools": "./dist/chats/HostTools.js",
+		"./chats/ToolDefinitions": "./dist/chats/ToolDefinitions.js",
+		"./plugins/Registration": "./dist/plugins/Registration.js",
+		"./plugins/ToolEntry": "./dist/plugins/ToolEntry.js",
+		"./plugins/ToolJson": "./dist/plugins/ToolJson.js",
+		"./plugins/work/Todos": "./dist/plugins/work/Todos.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/tools-contract"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

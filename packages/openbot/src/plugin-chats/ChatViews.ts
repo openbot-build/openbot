@@ -6,7 +6,7 @@ import type {
 	ChatView,
 	OpenWork,
 } from "@openbot-build/api"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { response } from "./ResponseMapping.ts"
 
 export const info = (ref: Chat.Ref): ChatInfo => {

@@ -1,18 +1,18 @@
 import { Bots as BotDomain, Execution } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
-import { Work } from "../conversation-contract/capabilities/Work.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import {
 	MemberInactive,
 	TurnContext,
-} from "../conversation-contract/chats/TurnContext.ts"
+} from "@openbot-build/conversation-contract/chats/TurnContext"
 export {
 	MemberInactive,
 	TurnContext,
-} from "../conversation-contract/chats/TurnContext.ts"
-export type { Failure } from "../conversation-contract/chats/TurnContext.ts"
+} from "@openbot-build/conversation-contract/chats/TurnContext"
+export type { Failure } from "@openbot-build/conversation-contract/chats/TurnContext"
 
 export const layer = Layer.effect(
 	TurnContext,

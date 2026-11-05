@@ -14,7 +14,7 @@ import {
 	Store,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 import {
 	GrantCleanup,
 	scopeOf,

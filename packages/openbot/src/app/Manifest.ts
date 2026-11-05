@@ -17,7 +17,7 @@ import {
 	Stream,
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
-import { BotFeatures } from "../conversation-contract/chats/BotFeatures.ts"
+import { BotFeatures } from "@openbot-build/conversation-contract/chats/BotFeatures"
 import * as RunnerManifest from "@openbot-build/server-execution/execution/RunnerManifest"
 import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
 import * as Background from "@openbot-build/server-kernel/execution/Background"

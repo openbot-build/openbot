@@ -25,7 +25,7 @@ import {
 	Toolkit,
 } from "effect/ai"
 import * as Assistance from "../plugin-apps/Assistance.ts"
-import * as HostTools from "../tools-contract/chats/HostTools.ts"
+import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
 
 /** Each development scenario and what it does. The scenario ids come from these keys. */
 const descriptions = {

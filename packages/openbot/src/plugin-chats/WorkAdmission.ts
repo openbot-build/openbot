@@ -11,12 +11,12 @@ import {
 	Schema,
 	Struct,
 } from "effect"
-import * as DelegationUsage from "../conversation-contract/bots/DelegationUsage.ts"
+import * as DelegationUsage from "@openbot-build/conversation-contract/bots/DelegationUsage"
 import {
 	Delegations,
 	noUsage,
-} from "../conversation-contract/bots/Delegations.ts"
-import { Requests } from "../conversation-contract/capabilities/Requests.ts"
+} from "@openbot-build/conversation-contract/bots/Delegations"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
 import * as Db from "@openbot-build/server-database/Database"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
 import * as Admission from "@openbot-build/server-execution/execution/Admission"
@@ -25,11 +25,11 @@ import {
 	storage,
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
-import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
-export { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
-export type { Service } from "../conversation-contract/chats/WorkAdmission.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
+import { WorkAdmission } from "@openbot-build/conversation-contract/chats/WorkAdmission"
+export { WorkAdmission } from "@openbot-build/conversation-contract/chats/WorkAdmission"
+export type { Service } from "@openbot-build/conversation-contract/chats/WorkAdmission"
 
 const TurnReference = Schema.Struct({
 	chat: Chat.Id,

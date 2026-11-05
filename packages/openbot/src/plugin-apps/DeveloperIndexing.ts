@@ -34,11 +34,11 @@ import {
 import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import * as Rows from "../apps-contract/apps/DeveloperRows.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
+import * as Rows from "@openbot-build/apps-contract/apps/DeveloperRows"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
 import { Governance } from "./Governance.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.index-request"
 const Input = Schema.Struct({

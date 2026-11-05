@@ -23,7 +23,7 @@ import type {
 	FromWorker,
 	Settled,
 	ToWorker,
-} from "../apps-contract/code/Protocol.ts"
+} from "@openbot-build/apps-contract/code/Protocol"
 
 /** Code that runs in QuickJS before the program. It builds `apps`, `vault`, `console`, the clock and random numbers. */
 const prelude = `(() => {

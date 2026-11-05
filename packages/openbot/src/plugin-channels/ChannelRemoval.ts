@@ -24,7 +24,7 @@ import {
 	Stream,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	organizationKey,

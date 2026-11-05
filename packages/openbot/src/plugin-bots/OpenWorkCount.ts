@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect"
-import { OpenWork } from "../conversation-contract/chats/OpenWork.ts"
+import { OpenWork } from "@openbot-build/conversation-contract/chats/OpenWork"
 import * as ChatWork from "./ChatWork.ts"
 
 /** Counts work that can still send a result to this Chat. */

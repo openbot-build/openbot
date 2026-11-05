@@ -18,10 +18,10 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import * as MemoryRecords from "./MemoryRecords.ts"
-import type { Home } from "../conversation-contract/bots/BotMemories.ts"
-export type { Home } from "../conversation-contract/bots/BotMemories.ts"
+import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
+export type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
 
 /** A linked Bot uses the memory of its source. */
 export const homeOf = (organizationId: string, bot: BotsApi.Bot): Home =>

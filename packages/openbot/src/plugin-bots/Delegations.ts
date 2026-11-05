@@ -11,21 +11,21 @@ import {
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
-import { hash } from "../conversation-contract/capabilities/Capability.ts"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
+import { hash } from "@openbot-build/conversation-contract/capabilities/Capability"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import {
 	type Delegation,
 	Stored,
 	type CreateInput,
 	Delegations,
 	noUsage,
-} from "../conversation-contract/bots/Delegations.ts"
+} from "@openbot-build/conversation-contract/bots/Delegations"
 export {
 	Stored,
 	Delegations,
 	noUsage,
-} from "../conversation-contract/bots/Delegations.ts"
-export type { CreateInput } from "../conversation-contract/bots/Delegations.ts"
+} from "@openbot-build/conversation-contract/bots/Delegations"
+export type { CreateInput } from "@openbot-build/conversation-contract/bots/Delegations"
 
 /** What the work used, with the running time up to now. */
 export const usageOf = (

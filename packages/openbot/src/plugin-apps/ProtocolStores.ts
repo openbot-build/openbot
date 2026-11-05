@@ -1,5 +1,5 @@
 import { Authorization, Store } from "@openbot-build/protocol"
-import * as GrantUses from "../apps-contract/apps/GrantUses.ts"
+import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	Context,
@@ -17,8 +17,8 @@ import {
 	appConnections,
 	appSecrets,
 } from "@openbot-build/server-database/Schema"
-import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
-import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
+import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
+import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"

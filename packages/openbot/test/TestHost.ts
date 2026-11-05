@@ -22,7 +22,7 @@ import * as Http from "../src/app/Http.ts"
 import * as Outside_ from "../src/app/Outside.ts"
 import * as Serving from "../src/app/Serving.ts"
 import * as Shared from "../src/app/Shared.ts"
-import type { LiveBackends } from "../src/models-contract/models/LiveBackends.ts"
+import type { LiveBackends } from "@openbot-build/models-contract/models/LiveBackends"
 import * as AccessMounts from "../src/plugin-access/HttpMounts.ts"
 import * as AppHost from "../src/plugin-apps/AppHost.ts"
 import * as AppDiscovery from "../src/plugin-apps/Discovery.ts"
@@ -54,7 +54,7 @@ import * as HttpFailureBoundary from "@openbot-build/server-kernel/errors/HttpBo
 import * as HttpHost from "@openbot-build/server-kernel/errors/HttpHost"
 import * as ErrorReporting from "@openbot-build/server-kernel/errors/Reporting"
 import * as OutboundPolicy from "@openbot-build/server-kernel/network/OutboundPolicy"
-import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
+import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
 import * as PostgresTest from "./PostgresTest.ts"
 
 /** The services that a test server needs: the Node services, crypto and the fetch HTTP client. */

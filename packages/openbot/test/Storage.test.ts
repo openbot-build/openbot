@@ -18,11 +18,11 @@ import { getTableName, is, Table } from "drizzle-orm"
 import * as Migration from "../src/server-upgrade/Migrations.ts"
 import * as AuthSchema from "@openbot-build/server-database/AuthSchema"
 import * as DatabaseSchema from "@openbot-build/server-database/Schema"
-import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import {
 	chatHostId,
 	chatHostStore,
-} from "../src/conversation-contract/chats/ChatHost.ts"
+} from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as Db from "@openbot-build/server-database/Database"

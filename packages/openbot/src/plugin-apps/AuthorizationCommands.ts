@@ -20,7 +20,7 @@ import {
 	ExecutionIdentity,
 	executionCallers,
 } from "@openbot-build/domain"
-import * as GrantUses from "../apps-contract/apps/GrantUses.ts"
+import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
 import * as GrantCleanup from "./GrantCleanup.ts"
 import * as RetryingCall from "@openbot-build/server-execution/execution/RetryingCall"
 import {
@@ -50,7 +50,7 @@ import {
 import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import type { End } from "@openbot-build/server-execution/execution/Program"
 import { Governance } from "./Governance.ts"
-import * as Connections from "../apps-contract/apps/StoredConnections.ts"
+import * as Connections from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.app-authorization"
 export const Preparation = Schema.Struct({

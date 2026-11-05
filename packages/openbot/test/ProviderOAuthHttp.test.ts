@@ -39,15 +39,15 @@ import * as PlatformHandlers from "../src/plugin-platform/HttpHandlers.ts"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Handlers from "../src/plugin-models/HttpHandlers.ts"
-import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
 import {
 	ModelProviders,
 	type Stored,
 	organizationOwner,
 	platformOwner,
-} from "../src/models-contract/models/ModelProviders.ts"
-import { Models } from "../src/models-contract/models/Models.ts"
-import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
+import { Models } from "@openbot-build/models-contract/models/Models"
+import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
 import { Billing } from "@openbot-build/server-billing/billing/Billing"
 import * as Fixture from "./OrganizationFixture.ts"
 import { Mail } from "@openbot-build/identity-contract/mail/Mail"

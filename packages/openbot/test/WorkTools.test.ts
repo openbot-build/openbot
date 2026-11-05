@@ -12,10 +12,13 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, type Tool, Toolkit } from "effect/ai"
-import { Answer, Gate } from "../src/conversation-contract/capabilities/Gate.ts"
-import { Work } from "../src/conversation-contract/capabilities/Work.ts"
-import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
-import { OpenWork } from "../src/conversation-contract/chats/OpenWork.ts"
+import {
+	Answer,
+	Gate,
+} from "@openbot-build/conversation-contract/capabilities/Gate"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import { OpenWork } from "@openbot-build/conversation-contract/chats/OpenWork"
 import { ReminderCommands } from "../src/plugin-work/ReminderCommands.ts"
 import { Execution } from "@openbot-build/domain"
 import * as ToolApprovals from "./ToolApprovals.ts"

@@ -5,7 +5,7 @@ import {
 	storage,
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 export const workflowName = "openbot.trigger-schedule"
 export const ScheduleInput = Schema.Struct({
 	triggerId: Domain.TriggerId,

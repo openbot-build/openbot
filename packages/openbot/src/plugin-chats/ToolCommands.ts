@@ -1,13 +1,13 @@
 import { Execution, ToolExecution } from "@openbot-build/domain"
 import * as DecisionWait from "@openbot-build/server-execution/execution/DecisionWait"
-import { type Definition } from "../tools-contract/chats/ToolDefinitions.ts"
-import * as ToolRecords from "../conversation-contract/chats/ToolRecords.ts"
+import { type Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"
+import * as ToolRecords from "@openbot-build/conversation-contract/chats/ToolRecords"
 import {
 	Request,
 	codec,
 	workflowName,
-} from "../conversation-contract/chats/ToolRecords.ts"
-import { latestCall } from "../conversation-contract/chats/ToolResults.ts"
+} from "@openbot-build/conversation-contract/chats/ToolRecords"
+import { latestCall } from "@openbot-build/conversation-contract/chats/ToolResults"
 import {
 	Chat,
 	Operation,
@@ -42,21 +42,21 @@ import {
 	type Fence,
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { stepId } from "./ToolSteps.ts"
 import {
 	End,
 	ToolCommands,
-} from "../conversation-contract/chats/ToolCommands.ts"
+} from "@openbot-build/conversation-contract/chats/ToolCommands"
 export {
 	End,
 	ToolCommands,
-} from "../conversation-contract/chats/ToolCommands.ts"
-export type { Service } from "../conversation-contract/chats/ToolCommands.ts"
+} from "@openbot-build/conversation-contract/chats/ToolCommands"
+export type { Service } from "@openbot-build/conversation-contract/chats/ToolCommands"
 
-export { workflowName } from "../conversation-contract/chats/ToolRecords.ts"
+export { workflowName } from "@openbot-build/conversation-contract/chats/ToolRecords"
 
 export const noticeWorkflowName = "openbot.tool-notice"
 

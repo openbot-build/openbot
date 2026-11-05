@@ -22,10 +22,10 @@ import {
 	String as Str,
 } from "effect"
 import { WorkflowEngine } from "effect/workflow"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import { policyOf } from "../src/plugin-authorization/Load.ts"
-import { Bots } from "../src/conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Authority from "@openbot-build/server-execution/imported/Authority"
 import * as Imported from "@openbot-build/server-execution/imported/Executions"

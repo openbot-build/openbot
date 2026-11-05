@@ -40,49 +40,52 @@ import {
 } from "effect"
 import { Digest } from "effect/crypto"
 import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
-import { type Failure, Bots } from "../conversation-contract/bots/Bots.ts"
+import {
+	type Failure,
+	Bots,
+} from "@openbot-build/conversation-contract/bots/Bots"
 import { type SqlError, SqlClient } from "effect/sql"
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
-import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
-import { Requests } from "../conversation-contract/capabilities/Requests.ts"
-import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
-import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import * as ChatModels from "../conversation-contract/chats/ChatModels.ts"
-import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+import * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
+import * as CallFrame from "@openbot-build/conversation-contract/chats/CallFrame"
+import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import * as ChatModels from "@openbot-build/conversation-contract/chats/ChatModels"
+import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as Db from "@openbot-build/server-database/Database"
 import type {
 	Authorize,
 	Decide,
 } from "@openbot-build/server-execution/execution/Engine"
-import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
-import * as Todos from "../tools-contract/plugins/work/Todos.ts"
+import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
 import { delegationTimeLimitOf } from "@openbot-build/server-kernel/settings/Documents"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as DelegationUsage from "../conversation-contract/bots/DelegationUsage.ts"
+import * as DelegationUsage from "@openbot-build/conversation-contract/bots/DelegationUsage"
 import {
 	Delegations,
 	noUsage,
-} from "../conversation-contract/bots/Delegations.ts"
+} from "@openbot-build/conversation-contract/bots/Delegations"
 
 export {
 	workflowName,
 	noticeWorkflowName,
 	Input,
 	Request,
-} from "../conversation-contract/bots/DelegationSource.ts"
-import * as DelegationSource from "../conversation-contract/bots/DelegationSource.ts"
+} from "@openbot-build/conversation-contract/bots/DelegationSource"
+import * as DelegationSource from "@openbot-build/conversation-contract/bots/DelegationSource"
 import {
 	workflowName,
 	noticeWorkflowName,
 	Input,
 	Request,
 	codec,
-} from "../conversation-contract/bots/DelegationSource.ts"
+} from "@openbot-build/conversation-contract/bots/DelegationSource"
 const sameCaller = Schema.toEquivalence(Caller)
 export const End = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("completed"), result: Schema.String }),

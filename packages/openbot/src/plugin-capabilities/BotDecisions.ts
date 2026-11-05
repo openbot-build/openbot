@@ -13,11 +13,11 @@ import {
 } from "effect"
 import { Digest } from "effect/crypto"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { workflowName as turnWorkflow } from "../conversation-contract/chats/InputCommands.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import { workflowName as turnWorkflow } from "@openbot-build/conversation-contract/chats/InputCommands"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	Store,
@@ -25,15 +25,15 @@ import {
 	type Fence,
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
-import { hash } from "../conversation-contract/capabilities/Capability.ts"
+import { hash } from "@openbot-build/conversation-contract/capabilities/Capability"
 import { CapabilityAccess } from "./CapabilityAccess.ts"
 import {
 	RequestCommands,
 	workflowName,
-} from "../conversation-contract/capabilities/RequestCommands.ts"
+} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 import { decisionId } from "./RequestCommands.ts"
-import { Rules } from "../conversation-contract/capabilities/Rules.ts"
-import { Requests } from "../conversation-contract/capabilities/Requests.ts"
+import { Rules } from "@openbot-build/conversation-contract/capabilities/Rules"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
 import { chatOf } from "./Requests.ts"
 
 export const Decision = Schema.Struct({

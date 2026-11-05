@@ -1,6 +1,6 @@
 import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import { type Developers, CodeRuns, Execution } from "@openbot-build/domain"
-import * as AppSecrets from "../apps-contract/vaults/AppSecrets.ts"
+import * as AppSecrets from "@openbot-build/apps-contract/vaults/AppSecrets"
 import {
 	Array as Arr,
 	Cause,
@@ -14,7 +14,7 @@ import {
 	Stream,
 	String as Str,
 } from "effect"
-import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
+import { AppCommands } from "@openbot-build/apps-contract/apps/AppCommands"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
 import { Calls } from "@openbot-build/server-execution/execution/Calls"
@@ -24,11 +24,11 @@ import {
 	type Fence,
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
-import * as VaultCode from "../apps-contract/vaults/CodeMode.ts"
-import { CodeCommands } from "../apps-contract/code/CodeCommands.ts"
+import * as VaultCode from "@openbot-build/apps-contract/vaults/CodeMode"
+import { CodeCommands } from "@openbot-build/apps-contract/code/CodeCommands"
 import { programStep } from "./CodeCommands.ts"
 import { Sandbox } from "./Sandbox.ts"
-import type { Call } from "../apps-contract/code/Protocol.ts"
+import type { Call } from "@openbot-build/apps-contract/code/Protocol"
 
 import { CallInput, Submitted } from "./CodeCall.ts"
 const Settled = Schema.Union([

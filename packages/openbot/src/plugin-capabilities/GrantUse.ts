@@ -1,14 +1,14 @@
 import { Item, ToolStep } from "@openbot-build/core"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
-import { Requests } from "../conversation-contract/capabilities/Requests.ts"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
 import { Bots as BotDomain, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import * as Hex from "effect/encoding/Hex"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as Db from "@openbot-build/server-database/Database"
 import { grantUses } from "@openbot-build/server-database/ExecutionSchema"
 import {
@@ -16,7 +16,7 @@ import {
 	storage,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import { Grants } from "../conversation-contract/capabilities/Grants.ts"
+import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 
 class GrantTaken extends Schema.TaggedError<
 	GrantTaken,

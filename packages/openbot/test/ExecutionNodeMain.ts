@@ -1,4 +1,4 @@
-import { Delegations } from "../src/conversation-contract/bots/Delegations.ts"
+import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
 import * as PrivateRpc from "@openbot-build/server-execution/transport/PrivateRpc"
 import * as Observation from "@openbot-build/server-execution/execution/Observation"
 /** This entry point is run in two separate processes by ExecutionCluster.test.ts. */

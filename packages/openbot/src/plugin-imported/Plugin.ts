@@ -1,7 +1,7 @@
 /** The imported plugin: executions that started in another program. */
 import { Authorization } from "@openbot-build/domain"
 import { SqlClient } from "effect/sql"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import { Store } from "@openbot-build/server-execution/execution/Store"
 import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
 import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"

@@ -21,8 +21,8 @@ import { Context, Effect, Layer, Option, Redacted, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as Db from "@openbot-build/server-database/Database"
 import { channels as rows } from "@openbot-build/server-database/Schema"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
@@ -38,7 +38,7 @@ import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	Channels,
 	Credentials,
-} from "../conversation-contract/channels/Channels.ts"
+} from "@openbot-build/conversation-contract/channels/Channels"
 import { fromInput } from "./ChannelInput.ts"
 
 export const workflowName = "openbot.channel-configuration"

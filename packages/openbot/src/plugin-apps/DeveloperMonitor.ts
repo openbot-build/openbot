@@ -32,7 +32,7 @@ import { issueKey, sameIssue } from "./DeveloperReports.ts"
 import * as Rows from "./DeveloperRows.ts"
 import * as DeveloperNotices from "./DeveloperNotices.ts"
 import { DeveloperWatches, type Reference } from "./DeveloperWatches.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 
 export const CheckResult = Schema.TaggedUnion({
 	App: { report: Models.InspectionReport },

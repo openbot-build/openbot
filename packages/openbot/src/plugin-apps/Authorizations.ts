@@ -31,7 +31,7 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { ProtocolStores } from "./ProtocolStores.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as ClientMetadata from "./ClientMetadata.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"

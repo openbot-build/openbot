@@ -13,13 +13,13 @@ import {
 	String as Str,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
-import { Chain } from "../conversation-contract/chats/ChatHost.ts"
-import { Grants } from "../conversation-contract/capabilities/Grants.ts"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
+import { Chain } from "@openbot-build/conversation-contract/chats/ChatHost"
+import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 import {
 	Rules,
 	deciderKey,
-} from "../conversation-contract/capabilities/Rules.ts"
+} from "@openbot-build/conversation-contract/capabilities/Rules"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
 import type { Records } from "@openbot-build/server-kernel/errors/Records"
 import {
@@ -27,16 +27,16 @@ import {
 	Stored,
 	type Decision,
 	Requests,
-} from "../conversation-contract/capabilities/Requests.ts"
+} from "@openbot-build/conversation-contract/capabilities/Requests"
 export {
 	Stored,
 	Requests,
-} from "../conversation-contract/capabilities/Requests.ts"
+} from "@openbot-build/conversation-contract/capabilities/Requests"
 export type {
 	Decision,
 	Ask,
 	Outcome,
-} from "../conversation-contract/capabilities/Requests.ts"
+} from "@openbot-build/conversation-contract/capabilities/Requests"
 
 type Approver = Request["approver"]
 

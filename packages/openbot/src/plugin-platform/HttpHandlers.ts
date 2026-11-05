@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { CreditConflict } from "@openbot-build/domain/Billing"
 import { Access } from "@openbot-build/identity-contract/access/Access"
-import { ProviderOAuth } from "../models-contract/models/ProviderOAuth.ts"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
 import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 import { Model, Provider } from "@openbot-build/core"
 import { Redacted } from "effect"
@@ -26,13 +26,16 @@ import {
 	organizationKey,
 	platformKey,
 } from "@openbot-build/identity-contract/audit/Resources"
-import { checkUnused } from "../models-contract/models/ProviderUseHttp.ts"
+import { checkUnused } from "@openbot-build/models-contract/models/ProviderUseHttp"
 import {
 	ModelProviders,
 	platformOwner,
 	view,
-} from "../models-contract/models/ModelProviders.ts"
-import { Models, view as modelView } from "../models-contract/models/Models.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
+import {
+	Models,
+	view as modelView,
+} from "@openbot-build/models-contract/models/Models"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {

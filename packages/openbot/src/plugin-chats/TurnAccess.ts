@@ -1,8 +1,8 @@
 import { triggerResource } from "@openbot-build/identity-contract/authorization/Resources"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import * as DelegationSource from "../conversation-contract/bots/DelegationSource.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
+import * as DelegationSource from "@openbot-build/conversation-contract/bots/DelegationSource"
 import * as WorkAdmission from "./WorkAdmission.ts"
-import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
+import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import { Chat, type Config } from "@openbot-build/core"
 import {
 	Authorization,
@@ -27,10 +27,10 @@ import {
 } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
-import { Delegations } from "../conversation-contract/bots/Delegations.ts"
-import { Requests } from "../conversation-contract/capabilities/Requests.ts"
-import { Channels } from "../conversation-contract/channels/Channels.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
+import { Delegations } from "@openbot-build/conversation-contract/bots/Delegations"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import * as Db from "@openbot-build/server-database/Database"
 import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import {
@@ -38,14 +38,14 @@ import {
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import {
 	type Failure,
 	TurnAccess,
-} from "../conversation-contract/chats/TurnAccess.ts"
-export { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
-export type { Service } from "../conversation-contract/chats/TurnAccess.ts"
+} from "@openbot-build/conversation-contract/chats/TurnAccess"
+export { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
+export type { Service } from "@openbot-build/conversation-contract/chats/TurnAccess"
 
 const sameCaller = Schema.toEquivalence(Caller)
 

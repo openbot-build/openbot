@@ -24,7 +24,7 @@ import { SecureRandom } from "effect/crypto"
 import { ProtocolStores, toStoreError } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
+import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Governance } from "./Governance.ts"
 import type {
 	AppConnections as ConnectionDomain,
@@ -34,8 +34,8 @@ import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as HostApp from "./HostApp.ts"
 import { Probe } from "./Probe.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
-export { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
+import { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
+export { AppNetwork } from "@openbot-build/apps-contract/apps/AppNetwork"
 
 type AuthorizationError =
 	| Authorization.AuthorizationError

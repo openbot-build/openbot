@@ -1,16 +1,16 @@
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Clock, Effect, Layer, Option, String as Str } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"
+import { BotRecords } from "@openbot-build/conversation-contract/bots/BotRecords"
 import {
 	type Rule,
 	deciderKey,
 	Rules,
-} from "../conversation-contract/capabilities/Rules.ts"
+} from "@openbot-build/conversation-contract/capabilities/Rules"
 export {
 	deciderKey,
 	Rules,
-} from "../conversation-contract/capabilities/Rules.ts"
+} from "@openbot-build/conversation-contract/capabilities/Rules"
 
 export const make: Effect.Effect<
 	typeof Rules.Service,

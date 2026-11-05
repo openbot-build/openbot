@@ -26,6 +26,21 @@
 			"path": "./packages/server-execution"
 		},
 		{
+			"path": "./packages/tools-contract"
+		},
+		{
+			"path": "./packages/models-contract"
+		},
+		{
+			"path": "./packages/apps-contract"
+		},
+		{
+			"path": "./packages/conversation-contract"
+		},
+		{
+			"path": "./packages/model-providers"
+		},
+		{
 			"path": "./packages/server-plugin"
 		},
 		{

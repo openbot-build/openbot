@@ -4,7 +4,7 @@
  * that the plugins publish.
  */
 import type { Layer, Redacted } from "effect"
-import type * as HostTools from "../tools-contract/chats/HostTools.ts"
+import type * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
 import * as Assembly from "./Assembly.ts"
 import { provide } from "./HostServices.ts"
 import type * as Outside_ from "./Outside.ts"

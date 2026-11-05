@@ -35,7 +35,7 @@ import * as Observation from "@openbot-build/server-execution/execution/Observat
 import * as Commands from "../src/plugin-apps/TestCommands.ts"
 import * as Rows from "../src/plugin-apps/DeveloperRows.ts"
 import { DeveloperAccess } from "../src/plugin-apps/DeveloperAccess.ts"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Postgres from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(Database.migrate).pipe(

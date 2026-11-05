@@ -4,8 +4,8 @@ import {
 	type Key,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
-import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
+import * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
+import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import { Chat, Turn } from "@openbot-build/core"
 import {
 	Authorization,
@@ -17,12 +17,12 @@ import {
 import { Clock, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Db from "@openbot-build/server-database/Database"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { TurnContext } from "../conversation-contract/chats/TurnContext.ts"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import {
 	type Authorize,
 	type DecisionCommand,
@@ -30,7 +30,7 @@ import {
 import {
 	Requests,
 	Stored,
-} from "../conversation-contract/capabilities/Requests.ts"
+} from "@openbot-build/conversation-contract/capabilities/Requests"
 import {
 	workflowName,
 	Continuation,
@@ -39,19 +39,19 @@ import {
 	type PolicyDecision,
 	type End,
 	RequestCommands,
-} from "../conversation-contract/capabilities/RequestCommands.ts"
+} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 export {
 	workflowName,
 	Continuation,
 	Details,
 	Input,
 	RequestCommands,
-} from "../conversation-contract/capabilities/RequestCommands.ts"
+} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 export type {
 	PolicyDecision,
 	End,
 	Service,
-} from "../conversation-contract/capabilities/RequestCommands.ts"
+} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
 
 export const noticeWorkflowName = "openbot.request-notice"
 

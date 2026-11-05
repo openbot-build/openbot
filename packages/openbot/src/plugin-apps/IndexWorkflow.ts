@@ -28,7 +28,7 @@ import {
 	CheckInput,
 	CheckResult,
 	IndexWork,
-} from "../apps-contract/apps/IndexWork.ts"
+} from "@openbot-build/apps-contract/apps/IndexWork"
 import { nextSignal, serviceId, workflowName } from "./IndexWork.ts"
 
 export const workflow = Engine.define(workflowName)

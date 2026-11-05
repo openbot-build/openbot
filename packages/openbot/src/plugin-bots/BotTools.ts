@@ -2,8 +2,8 @@ import { MemoryTasks } from "./MemoryTasks.ts"
 import { MemoryLearning } from "./MemoryLearning.ts"
 import * as DelegationTools from "./WorkflowTools.ts"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import * as Registration from "../tools-contract/plugins/Registration.ts"
-import { names as reviewNames } from "../conversation-contract/capabilities/ReviewTools.ts"
+import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+import { names as reviewNames } from "@openbot-build/conversation-contract/capabilities/ReviewTools"
 import {
 	Bot,
 	type Chat,
@@ -30,22 +30,22 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import { describe } from "../conversation-contract/capabilities/Capability.ts"
-import { Gate } from "../conversation-contract/capabilities/Gate.ts"
-import { Requests } from "../conversation-contract/capabilities/Requests.ts"
-import { Work } from "../conversation-contract/capabilities/Work.ts"
+import { describe } from "@openbot-build/conversation-contract/capabilities/Capability"
+import { Gate } from "@openbot-build/conversation-contract/capabilities/Gate"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { homeOf } from "./BotMemories.ts"
 import { confideTool } from "./MemoryBot.ts"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as ChatWork from "./ChatWork.ts"
-import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
+import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 
 /** The Bot tools. Their parameters are JSON Schema, like App tools. */
-import * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
+import * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
 export type Tools = ToolEntry.Tools
 
 /** What a handler knows about its tool call. */

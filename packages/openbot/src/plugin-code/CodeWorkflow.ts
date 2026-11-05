@@ -1,6 +1,6 @@
 import { Execution } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
-import { workflowName as appWorkflow } from "../apps-contract/apps/AppCommands.ts"
+import { workflowName as appWorkflow } from "@openbot-build/apps-contract/apps/AppCommands"
 import * as Children from "@openbot-build/server-execution/execution/Children"
 import * as Engine from "@openbot-build/server-execution/execution/Engine"
 import {
@@ -16,7 +16,7 @@ import {
 import {
 	CodeCommands,
 	workflowName,
-} from "../apps-contract/code/CodeCommands.ts"
+} from "@openbot-build/apps-contract/code/CodeCommands"
 import { CodeProgram } from "./CodeProgram.ts"
 
 export const workflow = Engine.define(workflowName)

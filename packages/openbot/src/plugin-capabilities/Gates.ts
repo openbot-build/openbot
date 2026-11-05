@@ -16,17 +16,17 @@ import {
 	Gate,
 	Gates,
 	type Frame,
-} from "../conversation-contract/capabilities/Gate.ts"
-import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
+} from "@openbot-build/conversation-contract/capabilities/Gate"
+import * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
 import {
 	RequestCommands,
 	type Input,
-} from "../conversation-contract/capabilities/RequestCommands.ts"
-import type { Stored } from "../conversation-contract/capabilities/Requests.ts"
-import { TurnContext } from "../conversation-contract/chats/TurnContext.ts"
+} from "@openbot-build/conversation-contract/capabilities/RequestCommands"
+import type { Stored } from "@openbot-build/conversation-contract/capabilities/Requests"
+import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
 import { type Fence } from "@openbot-build/server-execution/execution/Store"
 import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
-import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
+import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
 import * as CapabilityPolicy from "./CapabilityAccess.ts"
 import * as Judge from "./Judge.ts"
 

@@ -12,8 +12,8 @@ import {
 	type ExecutionIdentity,
 } from "@openbot-build/domain"
 import { Effect, Layer, Schema } from "effect"
-import { Bots } from "../src/conversation-contract/bots/Bots.ts"
-import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import * as TurnContext from "../src/plugin-chats/TurnContext.ts"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { bot } from "./BotFixture.ts"

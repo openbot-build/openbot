@@ -23,17 +23,20 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import * as Background from "@openbot-build/server-kernel/execution/Background"
-import { Answer, Gate } from "../conversation-contract/capabilities/Gate.ts"
-import { Work } from "../conversation-contract/capabilities/Work.ts"
+import {
+	Answer,
+	Gate,
+} from "@openbot-build/conversation-contract/capabilities/Gate"
+import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import { OpenWork } from "../conversation-contract/chats/OpenWork.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import { OpenWork } from "@openbot-build/conversation-contract/chats/OpenWork"
 import * as Plans from "./Plans.ts"
-import * as Todos from "../tools-contract/plugins/work/Todos.ts"
+import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
 import { ReminderCommands } from "./ReminderCommands.ts"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
-import * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
-import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
+import * as ToolEntry from "@openbot-build/tools-contract/plugins/ToolEntry"
+import { toolJson } from "@openbot-build/tools-contract/plugins/ToolJson"
 
 /** The work control tools. Their parameters are JSON Schema, like App tools. */
 export type Tools = ToolEntry.Tools

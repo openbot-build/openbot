@@ -45,8 +45,8 @@ import { Observation } from "@openbot-build/server-execution/execution/Observati
 import type { End } from "@openbot-build/server-execution/execution/Program"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.developer-test"
 export const Action = Schema.TaggedUnion({

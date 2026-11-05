@@ -8,7 +8,7 @@ import {
 	transactionFailures,
 } from "@openbot-build/server-execution/execution/Store"
 
-import { Channels } from "../conversation-contract/channels/Channels.ts"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 
 export const removalWorkflow = "openbot.channel-removal"
 

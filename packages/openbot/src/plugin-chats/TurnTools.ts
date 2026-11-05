@@ -2,7 +2,7 @@ import type { Paused } from "@openbot-build/server-execution/execution/Admission
 import { type Developers, Execution } from "@openbot-build/domain"
 import type { CallContext } from "@openbot-build/server-execution/execution/CallContext"
 import * as DecisionWait from "@openbot-build/server-execution/execution/DecisionWait"
-import * as ToolDefinitions from "../tools-contract/chats/ToolDefinitions.ts"
+import * as ToolDefinitions from "@openbot-build/tools-contract/chats/ToolDefinitions"
 import {
 	Operation,
 	type Operations,
@@ -30,10 +30,10 @@ import {
 	storage,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import * as ToolResults from "../conversation-contract/chats/ToolResults.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
-import { outputCodec } from "../conversation-contract/chats/ToolSteps.ts"
+import * as ToolResults from "@openbot-build/conversation-contract/chats/ToolResults"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
+import { outputCodec } from "@openbot-build/conversation-contract/chats/ToolSteps"
 import { ToolSteps, beforeSend, stepId } from "./ToolSteps.ts"
 
 type Part = Response.StreamPart<Record<string, Tool.Any>>

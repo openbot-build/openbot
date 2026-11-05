@@ -18,8 +18,8 @@ import {
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
 import { stepId } from "./ToolSteps.ts"
-import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
-import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"
+import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
+import { ToolCommands } from "@openbot-build/conversation-contract/chats/ToolCommands"
 import { noticeWorkflowName } from "./ToolCommands.ts"
 
 const Input = Schema.Struct({ toolExecutionId: Execution.Id })

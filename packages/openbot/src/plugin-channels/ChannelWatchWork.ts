@@ -1,11 +1,11 @@
 import { Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Ref, Schema, Stream } from "effect"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
-import { Requests } from "../conversation-contract/capabilities/Requests.ts"
-import * as ChatRecords from "../conversation-contract/chats/ChatRecords.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
+import { Requests } from "@openbot-build/conversation-contract/capabilities/Requests"
+import * as ChatRecords from "@openbot-build/conversation-contract/chats/ChatRecords"
 import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
-import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
+import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
 import {
 	Store,
 	type Fence,
@@ -15,7 +15,7 @@ import type { Authorize } from "@openbot-build/server-execution/execution/Engine
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { ChannelWatch } from "./ChannelWatch.ts"
 import * as ChannelSend from "./ChannelSend.ts"
-import { Channels } from "../conversation-contract/channels/Channels.ts"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { MessageRef, Target } from "./Channel.ts"

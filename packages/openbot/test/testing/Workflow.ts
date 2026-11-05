@@ -1,6 +1,6 @@
 import { type Caller, Execution } from "@openbot-build/domain"
 import { Effect } from "effect"
-import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { Store } from "@openbot-build/server-execution/execution/Store"
 import type { Host } from "../BrowserHost.ts"
 

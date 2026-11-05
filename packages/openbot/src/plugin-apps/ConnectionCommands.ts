@@ -19,7 +19,7 @@ import {
 	Execution,
 	executionCallers,
 } from "@openbot-build/domain"
-import * as GrantUses from "../apps-contract/apps/GrantUses.ts"
+import * as GrantUses from "@openbot-build/apps-contract/apps/GrantUses"
 import { Discovery, Store as Protocol } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -48,7 +48,7 @@ import type { End } from "@openbot-build/server-execution/execution/Program"
 import { Governance } from "./Governance.ts"
 import * as DiscoveryService from "./Discovery.ts"
 import * as GrantCleanup from "./GrantCleanup.ts"
-import * as Connections from "../apps-contract/apps/StoredConnections.ts"
+import * as Connections from "@openbot-build/apps-contract/apps/StoredConnections"
 
 export const workflowName = "openbot.app-connection"
 export const Action = Schema.TaggedUnion({

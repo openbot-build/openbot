@@ -33,15 +33,15 @@ import {
 	type FilesDocument,
 	quotaOf,
 } from "@openbot-build/server-kernel/settings/Documents"
-import { fileUrl } from "../apps-contract/files/Refs.ts"
+import { fileUrl } from "@openbot-build/apps-contract/files/Refs"
 import * as S3 from "./S3.ts"
 import {
 	type Content,
 	type Failure,
 	Files,
-} from "../apps-contract/files/Files.ts"
-export { Files } from "../apps-contract/files/Files.ts"
-export type { Content } from "../apps-contract/files/Files.ts"
+} from "@openbot-build/apps-contract/files/Files"
+export { Files } from "@openbot-build/apps-contract/files/Files"
+export type { Content } from "@openbot-build/apps-contract/files/Files"
 
 /** A signed upload address works this long. */
 export const uploadLifetimeSeconds = 15 * 60

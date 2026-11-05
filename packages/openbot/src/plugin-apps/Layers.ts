@@ -7,7 +7,7 @@ import {
 	RobotsPolicy,
 } from "@openbot-build/protocol"
 import { Effect, Layer } from "effect"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 import * as ActionPolicy from "./ActionPolicy.ts"
 import * as AppHost from "./AppHost.ts"
 import * as AuthorizationCommands from "./AuthorizationCommands.ts"

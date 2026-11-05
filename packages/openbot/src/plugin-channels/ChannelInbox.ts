@@ -12,11 +12,11 @@ import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
 import { channelInbox } from "@openbot-build/server-database/Schema"
 import { ChannelEventSchema, type ChannelEvent } from "./Channel.ts"
-import { Channels } from "../conversation-contract/channels/Channels.ts"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 
 export const workflowName = "openbot.channel-input"
 export const Input = Schema.Struct({

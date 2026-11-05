@@ -21,7 +21,7 @@ import * as Watches from "../src/plugin-apps/DeveloperWatches.ts"
 import * as Commands from "../src/plugin-apps/ProofCommands.ts"
 import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
 import { AppInspections } from "../src/plugin-apps/AppInspections.ts"
-import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Postgres from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(Database.migrate).pipe(

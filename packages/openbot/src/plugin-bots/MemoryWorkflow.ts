@@ -1,5 +1,5 @@
 import { DurableClock } from "effect/workflow"
-import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
+import { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
 import { MemoryBudgetSpent } from "./MemoryBot.ts"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import { Clock, DateTime, Effect, Layer, Result, Schema } from "effect"

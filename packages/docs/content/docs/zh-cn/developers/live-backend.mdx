@@ -11,16 +11,15 @@ description: "添加实时后端"
 
 **Live 后端**把 OpenBot 连接到一种 Live 服务。Live 模式的其他部分可以和任何后端一起工作。添加一个后端：
 
-1. 写一个模块，给出
-   `packages/openbot/src/models-contract/models/LiveBackends.ts` 中的
+1. 写一个模块，给出 `packages/models-contract/src/models/LiveBackends.ts` 中的
    `LiveBackend`。它的 `make` 给出 `@openbot-build/core/Live` 中的 `LiveModel`。
 2. 在 `capabilities` 中说明这个服务能做什么。OpenBot 从不发送后端不支持的输入。
 3. 把 `Live.Input` 的值映射为这个服务的消息，并把服务的消息映射为 `Live.Event`
    的值。
 4. 把后端加入 `packages/openbot/src/app/Outside.ts` 中的 `layerLiveBackends`。
 
-`packages/openbot/src/model-providers/providers/openai/OpenAiRealtime.ts`
-是 OpenAI Realtime API 的后端。可以把它当作例子。
+`packages/model-providers/src/providers/openai/OpenAiRealtime.ts` 是 OpenAI
+Realtime API 的后端。可以把它当作例子。
 
 不给出语音文本的服务无法保存 Chat 的历史。OpenBot 目前不会用这样的模型打开会话。
 

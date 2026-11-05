@@ -1,0 +1,75 @@
+{
+	"name": "@openbot-build/apps-contract",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The shared service tags and types of Apps, Code Mode, files, and vaults in the OpenBot server",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./apps/AppApprovals": "./dist/apps/AppApprovals.js",
+		"./apps/AppCall": "./dist/apps/AppCall.js",
+		"./apps/AppCommands": "./dist/apps/AppCommands.js",
+		"./apps/AppNetwork": "./dist/apps/AppNetwork.js",
+		"./apps/AppResults": "./dist/apps/AppResults.js",
+		"./apps/ConnectionModels": "./dist/apps/ConnectionModels.js",
+		"./apps/DeveloperAuthorization": "./dist/apps/DeveloperAuthorization.js",
+		"./apps/DeveloperRows": "./dist/apps/DeveloperRows.js",
+		"./apps/GrantUses": "./dist/apps/GrantUses.js",
+		"./apps/ImportedHistory": "./dist/apps/ImportedHistory.js",
+		"./apps/IndexNamespace": "./dist/apps/IndexNamespace.js",
+		"./apps/IndexWork": "./dist/apps/IndexWork.js",
+		"./apps/StoredConnections": "./dist/apps/StoredConnections.js",
+		"./apps/StoredInvocations": "./dist/apps/StoredInvocations.js",
+		"./apps/ToolInput": "./dist/apps/ToolInput.js",
+		"./apps/WorkflowTools": "./dist/apps/WorkflowTools.js",
+		"./code/Bindings": "./dist/code/Bindings.js",
+		"./code/CodeCommands": "./dist/code/CodeCommands.js",
+		"./code/Declarations": "./dist/code/Declarations.js",
+		"./code/Protocol": "./dist/code/Protocol.js",
+		"./code/ToolSchema": "./dist/code/ToolSchema.js",
+		"./files/Files": "./dist/files/Files.js",
+		"./files/ModelFiles": "./dist/files/ModelFiles.js",
+		"./files/Refs": "./dist/files/Refs.js",
+		"./vaults/AppSecrets": "./dist/vaults/AppSecrets.js",
+		"./vaults/CodeMode": "./dist/vaults/CodeMode.js",
+		"./vaults/Readers": "./dist/vaults/Readers.js",
+		"./vaults/Vaults": "./dist/vaults/Vaults.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@modelcontextprotocol/client": "2.3.1",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/apps-contract"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

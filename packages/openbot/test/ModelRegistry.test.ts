@@ -1,4 +1,4 @@
-import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, describe, it } from "@effect/vitest"
 import { ModelProvidersApi } from "@openbot-build/api"
@@ -7,17 +7,17 @@ import { Cause, Effect, Layer, Logger, Redacted, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { Billing } from "@openbot-build/server-billing/billing/Billing"
 import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
-import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
+import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
 import {
 	ModelProviders,
 	organizationOwner,
 	type Stored,
-} from "../src/models-contract/models/ModelProviders.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
 import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
 import {
 	Models,
 	type StoredModel,
-} from "../src/models-contract/models/Models.ts"
+} from "@openbot-build/models-contract/models/Models"
 import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"

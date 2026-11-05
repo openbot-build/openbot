@@ -5,9 +5,9 @@ import {
 	Bots as BotsApi,
 	type Execution,
 } from "@openbot-build/domain"
-import type { Chain } from "../conversation-contract/chats/ChatHost.ts"
+import type { Chain } from "@openbot-build/conversation-contract/chats/ChatHost"
 import { type Turn, type Chat } from "@openbot-build/core"
-import type * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
+import type * as PolicyOrigin from "@openbot-build/conversation-contract/capabilities/PolicyOrigin"
 import * as GrantUse from "./GrantUse.ts"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
@@ -23,18 +23,18 @@ import {
 	pipe,
 } from "effect"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import {
 	type Capability,
 	describe,
 	memberTarget,
-} from "../conversation-contract/capabilities/Capability.ts"
-import type { Attempt } from "../conversation-contract/capabilities/Gate.ts"
-import { Grants } from "../conversation-contract/capabilities/Grants.ts"
+} from "@openbot-build/conversation-contract/capabilities/Capability"
+import type { Attempt } from "@openbot-build/conversation-contract/capabilities/Gate"
+import { Grants } from "@openbot-build/conversation-contract/capabilities/Grants"
 import { Judge } from "./Judge.ts"
 import { chatOf } from "./Requests.ts"
-import { Rules } from "../conversation-contract/capabilities/Rules.ts"
-import type { Work } from "../conversation-contract/capabilities/Work.ts"
+import { Rules } from "@openbot-build/conversation-contract/capabilities/Rules"
+import type { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 
 /** The policy result does not create a request or own any execution. */
 export type Decision = Data.TaggedEnum<{

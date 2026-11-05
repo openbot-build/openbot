@@ -18,7 +18,7 @@ import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { vaultResource } from "@openbot-build/identity-contract/authorization/Resources"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	vaultAccess,
@@ -26,16 +26,19 @@ import {
 	vaults,
 } from "@openbot-build/server-database/Schema"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
+import { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"
 import { Readers } from "./Readers.ts"
 import { SecretProviders } from "./SecretProviders.ts"
 import {
 	type Vault,
 	type Item,
 	Vaults,
-} from "../apps-contract/vaults/Vaults.ts"
-export { Vaults } from "../apps-contract/vaults/Vaults.ts"
-export type { Failure, Usable } from "../apps-contract/vaults/Vaults.ts"
+} from "@openbot-build/apps-contract/vaults/Vaults"
+export { Vaults } from "@openbot-build/apps-contract/vaults/Vaults"
+export type {
+	Failure,
+	Usable,
+} from "@openbot-build/apps-contract/vaults/Vaults"
 
 type Source = VaultsModel.VaultItemSource
 

@@ -14,8 +14,8 @@ import {
 import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import { type SqlError, SqlClient } from "effect/sql"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
-import * as ChatModels from "../conversation-contract/chats/ChatModels.ts"
-import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
+import * as ChatModels from "@openbot-build/conversation-contract/chats/ChatModels"
+import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
 import {
 	Array as Arr,
 	Clock,
@@ -33,12 +33,12 @@ import {
 	executions,
 	toolExecutions,
 } from "@openbot-build/server-database/ExecutionSchema"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
-import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
+import { InputCommands } from "@openbot-build/conversation-contract/chats/InputCommands"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import * as Db from "@openbot-build/server-database/Database"
 import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import {
@@ -46,9 +46,9 @@ import {
 	type Fence,
 	type Key,
 } from "@openbot-build/server-execution/execution/Store"
-import * as Todos from "../tools-contract/plugins/work/Todos.ts"
-import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
-import { type Stored } from "../conversation-contract/capabilities/Requests.ts"
+import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
+import { RequestCommands } from "@openbot-build/conversation-contract/capabilities/RequestCommands"
+import { type Stored } from "@openbot-build/conversation-contract/capabilities/Requests"
 import { chatOf } from "./Requests.ts"
 
 const text = (stored: Stored) =>

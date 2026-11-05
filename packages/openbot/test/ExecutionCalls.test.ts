@@ -1,10 +1,10 @@
-import * as ModelFailure from "../src/models-contract/models/ModelFailure.ts"
+import * as ModelFailure from "@openbot-build/models-contract/models/ModelFailure"
 import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import * as Send from "@openbot-build/server-execution/execution/Send"
 import * as Admission from "@openbot-build/server-execution/execution/Admission"
 import * as Observation from "@openbot-build/server-execution/execution/Observation"
-import * as AppCall from "../src/apps-contract/apps/AppCall.ts"
+import * as AppCall from "@openbot-build/apps-contract/apps/AppCall"
 import { Client } from "@openbot-build/protocol"
 import { ConnectionId } from "@openbot-build/domain"
 import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
@@ -13,8 +13,8 @@ import {
 	Idempotent,
 	Local,
 	SavedResult,
-} from "../src/tools-contract/plugins/ToolEntry.ts"
-import * as ModelCalls from "../src/models-contract/models/ModelCalls.ts"
+} from "@openbot-build/tools-contract/plugins/ToolEntry"
+import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {
@@ -76,7 +76,7 @@ import * as Engine from "@openbot-build/server-execution/execution/Engine"
 import { DurableDeferred, WorkflowEngine } from "effect/workflow"
 import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
-import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as ModelSteps from "../src/plugin-chats/ModelSteps.ts"
 import {
 	Billing,
@@ -92,7 +92,7 @@ import * as Judge from "../src/plugin-capabilities/Judge.ts"
 import {
 	ModelRegistry,
 	AnyModel,
-} from "../src/models-contract/models/ModelRegistry.ts"
+} from "@openbot-build/models-contract/models/ModelRegistry"
 import * as BotFixture from "./BotFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

@@ -7,7 +7,7 @@ import {
 	type Mode,
 } from "../../src/server-development/DevelopmentScenarios.ts"
 import { Business } from "../../src/server-development/DevelopmentBusiness.ts"
-import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import { PublicIndex } from "../../src/plugin-apps/Index.ts"
 
 /** Set a failure of the simulated App for the next request. */

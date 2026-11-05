@@ -1,0 +1,40 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"rootDir": "src",
+		"outDir": "dist",
+		"rewriteRelativeImportExtensions": true,
+		"tsBuildInfoFile": ".cache/build.tsbuildinfo"
+	},
+	"include": ["src"],
+	"references": [
+		{
+			"path": "../core"
+		},
+		{
+			"path": "../domain"
+		},
+		{
+			"path": "../identity-contract"
+		},
+		{
+			"path": "../protocol"
+		},
+		{
+			"path": "../server-billing"
+		},
+		{
+			"path": "../server-database"
+		},
+		{
+			"path": "../server-execution"
+		},
+		{
+			"path": "../server-kernel"
+		},
+		{
+			"path": "../tools-contract"
+		}
+	]
+}

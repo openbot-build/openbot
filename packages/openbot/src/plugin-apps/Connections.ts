@@ -9,7 +9,7 @@ import {
 	ExperienceStorageUnavailable,
 	Identity,
 } from "@openbot-build/domain"
-import type * as Models from "../apps-contract/apps/ConnectionModels.ts"
+import type * as Models from "@openbot-build/apps-contract/apps/ConnectionModels"
 import { AppConnections, Discovery, Store } from "@openbot-build/protocol"
 import {
 	Array as Arr,
@@ -37,12 +37,12 @@ import {
 	appConnections,
 	appDrafts,
 } from "@openbot-build/server-database/Schema"
-import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
-import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
+import { IndexWork } from "@openbot-build/apps-contract/apps/IndexWork"
+import * as StoredConnections from "@openbot-build/apps-contract/apps/StoredConnections"
 import {
 	ownerKey,
 	type StoredConnection,
-} from "../apps-contract/apps/StoredConnections.ts"
+} from "@openbot-build/apps-contract/apps/StoredConnections"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 

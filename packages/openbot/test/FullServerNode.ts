@@ -8,7 +8,7 @@ import * as DevelopmentModel from "../src/server-development/DevelopmentModel.ts
 import * as Assembly from "../src/app/Assembly.ts"
 import * as Outside from "../src/app/Outside.ts"
 import * as Shared from "../src/app/Shared.ts"
-import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
+import * as HostTools from "@openbot-build/tools-contract/chats/HostTools"
 import { CurrentCallIdentity } from "@openbot-build/server-billing/billing/MeteredModel"
 import {
 	methodsOf,

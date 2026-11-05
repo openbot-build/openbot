@@ -25,11 +25,11 @@ import {
 	Store,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import * as ModelCalls from "../models-contract/models/ModelCalls.ts"
-import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
-import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
+import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
+import { ModelRegistry } from "@openbot-build/models-contract/models/ModelRegistry"
+import { MemoryBot } from "@openbot-build/conversation-contract/bots/MemoryBot"
 import { MemoryBudgetSpent, memoryBotId } from "./MemoryBot.ts"
-import type { Home } from "../conversation-contract/bots/BotMemories.ts"
+import type { Home } from "@openbot-build/conversation-contract/bots/BotMemories"
 
 const Request = Schema.Struct({
 	selection: Config.Selection,

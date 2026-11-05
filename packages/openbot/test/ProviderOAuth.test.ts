@@ -7,7 +7,7 @@ import {
 	platformOwner,
 	ModelProviders,
 	view,
-} from "../src/models-contract/models/ModelProviders.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
 import * as ModelProvidersPostgres from "../src/plugin-models/ModelProvidersPostgres.ts"
 import * as Accounts from "@openbot-build/domain/ProviderOAuth"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
@@ -29,7 +29,7 @@ import * as ProviderOAuth from "../src/plugin-models/ProviderOAuth.ts"
 import {
 	ChatGptOAuth,
 	Credentials,
-} from "../src/model-providers/providers/chatgpt/OAuth.ts"
+} from "@openbot-build/model-providers/providers/chatgpt/OAuth"
 import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"

@@ -11,10 +11,10 @@ import {
 	ContextCompaction,
 	Config,
 } from "@openbot-build/core"
-import * as ToolDefinitions from "../tools-contract/chats/ToolDefinitions.ts"
+import * as ToolDefinitions from "@openbot-build/tools-contract/chats/ToolDefinitions"
 import { Execution } from "@openbot-build/domain"
 import { CurrentAttribution } from "@openbot-build/server-billing/billing/MeteredModel"
-import * as ModelCalls from "../models-contract/models/ModelCalls.ts"
+import * as ModelCalls from "@openbot-build/models-contract/models/ModelCalls"
 import {
 	Array as Arr,
 	Clock,
@@ -37,7 +37,7 @@ import {
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
 
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 
 const CallRetry = Context.Reference<"read_only" | "never">(
 	"@openbot-build/openbot/chats/ModelSteps/CallRetry",

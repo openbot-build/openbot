@@ -19,7 +19,7 @@ import type {
 	Settled,
 	ToWorker,
 	VaultItem,
-} from "../apps-contract/code/Protocol.ts"
+} from "@openbot-build/apps-contract/code/Protocol"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
 import type { Records } from "@openbot-build/server-kernel/errors/Records"
 

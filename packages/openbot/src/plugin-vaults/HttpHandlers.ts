@@ -14,7 +14,7 @@ import {
 	vaultKey,
 } from "@openbot-build/identity-contract/audit/Resources"
 import { SecretProviders } from "./SecretProviders.ts"
-import { Vaults } from "../apps-contract/vaults/Vaults.ts"
+import { Vaults } from "@openbot-build/apps-contract/vaults/Vaults"
 import { unavailable } from "./Vaults.ts"
 
 /** Runs a call of a service as the caller of the request. */

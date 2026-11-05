@@ -51,22 +51,22 @@ import * as Calls from "@openbot-build/server-execution/execution/Calls"
 import * as Observation from "@openbot-build/server-execution/execution/Observation"
 import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
 import * as ToolControls from "../src/plugin-chats/ToolControls.ts"
-import * as ToolOrigins from "../src/conversation-contract/chats/ToolOrigins.ts"
+import * as ToolOrigins from "@openbot-build/conversation-contract/chats/ToolOrigins"
 import * as ToolCommands from "../src/plugin-chats/ToolCommands.ts"
 import * as TurnAccess from "../src/plugin-chats/TurnAccess.ts"
 import * as InputCommands from "../src/plugin-chats/InputCommands.ts"
-import * as ChatHost from "../src/conversation-contract/chats/ChatHost.ts"
-import * as StoredChats from "../src/conversation-contract/chats/StoredChats.ts"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
 import {
 	Delegations,
 	type Stored as StoredDelegation,
-} from "../src/conversation-contract/bots/Delegations.ts"
+} from "@openbot-build/conversation-contract/bots/Delegations"
 import {
 	Requests,
 	type Stored as StoredRequest,
-} from "../src/conversation-contract/capabilities/Requests.ts"
-import { Bots } from "../src/conversation-contract/bots/Bots.ts"
-import { Channels } from "../src/conversation-contract/channels/Channels.ts"
+} from "@openbot-build/conversation-contract/capabilities/Requests"
+import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
+import { Channels } from "@openbot-build/conversation-contract/channels/Channels"
 import {
 	Organization,
 	OrganizationUnavailable,

@@ -3,8 +3,8 @@ import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
-import * as ChatErrors from "../conversation-contract/chats/ChatErrors.ts"
-import * as ToolQueries from "../conversation-contract/chats/ToolQueries.ts"
+import * as ChatErrors from "@openbot-build/conversation-contract/chats/ChatErrors"
+import * as ToolQueries from "@openbot-build/conversation-contract/chats/ToolQueries"
 
 export const layer = HttpApiBuilder.group(OpenBotApi, "toolCalls", (handlers) =>
 	Effect.gen(function* () {

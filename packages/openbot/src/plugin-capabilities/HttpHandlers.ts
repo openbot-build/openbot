@@ -4,7 +4,7 @@ import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
-import * as Resolve from "../conversation-contract/capabilities/Resolve.ts"
+import * as Resolve from "@openbot-build/conversation-contract/capabilities/Resolve"
 
 export const layer = HttpApiBuilder.group(OpenBotApi, "requests", (handlers) =>
 	Effect.gen(function* () {

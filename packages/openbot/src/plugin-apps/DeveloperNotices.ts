@@ -4,7 +4,7 @@ import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import * as Db from "@openbot-build/server-database/Database"
 import * as Rows from "./DeveloperRows.ts"
-import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
+import { IndexNamespace } from "@openbot-build/apps-contract/apps/IndexNamespace"
 
 const NoticeIdentity = Schema.fromJsonString(
 	Schema.Array(Schema.Union([Schema.String, Schema.Finite])),

@@ -8,7 +8,7 @@ import {
 } from "@openbot-build/core"
 import { SqlClient } from "effect/sql"
 import * as Imported from "@openbot-build/server-execution/imported/Executions"
-import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
+import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
 import {
 	executionCallers,
 	restrictExecution,
@@ -28,27 +28,27 @@ import {
 	Store as Executions,
 	type Fence,
 } from "@openbot-build/server-execution/execution/Store"
-import * as DelegationSource from "../conversation-contract/bots/DelegationSource.ts"
-import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
+import * as DelegationSource from "@openbot-build/conversation-contract/bots/DelegationSource"
+import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
 import * as TurnEnd from "./TurnEnd.ts"
-import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
-import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import * as Todos from "../tools-contract/plugins/work/Todos.ts"
+import * as StoredChats from "@openbot-build/conversation-contract/chats/StoredChats"
+import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
+import * as Todos from "@openbot-build/tools-contract/plugins/work/Todos"
 import { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
-import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
+import { inExecution } from "@openbot-build/conversation-contract/chats/ChatEncoding"
 import {
 	Input,
 	Message,
 	workflowName,
 	InputCommands,
-} from "../conversation-contract/chats/InputCommands.ts"
+} from "@openbot-build/conversation-contract/chats/InputCommands"
 export {
 	Input,
 	Message,
 	workflowName,
 	InputCommands,
-} from "../conversation-contract/chats/InputCommands.ts"
-export type { Service } from "../conversation-contract/chats/InputCommands.ts"
+} from "@openbot-build/conversation-contract/chats/InputCommands"
+export type { Service } from "@openbot-build/conversation-contract/chats/InputCommands"
 
 const messageCodec = Schema.toCodecJson(Message)
 

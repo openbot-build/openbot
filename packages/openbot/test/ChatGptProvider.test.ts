@@ -4,11 +4,11 @@ import {
 	organizationOwner,
 	platformOwner,
 	type Stored,
-} from "../src/models-contract/models/ModelProviders.ts"
-import { Models } from "../src/models-contract/models/Models.ts"
-import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
+} from "@openbot-build/models-contract/models/ModelProviders"
+import { Models } from "@openbot-build/models-contract/models/Models"
+import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
 import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
-import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
+import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
 import {
 	Billing,
 	SpendingBlocked,
@@ -35,7 +35,7 @@ import {
 } from "effect"
 import { LanguageModel, Prompt, Tool, Toolkit } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import * as ChatGptProvider from "../src/model-providers/providers/chatgpt/ChatGptProvider.ts"
+import * as ChatGptProvider from "@openbot-build/model-providers/providers/chatgpt/ChatGptProvider"
 
 const selection = Config.Selection.make({
 	provider: Provider.Id.make("prov_chatgpt"),
