@@ -2,7 +2,7 @@ import * as Objects from "./Objects.ts"
 import { FileTasks } from "./FileTasks.ts"
 import { Files as FilesApi } from "@openbot-build/domain"
 import { type Caller } from "@openbot-build/domain"
-import { and, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, notExists, sql } from "drizzle-orm"
 import {
 	Array as Arr,
 	Cache,
@@ -28,7 +28,7 @@ import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as Db from "@openbot-build/server-database/Database"
-import { files } from "@openbot-build/server-database/Schema"
+import { artifactFiles, files } from "@openbot-build/server-database/Schema"
 import {
 	type FilesDocument,
 	quotaOf,
@@ -180,8 +180,16 @@ export const make = Effect.gen(function* () {
 			: Effect.void
 	}
 
+	// Generated files use the Chat download route, including for their storage owner.
+	const uploaded = notExists(
+		db
+			.select({ file: artifactFiles.file })
+			.from(artifactFiles)
+			.where(eq(artifactFiles.file, files.id)),
+	)
 	const owned = (caller: Caller, id: string) =>
 		and(
+			uploaded,
 			eq(files.id, id),
 			eq(files.organizationId, caller.organizationId),
 			eq(files.userId, caller.userId),
@@ -498,6 +506,7 @@ export const make = Effect.gen(function* () {
 									.where(
 										and(
 											allowed,
+											uploaded,
 											eq(files.id, query.after),
 											eq(files.organizationId, caller.organizationId),
 											eq(files.userId, caller.userId),
@@ -516,6 +525,7 @@ export const make = Effect.gen(function* () {
 						.where(
 							and(
 								allowed,
+								uploaded,
 								eq(files.organizationId, caller.organizationId),
 								eq(files.userId, caller.userId),
 								inArray(files.status, ["pending", "ready"]),
@@ -582,6 +592,7 @@ export const make = Effect.gen(function* () {
 									.where(
 										and(
 											inArray(files.id, ids),
+											uploaded,
 											eq(files.organizationId, caller.organizationId),
 											eq(files.userId, caller.userId),
 											eq(files.status, "ready"),

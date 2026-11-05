@@ -1,4 +1,4 @@
-import * as AppQueries from "./AppQueries.ts"
+import * as AppQueries from "@openbot-build/apps-contract/apps/AppQueries"
 import { CodeCommands } from "@openbot-build/apps-contract/code/CodeCommands"
 import * as WorkflowTools from "@openbot-build/apps-contract/apps/WorkflowTools"
 import type { Fence } from "@openbot-build/server-execution/execution/Store"

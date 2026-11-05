@@ -1,3 +1,4 @@
+import * as Citations from "@openbot-build/conversation-contract/artifacts/Citations"
 import { Chat, ChatStore, type Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Effect } from "effect"
@@ -39,6 +40,12 @@ export const make = (
 							execution.resource.id !== turn
 						)
 							return yield* conflict
+						const citationEvents = yield* Citations.bind(
+							db,
+							fence.namespace,
+							turn,
+							delta,
+						)
 						yield* executions.commit(
 							fence,
 							{
@@ -48,6 +55,7 @@ export const make = (
 										resource: { kind: "Chat", id: chat },
 										revision: delta.revision,
 									},
+									...citationEvents,
 								],
 							},
 							StoredChats.save(db, fence.namespace, delta, turn),

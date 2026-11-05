@@ -37,7 +37,7 @@ export const ReviewAllowed = Context.Reference<boolean>(
 	{ defaultValue: () => false },
 )
 
-/** A plan may keep its todo list, set a reminder, and submit itself. */
+/** A plan may keep its work notes, sources, citations, and reminders. */
 export const PlanAllowed = Context.Reference<boolean>(
 	"@openbot-build/openbot/tools/PlanAllowed",
 	{ defaultValue: () => false },

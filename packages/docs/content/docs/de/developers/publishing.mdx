@@ -10,15 +10,18 @@ Für Mitwirkende, die OpenBot ändern oder veröffentlichen.
 
 ## GitHub Actions
 
-Der Workflow `.github/workflows/ci.yml` hat zwei Jobs. Der zweite Job läuft nur,
-wenn der erste erfolgreich ist.
+Der Workflow `.github/workflows/ci.yml` läuft für Pull Requests, Pushes auf
+`main` und Tags wie `v1.2.3` oder `v1.2.3-beta.0`. Die anderen Jobs laufen nur,
+wenn `check` erfolgreich ist.
 
-| Job      | Was er tut                                                                     |
-| -------- | ------------------------------------------------------------------------------ |
-| `check`  | Führt `pnpm build`, `pnpm typecheck` und `pnpm -r test` in `devenv shell` aus. |
-| `images` | Baut, prüft, scannt und veröffentlicht die Docker-Images.                      |
+| Job               | Wann            | Was er tut                                                                                                                              |
+| ----------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `check`           | Immer           | Führt `pnpm build`, `pnpm typecheck`, `pnpm -r test` und `pnpm test:packages` in `devenv shell` aus und packt alle öffentlichen Pakete. |
+| `github-packages` | Pushes und Tags | Veröffentlicht die gepackten Pakete in GitHub Packages.                                                                                 |
+| `npm`             | Tags            | Veröffentlicht die gepackten Pakete mit Trusted Publishing auf npm.                                                                     |
+| `images`          | Immer           | Baut, prüft, scannt und veröffentlicht die Docker-Images.                                                                               |
 
-Beide Jobs laufen auf `ubuntu-latest`. Sie installieren Nix mit dem Determinate
+Alle Jobs laufen auf `ubuntu-latest`. Sie installieren Nix mit dem Determinate
 Nix Installer und danach devenv 2.4.0.
 [Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action)
 speichert Nix-Build-Ergebnisse im Cache von GitHub Actions. So bauen spätere
@@ -60,6 +63,84 @@ Die Images landen in der GitHub Container Registry, unter
 `ghcr.io/openbot-build/openbot/protocol-test`. Der Workflow bringt OpenBot nicht
 in Betrieb. Wenn du ein veröffentlichtes Image mit Compose nutzen willst, lade
 es herunter und gib ihm den Tag `openbot:<tag>`.
+
+### Pakete veröffentlichen
+
+Alle öffentlichen Pakete erscheinen zusammen mit einer Version.
+`pnpm packages:pack` setzt diese Version in jedem öffentlichen Paket, legt die
+Abhängigkeiten zwischen ihnen auf diese Version fest, packt sie nach `.release/`
+und hält den Hash jeder Datei in `.release/release.json` fest. Die Jobs zum
+Veröffentlichen veröffentlichen genau diese Dateien und bauen nicht noch einmal.
+
+| Ereignis                    | Version                             | npm-Tag                    | Veröffentlicht in       |
+| --------------------------- | ----------------------------------- | -------------------------- | ----------------------- |
+| Ein Push auf `main`         | `0.0.0-commit-<vollständiger Hash>` | `sha-<vollständiger Hash>` | GitHub Packages         |
+| Ein Tag wie `v1.2.3-beta.0` | `1.2.3-beta.0`                      | `alpha`, `beta` oder `rc`  | GitHub Packages und npm |
+| Ein Tag wie `v1.2.3`        | `1.2.3`                             | `latest`                   | GitHub Packages und npm |
+
+Ein Vorab-Tag nennt seinen Kanal, `alpha`, `beta` oder `rc`, gefolgt von einer
+Zahl. Seine Pakete werden nie `latest`. Kein Tag geht auf eine ältere Version
+zurück: Eine ältere Version, die später hochgeladen wird, erscheint unter
+`backport`, bei Vorabversionen unter `alpha-backport`, `beta-backport` oder
+`rc-backport`.
+
+Jede Registry hat eine eigene Concurrency-Gruppe, `publish-github-packages` oder
+`publish-npm`, mit `queue: max`. So veröffentlichen zwei Läufe nie gleichzeitig
+in dieselbe Registry. Ein erneuter Lauf überspringt eine Version, die es mit
+demselben Inhalt schon gibt, und bricht ab, wenn der Inhalt abweicht. Bevor du
+von Hand veröffentlichst, warte, bis die wartenden Jobs für diese Registry
+fertig sind.
+
+Die `.npmrc` des Repositorys leitet den Scope `@openbot-build` zu GitHub
+Packages. Das Release-Skript setzt auch die Registry des Scopes, daher
+veröffentlicht es immer in der Registry, die du angibst.
+
+So veröffentlichst du eine Version:
+
+1. Stelle sicher, dass `main` die CI besteht.
+2. Setze einen Tag auf den Commit und pushe ihn, etwa `v1.2.3` für ein stabiles
+   Release oder `v1.2.3-beta.0` für eine Vorabversion:
+
+   ```sh
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. Der Job `npm` wartet auf die Umgebung `npm`, falls sie eine Freigabe
+   verlangt, und veröffentlicht dann.
+
+Der Job `npm` nutzt
+[Trusted Publishing](https://docs.npmjs.com/trusted-publishers) von npm: npm
+akzeptiert das OIDC-Token des Workflow-Laufs statt eines Zugriffstokens und fügt
+jedem Paket eine Provenance-Angabe hinzu. Im Repository liegt kein Geheimnis.
+Jedes Paket vertraut dem Workflow `ci.yml` von `openbot-build/openbot` in der
+Umgebung `npm`:
+
+```sh
+npm trust github @openbot-build/client --file ci.yml --repo openbot-build/openbot --env npm --allow-publish
+npm trust list @openbot-build/client
+```
+
+npm kann nur einem Paket vertrauen, das es schon gibt. Ein neues Paket
+veröffentlicht daher zuerst eine Maintainerin oder ein Maintainer einmal aus den
+Dateien, die die CI gepackt hat, und richtet das Vertrauen danach ein:
+
+```sh
+gh run download <run id> --name packages-<commit hash> --dir .release
+npm login
+devenv shell -- pnpm packages:publish npm
+```
+
+### Eine Client-Momentaufnahme veröffentlichen
+
+Der Workflow `.github/workflows/sdk-snapshot.yml` läuft bei Pushes auf
+`codex/artifact-citation-contract`. Er baut den Client und seine nötigen Pakete,
+prüft die API und den Client und packt nur `@openbot-build/client`. Nach diesen
+Prüfungen nutzt ein zweiter Job den `GITHUB_TOKEN` des Repositorys. Er
+veröffentlicht die Momentaufnahme als `0.0.0-commit-<voller-Hash>` mit dem Tag
+`sha-<voller-Hash>`. Der Tag `latest` und die Server-Veröffentlichung bleiben im
+Hauptablauf der Veröffentlichung. Der Job zum Veröffentlichen wartet in
+derselben Warteschlange `publish-github-packages` wie der Haupt-Workflow.
 
 ### Die Doku-Seite veröffentlichen
 

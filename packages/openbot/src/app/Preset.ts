@@ -27,6 +27,7 @@ export const ids = [
 	"code",
 	"vaults",
 	"computers",
+	"artifacts",
 	"triggers",
 	"billing",
 	"settings",

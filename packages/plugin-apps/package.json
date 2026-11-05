@@ -17,7 +17,6 @@
 		"./AppHost": "./dist/AppHost.js",
 		"./AppIndex": "./dist/AppIndex.js",
 		"./AppInspections": "./dist/AppInspections.js",
-		"./AppQueries": "./dist/AppQueries.js",
 		"./AppSession": "./dist/AppSession.js",
 		"./AppTools": "./dist/AppTools.js",
 		"./AppWorkflow": "./dist/AppWorkflow.js",
@@ -97,8 +96,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/plugin-apps"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

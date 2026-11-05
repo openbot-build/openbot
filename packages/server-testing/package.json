@@ -74,7 +74,8 @@
 		"@openbot-build/tools-contract": "workspace:*",
 		"drizzle-orm": "1.0.0-rc.5",
 		"effect": "4.1.2",
-		"jose": "6.2.12"
+		"jose": "6.2.12",
+		"@openbot-build/plugin-artifacts": "workspace:*"
 	},
 	"peerDependencies": {
 		"vitest": "5.0.5"
@@ -92,8 +93,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/server-testing"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

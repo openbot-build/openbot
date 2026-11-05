@@ -55,7 +55,9 @@
 		"./chats/TurnAccess": "./dist/chats/TurnAccess.js",
 		"./chats/TurnContext": "./dist/chats/TurnContext.js",
 		"./chats/WorkAdmission": "./dist/chats/WorkAdmission.js",
-		"./work/Reminders": "./dist/work/Reminders.js"
+		"./work/Reminders": "./dist/work/Reminders.js",
+		"./artifacts/Citations": "./dist/artifacts/Citations.js",
+		"./artifacts/History": "./dist/artifacts/History.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -86,8 +88,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/conversation-contract"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

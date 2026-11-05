@@ -16,6 +16,7 @@ export * as RequestsApi from "./RequestsApi.ts"
 export * as PlanApproval from "./PlanApproval.ts"
 export * as TriggersApi from "./TriggersApi.ts"
 export * as FilesApi from "./FilesApi.ts"
+export * as ArtifactsApi from "./ArtifactsApi.ts"
 export * as ChannelsApi from "./ChannelsApi.ts"
 export * as ComputersApi from "./ComputersApi.ts"
 export * as LiveApi from "./LiveApi.ts"
@@ -67,6 +68,7 @@ export {
 	ChatView,
 	ChatSummary,
 	ChatInfo,
+	QueuedChatInput,
 	ChatKind,
 	ChatParent,
 	ChatStatus,
@@ -76,6 +78,9 @@ export {
 	ChatCommandReceipt,
 	MessageReceipt,
 	ChatResponse,
+	ChatItem,
+	OutputText,
+	OutputFile,
 	ResponseStatus,
 	ChatNotFound,
 	ChatExecutionUnavailable,

@@ -37,7 +37,9 @@
 		"./vaults/AppSecrets": "./dist/vaults/AppSecrets.js",
 		"./vaults/CodeMode": "./dist/vaults/CodeMode.js",
 		"./vaults/Readers": "./dist/vaults/Readers.js",
-		"./vaults/Vaults": "./dist/vaults/Vaults.js"
+		"./vaults/Vaults": "./dist/vaults/Vaults.js",
+		"./artifacts/ArtifactFiles": "./dist/artifacts/ArtifactFiles.js",
+		"./apps/AppQueries": "./dist/apps/AppQueries.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -68,8 +70,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/apps-contract"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

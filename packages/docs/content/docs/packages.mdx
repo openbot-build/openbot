@@ -10,8 +10,8 @@ OpenBot is a pnpm workspace. Each package has one job. `openbot` puts the parts
 together into the server. You can use the other libraries on their own.
 
 All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
-`effect@4.0.5`. They are not on npm yet. Use them from the workspace with
-`"workspace:*"`.
+`effect@4.1.2`. Use `"workspace:*"` for local work. See
+[Publishing](/developers/publishing) for package releases.
 
 ---
 
@@ -41,6 +41,7 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 | `plugin-authorization`  | The `authorization` plugin: roles, and the check of the permissions of each caller. Only the server uses it.                                                                                                                                 |
 | `plugin-models`         | The `models` plugin: model providers, models, and the model registry. Only the server uses it.                                                                                                                                               |
 | `plugin-files`          | The `files` plugin: stored files and their work. Only the server uses it.                                                                                                                                                                    |
+| `plugin-artifacts`      | Fixed files, saved sources, and citations.                                                                                                                                                                                                   |
 | `plugin-bots`           | The `bots` plugin: Bots, their memory, and the delegations between them. `openbot` exports its memory helpers again as `BotMemory`.                                                                                                          |
 | `plugin-capabilities`   | The `capabilities` plugin: Grants, Rules, requests, and the checks of them. Only the server uses it.                                                                                                                                         |
 | `plugin-work`           | The `work` plugin: reminders, and the work tools of Bots. Only the server uses it.                                                                                                                                                           |

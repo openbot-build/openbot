@@ -1,0 +1,55 @@
+{
+	"name": "@openbot-build/plugin-artifacts",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The artifacts plugin of the OpenBot server: fixed files and sources",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./ArtifactTools": "./dist/ArtifactTools.js",
+		"./HttpHandlers": "./dist/HttpHandlers.js",
+		"./Workflow": "./dist/Workflow.js",
+		"./Materials": "./dist/Materials.js",
+		"./Artifacts": "./dist/Artifacts.js",
+		"./ArtifactFeature": "./dist/ArtifactFeature.js",
+		"./HttpMounts": "./dist/HttpMounts.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@graftland/graft": "0.4.0",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"parse5": "8.0.1"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/plugin-artifacts"
+	}
+}

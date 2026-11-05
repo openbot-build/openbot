@@ -40,8 +40,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/plugin-organization"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

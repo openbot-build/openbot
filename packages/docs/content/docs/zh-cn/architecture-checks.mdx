@@ -111,21 +111,21 @@ API 用例，不计入 566 个历史声明。Pairing 等待持久删除结果；
 - **A05 — 版本证据：**
   记录源码版本及各次运行范围，明确列出可选或跳过的检查。接受测试数量变化前，比较变更和删除的基线断言。
 
-## 旧路径与替代实现
+## 包及其职责
 
-源码树已有以下删除。发布差异中应同时核对被删除入口及其调用方。仅用于迁移的 codec 不是活动执行器。独立的
-`core` runtime 是保留的库能力。
+在发布差异中核对这些包及其调用方。仅用于数据迁移的 codec 不是活动执行器。 `core`
+runtime 仍是一个库。
 
-| `packages/openbot/src/` 下删除的路径                                                                                                     | 当前需要核对的路径                                                                                                                                         | 简化规则的证据                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `packages/conversation-contract/src/chats/ChatHost.ts`, `packages/plugin-chats/src/TurnWorkflow.ts`, `packages/server-execution/src/execution/RunScope.ts` | 不再有逐成员 Chat runtime、引用计数包装、`keepOpen`、`current` 回调或逐方法代理。Turn 持有自己的作用域。     |
-| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `packages/plugin-apps/src/AppCommands.ts`, `packages/plugin-apps/src/AppWorkflow.ts`, `packages/server-execution/src/execution/Calls.ts`                   | App 工作使用共同的调用意图、attempt、保存结果和决策。发现返回描述。                                          |
-| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `packages/plugin-code/src/CodeCommands.ts`, `packages/plugin-code/src/CodeWorkflow.ts`, `packages/server-kernel/src/imported/LegacyV1.ts`                  | 沙箱重放使用共同调用日志。旧租约存储和过期运行扫描已删除。数据迁移用专用 codec 读取旧记录。                  |
-| `chats/ChatEvents.ts` 和旧 Chat SSE Schema                                                                                               | `packages/server-execution/src/execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                                                              | 持久执行事件替代本地事件队列、序号计数器和结束标记。所有调用方使用同一事件契约。                             |
-| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `packages/server-execution/src/execution/Store.ts`, `packages/server-execution/src/execution/Observation.ts`, `packages/plugin-chats/src/ToolCommands.ts`  | 不再有旧 Operation 监听器、取消通知循环或过期 Operation 扫描。`packages/api/src/OperationsApi.ts` 也已删除。 |
-| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `packages/plugin-chats/src/ExecutionFeatures.ts`, `packages/plugin-bots/src/DelegationCommands.ts`, `packages/plugin-capabilities/src/RequestCommands.ts`  | 执行作用域管理 Gate 和审批。委派工作流管理限额。请求逐条到期关闭。                                           |
-| 开发测试运行 FiberMap 和启动时重置运行                                                                                                   | `packages/plugin-apps/src/TestCommands.ts`, `packages/plugin-apps/src/TestWorkflow.ts`, `packages/plugin-apps/src/TestCleanupWorkflow.ts`                  | 保存的命令和检查代次的结果控制运行与清理。连接缓存不管理测试生命周期。                                       |
-| 记忆辅助任务队列和节点本地模型 semaphore                                                                                                 | `packages/plugin-bots/src/MemoryWorkflow.ts`, `packages/plugin-bots/src/MemoryModels.ts`, `packages/server-execution/src/execution/Permits.ts`             | 共同工作流负责恢复。数据库 permit 负责准入。                                                                 |
+| 领域           | 当前需要核对的路径                                                                                                                                         | 简化规则的证据                                                                                           |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Chat 运行      | `packages/conversation-contract/src/chats/ChatHost.ts`, `packages/plugin-chats/src/TurnWorkflow.ts`, `packages/server-execution/src/execution/RunScope.ts` | 不再有逐成员 Chat runtime、引用计数包装、`keepOpen`、`current` 回调或逐方法代理。Turn 持有自己的作用域。 |
+| App 调用       | `packages/plugin-apps/src/AppCommands.ts`, `packages/plugin-apps/src/AppWorkflow.ts`, `packages/server-execution/src/execution/Calls.ts`                   | App 工作使用共同的调用意图、attempt、保存结果和决策。发现返回描述。                                      |
+| 代码运行       | `packages/plugin-code/src/CodeCommands.ts`, `packages/plugin-code/src/CodeWorkflow.ts`, `packages/server-kernel/src/imported/LegacyV1.ts`                  | 沙箱重放使用共同调用日志。旧租约存储和过期运行扫描已删除。数据迁移用专用 codec 读取旧记录。              |
+| Chat 事件      | `packages/server-execution/src/execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                                                              | 持久执行事件替代本地事件队列、序号计数器和结束标记。所有调用方使用同一事件契约。                         |
+| 工具调用       | `packages/server-execution/src/execution/Store.ts`, `packages/server-execution/src/execution/Observation.ts`, `packages/plugin-chats/src/ToolCommands.ts`  | 不再有旧 Operation 监听器、取消通知循环或过期 Operation 扫描。                                           |
+| Bot 限额和审批 | `packages/plugin-chats/src/ExecutionFeatures.ts`, `packages/plugin-bots/src/DelegationCommands.ts`, `packages/plugin-capabilities/src/RequestCommands.ts`  | 执行作用域管理 Gate 和审批。委派工作流管理限额。请求逐条到期关闭。                                       |
+| 开发者测试     | `packages/plugin-apps/src/TestCommands.ts`, `packages/plugin-apps/src/TestWorkflow.ts`, `packages/plugin-apps/src/TestCleanupWorkflow.ts`                  | 保存的命令和检查代次的结果控制运行与清理。连接缓存不管理测试生命周期。                                   |
+| Bot 记忆       | `packages/plugin-bots/src/MemoryWorkflow.ts`, `packages/plugin-bots/src/MemoryModels.ts`, `packages/server-execution/src/execution/Permits.ts`             | 共同工作流负责恢复。数据库 permit 负责准入。                                                             |
 
 `scripts/effect-rules.ts` 检查 `domain-boundary`、
 `storage-contract-boundary`、`standalone-boundary`、`execution-boundary` 和

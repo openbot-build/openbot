@@ -6,8 +6,12 @@ on:
     tags: ["v*.*.*"]
   pull_request:
 
+# A newer pull request push cancels the older checks. Main and tag checks run
+# independently; the publishing jobs below serialize writes to each registry.
 concurrency:
-  group: ci-${{ github.ref }}
+  group:
+    ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' ||
+    github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -48,7 +52,7 @@ jobs:
         run: devenv shell -- pnpm typecheck
       - name: Test
         run: devenv shell -- pnpm -r test
-      - name: Check package versions
+      - name: Test the release script
         run: devenv shell -- pnpm test:packages
       - name: Pack packages
         run: devenv shell -- pnpm packages:pack
@@ -57,13 +61,20 @@ jobs:
           RELEASE_REF: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: npm-${{ github.sha }}
+          name: packages-${{ github.sha }}
           path: .release/
           include-hidden-files: true
           retention-days: 7
 
-  packages:
-    name: Publish npm packages
+  # Pushes enqueue publication to GitHub Packages: main as a commit snapshot,
+  # version tags as stable releases or prereleases.
+  github-packages:
+    # Hold the registry queue through all reads, publishes, and retry handling.
+    concurrency:
+      group: publish-github-packages
+      cancel-in-progress: false
+      queue: max
+    name: Publish to GitHub Packages
     needs: check
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -74,6 +85,8 @@ jobs:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           extra-conf: |
@@ -83,12 +96,46 @@ jobs:
         run: nix profile add github:cachix/devenv/v2.4.0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: npm-${{ github.sha }}
+          name: packages-${{ github.sha }}
           path: .release/
-      - name: Set registry access
-        run: devenv shell -- bash scripts/registry-auth.sh
       - name: Publish checked packages
-        run: devenv shell -- pnpm packages:publish
+        run: devenv shell -- pnpm packages:publish github
+
+  # Only version tags reach npm. Trusted publishing signs in with this run's
+  # OIDC token, needs no secret, and adds provenance.
+  npm:
+    # Hold the registry queue through all reads, publishes, and retry handling.
+    concurrency:
+      group: publish-npm
+      cancel-in-progress: false
+      queue: max
+    name: Publish to npm
+    needs: check
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@openbot-build/client
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          extra-conf: |
+            extra-substituters = https://devenv.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: packages-${{ github.sha }}
+          path: .release/
+      - name: Publish checked packages
+        run: devenv shell -- pnpm packages:publish npm
 
   images:
     name: Build and check images

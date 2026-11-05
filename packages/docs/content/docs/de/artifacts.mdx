@@ -1,0 +1,52 @@
+---
+title: "Arbeitsergebnisse behalten"
+description: "Dateien, Versionen und ihre Quellen lesen."
+---
+
+Ein **Artefakt** ist ein Ergebnis, das ein Bot für einen Chat erstellt, etwa ein
+Bericht oder eine CSV-Tabelle. Bei Änderungen bleibt seine ID gleich. Jede
+Version hat eine eigene gespeicherte Datei. Der Client kann das Ergebnis zeigen
+und zum Herunterladen anbieten.
+
+## Ein Ergebnis erstellen
+
+Sage dem Bot, welche Dateien du brauchst. Er kann Text oder eine Datei von einem
+[Computer](/de/computers) veröffentlichen, den er nutzen darf. Erst wenn Inhalt
+und Version gespeichert sind, ist die Datei geliefert. Eine Antwort wie „Die
+Datei ist fertig“ veröffentlicht noch keine Datei.
+
+Die Plattform braucht einen [Dateispeicher](/de/admin/file-storage). Erlaubte
+Dateitypen, Größen und Speichergrenzen gelten auch für diese Dateien.
+
+## Quellen lesen
+
+Eine **Quelle** ist eine gespeicherte Kopie des benutzten Materials. Sie kann
+von einer öffentlichen Webseite, einem abgeschlossenen App-Ergebnis oder einer
+Textdatei auf einem Computer stammen. Ein Verweis in einer Nachricht oder
+Dateiversion nennt diese Quelle. Er kann auch einen kurzen Auszug enthalten.
+
+Eine Quelle zeigt, welches Material gespeichert wurde. Sie beweist nicht, dass
+jede Aussage oder Folgerung richtig ist. Eine von einer App gemeldete oder in
+einer Datei genannte Adresse heißt nicht, dass OpenBot die Webseite selbst las.
+
+## Ein Ergebnis ändern
+
+Bitte den Bot, das Ergebnis zu ändern, und nenne die neuen Anforderungen. Die ID
+bleibt gleich. Der neue Inhalt wird zu einer weiteren Version. Frühere
+Nachrichten nennen weiter ihre ursprüngliche Version. Du kannst den Verlauf
+lesen oder eine feste Version herunterladen.
+
+Veröffentlichte Dateien bleiben gespeichert, wenn ein Computer stoppt. Ein Pfad
+auf diesem Computer allein ist kein gespeichertes Ergebnis.
+
+## Inhalt behalten oder entfernen
+
+Wer den Chat lesen darf, darf seine Ergebnisse und Quellen lesen. Zum
+Veröffentlichen oder Ändern ist Schreibzugriff auf den Chat nötig. Normal
+hochgeladene [Dateien](/de/files) bleiben privat.
+
+Alle Versionen und Quellenkopien zählen zum Speicherbedarf. Der Chat schützt sie
+vor der Bereinigung ungenutzter Dateien. Wird der Chat gelöscht, enden diese
+Verweise. Der Eigentümer kann Dateiinhalte trotzdem löschen. Die alte Version
+bleibt als nicht verfügbar im Verlauf. OpenBot erstellt sie nicht im Hintergrund
+erneut.

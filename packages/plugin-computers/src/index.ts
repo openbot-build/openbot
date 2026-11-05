@@ -20,6 +20,8 @@ import { Transport as ResourceTransport } from "@openbot-build/server-execution/
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Feature from "@openbot-build/server-plugin/Feature"
+import { ComputerFiles } from "@openbot-build/tools-contract/computers/ComputerFiles"
+import * as ComputerFilesLayer from "./ComputerFiles.ts"
 import * as ComputerFeature from "./ComputerFeature.ts"
 import * as ComputerProviders from "./ComputerProviders.ts"
 import * as Computers from "./Computers.ts"
@@ -37,6 +39,7 @@ import * as Worker from "./Worker.ts"
 
 /** The keys that this plugin publishes. */
 const publishes = [
+	ComputerFiles,
 	ComputerProviders.ComputerProviders,
 	Computers.Computers,
 	Connectors.Connectors,
@@ -66,7 +69,9 @@ export default Feature.make("@openbot-build/plugin-computers")
 			Store,
 			Workflows,
 		],
-		services: Maintenance.layer.pipe(Layer.provideMerge(Layers.layerComputers)),
+		services: Layer.merge(Maintenance.layer, ComputerFilesLayer.layer).pipe(
+			Layer.provideMerge(Layers.layerComputers),
+		),
 		publishes,
 	})
 	.start({

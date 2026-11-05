@@ -54,7 +54,7 @@ runtime。每个 Turn 或子阶段持有自己的模型和工具。账户连接�
 插件会等到它需要的每个服务都已发布。一个插件停止或重新启动时，使用它的服务的插件先停止。服务回来后，它们再启动。插件关闭期间，它的路由以
 `503` 和 `FeatureUnavailable` 回答。
 
-**预设**是 OpenBot 的 26 个插件的列表。三个限制插件一开始是关闭的。其中六个是必需的：`audit`、`platform`、`organization`、`access`、`auth`
+**预设**是 OpenBot 的 27 个插件的列表。三个限制插件一开始是关闭的。其中六个是必需的：`audit`、`platform`、`organization`、`access`、`auth`
 和
 `authorization`。插件文件可以关闭其他插件。参见[插件](/zh-cn/plugins)。`/health`
 路由和执行的路由属于宿主本身，所以没有人能关闭它们。

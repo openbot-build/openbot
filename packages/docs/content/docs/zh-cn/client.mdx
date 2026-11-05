@@ -15,22 +15,30 @@ description: 用 TypeScript 调用 OpenBot，请求和错误都有类型。
 
 ## 安装
 
-包发布在 GitHub Packages：`https://npm.pkg.github.com`。在项目的 `.npmrc`
-中加入：
+正式版本发布在 npm。安装一个精确版本：
+
+```sh
+pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
+```
+
+预发布版本在各自的渠道下，例如
+`@openbot-build/client@beta`。锁文件会保存标签对应的精确版本。
+
+`main` 上的每个提交也会发布到 GitHub Packages，版本为
+`0.0.0-commit-<完整提交哈希>`，标签为
+`sha-<完整提交哈希>`。要安装某个提交，在项目的 `.npmrc` 中加入：
 
 ```ini
 @openbot-build:registry=https://npm.pkg.github.com
 ```
 
-使用具有 `read:packages` 权限的 GitHub classic PAT。运行
+加入后，所有 `@openbot-build` 包都从 GitHub Packages 安装。即使是公开包，GitHub
+Packages 也需要具有 `read:packages` 权限的 GitHub classic PAT。运行
 `npm login --scope=@openbot-build --registry=https://npm.pkg.github.com --auth-type=legacy`
-将令牌存入用户 npm 设置。不要把令牌放入 Git。
-
-安装精确版本，或用 `sha-<完整提交哈希>`
-选择已发布的提交。锁文件会保存标签对应的精确版本：
+将令牌存入用户 npm 设置。不要把令牌放入 Git。然后安装这个提交：
 
 ```sh
-pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
+pnpm add --save-exact @openbot-build/client@sha-<完整提交哈希> effect@4.1.2
 ```
 
 客户端包含共用的 OpenBot 代码和类型，采用 MIT 许可。安装时不需要 OpenBot 源码。其他 OpenBot 包保留各自的许可证。
@@ -72,6 +80,13 @@ const id = await Effect.runPromise(
 观察执行。关闭观察不会取消工作。`Executions.cancel` 和 `Executions.decide`
 也会准备带稳定键的命令。这些辅助函数需要平台的 `SecureRandom`
 服务；上面的 Node.js 示例使用 `NodeCrypto.layer`。
+
+为了在页面重新加载后恢复，调用 `command.send`
+前应保存命令键、目标和完整输入。再次准备命令时，把原键作为 `commandKey`
+传入。新命令的有效消息回执包含 `inputId`。在 `ChatView.queuedInputs[].id`
+或已保存的 `ChatItem.id`
+中找到它后，再用服务端记录替换本地待发送副本。较早保存的命令可能没有这个字段。见
+[回答](/zh-cn/developers/chats#回答)。
 
 | 选项             | 必需 | 作用                                                                                                  |
 | ---------------- | ---- | ----------------------------------------------------------------------------------------------------- |

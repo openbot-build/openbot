@@ -17,23 +17,32 @@ programs. It runs in Node.js, Deno, Bun, workers, and browsers.
 
 ## Install
 
-The packages are on GitHub Packages at `https://npm.pkg.github.com`. Add this
-scope to your project `.npmrc`:
+Releases are on npm. Install an exact release:
+
+```sh
+pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
+```
+
+A prerelease is under its channel, such as `@openbot-build/client@beta`. The
+lockfile saves the exact version behind the tag.
+
+Each commit to `main` is also published to GitHub Packages, as
+`0.0.0-commit-<full-commit-hash>` with a `sha-<full-commit-hash>` tag. To
+install one, add this scope to your project `.npmrc`:
 
 ```ini
 @openbot-build:registry=https://npm.pkg.github.com
 ```
 
-Use a GitHub personal access token (classic) with `read:packages`. Save it in
-your user npm settings with
+With this scope, every `@openbot-build` package comes from GitHub Packages.
+GitHub Packages needs a GitHub personal access token (classic) with
+`read:packages`, even for public packages. Save it in your user npm settings
+with
 `npm login --scope=@openbot-build --registry=https://npm.pkg.github.com --auth-type=legacy`.
-Keep the token out of Git.
-
-Install an exact release, or use `sha-<full-commit-hash>` to select a published
-commit. The lockfile saves the exact version behind the tag:
+Keep the token out of Git. Then install the commit:
 
 ```sh
-pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
+pnpm add --save-exact @openbot-build/client@sha-<full-commit-hash> effect@4.1.2
 ```
 
 The client includes its shared OpenBot code and types under MIT. It needs no
@@ -77,6 +86,13 @@ Chat. The receipt names an execution; observe it through
 observation does not cancel work. `Executions.cancel` and `Executions.decide`
 also prepare commands with stable keys. Give a platform `SecureRandom` service
 when using these helpers; this Node.js example uses `NodeCrypto.layer`.
+
+For a page reload, save the command key, target, and full input before calling
+`command.send`. Pass that key as `commandKey` when preparing the command again.
+A valid message receipt includes `inputId` for new commands. Match it to
+`ChatView.queuedInputs[].id` or a saved `ChatItem.id` before replacing a local
+pending copy. Old saved commands may omit the field. See
+[The answer](/developers/chats#the-answer).
 
 | Option           | Required | What it does                                                                                                      |
 | ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |

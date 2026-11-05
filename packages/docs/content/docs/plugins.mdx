@@ -37,7 +37,7 @@ Clients see the same contract on every server.
 
 ## The plugins of OpenBot
 
-OpenBot has 26 plugins. The three limit plugins are off at first. The six
+OpenBot has 27 plugins. The three limit plugins are off at first. The six
 plugins with "Yes" in the column "Needed" can never be off. The column "Needs"
 lists the other plugins that a plugin uses. A plugin starts only when every
 plugin that it needs is on.
@@ -54,6 +54,7 @@ plugin that it needs is on.
 | `authorization` | Roles, and the check of the permissions of each caller.                 | Yes    | `auth`, `organization`, `platform`                                                                              |
 | `models`        | Model providers, models, and the model registry.                        |        | `audit`, `auth`, `authorization`                                                                                |
 | `files`         | Stored files and their work.                                            |        | `auth`, `authorization`                                                                                         |
+| `artifacts`     | Fixed files, saved sources, and citations.                              |        | `apps`, `auth`, `authorization`, `computers`, `files`, `imported`, `organization`                               |
 | `bots`          | Bots, their memory, and the delegations between them.                   |        | `audit`, `auth`, `authorization`, `capabilities`, `chats`, `imported`, `mail`, `models`, `organization`, `work` |
 | `capabilities`  | Grants, Rules, requests, and the checks of them.                        |        | `apps`, `audit`, `auth`, `authorization`, `bots`, `chats`, `imported`, `models`                                 |
 | `work`          | Reminders, and the work tools of Bots.                                  |        | `bots`, `chats`                                                                                                 |
@@ -76,7 +77,7 @@ need each other, such as `bots` and `chats`.
 
 What this means for you:
 
-- You can turn off `computers`, `triggers`, `billing`, and `settings` one by
+- You can turn off `artifacts`, `triggers`, `billing`, and `settings` one by
   one. No other plugin needs them.
 - You can turn each limit plugin on or off alone. No other plugin needs them.
 - You can not turn off `mail`, `sso`, or `models`. A needed plugin uses them, so

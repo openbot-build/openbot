@@ -90,6 +90,15 @@ const documented: Readonly<Record<string, ReadonlyArray<string>>> = {
 	authorization: ["auth", "organization", "platform"],
 	models: ["audit", "auth", "authorization"],
 	files: ["auth", "authorization"],
+	artifacts: [
+		"apps",
+		"auth",
+		"authorization",
+		"computers",
+		"files",
+		"imported",
+		"organization",
+	],
 	bots: [
 		"audit",
 		"auth",
@@ -171,7 +180,7 @@ describe("PluginNeeds", () => {
 				Arr.isReadonlyArrayEmpty(stopsWith(id)),
 		)
 		assert.deepStrictEqual(alone, [
-			"computers",
+			"artifacts",
 			"triggers",
 			"billing",
 			"settings",

@@ -73,7 +73,8 @@
 		"@openbot-build/server-upgrade": "workspace:*",
 		"@openbot-build/tools-contract": "workspace:*",
 		"effect": "4.1.2",
-		"yaml": "2.9.1"
+		"yaml": "2.9.1",
+		"@openbot-build/plugin-artifacts": "workspace:*"
 	},
 	"devDependencies": {
 		"@effect/vitest": "4.1.2",
@@ -83,8 +84,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/openbot"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

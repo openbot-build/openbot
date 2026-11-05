@@ -2,6 +2,12 @@ import { Chat, ChatStore, type Turn } from "@openbot-build/core"
 import { Array as Arr, Clock, Effect, Option, Schema } from "effect"
 import { and, asc, desc, eq, gt, inArray, lt, type SQL } from "drizzle-orm"
 import {
+	artifacts,
+	artifactVersions,
+	artifactSources,
+	artifactCitations,
+	artifactCitationIntents,
+	artifactJobs,
 	chats,
 	chatItems,
 	chatTurns,
@@ -302,6 +308,18 @@ export const remove = (
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
+				for (const table of [
+					artifacts,
+					artifactVersions,
+					artifactSources,
+					artifactCitations,
+					artifactCitationIntents,
+					artifactJobs,
+				]) {
+					yield* tx
+						.delete(table)
+						.where(and(eq(table.namespace, namespace), eq(table.chat, chat)))
+				}
 				yield* tx
 					.delete(chatItems)
 					.where(

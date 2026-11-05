@@ -9,7 +9,8 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 把各部分组装成服务器。其他库可以单独使用。
 
 所有包都命名为 `@openbot-build/<name>`，版本为 `0.1.0`，并使用
-`effect@4.0.5`。它们还没有发布到 npm。请在工作区中用 `"workspace:*"` 使用它们。
+`effect@4.1.2`。本地开发使用 `"workspace:*"`。包发布见
+[发布](/zh-cn/developers/publishing)。
 
 ---
 
@@ -39,6 +40,7 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 | `plugin-authorization`  | `authorization` 插件：角色，以及对每个调用方权限的检查。只有服务器使用它。                                                                                                 |
 | `plugin-models`         | `models` 插件：模型提供方、模型和模型注册表。只有服务器使用它。                                                                                                            |
 | `plugin-files`          | `files` 插件：存储的文件和它们的工作。只有服务器使用它。                                                                                                                   |
+| `plugin-artifacts`      | 固定文件、保存的来源和引用。                                                                                                                                               |
 | `plugin-bots`           | `bots` 插件：Bots、它们的记忆，以及它们之间的委托。`openbot` 会以 `BotMemory` 的名字再次导出它的记忆帮助函数。                                                             |
 | `plugin-capabilities`   | `capabilities` 插件：Grants、Rules、请求，以及对它们的检查。只有服务器使用它。                                                                                             |
 | `plugin-work`           | `work` 插件：提醒，以及 Bots 的工作工具。只有服务器使用它。                                                                                                                |

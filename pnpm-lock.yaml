@@ -544,6 +544,9 @@ importers:
       "@openbot-build/plugin-apps":
         specifier: workspace:*
         version: link:../plugin-apps
+      "@openbot-build/plugin-artifacts":
+        specifier: workspace:*
+        version: link:../plugin-artifacts
       "@openbot-build/plugin-audit":
         specifier: workspace:*
         version: link:../plugin-audit
@@ -748,6 +751,70 @@ importers:
         specifier: 4.1.2
         version: 4.1.2
     devDependencies:
+      "@effect/vitest":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/plugin-artifacts:
+    dependencies:
+      "@effect/sql-pg":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
+      "@graftland/graft":
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
+      "@openbot-build/api":
+        specifier: workspace:*
+        version: link:../api
+      "@openbot-build/apps-contract":
+        specifier: workspace:*
+        version: link:../apps-contract
+      "@openbot-build/conversation-contract":
+        specifier: workspace:*
+        version: link:../conversation-contract
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
+      "@openbot-build/identity-contract":
+        specifier: workspace:*
+        version: link:../identity-contract
+      "@openbot-build/protocol":
+        specifier: workspace:*
+        version: link:../protocol
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
+      "@openbot-build/server-execution":
+        specifier: workspace:*
+        version: link:../server-execution
+      "@openbot-build/server-kernel":
+        specifier: workspace:*
+        version: link:../server-kernel
+      "@openbot-build/server-plugin":
+        specifier: workspace:*
+        version: link:../server-plugin
+      "@openbot-build/tools-contract":
+        specifier: workspace:*
+        version: link:../tools-contract
+      drizzle-orm:
+        specifier: 1.0.0-rc.5
+        version: 1.0.0-rc.5(@effect/sql-pg@4.1.2(effect@4.1.2))(@effect/sql-sqlite-node@4.0.5(effect@4.1.2))(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(zod@4.6.7)
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
+    devDependencies:
+      "@effect/platform-node":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
       "@effect/vitest":
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
@@ -2053,6 +2120,9 @@ importers:
       "@openbot-build/plugin-apps":
         specifier: workspace:*
         version: link:../plugin-apps
+      "@openbot-build/plugin-artifacts":
+        specifier: workspace:*
+        version: link:../plugin-artifacts
       "@openbot-build/plugin-auth":
         specifier: workspace:*
         version: link:../plugin-auth
@@ -2264,6 +2334,9 @@ importers:
       "@openbot-build/plugin-apps":
         specifier: workspace:*
         version: link:../plugin-apps
+      "@openbot-build/plugin-artifacts":
+        specifier: workspace:*
+        version: link:../plugin-artifacts
       "@openbot-build/plugin-auth":
         specifier: workspace:*
         version: link:../plugin-auth

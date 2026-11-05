@@ -2,7 +2,7 @@ import { OpenBotApi } from "@openbot-build/api"
 import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Queries from "./AppQueries.ts"
+import * as Queries from "@openbot-build/apps-contract/apps/AppQueries"
 import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
 
 export const layer = HttpApiBuilder.group(

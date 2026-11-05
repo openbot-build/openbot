@@ -1,3 +1,4 @@
+import { Artifacts } from "@openbot-build/plugin-artifacts/Artifacts"
 import * as ResetCommands from "@openbot-build/plugin-apps/ResetCommands"
 import * as AuthorizationCommands from "@openbot-build/plugin-apps/AuthorizationCommands"
 import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
@@ -381,6 +382,7 @@ const startApi = Effect.fn("AppDiscoveryTest.startApi")(function* (
 	const services = yield* Layer.build(
 		HttpRouter.serve(TestHost.layerApi).pipe(
 			Layer.provide([
+				Layer.mock(Artifacts, {}),
 				Layer.mock(ExecutionCommands, {}),
 				Layer.mock(ImportedRecords, {}),
 				Layer.mock(DelegationQueries, {}),
@@ -586,7 +588,7 @@ layer(platform, { excludeTestServices: true })((it) => {
 				},
 				onEndpoint: () => undefined,
 			})
-			assert.strictEqual(HashSet.size(groups), 45)
+			assert.strictEqual(HashSet.size(groups), 46)
 			assert.deepStrictEqual(
 				Arr.sort(Arr.fromIterable(yield* api.host.mounted), Order.String),
 				Arr.sort(Arr.fromIterable(groups), Order.String),

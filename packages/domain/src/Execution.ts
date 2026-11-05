@@ -1,4 +1,5 @@
 import { Schema, String as Str } from "effect"
+import { ArtifactId, SourceId, SourceReference, Version } from "./Artifacts.ts"
 
 export const Id = Schema.String.check(
 	Schema.isMinLength(1),
@@ -157,6 +158,17 @@ export type Decision = typeof Decision.Type
 
 /** Each model retry starts a new attempt. Text never crosses attempts. */
 export const EventBody = Schema.TaggedUnion({
+	SourceCaptured: { chatId: Schema.String, sourceId: SourceId },
+	ArtifactPublished: {
+		chatId: Schema.String,
+		artifactId: ArtifactId,
+		version: Version,
+	},
+	CitationRecorded: {
+		chatId: Schema.String,
+		itemId: Schema.String,
+		citations: Schema.Array(SourceReference),
+	},
 	Wake: { key: Schema.String },
 	State: { status: Status, failure: Schema.NullOr(Failure) },
 	StepStarted: { step: Schema.String, attempt: Schema.Natural },
@@ -182,7 +194,12 @@ export const EventBody = Schema.TaggedUnion({
 	InputMoved: { executionId: Id, items: Schema.Array(Schema.String) },
 	/** Follow this execution with its own cursor, steps, and attempts. */
 	ChildExecution: { executionId: Id, step: Schema.String },
-	Checkpoint: { resource: Resource, revision: Schema.Natural },
+	Checkpoint: {
+		resource: Resource,
+		revision: Schema.Natural,
+		/** A message command keeps this input ID when the client retries it. */
+		inputId: Schema.optionalKey(Schema.String),
+	},
 })
 export type EventBody = typeof EventBody.Type
 

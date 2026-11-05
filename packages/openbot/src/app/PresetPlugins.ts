@@ -5,6 +5,7 @@
 import type { Plugin as GraftPlugin } from "@graftland/graft"
 import { type Entry, Loader, Tree } from "@graftland/loader"
 import AccessPlugin from "@openbot-build/plugin-access"
+import ArtifactsPlugin from "@openbot-build/plugin-artifacts"
 import AppsPlugin from "@openbot-build/plugin-apps"
 import AuditPlugin from "@openbot-build/plugin-audit"
 import AuthPlugin from "@openbot-build/plugin-auth"
@@ -64,6 +65,7 @@ export const byId = {
 	code: CodePlugin,
 	vaults: VaultsPlugin,
 	computers: ComputersPlugin,
+	artifacts: ArtifactsPlugin,
 	triggers: TriggersPlugin,
 	billing: BillingPlugin,
 	settings: SettingsPlugin,
@@ -159,6 +161,7 @@ export const published = [
 	...Feature.published(byId.authorization),
 	...Feature.published(byId.models),
 	...Feature.published(byId.files),
+	...Feature.published(byId.artifacts),
 	...Feature.published(byId.bots),
 	...Feature.published(byId.capabilities),
 	...Feature.published(byId.work),

@@ -6,6 +6,7 @@ export * as AppViews from "./AppViews.ts"
 export * as Executions from "./Executions.ts"
 
 export * as Chats from "./Chats.ts"
+export * as Artifacts from "./Artifacts.ts"
 
 export * as Requests from "./Requests.ts"
 

@@ -30,7 +30,8 @@
 		"./TurnTools": "./dist/TurnTools.js",
 		"./TurnWorkflow": "./dist/TurnWorkflow.js",
 		"./WorkAdmission": "./dist/WorkAdmission.js",
-		"./live/LiveConnections": "./dist/live/LiveConnections.js"
+		"./live/LiveConnections": "./dist/live/LiveConnections.js",
+		"./ResponseMapping": "./dist/ResponseMapping.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -65,8 +66,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/plugin-chats"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

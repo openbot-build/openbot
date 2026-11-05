@@ -18,6 +18,8 @@
 		"./AppConnections": "./dist/AppConnections.js",
 		"./AppDiscovery": "./dist/AppDiscovery.js",
 		"./AppIndex": "./dist/AppIndex.js",
+		"./ArtifactCommands": "./dist/ArtifactCommands.js",
+		"./Artifacts": "./dist/Artifacts.js",
 		"./Authorization": "./dist/Authorization.js",
 		"./Billing": "./dist/Billing.js",
 		"./BotMemory": "./dist/BotMemory.js",
@@ -71,8 +73,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/domain"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }

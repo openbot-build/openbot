@@ -81,6 +81,8 @@ export * as AppIndex from "./AppIndex.ts"
 export * as Developers from "./Developers.ts"
 
 export * as Files from "./Files.ts"
+export * as Artifacts from "./Artifacts.ts"
+export * as ArtifactCommands from "./ArtifactCommands.ts"
 
 export { ReturnTo } from "./ReturnTo.ts"
 

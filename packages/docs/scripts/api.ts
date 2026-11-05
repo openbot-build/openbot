@@ -82,6 +82,11 @@ const groups = [
 		"Upload files, such as pictures and PDFs, and give them to a Bot in a message.",
 	],
 	[
+		"artifacts",
+		"Artifacts and sources",
+		"Keep source snapshots, publish fixed file versions, and read the citations of a Chat.",
+	],
+	[
 		"delegations",
 		"Delegations",
 		"Read or stop the work that a Bot gave to another Bot or to itself.",

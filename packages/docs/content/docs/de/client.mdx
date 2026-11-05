@@ -18,22 +18,33 @@ für typisierte Programme. Er läuft in Node.js, Deno, Bun, Workern und Browsern
 
 ## Installieren
 
-Die Pakete liegen in GitHub Packages unter `https://npm.pkg.github.com`. Trage
-den Scope in die `.npmrc` des Projekts ein:
+Releases liegen auf npm. Installiere eine genaue Version:
+
+```sh
+pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
+```
+
+Eine Vorabversion liegt unter ihrem Kanal, etwa `@openbot-build/client@beta`.
+Die Lockdatei hält die genaue Version hinter dem Tag fest.
+
+Jeder Commit auf `main` erscheint außerdem in GitHub Packages, als
+`0.0.0-commit-<vollständiger-Commit-Hash>` mit dem Tag
+`sha-<vollständiger-Commit-Hash>`. Um einen davon zu installieren, trage den
+Scope in die `.npmrc` des Projekts ein:
 
 ```ini
 @openbot-build:registry=https://npm.pkg.github.com
 ```
 
-Nutze einen GitHub-Token (classic PAT) mit `read:packages`. Mit
+Mit diesem Scope kommen alle `@openbot-build`-Pakete aus GitHub Packages. GitHub
+Packages braucht auch für öffentliche Pakete einen GitHub-Token (classic PAT)
+mit `read:packages`. Mit
 `npm login --scope=@openbot-build --registry=https://npm.pkg.github.com --auth-type=legacy`
 speicherst du ihn in deinen npm-Einstellungen. Lege den Token nicht in Git ab.
-
-Installiere eine genaue Version. Mit `sha-<vollständiger-Commit-Hash>` wählst du
-einen veröffentlichten Commit. Die Lockdatei hält die genaue Version fest:
+Installiere dann den Commit:
 
 ```sh
-pnpm add --save-exact @openbot-build/client@0.1.2 effect@4.1.2
+pnpm add --save-exact @openbot-build/client@sha-<vollständiger-Commit-Hash> effect@4.1.2
 ```
 
 Der Client enthält gemeinsamen OpenBot-Code und Typen unter MIT. Du brauchst
@@ -79,6 +90,14 @@ der Beobachtung bricht die Arbeit nicht ab. `Executions.cancel` und
 `Executions.decide` bereiten auch Befehle mit festen Schlüsseln vor. Geben Sie
 diesen Helfern einen `SecureRandom`-Dienst der Plattform. Das Node.js-Beispiel
 nutzt `NodeCrypto.layer`.
+
+Speichere für ein Neuladen den Befehlsschlüssel, das Ziel und die ganze Eingabe,
+bevor du `command.send` aufrufst. Gib beim erneuten Vorbereiten den alten
+Schlüssel als `commandKey` mit. Ein gültiger Nachrichtenbeleg enthält für neue
+Befehle `inputId`. Gleiche sie mit `ChatView.queuedInputs[].id` oder einer
+gespeicherten `ChatItem.id` ab, bevor du eine lokale wartende Kopie ersetzt.
+Ältere gespeicherte Befehle können das Feld weglassen. Siehe
+[Die Antwort](/de/developers/chats#die-antwort).
 
 | Option           | Pflicht | Was sie tut                                                                                                                 |
 | ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |

@@ -31,6 +31,12 @@ openbot_computer_remove_file
 openbot_computer_open_port
 openbot_computer_screenshot
 openbot_computer_desktop
+openbot_capture_source
+openbot_list_artifacts
+openbot_read_artifact
+openbot_read_source
+openbot_publish_artifact
+openbot_cite_sources
 
 # normal instructions
 The host tools belong to this test server.
@@ -55,6 +61,7 @@ To come back to something later, call openbot_remind with seconds, or with until
 You can work on Computers: machines where you run commands, change files and use a desktop. Use openbot_computers_list to see them.
 
 You may use no Computer yet.
+When work needs files, save the sources, then publish files with their source references. A file is delivered only after publish succeeds. To change the last file, list or read it and keep its artifactId with expectedVersion. Use openbot_cite_sources before the next body answer that uses sources. Published file versions stay fixed.
 
 # review tools
 openbot_execution_status

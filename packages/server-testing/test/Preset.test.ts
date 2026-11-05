@@ -61,6 +61,7 @@ const presetWorkflows: ReadonlyArray<string> = [
 	"openbot.app-connection",
 	"openbot.app-grant-cleanup",
 	"openbot.app-reset",
+	"openbot.artifact-publish",
 	"openbot.capability-request",
 	"openbot.channel-configuration",
 	"openbot.channel-delivery",
@@ -97,6 +98,7 @@ const presetFeatures: ReadonlyArray<string> = [
 	"@openbot-build/plugin-work",
 	"@openbot-build/plugin-channels",
 	"@openbot-build/plugin-computers",
+	"@openbot-build/plugin-artifacts",
 ]
 
 /** Every group of the contract, in name order. */
@@ -194,8 +196,8 @@ layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
 					forkNames,
 				)
 				assert.deepStrictEqual(host.parts, expected)
-				assert.strictEqual(expected.features.length, 5)
-				assert.strictEqual(expected.groups.length, 45)
+				assert.strictEqual(expected.features.length, 6)
+				assert.strictEqual(expected.groups.length, 46)
 				assert.isAbove(expected.workflows.length, 30)
 
 				// A plugin that gives a bot feature gives a workflow too. Its
@@ -259,6 +261,9 @@ const forkNames: ReadonlyArray<string> = [
 	"      @openbot-build/plugin-apps",
 	"        @openbot-build/plugin-apps#session",
 	"          @openbot-build/plugin-apps#start",
+	"    @openbot-build/plugin-artifacts",
+	"      @openbot-build/plugin-artifacts",
+	"        @openbot-build/plugin-artifacts#start",
 	"    @openbot-build/plugin-audit",
 	"      @openbot-build/plugin-audit",
 	"    @openbot-build/plugin-auth",

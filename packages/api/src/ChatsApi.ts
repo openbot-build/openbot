@@ -12,7 +12,7 @@ import {
 	ChatSettingsChange as UpdateChatRequest,
 	ChatTodoChange as UpdateTodosRequest,
 } from "@openbot-build/domain"
-import { Execution, ChatModelInvalid } from "@openbot-build/domain"
+import { Artifacts, Execution, ChatModelInvalid } from "@openbot-build/domain"
 import { BotAuth } from "./AuthApi.ts"
 import { Chat, Config, Item, Turn } from "@openbot-build/core"
 import * as BotMemory from "./BotMemory.ts"
@@ -47,14 +47,30 @@ export const ChatCommandReceipt = Schema.Struct({
 	...Execution.Receipt.fields,
 	chat: Chat.Id,
 	turn: Turn.Id,
+	/** The same input ID in the queue and in saved Chat Items. Older commands may have none. */
+	inputId: Schema.optionalKey(Item.Id),
 })
 export type ChatCommandReceipt = typeof ChatCommandReceipt.Type
 
-const OutputText = Schema.Struct({
+export const OutputText = Schema.Struct({
 	type: Schema.Literal("output_text"),
 	text: Schema.String,
-	annotations: Schema.Tuple([]),
+	annotations: Schema.Array(Artifacts.SourceReference),
 })
+export type OutputText = typeof OutputText.Type
+export const OutputFile = Schema.Struct({
+	type: Schema.Literal("output_file"),
+	artifact_id: Artifacts.ArtifactId,
+	version: Artifacts.Version,
+	file_id: Schema.String,
+	filename: Schema.String,
+	media_type: Schema.String,
+	bytes: Schema.Natural,
+	availability: Artifacts.Availability,
+})
+export type OutputFile = typeof OutputFile.Type
+export const ChatItem = Artifacts.ChatItem
+export type ChatItem = typeof ChatItem.Type
 /** The saved status of one response. */
 export const ResponseStatus = Schema.Literals([
 	"in_progress",
@@ -69,7 +85,7 @@ const OutputMessage = Schema.Struct({
 	type: Schema.Literal("message"),
 	role: Schema.Literal("assistant"),
 	status: ResponseStatus.pick(["in_progress", "completed", "incomplete"]),
-	content: Schema.Array(OutputText),
+	content: Schema.Array(Schema.Union([OutputText, OutputFile])),
 })
 
 export const ModelUsage = Schema.Struct({
@@ -149,6 +165,15 @@ export const TurnInfo = Schema.Struct({
 })
 export type TurnInfo = typeof TurnInfo.Type
 
+/** Saved input that waits for the Bot to read it. Its ID stays the same in history. */
+export const QueuedChatInput = Schema.Struct({
+	id: Item.Id,
+	kind: Schema.Literals(["message", "steer"]),
+	turn: Schema.NullOr(Turn.Id),
+	content: Chat.InboxEntry.fields.content,
+})
+export type QueuedChatInput = typeof QueuedChatInput.Type
+
 /** One Chat, its current Turn and its latest response. It holds no history. */
 export const ChatView = Schema.Struct({
 	chat: ChatInfo,
@@ -158,6 +183,8 @@ export const ChatView = Schema.Struct({
 	executionId: Schema.NullOr(Execution.Id),
 	/** The number of inputs that wait for a Turn. */
 	inbox: Schema.Natural,
+	/** Fixed input IDs let clients replace local pending rows with this saved queue. */
+	queuedInputs: Schema.optionalKey(Schema.Array(QueuedChatInput)),
 	open: OpenWork,
 })
 export type ChatView = typeof ChatView.Type
@@ -319,7 +346,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 				limit: Schema.optionalKey(Schema.FiniteFromString),
 			},
 			success: Schema.Struct({
-				items: Schema.Array(Item.Record),
+				items: Schema.Array(ChatItem),
 				next: Schema.NullOr(Item.Seq),
 			}),
 			error: ChatOperationErrors,
@@ -351,7 +378,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 				limit: Schema.optionalKey(Schema.FiniteFromString),
 			},
 			success: Schema.Struct({
-				items: Schema.Array(Item.Record),
+				items: Schema.Array(ChatItem),
 				next: Schema.NullOr(Item.Id),
 			}),
 			error: ChatOperationErrors,

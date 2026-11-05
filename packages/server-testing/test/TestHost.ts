@@ -42,6 +42,7 @@ import * as CodeMounts from "@openbot-build/plugin-code/HttpMounts"
 import * as Drivers from "@openbot-build/plugin-computers/Drivers"
 import * as ComputersMounts from "@openbot-build/plugin-computers/HttpMounts"
 import * as FilesMounts from "@openbot-build/plugin-files/HttpMounts"
+import * as ArtifactsMounts from "@openbot-build/plugin-artifacts/HttpMounts"
 import * as ModelsMounts from "@openbot-build/plugin-models/HttpMounts"
 import * as OrganizationMounts from "@openbot-build/plugin-organization/HttpMounts"
 import * as PlatformMounts from "@openbot-build/plugin-platform/HttpMounts"
@@ -227,6 +228,7 @@ const layerGroups = Layer.effectDiscard(
 				SettingsMounts.mount,
 				TriggersMounts.mount,
 				FilesMounts.mount,
+				ArtifactsMounts.mount,
 				ChannelsMounts.mount,
 				ComputersMounts.mount,
 				VaultsMounts.mount,

@@ -15,13 +15,15 @@ import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as Feature from "@openbot-build/server-plugin/Feature"
+import { ArtifactFiles } from "@openbot-build/apps-contract/artifacts/ArtifactFiles"
+import * as ArtifactFilesLayer from "./ArtifactFiles.ts"
 import * as FilesLayer from "./Files.ts"
 import * as FileTasks from "./FileTasks.ts"
 import * as FileWorkflows from "./FileWorkflows.ts"
 import * as HttpMounts from "./HttpMounts.ts"
 
 /** The keys that this plugin publishes. */
-const publishes = [Files, FileTasks.FileTasks] as const
+const publishes = [Files, FileTasks.FileTasks, ArtifactFiles] as const
 
 export default Feature.make("@openbot-build/plugin-files")
 	.stage({
@@ -36,7 +38,9 @@ export default Feature.make("@openbot-build/plugin-files")
 			SqlClient.SqlClient,
 			Store,
 		],
-		services: FilesLayer.layer.pipe(Layer.provideMerge(FileTasks.layer)),
+		services: Layer.merge(FilesLayer.layer, ArtifactFilesLayer.layer).pipe(
+			Layer.provideMerge(FileTasks.layer),
+		),
 		publishes,
 	})
 	.start({

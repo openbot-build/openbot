@@ -509,6 +509,7 @@ const serverPackages = [
 	"plugin-authorization",
 	"plugin-models",
 	"plugin-files",
+	"plugin-artifacts",
 	"plugin-bots",
 	"plugin-capabilities",
 	"plugin-work",

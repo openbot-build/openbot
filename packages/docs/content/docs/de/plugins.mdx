@@ -40,7 +40,7 @@ aus ist. Clients sehen auf jedem Server denselben Vertrag.
 
 ## Die Plugins von OpenBot
 
-OpenBot hat 26 Plugins. Die drei Limit-Plugins sind am Anfang aus. Die sechs
+OpenBot hat 27 Plugins. Die drei Limit-Plugins sind am Anfang aus. Die sechs
 Plugins mit „Ja“ in der Spalte „Nötig“ können nie aus sein. Die Spalte „Braucht“
 nennt die anderen Plugins, die ein Plugin nutzt. Ein Plugin startet erst, wenn
 jedes Plugin an ist, das es braucht.
@@ -57,6 +57,7 @@ jedes Plugin an ist, das es braucht.
 | `authorization` | Rollen und die Prüfung der Rechte jedes Aufrufers.                           | Ja    | `auth`, `organization`, `platform`                                                                              |
 | `models`        | Modell-Anbieter, Modelle und das Modell-Register.                            |       | `audit`, `auth`, `authorization`                                                                                |
 | `files`         | Gespeicherte Dateien und ihre Arbeit.                                        |       | `auth`, `authorization`                                                                                         |
+| `artifacts`     | Feste Dateien, gespeicherte Quellen und Zitate.                              |       | `apps`, `auth`, `authorization`, `computers`, `files`, `imported`, `organization`                               |
 | `bots`          | Bots, ihr Gedächtnis und die Delegationen zwischen ihnen.                    |       | `audit`, `auth`, `authorization`, `capabilities`, `chats`, `imported`, `mail`, `models`, `organization`, `work` |
 | `capabilities`  | Grants, Rules, Anfragen und ihre Prüfung.                                    |       | `apps`, `audit`, `auth`, `authorization`, `bots`, `chats`, `imported`, `models`                                 |
 | `work`          | Erinnerungen und die Arbeits-Werkzeuge der Bots.                             |       | `bots`, `chats`                                                                                                 |
@@ -80,7 +81,7 @@ Starts. Darum können zwei Plugins einander brauchen, zum Beispiel `bots` und
 
 Was das für dich heißt:
 
-- Du kannst `computers`, `triggers`, `billing` und `settings` einzeln
+- Du kannst `artifacts`, `triggers`, `billing` und `settings` einzeln
   ausschalten. Kein anderes Plugin braucht sie.
 - Du kannst jedes Limit-Plugin allein an- oder ausschalten. Kein anderes Plugin
   braucht sie.

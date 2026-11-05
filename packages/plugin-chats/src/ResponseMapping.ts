@@ -2,8 +2,15 @@ import { Array as Arr, Match, pipe, Predicate, Record as Rec } from "effect"
 import { dual } from "effect/Function"
 import type { Chat, Item, Turn } from "@openbot-build/core"
 import type { ChatResponse } from "@openbot-build/api"
+import type { Artifacts } from "@openbot-build/domain"
 
 import type { Response } from "effect/ai"
+
+/** Saved links are joined by the host, not read from model text. */
+type LinkedItem = Item.Entry & {
+	readonly citations?: ReadonlyArray<Artifacts.SourceReference>
+	readonly artifacts?: ReadonlyArray<Artifacts.ArtifactVersion>
+}
 const addUsage: {
 	(next: Response.Usage): (previous: ChatResponse["usage"]) => {
 		inputTokens: Record<string, number>
@@ -60,19 +67,19 @@ const textOf = (items: ReadonlyArray<Item.Entry>): string =>
 export const response: {
 	(
 		turn: Turn.Record,
-		items: ReadonlyArray<Item.Entry>,
+		items: ReadonlyArray<LinkedItem>,
 	): (chat: Chat.Id) => ChatResponse
 	(
 		chat: Chat.Id,
 		turn: Turn.Record,
-		items: ReadonlyArray<Item.Entry>,
+		items: ReadonlyArray<LinkedItem>,
 	): ChatResponse
 } = dual(
 	3,
 	(
 		chat: Chat.Id,
 		turn: Turn.Record,
-		items: ReadonlyArray<Item.Entry>,
+		items: ReadonlyArray<LinkedItem>,
 	): ChatResponse => {
 		const state = turn.status
 		const phase: ChatResponse["status"] = Match.value(state).pipe(
@@ -118,8 +125,18 @@ export const response: {
 							{
 								type: "output_text" as const,
 								text: textOf([entry]),
-								annotations: [] as const,
+								annotations: entry.citations ?? [],
 							},
+							...Arr.map(entry.artifacts ?? [], (version) => ({
+								type: "output_file" as const,
+								artifact_id: version.artifactId,
+								version: version.version,
+								file_id: version.file.id,
+								filename: version.file.filename,
+								media_type: version.file.mediaType,
+								bytes: version.file.bytes,
+								availability: version.availability,
+							})),
 						],
 					},
 				]

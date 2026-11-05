@@ -29,7 +29,7 @@ import {
 import { Digest, SecureRandom } from "effect/crypto"
 import { Chat, Item, Turn } from "@openbot-build/core"
 
-import * as AppQueries from "./AppQueries.ts"
+import * as AppQueries from "@openbot-build/apps-contract/apps/AppQueries"
 import * as ChatQueries from "@openbot-build/conversation-contract/chats/ChatQueries"
 import * as ChatErrors from "@openbot-build/conversation-contract/chats/ChatErrors"
 import * as TaskMessages from "@openbot-build/conversation-contract/chats/TaskMessages"

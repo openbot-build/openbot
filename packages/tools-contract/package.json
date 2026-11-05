@@ -15,7 +15,8 @@
 		"./plugins/Registration": "./dist/plugins/Registration.js",
 		"./plugins/ToolEntry": "./dist/plugins/ToolEntry.js",
 		"./plugins/ToolJson": "./dist/plugins/ToolJson.js",
-		"./plugins/work/Todos": "./dist/plugins/work/Todos.js"
+		"./plugins/work/Todos": "./dist/plugins/work/Todos.js",
+		"./computers/ComputerFiles": "./dist/computers/ComputerFiles.js"
 	},
 	"scripts": {
 		"build": "tsdown",
@@ -37,8 +38,5 @@
 		"type": "git",
 		"url": "git+https://github.com/openbot-build/openbot.git",
 		"directory": "packages/tools-contract"
-	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
 	}
 }
