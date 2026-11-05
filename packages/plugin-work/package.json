@@ -20,7 +20,7 @@
 		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
 	},
 	"dependencies": {
-		"@graftland/graft": "0.3.3",
+		"@graftland/graft": "0.4.0",
 		"@openbot-build/conversation-contract": "workspace:*",
 		"@openbot-build/core": "workspace:*",
 		"@openbot-build/domain": "workspace:*",

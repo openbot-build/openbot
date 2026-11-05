@@ -5,8 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  "@graftland/graft": 0.3.3
-  "@graftland/loader": 0.3.3
+  "@graftland/graft": 0.4.0
+  "@graftland/loader": 0.4.0
 
 importers:
   .:
@@ -503,11 +503,11 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@graftland/loader":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@nmnmcc/ability":
         specifier: 3.2.0
         version: 3.2.0(effect@4.1.2)
@@ -654,8 +654,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -691,8 +691,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@nmnmcc/ability":
         specifier: 3.2.0
         version: 3.2.0(effect@4.1.2)
@@ -758,8 +758,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/domain":
         specifier: workspace:*
         version: link:../domain
@@ -798,8 +798,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -856,8 +856,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@nmnmcc/ability":
         specifier: 3.2.0
         version: 3.2.0(effect@4.1.2)
@@ -902,8 +902,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -942,8 +942,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1006,8 +1006,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1070,8 +1070,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1134,8 +1134,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@nmnmcc/ability":
         specifier: 3.2.0
         version: 3.2.0(effect@4.1.2)
@@ -1204,8 +1204,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@jitl/quickjs-singlefile-mjs-release-sync":
         specifier: 0.32.0
         version: 0.32.0
@@ -1262,8 +1262,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1320,8 +1320,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1366,8 +1366,8 @@ importers:
   packages/plugin-imported:
     dependencies:
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/apps-contract":
         specifier: workspace:*
         version: link:../apps-contract
@@ -1403,8 +1403,8 @@ importers:
   packages/plugin-mail:
     dependencies:
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/domain":
         specifier: workspace:*
         version: link:../domain
@@ -1461,8 +1461,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1516,8 +1516,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1562,8 +1562,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1611,8 +1611,8 @@ importers:
   packages/plugin-settings:
     dependencies:
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1648,8 +1648,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1688,8 +1688,8 @@ importers:
   packages/plugin-triggers:
     dependencies:
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1743,8 +1743,8 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1789,8 +1789,8 @@ importers:
   packages/plugin-work:
     dependencies:
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       "@openbot-build/conversation-contract":
         specifier: workspace:*
         version: link:../conversation-contract
@@ -2008,8 +2008,8 @@ importers:
   packages/server-plugin:
     dependencies:
       "@graftland/graft":
-        specifier: 0.3.3
-        version: 0.3.3(effect@4.1.2)
+        specifier: 0.4.0
+        version: 0.4.0(effect@4.1.2)
       effect:
         specifier: 4.1.2
         version: 4.1.2
@@ -3019,19 +3019,19 @@ packages:
         integrity: sha512-SNI7EgUSiADqbqUzzMbj1ZeC/r2pa5eg3KyFOGAd3a7EsIA4qzjXQLp+ODWQtHVDKFCdGs4J3ovSJUqvKIK96g==,
       }
 
-  "@graftland/graft@0.3.3":
+  "@graftland/graft@0.4.0":
     resolution:
       {
-        integrity: sha512-CMIUaIyG/ETIMmw8btHEEhDgBvIGb4VnmdyzDSxUJcY4dCB3yTdKFL8lE/0BXpptNl/WBW4RmUAmLuBXJSYY7w==,
+        integrity: sha512-4qo1VmH/AnfEUEIaSd/BwjPZJ839avlG285oXYgF4+49N+rpavzEpvPEcw1ixlc/2RHa17hC03C/p3bke+1OmQ==,
       }
     engines: { node: ">=22.19.0" }
     peerDependencies:
       effect: 4.1.*
 
-  "@graftland/loader@0.3.3":
+  "@graftland/loader@0.4.0":
     resolution:
       {
-        integrity: sha512-w89HyhokgSSNmtTAAA2qqVutKrRdfL09H7RhgYE7ufODwMFLLfooGTOlqyADaIpkvCwigvbEtMjYYuOvcARogQ==,
+        integrity: sha512-ORDguZCbdf0aLOreZO22p9jMXKqLPjizniiOj9D3V8SZ5IteCRm0QcSPalP4fimh6yFGWIpH9Zc20qfPhSHm5g==,
       }
     engines: { node: ">=22.19.0" }
     peerDependencies:
@@ -8993,13 +8993,13 @@ snapshots:
     dependencies:
       "@expressive-code/core": 0.44.2
 
-  "@graftland/graft@0.3.3(effect@4.1.2)":
+  "@graftland/graft@0.4.0(effect@4.1.2)":
     dependencies:
       effect: 4.1.2
 
-  "@graftland/loader@0.3.3(effect@4.1.2)":
+  "@graftland/loader@0.4.0(effect@4.1.2)":
     dependencies:
-      "@graftland/graft": 0.3.3(effect@4.1.2)
+      "@graftland/graft": 0.4.0(effect@4.1.2)
       effect: 4.1.2
       yaml: 2.9.1
 
