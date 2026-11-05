@@ -1,7 +1,0 @@
-interface:
-  # Invocation is opt-in for this catalog.
-  display_name: "TypeSafe"
-  short_description: "Keep data and type guarantees aligned."
-  default_prompt: "Use $typesafe when values cross a type or data boundary."
-policy:
-  allow_implicit_invocation: false
