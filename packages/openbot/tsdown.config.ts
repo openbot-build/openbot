@@ -1,43 +1,20 @@
 import config from "../../tsdown.config.ts"
 import { defineConfig } from "tsdown"
 
+// package.json is the source of `exports` and `bin`, so tsdown must not write
+// them. The keys of `exports` are the entries `index` and `Parts`. The four
+// programs `Main`, `Migrate`, `Setup` and `Inspect` are the commands in `bin`.
+// They start work when they load, so they are entries of the build but not
+// keys of `exports`.
 export default defineConfig({
 	...config,
 	entry: {
 		index: "src/index.ts",
-		"server-upgrade/Migrations": "src/server-upgrade/Migrations.ts",
+		Parts: "src/app/Parts.ts",
 		Main: "src/app/Main.ts",
-		Development: "src/server-development/Development.ts",
-		DevelopmentMain: "src/server-development/DevelopmentMain.ts",
 		Migrate: "src/app/Migrate.ts",
 		Setup: "src/app/Setup.ts",
 		Inspect: "src/app/Inspect.ts",
 	},
-	exports: {
-		...config.exports,
-		exclude: ["Inspect", "Main", "Migrate", "Setup", "DevelopmentMain"],
-		customExports(exports) {
-			return {
-				...Object.fromEntries(
-					Object.entries(exports).map(([key, value]) => {
-						const name = key.split("/").at(-1)
-						return [
-							key === "."
-								? key
-								: `./${name === "Migrations" ? "StorageMigration" : name}`,
-							value,
-						]
-					}),
-				),
-				// Keep the test source export when the build writes the package exports.
-				"./testing": "./test/Testing.ts",
-			}
-		},
-		bin: {
-			"openbot-server": "./src/app/Main.ts",
-			"openbot-migrate": "./src/app/Migrate.ts",
-			"openbot-setup": "./src/app/Setup.ts",
-			"openbot-inspect": "./src/app/Inspect.ts",
-		},
-	},
+	exports: false,
 })

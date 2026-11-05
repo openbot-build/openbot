@@ -1,0 +1,60 @@
+{
+	"name": "@openbot-build/server-upgrade",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "Runs the SQL migrations of the OpenBot server and moves old data into the new tables",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./Apps": "./dist/Apps.js",
+		"./Catalogs": "./dist/Catalogs.js",
+		"./Channels": "./dist/Channels.js",
+		"./Chats": "./dist/Chats.js",
+		"./Convert": "./dist/Convert.js",
+		"./Migrations": "./dist/Migrations.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/plugin-apps": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/models-contract": "workspace:*",
+		"@openbot-build/plugin-bots": "workspace:*",
+		"@openbot-build/plugin-capabilities": "workspace:*",
+		"@openbot-build/plugin-channels": "workspace:*",
+		"@openbot-build/plugin-chats": "workspace:*",
+		"@openbot-build/plugin-code": "workspace:*",
+		"@openbot-build/plugin-imported": "workspace:*",
+		"@openbot-build/plugin-triggers": "workspace:*",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/server-upgrade"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

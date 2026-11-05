@@ -122,6 +122,12 @@
 			"path": "./packages/plugin-token-limiter"
 		},
 		{
+			"path": "./packages/server-upgrade"
+		},
+		{
+			"path": "./packages/server-development"
+		},
+		{
 			"path": "./packages/protocol"
 		},
 		{

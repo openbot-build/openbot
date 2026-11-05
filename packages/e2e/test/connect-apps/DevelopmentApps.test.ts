@@ -29,7 +29,7 @@ import {
 	HttpClientRequest,
 	HttpServer,
 } from "effect/http"
-import * as Development from "@openbot-build/openbot/Development"
+import * as Development from "@openbot-build/server-development/Development"
 import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import {
 	Caller,
@@ -38,7 +38,7 @@ import {
 	Messages,
 	PostgresTest as Postgres,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 const { signIn } = DevelopmentLogin
 const { bot, message, model, settled } = Messages

@@ -1,0 +1,52 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"rootDir": "src",
+		"outDir": "dist",
+		"rewriteRelativeImportExtensions": true,
+		"tsBuildInfoFile": ".cache/build.tsbuildinfo"
+	},
+	"include": ["src"],
+	"references": [
+		{
+			"path": "../api"
+		},
+		{
+			"path": "../apps-contract"
+		},
+		{
+			"path": "../core"
+		},
+		{
+			"path": "../domain"
+		},
+		{
+			"path": "../identity-contract"
+		},
+		{
+			"path": "../openbot"
+		},
+		{
+			"path": "../plugin-apps"
+		},
+		{
+			"path": "../plugin-computers"
+		},
+		{
+			"path": "../plugin-files"
+		},
+		{
+			"path": "../plugin-vaults"
+		},
+		{
+			"path": "../protocol"
+		},
+		{
+			"path": "../server-kernel"
+		},
+		{
+			"path": "../tools-contract"
+		}
+	]
+}

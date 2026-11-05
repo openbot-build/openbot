@@ -1,4 +1,4 @@
-import { BrowserHost, Caller, Wait } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Wait } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import { ChatCommandReceipt } from "@openbot-build/api"
 import { Execution } from "@openbot-build/domain"

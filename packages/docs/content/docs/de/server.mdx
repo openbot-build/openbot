@@ -59,11 +59,12 @@ einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/platform#setup).
 | `EnvironmentConfiguration`                                   | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                                        |
 | `Auth`, `AppHost`, `AppTools`, `Configuration`               | Diensttypen für fortgeschrittene Aufbauten.                                                                                        |
 
-Der Unterpfad `@openbot-build/openbot/Development` exportiert den
-Entwicklungsserver. Siehe
-[Den Entwicklungsserver starten](#den-entwicklungsserver-starten). Der Unterpfad
-`@openbot-build/openbot/testing` gibt die Test-Helfer als TypeScript-Quelltext.
-Siehe [Testserver im Code](/de/developers/testing#testserver-im-code).
+Das Paket `@openbot-build/server-development` hat den Entwicklungsserver. Siehe
+[Den Entwicklungsserver starten](#den-entwicklungsserver-starten). Das Paket
+`@openbot-build/server-testing` gibt die Test-Helfer als TypeScript-Quelltext.
+Siehe [Testserver im Code](/de/developers/testing#testserver-im-code). Der
+Unterpfad `@openbot-build/openbot/Parts` gibt innere Teile des Hosts an diese
+zwei Pakete. Er ist keine stabile API und kann sich in jeder Version ändern.
 
 ---
 
@@ -313,7 +314,7 @@ kann denselben Server aus seinem eigenen Programm starten:
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
-import * as Development from "@openbot-build/openbot/Development"
+import * as Development from "@openbot-build/server-development/Development"
 
 NodeRuntime.runMain(Development.launch)
 ```
@@ -326,9 +327,9 @@ Plattform-Dienste, zum Beispiel `NodeServices.layer`, `NodeCrypto.layer` und
 `FetchHttpClient.layer`, und `Development.launch` gibt sie ihm. Er schreibt die
 Plattform-Einstellungen selbst. Darum braucht er kein Einrichtungsprogramm.
 `Development.developmentSecret` macht das Anmelde-Geheimnis aus dem ersten
-geheimen Schlüssel. So bleibt es nach einem Neustart gleich. Nutze den
-Entwicklungsserver nie in der Produktion. Jeder, der ihn erreicht, kann sich
-anmelden.
+geheimen Schlüssel. So bleibt es nach einem Neustart gleich. `pnpm dev` startet
+ihn aus dem Paket `server-development`. Nutze den Entwicklungsserver nie in der
+Produktion. Jeder, der ihn erreicht, kann sich anmelden.
 
 ## Fehler-Logs an deinen eigenen Dienst senden
 

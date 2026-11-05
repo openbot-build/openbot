@@ -7,24 +7,7 @@
 	"sideEffects": false,
 	"files": [
 		"dist",
-		"src",
-		"README.md",
-		"test/Testing.ts",
-		"test/AppFixture.ts",
-		"test/BotFixture.ts",
-		"test/BrowserHost.ts",
-		"test/Caller.ts",
-		"test/ChatTest.ts",
-		"test/DefaultBot.ts",
-		"test/DevelopmentLogin.ts",
-		"test/Messages.ts",
-		"test/OrganizationFixture.ts",
-		"test/Organizations.ts",
-		"test/Policies.ts",
-		"test/PostgresTest.ts",
-		"test/TestHost.ts",
-		"test/Wait.ts",
-		"test/testing"
+		"src"
 	],
 	"bin": {
 		"openbot-server": "./dist/Main.js",
@@ -34,14 +17,11 @@
 	},
 	"exports": {
 		".": "./dist/index.js",
-		"./Development": "./dist/Development.js",
-		"./StorageMigration": "./dist/server-upgrade/Migrations.js",
-		"./testing": "./test/Testing.ts"
+		"./Parts": "./dist/Parts.js"
 	},
 	"scripts": {
 		"build": "tsdown",
 		"start": "node dist/Main.js",
-		"start:development": "node dist/DevelopmentMain.js",
 		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run",
 		"migrate": "node dist/Migrate.js",
 		"setup": "node dist/Setup.js"
@@ -51,7 +31,6 @@
 		"@effect/sql-pg": "4.1.2",
 		"@graftland/graft": "0.4.0",
 		"@graftland/loader": "0.4.0",
-		"@nmnmcc/ability": "3.2.0",
 		"@openbot-build/api": "workspace:*",
 		"@openbot-build/apps-contract": "workspace:*",
 		"@openbot-build/conversation-contract": "workspace:*",
@@ -88,19 +67,16 @@
 		"@openbot-build/plugin-work": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
 		"@openbot-build/server-billing": "workspace:*",
-		"@openbot-build/server-database": "workspace:*",
 		"@openbot-build/server-execution": "workspace:*",
 		"@openbot-build/server-kernel": "workspace:*",
 		"@openbot-build/server-plugin": "workspace:*",
+		"@openbot-build/server-upgrade": "workspace:*",
 		"@openbot-build/tools-contract": "workspace:*",
-		"drizzle-orm": "1.0.0-rc.5",
 		"effect": "4.1.2",
-		"jose": "6.2.12",
 		"yaml": "2.9.1"
 	},
 	"devDependencies": {
 		"@effect/vitest": "4.1.2",
-		"@openbot-build/client": "workspace:*",
 		"vitest": "5.0.5"
 	},
 	"repository": {

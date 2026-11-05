@@ -1,0 +1,14 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"composite": false,
+		"allowImportingTsExtensions": true,
+		"tsBuildInfoFile": ".cache/tests.tsbuildinfo",
+		// The package gives its helpers as TypeScript source and writes no
+		// declarations, so the types of its exports do not need names that
+		// other packages can import.
+		"declaration": false,
+		"declarationMap": false
+	},
+	"include": ["test", "vitest.config.ts"]
+}

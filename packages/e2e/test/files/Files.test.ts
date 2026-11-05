@@ -4,7 +4,7 @@ import {
 	Devices,
 	Messages,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import { FilesApi, ChatCommandReceipt, UserTokensApi } from "@openbot-build/api"
 import {

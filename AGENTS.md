@@ -11,8 +11,6 @@
   `packages/docs`.
 - Command line tools go in `packages/cli` and the `openbot-*` command packages,
   such as `packages/computer`. They are tools, not a user interface.
-- Command line tools go in `packages/cli` and the `openbot-*` command packages,
-  such as `packages/computer`. They are tools, not a user interface.
 - Build the docs site with Astro and Starlight only. Do not use Next.js or
   another web framework.
 - Add a new feature to the HTTP contract in `@openbot-build/api` first. Then
@@ -71,7 +69,8 @@
 - Put code in the package of the feature it belongs to, such as
   `packages/plugin-chats` for Chats. Packages use each other only through their
   public entry points.
-- Only the plugin kit (`server-plugin`), the plugins, and the host import
+- Only the plugin kit (`server-plugin`), the plugins, the host, the development
+  server (`server-development`), and the test helpers (`server-testing`) import
   `@graftland/*`. A plugin package does not import another plugin package. A
   plugin does not publish a service of the kernel.
 - Importing a module must not start any I/O.
@@ -85,9 +84,12 @@
   `Identity`.
 - A library layer asks for the platform services and the services of the outside
   world. Program entry points and tests give them. Do not use
-  `Effect.serviceOption` to find a feature.
+  `Effect.serviceOption` or graft's `Plugin.optional` to find a feature.
 - Read values from the platform settings when you use them. Do not give them to
   a layer as arguments.
+- The config of a plugin holds only how this instance connects the plugin and
+  the local limits of the plugin. Give every server the same plugin config. Keep
+  other values in the platform settings.
 - Every fiber has an owner: a scope, a `FiberSet`, or a `FiberMap`. In the
   server packages (`packages/openbot` and the `server-*`, `*-contract`,
   `model-providers`, and `plugin-*` packages), periodic work uses
@@ -111,4 +113,6 @@
 ## Checks
 
 - Before you finish, run `pnpm build`, `pnpm typecheck`, and the tests of the
-  packages you changed (`pnpm --filter <package> test`).
+  packages you changed (`pnpm --filter <package> test`). Most server tests that
+  start a database or a whole server are in `packages/server-testing`. Run them
+  when you change a server package.

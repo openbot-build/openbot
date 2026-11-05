@@ -1,6 +1,6 @@
 import { assert, layer } from "@effect/vitest"
 import { AppExecution } from "@openbot-build/api"
-import { Apps, BrowserHost } from "@openbot-build/openbot/testing"
+import { Apps, BrowserHost } from "@openbot-build/server-testing"
 import { Effect, Schema, String as Str } from "effect"
 
 layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {

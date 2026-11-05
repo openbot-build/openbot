@@ -9,7 +9,7 @@ import {
 } from "@openbot-build/api"
 import { Turn } from "@openbot-build/core"
 import { Array as Arr, Effect, Option, pipe, Schema } from "effect"
-import { BrowserHost, Caller, Messages } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 
 const { bot, message, settled } = Messages
 type Send = Messages.Send

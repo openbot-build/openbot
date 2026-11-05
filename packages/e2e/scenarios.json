@@ -6183,7 +6183,7 @@
 						"condition": "Runs a real local OpenBot HTTP server with a throwaway PostgreSQL database and real time. The server uses signed fixture OIDC identities and a fixed model, not a live model provider.",
 						"evidence": [
 							{
-								"file": "packages/openbot/test/BrowserHost.ts",
+								"file": "packages/server-testing/test/BrowserHost.ts",
 								"searchText": "const database = yield* PostgresTest.start",
 								"line": 173
 							},
@@ -6242,7 +6242,7 @@
 								"line": 521
 							},
 							{
-								"file": "packages/openbot/test/Caller.ts",
+								"file": "packages/server-testing/test/Caller.ts",
 								"searchText": "origin: publicOrigin,",
 								"line": 75
 							}
@@ -6255,7 +6255,7 @@
 						"condition": "The host restart closes and rebuilds the server layers against the same database inside the test process. It is not a separate built-host process crash.",
 						"evidence": [
 							{
-								"file": "packages/openbot/test/BrowserHost.ts",
+								"file": "packages/server-testing/test/BrowserHost.ts",
 								"searchText": "Scope.close(current.scope, Exit.void).pipe(Effect.andThen(launch))",
 								"line": 718
 							}
@@ -9314,7 +9314,7 @@
 								"line": 519
 							},
 							{
-								"file": "packages/openbot/test/BrowserHost.ts",
+								"file": "packages/server-testing/test/BrowserHost.ts",
 								"testTitle": "files upload to S3, go to the model, and go away when nothing uses them",
 								"searchText": "const database = yield* PostgresTest.start",
 								"line": 173
@@ -14266,7 +14266,7 @@
 			"id": "full-server-failover",
 			"priority": 2,
 			"missingBehavior": "Two built OpenBot server processes recover the same public user Turn after one process is killed.",
-			"basis": "The private engine takeover tests use test workflows and remain in packages/openbot/test. The moved user journeys restart a host or replace a process in sequence."
+			"basis": "The private engine takeover tests use test workflows and remain in packages/server-testing/test. The moved user journeys restart a host or replace a process in sequence."
 		}
 	],
 	"closedGaps": [

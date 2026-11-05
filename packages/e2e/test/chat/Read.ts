@@ -1,7 +1,7 @@
 import { ChatResponse } from "@openbot-build/api"
 import { Item, Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
-import { Caller, type Messages } from "@openbot-build/openbot/testing"
+import { Caller, type Messages } from "@openbot-build/server-testing"
 import { Array as Arr, Effect, Schema, String as Str } from "effect"
 
 const TurnState = Schema.Struct({ id: Turn.Id, status: Turn.StatusSchema })

@@ -4,7 +4,7 @@ import {
 	Caller,
 	Messages,
 	Chats,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import {
 	Array as Arr,

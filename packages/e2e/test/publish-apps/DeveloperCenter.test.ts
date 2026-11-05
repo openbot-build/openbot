@@ -33,7 +33,7 @@ import {
 	HttpServer,
 } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
-import * as Development from "@openbot-build/openbot/Development"
+import * as Development from "@openbot-build/server-development/Development"
 import { DatabasePostgres as Database } from "@openbot-build/openbot"
 import { Index } from "@openbot-build/protocol"
 import {
@@ -44,7 +44,7 @@ import {
 	PostgresTest as Postgres,
 	TestHost,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 const { memberOf } = Caller
 const { signIn } = DevelopmentLogin

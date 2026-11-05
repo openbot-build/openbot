@@ -60,7 +60,7 @@ devenv shell -- pnpm dev
    `openbot-dev-rustfs` 中。要删除存储的文件，先停止 `pnpm dev`，再运行
    `docker volume rm openbot-dev-rustfs`。
 3. 用 `pnpm install --frozen-lockfile` 安装包。
-4. 构建 OpenBot 及其需要的包。
+4. 构建开发服务器及其需要的包。
 5. 运行数据库迁移。
 6. 在 `http://localhost`
    启动开发服务器。服务器会自己为这个源写入平台设置，所以不需要设置步骤。
@@ -253,10 +253,9 @@ v7 的开头是毫秒时间。同一毫秒内生成的 ID 顺序是随机的。�
 
 同一检查也验证模块依赖，包括类型导入。`domain` 可以使用
 `core`，但不能使用 HTTP、SQL 或工作流适配器。`core` 和 `protocol`
-不依赖产品包。`openbot` 中的功能模块不能导入 `app`
-装配目录。各包通过公开入口互相使用。服务器包只能通过其 `package.json` 中
-`exports` 的键来使用。插件包不导入其他插件包，它的 `src/index.ts`
-唯一的导出就是插件本身。
+不依赖产品包。包只能导入更低层的包，顺序见[执行设计验收](/zh-cn/architecture-checks)。插件不发布内核的服务。只有宿主、内核的 HTTP 文件和执行引擎提供 HTTP 服务、添加全局 HTTP 中间件，或用工作流构建 layer。各包通过公开入口互相使用。服务器包只能通过其
+`package.json` 中 `exports` 的键来使用。插件包不导入其他插件包，它的
+`src/index.ts` 唯一的导出就是插件本身。
 
 业务代码和存储不能导入 HTTP 契约。这包括 PostgreSQL 适配器、设置、模型、账户、角色和 SSO。这些模块使用领域值和领域错误。API 使用同一份领域定义，再添加 HTTP 状态码。只有 HTTP 处理器、响应映射和应用装配可以导入 HTTP 契约。App 适配器在边界处加入协议数据。
 

@@ -12,7 +12,7 @@ import {
 	Caller,
 	ComputerScenarios,
 	Policies,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 const publicOrigin = "https://computer-reads.example.com"
 layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {

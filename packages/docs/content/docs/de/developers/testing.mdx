@@ -101,15 +101,16 @@ und prüfen weder die interaktive Suche noch Menüs.
 Die CLI-Prüfungen starten gebaute Befehle. Die Computer-Prüfungen nutzen auch
 ein echtes Terminal. Protokollprüfungen nutzen unabhängige Clients und lokale
 Server. Einheiten- und Komponentenprüfungen bleiben in den Paketen `core`,
-`domain`, `api`, `client`, `openbot`, `cli`, `computer`, `protocol` und
-`protocol-test`.
+`domain`, `api`, `client`, `openbot`, `server-development`, `server-testing`,
+`cli`, `computer`, `protocol` und `protocol-test`.
 
 ## Testserver im Code
 
-Der Unterpfad `@openbot-build/openbot/testing` gibt die Test-Helfer von OpenBot.
-Er ist TypeScript-Quelltext, kein gebauter Code. Darum kann ihn nur ein Test
-nutzen, der TypeScript ausführt. Seine Teile können sich in jeder Version
-ändern.
+Das Paket `@openbot-build/server-testing` gibt die Test-Helfer von OpenBot. Es
+ist TypeScript-Quelltext, kein gebauter Code. Darum kann es nur ein Test nutzen,
+der TypeScript ausführt. Seine Teile können sich in jeder Version ändern. Die
+Tests des Servers, die eine Datenbank oder einen ganzen Server starten, liegen
+im selben Paket, in `packages/server-testing/test`.
 
 | Helfer                          | Was er tut                                                                                                                                                                          |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -131,7 +132,7 @@ Dieser Test startet den bloßen Plugin-Host und startet ihn auf derselben
 Datenbank wieder:
 
 ```ts
-import { TestHost } from "@openbot-build/openbot/testing"
+import { TestHost } from "@openbot-build/server-testing"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
@@ -227,7 +228,7 @@ vergleichen.
 Führe nach dem Build die internen Produktprüfungen für Papers 06 und 12 aus:
 
 ```sh
-devenv shell -- node --disable-warning=ExperimentalWarning packages/openbot/test/PaperProductEvidenceMain.ts --strict
+devenv shell -- node --disable-warning=ExperimentalWarning packages/server-testing/test/PaperProductEvidenceMain.ts --strict
 ```
 
 Diese Prüfungen rufen interne Dienste auf. Sie vergleichen Produktregeln mit den

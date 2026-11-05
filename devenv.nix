@@ -104,9 +104,9 @@
         exec = ''
           set -eu
           : "''${OPENBOT_SECRET_KEYS:?Run pnpm dev:setup first}"
-          pnpm --filter-prod @openbot-build/openbot... build
+          pnpm --filter-prod @openbot-build/server-development... build
           pnpm --filter @openbot-build/openbot migrate
-          exec pnpm --filter @openbot-build/openbot start:development
+          exec pnpm --filter @openbot-build/server-development start
         '';
         restart.on = "never";
         watch = {

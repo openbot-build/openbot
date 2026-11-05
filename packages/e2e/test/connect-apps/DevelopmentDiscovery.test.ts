@@ -6,8 +6,8 @@ import { AppDiscoveryFailed, AppDiscoveryResult } from "@openbot-build/api"
 import { Context, Effect, Layer, Result, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 
-import * as Development from "@openbot-build/openbot/Development"
-import { Caller, PostgresTest } from "@openbot-build/openbot/testing"
+import * as Development from "@openbot-build/server-development/Development"
+import { Caller, PostgresTest } from "@openbot-build/server-testing"
 import {
 	signIn,
 	settings,

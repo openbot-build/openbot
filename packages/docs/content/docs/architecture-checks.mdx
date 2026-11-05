@@ -25,7 +25,7 @@ no coverage claim. This page adds the shared execution and data move checks.
 The tables use these path prefixes:
 
 - `E/` means `packages/e2e/test/`.
-- `S/` means `packages/openbot/test/`.
+- `S/` means `packages/server-testing/test/`.
 - Other paths start at the project root.
 
 Tests may use a real database with a fixed model, a real HTTP server with a test
@@ -154,38 +154,54 @@ The source tree has the removals below. Check both the deleted entry and its
 callers in the release diff. A codec kept only for migration is not an active
 runner. The standalone `core` runtime is a retained library capability.
 
-| Removed path under `packages/openbot/src/`                                                                                               | Current path to inspect                                                                       | Evidence of the simpler rule                                                                                                                  |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `chats/ChatHost.ts`, `chats/TurnWorkflow.ts`, `execution/RunScope.ts`                         | No per-member Chat runtime, reference-count wrapper, `keepOpen`, `current` callback, or method proxy. A Turn owns its scope.                  |
-| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `apps/AppCommands.ts`, `apps/AppWorkflow.ts`, `execution/Calls.ts`                            | App work uses common call intent, attempts, saved results, and decisions. Discovery returns descriptions.                                     |
-| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `code/CodeCommands.ts`, `code/CodeWorkflow.ts`, `database/conversion/LegacyV1.ts`             | Sandbox replay uses the common call log. The old lease store and stale-run scan are removed. The data move has its own codec for old records. |
-| `chats/ChatEvents.ts` and the old Chat SSE schemas                                                                                       | `execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                               | Saved execution events replace the local event queue, sequence counter, and end marker. All callers use the same event contract.              |
-| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `execution/Store.ts`, `execution/Observation.ts`, `chats/ToolCommands.ts`                     | No old Operation listener, cancellation notice loop, or stale-operation sweep. `packages/api/src/OperationsApi.ts` is also removed.           |
-| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `chats/ExecutionFeatures.ts`, `bots/DelegationCommands.ts`, `capabilities/RequestCommands.ts` | Execution scopes own their Gate and approvals. The delegation workflow owns limits. Requests close one due record at a time.                  |
-| Developer test run FiberMap and startup run reset                                                                                        | `apps/TestCommands.ts`, `apps/TestWorkflow.ts`, `apps/TestCleanupWorkflow.ts`                 | Stored commands and generation-checked results own runs and cleanup. Connection caches do not own the test lifecycle.                         |
-| Memory helper job queue and node-local model semaphore                                                                                   | `bots/MemoryWorkflow.ts`, `bots/MemoryModels.ts`, `execution/Permits.ts`                      | The common workflow owns recovery. Database permits own admission.                                                                            |
+| Removed path under `packages/openbot/src/`                                                                                               | Current path to inspect                                                                                                                                    | Evidence of the simpler rule                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `packages/conversation-contract/src/chats/ChatHost.ts`, `packages/plugin-chats/src/TurnWorkflow.ts`, `packages/server-execution/src/execution/RunScope.ts` | No per-member Chat runtime, reference-count wrapper, `keepOpen`, `current` callback, or method proxy. A Turn owns its scope.                  |
+| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `packages/plugin-apps/src/AppCommands.ts`, `packages/plugin-apps/src/AppWorkflow.ts`, `packages/server-execution/src/execution/Calls.ts`                   | App work uses common call intent, attempts, saved results, and decisions. Discovery returns descriptions.                                     |
+| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `packages/plugin-code/src/CodeCommands.ts`, `packages/plugin-code/src/CodeWorkflow.ts`, `packages/server-kernel/src/imported/LegacyV1.ts`                  | Sandbox replay uses the common call log. The old lease store and stale-run scan are removed. The data move has its own codec for old records. |
+| `chats/ChatEvents.ts` and the old Chat SSE schemas                                                                                       | `packages/server-execution/src/execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                                                              | Saved execution events replace the local event queue, sequence counter, and end marker. All callers use the same event contract.              |
+| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `packages/server-execution/src/execution/Store.ts`, `packages/server-execution/src/execution/Observation.ts`, `packages/plugin-chats/src/ToolCommands.ts`  | No old Operation listener, cancellation notice loop, or stale-operation sweep. `packages/api/src/OperationsApi.ts` is also removed.           |
+| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `packages/plugin-chats/src/ExecutionFeatures.ts`, `packages/plugin-bots/src/DelegationCommands.ts`, `packages/plugin-capabilities/src/RequestCommands.ts`  | Execution scopes own their Gate and approvals. The delegation workflow owns limits. Requests close one due record at a time.                  |
+| Developer test run FiberMap and startup run reset                                                                                        | `packages/plugin-apps/src/TestCommands.ts`, `packages/plugin-apps/src/TestWorkflow.ts`, `packages/plugin-apps/src/TestCleanupWorkflow.ts`                  | Stored commands and generation-checked results own runs and cleanup. Connection caches do not own the test lifecycle.                         |
+| Memory helper job queue and node-local model semaphore                                                                                   | `packages/plugin-bots/src/MemoryWorkflow.ts`, `packages/plugin-bots/src/MemoryModels.ts`, `packages/server-execution/src/execution/Permits.ts`             | The common workflow owns recovery. Database permits own admission.                                                                            |
 
 `scripts/effect-rules.ts` checks `domain-boundary`, `storage-contract-boundary`,
-`standalone-boundary`, `assembly-boundary`, and `public-entry`. `pnpm typecheck`
-runs these rules. They check imports; they do not by themselves detect every
-second execution engine or recovery loop. Review new workers, timers, locks, and
-RPC handlers against the shared design.
+`standalone-boundary`, `execution-boundary`, and `public-entry`.
+`pnpm typecheck` runs these rules. They check imports; they do not by themselves
+detect every second execution engine or recovery loop. Review new workers,
+timers, locks, and RPC handlers against the shared design.
 
-Two more rules guard the plugin host. `graft-boundary` lets only the plugin kit
+Four more rules guard the plugin host. `graft-boundary` lets only the plugin kit
 (the `server-plugin` package), the `src/index.ts` file of each plugin package,
-the app, the development server, and the tests import graft. It also asks for
-the name `GraftPlugin` for the `Plugin` of graft. `feature-lookup` does not let
-server code look for a feature with `Effect.serviceOption` or `Plugin.optional`.
-Code lists the services that it needs instead.
+the host (`packages/openbot/src`), the development server, and the tests of the
+host, the plugin kit, the development server, and `server-testing` import graft.
+It also asks for the name `GraftPlugin` for the `Plugin` of graft.
+`feature-lookup` does not let the code or the tests of a server package look for
+a feature with `Effect.serviceOption` or `Plugin.optional`. Code lists the
+services that it needs instead. `kernel-provide` does not let a plugin publish a
+service of the kernel. A plugin publishes only keys of a contract package (a
+`*-contract` package), of `api`, `domain`, or `protocol`, or of its own package.
+Two keys in kernel packages are open to plugins: `Wallets` in `server-billing`
+and `ImportedRecords` in `server-execution`. A test of the preset also checks
+that no plugin publishes a key of the kernel. `host-only` lets only the host,
+the HTTP files of `server-kernel`, and `server-execution` serve HTTP with
+`HttpRouter.serve` or `HttpRouter.toWebHandler`, build the HTTP API with
+`HttpApiBuilder.layer`, add a global HTTP middleware, or make a layer from a
+workflow. A plugin mounts its routes with `HttpHost` and gives its workflows
+with `Workflows.contribute`.
 
-`virtual-boundary` keeps the server code in layers. From low to high:
-`server-database`, `server-kernel`, `identity-contract`, `server-billing`,
-`server-execution`, `tools-contract`, `models-contract`, `apps-contract`,
-`conversation-contract`, `model-providers`, `server-plugin`, then the plugin
-packages (`plugin-<id>`), then `server-upgrade`, `app`, and
-`server-development`, which are in `packages/openbot/src`. Code may import only
-lower layers. `public-entry` lets other packages use a server package only
-through a key of `exports` in its `package.json`. This is true for tests too.
+`package-layer` keeps the packages in layers. `core`, `domain`, `protocol`, and
+`api` are the base. Over the base, from low to high: `server-database`,
+`server-kernel`, `identity-contract`, `server-billing`, `server-execution`,
+`tools-contract`, `models-contract`, `apps-contract`, `conversation-contract`,
+`model-providers`, `server-plugin`, then the plugin packages (`plugin-<id>`),
+then `server-upgrade`, then the host (`openbot`), then `server-development`,
+then `server-testing`. A package may import only lower layers. A base package
+imports no server package, and `server-database` uses only `core` and `domain`.
+`domain-boundary` and `standalone-boundary` check the base packages among
+themselves. `public-entry` lets other packages use a server package or the host
+only through a key of `exports` in its `package.json`. This is true for tests
+too.
 
 Two rules keep the plugins apart. `plugin-boundary` does not let a plugin import
 another plugin. This is true for plugin packages and their tests. The host
@@ -193,17 +209,20 @@ connects the plugins through graft. `plugin-entry` checks that the
 `src/index.ts` file of a plugin package has one export only: the plugin, as the
 default export. The entries test of each plugin package checks that its
 `package.json` names no other plugin package. Another module of a plugin package
-has a key in `exports` only when a program or a test of the host needs it, or
-when the public types of the host name it. Review checks this. A worker file is
-an entry of the build of its package, but not a key of `exports`, because it
-starts work when it loads. The Code Mode worker of `plugin-code` is such a file.
+has a key in `exports` only when a program of the host, the development server
+(`server-development`), or the test helpers and host tests (`server-testing`)
+need it, when the data move (`server-upgrade`) needs it, or when the public
+types of the host name it. Review checks this. A worker file is an entry of the
+build of its package, but not a key of `exports`, because it starts work when it
+loads. The Code Mode worker of `plugin-code` is such a file.
 
 ## Data move checks
 
 The [deployment guide](/deploy) gives the maintenance order and secret-key
-settings. `S/DataUpgrade.test.ts` checks an empty database, exclusion between
-maintenance and a live server, batch rollback/resume, and imported history that
-starts no outside work. These are foundation checks.
+settings. `packages/server-upgrade/test/DataUpgrade.test.ts` checks an empty
+database, exclusion between maintenance and a live server, batch
+rollback/resume, and imported history that starts no outside work. These are
+foundation checks.
 
 `S/MigrationRehearsal.test.ts` starts from the old schema and records. It works
 with the domain conversion tests to check the following before the startup gate

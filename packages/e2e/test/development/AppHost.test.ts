@@ -14,11 +14,11 @@ import {
 	DatabasePostgres as Database,
 	Host,
 } from "@openbot-build/openbot"
-import * as Development from "@openbot-build/openbot/Development"
+import * as Development from "@openbot-build/server-development/Development"
 import {
 	DevelopmentTesting,
 	PostgresTest as Postgres,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { FetchHttpClient } from "effect/http"
 
 layer(

@@ -36,7 +36,7 @@ import {
 	DefaultBot,
 	Organizations,
 	Messages,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 const { bot, message } = Messages
 type Send = Messages.Send
 

@@ -1,5 +1,5 @@
 import { BotsApi } from "@openbot-build/api"
-import { BrowserHost, Caller, Messages } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { assert, expect, layer } from "@effect/vitest"
 import {
 	Array as Arr,

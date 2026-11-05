@@ -112,6 +112,9 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 | `@openbot-build/plugin-turn-limiter`   | The `turn-limiter` plugin of the server                                  |
 | `@openbot-build/plugin-time-limiter`   | The `time-limiter` plugin of the server                                  |
 | `@openbot-build/plugin-token-limiter`  | The `token-limiter` plugin of the server                                 |
+| `@openbot-build/server-upgrade`        | The data move of the server                                              |
+| `@openbot-build/server-development`    | The development server                                                   |
+| `@openbot-build/server-testing`        | Test helpers and host tests of the server                                |
 | `@openbot-build/api`                   | The typed HTTP contract                                                  |
 | `@openbot-build/client`                | The TypeScript client                                                    |
 | `@openbot-build/core`                  | The Bot core                                                             |

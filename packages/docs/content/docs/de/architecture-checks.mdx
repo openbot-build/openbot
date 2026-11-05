@@ -28,7 +28,7 @@ Prüfungen der gemeinsamen Ausführung und des Datenumzugs.
 Die Tabellen nutzen diese Pfadpräfixe:
 
 - `E/` steht für `packages/e2e/test/`.
-- `S/` steht für `packages/openbot/test/`.
+- `S/` steht für `packages/server-testing/test/`.
 - Andere Pfade beginnen im Projektstamm.
 
 Ein Test kann eine echte Datenbank mit festen Modellantworten, einen echten
@@ -165,39 +165,55 @@ sowohl den alten Einstieg als auch seine Aufrufer. Ein Codec nur für den
 Datenumzug ist kein aktiver Runner. Die eigenständige core-Laufzeit bleibt eine
 Bibliotheksfunktion.
 
-| Entfernter Pfad unter `packages/openbot/src/`                                                                                            | Aktuell zu prüfender Pfad                                                                     | Nachweis der einfacheren Regel                                                                                                                                                                  |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `chats/ChatHost.ts`, `chats/TurnWorkflow.ts`, `execution/RunScope.ts`                         | Keine Chat-Laufzeit je Mitglied, Referenzzählung, `keepOpen`, `current`-Rückrufe oder Methodenproxies. Ein Turn besitzt seinen Scope.                                                           |
-| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `apps/AppCommands.ts`, `apps/AppWorkflow.ts`, `execution/Calls.ts`                            | App-Arbeit nutzt gemeinsame Aufrufabsicht, Versuche, Ergebnisse und Entscheidungen. Erkennung liefert Beschreibungen.                                                                           |
-| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `code/CodeCommands.ts`, `code/CodeWorkflow.ts`, `database/conversion/LegacyV1.ts`             | Sandbox-Wiedergabe nutzt das gemeinsame Aufrufprotokoll. Der alte Lease-Speicher und die Suche nach alten Läufen sind entfernt. Die Datenübernahme hat einen eigenen Codec für alte Datensätze. |
-| `chats/ChatEvents.ts` und die alten Chat-SSE-Schemas                                                                                     | `execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                               | Gespeicherte Ausführungsereignisse ersetzen die lokale Ereigniswarteschlange, den Zähler und die Endmarke. Alle Aufrufer nutzen denselben Ereignisvertrag.                                      |
-| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `execution/Store.ts`, `execution/Observation.ts`, `chats/ToolCommands.ts`                     | Kein alter Operation-Listener, keine Schleife für Abbruchmeldungen, keine Suche nach veralteten Operations. `packages/api/src/OperationsApi.ts` ist ebenfalls entfernt.                         |
-| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `chats/ExecutionFeatures.ts`, `bots/DelegationCommands.ts`, `capabilities/RequestCommands.ts` | Ausführungsbereiche besitzen Gate und Freigaben. Der Delegations-Workflow besitzt Grenzen. Anfragen schließen einzeln bei Fälligkeit.                                                           |
-| FiberMap für Entwicklertestläufe und Laufzurücksetzen beim Start                                                                         | `apps/TestCommands.ts`, `apps/TestWorkflow.ts`, `apps/TestCleanupWorkflow.ts`                 | Gespeicherte Befehle und generationsgeprüfte Ergebnisse besitzen Läufe und Bereinigung. Verbindungscaches besitzen nicht den Testlebenszyklus.                                                  |
-| Warteschlange für Erinnerungshilfsarbeit und lokales Modell-Semaphor                                                                     | `bots/MemoryWorkflow.ts`, `bots/MemoryModels.ts`, `execution/Permits.ts`                      | Der gemeinsame Workflow besitzt die Wiederaufnahme. Datenbank-Permits besitzen die Zulassung.                                                                                                   |
+| Entfernter Pfad unter `packages/openbot/src/`                                                                                            | Aktuell zu prüfender Pfad                                                                                                                                  | Nachweis der einfacheren Regel                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `packages/conversation-contract/src/chats/ChatHost.ts`, `packages/plugin-chats/src/TurnWorkflow.ts`, `packages/server-execution/src/execution/RunScope.ts` | Keine Chat-Laufzeit je Mitglied, Referenzzählung, `keepOpen`, `current`-Rückrufe oder Methodenproxies. Ein Turn besitzt seinen Scope.                                                           |
+| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `packages/plugin-apps/src/AppCommands.ts`, `packages/plugin-apps/src/AppWorkflow.ts`, `packages/server-execution/src/execution/Calls.ts`                   | App-Arbeit nutzt gemeinsame Aufrufabsicht, Versuche, Ergebnisse und Entscheidungen. Erkennung liefert Beschreibungen.                                                                           |
+| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `packages/plugin-code/src/CodeCommands.ts`, `packages/plugin-code/src/CodeWorkflow.ts`, `packages/server-kernel/src/imported/LegacyV1.ts`                  | Sandbox-Wiedergabe nutzt das gemeinsame Aufrufprotokoll. Der alte Lease-Speicher und die Suche nach alten Läufen sind entfernt. Die Datenübernahme hat einen eigenen Codec für alte Datensätze. |
+| `chats/ChatEvents.ts` und die alten Chat-SSE-Schemas                                                                                     | `packages/server-execution/src/execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                                                              | Gespeicherte Ausführungsereignisse ersetzen die lokale Ereigniswarteschlange, den Zähler und die Endmarke. Alle Aufrufer nutzen denselben Ereignisvertrag.                                      |
+| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `packages/server-execution/src/execution/Store.ts`, `packages/server-execution/src/execution/Observation.ts`, `packages/plugin-chats/src/ToolCommands.ts`  | Kein alter Operation-Listener, keine Schleife für Abbruchmeldungen, keine Suche nach veralteten Operations. `packages/api/src/OperationsApi.ts` ist ebenfalls entfernt.                         |
+| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `packages/plugin-chats/src/ExecutionFeatures.ts`, `packages/plugin-bots/src/DelegationCommands.ts`, `packages/plugin-capabilities/src/RequestCommands.ts`  | Ausführungsbereiche besitzen Gate und Freigaben. Der Delegations-Workflow besitzt Grenzen. Anfragen schließen einzeln bei Fälligkeit.                                                           |
+| FiberMap für Entwicklertestläufe und Laufzurücksetzen beim Start                                                                         | `packages/plugin-apps/src/TestCommands.ts`, `packages/plugin-apps/src/TestWorkflow.ts`, `packages/plugin-apps/src/TestCleanupWorkflow.ts`                  | Gespeicherte Befehle und generationsgeprüfte Ergebnisse besitzen Läufe und Bereinigung. Verbindungscaches besitzen nicht den Testlebenszyklus.                                                  |
+| Warteschlange für Erinnerungshilfsarbeit und lokales Modell-Semaphor                                                                     | `packages/plugin-bots/src/MemoryWorkflow.ts`, `packages/plugin-bots/src/MemoryModels.ts`, `packages/server-execution/src/execution/Permits.ts`             | Der gemeinsame Workflow besitzt die Wiederaufnahme. Datenbank-Permits besitzen die Zulassung.                                                                                                   |
 
 `scripts/effect-rules.ts` prüft `domain-boundary`, `storage-contract-boundary`,
-`standalone-boundary`, `assembly-boundary` und `public-entry`. `pnpm typecheck`
+`standalone-boundary`, `execution-boundary` und `public-entry`. `pnpm typecheck`
 führt diese Regeln aus. Sie prüfen Importe. Allein finden sie nicht jede zweite
 Ausführungsengine oder Wiederaufnahmeschleife. Prüfen Sie neue Worker, Timer,
 Sperren und RPC-Handler gegen das gemeinsame Design.
 
-Zwei weitere Regeln schützen den Plugin-Host. `graft-boundary` lässt nur das
+Vier weitere Regeln schützen den Plugin-Host. `graft-boundary` lässt nur das
 Plugin-Kit (das Paket `server-plugin`), die Datei `src/index.ts` jedes
-Plugin-Pakets, die App, den Entwicklungsserver und die Tests graft importieren.
-Sie verlangt auch den Namen `GraftPlugin` für das `Plugin` von graft.
-`feature-lookup` verbietet Server-Code, eine Funktion mit `Effect.serviceOption`
-oder `Plugin.optional` zu suchen. Der Code nennt stattdessen die Dienste, die er
-braucht.
+Plugin-Pakets, den Host (`packages/openbot/src`), den Entwicklungsserver und die
+Tests des Hosts, des Plugin-Kits, des Entwicklungsservers und von
+`server-testing` graft importieren. Sie verlangt auch den Namen `GraftPlugin`
+für das `Plugin` von graft. `feature-lookup` verbietet dem Code und den Tests
+eines Server-Pakets, eine Funktion mit `Effect.serviceOption` oder
+`Plugin.optional` zu suchen. Der Code nennt stattdessen die Dienste, die er
+braucht. `kernel-provide` verbietet einem Plugin, einen Dienst des Kernels zu
+veröffentlichen. Ein Plugin veröffentlicht nur Schlüssel eines Contract-Pakets
+(ein Paket `*-contract`), von `api`, `domain` oder `protocol` oder seines
+eigenen Pakets. Zwei Schlüssel in Kernel-Paketen sind für Plugins offen:
+`Wallets` in `server-billing` und `ImportedRecords` in `server-execution`. Ein
+Test des Presets prüft auch, dass kein Plugin einen Schlüssel des Kernels
+veröffentlicht. `host-only` lässt nur den Host, die HTTP-Dateien von
+`server-kernel` und `server-execution` HTTP mit `HttpRouter.serve` oder
+`HttpRouter.toWebHandler` bereitstellen, die HTTP-API mit `HttpApiBuilder.layer`
+bauen, eine globale HTTP-Middleware hinzufügen oder aus einem Workflow einen
+Layer machen. Ein Plugin hängt seine Routen mit `HttpHost` ein und gibt seine
+Workflows mit `Workflows.contribute`.
 
-`virtual-boundary` hält den Server-Code in Schichten. Von unten nach oben:
-`server-database`, `server-kernel`, `identity-contract`, `server-billing`,
-`server-execution`, `tools-contract`, `models-contract`, `apps-contract`,
-`conversation-contract`, `model-providers`, `server-plugin`, dann die
-Plugin-Pakete (`plugin-<id>`), dann `server-upgrade`, `app` und
-`server-development`, die in `packages/openbot/src` liegen. Code darf nur
-tiefere Schichten importieren. `public-entry` lässt andere Pakete ein
-Server-Paket nur über einen Schlüssel von `exports` in seiner `package.json`
+`package-layer` hält die Pakete in Schichten. `core`, `domain`, `protocol` und
+`api` sind die Basis. Über der Basis, von unten nach oben: `server-database`,
+`server-kernel`, `identity-contract`, `server-billing`, `server-execution`,
+`tools-contract`, `models-contract`, `apps-contract`, `conversation-contract`,
+`model-providers`, `server-plugin`, dann die Plugin-Pakete (`plugin-<id>`), dann
+`server-upgrade`, dann der Host (`openbot`), dann `server-development`, dann
+`server-testing`. Ein Paket darf nur tiefere Schichten importieren. Ein
+Basis-Paket importiert kein Server-Paket, und `server-database` nutzt nur `core`
+und `domain`. `domain-boundary` und `standalone-boundary` prüfen die
+Basis-Pakete untereinander. `public-entry` lässt andere Pakete ein Server-Paket
+oder den Host nur über einen Schlüssel von `exports` in seiner `package.json`
 nutzen. Das gilt auch für Tests.
 
 Zwei Regeln halten die Plugins getrennt. `plugin-boundary` verbietet einem
@@ -206,8 +222,10 @@ Tests. Der Host verbindet die Plugins über graft. `plugin-entry` prüft, dass d
 Datei `src/index.ts` eines Plugin-Pakets nur einen Export hat: das Plugin, als
 Default-Export. Der Eingangstest jedes Plugin-Pakets prüft, dass seine
 `package.json` kein anderes Plugin-Paket nennt. Ein anderes Modul eines
-Plugin-Pakets hat nur dann einen Schlüssel in `exports`, wenn ein Programm oder
-ein Test des Hosts es braucht oder wenn die öffentlichen Typen des Hosts es
+Plugin-Pakets hat nur dann einen Schlüssel in `exports`, wenn ein Programm des
+Hosts, der Entwicklungsserver (`server-development`) oder die Test-Helfer und
+Host-Tests (`server-testing`) es brauchen, wenn der Datenumzug
+(`server-upgrade`) es braucht oder wenn die öffentlichen Typen des Hosts es
 nennen. Das Review prüft das. Eine Worker-Datei ist ein Einstieg im Build ihres
 Pakets, aber kein Schlüssel in `exports`, weil sie beim Laden mit der Arbeit
 beginnt. Der Code-Mode-Worker von `plugin-code` ist so eine Datei.
@@ -215,9 +233,10 @@ beginnt. Der Code-Mode-Worker von `plugin-code` ist so eine Datei.
 ## Prüfungen des Datenumzugs
 
 Die [Betriebsanleitung](/de/deploy) nennt die Wartungsreihenfolge und
-Schlüsseleinstellungen. `S/DataUpgrade.test.ts` prüft eine leere Datenbank, den
-Ausschluss zwischen Wartung und laufendem Server, Batch-Rollback und Fortsetzung
-sowie importierten Verlauf ohne neue Außenarbeit. Das sind Grundlagenprüfungen.
+Schlüsseleinstellungen. `packages/server-upgrade/test/DataUpgrade.test.ts` prüft
+eine leere Datenbank, den Ausschluss zwischen Wartung und laufendem Server,
+Batch-Rollback und Fortsetzung sowie importierten Verlauf ohne neue Außenarbeit.
+Das sind Grundlagenprüfungen.
 
 `S/MigrationRehearsal.test.ts` startet mit dem alten Schema und alten
 Datensätzen. Zusammen mit den Umwandlungstests der Fachbereiche prüft es

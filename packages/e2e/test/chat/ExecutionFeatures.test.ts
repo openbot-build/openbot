@@ -12,7 +12,7 @@ import {
 	Caller,
 	Messages,
 	Workflow,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { Array as Arr, Effect, Option, Schema, Stream } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 

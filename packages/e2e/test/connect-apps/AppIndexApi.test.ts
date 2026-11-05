@@ -4,7 +4,7 @@ import { Document, Index } from "@openbot-build/protocol"
 import { Array as Arr, Context, Effect, Layer, Redacted, Schema } from "effect"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Host } from "@openbot-build/openbot"
-import { AppIndex, PostgresTest } from "@openbot-build/openbot/testing"
+import { AppIndex, PostgresTest } from "@openbot-build/server-testing"
 import { FetchHttpClient, HttpClient, HttpServer } from "effect/http"
 import * as Client from "@openbot-build/client"
 

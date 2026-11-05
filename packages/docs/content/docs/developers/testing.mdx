@@ -92,13 +92,16 @@ browser or test interactive search and menus.
 The CLI checks start built commands. The computer checks include a real
 terminal. Protocol checks use independent clients and local servers. Unit and
 component checks stay in the `core`, `domain`, `api`, `client`, `openbot`,
-`cli`, `computer`, `protocol`, and `protocol-test` packages.
+`server-development`, `server-testing`, `cli`, `computer`, `protocol`, and
+`protocol-test` packages.
 
 ## Test servers in code
 
-The subpath `@openbot-build/openbot/testing` gives the test helpers of OpenBot.
+The package `@openbot-build/server-testing` gives the test helpers of OpenBot.
 It is TypeScript source, not built code, so only a test that runs TypeScript can
-use it. Its parts can change in any version.
+use it. Its parts can change in any version. The tests of the server that start
+a database or a whole server are in the same package, in
+`packages/server-testing/test`.
 
 | Helper                          | What it does                                                                                                                                                  |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -119,7 +122,7 @@ with the `auth` option. See [Sign-in](/server#sign-in).
 This test starts the bare plugin host, and starts it again on the same database:
 
 ```ts
-import { TestHost } from "@openbot-build/openbot/testing"
+import { TestHost } from "@openbot-build/server-testing"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
@@ -208,7 +211,7 @@ experiments, and checks that compare the product with a paper's intended rule.
 Run the internal product checks for Papers 06 and 12 after the build:
 
 ```sh
-devenv shell -- node --disable-warning=ExperimentalWarning packages/openbot/test/PaperProductEvidenceMain.ts --strict
+devenv shell -- node --disable-warning=ExperimentalWarning packages/server-testing/test/PaperProductEvidenceMain.ts --strict
 ```
 
 These checks call internal services. They compare product rules with the papers;

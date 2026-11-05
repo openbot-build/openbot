@@ -16,7 +16,7 @@ import {
 	BrowserHost,
 	Caller,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 const publicOrigin = "https://openbot.fixture.test"
 

@@ -45,6 +45,7 @@
 		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
 	},
 	"dependencies": {
+		"@effect/platform-node": "4.1.2",
 		"@effect/sql-pg": "4.1.2",
 		"@nmnmcc/ability": "3.2.0",
 		"@openbot-build/api": "workspace:*",
@@ -57,7 +58,6 @@
 		"undici": "8.12.3"
 	},
 	"devDependencies": {
-		"@effect/platform-node": "4.1.2",
 		"@effect/vitest": "4.1.2",
 		"vitest": "5.0.5"
 	},

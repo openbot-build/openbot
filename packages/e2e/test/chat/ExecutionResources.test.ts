@@ -6,7 +6,7 @@ import {
 	Wait,
 	Chats,
 	Failures,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import { Operation } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"

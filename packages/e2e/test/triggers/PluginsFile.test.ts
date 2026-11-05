@@ -2,7 +2,7 @@ import { assert, layer } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { FailureApi, OpenBotApi } from "@openbot-build/api"
-import { BuiltPrograms, PostgresTest } from "@openbot-build/openbot/testing"
+import { BuiltPrograms, PostgresTest } from "@openbot-build/server-testing"
 import {
 	Array as Arr,
 	Deferred,

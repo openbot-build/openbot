@@ -4,7 +4,7 @@ import {
 	PostgresTest,
 	DefaultBot,
 	Organizations,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import {
 	Array as Arr,
 	Context,

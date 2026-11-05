@@ -70,7 +70,7 @@ devenv shell -- pnpm dev
    `openbot-dev-rustfs`. Um die gespeicherten Dateien zu löschen, stoppe
    `pnpm dev` und führe `docker volume rm openbot-dev-rustfs` aus.
 3. Es installiert die Pakete mit `pnpm install --frozen-lockfile`.
-4. Es baut OpenBot und die Pakete, die OpenBot braucht.
+4. Es baut den Entwicklungsserver und die Pakete, die er braucht.
 5. Es führt die Datenbank-Migrationen aus.
 6. Es startet den Entwicklungsserver unter `http://localhost`. Der Server
    schreibt die Plattform-Einstellungen für diesen Origin selbst. Darum gibt es
@@ -309,11 +309,16 @@ ab. Tests dürfen ihre eigenen Layer bereitstellen.
 
 Diese Prüfung prüft auch Modulgrenzen und Typ-Imports. `domain` darf `core`
 nutzen, aber keine Adapter für HTTP, SQL oder Workflows. `core` und `protocol`
-bleiben frei von Produktpaketen. Ein Modul in `openbot` darf den Ordner `app`
-für den Aufbau nicht importieren. Pakete nutzen einander über öffentliche
-Eingänge. Ein Server-Paket wird nur über die Schlüssel von `exports` in seiner
-`package.json` genutzt. Ein Plugin-Paket importiert kein anderes Plugin-Paket,
-und der einzige Export seiner `src/index.ts` ist das Plugin.
+bleiben frei von Produktpaketen. Ein Paket importiert nur Pakete einer tieferen
+Schicht. Die Reihenfolge steht unter
+[Prüfungen des Ausführungsdesigns](/de/architecture-checks). Ein Plugin
+veröffentlicht keinen Dienst des Kernels. Nur der Host, die HTTP-Dateien des
+Kernels und die Ausführungsengine stellen HTTP bereit, fügen eine globale
+HTTP-Middleware hinzu oder machen Layer aus Workflows. Pakete nutzen einander
+über öffentliche Eingänge. Ein Server-Paket wird nur über die Schlüssel von
+`exports` in seiner `package.json` genutzt. Ein Plugin-Paket importiert kein
+anderes Plugin-Paket, und der einzige Export seiner `src/index.ts` ist das
+Plugin.
 
 Geschäftscode und Speicher dürfen keine HTTP-Verträge importieren. Das gilt auch
 für PostgreSQL-Adapter, Einstellungen, Modelle, Konten, Rollen und SSO. Diese

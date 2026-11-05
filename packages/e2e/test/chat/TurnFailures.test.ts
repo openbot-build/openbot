@@ -7,7 +7,7 @@ import {
 	Failures,
 	Messages,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { Array as Arr, Deferred, Effect, Option, Stream } from "effect"
 import { LanguageModel, type Prompt } from "effect/ai"
 

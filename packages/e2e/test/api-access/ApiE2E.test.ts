@@ -1,4 +1,4 @@
-import { BrowserHost, Caller, Policies } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Policies } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import {
 	Authorization,

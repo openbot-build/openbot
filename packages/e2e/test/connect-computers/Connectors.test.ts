@@ -13,7 +13,7 @@ import {
 } from "effect"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
-import { BrowserHost, Caller } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller } from "@openbot-build/server-testing"
 
 const publicOrigin = "https://connectors.example.com"
 

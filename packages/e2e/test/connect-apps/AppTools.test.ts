@@ -3,7 +3,7 @@ import {
 	BrowserHost,
 	Caller,
 	Messages,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { Execution } from "@openbot-build/domain"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"

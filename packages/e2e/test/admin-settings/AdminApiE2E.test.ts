@@ -1,4 +1,4 @@
-import { BrowserHost, Caller, Outside } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Outside } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import {
 	ModelProvidersApi,

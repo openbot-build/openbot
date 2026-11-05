@@ -4,9 +4,9 @@
  * preset on top of it. Startup waits until every plugin is active, then opens
  * the first engine generation.
  *
- * This module is private. `Host` gives the public entry points. The
- * development server and the tests use the parts here, because they give
- * their own services from outside.
+ * This module is private. `Host` gives the public entry points. `Parts` gives
+ * the parts here to the development server and the test helpers, because they
+ * give their own services from outside.
  */
 import { Graft, type Plugin as GraftPlugin } from "@graftland/graft"
 import { type Entry, Loader, ModuleResolver } from "@graftland/loader"

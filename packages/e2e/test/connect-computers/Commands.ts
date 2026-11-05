@@ -5,7 +5,7 @@ import { Effect, Option, Stream } from "effect"
 import { Sse } from "effect/encoding"
 import type { HttpMethod } from "effect/http"
 import type { Redacted } from "effect"
-import { Caller } from "@openbot-build/openbot/testing"
+import { Caller } from "@openbot-build/server-testing"
 
 export type Send = (
 	credential: Redacted.Redacted<string>,

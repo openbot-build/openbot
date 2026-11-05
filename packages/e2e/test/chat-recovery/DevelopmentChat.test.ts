@@ -18,12 +18,8 @@ import {
 
 import { message, settled, sendMessage } from "../support/Development.ts"
 
-import * as Development from "@openbot-build/openbot/Development"
-import {
-	Caller,
-	PostgresTest,
-	DefaultBot,
-} from "@openbot-build/openbot/testing"
+import * as Development from "@openbot-build/server-development/Development"
+import { Caller, PostgresTest, DefaultBot } from "@openbot-build/server-testing"
 import {
 	browser,
 	signIn,

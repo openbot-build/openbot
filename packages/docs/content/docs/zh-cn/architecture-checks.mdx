@@ -18,7 +18,7 @@ description: 执行重设计的产品覆盖、故障检查及发布所需证据�
 表中使用以下路径前缀：
 
 - `E/` 表示 `packages/e2e/test/`。
-- `S/` 表示 `packages/openbot/test/`。
+- `S/` 表示 `packages/server-testing/test/`。
 - 其他路径从项目根目录开始。
 
 测试可能使用真实数据库和固定模型回复，也可能使用真实 HTTP 服务和测试工作流，或完整服务器。这些测试的范围不同。服务 Layer 重启不等于进程崩溃。同一进程中的两个服务对象也不等于两个服务器进程。
@@ -116,44 +116,55 @@ API 用例，不计入 566 个历史声明。Pairing 等待持久删除结果；
 源码树已有以下删除。发布差异中应同时核对被删除入口及其调用方。仅用于迁移的 codec 不是活动执行器。独立的
 `core` runtime 是保留的库能力。
 
-| `packages/openbot/src/` 下删除的路径                                                                                                     | 当前需要核对的路径                                                                            | 简化规则的证据                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `chats/ChatHost.ts`, `chats/TurnWorkflow.ts`, `execution/RunScope.ts`                         | 不再有逐成员 Chat runtime、引用计数包装、`keepOpen`、`current` 回调或逐方法代理。Turn 持有自己的作用域。     |
-| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `apps/AppCommands.ts`, `apps/AppWorkflow.ts`, `execution/Calls.ts`                            | App 工作使用共同的调用意图、attempt、保存结果和决策。发现返回描述。                                          |
-| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `code/CodeCommands.ts`, `code/CodeWorkflow.ts`, `database/conversion/LegacyV1.ts`             | 沙箱重放使用共同调用日志。旧租约存储和过期运行扫描已删除。数据迁移用专用 codec 读取旧记录。                  |
-| `chats/ChatEvents.ts` 和旧 Chat SSE Schema                                                                                               | `execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                               | 持久执行事件替代本地事件队列、序号计数器和结束标记。所有调用方使用同一事件契约。                             |
-| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `execution/Store.ts`, `execution/Observation.ts`, `chats/ToolCommands.ts`                     | 不再有旧 Operation 监听器、取消通知循环或过期 Operation 扫描。`packages/api/src/OperationsApi.ts` 也已删除。 |
-| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `chats/ExecutionFeatures.ts`, `bots/DelegationCommands.ts`, `capabilities/RequestCommands.ts` | 执行作用域管理 Gate 和审批。委派工作流管理限额。请求逐条到期关闭。                                           |
-| 开发测试运行 FiberMap 和启动时重置运行                                                                                                   | `apps/TestCommands.ts`, `apps/TestWorkflow.ts`, `apps/TestCleanupWorkflow.ts`                 | 保存的命令和检查代次的结果控制运行与清理。连接缓存不管理测试生命周期。                                       |
-| 记忆辅助任务队列和节点本地模型 semaphore                                                                                                 | `bots/MemoryWorkflow.ts`, `bots/MemoryModels.ts`, `execution/Permits.ts`                      | 共同工作流负责恢复。数据库 permit 负责准入。                                                                 |
+| `packages/openbot/src/` 下删除的路径                                                                                                     | 当前需要核对的路径                                                                                                                                         | 简化规则的证据                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `app/Backend.ts`, `app/BackendLayers.ts`, `chats/ManagedChats.ts`, `chats/Chats.ts`, `bots/Coordinator.ts`, `chats/live/LiveSessions.ts` | `packages/conversation-contract/src/chats/ChatHost.ts`, `packages/plugin-chats/src/TurnWorkflow.ts`, `packages/server-execution/src/execution/RunScope.ts` | 不再有逐成员 Chat runtime、引用计数包装、`keepOpen`、`current` 回调或逐方法代理。Turn 持有自己的作用域。     |
+| `apps/Operations.ts`, `apps/Invocations.ts`                                                                                              | `packages/plugin-apps/src/AppCommands.ts`, `packages/plugin-apps/src/AppWorkflow.ts`, `packages/server-execution/src/execution/Calls.ts`                   | App 工作使用共同的调用意图、attempt、保存结果和决策。发现返回描述。                                          |
+| `code/CodeRuns.ts`, `code/StoredCodeRuns.ts`                                                                                             | `packages/plugin-code/src/CodeCommands.ts`, `packages/plugin-code/src/CodeWorkflow.ts`, `packages/server-kernel/src/imported/LegacyV1.ts`                  | 沙箱重放使用共同调用日志。旧租约存储和过期运行扫描已删除。数据迁移用专用 codec 读取旧记录。                  |
+| `chats/ChatEvents.ts` 和旧 Chat SSE Schema                                                                                               | `packages/server-execution/src/execution/Observation.ts`, `packages/api/src/ExecutionsApi.ts`                                                              | 持久执行事件替代本地事件队列、序号计数器和结束标记。所有调用方使用同一事件契约。                             |
+| `operations/StoredOperations.ts`, `plugins/operations/OperationsPlugin.ts`                                                               | `packages/server-execution/src/execution/Store.ts`, `packages/server-execution/src/execution/Observation.ts`, `packages/plugin-chats/src/ToolCommands.ts`  | 不再有旧 Operation 监听器、取消通知循环或过期 Operation 扫描。`packages/api/src/OperationsApi.ts` 也已删除。 |
+| `bots/Signals.ts`, `bots/Limits.ts`, `Gate.layer`, `Approvals.layer`, `WorkTools.layer`                                                  | `packages/plugin-chats/src/ExecutionFeatures.ts`, `packages/plugin-bots/src/DelegationCommands.ts`, `packages/plugin-capabilities/src/RequestCommands.ts`  | 执行作用域管理 Gate 和审批。委派工作流管理限额。请求逐条到期关闭。                                           |
+| 开发测试运行 FiberMap 和启动时重置运行                                                                                                   | `packages/plugin-apps/src/TestCommands.ts`, `packages/plugin-apps/src/TestWorkflow.ts`, `packages/plugin-apps/src/TestCleanupWorkflow.ts`                  | 保存的命令和检查代次的结果控制运行与清理。连接缓存不管理测试生命周期。                                       |
+| 记忆辅助任务队列和节点本地模型 semaphore                                                                                                 | `packages/plugin-bots/src/MemoryWorkflow.ts`, `packages/plugin-bots/src/MemoryModels.ts`, `packages/server-execution/src/execution/Permits.ts`             | 共同工作流负责恢复。数据库 permit 负责准入。                                                                 |
 
 `scripts/effect-rules.ts` 检查 `domain-boundary`、
-`storage-contract-boundary`、`standalone-boundary`、`assembly-boundary` 和
+`storage-contract-boundary`、`standalone-boundary`、`execution-boundary` 和
 `public-entry`。`pnpm typecheck`
 运行这些规则。它们检查导入关系，本身不能找出所有第二套执行器或恢复循环。新增 worker、计时器、锁和 RPC
 handler 仍需按统一设计审查。
 
-另外两条规则保护插件宿主。`graft-boundary` 只允许插件工具包（`server-plugin`
+另外四条规则保护插件宿主。`graft-boundary` 只允许插件工具包（`server-plugin`
 包）、每个插件包的 `src/index.ts`
-文件、应用、开发服务器和测试导入 graft。它还要求把 graft 的 `Plugin` 命名为
-`GraftPlugin`。`feature-lookup` 不允许服务器代码用 `Effect.serviceOption` 或
-`Plugin.optional` 查找功能。代码应列出它需要的服务。
+文件、宿主（`packages/openbot/src`）、开发服务器，以及宿主、插件工具包、开发服务器和
+`server-testing` 的测试导入 graft。它还要求把 graft 的 `Plugin` 命名为
+`GraftPlugin`。`feature-lookup` 不允许服务器包的代码和测试用
+`Effect.serviceOption` 或 `Plugin.optional`
+查找功能。代码应列出它需要的服务。`kernel-provide`
+不允许插件发布内核的服务。插件只发布契约包（`*-contract`
+包）、`api`、`domain`、`protocol`
+或它自己的包中的键。内核包中有两个键对插件开放：`server-billing` 中的 `Wallets`
+和 `server-execution` 中的
+`ImportedRecords`。preset 的一个测试也检查没有插件发布内核的键。`host-only`
+只允许宿主、`server-kernel` 的 HTTP 文件和 `server-execution` 用
+`HttpRouter.serve` 或 `HttpRouter.toWebHandler` 提供 HTTP 服务、用
+`HttpApiBuilder.layer` 构建 HTTP
+API、添加全局 HTTP 中间件，或者用工作流构建 layer。插件用 `HttpHost`
+挂载自己的路由，用 `Workflows.contribute` 提供自己的工作流。
 
-`virtual-boundary` 让服务器代码分层。从低到高依次是：`server-database`、
-`server-kernel`、`identity-contract`、`server-billing`、`server-execution`、
-`tools-contract`、`models-contract`、`apps-contract`、`conversation-contract`、
-`model-providers`、`server-plugin`，然后是插件包（`plugin-<id>`），然后是在
-`packages/openbot/src` 中的 `server-upgrade`、`app` 和
-`server-development`。代码只能导入更低的层。`public-entry`
-只允许其他包通过服务器包 `package.json` 中 `exports`
-的键来使用它。测试也是这样。
+`package-layer` 让各包分层。`core`、`domain`、`protocol` 和 `api`
+是基础层。基础层之上从低到高依次是：`server-database`、`server-kernel`、`identity-contract`、`server-billing`、`server-execution`、`tools-contract`、`models-contract`、`apps-contract`、`conversation-contract`、`model-providers`、`server-plugin`，然后是插件包（`plugin-<id>`），然后是
+`server-upgrade`，然后是宿主（`openbot`），然后是 `server-development`，然后是
+`server-testing`。包只能导入更低的层。基础层的包不导入服务器包，`server-database`
+只使用 `core` 和 `domain`。`domain-boundary` 和 `standalone-boundary`
+检查基础层各包之间的导入。`public-entry` 只允许其他包通过服务器包或宿主
+`package.json` 中 `exports` 的键来使用它。测试也是这样。
 
 两条规则让插件彼此分开。`plugin-boundary`
 不允许一个插件导入另一个插件。插件包和它们的测试都是这样。宿主通过 graft 连接各个插件。`plugin-entry`
 检查插件包的 `src/index.ts`
 只有一个导出：插件本身，作为默认导出。每个插件包的入口测试检查它的
 `package.json`
-不包含其他插件包。插件包的其他模块只有在宿主的程序或测试需要它，或者宿主的公开类型用到它时，才在
+不包含其他插件包。插件包的其他模块只有在宿主的程序、开发服务器（`server-development`）或测试辅助工具和宿主测试（`server-testing`）需要它、数据迁移（`server-upgrade`）需要它，或者宿主的公开类型用到它时，才在
 `exports`
 中有一个键。代码审查检查这一点。worker 文件是它所在包的构建入口，但不是
 `exports` 中的键，因为它一加载就开始工作。`plugin-code` 的 Code Mode
@@ -161,7 +172,8 @@ worker 就是这样的文件。
 
 ## 数据迁移检查
 
-[部署指南](/zh-cn/deploy)说明维护顺序和密钥配置。 `S/DataUpgrade.test.ts`
+[部署指南](/zh-cn/deploy)说明维护顺序和密钥配置。
+`packages/server-upgrade/test/DataUpgrade.test.ts`
 检查空数据库、维护与活动服务器互斥、批次回滚与续跑，以及导入历史不会启动外部工作。这些是基础检查。
 
 `S/MigrationRehearsal.test.ts`

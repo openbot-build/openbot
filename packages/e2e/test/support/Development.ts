@@ -1,7 +1,7 @@
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Config, Item, Model, Provider } from "@openbot-build/core"
 import { DatabasePostgres } from "@openbot-build/openbot"
-import { DevelopmentLogin, Messages } from "@openbot-build/openbot/testing"
+import { DevelopmentLogin, Messages } from "@openbot-build/server-testing"
 import {
 	Context,
 	Effect,

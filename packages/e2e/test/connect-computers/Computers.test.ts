@@ -31,7 +31,7 @@ import {
 	ComputerScenarios,
 	Messages,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 const { settled, talk } = Messages
 type Send = Messages.Send

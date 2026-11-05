@@ -21,6 +21,8 @@
 		"@openbot-build/openbot": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
 		"@openbot-build/protocol-test": "workspace:*",
+		"@openbot-build/server-development": "workspace:*",
+		"@openbot-build/server-testing": "workspace:*",
 		"@effect/platform-node": "4.1.2",
 		"@effect/sql-pg": "4.1.2",
 		"@effect/vitest": "4.1.2",

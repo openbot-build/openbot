@@ -69,13 +69,14 @@ devenv shell -- pnpm --filter @openbot-build/e2e exec vitest --watch test/chat/C
 文档检查通过本地 HTTP 端口提供构建出的站点。它们检查手册的三种语言、API 参考、搜索文件、图标、每个构建出的文件、本地链接和解码后的锚点。API 页面只有英语语言链接。检查不会获取外部链接。这些是静态站点检查。它们不运行浏览器，也不测试交互式搜索和菜单。
 
 CLI 检查会启动构建出的命令。计算机检查包含真实终端。协议检查使用独立客户端和本地服务器。单元和组件检查仍放在
-`core`、`domain`、`api`、`client`、`openbot`、`cli`、`computer`、`protocol` 和
-`protocol-test` 包中。
+`core`、`domain`、`api`、`client`、`openbot`、`server-development`、`server-testing`、`cli`、`computer`、`protocol`
+和 `protocol-test` 包中。
 
 ## 在代码中测试服务器
 
-子路径 `@openbot-build/openbot/testing`
-提供 OpenBot 的测试辅助工具。它是 TypeScript 源码，不是构建后的代码，所以只有运行 TypeScript 的测试才能使用它。它的各个部分在任何版本中都可能改变。
+包 `@openbot-build/server-testing`
+提供 OpenBot 的测试辅助工具。它是 TypeScript 源码，不是构建后的代码，所以只有运行 TypeScript 的测试才能使用它。它的各个部分在任何版本中都可能改变。启动数据库或整个服务器的服务器测试也在这个包中，位于
+`packages/server-testing/test`。
 
 | 辅助工具                        | 作用                                                                                                                                  |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -96,7 +97,7 @@ CLI 检查会启动构建出的命令。计算机检查包含真实终端。协�
 下面的测试启动裸插件宿主，并在同一个数据库上再次启动它：
 
 ```ts
-import { TestHost } from "@openbot-build/openbot/testing"
+import { TestHost } from "@openbot-build/server-testing"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
@@ -171,7 +172,7 @@ devenv shell -- python3 papers/experiments/run.py --seeds 30 --output .cache/e2e
 构建完成后，运行论文 06 和 12 的产品内部检查：
 
 ```sh
-devenv shell -- node --disable-warning=ExperimentalWarning packages/openbot/test/PaperProductEvidenceMain.ts --strict
+devenv shell -- node --disable-warning=ExperimentalWarning packages/server-testing/test/PaperProductEvidenceMain.ts --strict
 ```
 
 这些检查调用内部服务。它们将产品规则与论文比较，并非 `packages/e2e`

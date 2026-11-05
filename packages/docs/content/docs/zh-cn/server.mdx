@@ -52,9 +52,11 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 | `EnvironmentConfiguration`                                   | 从环境变量读取实例设置。                                                                  |
 | `Auth`、`AppHost`、`AppTools`、`Configuration`               | 用于高级配置的服务类型。                                                                  |
 
-子路径 `@openbot-build/openbot/Development` 导出开发服务器。见
-[运行开发服务器](#运行开发服务器)。子路径 `@openbot-build/openbot/testing`
-以 TypeScript 源码的形式提供测试辅助工具。请看[在代码中测试服务器](/zh-cn/developers/testing#在代码中测试服务器)。
+包 `@openbot-build/server-development` 含有开发服务器。见
+[运行开发服务器](#运行开发服务器)。包 `@openbot-build/server-testing`
+以 TypeScript 源码的形式提供测试辅助工具。请看[在代码中测试服务器](/zh-cn/developers/testing#在代码中测试服务器)。子路径
+`@openbot-build/openbot/Parts`
+把主机的内部部件交给这两个包。它不是稳定的 API，任何版本都可能改变它。
 
 ---
 
@@ -266,7 +268,7 @@ pnpm --filter @openbot-build/openbot migrate
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
-import * as Development from "@openbot-build/openbot/Development"
+import * as Development from "@openbot-build/server-development/Development"
 
 NodeRuntime.runMain(Development.launch)
 ```
@@ -278,7 +280,9 @@ NodeRuntime.runMain(Development.launch)
 `NodeServices.layer`、`NodeCrypto.layer` 和
 `FetchHttpClient.layer`，`Development.launch`
 会提供它们。它自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret`
-用第一个机密密钥生成登录密钥，所以重启后它保持不变。永远不要在生产环境中使用开发服务器。任何能访问它的人都可以登录。
+用第一个机密密钥生成登录密钥，所以重启后它保持不变。`pnpm dev` 从包
+`server-development`
+运行它。永远不要在生产环境中使用开发服务器。任何能访问它的人都可以登录。
 
 ## 把错误日志发送到你自己的服务
 

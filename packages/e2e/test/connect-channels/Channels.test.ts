@@ -33,7 +33,7 @@ import {
 	Caller,
 	ChannelPlatformScenarios,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 const { until } = Wait
 

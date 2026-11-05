@@ -3,7 +3,7 @@ import {
 	Caller,
 	Policies,
 	Chats,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
 import { Authorization } from "@openbot-build/domain"

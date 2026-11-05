@@ -7,7 +7,7 @@ import {
 	Caller,
 	DevelopmentTesting,
 	Messages,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 layer(BrowserHost.layerPlatform, { excludeTestServices: true })((it) => {
 	it.effect(

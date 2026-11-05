@@ -3,7 +3,7 @@ import {
 	Caller,
 	Messages,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { Execution } from "@openbot-build/domain"
 import { assert, layer } from "@effect/vitest"
 import { Item } from "@openbot-build/core"

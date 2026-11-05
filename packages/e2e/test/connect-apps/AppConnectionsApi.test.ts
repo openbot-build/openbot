@@ -4,7 +4,7 @@ import {
 	AppFixture as Fixture,
 	BrowserHost,
 	Caller,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { Effect } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 

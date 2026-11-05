@@ -58,10 +58,12 @@ it. See [Platform](/platform#setup).
 | `EnvironmentConfiguration`                                   | Reads the instance settings from environment variables.                                                                            |
 | `Auth`, `AppHost`, `AppTools`, `Configuration`               | Service types for advanced setups.                                                                                                 |
 
-The subpath `@openbot-build/openbot/Development` exports the development server.
-See [Run the development server](#run-the-development-server). The subpath
-`@openbot-build/openbot/testing` gives the test helpers as TypeScript source.
-See [Test servers in code](/developers/testing#test-servers-in-code).
+The package `@openbot-build/server-development` has the development server. See
+[Run the development server](#run-the-development-server). The package
+`@openbot-build/server-testing` gives the test helpers as TypeScript source. See
+[Test servers in code](/developers/testing#test-servers-in-code). The subpath
+`@openbot-build/openbot/Parts` gives inner parts of the host to these two
+packages. It is not a stable API, and it can change in any version.
 
 ---
 
@@ -301,7 +303,7 @@ server from its own program:
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
-import * as Development from "@openbot-build/openbot/Development"
+import * as Development from "@openbot-build/server-development/Development"
 
 NodeRuntime.runMain(Development.launch)
 ```
@@ -314,8 +316,9 @@ services, such as `NodeServices.layer`, `NodeCrypto.layer`, and
 `FetchHttpClient.layer`, and `Development.launch` gives them. It writes the
 platform settings itself, so it needs no setup program.
 `Development.developmentSecret` makes the sign-in secret from the first secret
-key, so it stays the same after a restart. Never use the development server in
-production. Everyone who can reach it can sign in.
+key, so it stays the same after a restart. `pnpm dev` runs it from the package
+`server-development`. Never use the development server in production. Everyone
+who can reach it can sign in.
 
 ## Send error logs to your own service
 

@@ -35,7 +35,7 @@ import {
 	AppFixture as Fixture,
 	BrowserHost,
 	Caller,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 /** Headers of one connection. A proxy does not pass them on. */
 const connectionHeaders: ReadonlyArray<string> = [

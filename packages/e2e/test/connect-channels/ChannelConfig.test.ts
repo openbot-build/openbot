@@ -16,7 +16,7 @@ import {
 	Caller,
 	ChannelScenarios,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 
 const { until } = Wait
 const publicOrigin = "https://channel-config.example.com"

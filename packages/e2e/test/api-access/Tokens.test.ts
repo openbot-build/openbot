@@ -3,7 +3,7 @@ import {
 	Caller,
 	Policies,
 	Messages,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { Redacted } from "effect"
 import { assert, layer } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"

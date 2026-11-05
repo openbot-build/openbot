@@ -28,7 +28,7 @@ import {
 	BrowserHost,
 	Caller,
 	Messages,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 const { message, settled } = Messages
 type Send = Messages.Send
 

@@ -1,6 +1,6 @@
 import { assert, layer } from "@effect/vitest"
 import { ComputersApi, UserTokensApi } from "@openbot-build/api"
-import { BrowserHost, Caller, Wait } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Wait } from "@openbot-build/server-testing"
 import { finished } from "../connect-computers/Commands.ts"
 import {
 	Array as Arr,

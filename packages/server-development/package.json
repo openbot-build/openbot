@@ -1,0 +1,71 @@
+{
+	"name": "@openbot-build/server-development",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The OpenBot development server, with a local test account, simulated models and a simulated App",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./Development": "./dist/Development.js",
+		"./DevelopmentAppUi": "./dist/DevelopmentAppUi.js",
+		"./DevelopmentApps": "./dist/DevelopmentApps.js",
+		"./DevelopmentAuthorization": "./dist/DevelopmentAuthorization.js",
+		"./DevelopmentBusiness": "./dist/DevelopmentBusiness.js",
+		"./DevelopmentModel": "./dist/DevelopmentModel.js",
+		"./DevelopmentProofs": "./dist/DevelopmentProofs.js",
+		"./DevelopmentScenarios": "./dist/DevelopmentScenarios.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"start": "node dist/DevelopmentMain.js",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/sql-pg": "4.1.2",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/models-contract": "workspace:*",
+		"@openbot-build/openbot": "workspace:*",
+		"@openbot-build/plugin-apps": "workspace:*",
+		"@openbot-build/plugin-auth": "workspace:*",
+		"@openbot-build/plugin-bots": "workspace:*",
+		"@openbot-build/plugin-capabilities": "workspace:*",
+		"@openbot-build/plugin-channels": "workspace:*",
+		"@openbot-build/plugin-chats": "workspace:*",
+		"@openbot-build/plugin-code": "workspace:*",
+		"@openbot-build/plugin-computers": "workspace:*",
+		"@openbot-build/plugin-files": "workspace:*",
+		"@openbot-build/plugin-models": "workspace:*",
+		"@openbot-build/plugin-platform": "workspace:*",
+		"@openbot-build/plugin-triggers": "workspace:*",
+		"@openbot-build/plugin-vaults": "workspace:*",
+		"@openbot-build/plugin-work": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/server-development"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

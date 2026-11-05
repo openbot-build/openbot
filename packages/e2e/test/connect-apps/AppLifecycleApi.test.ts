@@ -7,7 +7,7 @@ import {
 	AppFixture as Fixture,
 	BrowserHost,
 	Caller,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,

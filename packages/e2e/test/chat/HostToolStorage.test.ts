@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import { HostTools } from "@openbot-build/openbot"
-import { BrowserHost, Caller, Messages } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { Context, Deferred, Effect, Layer, Ref, Stream } from "effect"
 import { LanguageModel, Response } from "effect/ai"
 

@@ -65,7 +65,7 @@ devenv shell -- pnpm dev
    `openbot-dev-rustfs`. To delete the stored files, stop `pnpm dev` and run
    `docker volume rm openbot-dev-rustfs`.
 3. It installs the packages with `pnpm install --frozen-lockfile`.
-4. It builds OpenBot and the packages it needs.
+4. It builds the development server and the packages it needs.
 5. It runs the database migrations.
 6. It starts the development server at `http://localhost`. The server writes the
    platform settings for this origin itself, so there is no setup step.
@@ -294,10 +294,13 @@ provide their own Layers.
 
 The same check also tests module boundaries, including type imports. `domain`
 may use `core`, but not HTTP, SQL, or workflow adapters. `core` and `protocol`
-stay free of product packages. A feature in `openbot` must not import the `app`
-assembly folder. Packages use each other through public entries. A server
-package is used only through the keys of `exports` in its `package.json`. A
-plugin package does not import another plugin package, and the only export of
+stay free of product packages. A package imports only packages of a lower layer.
+See [Execution design checks](/architecture-checks) for the order. A plugin does
+not publish a service of the kernel. Only the host, the HTTP files of the
+kernel, and the execution engine serve HTTP, add a global HTTP middleware, or
+make layers from workflows. Packages use each other through public entries. A
+server package is used only through the keys of `exports` in its `package.json`.
+A plugin package does not import another plugin package, and the only export of
 its `src/index.ts` is the plugin.
 
 Business code and storage cannot import HTTP contracts. This includes PostgreSQL

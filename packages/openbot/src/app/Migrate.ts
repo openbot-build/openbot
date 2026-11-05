@@ -4,7 +4,7 @@ import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 
 import * as SecretFiles from "@openbot-build/server-kernel/configuration/SecretFiles"
 import * as DatabasePostgres from "./DatabasePostgres.ts"
-import * as DataMigration from "../server-upgrade/Migrations.ts"
+import * as DataMigration from "@openbot-build/server-upgrade/Migrations"
 import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Store from "@openbot-build/server-execution/execution/Store"
 

@@ -112,9 +112,6 @@
 			"path": "../server-billing"
 		},
 		{
-			"path": "../server-database"
-		},
-		{
 			"path": "../server-execution"
 		},
 		{
@@ -122,6 +119,9 @@
 		},
 		{
 			"path": "../server-plugin"
+		},
+		{
+			"path": "../server-upgrade"
 		},
 		{
 			"path": "../tools-contract"

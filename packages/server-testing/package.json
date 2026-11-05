@@ -1,0 +1,99 @@
+{
+	"name": "@openbot-build/server-testing",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "Test helpers of the OpenBot server as TypeScript source, and the tests that start a database or a whole server",
+	"sideEffects": false,
+	"files": [
+		"test/Testing.ts",
+		"test/AppFixture.ts",
+		"test/BotFixture.ts",
+		"test/BrowserHost.ts",
+		"test/Caller.ts",
+		"test/ChatTest.ts",
+		"test/DefaultBot.ts",
+		"test/DevelopmentLogin.ts",
+		"test/Messages.ts",
+		"test/OrganizationFixture.ts",
+		"test/Organizations.ts",
+		"test/Policies.ts",
+		"test/PostgresTest.ts",
+		"test/TestHost.ts",
+		"test/Wait.ts",
+		"test/testing"
+	],
+	"exports": {
+		".": "./test/Testing.ts"
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json --noEmit",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "pnpm --filter \"@openbot-build/server-testing^...\" build && tsc -p tsconfig.json --noEmit && vitest run"
+	},
+	"dependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/sql-pg": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/models-contract": "workspace:*",
+		"@openbot-build/openbot": "workspace:*",
+		"@openbot-build/plugin-access": "workspace:*",
+		"@openbot-build/plugin-apps": "workspace:*",
+		"@openbot-build/plugin-auth": "workspace:*",
+		"@openbot-build/plugin-authorization": "workspace:*",
+		"@openbot-build/plugin-billing": "workspace:*",
+		"@openbot-build/plugin-bots": "workspace:*",
+		"@openbot-build/plugin-capabilities": "workspace:*",
+		"@openbot-build/plugin-channels": "workspace:*",
+		"@openbot-build/plugin-chats": "workspace:*",
+		"@openbot-build/plugin-code": "workspace:*",
+		"@openbot-build/plugin-computers": "workspace:*",
+		"@openbot-build/plugin-files": "workspace:*",
+		"@openbot-build/plugin-models": "workspace:*",
+		"@openbot-build/plugin-organization": "workspace:*",
+		"@openbot-build/plugin-platform": "workspace:*",
+		"@openbot-build/plugin-settings": "workspace:*",
+		"@openbot-build/plugin-sso": "workspace:*",
+		"@openbot-build/plugin-triggers": "workspace:*",
+		"@openbot-build/plugin-vaults": "workspace:*",
+		"@openbot-build/plugin-work": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-development": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/server-upgrade": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2",
+		"jose": "6.2.12"
+	},
+	"peerDependencies": {
+		"vitest": "5.0.5"
+	},
+	"devDependencies": {
+		"@graftland/graft": "0.4.0",
+		"@openbot-build/client": "workspace:*",
+		"@openbot-build/model-providers": "workspace:*",
+		"@openbot-build/plugin-audit": "workspace:*",
+		"@openbot-build/plugin-imported": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/server-testing"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

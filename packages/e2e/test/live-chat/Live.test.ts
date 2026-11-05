@@ -4,7 +4,7 @@ import {
 	Devices,
 	Messages,
 	Wait,
-} from "@openbot-build/openbot/testing"
+} from "@openbot-build/server-testing"
 import { NodeHttpClient, NodeSocket } from "@effect/platform-node"
 import { assert, layer } from "@effect/vitest"
 import {

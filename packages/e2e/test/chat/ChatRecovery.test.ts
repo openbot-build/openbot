@@ -1,6 +1,6 @@
 import * as Read from "./Read.ts"
 import { PgClient } from "@effect/sql-pg"
-import { BrowserHost, Caller, Messages } from "@openbot-build/openbot/testing"
+import { BrowserHost, Caller, Messages } from "@openbot-build/server-testing"
 import { assert, layer } from "@effect/vitest"
 import { ChatCommandReceipt, ExecutionsApi } from "@openbot-build/api"
 import { Deferred, Effect, Ref, Schema, Stream, Array as Arr } from "effect"
