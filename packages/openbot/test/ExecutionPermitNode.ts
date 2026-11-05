@@ -3,8 +3,8 @@ import { PgClient } from "@effect/sql-pg"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Config, Effect, Layer, Schedule } from "effect"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Permits from "../src/server-execution/execution/Permits.ts"
-import * as Recovery from "../src/server-execution/execution/Recovery.ts"
+import * as Permits from "@openbot-build/server-execution/execution/Permits"
+import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 
 /** A process with its own permit service and scope. The parent sets each fence. */

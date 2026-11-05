@@ -27,9 +27,9 @@ import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import * as IndexStore from "./IndexStore.ts"
 import { Governance } from "./Governance.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 export type Error =
 	| Domain.IndexInputInvalid

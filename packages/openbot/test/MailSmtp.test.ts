@@ -20,7 +20,7 @@ import * as Smtp from "../src/plugin-mail/Smtp.ts"
 import {
 	Transport,
 	type Message,
-} from "../src/identity-contract/mail/Transport.ts"
+} from "@openbot-build/identity-contract/mail/Transport"
 
 const message: Message = {
 	from: { address: "openbot@example.com", name: "OpenBot" },

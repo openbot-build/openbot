@@ -1,10 +1,10 @@
 /** The mail plugin: mail from the platform, with the SMTP settings of the platform. */
-import { Mail } from "../identity-contract/mail/Mail.ts"
-import { Transport } from "../identity-contract/mail/Transport.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Feature from "../server-plugin/Feature.ts"
+import { Mail } from "@openbot-build/identity-contract/mail/Mail"
+import { Transport } from "@openbot-build/identity-contract/mail/Transport"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as MailLayer from "./Mail.ts"
 
 export const id = "mail"

@@ -8,7 +8,7 @@ import {
 import { Clock, Effect, Option, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import * as Db from "@openbot-build/server-database/Database"
-import { Store } from "../../server-execution/execution/Store.ts"
+import { Store } from "@openbot-build/server-execution/execution/Store"
 import { Delegations } from "../bots/Delegations.ts"
 import * as DelegationSource from "../bots/DelegationSource.ts"
 import * as DelegationUsage from "../bots/DelegationUsage.ts"

@@ -14,7 +14,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { createLocalJWKSet, jwtVerify } from "jose"
-import * as Failures from "../../../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 
 const issuer = "https://auth.openai.com"
 const resource = "https://api.openai.com/v1"

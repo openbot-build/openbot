@@ -1,6 +1,6 @@
 import { Identity } from "@openbot-build/domain"
 import { AuthorizationCommands } from "./AuthorizationCommands.ts"
-import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
 import { OpenBotApi, ConnectionsApi } from "@openbot-build/api"
 
 import { Effect } from "effect"

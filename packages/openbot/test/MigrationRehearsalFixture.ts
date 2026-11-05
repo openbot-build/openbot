@@ -5,15 +5,15 @@ import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { Effect, Schema, String as Str } from "effect"
 import { Prompt } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Legacy from "../src/server-execution/imported/LegacyChats.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Legacy from "@openbot-build/server-execution/imported/LegacyChats"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as MigrationTest from "./MigrationTest.ts"
 
 /** These values use the stored shapes at 2a123ff, before execution records. */
 export const namespace = '["org","person"]'
 const owner = namespace
 export const encode = Schema.encodeEffect(Schema.fromJsonString(Schema.Json))
-import * as LegacyApps from "../src/server-execution/imported/LegacyApps.ts"
+import * as LegacyApps from "@openbot-build/server-execution/imported/LegacyApps"
 const chain = {
 	organizationId: "org",
 	userId: "person",

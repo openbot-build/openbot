@@ -2,11 +2,11 @@ import { Array as Arr, Config, Effect, Layer } from "effect"
 import { Command } from "effect/cli"
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 
-import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
+import * as SecretFiles from "@openbot-build/server-kernel/configuration/SecretFiles"
 import * as DatabasePostgres from "./DatabasePostgres.ts"
 import * as DataMigration from "../server-upgrade/Migrations.ts"
-import * as Secrets from "../server-kernel/secrets/Secrets.ts"
-import * as Store from "../server-execution/execution/Store.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Store from "@openbot-build/server-execution/execution/Store"
 
 const migrate = DataMigration.upgrade.pipe(
 	// @effect-diagnostics-next-line strictEffectProvide:off -- This program owns the whole application Layer scope.

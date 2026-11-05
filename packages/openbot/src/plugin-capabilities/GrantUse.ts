@@ -15,7 +15,7 @@ import {
 	Store,
 	storage,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { Grants } from "../conversation-contract/capabilities/Grants.ts"
 
 class GrantTaken extends Schema.TaggedError<

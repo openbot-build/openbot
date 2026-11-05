@@ -3,7 +3,7 @@ import {
 	Store,
 	storage,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type Developers,
 	Caller,
@@ -18,9 +18,9 @@ import {
 	appDrafts,
 	appSecrets,
 } from "@openbot-build/server-database/Schema"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import { AuthorizationCommands } from "./AuthorizationCommands.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 
 export const workflowName = "openbot.app-reset"

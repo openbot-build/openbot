@@ -26,9 +26,9 @@ import { discover } from "./Discovery.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import * as IndexStore from "./IndexStore.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
-import type { Records } from "../server-kernel/errors/Records.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import type { Records } from "@openbot-build/server-kernel/errors/Records"
 
 export class AppInspections extends Context.Service<
 	AppInspections,

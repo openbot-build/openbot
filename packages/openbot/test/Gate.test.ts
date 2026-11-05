@@ -8,12 +8,12 @@ import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import { Grants } from "../src/conversation-contract/capabilities/Grants.ts"
 import { Requests } from "../src/conversation-contract/capabilities/Requests.ts"
 import { Rules } from "../src/conversation-contract/capabilities/Rules.ts"
-import { Store } from "../src/server-execution/execution/Store.ts"
+import { Store } from "@openbot-build/server-execution/execution/Store"
 import {
 	AnyModel,
 	ModelRegistry,
 } from "../src/models-contract/models/ModelRegistry.ts"
-import { Secrets } from "../src/server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { bot } from "./BotFixture.ts"
 import * as Fixture from "./GateFixture.ts"
 

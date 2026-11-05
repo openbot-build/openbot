@@ -14,11 +14,11 @@ import {
 	SpendingBlocked,
 	type Call,
 	type Tokens,
-} from "../src/server-billing/billing/Billing.ts"
-import { attribute } from "../src/server-billing/billing/MeteredModel.ts"
-import { TokenThrottle } from "../src/server-billing/billing/TokenThrottle.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
-import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
+} from "@openbot-build/server-billing/billing/Billing"
+import { attribute } from "@openbot-build/server-billing/billing/MeteredModel"
+import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import { Config, ContextWindow, Model, Provider } from "@openbot-build/core"

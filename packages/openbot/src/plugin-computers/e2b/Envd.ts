@@ -14,7 +14,7 @@ import {
 } from "effect"
 import { Base64 } from "effect/encoding"
 import { type HttpClient, HttpClientRequest } from "effect/http"
-import * as Background from "../../server-kernel/execution/Background.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
 import {
 	ComputerCallFailed,
 	type RunRequest,

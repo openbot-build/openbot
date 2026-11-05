@@ -11,13 +11,13 @@ import {
 	String as Str,
 } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
-import { Calls } from "../server-execution/execution/Calls.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
 import {
 	Store,
 	storage,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
-import { Records, category } from "../server-kernel/errors/Records.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import { Records, category } from "@openbot-build/server-kernel/errors/Records"
 import type { Bots } from "@openbot-build/domain"
 import { type Home } from "../conversation-contract/bots/BotMemories.ts"
 import { BotMemories } from "./BotMemories.ts"

@@ -1,4 +1,4 @@
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Chat, Turn } from "@openbot-build/core"

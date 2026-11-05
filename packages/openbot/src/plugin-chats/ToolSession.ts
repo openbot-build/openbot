@@ -1,4 +1,4 @@
-import type { Paused } from "../server-execution/execution/Admission.ts"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import { type Developers, Execution } from "@openbot-build/domain"
 import {
 	type Failure,
@@ -19,9 +19,9 @@ import { Prompt, Toolkit, type Tool } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { Work } from "../conversation-contract/capabilities/Work.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import * as Background from "../server-kernel/execution/Background.ts"
-import { type Fence } from "../server-execution/execution/Store.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import { type Fence } from "@openbot-build/server-execution/execution/Store"
 import { ExecutionFeatures } from "./ExecutionFeatures.ts"
 import { HostTools } from "../tools-contract/chats/HostTools.ts"
 import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"

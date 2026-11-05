@@ -1,4 +1,4 @@
-import type { Records } from "../src/server-kernel/errors/Records.ts"
+import type { Records } from "@openbot-build/server-kernel/errors/Records"
 import type { SqlClient } from "effect/sql"
 import { assert, it } from "@effect/vitest"
 import type { NodeServices } from "@effect/platform-node"
@@ -13,9 +13,9 @@ import type * as Preset from "../src/app/Preset.ts"
 import type * as Shared from "../src/app/Shared.ts"
 import type * as Authentication from "../src/plugin-auth/HttpMiddleware.ts"
 import type * as Authorization from "../src/plugin-authorization/Layer.ts"
-import type { Wallets } from "../src/server-billing/billing/Host.ts"
+import type { Wallets } from "@openbot-build/server-billing/billing/Host"
 import type { HostTools } from "../src/tools-contract/chats/HostTools.ts"
-import type { Settings } from "../src/server-kernel/settings/Settings.ts"
+import type { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import type { PgClient } from "@effect/sql-pg"
 
 /** True when the two types are the same. */

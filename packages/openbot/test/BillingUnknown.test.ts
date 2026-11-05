@@ -7,8 +7,8 @@ import {
 	Billing,
 	type Call,
 	type Tokens,
-} from "../src/server-billing/billing/Billing.ts"
-import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
+} from "@openbot-build/server-billing/billing/Billing"
+import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

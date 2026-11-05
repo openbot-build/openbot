@@ -28,11 +28,11 @@ import {
 	SqlRunnerStorage,
 } from "effect/cluster"
 import { HttpRouter, HttpServerResponse } from "effect/http"
-import * as Directory from "../src/server-execution/resources/Directory.ts"
-import * as Transport from "../src/server-execution/resources/Transport.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
-import * as PrivateRpc from "../src/server-execution/transport/PrivateRpc.ts"
+import * as Directory from "@openbot-build/server-execution/resources/Directory"
+import * as Transport from "@openbot-build/server-execution/resources/Transport"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as PrivateRpc from "@openbot-build/server-execution/transport/PrivateRpc"
 
 const ref = { namespace: "process-test", kind: "socket", id: "one" }
 const app = Layer.unwrap(

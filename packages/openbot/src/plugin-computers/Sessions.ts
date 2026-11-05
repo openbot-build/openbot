@@ -28,11 +28,11 @@ import {
 	String as Str,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import * as Background from "../server-kernel/execution/Background.ts"
-import * as Send from "../server-execution/execution/Send.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
-import * as Resource from "../server-execution/resources/Resource.ts"
-import { Transport } from "../server-execution/resources/Transport.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as Send from "@openbot-build/server-execution/execution/Send"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Resource from "@openbot-build/server-execution/resources/Resource"
+import { Transport } from "@openbot-build/server-execution/resources/Transport"
 import {
 	ComputerCallFailed,
 	ComputerGone,

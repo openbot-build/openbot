@@ -28,7 +28,7 @@ import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import { hasImage, imageKey } from "../model-providers/providers/ToolImages.ts"
 import type * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
 import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 
 /**
  * The Computer tools. Their parameters are JSON Schema, like App tools.

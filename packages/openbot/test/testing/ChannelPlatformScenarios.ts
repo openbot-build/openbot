@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, String as Str } from "effect"
 import * as Db from "@openbot-build/server-database/Database"
 import { executions } from "@openbot-build/server-database/Schema"
-import { Store as ExecutionStore } from "../../src/server-execution/execution/Store.ts"
+import { Store as ExecutionStore } from "@openbot-build/server-execution/execution/Store"
 
 /** Reads the saved people and Channel of work that came from a Turn. */
 export const turnAuthority = (turnId: string) =>

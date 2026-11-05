@@ -8,7 +8,7 @@ import {
 	methodsOf,
 	type Options,
 	withMethods,
-} from "../../server-billing/models/ModelMethods.ts"
+} from "@openbot-build/server-billing/models/ModelMethods"
 
 type Load = Files["Service"]["load"]
 

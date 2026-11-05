@@ -24,11 +24,11 @@ import * as Rows from "./DeveloperRows.ts"
 import type { TestRecord } from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 export class DeveloperTests extends Context.Service<
 	DeveloperTests,

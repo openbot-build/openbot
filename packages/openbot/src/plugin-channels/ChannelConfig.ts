@@ -4,7 +4,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type BotId,
 	type Developers,
@@ -14,27 +14,27 @@ import {
 	Execution,
 	Version,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { and, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Option, Redacted, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import { channels as rows } from "@openbot-build/server-database/Schema"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	organizationKey,
 	segment,
-} from "../identity-contract/audit/Resources.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
-import type { End } from "../server-execution/execution/Program.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+} from "@openbot-build/identity-contract/audit/Resources"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import type { End } from "@openbot-build/server-execution/execution/Program"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	Channels,
 	Credentials,

@@ -3,10 +3,13 @@ import { BillingApi, OpenBotApi } from "@openbot-build/api"
 import { type Caller, Identity } from "@openbot-build/domain"
 import { Clock, DateTime, Effect, Layer, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { organizationKey } from "../identity-contract/audit/Resources.ts"
-import { Billing, periodStart } from "../server-billing/billing/Billing.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import { organizationKey } from "@openbot-build/identity-contract/audit/Resources"
+import {
+	Billing,
+	periodStart,
+} from "@openbot-build/server-billing/billing/Billing"
 
 /** Fails with `BillingUnavailable` in place of an inside failure, and logs the failure. */
 const unavailable = (message: string) =>

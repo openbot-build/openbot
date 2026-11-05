@@ -1,6 +1,6 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
-import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
 import { assert, it } from "@effect/vitest"
 import { Authorizer, Policy } from "@nmnmcc/ability"

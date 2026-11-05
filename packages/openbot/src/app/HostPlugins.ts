@@ -2,11 +2,11 @@ import { AuthApi, FailureApi } from "@openbot-build/api"
 import { type Graft, Plugin as GraftPlugin } from "@graftland/graft"
 import { Loader, type Tree } from "@graftland/loader"
 import { Effect, Layer } from "effect"
-import { Commands } from "../server-execution/execution/Commands.ts"
-import * as ExecutionHandlers from "../server-execution/execution/HttpHandlers.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
-import { HttpHost } from "../server-kernel/errors/HttpHost.ts"
-import * as Feature from "../server-plugin/Feature.ts"
+import { Commands } from "@openbot-build/server-execution/execution/Commands"
+import * as ExecutionHandlers from "@openbot-build/server-execution/execution/HttpHandlers"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { HttpHost } from "@openbot-build/server-kernel/errors/HttpHost"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 
 /**
  * The routes of executions. The host owns them, so nobody can turn them off.

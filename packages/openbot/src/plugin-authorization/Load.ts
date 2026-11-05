@@ -7,20 +7,20 @@ import { Authorization } from "@openbot-build/domain"
 import { type AccountCaller } from "@openbot-build/domain"
 import { Policy } from "@nmnmcc/ability"
 import { Array as Arr, Clock, DateTime, Effect, Option, pipe } from "effect"
-import { Tokens } from "../identity-contract/auth/Tokens.ts"
+import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import {
 	Organization,
 	type OrganizationUnavailable,
-} from "../identity-contract/organization/Organization.ts"
+} from "@openbot-build/identity-contract/organization/Organization"
 import {
 	PlatformAdmins,
 	type PlatformAdminsUnavailable,
-} from "../identity-contract/platform/PlatformAdmins.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+} from "@openbot-build/identity-contract/platform/PlatformAdmins"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	Roles,
 	type RolesUnavailable,
-} from "../identity-contract/authorization/Roles.ts"
+} from "@openbot-build/identity-contract/authorization/Roles"
 
 export type Services = Organization | Tokens | Roles | Settings | PlatformAdmins
 

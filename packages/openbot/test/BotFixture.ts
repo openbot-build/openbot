@@ -1,6 +1,6 @@
 import { BotsApi } from "@openbot-build/api"
 import { Effect, Layer } from "effect"
-import { Billing } from "../src/server-billing/billing/Billing.ts"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
 import * as MemoryLogs from "../src/plugin-bots/MemoryLogs.ts"
 import * as TurnContext from "../src/plugin-chats/TurnContext.ts"
 import * as Grants from "../src/plugin-capabilities/Grants.ts"

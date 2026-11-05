@@ -1,5 +1,5 @@
 import { type Developers, Execution } from "@openbot-build/domain"
-import type { Paused } from "../server-execution/execution/Admission.ts"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import type { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
 import { ChatState, type ModelStep, ToolStep } from "@openbot-build/core"
 import {
@@ -18,9 +18,12 @@ import {
 	Local,
 	SavedResult,
 } from "../tools-contract/plugins/ToolEntry.ts"
-import { CallContext } from "../server-execution/execution/CallContext.ts"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	outputCodec,
 	stepId,

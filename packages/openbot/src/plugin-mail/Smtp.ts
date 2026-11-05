@@ -6,7 +6,7 @@ import {
 	TransportError,
 	type Connection,
 	type Message,
-} from "../identity-contract/mail/Transport.ts"
+} from "@openbot-build/identity-contract/mail/Transport"
 
 const send = Effect.fn("MailSmtp.send")(function* (
 	settings: Connection,

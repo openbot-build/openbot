@@ -1,5 +1,5 @@
 import * as Models from "./DeveloperModels.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { DeveloperWatches } from "./DeveloperWatches.ts"
 import * as DeveloperNotices from "./DeveloperNotices.ts"
 import { isIP } from "node:net"
@@ -32,10 +32,10 @@ import {
 import { AppInspections } from "./AppInspections.ts"
 import * as Rows from "./DeveloperRows.ts"
 import type { ProofRecord } from "../apps-contract/apps/DeveloperRows.ts"
-import { DomainControl } from "../server-kernel/apps/DomainControl.ts"
+import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import {
 	usableStatus,
 	covers,

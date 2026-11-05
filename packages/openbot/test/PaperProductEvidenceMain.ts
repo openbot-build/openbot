@@ -13,15 +13,18 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { Billing, type Call } from "../src/server-billing/billing/Billing.ts"
-import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
+import {
+	Billing,
+	type Call,
+} from "@openbot-build/server-billing/billing/Billing"
+import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"
 import * as BotMemories from "../src/plugin-bots/BotMemories.ts"
 import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
 import * as MemoryLogs from "../src/plugin-bots/MemoryLogs.ts"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Audience from "../src/plugin-bots/memory/Audience.ts"
 import * as Memory from "../src/plugin-bots/memory/BotMemory.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 
 /** Run this file to check two paper claims against the real PostgreSQL services. */

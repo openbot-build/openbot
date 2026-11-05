@@ -10,7 +10,7 @@ import {
 	Schema,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Models from "./DeveloperModels.ts"
 import { Developers, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
@@ -25,7 +25,7 @@ import {
 	Store,
 	transactionFailures,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { AppInspections } from "./AppInspections.ts"
 import { issueKey, sameIssue } from "./DeveloperReports.ts"

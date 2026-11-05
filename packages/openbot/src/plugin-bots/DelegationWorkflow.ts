@@ -1,17 +1,20 @@
 import { Array as Arr, Cause, Effect, Layer, Option, Stream } from "effect"
 import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
-import * as Children from "../server-execution/execution/Children.ts"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
-import * as Program from "../server-execution/execution/Program.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Children from "@openbot-build/server-execution/execution/Children"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import * as Program from "@openbot-build/server-execution/execution/Program"
 import {
 	Store,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { DelegationCommands, workflowName } from "./DelegationCommands.ts"
 import { DelegationSession } from "./DelegationSession.ts"
 

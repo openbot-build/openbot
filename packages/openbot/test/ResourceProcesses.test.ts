@@ -13,7 +13,7 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Resource from "../src/server-execution/resources/Resource.ts"
+import * as Resource from "@openbot-build/server-execution/resources/Resource"
 import * as Network from "./ResourceNetwork.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

@@ -1,26 +1,29 @@
-import { Access } from "../src/identity-contract/access/Access.ts"
+import { Access } from "@openbot-build/identity-contract/access/Access"
 import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Effect, HashMap, Layer, Stream, Option } from "effect"
-import { Organization } from "../src/identity-contract/organization/Organization.ts"
-import { AuditLog } from "../src/identity-contract/audit/AuditLog.ts"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import * as AuthorizationLayer from "../src/plugin-authorization/Layer.ts"
-import { Roles, builtin } from "../src/identity-contract/authorization/Roles.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import {
+	Roles,
+	builtin,
+} from "@openbot-build/identity-contract/authorization/Roles"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	type OrganizationDocument,
 	memberDefaults,
 	organizationDefaults,
-} from "../src/server-kernel/settings/Documents.ts"
+} from "@openbot-build/server-kernel/settings/Documents"
 import { type AppIndexApi, Authorization } from "@openbot-build/api"
-import { PlatformAdmins } from "../src/identity-contract/platform/PlatformAdmins.ts"
+import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import { ProviderOAuth } from "../src/models-contract/models/ProviderOAuth.ts"
 import { ModelProviders } from "../src/models-contract/models/ModelProviders.ts"
 import { Models } from "../src/models-contract/models/Models.ts"
 import { ModelRegistry } from "../src/models-contract/models/ModelRegistry.ts"
-import { Sso } from "../src/identity-contract/sso/Sso.ts"
-import { Billing } from "../src/server-billing/billing/Billing.ts"
-import { RateLimiter } from "../src/server-billing/billing/RateLimit.ts"
-import { Mail } from "../src/identity-contract/mail/Mail.ts"
+import { Sso } from "@openbot-build/identity-contract/sso/Sso"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { RateLimiter } from "@openbot-build/server-billing/billing/RateLimit"
+import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 
 /**
  * An organization where every account is an active Super Administrator.

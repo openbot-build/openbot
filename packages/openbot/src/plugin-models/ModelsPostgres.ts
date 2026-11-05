@@ -11,7 +11,7 @@ import {
 	String as Str,
 } from "effect"
 import { and, asc, eq, or } from "drizzle-orm"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import {
 	modelProviders,
 	models,

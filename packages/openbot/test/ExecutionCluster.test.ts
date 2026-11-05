@@ -13,8 +13,8 @@ import {
 } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 
 layer(Layer.merge(NodeServices.layer, NodeCrypto.layer), {

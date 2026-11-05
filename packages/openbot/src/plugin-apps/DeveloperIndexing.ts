@@ -18,21 +18,21 @@ import {
 	Stream,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import { and, eq } from "drizzle-orm"
 import { developerIndexRequests } from "@openbot-build/server-database/Schema"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import {
 	Store,
 	storage,
 	transactionFailures,
 	type Key,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "../apps-contract/apps/DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"

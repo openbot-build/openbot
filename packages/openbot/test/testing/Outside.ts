@@ -1,5 +1,5 @@
 import { Layer } from "effect"
-import { DomainControl } from "../../src/server-kernel/apps/DomainControl.ts"
+import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
 import { Readers } from "../../src/plugin-vaults/Readers.ts"
 
 /** Gives a test host the TXT records of each domain. */

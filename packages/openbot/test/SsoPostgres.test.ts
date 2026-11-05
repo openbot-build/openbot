@@ -1,4 +1,4 @@
-import * as AccountAccess from "../src/identity-contract/access/Access.ts"
+import * as AccountAccess from "@openbot-build/identity-contract/access/Access"
 import { assert, it } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -12,14 +12,14 @@ import {
 	Ref,
 	String as Str,
 } from "effect"
-import { DomainControl } from "../src/server-kernel/apps/DomainControl.ts"
+import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
-import { Sso } from "../src/identity-contract/sso/Sso.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { Sso } from "@openbot-build/identity-contract/sso/Sso"
 import * as SsoPostgres from "../src/plugin-sso/SsoPostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
+import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
 
 const organizationId = "org_sso_notice"
 const domain = "example.com"

@@ -3,7 +3,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { AppCalls, Caller, Execution } from "@openbot-build/domain"
 import { Client, McpClient } from "@openbot-build/protocol"
 import { and, eq } from "drizzle-orm"
@@ -24,8 +24,8 @@ import {
 import {
 	type Authorize,
 	type Decide,
-} from "../server-execution/execution/Engine.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+} from "@openbot-build/server-execution/execution/Engine"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import * as AppCall from "../apps-contract/apps/AppCall.ts"
 import {

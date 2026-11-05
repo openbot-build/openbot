@@ -1,17 +1,17 @@
 import { Clock, Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Authority from "../server-execution/imported/Authority.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Authority from "@openbot-build/server-execution/imported/Authority"
 import * as Apps from "./Apps.ts"
 import * as Catalogs from "./Catalogs.ts"
 import * as Chats from "./Chats.ts"
 import * as Channels from "./Channels.ts"
 import * as ChannelChecks from "./ChannelChecks.ts"
 import * as Checks from "./Checks.ts"
-import * as Imported from "../server-execution/imported/Executions.ts"
+import * as Imported from "@openbot-build/server-execution/imported/Executions"
 import * as Resources from "./Resources.ts"
-import * as Legacy from "../server-kernel/imported/LegacyV1.ts"
-import * as Progress from "../server-kernel/imported/Progress.ts"
+import * as Legacy from "@openbot-build/server-kernel/imported/LegacyV1"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
 
 export class InvalidData extends Schema.TaggedError<
 	InvalidData,

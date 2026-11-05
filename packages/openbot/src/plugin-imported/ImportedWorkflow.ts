@@ -6,21 +6,24 @@ import {
 } from "@openbot-build/domain"
 import { Array as Arr, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { botResource } from "../identity-contract/authorization/Resources.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { botResource } from "@openbot-build/identity-contract/authorization/Resources"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as DeveloperAccess from "../apps-contract/apps/DeveloperAuthorization.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
 import {
 	Store,
 	storage,
 	type Key,
-} from "../server-execution/execution/Store.ts"
-import * as Imported from "../server-execution/imported/Executions.ts"
-import { ImportedRecords } from "../server-execution/imported/ImportedRecords.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import * as Imported from "@openbot-build/server-execution/imported/Executions"
+import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
 
 export const workflow = Engine.define(Imported.workflowName)
 

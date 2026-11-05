@@ -15,7 +15,7 @@ import {
 	transactionFailures,
 	type Key,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	AppIndex,
 	Execution,

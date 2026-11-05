@@ -64,7 +64,8 @@ billing. Each plugin has a fixed id, such as `bots`.
 The **kernel** is the part that every plugin shares: the database pool, the
 settings, the secret keys, the error records, the HTTP host, and the services of
 the execution engine. The host builds the kernel first. No plugin may publish a
-service of the kernel.
+service of the kernel. Most of its code is in the packages `server-database`,
+`server-kernel`, `server-billing`, and `server-execution`.
 
 A plugin is a chain of **stages** and one **start**. A stage builds some
 services and publishes all of them in one step. A later stage can wait for a

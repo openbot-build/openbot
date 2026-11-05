@@ -22,15 +22,15 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
-import { Records } from "../../server-kernel/errors/Records.ts"
-import * as Background from "../../server-kernel/execution/Background.ts"
-import * as Send from "../../server-execution/execution/Send.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as Send from "@openbot-build/server-execution/execution/Send"
 import {
 	Transport,
 	type Handler,
-} from "../../server-execution/resources/Transport.ts"
-import * as Resource from "../../server-execution/resources/Resource.ts"
-import { Directory } from "../../server-execution/resources/Directory.ts"
+} from "@openbot-build/server-execution/resources/Transport"
+import * as Resource from "@openbot-build/server-execution/resources/Resource"
+import { Directory } from "@openbot-build/server-execution/resources/Directory"
 import * as Access from "../Access.ts"
 import {
 	ComputerCallFailed,

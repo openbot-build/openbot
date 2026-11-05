@@ -1,7 +1,7 @@
 import { Array as Arr, Cause, Context, Effect, Layer } from "effect"
 import { AppCalls } from "@openbot-build/domain"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 
 /**
  * Only the organization says which App tools only read, in its `appReadRules`

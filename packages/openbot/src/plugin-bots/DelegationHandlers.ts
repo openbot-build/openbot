@@ -2,9 +2,9 @@ import { FailureApi, OpenBotApi } from "@openbot-build/api"
 import { Identity } from "@openbot-build/domain"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
-import { Unavailable } from "../server-execution/execution/Workflows.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
+import { Unavailable } from "@openbot-build/server-execution/execution/Workflows"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as DelegationQueries from "./DelegationQueries.ts"
 
 export const layerPlatform = HttpApiBuilder.group(

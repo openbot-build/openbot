@@ -1,12 +1,12 @@
 import * as AppQueries from "./AppQueries.ts"
 import { CodeCommands } from "../apps-contract/code/CodeCommands.ts"
 import * as WorkflowTools from "../apps-contract/apps/WorkflowTools.ts"
-import type { Fence } from "../server-execution/execution/Store.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import * as Registration from "../tools-contract/plugins/Registration.ts"
 import { Vaults } from "../apps-contract/vaults/Vaults.ts"
 import * as VaultCode from "../apps-contract/vaults/CodeMode.ts"
 import * as StoredViews from "./StoredViews.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { Bot } from "@openbot-build/core"
 import {
 	AppCalls as AppExecution,
@@ -36,7 +36,7 @@ import { ActionPolicy } from "./ActionPolicy.ts"
 import { Work } from "../conversation-contract/capabilities/Work.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Report from "../server-kernel/errors/Report.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 
 export type Tools = Record<
 	string,

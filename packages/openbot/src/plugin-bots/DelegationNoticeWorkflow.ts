@@ -1,8 +1,11 @@
 import { Effect, Layer } from "effect"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import { Runner } from "../server-execution/execution/Runner.ts"
-import { Store } from "../server-execution/execution/Store.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import { Runner } from "@openbot-build/server-execution/execution/Runner"
+import { Store } from "@openbot-build/server-execution/execution/Store"
 import { noticeWorkflowName } from "./DelegationCommands.ts"
 import { DelegationNotices } from "./DelegationNotices.ts"
 

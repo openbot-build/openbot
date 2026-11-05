@@ -5,8 +5,11 @@ import { Array as Arr, Effect, Option, Schema } from "effect"
 import * as Db from "@openbot-build/server-database/Database"
 import { appGrantUses, appSecrets } from "@openbot-build/server-database/Schema"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import { storage, type Key } from "../../server-execution/execution/Store.ts"
-import { Secrets } from "../../server-kernel/secrets/Secrets.ts"
+import {
+	storage,
+	type Key,
+} from "@openbot-build/server-execution/execution/Store"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 
 /** OAuth may revoke all grants from the same issuer and client together. */
 export const Scope = Schema.Struct({

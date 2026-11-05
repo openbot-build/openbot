@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm"
 import { Array as Arr, Effect } from "effect"
 import * as Db from "@openbot-build/server-database/Database"
 import { fileRefs, files } from "@openbot-build/server-database/Schema"
-import { Store } from "../../src/server-execution/execution/Store.ts"
+import { Store } from "@openbot-build/server-execution/execution/Store"
 import { FileTasks } from "../../src/plugin-files/FileTasks.ts"
 import * as LiveBackends from "../../src/models-contract/models/LiveBackends.ts"
 

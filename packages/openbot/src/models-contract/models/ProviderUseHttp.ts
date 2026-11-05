@@ -1,8 +1,8 @@
 import { Provider } from "@openbot-build/core"
 import { ModelProvidersApi } from "@openbot-build/api"
 import { Effect } from "effect"
-import * as Failures from "../../server-kernel/errors/Failures.ts"
-import { Settings } from "../../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 /**
  * A provider cannot go while a setting still names it, or the setting would

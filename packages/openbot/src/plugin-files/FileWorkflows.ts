@@ -1,11 +1,17 @@
-import * as RetryingCall from "../server-execution/execution/RetryingCall.ts"
+import * as RetryingCall from "@openbot-build/server-execution/execution/RetryingCall"
 import { Array as Arr, Clock, Effect, Layer, Option } from "effect"
 import { Digest } from "effect/crypto"
 import { DurableClock } from "effect/workflow"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import * as Program from "../server-execution/execution/Program.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import * as Program from "@openbot-build/server-execution/execution/Program"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	FileTasks,
 	cleanupWorkflowName,

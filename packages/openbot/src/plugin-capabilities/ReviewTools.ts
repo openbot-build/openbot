@@ -10,10 +10,10 @@ import {
 	Option,
 } from "effect"
 import { Tool, Toolkit } from "effect/ai"
-import { Records, category } from "../server-kernel/errors/Records.ts"
-import { CallContext } from "../server-execution/execution/CallContext.ts"
-import * as Recovery from "../server-execution/execution/Recovery.ts"
-import type { Fence } from "../server-execution/execution/Store.ts"
+import { Records, category } from "@openbot-build/server-kernel/errors/Records"
+import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import {
 	Local,
 	ReviewAllowed,

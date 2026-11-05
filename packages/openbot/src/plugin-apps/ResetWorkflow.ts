@@ -3,15 +3,18 @@ import { Array as Arr, Effect, Layer } from "effect"
 import { eq, and } from "drizzle-orm"
 import * as Db from "@openbot-build/server-database/Database"
 import { appConnections } from "@openbot-build/server-database/Schema"
-import * as Children from "../server-execution/execution/Children.ts"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import * as Program from "../server-execution/execution/Program.ts"
+import * as Children from "@openbot-build/server-execution/execution/Children"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import * as Program from "@openbot-build/server-execution/execution/Program"
 import {
 	Store,
 	storage,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	AuthorizationCommands,
 	workflowName as childWorkflow,

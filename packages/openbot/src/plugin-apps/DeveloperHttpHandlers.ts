@@ -1,12 +1,12 @@
 import { TestCleanup } from "./TestCleanup.ts"
 import { TestCommands } from "./TestCommands.ts"
 import { ProofCommands } from "./ProofCommands.ts"
-import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
 import { DeveloperApi as Api, OpenBotApi } from "@openbot-build/api"
 
 import { Identity } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
-import * as HttpMiddleware from "../identity-contract/auth/SessionHttp.ts"
+import * as HttpMiddleware from "@openbot-build/identity-contract/auth/SessionHttp"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { AppInspections } from "./AppInspections.ts"
@@ -17,7 +17,7 @@ import { ownerKey, ownersOf } from "../apps-contract/apps/StoredConnections.ts"
 import { DeveloperTests } from "./DeveloperTests.ts"
 import { DeveloperIndexing } from "./DeveloperIndexing.ts"
 import { DeveloperNotifications } from "./DeveloperNotifications.ts"
-import { Auth } from "../identity-contract/auth/Auth.ts"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 
 export const layerPublic = HttpApiBuilder.group(
 	OpenBotApi,

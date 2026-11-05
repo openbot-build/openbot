@@ -1,6 +1,6 @@
 import { type BotMemory, Bots as BotsApi } from "@openbot-build/domain"
 import { MemoryLogs } from "./MemoryLogs.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as Memory from "./memory/BotMemory.ts"
 import * as Audience from "./memory/Audience.ts"
 import {

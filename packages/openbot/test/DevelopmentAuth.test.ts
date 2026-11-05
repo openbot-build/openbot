@@ -34,8 +34,8 @@ import {
 // OrganizationFixture uses the source files, so the Auth layer must come from them too.
 import * as Auth from "../src/plugin-auth/index.ts"
 import * as AuthorizationLayer from "../src/plugin-authorization/Layer.ts"
-import * as HttpBoundary from "../src/server-kernel/errors/HttpBoundary.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+import * as HttpBoundary from "@openbot-build/server-kernel/errors/HttpBoundary"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { Execution } from "@openbot-build/domain"
 
 import * as Development from "../dist/Development.js"

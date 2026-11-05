@@ -4,7 +4,7 @@ import {
 	ChatStorageUnavailable,
 } from "@openbot-build/domain"
 import { Effect } from "effect"
-import * as Failures from "../../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import type { InputCommands } from "./InputCommands.ts"
 import type * as ChatCommands from "./ChatCommands.ts"
 import type * as ChatQueries from "./ChatQueries.ts"

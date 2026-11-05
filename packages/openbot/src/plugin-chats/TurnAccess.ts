@@ -1,4 +1,4 @@
-import { triggerResource } from "../identity-contract/authorization/Resources.ts"
+import { triggerResource } from "@openbot-build/identity-contract/authorization/Resources"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as DelegationSource from "../conversation-contract/bots/DelegationSource.ts"
 import * as WorkAdmission from "./WorkAdmission.ts"
@@ -25,16 +25,19 @@ import {
 	Option,
 	Schema,
 } from "effect"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { Tokens } from "../identity-contract/auth/Tokens.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import { Delegations } from "../conversation-contract/bots/Delegations.ts"
 import { Requests } from "../conversation-contract/capabilities/Requests.ts"
 import { Channels } from "../conversation-contract/channels/Channels.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
-import { Store, type Key } from "../server-execution/execution/Store.ts"
-import { Organization } from "../identity-contract/organization/Organization.ts"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import {
+	Store,
+	type Key,
+} from "@openbot-build/server-execution/execution/Store"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import {

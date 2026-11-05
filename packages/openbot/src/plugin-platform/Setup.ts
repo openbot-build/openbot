@@ -5,19 +5,19 @@ import { Authorization } from "@openbot-build/domain"
 import { Effect, Option, Redacted, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
-import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	filesDefaults,
 	filesOf,
 	type PlatformDocument,
-} from "../server-kernel/settings/Documents.ts"
+} from "@openbot-build/server-kernel/settings/Documents"
 import {
 	bindings,
 	changeFiles,
 	changeMail,
-} from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import { PlatformAdmins } from "../identity-contract/platform/PlatformAdmins.ts"
+} from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 
 export interface Input {
 	readonly publicOrigin: string

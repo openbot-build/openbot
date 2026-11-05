@@ -14,8 +14,11 @@ import { Decision, DecisionModel } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config, Model, Provider } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
-import { Billing, type Tokens } from "../src/server-billing/billing/Billing.ts"
-import { TokenThrottle } from "../src/server-billing/billing/TokenThrottle.ts"
+import {
+	Billing,
+	type Tokens,
+} from "@openbot-build/server-billing/billing/Billing"
+import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
 import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
 import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
 import {
@@ -28,8 +31,8 @@ import {
 	type StoredModel,
 } from "../src/models-contract/models/Models.ts"
 import * as TypeSafeProvider from "../src/model-providers/providers/typesafe/TypeSafeProvider.ts"
-import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 const SentBody = Schema.Struct({
 	model: Schema.String,

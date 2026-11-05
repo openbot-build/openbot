@@ -16,8 +16,8 @@ import {
 import { TestClock } from "effect/testing"
 import * as PluginFailures from "../src/app/PluginFailures.ts"
 import * as PluginLogs from "../src/app/PluginLogs.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
-import * as Feature from "../src/server-plugin/Feature.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 
 interface Line {
 	readonly message: ReadonlyArray<unknown>

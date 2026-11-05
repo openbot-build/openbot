@@ -1,5 +1,5 @@
 import { Execution } from "@openbot-build/domain"
-import type { Fence } from "../server-execution/execution/Store.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import { Bot, type Chat, type ChatStore } from "@openbot-build/core"
 import {
 	Array as Arr,
@@ -20,7 +20,7 @@ import { ChannelQueue } from "./ChannelQueue.ts"
 import { Channels } from "../conversation-contract/channels/Channels.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 
 /** The Channel tools. Their parameters are JSON Schema, like App tools. */
 export type Tools = import("../tools-contract/plugins/ToolEntry.ts").Tools

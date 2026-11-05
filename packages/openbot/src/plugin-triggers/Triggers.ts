@@ -1,10 +1,10 @@
 import { SqlClient } from "effect/sql"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	Store,
 	storage,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 export const workflowName = "openbot.trigger-schedule"
 export const ScheduleInput = Schema.Struct({
@@ -43,10 +43,10 @@ import {
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { triggerResource } from "../identity-contract/authorization/Resources.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { triggerResource } from "@openbot-build/identity-contract/authorization/Resources"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import { triggers } from "@openbot-build/server-database/Schema"
 import * as Db from "@openbot-build/server-database/Database"
 

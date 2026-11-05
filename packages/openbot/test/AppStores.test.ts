@@ -12,7 +12,7 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as ProtocolStores from "../src/plugin-apps/ProtocolStores.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 

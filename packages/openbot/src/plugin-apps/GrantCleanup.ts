@@ -6,7 +6,7 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type Developers,
 	Execution,
@@ -14,7 +14,7 @@ import {
 	ServiceIdentity,
 	ServiceId,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as GrantUses from "../apps-contract/apps/GrantUses.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import * as Rows from "./DeveloperRows.ts"
@@ -39,8 +39,8 @@ import {
 	appConnections,
 	developerTests,
 } from "@openbot-build/server-database/Schema"
-import type { End } from "../server-execution/execution/Program.ts"
-import * as Observation from "../server-execution/execution/Observation.ts"
+import type { End } from "@openbot-build/server-execution/execution/Program"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
 import * as Connections from "../apps-contract/apps/StoredConnections.ts"
 
 export const workflowName = "openbot.app-grant-cleanup"

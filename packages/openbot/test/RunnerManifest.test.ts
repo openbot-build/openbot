@@ -3,7 +3,7 @@ import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { Array as Arr, Effect, Layer, Option } from "effect"
 import { SqlClient } from "effect/sql"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as RunnerManifest from "../src/server-execution/execution/RunnerManifest.ts"
+import * as RunnerManifest from "@openbot-build/server-execution/execution/RunnerManifest"
 import * as TestHost from "./TestHost.ts"
 
 const mine: RunnerManifest.Seen = {

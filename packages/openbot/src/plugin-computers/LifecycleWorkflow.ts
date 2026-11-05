@@ -1,11 +1,17 @@
 import { Computers as ComputerData } from "@openbot-build/domain"
 import { Effect, Layer, Option, Schema } from "effect"
 import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import * as Program from "../server-execution/execution/Program.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import * as Program from "@openbot-build/server-execution/execution/Program"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 import { workflowName } from "./Activity.ts"
 import type { ComputerError } from "./Computer.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"

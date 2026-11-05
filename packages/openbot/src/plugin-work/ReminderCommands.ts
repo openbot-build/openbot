@@ -4,7 +4,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as Hex from "effect/encoding/Hex"
 import {
 	Execution,
@@ -15,7 +15,7 @@ import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { type Authorize } from "../server-execution/execution/Engine.ts"
+import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import { Chat, ToolStep, Turn } from "@openbot-build/core"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"

@@ -21,8 +21,8 @@ import {
 	UrlParams,
 } from "effect/http"
 import * as ClientMetadata from "../plugin-apps/ClientMetadata.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { Scenarios, type Mode } from "./DevelopmentScenarios.ts"
 
 const origin = "https://app.development.test"

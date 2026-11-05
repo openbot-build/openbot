@@ -22,7 +22,7 @@ import {
 	Transport,
 	TransportError,
 	type Message,
-} from "../src/identity-contract/mail/Transport.ts"
+} from "@openbot-build/identity-contract/mail/Transport"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as Caller from "./Caller.ts"
 

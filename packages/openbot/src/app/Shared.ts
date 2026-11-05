@@ -3,9 +3,9 @@
  * `openbot setup`, use this module alone, so they do not load the plugins.
  */
 import { Layer, type Redacted } from "effect"
-import * as ErrorRecords from "../server-kernel/errors/Records.ts"
-import * as Secrets from "../server-kernel/secrets/Secrets.ts"
-import * as SettingsPostgres from "../server-kernel/settings/SettingsPostgres.ts"
+import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as SettingsPostgres from "@openbot-build/server-kernel/settings/SettingsPostgres"
 import * as DatabasePostgres from "./DatabasePostgres.ts"
 
 /**

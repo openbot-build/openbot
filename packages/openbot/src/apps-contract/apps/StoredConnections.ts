@@ -23,9 +23,9 @@ import {
 	appDrafts,
 	appRecords,
 } from "@openbot-build/server-database/Schema"
-import type { Secrets } from "../../server-kernel/secrets/Secrets.ts"
+import type { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 
 /** An owner key is the JSON of `[organization id, user id]`. */
 const OwnerJson = Schema.fromJsonString(

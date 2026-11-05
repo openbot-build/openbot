@@ -16,13 +16,16 @@ import {
 } from "../src/conversation-contract/bots/Delegations.ts"
 import { DelegationCommands } from "../src/plugin-bots/DelegationCommands.ts"
 import * as DelegationHandlers from "../src/plugin-bots/DelegationHandlers.ts"
-import { Commands } from "../src/server-execution/execution/Commands.ts"
-import { Store, type Loaded } from "../src/server-execution/execution/Store.ts"
-import { Unavailable } from "../src/server-execution/execution/Workflows.ts"
-import { ImportedRecords } from "../src/server-execution/imported/ImportedRecords.ts"
-import * as Boundary from "../src/server-kernel/errors/HttpBoundary.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
-import * as Reporting from "../src/server-kernel/errors/Reporting.ts"
+import { Commands } from "@openbot-build/server-execution/execution/Commands"
+import {
+	Store,
+	type Loaded,
+} from "@openbot-build/server-execution/execution/Store"
+import { Unavailable } from "@openbot-build/server-execution/execution/Workflows"
+import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
+import * as Boundary from "@openbot-build/server-kernel/errors/HttpBoundary"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Reporting from "@openbot-build/server-kernel/errors/Reporting"
 
 const api = HttpApi.make("openbot-api")
 	.add(DelegationsApi.DelegationsApi)

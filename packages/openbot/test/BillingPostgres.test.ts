@@ -23,10 +23,10 @@ import {
 	BillingStorageError,
 	type Call,
 	SpendingBlocked,
-} from "../src/server-billing/billing/Billing.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
-import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
+} from "@openbot-build/server-billing/billing/Billing"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

@@ -1,11 +1,11 @@
 /** The billing plugin: the wallets of organizations, usage and budgets. */
 import { PgClient } from "@effect/sql-pg"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { Organization } from "../identity-contract/organization/Organization.ts"
-import { Billing } from "../server-billing/billing/Billing.ts"
-import * as Wallets from "../server-billing/billing/Host.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Feature from "../server-plugin/Feature.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import * as Wallets from "@openbot-build/server-billing/billing/Host"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as HttpMounts from "./HttpMounts.ts"
 
 export const id = "billing"

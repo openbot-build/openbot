@@ -20,7 +20,7 @@ import {
 	builtin,
 	Roles,
 	RolesUnavailable,
-} from "../identity-contract/authorization/Roles.ts"
+} from "@openbot-build/identity-contract/authorization/Roles"
 import * as Db from "@openbot-build/server-database/Database"
 
 const PolicyJson = Authorization.PolicySchema

@@ -1,5 +1,5 @@
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Clock, Effect, Layer, Option, Schema, String as Str } from "effect"
 import { Digest } from "effect/crypto"

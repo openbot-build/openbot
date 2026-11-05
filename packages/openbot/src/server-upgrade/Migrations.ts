@@ -1,14 +1,17 @@
 import { ChatStore } from "@openbot-build/core"
 import { Effect } from "effect"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
-import * as Shared from "../server-kernel/database/DatabaseError.ts"
+import * as Shared from "@openbot-build/server-kernel/database/DatabaseError"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Progress from "../server-kernel/imported/Progress.ts"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
 import * as Convert from "./Convert.ts"
 import * as GrantUses from "./GrantUses.ts"
 import { migrationsFolder as folder } from "@openbot-build/server-database/MigrationsFolder"
-import { check } from "../server-kernel/database/Check.ts"
-export { check, checkStartup } from "../server-kernel/database/Check.ts"
+import { check } from "@openbot-build/server-kernel/database/Check"
+export {
+	check,
+	checkStartup,
+} from "@openbot-build/server-kernel/database/Check"
 
 /** Apply the current schema with the standard Drizzle migrator, which keeps a journal. */
 const schema = Effect.gen(function* () {

@@ -1,4 +1,4 @@
-import type { Check as CheckType } from "../../server-execution/execution/Admission.ts"
+import type { Check as CheckType } from "@openbot-build/server-execution/execution/Admission"
 import { Chat, type Config } from "@openbot-build/core"
 import {
 	Caller,
@@ -6,8 +6,8 @@ import {
 	type ExecutionIdentity,
 } from "@openbot-build/domain"
 import { Context, Effect } from "effect"
-import type { Authorize } from "../../server-execution/execution/Engine.ts"
-import { type Key } from "../../server-execution/execution/Store.ts"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { type Key } from "@openbot-build/server-execution/execution/Store"
 
 type Failure = Execution.Forbidden | Execution.NotFound | Execution.StorageError
 

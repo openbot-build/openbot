@@ -19,12 +19,12 @@ import {
 import { Requests } from "../conversation-contract/capabilities/Requests.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import * as Admission from "../server-execution/execution/Admission.ts"
+import * as Admission from "@openbot-build/server-execution/execution/Admission"
 import {
 	Store,
 	storage,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
 import { WorkAdmission } from "../conversation-contract/chats/WorkAdmission.ts"

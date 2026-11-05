@@ -2,7 +2,7 @@ import { Vaults as VaultsModel } from "@openbot-build/domain"
 import { Bots as BotsModel } from "@openbot-build/domain"
 import { type Caller } from "@openbot-build/domain"
 import { Context, Effect } from "effect"
-import * as Check from "../../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { VaultReadFailed } from "./Readers.ts"
 
 type Vault = VaultsModel.Vault

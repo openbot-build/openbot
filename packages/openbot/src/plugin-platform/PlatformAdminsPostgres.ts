@@ -10,7 +10,7 @@ import {
 	normalizeEmail,
 	PlatformAdmins,
 	PlatformAdminsUnavailable,
-} from "../identity-contract/platform/PlatformAdmins.ts"
+} from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import { openbot_auth_account } from "@openbot-build/server-database/AuthSchema"
 import * as Db from "@openbot-build/server-database/Database"
 

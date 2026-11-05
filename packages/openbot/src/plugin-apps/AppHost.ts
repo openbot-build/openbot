@@ -10,7 +10,7 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { OutboundPolicy } from "../server-kernel/network/OutboundPolicy.ts"
+import { OutboundPolicy } from "@openbot-build/server-kernel/network/OutboundPolicy"
 import {
 	Array as Arr,
 	Context,
@@ -23,14 +23,14 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { ProtocolStores, toStoreError } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import { Governance } from "./Governance.ts"
 import type {
 	AppConnections as ConnectionDomain,
 	AppIndex,
 } from "@openbot-build/domain"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as HostApp from "./HostApp.ts"
 import { Probe } from "./Probe.ts"
 import * as Db from "@openbot-build/server-database/Database"

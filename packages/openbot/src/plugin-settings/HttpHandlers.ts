@@ -3,10 +3,10 @@ import { OpenBotApi, Settings as Api } from "@openbot-build/api"
 import { Identity } from "@openbot-build/domain"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as DefaultBot from "../conversation-contract/bots/DefaultBot.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Views from "../server-kernel/settings/Views.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Views from "@openbot-build/server-kernel/settings/Views"
 
 /** The settings of the caller. Each member reads and changes only their own. */
 export const layerMember = HttpApiBuilder.group(

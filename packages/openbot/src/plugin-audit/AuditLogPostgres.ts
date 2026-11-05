@@ -8,7 +8,7 @@ import { auditLogs } from "@openbot-build/server-database/Schema"
 import {
 	AuditLog,
 	AuditUnavailable,
-} from "../identity-contract/audit/AuditLog.ts"
+} from "@openbot-build/identity-contract/audit/AuditLog"
 import * as Db from "@openbot-build/server-database/Database"
 
 const ActorJson = Schema.fromJsonString(Caller)

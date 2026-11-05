@@ -1,10 +1,13 @@
 import { Chat, ChatStore, type Turn } from "@openbot-build/core"
 import { Execution } from "@openbot-build/domain"
 import { Effect } from "effect"
-import type { Calls } from "../server-execution/execution/Calls.ts"
+import type { Calls } from "@openbot-build/server-execution/execution/Calls"
 import type { Database } from "@openbot-build/server-database/Database"
-import type { Fence, Store } from "../server-execution/execution/Store.ts"
-import { databaseError } from "../server-kernel/database/DatabaseError.ts"
+import type {
+	Fence,
+	Store,
+} from "@openbot-build/server-execution/execution/Store"
+import { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 
 /** A Turn may write only while it holds its execution and is current in its Chat. */

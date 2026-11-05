@@ -11,7 +11,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as ToolRecords from "./ToolRecords.ts"
 
 const sameIdentity = Schema.toEquivalence(ExecutionIdentity)

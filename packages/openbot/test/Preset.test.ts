@@ -17,8 +17,8 @@ import * as Composition from "../src/app/Composition.ts"
 import * as Preset from "../src/app/Preset.ts"
 import * as PresetPlugins from "../src/app/PresetPlugins.ts"
 import { BotFeatures } from "../src/conversation-contract/chats/BotFeatures.ts"
-import { Workflows } from "../src/server-execution/execution/Workflows.ts"
-import { HttpHost } from "../src/server-kernel/errors/HttpHost.ts"
+import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
+import { HttpHost } from "@openbot-build/server-kernel/errors/HttpHost"
 import * as TestHost from "./TestHost.ts"
 
 /** What one assembly gives: its workflows, its bot features and its groups. */

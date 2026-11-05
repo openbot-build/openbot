@@ -14,8 +14,8 @@ import {
 	Scope,
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as Background from "../src/server-kernel/execution/Background.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 
 const make = Effect.gen(function* () {

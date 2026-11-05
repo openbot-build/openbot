@@ -59,7 +59,7 @@ const rules = {
 	"virtual-boundary":
 		"A server folder or server package may import only lower folders and packages, and a plugin folder must not import another plugin folder. The database package imports no other OpenBot server code. Put shared types and service tags in a contract folder.",
 	"graft-boundary":
-		"Only the plugin kit (`server-plugin`), the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
+		"Only the plugin kit (the `server-plugin` package), the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
 	"feature-lookup":
 		"Do not look for a feature with `Effect.serviceOption` or `Plugin.optional`. List the services that the code needs, so the layer or the plugin asks for them.",
 	parse: "The rules could not read this file.",
@@ -261,7 +261,9 @@ const isLookup = (parts: ReadonlyArray<string>): boolean => {
 
 const check = (file: string, program: Node) => {
 	const main = Str.endsWith("Main.ts")(file)
-	const server = /^packages\/(?:openbot|server-database)\/src\//.test(file)
+	const owner = /^packages\/([^/]+)\/src\//.exec(file)?.[1]
+	const server =
+		owner !== undefined && (owner === "openbot" || isServerPackage(owner))
 	const domain = Str.startsWith("packages/domain/src/")(file)
 	const core = coreImports(program)
 	const blind = isBlind(blindNames(program))
@@ -384,11 +386,11 @@ const httpAdapters = [
 ] as const
 
 /**
- * The folders of packages/openbot/src are the packages that they will become.
- * A server package that has left packages/openbot keeps its number here. A
- * folder or a server package may import only folders and packages with a
- * lower number. Each plugin-* folder has the plugin number, and plugins must
- * not import each other.
+ * The server packages and the folders of packages/openbot/src, in layers. A
+ * server package keeps the number of the folder that it was. A package or
+ * folder may import only packages and folders with a lower number. Each
+ * plugin-* folder has the plugin number, and plugins must not import each
+ * other.
  */
 const serverLayers: Readonly<Record<string, number>> = {
 	"server-database": 1,
@@ -409,7 +411,14 @@ const serverLayers: Readonly<Record<string, number>> = {
 }
 
 /** Server packages that left packages/openbot. Other packages use only their entry points. */
-const serverPackages = ["server-database"] as const
+const serverPackages = [
+	"server-database",
+	"server-kernel",
+	"identity-contract",
+	"server-billing",
+	"server-execution",
+	"server-plugin",
+] as const
 const isServerPackage = (name: string) =>
 	Arr.some(serverPackages, (server) => server === name)
 
@@ -429,9 +438,10 @@ const targetUnit = (
 ): Option.Option<string> => {
 	if (Str.startsWith(".")(target)) return serverUnit(resolved)
 	const entry = /^@openbot-build\/([^/]+)(?:\/|$)/.exec(target)
-	return entry !== null && isServerPackage(entry[1]!)
-		? Option.some(entry[1]!)
-		: Option.none()
+	if (entry === null) return Option.none()
+	// The openbot package holds the app, so a server package must not import it.
+	if (entry[1] === "openbot") return Option.some("app")
+	return isServerPackage(entry[1]!) ? Option.some(entry[1]!) : Option.none()
 }
 
 const breaksLayers = (
@@ -453,14 +463,19 @@ const breaksLayers = (
 	return high >= low
 }
 
+/** True for a server file that may use the HTTP contract: an HTTP adapter or the app. */
 const usesHttpContract = (file: string): boolean => {
-	const local = Str.replace("packages/openbot/src/", "")(file)
-	if (local === file) return false
+	const place = /^packages\/([^/]+)\/src\/(.+)$/.exec(file)
+	if (place === null) return false
+	const owner = place[1]!
+	const local = place[2]!
+	if (owner !== "openbot" && !isServerPackage(owner)) return false
+	if (/(?:Http[^/]*|Handlers?)\.ts$/.test(local)) return true
 	return (
-		Str.startsWith("app/")(local) ||
-		Str.startsWith("server-development/")(local) ||
-		/(?:Http[^/]*|Handlers?)\.ts$/.test(local) ||
-		Arr.some(httpAdapters, (adapter) => local === adapter)
+		owner === "openbot" &&
+		(Str.startsWith("app/")(local) ||
+			Str.startsWith("server-development/")(local) ||
+			Arr.some(httpAdapters, (adapter) => local === adapter))
 	)
 }
 
@@ -558,7 +573,8 @@ const databaseImports = /^@openbot-build\/(?:core|domain)(?:\/|$)/
 /**
  * The tests and other files of a package outside `src`. They may use the
  * source of other packages for test helpers, but a server package only
- * through its public entry.
+ * through its public entry. The tests of a server package stay inside it and
+ * keep its layer.
  */
 const entries = (
 	file: string,
@@ -572,16 +588,26 @@ const entries = (
 	return Arr.flatMap(
 		referencesOf(code),
 		({ target, line }): ReadonlyArray<Omit<Finding, "file">> => {
-			const resolved = path.normalize(path.join(path.dirname(file), target))
+			const relative = Str.startsWith(".")(target)
+			const resolved = relative
+				? path.normalize(path.join(path.dirname(file), target))
+				: target
 			const into = /^packages\/([^/]+)\//.exec(resolved)
-			return (Str.startsWith(".")(target) &&
-				into !== null &&
-				into[1] !== owner &&
-				isServerPackage(into[1]!)) ||
+			const server = isServerPackage(owner)
+			const found: ReadonlyArray<Rule> = [
+				...(server && breaksLayers(file, target, resolved)
+					? ["virtual-boundary" as const]
+					: []),
+				...((relative &&
+					into !== null &&
+					into[1] !== owner &&
+					(server || isServerPackage(into[1]!))) ||
 				inside.test(target) ||
 				unknownEntry(target, served)
-				? [{ line, rule: "public-entry", detail: target }]
-				: []
+					? ["public-entry" as const]
+					: []),
+			]
+			return Arr.map(found, (rule) => ({ line, rule, detail: target }))
 		},
 	)
 }
@@ -632,7 +658,7 @@ const boundaries = (
 					: []),
 				...(server &&
 				/^effect\/(?:cluster|rpc)(?:\/|$)/.test(target) &&
-				!/^packages\/openbot\/src\/(?:server-execution|app)\//.test(file)
+				!/^packages\/(?:server-execution\/src|openbot\/src\/app)\//.test(file)
 					? ["execution-boundary" as const]
 					: []),
 				...(owner === "openbot" &&
@@ -663,7 +689,7 @@ const boundaries = (
 
 /** The places of OpenBot that may import graft. */
 const graftPlaces = [
-	/^packages\/openbot\/src\/server-plugin\//,
+	/^packages\/server-plugin\/(?:src|test)\//,
 	/^packages\/openbot\/src\/plugin-[^/]+\/Plugin\.ts$/,
 	/^packages\/openbot\/src\/app\//,
 	/^packages\/openbot\/src\/server-development\//,

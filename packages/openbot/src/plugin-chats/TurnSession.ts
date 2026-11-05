@@ -2,7 +2,7 @@ import type {
 	Busy,
 	Failed,
 	Gone,
-} from "../server-execution/resources/Resource.ts"
+} from "@openbot-build/server-execution/resources/Resource"
 import {
 	type ChatModelInvalid,
 	Execution,
@@ -23,8 +23,8 @@ import {
 import {
 	type BillingStorageError,
 	Billing,
-} from "../server-billing/billing/Billing.ts"
-import type { Paused } from "../server-execution/execution/Admission.ts"
+} from "@openbot-build/server-billing/billing/Billing"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import {
 	type Scope,
 	Array as Arr,
@@ -43,11 +43,14 @@ import { LanguageModel, Prompt, Toolkit } from "effect/ai"
 import * as Hex from "effect/encoding/Hex"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as ChatModels from "../conversation-contract/chats/ChatModels.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
-import { CurrentAttribution } from "../server-billing/billing/MeteredModel.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { CurrentAttribution } from "@openbot-build/server-billing/billing/MeteredModel"
 import * as Db from "@openbot-build/server-database/Database"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import { ExecutionFeatures } from "./ExecutionFeatures.ts"

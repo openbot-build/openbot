@@ -107,7 +107,7 @@ Fehlerprüfungen im nächsten Abschnitt gelten für diese Funktionen.
 | [Computer](/de/computers) und Connectors                                                         | `E/connect-computers/Computers.test.ts`, `E/connect-computers/Connectors.test.ts`, `E/connect-computers/ComputerQueries.test.ts`, `S/ResourceTransport.test.ts`, `packages/computer/test/Sessions.test.ts` | Kopplung, nach Ressourcenrechten gefilterte Listen, Terminalsitzungen, Aufrufe beim Besitzer, geordnete Ausgabe und unbekannte interaktive Ergebnisse.                                                             |
 | [Live-Sitzungen](/de/live)                                                                       | `E/live-chat/Live.test.ts`, `S/LiveConnections.test.ts`, `S/OpenAiRealtime.test.ts`, `packages/core/test/LiveDriver.test.ts`                                                                               | Anbieterereignisse, Live-Werkzeuge, Schließen der Verbindung, Abbruch und Verlust einer Live-Verbindung.                                                                                                           |
 | [Dateien](/de/files)                                                                             | `E/files/Files.test.ts`, `S/FileTasks.test.ts`, `S/S3.test.ts`                                                                                                                                             | Upload, Modellanhänge, Objektverweise, Aufbewahrung, atomare Löschaufgaben und Ablehnung alter Ausführer.                                                                                                          |
-| [Vaults](/de/vaults)                                                                             | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `S/SecretFiles.test.ts`                                                                                                     | Erlaubte Felder, verschlüsselte Werte, Eigentümer- und Token-Grenzen, fehlende Geheimnisse und Auflösung erst an der Aufrufgrenze.                                                                                 |
+| [Vaults](/de/vaults)                                                                             | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `packages/server-kernel/test/SecretFiles.test.ts`                                                                           | Erlaubte Felder, verschlüsselte Werte, Eigentümer- und Token-Grenzen, fehlende Geheimnisse und Auflösung erst an der Aufrufgrenze.                                                                                 |
 | [Modelle](/de/models)                                                                            | `E/use-models/Cloudflare.test.ts`, `S/OpenAi.test.ts`, `S/Anthropic.test.ts`, `S/OpenAiCompat.test.ts`, `S/ModelRegistry.test.ts`                                                                          | Anbieterformate, Modellauswahl, Streams, geänderte Einstellungen und der optionale echte Modellaufruf. Dieser Test braucht seine ausdrückliche Umgebungseinstellung.                                               |
 | [Nutzung und Abrechnung](/de/usage)                                                              | `E/bot-work/Billing.test.ts`, `S/BillingPostgres.test.ts`, `S/BillingUnknown.test.ts`, `S/MeteredModel.test.ts`                                                                                            | Preise, Guthaben, Budgets, gemeinsame Reservierungen, bestätigte Abrechnung, unbekannte Nutzung und späte Belege.                                                                                                  |
 | [Organisationen](/de/organization), [SSO](/de/sso) und [Plattformeinstellungen](/de/platform)    | `E/organizations/Organization.test.ts`, `E/sign-in/Oidc.test.ts`, `E/admin-settings/AdminApiE2E.test.ts`, `E/admin-settings/PlatformApi.test.ts`                                                           | Mitgliedschaft, Einladungen, getrennte Konten, Anmeldung, Geheimnishinweise und Verwaltung mit Cookie oder Token.                                                                                                  |
@@ -183,11 +183,21 @@ Ausführungsengine oder Wiederaufnahmeschleife. Prüfen Sie neue Worker, Timer,
 Sperren und RPC-Handler gegen das gemeinsame Design.
 
 Zwei weitere Regeln schützen den Plugin-Host. `graft-boundary` lässt nur das
-Plugin-Kit, die Datei `Plugin.ts` jedes Plugin-Ordners, die App, den
-Entwicklungsserver und die Tests graft importieren. Sie verlangt auch den Namen
-`GraftPlugin` für das `Plugin` von graft. `feature-lookup` verbietet
-Server-Code, eine Funktion mit `Effect.serviceOption` oder `Plugin.optional` zu
-suchen. Der Code nennt stattdessen die Dienste, die er braucht.
+Plugin-Kit (das Paket `server-plugin`), die Datei `Plugin.ts` jedes
+Plugin-Ordners, die App, den Entwicklungsserver und die Tests graft importieren.
+Sie verlangt auch den Namen `GraftPlugin` für das `Plugin` von graft.
+`feature-lookup` verbietet Server-Code, eine Funktion mit `Effect.serviceOption`
+oder `Plugin.optional` zu suchen. Der Code nennt stattdessen die Dienste, die er
+braucht.
+
+`virtual-boundary` hält den Server-Code in Schichten. Von unten nach oben:
+`server-database`, `server-kernel`, `identity-contract`, `server-billing`,
+`server-execution`, die anderen Vertragsordner und `model-providers` in
+`packages/openbot/src`, `server-plugin`, die Plugin-Ordner, `server-upgrade`,
+`app` und `server-development`. Code darf nur tiefere Schichten importieren.
+Plugin-Ordner dürfen sich nicht gegenseitig importieren. `public-entry` lässt
+andere Pakete ein Server-Paket nur über einen Schlüssel von `exports` in seiner
+`package.json` nutzen. Das gilt auch für Tests.
 
 ## Prüfungen des Datenumzugs
 

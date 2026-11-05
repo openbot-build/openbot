@@ -4,11 +4,11 @@ import { type Caller } from "@openbot-build/domain"
 import { Array as Arr, Clock, Effect, Layer, Option, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Hex } from "effect/encoding"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import {
 	botResource,
 	rootOf,
-} from "../identity-contract/authorization/Resources.ts"
+} from "@openbot-build/identity-contract/authorization/Resources"
 import {
 	BotRecords,
 	type Keys,

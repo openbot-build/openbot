@@ -311,7 +311,8 @@ Diese Prüfung prüft auch Modulgrenzen und Typ-Imports. `domain` darf `core`
 nutzen, aber keine Adapter für HTTP, SQL oder Workflows. `core` und `protocol`
 bleiben frei von Produktpaketen. Ein Modul in `openbot` darf den Ordner `app`
 für den Aufbau nicht importieren. Pakete nutzen einander über öffentliche
-Eingänge.
+Eingänge. Ein Server-Paket wird nur über die Schlüssel von `exports` in seiner
+`package.json` genutzt.
 
 Geschäftscode und Speicher dürfen keine HTTP-Verträge importieren. Das gilt auch
 für PostgreSQL-Adapter, Einstellungen, Modelle, Konten, Rollen und SSO. Diese

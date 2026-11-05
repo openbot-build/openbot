@@ -20,13 +20,13 @@ import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import {
 	organizationScope,
 	type Scope,
-} from "../src/server-kernel/settings/Documents.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
-import * as SettingsPostgres from "../src/server-kernel/settings/SettingsPostgres.ts"
+} from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as SettingsPostgres from "@openbot-build/server-kernel/settings/SettingsPostgres"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
-import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
+import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
 
 /** Starts a new database, and gives the layer of a connection pool to it. */
 const startDatabase = Effect.gen(function* () {

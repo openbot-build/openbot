@@ -1,0 +1,72 @@
+{
+	"name": "@openbot-build/server-kernel",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The parts of the OpenBot server that every plugin shares: errors, secrets, settings, configuration, network rules, background work, and the HTTP host",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./apps/DomainControl": "./dist/apps/DomainControl.js",
+		"./auth/Configuration": "./dist/auth/Configuration.js",
+		"./auth/Model": "./dist/auth/Model.js",
+		"./configuration/Configuration": "./dist/configuration/Configuration.js",
+		"./configuration/EnvironmentConfiguration": "./dist/configuration/EnvironmentConfiguration.js",
+		"./configuration/InstanceSettings": "./dist/configuration/InstanceSettings.js",
+		"./configuration/SecretFiles": "./dist/configuration/SecretFiles.js",
+		"./database/Check": "./dist/database/Check.js",
+		"./database/DatabaseError": "./dist/database/DatabaseError.js",
+		"./errors/Failures": "./dist/errors/Failures.js",
+		"./errors/HttpBoundary": "./dist/errors/HttpBoundary.js",
+		"./errors/HttpHost": "./dist/errors/HttpHost.js",
+		"./errors/Records": "./dist/errors/Records.js",
+		"./errors/Report": "./dist/errors/Report.js",
+		"./errors/Reporting": "./dist/errors/Reporting.js",
+		"./errors/Snapshot": "./dist/errors/Snapshot.js",
+		"./execution/Background": "./dist/execution/Background.js",
+		"./imported/GrantUses": "./dist/imported/GrantUses.js",
+		"./imported/LegacyV1": "./dist/imported/LegacyV1.js",
+		"./imported/Progress": "./dist/imported/Progress.js",
+		"./network/OutboundGuard": "./dist/network/OutboundGuard.js",
+		"./network/OutboundPolicy": "./dist/network/OutboundPolicy.js",
+		"./secrets/Compare": "./dist/secrets/Compare.js",
+		"./secrets/Secrets": "./dist/secrets/Secrets.js",
+		"./settings/Documents": "./dist/settings/Documents.js",
+		"./settings/Platform": "./dist/settings/Platform.js",
+		"./settings/Settings": "./dist/settings/Settings.js",
+		"./settings/SettingsPostgres": "./dist/settings/SettingsPostgres.js",
+		"./settings/Views": "./dist/settings/Views.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2",
+		"undici": "8.12.3"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/server-kernel"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

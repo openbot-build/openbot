@@ -4,7 +4,7 @@ import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { ConnectionsApi as Api, Identity } from "@openbot-build/api"
 import type { Caller } from "@openbot-build/domain"
-import { Tokens } from "../src/identity-contract/auth/Tokens.ts"
+import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import {
 	AppConnections,
 	CatalogDiscovery,
@@ -37,7 +37,7 @@ import { eq } from "drizzle-orm"
 import { appRecords } from "@openbot-build/server-database/Schema"
 import * as StoredConnections from "../src/apps-contract/apps/StoredConnections.ts"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Fixture from "./AppFixture.ts"

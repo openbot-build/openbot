@@ -295,7 +295,8 @@ provide their own Layers.
 The same check also tests module boundaries, including type imports. `domain`
 may use `core`, but not HTTP, SQL, or workflow adapters. `core` and `protocol`
 stay free of product packages. A feature in `openbot` must not import the `app`
-assembly folder. Packages use each other through public entries.
+assembly folder. Packages use each other through public entries. A server
+package is used only through the keys of `exports` in its `package.json`.
 
 Business code and storage cannot import HTTP contracts. This includes PostgreSQL
 adapters, settings, models, accounts, roles, and SSO. These modules use domain

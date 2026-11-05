@@ -1,7 +1,7 @@
 import { PgClient } from "@effect/sql-pg"
 import { Effect, Option } from "effect"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Views from "../server-kernel/settings/Views.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Views from "@openbot-build/server-kernel/settings/Views"
 
 /** A server operator can read this snapshot without a user session. It has no secret values. */
 export const inspect = Effect.gen(function* () {

@@ -1,4 +1,4 @@
-import { Records } from "../server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import {
 	Bot,
 	type Chat,
@@ -22,16 +22,16 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import * as Background from "../server-kernel/execution/Background.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
 import { Answer, Gate } from "../conversation-contract/capabilities/Gate.ts"
 import { Work } from "../conversation-contract/capabilities/Work.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import { OpenWork } from "../conversation-contract/chats/OpenWork.ts"
 import * as Plans from "./Plans.ts"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import { ReminderCommands } from "./ReminderCommands.ts"
-import type { Fence } from "../server-execution/execution/Store.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
 import { toolJson } from "../tools-contract/plugins/ToolJson.ts"
 

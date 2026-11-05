@@ -1,8 +1,8 @@
 import { PgClient } from "@effect/sql-pg"
 import { BotMemory, Bots } from "@openbot-build/domain"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import type { Keys } from "../conversation-contract/bots/BotRecords.ts"
 
 const unavailable = Failures.replace(

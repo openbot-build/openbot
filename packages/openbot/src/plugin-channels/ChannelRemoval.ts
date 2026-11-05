@@ -6,7 +6,7 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	Authorization,
 	Caller,
@@ -25,12 +25,12 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	organizationKey,
 	segment,
-} from "../identity-contract/audit/Resources.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
+} from "@openbot-build/identity-contract/audit/Resources"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	channels,
@@ -39,10 +39,10 @@ import {
 	channelConversations,
 	executions,
 } from "@openbot-build/server-database/Schema"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
-import type { End } from "../server-execution/execution/Program.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import type { End } from "@openbot-build/server-execution/execution/Program"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 
 export const workflowName = ChannelAdmission.removalWorkflow

@@ -5,15 +5,18 @@ import {
 	Execution,
 	ToolExecution,
 } from "@openbot-build/domain"
-import type { Check } from "../../server-execution/execution/Admission.ts"
-import * as DecisionWait from "../../server-execution/execution/DecisionWait.ts"
+import type { Check } from "@openbot-build/server-execution/execution/Admission"
+import * as DecisionWait from "@openbot-build/server-execution/execution/DecisionWait"
 import { type Definition } from "../../tools-contract/chats/ToolDefinitions.ts"
 import * as ToolRecords from "./ToolRecords.ts"
 import { Chat, type Operations } from "@openbot-build/core"
 import { Context, Duration, Effect, Schema } from "effect"
 import { Prompt } from "effect/ai"
-import { type Authorize } from "../../server-execution/execution/Engine.ts"
-import { type Fence, type Key } from "../../server-execution/execution/Store.ts"
+import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
+import {
+	type Fence,
+	type Key,
+} from "@openbot-build/server-execution/execution/Store"
 
 export const End = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("completed") }),

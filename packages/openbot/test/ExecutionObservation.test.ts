@@ -1,4 +1,4 @@
-import * as ErrorRecords from "../src/server-kernel/errors/Records.ts"
+import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -19,9 +19,9 @@ import {
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Observation from "../src/server-execution/execution/Observation.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

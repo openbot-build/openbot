@@ -1,7 +1,7 @@
 /** The audit plugin: the audit log of each organization. */
 import { PgClient } from "@effect/sql-pg"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import * as Feature from "../server-plugin/Feature.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as AuditLogPostgres from "./AuditLogPostgres.ts"
 
 export const id = "audit"

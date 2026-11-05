@@ -1,7 +1,7 @@
 import { Indexing } from "@openbot-build/protocol"
 import { Effect, Layer } from "effect"
 import * as Work from "../src/plugin-apps/IndexWork.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as Governance from "../src/plugin-apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 

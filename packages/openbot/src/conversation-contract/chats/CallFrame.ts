@@ -6,7 +6,7 @@ import {
 	Store,
 	storage,
 	type Fence,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as ChatHost from "./ChatHost.ts"
 import * as StoredChats from "./StoredChats.ts"
 import * as ToolOrigins from "./ToolOrigins.ts"

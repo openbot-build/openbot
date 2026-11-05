@@ -15,12 +15,12 @@ import {
 	String as Str,
 } from "effect"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Admission from "../src/server-execution/execution/Admission.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
-import * as RunScope from "../src/server-execution/execution/RunScope.ts"
+import * as Admission from "@openbot-build/server-execution/execution/Admission"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
 import { WorkflowEngine } from "effect/workflow"
-import * as Permits from "../src/server-execution/execution/Permits.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Permits from "@openbot-build/server-execution/execution/Permits"
+import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 

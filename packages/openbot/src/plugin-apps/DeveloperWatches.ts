@@ -5,14 +5,14 @@ import {
 	transactionFailures,
 	type Key,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type Developers,
 	Execution,
 	ServiceId,
 	type ServiceIdentity,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import { type SqlError, SqlClient } from "effect/sql"
 import { and, eq } from "drizzle-orm"

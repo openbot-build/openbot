@@ -3,13 +3,13 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
 import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import {
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { DelegationCommands, noticeWorkflowName } from "./DelegationCommands.ts"
 
 const Input = Schema.Struct({ delegationExecutionId: Execution.Id })

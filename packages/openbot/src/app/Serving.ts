@@ -11,10 +11,10 @@ import { Effect, Layer, Option, Result } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import * as PlatformAdminsPostgres from "../plugin-platform/PlatformAdminsPostgres.ts"
 import * as Setup from "../plugin-platform/Setup.ts"
-import * as AuthConfiguration from "../server-kernel/auth/Configuration.ts"
-import type { Configuration } from "../server-kernel/auth/Model.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as AuthConfiguration from "@openbot-build/server-kernel/auth/Configuration"
+import type { Configuration } from "@openbot-build/server-kernel/auth/Model"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 /** The answer of every route except `/health` while the platform has no settings. */
 const setupRequired = HttpServerResponse.schemaJson(Api.SetupRequired)(

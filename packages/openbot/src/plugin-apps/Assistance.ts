@@ -6,7 +6,7 @@ import { Tool } from "effect/ai"
 import { Connections } from "./Connections.ts"
 import type { Entry } from "./AppTools.ts"
 import type { Error as IndexError, PublicIndex } from "./Index.ts"
-import type * as Report from "../server-kernel/errors/Report.ts"
+import type * as Report from "@openbot-build/server-kernel/errors/Report"
 
 /** The names of the assistance tools. A name gets a suffix when another tool already uses it. */
 export const names = {

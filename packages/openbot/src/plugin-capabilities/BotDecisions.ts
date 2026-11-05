@@ -12,7 +12,7 @@ import {
 	Schema,
 } from "effect"
 import { Digest } from "effect/crypto"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
@@ -24,7 +24,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { hash } from "../conversation-contract/capabilities/Capability.ts"
 import { CapabilityAccess } from "./CapabilityAccess.ts"
 import {

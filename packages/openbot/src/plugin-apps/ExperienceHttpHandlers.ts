@@ -1,5 +1,5 @@
 import { ResetCommands } from "./ResetCommands.ts"
-import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
 import { OpenBotApi } from "@openbot-build/api"
 
 import { Identity } from "@openbot-build/domain"

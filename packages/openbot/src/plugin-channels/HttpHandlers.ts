@@ -1,6 +1,6 @@
 import { ChannelRemoval } from "./ChannelRemoval.ts"
 import { ChannelConfig } from "./ChannelConfig.ts"
-import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
 import {
 	ChannelsApi,
 	OpenBotApi,
@@ -10,20 +10,20 @@ import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Clock, Effect, Option, type Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	organizationKey,
 	segment,
-} from "../identity-contract/audit/Resources.ts"
+} from "@openbot-build/identity-contract/audit/Resources"
 import {
 	Channels,
 	type StoredChannel,
 } from "../conversation-contract/channels/Channels.ts"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 const channelKey = (organizationId: string, id: string) =>
 	organizationKey(organizationId) + ".channel." + segment(id)

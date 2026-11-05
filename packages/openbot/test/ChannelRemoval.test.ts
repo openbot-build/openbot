@@ -21,7 +21,7 @@ import {
 import {
 	AuditLog,
 	type Entry,
-} from "../src/identity-contract/audit/AuditLog.ts"
+} from "@openbot-build/identity-contract/audit/AuditLog"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
 import { ChannelEvent, Target } from "../src/plugin-channels/Channel.ts"
 import * as Admission from "../src/plugin-channels/ChannelAdmission.ts"
@@ -36,10 +36,10 @@ import {
 	channelInbox,
 	channelDeliveries,
 } from "@openbot-build/server-database/Schema"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Observation from "../src/server-execution/execution/Observation.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Postgres from "./PostgresTest.ts"
 import * as Wait from "./Wait.ts"
 

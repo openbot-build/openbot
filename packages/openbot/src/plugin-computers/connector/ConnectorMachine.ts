@@ -2,7 +2,7 @@ import type { ExecutionIdentity } from "@openbot-build/domain"
 import { Computers as ComputerData } from "@openbot-build/domain"
 
 import { Duration, Effect, Schema } from "effect"
-import * as Failures from "../../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { ComputerCallFailed, Machine } from "../Computer.ts"
 import type { Connectors } from "./Connectors.ts"
 

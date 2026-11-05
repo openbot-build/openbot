@@ -12,7 +12,7 @@ import {
 } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as Fixture from "./ExecutionPermitFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

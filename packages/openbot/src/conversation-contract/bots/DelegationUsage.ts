@@ -19,7 +19,7 @@ import {
 	Store,
 	storage,
 	type Key,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 
 const Task = Schema.Struct({ chat: Chat.Id, host: ChatHost.ChatHostState })
 type Owned = {

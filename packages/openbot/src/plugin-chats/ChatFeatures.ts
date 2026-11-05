@@ -12,18 +12,18 @@ import {
 	type Scope,
 } from "effect"
 import { Prompt, type LanguageModel, type Tool } from "effect/ai"
-import * as Background from "../server-kernel/execution/Background.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 import { Files } from "../apps-contract/files/Files.ts"
 import { withFiles } from "../apps-contract/files/ModelFiles.ts"
 import type { Entry } from "../apps-contract/apps/WorkflowTools.ts"
 import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
-import type { Fence } from "../server-execution/execution/Store.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import type { Definition } from "../tools-contract/chats/ToolDefinitions.ts"
 import * as Assembly from "./Assembly.ts"
 import { names as executionToolNames } from "./ToolControls.ts"
-import { operationsOf } from "../server-kernel/settings/Documents.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { operationsOf } from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import type {
 	InputCommands,

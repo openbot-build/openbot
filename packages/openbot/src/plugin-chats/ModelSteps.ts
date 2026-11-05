@@ -1,8 +1,8 @@
 import {
 	type BillingStorageError,
 	Billing,
-} from "../server-billing/billing/Billing.ts"
-import type { Paused } from "../server-execution/execution/Admission.ts"
+} from "@openbot-build/server-billing/billing/Billing"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import {
 	type Provider,
 	type Model,
@@ -13,7 +13,7 @@ import {
 } from "@openbot-build/core"
 import * as ToolDefinitions from "../tools-contract/chats/ToolDefinitions.ts"
 import { Execution } from "@openbot-build/domain"
-import { CurrentAttribution } from "../server-billing/billing/MeteredModel.ts"
+import { CurrentAttribution } from "@openbot-build/server-billing/billing/MeteredModel"
 import * as ModelCalls from "../models-contract/models/ModelCalls.ts"
 import {
 	Array as Arr,
@@ -29,10 +29,13 @@ import {
 } from "effect"
 import { Digest } from "effect/crypto"
 import { LanguageModel, Prompt, Tool, Toolkit, type Response } from "effect/ai"
-import { Records, category } from "../server-kernel/errors/Records.ts"
+import { Records, category } from "@openbot-build/server-kernel/errors/Records"
 import { Hex } from "effect/encoding"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 

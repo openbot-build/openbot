@@ -14,9 +14,9 @@ import {
 } from "effect"
 import { HttpClient, HttpRouter, HttpServerResponse } from "effect/http"
 import { Execution } from "@openbot-build/domain"
-import { Records } from "../src/server-kernel/errors/Records.ts"
-import * as ErrorReporting from "../src/server-kernel/errors/Reporting.ts"
-import * as EnvironmentConfiguration from "../src/server-kernel/configuration/EnvironmentConfiguration.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as ErrorReporting from "@openbot-build/server-kernel/errors/Reporting"
+import * as EnvironmentConfiguration from "@openbot-build/server-kernel/configuration/EnvironmentConfiguration"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 
 const records = Layer.succeed(Records, {

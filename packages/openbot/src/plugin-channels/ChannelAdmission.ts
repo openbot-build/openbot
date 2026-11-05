@@ -6,7 +6,7 @@ import { channels, executions } from "@openbot-build/server-database/Schema"
 import {
 	storage,
 	transactionFailures,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 
 import { Channels } from "../conversation-contract/channels/Channels.ts"
 

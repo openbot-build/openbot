@@ -1,14 +1,14 @@
 import type { Mail as MailModel } from "@openbot-build/domain"
 import { DateTime, Effect, Layer, Option, Redacted } from "effect"
-import * as Report from "../server-kernel/errors/Report.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import { bindings } from "../server-kernel/settings/Platform.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { bindings } from "@openbot-build/server-kernel/settings/Platform"
 import * as Templates from "./Templates.ts"
-import { Transport } from "../identity-contract/mail/Transport.ts"
-import { Mail } from "../identity-contract/mail/Mail.ts"
-export { Mail } from "../identity-contract/mail/Mail.ts"
-export type { Invitation } from "../identity-contract/mail/Mail.ts"
+import { Transport } from "@openbot-build/identity-contract/mail/Transport"
+import { Mail } from "@openbot-build/identity-contract/mail/Mail"
+export { Mail } from "@openbot-build/identity-contract/mail/Mail"
+export type { Invitation } from "@openbot-build/identity-contract/mail/Mail"
 
 export const layer = Layer.effect(
 	Mail,

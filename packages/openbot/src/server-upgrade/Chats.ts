@@ -2,12 +2,12 @@ import { ChatState, Item } from "@openbot-build/core"
 import { Array as Arr, Effect, HashMap, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Authority from "../server-execution/imported/Authority.ts"
-import * as Imported from "../server-execution/imported/Executions.ts"
-import * as Legacy from "../server-execution/imported/LegacyChats.ts"
-import * as Version from "../server-kernel/imported/LegacyV1.ts"
-import * as Progress from "../server-kernel/imported/Progress.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Authority from "@openbot-build/server-execution/imported/Authority"
+import * as Imported from "@openbot-build/server-execution/imported/Executions"
+import * as Legacy from "@openbot-build/server-execution/imported/LegacyChats"
+import * as Version from "@openbot-build/server-kernel/imported/LegacyV1"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
 
 const json = Schema.fromJsonString(Schema.Json)
 const encode = Schema.encodeEffect(json)

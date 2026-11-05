@@ -1,8 +1,8 @@
 import { Authorization, Caller, Execution } from "@openbot-build/domain"
 import { Effect, Option, Schema } from "effect"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { Store, storage } from "../server-execution/execution/Store.ts"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { Store, storage } from "@openbot-build/server-execution/execution/Store"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import { Channels } from "../conversation-contract/channels/Channels.ts"
 
 const sameCaller = Schema.toEquivalence(Caller)

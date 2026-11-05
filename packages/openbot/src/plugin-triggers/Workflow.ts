@@ -1,15 +1,18 @@
 import { Execution } from "@openbot-build/domain"
 import { Effect, Layer, Option, Schema } from "effect"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import { Runner } from "../server-execution/execution/Runner.ts"
-import { RunScope } from "../server-execution/execution/RunScope.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import { Runner } from "@openbot-build/server-execution/execution/Runner"
+import { RunScope } from "@openbot-build/server-execution/execution/RunScope"
 import {
 	Store,
 	storage,
 	type Key,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as Fire from "./Fire.ts"
 import { Triggers, ScheduleInput, workflowName } from "./Triggers.ts"
 

@@ -16,7 +16,22 @@
 			"path": "../core"
 		},
 		{
+			"path": "../identity-contract"
+		},
+		{
+			"path": "../server-billing"
+		},
+		{
 			"path": "../server-database"
+		},
+		{
+			"path": "../server-execution"
+		},
+		{
+			"path": "../server-kernel"
+		},
+		{
+			"path": "../server-plugin"
 		}
 	]
 }

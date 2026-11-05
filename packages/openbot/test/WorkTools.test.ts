@@ -19,9 +19,9 @@ import { OpenWork } from "../src/conversation-contract/chats/OpenWork.ts"
 import { ReminderCommands } from "../src/plugin-work/ReminderCommands.ts"
 import { Execution } from "@openbot-build/domain"
 import * as ToolApprovals from "./ToolApprovals.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import * as WorkTools from "../src/plugin-work/WorkTools.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { bot } from "./BotFixture.ts"
 
 const chat = Chat.Id.make("chat_1")

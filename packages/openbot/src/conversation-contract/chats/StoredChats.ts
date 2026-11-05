@@ -10,7 +10,7 @@ import {
 import { fileIdsIn } from "../../apps-contract/files/Refs.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import { chatHostId } from "./ChatHost.ts"
-import { databaseError } from "../../server-kernel/database/DatabaseError.ts"
+import { databaseError } from "@openbot-build/server-kernel/database/DatabaseError"
 import { decode } from "./ChatEncoding.ts"
 
 /** The Chats of each namespace, kept in Postgres. */

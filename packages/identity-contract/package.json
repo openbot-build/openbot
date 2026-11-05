@@ -1,0 +1,57 @@
+{
+	"name": "@openbot-build/identity-contract",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The shared service tags and types of sign-in, access, roles, organizations, mail, SSO, and the audit log in the OpenBot server",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./access/Access": "./dist/access/Access.js",
+		"./audit/AuditLog": "./dist/audit/AuditLog.js",
+		"./audit/Resources": "./dist/audit/Resources.js",
+		"./auth/Auth": "./dist/auth/Auth.js",
+		"./auth/SessionHttp": "./dist/auth/SessionHttp.js",
+		"./auth/Tokens": "./dist/auth/Tokens.js",
+		"./authorization/Check": "./dist/authorization/Check.js",
+		"./authorization/Escalation": "./dist/authorization/Escalation.js",
+		"./authorization/Resources": "./dist/authorization/Resources.js",
+		"./authorization/Roles": "./dist/authorization/Roles.js",
+		"./authorization/Sql": "./dist/authorization/Sql.js",
+		"./mail/Mail": "./dist/mail/Mail.js",
+		"./mail/Transport": "./dist/mail/Transport.js",
+		"./organization/Organization": "./dist/organization/Organization.js",
+		"./platform/PlatformAdmins": "./dist/platform/PlatformAdmins.js",
+		"./sso/Sso": "./dist/sso/Sso.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@nmnmcc/ability": "3.2.0",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/identity-contract"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

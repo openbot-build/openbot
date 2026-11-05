@@ -4,7 +4,7 @@ import { HttpClient } from "effect/http"
 import type { Provider } from "./Computer.ts"
 import * as DaytonaProvider from "./daytona/DaytonaProvider.ts"
 import * as E2bProvider from "./e2b/E2bProvider.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 
 /** Builds the driver of a Computer provider from its secrets. Tests give their own. */
 export class Drivers extends Context.Service<

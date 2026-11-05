@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { ChatConflict } from "@openbot-build/domain"
 import { Chat, ChatStore } from "@openbot-build/core"
 import { Array as Arr, Cause, Effect, Exit, Logger, Schema } from "effect"
-import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
+import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
 import * as ChatErrors from "../src/conversation-contract/chats/ChatErrors.ts"
 
 it.effect(

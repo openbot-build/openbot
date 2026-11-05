@@ -14,7 +14,7 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import * as Composition from "../src/app/Composition.ts"
-import * as Feature from "../src/server-plugin/Feature.ts"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 
 class Given extends Context.Service<Given, { readonly value: string }>()(
 	"@openbot-build/openbot/test/Settle.test/Given",

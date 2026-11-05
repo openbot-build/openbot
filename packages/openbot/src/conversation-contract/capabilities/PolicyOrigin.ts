@@ -15,7 +15,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 
 /** A limit check is a control operation. It is not a model tool call. */
 export const Control = Domain.LimitControl

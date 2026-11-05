@@ -7,7 +7,7 @@ import {
 	developerProofs,
 } from "@openbot-build/server-database/Schema"
 import * as Db from "@openbot-build/server-database/Database"
-import { transactionFailures } from "../../server-execution/execution/Store.ts"
+import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
 
 /**
  * The Developer Center tables in Postgres: the codecs between rows and product

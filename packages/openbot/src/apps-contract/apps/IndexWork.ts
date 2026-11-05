@@ -1,10 +1,10 @@
 import { type PlatformError, Context, Effect, Option, Schema } from "effect"
-import type { SecretStorageError } from "../../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	type ServiceExecution,
 	type Key,
 	type Fence,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { AppIndex, Execution } from "@openbot-build/domain"
 import { Discovery, Index, Indexing } from "@openbot-build/protocol"
 import { appIndexJobs } from "@openbot-build/server-database/Schema"

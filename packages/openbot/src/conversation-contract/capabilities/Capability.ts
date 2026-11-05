@@ -11,7 +11,7 @@ import {
 	computerProviderResource,
 	computerResource,
 	rootOf,
-} from "../../identity-contract/authorization/Resources.ts"
+} from "@openbot-build/identity-contract/authorization/Resources"
 
 export type Capability = BotsApi.Capability
 

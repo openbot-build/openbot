@@ -1,9 +1,9 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
 import { Authorization, type Settings as Limits } from "@openbot-build/domain"
 import { Effect, Layer } from "effect"
-import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
-import * as TokenThrottle from "../src/server-billing/billing/TokenThrottle.ts"
+import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as TokenThrottle from "@openbot-build/server-billing/billing/TokenThrottle"
 
 export const none: Limits.TokenRateLimits = {
 	organization: null,

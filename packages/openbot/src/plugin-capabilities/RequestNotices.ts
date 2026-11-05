@@ -12,13 +12,13 @@ import {
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import { type Authorize } from "../server-execution/execution/Engine.ts"
+import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
 import {
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import { approvedCallId } from "../conversation-contract/capabilities/Approvals.ts"
 import { describe } from "../conversation-contract/capabilities/Capability.ts"

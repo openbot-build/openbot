@@ -18,7 +18,7 @@ import { TestClock } from "effect/testing"
 import { BotRecords } from "../src/conversation-contract/bots/BotRecords.ts"
 import * as Judge from "../src/plugin-capabilities/Judge.ts"
 import { AnyModel } from "../src/models-contract/models/ModelRegistry.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { bot } from "./BotFixture.ts"
 
 const rule = (id: string, text: string): BotsApi.Rule => ({

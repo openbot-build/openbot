@@ -14,8 +14,8 @@ import {
 } from "effect"
 import { Base64 } from "effect/encoding"
 import { Socket } from "effect/socket"
-import * as Failures from "../../../server-kernel/errors/Failures.ts"
-import * as Report from "../../../server-kernel/errors/Report.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 import type { LiveBackend } from "../../../models-contract/models/LiveBackends.ts"
 
 /**

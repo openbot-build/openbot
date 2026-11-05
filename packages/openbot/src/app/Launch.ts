@@ -3,11 +3,11 @@ import { Array as Arr, Effect, Layer } from "effect"
 import type { Digest, SecureRandom } from "effect/crypto"
 import { Command } from "effect/cli"
 import { FetchHttpClient, type HttpClient } from "effect/http"
-import type * as Configuration from "../server-kernel/configuration/Configuration.ts"
-import * as EnvironmentConfiguration from "../server-kernel/configuration/EnvironmentConfiguration.ts"
-import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
-import * as OutboundGuard from "../server-kernel/network/OutboundGuard.ts"
-import * as ErrorReporting from "../server-kernel/errors/Reporting.ts"
+import type * as Configuration from "@openbot-build/server-kernel/configuration/Configuration"
+import * as EnvironmentConfiguration from "@openbot-build/server-kernel/configuration/EnvironmentConfiguration"
+import * as SecretFiles from "@openbot-build/server-kernel/configuration/SecretFiles"
+import * as OutboundGuard from "@openbot-build/server-kernel/network/OutboundGuard"
+import * as ErrorReporting from "@openbot-build/server-kernel/errors/Reporting"
 
 /**
  * The platform services that a server of `server` and `main` can use: the Node

@@ -29,22 +29,22 @@ import {
 	Toolkit,
 } from "effect/ai"
 import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
-import * as Check from "../../identity-contract/authorization/Check.ts"
-import { Records, category } from "../../server-kernel/errors/Records.ts"
-import * as Recovery from "../../server-execution/execution/Recovery.ts"
-import * as Send from "../../server-execution/execution/Send.ts"
-import { Workflows } from "../../server-execution/execution/Workflows.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { Records, category } from "@openbot-build/server-kernel/errors/Records"
+import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
+import * as Send from "@openbot-build/server-execution/execution/Send"
+import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
 import {
 	Store,
 	type Fence,
 	type Key,
-} from "../../server-execution/execution/Store.ts"
-import { Directory } from "../../server-execution/resources/Directory.ts"
-import * as Resource from "../../server-execution/resources/Resource.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import { Directory } from "@openbot-build/server-execution/resources/Directory"
+import * as Resource from "@openbot-build/server-execution/resources/Resource"
 import * as Db from "@openbot-build/server-database/Database"
 import * as StoredChats from "../../conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../../conversation-contract/chats/ChatHost.ts"
-import { Transport } from "../../server-execution/resources/Transport.ts"
+import { Transport } from "@openbot-build/server-execution/resources/Transport"
 
 const ToolDefinition = Schema.Struct({
 	name: Schema.String,

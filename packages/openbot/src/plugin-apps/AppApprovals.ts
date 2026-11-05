@@ -5,8 +5,8 @@ import {
 	appInvocations,
 } from "@openbot-build/server-database/Schema"
 import * as Db from "@openbot-build/server-database/Database"
-import { storage } from "../server-execution/execution/Store.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { storage } from "@openbot-build/server-execution/execution/Store"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import * as StoredInvocations from "../apps-contract/apps/StoredInvocations.ts"
 import { AppApprovals } from "../apps-contract/apps/AppApprovals.ts"

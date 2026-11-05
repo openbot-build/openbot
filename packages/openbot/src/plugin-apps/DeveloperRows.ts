@@ -10,7 +10,7 @@ import {
 	developerTestFlows,
 	developerTests,
 } from "@openbot-build/server-database/Schema"
-import { transactionFailures } from "../server-execution/execution/Store.ts"
+import { transactionFailures } from "@openbot-build/server-execution/execution/Store"
 import {
 	type Database,
 	stored,

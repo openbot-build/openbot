@@ -9,7 +9,7 @@ import { type Capability } from "./Capability.ts"
 import type { Ask } from "./Requests.ts"
 import { Work } from "./Work.ts"
 import type * as PolicyOrigin from "./PolicyOrigin.ts"
-import { type Fence } from "../../server-execution/execution/Store.ts"
+import { type Fence } from "@openbot-build/server-execution/execution/Store"
 
 /**
  * What a tool call does after the check. `Allow` runs it now. `Deny` does not run it,

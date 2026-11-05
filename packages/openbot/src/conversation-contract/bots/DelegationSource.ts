@@ -14,7 +14,7 @@ import {
 	Store,
 	storage,
 	type Key,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { Delegations } from "./Delegations.ts"
 
 export const workflowName = "openbot.delegation"

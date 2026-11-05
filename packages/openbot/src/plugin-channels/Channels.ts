@@ -18,7 +18,7 @@ import {
 } from "effect"
 import { Digest, SecureRandom } from "effect/crypto"
 import { Base64Url, Hex } from "effect/encoding"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { ConversationKind } from "../conversation-contract/channels/Channel.ts"
 import {
 	channelConversations,
@@ -26,10 +26,10 @@ import {
 	channelLinks,
 	channels,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import {
 	Credentials,
 	type StoredChannel,

@@ -1,8 +1,8 @@
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { type Caller } from "@openbot-build/domain"
 import { Effect } from "effect"
-import * as Failures from "../../server-kernel/errors/Failures.ts"
-import { Settings } from "../../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { Bots, type Failure } from "./Bots.ts"
 
 /** The services that the default Bot needs. */

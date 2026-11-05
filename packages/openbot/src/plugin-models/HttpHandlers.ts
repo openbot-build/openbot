@@ -5,12 +5,12 @@ import { Authorization } from "@openbot-build/domain"
 import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { Billing } from "../server-billing/billing/Billing.ts"
-import { organizationKey } from "../identity-contract/audit/Resources.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { organizationKey } from "@openbot-build/identity-contract/audit/Resources"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	ModelProviders,
 	organizationOwner,

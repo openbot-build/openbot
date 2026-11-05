@@ -1,6 +1,6 @@
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
-import * as OutboundPolicy from "../server-kernel/network/OutboundPolicy.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as OutboundPolicy from "@openbot-build/server-kernel/network/OutboundPolicy"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { AppDiscovery } from "@openbot-build/domain"
 
 import {

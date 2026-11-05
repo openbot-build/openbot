@@ -10,8 +10,8 @@ import {
 	Stream,
 	type Scope,
 } from "effect"
-import * as Report from "../server-kernel/errors/Report.ts"
-import * as Background from "../server-kernel/execution/Background.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
 import { flatten } from "./Composition.ts"
 
 /** Saves the cause of each failed plugin fork in the error records. */

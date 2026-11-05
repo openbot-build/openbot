@@ -1,4 +1,4 @@
-import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
 import { Redacted } from "effect"
 import {
 	OpenBotApi,
@@ -11,11 +11,11 @@ import { Array as Arr, Effect, Option, type Schema, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as DefaultBot from "../conversation-contract/bots/DefaultBot.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { triggerKey } from "../identity-contract/audit/Resources.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import { triggerKey } from "@openbot-build/identity-contract/audit/Resources"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as Fire from "./Fire.ts"
 import { Triggers } from "./Triggers.ts"
 

@@ -1,7 +1,7 @@
 import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import { LiveConnections } from "../src/plugin-chats/live/LiveConnections.ts"
 import { ReviewTools } from "../src/conversation-contract/capabilities/ReviewTools.ts"
-import { Billing } from "../src/server-billing/billing/Billing.ts"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as Arr,
@@ -13,9 +13,9 @@ import {
 	Option,
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Runner from "../src/server-execution/execution/Runner.ts"
-import * as Observation from "../src/server-execution/execution/Observation.ts"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Runner from "@openbot-build/server-execution/execution/Runner"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
 import * as InputCommands from "../src/plugin-chats/InputCommands.ts"
 import * as ToolCommands from "../src/plugin-chats/ToolCommands.ts"
 import * as ToolControls from "../src/plugin-chats/ToolControls.ts"

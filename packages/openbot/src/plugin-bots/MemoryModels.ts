@@ -2,9 +2,9 @@ import {
 	type BillingStorageError,
 	Billing,
 	periodStart,
-} from "../server-billing/billing/Billing.ts"
+} from "@openbot-build/server-billing/billing/Billing"
 import { type Bots, type Developers, Execution } from "@openbot-build/domain"
-import type { Paused } from "../server-execution/execution/Admission.ts"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import {
 	type Cause,
 	Array as Arr,
@@ -17,11 +17,14 @@ import {
 } from "effect"
 import { Config } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response } from "effect/ai"
-import { attribute } from "../server-billing/billing/MeteredModel.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import * as Permits from "../server-execution/execution/Permits.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import { attribute } from "@openbot-build/server-billing/billing/MeteredModel"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import * as Permits from "@openbot-build/server-execution/execution/Permits"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 import * as ModelCalls from "../models-contract/models/ModelCalls.ts"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
 import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"

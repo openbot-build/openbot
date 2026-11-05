@@ -1,10 +1,13 @@
 import { Effect, Layer, Stream } from "effect"
 import * as ChannelSend from "./ChannelSend.ts"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import * as Program from "../server-execution/execution/Program.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
-import { type Fence } from "../server-execution/execution/Store.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import * as Program from "@openbot-build/server-execution/execution/Program"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import { type Fence } from "@openbot-build/server-execution/execution/Store"
 import { ChannelConfig, workflowName } from "./ChannelConfig.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 

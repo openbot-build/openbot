@@ -11,11 +11,11 @@ import {
 import { AuthApi, DeveloperApi as Api } from "@openbot-build/api"
 
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { DomainControl } from "../server-kernel/apps/DomainControl.ts"
+import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
 import { scopeKey } from "../plugin-apps/DeveloperAccess.ts"
-import { Auth } from "../identity-contract/auth/Auth.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 export class Proofs extends Context.Service<
 	Proofs,

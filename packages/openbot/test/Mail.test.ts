@@ -15,12 +15,12 @@ import {
 	TransportError,
 	type Connection,
 	type Message,
-} from "../src/identity-contract/mail/Transport.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
-import type { PlatformDocument } from "../src/server-kernel/settings/Documents.ts"
-import { Secrets } from "../src/server-kernel/secrets/Secrets.ts"
-import { bindings } from "../src/server-kernel/settings/Platform.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+} from "@openbot-build/identity-contract/mail/Transport"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import type { PlatformDocument } from "@openbot-build/server-kernel/settings/Documents"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { bindings } from "@openbot-build/server-kernel/settings/Platform"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 
 const document: PlatformDocument = {
 	publicOrigin: "https://openbot.example.com",

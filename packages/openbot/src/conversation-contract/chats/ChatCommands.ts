@@ -17,7 +17,7 @@ import {
 import { Effect, Option, String as Str } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
-import * as Check from "../../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Bots } from "../bots/Bots.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import { ModelRegistry } from "../../models-contract/models/ModelRegistry.ts"

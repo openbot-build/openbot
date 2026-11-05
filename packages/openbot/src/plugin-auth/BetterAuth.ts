@@ -3,7 +3,7 @@ import * as AccessModel from "@openbot-build/domain/Access"
 import {
 	Access,
 	type Identity as AccessIdentity,
-} from "../identity-contract/access/Access.ts"
+} from "@openbot-build/identity-contract/access/Access"
 import { AuthApi } from "@openbot-build/api"
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
@@ -21,7 +21,7 @@ import { Pool } from "pg"
 import { decodeJwt, SignJWT, jwtVerify } from "jose"
 import { emailOTP } from "better-auth/plugins/email-otp"
 import { Hex } from "effect/encoding"
-import { Mail } from "../identity-contract/mail/Mail.ts"
+import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 import {
 	Array as Arr,
 	Cause,
@@ -43,28 +43,28 @@ import {
 import { Digest, SecureRandom } from "effect/crypto"
 import { HttpServerResponse } from "effect/http"
 import * as tables from "@openbot-build/server-database/AuthSchema"
-import { Auth } from "../identity-contract/auth/Auth.ts"
-import { Organization } from "../identity-contract/organization/Organization.ts"
-import { PlatformAdmins } from "../identity-contract/platform/PlatformAdmins.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
+import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	type Connection as SsoConnection,
 	connectionFor,
 	Sso,
-} from "../identity-contract/sso/Sso.ts"
+} from "@openbot-build/identity-contract/sso/Sso"
 import { developmentLogin } from "./DevelopmentLogin.ts"
-import { ResolvedConfiguration } from "../server-kernel/auth/Configuration.ts"
+import { ResolvedConfiguration } from "@openbot-build/server-kernel/auth/Configuration"
 import {
 	AuthUnavailable,
 	CredentialRejected,
 	AuthConfigurationError,
-} from "../server-kernel/auth/Model.ts"
-import * as Background from "../server-kernel/execution/Background.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
-import type { Records } from "../server-kernel/errors/Records.ts"
+} from "@openbot-build/server-kernel/auth/Model"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import type { Records } from "@openbot-build/server-kernel/errors/Records"
 
 /**
  * The Better Auth provider ID of the platform provider. Its callback is

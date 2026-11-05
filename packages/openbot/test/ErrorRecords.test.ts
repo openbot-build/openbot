@@ -1,5 +1,5 @@
 import { Execution } from "@openbot-build/domain"
-import * as Failures from "../src/server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { assert, layer } from "@effect/vitest"
@@ -15,10 +15,10 @@ import {
 	Schema,
 	String as Str,
 } from "effect"
-import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
+import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

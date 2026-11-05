@@ -21,7 +21,7 @@ import * as MemoryLogs from "../src/plugin-bots/MemoryLogs.ts"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Audience from "../src/plugin-bots/memory/Audience.ts"
 import * as Memory from "../src/plugin-bots/memory/BotMemory.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

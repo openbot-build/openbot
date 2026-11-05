@@ -14,7 +14,7 @@ import { Array as Arr, Context, Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Connections, type Error as ConnectionsError } from "./Connections.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 
 /**
  * Keep the Experience errors of a Connections call. The other Connections

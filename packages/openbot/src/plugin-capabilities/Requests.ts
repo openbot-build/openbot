@@ -1,4 +1,4 @@
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import type { Chat } from "@openbot-build/core"
 import { Requests as RequestDomain } from "@openbot-build/domain"
 import { Bots as BotsApi } from "@openbot-build/domain"
@@ -20,8 +20,8 @@ import {
 	Rules,
 	deciderKey,
 } from "../conversation-contract/capabilities/Rules.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
-import type { Records } from "../server-kernel/errors/Records.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import type { Records } from "@openbot-build/server-kernel/errors/Records"
 import {
 	type Request,
 	Stored,

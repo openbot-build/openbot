@@ -1,8 +1,8 @@
 import { SqlClient } from "effect/sql"
 import * as Watches from "../src/plugin-apps/DeveloperWatches.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import { assert, layer } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { DeveloperApi as Api } from "@openbot-build/api"
@@ -36,7 +36,7 @@ import { AppInspections } from "../src/plugin-apps/AppInspections.ts"
 import {
 	DomainControl,
 	DomainControlUnavailable,
-} from "../src/server-kernel/apps/DomainControl.ts"
+} from "@openbot-build/server-kernel/apps/DomainControl"
 import { ownerKey } from "../src/apps-contract/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Db from "@openbot-build/server-database/Database"

@@ -1,7 +1,7 @@
-import type { Paused } from "../server-execution/execution/Admission.ts"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import { type Developers, Execution } from "@openbot-build/domain"
-import type { CallContext } from "../server-execution/execution/CallContext.ts"
-import * as DecisionWait from "../server-execution/execution/DecisionWait.ts"
+import type { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import * as DecisionWait from "@openbot-build/server-execution/execution/DecisionWait"
 import * as ToolDefinitions from "../tools-contract/chats/ToolDefinitions.ts"
 import {
 	Operation,
@@ -23,13 +23,13 @@ import {
 } from "effect"
 import { Response, type Prompt, type Tool } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import {
 	Store,
 	storage,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as ToolResults from "../conversation-contract/chats/ToolResults.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"

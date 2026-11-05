@@ -8,12 +8,12 @@ import { Array as Arr, Effect, Schema } from "effect"
 import { Digest } from "effect/crypto"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
-import * as Documents from "../server-kernel/settings/Documents.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Authority from "../server-execution/imported/Authority.ts"
-import * as Imported from "../server-execution/imported/Executions.ts"
-import * as Legacy from "../server-kernel/imported/LegacyV1.ts"
-import * as Progress from "../server-kernel/imported/Progress.ts"
+import * as Documents from "@openbot-build/server-kernel/settings/Documents"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Authority from "@openbot-build/server-execution/imported/Authority"
+import * as Imported from "@openbot-build/server-execution/imported/Executions"
+import * as Legacy from "@openbot-build/server-kernel/imported/LegacyV1"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
 
 const json = Schema.fromJsonString(Schema.Json)
 const texts = Schema.Array(Schema.String)

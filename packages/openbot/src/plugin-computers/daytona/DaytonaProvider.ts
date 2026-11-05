@@ -29,8 +29,8 @@ import {
 } from "effect"
 import { Base64, Hex } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
-import * as Background from "../../server-kernel/execution/Background.ts"
-import * as Report from "../../server-kernel/errors/Report.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 import {
 	ComputerCallFailed,
 	ComputerGone,

@@ -9,9 +9,9 @@ import { AppCalls } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { appInvocations } from "@openbot-build/server-database/Schema"
-import type { Secrets } from "../../server-kernel/secrets/Secrets.ts"
+import type { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 
 /** The App operations of each owner, kept sealed in Postgres. */
 export type Error =

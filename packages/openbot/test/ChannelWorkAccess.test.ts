@@ -6,21 +6,21 @@ import { Digest } from "effect/crypto"
 import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import { Requests } from "../src/conversation-contract/capabilities/Requests.ts"
 import { Channels } from "../src/conversation-contract/channels/Channels.ts"
-import { Organization } from "../src/identity-contract/organization/Organization.ts"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import * as ChannelDeliveryWork from "../src/plugin-channels/ChannelDeliveryWork.ts"
 import { ChannelQueue } from "../src/plugin-channels/ChannelQueue.ts"
 import { ChannelRegistry } from "../src/plugin-channels/ChannelRegistry.ts"
 import { ChannelWatch } from "../src/plugin-channels/ChannelWatch.ts"
 import * as ChannelWatchWork from "../src/plugin-channels/ChannelWatchWork.ts"
-import { Calls } from "../src/server-execution/execution/Calls.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
-import { Observation } from "../src/server-execution/execution/Observation.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import {
 	type MemberExecution,
 	Store,
-} from "../src/server-execution/execution/Store.ts"
-import * as Workflows from "../src/server-execution/execution/Workflows.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 
 const actor = { kind: "member", organizationId: "org", userId: "user" } as const
 const key = { namespace: "org", id: Execution.Id.make("channel-work") }

@@ -4,11 +4,11 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type SecretStorageError,
 	Secrets,
-} from "../server-kernel/secrets/Secrets.ts"
+} from "@openbot-build/server-kernel/secrets/Secrets"
 import { and, eq } from "drizzle-orm"
 import { developerTests } from "@openbot-build/server-database/Schema"
 import * as GrantCleanup from "./GrantCleanup.ts"
@@ -38,11 +38,11 @@ import {
 	Stream,
 } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
-import type { End } from "../server-execution/execution/Program.ts"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import type { End } from "@openbot-build/server-execution/execution/Program"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"

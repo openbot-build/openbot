@@ -10,7 +10,7 @@ import { DeveloperTests } from "../../dist/plugin-apps/DeveloperTests.js"
 import { DeveloperWatches } from "../../dist/plugin-apps/DeveloperWatches.js"
 import { DeveloperIndexing } from "../../dist/plugin-apps/DeveloperIndexing.js"
 import { IndexWork } from "../../dist/apps-contract/apps/IndexWork.js"
-import { Settings } from "../../dist/server-kernel/settings/Settings.js"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { IndexNamespace } from "../../src/apps-contract/apps/IndexNamespace.ts"
 import * as Rows from "../../src/plugin-apps/DeveloperRows.ts"
 import { ownerKey } from "../../src/apps-contract/apps/StoredConnections.ts"
@@ -22,7 +22,7 @@ import {
 	developerProofs,
 	developerSubscriptions,
 } from "@openbot-build/server-database/Schema"
-import * as Secrets from "../../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Wait from "../Wait.ts"
 
 /** Sets the public state of the App used by the development server. */

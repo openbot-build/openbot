@@ -1,9 +1,12 @@
 import { Execution } from "@openbot-build/domain"
 import { Effect, Option, Stream } from "effect"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
-import { Workflows } from "../server-execution/execution/Workflows.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { Channels } from "../conversation-contract/channels/Channels.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"

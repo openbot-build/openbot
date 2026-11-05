@@ -4,10 +4,16 @@ import { SqlClient, type SqlError } from "effect/sql"
 import * as Grants from "../apps-contract/apps/GrantUses.ts"
 import * as Connections from "../apps-contract/apps/StoredConnections.ts"
 import { privateStateCodec } from "../plugin-apps/DeveloperTestStores.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Progress from "../server-kernel/imported/Progress.ts"
-import { version, checkReady } from "../server-kernel/imported/GrantUses.ts"
-export { version, checkReady } from "../server-kernel/imported/GrantUses.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
+import {
+	version,
+	checkReady,
+} from "@openbot-build/server-kernel/imported/GrantUses"
+export {
+	version,
+	checkReady,
+} from "@openbot-build/server-kernel/imported/GrantUses"
 
 const json = Schema.fromJsonString(Schema.Json)
 

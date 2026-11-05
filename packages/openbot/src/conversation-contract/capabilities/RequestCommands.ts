@@ -2,7 +2,7 @@ import {
 	type MemberExecution,
 	type Key,
 	type Fence,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as PolicyOrigin from "./PolicyOrigin.ts"
 import {
 	Bots as BotDomain,
@@ -14,7 +14,7 @@ import { Context, Effect, Option, Schema } from "effect"
 import {
 	type Authorize,
 	type DecisionCommand,
-} from "../../server-execution/execution/Engine.ts"
+} from "@openbot-build/server-execution/execution/Engine"
 import { Stored } from "./Requests.ts"
 
 export const workflowName = "openbot.capability-request"

@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, Option, Order, Record as Rec } from "effect"
 import * as Preset from "../src/app/Preset.ts"
 import * as PresetPlugins from "../src/app/PresetPlugins.ts"
-import * as Feature from "../src/server-plugin/Feature.ts"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 
 /** The plugin that publishes each key, by the key. */
 const publishers: Readonly<Record<string, string>> = Rec.fromEntries(

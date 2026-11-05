@@ -1,10 +1,13 @@
 import { AppCalls, Execution } from "@openbot-build/domain"
 import { Client } from "@openbot-build/protocol"
 import { Effect, Schema } from "effect"
-import { Records } from "../../server-kernel/errors/Records.ts"
-import { Calls } from "../../server-execution/execution/Calls.ts"
-import * as Recovery from "../../server-execution/execution/Recovery.ts"
-import { Store, type Fence } from "../../server-execution/execution/Store.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 import { json, jsonObject } from "./AppResults.ts"
 
 /** Each input round has its own call. A continuation never repeats the first request. */

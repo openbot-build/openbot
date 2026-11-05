@@ -15,7 +15,7 @@ import {
 	SubscriptionRef,
 } from "effect"
 import type { Entry } from "../../apps-contract/apps/WorkflowTools.ts"
-import type { Fence } from "../../server-execution/execution/Store.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import type { Definition } from "../../tools-contract/chats/ToolDefinitions.ts"
 import type { Gate } from "../capabilities/Gate.ts"
 import type { Work } from "../capabilities/Work.ts"

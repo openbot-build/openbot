@@ -1,5 +1,5 @@
 import { Schema, Array as Arr, String as Str } from "effect"
-import * as Apps from "../server-execution/imported/LegacyApps.ts"
+import * as Apps from "@openbot-build/server-execution/imported/LegacyApps"
 
 /** Saved catalog forms at 2a123ff. These codecs do not use current HTTP models. */
 const extensions = Schema.Record(Schema.String, Schema.Json)

@@ -4,8 +4,8 @@ import {
 	storage,
 	type Key,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
-import type { BillingStorageError } from "../server-billing/billing/Billing.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import type { BillingStorageError } from "@openbot-build/server-billing/billing/Billing"
 import {
 	type ChatStore,
 	type Config,
@@ -15,8 +15,8 @@ import {
 } from "@openbot-build/core"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import type { MemoryBudgetSpent } from "./MemoryBot.ts"
-import type { Paused } from "../server-execution/execution/Admission.ts"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	type Settings as SettingsData,
 	Bots as Domain,
@@ -37,19 +37,19 @@ import {
 	Stream,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
-import type { Errors } from "../identity-contract/authorization/Check.ts"
+import type { Errors } from "@openbot-build/identity-contract/authorization/Check"
 import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import { and, asc, eq, gt, lte, max } from "drizzle-orm"
 import { LanguageModel, Prompt } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
 import { chatItems } from "@openbot-build/server-database/Schema"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as Memory from "./memory/BotMemory.ts"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import { BotRecords } from "../conversation-contract/bots/BotRecords.ts"

@@ -18,20 +18,20 @@ import {
 	Struct,
 } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { noMoreThanCaller } from "../identity-contract/authorization/Escalation.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import { noMoreThanCaller } from "@openbot-build/identity-contract/authorization/Escalation"
 import {
 	organizationKey,
 	userKey,
-} from "../identity-contract/audit/Resources.ts"
-import { Roles } from "../identity-contract/authorization/Roles.ts"
+} from "@openbot-build/identity-contract/audit/Resources"
+import { Roles } from "@openbot-build/identity-contract/authorization/Roles"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Views from "../server-kernel/settings/Views.ts"
-import { PlatformAdmins } from "../identity-contract/platform/PlatformAdmins.ts"
-import { Organization } from "../identity-contract/organization/Organization.ts"
-import { Mail } from "../identity-contract/mail/Mail.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Views from "@openbot-build/server-kernel/settings/Views"
+import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
+import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 
 const superAdministrator = "super_administrator"
 const storageUnavailable = () =>

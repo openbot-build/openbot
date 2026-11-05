@@ -16,7 +16,7 @@ import * as Gate from "../conversation-contract/capabilities/Gate.ts"
 import type { Work } from "../conversation-contract/capabilities/Work.ts"
 import * as BotFeatures from "../conversation-contract/chats/BotFeatures.ts"
 import * as Registration from "../tools-contract/plugins/Registration.ts"
-import type { Fence } from "../server-execution/execution/Store.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import * as ChatFeatures from "./ChatFeatures.ts"
 
 /** The input to give back one saved tool. A host tool keeps the scope of its own registration. */

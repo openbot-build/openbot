@@ -69,7 +69,7 @@ API 用例，不计入 566 个历史声明。Pairing 等待持久删除结果；
 | [Computer](/zh-cn/computers)和 Connector                                                         | `E/connect-computers/Computers.test.ts`, `E/connect-computers/Connectors.test.ts`, `E/connect-computers/ComputerQueries.test.ts`, `S/ResourceTransport.test.ts`, `packages/computer/test/Sessions.test.ts` | 配对、按资源权限过滤列表、终端会话、路由到持有者、有序输出和未知交互结果。                                                            |
 | [Live 会话](/zh-cn/live)                                                                         | `E/live-chat/Live.test.ts`, `S/LiveConnections.test.ts`, `S/OpenAiRealtime.test.ts`, `packages/core/test/LiveDriver.test.ts`                                                                               | 供应商事件、实时工具、关闭连接、取消和实时连接丢失。                                                                                  |
 | [文件](/zh-cn/files)                                                                             | `E/files/Files.test.ts`, `S/FileTasks.test.ts`, `S/S3.test.ts`                                                                                                                                             | 上传、模型附件、对象引用、保留策略、原子删除任务和拒绝旧执行者。                                                                      |
-| [Vault](/zh-cn/vaults)                                                                           | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `S/SecretFiles.test.ts`                                                                                                     | 允许的字段、加密值、归属和 token 限制、缺失密钥，以及调用边界上的密钥解析。                                                           |
+| [Vault](/zh-cn/vaults)                                                                           | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `packages/server-kernel/test/SecretFiles.test.ts`                                                                           | 允许的字段、加密值、归属和 token 限制、缺失密钥，以及调用边界上的密钥解析。                                                           |
 | [模型](/zh-cn/models)                                                                            | `E/use-models/Cloudflare.test.ts`, `S/OpenAi.test.ts`, `S/Anthropic.test.ts`, `S/OpenAiCompat.test.ts`, `S/ModelRegistry.test.ts`                                                                          | 供应商格式、模型选择、流、配置变更和可选的真实模型路径。真实模型测试需要显式环境设置。                                                |
 | [用量与计费](/zh-cn/usage)                                                                       | `E/bot-work/Billing.test.ts`, `S/BillingPostgres.test.ts`, `S/BillingUnknown.test.ts`, `S/MeteredModel.test.ts`                                                                                            | 价格、余额、预算、共享预留、确认用量结算、未知用量和迟到回执。                                                                        |
 | [组织](/zh-cn/organization)、[SSO](/zh-cn/sso)和[平台配置](/zh-cn/platform)                      | `E/organizations/Organization.test.ts`, `E/sign-in/Oidc.test.ts`, `E/admin-settings/AdminApiE2E.test.ts`, `E/admin-settings/PlatformApi.test.ts`                                                           | 成员、邀请、账户隔离、登录、密钥提示及 cookie/token 管理入口。                                                                        |
@@ -133,10 +133,19 @@ API 用例，不计入 566 个历史声明。Pairing 等待持久删除结果；
 运行这些规则。它们检查导入关系，本身不能找出所有第二套执行器或恢复循环。新增 worker、计时器、锁和 RPC
 handler 仍需按统一设计审查。
 
-另外两条规则保护插件宿主。`graft-boundary` 只允许插件工具包、每个插件目录中的
-`Plugin.ts` 文件、应用、开发服务器和测试导入 graft。它还要求把 graft 的 `Plugin`
-命名为 `GraftPlugin`。`feature-lookup` 不允许服务器代码用 `Effect.serviceOption`
-或 `Plugin.optional` 查找功能。代码应列出它需要的服务。
+另外两条规则保护插件宿主。`graft-boundary` 只允许插件工具包（`server-plugin`
+包）、每个插件目录中的 `Plugin.ts`
+文件、应用、开发服务器和测试导入 graft。它还要求把 graft 的 `Plugin` 命名为
+`GraftPlugin`。`feature-lookup` 不允许服务器代码用 `Effect.serviceOption` 或
+`Plugin.optional` 查找功能。代码应列出它需要的服务。
+
+`virtual-boundary` 让服务器代码分层。从低到高依次是：`server-database`、
+`server-kernel`、`identity-contract`、`server-billing`、`server-execution`、
+`packages/openbot/src` 中的其他契约目录和
+`model-providers`、`server-plugin`、插件目录、`server-upgrade`、`app` 和
+`server-development`。代码只能导入更低的层。插件目录不能互相导入。`public-entry`
+只允许其他包通过服务器包 `package.json` 中 `exports`
+的键来使用它。测试也是这样。
 
 ## 数据迁移检查
 

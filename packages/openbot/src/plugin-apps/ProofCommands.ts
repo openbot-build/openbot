@@ -4,8 +4,8 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	Authorization,
 	Caller,
@@ -14,8 +14,8 @@ import {
 } from "@openbot-build/domain"
 import { Context, Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import type { Authorize } from "../server-execution/execution/Engine.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import type { Authorize } from "@openbot-build/server-execution/execution/Engine"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import type * as Models from "./DeveloperModels.ts"

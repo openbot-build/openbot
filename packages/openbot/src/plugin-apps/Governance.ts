@@ -1,7 +1,7 @@
 import { AppIndex, ExperienceStorageUnavailable } from "@openbot-build/domain"
 import { Array as Arr, Context, Effect, HashMap, Layer, Option } from "effect"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 /** One snapshot serves a whole list. Actions read current restrictions before sending. */
 export interface Service {

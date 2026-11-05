@@ -30,7 +30,7 @@ import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 import { capabilityLists, pages } from "./Capabilities.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Probe } from "./Probe.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { type Input, type Prepared } from "./ConnectionCommands.ts"
 import { jsonObject } from "../apps-contract/apps/AppResults.ts"
 

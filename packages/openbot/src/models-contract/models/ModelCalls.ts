@@ -1,6 +1,6 @@
-import { category } from "../../server-kernel/errors/Records.ts"
+import { category } from "@openbot-build/server-kernel/errors/Records"
 import * as ModelFailure from "./ModelFailure.ts"
-import * as Recovery from "../../server-execution/execution/Recovery.ts"
+import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
 import { Execution } from "@openbot-build/domain"
 import { Effect, Schema, Ref, Option, Exit } from "effect"
 import { AiError, type Response } from "effect/ai"
@@ -10,15 +10,18 @@ import {
 	BillingStorageError,
 	SpendingBlocked,
 	tokensOf,
-} from "../../server-billing/billing/Billing.ts"
+} from "@openbot-build/server-billing/billing/Billing"
 import {
 	CurrentCallIdentity,
 	CurrentReservation,
 	CurrentUsage,
 	confirmed,
-} from "../../server-billing/billing/MeteredModel.ts"
-import { Calls } from "../../server-execution/execution/Calls.ts"
-import { Store, type Fence } from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-billing/billing/MeteredModel"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 
 /** A saved model result distinguishes an answer from a call that was not sent. */
 export const resultCodec = <A>(value: Schema.Codec<A, Schema.Json>) =>

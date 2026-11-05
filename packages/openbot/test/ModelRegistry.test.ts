@@ -5,8 +5,8 @@ import { ModelProvidersApi } from "@openbot-build/api"
 import { Config, Live, Model, Provider } from "@openbot-build/core"
 import { Cause, Effect, Layer, Logger, Redacted, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
-import { Billing } from "../src/server-billing/billing/Billing.ts"
-import { TokenThrottle } from "../src/server-billing/billing/TokenThrottle.ts"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
 import * as LiveBackends from "../src/models-contract/models/LiveBackends.ts"
 import {
 	ModelProviders,
@@ -18,9 +18,9 @@ import {
 	Models,
 	type StoredModel,
 } from "../src/models-contract/models/Models.ts"
-import { organizationDefaults } from "../src/server-kernel/settings/Documents.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
-import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
+import { organizationDefaults } from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
 
 const organizationId = "org_a"
 

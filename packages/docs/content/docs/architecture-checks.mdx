@@ -99,7 +99,7 @@ checks in the next section apply across these rows.
 | [Computers](/computers) and Connectors                                                   | `E/connect-computers/Computers.test.ts`, `E/connect-computers/Connectors.test.ts`, `E/connect-computers/ComputerQueries.test.ts`, `S/ResourceTransport.test.ts`, `packages/computer/test/Sessions.test.ts` | Pairing, resource-filtered lists, terminal sessions, owner routing, ordered output, and unknown interactive results.                                                                    |
 | [Live sessions](/live)                                                                   | `E/live-chat/Live.test.ts`, `S/LiveConnections.test.ts`, `S/OpenAiRealtime.test.ts`, `packages/core/test/LiveDriver.test.ts`                                                                               | Provider events, live tools, connection closure, cancellation, and loss of a live connection.                                                                                           |
 | [Files](/files)                                                                          | `E/files/Files.test.ts`, `S/FileTasks.test.ts`, `S/S3.test.ts`                                                                                                                                             | Upload, model attachments, object references, retention, atomic delete tasks, and old-owner rejection.                                                                                  |
-| [Vaults](/vaults)                                                                        | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `S/SecretFiles.test.ts`                                                                                                     | Allowed fields, sealed values, owner and token limits, missing secrets, and secret resolution at the call boundary.                                                                     |
+| [Vaults](/vaults)                                                                        | `E/run-code/Vaults.test.ts`, `S/VaultReaders.test.ts`, `S/AppSecrets.test.ts`, `packages/server-kernel/test/SecretFiles.test.ts`                                                                           | Allowed fields, sealed values, owner and token limits, missing secrets, and secret resolution at the call boundary.                                                                     |
 | [Models](/models)                                                                        | `E/use-models/Cloudflare.test.ts`, `S/OpenAi.test.ts`, `S/Anthropic.test.ts`, `S/OpenAiCompat.test.ts`, `S/ModelRegistry.test.ts`                                                                          | Provider formats, model selection, streams, settings changes, and the optional real model path. The real model test needs its explicit environment setting.                             |
 | [Usage and billing](/usage)                                                              | `E/bot-work/Billing.test.ts`, `S/BillingPostgres.test.ts`, `S/BillingUnknown.test.ts`, `S/MeteredModel.test.ts`                                                                                            | Prices, credits, budgets, shared reservations, confirmed settlement, unknown usage, and late receipts.                                                                                  |
 | [Organizations](/organization), [SSO](/sso), and [platform settings](/platform)          | `E/organizations/Organization.test.ts`, `E/sign-in/Oidc.test.ts`, `E/admin-settings/AdminApiE2E.test.ts`, `E/admin-settings/PlatformApi.test.ts`                                                           | Membership, invitations, account separation, sign-in, secret hints, and cookie/token administration.                                                                                    |
@@ -171,12 +171,21 @@ runs these rules. They check imports; they do not by themselves detect every
 second execution engine or recovery loop. Review new workers, timers, locks, and
 RPC handlers against the shared design.
 
-Two more rules guard the plugin host. `graft-boundary` lets only the plugin kit,
-the `Plugin.ts` file of each plugin folder, the app, the development server, and
-the tests import graft. It also asks for the name `GraftPlugin` for the `Plugin`
-of graft. `feature-lookup` does not let server code look for a feature with
-`Effect.serviceOption` or `Plugin.optional`. Code lists the services that it
-needs instead.
+Two more rules guard the plugin host. `graft-boundary` lets only the plugin kit
+(the `server-plugin` package), the `Plugin.ts` file of each plugin folder, the
+app, the development server, and the tests import graft. It also asks for the
+name `GraftPlugin` for the `Plugin` of graft. `feature-lookup` does not let
+server code look for a feature with `Effect.serviceOption` or `Plugin.optional`.
+Code lists the services that it needs instead.
+
+`virtual-boundary` keeps the server code in layers. From low to high:
+`server-database`, `server-kernel`, `identity-contract`, `server-billing`,
+`server-execution`, the other contract folders and `model-providers` in
+`packages/openbot/src`, `server-plugin`, the plugin folders, `server-upgrade`,
+`app`, and `server-development`. Code may import only lower layers. Plugin
+folders must not import each other. `public-entry` lets other packages use a
+server package only through a key of `exports` in its `package.json`. This is
+true for tests too.
 
 ## Data move checks
 

@@ -44,18 +44,18 @@ import {
 	organizations,
 	tokens,
 } from "@openbot-build/server-database/Schema"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	organizationKey,
 	userKey,
-} from "../identity-contract/audit/Resources.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+} from "@openbot-build/identity-contract/audit/Resources"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	type Account,
 	domainOf,
 	Organization,
 	OrganizationUnavailable,
-} from "../identity-contract/organization/Organization.ts"
+} from "@openbot-build/identity-contract/organization/Organization"
 import * as Db from "@openbot-build/server-database/Database"
 
 const Roles = Schema.fromJsonString(Schema.Array(RoleId))

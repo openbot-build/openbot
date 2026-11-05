@@ -2,7 +2,7 @@ import { Bots as BotDomain, Execution } from "@openbot-build/domain"
 import { Effect, Layer, Option } from "effect"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import { Work } from "../conversation-contract/capabilities/Work.ts"
-import { Organization } from "../identity-contract/organization/Organization.ts"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import {
 	MemberInactive,

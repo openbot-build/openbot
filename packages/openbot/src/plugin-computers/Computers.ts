@@ -1,6 +1,6 @@
 import { Lifecycle } from "./Lifecycle.ts"
 import * as Activity from "./Activity.ts"
-import { Directory } from "../server-execution/resources/Directory.ts"
+import { Directory } from "@openbot-build/server-execution/resources/Directory"
 import { Computers as ComputerData, Execution } from "@openbot-build/domain"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { type Caller, type ExecutionIdentity } from "@openbot-build/domain"
@@ -19,11 +19,11 @@ import {
 import { Digest, SecureRandom } from "effect/crypto"
 import { SqlClient } from "effect/sql"
 import { Base64, Base64Url, Hex } from "effect/encoding"
-import * as Background from "../server-kernel/execution/Background.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	computerAccess,

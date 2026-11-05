@@ -11,7 +11,7 @@ import {
 	ChatStoreRepository,
 	Store as CoreStore,
 } from "@openbot-build/core"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import { type SqlError, SqlClient } from "effect/sql"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
 import * as ChatModels from "../conversation-contract/chats/ChatModels.ts"
@@ -40,12 +40,12 @@ import { inExecution } from "../conversation-contract/chats/ChatEncoding.ts"
 import { InputCommands } from "../conversation-contract/chats/InputCommands.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import { Observation } from "../server-execution/execution/Observation.ts"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import {
 	Store,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
 import { type Stored } from "../conversation-contract/capabilities/Requests.ts"

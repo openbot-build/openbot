@@ -19,8 +19,8 @@ import {
 	fileRefs,
 	organizations,
 } from "@openbot-build/server-database/Schema"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as Tasks from "../src/plugin-files/FileTasks.ts"
 import * as Fixture from "./OrganizationFixture.ts"
 import * as Postgres from "./PostgresTest.ts"

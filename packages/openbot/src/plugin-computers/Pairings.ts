@@ -18,10 +18,10 @@ import {
 	String as Str,
 } from "effect"
 import { Base64Url, Hex } from "effect/encoding"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as Db from "@openbot-build/server-database/Database"
 import { computerPairings } from "@openbot-build/server-database/Schema"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { Computers, type Failure, hashToken } from "./Computers.ts"
 
 /** A pairing code works this long. */

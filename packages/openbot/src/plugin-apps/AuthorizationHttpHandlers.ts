@@ -1,4 +1,4 @@
-import * as HttpErrors from "../server-execution/execution/HttpErrors.ts"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
 import { AppAuthorizationApi as Api, OpenBotApi } from "@openbot-build/api"
 
 import { Effect, Layer, Option, String as Str, pipe } from "effect"
@@ -6,10 +6,10 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Authorizations } from "./Authorizations.ts"
 import { ownersOf } from "../apps-contract/apps/StoredConnections.ts"
-import { Auth } from "../identity-contract/auth/Auth.ts"
-import * as HttpMiddleware from "../identity-contract/auth/SessionHttp.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
+import * as HttpMiddleware from "@openbot-build/identity-contract/auth/SessionHttp"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 // The "&" goes first, so the later steps do not change the "&" that they add.
 const escapeHtml = (value: string) =>

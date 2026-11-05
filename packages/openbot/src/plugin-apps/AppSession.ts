@@ -16,7 +16,7 @@ import {
 	type Store,
 	Client,
 } from "@openbot-build/protocol"
-import type { Paused } from "../server-execution/execution/Admission.ts"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import type { Pending } from "@nmnmcc/ability/Authorizer"
 import { type Unavailable, ConnectionSessions } from "./ConnectionSessions.ts"
 import type { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
@@ -30,11 +30,11 @@ import {
 	Ref,
 	Schema,
 } from "effect"
-import { Calls } from "../server-execution/execution/Calls.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
 import * as Gate from "../conversation-contract/capabilities/Gate.ts"
 import { RequestCommands } from "../conversation-contract/capabilities/RequestCommands.ts"
 import * as CallFrame from "../conversation-contract/chats/CallFrame.ts"
-import { type Fence } from "../server-execution/execution/Store.ts"
+import { type Fence } from "@openbot-build/server-execution/execution/Store"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import * as AppCall from "../apps-contract/apps/AppCall.ts"
 import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
@@ -44,9 +44,9 @@ import {
 	ownerKey,
 	get as connection,
 } from "../apps-contract/apps/StoredConnections.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as AppSecrets from "../apps-contract/vaults/AppSecrets.ts"
 import * as VaultCode from "../apps-contract/vaults/CodeMode.ts"
 

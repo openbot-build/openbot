@@ -3,7 +3,7 @@ import { Settings as Api } from "@openbot-build/api"
 import { AppIndex } from "@openbot-build/domain"
 import { Effect, HashMap, Layer, Option, Ref } from "effect"
 import * as Governance from "../src/plugin-apps/Governance.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 
 it.effect(

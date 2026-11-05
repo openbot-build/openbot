@@ -17,17 +17,17 @@ import { LanguageModel, Response } from "effect/ai"
 import {
 	Billing,
 	BillingStorageError,
-} from "../src/server-billing/billing/Billing.ts"
+} from "@openbot-build/server-billing/billing/Billing"
 import {
 	CurrentCallIdentity,
 	meter,
-} from "../src/server-billing/billing/MeteredModel.ts"
-import { Unavailable } from "../src/server-billing/billing/TokenThrottle.ts"
+} from "@openbot-build/server-billing/billing/MeteredModel"
+import { Unavailable } from "@openbot-build/server-billing/billing/TokenThrottle"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Report from "../src/server-kernel/errors/Report.ts"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 import * as Realtime from "../src/model-providers/providers/openai/OpenAiRealtime.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(DatabasePostgres.migrate).pipe(

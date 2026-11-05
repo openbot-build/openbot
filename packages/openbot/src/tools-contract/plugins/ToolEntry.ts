@@ -2,7 +2,7 @@ import { Execution } from "@openbot-build/domain"
 import { Operation } from "@openbot-build/core"
 import { Cause, Context, Effect, type JsonSchema, Option, Schema } from "effect"
 import { Tool, type Toolkit } from "effect/ai"
-import { Records, category } from "../../server-kernel/errors/Records.ts"
+import { Records, category } from "@openbot-build/server-kernel/errors/Records"
 
 /** The handler commits a durable command receipt before returning its result. */
 export const Idempotent = Context.Reference<boolean>(

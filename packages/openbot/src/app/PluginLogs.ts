@@ -11,8 +11,8 @@ import {
 	References,
 	String as Str,
 } from "effect"
-import * as Report from "../server-kernel/errors/Report.ts"
-import * as Background from "../server-kernel/execution/Background.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
 
 /**
  * graft and its loader log the full cause of a plugin failure, and a log line

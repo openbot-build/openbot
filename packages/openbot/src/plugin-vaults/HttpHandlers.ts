@@ -7,12 +7,12 @@ import {
 import { type Caller, Identity } from "@openbot-build/domain"
 import { Effect, type Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	secretProviderKey,
 	vaultKey,
-} from "../identity-contract/audit/Resources.ts"
+} from "@openbot-build/identity-contract/audit/Resources"
 import { SecretProviders } from "./SecretProviders.ts"
 import { Vaults } from "../apps-contract/vaults/Vaults.ts"
 import { unavailable } from "./Vaults.ts"

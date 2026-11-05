@@ -1,13 +1,13 @@
 import * as ModelFailure from "../src/models-contract/models/ModelFailure.ts"
-import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
-import * as Send from "../src/server-execution/execution/Send.ts"
-import * as Admission from "../src/server-execution/execution/Admission.ts"
-import * as Observation from "../src/server-execution/execution/Observation.ts"
+import * as Send from "@openbot-build/server-execution/execution/Send"
+import * as Admission from "@openbot-build/server-execution/execution/Admission"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
 import * as AppCall from "../src/apps-contract/apps/AppCall.ts"
 import { Client } from "@openbot-build/protocol"
 import { ConnectionId } from "@openbot-build/domain"
-import { CallContext } from "../src/server-execution/execution/CallContext.ts"
+import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
 import {
 	entry,
 	Idempotent,
@@ -64,30 +64,30 @@ import {
 	Toolkit,
 } from "effect/ai"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Report from "../src/server-kernel/errors/Report.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
-import * as Calls from "../src/server-execution/execution/Calls.ts"
-import * as CallRecovery from "../src/server-execution/execution/CallRecovery.ts"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Calls from "@openbot-build/server-execution/execution/Calls"
+import * as CallRecovery from "@openbot-build/server-execution/execution/CallRecovery"
 import { SqlError } from "effect/sql"
-import * as Runner from "../src/server-execution/execution/Runner.ts"
-import * as RunScope from "../src/server-execution/execution/RunScope.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
+import * as Runner from "@openbot-build/server-execution/execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
 import { DurableDeferred, WorkflowEngine } from "effect/workflow"
-import * as Store from "../src/server-execution/execution/Store.ts"
+import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
 import { TurnAccess } from "../src/conversation-contract/chats/TurnAccess.ts"
 import * as ModelSteps from "../src/plugin-chats/ModelSteps.ts"
 import {
 	Billing,
 	BillingStorageError,
-} from "../src/server-billing/billing/Billing.ts"
+} from "@openbot-build/server-billing/billing/Billing"
 import {
 	CurrentAttribution,
 	meter,
 	meterDecision,
 	CurrentCallIdentity,
-} from "../src/server-billing/billing/MeteredModel.ts"
+} from "@openbot-build/server-billing/billing/MeteredModel"
 import * as Judge from "../src/plugin-capabilities/Judge.ts"
 import {
 	ModelRegistry,

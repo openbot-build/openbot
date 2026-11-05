@@ -24,15 +24,15 @@ import { Digest, SecureRandom } from "effect/crypto"
 import { Prompt } from "effect/ai"
 import { Hex } from "effect/encoding"
 import { HttpClient, Multipart } from "effect/http"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as Db from "@openbot-build/server-database/Database"
 import { files } from "@openbot-build/server-database/Schema"
 import {
 	type FilesDocument,
 	quotaOf,
-} from "../server-kernel/settings/Documents.ts"
+} from "@openbot-build/server-kernel/settings/Documents"
 import { fileUrl } from "../apps-contract/files/Refs.ts"
 import * as S3 from "./S3.ts"
 import {

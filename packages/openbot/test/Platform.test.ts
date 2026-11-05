@@ -13,7 +13,7 @@ import * as BrowserHost from "./BrowserHost.ts"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Setup from "../src/plugin-platform/Setup.ts"
 import * as PlatformAdminsPostgres from "../src/plugin-platform/PlatformAdminsPostgres.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as TestHost from "./TestHost.ts"
 

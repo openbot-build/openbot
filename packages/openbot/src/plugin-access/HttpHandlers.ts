@@ -2,17 +2,17 @@ import * as Model from "@openbot-build/domain/Access"
 import type {
 	AuthUnavailable,
 	CredentialRejected,
-} from "../server-kernel/auth/Model.ts"
-import { Auth } from "../identity-contract/auth/Auth.ts"
-import * as Middleware from "../identity-contract/auth/SessionHttp.ts"
+} from "@openbot-build/server-kernel/auth/Model"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
+import * as Middleware from "@openbot-build/identity-contract/auth/SessionHttp"
 import { HttpServerRequest } from "effect/http"
 import { Option } from "effect"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import { OpenBotApi } from "@openbot-build/api"
 import { Account } from "@openbot-build/domain"
 import { Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { Access } from "../identity-contract/access/Access.ts"
+import { Access } from "@openbot-build/identity-contract/access/Access"
 export const layer = Layer.mergeAll(
 	HttpApiBuilder.group(OpenBotApi, "access", (handlers) =>
 		Effect.gen(function* () {

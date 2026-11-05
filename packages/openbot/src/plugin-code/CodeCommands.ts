@@ -3,7 +3,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { CodeRuns, Execution } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Array as Arr, Clock, Effect, Layer, Option, Schema } from "effect"
@@ -19,9 +19,9 @@ import { codeExecutions } from "@openbot-build/server-database/ExecutionSchema"
 import {
 	type Authorize,
 	type Decide,
-} from "../server-execution/execution/Engine.ts"
-import { codeModeOf } from "../server-kernel/settings/Documents.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+} from "@openbot-build/server-execution/execution/Engine"
+import { codeModeOf } from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	workflowName,
 	Input,

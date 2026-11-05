@@ -25,7 +25,7 @@ import {
 import * as Grants from "../src/plugin-capabilities/Grants.ts"
 import * as Requests from "../src/plugin-capabilities/Requests.ts"
 import * as Rules from "../src/plugin-capabilities/Rules.ts"
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 const organizationId = "org_1"
 const userId = "user_1"

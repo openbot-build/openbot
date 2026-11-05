@@ -1,4 +1,4 @@
-import type { Paused } from "../server-execution/execution/Admission.ts"
+import type { Paused } from "@openbot-build/server-execution/execution/Admission"
 import { type Developers, CodeRuns, Execution } from "@openbot-build/domain"
 import * as AppSecrets from "../apps-contract/vaults/AppSecrets.ts"
 import {
@@ -15,15 +15,15 @@ import {
 	String as Str,
 } from "effect"
 import { AppCommands } from "../apps-contract/apps/AppCommands.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
-import * as Recovery from "../server-execution/execution/Recovery.ts"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
+import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import {
 	Store,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as VaultCode from "../apps-contract/vaults/CodeMode.ts"
 import { CodeCommands } from "../apps-contract/code/CodeCommands.ts"
 import { programStep } from "./CodeCommands.ts"

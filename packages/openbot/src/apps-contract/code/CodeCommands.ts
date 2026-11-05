@@ -2,8 +2,8 @@ import {
 	type MemberExecution,
 	type Fence,
 	type Key,
-} from "../../server-execution/execution/Store.ts"
-import type { Check } from "../../server-execution/execution/Admission.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import type { Check } from "@openbot-build/server-execution/execution/Admission"
 import {
 	type TokenId,
 	type BotId,
@@ -22,7 +22,7 @@ import { Context, Effect, Option, Schema } from "effect"
 import {
 	type Authorize,
 	type Decide,
-} from "../../server-execution/execution/Engine.ts"
+} from "@openbot-build/server-execution/execution/Engine"
 
 export const workflowName = "openbot.code"
 

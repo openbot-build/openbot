@@ -1,10 +1,10 @@
 import { Execution } from "@openbot-build/domain"
 import { Effect, Layer, Redacted, String as Str } from "effect"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Observation from "../src/server-execution/execution/Observation.ts"
-import * as Permits from "../src/server-execution/execution/Permits.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Permits from "@openbot-build/server-execution/execution/Permits"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 
 export const actor = {
 	kind: "member",

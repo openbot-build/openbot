@@ -67,7 +67,9 @@ ID, zum Beispiel `bots`.
 Der **Kernel** ist der Teil, den alle Plugins teilen: der Datenbank-Pool, die
 Einstellungen, die geheimen Schlüssel, die Fehlereinträge, der HTTP-Host und die
 Dienste der Ausführungsengine. Der Host baut den Kernel zuerst. Kein Plugin darf
-einen Dienst des Kernels veröffentlichen.
+einen Dienst des Kernels veröffentlichen. Der meiste Code des Kernels liegt in
+den Paketen `server-database`, `server-kernel`, `server-billing` und
+`server-execution`.
 
 Ein Plugin ist eine Kette von **Stufen** und ein **Start**. Eine Stufe baut
 einige Dienste und veröffentlicht alle in einem Schritt. Eine spätere Stufe kann

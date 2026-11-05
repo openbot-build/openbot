@@ -9,19 +9,19 @@ import { and, eq, notInArray } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema, Stream } from "effect"
 import { SqlClient } from "effect/sql"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
 import { executions } from "@openbot-build/server-database/ExecutionSchema"
-import { type Authorize } from "../server-execution/execution/Engine.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
+import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
 import {
 	Store,
 	storage,
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
-import type { End } from "../server-execution/execution/Program.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import type { End } from "@openbot-build/server-execution/execution/Program"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"

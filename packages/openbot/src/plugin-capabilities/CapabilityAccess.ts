@@ -9,8 +9,8 @@ import type { Chain } from "../conversation-contract/chats/ChatHost.ts"
 import { type Turn, type Chat } from "@openbot-build/core"
 import type * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
 import * as GrantUse from "./GrantUse.ts"
-import type { Fence } from "../server-execution/execution/Store.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 import {
 	Array as Arr,
 	Cause,
@@ -22,7 +22,7 @@ import {
 	Schema,
 	pipe,
 } from "effect"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import {
 	type Capability,

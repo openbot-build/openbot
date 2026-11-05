@@ -16,7 +16,7 @@ import {
 	developerTestFlows,
 	developerTests,
 } from "@openbot-build/server-database/Schema"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "../apps-contract/apps/IndexNamespace.ts"
 import * as Db from "@openbot-build/server-database/Database"

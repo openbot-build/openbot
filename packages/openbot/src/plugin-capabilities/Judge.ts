@@ -24,17 +24,20 @@ import {
 import {
 	attribute,
 	decisionUsage,
-} from "../server-billing/billing/MeteredModel.ts"
+} from "@openbot-build/server-billing/billing/MeteredModel"
 import {
 	AnyModel,
 	ModelRegistry,
 } from "../models-contract/models/ModelRegistry.ts"
 import * as ModelCalls from "../models-contract/models/ModelCalls.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Records, category } from "../server-kernel/errors/Records.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { Records, category } from "@openbot-build/server-kernel/errors/Records"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 
 /** What the judge model returns. */
 export const Verdict = Schema.Struct({

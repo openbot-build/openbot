@@ -4,13 +4,13 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type Channels,
 	type Developers,
 	Execution,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as ChannelAdmission from "./ChannelAdmission.ts"
 import { Chat } from "@openbot-build/core"
 import { Effect, Context, Layer, Schema } from "effect"

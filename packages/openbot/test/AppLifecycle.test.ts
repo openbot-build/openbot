@@ -38,10 +38,10 @@ import {
 	appConnections,
 	appRecords,
 } from "@openbot-build/server-database/Schema"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as HttpErrors from "../src/server-execution/execution/HttpErrors.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as HttpErrors from "@openbot-build/server-execution/execution/HttpErrors"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Postgres from "./PostgresTest.ts"
 
 const database = Layer.effectDiscard(Database.migrate).pipe(

@@ -18,7 +18,7 @@ import {
 import type { PgClient } from "@effect/sql-pg"
 import { AppHost } from "./AppHost.ts"
 import { Governance } from "./Governance.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import type {
 	Error as StorageError,

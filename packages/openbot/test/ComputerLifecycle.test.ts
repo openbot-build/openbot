@@ -19,7 +19,7 @@ import {
 	String as Str,
 } from "effect"
 import { WorkflowEngine } from "effect/workflow"
-import { AuditLog } from "../src/identity-contract/audit/AuditLog.ts"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import { Bots } from "../src/conversation-contract/bots/Bots.ts"
 import * as Activity from "../src/plugin-computers/Activity.ts"
 import {
@@ -42,13 +42,13 @@ import {
 	computerUsage,
 	executions,
 } from "@openbot-build/server-database/Schema"
-import * as Calls from "../src/server-execution/execution/Calls.ts"
-import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import * as Calls from "@openbot-build/server-execution/execution/Calls"
+import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
 import * as WorkflowsFixture from "./WorkflowsFixture.ts"
-import * as Observation from "../src/server-execution/execution/Observation.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Postgres from "./PostgresTest.ts"
 
 class Allowed extends Context.Service<Allowed, Ref.Ref<boolean>>()(

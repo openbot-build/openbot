@@ -1,4 +1,4 @@
-import { Settings } from "../src/server-kernel/settings/Settings.ts"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { Option } from "effect"
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -9,11 +9,11 @@ import * as Assembly from "../src/app/Assembly.ts"
 import * as Outside from "../src/app/Outside.ts"
 import * as Shared from "../src/app/Shared.ts"
 import * as HostTools from "../src/tools-contract/chats/HostTools.ts"
-import { CurrentCallIdentity } from "../src/server-billing/billing/MeteredModel.ts"
+import { CurrentCallIdentity } from "@openbot-build/server-billing/billing/MeteredModel"
 import {
 	methodsOf,
 	withMethods,
-} from "../src/server-billing/models/ModelMethods.ts"
+} from "@openbot-build/server-billing/models/ModelMethods"
 
 /** This is the full server assembly. Only model and host tool results are fixed. */
 const main = Effect.gen(function* () {

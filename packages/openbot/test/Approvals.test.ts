@@ -6,7 +6,7 @@ import { Effect, Option, Ref } from "effect"
 import * as Approvals from "../src/conversation-contract/capabilities/Approvals.ts"
 import { RequestCommands } from "../src/conversation-contract/capabilities/RequestCommands.ts"
 import { Requests } from "../src/conversation-contract/capabilities/Requests.ts"
-import { Store } from "../src/server-execution/execution/Store.ts"
+import { Store } from "@openbot-build/server-execution/execution/Store"
 import * as Fixture from "./GateFixture.ts"
 
 layer(Fixture.services, { excludeTestServices: true, timeout: "60 seconds" })(

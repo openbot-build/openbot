@@ -25,16 +25,19 @@ import {
 } from "effect"
 import { DecisionModel, LanguageModel, Telemetry } from "effect/ai"
 import { HttpClient } from "effect/http"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
 import * as AnthropicProvider from "../model-providers/providers/anthropic/AnthropicProvider.ts"
 import * as OpenAiCompatProvider from "../model-providers/providers/openai-compat/OpenAiCompatProvider.ts"
 import * as OpenAiProvider from "../model-providers/providers/openai/OpenAiProvider.ts"
 import * as TypeSafeProvider from "../model-providers/providers/typesafe/TypeSafeProvider.ts"
-import { Billing } from "../server-billing/billing/Billing.ts"
-import { meter, meterDecision } from "../server-billing/billing/MeteredModel.ts"
-import { TokenThrottle } from "../server-billing/billing/TokenThrottle.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import {
+	meter,
+	meterDecision,
+} from "@openbot-build/server-billing/billing/MeteredModel"
+import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	linkedOwner,
 	ModelProviders,

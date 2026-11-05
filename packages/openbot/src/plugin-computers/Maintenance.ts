@@ -4,7 +4,7 @@ import {
 	transactionFailures,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type Bots as BotsType,
 	type Computers,
@@ -13,7 +13,7 @@ import {
 	type Caller,
 	type ServiceIdentity,
 } from "@openbot-build/domain"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import type { Machine, ComputerError } from "./Computer.ts"
 import { and, eq, isNull, lt } from "drizzle-orm"
 import {
@@ -36,8 +36,8 @@ import {
 import {
 	type Access as ExecutionAccess,
 	type DecisionCommand,
-} from "../server-execution/execution/Engine.ts"
-import type { End } from "../server-execution/execution/Program.ts"
+} from "@openbot-build/server-execution/execution/Engine"
+import type { End } from "@openbot-build/server-execution/execution/Program"
 import * as Access from "./Access.ts"
 import * as Activity from "./Activity.ts"
 import { ComputerProviders } from "./ComputerProviders.ts"

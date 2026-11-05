@@ -22,10 +22,10 @@ import type { ConnectionSessions, Opened } from "./ConnectionSessions.ts"
 import type { ActionPolicy } from "./ActionPolicy.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import { organizationOf } from "../apps-contract/apps/StoredConnections.ts"
-import type { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import type { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import type * as Report from "../server-kernel/errors/Report.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import type * as Report from "@openbot-build/server-kernel/errors/Report"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 
 /** The services needed to read descriptions. Calls use the App workflow. */
 export interface DiscoveryServices {

@@ -6,16 +6,16 @@ import { type Caller } from "@openbot-build/domain"
 import { and, eq } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { secretProviderResource } from "../identity-contract/authorization/Resources.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { secretProviderResource } from "@openbot-build/identity-contract/authorization/Resources"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	secretProviders,
 	vaultItems,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { Readers } from "./Readers.ts"
 
 type Provider = VaultsModel.SecretProvider

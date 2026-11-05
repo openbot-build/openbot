@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 import { CreditConflict } from "@openbot-build/domain/Billing"
-import { Access } from "../identity-contract/access/Access.ts"
+import { Access } from "@openbot-build/identity-contract/access/Access"
 import { ProviderOAuth } from "../models-contract/models/ProviderOAuth.ts"
-import { Mail } from "../identity-contract/mail/Mail.ts"
+import { Mail } from "@openbot-build/identity-contract/mail/Mail"
 import { Model, Provider } from "@openbot-build/core"
 import { Redacted } from "effect"
 import {
@@ -15,17 +15,17 @@ import {
 import { Account, type AccountCaller } from "@openbot-build/domain"
 import { Array as Arr, Effect, Option, Stream, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import {
 	Billing,
 	type BillingStorageError,
 	type OrganizationMissing,
-} from "../server-billing/billing/Billing.ts"
+} from "@openbot-build/server-billing/billing/Billing"
 import {
 	organizationKey,
 	platformKey,
-} from "../identity-contract/audit/Resources.ts"
+} from "@openbot-build/identity-contract/audit/Resources"
 import { checkUnused } from "../models-contract/models/ProviderUseHttp.ts"
 import {
 	ModelProviders,
@@ -33,20 +33,20 @@ import {
 	view,
 } from "../models-contract/models/ModelProviders.ts"
 import { Models, view as modelView } from "../models-contract/models/Models.ts"
-import { Organization } from "../identity-contract/organization/Organization.ts"
-import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
+import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	filesOf,
 	type PlatformDocument,
-} from "../server-kernel/settings/Documents.ts"
+} from "@openbot-build/server-kernel/settings/Documents"
 import {
 	bindings,
 	changeFiles,
 	changeMail,
-} from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Views from "../server-kernel/settings/Views.ts"
-import { PlatformAdmins } from "../identity-contract/platform/PlatformAdmins.ts"
+} from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Views from "@openbot-build/server-kernel/settings/Views"
+import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 
 /** Platform actions go to this audit log, apart from the logs of organizations. */
 export const platformLog = "platform"

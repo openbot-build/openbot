@@ -12,7 +12,7 @@ import {
 	AppCalls,
 	AppViews,
 } from "@openbot-build/domain"
-import type { Errors } from "../identity-contract/authorization/Check.ts"
+import type { Errors } from "@openbot-build/identity-contract/authorization/Check"
 import {
 	type PlatformError,
 	Array as Arr,
@@ -36,16 +36,16 @@ import * as TaskMessages from "../conversation-contract/chats/TaskMessages.ts"
 import {
 	Store,
 	transactionFailures,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import * as Hex from "effect/encoding/Hex"
 import { Prompt } from "effect/ai"
 import { SqlClient } from "effect/sql"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as Capabilities from "./Capabilities.ts"
 import { ConnectionSessions, type Opened } from "./ConnectionSessions.ts"
 import { appSecrets } from "@openbot-build/server-database/Schema"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as StoredViews from "./StoredViews.ts"

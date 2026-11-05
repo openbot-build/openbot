@@ -1,11 +1,11 @@
 import { type ChatStore, Chat, Item, Turn } from "@openbot-build/core"
 import { type SqlError } from "effect/sql"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core"
-import type { SecretStorageError } from "../../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import { Definition } from "../../tools-contract/chats/ToolDefinitions.ts"
 import { Caller, Execution, ExecutionIdentity } from "@openbot-build/domain"
 import { Context, Effect, Option, Schema } from "effect"
-import { type Fence } from "../../server-execution/execution/Store.ts"
+import { type Fence } from "@openbot-build/server-execution/execution/Store"
 
 export const Input = Schema.Struct({
 	chat: Chat.Id,

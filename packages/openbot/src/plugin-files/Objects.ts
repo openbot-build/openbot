@@ -2,14 +2,14 @@ import { Files } from "@openbot-build/domain"
 import { Effect, Option, Redacted } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { HttpClient } from "effect/http"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	filesDefaults,
 	filesOf,
 	type FilesDocument,
-} from "../server-kernel/settings/Documents.ts"
-import { bindings } from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+} from "@openbot-build/server-kernel/settings/Documents"
+import { bindings } from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as S3 from "./S3.ts"
 
 /** The shared object storage boundary. Secrets are opened only for a call. */

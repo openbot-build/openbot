@@ -22,7 +22,7 @@ import { Computers } from "../src/plugin-computers/Computers.ts"
 import { Sessions } from "../src/plugin-computers/Sessions.ts"
 import * as ComputerTools from "../src/plugin-computers/ComputerTools.ts"
 import { bot } from "./BotFixture.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 
 const { names } = ComputerTools
 

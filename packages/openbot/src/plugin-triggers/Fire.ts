@@ -14,11 +14,11 @@ import {
 	Store,
 	storage,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { triggerKey } from "../identity-contract/audit/Resources.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import { delegationTimeLimitOf } from "../server-kernel/settings/Documents.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import { triggerKey } from "@openbot-build/identity-contract/audit/Resources"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { delegationTimeLimitOf } from "@openbot-build/server-kernel/settings/Documents"
 import { Triggers } from "./Triggers.ts"
 
 export const dataNote =

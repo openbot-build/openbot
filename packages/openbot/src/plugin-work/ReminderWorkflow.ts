@@ -1,8 +1,11 @@
 import { Effect, Layer } from "effect"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import { Runner } from "../server-execution/execution/Runner.ts"
-import { RunScope } from "../server-execution/execution/RunScope.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import { Runner } from "@openbot-build/server-execution/execution/Runner"
+import { RunScope } from "@openbot-build/server-execution/execution/RunScope"
 import { ReminderCommands, workflowName } from "./ReminderCommands.ts"
 
 export const workflow = Engine.define(workflowName)

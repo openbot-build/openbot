@@ -1,15 +1,15 @@
-import { Access } from "../identity-contract/access/Access.ts"
+import { Access } from "@openbot-build/identity-contract/access/Access"
 import { OpenBotApi, type OrganizationApi, SsoApi } from "@openbot-build/api"
 
 import { type Caller, Identity } from "@openbot-build/domain"
 import { Array as Arr, DateTime, Effect, Option, Struct } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
-import { organizationKey } from "../identity-contract/audit/Resources.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import { type Connection, Sso } from "../identity-contract/sso/Sso.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
+import { organizationKey } from "@openbot-build/identity-contract/audit/Resources"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { type Connection, Sso } from "@openbot-build/identity-contract/sso/Sso"
 
 /** The API form. The client secret only shows whether it is set. */
 export const view = ({

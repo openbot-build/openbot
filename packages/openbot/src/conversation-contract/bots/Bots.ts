@@ -3,7 +3,7 @@ import { Bots as BotsApi } from "@openbot-build/domain"
 import { type Authorization } from "@openbot-build/domain"
 import { type Caller } from "@openbot-build/domain"
 import { Context, Effect, Option } from "effect"
-import * as Check from "../../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 
 type Bot = BotsApi.Bot
 

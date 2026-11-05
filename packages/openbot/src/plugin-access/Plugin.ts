@@ -1,10 +1,10 @@
 /** The access plugin: who may join the platform, and how. */
 import { PgClient } from "@effect/sql-pg"
 import { SecureRandom } from "effect/crypto"
-import * as AccessLayer from "../identity-contract/access/Access.ts"
-import { Auth } from "../identity-contract/auth/Auth.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import * as Feature from "../server-plugin/Feature.ts"
+import * as AccessLayer from "@openbot-build/identity-contract/access/Access"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as HttpMounts from "./HttpMounts.ts"
 
 export const id = "access"

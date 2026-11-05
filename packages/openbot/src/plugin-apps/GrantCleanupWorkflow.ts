@@ -2,12 +2,18 @@ import { AppAuthorizations, Execution } from "@openbot-build/domain"
 import { Authorization, OAuthAuthorization } from "@openbot-build/protocol"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { DurableClock } from "effect/workflow"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import * as Program from "../server-execution/execution/Program.ts"
-import * as RetryingCall from "../server-execution/execution/RetryingCall.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
-import { Store, type Fence } from "../server-execution/execution/Store.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import * as Program from "@openbot-build/server-execution/execution/Program"
+import * as RetryingCall from "@openbot-build/server-execution/execution/RetryingCall"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import {
+	Store,
+	type Fence,
+} from "@openbot-build/server-execution/execution/Store"
 import { AppNetwork } from "../apps-contract/apps/AppNetwork.ts"
 import {
 	GrantCleanup,

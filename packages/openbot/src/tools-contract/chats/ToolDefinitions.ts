@@ -3,7 +3,10 @@ import { Array as Arr, Context, Duration, Effect, Option, Schema } from "effect"
 import { Operation, type ModelStep } from "@openbot-build/core"
 import { Tool } from "effect/ai"
 import { InputState, Local, Idempotent } from "../plugins/ToolEntry.ts"
-import type { Store, Key } from "../../server-execution/execution/Store.ts"
+import type {
+	Store,
+	Key,
+} from "@openbot-build/server-execution/execution/Store"
 
 /** The tool data shown to a model is part of that model call's saved input. */
 export const Definition = Schema.Struct({

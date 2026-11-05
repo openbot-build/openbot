@@ -6,7 +6,7 @@ import {
 } from "@openbot-build/domain"
 import { Context, Effect, Schema } from "effect"
 import { Work } from "../capabilities/Work.ts"
-import { type OrganizationUnavailable } from "../../identity-contract/organization/Organization.ts"
+import { type OrganizationUnavailable } from "@openbot-build/identity-contract/organization/Organization"
 import * as ChatHost from "./ChatHost.ts"
 
 /** The owner or actor of a Turn is no longer an active member. */

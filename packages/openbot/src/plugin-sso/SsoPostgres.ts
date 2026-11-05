@@ -1,4 +1,4 @@
-import { Access as AccountAccess } from "../identity-contract/access/Access.ts"
+import { Access as AccountAccess } from "@openbot-build/identity-contract/access/Access"
 import * as Access from "@openbot-build/domain/Access"
 import { Sso as SsoModel } from "@openbot-build/domain"
 
@@ -18,22 +18,22 @@ import { SecureRandom } from "effect/crypto"
 import { Base64Url } from "effect/encoding"
 import { SqlError } from "effect/sql"
 import { and, asc, eq, isNotNull, ne } from "drizzle-orm"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
-import { DomainControl } from "../server-kernel/apps/DomainControl.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import { DomainControl } from "@openbot-build/server-kernel/apps/DomainControl"
 import { openbot_auth_account } from "@openbot-build/server-database/AuthSchema"
 import {
 	organizationDomains,
 	ssoConnections,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
-import { signInScope } from "../server-kernel/settings/Documents.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { signInScope } from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import {
 	type Connection,
 	recordName,
 	Sso,
-} from "../identity-contract/sso/Sso.ts"
+} from "@openbot-build/identity-contract/sso/Sso"
 import * as Db from "@openbot-build/server-database/Database"
 
 const AccessJson = Schema.fromJsonString(Access.ProviderAccess)

@@ -12,16 +12,16 @@ import {
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import * as Db from "@openbot-build/server-database/Database"
-import { Records, category } from "../server-kernel/errors/Records.ts"
-import { CallContext } from "../server-execution/execution/CallContext.ts"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { Observation } from "../server-execution/execution/Observation.ts"
-import * as Recovery from "../server-execution/execution/Recovery.ts"
+import { Records, category } from "@openbot-build/server-kernel/errors/Records"
+import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { Observation } from "@openbot-build/server-execution/execution/Observation"
+import * as Recovery from "@openbot-build/server-execution/execution/Recovery"
 import {
 	Store,
 	storage,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as ToolEntry from "../tools-contract/plugins/ToolEntry.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { ToolCommands } from "../conversation-contract/chats/ToolCommands.ts"

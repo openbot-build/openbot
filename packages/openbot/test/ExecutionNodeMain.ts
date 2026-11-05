@@ -1,6 +1,6 @@
 import { Delegations } from "../src/conversation-contract/bots/Delegations.ts"
-import * as PrivateRpc from "../src/server-execution/transport/PrivateRpc.ts"
-import * as Observation from "../src/server-execution/execution/Observation.ts"
+import * as PrivateRpc from "@openbot-build/server-execution/transport/PrivateRpc"
+import * as Observation from "@openbot-build/server-execution/execution/Observation"
 /** This entry point is run in two separate processes by ExecutionCluster.test.ts. */
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer needs the native server factory.
 import { createServer } from "node:http"
@@ -12,8 +12,8 @@ import {
 	NodeServices,
 } from "@effect/platform-node"
 import { Execution, ServiceId } from "@openbot-build/domain"
-import { Billing } from "../src/server-billing/billing/Billing.ts"
-import * as BillingPostgres from "../src/server-billing/billing/BillingPostgres.ts"
+import { Billing } from "@openbot-build/server-billing/billing/Billing"
+import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Config,
@@ -36,16 +36,16 @@ import {
 	DurableDeferred,
 	type WorkflowEngine,
 } from "effect/workflow"
-import * as Runner from "../src/server-execution/execution/Runner.ts"
-import * as RunScope from "../src/server-execution/execution/RunScope.ts"
-import * as Calls from "../src/server-execution/execution/Calls.ts"
-import * as CallRecovery from "../src/server-execution/execution/CallRecovery.ts"
-import * as Records from "../src/server-kernel/errors/Records.ts"
-import * as Engine from "../src/server-execution/execution/Engine.ts"
-import * as Workflows from "../src/server-execution/execution/Workflows.ts"
-import * as EngineHost from "../src/server-execution/execution/EngineHost.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Runner from "@openbot-build/server-execution/execution/Runner"
+import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
+import * as Calls from "@openbot-build/server-execution/execution/Calls"
+import * as CallRecovery from "@openbot-build/server-execution/execution/CallRecovery"
+import * as Records from "@openbot-build/server-kernel/errors/Records"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
+import * as EngineHost from "@openbot-build/server-execution/execution/EngineHost"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 
 import * as TurnClusterFixture from "./TurnClusterFixture.ts"

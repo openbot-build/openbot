@@ -1,5 +1,5 @@
 import { Execution, ToolExecution } from "@openbot-build/domain"
-import * as DecisionWait from "../server-execution/execution/DecisionWait.ts"
+import * as DecisionWait from "@openbot-build/server-execution/execution/DecisionWait"
 import { type Definition } from "../tools-contract/chats/ToolDefinitions.ts"
 import * as ToolRecords from "../conversation-contract/chats/ToolRecords.ts"
 import {
@@ -34,14 +34,14 @@ import {
 	executions,
 	toolExecutions,
 } from "@openbot-build/server-database/ExecutionSchema"
-import { Calls } from "../server-execution/execution/Calls.ts"
-import { type Authorize } from "../server-execution/execution/Engine.ts"
+import { Calls } from "@openbot-build/server-execution/execution/Calls"
+import { type Authorize } from "@openbot-build/server-execution/execution/Engine"
 import {
 	Store,
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"

@@ -1,7 +1,7 @@
 import { PgClient } from "@effect/sql-pg"
 import { Bots as BotsApi } from "@openbot-build/domain"
 import { Array as Arr, Effect, Layer, Option, Schema } from "effect"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import {
 	type Collection,
 	BotRecords,

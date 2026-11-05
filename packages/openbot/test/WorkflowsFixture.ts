@@ -1,9 +1,9 @@
 import type { ServiceId } from "@openbot-build/domain"
 import { Effect, HashMap, Layer, Option, Stream } from "effect"
-import type * as Admission from "../src/server-execution/execution/Admission.ts"
-import type * as Engine from "../src/server-execution/execution/Engine.ts"
-import type { Key } from "../src/server-execution/execution/Store.ts"
-import * as Workflows from "../src/server-execution/execution/Workflows.ts"
+import type * as Admission from "@openbot-build/server-execution/execution/Admission"
+import type * as Engine from "@openbot-build/server-execution/execution/Engine"
+import type { Key } from "@openbot-build/server-execution/execution/Store"
+import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
 
 const { Policy } = Workflows
 

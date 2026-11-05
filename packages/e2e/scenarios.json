@@ -1890,7 +1890,7 @@
 				},
 				{
 					"file": "packages/e2e/test/bot-work/Billing.test.ts",
-					"missingBehavior": "The two pure price tests kept in packages/openbot/test/Billing.test.ts are outside this audit."
+					"missingBehavior": "The two pure price tests kept in packages/server-billing/test/Billing.test.ts are outside this audit."
 				},
 				{
 					"file": "packages/e2e/test/bot-work/BotSharing.test.ts",

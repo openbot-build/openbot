@@ -10,7 +10,7 @@ import {
 } from "effect"
 import type * as Audience from "./memory/Audience.ts"
 import * as Memory from "./memory/BotMemory.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import type { Home } from "../conversation-contract/bots/BotMemories.ts"
 
 const Sources = Schema.fromJsonString(Schema.Array(Memory.Source))

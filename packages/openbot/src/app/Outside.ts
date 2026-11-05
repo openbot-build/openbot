@@ -16,9 +16,9 @@ import * as AppDiscovery from "../plugin-apps/Discovery.ts"
 import * as AppProbe from "../plugin-apps/Probe.ts"
 import * as Drivers from "../plugin-computers/Drivers.ts"
 import * as VaultReaders from "../plugin-vaults/Readers.ts"
-import * as DomainControl from "../server-kernel/apps/DomainControl.ts"
-import type * as ErrorRecords from "../server-kernel/errors/Records.ts"
-import * as OutboundPolicy from "../server-kernel/network/OutboundPolicy.ts"
+import * as DomainControl from "@openbot-build/server-kernel/apps/DomainControl"
+import type * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
+import * as OutboundPolicy from "@openbot-build/server-kernel/network/OutboundPolicy"
 
 /** The services from outside of OpenBot that the host needs. */
 export type Services =

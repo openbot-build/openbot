@@ -1,5 +1,5 @@
 import * as ErrorRecordsFixture from "./ErrorRecordsFixture.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { ComputerCallFailed } from "../src/plugin-computers/Computer.ts"
 import { Redacted } from "effect"
 import { assert, it } from "@effect/vitest"

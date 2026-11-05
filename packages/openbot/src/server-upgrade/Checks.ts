@@ -11,14 +11,14 @@ import {
 	appGrantUses,
 	developerWatches,
 } from "@openbot-build/server-database/Schema"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import { Store } from "../server-execution/execution/Store.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import { Store } from "@openbot-build/server-execution/execution/Store"
 import * as TestCleanup from "../plugin-apps/TestCleanup.ts"
 import * as IndexWork from "../plugin-apps/IndexWork.ts"
 import * as DeveloperWatches from "../plugin-apps/DeveloperWatches.ts"
-import * as Imported from "../server-execution/imported/Executions.ts"
-import * as Legacy from "../server-kernel/imported/LegacyV1.ts"
-import * as Progress from "../server-kernel/imported/Progress.ts"
+import * as Imported from "@openbot-build/server-execution/imported/Executions"
+import * as Legacy from "@openbot-build/server-kernel/imported/LegacyV1"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
 
 const json = Schema.fromJsonString(Schema.Json)
 const Counts = Schema.fromJsonString(

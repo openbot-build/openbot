@@ -29,14 +29,14 @@ import {
 	appAuthorizations,
 	appConnections,
 } from "@openbot-build/server-database/Schema"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { ProtocolStores } from "./ProtocolStores.ts"
 import { ownerKey } from "../apps-contract/apps/StoredConnections.ts"
 import * as ClientMetadata from "./ClientMetadata.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 type CommandError = Effect.Error<
 	ReturnType<(typeof AuthorizationCommands.Service)["start"]>

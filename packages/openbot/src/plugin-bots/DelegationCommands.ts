@@ -4,7 +4,7 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import {
 	type BotId,
 	type Bots as BotsType,
@@ -39,7 +39,7 @@ import {
 	Struct,
 } from "effect"
 import { Digest } from "effect/crypto"
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import { type Failure, Bots } from "../conversation-contract/bots/Bots.ts"
 import { type SqlError, SqlClient } from "effect/sql"
 import { Prompt } from "effect/ai"
@@ -55,11 +55,14 @@ import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import type { Authorize, Decide } from "../server-execution/execution/Engine.ts"
+import type {
+	Authorize,
+	Decide,
+} from "@openbot-build/server-execution/execution/Engine"
 import { ModelRegistry } from "../models-contract/models/ModelRegistry.ts"
 import * as Todos from "../tools-contract/plugins/work/Todos.ts"
-import { delegationTimeLimitOf } from "../server-kernel/settings/Documents.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import { delegationTimeLimitOf } from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import * as DelegationUsage from "../conversation-contract/bots/DelegationUsage.ts"
 import {
 	Delegations,

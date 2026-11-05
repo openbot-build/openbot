@@ -3,7 +3,7 @@ import type {
 	Preparation,
 	Exchange,
 } from "./TestCommands.ts"
-import { Records } from "../server-kernel/errors/Records.ts"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { Developers, Execution as Executions } from "@openbot-build/domain"
 
 import {
@@ -39,9 +39,9 @@ import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { capabilityLists, pages } from "./Capabilities.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 export type Execution = TestResult
 export class DeveloperTestRuntime extends Context.Service<

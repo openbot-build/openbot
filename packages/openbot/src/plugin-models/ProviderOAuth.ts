@@ -20,8 +20,8 @@ import {
 	providerOAuthAuthorizations,
 	providerOAuthHosts,
 } from "@openbot-build/server-database/Schema"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	authorizeUrl,
 	ChatGptOAuth,

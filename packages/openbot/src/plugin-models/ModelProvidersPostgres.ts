@@ -13,13 +13,13 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { and, asc, eq, inArray, or } from "drizzle-orm"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import {
 	modelProviders,
 	models,
 	providerModels,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	linkedOwner,
 	ModelProviders,

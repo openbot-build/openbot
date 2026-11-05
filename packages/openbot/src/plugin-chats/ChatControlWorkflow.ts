@@ -1,7 +1,10 @@
 import { Effect, Layer } from "effect"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import * as Program from "../server-execution/execution/Program.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import * as Program from "@openbot-build/server-execution/execution/Program"
 import * as ChatControl from "./ChatControl.ts"
 
 export const workflow = Engine.define(ChatControl.workflowName)

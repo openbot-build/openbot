@@ -19,9 +19,9 @@ import {
 } from "@openbot-build/server-database/Schema"
 import { IndexWork } from "../apps-contract/apps/IndexWork.ts"
 import * as StoredConnections from "../apps-contract/apps/StoredConnections.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 
 export interface OwnedStores {
 	readonly apps: typeof Store.AppStore.Service

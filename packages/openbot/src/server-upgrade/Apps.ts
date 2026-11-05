@@ -1,18 +1,18 @@
 import { Execution } from "@openbot-build/domain"
 import * as TestCleanup from "../plugin-apps/TestCleanup.ts"
-import * as Store from "../server-execution/execution/Store.ts"
+import * as Store from "@openbot-build/server-execution/execution/Store"
 import { Array as Arr, Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
-import * as Authority from "../server-execution/imported/Authority.ts"
-import * as Executions from "../server-execution/imported/Executions.ts"
-import * as Legacy from "../server-execution/imported/LegacyApps.ts"
-import * as Version from "../server-kernel/imported/LegacyV1.ts"
-import * as Progress from "../server-kernel/imported/Progress.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
+import * as Authority from "@openbot-build/server-execution/imported/Authority"
+import * as Executions from "@openbot-build/server-execution/imported/Executions"
+import * as Legacy from "@openbot-build/server-execution/imported/LegacyApps"
+import * as Version from "@openbot-build/server-kernel/imported/LegacyV1"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
 import {
 	AuthorizationHistory,
 	History,
-} from "../server-execution/imported/AppHistory.ts"
+} from "@openbot-build/server-execution/imported/AppHistory"
 
 const json = Schema.fromJsonString(Schema.Json)
 const encode = Schema.encodeEffect(json)
@@ -24,7 +24,7 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>
 export {
 	AppHistory,
 	CodeHistory,
-} from "../server-execution/imported/AppHistory.ts"
+} from "@openbot-build/server-execution/imported/AppHistory"
 export class InvalidAppRecord extends Schema.TaggedError<
 	InvalidAppRecord,
 	{ readonly brand: unique symbol }

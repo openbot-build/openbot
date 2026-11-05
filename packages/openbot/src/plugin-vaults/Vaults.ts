@@ -14,10 +14,10 @@ import {
 	Schema,
 } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { vaultResource } from "../identity-contract/authorization/Resources.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { vaultResource } from "@openbot-build/identity-contract/authorization/Resources"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import { Bots } from "../conversation-contract/bots/Bots.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import {
@@ -25,7 +25,7 @@ import {
 	vaultItems,
 	vaults,
 } from "@openbot-build/server-database/Schema"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import { VaultReadFailed } from "../apps-contract/vaults/Readers.ts"
 import { Readers } from "./Readers.ts"
 import { SecretProviders } from "./SecretProviders.ts"

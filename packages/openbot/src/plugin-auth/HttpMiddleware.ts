@@ -15,23 +15,23 @@ import {
 	String as Str,
 } from "effect"
 import { HttpMethod, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { Tokens } from "../identity-contract/auth/Tokens.ts"
-import { Auth } from "../identity-contract/auth/Auth.ts"
+import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
+import { Auth } from "@openbot-build/identity-contract/auth/Auth"
 import {
 	AuthUnavailable,
 	CredentialRejected,
-} from "../server-kernel/auth/Model.ts"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import { Organization } from "../identity-contract/organization/Organization.ts"
-import { RateLimiter } from "../server-billing/billing/RateLimit.ts"
-import * as Platform from "../server-kernel/settings/Platform.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
-import { setSessionCookies } from "../identity-contract/auth/SessionHttp.ts"
+} from "@openbot-build/server-kernel/auth/Model"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import { Organization } from "@openbot-build/identity-contract/organization/Organization"
+import { RateLimiter } from "@openbot-build/server-billing/billing/RateLimit"
+import * as Platform from "@openbot-build/server-kernel/settings/Platform"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
+import { setSessionCookies } from "@openbot-build/identity-contract/auth/SessionHttp"
 export {
 	setSessionCookies,
 	optionalSession,
 	layerNoStore,
-} from "../identity-contract/auth/SessionHttp.ts"
+} from "@openbot-build/identity-contract/auth/SessionHttp"
 
 /** The public error for a credential that failed to resolve. */
 const publicError = (error: AuthUnavailable | CredentialRejected) =>

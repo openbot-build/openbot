@@ -4,9 +4,9 @@ import { and, eq } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Order, Schema } from "effect"
 import { ownerKey } from "../../apps-contract/apps/StoredConnections.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Imported from "../../server-execution/imported/Executions.ts"
-import { ImportedRecords } from "../../server-execution/imported/ImportedRecords.ts"
-import * as Legacy from "../../server-execution/imported/LegacyChats.ts"
+import * as Imported from "@openbot-build/server-execution/imported/Executions"
+import { ImportedRecords } from "@openbot-build/server-execution/imported/ImportedRecords"
+import * as Legacy from "@openbot-build/server-execution/imported/LegacyChats"
 import {
 	executions,
 	toolExecutions,
@@ -14,7 +14,7 @@ import {
 import {
 	Store,
 	transactionFailures,
-} from "../../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as ChatQueries from "./ChatQueries.ts"
 import { ToolCommands } from "./ToolCommands.ts"
 import * as ToolResults from "./ToolResults.ts"

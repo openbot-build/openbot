@@ -14,11 +14,11 @@ import {
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Migrations from "../src/server-upgrade/Migrations.ts"
 import * as Apps from "../src/server-upgrade/Apps.ts"
-import * as Imported from "../src/server-execution/imported/Executions.ts"
-import * as Legacy from "../src/server-execution/imported/LegacyApps.ts"
-import * as Progress from "../src/server-kernel/imported/Progress.ts"
-import * as Store from "../src/server-execution/execution/Store.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Imported from "@openbot-build/server-execution/imported/Executions"
+import * as Legacy from "@openbot-build/server-execution/imported/LegacyApps"
+import * as Progress from "@openbot-build/server-kernel/imported/Progress"
+import * as Store from "@openbot-build/server-execution/execution/Store"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const owner = '["org","person"]'

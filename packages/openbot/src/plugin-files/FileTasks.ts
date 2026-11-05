@@ -1,4 +1,4 @@
-import type { SecretStorageError } from "../server-kernel/secrets/Secrets.ts"
+import type { SecretStorageError } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	Authorization,
 	Execution,
@@ -10,7 +10,7 @@ import {
 import { and, eq, isNull, lt, notExists, or } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import * as Check from "../identity-contract/authorization/Check.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	executions,
@@ -23,9 +23,12 @@ import {
 	storage,
 	type Fence,
 	type Key,
-} from "../server-execution/execution/Store.ts"
-import { filesDefaults, filesOf } from "../server-kernel/settings/Documents.ts"
-import { Settings } from "../server-kernel/settings/Settings.ts"
+} from "@openbot-build/server-execution/execution/Store"
+import {
+	filesDefaults,
+	filesOf,
+} from "@openbot-build/server-kernel/settings/Documents"
+import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 export const cleanupWorkflowName = "openbot.file-cleanup"
 export const retentionWorkflowName = "openbot.file-retention"

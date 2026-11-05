@@ -3,7 +3,7 @@ import {
 	storage,
 	type Key,
 	type Fence,
-} from "../server-execution/execution/Store.ts"
+} from "@openbot-build/server-execution/execution/Store"
 import * as PolicyOrigin from "../conversation-contract/capabilities/PolicyOrigin.ts"
 import * as ToolOrigins from "../conversation-contract/chats/ToolOrigins.ts"
 import { Chat, Turn } from "@openbot-build/core"
@@ -19,14 +19,14 @@ import { SqlClient } from "effect/sql"
 import * as Db from "@openbot-build/server-database/Database"
 import * as StoredChats from "../conversation-contract/chats/StoredChats.ts"
 import { TurnContext } from "../conversation-contract/chats/TurnContext.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { AuditLog } from "../identity-contract/audit/AuditLog.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
 import * as ChatHost from "../conversation-contract/chats/ChatHost.ts"
 import { TurnAccess } from "../conversation-contract/chats/TurnAccess.ts"
 import {
 	type Authorize,
 	type DecisionCommand,
-} from "../server-execution/execution/Engine.ts"
+} from "@openbot-build/server-execution/execution/Engine"
 import {
 	Requests,
 	Stored,

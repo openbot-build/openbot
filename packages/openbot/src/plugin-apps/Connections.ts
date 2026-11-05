@@ -26,13 +26,13 @@ import {
 import { SecureRandom } from "effect/crypto"
 import type { PgClient } from "@effect/sql-pg"
 import { sql } from "drizzle-orm"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as DiscoveryService from "./Discovery.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
-import { Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import {
 	appConnections,
 	appDrafts,
@@ -44,7 +44,7 @@ import {
 	type StoredConnection,
 } from "../apps-contract/apps/StoredConnections.ts"
 import * as Db from "@openbot-build/server-database/Database"
-import * as Failures from "../server-kernel/errors/Failures.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 
 export type Error =
 	| ExperienceInputInvalid

@@ -30,7 +30,7 @@ import {
 	ChatGptOAuth,
 	Credentials,
 } from "../src/model-providers/providers/chatgpt/OAuth.ts"
-import * as Secrets from "../src/server-kernel/secrets/Secrets.ts"
+import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as MigrationTest from "./MigrationTest.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 

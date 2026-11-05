@@ -20,8 +20,8 @@ import type {
 	ToWorker,
 	VaultItem,
 } from "../apps-contract/code/Protocol.ts"
-import * as Report from "../server-kernel/errors/Report.ts"
-import type { Records } from "../server-kernel/errors/Records.ts"
+import * as Report from "@openbot-build/server-kernel/errors/Report"
+import type { Records } from "@openbot-build/server-kernel/errors/Records"
 
 export interface Program {
 	readonly code: string

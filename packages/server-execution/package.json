@@ -1,0 +1,76 @@
+{
+	"name": "@openbot-build/server-execution",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The execution engine of the OpenBot server: stored executions, calls, workflows, resources, and the private RPC",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		"./execution/Admission": "./dist/execution/Admission.js",
+		"./execution/CallContext": "./dist/execution/CallContext.js",
+		"./execution/CallRecovery": "./dist/execution/CallRecovery.js",
+		"./execution/Calls": "./dist/execution/Calls.js",
+		"./execution/Children": "./dist/execution/Children.js",
+		"./execution/Commands": "./dist/execution/Commands.js",
+		"./execution/DecisionWait": "./dist/execution/DecisionWait.js",
+		"./execution/Engine": "./dist/execution/Engine.js",
+		"./execution/EngineHost": "./dist/execution/EngineHost.js",
+		"./execution/HttpErrors": "./dist/execution/HttpErrors.js",
+		"./execution/HttpEvents": "./dist/execution/HttpEvents.js",
+		"./execution/HttpHandlers": "./dist/execution/HttpHandlers.js",
+		"./execution/Observation": "./dist/execution/Observation.js",
+		"./execution/Permits": "./dist/execution/Permits.js",
+		"./execution/Program": "./dist/execution/Program.js",
+		"./execution/Recovery": "./dist/execution/Recovery.js",
+		"./execution/RetryingCall": "./dist/execution/RetryingCall.js",
+		"./execution/Runner": "./dist/execution/Runner.js",
+		"./execution/RunnerManifest": "./dist/execution/RunnerManifest.js",
+		"./execution/RunScope": "./dist/execution/RunScope.js",
+		"./execution/Send": "./dist/execution/Send.js",
+		"./execution/Store": "./dist/execution/Store.js",
+		"./execution/Workflows": "./dist/execution/Workflows.js",
+		"./imported/AppHistory": "./dist/imported/AppHistory.js",
+		"./imported/Authority": "./dist/imported/Authority.js",
+		"./imported/Executions": "./dist/imported/Executions.js",
+		"./imported/ImportedRecords": "./dist/imported/ImportedRecords.js",
+		"./imported/LegacyApps": "./dist/imported/LegacyApps.js",
+		"./imported/LegacyChats": "./dist/imported/LegacyChats.js",
+		"./resources/ConnectionScopes": "./dist/resources/ConnectionScopes.js",
+		"./resources/Directory": "./dist/resources/Directory.js",
+		"./resources/Resource": "./dist/resources/Resource.js",
+		"./resources/Transport": "./dist/resources/Transport.js",
+		"./transport/PrivateRpc": "./dist/transport/PrivateRpc.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/protocol": "workspace:*",
+		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/server-execution"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

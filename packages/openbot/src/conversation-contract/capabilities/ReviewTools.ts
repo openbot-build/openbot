@@ -1,8 +1,8 @@
 import { Execution } from "@openbot-build/domain"
 import { Context, Effect, Schema } from "effect"
 import { Tool } from "effect/ai"
-import { CallContext } from "../../server-execution/execution/CallContext.ts"
-import type { Fence } from "../../server-execution/execution/Store.ts"
+import { CallContext } from "@openbot-build/server-execution/execution/CallContext"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 
 export const names = {
 	approve: "openbot_approve",

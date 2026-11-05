@@ -6,7 +6,7 @@ import { ChannelQueue } from "../../src/plugin-channels/ChannelQueue.ts"
 import { Channels } from "../../src/conversation-contract/channels/Channels.ts"
 import * as Db from "@openbot-build/server-database/Database"
 import { executions } from "@openbot-build/server-database/Schema"
-import { Store } from "../../src/server-execution/execution/Store.ts"
+import { Store } from "@openbot-build/server-execution/execution/Store"
 
 /** Reads the saved caller after a Channel is made through the API. */
 export const authority = (organizationId: string, channelId: string) =>

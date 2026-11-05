@@ -27,7 +27,7 @@ import {
 } from "../Computer.ts"
 import * as Desktop from "./Desktop.ts"
 import * as Envd from "./Envd.ts"
-import * as Background from "../../server-kernel/execution/Background.ts"
+import * as Background from "@openbot-build/server-kernel/execution/Background"
 import {
 	failed,
 	field,

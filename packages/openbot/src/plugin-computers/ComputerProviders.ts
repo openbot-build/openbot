@@ -14,16 +14,16 @@ import {
 	Schema,
 } from "effect"
 import { Hex } from "effect/encoding"
-import * as Failures from "../server-kernel/errors/Failures.ts"
-import * as Check from "../identity-contract/authorization/Check.ts"
-import { computerProviderResource } from "../identity-contract/authorization/Resources.ts"
-import { toWhere } from "../identity-contract/authorization/Sql.ts"
+import * as Failures from "@openbot-build/server-kernel/errors/Failures"
+import * as Check from "@openbot-build/identity-contract/authorization/Check"
+import { computerProviderResource } from "@openbot-build/identity-contract/authorization/Resources"
+import { toWhere } from "@openbot-build/identity-contract/authorization/Sql"
 import * as Db from "@openbot-build/server-database/Database"
 import {
 	computerProviders,
 	computers,
 } from "@openbot-build/server-database/Schema"
-import { hint, Secrets } from "../server-kernel/secrets/Secrets.ts"
+import { hint, Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 
 type ComputerProvider = ComputerData.ComputerProvider
 type Credentials = ComputerData.ComputerProviderCredentials

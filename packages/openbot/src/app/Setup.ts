@@ -10,7 +10,7 @@ import {
 	String as Str,
 } from "effect"
 import { Command, Flag } from "effect/cli"
-import * as SecretFiles from "../server-kernel/configuration/SecretFiles.ts"
+import * as SecretFiles from "@openbot-build/server-kernel/configuration/SecretFiles"
 import * as PlatformAdminsPostgres from "../plugin-platform/PlatformAdminsPostgres.ts"
 import * as Setup from "../plugin-platform/Setup.ts"
 import { read } from "../plugin-platform/SetupFile.ts"

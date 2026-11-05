@@ -2,8 +2,8 @@ import { assert, it } from "@effect/vitest"
 import { Execution } from "@openbot-build/domain"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { entry } from "../src/tools-contract/plugins/ToolEntry.ts"
-import { codec, snapshot } from "../src/server-kernel/errors/Snapshot.ts"
-import { Records } from "../src/server-kernel/errors/Records.ts"
+import { codec, snapshot } from "@openbot-build/server-kernel/errors/Snapshot"
+import { Records } from "@openbot-build/server-kernel/errors/Records"
 
 class Inside extends Schema.TaggedError<
 	Inside,

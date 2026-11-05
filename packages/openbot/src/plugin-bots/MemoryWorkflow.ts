@@ -1,12 +1,15 @@
 import { DurableClock } from "effect/workflow"
 import { MemoryBot } from "../conversation-contract/bots/MemoryBot.ts"
 import { MemoryBudgetSpent } from "./MemoryBot.ts"
-import type { Fence } from "../server-execution/execution/Store.ts"
+import type { Fence } from "@openbot-build/server-execution/execution/Store"
 import { Clock, DateTime, Effect, Layer, Result, Schema } from "effect"
-import * as Engine from "../server-execution/execution/Engine.ts"
-import { Policy, Workflows } from "../server-execution/execution/Workflows.ts"
-import { Runner } from "../server-execution/execution/Runner.ts"
-import { RunScope } from "../server-execution/execution/RunScope.ts"
+import * as Engine from "@openbot-build/server-execution/execution/Engine"
+import {
+	Policy,
+	Workflows,
+} from "@openbot-build/server-execution/execution/Workflows"
+import { Runner } from "@openbot-build/server-execution/execution/Runner"
+import { RunScope } from "@openbot-build/server-execution/execution/RunScope"
 import { MemoryLearning, workflowName } from "./MemoryLearning.ts"
 
 export const workflow = Engine.define(workflowName)
