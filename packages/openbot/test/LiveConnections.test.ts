@@ -32,7 +32,7 @@ import {
 } from "effect"
 import { LanguageModel, Response } from "effect/ai"
 import { ownerKey } from "@openbot-build/apps-contract/apps/StoredConnections"
-import * as LiveConnections from "../src/plugin-chats/live/LiveConnections.ts"
+import * as LiveConnections from "@openbot-build/plugin-chats/live/LiveConnections"
 import { Workflows } from "@openbot-build/server-execution/execution/Workflows"
 import * as Send from "@openbot-build/server-execution/execution/Send"
 import * as Store from "@openbot-build/server-execution/execution/Store"

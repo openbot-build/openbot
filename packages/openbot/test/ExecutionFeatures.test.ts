@@ -22,7 +22,7 @@ import {
 import type { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import * as BotFeatures from "@openbot-build/conversation-contract/chats/BotFeatures"
 import { TurnContext } from "@openbot-build/conversation-contract/chats/TurnContext"
-import * as ExecutionFeatures from "../src/plugin-chats/ExecutionFeatures.ts"
+import * as ExecutionFeatures from "@openbot-build/plugin-chats/ExecutionFeatures"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import type { Definition } from "@openbot-build/tools-contract/chats/ToolDefinitions"

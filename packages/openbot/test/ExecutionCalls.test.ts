@@ -75,9 +75,9 @@ import * as RunScope from "@openbot-build/server-execution/execution/RunScope"
 import * as Engine from "@openbot-build/server-execution/execution/Engine"
 import { DurableDeferred, WorkflowEngine } from "effect/workflow"
 import * as Store from "@openbot-build/server-execution/execution/Store"
-import * as ToolSteps from "../src/plugin-chats/ToolSteps.ts"
+import * as ToolSteps from "@openbot-build/plugin-chats/ToolSteps"
 import { TurnAccess } from "@openbot-build/conversation-contract/chats/TurnAccess"
-import * as ModelSteps from "../src/plugin-chats/ModelSteps.ts"
+import * as ModelSteps from "@openbot-build/plugin-chats/ModelSteps"
 import {
 	Billing,
 	BillingStorageError,
@@ -88,7 +88,7 @@ import {
 	meterDecision,
 	CurrentCallIdentity,
 } from "@openbot-build/server-billing/billing/MeteredModel"
-import * as Judge from "../src/plugin-capabilities/Judge.ts"
+import * as Judge from "@openbot-build/plugin-capabilities/Judge"
 import {
 	ModelRegistry,
 	AnyModel,

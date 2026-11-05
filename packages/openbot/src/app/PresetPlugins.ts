@@ -9,6 +9,9 @@ import AuditPlugin from "@openbot-build/plugin-audit"
 import AuthPlugin from "@openbot-build/plugin-auth"
 import AuthorizationPlugin from "@openbot-build/plugin-authorization"
 import BillingPlugin from "@openbot-build/plugin-billing"
+import BotsPlugin from "@openbot-build/plugin-bots"
+import CapabilitiesPlugin from "@openbot-build/plugin-capabilities"
+import ChatsPlugin from "@openbot-build/plugin-chats"
 import CodePlugin from "@openbot-build/plugin-code"
 import FilesPlugin from "@openbot-build/plugin-files"
 import MailPlugin from "@openbot-build/plugin-mail"
@@ -18,6 +21,7 @@ import PlatformPlugin from "@openbot-build/plugin-platform"
 import SettingsPlugin from "@openbot-build/plugin-settings"
 import SsoPlugin from "@openbot-build/plugin-sso"
 import VaultsPlugin from "@openbot-build/plugin-vaults"
+import WorkPlugin from "@openbot-build/plugin-work"
 import {
 	Array as Arr,
 	Effect,
@@ -27,14 +31,10 @@ import {
 	Stream,
 } from "effect"
 import * as AppsPlugin from "../plugin-apps/Plugin.ts"
-import * as BotsPlugin from "../plugin-bots/Plugin.ts"
-import * as CapabilitiesPlugin from "../plugin-capabilities/Plugin.ts"
 import * as ChannelsPlugin from "../plugin-channels/Plugin.ts"
-import * as ChatsPlugin from "../plugin-chats/Plugin.ts"
 import * as ComputersPlugin from "../plugin-computers/Plugin.ts"
 import * as ImportedPlugin from "../plugin-imported/Plugin.ts"
 import * as TriggersPlugin from "../plugin-triggers/Plugin.ts"
-import * as WorkPlugin from "../plugin-work/Plugin.ts"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as PluginsFile from "./PluginsFile.ts"
 import { type Id, ids, nameOf, required } from "./Preset.ts"
@@ -51,11 +51,11 @@ export const byId = {
 	authorization: AuthorizationPlugin,
 	models: ModelsPlugin,
 	files: FilesPlugin,
-	bots: BotsPlugin.default,
-	capabilities: CapabilitiesPlugin.default,
-	work: WorkPlugin.default,
+	bots: BotsPlugin,
+	capabilities: CapabilitiesPlugin,
+	work: WorkPlugin,
 	imported: ImportedPlugin.default,
-	chats: ChatsPlugin.default,
+	chats: ChatsPlugin,
 	channels: ChannelsPlugin.default,
 	apps: AppsPlugin.default,
 	code: CodePlugin,

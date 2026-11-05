@@ -17,7 +17,7 @@ export * as ResponsesCompaction from "@openbot-build/model-providers/providers/o
 export * as OpenAiCompatProvider from "@openbot-build/model-providers/providers/openai-compat/OpenAiCompatProvider"
 export * as AnthropicProvider from "@openbot-build/model-providers/providers/anthropic/AnthropicProvider"
 
-export * as BotMemory from "./plugin-bots/memory/BotMemory.ts"
+export * as BotMemory from "@openbot-build/plugin-bots/memory/BotMemory"
 export * as TimeLimiter from "./plugin-limiters/time-limiter/TimeLimiter.ts"
 export * as TokenLimiter from "./plugin-limiters/token-limiter/TokenLimiter.ts"
 export * as TurnLimiter from "./plugin-limiters/turn-limiter/TurnLimiter.ts"

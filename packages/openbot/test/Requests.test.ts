@@ -22,9 +22,9 @@ import {
 	BotRecords,
 	type Keys,
 } from "@openbot-build/conversation-contract/bots/BotRecords"
-import * as Grants from "../src/plugin-capabilities/Grants.ts"
-import * as Requests from "../src/plugin-capabilities/Requests.ts"
-import * as Rules from "../src/plugin-capabilities/Rules.ts"
+import * as Grants from "@openbot-build/plugin-capabilities/Grants"
+import * as Requests from "@openbot-build/plugin-capabilities/Requests"
+import * as Rules from "@openbot-build/plugin-capabilities/Rules"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 
 const organizationId = "org_1"

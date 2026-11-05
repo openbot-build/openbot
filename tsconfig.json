@@ -74,6 +74,18 @@
 			"path": "./packages/plugin-files"
 		},
 		{
+			"path": "./packages/plugin-bots"
+		},
+		{
+			"path": "./packages/plugin-capabilities"
+		},
+		{
+			"path": "./packages/plugin-work"
+		},
+		{
+			"path": "./packages/plugin-chats"
+		},
+		{
 			"path": "./packages/plugin-code"
 		},
 		{

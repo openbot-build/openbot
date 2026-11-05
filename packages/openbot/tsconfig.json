@@ -46,6 +46,15 @@
 			"path": "../plugin-billing"
 		},
 		{
+			"path": "../plugin-bots"
+		},
+		{
+			"path": "../plugin-capabilities"
+		},
+		{
+			"path": "../plugin-chats"
+		},
+		{
 			"path": "../plugin-code"
 		},
 		{
@@ -71,6 +80,9 @@
 		},
 		{
 			"path": "../plugin-vaults"
+		},
+		{
+			"path": "../plugin-work"
 		},
 		{
 			"path": "../server-billing"

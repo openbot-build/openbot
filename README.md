@@ -96,6 +96,10 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 | `@openbot-build/plugin-authorization`  | The `authorization` plugin of the server          |
 | `@openbot-build/plugin-models`         | The `models` plugin of the server                 |
 | `@openbot-build/plugin-files`          | The `files` plugin of the server                  |
+| `@openbot-build/plugin-bots`           | The `bots` plugin of the server                   |
+| `@openbot-build/plugin-capabilities`   | The `capabilities` plugin of the server           |
+| `@openbot-build/plugin-work`           | The `work` plugin of the server                   |
+| `@openbot-build/plugin-chats`          | The `chats` plugin of the server                  |
 | `@openbot-build/plugin-code`           | The `code` plugin of the server                   |
 | `@openbot-build/plugin-vaults`         | The `vaults` plugin of the server                 |
 | `@openbot-build/plugin-billing`        | The `billing` plugin of the server                |

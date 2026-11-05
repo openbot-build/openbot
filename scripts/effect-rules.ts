@@ -381,8 +381,8 @@ const placeOf = Schema.decodeUnknownOption(
 
 /** These files only map an application result to the HTTP contract. */
 const httpViews = [
-	"packages/openbot/src/plugin-chats/ChatViews.ts",
-	"packages/openbot/src/plugin-chats/ResponseMapping.ts",
+	"packages/plugin-chats/src/ChatViews.ts",
+	"packages/plugin-chats/src/ResponseMapping.ts",
 ] as const
 /** These files connect an outside library or the HTTP contract to a feature. */
 const httpAdapters = [
@@ -439,6 +439,10 @@ const serverPackages = [
 	"plugin-authorization",
 	"plugin-models",
 	"plugin-files",
+	"plugin-bots",
+	"plugin-capabilities",
+	"plugin-work",
+	"plugin-chats",
 	"plugin-code",
 	"plugin-vaults",
 	"plugin-billing",

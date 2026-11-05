@@ -18,12 +18,12 @@ import {
 	type Call,
 } from "@openbot-build/server-billing/billing/Billing"
 import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"
-import * as BotMemories from "../src/plugin-bots/BotMemories.ts"
-import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
-import * as MemoryLogs from "../src/plugin-bots/MemoryLogs.ts"
+import * as BotMemories from "@openbot-build/plugin-bots/BotMemories"
+import * as BotRecords from "@openbot-build/plugin-bots/BotRecords"
+import * as MemoryLogs from "@openbot-build/plugin-bots/MemoryLogs"
 import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
-import * as Audience from "../src/plugin-bots/memory/Audience.ts"
-import * as Memory from "../src/plugin-bots/memory/BotMemory.ts"
+import * as Audience from "@openbot-build/plugin-bots/memory/Audience"
+import * as Memory from "@openbot-build/plugin-bots/memory/BotMemory"
 import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import * as PostgresTest from "./PostgresTest.ts"
 

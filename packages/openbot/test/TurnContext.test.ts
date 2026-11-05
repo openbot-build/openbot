@@ -14,7 +14,7 @@ import {
 import { Effect, Layer, Schema } from "effect"
 import { Bots } from "@openbot-build/conversation-contract/bots/Bots"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
-import * as TurnContext from "../src/plugin-chats/TurnContext.ts"
+import * as TurnContext from "@openbot-build/plugin-chats/TurnContext"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { bot } from "./BotFixture.ts"
 import { layerEveryoneAdministrator } from "./OrganizationFixture.ts"

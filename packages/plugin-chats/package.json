@@ -1,0 +1,72 @@
+{
+	"name": "@openbot-build/plugin-chats",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The chats plugin of the OpenBot server: Chats, Turns, tools, and Live connections",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./ChatViews": "./dist/ChatViews.js",
+		"./ExecutionFeatures": "./dist/ExecutionFeatures.js",
+		"./HttpMounts": "./dist/HttpMounts.js",
+		"./InputCommands": "./dist/InputCommands.js",
+		"./ModelSteps": "./dist/ModelSteps.js",
+		"./ToolCommands": "./dist/ToolCommands.js",
+		"./ToolControls": "./dist/ToolControls.js",
+		"./ToolNoticeWorkflow": "./dist/ToolNoticeWorkflow.js",
+		"./ToolNotices": "./dist/ToolNotices.js",
+		"./ToolSession": "./dist/ToolSession.js",
+		"./ToolSteps": "./dist/ToolSteps.js",
+		"./ToolWorkflow": "./dist/ToolWorkflow.js",
+		"./TurnAccess": "./dist/TurnAccess.js",
+		"./TurnContext": "./dist/TurnContext.js",
+		"./TurnPersistence": "./dist/TurnPersistence.js",
+		"./TurnSession": "./dist/TurnSession.js",
+		"./TurnTools": "./dist/TurnTools.js",
+		"./TurnWorkflow": "./dist/TurnWorkflow.js",
+		"./WorkAdmission": "./dist/WorkAdmission.js",
+		"./live/LiveConnections": "./dist/live/LiveConnections.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@graftland/graft": "0.3.3",
+		"@nmnmcc/ability": "3.2.0",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/models-contract": "workspace:*",
+		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/plugin-chats"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

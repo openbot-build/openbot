@@ -1,0 +1,73 @@
+{
+	"name": "@openbot-build/plugin-bots",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The bots plugin of the OpenBot server: Bots, their memory, and the delegations between them",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./BotMemories": "./dist/BotMemories.js",
+		"./BotRecords": "./dist/BotRecords.js",
+		"./Bots": "./dist/Bots.js",
+		"./ChatWork": "./dist/ChatWork.js",
+		"./DelegationCommands": "./dist/DelegationCommands.js",
+		"./DelegationNotices": "./dist/DelegationNotices.js",
+		"./DelegationQueries": "./dist/DelegationQueries.js",
+		"./DelegationSession": "./dist/DelegationSession.js",
+		"./DelegationWorkflow": "./dist/DelegationWorkflow.js",
+		"./Delegations": "./dist/Delegations.js",
+		"./HttpMounts": "./dist/HttpMounts.js",
+		"./MemoryBot": "./dist/MemoryBot.js",
+		"./MemoryEvidence": "./dist/MemoryEvidence.js",
+		"./MemoryLearning": "./dist/MemoryLearning.js",
+		"./MemoryLogs": "./dist/MemoryLogs.js",
+		"./MemoryModels": "./dist/MemoryModels.js",
+		"./MemoryRules": "./dist/MemoryRules.js",
+		"./MemoryTasks": "./dist/MemoryTasks.js",
+		"./OpenWorkCount": "./dist/OpenWorkCount.js",
+		"./WorkflowTools": "./dist/WorkflowTools.js",
+		"./memory/Audience": "./dist/memory/Audience.js",
+		"./memory/BotMemory": "./dist/memory/BotMemory.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/sql-pg": "4.1.2",
+		"@graftland/graft": "0.3.3",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/models-contract": "workspace:*",
+		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"@openbot-build/tools-contract": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/plugin-bots"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

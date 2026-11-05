@@ -19,11 +19,11 @@ import {
 import { Work } from "@openbot-build/conversation-contract/capabilities/Work"
 import * as ChatHost from "@openbot-build/conversation-contract/chats/ChatHost"
 import { OpenWork } from "@openbot-build/conversation-contract/chats/OpenWork"
-import { ReminderCommands } from "../src/plugin-work/ReminderCommands.ts"
+import { ReminderCommands } from "@openbot-build/plugin-work/ReminderCommands"
 import { Execution } from "@openbot-build/domain"
 import * as ToolApprovals from "./ToolApprovals.ts"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as WorkTools from "../src/plugin-work/WorkTools.ts"
+import * as WorkTools from "@openbot-build/plugin-work/WorkTools"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { bot } from "./BotFixture.ts"
 

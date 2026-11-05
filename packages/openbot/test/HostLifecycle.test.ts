@@ -21,7 +21,7 @@ import * as Engine from "@openbot-build/server-execution/execution/Engine"
 import * as Store from "@openbot-build/server-execution/execution/Store"
 import * as Workflows from "@openbot-build/server-execution/execution/Workflows"
 import * as Feature from "@openbot-build/server-plugin/Feature"
-import * as TurnWorkflow from "../src/plugin-chats/TurnWorkflow.ts"
+import * as TurnWorkflow from "@openbot-build/plugin-chats/TurnWorkflow"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as TestHost from "./TestHost.ts"
 
