@@ -4,19 +4,23 @@ import { defineConfig } from "tsdown"
 const path = (relative: string) =>
 	fileURLToPath(new URL(relative, import.meta.url))
 
-// The Code Mode worker runs in its own thread, so it is its own file next to the server.
+// Each entry: the output name, its package, and its source in that package.
+// tsdown works in the folder of that package, so it reads the package's own
+// package.json and tsconfig.json. The Code Mode worker runs in its own thread,
+// so it is its own file next to the server. Its source is in the plugin-code
+// package.
 const entries = [
-	["Main", "src/app/Main.ts"],
-	["Migrate", "src/app/Migrate.ts"],
-	["Setup", "src/app/Setup.ts"],
-	["Inspect", "src/app/Inspect.ts"],
-	["CodeWorker", "src/plugin-code/Worker.ts"],
+	["Main", "openbot", "src/app/Main.ts"],
+	["Migrate", "openbot", "src/app/Migrate.ts"],
+	["Setup", "openbot", "src/app/Setup.ts"],
+	["Inspect", "openbot", "src/app/Inspect.ts"],
+	["CodeWorker", "plugin-code", "src/Worker.ts"],
 ] as const
 
 export default defineConfig(
-	entries.map(([name, file]) =>
+	entries.map(([name, owner, file]) =>
 		defineConfig({
-			cwd: path("../../packages/openbot"),
+			cwd: path(`../../packages/${owner}`),
 			entry: { [name]: file },
 			// The server finds the migrations two folders up from this folder, in
 			// /app/migrations. Keep the depth.

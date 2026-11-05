@@ -24,10 +24,8 @@ import * as CodeWorkflow from "./CodeWorkflow.ts"
 import * as HttpMounts from "./HttpMounts.ts"
 import * as Sandbox from "./Sandbox.ts"
 
-export const id = "code"
-
 /** The keys that this plugin publishes. */
-export const publishes = [
+const publishes = [
 	CodeCommands,
 	CodeProgram.CodeProgram,
 	Sandbox.Sandbox,

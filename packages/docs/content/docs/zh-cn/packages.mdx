@@ -37,6 +37,10 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 | `plugin-sso`            | `sso` 插件：组织的登录连接。只有服务器使用它。                                                                   |
 | `plugin-auth`           | `auth` 插件：登录、用户令牌，以及对每个调用方的检查。`openbot` 会以 `Auth` 的名字再次导出它的部分内容。          |
 | `plugin-authorization`  | `authorization` 插件：角色，以及对每个调用方权限的检查。只有服务器使用它。                                       |
+| `plugin-models`         | `models` 插件：模型提供方、模型和模型注册表。只有服务器使用它。                                                  |
+| `plugin-files`          | `files` 插件：存储的文件和它们的工作。只有服务器使用它。                                                         |
+| `plugin-code`           | `code` 插件：Bots 在沙箱中运行代码。只有服务器使用它。                                                           |
+| `plugin-vaults`         | `vaults` 插件：Vaults，以及它们读取的机密提供方。只有服务器使用它。                                              |
 | `plugin-billing`        | `billing` 插件：组织的钱包、用量和预算。只有服务器使用它。                                                       |
 | `plugin-settings`       | `settings` 插件：每个成员的设置。只有服务器使用它。                                                              |
 | `api`                   | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                                                          |

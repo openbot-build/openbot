@@ -5,7 +5,7 @@ import { Array as Arr, Effect } from "effect"
 import * as Db from "@openbot-build/server-database/Database"
 import { fileRefs, files } from "@openbot-build/server-database/Schema"
 import { Store } from "@openbot-build/server-execution/execution/Store"
-import { FileTasks } from "../../src/plugin-files/FileTasks.ts"
+import { FileTasks } from "@openbot-build/plugin-files/FileTasks"
 import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
 
 /** Gives the host a controlled Live provider at its outside boundary. */

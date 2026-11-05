@@ -3,7 +3,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { assert, it, layer } from "@effect/vitest"
 import { VaultsApi } from "@openbot-build/api"
 import { Array as Arr, Effect, Layer, String as Str } from "effect"
-import { make } from "../src/plugin-code/Sandbox.ts"
+import { make } from "@openbot-build/plugin-code/Sandbox"
 import * as VaultCode from "@openbot-build/apps-contract/vaults/CodeMode"
 import type { Usable } from "@openbot-build/apps-contract/vaults/Vaults"
 

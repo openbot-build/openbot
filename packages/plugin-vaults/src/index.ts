@@ -13,10 +13,8 @@ import { Readers } from "./Readers.ts"
 import * as SecretProviders from "./SecretProviders.ts"
 import * as VaultsLayer from "./Vaults.ts"
 
-export const id = "vaults"
-
 /** The keys that this plugin publishes. */
-export const publishes = [SecretProviders.SecretProviders, Vaults] as const
+const publishes = [SecretProviders.SecretProviders, Vaults] as const
 
 export default Feature.make("@openbot-build/plugin-vaults")
 	.stage({

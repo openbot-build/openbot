@@ -20,7 +20,7 @@ import type { Call } from "@openbot-build/apps-contract/code/Protocol"
 import {
 	make as makeSandbox,
 	type Program,
-} from "../src/plugin-code/Sandbox.ts"
+} from "@openbot-build/plugin-code/Sandbox"
 import * as BrowserHost from "./BrowserHost.ts"
 
 const limits = {

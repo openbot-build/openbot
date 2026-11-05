@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest"
 import { VaultsApi } from "@openbot-build/api"
 import { Array as Arr, Effect, Record as Rec, Ref, String as Str } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import * as Readers from "../src/plugin-vaults/Readers.ts"
+import * as Readers from "../src/Readers.ts"
 
 const provider = VaultsApi.SecretProviderId.make("spr_test")
 

@@ -7,7 +7,7 @@ import {
 } from "@openbot-build/models-contract/models/ModelProviders"
 import { Models } from "@openbot-build/models-contract/models/Models"
 import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
-import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
+import * as ModelRegistry from "@openbot-build/plugin-models/ModelRegistry"
 import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
 import {
 	Billing,

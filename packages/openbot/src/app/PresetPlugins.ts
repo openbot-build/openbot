@@ -9,11 +9,15 @@ import AuditPlugin from "@openbot-build/plugin-audit"
 import AuthPlugin from "@openbot-build/plugin-auth"
 import AuthorizationPlugin from "@openbot-build/plugin-authorization"
 import BillingPlugin from "@openbot-build/plugin-billing"
+import CodePlugin from "@openbot-build/plugin-code"
+import FilesPlugin from "@openbot-build/plugin-files"
 import MailPlugin from "@openbot-build/plugin-mail"
+import ModelsPlugin from "@openbot-build/plugin-models"
 import OrganizationPlugin from "@openbot-build/plugin-organization"
 import PlatformPlugin from "@openbot-build/plugin-platform"
 import SettingsPlugin from "@openbot-build/plugin-settings"
 import SsoPlugin from "@openbot-build/plugin-sso"
+import VaultsPlugin from "@openbot-build/plugin-vaults"
 import {
 	Array as Arr,
 	Effect,
@@ -27,13 +31,9 @@ import * as BotsPlugin from "../plugin-bots/Plugin.ts"
 import * as CapabilitiesPlugin from "../plugin-capabilities/Plugin.ts"
 import * as ChannelsPlugin from "../plugin-channels/Plugin.ts"
 import * as ChatsPlugin from "../plugin-chats/Plugin.ts"
-import * as CodePlugin from "../plugin-code/Plugin.ts"
 import * as ComputersPlugin from "../plugin-computers/Plugin.ts"
-import * as FilesPlugin from "../plugin-files/Plugin.ts"
 import * as ImportedPlugin from "../plugin-imported/Plugin.ts"
-import * as ModelsPlugin from "../plugin-models/Plugin.ts"
 import * as TriggersPlugin from "../plugin-triggers/Plugin.ts"
-import * as VaultsPlugin from "../plugin-vaults/Plugin.ts"
 import * as WorkPlugin from "../plugin-work/Plugin.ts"
 import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as PluginsFile from "./PluginsFile.ts"
@@ -49,8 +49,8 @@ export const byId = {
 	sso: SsoPlugin,
 	auth: AuthPlugin,
 	authorization: AuthorizationPlugin,
-	models: ModelsPlugin.default,
-	files: FilesPlugin.default,
+	models: ModelsPlugin,
+	files: FilesPlugin,
 	bots: BotsPlugin.default,
 	capabilities: CapabilitiesPlugin.default,
 	work: WorkPlugin.default,
@@ -58,8 +58,8 @@ export const byId = {
 	chats: ChatsPlugin.default,
 	channels: ChannelsPlugin.default,
 	apps: AppsPlugin.default,
-	code: CodePlugin.default,
-	vaults: VaultsPlugin.default,
+	code: CodePlugin,
+	vaults: VaultsPlugin,
 	computers: ComputersPlugin.default,
 	triggers: TriggersPlugin.default,
 	billing: BillingPlugin,

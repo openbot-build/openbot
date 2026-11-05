@@ -437,6 +437,10 @@ const serverPackages = [
 	"plugin-sso",
 	"plugin-auth",
 	"plugin-authorization",
+	"plugin-models",
+	"plugin-files",
+	"plugin-code",
+	"plugin-vaults",
 	"plugin-billing",
 	"plugin-settings",
 ] as const

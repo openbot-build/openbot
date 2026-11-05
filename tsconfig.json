@@ -68,6 +68,18 @@
 			"path": "./packages/plugin-authorization"
 		},
 		{
+			"path": "./packages/plugin-models"
+		},
+		{
+			"path": "./packages/plugin-files"
+		},
+		{
+			"path": "./packages/plugin-code"
+		},
+		{
+			"path": "./packages/plugin-vaults"
+		},
+		{
 			"path": "./packages/plugin-billing"
 		},
 		{

@@ -19,7 +19,7 @@ import {
 	type Tokens,
 } from "@openbot-build/server-billing/billing/Billing"
 import { TokenThrottle } from "@openbot-build/server-billing/billing/TokenThrottle"
-import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
+import * as ModelRegistry from "@openbot-build/plugin-models/ModelRegistry"
 import * as LiveBackends from "@openbot-build/models-contract/models/LiveBackends"
 import {
 	ModelProviders,

@@ -66,12 +66,13 @@ export class Sandbox extends Context.Service<
 			) => Effect.Effect<Option.Option<ReadonlyArray<Settled>>, never, R>,
 		) => Effect.Effect<Outcome, never, R>
 	}
+	// @effect-diagnostics-next-line deterministicKeys:off -- The key keeps the name it had in the openbot package, so code built for that name still finds this service.
 >()("@openbot-build/openbot/plugin-code/Sandbox") {}
 
 /**
- * The places of the worker file. Tests run the TypeScript source. The package
- * build has a JavaScript file next to this one. The single-file server bundle has
- * `CodeWorker.mjs` next to the bundle.
+ * The places of the worker file. A program that runs the TypeScript source
+ * finds `Worker.ts`. The package build has `Worker.js` next to this file. The
+ * single-file server bundle has `CodeWorker.mjs` next to the bundle.
  */
 const workerFiles = [
 	new URL("./Worker.ts", import.meta.url),

@@ -1,0 +1,59 @@
+{
+	"name": "@openbot-build/plugin-code",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The code plugin of the OpenBot server: code runs of Bots in a sandbox",
+	"sideEffects": [
+		"./dist/Worker.js",
+		"./src/Worker.ts"
+	],
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./CodeCommands": "./dist/CodeCommands.js",
+		"./CodeProgram": "./dist/CodeProgram.js",
+		"./CodeQueries": "./dist/CodeQueries.js",
+		"./CodeWorkflow": "./dist/CodeWorkflow.js",
+		"./HttpMounts": "./dist/HttpMounts.js",
+		"./Sandbox": "./dist/Sandbox.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/sql-pg": "4.1.2",
+		"@graftland/graft": "0.3.3",
+		"@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/apps-contract": "workspace:*",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-execution": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2",
+		"quickjs-emscripten-core": "0.32.0"
+	},
+	"devDependencies": {
+		"@effect/vitest": "4.1.2",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/plugin-code"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

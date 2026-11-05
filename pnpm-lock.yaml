@@ -508,9 +508,6 @@ importers:
       "@graftland/loader":
         specifier: 0.3.3
         version: 0.3.3(effect@4.1.2)
-      "@jitl/quickjs-singlefile-mjs-release-sync":
-        specifier: 0.32.0
-        version: 0.32.0
       "@nmnmcc/ability":
         specifier: 3.2.0
         version: 3.2.0(effect@4.1.2)
@@ -553,9 +550,18 @@ importers:
       "@openbot-build/plugin-billing":
         specifier: workspace:*
         version: link:../plugin-billing
+      "@openbot-build/plugin-code":
+        specifier: workspace:*
+        version: link:../plugin-code
+      "@openbot-build/plugin-files":
+        specifier: workspace:*
+        version: link:../plugin-files
       "@openbot-build/plugin-mail":
         specifier: workspace:*
         version: link:../plugin-mail
+      "@openbot-build/plugin-models":
+        specifier: workspace:*
+        version: link:../plugin-models
       "@openbot-build/plugin-organization":
         specifier: workspace:*
         version: link:../plugin-organization
@@ -568,6 +574,9 @@ importers:
       "@openbot-build/plugin-sso":
         specifier: workspace:*
         version: link:../plugin-sso
+      "@openbot-build/plugin-vaults":
+        specifier: workspace:*
+        version: link:../plugin-vaults
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
@@ -598,9 +607,6 @@ importers:
       jose:
         specifier: 6.2.12
         version: 6.2.12
-      quickjs-emscripten-core:
-        specifier: 0.32.0
-        version: 0.32.0
       yaml:
         specifier: 2.9.1
         version: 2.9.1
@@ -836,6 +842,116 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/plugin-code:
+    dependencies:
+      "@effect/platform-node":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
+      "@effect/sql-pg":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
+      "@graftland/graft":
+        specifier: 0.3.3
+        version: 0.3.3(effect@4.1.2)
+      "@jitl/quickjs-singlefile-mjs-release-sync":
+        specifier: 0.32.0
+        version: 0.32.0
+      "@openbot-build/api":
+        specifier: workspace:*
+        version: link:../api
+      "@openbot-build/apps-contract":
+        specifier: workspace:*
+        version: link:../apps-contract
+      "@openbot-build/conversation-contract":
+        specifier: workspace:*
+        version: link:../conversation-contract
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
+      "@openbot-build/identity-contract":
+        specifier: workspace:*
+        version: link:../identity-contract
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
+      "@openbot-build/server-execution":
+        specifier: workspace:*
+        version: link:../server-execution
+      "@openbot-build/server-kernel":
+        specifier: workspace:*
+        version: link:../server-kernel
+      "@openbot-build/server-plugin":
+        specifier: workspace:*
+        version: link:../server-plugin
+      drizzle-orm:
+        specifier: 1.0.0-rc.5
+        version: 1.0.0-rc.5(@effect/sql-pg@4.1.2(effect@4.1.2))(@effect/sql-sqlite-node@4.0.5(effect@4.1.2))(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(zod@4.6.7)
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+      quickjs-emscripten-core:
+        specifier: 0.32.0
+        version: 0.32.0
+    devDependencies:
+      "@effect/vitest":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/plugin-files:
+    dependencies:
+      "@effect/sql-pg":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
+      "@graftland/graft":
+        specifier: 0.3.3
+        version: 0.3.3(effect@4.1.2)
+      "@openbot-build/api":
+        specifier: workspace:*
+        version: link:../api
+      "@openbot-build/apps-contract":
+        specifier: workspace:*
+        version: link:../apps-contract
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
+      "@openbot-build/identity-contract":
+        specifier: workspace:*
+        version: link:../identity-contract
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
+      "@openbot-build/server-execution":
+        specifier: workspace:*
+        version: link:../server-execution
+      "@openbot-build/server-kernel":
+        specifier: workspace:*
+        version: link:../server-kernel
+      "@openbot-build/server-plugin":
+        specifier: workspace:*
+        version: link:../server-plugin
+      drizzle-orm:
+        specifier: 1.0.0-rc.5
+        version: 1.0.0-rc.5(@effect/sql-pg@4.1.2(effect@4.1.2))(@effect/sql-sqlite-node@4.0.5(effect@4.1.2))(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(zod@4.6.7)
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+    devDependencies:
+      "@effect/platform-node":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
+      "@effect/vitest":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
   packages/plugin-mail:
     dependencies:
       "@graftland/graft":
@@ -887,6 +1003,61 @@ importers:
       "@types/react-dom":
         specifier: 19.3.0
         version: 19.3.0(@types/react@19.3.0)
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/plugin-models:
+    dependencies:
+      "@effect/sql-pg":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
+      "@graftland/graft":
+        specifier: 0.3.3
+        version: 0.3.3(effect@4.1.2)
+      "@openbot-build/api":
+        specifier: workspace:*
+        version: link:../api
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
+      "@openbot-build/identity-contract":
+        specifier: workspace:*
+        version: link:../identity-contract
+      "@openbot-build/model-providers":
+        specifier: workspace:*
+        version: link:../model-providers
+      "@openbot-build/models-contract":
+        specifier: workspace:*
+        version: link:../models-contract
+      "@openbot-build/server-billing":
+        specifier: workspace:*
+        version: link:../server-billing
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
+      "@openbot-build/server-kernel":
+        specifier: workspace:*
+        version: link:../server-kernel
+      "@openbot-build/server-plugin":
+        specifier: workspace:*
+        version: link:../server-plugin
+      drizzle-orm:
+        specifier: 1.0.0-rc.5
+        version: 1.0.0-rc.5(@effect/sql-pg@4.1.2(effect@4.1.2))(@effect/sql-sqlite-node@4.0.5(effect@4.1.2))(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(zod@4.6.7)
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+    devDependencies:
+      "@effect/platform-node":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
+      "@effect/vitest":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1034,6 +1205,55 @@ importers:
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
+      "@openbot-build/domain":
+        specifier: workspace:*
+        version: link:../domain
+      "@openbot-build/identity-contract":
+        specifier: workspace:*
+        version: link:../identity-contract
+      "@openbot-build/server-database":
+        specifier: workspace:*
+        version: link:../server-database
+      "@openbot-build/server-kernel":
+        specifier: workspace:*
+        version: link:../server-kernel
+      "@openbot-build/server-plugin":
+        specifier: workspace:*
+        version: link:../server-plugin
+      drizzle-orm:
+        specifier: 1.0.0-rc.5
+        version: 1.0.0-rc.5(@effect/sql-pg@4.1.2(effect@4.1.2))(@effect/sql-sqlite-node@4.0.5(effect@4.1.2))(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(zod@4.6.7)
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+    devDependencies:
+      "@effect/platform-node":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
+      "@effect/vitest":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/plugin-vaults:
+    dependencies:
+      "@effect/sql-pg":
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
+      "@graftland/graft":
+        specifier: 0.3.3
+        version: 0.3.3(effect@4.1.2)
+      "@openbot-build/api":
+        specifier: workspace:*
+        version: link:../api
+      "@openbot-build/apps-contract":
+        specifier: workspace:*
+        version: link:../apps-contract
+      "@openbot-build/conversation-contract":
+        specifier: workspace:*
+        version: link:../conversation-contract
       "@openbot-build/domain":
         specifier: workspace:*
         version: link:../domain

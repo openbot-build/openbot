@@ -39,6 +39,10 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 | `plugin-sso`            | The `sso` plugin: the sign-in connections of organizations. Only the server uses it.                                                                    |
 | `plugin-auth`           | The `auth` plugin: sign-in, user tokens, and the check of each caller. `openbot` exports its parts again as `Auth`.                                     |
 | `plugin-authorization`  | The `authorization` plugin: roles, and the check of the permissions of each caller. Only the server uses it.                                            |
+| `plugin-models`         | The `models` plugin: model providers, models, and the model registry. Only the server uses it.                                                          |
+| `plugin-files`          | The `files` plugin: stored files and their work. Only the server uses it.                                                                               |
+| `plugin-code`           | The `code` plugin: code runs of Bots in a sandbox. Only the server uses it.                                                                             |
+| `plugin-vaults`         | The `vaults` plugin: Vaults, and the secret providers that they read. Only the server uses it.                                                          |
 | `plugin-billing`        | The `billing` plugin: the wallets of organizations, usage, and budgets. Only the server uses it.                                                        |
 | `plugin-settings`       | The `settings` plugin: the settings of each member. Only the server uses it.                                                                            |
 | `api`                   | The typed HTTP contract. The server, the client, and the API reference use it.                                                                          |

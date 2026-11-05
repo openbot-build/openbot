@@ -46,7 +46,16 @@
 			"path": "../plugin-billing"
 		},
 		{
+			"path": "../plugin-code"
+		},
+		{
+			"path": "../plugin-files"
+		},
+		{
 			"path": "../plugin-mail"
+		},
+		{
+			"path": "../plugin-models"
 		},
 		{
 			"path": "../plugin-organization"
@@ -59,6 +68,9 @@
 		},
 		{
 			"path": "../plugin-sso"
+		},
+		{
+			"path": "../plugin-vaults"
 		},
 		{
 			"path": "../server-billing"

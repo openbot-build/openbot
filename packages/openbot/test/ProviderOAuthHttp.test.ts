@@ -38,7 +38,7 @@ import { Records } from "@openbot-build/server-kernel/errors/Records"
 import * as PlatformHandlers from "@openbot-build/plugin-platform/HttpHandlers"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
-import * as Handlers from "../src/plugin-models/HttpHandlers.ts"
+import * as Handlers from "@openbot-build/plugin-models/HttpHandlers"
 import { ProviderOAuth } from "@openbot-build/models-contract/models/ProviderOAuth"
 import {
 	ModelProviders,

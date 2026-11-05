@@ -25,7 +25,7 @@ import * as Assistance from "../../src/plugin-apps/Assistance.ts"
 import * as Report from "@openbot-build/server-kernel/errors/Report"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { VaultReadFailed } from "@openbot-build/apps-contract/vaults/Readers"
-import { Readers } from "../../src/plugin-vaults/Readers.ts"
+import { Readers } from "@openbot-build/plugin-vaults/Readers"
 import type * as BrowserHost from "../BrowserHost.ts"
 
 type Host = Effect.Success<ReturnType<typeof BrowserHost.start>>

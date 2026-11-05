@@ -18,10 +18,8 @@ import * as Feature from "@openbot-build/server-plugin/Feature"
 import * as HttpMounts from "./HttpMounts.ts"
 import * as Layers from "./Layers.ts"
 
-export const id = "models"
-
 /** The keys that this plugin publishes. */
-export const publishes = [
+const publishes = [
 	ModelProviders,
 	ModelRegistry,
 	Models,

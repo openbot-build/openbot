@@ -99,6 +99,24 @@ if compose logs openbot openbot-peer | grep -q "are not the same as on other run
   exit 1
 fi
 
+# The server bundle looks for the Code Mode worker in CodeWorker.mjs, next to Main.mjs. Run one program in it.
+compose exec -T openbot /usr/local/bin/node --input-type=module -e '
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { Worker } from "node:worker_threads";
+assert.deepEqual(readdirSync("/app/dist/app").sort(), ["CodeWorker.mjs", "Inspect.mjs", "Main.mjs", "Migrate.mjs", "Setup.mjs"], "The image has other files next to the server");
+assert.ok(readFileSync("/app/dist/app/Main.mjs", "utf8").includes("./CodeWorker.mjs"), "The server does not look for the Code Mode worker");
+// A worker gets the flags of its process. `--input-type` is only for the text of `-e`, so the worker gets none.
+const worker = new Worker("/app/dist/app/CodeWorker.mjs", { execArgv: [] });
+const answer = await new Promise((resolve, reject) => {
+  worker.once("message", resolve);
+  worker.once("error", reject);
+  worker.postMessage({ type: "start", code: "return 1 + 2", bindings: [], vault: [], seed: 1, clock: 0, limits: { timeoutMs: 2000, memoryBytes: 33554432, outputBytes: 4096 } });
+});
+await worker.terminate();
+assert.deepEqual(answer, { type: "done", value: "3", logs: [] }, "The Code Mode worker did not run the program");
+'
+
 # A live node holds the shared maintenance lock. The migrator must not change its data.
 if compose run --rm --no-deps --quiet-pull migrate > "$report" 2>&1; then
   echo "The data move ran while OpenBot was still active." >&2
@@ -110,4 +128,4 @@ if ! grep -q "Stop all OpenBot servers before the data move" "$report"; then
   exit 1
 fi
 
-echo "Both nodes, private RPC, the plugins file, and the maintenance lock passed."
+echo "Both nodes, private RPC, the plugins file, the Code Mode worker, and the maintenance lock passed."

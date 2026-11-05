@@ -20,10 +20,8 @@ import * as FileTasks from "./FileTasks.ts"
 import * as FileWorkflows from "./FileWorkflows.ts"
 import * as HttpMounts from "./HttpMounts.ts"
 
-export const id = "files"
-
 /** The keys that this plugin publishes. */
-export const publishes = [Files, FileTasks.FileTasks] as const
+const publishes = [Files, FileTasks.FileTasks] as const
 
 export default Feature.make("@openbot-build/plugin-files")
 	.stage({

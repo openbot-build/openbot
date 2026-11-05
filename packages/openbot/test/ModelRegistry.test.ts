@@ -13,7 +13,7 @@ import {
 	organizationOwner,
 	type Stored,
 } from "@openbot-build/models-contract/models/ModelProviders"
-import * as ModelRegistry from "../src/plugin-models/ModelRegistry.ts"
+import * as ModelRegistry from "@openbot-build/plugin-models/ModelRegistry"
 import {
 	Models,
 	type StoredModel,
