@@ -1,7 +1,11 @@
 import type { Bot, Chat, ChatStore } from "@openbot-build/core"
 import { Array as Arr, Effect, Option, Order, Record as Rec } from "effect"
 import type { Tool } from "effect/ai"
+import type { FeatureStopped } from "@openbot-build/conversation-contract/chats/BotFeatures"
 import * as Registration from "@openbot-build/tools-contract/plugins/Registration"
+
+/** The tools of a part. A hook of a feature can stop the Turn. */
+type Built = Bot.ToolRegistration<{}, FeatureStopped>
 
 /** One part of the tools of a Turn: a feature, or a part that the Chats own. */
 export interface Part<R = never> {
@@ -12,11 +16,7 @@ export interface Part<R = never> {
 	readonly build: "normal" | "last"
 	readonly register: (
 		occupied: ReadonlyArray<string>,
-	) => Effect.Effect<
-		Bot.ToolRegistration,
-		Chat.ChatNotFound | ChatStore.ChatStoreError,
-		R
-	>
+	) => Effect.Effect<Built, Chat.ChatNotFound | ChatStore.ChatStoreError, R>
 }
 
 /** The order number, then the parts that the Chats own, then the id. */
@@ -28,7 +28,7 @@ export const partOrder: Order.Order<Part<unknown>> = Order.combine(
 	Order.mapInput(Order.String, (part: Part<unknown>) => part.id),
 )
 
-const names = (registration: Bot.ToolRegistration) => {
+const names = (registration: Built) => {
 	const tools: Readonly<Record<string, Tool.Any>> = registration.tools
 	return Rec.keys(tools)
 }
@@ -64,7 +64,7 @@ export const assemble = <R>(
 				occupied: [...names(fixed), ...reserved],
 				built: Arr.empty<{
 					readonly part: Part<R>
-					readonly registration: Bot.ToolRegistration
+					readonly registration: Built
 				}>(),
 			}),
 			(state, part) =>

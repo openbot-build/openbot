@@ -47,7 +47,7 @@ layer(withSecret)((it) => {
 					report.entries,
 					(entry) =>
 						entry.source === "preset" &&
-						!entry.disabled &&
+						entry.disabled === Arr.contains(Preset.offByDefault, entry.id) &&
 						entry.changed.length === 0,
 				),
 			)
@@ -87,6 +87,28 @@ layer(withSecret)((it) => {
 					)
 				}),
 			),
+	)
+
+	it.effect("a file that turns a limit on shows the change and the limit", () =>
+		Effect.scoped(
+			Effect.gen(function* () {
+				const file = yield* writeFile(
+					"- id: turn-limiter\n  disabled: false\n  config:\n    maxSteps: 40\n",
+				)
+				const report = yield* InspectPlugins.report(Option.some(file))
+				assert.deepStrictEqual(
+					Arr.findFirst(report.entries, (entry) => entry.id === "turn-limiter"),
+					Option.some<InspectPlugins.ReportEntry>({
+						id: "turn-limiter",
+						name: Preset.nameOf("turn-limiter"),
+						disabled: false,
+						config: { maxSteps: 40 },
+						source: "preset",
+						changed: ["disabled", "config"],
+					}),
+				)
+			}),
+		),
 	)
 
 	it.effect(

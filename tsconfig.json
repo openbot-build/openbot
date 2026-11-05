@@ -113,6 +113,15 @@
 			"path": "./packages/plugin-settings"
 		},
 		{
+			"path": "./packages/plugin-turn-limiter"
+		},
+		{
+			"path": "./packages/plugin-time-limiter"
+		},
+		{
+			"path": "./packages/plugin-token-limiter"
+		},
+		{
 			"path": "./packages/protocol"
 		},
 		{

@@ -4,9 +4,9 @@ import { Tool } from "effect/ai"
 import { PlanAllowed, ReviewAllowed } from "./ToolEntry.ts"
 
 /** Combine definitions and hooks. No feature owns another feature's event stream. */
-export const merge = (
-	parts: ReadonlyArray<Bot.ToolRegistration>,
-): Bot.ToolRegistration =>
+export const merge = <E = never>(
+	parts: ReadonlyArray<Bot.ToolRegistration<{}, E>>,
+): Bot.ToolRegistration<{}, E> =>
 	Arr.reduce(
 		parts,
 		{ tools: {}, handlers: Context.empty() },
@@ -14,10 +14,10 @@ export const merge = (
 	)
 
 /** Apply the same tool rules after all features have registered. */
-export const select = (
-	registration: Bot.ToolRegistration,
+export const select = <E = never>(
+	registration: Bot.ToolRegistration<{}, E>,
 	policy: { readonly review: boolean; readonly plan: boolean },
-): Bot.ToolRegistration => {
+): Bot.ToolRegistration<{}, E> => {
 	const tools: Readonly<Record<string, Tool.Any>> = registration.tools
 	return {
 		...registration,

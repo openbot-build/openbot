@@ -284,6 +284,7 @@ export const start = (options: Options) =>
 			bundled: Rec.keys(modules(options)),
 			required: Preset.required,
 			configurable: PluginsFile.configurable,
+			noEnv: Preset.offByDefault,
 		}
 		const entries = yield* loadEntries(known)
 		yield* PresetPlugins.check(entries)

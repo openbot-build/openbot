@@ -13,7 +13,7 @@ import * as PluginsFile from "../src/app/PluginsFile.ts"
 import * as Preset from "../src/app/Preset.ts"
 import * as PresetPlugins from "../src/app/PresetPlugins.ts"
 
-const all = Arr.map(Preset.ids, (id) => ({ id, name: Preset.nameOf(id) }))
+const all = PluginsFile.presetEntries
 
 it.effect("the check names each required plugin that is missing", () =>
 	Effect.gen(function* () {

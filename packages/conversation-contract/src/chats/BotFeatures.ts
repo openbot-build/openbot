@@ -1,4 +1,11 @@
-import type { Bot, Chat, ChatStore, Item, Turn } from "@openbot-build/core"
+import type {
+	Bot,
+	Chat,
+	ChatStore,
+	Item,
+	Plugin,
+	Turn,
+} from "@openbot-build/core"
 import type { Identity } from "@openbot-build/domain"
 import {
 	Array as Arr,
@@ -68,7 +75,7 @@ export interface Feature {
 	readonly register: (
 		input: RegisterInput,
 	) => Effect.Effect<
-		Bot.ToolRegistration,
+		Bot.ToolRegistration<{}, FeatureStopped>,
 		never,
 		Bot.Context | Work | Scope.Scope
 	>
@@ -78,6 +85,71 @@ export interface Feature {
 		name: string,
 		work: typeof Work.Service,
 	) => Effect.Effect<Bot.ToolRegistration>
+}
+
+/** A feature ended the Turn, for example at a limit. `cause` is the typed failure of the feature. */
+export class FeatureStopped extends Schema.TaggedError<
+	FeatureStopped,
+	{ readonly brand: unique symbol }
+>()("BotFeatureStopped", { feature: Schema.String, cause: Schema.Defect() }) {
+	override get message() {
+		return `The bot feature ${this.feature} stopped the Turn.`
+	}
+}
+
+/** A feature made from a Bot plugin of `core`. It needs no input and only a scope. */
+export interface PluginFeature extends Feature {
+	readonly register: (
+		input?: RegisterInput,
+	) => Effect.Effect<
+		Bot.ToolRegistration<{}, FeatureStopped>,
+		never,
+		Scope.Scope
+	>
+}
+
+/**
+ * The hooks of a Bot plugin of `core` as a feature. A failure of a hook, or
+ * the error of its time limit, becomes `FeatureStopped` with the failure as
+ * its cause. Tools, handlers and instructions stay as they are.
+ */
+export const fromPlugin = <E>(
+	feature: string,
+	plugin: Plugin.Plugin<{}, E>,
+): PluginFeature => {
+	const stop = (cause: E) => FeatureStopped.make({ feature, cause })
+	return {
+		register: () =>
+			Effect.map(
+				plugin.register,
+				({
+					beforeStep,
+					afterStep,
+					timeLimit,
+					...rest
+				}): Bot.ToolRegistration<{}, FeatureStopped> => ({
+					...rest,
+					...(beforeStep === undefined
+						? {}
+						: {
+								beforeStep: (input) => Effect.mapError(beforeStep(input), stop),
+							}),
+					...(afterStep === undefined
+						? {}
+						: {
+								afterStep: (input) => Effect.mapError(afterStep(input), stop),
+							}),
+					...(timeLimit === undefined
+						? {}
+						: {
+								timeLimit: {
+									duration: timeLimit.duration,
+									error: (history) => stop(timeLimit.error(history)),
+								},
+							}),
+				}),
+			),
+	}
 }
 
 /** What a feature gives to every Turn while its scope is open. */
@@ -109,6 +181,14 @@ export interface Contribution {
 		fence: Fence,
 		definition: Definition,
 	) => Option.Option<Entry>
+}
+
+/** A contribution whose features come from Bot plugins of `core` (see `fromPlugin`). */
+export interface PluginContribution extends Contribution {
+	readonly prepare: (
+		fence: Fence,
+		settings: Schema.Json,
+	) => Effect.Effect<PluginFeature, never, Scope.Scope>
 }
 
 /** A feature that a hold keeps, with the settings of its pin. */
@@ -427,7 +507,9 @@ export const make = (options: { readonly drain: Duration.Input }) =>
 	})
 
 /**
- * The features of one server. A release does not wait: the execution engine
- * closes before the features, so no Turn runs at that time.
+ * The features of one server. A release does not wait. At shutdown the
+ * execution engine closes before the features, so no Turn runs at that time.
+ * A feature plugin can also restart while Turns run, for example when its
+ * config changes. A Turn keeps the feature that it built.
  */
 export const layer = Layer.effect(BotFeatures, make({ drain: Duration.zero }))

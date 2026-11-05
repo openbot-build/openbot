@@ -395,8 +395,8 @@ const httpAdapters = [
  * The server packages and the folders of packages/openbot/src, in layers. A
  * server package keeps the number of the folder that it was. A package or
  * folder may import only packages and folders with a lower number. Each
- * plugin package and each plugin-* folder has the plugin number. The
- * plugin-boundary rule keeps plugins apart.
+ * plugin package has the plugin number. The plugin-boundary rule keeps
+ * plugins apart.
  */
 const serverLayers: Readonly<Record<string, number>> = {
 	"server-database": 1,
@@ -452,6 +452,9 @@ const serverPackages = [
 	"plugin-triggers",
 	"plugin-billing",
 	"plugin-settings",
+	"plugin-turn-limiter",
+	"plugin-time-limiter",
+	"plugin-token-limiter",
 ] as const
 const isServerPackage = (name: string) =>
 	Arr.some(serverPackages, (server) => server === name)
@@ -463,14 +466,25 @@ const isServerPackage = (name: string) =>
 const isPluginPackage = (name: string) =>
 	Str.startsWith("plugin-")(name) && name !== "plugin"
 
-/** The server unit of a file: a folder of packages/openbot/src, or a server package. */
+/** The folders of packages/openbot/src. Each one is a unit with a layer. */
+const openbotFolders = ["server-upgrade", "app", "server-development"]
+
+/**
+ * The server unit of a file: a server package, or a folder of
+ * packages/openbot/src. Any other folder there is a unit of its own with no
+ * layer, so each server import from it breaks the layers.
+ */
 const serverUnit = (file: string): Option.Option<string> => {
 	const own = /^packages\/([^/]+)\//.exec(file)
 	if (own !== null && (isServerPackage(own[1]!) || isPluginPackage(own[1]!)))
 		return Option.some(own[1]!)
 	const local = Str.replace("packages/openbot/src/", "")(file)
 	if (local === file || !Str.includes("/")(local)) return Option.none()
-	return Arr.head(Str.split(local, "/"))
+	return Option.map(Arr.head(Str.split(local, "/")), (folder) =>
+		Arr.contains(openbotFolders, folder)
+			? folder
+			: `packages/openbot/src/${folder}`,
+	)
 }
 
 /** The server unit that an import names: a relative path, or the entry of a server package. */
@@ -488,7 +502,7 @@ const targetUnit = (
 		: Option.none()
 }
 
-/** True when a plugin package or folder imports another plugin package or folder. */
+/** True when a plugin package imports another plugin package. */
 const crossesPlugins = (
 	file: string,
 	target: string,
@@ -516,10 +530,10 @@ const breaksLayers = (
 	const to = targetUnit(target, resolved)
 	if (Option.isNone(from) || Option.isNone(to) || from.value === to.value)
 		return false
-	const layer = (folder: string) =>
-		Str.startsWith("plugin-")(folder)
+	const layer = (unit: string) =>
+		Str.startsWith("plugin-")(unit)
 			? serverLayers["plugin"]
-			: serverLayers[folder]
+			: serverLayers[unit]
 	const low = layer(from.value)
 	const high = layer(to.value)
 	if (low === undefined || high === undefined) return true

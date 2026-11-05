@@ -24,7 +24,10 @@ import OrganizationPlugin from "@openbot-build/plugin-organization"
 import PlatformPlugin from "@openbot-build/plugin-platform"
 import SettingsPlugin from "@openbot-build/plugin-settings"
 import SsoPlugin from "@openbot-build/plugin-sso"
+import TimeLimiterPlugin from "@openbot-build/plugin-time-limiter"
+import TokenLimiterPlugin from "@openbot-build/plugin-token-limiter"
 import TriggersPlugin from "@openbot-build/plugin-triggers"
+import TurnLimiterPlugin from "@openbot-build/plugin-turn-limiter"
 import VaultsPlugin from "@openbot-build/plugin-vaults"
 import WorkPlugin from "@openbot-build/plugin-work"
 import {
@@ -64,6 +67,9 @@ export const byId = {
 	triggers: TriggersPlugin,
 	billing: BillingPlugin,
 	settings: SettingsPlugin,
+	"turn-limiter": TurnLimiterPlugin,
+	"time-limiter": TimeLimiterPlugin,
+	"token-limiter": TokenLimiterPlugin,
 } as const satisfies Record<Id, GraftPlugin.Plugin>
 
 /**
@@ -138,7 +144,10 @@ export const store = (
 		external: Stream.never,
 	}))
 
-/** The keys that the plugins publish, read from each plugin. */
+/**
+ * The keys that the plugins publish, read from each plugin. The limit plugins
+ * publish nothing, so they are not here.
+ */
 export const published = [
 	...Feature.published(byId.audit),
 	...Feature.published(byId.mail),

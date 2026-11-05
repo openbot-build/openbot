@@ -194,24 +194,23 @@ braucht.
 `server-database`, `server-kernel`, `identity-contract`, `server-billing`,
 `server-execution`, `tools-contract`, `models-contract`, `apps-contract`,
 `conversation-contract`, `model-providers`, `server-plugin`, dann die
-Plugin-Pakete (`plugin-<id>`) und die Plugin-Ordner in `packages/openbot/src`,
-dann `server-upgrade`, `app` und `server-development`, die auch in
-`packages/openbot/src` liegen. Code darf nur tiefere Schichten importieren.
-`public-entry` lässt andere Pakete ein Server-Paket nur über einen Schlüssel von
-`exports` in seiner `package.json` nutzen. Das gilt auch für Tests.
+Plugin-Pakete (`plugin-<id>`), dann `server-upgrade`, `app` und
+`server-development`, die in `packages/openbot/src` liegen. Code darf nur
+tiefere Schichten importieren. `public-entry` lässt andere Pakete ein
+Server-Paket nur über einen Schlüssel von `exports` in seiner `package.json`
+nutzen. Das gilt auch für Tests.
 
 Zwei Regeln halten die Plugins getrennt. `plugin-boundary` verbietet einem
-Plugin, ein anderes Plugin zu importieren. Das gilt für Plugin-Pakete und
-Plugin-Ordner und für die Tests eines Plugin-Pakets. Der Host verbindet die
-Plugins über graft. `plugin-entry` prüft, dass die Datei `src/index.ts` eines
-Plugin-Pakets nur einen Export hat: das Plugin, als Default-Export. Der
-Eingangstest jedes Plugin-Pakets prüft, dass seine `package.json` kein anderes
-Plugin-Paket nennt. Ein anderes Modul eines Plugin-Pakets hat nur dann einen
-Schlüssel in `exports`, wenn ein Programm oder ein Test des Hosts es braucht
-oder wenn die öffentlichen Typen des Hosts es nennen. Das Review prüft das. Eine
-Worker-Datei ist ein Einstieg im Build ihres Pakets, aber kein Schlüssel in
-`exports`, weil sie beim Laden mit der Arbeit beginnt. Der Code-Mode-Worker von
-`plugin-code` ist so eine Datei.
+Plugin, ein anderes Plugin zu importieren. Das gilt für Plugin-Pakete und ihre
+Tests. Der Host verbindet die Plugins über graft. `plugin-entry` prüft, dass die
+Datei `src/index.ts` eines Plugin-Pakets nur einen Export hat: das Plugin, als
+Default-Export. Der Eingangstest jedes Plugin-Pakets prüft, dass seine
+`package.json` kein anderes Plugin-Paket nennt. Ein anderes Modul eines
+Plugin-Pakets hat nur dann einen Schlüssel in `exports`, wenn ein Programm oder
+ein Test des Hosts es braucht oder wenn die öffentlichen Typen des Hosts es
+nennen. Das Review prüft das. Eine Worker-Datei ist ein Einstieg im Build ihres
+Pakets, aber kein Schlüssel in `exports`, weil sie beim Laden mit der Arbeit
+beginnt. Der Code-Mode-Worker von `plugin-code` ist so eine Datei.
 
 ## Prüfungen des Datenumzugs
 

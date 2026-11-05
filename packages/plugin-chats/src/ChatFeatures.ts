@@ -71,7 +71,11 @@ export class ChatFeatures extends Context.Service<
 			input: TurnInput,
 			host: Bot.ToolRegistration,
 			identity: ExecutionIdentity,
-		) => Effect.Effect<Bot.ToolRegistration, never, Bot.Context | Scope.Scope>
+		) => Effect.Effect<
+			Bot.ToolRegistration<{}, BotFeatures.FeatureStopped>,
+			never,
+			Bot.Context | Scope.Scope
+		>
 		/** Decides the tool calls that ask for approval. */
 		readonly approvals: typeof Chat.Approvals.Service
 		/** Gives a model the content of the files that a prompt names. */

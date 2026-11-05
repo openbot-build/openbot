@@ -17,7 +17,7 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 
 | 包                      | 用途                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `openbot`               | 服务器和插件宿主，以及 Turn 限制插件。它会再次导出模型提供方。请看[从代码中运行](/zh-cn/server)。                |
+| `openbot`               | 服务器和插件宿主。它会再次导出模型提供方和 Turn 限制插件。请看[从代码中运行](/zh-cn/server)。                    |
 | `server-database`       | 服务器数据库的表、Drizzle 数据库和 SQL 迁移。只有服务器使用它。                                                  |
 | `server-kernel`         | 所有插件共用的服务器部分：错误、密钥、设置、配置、网络规则和 HTTP 宿主。只有服务器使用它。                       |
 | `identity-contract`     | 登录、访问、角色、组织、邮件、SSO 和审计日志共用的服务标签与类型。只有服务器使用它。                             |
@@ -52,6 +52,9 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 | `plugin-triggers`       | `triggers` 插件：启动 Turns 的触发器，以及它们的 webhook。只有服务器使用它。                                     |
 | `plugin-billing`        | `billing` 插件：组织的钱包、用量和预算。只有服务器使用它。                                                       |
 | `plugin-settings`       | `settings` 插件：每个成员的设置。只有服务器使用它。                                                              |
+| `plugin-turn-limiter`   | `turn-limiter` 插件：限制每个 Turn 的模型步数。它一开始是关闭的。`openbot` 会再次导出它的 `TurnLimiter`。        |
+| `plugin-time-limiter`   | `time-limiter` 插件：限制每个 Turn 的时间。它一开始是关闭的。`openbot` 会再次导出它的 `TimeLimiter`。            |
+| `plugin-token-limiter`  | `token-limiter` 插件：限制每个 Turn 的 token。它一开始是关闭的。`openbot` 会再次导出它的 `TokenLimiter`。        |
 | `api`                   | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                                                          |
 | `client`                | TypeScript 客户端。请看[客户端](/zh-cn/client)。                                                                 |
 | `core`                  | Bot 核心：Bot、Chat、Turn、存储、插件和技能。                                                                    |
@@ -253,7 +256,8 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 ## openbot 中的插件
 
 服务器在每个 Turn 中都使用 OpenBot 的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。`@openbot-build/openbot`
-包含 Turn 限制插件。你也可以在自己的 `ChatRuntime` 中使用它们。
+再次导出 Turn 限制插件。它们来自 `plugin-turn-limiter`、`plugin-token-limiter`
+和 `plugin-time-limiter` 这三个包。你可以在自己的 `ChatRuntime` 中使用它们。
 
 `Auth.handle(request)` 返回包含响应的 Effect。`Chats.wait` 的超时接受
 `Duration.Input`，例如 `"30 seconds"`。HTTP 路由仍通过 `timeoutMs` 接受毫秒数。
@@ -271,7 +275,8 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 ### Turn 限制
 
 有三个插件可以限制每个 Turn。你可以只用其中一个，也可以用
-`PluginComposition.merge` 把它们合在一起。每个插件只计算自己的 Turn。
+`PluginComposition.merge`
+把它们合在一起。每个插件只计算自己的 Turn。在服务器中，插件文件打开它们并设定限制。请看[插件](/zh-cn/plugins)。
 
 #### 模型步骤
 

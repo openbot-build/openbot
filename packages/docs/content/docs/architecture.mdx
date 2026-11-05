@@ -74,18 +74,19 @@ services and publishes all of them in one step. A later stage can wait for a
 service of another plugin, and the services of the stages before it stay
 published. The start builds the work of the feature in this order: Bot features,
 workflows, workers, and HTTP routes. It closes in the reverse order. A stage or
-a start that fails tries again: fast at first, then every 30 seconds.
+a start that fails tries again: fast at first, then every 30 seconds. The three
+limit plugins are one graft plugin each, with config.
 
 A plugin waits until every service that it needs is published. When a plugin
 stops or starts again, the plugins that use its services stop first. They start
 again when the services come back. While a plugin is off, its routes answer
 `503` with `FeatureUnavailable`.
 
-The **preset** is the list of the 23 plugins of OpenBot. Six of them are
-required: `audit`, `platform`, `organization`, `access`, `auth`, and
-`authorization`. The plugins file can turn other plugins off. See
-[Plugins](/plugins). The host itself owns the `/health` route and the routes of
-executions, so nobody can turn them off.
+The **preset** is the list of the 26 plugins of OpenBot. The three limit plugins
+are off at first. Six of them are required: `audit`, `platform`, `organization`,
+`access`, `auth`, and `authorization`. The plugins file can turn other plugins
+off. See [Plugins](/plugins). The host itself owns the `/health` route and the
+routes of executions, so nobody can turn them off.
 
 ### Startup
 

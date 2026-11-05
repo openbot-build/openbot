@@ -182,23 +182,21 @@ Code lists the services that it needs instead.
 `server-database`, `server-kernel`, `identity-contract`, `server-billing`,
 `server-execution`, `tools-contract`, `models-contract`, `apps-contract`,
 `conversation-contract`, `model-providers`, `server-plugin`, then the plugin
-packages (`plugin-<id>`) and the plugin folders in `packages/openbot/src`, then
-`server-upgrade`, `app`, and `server-development`, which are also in
-`packages/openbot/src`. Code may import only lower layers. `public-entry` lets
-other packages use a server package only through a key of `exports` in its
-`package.json`. This is true for tests too.
+packages (`plugin-<id>`), then `server-upgrade`, `app`, and
+`server-development`, which are in `packages/openbot/src`. Code may import only
+lower layers. `public-entry` lets other packages use a server package only
+through a key of `exports` in its `package.json`. This is true for tests too.
 
 Two rules keep the plugins apart. `plugin-boundary` does not let a plugin import
-another plugin. This is true for plugin packages and plugin folders, and for the
-tests of a plugin package. The host connects the plugins through graft.
-`plugin-entry` checks that the `src/index.ts` file of a plugin package has one
-export only: the plugin, as the default export. The entries test of each plugin
-package checks that its `package.json` names no other plugin package. Another
-module of a plugin package has a key in `exports` only when a program or a test
-of the host needs it, or when the public types of the host name it. Review
-checks this. A worker file is an entry of the build of its package, but not a
-key of `exports`, because it starts work when it loads. The Code Mode worker of
-`plugin-code` is such a file.
+another plugin. This is true for plugin packages and their tests. The host
+connects the plugins through graft. `plugin-entry` checks that the
+`src/index.ts` file of a plugin package has one export only: the plugin, as the
+default export. The entries test of each plugin package checks that its
+`package.json` names no other plugin package. Another module of a plugin package
+has a key in `exports` only when a program or a test of the host needs it, or
+when the public types of the host name it. Review checks this. A worker file is
+an entry of the build of its package, but not a key of `exports`, because it
+starts work when it loads. The Code Mode worker of `plugin-code` is such a file.
 
 ## Data move checks
 

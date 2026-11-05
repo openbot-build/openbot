@@ -45,19 +45,19 @@ einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/platform#setup).
 
 ## Was das Paket exportiert
 
-| Export                                                       | Was es ist                                                                                                              |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `Host.layer(options)`                                        | OpenBot mit eigenem Node.js-Server für HTTP. `openbot-server` führt es aus.                                             |
-| `Host.layerApp(options)`                                     | Die OpenBot-Routen und -Dienste, für einen HTTP-Server, den du schon hast.                                              |
-| `Host.Options`, `Host.AppOptions`                            | Die Optionen von `Host.layer` und von `Host.layerApp`. Siehe [Optionen](#optionen).                                     |
-| `Host.Outside`, `Host.RouteServices`, `Host.StartupServices` | Die Dienste von außen, die Dienste, die deine Routen nutzen können, und die Dienste, die Arbeit beim Start nutzen kann. |
-| `Launch.main(make)`, `Launch.server(make)`                   | Führt den Layer aus `make` so aus wie `openbot-server`.                                                                 |
-| `Preset`                                                     | Die IDs der Plugins, die OpenBot ausführt, und die IDs der Plugins, die aktiv sein müssen.                              |
-| `Wallets`                                                    | Der Dienst für Operationen mit Guthaben. Deine Routen können ihn nutzen.                                                |
-| `HostTools`                                                  | Die Werkzeuge, die dein Programm jedem Chat gibt. Siehe [Ein Werkzeug hinzufügen](#ein-werkzeug-hinzufügen).            |
-| `DatabasePostgres`                                           | Der Datenbank-Layer und das Programm `migrate`.                                                                         |
-| `EnvironmentConfiguration`                                   | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                             |
-| `Auth`, `AppHost`, `AppTools`, `Configuration`               | Diensttypen für fortgeschrittene Aufbauten.                                                                             |
+| Export                                                       | Was es ist                                                                                                                         |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `Host.layer(options)`                                        | OpenBot mit eigenem Node.js-Server für HTTP. `openbot-server` führt es aus.                                                        |
+| `Host.layerApp(options)`                                     | Die OpenBot-Routen und -Dienste, für einen HTTP-Server, den du schon hast.                                                         |
+| `Host.Options`, `Host.AppOptions`                            | Die Optionen von `Host.layer` und von `Host.layerApp`. Siehe [Optionen](#optionen).                                                |
+| `Host.Outside`, `Host.RouteServices`, `Host.StartupServices` | Die Dienste von außen, die Dienste, die deine Routen nutzen können, und die Dienste, die Arbeit beim Start nutzen kann.            |
+| `Launch.main(make)`, `Launch.server(make)`                   | Führt den Layer aus `make` so aus wie `openbot-server`.                                                                            |
+| `Preset`                                                     | Die IDs der Plugins von OpenBot, die IDs, die am Anfang aus sind (`offByDefault`), und die IDs der Plugins, die aktiv sein müssen. |
+| `Wallets`                                                    | Der Dienst für Operationen mit Guthaben. Deine Routen können ihn nutzen.                                                           |
+| `HostTools`                                                  | Die Werkzeuge, die dein Programm jedem Chat gibt. Siehe [Ein Werkzeug hinzufügen](#ein-werkzeug-hinzufügen).                       |
+| `DatabasePostgres`                                           | Der Datenbank-Layer und das Programm `migrate`.                                                                                    |
+| `EnvironmentConfiguration`                                   | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                                        |
+| `Auth`, `AppHost`, `AppTools`, `Configuration`               | Diensttypen für fortgeschrittene Aufbauten.                                                                                        |
 
 Der Unterpfad `@openbot-build/openbot/Development` exportiert den
 Entwicklungsserver. Siehe
@@ -282,10 +282,11 @@ Die Dienste, die diese Layer deinem Programm geben, sind die Dienste der Plugins
 zur Zeit des Starts. Wenn ein Plugin später neu startet, ändert sich deine Kopie
 nicht.
 
-Wegen dieser Kopie brauchen `Host.layer` und `Host.layerApp` jedes Plugin. Wenn
-`pluginsFile` ein Plugin ausschaltet, endet der Layer mit `CaptureMissing`. Das
-Programm `openbot-server` führt denselben Server ohne die Kopie aus. Dort kann
-die Plugin-Datei also Plugins ausschalten. Siehe [Plugins](/de/plugins).
+Wegen dieser Kopie brauchen `Host.layer` und `Host.layerApp` jedes Plugin, das
+Dienste gibt. Die Limit-Plugins geben keine Dienste, also können sie aus sein.
+Wenn `pluginsFile` ein Plugin ausschaltet, endet der Layer mit `CaptureMissing`.
+Das Programm `openbot-server` führt denselben Server ohne die Kopie aus. Dort
+kann die Plugin-Datei also Plugins ausschalten. Siehe [Plugins](/de/plugins).
 
 ---
 

@@ -24,17 +24,28 @@ import { Digest } from "effect/crypto"
 import { LineCounter, parseDocument, type ScalarTag } from "yaml"
 import * as Preset from "./Preset.ts"
 
-/** The default entries: one for each plugin of the preset, in the order of `ids`. */
+/**
+ * The default entries: one for each plugin of the preset, in the order of
+ * `ids`. The plugins of `Preset.offByDefault` are off.
+ */
 export const presetEntries: ReadonlyArray<Entry.Entry> = Arr.map(
 	Preset.ids,
-	(id) => ({ id, name: Preset.nameOf(id) }),
+	(id) => ({
+		id,
+		name: Preset.nameOf(id),
+		...(Arr.contains(Preset.offByDefault, id) ? { disabled: true } : {}),
+	}),
 )
 
 /**
- * The preset plugins that take config. No preset plugin takes config yet. A
- * plugin that gets a config Schema adds its id here.
+ * The preset plugins that take config. A plugin that gets a config Schema
+ * adds its id here. The limit plugins take their limit as config.
  */
-export const configurable: ReadonlyArray<string> = []
+export const configurable: ReadonlyArray<string> = [
+	"turn-limiter",
+	"time-limiter",
+	"token-limiter",
+]
 
 /** The fields that an entry may have. Groups and the other loader fields are not for this file. */
 const fields = ["id", "name", "disabled", "config"] as const
@@ -114,6 +125,12 @@ export interface Known {
 	readonly required: ReadonlyArray<string>
 	/** The ids of `base` that take config. */
 	readonly configurable: ReadonlyArray<string>
+	/**
+	 * The ids of `base` whose config can not use `!env`. Their config must be
+	 * the same on every server, and the manifest hash has only the name of an
+	 * environment variable, not its value.
+	 */
+	readonly noEnv?: ReadonlyArray<string>
 }
 
 /** What the rules know without test plugins. `openbot-inspect` uses it. */
@@ -122,6 +139,7 @@ export const presetKnown: Known = {
 	bundled: Arr.map(Preset.ids, Preset.nameOf),
 	required: Preset.required,
 	configurable,
+	noEnv: Preset.offByDefault,
 }
 
 // The tag is a copy of the one of the loader's `Include`. OpenBot does not use
@@ -254,6 +272,7 @@ const sameConfig = (a: unknown, b: unknown) => canonical(a) === canonical(b)
  * - an entry has only `id`, `name`, `disabled` and `config`;
  * - an entry of `base` keeps its name, and changes its config only when its
  *   plugin takes config;
+ * - the config of an id in `noEnv` has no `!env`;
  * - a new entry names a bundled plugin that no other entry runs;
  * - every required plugin is there and on.
  *
@@ -294,6 +313,10 @@ export const checkEntries = (
 						sameConfig(entry.config, base.config)
 							? []
 							: [{ id, reason: "This plugin takes no config." }]),
+						...(Arr.contains(known.noEnv ?? [], id) &&
+						Arr.some(leaves(entry.config), (leaf) => leaf instanceof Entry.Env)
+							? [{ id, reason: "The config of this plugin can not use !env." }]
+							: []),
 					],
 					onNone: (): ReadonlyArray<Problem> => {
 						if (!Arr.contains(known.bundled, entry.name))
@@ -475,6 +498,23 @@ export const merge = (
 				onSome: (name) => [patch({ id: item.id, name }, item)],
 			}),
 	)
+	// Config alone does not turn on a plugin that is off at first.
+	const stillOff = Arr.flatMap(items, (item): ReadonlyArray<Problem> =>
+		Option.isSome(item.config) &&
+		Option.isNone(item.disabled) &&
+		Arr.some(
+			known.base,
+			(base) => base.id === item.id && base.disabled === true,
+		)
+			? [
+					{
+						entry: item.position,
+						id: item.id,
+						reason: 'This plugin is off. Add "disabled: false" to turn it on.',
+					},
+				]
+			: [],
+	)
 	const merged = [...patched, ...added]
 	const ofEntries = Arr.map(checkEntries(known, merged), (problem): Problem =>
 		Option.match(Option.flatMap(Option.fromUndefinedOr(problem.id), first), {
@@ -482,7 +522,13 @@ export const merge = (
 			onSome: (item) => ({ entry: item.position, ...problem }),
 		}),
 	)
-	const problems = [...ownProblems, ...twice, ...nameless, ...ofEntries]
+	const problems = [
+		...ownProblems,
+		...twice,
+		...nameless,
+		...stillOff,
+		...ofEntries,
+	]
 	if (Arr.isReadonlyArrayNonEmpty(problems)) return Result.fail(problems)
 	return Result.mapError(Tree.validate(merged), (invalid) => [
 		{ reason: `The entries are not valid: ${invalid.reason}` },

@@ -20,7 +20,7 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 
 | Paket                   | Wofür es da ist                                                                                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openbot`               | Der Server und der Plugin-Host, mit den Plugins für das Turn-Limit. Er exportiert die Model Providers noch einmal. Siehe [Aus Code starten](/de/server).        |
+| `openbot`               | Der Server und der Plugin-Host. Er exportiert die Model Providers und die Plugins für das Turn-Limit noch einmal. Siehe [Aus Code starten](/de/server).         |
 | `server-database`       | Die Tabellen der Server-Datenbank, die Drizzle-Datenbank und die SQL-Migrationen. Nur der Server nutzt es.                                                      |
 | `server-kernel`         | Die Teile des Servers, die alle Plugins teilen: Fehler, geheime Schlüssel, Einstellungen, Konfiguration, Netzregeln und der HTTP-Host. Nur der Server nutzt es. |
 | `identity-contract`     | Die gemeinsamen Service-Tags und Typen für Anmeldung, Zugriff, Rollen, Organisationen, Mail, SSO und das Audit-Log. Nur der Server nutzt es.                    |
@@ -55,6 +55,9 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 | `plugin-triggers`       | Das Plugin `triggers`: Trigger, die Turns starten, und ihre Webhooks. Nur der Server nutzt es.                                                                  |
 | `plugin-billing`        | Das Plugin `billing`: die Wallets der Organisationen, die Nutzung und Budgets. Nur der Server nutzt es.                                                         |
 | `plugin-settings`       | Das Plugin `settings`: die Einstellungen jedes Mitglieds. Nur der Server nutzt es.                                                                              |
+| `plugin-turn-limiter`   | Das Plugin `turn-limiter`: ein Limit für die Modellschritte jedes Turns. Es ist am Anfang aus. `openbot` exportiert sein `TurnLimiter` noch einmal.             |
+| `plugin-time-limiter`   | Das Plugin `time-limiter`: ein Limit für die Zeit jedes Turns. Es ist am Anfang aus. `openbot` exportiert sein `TimeLimiter` noch einmal.                       |
+| `plugin-token-limiter`  | Das Plugin `token-limiter`: ein Limit für die Tokens jedes Turns. Es ist am Anfang aus. `openbot` exportiert sein `TokenLimiter` noch einmal.                   |
 | `api`                   | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                                                                            |
 | `client`                | Der TypeScript-Client. Siehe [Client](/de/client).                                                                                                              |
 | `core`                  | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                                                                                 |
@@ -303,9 +306,10 @@ Programm findet, lädt und führt die Skills aus.
 
 Der Server nutzt die Plugins von OpenBot, zum Beispiel die Plugins für Bot, App
 und Arbeit, in jedem Turn. Das Arbeits-Plugin gibt dem Bot seine Todo-Liste,
-seine Erinnerungen und den Plan-Modus. `@openbot-build/openbot` enthält die
-Plugins für das Turn-Limit. Du kannst sie auch mit deiner eigenen `ChatRuntime`
-nutzen.
+seine Erinnerungen und den Plan-Modus. `@openbot-build/openbot` exportiert die
+Plugins für das Turn-Limit noch einmal. Sie kommen aus den Paketen
+`plugin-turn-limiter`, `plugin-token-limiter` und `plugin-time-limiter`. Du
+kannst sie mit deiner eigenen `ChatRuntime` nutzen.
 
 `Auth.handle(request)` gibt einen Effect mit der Antwort zurück. `Chats.wait`
 nimmt ein `Duration.Input` als Zeitgrenze, etwa `"30 seconds"`. Die HTTP-Route
@@ -325,7 +329,8 @@ Aufrufer erzeugt diese IDs vor dem Aufruf der reinen Hilfsfunktionen.
 
 Drei Plugins setzen jedem Turn eine Grenze. Du kannst eines davon nutzen oder
 sie mit `PluginComposition.merge` verbinden. Jedes Plugin zählt nur seinen
-eigenen Turn.
+eigenen Turn. Im Server schaltet die Plugin-Datei sie an und setzt die Limits.
+Siehe [Plugins](/de/plugins).
 
 #### Model-Schritte
 

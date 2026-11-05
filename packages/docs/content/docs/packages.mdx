@@ -19,7 +19,7 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 
 | Package                 | What it is for                                                                                                                                         |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `openbot`               | The server and the plugin host, with the Turn limit plugins. It exports the model providers again. See [Run from code](/server).                       |
+| `openbot`               | The server and the plugin host. It exports the model providers and the Turn limit plugins again. See [Run from code](/server).                         |
 | `server-database`       | The tables of the server database, the Drizzle database, and the SQL migrations. Only the server uses it.                                              |
 | `server-kernel`         | The parts of the server that every plugin shares: errors, secrets, settings, configuration, network rules, and the HTTP host. Only the server uses it. |
 | `identity-contract`     | The shared service tags and types for sign-in, access, roles, organizations, mail, SSO, and the audit log. Only the server uses it.                    |
@@ -54,6 +54,9 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 | `plugin-triggers`       | The `triggers` plugin: Triggers that start Turns, and their webhooks. Only the server uses it.                                                         |
 | `plugin-billing`        | The `billing` plugin: the wallets of organizations, usage, and budgets. Only the server uses it.                                                       |
 | `plugin-settings`       | The `settings` plugin: the settings of each member. Only the server uses it.                                                                           |
+| `plugin-turn-limiter`   | The `turn-limiter` plugin: a limit on the model steps of each Turn. It is off at first. `openbot` exports its `TurnLimiter` again.                     |
+| `plugin-time-limiter`   | The `time-limiter` plugin: a limit on the time of each Turn. It is off at first. `openbot` exports its `TimeLimiter` again.                            |
+| `plugin-token-limiter`  | The `token-limiter` plugin: a limit on the tokens of each Turn. It is off at first. `openbot` exports its `TokenLimiter` again.                        |
 | `api`                   | The typed HTTP contract. The server, the client, and the API reference use it.                                                                         |
 | `client`                | The TypeScript client. See [Client](/client).                                                                                                          |
 | `core`                  | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                                                                        |
@@ -290,8 +293,9 @@ loads, and runs the skills.
 
 The server uses the plugins of OpenBot, such as the Bot, App, and work plugins,
 in every Turn. The work plugin gives the Bot its todo list, its reminders and
-plan mode. `@openbot-build/openbot` has the Turn limit plugins. You can also use
-them with your own `ChatRuntime`.
+plan mode. `@openbot-build/openbot` exports the Turn limit plugins again. They
+come from the packages `plugin-turn-limiter`, `plugin-token-limiter`, and
+`plugin-time-limiter`. You can use them with your own `ChatRuntime`.
 
 `Auth.handle(request)` returns an Effect with the response. `Chats.wait` takes a
 `Duration.Input` for its timeout, such as `"30 seconds"`. The HTTP route still
@@ -310,7 +314,9 @@ these IDs before it calls the pure helpers.
 ### Turn limits
 
 Three plugins put a limit on each Turn. You can use one of them, or merge them
-with `PluginComposition.merge`. Each one counts only its own Turn.
+with `PluginComposition.merge`. Each one counts only its own Turn. In the
+server, the plugins file turns them on and sets the limits. See
+[Plugins](/plugins).
 
 #### Model steps
 

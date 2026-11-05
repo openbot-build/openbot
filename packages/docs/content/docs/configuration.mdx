@@ -50,7 +50,7 @@ This is the complete list of environment variables that the server reads.
 | `OPENBOT_DATABASE_URL`   | Yes      |               | A PostgreSQL connection URL.                                        |
 | `OPENBOT_SECRET_KEYS`    | Yes      |               | The keys that encrypt secrets in the database. See below.           |
 | `OPENBOT_OUTBOUND_ALLOW` | No       |               | Private hosts and IP ranges that OpenBot may connect to. See below. |
-| `OPENBOT_PLUGINS_FILE`   | No       |               | A YAML file that turns plugins off. See [Plugins](/plugins).        |
+| `OPENBOT_PLUGINS_FILE`   | No       |               | A YAML file that turns plugins on and off. See [Plugins](/plugins). |
 
 The Docker image sets `OPENBOT_HOST=0.0.0.0` and `OPENBOT_PORT=3000`, so the
 server can take traffic from outside the container.
@@ -123,9 +123,9 @@ When OpenBot blocks a connection, the error and the log name the host and
 
 ### Plugins
 
-OpenBot is a set of plugins. Without `OPENBOT_PLUGINS_FILE`, every plugin is on.
-To turn a plugin off, such as `triggers`, list it in a YAML file and set
-`OPENBOT_PLUGINS_FILE` to its path.
+OpenBot is a set of plugins. Without `OPENBOT_PLUGINS_FILE`, every plugin is on,
+except the three limit plugins. To turn a plugin off, such as `triggers`, or a
+limit on, list it in a YAML file and set `OPENBOT_PLUGINS_FILE` to its path.
 
 The server reads the file once, when it starts, and never writes it. A file that
 is not valid stops the start. Give every instance the same file. See

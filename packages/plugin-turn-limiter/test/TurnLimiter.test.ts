@@ -15,7 +15,7 @@ import {
 	Stream,
 } from "effect"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import * as TurnLimiter from "../src/plugin-limiters/turn-limiter/TurnLimiter.ts"
+import * as TurnLimiter from "../src/TurnLimiter.ts"
 import { ChatTest } from "./ChatTest.ts"
 
 const usage = Response.Usage.make({

@@ -466,11 +466,18 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 							return yield* test.executions.commit(fence, change, writes)
 						}),
 				})
-				// Each snapshot has a new version, so a second snapshot would show.
+				// Each snapshot has a new version and new settings, so a second
+				// snapshot would show. The limit is 1 first and 5 after.
 				const features = Layer.mock(BotFeatures.BotFeatures, {
 					snapshot: Effect.map(
 						Ref.updateAndGet(snapshots, (count) => count + 1),
-						(version) => [{ id: "tools", version, settings: null }],
+						(version) => [
+							{
+								id: "tools",
+								version,
+								settings: { maxSteps: version === 1 ? 1 : 5 },
+							},
+						],
 					),
 				})
 				const execution = Layer.effect(
@@ -505,7 +512,8 @@ layer(services, { excludeTestServices: true, timeout: "60 seconds" })((it) => {
 						(pinned) =>
 							Schema.is(Schema.Array(BotFeatures.Pin))(pinned) &&
 							pinned.length === 1 &&
-							pinned[0]?.version === 1,
+							pinned[0]?.version === 1 &&
+							JSON.stringify(pinned[0]?.settings) === '{"maxSteps":1}',
 					),
 				)
 				assert.equal((yield* test.executions.get(test.key)).status, "completed")

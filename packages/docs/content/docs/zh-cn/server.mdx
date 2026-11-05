@@ -38,19 +38,19 @@ HTTP 客户端交给这个 Layer。`Launch.server`
 
 ## 包导出了什么
 
-| 导出                                                         | 是什么                                                              |
-| ------------------------------------------------------------ | ------------------------------------------------------------------- |
-| `Host.layer(options)`                                        | 带有自己的 Node.js HTTP 服务器的 OpenBot。`openbot-server` 运行它。 |
-| `Host.layerApp(options)`                                     | OpenBot 的路由和服务，用于你已有的 HTTP 服务器。                    |
-| `Host.Options`、`Host.AppOptions`                            | `Host.layer` 和 `Host.layerApp` 的选项。请看[选项](#选项)。         |
-| `Host.Outside`、`Host.RouteServices`、`Host.StartupServices` | 外部服务、你的路由可以使用的服务，以及启动时的工作可以使用的服务。  |
-| `Launch.main(make)`、`Launch.server(make)`                   | 像 `openbot-server` 一样运行 `make` 给出的 Layer。                  |
-| `Preset`                                                     | OpenBot 运行的插件的 ID，以及必须处于活动状态的插件的 ID。          |
-| `Wallets`                                                    | 额度操作的服务。你的路由可以使用它。                                |
-| `HostTools`                                                  | 你的程序交给每个 Chat 的工具。请看[添加工具](#添加工具)。           |
-| `DatabasePostgres`                                           | 数据库 Layer 和 `migrate` 程序。                                    |
-| `EnvironmentConfiguration`                                   | 从环境变量读取实例设置。                                            |
-| `Auth`、`AppHost`、`AppTools`、`Configuration`               | 用于高级配置的服务类型。                                            |
+| 导出                                                         | 是什么                                                                                    |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `Host.layer(options)`                                        | 带有自己的 Node.js HTTP 服务器的 OpenBot。`openbot-server` 运行它。                       |
+| `Host.layerApp(options)`                                     | OpenBot 的路由和服务，用于你已有的 HTTP 服务器。                                          |
+| `Host.Options`、`Host.AppOptions`                            | `Host.layer` 和 `Host.layerApp` 的选项。请看[选项](#选项)。                               |
+| `Host.Outside`、`Host.RouteServices`、`Host.StartupServices` | 外部服务、你的路由可以使用的服务，以及启动时的工作可以使用的服务。                        |
+| `Launch.main(make)`、`Launch.server(make)`                   | 像 `openbot-server` 一样运行 `make` 给出的 Layer。                                        |
+| `Preset`                                                     | OpenBot 的插件的 ID、一开始关闭的 ID（`offByDefault`），以及必须处于活动状态的插件的 ID。 |
+| `Wallets`                                                    | 额度操作的服务。你的路由可以使用它。                                                      |
+| `HostTools`                                                  | 你的程序交给每个 Chat 的工具。请看[添加工具](#添加工具)。                                 |
+| `DatabasePostgres`                                           | 数据库 Layer 和 `migrate` 程序。                                                          |
+| `EnvironmentConfiguration`                                   | 从环境变量读取实例设置。                                                                  |
+| `Auth`、`AppHost`、`AppTools`、`Configuration`               | 用于高级配置的服务类型。                                                                  |
 
 子路径 `@openbot-build/openbot/Development` 导出开发服务器。见
 [运行开发服务器](#运行开发服务器)。子路径 `@openbot-build/openbot/testing`
@@ -239,7 +239,8 @@ OpenBot 用一个单独的路由器来服务这些路由。这个 Layer 里的�
 
 这些 Layer 交给你的程序的服务，是启动时各插件的服务。插件之后重新启动时，你手中的副本不会改变。
 
-因为有这个副本，`Host.layer` 和 `Host.layerApp` 需要每个插件都打开。当
+因为有这个副本，`Host.layer` 和 `Host.layerApp`
+需要每个提供服务的插件都打开。限制插件不提供服务，所以它们可以关闭。当
 `pluginsFile` 关闭一个插件时，Layer 以 `CaptureMissing` 终止。`openbot-server`
 程序运行同样的服务器但没有这个副本，所以插件文件可以在那里关闭插件。参见[插件](/zh-cn/plugins)。
 

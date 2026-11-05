@@ -1,14 +1,14 @@
 ---
 title: Plugins
-description: Turn plugins of OpenBot off with a read-only plugins file.
+description: Turn plugins of OpenBot on and off with a read-only plugins file.
 ---
 
 For platform operators. These tasks affect the whole deployment. Have server
 access as the task requires. Start with the [administrator manual](/admin).
 
 OpenBot is a set of plugins on one plugin host. This page lists the plugins. It
-shows how to turn some of them off with the plugins file, and how to check that
-every server runs the same plugins.
+shows how to turn some of them on and off with the plugins file, and how to
+check that every server runs the same plugins.
 
 ---
 
@@ -37,9 +37,10 @@ Clients see the same contract on every server.
 
 ## The plugins of OpenBot
 
-OpenBot has 23 plugins. The six plugins with "Yes" in the column "Needed" can
-never be off. The column "Needs" lists the other plugins that a plugin uses. A
-plugin starts only when every plugin that it needs is on.
+OpenBot has 26 plugins. The three limit plugins are off at first. The six
+plugins with "Yes" in the column "Needed" can never be off. The column "Needs"
+lists the other plugins that a plugin uses. A plugin starts only when every
+plugin that it needs is on.
 
 | Plugin          | What it gives                                                           | Needed | Needs                                                                                                           |
 | --------------- | ----------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
@@ -66,6 +67,9 @@ plugin starts only when every plugin that it needs is on.
 | `triggers`      | Triggers that start Turns, and their webhooks.                          |        | `audit`, `auth`, `authorization`, `bots`, `chats`, `models`                                                     |
 | `billing`       | The wallets of organizations, usage, and budgets.                       |        | `audit`, `auth`, `authorization`, `organization`                                                                |
 | `settings`      | The settings of each member.                                            |        | `auth`, `authorization`, `bots`                                                                                 |
+| `turn-limiter`  | A limit on the model steps of each Turn. Off at first.                  |        |                                                                                                                 |
+| `time-limiter`  | A limit on the time of each Turn. Off at first.                         |        |                                                                                                                 |
+| `token-limiter` | A limit on the input and output tokens of each Turn. Off at first.      |        |                                                                                                                 |
 
 A plugin uses another plugin in a later step of its start. So two plugins can
 need each other, such as `bots` and `chats`.
@@ -74,6 +78,7 @@ What this means for you:
 
 - You can turn off `computers`, `triggers`, `billing`, and `settings` one by
   one. No other plugin needs them.
+- You can turn each limit plugin on or off alone. No other plugin needs them.
 - You can not turn off `mail`, `sso`, or `models`. A needed plugin uses them, so
   OpenBot does not start without them.
 - The other plugins need each other. To turn one of them off, you must also turn
@@ -99,19 +104,65 @@ An empty file, or the list `[]`, changes nothing.
   disabled: true
 ```
 
-Without `OPENBOT_PLUGINS_FILE`, every plugin is on.
+Without `OPENBOT_PLUGINS_FILE`, every plugin is on, except the three limit
+plugins.
 
 ### Turn a plugin off
 
-Give the id of the plugin and `disabled: true`. `disabled: false` keeps the
-plugin on, the same as no entry.
+Give the id of the plugin and `disabled: true`. `disabled: false` turns the
+plugin on. For most plugins this is the same as no entry. The limit plugins are
+off without an entry.
+
+### Turn a limit on
+
+The three limit plugins put a limit on each Turn. They are off at first. To turn
+one on, give `disabled: false` and its limit in `config`:
+
+```yaml
+- id: turn-limiter
+  disabled: false
+  config:
+    maxSteps: 40
+- id: time-limiter
+  disabled: false
+  config:
+    maxDuration: 600000
+- id: token-limiter
+  disabled: false
+  config:
+    maxTokens: 200000
+```
+
+| Plugin          | Config field  | Value                                                                                                                                                     |
+| --------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `turn-limiter`  | `maxSteps`    | A whole number from 1. Each model request of a Turn is one step. The first request counts too.                                                            |
+| `time-limiter`  | `maxDuration` | Milliseconds, such as `600000`, or a text such as `10 minutes`. `openbot-inspect plugins` shows a text as `"<redacted>"`, so a number is easier to check. |
+| `token-limiter` | `maxTokens`   | A whole number from 1. It counts the input and output tokens of all model requests of a Turn.                                                             |
+
+- A limit plugin that is on needs its config. Without good config the plugin
+  fails, and the start stops with `PluginsInactive`.
+- `config` alone does not turn a limit on. An entry with `config` and no
+  `disabled` is an error: "This plugin is off. Add "disabled: false" to turn it
+  on."
+- A limit can not use `!env`. Give every server the same limits. The config is
+  in the manifest hash, but a value of `!env` is not.
+- Each Turn keeps the limits that were on when it started, also after a restart
+  of the server. A new limit counts only for new Turns.
+- The time counts from the start of the Turn, also while the Turn waits, for
+  example for a server that starts again.
+- A Turn at a limit ends as failed. Its error record has `BotFeatureStopped`
+  with the error of the limit, such as `ModelStepLimitExceeded`. The API shows
+  the failure category `unavailable`.
+- When you turn a limit plugin off, a Turn that started with it waits until it
+  is on again. To remove a limit, first set a high limit. Turn the plugin off
+  only when no Turn runs.
 
 ### Give config to a plugin
 
-An entry can have `config`, the settings of one plugin. Today no plugin of
-OpenBot takes config. So `config` on a plugin of OpenBot is an error, and the
-start stops with "This plugin takes no config." This way a value that no plugin
-reads can not look like it works.
+An entry can have `config`, the settings of one plugin. Today only the three
+limit plugins take config. `config` on another plugin of OpenBot is an error,
+and the start stops with "This plugin takes no config." This way a value that no
+plugin reads can not look like it works.
 
 ### Values from the environment
 
@@ -145,7 +196,9 @@ with the place in the file.
 | has an id that is in the file more than once                         | Error.                                                       |
 | gives another `name` to a plugin of OpenBot                          | Error. The name of a plugin of OpenBot can not change.       |
 | turns off a needed plugin                                            | Error. "This plugin is needed, so it can not be turned off." |
-| gives `config` to a plugin of OpenBot                                | Error. "This plugin takes no config."                        |
+| gives `config` to a plugin of OpenBot that takes no config           | Error. "This plugin takes no config."                        |
+| gives `config` to a limit plugin that stays off                      | Error. Add `disabled: false`.                                |
+| uses `!env` in the config of a limit plugin                          | Error. "The config of this plugin can not use !env."         |
 | has a new id with no `name`                                          | Error. A new entry needs a name.                             |
 | has a new id and a name that does not come with OpenBot              | Error. Only plugins that come with OpenBot can run.          |
 | has a new id and a name that already runs as another entry           | Error. Change that entry instead.                            |
@@ -165,8 +218,8 @@ does not see a change while it runs. To use a changed file, start every server
 again.
 
 When the file is good, the server logs `OpenBot read the plugins file.` with the
-path, the ids that are off, the new ids, and the manifest hash. It never logs
-config.
+path, the ids that are off (the limit plugins that stay off too), the new ids,
+and the manifest hash. It never logs config.
 
 When the file is not good, the server does not start. It logs one of these lines
 first:

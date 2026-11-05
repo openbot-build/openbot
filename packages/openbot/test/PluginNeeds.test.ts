@@ -153,6 +153,9 @@ const documented: Readonly<Record<string, ReadonlyArray<string>>> = {
 	triggers: ["audit", "auth", "authorization", "bots", "chats", "models"],
 	billing: ["audit", "auth", "authorization", "organization"],
 	settings: ["auth", "authorization", "bots"],
+	"turn-limiter": [],
+	"time-limiter": [],
+	"token-limiter": [],
 }
 
 describe("PluginNeeds", () => {
@@ -172,6 +175,9 @@ describe("PluginNeeds", () => {
 			"triggers",
 			"billing",
 			"settings",
+			"turn-limiter",
+			"time-limiter",
+			"token-limiter",
 		])
 	})
 

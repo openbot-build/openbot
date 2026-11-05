@@ -1,7 +1,13 @@
 import { ConfigProvider, Effect, Redacted, Result, String as Str } from "effect"
 import { assert, it } from "@effect/vitest"
+import { Prompt } from "effect/ai"
 import { NodeCrypto } from "@effect/platform-node"
-import { EnvironmentConfiguration } from "@openbot-build/openbot"
+import {
+	EnvironmentConfiguration,
+	TimeLimiter,
+	TokenLimiter,
+	TurnLimiter,
+} from "@openbot-build/openbot"
 
 import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 
@@ -31,6 +37,28 @@ it.effect("an instance reads only its own settings and the secret keys", () =>
 		assert.strictEqual(plain.success.port, 3000)
 	}),
 )
+
+it("the Turn limit plugins keep their names and plugin ids", () => {
+	assert.strictEqual(
+		TurnLimiter.make({ maxSteps: 1 }).id,
+		"@openbot-build/openbot/turn-limiter",
+	)
+	assert.strictEqual(
+		TokenLimiter.make({ maxTokens: 1 }).id,
+		"@openbot-build/openbot/token-limiter",
+	)
+	assert.strictEqual(
+		TimeLimiter.make({ maxDuration: "1 minute" }).id,
+		"@openbot-build/openbot/time-limiter",
+	)
+	assert.strictEqual(
+		TurnLimiter.ModelStepLimitExceeded.make({
+			maxSteps: 1,
+			history: Prompt.empty,
+		})._tag,
+		"ModelStepLimitExceeded",
+	)
+})
 
 it.layer(NodeCrypto.layer)((it) => {
 	it.effect("secret keys change one at a time and old secrets still open", () =>

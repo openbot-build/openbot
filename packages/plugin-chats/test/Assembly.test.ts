@@ -17,7 +17,8 @@ const registration = (
 		: { instructions: Prompt.make(instructions) }),
 })
 
-const toolNames = (value: Bot.ToolRegistration) => {
+// A hook of a feature can stop the Turn, so the registration can have an error.
+const toolNames = (value: Bot.ToolRegistration<{}, unknown>) => {
 	const tools: Readonly<Record<string, Tool.Any>> = value.tools
 	return Rec.keys(tools)
 }

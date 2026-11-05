@@ -91,7 +91,16 @@
 			"path": "../plugin-sso"
 		},
 		{
+			"path": "../plugin-time-limiter"
+		},
+		{
+			"path": "../plugin-token-limiter"
+		},
+		{
 			"path": "../plugin-triggers"
+		},
+		{
+			"path": "../plugin-turn-limiter"
 		},
 		{
 			"path": "../plugin-vaults"

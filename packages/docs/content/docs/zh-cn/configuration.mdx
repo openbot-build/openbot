@@ -29,16 +29,16 @@ OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenB
 
 这是服务器读取的环境变量的完整列表。
 
-| 变量                     | 必需 | 默认值      | 含义                                               |
-| ------------------------ | ---- | ----------- | -------------------------------------------------- |
-| `OPENBOT_HOST`           | 否   | `127.0.0.1` | 服务器监听的网络地址。                             |
-| `OPENBOT_PORT`           | 否   | `3000`      | 服务器监听的端口。                                 |
-| `OPENBOT_CLUSTER_SECRET` | 是   |             | 节点间私有 RPC 的共享密钥，至少 32 个字符。        |
-| `OPENBOT_CLUSTER_HOST`   | 否   | 监听地址    | 其他节点能在服务器端口访问的主机。                 |
-| `OPENBOT_DATABASE_URL`   | 是   |             | 一个 PostgreSQL 连接 URL。                         |
-| `OPENBOT_SECRET_KEYS`    | 是   |             | 用来加密数据库中机密的密钥。见下文。               |
-| `OPENBOT_OUTBOUND_ALLOW` | 否   |             | OpenBot 可以连接的私有主机和 IP 范围。见下文。     |
-| `OPENBOT_PLUGINS_FILE`   | 否   |             | 关闭插件的 YAML 文件。参见[插件](/zh-cn/plugins)。 |
+| 变量                     | 必需 | 默认值      | 含义                                                     |
+| ------------------------ | ---- | ----------- | -------------------------------------------------------- |
+| `OPENBOT_HOST`           | 否   | `127.0.0.1` | 服务器监听的网络地址。                                   |
+| `OPENBOT_PORT`           | 否   | `3000`      | 服务器监听的端口。                                       |
+| `OPENBOT_CLUSTER_SECRET` | 是   |             | 节点间私有 RPC 的共享密钥，至少 32 个字符。              |
+| `OPENBOT_CLUSTER_HOST`   | 否   | 监听地址    | 其他节点能在服务器端口访问的主机。                       |
+| `OPENBOT_DATABASE_URL`   | 是   |             | 一个 PostgreSQL 连接 URL。                               |
+| `OPENBOT_SECRET_KEYS`    | 是   |             | 用来加密数据库中机密的密钥。见下文。                     |
+| `OPENBOT_OUTBOUND_ALLOW` | 否   |             | OpenBot 可以连接的私有主机和 IP 范围。见下文。           |
+| `OPENBOT_PLUGINS_FILE`   | 否   |             | 打开和关闭插件的 YAML 文件。参见[插件](/zh-cn/plugins)。 |
 
 Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和
 `OPENBOT_PORT=3000`，这样服务器可以接收来自容器外部的流量。
@@ -96,9 +96,9 @@ OPENBOT_OUTBOUND_ALLOW=localhost,10.20.0.0/16
 ### 插件
 
 OpenBot 是一组插件。没有 `OPENBOT_PLUGINS_FILE`
-时，每个插件都打开。要关闭一个插件，例如
-`triggers`，请把它写进一个 YAML 文件，并把 `OPENBOT_PLUGINS_FILE`
-设为这个文件的路径。
+时，除了三个限制插件，每个插件都打开。要关闭一个插件，例如
+`triggers`，或打开一个限制，请把它写进一个 YAML 文件，并把
+`OPENBOT_PLUGINS_FILE` 设为这个文件的路径。
 
 服务器启动时读取文件一次，并且从不写它。无效的文件会停止启动。给每个实例相同的文件。参见[插件](/zh-cn/plugins)。
 

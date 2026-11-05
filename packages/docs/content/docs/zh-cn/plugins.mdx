@@ -1,11 +1,11 @@
 ---
 title: 插件
-description: 用只读的插件文件关闭 OpenBot 的插件。
+description: 用只读的插件文件打开和关闭 OpenBot 的插件。
 ---
 
 面向平台运维人员。这些任务会影响整个部署。请按任务要求准备服务器访问权限。从[管理员手册](/zh-cn/admin)开始。
 
-OpenBot 是一个插件宿主上的一组插件。本页列出这些插件。它说明怎样用插件文件关闭其中一些插件，以及怎样检查每台服务器运行相同的插件。
+OpenBot 是一个插件宿主上的一组插件。本页列出这些插件。它说明怎样用插件文件打开和关闭其中一些插件，以及怎样检查每台服务器运行相同的插件。
 
 ---
 
@@ -31,7 +31,7 @@ OpenBot 是一个插件宿主上的一组插件。本页列出这些插件。它
 
 ## OpenBot 的插件
 
-OpenBot 有 23 个插件。“必需”一列为“是”的六个插件永远不能关闭。“需要”一列列出一个插件使用的其他插件。只有当一个插件需要的每个插件都打开时，它才会启动。
+OpenBot 有 26 个插件。三个限制插件一开始是关闭的。“必需”一列为“是”的六个插件永远不能关闭。“需要”一列列出一个插件使用的其他插件。只有当一个插件需要的每个插件都打开时，它才会启动。
 
 | 插件            | 它提供什么                                                | 必需 | 需要                                                                                                            |
 | --------------- | --------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------- |
@@ -58,6 +58,9 @@ OpenBot 有 23 个插件。“必需”一列为“是”的六个插件永远�
 | `triggers`      | 启动 Turns 的触发器，以及它们的 webhook。                 |      | `audit`、`auth`、`authorization`、`bots`、`chats`、`models`                                                     |
 | `billing`       | 组织的钱包、用量和预算。                                  |      | `audit`、`auth`、`authorization`、`organization`                                                                |
 | `settings`      | 每个成员的设置。                                          |      | `auth`、`authorization`、`bots`                                                                                 |
+| `turn-limiter`  | 限制每个 Turn 的模型步数。一开始关闭。                    |      |                                                                                                                 |
+| `time-limiter`  | 限制每个 Turn 的时间。一开始关闭。                        |      |                                                                                                                 |
+| `token-limiter` | 限制每个 Turn 的输入和输出 token。一开始关闭。            |      |                                                                                                                 |
 
 一个插件在启动的后面步骤中才使用另一个插件。所以两个插件可以互相需要，例如
 `bots` 和 `chats`。
@@ -66,6 +69,7 @@ OpenBot 有 23 个插件。“必需”一列为“是”的六个插件永远�
 
 - 你可以逐个关闭 `computers`、`triggers`、`billing` 和
   `settings`。没有其他插件需要它们。
+- 你可以单独打开或关闭每个限制插件。没有其他插件需要它们。
 - 你不能关闭 `mail`、`sso` 或
   `models`。必需插件使用它们，所以没有它们 OpenBot 不会启动。
 - 其他插件互相需要。要关闭其中一个，你也必须关闭需要它的每个插件。
@@ -89,17 +93,56 @@ OpenBot 有 23 个插件。“必需”一列为“是”的六个插件永远�
   disabled: true
 ```
 
-没有 `OPENBOT_PLUGINS_FILE` 时，每个插件都打开。
+没有 `OPENBOT_PLUGINS_FILE` 时，除了三个限制插件，每个插件都打开。
 
 ### 关闭一个插件
 
 写出插件的 id 和 `disabled: true`。`disabled: false`
-让插件保持打开，和没有条目一样。
+打开插件。对大多数插件来说，这和没有条目一样。没有条目时，限制插件是关闭的。
+
+### 打开一个限制
+
+三个限制插件给每个 Turn 一个限制。它们一开始是关闭的。要打开一个，写出
+`disabled: false`，并在 `config` 中写出它的限制：
+
+```yaml
+- id: turn-limiter
+  disabled: false
+  config:
+    maxSteps: 40
+- id: time-limiter
+  disabled: false
+  config:
+    maxDuration: 600000
+- id: token-limiter
+  disabled: false
+  config:
+    maxTokens: 200000
+```
+
+| 插件            | 配置字段      | 值                                                                                                                            |
+| --------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `turn-limiter`  | `maxSteps`    | 从 1 开始的整数。一个 Turn 的每次模型请求是一步。第一次请求也算。                                                             |
+| `time-limiter`  | `maxDuration` | 毫秒数，例如 `600000`，或文本，例如 `10 minutes`。`openbot-inspect plugins` 把文本显示为 `"<redacted>"`，所以数字更容易检查。 |
+| `token-limiter` | `maxTokens`   | 从 1 开始的整数。它计算一个 Turn 所有模型请求的输入和输出 token。                                                             |
+
+- 打开的限制插件需要它的配置。没有正确的配置时，插件失败，启动以
+  `PluginsInactive` 停止。
+- 只有 `config` 不会打开限制。有 `config` 但没有 `disabled` 的条目是错误：“This
+  plugin is off. Add "disabled: false" to turn it on.”
+- 限制不能使用 `!env`。给每台服务器相同的限制。配置在清单哈希中，但 `!env`
+  的值不在。
+- 每个 Turn 保留它开始时打开的限制，服务器重新启动后也一样。新的限制只对新的 Turn 生效。
+- 时间从 Turn 开始时计算，Turn 等待时也计算，例如等待服务器重新启动时。
+- 到达限制的 Turn 以失败结束。它的错误记录有
+  `BotFeatureStopped`，以及限制的错误，例如
+  `ModelStepLimitExceeded`。API 显示失败类别 `unavailable`。
+- 关闭一个限制插件后，用它开始的 Turn 会等待，直到它再次打开。要去掉一个限制，先设一个很高的限制。只在没有 Turn 运行时关闭插件。
 
 ### 给插件配置
 
 一个条目可以有
-`config`，也就是一个插件的设置。现在 OpenBot 没有插件接受配置。所以给 OpenBot 的插件写
+`config`，也就是一个插件的设置。现在只有三个限制插件接受配置。给 OpenBot 的其他插件写
 `config` 是错误，启动会以 “This plugin takes no
 config.” 停止。这样，没有插件读取的值不会看起来像是生效了。
 
@@ -132,7 +175,9 @@ OpenBot 在启动前检查整个文件。它一次给出所有问题，并写出
 | 同一个 id 在文件中出现多次                       | 错误。                                                      |
 | 给 OpenBot 的插件另一个 `name`                   | 错误。OpenBot 插件的名字不能改变。                          |
 | 关闭一个必需插件                                 | 错误。“This plugin is needed, so it can not be turned off.” |
-| 给 OpenBot 的插件 `config`                       | 错误。“This plugin takes no config.”                        |
+| 给不接受配置的 OpenBot 插件 `config`             | 错误。“This plugin takes no config.”                        |
+| 给保持关闭的限制插件 `config`                    | 错误。请加上 `disabled: false`。                            |
+| 在限制插件的配置中使用 `!env`                    | 错误。“The config of this plugin can not use !env.”         |
 | 有新的 id 但没有 `name`                          | 错误。新条目需要名字。                                      |
 | 有新的 id，名字不是 OpenBot 自带的插件           | 错误。只有 OpenBot 自带的插件可以运行。                     |
 | 有新的 id，名字已经作为另一个条目运行            | 错误。请改那个条目。                                        |
@@ -148,7 +193,7 @@ OpenBot 在启动前检查整个文件。它一次给出所有问题，并写出
 服务器启动时读取文件一次。它从不写这个文件，运行时也看不到文件的修改。要使用修改后的文件，请重新启动每台服务器。
 
 文件正确时，服务器在日志中写
-`OpenBot read the plugins file.`，带有路径、关闭的 id、新的 id 和清单哈希。它从不把配置写进日志。
+`OpenBot read the plugins file.`，带有路径、关闭的 id（也包括保持关闭的限制插件）、新的 id 和清单哈希。它从不把配置写进日志。
 
 文件不正确时，服务器不启动。它先写下面其中一行：
 

@@ -142,15 +142,14 @@ handler 仍需按统一设计审查。
 `virtual-boundary` 让服务器代码分层。从低到高依次是：`server-database`、
 `server-kernel`、`identity-contract`、`server-billing`、`server-execution`、
 `tools-contract`、`models-contract`、`apps-contract`、`conversation-contract`、
-`model-providers`、`server-plugin`，然后是插件包（`plugin-<id>`）和
-`packages/openbot/src` 中的插件目录，然后是同样在 `packages/openbot/src` 中的
-`server-upgrade`、`app` 和
+`model-providers`、`server-plugin`，然后是插件包（`plugin-<id>`），然后是在
+`packages/openbot/src` 中的 `server-upgrade`、`app` 和
 `server-development`。代码只能导入更低的层。`public-entry`
 只允许其他包通过服务器包 `package.json` 中 `exports`
 的键来使用它。测试也是这样。
 
 两条规则让插件彼此分开。`plugin-boundary`
-不允许一个插件导入另一个插件。插件包和插件目录都是这样，插件包的测试也是这样。宿主通过 graft 连接各个插件。`plugin-entry`
+不允许一个插件导入另一个插件。插件包和它们的测试都是这样。宿主通过 graft 连接各个插件。`plugin-entry`
 检查插件包的 `src/index.ts`
 只有一个导出：插件本身，作为默认导出。每个插件包的入口测试检查它的
 `package.json`

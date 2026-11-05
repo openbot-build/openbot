@@ -79,18 +79,19 @@ auf einen Dienst eines anderen Plugins warten. Die Dienste der Stufen davor
 bleiben dabei veröffentlicht. Der Start baut die Arbeit der Funktion in dieser
 Reihenfolge: Bot-Funktionen, Workflows, Worker und HTTP-Routen. Er schließt in
 der umgekehrten Reihenfolge. Eine Stufe oder ein Start mit Fehler versucht es
-wieder: zuerst schnell, dann alle 30 Sekunden.
+wieder: zuerst schnell, dann alle 30 Sekunden. Die drei Limit-Plugins sind je
+ein graft-Plugin mit Konfiguration.
 
 Ein Plugin wartet, bis jeder Dienst veröffentlicht ist, den es braucht. Wenn ein
 Plugin stoppt oder neu startet, stoppen die Plugins zuerst, die seine Dienste
 nutzen. Sie starten wieder, wenn die Dienste zurück sind. Solange ein Plugin aus
 ist, antworten seine Routen mit `503` und `FeatureUnavailable`.
 
-Das **Preset** ist die Liste der 23 Plugins von OpenBot. Sechs davon sind nötig:
-`audit`, `platform`, `organization`, `access`, `auth` und `authorization`. Die
-Plugin-Datei kann andere Plugins ausschalten. Siehe [Plugins](/de/plugins). Die
-Route `/health` und die Routen der Ausführungen gehören dem Host selbst. Darum
-kann niemand sie ausschalten.
+Das **Preset** ist die Liste der 26 Plugins von OpenBot. Die drei Limit-Plugins
+sind am Anfang aus. Sechs davon sind nötig: `audit`, `platform`, `organization`,
+`access`, `auth` und `authorization`. Die Plugin-Datei kann andere Plugins
+ausschalten. Siehe [Plugins](/de/plugins). Die Route `/health` und die Routen
+der Ausführungen gehören dem Host selbst. Darum kann niemand sie ausschalten.
 
 ### Start
 

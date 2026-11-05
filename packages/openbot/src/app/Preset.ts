@@ -1,7 +1,7 @@
 /**
  * The preset: the plugins that OpenBot runs. The entry points of `Host` run
- * all of them, except those that the plugins file turns off. A plugin in
- * `required` cannot be turned off.
+ * all of them, except the plugins that are off by default and those that the
+ * plugins file turns off. A plugin in `required` cannot be turned off.
  */
 import type * as PresetPlugins from "./PresetPlugins.ts"
 
@@ -30,12 +30,25 @@ export const ids = [
 	"triggers",
 	"billing",
 	"settings",
+	"turn-limiter",
+	"time-limiter",
+	"token-limiter",
 ] as const
 
 export type Id = (typeof ids)[number]
 
 /** The module name of a plugin, such as `@openbot-build/plugin-bots`. */
 export const nameOf = (id: string) => `@openbot-build/plugin-${id}`
+
+/**
+ * These plugins are off until the plugins file turns them on. The limit
+ * plugins are here: each one needs its limit as config.
+ */
+export const offByDefault: ReadonlyArray<Id> = [
+	"turn-limiter",
+	"time-limiter",
+	"token-limiter",
+]
 
 /** OpenBot cannot work without these plugins. */
 export const required: ReadonlyArray<Id> = [

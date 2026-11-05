@@ -70,6 +70,11 @@ export interface Options extends TestHost.Outside {
 	/** People with these emails are platform admins. */
 	readonly platformAdmins?: ReadonlyArray<string>
 	/**
+	 * The path of a plugins file. The server reads it at each start, so a
+	 * restart reads it again.
+	 */
+	readonly pluginsFile?: string
+	/**
 	 * The platform has no fixture model, as in production: no built-in model
 	 * and no default model. Then each Chat or its Bot must name a stored model.
 	 * Without it, every organization can use the fixture model, and each new
@@ -390,6 +395,9 @@ export const start = Effect.fn("BrowserHost.start")(function* (
 		...(options.indexWork === undefined
 			? {}
 			: { indexWork: options.indexWork }),
+		...(options.pluginsFile === undefined
+			? {}
+			: { pluginsFile: options.pluginsFile }),
 
 		host: "127.0.0.1",
 		port: options.port ?? 0,

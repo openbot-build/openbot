@@ -88,6 +88,7 @@ export interface Service {
 		| Gone
 		| Bot.ExecutionError<
 				{},
+				| BotFeatures.FeatureStopped
 				| BillingStorageError
 				| Execution.Conflict
 				| Execution.KeyConflict
@@ -330,38 +331,49 @@ const make = Effect.gen(function* () {
 				},
 			])
 		})
+		// The types are written out because the hooks of a feature and the
+		// providers fail with different errors, and inference takes only one.
+		const bot: Bot.Definition<
+			{},
+			BotFeatures.FeatureStopped | Config.ModelConfigurationError,
+			never,
+			| Execution.Conflict
+			| Execution.Forbidden
+			| Execution.NotFound
+			| Execution.StorageError
+		> = {
+			registerTools,
+			modelCatalog: Effect.succeed(
+				Arr.map(catalog.models, Compaction.withSummary),
+			),
+			providers: Arr.map(
+				catalog.providers,
+				(provider) =>
+					new Provider.Provider({
+						id: provider.id,
+						model: (selection) =>
+							resolve(selection).pipe(
+								Effect.map((model) =>
+									Model.make({
+										provider: selection.provider,
+										model: selection.model,
+										layer: Layer.succeed(
+											LanguageModel.LanguageModel,
+											features.withFiles(model),
+										),
+									}),
+								),
+							),
+					}),
+			),
+			compaction: Compaction.service,
+			approvals: features.approvals,
+		}
 		const runner = yield* TurnRunner.make({
 			store,
 			...adapters,
 			executeTool: tools.executor(fence, limits),
-			bot: {
-				registerTools,
-				modelCatalog: Effect.succeed(
-					Arr.map(catalog.models, Compaction.withSummary),
-				),
-				providers: Arr.map(
-					catalog.providers,
-					(provider) =>
-						new Provider.Provider({
-							id: provider.id,
-							model: (selection) =>
-								resolve(selection).pipe(
-									Effect.map((model) =>
-										Model.make({
-											provider: selection.provider,
-											model: selection.model,
-											layer: Layer.succeed(
-												LanguageModel.LanguageModel,
-												features.withFiles(model),
-											),
-										}),
-									),
-								),
-						}),
-				),
-				compaction: Compaction.service,
-				approvals: features.approvals,
-			},
+			bot,
 		}).pipe(Effect.provideService(LanguageModel.LanguageModel, model))
 		yield* runner
 			.run({ view, turn, item: Item.Id.make(item.value), prompt })

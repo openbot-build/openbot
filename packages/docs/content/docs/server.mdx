@@ -44,19 +44,19 @@ it. See [Platform](/platform#setup).
 
 ## What the package exports
 
-| Export                                                       | What it is                                                                                                    |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `Host.layer(options)`                                        | OpenBot with its own Node.js HTTP server. `openbot-server` runs it.                                           |
-| `Host.layerApp(options)`                                     | The OpenBot routes and services, for an HTTP server that you already have.                                    |
-| `Host.Options`, `Host.AppOptions`                            | The options of `Host.layer` and of `Host.layerApp`. See [Options](#options).                                  |
-| `Host.Outside`, `Host.RouteServices`, `Host.StartupServices` | The services from outside, the services that your routes can use, and the services that startup work can use. |
-| `Launch.main(make)`, `Launch.server(make)`                   | Runs the Layer from `make` as `openbot-server` does.                                                          |
-| `Preset`                                                     | The IDs of the plugins that OpenBot runs, and the IDs of the plugins that must be active.                     |
-| `Wallets`                                                    | The service of credit operations. Your routes can use it.                                                     |
-| `HostTools`                                                  | The tools that your program gives to every Chat. See [Add a tool](#add-a-tool).                               |
-| `DatabasePostgres`                                           | The database Layer and the `migrate` program.                                                                 |
-| `EnvironmentConfiguration`                                   | Reads the instance settings from environment variables.                                                       |
-| `Auth`, `AppHost`, `AppTools`, `Configuration`               | Service types for advanced setups.                                                                            |
+| Export                                                       | What it is                                                                                                                         |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `Host.layer(options)`                                        | OpenBot with its own Node.js HTTP server. `openbot-server` runs it.                                                                |
+| `Host.layerApp(options)`                                     | The OpenBot routes and services, for an HTTP server that you already have.                                                         |
+| `Host.Options`, `Host.AppOptions`                            | The options of `Host.layer` and of `Host.layerApp`. See [Options](#options).                                                       |
+| `Host.Outside`, `Host.RouteServices`, `Host.StartupServices` | The services from outside, the services that your routes can use, and the services that startup work can use.                      |
+| `Launch.main(make)`, `Launch.server(make)`                   | Runs the Layer from `make` as `openbot-server` does.                                                                               |
+| `Preset`                                                     | The IDs of the plugins of OpenBot, the IDs that are off at first (`offByDefault`), and the IDs of the plugins that must be active. |
+| `Wallets`                                                    | The service of credit operations. Your routes can use it.                                                                          |
+| `HostTools`                                                  | The tools that your program gives to every Chat. See [Add a tool](#add-a-tool).                                                    |
+| `DatabasePostgres`                                           | The database Layer and the `migrate` program.                                                                                      |
+| `EnvironmentConfiguration`                                   | Reads the instance settings from environment variables.                                                                            |
+| `Auth`, `AppHost`, `AppTools`, `Configuration`               | Service types for advanced setups.                                                                                                 |
 
 The subpath `@openbot-build/openbot/Development` exports the development server.
 See [Run the development server](#run-the-development-server). The subpath
@@ -271,8 +271,9 @@ The services that these Layers give to your program are the services of the
 plugins at the time of the start. When a plugin starts again later, your copy
 does not change.
 
-Because of this copy, `Host.layer` and `Host.layerApp` need every plugin on.
-When `pluginsFile` turns a plugin off, the Layer dies with `CaptureMissing`. The
+Because of this copy, `Host.layer` and `Host.layerApp` need every plugin that
+gives services. The limit plugins give no services, so they can be off. When
+`pluginsFile` turns a plugin off, the Layer dies with `CaptureMissing`. The
 `openbot-server` program runs the same server without the copy, so the plugins
 file can turn plugins off there. See [Plugins](/plugins).
 

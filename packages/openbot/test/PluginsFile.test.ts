@@ -92,7 +92,88 @@ describe("merge", () => {
 			[
 				{ id: "bots", name: Preset.nameOf("bots"), disabled: false },
 				{ id: "triggers", name: Preset.nameOf("triggers"), disabled: true },
+				{
+					id: "turn-limiter",
+					name: Preset.nameOf("turn-limiter"),
+					disabled: true,
+				},
+				{
+					id: "time-limiter",
+					name: Preset.nameOf("time-limiter"),
+					disabled: true,
+				},
+				{
+					id: "token-limiter",
+					name: Preset.nameOf("token-limiter"),
+					disabled: true,
+				},
 			],
+		)
+	})
+
+	it("turns a limit plugin on with its config", () => {
+		const entries = Result.getOrThrow(
+			merged(
+				"- id: turn-limiter\n  disabled: false\n  config:\n    maxSteps: 40\n",
+			),
+		)
+		assert.deepStrictEqual(
+			Arr.findFirst(entries, (entry) => entry.id === "turn-limiter"),
+			Option.some<Entry.Entry>({
+				id: "turn-limiter",
+				name: Preset.nameOf("turn-limiter"),
+				disabled: false,
+				config: { maxSteps: 40 },
+			}),
+		)
+		assert.deepStrictEqual(PluginsFile.changes(known, entries).off, [
+			"time-limiter",
+			"token-limiter",
+		])
+	})
+
+	it("gives a problem for config on a limit plugin that stays off", () => {
+		assert.deepStrictEqual(
+			problems(merged("- id: turn-limiter\n  config:\n    maxSteps: 40\n")),
+			[
+				{
+					entry: 1,
+					id: "turn-limiter",
+					reason: 'This plugin is off. Add "disabled: false" to turn it on.',
+				},
+			],
+		)
+		// With "disabled: true" the file says that the plugin stays off.
+		assert.isTrue(
+			Result.isSuccess(
+				merged(
+					"- id: turn-limiter\n  disabled: true\n  config:\n    maxSteps: 40\n",
+				),
+			),
+		)
+	})
+
+	it("refuses !env in the config of a limit plugin", () => {
+		assert.deepStrictEqual(
+			problems(
+				merged(
+					"- id: time-limiter\n  disabled: false\n  config:\n    maxDuration: !env OPENBOT_LIMIT\n",
+				),
+			),
+			[
+				{
+					entry: 1,
+					id: "time-limiter",
+					reason: "The config of this plugin can not use !env.",
+				},
+			],
+		)
+	})
+
+	it("still refuses config on a plugin that takes no config", () => {
+		assert.deepStrictEqual(
+			problems(merged("- id: triggers\n  config:\n    maxSteps: 40\n")),
+			[{ entry: 1, id: "triggers", reason: "This plugin takes no config." }],
 		)
 	})
 

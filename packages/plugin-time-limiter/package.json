@@ -1,0 +1,41 @@
+{
+	"name": "@openbot-build/plugin-time-limiter",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The time-limiter plugin of the OpenBot server: a limit on the time of each Turn",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./TimeLimiter": "./dist/TimeLimiter.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@graftland/graft": "0.4.0",
+		"@openbot-build/conversation-contract": "workspace:*",
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"effect": "4.1.2"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"@openbot-build/domain": "workspace:*",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/plugin-time-limiter"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

@@ -128,13 +128,11 @@ layer(TestHost.layerPlatform, {
 					)
 					assert.deepStrictEqual(
 						Arr.filter(entries, (entry) => entry.disabled === true),
-						[
-							{
-								id: "triggers",
-								name: Preset.nameOf("triggers"),
-								disabled: true,
-							},
-						],
+						Arr.map(["triggers", ...Preset.offByDefault], (id) => ({
+							id,
+							name: Preset.nameOf(id),
+							disabled: true,
+						})),
 					)
 					const forks = yield* allActive
 					assert.isFalse(
@@ -147,7 +145,10 @@ layer(TestHost.layerPlatform, {
 						Str.includes("OpenBot read the plugins file.")(line),
 					)
 					assert.strictEqual(read.length, 1)
-					assert.include(read[0], '"off":["triggers"]')
+					assert.include(
+						read[0],
+						'"off":["triggers","turn-limiter","time-limiter","token-limiter"]',
+					)
 					assert.include(read[0], yield* PluginsFile.manifestHash(entries))
 
 					const refused = yield* composition.loader
