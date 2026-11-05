@@ -74,7 +74,7 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 
 | Package                                | What it is                                        |
 | -------------------------------------- | ------------------------------------------------- |
-| `@openbot-build/openbot`               | The server and all its plugins                    |
+| `@openbot-build/openbot`               | The server, its plugin host, and some plugins     |
 | `@openbot-build/server-database`       | The server database tables and migrations         |
 | `@openbot-build/server-kernel`         | The shared parts of the server                    |
 | `@openbot-build/identity-contract`     | Shared tags and types for sign-in and access      |
@@ -86,6 +86,16 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 | `@openbot-build/conversation-contract` | Shared tags and types for Bots and Chats          |
 | `@openbot-build/model-providers`       | The model providers of the server                 |
 | `@openbot-build/server-plugin`         | The plugin kit of the server                      |
+| `@openbot-build/plugin-audit`          | The `audit` plugin of the server                  |
+| `@openbot-build/plugin-mail`           | The `mail` plugin of the server                   |
+| `@openbot-build/plugin-platform`       | The `platform` plugin of the server               |
+| `@openbot-build/plugin-organization`   | The `organization` plugin of the server           |
+| `@openbot-build/plugin-access`         | The `access` plugin of the server                 |
+| `@openbot-build/plugin-sso`            | The `sso` plugin of the server                    |
+| `@openbot-build/plugin-auth`           | The `auth` plugin of the server                   |
+| `@openbot-build/plugin-authorization`  | The `authorization` plugin of the server          |
+| `@openbot-build/plugin-billing`        | The `billing` plugin of the server                |
+| `@openbot-build/plugin-settings`       | The `settings` plugin of the server               |
 | `@openbot-build/api`                   | The typed HTTP contract                           |
 | `@openbot-build/client`                | The TypeScript client                             |
 | `@openbot-build/core`                  | The Bot core                                      |

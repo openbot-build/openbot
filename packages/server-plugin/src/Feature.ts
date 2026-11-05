@@ -184,6 +184,14 @@ export const keys = (plugin: GraftPlugin.Plugin): Keys =>
 			}
 
 /**
+ * The keys that a feature publishes, with the types of their services. The
+ * host reads them from the plugin, so a plugin module needs no other export.
+ */
+export const published = <F extends Feature<any>>(
+	plugin: F,
+): ReadonlyArray<Context.Key<ServicesOf<F>, any>> => keys(plugin).publishes
+
+/**
  * The plugin of the first step. Its fork builds the step, publishes its
  * keys in one transaction, and then loads the plugin of the next step with
  * every service so far.

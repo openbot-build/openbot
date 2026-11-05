@@ -8,6 +8,7 @@ import {
 	HashSet,
 	Layer,
 	Order,
+	Record as Rec,
 	Stream,
 	String as Str,
 } from "effect"
@@ -226,9 +227,11 @@ layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
 layer(TestHost.layerPlatform, { excludeTestServices: true })((it) => {
 	it.effect("the preset has one entry for each id, in the same order", () =>
 		Effect.sync(() => {
+			assert.deepStrictEqual(Rec.keys(PresetPlugins.byId), [...Preset.ids])
+			// The loader finds a plugin by its module name.
 			assert.deepStrictEqual(
-				Arr.map(PresetPlugins.modules, (module) => module.id),
-				[...Preset.ids],
+				Arr.map(Preset.ids, (id) => PresetPlugins.byId[id].name),
+				Arr.map(Preset.ids, Preset.nameOf),
 			)
 			assert.deepStrictEqual(
 				Arr.map(PresetPlugins.entries, (entry) => entry.id),

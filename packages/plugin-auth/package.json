@@ -1,0 +1,53 @@
+{
+	"name": "@openbot-build/plugin-auth",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The auth plugin of the OpenBot server: sign-in, user tokens, and the check of each caller",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./Auth": "./dist/Auth.js",
+		"./HttpMiddleware": "./dist/HttpMiddleware.js",
+		"./HttpMounts": "./dist/HttpMounts.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
+	},
+	"dependencies": {
+		"@better-auth/drizzle-adapter": "1.7.8",
+		"@effect/sql-pg": "4.1.2",
+		"@graftland/graft": "0.3.3",
+		"@openbot-build/api": "workspace:*",
+		"@openbot-build/domain": "workspace:*",
+		"@openbot-build/identity-contract": "workspace:*",
+		"@openbot-build/server-billing": "workspace:*",
+		"@openbot-build/server-database": "workspace:*",
+		"@openbot-build/server-kernel": "workspace:*",
+		"@openbot-build/server-plugin": "workspace:*",
+		"better-auth": "1.7.8",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.1.2",
+		"jose": "6.2.12",
+		"pg": "8.23.1"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.1.2",
+		"@effect/vitest": "4.1.2",
+		"@types/pg": "8.23.1",
+		"vitest": "5.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/openbot-build/openbot.git",
+		"directory": "packages/plugin-auth"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	}
+}

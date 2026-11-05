@@ -6,25 +6,25 @@ import * as Feature from "@openbot-build/server-plugin/Feature"
 
 /** The plugin that publishes each key, by the key. */
 const publishers: Readonly<Record<string, string>> = Rec.fromEntries(
-	Arr.flatMap(PresetPlugins.modules, (module) =>
+	Arr.flatMap(Preset.ids, (id) =>
 		Arr.map(
-			Feature.keys(module.default).publishes,
-			(key) => [key.key, module.id] as const,
+			Feature.keys(PresetPlugins.byId[id]).publishes,
+			(key) => [key.key, id] as const,
 		),
 	),
 )
 
 /** The other plugins that each plugin waits for, in name order. */
 const needs: Readonly<Record<string, ReadonlyArray<string>>> = Rec.fromEntries(
-	Arr.map(PresetPlugins.modules, (module) => [
-		module.id,
+	Arr.map(Preset.ids, (id) => [
+		id,
 		Arr.sort(
 			Arr.dedupe(
 				Arr.filter(
-					Arr.flatMap(Feature.keys(module.default).inject, (key) =>
+					Arr.flatMap(Feature.keys(PresetPlugins.byId[id]).inject, (key) =>
 						Option.toArray(Rec.get(publishers, key.key)),
 					),
-					(id) => id !== module.id,
+					(other) => other !== id,
 				),
 			),
 			Order.String,
@@ -188,8 +188,8 @@ describe("PluginNeeds", () => {
 	})
 
 	it("every key that a plugin needs comes from one plugin only", () => {
-		const keys = Arr.flatMap(PresetPlugins.modules, (module) =>
-			Arr.map(Feature.keys(module.default).publishes, (key) => key.key),
+		const keys = Arr.flatMap(Preset.ids, (id) =>
+			Arr.map(Feature.keys(PresetPlugins.byId[id]).publishes, (key) => key.key),
 		)
 		assert.strictEqual(Arr.dedupe(keys).length, keys.length)
 	})

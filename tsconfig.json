@@ -44,6 +44,36 @@
 			"path": "./packages/server-plugin"
 		},
 		{
+			"path": "./packages/plugin-audit"
+		},
+		{
+			"path": "./packages/plugin-mail"
+		},
+		{
+			"path": "./packages/plugin-platform"
+		},
+		{
+			"path": "./packages/plugin-organization"
+		},
+		{
+			"path": "./packages/plugin-access"
+		},
+		{
+			"path": "./packages/plugin-sso"
+		},
+		{
+			"path": "./packages/plugin-auth"
+		},
+		{
+			"path": "./packages/plugin-authorization"
+		},
+		{
+			"path": "./packages/plugin-billing"
+		},
+		{
+			"path": "./packages/plugin-settings"
+		},
+		{
 			"path": "./packages/protocol"
 		},
 		{

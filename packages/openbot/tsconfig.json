@@ -31,6 +31,36 @@
 			"path": "../models-contract"
 		},
 		{
+			"path": "../plugin-access"
+		},
+		{
+			"path": "../plugin-audit"
+		},
+		{
+			"path": "../plugin-auth"
+		},
+		{
+			"path": "../plugin-authorization"
+		},
+		{
+			"path": "../plugin-billing"
+		},
+		{
+			"path": "../plugin-mail"
+		},
+		{
+			"path": "../plugin-organization"
+		},
+		{
+			"path": "../plugin-platform"
+		},
+		{
+			"path": "../plugin-settings"
+		},
+		{
+			"path": "../plugin-sso"
+		},
+		{
 			"path": "../server-billing"
 		},
 		{

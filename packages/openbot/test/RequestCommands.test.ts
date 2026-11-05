@@ -52,7 +52,7 @@ import {
 	Stream,
 	Record as Rec,
 } from "effect"
-import * as Audit from "../src/plugin-audit/AuditLogPostgres.ts"
+import * as Audit from "@openbot-build/plugin-audit/AuditLogPostgres"
 import * as BotRecords from "../src/plugin-bots/BotRecords.ts"
 import * as Gate from "@openbot-build/conversation-contract/capabilities/Gate"
 import * as Gates from "../src/plugin-capabilities/Gates.ts"

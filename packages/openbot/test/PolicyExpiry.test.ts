@@ -3,7 +3,7 @@ import { Authorization, TokenId } from "@openbot-build/domain"
 import { Clock, DateTime, Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
-import * as Load from "../src/plugin-authorization/Load.ts"
+import * as Load from "@openbot-build/plugin-authorization/Load"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import * as Fixture from "./OrganizationFixture.ts"
 

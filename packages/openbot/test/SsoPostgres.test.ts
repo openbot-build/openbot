@@ -17,7 +17,7 @@ import * as DatabasePostgres from "../src/app/DatabasePostgres.ts"
 import * as Secrets from "@openbot-build/server-kernel/secrets/Secrets"
 import { Settings } from "@openbot-build/server-kernel/settings/Settings"
 import { Sso } from "@openbot-build/identity-contract/sso/Sso"
-import * as SsoPostgres from "../src/plugin-sso/SsoPostgres.ts"
+import * as SsoPostgres from "@openbot-build/plugin-sso/SsoPostgres"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as ErrorRecords from "@openbot-build/server-kernel/errors/Records"
 

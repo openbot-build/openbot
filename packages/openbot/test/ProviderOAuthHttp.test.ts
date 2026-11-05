@@ -28,14 +28,14 @@ import { layerNoStore } from "@openbot-build/identity-contract/auth/SessionHttp"
 import {
 	layerBotAuth,
 	layerAccountAuth,
-} from "../src/plugin-auth/HttpMiddleware.ts"
+} from "@openbot-build/plugin-auth/HttpMiddleware"
 import { CredentialRejected } from "@openbot-build/server-kernel/auth/Model"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
 import { RateLimiter } from "@openbot-build/server-billing/billing/RateLimit"
 import * as Failures from "@openbot-build/server-kernel/errors/Failures"
 import * as Boundary from "@openbot-build/server-kernel/errors/HttpBoundary"
 import { Records } from "@openbot-build/server-kernel/errors/Records"
-import * as PlatformHandlers from "../src/plugin-platform/HttpHandlers.ts"
+import * as PlatformHandlers from "@openbot-build/plugin-platform/HttpHandlers"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import { Secrets } from "@openbot-build/server-kernel/secrets/Secrets"
 import * as Handlers from "../src/plugin-models/HttpHandlers.ts"

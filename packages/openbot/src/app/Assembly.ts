@@ -44,7 +44,7 @@ import { PlatformAdmins } from "@openbot-build/identity-contract/platform/Platfo
 import type * as AppIndex from "../plugin-apps/Index.ts"
 import type * as IndexWork from "../plugin-apps/IndexWork.ts"
 import * as AppWiring from "../plugin-apps/Wiring.ts"
-import * as MailSmtp from "../plugin-mail/Smtp.ts"
+import * as MailSmtp from "@openbot-build/plugin-mail/Smtp"
 import type * as ModelRegistry from "../plugin-models/ModelRegistry.ts"
 import * as ModelWiring from "../plugin-models/Wiring.ts"
 import * as BillingPostgres from "@openbot-build/server-billing/billing/BillingPostgres"

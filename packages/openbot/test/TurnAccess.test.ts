@@ -72,7 +72,7 @@ import {
 	OrganizationUnavailable,
 } from "@openbot-build/identity-contract/organization/Organization"
 import { Tokens } from "@openbot-build/identity-contract/auth/Tokens"
-import * as AuthorizationLayer from "../src/plugin-authorization/Layer.ts"
+import * as AuthorizationLayer from "@openbot-build/plugin-authorization/Layer"
 import * as Check from "@openbot-build/identity-contract/authorization/Check"
 import { PlatformAdmins } from "@openbot-build/identity-contract/platform/PlatformAdmins"
 import * as BotFixture from "./BotFixture.ts"

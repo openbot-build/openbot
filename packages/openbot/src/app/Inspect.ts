@@ -1,7 +1,7 @@
 import { NodeCrypto, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Console, Effect, Layer, Option } from "effect"
 import { Command, Flag } from "effect/cli"
-import * as Administration from "../plugin-platform/Administration.ts"
+import * as Administration from "@openbot-build/plugin-platform/Administration"
 import * as EnvironmentConfiguration from "@openbot-build/server-kernel/configuration/EnvironmentConfiguration"
 import * as SecretFiles from "@openbot-build/server-kernel/configuration/SecretFiles"
 import * as InspectPlugins from "./InspectPlugins.ts"

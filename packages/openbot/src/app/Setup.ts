@@ -11,9 +11,9 @@ import {
 } from "effect"
 import { Command, Flag } from "effect/cli"
 import * as SecretFiles from "@openbot-build/server-kernel/configuration/SecretFiles"
-import * as PlatformAdminsPostgres from "../plugin-platform/PlatformAdminsPostgres.ts"
-import * as Setup from "../plugin-platform/Setup.ts"
-import { read } from "../plugin-platform/SetupFile.ts"
+import * as PlatformAdminsPostgres from "@openbot-build/plugin-platform/PlatformAdminsPostgres"
+import * as Setup from "@openbot-build/plugin-platform/Setup"
+import { read } from "@openbot-build/plugin-platform/SetupFile"
 import * as Shared from "./Shared.ts"
 
 const force = Flag.Boolean("force").pipe(

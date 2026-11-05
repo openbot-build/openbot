@@ -17,7 +17,7 @@ import {
 	HttpApiGroup,
 } from "effect/http-api"
 import { Auth } from "@openbot-build/identity-contract/auth/Auth"
-import { layerBotAuth } from "../src/plugin-auth/HttpMiddleware.ts"
+import { layerBotAuth } from "@openbot-build/plugin-auth/HttpMiddleware"
 import {
 	AuthUnavailable,
 	CredentialRejected,

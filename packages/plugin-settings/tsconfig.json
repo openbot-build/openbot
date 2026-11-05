@@ -1,0 +1,28 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"rootDir": "src",
+		"outDir": "dist",
+		"rewriteRelativeImportExtensions": true,
+		"tsBuildInfoFile": ".cache/build.tsbuildinfo"
+	},
+	"include": ["src"],
+	"references": [
+		{
+			"path": "../api"
+		},
+		{
+			"path": "../conversation-contract"
+		},
+		{
+			"path": "../domain"
+		},
+		{
+			"path": "../server-kernel"
+		},
+		{
+			"path": "../server-plugin"
+		}
+	]
+}

@@ -332,3 +332,32 @@ it("the types reject a wrong list of keys", () => {
 	assert.isDefined(repeatedFeature)
 	assert.isFunction(partialStart)
 })
+
+it("published gives the keys of every stage in stage order", () => {
+	const plugin = Feature.make("two")
+		.stage({
+			inject: [],
+			services: Layer.succeed(First, { value: "first" }),
+			publishes: [First],
+		})
+		.stage({
+			inject: [],
+			services: Layer.succeed(Second, { value: "second" }),
+			publishes: [Second],
+		})
+		.done()
+	const keys = Feature.published(plugin)
+	assert.deepStrictEqual(
+		Arr.map(keys, (key) => key.key),
+		[First.key, Second.key],
+	)
+	// The type of the keys names every service that the stages publish, and
+	// no other service.
+	type Named = (typeof keys)[number]["Identifier"]
+	const same: [Named] extends [First | Second]
+		? [First | Second] extends [Named]
+			? true
+			: false
+		: false = true
+	assert.isTrue(same)
+})

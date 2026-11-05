@@ -17,28 +17,38 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 
 ## Overview
 
-| Package                 | What it is for                                                                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `openbot`               | The server and its plugins. It exports the model providers again. See [Run from code](/server).                                                        |
-| `server-database`       | The tables of the server database, the Drizzle database, and the SQL migrations. Only the server uses it.                                              |
-| `server-kernel`         | The parts of the server that every plugin shares: errors, secrets, settings, configuration, network rules, and the HTTP host. Only the server uses it. |
-| `identity-contract`     | The shared service tags and types for sign-in, access, roles, organizations, mail, SSO, and the audit log. Only the server uses it.                    |
-| `server-billing`        | Billing, credits, rate limits, and token limits of the server, with their PostgreSQL storage. Only the server uses it.                                 |
-| `server-execution`      | The execution engine of the server: stored executions, calls, workflows, resources, and the private RPC. Only the server uses it.                      |
-| `tools-contract`        | The shared service tags and types for tools: tool entries, tool definitions, host tools, and the todo list. Only the server uses it.                   |
-| `models-contract`       | The shared service tags and types for models, model providers, model calls, and Live backends. Only the server uses it.                                |
-| `apps-contract`         | The shared service tags and types for Apps, Code Mode, files, and vaults. Only the server uses it.                                                     |
-| `conversation-contract` | The shared service tags and types for Bots, Chats, capabilities, channels, and work. Only the server uses it.                                          |
-| `model-providers`       | The model providers of the server: OpenAI, OpenAI-compatible services, Anthropic, ChatGPT, and TypeSafe. `openbot` exports some of them again.         |
-| `server-plugin`         | The kit that makes a feature of the server into a graft plugin. Only the server uses it.                                                               |
-| `api`                   | The typed HTTP contract. The server, the client, and the API reference use it.                                                                         |
-| `client`                | The TypeScript client. See [Client](/client).                                                                                                          |
-| `core`                  | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                                                                        |
-| `protocol`              | The OpenBot App Protocol: publish, find, connect, and index Apps.                                                                                      |
-| `protocol-test`         | A public test service for the App Protocol. See [Protocol test](/protocol-test).                                                                       |
-| `cli`                   | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                                                                  |
-| `computer`              | The `openbot computer` command, which pairs and connects your own [Computer](/developers/computers).                                                   |
-| `docs`                  | This docs site.                                                                                                                                        |
+| Package                 | What it is for                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openbot`               | The server and the plugin host, with the plugins that have no package of their own. It exports the model providers again. See [Run from code](/server). |
+| `server-database`       | The tables of the server database, the Drizzle database, and the SQL migrations. Only the server uses it.                                               |
+| `server-kernel`         | The parts of the server that every plugin shares: errors, secrets, settings, configuration, network rules, and the HTTP host. Only the server uses it.  |
+| `identity-contract`     | The shared service tags and types for sign-in, access, roles, organizations, mail, SSO, and the audit log. Only the server uses it.                     |
+| `server-billing`        | Billing, credits, rate limits, and token limits of the server, with their PostgreSQL storage. Only the server uses it.                                  |
+| `server-execution`      | The execution engine of the server: stored executions, calls, workflows, resources, and the private RPC. Only the server uses it.                       |
+| `tools-contract`        | The shared service tags and types for tools: tool entries, tool definitions, host tools, and the todo list. Only the server uses it.                    |
+| `models-contract`       | The shared service tags and types for models, model providers, model calls, and Live backends. Only the server uses it.                                 |
+| `apps-contract`         | The shared service tags and types for Apps, Code Mode, files, and vaults. Only the server uses it.                                                      |
+| `conversation-contract` | The shared service tags and types for Bots, Chats, capabilities, channels, and work. Only the server uses it.                                           |
+| `model-providers`       | The model providers of the server: OpenAI, OpenAI-compatible services, Anthropic, ChatGPT, and TypeSafe. `openbot` exports some of them again.          |
+| `server-plugin`         | The kit that makes a feature of the server into a graft plugin. Only the server uses it.                                                                |
+| `plugin-audit`          | The `audit` plugin: the audit log of each organization. Only the server uses it.                                                                        |
+| `plugin-mail`           | The `mail` plugin: mail from the platform, with the SMTP settings of the platform. `openbot` exports its SMTP transport again.                          |
+| `plugin-platform`       | The `platform` plugin: the platform admins and the platform settings. `openbot` exports its administration tools again.                                 |
+| `plugin-organization`   | The `organization` plugin: organizations, their members, and invitations. Only the server uses it.                                                      |
+| `plugin-access`         | The `access` plugin: who may join the platform, and how. Only the server uses it.                                                                       |
+| `plugin-sso`            | The `sso` plugin: the sign-in connections of organizations. Only the server uses it.                                                                    |
+| `plugin-auth`           | The `auth` plugin: sign-in, user tokens, and the check of each caller. `openbot` exports its parts again as `Auth`.                                     |
+| `plugin-authorization`  | The `authorization` plugin: roles, and the check of the permissions of each caller. Only the server uses it.                                            |
+| `plugin-billing`        | The `billing` plugin: the wallets of organizations, usage, and budgets. Only the server uses it.                                                        |
+| `plugin-settings`       | The `settings` plugin: the settings of each member. Only the server uses it.                                                                            |
+| `api`                   | The typed HTTP contract. The server, the client, and the API reference use it.                                                                          |
+| `client`                | The TypeScript client. See [Client](/client).                                                                                                           |
+| `core`                  | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                                                                         |
+| `protocol`              | The OpenBot App Protocol: publish, find, connect, and index Apps.                                                                                       |
+| `protocol-test`         | A public test service for the App Protocol. See [Protocol test](/protocol-test).                                                                        |
+| `cli`                   | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                                                                   |
+| `computer`              | The `openbot computer` command, which pairs and connects your own [Computer](/developers/computers).                                                    |
+| `docs`                  | This docs site.                                                                                                                                         |
 
 The examples below leave out the model. To run them, provide a `LanguageModel`
 Layer, for example from a [model provider](#model-providers) in `openbot`.

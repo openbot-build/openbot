@@ -20,7 +20,7 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 
 | Paket                   | Wofür es da ist                                                                                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openbot`               | Der Server und seine Plugins. Er exportiert die Model Providers noch einmal. Siehe [Aus Code starten](/de/server).                                              |
+| `openbot`               | Der Server und der Plugin-Host, mit den Plugins ohne eigenes Paket. Er exportiert die Model Providers noch einmal. Siehe [Aus Code starten](/de/server).        |
 | `server-database`       | Die Tabellen der Server-Datenbank, die Drizzle-Datenbank und die SQL-Migrationen. Nur der Server nutzt es.                                                      |
 | `server-kernel`         | Die Teile des Servers, die alle Plugins teilen: Fehler, geheime Schlüssel, Einstellungen, Konfiguration, Netzregeln und der HTTP-Host. Nur der Server nutzt es. |
 | `identity-contract`     | Die gemeinsamen Service-Tags und Typen für Anmeldung, Zugriff, Rollen, Organisationen, Mail, SSO und das Audit-Log. Nur der Server nutzt es.                    |
@@ -32,6 +32,16 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 | `conversation-contract` | Die gemeinsamen Service-Tags und Typen für Bots, Chats, Capabilities, Channels und Arbeit. Nur der Server nutzt es.                                             |
 | `model-providers`       | Die Model Providers des Servers: OpenAI, OpenAI-kompatible Dienste, Anthropic, ChatGPT und TypeSafe. `openbot` exportiert einige davon noch einmal.             |
 | `server-plugin`         | Das Kit, das eine Funktion des Servers zu einem graft-Plugin macht. Nur der Server nutzt es.                                                                    |
+| `plugin-audit`          | Das Plugin `audit`: das Audit-Log jeder Organisation. Nur der Server nutzt es.                                                                                  |
+| `plugin-mail`           | Das Plugin `mail`: Mails der Plattform, mit den SMTP-Einstellungen der Plattform. `openbot` exportiert seinen SMTP-Transport noch einmal.                       |
+| `plugin-platform`       | Das Plugin `platform`: die Plattform-Admins und die Plattform-Einstellungen. `openbot` exportiert seine Admin-Werkzeuge noch einmal.                            |
+| `plugin-organization`   | Das Plugin `organization`: Organisationen, ihre Mitglieder und Einladungen. Nur der Server nutzt es.                                                            |
+| `plugin-access`         | Das Plugin `access`: wer der Plattform beitreten darf, und wie. Nur der Server nutzt es.                                                                        |
+| `plugin-sso`            | Das Plugin `sso`: die Anmelde-Verbindungen der Organisationen. Nur der Server nutzt es.                                                                         |
+| `plugin-auth`           | Das Plugin `auth`: Anmeldung, Nutzer-Tokens und die Prüfung jedes Aufrufers. `openbot` exportiert seine Teile noch einmal als `Auth`.                           |
+| `plugin-authorization`  | Das Plugin `authorization`: Rollen und die Prüfung der Rechte jedes Aufrufers. Nur der Server nutzt es.                                                         |
+| `plugin-billing`        | Das Plugin `billing`: die Wallets der Organisationen, die Nutzung und Budgets. Nur der Server nutzt es.                                                         |
+| `plugin-settings`       | Das Plugin `settings`: die Einstellungen jedes Mitglieds. Nur der Server nutzt es.                                                                              |
 | `api`                   | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                                                                            |
 | `client`                | Der TypeScript-Client. Siehe [Client](/de/client).                                                                                                              |
 | `core`                  | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                                                                                 |

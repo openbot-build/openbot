@@ -3,7 +3,7 @@ import { Context, Effect, Layer, Option, Redacted, String as Str } from "effect"
 import { HttpServer } from "effect/http"
 import * as DatabasePostgres from "../../src/app/DatabasePostgres.ts"
 import { Host } from "../../src/index.ts"
-import * as Setup from "../../src/plugin-platform/Setup.ts"
+import * as Setup from "@openbot-build/plugin-platform/Setup"
 import * as PostgresTest from "../PostgresTest.ts"
 
 /** Start a real platform with no settings. Keep setup in the same server. */

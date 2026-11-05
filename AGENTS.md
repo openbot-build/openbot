@@ -69,6 +69,9 @@
   only when you really need them.
 - Put code in the folder of the feature it belongs to. Packages use each other
   only through their public entry points.
+- Only the plugin kit (`server-plugin`), the plugins, and the host import
+  `@graftland/*`. A plugin package does not import another plugin package. A
+  plugin does not publish a service of the kernel.
 - Importing a module must not start any I/O.
 - Follow the Effect rules on the contributing page of the docs. `pnpm typecheck`
   checks them with the Effect language service and with
@@ -83,10 +86,12 @@
   `Effect.serviceOption` to find a feature.
 - Read values from the platform settings when you use them. Do not give them to
   a layer as arguments.
-- Every fiber has an owner: a scope, a `FiberSet`, or a `FiberMap`. In
-  `packages/openbot`, periodic work uses `Background.repeat`.
+- Every fiber has an owner: a scope, a `FiberSet`, or a `FiberMap`. In the
+  server packages (`packages/openbot` and the `server-*`, `*-contract`,
+  `model-providers`, and `plugin-*` packages), periodic work uses
+  `Background.repeat`.
 - Never drop the cause of a failure. A public HTTP error must not carry inside
-  details, so log the inside failure first. In `packages/openbot`,
+  details, so log the inside failure first. In the server packages,
   `Failures.replace` does this.
 
 ## Changes

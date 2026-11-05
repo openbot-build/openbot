@@ -8,9 +8,9 @@ import { Billing as BillingService } from "@openbot-build/server-billing/billing
 import * as Database from "../src/app/DatabasePostgres.ts"
 import * as Billing from "@openbot-build/server-billing/billing/BillingPostgres"
 import * as Host from "@openbot-build/server-billing/billing/Host"
-import * as Organizations from "../src/plugin-organization/OrganizationPostgres.ts"
+import * as Organizations from "@openbot-build/plugin-organization/OrganizationPostgres"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
-import * as Audit from "../src/plugin-audit/AuditLogPostgres.ts"
+import * as Audit from "@openbot-build/plugin-audit/AuditLogPostgres"
 import * as PostgresTest from "./PostgresTest.ts"
 import { layerSettings } from "./OrganizationFixture.ts"
 

@@ -9,6 +9,7 @@ import {
 	Array as Arr,
 	Console,
 	Effect,
+	Equal,
 	FileSystem,
 	HashSet,
 	Option,
@@ -57,9 +58,13 @@ const rules = {
 	"public-entry":
 		"Use the public entry of another package, not its source files. An entry of a server package must be a key of `exports` in its package.json.",
 	"virtual-boundary":
-		"A server folder or server package may import only lower folders and packages, and a plugin folder must not import another plugin folder. The database package imports no other OpenBot server code. Put shared types and service tags in a contract package.",
+		"A server folder or server package may import only lower folders and packages. The database package imports no other OpenBot server code. Put shared types and service tags in a contract package.",
 	"graft-boundary":
-		"Only the plugin kit (the `server-plugin` package), the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
+		"Only the plugin kit (the `server-plugin` package), the `src/index.ts` file of a plugin package, the `Plugin.ts` file of a plugin folder, the app, the development server and the tests of OpenBot may import graft. Import graft's `Plugin` as `GraftPlugin`, so it is not mixed up with an OpenBot plugin.",
+	"plugin-boundary":
+		"A plugin must not import another plugin, in its code or in its tests. Put shared service tags and types in a contract package. The host connects the plugins through graft.",
+	"plugin-entry":
+		"The `src/index.ts` file of a plugin package has one export only: the plugin, as the default export. Keep other code in other modules.",
 	"feature-lookup":
 		"Do not look for a feature with `Effect.serviceOption` or `Plugin.optional`. List the services that the code needs, so the layer or the plugin asks for them.",
 	parse: "The rules could not read this file.",
@@ -376,21 +381,22 @@ const placeOf = Schema.decodeUnknownOption(
 
 /** These files only map an application result to the HTTP contract. */
 const httpViews = [
-	"plugin-chats/ChatViews.ts",
-	"plugin-chats/ResponseMapping.ts",
+	"packages/openbot/src/plugin-chats/ChatViews.ts",
+	"packages/openbot/src/plugin-chats/ResponseMapping.ts",
 ] as const
+/** These files connect an outside library or the HTTP contract to a feature. */
 const httpAdapters = [
 	...httpViews,
-	"plugin-auth/BetterAuth.ts",
-	"plugin-authorization/Layer.ts",
+	"packages/plugin-auth/src/BetterAuth.ts",
+	"packages/plugin-authorization/src/Layer.ts",
 ] as const
 
 /**
  * The server packages and the folders of packages/openbot/src, in layers. A
  * server package keeps the number of the folder that it was. A package or
  * folder may import only packages and folders with a lower number. Each
- * plugin-* folder has the plugin number, and plugins must not import each
- * other.
+ * plugin package and each plugin-* folder has the plugin number. The
+ * plugin-boundary rule keeps plugins apart.
  */
 const serverLayers: Readonly<Record<string, number>> = {
 	"server-database": 1,
@@ -423,14 +429,32 @@ const serverPackages = [
 	"conversation-contract",
 	"model-providers",
 	"server-plugin",
+	"plugin-audit",
+	"plugin-mail",
+	"plugin-platform",
+	"plugin-organization",
+	"plugin-access",
+	"plugin-sso",
+	"plugin-auth",
+	"plugin-authorization",
+	"plugin-billing",
+	"plugin-settings",
 ] as const
 const isServerPackage = (name: string) =>
 	Arr.some(serverPackages, (server) => server === name)
 
+/**
+ * True for the name of a plugin package. A plugin package that is missing
+ * from `serverPackages` still counts, so the plugin rules see it.
+ */
+const isPluginPackage = (name: string) =>
+	Str.startsWith("plugin-")(name) && name !== "plugin"
+
 /** The server unit of a file: a folder of packages/openbot/src, or a server package. */
 const serverUnit = (file: string): Option.Option<string> => {
 	const own = /^packages\/([^/]+)\//.exec(file)
-	if (own !== null && isServerPackage(own[1]!)) return Option.some(own[1]!)
+	if (own !== null && (isServerPackage(own[1]!) || isPluginPackage(own[1]!)))
+		return Option.some(own[1]!)
 	const local = Str.replace("packages/openbot/src/", "")(file)
 	if (local === file || !Str.includes("/")(local)) return Option.none()
 	return Arr.head(Str.split(local, "/"))
@@ -446,7 +470,26 @@ const targetUnit = (
 	if (entry === null) return Option.none()
 	// The openbot package holds the app, so a server package must not import it.
 	if (entry[1] === "openbot") return Option.some("app")
-	return isServerPackage(entry[1]!) ? Option.some(entry[1]!) : Option.none()
+	return isServerPackage(entry[1]!) || isPluginPackage(entry[1]!)
+		? Option.some(entry[1]!)
+		: Option.none()
+}
+
+/** True when a plugin package or folder imports another plugin package or folder. */
+const crossesPlugins = (
+	file: string,
+	target: string,
+	resolved: string,
+): boolean => {
+	const from = serverUnit(file)
+	const to = targetUnit(target, resolved)
+	return (
+		Option.isSome(from) &&
+		Option.isSome(to) &&
+		Str.startsWith("plugin-")(from.value) &&
+		Str.startsWith("plugin-")(to.value) &&
+		from.value !== to.value
+	)
 }
 
 const breaksLayers = (
@@ -454,6 +497,8 @@ const breaksLayers = (
 	target: string,
 	resolved: string,
 ): boolean => {
+	// The plugin-boundary rule covers an import from one plugin into another.
+	if (crossesPlugins(file, target, resolved)) return false
 	const from = serverUnit(file)
 	const to = targetUnit(target, resolved)
 	if (Option.isNone(from) || Option.isNone(to) || from.value === to.value)
@@ -476,11 +521,11 @@ const usesHttpContract = (file: string): boolean => {
 	const local = place[2]!
 	if (owner !== "openbot" && !isServerPackage(owner)) return false
 	if (/(?:Http[^/]*|Handlers?)\.ts$/.test(local)) return true
+	if (Arr.contains(httpAdapters, file)) return true
 	return (
 		owner === "openbot" &&
 		(Str.startsWith("app/")(local) ||
-			Str.startsWith("server-development/")(local) ||
-			Arr.some(httpAdapters, (adapter) => local === adapter))
+			Str.startsWith("server-development/")(local))
 	)
 }
 
@@ -603,6 +648,9 @@ const entries = (
 				...(server && breaksLayers(file, target, resolved)
 					? ["virtual-boundary" as const]
 					: []),
+				...(crossesPlugins(file, target, resolved)
+					? ["plugin-boundary" as const]
+					: []),
 				...((relative &&
 					into !== null &&
 					into[1] !== owner &&
@@ -651,11 +699,7 @@ const boundaries = (
 				(target === "@openbot-build/api" ||
 					Str.startsWith("@openbot-build/api/")(target) ||
 					Str.startsWith("effect/http-api")(target) ||
-					(relative &&
-						Arr.some(
-							httpViews,
-							(view) => resolved === `packages/openbot/src/${view}`,
-						)))
+					(relative && Arr.contains(httpViews, resolved)))
 					? ["storage-contract-boundary" as const]
 					: []),
 				...((owner === "core" || owner === "protocol") && product && !core
@@ -679,6 +723,9 @@ const boundaries = (
 					!databaseImports.test(target))
 					? ["virtual-boundary" as const]
 					: []),
+				...(crossesPlugins(file, target, resolved)
+					? ["plugin-boundary" as const]
+					: []),
 				...((relative &&
 					/^packages\//.test(resolved) &&
 					!Str.startsWith(`packages/${owner}/`)(resolved)) ||
@@ -695,6 +742,7 @@ const boundaries = (
 /** The places of OpenBot that may import graft. */
 const graftPlaces = [
 	/^packages\/server-plugin\/(?:src|test)\//,
+	/^packages\/plugin-[^/]+\/src\/index\.ts$/,
 	/^packages\/openbot\/src\/plugin-[^/]+\/Plugin\.ts$/,
 	/^packages\/openbot\/src\/app\//,
 	/^packages\/openbot\/src\/server-development\//,
@@ -752,6 +800,80 @@ const graftImports = (
 			? [{ line, rule: "graft-boundary", detail: target }]
 			: []
 	})
+}
+
+/** The `src/index.ts` file of a plugin package. */
+const pluginIndex = /^packages\/plugin-[^/]+\/src\/index\.ts$/
+
+/** The name that an export specifier gives: an identifier, or a string such as `"default"`. */
+const exportedName = (specifier: unknown): Option.Option<unknown> =>
+	Predicate.hasProperty(specifier, "exported") &&
+	Predicate.hasProperty(specifier.exported, "type")
+		? specifier.exported.type === "Identifier" &&
+			Predicate.hasProperty(specifier.exported, "name")
+			? Option.some(specifier.exported.name)
+			: Predicate.hasProperty(specifier.exported, "value")
+				? Option.some(specifier.exported.value)
+				: Option.none()
+		: Option.none()
+
+/** True for `export default …`, and for `export { x as default }` with no other name. */
+const onlyDefault = (node: Node): boolean =>
+	node.type === "ExportDefaultDeclaration" ||
+	(node.type === "ExportNamedDeclaration" &&
+		node.declaration === null &&
+		node.specifiers.length === 1 &&
+		Equal.equals(exportedName(node.specifiers[0]), Option.some("default")))
+
+/**
+ * Checks that the `src/index.ts` file of a plugin package has one export
+ * only, the plugin as the default export. It counts the `export` words of the
+ * source, so it sees type exports too, which Node takes out before the parse.
+ */
+const pluginEntry = (
+	file: string,
+	code: string,
+	program: Node,
+): ReadonlyArray<Omit<Finding, "file">> => {
+	if (!pluginIndex.test(file)) return []
+	const words = Arr.filter(
+		Arr.fromIterable(
+			Acorn.tokenizer(code, {
+				ecmaVersion: "latest",
+				sourceType: "module",
+				locations: true,
+			}),
+		),
+		(token) => token.type.keyword === "export",
+	)
+	const extra = Arr.map(Arr.drop(words, 1), (token): Omit<Finding, "file"> => ({
+		line: token.loc?.start.line ?? 1,
+		rule: "plugin-entry",
+		detail: "another export",
+	}))
+	const exported = Arr.filter(
+		program.type === "Program" ? program.body : [],
+		(node) =>
+			node.type === "ExportNamedDeclaration" ||
+			node.type === "ExportDefaultDeclaration" ||
+			node.type === "ExportAllDeclaration",
+	)
+	const plugin = Arr.some(exported, onlyDefault)
+	return [
+		...extra,
+		...(plugin
+			? []
+			: [
+					{
+						line: Option.match(Arr.head(exported), {
+							onNone: () => 1,
+							onSome: (node) => node.loc?.start.line ?? 1,
+						}),
+						rule: "plugin-entry" as const,
+						detail: "no default export of the plugin",
+					},
+				]),
+	]
 }
 
 const checkFile = Effect.fn("EffectRules.checkFile")(function* (
@@ -812,6 +934,7 @@ const checkFile = Effect.fn("EffectRules.checkFile")(function* (
 			...unreasoned,
 			...boundaries(file, code, path, served),
 			...graftImports(file, code),
+			...pluginEntry(file, code, parsed.success),
 		],
 		(finding): Finding => ({
 			file,
@@ -865,6 +988,13 @@ const program = Effect.gen(function* () {
 		Effect.map(Arr.flatten),
 	)
 	const served = yield* readEntries()
+	const fs = yield* FileSystem.FileSystem
+	// A plugin package that is missing from `serverPackages` would miss the
+	// checks of its entries and its layer.
+	const unlisted = Arr.filter(
+		yield* fs.readDirectory("packages"),
+		(name) => isPluginPackage(name) && !isServerPackage(name),
+	)
 	const codeFindings = yield* Effect.forEach(
 		files,
 		(file) => checkFile(file, served),
@@ -872,6 +1002,12 @@ const program = Effect.gen(function* () {
 	).pipe(Effect.map(Arr.flatten))
 	const findings: ReadonlyArray<Finding> = [
 		...codeFindings,
+		...Arr.map(unlisted, (name): Finding => ({
+			file: `packages/${name}/package.json`,
+			line: 1,
+			rule: "virtual-boundary",
+			detail: `packages/${name} is not in serverPackages of scripts/effect-rules.ts`,
+		})),
 		...(yield* ServiceContracts.check(
 			Arr.map(files, (file) => path.resolve(file)),
 		)),

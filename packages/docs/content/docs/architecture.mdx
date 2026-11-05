@@ -59,7 +59,10 @@ version. That cache does not own Chat state or execution.
 
 The server runs its features as plugins on one plugin host. The host uses graft,
 a small library for plugins. A plugin is one feature, such as Bots, Chats, or
-billing. Each plugin has a fixed id, such as `bots`.
+billing. Each plugin has a fixed id, such as `bots`. Some plugins are packages
+of their own, named `@openbot-build/plugin-<id>`. The main entry of such a
+package has one export only: the plugin. The other plugins are folders in
+`packages/openbot/src`.
 
 The **kernel** is the part that every plugin shares: the database pool, the
 settings, the secret keys, the error records, the HTTP host, and the services of

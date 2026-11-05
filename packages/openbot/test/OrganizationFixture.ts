@@ -3,7 +3,7 @@ import { Execution } from "@openbot-build/domain"
 import { Array as Arr, Effect, HashMap, Layer, Stream, Option } from "effect"
 import { Organization } from "@openbot-build/identity-contract/organization/Organization"
 import { AuditLog } from "@openbot-build/identity-contract/audit/AuditLog"
-import * as AuthorizationLayer from "../src/plugin-authorization/Layer.ts"
+import * as AuthorizationLayer from "@openbot-build/plugin-authorization/Layer"
 import {
 	Roles,
 	builtin,

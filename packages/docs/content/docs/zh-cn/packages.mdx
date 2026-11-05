@@ -17,7 +17,7 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 
 | 包                      | 用途                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `openbot`               | 服务器和它的插件。它会再次导出模型提供方。请看[从代码中运行](/zh-cn/server)。                                    |
+| `openbot`               | 服务器和插件宿主，以及没有自己包的插件。它会再次导出模型提供方。请看[从代码中运行](/zh-cn/server)。              |
 | `server-database`       | 服务器数据库的表、Drizzle 数据库和 SQL 迁移。只有服务器使用它。                                                  |
 | `server-kernel`         | 所有插件共用的服务器部分：错误、密钥、设置、配置、网络规则和 HTTP 宿主。只有服务器使用它。                       |
 | `identity-contract`     | 登录、访问、角色、组织、邮件、SSO 和审计日志共用的服务标签与类型。只有服务器使用它。                             |
@@ -29,6 +29,16 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
 | `conversation-contract` | Bot、Chat、能力、频道和工作共用的服务标签与类型。只有服务器使用它。                                              |
 | `model-providers`       | 服务器的模型提供方：OpenAI、兼容 OpenAI 的服务、Anthropic、ChatGPT 和 TypeSafe。`openbot` 会再次导出其中一部分。 |
 | `server-plugin`         | 把服务器的一个功能变成 graft 插件的工具包。只有服务器使用它。                                                    |
+| `plugin-audit`          | `audit` 插件：每个组织的审计日志。只有服务器使用它。                                                             |
+| `plugin-mail`           | `mail` 插件：平台发出的邮件，使用平台的 SMTP 设置。`openbot` 会再次导出它的 SMTP 传输。                          |
+| `plugin-platform`       | `platform` 插件：平台管理员和平台设置。`openbot` 会再次导出它的管理工具。                                        |
+| `plugin-organization`   | `organization` 插件：组织、组织成员和邀请。只有服务器使用它。                                                    |
+| `plugin-access`         | `access` 插件：谁可以加入平台，以及怎样加入。只有服务器使用它。                                                  |
+| `plugin-sso`            | `sso` 插件：组织的登录连接。只有服务器使用它。                                                                   |
+| `plugin-auth`           | `auth` 插件：登录、用户令牌，以及对每个调用方的检查。`openbot` 会以 `Auth` 的名字再次导出它的部分内容。          |
+| `plugin-authorization`  | `authorization` 插件：角色，以及对每个调用方权限的检查。只有服务器使用它。                                       |
+| `plugin-billing`        | `billing` 插件：组织的钱包、用量和预算。只有服务器使用它。                                                       |
+| `plugin-settings`       | `settings` 插件：每个成员的设置。只有服务器使用它。                                                              |
 | `api`                   | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                                                          |
 | `client`                | TypeScript 客户端。请看[客户端](/zh-cn/client)。                                                                 |
 | `core`                  | Bot 核心：Bot、Chat、Turn、存储、插件和技能。                                                                    |

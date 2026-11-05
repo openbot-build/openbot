@@ -62,7 +62,10 @@ noch die Ausführung.
 Der Server führt seine Funktionen als Plugins auf einem Plugin-Host aus. Der
 Host nutzt graft, eine kleine Bibliothek für Plugins. Ein Plugin ist eine
 Funktion, zum Beispiel Bots, Chats oder Abrechnung. Jedes Plugin hat eine feste
-ID, zum Beispiel `bots`.
+ID, zum Beispiel `bots`. Einige Plugins sind eigene Pakete mit dem Namen
+`@openbot-build/plugin-<id>`. Der Haupteingang eines solchen Pakets hat nur
+einen Export: das Plugin. Die anderen Plugins sind Ordner in
+`packages/openbot/src`.
 
 Der **Kernel** ist der Teil, den alle Plugins teilen: der Datenbank-Pool, die
 Einstellungen, die geheimen Schlüssel, die Fehlereinträge, der HTTP-Host und die
